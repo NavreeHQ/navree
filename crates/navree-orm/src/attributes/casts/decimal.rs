@@ -33,7 +33,8 @@ pub struct DecimalScale<const SCALE: u32>;
 impl<const SCALE: u32> DecimalScale<SCALE> {
     /// `value` at the scale, rounded half away from zero.
     pub fn round(value: Decimal) -> Decimal {
-        let mut rounded = value.round_dp_with_strategy(SCALE, RoundingStrategy::MidpointAwayFromZero);
+        let mut rounded =
+            value.round_dp_with_strategy(SCALE, RoundingStrategy::MidpointAwayFromZero);
         rounded.rescale(SCALE);
         rounded
     }

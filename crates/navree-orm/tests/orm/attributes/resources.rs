@@ -11,7 +11,9 @@ use navree_api::{ApiModule, ApiOptions, ApiResource};
 use navree_db::{DatabaseModule, Db, PageQuery, Uow};
 use navree_http::{ApiMeta, AppError, Controller, Json, ModuleBuilderHttpExt, RouteDef, schema_fn};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
-use navree_orm::attributes::{ModelSchema, Resource, cursor_page_schema, page_schema, simple_page_schema};
+use navree_orm::attributes::{
+    ModelSchema, Resource, cursor_page_schema, page_schema, simple_page_schema,
+};
 use navree_orm::{Collection, CursorPage, Model, Page, Record, SimplePage, accessors};
 use navree_testing::TestApp;
 use serde::{Deserialize, Serialize};
@@ -124,7 +126,11 @@ fn records_become_resources_with_their_subject_type() {
             tier: Tier::Pro
         }
     );
-    assert_eq!(contact.resource(), contact.to_resource::<ContactCard>(), "the declared resource");
+    assert_eq!(
+        contact.resource(),
+        contact.to_resource::<ContactCard>(),
+        "the declared resource"
+    );
     assert_eq!(
         contact.to_resource_json_as::<ContactCard>(),
         json!({"id": 1, "label": "Ada <ada@example.com>", "tier": "pro", "__type": "Contact"})
@@ -134,7 +140,8 @@ fn records_become_resources_with_their_subject_type() {
     assert!(own.get("phone").is_none(), "visibility applies");
     assert_eq!(own["display"], "Ada <ada@example.com>");
 
-    let contacts: Collection<Contact> = vec![Record::new(ada()), Record::new(Contact { id: 2, ..ada() })].into();
+    let contacts: Collection<Contact> =
+        vec![Record::new(ada()), Record::new(Contact { id: 2, ..ada() })].into();
     assert_eq!(contacts.to_resource_collection::<ContactCard>().len(), 2);
     assert_eq!(contacts.resources()[1].id, 2);
     assert_eq!(
@@ -148,7 +155,15 @@ fn masks_keep_the_permitted_columns_the_key_and_the_type() {
     let contact = Record::new(ada());
     assert_eq!(
         contact.field_names().unwrap(),
-        ["id", "name", "mail", "tier", "score", "created_on", "display"]
+        [
+            "id",
+            "name",
+            "mail",
+            "tier",
+            "score",
+            "created_on",
+            "display"
+        ]
     );
     let permitted = vec!["name".to_owned(), "email".to_owned()];
     assert_eq!(
@@ -160,11 +175,16 @@ fn masks_keep_the_permitted_columns_the_key_and_the_type() {
     assert_eq!(everything, contact.to_resource_json().unwrap());
     let contacts: Collection<Contact> = vec![Record::new(ada())].into();
     assert_eq!(
-        contacts.to_value_masked(Some(&["display".to_owned()])).unwrap(),
+        contacts
+            .to_value_masked(Some(&["display".to_owned()]))
+            .unwrap(),
         json!([{"id": 1, "display": "Ada <ada@example.com>", "__type": "Contact"}])
     );
     assert_eq!(
-        navree_api::mask_fields(contact.to_resource_json().unwrap(), Some(&["tier".to_owned()])),
+        navree_api::mask_fields(
+            contact.to_resource_json().unwrap(),
+            Some(&["tier".to_owned()])
+        ),
         json!({"id": 1, "tier": "pro", "__type": "Contact"}),
         "navree-api's mask works on the JSON too"
     );
@@ -190,14 +210,28 @@ fn model_schemas_describe_serialized_records() {
     );
     assert_eq!(
         schema["required"],
-        json!(["id", "name", "mail", "tier", "score", "created_on", "display"]),
+        json!([
+            "id",
+            "name",
+            "mail",
+            "tier",
+            "score",
+            "created_on",
+            "display"
+        ]),
         "skip_serializing_if fields are optional"
     );
     let (name, page) = page_schema::<Record<Contact>>();
     assert_eq!(name, "ContactPage");
-    assert_eq!(page["properties"]["meta"]["required"], json!(["current_page", "per_page", "total", "last_page"]));
+    assert_eq!(
+        page["properties"]["meta"]["required"],
+        json!(["current_page", "per_page", "total", "last_page"])
+    );
     assert_eq!(page["x-navree-components"]["Contact"], schema);
-    assert_eq!(simple_page_schema::<Record<Contact>>().0, "ContactSimplePage");
+    assert_eq!(
+        simple_page_schema::<Record<Contact>>().0,
+        "ContactSimplePage"
+    );
     assert_eq!(
         cursor_page_schema::<Record<Contact>>().1["properties"]["next_cursor"],
         json!({"type": ["string", "null"]})
@@ -232,10 +266,14 @@ impl Controller for ContactsController {
                 response: Some(page_schema::<Record<Contact>>),
                 ..ApiMeta::default()
             }),
-            RouteDef::on(Method::GET, "/{id}", |uow: Uow, Path(id): Path<i64>| async move {
-                let contact = Contact::find_or_fail(&uow, id).await?;
-                Ok::<_, AppError>(Json(contact.to_resource_json_as::<ContactCard>()))
-            })
+            RouteDef::on(
+                Method::GET,
+                "/{id}",
+                |uow: Uow, Path(id): Path<i64>| async move {
+                    let contact = Contact::find_or_fail(&uow, id).await?;
+                    Ok::<_, AppError>(Json(contact.to_resource_json_as::<ContactCard>()))
+                },
+            )
             .public()
             .api(ApiMeta {
                 response: Some(schema_fn::<Record<Contact>>),
@@ -264,11 +302,22 @@ async fn the_openapi_document_carries_model_and_page_schemas() {
         .await;
     let db = app.get::<Db>().await;
     create(&db, SCHEMA).await;
-    Contact::create(&*db, Contact { id: 0, ..ada() }).await.unwrap();
+    Contact::create(&*db, Contact { id: 0, ..ada() })
+        .await
+        .unwrap();
 
-    let document = app.client().get("/api/openapi.json").send().await.assert_status(200).json_value();
+    let document = app
+        .client()
+        .get("/api/openapi.json")
+        .send()
+        .await
+        .assert_status(200)
+        .json_value();
     let schemas = &document["components"]["schemas"];
-    assert_eq!(schemas["Contact"]["properties"]["mail"], json!({"type": "string"}));
+    assert_eq!(
+        schemas["Contact"]["properties"]["mail"],
+        json!({"type": "string"})
+    );
     assert!(schemas["Contact"]["properties"].get("phone").is_none());
     assert_eq!(
         schemas["ContactPage"]["properties"]["data"]["items"]["$ref"],
@@ -294,7 +343,9 @@ async fn the_openapi_document_carries_model_and_page_schemas() {
 #[tokio::test]
 async fn records_read_from_the_database_serialize_like_new_ones() {
     let t = sqlite(SCHEMA).await;
-    let created = Contact::create(&t.db, Contact { id: 0, ..ada() }).await.unwrap();
+    let created = Contact::create(&t.db, Contact { id: 0, ..ada() })
+        .await
+        .unwrap();
     let stored = Contact::find_or_fail(&t.db, created.id).await.unwrap();
     assert_eq!(stored.to_value().unwrap(), created.to_value().unwrap());
 }

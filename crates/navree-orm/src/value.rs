@@ -794,9 +794,13 @@ integer_field!(u16, "u16", 16, false, Value::SmallUnsigned(None));
 integer_field!(u32, "u32", 32, false, Value::Unsigned(None));
 integer_field!(u64, "u64", 64, false, Value::BigUnsigned(None));
 
-exact_field!(bool, "bool", FieldKind::Bool, Value::Bool(None), |value: Value| boolean(
-    &value
-));
+exact_field!(
+    bool,
+    "bool",
+    FieldKind::Bool,
+    Value::Bool(None),
+    |value: Value| boolean(&value)
+);
 
 impl Field for f32 {
     const KIND: FieldKind = FieldKind::Float { bits: 32 };
@@ -853,7 +857,13 @@ impl Field for f64 {
         Cow::Borrowed("f64")
     }
 }
-exact_field!(String, "String", FieldKind::Text, Value::String(None), string);
+exact_field!(
+    String,
+    "String",
+    FieldKind::Text,
+    Value::String(None),
+    string
+);
 
 /// Bytes: JSON input is an array of numbers (what serde writes for a
 /// `Vec<u8>`) or a string (its UTF-8 bytes).
@@ -883,7 +893,9 @@ impl Field for Vec<u8> {
                 .map(|item| {
                     item.as_u64()
                         .and_then(|n| u8::try_from(n).ok())
-                        .ok_or_else(|| FieldError::Invalid(format!("{item} is not a byte (0 to 255)")))
+                        .ok_or_else(|| {
+                            FieldError::Invalid(format!("{item} is not a byte (0 to 255)"))
+                        })
                 })
                 .collect(),
             serde_json::Value::Null => Err(FieldError::Null),
@@ -1068,9 +1080,7 @@ impl Field for Decimal {
     /// the nearest binary float).
     fn from_json(json: serde_json::Value) -> Result<Self, FieldError> {
         match json {
-            serde_json::Value::Number(number) => {
-                decimal(&Value::String(Some(number.to_string())))
-            }
+            serde_json::Value::Number(number) => decimal(&Value::String(Some(number.to_string()))),
             other => decimal(&json_to_value(other)),
         }
     }

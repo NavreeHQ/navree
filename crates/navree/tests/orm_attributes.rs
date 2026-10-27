@@ -6,7 +6,12 @@ use navree::prelude::*;
 use serde::Serialize;
 
 #[derive(Model, Clone, Debug, Default, Serialize)]
-#[model(table = "badges", fillable(label, level), hidden(secret), appends(shout))]
+#[model(
+    table = "badges",
+    fillable(label, level),
+    hidden(secret),
+    appends(shout)
+)]
 struct Badge {
     id: i64,
     label: String,

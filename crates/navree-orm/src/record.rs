@@ -183,9 +183,10 @@ impl<M: Model> Record<M> {
             columns
                 .into_iter()
                 .map(|column| {
-                    let value = self.model.value(column)?.ok_or_else(|| {
-                        crate::model::derive_support::unknown_column::<M>(column)
-                    })?;
+                    let value = self
+                        .model
+                        .value(column)?
+                        .ok_or_else(|| crate::model::derive_support::unknown_column::<M>(column))?;
                     Ok((column, value))
                 })
                 .collect()

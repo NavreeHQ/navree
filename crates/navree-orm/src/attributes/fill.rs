@@ -88,7 +88,9 @@ impl Attributes {
     }
 
     /// The values of `pairs` (a later key replaces an earlier one).
-    pub fn from_pairs<K: Into<String>>(pairs: impl IntoIterator<Item = (K, serde_json::Value)>) -> Self {
+    pub fn from_pairs<K: Into<String>>(
+        pairs: impl IntoIterator<Item = (K, serde_json::Value)>,
+    ) -> Self {
         pairs.into_iter().collect()
     }
 
@@ -128,7 +130,11 @@ impl Attributes {
     ) -> Option<serde_json::Value> {
         let key = key.into();
         let value = value.into();
-        match self.entries.iter_mut().find(|(existing, _)| *existing == key) {
+        match self
+            .entries
+            .iter_mut()
+            .find(|(existing, _)| *existing == key)
+        {
             Some(entry) => Some(std::mem::replace(&mut entry.1, value)),
             None => {
                 self.entries.push((key, value));
@@ -147,7 +153,10 @@ impl Attributes {
 
     /// Removes `key`; returns its value.
     pub fn remove(&mut self, key: &str) -> Option<serde_json::Value> {
-        let index = self.entries.iter().position(|(existing, _)| existing == key)?;
+        let index = self
+            .entries
+            .iter()
+            .position(|(existing, _)| existing == key)?;
         Some(self.entries.remove(index).1)
     }
 
@@ -163,7 +172,9 @@ impl Attributes {
 
     /// The keys and values, in order.
     pub fn iter(&self) -> impl Iterator<Item = (&str, &serde_json::Value)> {
-        self.entries.iter().map(|(key, value)| (key.as_str(), value))
+        self.entries
+            .iter()
+            .map(|(key, value)| (key.as_str(), value))
     }
 
     /// How many values.
@@ -241,7 +252,10 @@ impl<'de> Deserialize<'de> for Attributes {
                 f.write_str("a JSON object of column values")
             }
 
-            fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> std::result::Result<Attributes, A::Error> {
+            fn visit_map<A: MapAccess<'de>>(
+                self,
+                mut map: A,
+            ) -> std::result::Result<Attributes, A::Error> {
                 let mut attributes = Attributes::new();
                 while let Some((key, value)) = map.next_entry::<String, serde_json::Value>()? {
                     attributes.insert(key, value);
@@ -466,7 +480,11 @@ enum Guard<'a> {
 
 /// Fills `record` from `attributes` under `guard`; changes nothing when it
 /// fails.
-fn fill_record<M: Model>(record: &mut Record<M>, attributes: Attributes, guard: &Guard<'_>) -> Result<()> {
+fn fill_record<M: Model>(
+    record: &mut Record<M>,
+    attributes: Attributes,
+    guard: &Guard<'_>,
+) -> Result<()> {
     let meta = M::meta();
     let unguarded = is_unguarded();
     let mut refused = Vec::new();
@@ -543,7 +561,9 @@ async fn context_for<M: Model, E: Executor + ?Sized>(exec: &E) -> Result<Option<
         return Ok(None);
     }
     let target = exec.target(Access::Write).await?;
-    Ok(CastContext::for_model::<M>(&target.context()).await?.map(Arc::new))
+    Ok(CastContext::for_model::<M>(&target.context())
+        .await?
+        .map(Arc::new))
 }
 
 /// The field `column` belongs to, when that field is stored across several
@@ -581,7 +601,9 @@ fn set_json_path_on<M: Model>(
         Some(found) if found.is_json() => {}
         Some(_) | None => return Err(not_assignable::<M>(&format!("{column}->{path}"))),
     }
-    let mut json = model.json_attribute(column)?.unwrap_or(serde_json::Value::Null);
+    let mut json = model
+        .json_attribute(column)?
+        .unwrap_or(serde_json::Value::Null);
     let segments: Vec<&str> = path.split("->").map(str::trim).collect();
     if segments.iter().any(|segment| segment.is_empty()) {
         return Err(OrmError::InvalidQuery(format!(
@@ -589,14 +611,21 @@ fn set_json_path_on<M: Model>(
         )));
     }
     set_path(&mut json, &segments, value).map_err(|message| {
-        OrmError::InvalidQuery(format!("cannot set `{column}->{path}` of {}: {message}", meta.name()))
+        OrmError::InvalidQuery(format!(
+            "cannot set `{column}->{path}` of {}: {message}",
+            meta.name()
+        ))
     })?;
     model.set_attribute(column, json)
 }
 
 /// Sets `value` at `segments` inside `json`, creating objects on the way;
 /// a numeric step indexes an array (or appends at its length).
-fn set_path(json: &mut serde_json::Value, segments: &[&str], value: serde_json::Value) -> std::result::Result<(), String> {
+fn set_path(
+    json: &mut serde_json::Value,
+    segments: &[&str],
+    value: serde_json::Value,
+) -> std::result::Result<(), String> {
     let Some((first, rest)) = segments.split_first() else {
         *json = value;
         return Ok(());
@@ -626,7 +655,12 @@ fn set_path(json: &mut serde_json::Value, segments: &[&str], value: serde_json::
                 }
             }
         }
-        other => return Err(format!("`{first}` is inside {}, not an object", json_kind(other))),
+        other => {
+            return Err(format!(
+                "`{first}` is inside {}, not an object",
+                json_kind(other)
+            ));
+        }
     };
     set_path(next, rest, value)
 }
@@ -702,7 +736,11 @@ impl<M: Model> Record<M> {
 
     /// Sets `column` from untyped input, through the field's cast and
     /// mutator (unguarded: [`fill`](Record::fill) applies the guards).
-    pub fn set_attribute(&mut self, column: impl ColumnName, input: impl Into<serde_json::Value>) -> Result<&mut Self> {
+    pub fn set_attribute(
+        &mut self,
+        column: impl ColumnName,
+        input: impl Into<serde_json::Value>,
+    ) -> Result<&mut Self> {
         let column = column.column_name();
         let input = input.into();
         let context = self.attributes.context.clone();
@@ -802,7 +840,10 @@ mod tests {
         assert_eq!(attributes.remove("b"), Some(json!(3)));
         assert!(!attributes.contains_key("b"));
         let parsed: Attributes = serde_json::from_value(json!({"x": 1, "y": [2]})).unwrap();
-        assert_eq!(serde_json::to_value(&parsed).unwrap(), json!({"x": 1, "y": [2]}));
+        assert_eq!(
+            serde_json::to_value(&parsed).unwrap(),
+            json!({"x": 1, "y": [2]})
+        );
         assert!(Attributes::from_json(json!([1])).is_err());
         assert!(serde_json::from_value::<Attributes>(json!("text")).is_err());
     }
@@ -815,6 +856,9 @@ mod tests {
         assert!(matches!(discard_policy(), DiscardPolicy::Ignore));
         let inside = with_discard_policy(DiscardPolicy::Fail, async { discard_policy() }).await;
         assert!(matches!(inside, DiscardPolicy::Fail));
-        assert_eq!(format!("{:?}", DiscardPolicy::Report(Arc::new(|_, _| {}))), "Report(..)");
+        assert_eq!(
+            format!("{:?}", DiscardPolicy::Report(Arc::new(|_, _| {}))),
+            "Report(..)"
+        );
     }
 }

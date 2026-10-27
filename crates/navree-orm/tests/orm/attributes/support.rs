@@ -31,7 +31,10 @@ pub async fn create(db: &Db, schema: &str) {
 /// A fresh SQLite database (no app) with `schema`'s tables.
 pub async fn sqlite(schema: &str) -> Sqlite {
     let dir = tempfile::tempdir().expect("a temporary directory");
-    let url = format!("sqlite://{}?mode=rwc", dir.path().join("attributes.db").display());
+    let url = format!(
+        "sqlite://{}?mode=rwc",
+        dir.path().join("attributes.db").display()
+    );
     let db = Db::connect(&DbOptions {
         url,
         ..DbOptions::default()

@@ -209,11 +209,17 @@ impl<T: Serialize + DeserializeOwned + 'static> Cast<T> for EncryptedJson {
     }
 
     fn get_with(stored: String, context: &CastContext) -> Result<T, CastError> {
-        context.encrypter()?.decrypt_json(&stored).map_err(crypto_error)
+        context
+            .encrypter()?
+            .decrypt_json(&stored)
+            .map_err(crypto_error)
     }
 
     fn set_with(value: &T, context: &CastContext) -> Result<String, CastError> {
-        context.encrypter()?.encrypt_json(value).map_err(crypto_error)
+        context
+            .encrypter()?
+            .encrypt_json(value)
+            .map_err(crypto_error)
     }
 
     fn same(a: &T, b: &T, context: &CastContext) -> bool {
@@ -227,7 +233,9 @@ impl<T: Serialize + DeserializeOwned + 'static> Cast<T> for EncryptedJson {
     fn from_json(input: serde_json::Value, context: &CastContext) -> Result<T, CastError> {
         let _ = context;
         serde_json::from_value(input).map_err(|error| {
-            CastError::new(format!("the input is not the JSON of the field's type: {error}"))
+            CastError::new(format!(
+                "the input is not the JSON of the field's type: {error}"
+            ))
         })
     }
 
@@ -255,8 +263,16 @@ mod tests {
         let first: String = Encrypted::set_with(&secret, &context).unwrap();
         let second: String = Encrypted::set_with(&secret, &context).unwrap();
         assert_ne!(first, second, "a fresh nonce each time");
-        assert!(<Encrypted as Cast<String>>::same(&secret, &secret.clone(), &context));
-        assert!(!<Encrypted as Cast<String>>::same(&secret, &"other".to_owned(), &context));
+        assert!(<Encrypted as Cast<String>>::same(
+            &secret,
+            &secret.clone(),
+            &context
+        ));
+        assert!(!<Encrypted as Cast<String>>::same(
+            &secret,
+            &"other".to_owned(),
+            &context
+        ));
         let bytes = vec![0_u8, 159, 255];
         let stored = Encrypted::set_with(&bytes, &context).unwrap();
         let read: Vec<u8> = Encrypted::get_with(stored, &context).unwrap();
@@ -265,12 +281,20 @@ mod tests {
 
     #[test]
     fn decryption_failures_explain_key_rotation() {
-        let stored: String = Encrypted::set_with(&"x".to_owned(), &context(AppKey::generate())).unwrap();
-        let error = <Encrypted as Cast<String>>::get_with(stored, &context(AppKey::generate())).unwrap_err();
+        let stored: String =
+            Encrypted::set_with(&"x".to_owned(), &context(AppKey::generate())).unwrap();
+        let error = <Encrypted as Cast<String>>::get_with(stored, &context(AppKey::generate()))
+            .unwrap_err();
         assert!(error.to_string().contains("app.previous_keys"), "{error}");
-        let error = <Encrypted as Cast<String>>::get_with("plain".into(), &context(AppKey::generate())).unwrap_err();
-        assert!(error.to_string().starts_with("invalid encrypted payload"), "{error}");
-        let error = <Encrypted as Cast<String>>::set_with(&"x".to_owned(), &CastContext::new()).unwrap_err();
+        let error =
+            <Encrypted as Cast<String>>::get_with("plain".into(), &context(AppKey::generate()))
+                .unwrap_err();
+        assert!(
+            error.to_string().starts_with("invalid encrypted payload"),
+            "{error}"
+        );
+        let error = <Encrypted as Cast<String>>::set_with(&"x".to_owned(), &CastContext::new())
+            .unwrap_err();
         assert!(error.to_string().contains("no Encrypter"), "{error}");
     }
 
@@ -281,12 +305,20 @@ mod tests {
         let rotated = CastContext::new()
             .with_encrypter(Encrypter::new(AppKey::generate()).with_previous_keys([old.clone()]));
         let row = Row::from_values(vec![("note".into(), Value::from(stored.clone()))]);
-        assert!(<Encrypted as Cast<String>>::is_stale(&row, "note", &rotated));
-        assert!(!<Encrypted as Cast<String>>::is_stale(&row, "note", &context(old)));
+        assert!(<Encrypted as Cast<String>>::is_stale(
+            &row, "note", &rotated
+        ));
+        assert!(!<Encrypted as Cast<String>>::is_stale(
+            &row,
+            "note",
+            &context(old)
+        ));
         let read: String = Encrypted::get_with(stored, &rotated).unwrap();
         assert_eq!(read, "x", "previous keys still decrypt");
         let nulls = Row::from_values(vec![("note".into(), Value::String(None))]);
-        assert!(!<Encrypted as Cast<String>>::is_stale(&nulls, "note", &rotated));
+        assert!(!<Encrypted as Cast<String>>::is_stale(
+            &nulls, "note", &rotated
+        ));
     }
 
     #[test]
@@ -298,8 +330,12 @@ mod tests {
         assert_eq!(read, codes);
         let input: Vec<u32> = EncryptedJson::from_json(json!([1, 2]), &context).unwrap();
         assert_eq!(input, [1, 2]);
-        let error = <EncryptedJson as Cast<Vec<u32>>>::from_json(json!("nope"), &context).unwrap_err();
-        assert!(error.to_string().starts_with("the input is not the JSON"), "{error}");
+        let error =
+            <EncryptedJson as Cast<Vec<u32>>>::from_json(json!("nope"), &context).unwrap_err();
+        assert!(
+            error.to_string().starts_with("the input is not the JSON"),
+            "{error}"
+        );
         let plain: String = Encrypted::from_json(json!("plain"), &context).unwrap();
         assert_eq!(plain, "plain");
     }

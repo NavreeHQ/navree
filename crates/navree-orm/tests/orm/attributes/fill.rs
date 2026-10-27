@@ -5,9 +5,7 @@
 use std::sync::{Arc, Mutex};
 
 use chrono::{DateTime, TimeZone, Utc};
-use navree_orm::attributes::{
-    Attributes, DiscardPolicy, unguarded, with_discard_policy,
-};
+use navree_orm::attributes::{Attributes, DiscardPolicy, unguarded, with_discard_policy};
 use navree_orm::{Model, OrmError, Record, attrs};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -43,8 +41,34 @@ CREATE TABLE notes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     body TEXT NOT NULL,
     pinned BOOLEAN NOT NULL
+);
+CREATE TABLE people (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    full_name TEXT NOT NULL,
+    first_name TEXT NOT NULL,
+    last_name TEXT NOT NULL
 )
 "#;
+
+/// A full name that also sets the first and last names.
+#[derive(Model, Clone, Debug, Default, PartialEq, Serialize)]
+#[model(table = "people", fillable(full_name))]
+pub struct Person {
+    pub id: i64,
+    #[model(set_with = split_name)]
+    pub full_name: String,
+    pub first_name: String,
+    pub last_name: String,
+}
+
+/// Sets the full name (spaces collapsed) and the names it splits into.
+fn split_name(person: &mut Person, full_name: String) {
+    let full_name = full_name.split_whitespace().collect::<Vec<_>>().join(" ");
+    let (first, last) = full_name.split_once(' ').unwrap_or((&full_name, ""));
+    person.first_name = first.to_owned();
+    person.last_name = last.to_owned();
+    person.full_name = full_name;
+}
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -163,7 +187,10 @@ fn untyped_input_is_converted_through_types_and_casts() {
     assert_eq!(member.role, Role::Admin);
     assert_eq!(member.age, Some(42));
     assert_eq!(member.settings, json!({"theme": "dark"}));
-    assert_eq!(member.joined_at, Utc.with_ymd_and_hms(2026, 10, 27, 8, 30, 0).unwrap());
+    assert_eq!(
+        member.joined_at,
+        Utc.with_ymd_and_hms(2026, 10, 27, 8, 30, 0).unwrap()
+    );
     assert_eq!(member.profile.as_ref().unwrap().bio, "Mathematician");
 
     member.fill(attrs! { "age" => null }).unwrap();
@@ -179,7 +206,10 @@ fn input_that_does_not_fit_changes_nothing() {
     let error = member
         .fill(attrs! { "name" => "After", "role" => "emperor" })
         .unwrap_err();
-    assert!(matches!(error, OrmError::Cast { ref column, .. } if column == "role"), "{error:?}");
+    assert!(
+        matches!(error, OrmError::Cast { ref column, .. } if column == "role"),
+        "{error:?}"
+    );
     assert_eq!(member.name, "Before");
     let error = member.fill(attrs! { "age" => "old" }).unwrap_err();
     assert_eq!(
@@ -227,7 +257,10 @@ fn guarded_models_fill_every_other_real_column() {
 fn unknown_columns_and_paths_into_plain_columns_never_reach_the_model() {
     let mut post = Record::new(Post::default());
     let error = post.force_fill(attrs! { "nope" => 1 }).unwrap_err();
-    assert_eq!(error.to_string(), "invalid query: Post has no column `nope`");
+    assert_eq!(
+        error.to_string(),
+        "invalid query: Post has no column `nope`"
+    );
     let error = post.force_fill(attrs! { "title->x" => 1 }).unwrap_err();
     assert_eq!(
         error.to_string(),
@@ -260,12 +293,16 @@ async fn a_reporting_discard_policy_calls_its_handler() {
     let handler = {
         let seen = Arc::clone(&seen);
         DiscardPolicy::Report(Arc::new(move |model, columns| {
-            seen.lock().unwrap().push((model.to_owned(), columns.to_vec()));
+            seen.lock()
+                .unwrap()
+                .push((model.to_owned(), columns.to_vec()));
         }))
     };
     let mut member = Record::new(Member::default());
     with_discard_policy(handler, async {
-        member.fill(attrs! { "name" => "Ada", "is_admin" => true }).unwrap();
+        member
+            .fill(attrs! { "name" => "Ada", "is_admin" => true })
+            .unwrap();
     })
     .await;
     assert_eq!(member.name, "Ada");
@@ -291,7 +328,8 @@ async fn unguarded_scopes_and_models_fill_every_real_column() {
     assert_eq!(label.name, "x");
 
     let mut note = Record::new(Note::default());
-    note.fill(attrs! { "body" => "hello", "pinned" => 1 }).unwrap();
+    note.fill(attrs! { "body" => "hello", "pinned" => 1 })
+        .unwrap();
     assert_eq!((note.body.as_str(), note.pinned), ("hello", true));
 }
 
@@ -303,20 +341,34 @@ fn fill_only_is_an_allow_list_for_one_call() {
         &["title", "author_id"],
     )
     .unwrap();
-    assert_eq!((post.title.as_str(), post.body.as_str(), post.author_id), ("T", "", 4));
+    assert_eq!(
+        (post.title.as_str(), post.body.as_str(), post.author_id),
+        ("T", "", 4)
+    );
 }
 
 #[test]
 fn guards_are_declared_and_queried_statically() {
     assert_eq!(
         Member::fillable(),
-        ["name", "email", "role", "age", "settings", "joined_at", "profile->bio"]
+        [
+            "name",
+            "email",
+            "role",
+            "age",
+            "settings",
+            "joined_at",
+            "profile->bio"
+        ]
     );
     assert_eq!(Member::guarded(), None);
     assert!(Member::is_fillable("name"));
     assert!(Member::is_fillable("profile->bio"));
     assert!(!Member::is_fillable("profile->links"));
-    assert!(Member::is_fillable("settings->theme"), "a path into a fillable JSON column");
+    assert!(
+        Member::is_fillable("settings->theme"),
+        "a path into a fillable JSON column"
+    );
     assert!(!Member::is_fillable("is_admin"));
     assert!(!Member::is_fillable("nope"));
     assert!(Member::is_guarded("is_admin"));
@@ -334,15 +386,25 @@ fn guards_are_declared_and_queried_statically() {
     assert_eq!(Draft::fillable(), ["title", "body"]);
     assert_eq!(Draft::guarded(), Some(&["id"][..]));
     assert!(Draft::is_fillable("body"));
-    assert!(!Draft::is_fillable("author_id"), "fillable lists win over guarded lists");
+    assert!(
+        !Draft::is_fillable("author_id"),
+        "fillable lists win over guarded lists"
+    );
 }
 
 #[test]
 fn json_paths_edit_json_columns_by_value() {
     let mut member = Record::new(Member::default());
-    member.set_json_path("settings", "theme->accent", "green").unwrap();
-    member.set_json_path(Member::SETTINGS, "langs", ["en", "pa"]).unwrap();
-    assert_eq!(member.settings, json!({"theme": {"accent": "green"}, "langs": ["en", "pa"]}));
+    member
+        .set_json_path("settings", "theme->accent", "green")
+        .unwrap();
+    member
+        .set_json_path(Member::SETTINGS, "langs", ["en", "pa"])
+        .unwrap();
+    assert_eq!(
+        member.settings,
+        json!({"theme": {"accent": "green"}, "langs": ["en", "pa"]})
+    );
     // A typed JSON field must still fit its type: an absent profile gains
     // `links` but no `bio`.
     let error = member
@@ -354,8 +416,12 @@ fn json_paths_edit_json_columns_by_value() {
     );
     assert_eq!(member.profile, None, "nothing changed");
     member.profile = Some(Profile::default());
-    member.set_json_path(Member::PROFILE, "links", ["https://a.example"]).unwrap();
-    member.set_json_path(Member::PROFILE, "links->1", "https://b.example").unwrap();
+    member
+        .set_json_path(Member::PROFILE, "links", ["https://a.example"])
+        .unwrap();
+    member
+        .set_json_path(Member::PROFILE, "links->1", "https://b.example")
+        .unwrap();
     assert_eq!(
         member.profile,
         Some(Profile {
@@ -363,7 +429,9 @@ fn json_paths_edit_json_columns_by_value() {
             links: vec!["https://a.example".into(), "https://b.example".into()],
         })
     );
-    let error = member.set_json_path(Member::PROFILE, "links->5", "x").unwrap_err();
+    let error = member
+        .set_json_path(Member::PROFILE, "links->5", "x")
+        .unwrap_err();
     assert_eq!(
         error.to_string(),
         "invalid query: cannot set `profile->links->5` of Member: index 5 is past the end of an array of 2"
@@ -390,9 +458,29 @@ fn mutators_also_run_through_generated_setters_and_set_attribute() {
     assert!(Member::meta().column("email").unwrap().has_mutator());
 }
 
+#[tokio::test]
+async fn mutators_can_write_several_columns() {
+    let t = sqlite(SCHEMA).await;
+    let person = Person::create_from(&t.db, attrs! { "full_name" => "  Ada   King Lovelace " })
+        .await
+        .unwrap();
+    assert_eq!(person.full_name, "Ada King Lovelace");
+    let mut stored = Person::find_or_fail(&t.db, person.id).await.unwrap();
+    assert_eq!(
+        (stored.first_name.as_str(), stored.last_name.as_str()),
+        ("Ada", "King Lovelace"),
+        "set by the mutator, though not fillable"
+    );
+    stored.set_full_name("Grace Hopper");
+    assert!(stored.is_dirty_on(["first_name"]) && stored.is_dirty_on(["last_name"]));
+    stored.fill(attrs! { "first_name" => "x" }).unwrap();
+    assert_eq!(stored.first_name, "Grace", "not fillable: left out");
+}
+
 #[test]
 fn request_bodies_deserialize_into_attributes() {
-    let body: Attributes = serde_json::from_str(r#"{"title": "From JSON", "published": false}"#).unwrap();
+    let body: Attributes =
+        serde_json::from_str(r#"{"title": "From JSON", "published": false}"#).unwrap();
     let mut post = Record::new(Post::default());
     post.fill(body).unwrap();
     assert_eq!(post.title, "From JSON");
@@ -401,7 +489,11 @@ fn request_bodies_deserialize_into_attributes() {
         title: &'a str,
         body: &'a str,
     }
-    let typed = Attributes::from_serialize(&NewPost { title: "Typed", body: "Body" }).unwrap();
+    let typed = Attributes::from_serialize(&NewPost {
+        title: "Typed",
+        body: "Body",
+    })
+    .unwrap();
     post.fill(typed).unwrap();
     assert_eq!((post.title.as_str(), post.body.as_str()), ("Typed", "Body"));
 }
@@ -417,22 +509,54 @@ async fn records_are_created_and_updated_from_attributes() {
     .unwrap();
     assert!(member.exists());
     let stored = Member::find_or_fail(&t.db, member.id).await.unwrap();
-    assert_eq!((stored.name.as_str(), stored.email.as_str(), stored.is_admin), ("Ada", "ada@x.io", false));
+    assert_eq!(
+        (stored.name.as_str(), stored.email.as_str(), stored.is_admin),
+        ("Ada", "ada@x.io", false)
+    );
 
     let forced = Member::force_create(&t.db, attrs! { "name" => "Root", "is_admin" => true })
         .await
         .unwrap();
-    assert!(Member::find_or_fail(&t.db, forced.id).await.unwrap().is_admin);
+    assert!(
+        Member::find_or_fail(&t.db, forced.id)
+            .await
+            .unwrap()
+            .is_admin
+    );
 
-    let label = Label::query().force_create(&t.db, attrs! { "name" => "vip" }).await.unwrap();
+    let label = Label::query()
+        .force_create(&t.db, attrs! { "name" => "vip" })
+        .await
+        .unwrap();
     assert_eq!(label.name, "vip");
-    let error = Label::create_from(&t.db, attrs! { "name" => "no" }).await.unwrap_err();
-    assert!(matches!(error, OrmError::MassAssignment { .. }), "{error:?}");
+    let error = Label::create_from(&t.db, attrs! { "name" => "no" })
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(error, OrmError::MassAssignment { .. }),
+        "{error:?}"
+    );
 
     let mut stored = stored;
-    assert!(stored.update_attributes(&t.db, attrs! { "name" => "Ada L." }).await.unwrap());
-    assert_eq!(Member::find_or_fail(&t.db, member.id).await.unwrap().name, "Ada L.");
+    assert!(
+        stored
+            .update_attributes(&t.db, attrs! { "name" => "Ada L." })
+            .await
+            .unwrap()
+    );
+    assert_eq!(
+        Member::find_or_fail(&t.db, member.id).await.unwrap().name,
+        "Ada L."
+    );
     let mut unsaved = Record::new(Member::default());
-    assert!(!unsaved.update_attributes(&t.db, attrs! { "name" => "x" }).await.unwrap());
-    assert_eq!(unsaved.name, "", "a record that is not stored is left alone");
+    assert!(
+        !unsaved
+            .update_attributes(&t.db, attrs! { "name" => "x" })
+            .await
+            .unwrap()
+    );
+    assert_eq!(
+        unsaved.name, "",
+        "a record that is not stored is left alone"
+    );
 }

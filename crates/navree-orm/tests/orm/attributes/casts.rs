@@ -71,7 +71,10 @@ impl navree_orm::Field for Email {
         <String as navree_orm::Field>::null()
     }
 
-    fn from_sql(row: &navree_db::sea_orm::QueryResult, column: &str) -> Result<Self, navree_orm::FieldError> {
+    fn from_sql(
+        row: &navree_db::sea_orm::QueryResult,
+        column: &str,
+    ) -> Result<Self, navree_orm::FieldError> {
         <String as navree_orm::Field>::from_sql(row, column).map(|text| Email::new(&text))
     }
 
@@ -204,7 +207,9 @@ impl MultiColumnCast<Money> for MoneyColumns {
         if currency.len() == 3 {
             Ok(Money { cents, currency })
         } else {
-            Err(CastError::new(format!("`{currency}` is not a currency code")))
+            Err(CastError::new(format!(
+                "`{currency}` is not a currency code"
+            )))
         }
     }
 
@@ -310,7 +315,8 @@ pub struct Ledger {
 }
 
 fn at(day: u32, hour: u32, minute: u32, second: u32) -> DateTime<Utc> {
-    Utc.with_ymd_and_hms(2026, 10, day, hour, minute, second).unwrap()
+    Utc.with_ymd_and_hms(2026, 10, day, hour, minute, second)
+        .unwrap()
 }
 
 fn ledger() -> Ledger {
@@ -351,21 +357,43 @@ async fn every_cast_stores_its_form_and_reads_back() {
     let stored = Ledger::find_or_fail(&t.db, created.id).await.unwrap();
     assert_eq!(*stored, *created, "the record holds what is stored");
 
-    let row = navree_orm::table("ledgers").first(&t.db).await.unwrap().unwrap();
+    let row = navree_orm::table("ledgers")
+        .first(&t.db)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(row.get::<Decimal>("balance").unwrap().to_string(), "12.35");
     assert_eq!(row.get::<String>("opened_at").unwrap(), "27/10/2026 08:30");
-    assert_eq!(row.get::<String>("local_time").unwrap(), "2026-10-27T14:00:00+05:30");
+    assert_eq!(
+        row.get::<String>("local_time").unwrap(),
+        "2026-10-27T14:00:00+05:30"
+    );
     assert_eq!(row.get::<String>("day").unwrap(), "01.02.2026");
-    assert_eq!(row.get::<i64>("synced_at").unwrap(), at(27, 9, 0, 0).timestamp());
+    assert_eq!(
+        row.get::<i64>("synced_at").unwrap(),
+        at(27, 9, 0, 0).timestamp()
+    );
     assert_eq!(
         row.get::<i64>("pinged_at").unwrap(),
         at(27, 9, 0, 2).timestamp_millis() + 234
     );
-    assert_eq!(row.get::<Vec<u8>>("reference").unwrap(), created.reference.as_bytes());
+    assert_eq!(
+        row.get::<Vec<u8>>("reference").unwrap(),
+        created.reference.as_bytes()
+    );
     assert_eq!(row.get::<Vec<u8>>("batch").unwrap().len(), 16);
-    assert_eq!(row.get::<String>("website").unwrap(), "https://navree.com/docs");
-    assert_eq!(row.get::<serde_json::Value>("statuses").unwrap(), json!(["open", "closed"]));
-    assert_eq!(row.get::<serde_json::Value>("priorities").unwrap(), json!([1, 3]));
+    assert_eq!(
+        row.get::<String>("website").unwrap(),
+        "https://navree.com/docs"
+    );
+    assert_eq!(
+        row.get::<serde_json::Value>("statuses").unwrap(),
+        json!(["open", "closed"])
+    );
+    assert_eq!(
+        row.get::<serde_json::Value>("priorities").unwrap(),
+        json!([1, 3])
+    );
     assert_eq!(row.get::<String>("slug").unwrap(), "hello-world-again");
     assert_eq!(row.get::<String>("price").unwrap(), "12.50");
     assert!((row.get::<f64>("ratio").unwrap() - 0.25).abs() < f64::EPSILON);
@@ -375,13 +403,27 @@ async fn every_cast_stores_its_form_and_reads_back() {
     assert_eq!(row.get::<i64>("visits").unwrap(), 5);
     assert_eq!(
         row.get::<Vec<u8>>("embedding").unwrap(),
-        [0.5_f32, -1.0, 2.25].iter().flat_map(|f| f.to_le_bytes()).collect::<Vec<u8>>()
+        [0.5_f32, -1.0, 2.25]
+            .iter()
+            .flat_map(|f| f.to_le_bytes())
+            .collect::<Vec<u8>>()
     );
 
-    assert_eq!(created.balance.to_string(), "12.35", "rounded in the record when saved");
-    assert_eq!(created.opened_at, at(27, 8, 30, 0), "the format's precision");
+    assert_eq!(
+        created.balance.to_string(),
+        "12.35",
+        "rounded in the record when saved"
+    );
+    assert_eq!(
+        created.opened_at,
+        at(27, 8, 30, 0),
+        "the format's precision"
+    );
     assert_eq!(created.synced_at, at(27, 9, 0, 0), "whole seconds");
-    assert_eq!(created.slug, "hello-world-again", "an inbound cast's value once saved");
+    assert_eq!(
+        created.slug, "hello-world-again",
+        "an inbound cast's value once saved"
+    );
     let mut renamed = stored;
     renamed.slug = "Another Title".into();
     assert!(renamed.is_dirty_on(["slug"]));
@@ -400,20 +442,39 @@ async fn conditions_and_column_constants_go_through_the_casts() {
     assert_eq!(count(Ledger::REFERENCE.eq(created.reference)).await, 1);
     assert_eq!(count(Ledger::REFERENCE.eq(Uuid::now_v7())).await, 0);
     assert_eq!(count(Ledger::BATCH.eq(created.batch)).await, 1);
-    assert_eq!(count(Ledger::BALANCE.eq("12.345".parse::<Decimal>().unwrap())).await, 1);
+    assert_eq!(
+        count(Ledger::BALANCE.eq("12.345".parse::<Decimal>().unwrap())).await,
+        1
+    );
     assert_eq!(count(Ledger::TOTAL_CENTS.gte(999)).await, 1);
     assert_eq!(count(Ledger::TOTAL_CURRENCY.eq("USD")).await, 0);
     assert_eq!(count(Ledger::TIP_CENTS.is_null()).await, 1);
-    assert_eq!(count(Ledger::SLUG.eq("Hello World Again")).await, 1, "the inbound cast applies");
+    assert_eq!(
+        count(Ledger::SLUG.eq("Hello World Again")).await,
+        1,
+        "the inbound cast applies"
+    );
     assert_eq!(count(Ledger::RATIO.eq(25)).await, 1);
     let meta = Ledger::meta();
     assert_eq!(meta.column("tip_cents").unwrap().field(), "tip");
-    assert_eq!(meta.column("tip_cents").unwrap().cast_name(), Some("MoneyColumns"));
+    assert_eq!(
+        meta.column("tip_cents").unwrap().cast_name(),
+        Some("MoneyColumns")
+    );
     assert!(meta.column("tip_currency").unwrap().is_nullable());
-    assert_eq!(meta.column("ratio").unwrap().cast_name(), Some("Scaled<100>"));
+    assert_eq!(
+        meta.column("ratio").unwrap().cast_name(),
+        Some("Scaled<100>")
+    );
     assert_eq!(meta.column("price").unwrap().cast_name(), Some("castable"));
-    assert_eq!(meta.column("slug").unwrap().cast_name(), Some("inbound(Slugify)"));
-    assert_eq!(meta.column("balance").unwrap().cast_name(), Some("decimal(2)"));
+    assert_eq!(
+        meta.column("slug").unwrap().cast_name(),
+        Some("inbound(Slugify)")
+    );
+    assert_eq!(
+        meta.column("balance").unwrap().cast_name(),
+        Some("decimal(2)")
+    );
 }
 
 #[tokio::test]
@@ -424,9 +485,17 @@ async fn fields_across_columns_track_each_column() {
     assert!(record.is_dirty_on(["total_currency"]));
     assert!(!record.is_dirty_on(["total_cents"]));
     let dirty = record.get_dirty().unwrap();
-    assert_eq!(dirty.iter().map(|(name, _)| *name).collect::<Vec<_>>(), ["total_currency"]);
+    assert_eq!(
+        dirty.iter().map(|(name, _)| *name).collect::<Vec<_>>(),
+        ["total_currency"]
+    );
     record.save(&t.db).await.unwrap();
-    assert_eq!(stored_text(&t.db, "ledgers", "total_currency").await.as_deref(), Some("USD"));
+    assert_eq!(
+        stored_text(&t.db, "ledgers", "total_currency")
+            .await
+            .as_deref(),
+        Some("USD")
+    );
 
     record.tip = Some(Money {
         cents: 100,
@@ -437,17 +506,26 @@ async fn fields_across_columns_track_each_column() {
     assert_eq!(stored.tip, record.tip);
 
     let mut stored = stored;
-    stored.set_value("total_cents", navree_orm::Value::BigInt(Some(1))).unwrap();
+    stored
+        .set_value("total_cents", navree_orm::Value::BigInt(Some(1)))
+        .unwrap();
     assert_eq!(stored.total.cents, 1);
-    stored.fill(attrs! { "total_currency" => "GBP", "tip_cents" => 250 }).unwrap();
+    stored
+        .fill(attrs! { "total_currency" => "GBP", "tip_cents" => 250 })
+        .unwrap();
     assert_eq!(stored.total.currency, "GBP");
     assert_eq!(stored.tip.as_ref().unwrap().cents, 250);
-    let error = stored.fill(attrs! { "total_currency" => "POUNDS" }).unwrap_err();
+    let error = stored
+        .fill(attrs! { "total_currency" => "POUNDS" })
+        .unwrap_err();
     assert_eq!(
         error.to_string(),
         "cannot cast column `total` of Ledger: `POUNDS` is not a currency code"
     );
-    assert_eq!(stored.value("total_currency").unwrap(), Some(navree_orm::Value::from("GBP")));
+    assert_eq!(
+        stored.value("total_currency").unwrap(),
+        Some(navree_orm::Value::from("GBP"))
+    );
 
     t.db.conn()
         .execute_unprepared("UPDATE ledgers SET tip_cents = 5, tip_currency = NULL")
@@ -468,32 +546,65 @@ async fn custom_equivalence_and_rounding_decide_dirtiness() {
     record.balance = "12.36".parse().unwrap();
     assert!(record.is_dirty_on(["balance"]));
     record.opened_at = at(27, 8, 30, 59);
-    assert!(record.is_clean_on(["opened_at"]), "the format drops the seconds");
+    assert!(
+        record.is_clean_on(["opened_at"]),
+        "the format drops the seconds"
+    );
 }
 
 #[tokio::test]
 async fn increments_go_through_the_cast_and_the_database() {
     let t = sqlite(SCHEMA).await;
     let mut record = Ledger::create(&t.db, ledger()).await.unwrap();
-    assert!(record.increment_cast(&t.db, Ledger::VISITS, Counter(3)).await.unwrap());
+    assert!(
+        record
+            .increment_cast(&t.db, Ledger::VISITS, Counter(3))
+            .await
+            .unwrap()
+    );
     assert_eq!(record.visits, Counter(8));
-    assert!(record.decrement_cast(&t.db, Ledger::VISITS, Counter(2)).await.unwrap());
+    assert!(
+        record
+            .decrement_cast(&t.db, Ledger::VISITS, Counter(2))
+            .await
+            .unwrap()
+    );
     assert_eq!(record.visits, Counter(6));
     assert!(record.is_clean());
     let stored = Ledger::find_or_fail(&t.db, record.id).await.unwrap();
     assert_eq!(stored.visits, Counter(6));
 
-    let error = record.decrement_cast(&t.db, Ledger::VISITS, Counter(100)).await.unwrap_err();
-    assert_eq!(error.to_string(), "cannot cast column `visits` of Ledger: a counter cannot go below zero");
-    let error = record.increment_cast(&t.db, Ledger::CODE, "x".to_owned()).await.unwrap_err();
-    assert!(error.to_string().contains("which the database cannot add to"), "{error}");
+    let error = record
+        .decrement_cast(&t.db, Ledger::VISITS, Counter(100))
+        .await
+        .unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "cannot cast column `visits` of Ledger: a counter cannot go below zero"
+    );
+    let error = record
+        .increment_cast(&t.db, Ledger::CODE, "x".to_owned())
+        .await
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("which the database cannot add to"),
+        "{error}"
+    );
     let error = record
         .increment_cast(&t.db, Ledger::RATIO, 1)
         .await
         .unwrap_err();
-    assert!(error.to_string().contains("does not support increments"), "{error}");
+    assert!(
+        error.to_string().contains("does not support increments"),
+        "{error}"
+    );
     let mut unsaved = Record::new(ledger());
-    let error = unsaved.increment_cast(&t.db, Ledger::VISITS, Counter(1)).await.unwrap_err();
+    let error = unsaved
+        .increment_cast(&t.db, Ledger::VISITS, Counter(1))
+        .await
+        .unwrap_err();
     assert!(matches!(error, OrmError::NotPersisted { .. }), "{error:?}");
 }
 
@@ -503,8 +614,14 @@ async fn serialized_records_write_cast_outputs() {
     let record = Ledger::create(&t.db, ledger()).await.unwrap();
     let json = record.to_value().unwrap();
     assert_eq!(json["visits"], json!({"count": 5}), "Cast::serialize");
-    assert_eq!(json["opened_at"], "27/10/2026 08:30", "the format's own output");
-    assert_eq!(json["synced_at"], "2026-10-27T09:00:00.000000Z", "date-times in UTC with microseconds");
+    assert_eq!(
+        json["opened_at"], "27/10/2026 08:30",
+        "the format's own output"
+    );
+    assert_eq!(
+        json["synced_at"], "2026-10-27T09:00:00.000000Z",
+        "date-times in UTC with microseconds"
+    );
     assert_eq!(json["reference"], record.reference.to_string());
     assert_eq!(json["batch"], record.batch.to_string());
     assert_eq!(json["balance"], "12.35");
@@ -546,7 +663,10 @@ async fn untyped_input_reaches_every_cast_in_its_plain_form() {
     .await
     .unwrap();
     assert_eq!(record.balance.to_string(), "7.01");
-    assert_eq!(record.opened_at, Utc.with_ymd_and_hms(2026, 11, 1, 10, 0, 0).unwrap());
+    assert_eq!(
+        record.opened_at,
+        Utc.with_ymd_and_hms(2026, 11, 1, 10, 0, 0).unwrap()
+    );
     assert_eq!(record.local_time.offset().local_minus_utc(), -18_000);
     assert_eq!(record.synced_at.timestamp(), 1_793_089_800);
     assert_eq!(record.pinged_at.unwrap().timestamp_subsec_millis(), 123);
@@ -554,14 +674,20 @@ async fn untyped_input_reaches_every_cast_in_its_plain_form() {
     assert_eq!(record.statuses, [Status::Draft]);
     assert_eq!(record.priorities, [Priority::High].into());
     assert_eq!(record.price, Price(310));
-    assert_eq!(record.ratio, 50, "the input is the stored form for a custom cast");
+    assert_eq!(
+        record.ratio, 50,
+        "the input is the stored form for a custom cast"
+    );
     assert_eq!(record.total.currency, "JPY");
     assert_eq!(record.visits, Counter(2));
     assert_eq!(record.embedding.as_deref(), Some(&[1.0, 2.5][..]));
     let error = Record::new(Ledger::default())
         .fill(attrs! { "reference" => "not-a-uuid" })
         .unwrap_err();
-    assert!(matches!(error, OrmError::Cast { ref column, .. } if column == "reference"), "{error:?}");
+    assert!(
+        matches!(error, OrmError::Cast { ref column, .. } if column == "reference"),
+        "{error:?}"
+    );
 }
 
 #[tokio::test]
@@ -582,7 +708,31 @@ async fn stored_values_that_do_not_fit_are_cast_errors_naming_the_column() {
         .await
         .unwrap();
     let error = Ledger::query().first(&t.db).await.unwrap_err();
-    assert!(error.to_string().starts_with("cannot cast column `opened_at` of Ledger: `soon` does not match the format"), "{error}");
+    assert!(
+        error.to_string().starts_with(
+            "cannot cast column `opened_at` of Ledger: `soon` does not match the format"
+        ),
+        "{error}"
+    );
+
+    // Decimals that do not parse are errors naming the column, stored or
+    // given.
+    t.db.conn()
+        .execute_unprepared("UPDATE ledgers SET opened_at = '27/10/2026 08:30', balance = 'lots'")
+        .await
+        .unwrap();
+    let error = Ledger::query().first(&t.db).await.unwrap_err();
+    assert!(
+        matches!(&error, OrmError::Decode { column, .. } | OrmError::Cast { column, .. } if column == "balance"),
+        "{error:?}"
+    );
+    let mut record = Record::new(ledger());
+    let error = record.fill(attrs! { "balance" => "lots" }).unwrap_err();
+    assert!(
+        matches!(&error, OrmError::Decode { column, .. } | OrmError::Cast { column, .. } if column == "balance"),
+        "{error:?}"
+    );
+    assert_eq!(record.balance, ledger().balance, "nothing changed");
 }
 
 #[tokio::test]
@@ -603,7 +753,10 @@ async fn query_time_casts_type_extra_columns() {
         .unwrap();
     let record = &records[0];
     assert_eq!(record.extra::<bool>("rich").unwrap(), Some(true));
-    assert_eq!(record.extra::<serde_json::Value>("document").unwrap(), Some(json!({"a": 1})));
+    assert_eq!(
+        record.extra::<serde_json::Value>("document").unwrap(),
+        Some(json!({"a": 1}))
+    );
     let json = record.to_value().unwrap();
     assert_eq!(json["rich"], true);
     assert_eq!(json["document"], json!({"a": 1}));
@@ -614,16 +767,28 @@ async fn query_time_casts_type_extra_columns() {
         .get(&t.db)
         .await
         .unwrap_err();
-    assert_eq!(error.to_string(), "cannot cast column `rich` of Ledger: `x` is not a boolean");
+    assert_eq!(
+        error.to_string(),
+        "cannot cast column `rich` of Ledger: `x` is not a boolean"
+    );
 }
 
 #[tokio::test]
 async fn newtypes_that_are_fields_need_no_cast() {
     let t = sqlite(SCHEMA).await;
-    let contact = Contact::create(&t.db, Contact { email: Email::new(" Ada@Example.com "), ..Contact::default() })
-        .await
-        .unwrap();
-    assert_eq!(stored_text(&t.db, "contacts", "email").await.as_deref(), Some("ada@example.com"));
+    let contact = Contact::create(
+        &t.db,
+        Contact {
+            email: Email::new(" Ada@Example.com "),
+            ..Contact::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        stored_text(&t.db, "contacts", "email").await.as_deref(),
+        Some("ada@example.com")
+    );
     let found = Contact::query()
         .where_(Contact::EMAIL.eq(Email::new("ADA@example.com")))
         .first(&t.db)
@@ -632,7 +797,9 @@ async fn newtypes_that_are_fields_need_no_cast() {
         .unwrap();
     assert_eq!(found.email, contact.email);
     let mut filled = Record::new(Contact::default());
-    filled.fill(attrs! { "email" => "Grace@Example.com" }).unwrap();
+    filled
+        .fill(attrs! { "email" => "Grace@Example.com" })
+        .unwrap();
     assert_eq!(filled.email, Email::new("grace@example.com"));
     assert_eq!(filled.to_value().unwrap()["email"], "grace@example.com");
 }

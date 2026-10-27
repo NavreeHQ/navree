@@ -38,7 +38,10 @@ pub trait StoredColumns: Sized + 'static {
 
 /// The column name at `index`, or a placeholder when the list is short.
 fn column<'a>(columns: &[&'a str], index: usize) -> Result<&'a str, (usize, FieldError)> {
-    columns.get(index).copied().ok_or((index, FieldError::Missing))
+    columns
+        .get(index)
+        .copied()
+        .ok_or((index, FieldError::Missing))
 }
 
 macro_rules! stored_columns {
@@ -196,8 +199,16 @@ mod tests {
             <(i64, String)>::from_values(vec![Value::from("x"), Value::from("EUR")]).unwrap_err();
         assert_eq!(index, 0);
         assert_eq!(error, FieldError::Invalid("`x` is not an integer".into()));
-        assert_eq!(<(i64, String)>::from_values(vec![Value::BigInt(Some(1))]).unwrap_err().0, 1);
-        assert_eq!(<(i64, String)>::nulls(), [Value::BigInt(None), Value::String(None)]);
+        assert_eq!(
+            <(i64, String)>::from_values(vec![Value::BigInt(Some(1))])
+                .unwrap_err()
+                .0,
+            1
+        );
+        assert_eq!(
+            <(i64, String)>::nulls(),
+            [Value::BigInt(None), Value::String(None)]
+        );
         assert_eq!(<(i64, Option<String>)>::type_name(1), "Option<String>");
     }
 
@@ -213,7 +224,10 @@ mod tests {
             ("cents".into(), Value::BigInt(None)),
             ("currency".into(), Value::String(None)),
         ]);
-        assert_eq!(<(i64, String)>::from_row_option(&nulls, &["cents", "currency"]).unwrap(), None);
+        assert_eq!(
+            <(i64, String)>::from_row_option(&nulls, &["cents", "currency"]).unwrap(),
+            None
+        );
         let half = Row::from_values(vec![
             ("cents".into(), Value::BigInt(Some(5))),
             ("currency".into(), Value::String(None)),

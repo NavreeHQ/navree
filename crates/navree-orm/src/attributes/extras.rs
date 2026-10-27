@@ -98,7 +98,9 @@ impl ExtraCast {
             }
             ExtraCast::String => Value::String(Some(String::from_value(value)?)),
             ExtraCast::Json => Value::Json(Some(Box::new(serde_json::Value::from_value(value)?))),
-            ExtraCast::DateTime => Value::ChronoDateTimeUtc(Some(DateTime::<Utc>::from_value(value)?)),
+            ExtraCast::DateTime => {
+                Value::ChronoDateTimeUtc(Some(DateTime::<Utc>::from_value(value)?))
+            }
             ExtraCast::Date => Value::ChronoDate(Some(NaiveDate::from_value(value)?)),
             ExtraCast::Uuid => Value::Uuid(Some(Uuid::from_value(value)?)),
             ExtraCast::Custom(convert) => convert(value)?,
@@ -165,16 +167,24 @@ mod tests {
 
     #[test]
     fn conversions_and_nulls() {
-        assert_eq!(ExtraCast::Bool.convert(Value::BigInt(Some(1))).unwrap(), Value::Bool(Some(true)));
         assert_eq!(
-            ExtraCast::Decimal(Some(2)).convert(Value::Double(Some(2.0 / 3.0))).unwrap(),
+            ExtraCast::Bool.convert(Value::BigInt(Some(1))).unwrap(),
+            Value::Bool(Some(true))
+        );
+        assert_eq!(
+            ExtraCast::Decimal(Some(2))
+                .convert(Value::Double(Some(2.0 / 3.0)))
+                .unwrap(),
             Value::Decimal(Some(Decimal::new(67, 2)))
         );
         assert_eq!(
             ExtraCast::Json.convert(Value::from(r#"{"a":1}"#)).unwrap(),
             Value::Json(Some(Box::new(serde_json::json!({"a": 1}))))
         );
-        assert_eq!(ExtraCast::Integer.convert(Value::String(None)).unwrap(), Value::BigInt(None));
+        assert_eq!(
+            ExtraCast::Integer.convert(Value::String(None)).unwrap(),
+            Value::BigInt(None)
+        );
         assert!(ExtraCast::Uuid.convert(Value::from("nope")).is_err());
         let upper = ExtraCast::Custom(|value| match value {
             Value::String(Some(s)) => Ok(Value::from(s.to_uppercase())),

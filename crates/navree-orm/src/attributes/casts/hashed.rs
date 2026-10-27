@@ -167,7 +167,10 @@ mod tests {
         let hasher = fast_hasher();
         let context = CastContext::new().with_hasher(hasher.clone());
         let mut password = "correct horse".to_owned();
-        assert!(Hashed::set(&password).is_err(), "never stores a plain value");
+        assert!(
+            Hashed::set(&password).is_err(),
+            "never stores a plain value"
+        );
         Hashed::prepare(&mut password, &context).await.unwrap();
         assert!(is_password_hash(&password), "{password}");
         assert!(hasher.verify("correct horse", &password).await.unwrap());
@@ -191,7 +194,9 @@ mod tests {
     #[tokio::test]
     async fn hashing_needs_the_apps_hasher() {
         let mut password = "secret".to_owned();
-        let error = Hashed::prepare(&mut password, &CastContext::new()).await.unwrap_err();
+        let error = Hashed::prepare(&mut password, &CastContext::new())
+            .await
+            .unwrap_err();
         assert!(error.to_string().contains("no Hasher"), "{error}");
         assert_eq!(password, "secret");
     }

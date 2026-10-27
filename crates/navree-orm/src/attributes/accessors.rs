@@ -170,7 +170,10 @@ mod tests {
         const MISSING: bool = has_accessor(ACCESSORS, "double");
         assert!(FOUND);
         assert!(!MISSING);
-        assert_eq!(ACCESSORS[0].value(&Point { x: 21 }).unwrap(), serde_json::json!(42));
+        assert_eq!(
+            ACCESSORS[0].value(&Point { x: 21 }).unwrap(),
+            serde_json::json!(42)
+        );
         assert_eq!(ACCESSORS[0].rust_type(), "i32");
         assert_eq!(
             format!("{:?}", ACCESSORS[0]),

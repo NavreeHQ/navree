@@ -64,9 +64,9 @@ use serde::de::DeserializeOwned;
 pub use crate::attributes::CastContext;
 pub use crate::attributes::casts::{
     BinaryUlid, BinaryUuid, Castable, DateTimeFormat, DateTimeFormatSpec, DecimalScale, Encrypted,
-    FormattedDateTime,
-    EncryptedJson, EncryptedValue, Hashed, Inbound, InboundCast, MultiColumnCast, StoredColumns,
-    StoredVector, UnixTimestamp, UnixTimestampMs, Vector, is_password_hash,
+    EncryptedJson, EncryptedValue, FormattedDateTime, Hashed, Inbound, InboundCast,
+    MultiColumnCast, StoredColumns, StoredVector, UnixTimestamp, UnixTimestampMs, Vector,
+    is_password_hash,
 };
 use crate::row::Row;
 use crate::value::{Field, FieldError, FieldKind, Value, same_value};
@@ -217,7 +217,10 @@ pub trait Cast<T>: 'static {
     /// the `saving`, `creating` and `updating` hooks): the hashed cast
     /// hashes a plain value here, off the async threads. Nothing by
     /// default.
-    fn prepare<'a>(value: &'a mut T, context: &'a CastContext) -> BoxFuture<'a, Result<(), CastError>> {
+    fn prepare<'a>(
+        value: &'a mut T,
+        context: &'a CastContext,
+    ) -> BoxFuture<'a, Result<(), CastError>> {
         let _ = (value, context);
         Box::pin(std::future::ready(Ok(())))
     }

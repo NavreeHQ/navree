@@ -63,9 +63,9 @@ impl StoredVector {
         inner
             .split(',')
             .map(|item| {
-                item.trim()
-                    .parse::<f32>()
-                    .map_err(|_| FieldError::Invalid(format!("`{}` in a vector is not a number", item.trim())))
+                item.trim().parse::<f32>().map_err(|_| {
+                    FieldError::Invalid(format!("`{}` in a vector is not a number", item.trim()))
+                })
             })
             .collect()
     }
@@ -94,7 +94,9 @@ impl Field for StoredVector {
     fn to_value(&self) -> Value {
         match self.wire {
             #[cfg(feature = "postgres")]
-            Wire::Postgres => Value::Vector(Some(sea_orm::prelude::PgVector::from(self.floats.clone()))),
+            Wire::Postgres => {
+                Value::Vector(Some(sea_orm::prelude::PgVector::from(self.floats.clone())))
+            }
             #[cfg(not(feature = "postgres"))]
             Wire::Postgres => Value::String(Some(StoredVector::text(&self.floats))),
             Wire::Binary => Value::Bytes(Some(StoredVector::to_bytes(&self.floats))),
@@ -118,8 +120,9 @@ impl Field for StoredVector {
             Ok(bytes) => {
                 // Text read back as bytes (`[1,2]`) is the text form.
                 if bytes.first() == Some(&b'[') {
-                    let text = String::from_utf8(bytes)
-                        .map_err(|_| FieldError::Invalid("a vector's text is not UTF-8".to_owned()))?;
+                    let text = String::from_utf8(bytes).map_err(|_| {
+                        FieldError::Invalid("a vector's text is not UTF-8".to_owned())
+                    })?;
                     return StoredVector::from_value(Value::String(Some(text)));
                 }
                 Ok(StoredVector {
@@ -127,9 +130,8 @@ impl Field for StoredVector {
                     wire: Wire::Binary,
                 })
             }
-            Err(FieldError::Invalid(_)) => sql_get::<String>(row, column).and_then(|text| {
-                StoredVector::from_value(Value::String(Some(text)))
-            }),
+            Err(FieldError::Invalid(_)) => sql_get::<String>(row, column)
+                .and_then(|text| StoredVector::from_value(Value::String(Some(text)))),
             Err(other) => Err(other),
         }
     }
@@ -160,7 +162,9 @@ impl Field for StoredVector {
                                 let narrow = f as f32;
                                 narrow
                             })
-                            .ok_or_else(|| FieldError::Invalid(format!("{item} in a vector is not a number")))
+                            .ok_or_else(|| {
+                                FieldError::Invalid(format!("{item} in a vector is not a number"))
+                            })
                     })
                     .collect::<Result<Vec<f32>, FieldError>>()
                     .map(|floats| StoredVector {
@@ -287,8 +291,16 @@ mod tests {
         assert!(StoredVector::from_value(Value::Bytes(Some(vec![1, 2, 3]))).is_err());
         assert!(StoredVector::from_value(Value::from("1,2")).is_err());
         assert!(StoredVector::from_value(Value::from("[1,x]")).is_err());
-        assert_eq!(StoredVector::from_value(Value::from("[]")).unwrap().floats(), [] as [f32; 0]);
-        assert_eq!(StoredVector::from_value(Value::Bytes(None)).unwrap_err(), FieldError::Null);
+        assert_eq!(
+            StoredVector::from_value(Value::from("[]"))
+                .unwrap()
+                .floats(),
+            [] as [f32; 0]
+        );
+        assert_eq!(
+            StoredVector::from_value(Value::Bytes(None)).unwrap_err(),
+            FieldError::Null
+        );
         let error = Vector::set_with(&vec![f32::NAN], &CastContext::new()).unwrap_err();
         assert!(error.to_string().contains("finite"), "{error}");
     }
@@ -296,7 +308,10 @@ mod tests {
     #[test]
     fn nulls_match_the_column_type_of_each_database() {
         let mysql = CastContext::new().with_dialect(Dialect::MySql);
-        assert_eq!(<Vector as Cast<Vec<f32>>>::null_with(&mysql), Value::Bytes(None));
+        assert_eq!(
+            <Vector as Cast<Vec<f32>>>::null_with(&mysql),
+            Value::Bytes(None)
+        );
     }
 
     #[test]

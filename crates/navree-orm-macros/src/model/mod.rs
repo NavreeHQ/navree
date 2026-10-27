@@ -237,7 +237,8 @@ fn analyse(input: &DeriveInput) -> syn::Result<Model> {
                 ));
             }
             if layer.hidden.is_some()
-                && let Some(key) = attributes::serialized_key(&field_ident, &serde_container, &serde_field)
+                && let Some(key) =
+                    attributes::serialized_key(&field_ident, &serde_container, &serde_field)
             {
                 skipped_hidden.push(key);
             }
@@ -265,7 +266,14 @@ fn analyse(input: &DeriveInput) -> syn::Result<Model> {
                     "a field stored across several columns cannot be `default`",
                 ));
             }
-            multi_columns(&field_ident, &field.ty, field_attrs.cast, declared, &info, &mut errors)
+            multi_columns(
+                &field_ident,
+                &field.ty,
+                field_attrs.cast,
+                declared,
+                &info,
+                &mut errors,
+            )
         } else {
             let name = field_attrs
                 .column

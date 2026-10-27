@@ -80,7 +80,10 @@ impl<C: InboundCast<T>, T: Field> Cast<T> for Inbound<C> {
 
     /// The record holds the transformed value once it is saved, as the
     /// database does.
-    fn prepare<'a>(value: &'a mut T, context: &'a CastContext) -> BoxFuture<'a, Result<(), CastError>> {
+    fn prepare<'a>(
+        value: &'a mut T,
+        context: &'a CastContext,
+    ) -> BoxFuture<'a, Result<(), CastError>> {
         let result = C::set_with(value, context).map(|stored| *value = stored);
         Box::pin(std::future::ready(result))
     }
