@@ -13,7 +13,7 @@ workspace = true
 [features]
 default = ["full"]
 ## Every module crate, except the opt-in ones (`social`, `oauth`, `flags`,
-## `graphql`, `billing`, `dock`).
+## `graphql`, `billing`, `dock`, `navigator`).
 full = [
     "access",
     "api",
@@ -190,6 +190,10 @@ postgres = ["db", "navree-db/postgres"]
 ## Opt-in, not in `full`: Dock's library (`dock.toml`, the services' settings,
 ## the Compose file), for tools and tests. `navree dock` (the CLI) does not need it.
 dock = ["dep:navree-dock"]
+## Opt-in, not in `full`: Navigator's library (the MCP server for coding
+## agents behind `navree mcp`, its tools, and the embedded agent skills of
+## `navree skills:install`), for tools and tests. The CLI does not need it.
+navigator = ["dep:navree-navigator"]
 ## OTLP export of spans (gRPC and HTTP/protobuf) for `observe.tracing`
 ## (opt-in: it adds the OpenTelemetry SDK, tonic and prost).
 otel = ["observe", "navree-observe/otel"]
@@ -214,6 +218,7 @@ navree-cache = { workspace = true, optional = true }
 navree-crypto = { workspace = true, optional = true }
 navree-db = { workspace = true, optional = true }
 navree-dock = { workspace = true, optional = true }
+navree-navigator = { workspace = true, optional = true }
 navree-events = { workspace = true, optional = true }
 navree-graphql = { workspace = true, optional = true }
 navree-http = { workspace = true, optional = true }

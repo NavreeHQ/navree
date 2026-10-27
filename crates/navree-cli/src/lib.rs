@@ -1,9 +1,10 @@
 //! # navree-cli
 //!
 //! The library behind the `navree` command-line tool: it creates apps,
-//! generates code, runs the dev loop and the app's local services. Its only
-//! navree dependency is navree-dock (a tool crate): everything it knows
-//! about the framework's runtime is in the code it generates.
+//! generates code, runs the dev loop and the app's local services, and
+//! serves Navigator to coding agents. Its navree dependencies are tool
+//! crates, navree-dock and navree-navigator: everything else it knows about
+//! the framework's runtime is in the code it generates.
 //!
 //! | Command | What it does |
 //! |---|---|
@@ -13,6 +14,8 @@
 //! | `navree dev [-- <serve args>]` | Build, serve, rebuild and restart on change ([`dev`]) |
 //! | `navree dock up\|down\|status\|logs\|env\|shell` | The app's local services from `dock.toml`, in Docker or Podman ([`dock`]) |
 //! | `navree dock:add <service>`, `navree dock:remove <service>` | Edit `dock.toml` ([`dock`]) |
+//! | `navree mcp [--path <dir>] [--no-build] [--allow-remote-database] [--docs-offline]` | Navigator, the MCP server for coding agents, on stdio (navree-navigator) |
+//! | `navree skills:install [--path <dir>]` | The Navree agent skills into `.claude/skills/` and `.agents/skills/` |
 //! | `navree <anything else> [args...]` | `cargo run --quiet -- <command> [args...]` in the app ([`forward`]) |
 //!
 //! When the app has a `dock.toml`, `navree dev` and forwarded commands pass

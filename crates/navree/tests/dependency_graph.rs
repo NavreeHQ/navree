@@ -66,6 +66,12 @@ const HIERARCHY: &[Rule] = &[
     rule("navree-view", 2, &["navree-kernel", "navree-contracts", "navree-config"]),
     rule("navree-cache", 2, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry"]),
     rule("navree-http-client", 2, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry"]),
+    // Navigator: the MCP server for coding agents (`navree mcp`) and the
+    // embedded agent skills (`navree skills:install`). A tool crate the CLI
+    // runs outside the app: it reads the app's configuration with
+    // navree-config (decision D7) and Dock's settings; the facade re-exports
+    // it behind the opt-in `navigator` feature.
+    rule("navree-navigator", 2, &["navree-kernel", "navree-contracts", "navree-config", "navree-dock"]),
     // L3
     rule("navree-db", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http"]),
     rule("navree-testing", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-http"]),
@@ -160,8 +166,9 @@ const HIERARCHY: &[Rule] = &[
     ]),
     // L8: entry points.
     rule("navree", 8, RUNTIME_CRATES),
-    // The CLI uses no runtime crate; navree-dock runs `navree dock`.
-    rule("navree-cli", 8, &["navree-dock"]),
+    // The CLI uses no runtime crate: navree-dock runs `navree dock`,
+    // navree-navigator `navree mcp` and `navree skills:install`.
+    rule("navree-cli", 8, &["navree-dock", "navree-navigator"]),
     // L9 and up (apps): anything below, except the CLI binary.
     // The CRM (plan "Wave 6 layout"): its crates use only the `navree` facade.
     // crm-core is shared; crm-testkit boots it for tests (a dev-dependency
@@ -186,13 +193,15 @@ const CRM_API_DEPENDENCIES: &[&str] = &[
     "crm-activities",
 ];
 
-/// Every runtime crate (layers 0 to 7) plus navree-macros and navree-dock:
+/// Every runtime crate (layers 0 to 7) plus navree-macros and the tool
+/// crates navree-dock and navree-navigator:
 /// what the facade may re-export and what navree-macros tests may
 /// dev-depend on.
 const RUNTIME_CRATES: &[&str] = &[
     "navree-kernel",
     "navree-macros",
     "navree-dock",
+    "navree-navigator",
     "navree-contracts",
     "navree-config",
     "navree-telemetry",
