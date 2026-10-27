@@ -34,6 +34,8 @@
 
 #[cfg(feature = "testing")]
 mod app;
+#[cfg(feature = "testing")]
+pub mod database;
 mod queries;
 
 use std::borrow::Cow;

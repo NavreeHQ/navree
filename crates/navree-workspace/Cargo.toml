@@ -49,6 +49,8 @@ uuid = { workspace = true }
 [dev-dependencies]
 # The crate's own tests run isolation suites (feature `testing`).
 navree-workspace = { workspace = true, features = ["testing"] }
+# ORM models under each isolation strategy; the test servers' settings.
+navree-orm = { workspace = true, features = ["testing"] }
 navree-testing = { workspace = true }
 navree-view = { workspace = true }
 tempfile = { workspace = true }
