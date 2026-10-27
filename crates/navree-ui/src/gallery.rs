@@ -555,7 +555,7 @@ fn latency_chart() -> Chart {
     let p95 = (0..24).map(|h| 96.0 + ((h as f64) / 2.5).sin().abs() * 60.0);
     Chart::bars(hours)
         .series("p50", SeriesTone::Muted, p50)
-        .series("p95", SeriesTone::Amber, p95)
+        .series("p95", SeriesTone::Bright, p95)
         .suffix(" ms")
         .size(ChartSize::Small)
         .label_every(4)
