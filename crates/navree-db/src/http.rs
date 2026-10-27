@@ -1,7 +1,10 @@
 //! HTTP integration: the unit-of-work layer, the [`Uow`] extractor and the
 //! mapping of database errors to error responses.
 
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
+use std::task::{Context, Poll};
 
 use axum::extract::{FromRequestParts, Request, State};
 use axum::middleware::{Next, from_fn_with_state};
@@ -9,8 +12,9 @@ use axum::response::{IntoResponse, Response};
 use http::request::Parts;
 use navree_contracts::{AuthState, RequestId};
 use navree_http::{AppError, GlobalLayer, LayerSlot};
-use navree_kernel::AppContext;
+use navree_kernel::{AppContext, BoxFuture};
 use navree_telemetry::TelemetryContext;
+use tracing::Instrument;
 use sea_orm::sqlx::error::ErrorKind;
 use sea_orm::{DbErr, RuntimeErr, SqlErr};
 use tokio::sync::OnceCell;
@@ -32,11 +36,13 @@ impl<S: Send + Sync> FromRequestParts<S> for Uow {
 }
 
 /// The [`LayerSlot::Uow`] layer: a lazy [`Uow`] per request with the actor
-/// (from `AuthState`) and the request id. The rest of the pipeline runs in a
-/// task on the app's tracker, so it completes (and commits) even if the
-/// client disconnects, with the unit of work as [`Uow::current`]. Commits
-/// when the status is below 400, rolls back otherwise; a failed commit
-/// becomes an error response.
+/// (from `AuthState`) and the request id. The rest of the pipeline runs
+/// with the unit of work as [`Uow::current`], in the task that polls the
+/// request (no task per request). If the request is dropped before it
+/// finishes (the client disconnected, or the global timeout fired), what
+/// is left of it moves to a task on the app's tracker, so it still
+/// completes (and commits). Commits when the status is below 400, rolls
+/// back otherwise; a failed commit becomes an error response.
 pub(crate) fn uow_layer() -> GlobalLayer {
     GlobalLayer::new(LayerSlot::Uow, "uow", |_ctx, router| {
         let db: Arc<OnceCell<Arc<Db>>> = Arc::new(OnceCell::new());
@@ -68,17 +74,74 @@ async fn unit_of_work(
         .map(|id| id.as_str().to_owned());
     let uow = db.uow(actor, request_id).await;
     request.extensions_mut().insert(uow.clone());
+    // What a detached remainder needs to run as the request did.
+    let context = request.extensions().get::<TelemetryContext>().cloned();
 
-    // The task keeps the request's telemetry context (request id, trace).
-    let task = ctx.tracker().spawn(TelemetryContext::propagate(async move {
-        // After-commit hooks run outside the scope: by then it is finished.
-        let response = uow.scope(next.run(request)).await;
-        finish(&uow, response).await
-    }));
-    match task.await {
-        Ok(response) => response,
-        Err(error) if error.is_panic() => std::panic::resume_unwind(error.into_panic()),
-        Err(error) => AppError::internal(error).into_response(),
+    RunToCompletion {
+        future: Some(Box::pin(async move {
+            // After-commit hooks run outside the scope: by then it is finished.
+            let response = uow.scope(next.run(request)).await;
+            finish(&uow, response).await
+        })),
+        polling: false,
+        ctx,
+        context,
+        span: tracing::Span::current(),
+    }
+    .await
+}
+
+/// The rest of a request: polled in place by the task that polls the
+/// request, and moved to a task on the app's tracker if it is dropped
+/// before it finishes, so a request whose client went away still runs to
+/// completion (with its telemetry context and tracing span) and commits.
+struct RunToCompletion {
+    future: Option<BoxFuture<'static, Response>>,
+    /// Set while `future` is polled: still set when `Drop` runs means the
+    /// poll panicked, and a panicked future must not be polled again.
+    polling: bool,
+    ctx: AppContext,
+    context: Option<TelemetryContext>,
+    span: tracing::Span,
+}
+
+impl Future for RunToCompletion {
+    type Output = Response;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Response> {
+        let this = &mut *self;
+        let Some(future) = this.future.as_mut() else {
+            return Poll::Pending;
+        };
+        this.polling = true;
+        let polled = future.as_mut().poll(cx);
+        this.polling = false;
+        if polled.is_ready() {
+            this.future = None;
+        }
+        polled
+    }
+}
+
+impl Drop for RunToCompletion {
+    fn drop(&mut self) {
+        let Some(future) = self.future.take() else {
+            return;
+        };
+        if self.polling {
+            // The request panicked: dropping it rolls the unit of work back.
+            return;
+        }
+        let context = self.context.take();
+        let remainder = async move {
+            match context {
+                Some(context) => drop(context.scope(future).await),
+                None => drop(future.await),
+            }
+        };
+        self.ctx
+            .tracker()
+            .spawn(remainder.instrument(self.span.clone()));
     }
 }
 
