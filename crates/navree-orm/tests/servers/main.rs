@@ -43,6 +43,22 @@ async fn postgres_unit_of_work() {
 }
 
 #[tokio::test]
+async fn postgres_json_patterns_and_vectors() {
+    run(Server::Postgres, |db| {
+        scenarios::json_patterns_and_vectors(db, Server::Postgres)
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn mysql_json_patterns_and_vectors() {
+    run(Server::MySql, |db| {
+        scenarios::json_patterns_and_vectors(db, Server::MySql)
+    })
+    .await;
+}
+
+#[tokio::test]
 async fn postgres_compound_queries() {
     run(Server::Postgres, |db| {
         scenarios::compound(db, Server::Postgres)

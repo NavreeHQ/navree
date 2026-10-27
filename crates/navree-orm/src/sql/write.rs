@@ -6,7 +6,7 @@ use std::borrow::Cow;
 
 use sea_query::{Alias, IntoIden, TableName};
 
-use super::{Compiler, Dialect, Statement, build, json_path_literal};
+use super::{Compiler, Dialect, Statement, build};
 use crate::error::OrmError;
 use crate::ir::{
     ColumnRef, DeleteIr, Expr, InsertIr, Join, JoinKind, JsonSegment, OnConflict, TableRef,
@@ -415,7 +415,7 @@ impl Compiler {
                 };
                 let mut exprs = vec![self.custom(empty, vec![column])];
                 for (path, value) in paths {
-                    exprs.push(sea_query::Expr::cust(json_path_literal(path)));
+                    exprs.push(sea_query::Expr::cust(self.json_path(path)));
                     exprs.push(match value {
                         Expr::Value(value) => self.custom(
                             wrap,

@@ -637,6 +637,124 @@ pub async fn unit_of_work(db: Db, server: Server) {
     assert_eq!(Company::query().count(&db).await.unwrap(), 1);
 }
 
+/// JSON overlaps, keys and containment, regular expressions, null-safe
+/// inequality, full text in raw syntax, hand-written operators and (with
+/// pgvector installed) vector distances.
+pub async fn json_patterns_and_vectors(db: Db, server: Server) {
+    use navree_orm::{Filter, OrmError};
+
+    let (acme, _globex) = seed(&db).await;
+    let deals = |q: navree_orm::Builder<Deal>| {
+        let db = db.clone();
+        async move { titles(&q.get(&db).await.unwrap()) }
+    };
+    assert_eq!(
+        deals(Deal::query().where_json_overlaps(Deal::TAGS, ["q1", "nope"])).await,
+        ["Pricing upgrade", "Small change"]
+    );
+    assert_eq!(
+        deals(Deal::query().where_(Deal::TAGS.contained_by(["vip"]))).await,
+        ["Platform deal", "Renewal for Acme"],
+        "an empty array fits in anything"
+    );
+    assert_eq!(
+        deals(Deal::query().where_json_contains_key("tags[1]")).await,
+        ["Pricing upgrade"]
+    );
+    assert_eq!(
+        deals(Deal::query().where_json_contains_key("tags[-1]")).await,
+        ["Pricing upgrade", "Renewal for Acme", "Small change"]
+    );
+    assert_eq!(deals(Deal::query().where_(Deal::META.has_key("source"))).await.len(), 4);
+    assert!(deals(Deal::query().where_json_contains_key("meta->owner")).await.is_empty());
+    assert_eq!(
+        deals(Deal::query().where_(Deal::TITLE.regex("^P[a-z]+ (deal|upgrade)$"))).await,
+        ["Platform deal", "Pricing upgrade"]
+    );
+    assert!(
+        deals(Deal::query().where_(Deal::TITLE.regex("^pricing"))).await.is_empty(),
+        "case matters"
+    );
+    assert_eq!(
+        deals(Deal::query().where_(Deal::TITLE.regex_case_insensitive("^pricing"))).await,
+        ["Pricing upgrade"]
+    );
+    assert_eq!(
+        deals(Deal::query().where_(Deal::COMPANY_ID.is_distinct_from(acme.id))).await,
+        ["Platform deal", "Small change"],
+        "a NULL company id is distinct from Acme's"
+    );
+    let raw_text = match server {
+        Server::Postgres => "pricing & upgrade",
+        Server::MySql => "+pricing +upgrade",
+    };
+    assert_eq!(
+        deals(Deal::query().where_full_text_with([Deal::TITLE], raw_text, FullText::raw())).await,
+        ["Pricing upgrade"]
+    );
+    if server == Server::Postgres {
+        assert_eq!(
+            deals(Deal::query().where_(Filter::op_raw(
+                Deal::TAGS,
+                "?",
+                Expr::val("q1")
+            )))
+            .await,
+            ["Pricing upgrade", "Small change"]
+        );
+        let stripped: Vec<Value> = Deal::query()
+            .where_(Deal::STAGE.eq(Stage::Lead))
+            .pluck(&db, Expr::col("meta").binary("-", Expr::val("score")))
+            .await
+            .unwrap();
+        assert_eq!(navree_orm::to_json(&stripped[0]), serde_json::json!({"source": "web"}));
+
+        let has_vector: Option<i64> = navree_orm::scalar(
+            &db,
+            navree_orm::raw(
+                "SELECT COUNT(*) FROM pg_available_extensions WHERE name = 'vector'",
+                [] as [i64; 0],
+            ),
+        )
+        .await
+        .unwrap();
+        if has_vector == Some(1) {
+            navree_orm::unprepared(
+                &db,
+                "CREATE EXTENSION IF NOT EXISTS vector; CREATE TABLE documents (id BIGSERIAL PRIMARY KEY, title TEXT NOT NULL, embedding vector(3) NOT NULL)",
+            )
+            .await
+            .unwrap();
+            for (title, embedding) in [("north", "[0,1,0]"), ("north-east", "[0.7,0.7,0]"), ("south", "[0,-1,0]")] {
+                navree_orm::statement(
+                    &db,
+                    navree_orm::raw(
+                        "INSERT INTO documents (title, embedding) VALUES (?, CAST(? AS vector))",
+                        [title, embedding],
+                    ),
+                )
+                .await
+                .unwrap();
+            }
+            let near: Vec<String> = table("documents")
+                .where_vector_similar_to("embedding", &[0.0, 1.0, 0.0], 0.5)
+                .pluck(&db, col_as::<String>("title"))
+                .await
+                .unwrap();
+            assert_eq!(near, ["north", "north-east"], "most similar first");
+        } else {
+            eprintln!("pgvector is not installed: vector distances were not run");
+        }
+    } else {
+        let error = Deal::query()
+            .where_(Filter::op_raw(Deal::TAGS, "?", Expr::val("q1")))
+            .get(&db)
+            .await
+            .unwrap_err();
+        assert!(matches!(error, OrmError::InvalidQuery(_)), "{error}");
+    }
+}
+
 /// Compound queries: lateral joins, limits per group, unions with orders
 /// and limits, derived tables and (PostgreSQL) a table function.
 pub async fn compound(db: Db, server: Server) {
