@@ -5198,6 +5198,47 @@ dependencies = [
 ]
 
 [[package]]
+name = "navree-sso"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "base64 0.23.1",
+ "chrono",
+ "flate2",
+ "form_urlencoded",
+ "http",
+ "navree-access",
+ "navree-api",
+ "navree-auth",
+ "navree-cache",
+ "navree-config",
+ "navree-contracts",
+ "navree-crypto",
+ "navree-db",
+ "navree-events",
+ "navree-http",
+ "navree-http-client",
+ "navree-kernel",
+ "navree-testing",
+ "navree-workspace",
+ "quick-xml",
+ "sea-orm",
+ "sea-orm-migration",
+ "serde",
+ "serde_json",
+ "sha1 0.11.0",
+ "sha2 0.11.1",
+ "subtle",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "url",
+ "utoipa",
+ "uuid",
+ "wiremock",
+]
+
+[[package]]
 name = "navree-storage"
 version = "0.1.0"
 dependencies = [
