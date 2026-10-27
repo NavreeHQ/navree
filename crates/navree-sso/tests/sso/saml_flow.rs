@@ -409,3 +409,65 @@ async fn a_disabled_connection_refuses_sign_in() {
         .await
         .assert_error_code(403, "sso_connection_disabled");
 }
+
+#[tokio::test]
+async fn a_code_is_bound_to_the_state_of_its_login() {
+    let world = support::world_with(
+        support::builder().config("sso.complete_url", "https://app.acme.test/auth/sso"),
+    )
+    .await;
+    let fake = SsoFake::new();
+    let connection = world
+        .saml_connection(&fake, SsoOwner::App, "acme", Provisioning::default())
+        .await;
+    world.verified_domain(&connection, "acme.test").await;
+
+    let sign_in = || async {
+        let login = world
+            .app
+            .client()
+            .get("/api/sso/acme/login")
+            .send()
+            .await
+            .assert_status(200)
+            .json_value();
+        let (url, state) = (
+            login["url"].as_str().unwrap().to_owned(),
+            login["state"].as_str().unwrap().to_owned(),
+        );
+        let answer = fake.respond_to(&url).unwrap().name_id("eve@acme.test");
+        let response = world.acs("acme", &answer.form()).await.assert_status(303);
+        let location = url::Url::parse(response.header("location").unwrap()).unwrap();
+        let code = location
+            .query_pairs()
+            .find(|(k, _)| k == "code")
+            .unwrap()
+            .1
+            .into_owned();
+        (code, state)
+    };
+
+    // A code from another sign-in (an attacker's, posted through the
+    // victim's browser) is refused when the front end sends its state.
+    let (attacker_code, _) = sign_in().await;
+    let (_, victim_state) = sign_in().await;
+    world
+        .app
+        .client()
+        .post("/api/sso/exchange")
+        .json(&json!({ "code": attacker_code, "state": victim_state }))
+        .send()
+        .await
+        .assert_error_code(400, "invalid_sso_code");
+
+    let (code, state) = sign_in().await;
+    world
+        .app
+        .client()
+        .post("/api/sso/exchange")
+        .json(&json!({ "code": code, "state": state }))
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("user.email", json!("eve@acme.test"));
+}

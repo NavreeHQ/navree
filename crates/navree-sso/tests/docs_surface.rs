@@ -204,12 +204,13 @@ fn the_documented_resources(
         login_url: _,
         password_allowed: _,
     } = discovery;
-    let SsoRedirect { url: _ } = redirect;
+    let SsoRedirect { url: _, state: _ } = redirect;
     let SsoSignIn {
         user: _,
         connection_id: _,
         return_to: _,
         created: _,
+        state: _,
     } = sign_in;
     let OidcCallback {
         code: _,
@@ -260,7 +261,8 @@ async fn the_documented_service(sso: &Sso, uow: &Uow, meta: &ClientMeta) -> Resu
     };
     let _: SsoSignIn = sso.sign_in_profile("acme", profile, meta).await?;
     let code: String = sso.issue_code(&sign_in).await?;
-    let (_, _, _): (User, TokenPair, Option<String>) = sso.exchange(&code, meta).await?;
+    let (_, _, _): (User, TokenPair, Option<String>) =
+        sso.exchange(&code, Some("state"), meta).await?;
     let _: String = sso.saml_metadata("acme").await?;
     let _: &SsoOptions = sso.options();
     Ok(())

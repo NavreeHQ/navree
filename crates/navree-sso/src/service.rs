@@ -50,6 +50,10 @@ const RESERVED_SLUGS: &[&str] = &[
 pub struct SsoRedirect {
     /// The identity provider's sign-in URL.
     pub url: String,
+    /// The sign-in's state: keep it in the browser (session storage) and
+    /// send it with `POST /sso/exchange`, so a code from someone else's
+    /// sign-in is refused.
+    pub state: String,
 }
 
 /// A finished sign-in: the user (found, linked or created) and where the
@@ -64,6 +68,9 @@ pub struct SsoSignIn {
     pub return_to: Option<String>,
     /// Whether this sign-in created the user.
     pub created: bool,
+    /// The state of the login that started it (none for an IdP-initiated
+    /// sign-in).
+    pub state: Option<String>,
 }
 
 /// The query of an OpenID Connect callback.
@@ -101,6 +108,7 @@ struct PendingCode {
     user_id: Uuid,
     connection_id: Uuid,
     return_to: Option<String>,
+    state: Option<String>,
 }
 
 /// The IdP metadata of a connection, with when it was read.
@@ -1038,7 +1046,7 @@ impl Sso {
         self.cache
             .put(&Self::state_key(&relay), &state, Duration::from_secs(ttl))
             .await?;
-        Ok(SsoRedirect { url })
+        Ok(SsoRedirect { url, state: relay })
     }
 
     /// The state of `key`, which works once and must be for `connection`.
@@ -1209,7 +1217,8 @@ impl Sso {
                 .map(str::to_owned),
         };
         let profile = SsoProfile::from_saml(&assertion, &loaded.provisioning.attributes);
-        self.finish(&loaded, profile, return_to, meta).await
+        let started = state.is_some().then(|| relay_state.unwrap_or_default().to_owned());
+        self.finish(&loaded, profile, return_to, started, meta).await
     }
 
     /// Finishes an OpenID Connect sign-in at the callback of connection
@@ -1286,7 +1295,8 @@ impl Sso {
             oidc::merge_userinfo(&self.http, &discovery, access_token, &mut claims).await?;
         }
         let profile = SsoProfile::from_claims(&claims, mapping);
-        self.finish(&loaded, profile, state.return_to, meta).await
+        self.finish(&loaded, profile, state.return_to, callback.state.clone(), meta)
+            .await
     }
 
     /// Signs `profile` in with connection `key`, as the flows do after
@@ -1299,7 +1309,7 @@ impl Sso {
         meta: &ClientMeta,
     ) -> Result<SsoSignIn, SsoError> {
         let loaded = Self::enabled(self.load(&self.db.reader().await, key).await?)?;
-        self.finish(&loaded, profile, None, meta).await
+        self.finish(&loaded, profile, None, None, meta).await
     }
 
     async fn finish(
@@ -1307,6 +1317,7 @@ impl Sso {
         loaded: &Loaded,
         profile: SsoProfile,
         return_to: Option<String>,
+        state: Option<String>,
         meta: &ClientMeta,
     ) -> Result<SsoSignIn, SsoError> {
         if profile.subject.trim().is_empty() {
@@ -1329,6 +1340,7 @@ impl Sso {
             connection_id: loaded.model.id,
             return_to,
             created,
+            state,
         })
     }
 
@@ -1579,6 +1591,7 @@ impl Sso {
                     user_id: sign_in.user.id,
                     connection_id: sign_in.connection_id,
                     return_to: sign_in.return_to.clone(),
+                    state: sign_in.state.clone(),
                 },
                 Duration::from_secs(self.options.code_ttl_secs),
             )
@@ -1588,10 +1601,13 @@ impl Sso {
 
     /// Exchanges a one-time code for the user, a navree-auth token pair and
     /// the return path. [`SsoError::InvalidCode`] for an unknown, expired
-    /// or used code.
+    /// or used code, or when `state` is given and is not the state of the
+    /// login that started the sign-in (a code from someone else's
+    /// sign-in: login CSRF).
     pub async fn exchange(
         &self,
         code: &str,
+        state: Option<&str>,
         meta: &ClientMeta,
     ) -> Result<(User, navree_auth::TokenPair, Option<String>), SsoError> {
         let pending: PendingCode = self
@@ -1602,6 +1618,14 @@ impl Sso {
             ))
             .await?
             .ok_or(SsoError::InvalidCode)?;
+        if let Some(state) = state
+            && !pending
+                .state
+                .as_deref()
+                .is_some_and(|started| navree_crypto::constant_time_eq(started.as_bytes(), state.as_bytes()))
+        {
+            return Err(SsoError::InvalidCode);
+        }
         let user = self
             .auth
             .find_user(pending.user_id)

@@ -36,6 +36,10 @@ pub struct DiscoverInput {
 pub struct ExchangeInput {
     /// The one-time code from the `complete_url` redirect.
     pub code: String,
+    /// The `state` the login route answered (JSON form): when given, the
+    /// code must come from that sign-in.
+    #[serde(default)]
+    pub state: Option<String>,
 }
 
 /// `POST /sso/connections/{id}/domains`.
@@ -332,8 +336,10 @@ impl Controller for SsoController {
         let exchange = move |meta: ClientMeta, Json(input): Json<ExchangeInput>| {
             let sso = sso.clone();
             async move {
-                let (user, tokens, return_to) =
-                    sso.exchange(&input.code, &meta).await.map_err(sso_error)?;
+                let (user, tokens, return_to) = sso
+                    .exchange(&input.code, input.state.as_deref(), &meta)
+                    .await
+                    .map_err(sso_error)?;
                 let body: Value = sso
                     .login_body(&user, &tokens, return_to)
                     .await
