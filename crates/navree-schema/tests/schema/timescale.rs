@@ -437,6 +437,35 @@ async fn converting_a_table_needs_the_database() {
 }
 
 #[tokio::test]
+async fn only_timescaledb_has_hypertables() {
+    // Asking TimescaleDB reads its catalog: an offline schema cannot.
+    let error = Schema::offline(timescaledb())
+        .is_hypertable("events")
+        .await
+        .unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "checking whether `events` is a hypertable needs a database connection; this schema is offline (it only records statements)"
+    );
+    // Every other database answers without one.
+    for target in [
+        Target::postgres(17),
+        Target::postgres(17).with_timescaledb_installable((2, 17)),
+        Target::mysql((8, 4)),
+        Target::mariadb((11, 4)),
+        Target::sqlite((3, 46)),
+    ] {
+        let schema = Schema::offline(target.clone());
+        assert!(
+            !schema.is_hypertable("events").await.unwrap(),
+            "{}",
+            target.describe()
+        );
+        assert!(schema.statements().is_empty());
+    }
+}
+
+#[tokio::test]
 async fn a_configured_hypertable_can_be_passed_to_create_hypertable() {
     let sql = sql_for!([("timescaledb", timescaledb())], |schema| {
         schema

@@ -327,6 +327,30 @@ pub(crate) async fn has_table(
     Ok(found.first().is_some_and(|r| boolean(r, "present")))
 }
 
+/// Whether `table_name` is a TimescaleDB hypertable, read from
+/// `timescaledb_information.hypertables` (so TimescaleDB must be installed
+/// in the database).
+pub(crate) async fn is_hypertable(
+    conn: &dyn SchemaConnection,
+    table_name: &str,
+) -> SchemaResult<bool> {
+    let name = unqualified(table_name);
+    let (sql, values) = match schema_of(table_name) {
+        Some(schema) => (
+            "SELECT EXISTS (SELECT 1 FROM timescaledb_information.hypertables \
+             WHERE hypertable_schema = $1 AND hypertable_name = $2) AS present",
+            vec![s(schema), s(name)],
+        ),
+        None => (
+            "SELECT EXISTS (SELECT 1 FROM timescaledb_information.hypertables \
+             WHERE hypertable_schema = ANY (current_schemas(false)) AND hypertable_name = $1) AS present",
+            vec![s(name)],
+        ),
+    };
+    let found = rows(conn, sql, values).await?;
+    Ok(found.first().is_some_and(|r| boolean(r, "present")))
+}
+
 fn sqlite_master(schema: Option<&str>) -> String {
     match schema {
         Some(schema) => format!("{}.sqlite_master", table(Dialect::Sqlite, schema)),
