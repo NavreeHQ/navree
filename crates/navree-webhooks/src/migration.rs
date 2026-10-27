@@ -1,6 +1,11 @@
-//! The webhooks module's migrations (`MigrationSet` `webhooks`).
+//! The webhooks module's migrations (`MigrationSet` `webhooks`). The
+//! delivery log, `webhook_deliveries` and `webhook_attempts`, is time
+//! series: TimescaleDB hypertables on `created_at`.
 
 use navree_db::MigrationSet;
+use navree_db::navree_schema::{
+    Hypertable, KeyStrategy, Migration, Schema, SchemaMigration, SchemaResult,
+};
 use sea_orm::DbErr;
 use sea_orm::sea_query::{ColumnDef, ForeignKey, ForeignKeyAction, Index, Table};
 use sea_orm_migration::async_trait::async_trait;
@@ -9,9 +14,91 @@ use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
 /// The name of the webhooks module's migration set.
 pub const WEBHOOKS_MIGRATIONS: &str = "webhooks";
 
+/// The table of outgoing deliveries.
+pub(crate) const DELIVERIES_TABLE: &str = "webhook_deliveries";
+
+/// The table of delivery attempts.
+pub(crate) const ATTEMPTS_TABLE: &str = "webhook_attempts";
+
 /// The webhooks module's migration set.
 pub(crate) fn migrations() -> MigrationSet {
-    MigrationSet::new(WEBHOOKS_MIGRATIONS).migration(CreateWebhookTables)
+    MigrationSet::new(WEBHOOKS_MIGRATIONS)
+        .migration(CreateWebhookTables)
+        .migration(SchemaMigration::new(
+            "m20261027_000001_convert_webhook_deliveries_to_hypertables",
+            ConvertDeliveriesToHypertables,
+        ))
+}
+
+/// How the delivery log is partitioned on TimescaleDB: by `created_at`, a
+/// day per chunk (deliveries are kept 30 days by default, so about thirty
+/// chunks a table). `webhooks:prune` drops whole chunks.
+pub(crate) fn hypertables() -> [(&'static str, Hypertable); 2] {
+    let table = || {
+        let mut hypertable = Hypertable::on("created_at");
+        hypertable
+            .chunk_interval("1 day")
+            .keys(KeyStrategy::Extend)
+            .migrate_data();
+        hypertable
+    };
+    [(DELIVERIES_TABLE, table()), (ATTEMPTS_TABLE, table())]
+}
+
+/// Makes the delivery log time series.
+///
+/// A hypertable's primary key must include its time column, so no other
+/// table can reference `webhook_deliveries (id)`: attempts now reference
+/// their endpoint (`ON DELETE CASCADE`, as deliveries do) instead of their
+/// delivery, and `webhooks:prune` deletes a delivery's attempts with it.
+/// Then both tables become hypertables on TimescaleDB, their primary keys
+/// `(id, created_at)`; elsewhere they stay regular tables with their
+/// `created_at` indexes, and the migration reports a notice.
+///
+/// Reverting it keeps both: TimescaleDB cannot turn a hypertable back into
+/// a plain table in place, and the tables work the same either way. Running
+/// it again changes nothing.
+struct ConvertDeliveriesToHypertables;
+
+impl Migration for ConvertDeliveriesToHypertables {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        let foreign_keys = schema.foreign_keys(ATTEMPTS_TABLE).await?;
+        let to_delivery = foreign_keys
+            .iter()
+            .find(|key| key.foreign_table == DELIVERIES_TABLE && key.columns == ["delivery_id"]);
+        let to_endpoint = foreign_keys
+            .iter()
+            .any(|key| key.foreign_table == "webhook_endpoints" && key.columns == ["endpoint_id"]);
+        if to_delivery.is_some() || !to_endpoint {
+            schema
+                .table(ATTEMPTS_TABLE, |t| {
+                    match to_delivery.map(|key| key.name.as_deref()) {
+                        // PostgreSQL and MySQL drop a foreign key by name...
+                        Some(Some(name)) => t.drop_foreign(name),
+                        // ...SQLite's have none: by its columns.
+                        Some(None) => t.drop_foreign(["delivery_id"]),
+                        None => {}
+                    }
+                    if !to_endpoint {
+                        t.foreign(["endpoint_id"])
+                            .references(["id"])
+                            .on("webhook_endpoints")
+                            .cascade_on_delete();
+                    }
+                })
+                .await?;
+        }
+        for (table, hypertable) in hypertables() {
+            if !schema.is_hypertable(table).await? {
+                schema.convert_to_hypertable(table, hypertable).await?;
+            }
+        }
+        Ok(())
+    }
+
+    async fn down(&self, _schema: &Schema<'_>) -> SchemaResult {
+        Ok(())
+    }
 }
 
 /// Creates `webhook_endpoints`, `webhook_deliveries`, `webhook_attempts`
