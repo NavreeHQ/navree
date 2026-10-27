@@ -1,0 +1,17 @@
+# harbor: users on {{ server.name }}
+{% include "provision/prelude.sh" %}
+id -u {{ user }} > /dev/null 2>&1 || useradd --create-home --shell /bin/bash {{ user }}
+usermod -aG systemd-journal {{ user }}
+install -d -m 0700 -o {{ user }} -g {{ user }} "$(getent passwd {{ user }} | cut -d: -f6)/.ssh"
+harbor_file "$(getent passwd {{ user }} | cut -d: -f6)/.ssh/authorized_keys" 0600 {{ user }}:{{ user }} <<'HARBOR_EOF'
+{{ files.authorized_keys }}HARBOR_EOF
+harbor_file /etc/sudoers.d/harbor-{{ app }} 0440 root:root "visudo -cqf" <<'HARBOR_EOF'
+{{ files.sudoers }}HARBOR_EOF
+install -d -m 0755 -o {{ user }} -g {{ user }} {{ base }} {{ base }}/releases {{ base }}/shared
+{% for dir in shared %}
+install -d -m 0755 -o {{ user }} -g {{ user }} {{ base }}/shared/{{ dir }}
+{% endfor %}
+install -d -m 0700 -o {{ user }} -g {{ user }} {{ etc }}
+if [ ! -f {{ etc }}/env ]; then
+	install -m 0600 -o {{ user }} -g {{ user }} /dev/null {{ etc }}/env
+fi

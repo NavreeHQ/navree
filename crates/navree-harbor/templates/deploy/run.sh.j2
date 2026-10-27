@@ -1,0 +1,6 @@
+# harbor: {{ step }} on {{ server.name }}
+cd {{ dir }}
+set -a
+. {{ env_file }}
+set +a
+exec ./{{ app }} {{ args }}

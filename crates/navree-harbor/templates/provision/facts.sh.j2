@@ -1,0 +1,6 @@
+# harbor: facts on {{ server.name }}
+. /etc/os-release
+echo "id=${ID:-unknown}"
+echo "version=${VERSION_ID:-unknown}"
+echo "arch=$(uname -m)"
+echo "memory_mb=$(( $(awk '/^MemTotal:/ {print $2}' /proc/meminfo) / 1024 ))"

@@ -1,0 +1,79 @@
+---
+source: crates/navree-harbor/tests/provision.rs
+expression: "step(&steps(SINGLE, \"app-1\", &plain(), 1987), \"firewall\").script"
+---
+# harbor: firewall on app-1
+export DEBIAN_FRONTEND=noninteractive NEEDRESTART_SUSPEND=1
+HARBOR_CHANGED=0
+# harbor_file PATH MODE OWNER:GROUP [CHECK]: writes standard input to PATH
+# only when it differs; HARBOR_CHANGED says whether it did. CHECK (such as
+# `visudo -cqf`) must accept the new file first.
+harbor_file() {
+	local path="$1" mode="$2" owner="$3" check="${4:-}" tmp
+	tmp="$(mktemp)"
+	cat > "$tmp"
+	if [ -n "$check" ] && ! $check "$tmp" > /dev/null; then
+		rm -f "$tmp"
+		echo "harbor: the new $path is invalid" >&2
+		return 1
+	fi
+	if [ -f "$path" ] && cmp -s "$tmp" "$path"; then
+		rm -f "$tmp"
+		HARBOR_CHANGED=0
+	else
+		install -D -m "$mode" -o "${owner%%:*}" -g "${owner##*:}" "$tmp" "$path"
+		rm -f "$tmp"
+		HARBOR_CHANGED=1
+	fi
+	chmod "$mode" "$path"
+	chown "$owner" "$path"
+}
+# harbor_remove PATH: removes PATH; HARBOR_CHANGED says whether it existed.
+harbor_remove() {
+	if [ -e "$1" ]; then
+		rm -f "$1"
+		HARBOR_CHANGED=1
+	else
+		HARBOR_CHANGED=0
+	fi
+}
+harbor_installed() {
+	dpkg-query -W -f='${Status}' "$1" 2> /dev/null | grep -q "install ok installed"
+}
+harbor_apt() {
+	apt-get -y -q -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold "$@"
+}
+harbor_installed ufw || harbor_apt install ufw
+harbor_installed fail2ban || harbor_apt install fail2ban
+ufw default deny incoming > /dev/null
+ufw default allow outgoing > /dev/null
+desired="$(cat <<'HARBOR_EOF'
+allow 22/tcp comment 'harbor'
+allow 80/tcp comment 'harbor'
+allow 443/tcp comment 'harbor'
+allow 443/udp comment 'harbor'
+HARBOR_EOF
+)"
+# Remove Harbor's rules that harbor.toml no longer asks for.
+while IFS= read -r rule; do
+	[ -n "$rule" ] || continue
+	if ! grep -Fxq -- "$rule" <<< "$desired"; then
+		eval "ufw delete $rule" > /dev/null
+	fi
+done < <(ufw show added 2> /dev/null | sed -n 's/^ufw //p' | grep -F "comment 'harbor'" || true)
+while IFS= read -r rule; do
+	[ -n "$rule" ] || continue
+	eval "ufw $rule" > /dev/null
+done <<< "$desired"
+ufw --force enable > /dev/null
+harbor_file /etc/fail2ban/jail.d/harbor.conf 0644 root:root <<'HARBOR_EOF'
+# Written by navree harbor:provision.
+[sshd]
+enabled = true
+port = 22
+backend = systemd
+HARBOR_EOF
+if [ "$HARBOR_CHANGED" = 1 ]; then
+	systemctl restart fail2ban
+fi
+systemctl enable --now fail2ban > /dev/null 2>&1
