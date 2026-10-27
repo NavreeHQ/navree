@@ -6,6 +6,12 @@
  * navree and the CRM crates and holds each tab as shown; its test produced
  * the 400 response below.
  *
+ * The ORM tab compiles as shown: the scratch crate target/docs-check/orm-docs
+ * holds the model and the controller (src/showcase.rs), and its test
+ * (tests/showcase_tab.rs) ran the query and the save on SQLite: a page is
+ * three statements (the count, the page, then the page's companies in one
+ * `IN (..)` query), and the save is an UPDATE of `stage` and `updated_at`.
+ *
  * The Workspaces and Testing tabs are written from the crates' APIs but not
  * compiled: `CurrentWorkspace`, `WorkspaceScoped` and `WorkspaceRepo` from
  * the prelude, `navree::db::paginate` and the `workspace` config section
@@ -114,6 +120,78 @@ impl DealsController {
         Ok(Json(self.deals.update(&uow, user.id, deal, input).await?))
     }
 }`,
+  },
+  {
+    id: "orm",
+    label: "ORM",
+    file: "src/modules/deals/models/deal.rs",
+    title: "Models are structs the compiler checks",
+    text: "#[derive(Model)] maps a struct to its table and gives it a typed constant per column, so comparing an amount with a string doesn't compile. Relations load for a whole page in one query, soft-deleted rows stay out, and a saved record writes only the columns that changed, in the request's transaction, with the change recorded for the audit log.",
+    href: "/docs/orm/getting-started/",
+    linkText: "Read about the ORM",
+    code: `use chrono::{DateTime, Utc};
+use navree::orm::prelude::*;
+use serde::Serialize;
+use uuid::Uuid;
+
+use super::{Activity, Company, Stage};
+
+/// A deal: the \`deals\` table, one typed column constant per field.
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(timestamps, soft_deletes)]
+pub struct Deal {
+    pub id: Uuid,
+    pub company_id: Uuid,
+    pub title: String,
+    pub amount_cents: i64,
+    #[model(cast = "string_enum")]
+    pub stage: Stage,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub deleted_at: Option<DateTime<Utc>>,
+}
+
+#[relations]
+impl Deal {
+    pub fn company(&self) -> BelongsTo<Deal, Company> {
+        self.belongs_to(Deal::COMPANY_ID)
+    }
+
+    pub fn activities(&self) -> HasMany<Deal, Activity> {
+        self.has_many(Activity::DEAL_ID)
+    }
+}`,
+    extra: {
+      file: "src/modules/deals/controller.rs",
+      lang: "rust",
+      code: `#[controller("/deals", version = "1")]
+impl DealsController {
+    /// Won deals over $1,000, newest first, with their companies:
+    /// one query for the page's companies, however long the page.
+    #[get("/won")]
+    #[authenticated]
+    async fn won(&self, uow: Uow, page: PageQuery) -> Result<Page<Record<Deal>>> {
+        Ok(Deal::query()
+            .where_(Deal::STAGE.eq(Stage::Won))
+            .where_(Deal::AMOUNT_CENTS.gte(100_000))
+            .with("company")
+            .latest()
+            .paginate(&uow, page)
+            .await?)
+    }
+
+    /// Loads the deal or answers 404. \`save\` writes only what
+    /// changed, in the request's transaction, for the audit log.
+    #[patch("/{deal}/win")]
+    #[authenticated]
+    async fn win(&self, uow: Uow, deal: Bound<Deal>) -> Result<Json<Record<Deal>>> {
+        let mut deal = deal.into_inner();
+        deal.stage = Stage::Won;
+        deal.save(&uow).await?;
+        Ok(Json(deal))
+    }
+}`,
+    },
   },
   {
     id: "validation",
