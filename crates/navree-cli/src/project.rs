@@ -86,7 +86,11 @@ mod tests {
         )
         .unwrap();
         assert_eq!(run_root(dir.path()), Some(dir.path().to_path_buf()));
-        assert_eq!(project_root(dir.path()), None, "no package to generate code in");
+        assert_eq!(
+            project_root(dir.path()),
+            None,
+            "no package to generate code in"
+        );
         // Inside the service crate, generators and commands use the crate.
         assert_eq!(run_root(&service.join("src")), Some(service.clone()));
         assert_eq!(project_root(&service.join("src")), Some(service));

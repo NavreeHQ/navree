@@ -86,7 +86,9 @@ pub fn execute(cli: Cli, cwd: &Path) -> anyhow::Result<ExitCode> {
             Ok(exit_code(report.passed()))
         }
         Command::Dock(command) => dock::run(command, &run_root_of(cwd)?),
-        Command::DockAdd(args) => dock::add(&args.service, &run_root_of(cwd)?, &mut std::io::stdout()),
+        Command::DockAdd(args) => {
+            dock::add(&args.service, &run_root_of(cwd)?, &mut std::io::stdout())
+        }
         Command::DockRemove(args) => dock::remove(
             &args.service,
             args.volumes,
@@ -245,4 +247,3 @@ fn format_rust(files: &[PathBuf]) {
         );
     }
 }
-
