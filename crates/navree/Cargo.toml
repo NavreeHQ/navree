@@ -224,6 +224,8 @@ axum = { workspace = true, optional = true }
 # The `graphql` test's object derives name async-graphql directly, as an
 # app's do.
 async-graphql = { workspace = true }
+# `tests/jose_docs.rs` builds fixture keys by hand.
+base64 = { workspace = true }
 chrono = { workspace = true }
 garde = { workspace = true }
 metrics = { workspace = true }

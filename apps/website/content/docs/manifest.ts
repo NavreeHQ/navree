@@ -91,7 +91,14 @@ export const sections: DocsSection[] = [
     // Owner: C
     slug: "security",
     title: "Security",
-    pages: ["authentication", "account-flows", "authorization", "encryption-and-hashing", "audit-log"],
+    pages: [
+      "authentication",
+      "account-flows",
+      "authorization",
+      "encryption-and-hashing",
+      "signatures-and-keys",
+      "audit-log",
+    ],
   },
   {
     // Owner: workspace

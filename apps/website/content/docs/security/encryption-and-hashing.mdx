@@ -7,7 +7,8 @@ description: "The application key, AES-256-GCM encryption with key rotation, Arg
 
 - `Encrypter` encrypts values with the application key (AES-256-GCM), and still decrypts them after you rotate the key;
 - `Hasher` hashes passwords with Argon2id, off the async worker threads;
-- helpers make random tokens, digests and signatures, and derive keys for other purposes from the application key.
+- helpers make random tokens, digests and signatures, and derive keys for other purposes from the application key;
+- `navree::crypto::jose` signs and verifies JSON Web Signatures and reads and publishes JSON Web Keys, for tokens that cross the boundary of your app. [Signatures and keys](/docs/security/signatures-and-keys/) covers it.
 
 Keys, plaintexts and passwords never appear in `Debug` output or in error messages, so both are safe to log.
 
@@ -337,6 +338,9 @@ Navree's own tokens work this way: refresh tokens (an id plus 48 random characte
 - Password hashes are Argon2id only: hashes from another system (bcrypt, say) can't be verified, so migrate those users with a password reset.
 
 <LinkCards>
+  <LinkCard href="/docs/security/signatures-and-keys/" title="Signatures and keys">
+    JSON Web Signatures, JSON Web Keys and PKCS#8 keys.
+  </LinkCard>
   <LinkCard href="/docs/security/authentication/" title="Authentication">
     How the JWT signing key comes from the application key.
   </LinkCard>

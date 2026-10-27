@@ -224,12 +224,12 @@ sha2 = "0.11.1"
 # HMAC-SHA1 for incoming webhook sources that still sign with SHA-1.
 sha1 = "0.11.0"
 subtle = "2.6.1"
-# JWS signatures (navree-social: RS256/ES256 ID tokens, the ES256 client secret
-# of Sign in with Apple). Already in the tree through rustls.
+# Asymmetric signatures: navree_crypto::jose (Ed25519, ECDSA P-256/P-384, RSA
+# verification and signing). Already in the tree through rustls. The crypto
+# policy keeps `rsa`, `p256`, `p384` and `ed25519-dalek` out of the tree; the
+# dependency-graph test enforces it.
 ring = "0.17.14"
 rand = "0.10.3"
-# Ed25519 signatures (navree-oauth's OpenID Connect ID tokens), pure Rust.
-ed25519-dalek = "3.0.0"
 totp-rs = { version = "6.0.0", features = ["gen_secret", "otpauth", "serde", "zeroize"] }
 qrcode2 = { version = "0.18.0", default-features = false, features = ["std", "svg"] }
 # JWT access tokens (navree-auth): no crypto backend feature and no PEM parsing.

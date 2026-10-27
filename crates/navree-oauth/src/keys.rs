@@ -1,24 +1,16 @@
 //! [`SigningKeys`]: the Ed25519 keys that sign ID tokens (EdDSA JWS) and
-//! the JWKS that publishes them.
+//! the JWKS that publishes them, on [`navree_crypto::jose`].
 
 use std::fmt;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
-use ed25519_dalek::ed25519::signature::Signer as _;
-use ed25519_dalek::{Signature, SigningKey, VerifyingKey};
+use navree_crypto::jose::{Algorithm, Jws, SigningKey, VerifyingKey};
 use serde::Serialize;
-use serde_json::{Value, json};
-use sha2::{Digest as _, Sha256};
+use serde_json::Value;
 
 /// The prefix of an encoded signing key (`ed25519:<base64>`).
 pub const SIGNING_KEY_PREFIX: &str = "ed25519:";
-
-/// The DER prefix of an Ed25519 private key in PKCS#8 v1 (RFC 8410 §7),
-/// followed by the 32-byte seed.
-const PKCS8_PREFIX: [u8; 16] = [
-    0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x04, 0x22, 0x04, 0x20,
-];
 
 /// An error reading a signing key or verifying a token.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -35,16 +27,20 @@ pub enum KeyError {
 /// JWK).
 #[derive(Clone)]
 pub struct SigningKey25519 {
+    /// An Ed25519 key whose kid is its thumbprint.
     key: SigningKey,
-    kid: String,
 }
 
 impl SigningKey25519 {
+    fn new(key: SigningKey) -> Self {
+        Self {
+            key: key.with_thumbprint_kid(),
+        }
+    }
+
     /// The key whose 32-byte seed is `seed`.
     pub fn from_seed(seed: [u8; 32]) -> Self {
-        let key = SigningKey::from_bytes(&seed);
-        let kid = thumbprint(&key.verifying_key());
-        Self { key, kid }
+        Self::new(SigningKey::ed25519_from_seed(&seed))
     }
 
     /// Parses `ed25519:<base64>`: a PKCS#8 Ed25519 private key (what
@@ -58,34 +54,34 @@ impl SigningKey25519 {
             .decode(body)
             .or_else(|_| URL_SAFE_NO_PAD.decode(body.trim_end_matches('=')))
             .map_err(|_| KeyError::Malformed)?;
-        let seed: [u8; 32] = match bytes.len() {
-            32 => bytes.try_into().map_err(|_| KeyError::Malformed)?,
-            48 if bytes[..16] == PKCS8_PREFIX => {
-                bytes[16..].try_into().map_err(|_| KeyError::Malformed)?
-            }
-            _ => return Err(KeyError::Malformed),
+        let key = match <[u8; 32]>::try_from(bytes.as_slice()) {
+            Ok(seed) => SigningKey::ed25519_from_seed(&seed),
+            Err(_) => SigningKey::from_pkcs8_der(&bytes)
+                .ok()
+                .filter(|key| key.algorithm() == Algorithm::EdDSA)
+                .ok_or(KeyError::Malformed)?,
         };
-        Ok(Self::from_seed(seed))
+        Ok(Self::new(key))
     }
 
     /// A new random key.
     pub fn generate() -> Self {
-        let mut seed = [0_u8; 32];
-        rand::fill(&mut seed);
-        Self::from_seed(seed)
+        Self::new(SigningKey::generate_ed25519())
     }
 
     /// The key encoded as `ed25519:<base64 PKCS#8>`, for
     /// `APP_OAUTH__SIGNING_KEY`.
     pub fn encode(&self) -> String {
-        let mut der = PKCS8_PREFIX.to_vec();
-        der.extend_from_slice(&self.key.to_bytes());
+        let der = self
+            .key
+            .to_pkcs8_der()
+            .expect("an Ed25519 key exports as PKCS#8");
         format!("{SIGNING_KEY_PREFIX}{}", STANDARD.encode(der))
     }
 
     /// The key id.
     pub fn kid(&self) -> &str {
-        &self.kid
+        self.key.kid().unwrap_or_default()
     }
 
     /// The public key.
@@ -95,21 +91,14 @@ impl SigningKey25519 {
 
     /// The public key as a JWK (`kty: OKP`, `crv: Ed25519`).
     pub fn public_jwk(&self) -> Value {
-        json!({
-            "kty": "OKP",
-            "crv": "Ed25519",
-            "x": URL_SAFE_NO_PAD.encode(self.verifying_key().to_bytes()),
-            "kid": self.kid,
-            "alg": "EdDSA",
-            "use": "sig",
-        })
+        serde_json::to_value(self.key.public_jwk()).unwrap_or(Value::Null)
     }
 }
 
 impl fmt::Debug for SigningKey25519 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("SigningKey25519")
-            .field("kid", &self.kid)
+            .field("kid", &self.kid())
             .finish_non_exhaustive()
     }
 }
@@ -138,64 +127,41 @@ impl SigningKeys {
             .chain(&self.previous)
             .map(SigningKey25519::public_jwk)
             .collect();
-        json!({ "keys": keys })
+        serde_json::json!({ "keys": keys })
     }
 
     /// `claims` as a compact JWS signed with the current key (`alg:
     /// EdDSA`, `typ: JWT`, `kid`).
     pub fn sign<T: Serialize>(&self, claims: &T) -> String {
-        let header = json!({ "alg": "EdDSA", "typ": "JWT", "kid": self.current.kid });
-        let encode = |value: &Value| URL_SAFE_NO_PAD.encode(value.to_string());
         let claims = serde_json::to_value(claims).unwrap_or(Value::Null);
-        let input = format!("{}.{}", encode(&header), encode(&claims));
-        let signature: Signature = self.current.key.sign(input.as_bytes());
-        format!("{input}.{}", URL_SAFE_NO_PAD.encode(signature.to_bytes()))
+        self.current
+            .key
+            .sign_jwt(&claims)
+            .expect("Ed25519 signing of JSON does not fail")
     }
 
     /// The claims of `token` when one of the keys signed it (its `kid`
     /// picks the key). Expiry and audience are the caller's to check.
     pub fn verify(&self, token: &str) -> Result<Value, KeyError> {
-        let mut parts = token.split('.');
-        let (Some(header), Some(payload), Some(signature), None) =
-            (parts.next(), parts.next(), parts.next(), parts.next())
-        else {
-            return Err(KeyError::InvalidSignature);
-        };
-        let decode = |part: &str| {
-            URL_SAFE_NO_PAD
-                .decode(part)
-                .map_err(|_| KeyError::InvalidSignature)
-        };
-        let header: Value =
-            serde_json::from_slice(&decode(header)?).map_err(|_| KeyError::InvalidSignature)?;
-        if header["alg"] != "EdDSA" {
+        let jws = Jws::parse(token).map_err(|_| KeyError::InvalidSignature)?;
+        if jws.header().alg != Algorithm::EdDSA {
             return Err(KeyError::InvalidSignature);
         }
+        let kid = jws.header().kid.as_deref();
         let key = std::iter::once(&self.current)
             .chain(&self.previous)
-            .find(|key| header["kid"].as_str() == Some(key.kid()))
+            .find(|key| kid == Some(key.kid()))
             .ok_or(KeyError::InvalidSignature)?;
-        let signature =
-            Signature::from_slice(&decode(signature)?).map_err(|_| KeyError::InvalidSignature)?;
-        let input = &token[..token.rfind('.').unwrap_or(0)];
-        key.verifying_key()
-            .verify_strict(input.as_bytes(), &signature)
+        jws.verify(&key.verifying_key())
             .map_err(|_| KeyError::InvalidSignature)?;
-        serde_json::from_slice(&decode(payload)?).map_err(|_| KeyError::InvalidSignature)
+        jws.claims().map_err(|_| KeyError::InvalidSignature)
     }
-}
-
-/// The RFC 7638 thumbprint of an Ed25519 public key's JWK.
-fn thumbprint(key: &VerifyingKey) -> String {
-    let canonical = format!(
-        r#"{{"crv":"Ed25519","kty":"OKP","x":"{}"}}"#,
-        URL_SAFE_NO_PAD.encode(key.to_bytes())
-    );
-    URL_SAFE_NO_PAD.encode(Sha256::digest(canonical.as_bytes()))
 }
 
 #[cfg(test)]
 mod tests {
+    use serde_json::json;
+
     use super::*;
 
     #[test]
@@ -210,6 +176,9 @@ mod tests {
             "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"
         );
         assert_eq!(key.kid(), "kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k");
+        assert_eq!(key.public_jwk()["alg"], "EdDSA");
+        assert_eq!(key.public_jwk()["use"], "sig");
+        assert_eq!(key.public_jwk()["kid"], key.kid());
     }
 
     #[test]
@@ -220,9 +189,9 @@ mod tests {
             .unwrap();
         let key = SigningKey25519::from_seed(seed.try_into().unwrap());
         let input = "eyJhbGciOiJFZERTQSJ9.RXhhbXBsZSBvZiBFZDI1NTE5IHNpZ25pbmc";
-        let signature: Signature = key.key.sign(input.as_bytes());
+        let signature = key.key.sign(input.as_bytes()).unwrap();
         assert_eq!(
-            URL_SAFE_NO_PAD.encode(signature.to_bytes()),
+            URL_SAFE_NO_PAD.encode(signature),
             "hgyY0il_MGCjP0JzlnLWG1PPOt7-09PGcvMg3AIbQR6dWbhijcNR4ki4iylGjg5BhVsPt9g7sVvpAr_MuM0KAg"
         );
     }
@@ -237,7 +206,8 @@ mod tests {
         );
         let parsed = SigningKey25519::parse(&encoded).unwrap();
         assert_eq!(parsed.kid(), key.kid());
-        let seed = format!("ed25519:{}", STANDARD.encode(key.key.to_bytes()));
+        let der = key.key.to_pkcs8_der().unwrap();
+        let seed = format!("ed25519:{}", STANDARD.encode(&der[16..]));
         assert_eq!(SigningKey25519::parse(&seed).unwrap().kid(), key.kid());
         for bad in ["", "ed25519:", "ed25519:!!!", "rsa:AAAA", "ed25519:AAAA"] {
             assert_eq!(
@@ -246,6 +216,12 @@ mod tests {
                 "{bad}"
             );
         }
+        // A PKCS#8 key of another type is not an Ed25519 key.
+        let es256 = SigningKey::generate_es256().to_pkcs8_der().unwrap();
+        assert_eq!(
+            SigningKey25519::parse(&format!("ed25519:{}", STANDARD.encode(es256))).unwrap_err(),
+            KeyError::Malformed
+        );
     }
 
     #[test]
@@ -267,5 +243,27 @@ mod tests {
         parts[1] = &forged;
         assert!(after.verify(&parts.join(".")).is_err());
         assert!(after.verify("a.b").is_err());
+    }
+
+    #[test]
+    fn tokens_of_other_algorithms_are_refused() {
+        // A token naming the current key's kid but signed with HMAC.
+        let keys = SigningKeys::new(SigningKey25519::generate(), Vec::new());
+        let hmac = SigningKey::hmac(Algorithm::HS256, [1_u8; 32])
+            .unwrap()
+            .with_kid(keys.current().kid());
+        let token = hmac.sign_jwt(&json!({"sub": "mallory"})).unwrap();
+        assert_eq!(keys.verify(&token), Err(KeyError::InvalidSignature));
+        // The header is `{"alg":"EdDSA","kid":..,"typ":"JWT"}`.
+        let header: Value = serde_json::from_slice(
+            &URL_SAFE_NO_PAD
+                .decode(keys.sign(&json!({})).split('.').next().unwrap())
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            header,
+            json!({"alg": "EdDSA", "kid": keys.current().kid(), "typ": "JWT"})
+        );
     }
 }

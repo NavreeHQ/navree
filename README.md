@@ -127,7 +127,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L1 | `navree-telemetry` | Typed telemetry events (requests, queries, jobs, scheduled tasks, mail, notifications, cache, outgoing HTTP, exceptions, log lines) delivered to registered sinks, `TelemetryRecorder`, W3C trace context |
 | L2 | `navree-http` | Axum integration, default Tower layers, JSON errors, controllers, rate limits, trusted proxies |
 | L2 | `navree-log` | tracing subscriber, JSON or pretty output, redaction, rotating files |
-| L2 | `navree-crypto` | AES-256-GCM encrypter with key rotation, Argon2id hasher, token helpers |
+| L2 | `navree-crypto` | AES-256-GCM encrypter with key rotation, Argon2id hasher, token helpers, JOSE helpers (JWS, JWK, PKCS#8 on `ring`) |
 | L2 | `navree-events` | Typed event bus with sync and queued listeners |
 | L2 | `navree-view` | MiniJinja templates (mail and other text) |
 | L2 | `navree-cache` | Cache stores (memory on moka), remember, tags, locks |
