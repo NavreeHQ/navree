@@ -15,6 +15,8 @@ CREATE TABLE companies (
     name TEXT NOT NULL,
     country TEXT NULL,
     employees INTEGER NOT NULL DEFAULT 0,
+    verified BOOLEAN NOT NULL DEFAULT 0,
+    profile TEXT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     deleted_at TEXT NULL
@@ -65,6 +67,8 @@ pub struct Company {
     pub name: String,
     pub country: Option<String>,
     pub employees: i32,
+    pub verified: bool,
+    pub profile: Option<serde_json::Value>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub deleted_at: Option<DateTime<Utc>>,

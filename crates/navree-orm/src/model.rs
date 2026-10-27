@@ -590,6 +590,16 @@ pub trait Model: Clone + Send + Sync + Serialize + 'static {
         Vec::new()
     }
 
+    /// The model's table.
+    ///
+    /// ```
+    /// # use navree_orm::__doc_models::*;
+    /// assert_eq!(Company::table_name(), "companies");
+    /// ```
+    fn table_name() -> &'static str {
+        Self::meta().table()
+    }
+
     /// The column route model binding looks records up by: the model's
     /// `#[model(route_key = "...")]`, else its key column.
     ///

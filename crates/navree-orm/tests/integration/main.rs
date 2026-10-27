@@ -5,5 +5,6 @@
 mod models;
 mod support;
 
+mod assertions;
 mod factories_create;
 mod factories_make;

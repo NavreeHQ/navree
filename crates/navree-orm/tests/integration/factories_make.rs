@@ -166,7 +166,7 @@ fn raw_gives_the_generated_values_without_empty_keys_and_timestamps() {
         .raw_one()
         .unwrap();
     let columns: Vec<&str> = raw.iter().map(|(column, _)| *column).collect();
-    assert_eq!(columns, ["name", "country", "employees"]);
+    assert_eq!(columns, ["name", "country", "employees", "verified", "profile"]);
     assert_eq!(raw.get("name"), Some(&Value::from("Acme")));
     assert_eq!(raw.to_json()["name"], "Acme");
     assert_eq!(serde_json::to_value(&raw).unwrap()["name"], "Acme");
