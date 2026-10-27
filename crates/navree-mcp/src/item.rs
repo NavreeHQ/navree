@@ -9,10 +9,9 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use garde::Validate;
-use navree_access::{ActionMarker, Authorized, AuthorizedRecord, Subject};
+use navree_access::{ActionMarker, Authorized, AuthorizedRecord, SubjectRecords};
 use navree_http::{AccessSpec, AppError, CanSpec};
 use navree_kernel::BoxFuture;
-use sea_orm::EntityTrait;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
@@ -443,8 +442,7 @@ impl Call {
     /// `A`.
     pub fn record<E, A>(&self) -> Result<Authorized<E, A>, AppError>
     where
-        E: EntityTrait + Subject,
-        E::Model: Sync,
+        E: SubjectRecords,
         A: ActionMarker,
     {
         self.record
