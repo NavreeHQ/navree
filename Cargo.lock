@@ -4237,6 +4237,7 @@ dependencies = [
  "navree-schema",
  "navree-search",
  "navree-session",
+ "navree-sheets",
  "navree-social",
  "navree-storage",
  "navree-telemetry",

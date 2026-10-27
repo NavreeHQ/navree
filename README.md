@@ -63,7 +63,8 @@ open source and free, documented on the
   Navigator (the MCP server for your coding agent).
 - **Packages:** search, the AI SDK, MCP servers, microservices, gRPC,
   GraphQL, an OAuth 2.1 server, social sign-in, billing, feature flags,
-  webhooks, localization and browser testing.
+  webhooks, CSV and Excel imports and exports, localization and browser
+  testing.
 - **Starter kits:** `navree new <name> --kit saas|api|micro`.
 - **Agent skills** for every common task, in [`skills/`](skills/).
 
@@ -109,7 +110,7 @@ each test run.
 L9+ apps/crm-api (Navree app)                   apps/crm-web (Next.js 16)
 L8  navree (facade: re-exports + prelude)       navree-cli (binary `navree`; no runtime navree deps, uses navree-dock, navree-harbor and navree-navigator)
 L7  navree-billing  navree-search  navree-lighthouse  navree-logbook  navree-fleet  navree-helm (packages built on other packages)
-L6  navree-social  navree-webhooks  navree-oauth  navree-flags  navree-graphql  navree-grpc  navree-mcp  navree-ai  navree-micro  navree-i18n (ecosystem libraries)
+L6  navree-social  navree-webhooks  navree-sheets  navree-oauth  navree-flags  navree-graphql  navree-grpc  navree-mcp  navree-ai  navree-micro  navree-i18n (ecosystem libraries)
 L5  navree-auth  navree-workspace  navree-redis
 L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify  navree-ui  navree-orm  navree-browser
 L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage
@@ -160,6 +161,7 @@ L0  navree-kernel                                navree-macros  navree-orm-macro
 | L5 | `navree-redis` | Redis: shared connections (lazy, reconnecting, TLS), Redis drivers for the cache and locks, the queue, sessions and the real-time backplane, shared rate limits (facade feature `redis`, opt-in) |
 | L6 | `navree-social` | Social sign-in: Google, GitHub, Apple, Microsoft, GitLab, Slack, LinkedIn, Discord, X and OpenID Connect, linked to Navree users (facade feature `social`, opt-in) |
 | L6 | `navree-webhooks` | Webhooks: signed outgoing deliveries with queue-backed retries and a delivery log, verified incoming webhooks (Stripe, GitHub, Paddle, Standard Webhooks) |
+| L6 | `navree-sheets` | CSV and Excel: `#[derive(Exportable)]` rows, downloads with a byte-order mark and formula escaping, XLSX with typed cells, named exports streamed or queued to a disk with a signed link; imports with encoding detection (UTF-16, Windows-1256 and the rest), CSV, XLSX, XLS and ODS reading, automatic and saved header mappings, garde validation per row, a staging preview, duplicate modes, batched apply with progress and error files |
 | L6 | `navree-oauth` | OAuth 2.1 and OpenID Connect provider: PKCE, client credentials, device and refresh grants, scopes mapped to permissions, personal access tokens (facade feature `oauth`, opt-in) |
 | L6 | `navree-flags` | Feature flags: `#[flag]` types, checks per user, workspace, plan or percentage with stable hashing, a kill switch, `#[requires_flag]` routes, database storage with a cache (facade feature `flags`, opt-in) |
 | L6 | `navree-graphql` | GraphQL on async-graphql: `#[resolver]` fields in modules with route-style access, per-request dataloaders, subscriptions over WebSockets, GraphiQL, `graphql:schema` (facade feature `graphql`, opt-in) |

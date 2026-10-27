@@ -41,6 +41,7 @@
 //! | `workspace` | navree-workspace | `workspace` | `WorkspaceModule`: workspaces, members, roles, invitations, isolation, organizations, partitions |
 //! | `redis` | navree-redis | `redis` (opt-in) | `RedisModule`: shared Redis connections; Redis cache, locks, queue, sessions, rate limits and real-time backplane |
 //! | `webhooks` | navree-webhooks | `webhooks` | `WebhooksModule`: signed outgoing webhooks with retries, verified incoming ones |
+//! | `sheets` | navree-sheets (plus `#[derive(Exportable)]`, `#[derive(Importable)]`) | `sheets` | `SheetsModule`: CSV and Excel exports and imports with staging, mapping and error files |
 //! | `social` | navree-social | `social` (opt-in) | `SocialModule`: sign-in with Google, GitHub, Apple and other providers |
 //! | `oauth` | navree-oauth | `oauth` (opt-in) | `OAuthServerModule`: OAuth 2.1 and OpenID Connect provider, personal access tokens |
 //! | `flags` | navree-flags (plus `#[flag]`) | `flags` (opt-in) | `FlagsModule`: feature flags per user, workspace, plan or percentage |
@@ -214,6 +215,10 @@ pub use navree_workspace as workspace;
 pub use navree_redis as redis;
 
 // L6: ecosystem libraries.
+/// CSV and Excel exports and imports (the `sheets` feature): navree-sheets
+/// re-exported whole, with its `Exportable` and `Importable` derives.
+#[cfg(feature = "sheets")]
+pub use navree_sheets as sheets;
 #[cfg(feature = "webhooks")]
 pub use navree_webhooks as webhooks;
 
