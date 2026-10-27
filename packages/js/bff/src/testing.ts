@@ -31,16 +31,21 @@ export type FakeRoute = (call: RecordedCall) => Response | Promise<Response>;
 export function fakeNavree(routes: Record<string, FakeRoute>) {
   const calls: RecordedCall[] = [];
   const fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    const url = input instanceof Request ? input.url : String(input);
-    const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
+    const request = input instanceof Request ? input : undefined;
+    const url = request ? request.url : String(input);
+    const method = (init?.method ?? request?.method ?? "GET").toUpperCase();
     const raw = init?.body;
     const body =
       raw === undefined || raw === null
-        ? ""
+        ? request
+          ? await request.clone().text()
+          : ""
         : typeof raw === "string"
           ? raw
           : new TextDecoder().decode(raw as ArrayBuffer | Uint8Array);
-    const call: RecordedCall = { url, method, headers: new Headers(init?.headers), body };
+    const headers = new Headers(request?.headers);
+    new Headers(init?.headers).forEach((value, name) => headers.set(name, value));
+    const call: RecordedCall = { url, method, headers, body };
     calls.push(call);
     const route = routes[`${method} ${new URL(url).pathname}`];
     if (!route) {
