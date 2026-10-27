@@ -81,7 +81,10 @@ impl InputContext {
     /// The context of a request: the app's (or the defaults), with the
     /// region of the app's [`RegionSource`] when it gives one. Without a
     /// request (`parts` is `None`), the app's context as configured.
-    pub(crate) async fn resolve(app: Option<&AppContext>, parts: Option<&mut Parts>) -> InputContext {
+    pub(crate) async fn resolve(
+        app: Option<&AppContext>,
+        parts: Option<&mut Parts>,
+    ) -> InputContext {
         let Some(app) = app else {
             return defaults().clone();
         };

@@ -265,6 +265,22 @@ async fn national_numbers_need_a_default_region() {
 }
 
 #[tokio::test]
+async fn the_default_region_comes_from_the_environment() {
+    let app = TestApp::builder()
+        .sources(
+            navree_config::ConfigSources::new()
+                .env_vars("APP_", [("APP_VALIDATION__PHONE__DEFAULT_REGION", "in")]),
+        )
+        .config("http.per_ip_rate_limit", Value::Null)
+        .module(ValidationModule::from_config())
+        .module(PhoneTestModule)
+        .build()
+        .await;
+    let body = post_phone(&app, "०८१२३४ ५६७८९").await;
+    assert_eq!(body["ok"]["phone"], json!("+918123456789"));
+}
+
+#[tokio::test]
 async fn a_region_source_picks_the_region_per_request() {
     let app = TestApp::builder()
         .config("http.per_ip_rate_limit", Value::Null)

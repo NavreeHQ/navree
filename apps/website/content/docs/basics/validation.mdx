@@ -569,6 +569,8 @@ let row: ImportRow = context.scope(|| serde_json::from_str(&line))?;
 
 `InputContext::new().with_default_region(..).with_html(..)` builds one by hand, for tests or scripts.
 
+`validate_in(&value, Some(&ctx))`, which checks a value that arrived some other way (a gRPC message, an event), runs its rules in the app's context as configured: `rules::phone` reads a number without a country code in `validation.phone.default_region`. There is no request, so no `RegionSource` is asked.
+
 The extractors resolve the context only when a value asks for it: a phone number without a country code, or a `SafeHtml` field. The rest of your routes pay nothing for it.
 
 ### In the OpenAPI document
@@ -895,7 +897,7 @@ pub fn check_dates(starts_on: &str, ends_on: &str) -> Result<()> {
 - To reuse the app's templates, inject `Arc<Messages>` (exported by `ValidationModule`) and call `messages.render("company_id", "exists", &[])`. The CRM does this to report a soft-deleted company as `company_id does not exist`.
 - `AppError::validation(map)` builds the same response from a `BTreeMap<String, Vec<String>>`.
 
-Calling garde's `input.validate()` yourself works anywhere, but it returns garde's own report and messages. Navree's messages come from the extractors.
+Calling garde's `input.validate()` yourself works anywhere, but it returns garde's own report and messages. For Navree's messages on a value that didn't come through an extractor (a gRPC message, an event payload), call `validate_in(&value, Some(&ctx)).await` with the app's `AppContext` (its messages and its [input context](#outside-the-extractors); `None` uses the built-in ones), or `validate(&value, None, &messages, "input")` with a `Messages` you hold. Both return `ValidationErrors`, keyed by dotted field path.
 
 ## Testing
 
