@@ -3771,6 +3771,7 @@ name = "navree-realtime"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "bytes",
  "dashmap",
  "futures-util",
  "hex",
