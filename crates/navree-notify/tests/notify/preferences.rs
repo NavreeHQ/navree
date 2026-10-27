@@ -19,7 +19,9 @@ use navree_testing::principal;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use crate::people::{DealUpdate, Mention, Person, SignInCode, TrainingDue, prefer, subjects, timed};
+use crate::people::{
+    DealUpdate, Mention, Person, SignInCode, TrainingDue, prefer, subjects, timed,
+};
 use crate::support;
 
 /// Options with `security` required.
@@ -52,11 +54,19 @@ async fn channels_turned_off_are_skipped_and_the_workspace_gives_the_defaults() 
         json!({"categories": {"mentions": {"channels": {"mail": false}}}}),
     )
     .await;
-    let texter = Person::in_zone(Some("UTC")).of(acme).phone("+44 7400 123456");
+    let texter = Person::in_zone(Some("UTC"))
+        .of(acme)
+        .phone("+44 7400 123456");
     prefer(&app, &texter.owner(), json!({"channels": {"sms": true}})).await;
 
-    notifier.send(&quiet, Mention { by: "Ada".into() }).await.unwrap();
-    notifier.send(&texter, Mention { by: "Bob".into() }).await.unwrap();
+    notifier
+        .send(&quiet, Mention { by: "Ada".into() })
+        .await
+        .unwrap();
+    notifier
+        .send(&texter, Mention { by: "Bob".into() })
+        .await
+        .unwrap();
 
     // Both in-app notifications are stored.
     assert_eq!(support::rows(&app).await.len(), 2);
@@ -68,7 +78,12 @@ async fn channels_turned_off_are_skipped_and_the_workspace_gives_the_defaults() 
 
     // A required category goes out whatever the switches say.
     notifier
-        .send(&quiet, SignInCode { code: "123456".into() })
+        .send(
+            &quiet,
+            SignInCode {
+                code: "123456".into(),
+            },
+        )
         .await
         .unwrap();
     assert_eq!(fakes.sms.sent_to("+14155550100").len(), 1);
@@ -86,7 +101,11 @@ async fn turning_off_database_also_stops_the_broadcast() {
     prefer(&app, &ada.owner(), json!({"channels": {"database": false}})).await;
     let mut update = DealUpdate::new("Acme");
     update.channels = vec![Channel::Database, Channel::Broadcast];
-    app.get::<Notifier>().await.send(&ada, update).await.unwrap();
+    app.get::<Notifier>()
+        .await
+        .send(&ada, update)
+        .await
+        .unwrap();
     assert!(support::rows(&app).await.is_empty());
     assert!(broadcaster.sent().is_empty());
 }
@@ -120,14 +139,23 @@ async fn the_service_reads_merges_and_forgets() {
     let app = builder.build().await;
     let preferences = app.get::<NotificationPreferences>().await;
     let ada = Person::in_zone(Some("UTC"));
-    assert_eq!(preferences.of(&ada.owner()).await.unwrap(), Preferences::default());
+    assert_eq!(
+        preferences.of(&ada.owner()).await.unwrap(),
+        Preferences::default()
+    );
 
     let stored = preferences
-        .update(&ada.owner(), &json!({"channels": {"sms": false}, "digest": "daily"}))
+        .update(
+            &ada.owner(),
+            &json!({"channels": {"sms": false}, "digest": "daily"}),
+        )
         .await
         .unwrap();
     let again = preferences
-        .update(&ada.owner(), &json!({"digest": null, "categories": {"deals": {"channels": {"mail": false}}}}))
+        .update(
+            &ada.owner(),
+            &json!({"digest": null, "categories": {"deals": {"channels": {"mail": false}}}}),
+        )
         .await
         .unwrap();
     assert_eq!(stored.channels.get(&Channel::Sms), Some(&false));
@@ -139,17 +167,28 @@ async fn the_service_reads_merges_and_forgets() {
     assert!(resolved.allows("security", Channel::Sms));
 
     let error = preferences
-        .update(&ada.owner(), &json!({"categories": {"security": {"channels": {"sms": false}}}}))
+        .update(
+            &ada.owner(),
+            &json!({"categories": {"security": {"channels": {"sms": false}}}}),
+        )
         .await
         .unwrap_err();
-    assert!(error.to_string().contains("security notifications cannot be turned off"), "{error}");
+    assert!(
+        error
+            .to_string()
+            .contains("security notifications cannot be turned off"),
+        "{error}"
+    );
 
     let replaced = preferences
         .set(&ada.owner(), Preferences::default())
         .await
         .unwrap();
     assert!(replaced.is_empty());
-    assert!(!preferences.forget(&ada.owner()).await.unwrap(), "the empty set was deleted");
+    assert!(
+        !preferences.forget(&ada.owner()).await.unwrap(),
+        "the empty set was deleted"
+    );
 }
 
 /// Registers the test notification types.
@@ -181,7 +220,9 @@ async fn the_routes_show_and_change_the_signed_in_users_preferences() {
     assert_eq!(body["time_zone"], "UTC");
     assert_eq!(
         body["channels"],
-        json!(["mail", "database", "slack", "teams", "sms", "whatsapp", "web_push"])
+        json!([
+            "mail", "database", "slack", "teams", "sms", "whatsapp", "web_push"
+        ])
     );
     let categories: Vec<&str> = body["categories"]
         .as_array()
@@ -255,7 +296,12 @@ async fn the_routes_show_and_change_the_signed_in_users_preferences() {
         .await
         .assert_status(400)
         .json_value();
-    assert!(refused["errors"]["preferences"][0].as_str().unwrap().contains("late"));
+    assert!(
+        refused["errors"]["preferences"][0]
+            .as_str()
+            .unwrap()
+            .contains("late")
+    );
 
     // Guests get 401.
     app.client()
@@ -338,7 +384,8 @@ async fn a_workspace_gives_its_members_defaults_that_admins_change() {
         .await
         .assert_status(404);
 
-    let defaults = json!({"channels": {"sms": false}, "categories": {"deals": {"digest": "weekly"}}});
+    let defaults =
+        json!({"channels": {"sms": false}, "categories": {"deals": {"digest": "weekly"}}});
     as_member
         .patch("/api/notifications/preferences/workspace")
         .header("x-workspace", acme.as_str())
@@ -402,12 +449,16 @@ impl TemplateOverrides for Branded {
         Box::pin(async move {
             let mut overrides = NotificationOverrides::default();
             if workspace == Some(acme) {
-                overrides.style.insert("brand_color".into(), json!("#0F766E"));
+                overrides
+                    .style
+                    .insert("brand_color".into(), json!("#0F766E"));
                 overrides.templates.insert(
                     "mentions".into(),
                     MailOverride {
                         subject: Some("Acme: {{ title }} mentioned you".into()),
-                        html: Some("<p style=\"color: {{ style.brand_color }}\">{{ title }}</p>".into()),
+                        html: Some(
+                            "<p style=\"color: {{ style.brand_color }}\">{{ title }}</p>".into(),
+                        ),
                         text: None,
                     },
                 );
@@ -438,7 +489,10 @@ async fn a_workspaces_overrides_restyle_its_mail() {
     let notifier = app.get::<Notifier>().await;
 
     notifier
-        .send(&Person::in_zone(Some("UTC")).of(acme), Mention { by: "Ada".into() })
+        .send(
+            &Person::in_zone(Some("UTC")).of(acme),
+            Mention { by: "Ada".into() },
+        )
         .await
         .unwrap();
     notifier
@@ -447,13 +501,19 @@ async fn a_workspaces_overrides_restyle_its_mail() {
         .unwrap();
     // A failing source sends the default mail.
     notifier
-        .send(&Person::in_zone(Some("UTC")).of(Uuid::now_v7()), Mention { by: "Cy".into() })
+        .send(
+            &Person::in_zone(Some("UTC")).of(Uuid::now_v7()),
+            Mention { by: "Cy".into() },
+        )
         .await
         .unwrap();
 
     let mail = support::sent_mail(&app).await;
     assert_eq!(mail[0].subject, "Acme: Ada mentioned you");
-    assert_eq!(mail[0].html.as_deref(), Some("<p style=\"color: #0F766E\">Ada</p>"));
+    assert_eq!(
+        mail[0].html.as_deref(),
+        Some("<p style=\"color: #0F766E\">Ada</p>")
+    );
     assert_eq!(mail[0].text.as_deref(), Some("Ada was won."));
     assert_eq!(mail[1].subject, "Mention from Bob");
     assert_eq!(mail[2].subject, "Cy mentioned you");

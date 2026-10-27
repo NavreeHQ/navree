@@ -14,8 +14,8 @@ use navree::contracts::{Clock, FixedClock};
 use navree::db::Db;
 use navree::mail::{Mailer, TemplateMail};
 use navree::notify::{
-    Channel, Digest, NotificationCatalog, NotificationDeferral, NotificationPreferences,
-    Notifiable, Notification, Notifier, PreferenceOwner, SmsDriver, SmsFake, SmsMessage,
+    Channel, Digest, Notifiable, Notification, NotificationCatalog, NotificationDeferral,
+    NotificationPreferences, Notifier, PreferenceOwner, SmsDriver, SmsFake, SmsMessage,
     USER_NOTIFIABLE_TYPE, notification,
 };
 use navree::orm::Model as _;
@@ -83,7 +83,10 @@ impl Notification for SignInCode {
     }
 
     fn to_sms(&self, _notifiable: &dyn Notifiable) -> Option<SmsMessage> {
-        Some(SmsMessage::new(format!("Your sign-in code is {}", self.code)))
+        Some(SmsMessage::new(format!(
+            "Your sign-in code is {}",
+            self.code
+        )))
     }
 }
 
@@ -233,8 +236,14 @@ async fn deal_mail_waits_for_the_morning_digest() {
     let released = notifier.release_due().await.unwrap();
     assert_eq!((released.digests, released.batched), (1, 2));
     let digest = &mail.sent()[0];
-    assert_eq!(digest.to, [priya.email.clone()]);
-    assert!(digest.text.as_deref().unwrap().contains("Deal won: Acme renewal"));
+    assert_eq!(digest.to, [priya.email.as_str()]);
+    assert!(
+        digest
+            .text
+            .as_deref()
+            .unwrap()
+            .contains("Deal won: Acme renewal")
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -277,11 +286,21 @@ async fn urgent_codes_skip_quiet_hours_and_training_waits_for_the_window() {
         .unwrap();
 
     notifier
-        .send(&priya, SignInCode { code: "481516".into() })
+        .send(
+            &priya,
+            SignInCode {
+                code: "481516".into(),
+            },
+        )
         .await
         .unwrap();
     notifier
-        .send(&priya, TrainingDue { module: "Phishing basics".into() })
+        .send(
+            &priya,
+            TrainingDue {
+                module: "Phishing basics".into(),
+            },
+        )
         .await
         .unwrap();
 
@@ -383,7 +402,12 @@ async fn workspace_templates_restyle_the_mail() {
     // Wednesday 12:00 UTC is inside the window.
     app.get::<Notifier>()
         .await
-        .send(&priya, TrainingDue { module: "Phishing basics".into() })
+        .send(
+            &priya,
+            TrainingDue {
+                module: "Phishing basics".into(),
+            },
+        )
         .await
         .unwrap();
     let mailer = app.get::<Mailer>().await;

@@ -223,7 +223,9 @@ mod tests {
 
     fn overrides(template: Option<MailOverride>) -> NotificationOverrides {
         let mut overrides = NotificationOverrides::default();
-        overrides.style.insert("brand_color".to_owned(), json!("#0F766E"));
+        overrides
+            .style
+            .insert("brand_color".to_owned(), json!("#0F766E"));
         if let Some(template) = template {
             overrides.templates.insert("deal_won".to_owned(), template);
         }
@@ -323,7 +325,10 @@ mod tests {
         let context = with_style(&json!({"style": {"x": 1}}), Some(&overrides));
         assert_eq!(context["style"], json!({"x": 1}));
         assert_eq!(with_style(&Value::Null, None), json!({"style": {}}));
-        assert_eq!(with_style(&json!([1]), None), json!({"data": [1], "style": {}}));
+        assert_eq!(
+            with_style(&json!([1]), None),
+            json!({"data": [1], "style": {}})
+        );
         assert!(NotificationOverrides::default().is_empty());
         assert!(!overrides.is_empty());
     }

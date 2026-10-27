@@ -162,7 +162,8 @@ impl DigestOptions {
     /// [`at`](DigestOptions::at), parsed (09:00 when invalid; the options
     /// refuse to load with such a value).
     pub fn time(&self) -> NaiveTime {
-        parse_hh_mm(&self.at).unwrap_or_else(|_| NaiveTime::from_hms_opt(9, 0, 0).unwrap_or_default())
+        parse_hh_mm(&self.at)
+            .unwrap_or_else(|_| NaiveTime::from_hms_opt(9, 0, 0).unwrap_or_default())
     }
 
     /// [`weekly_on`](DigestOptions::weekly_on), parsed (Monday when
@@ -263,8 +264,7 @@ impl ConfigSection for NotifyOptions {
         }
         if self.preferences.channels.contains(&Channel::Broadcast) {
             return Err(
-                "notify.preferences.channels cannot list `broadcast`: it follows `database`"
-                    .into(),
+                "notify.preferences.channels cannot list `broadcast`: it follows `database`".into(),
             );
         }
         if let Some(driver) = self.sms.driver {

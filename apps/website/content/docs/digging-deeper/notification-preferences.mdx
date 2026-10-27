@@ -515,7 +515,7 @@ async fn deal_mail_waits_for_the_morning_digest() {
     let released = notifier.release_due().await.unwrap();
     assert_eq!((released.digests, released.batched), (1, 2));
     let digest = &mail.sent()[0];
-    assert_eq!(digest.to, [priya.email.clone()]);
+    assert_eq!(digest.to, [priya.email.as_str()]);
     assert!(digest.text.as_deref().unwrap().contains("Deal won: Acme renewal"));
 }
 ```

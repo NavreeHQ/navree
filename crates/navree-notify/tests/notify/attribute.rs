@@ -3,8 +3,8 @@
 //! catalog.
 
 use navree_notify::{
-    Channel, Digest, Notifiable, Notification, NotificationCatalog, NotificationKind,
-    NotifyModule, NotifyOptions, notification,
+    Channel, Digest, Notifiable, Notification, NotificationCatalog, NotificationKind, NotifyModule,
+    NotifyOptions, notification,
 };
 use serde::{Deserialize, Serialize};
 
@@ -52,11 +52,11 @@ impl Notification for Plain {
 fn the_attribute_sets_the_constants() {
     assert_eq!(DealWon::CATEGORY, "deals");
     assert_eq!(DealWon::DIGEST, Digest::Daily);
-    assert!(!DealWon::URGENT);
+    const { assert!(!DealWon::URGENT) };
     assert_eq!(SignInCode::TYPE, "sign_in_code");
     assert_eq!(SignInCode::CATEGORY, "security");
     assert_eq!(SignInCode::DIGEST, Digest::Off);
-    assert!(SignInCode::URGENT);
+    const { assert!(SignInCode::URGENT) };
     // Without arguments, the trait's defaults: the category is the type.
     assert_eq!(Plain::CATEGORY, "plain");
     assert_eq!(Plain::DIGEST, Digest::Off);

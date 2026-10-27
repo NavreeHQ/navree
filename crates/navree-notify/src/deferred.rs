@@ -221,8 +221,10 @@ impl Notifier {
         } else {
             resolved.quiet_hours()
         };
-        let digests_mail =
-            digest.is_on() && jobs.iter().any(|job| job.delivery.channel() == Channel::Mail);
+        let digests_mail = digest.is_on()
+            && jobs
+                .iter()
+                .any(|job| job.delivery.channel() == Channel::Mail);
         let times_held = (quiet.is_some() || meta.window.is_some())
             && jobs
                 .iter()
@@ -485,7 +487,10 @@ impl Notifier {
 }
 
 /// The digest mail job of a recipient's held mails.
-fn digest_job(rows: &[(NotificationDeferral, SendNotificationJob)], now: DateTime<Utc>) -> SendNotificationJob {
+fn digest_job(
+    rows: &[(NotificationDeferral, SendNotificationJob)],
+    now: DateTime<Utc>,
+) -> SendNotificationJob {
     let (first, first_job) = &rows[0];
     let digest = first
         .digest
@@ -532,8 +537,7 @@ fn deferral(
     digest: Option<Digest>,
     release_at: DateTime<Utc>,
 ) -> Result<NotificationDeferral, NotifyError> {
-    let payload = serde_json::to_value(job)
-        .map_err(|error| NotifyError::Queue(Box::new(error)))?;
+    let payload = serde_json::to_value(job).map_err(|error| NotifyError::Queue(Box::new(error)))?;
     Ok(NotificationDeferral {
         id: Uuid::now_v7(),
         notification_id: job.id,
