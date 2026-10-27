@@ -461,7 +461,7 @@ export const ecosystem: EcosystemEntry[] = [
     crate: "navree-browser",
     command: "cargo add --dev --git https://github.com/NavreeHQ/navree navree-browser",
     href: "/docs/packages/browser-testing/",
-    status: "planned",
+    status: "stable",
     signature: "browser.visit(web.url(\"/login\")).await?",
   },
 ];

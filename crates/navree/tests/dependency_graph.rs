@@ -109,6 +109,12 @@ const HIERARCHY: &[Rule] = &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http",
         "navree-db", "navree-events", "navree-crypto", "navree-orm-macros",
     ]),
+    // Browser testing: a dev-dependency crate that serves an app's router
+    // (navree-http) on a real port and drives Chrome over the DevTools
+    // Protocol (ecosystem build plan §3: may use http and testing).
+    rule("navree-browser", 4, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-testing",
+    ]),
     // L5
     rule("navree-auth", 5, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db",
@@ -315,6 +321,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-notify",
     "navree-ui",
     "navree-orm",
+    "navree-browser",
     "navree-auth",
     "navree-workspace",
     "navree-redis",

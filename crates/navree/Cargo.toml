@@ -13,7 +13,8 @@ workspace = true
 [features]
 default = ["full"]
 ## Every module crate, except the opt-in ones (`social`, `oauth`, `flags`,
-## `graphql`, `grpc`, `billing`, `search`, `mcp`, `ai`, `redis`, `dock`).
+## `graphql`, `grpc`, `billing`, `search`, `mcp`, `ai`, `redis`, `dock`,
+## `browser`).
 full = [
     "access",
     "api",
@@ -336,6 +337,10 @@ validation-html = ["validation", "navree-validation/html"]
 ## Opt-in, not in `full`: Dock's library (`dock.toml`, the services' settings,
 ## the Compose file), for tools and tests. `navree dock` (the CLI) does not need it.
 dock = ["dep:navree-dock"]
+## Opt-in, not in `full`: browser testing (navree-browser) for tests, usually
+## turned on in `[dev-dependencies]`; it drives Chrome or Chromium over the
+## DevTools Protocol, so it needs a browser on the machine at test time.
+browser = ["dep:navree-browser", "http"]
 ## OTLP export of spans (gRPC and HTTP/protobuf) for `observe.tracing`
 ## (opt-in: it adds the OpenTelemetry SDK, tonic and prost).
 otel = ["observe", "navree-observe/otel"]
@@ -355,6 +360,7 @@ navree-api = { workspace = true, optional = true }
 navree-audit = { workspace = true, optional = true }
 navree-auth = { workspace = true, optional = true }
 navree-billing = { workspace = true, optional = true }
+navree-browser = { workspace = true, optional = true }
 navree-workspace = { workspace = true, optional = true }
 navree-oauth = { workspace = true, optional = true }
 navree-flags = { workspace = true, optional = true }
