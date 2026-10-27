@@ -1,0 +1,15 @@
+# Local services for {{ package }}. `navree dock up` starts them, and
+# `navree dev` (and every app command the CLI runs) points the app at them.
+
+{% if database == "timescaledb" %}
+# The app's database: PostgreSQL with TimescaleDB (database `{{ crate_name }}`,
+# user and password `navree`, on 127.0.0.1:5432). `timescaledb = false`
+# runs plain PostgreSQL instead.
+[services.postgres]
+{% else %}
+# The app's database: plain PostgreSQL (database `{{ crate_name }}`, user and
+# password `navree`, on 127.0.0.1:5432). Remove `timescaledb = false` to run
+# TimescaleDB, Navree's default, with time-series hypertables.
+[services.postgres]
+timescaledb = false
+{% endif %}

@@ -42,7 +42,7 @@ pub fn app(sources: ConfigSources) -> AppBuilder {
 | `ScheduleModule` | Optional. Lighthouse schedules its own [pruning](#retention-and-pruning) when the app has a scheduler. |
 | `McpModule` | Optional, with the `mcp` feature. Lighthouse adds its [tools for agents](#mcp-tools-for-agents) to your app's MCP server. |
 
-The module contributes the migration set `lighthouse`, which `migrate` runs with your app's migrations. It creates five tables, all prefixed `lighthouse_`: `issues`, `occurrences`, `samples` (request and job samples with their spans), `aggregates` (per-minute and per-hour counts and latency histograms) and `alerts` (the alerts sent).
+The module contributes the migration set `lighthouse`, which `migrate` runs with your app's migrations. It creates five tables, all prefixed `lighthouse_`: `issues`, `occurrences`, `samples` (request and job samples with their spans), `aggregates` (per-minute and per-hour counts and latency histograms) and `alerts` (the alerts sent). On [TimescaleDB](/docs/database/timescaledb/#navrees-own-tables), samples, occurrences and aggregates are hypertables, a day per chunk, in the app's database or in `lighthouse.database_url`'s.
 
 ```sh
 navree migrate
@@ -423,7 +423,7 @@ On a busy app, start with `requests = 0.1` and raise it if you want more traces 
 
 ## Retention and pruning
 
-`lighthouse:prune` deletes samples, occurrences, aggregates and sent alerts older than `lighthouse.retention_days` (14), per-minute aggregates older than two days (hourly ones stay for the 24-hour and 7-day views), and resolved or ignored issues with no occurrence left. Open issues are kept with their counts.
+`lighthouse:prune` deletes samples, occurrences, aggregates and sent alerts older than `lighthouse.retention_days` (14), per-minute aggregates older than two days (hourly ones stay for the 24-hour and 7-day views), and resolved or ignored issues with no occurrence left. Open issues are kept with their counts. On TimescaleDB, the days entirely before the cutoff go as whole chunks.
 
 ```sh
 navree lighthouse:prune

@@ -350,6 +350,59 @@ async fn hypertables_policies_and_continuous_aggregates() {
         column(&conn, "SELECT count(*) FROM audit_logs").await,
         ["2"]
     );
+    // The catalog knows which tables are hypertables, by plain or
+    // schema-qualified name, and their time dimensions.
+    for (table, expected) in [
+        ("events", true),
+        ("public.events", true),
+        ("audit_logs", true),
+        ("events_daily", false),
+        ("other_schema.events", false),
+        ("missing", false),
+    ] {
+        assert_eq!(
+            schema.is_hypertable(table).await.unwrap(),
+            expected,
+            "{table}"
+        );
+    }
+    let dimension = |table: &'static str| {
+        let schema = &schema;
+        async move {
+            schema.time_dimension(table).await.unwrap().map(|d| {
+                (
+                    d.column.clone(),
+                    d.column_type.clone(),
+                    d.chunk_interval.clone(),
+                )
+            })
+        }
+    };
+    let owned = |column: &str, kind: &str, interval: &str| {
+        Some((column.to_owned(), kind.to_owned(), interval.to_owned()))
+    };
+    assert_eq!(
+        dimension("events").await,
+        owned("occurred_at", "timestamp with time zone", "1 day")
+    );
+    assert_eq!(
+        dimension("public.audit_logs").await,
+        owned("created_at", "timestamp with time zone", "7 days")
+    );
+    assert_eq!(dimension("events_daily").await, None);
+    // An integer time column (Unix milliseconds) and its integer chunks.
+    schema
+        .create_hypertable("ticks", "at_ms", |t| {
+            t.uuid_primary();
+            t.big_integer("at_ms");
+            t.hypertable("at_ms").chunk_interval("86400000");
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        dimension("ticks").await,
+        owned("at_ms", "bigint", "86400000")
+    );
 
     // A table referenced by a foreign key cannot have its key widened.
     schema
@@ -430,6 +483,7 @@ async fn without_timescaledb_hypertables_are_regular_tables() {
         .await
         .unwrap();
     assert!(schema.has_index("metrics", ["at"], None).await.unwrap());
+    assert!(!schema.is_hypertable("metrics").await.unwrap());
     assert_eq!(
         schema.notices(),
         [

@@ -4,10 +4,11 @@
 //! module-owned migrations, seeders, factories and pagination.
 //!
 //! - [`DatabaseModule`] is global: it connects the pool at boot and exports
-//!   [`Db`] and [`DbOptions`] (section `database`). SQLite is built in (its
-//!   connections use WAL, `busy_timeout = 5000` and `foreign_keys = ON`);
-//!   PostgreSQL is behind the `postgres` feature, MySQL and MariaDB behind
-//!   the `mysql` feature (`mysql://` or `mariadb://` URLs; connections in
+//!   [`Db`] and [`DbOptions`] (section `database`). TimescaleDB, Navree's
+//!   default database, and plain PostgreSQL are behind the `postgres`
+//!   feature; SQLite is built in (its connections use WAL,
+//!   `busy_timeout = 5000` and `foreign_keys = ON`); MySQL and MariaDB are
+//!   behind the `mysql` feature (`mysql://` or `mariadb://` URLs; connections in
 //!   UTC, `utf8mb4` and strict SQL mode over TLS when the server offers
 //!   it, see [`MySqlOptions`]). It registers the `database` health check
 //!   and the commands `migrate`, `migrate:install`, `migrate:rollback`,
@@ -37,6 +38,9 @@
 //!   dumps.
 //! - [`Seeder`]s fill the database (`db:seed`); [`Factory`] and
 //!   [`create_many`] build test records.
+//! - [`prune_time_series`] deletes the rows of a time-series table older
+//!   than a cutoff; on a TimescaleDB hypertable it drops whole chunks
+//!   instead of deleting row by row.
 //! - [`PageQuery`] / [`Page`] / [`paginate`] give offset
 //!   pages (`{"data", "meta": {"current_page", "per_page", "total",
 //!   "last_page"}}`); [`CursorQuery`] / [`CursorPage`] / [`cursor_paginate`]
@@ -94,6 +98,7 @@ mod reader;
 mod repo;
 mod seed;
 mod text;
+mod time_series;
 mod uow;
 
 pub use db::Db;
@@ -112,6 +117,7 @@ pub use reader::Reader;
 pub use repo::Repo;
 pub use seed::{Factory, Seeder, create, create_many, run_seeders};
 pub use text::{contains_ignore_case, eq_ignore_case};
+pub use time_series::{TimePoint, prune_time_series};
 pub use uow::{ChangeEvent, ChangeObserver, ChangeOp, Uow};
 
 pub use navree_schema;

@@ -1,6 +1,10 @@
-//! The `audit` migration set: the `audit_logs` table.
+//! The `audit` migration set: the `audit_logs` table, a TimescaleDB
+//! hypertable on `created_at`.
 
 use navree_db::MigrationSet;
+use navree_db::navree_schema::{
+    Hypertable, KeyStrategy, Migration, Schema, SchemaMigration, SchemaResult,
+};
 use sea_orm::DbErr;
 use sea_orm::sea_query::{ColumnDef, Index, Table};
 use sea_orm_migration::async_trait::async_trait;
@@ -13,6 +17,47 @@ pub(crate) fn migrations() -> MigrationSet {
     MigrationSet::new("audit")
         .migration(CreateAuditLogs)
         .migration(AddImpersonatorId)
+        .migration(SchemaMigration::new(
+            "m20261027_000002_convert_audit_logs_to_hypertable",
+            ConvertAuditLogsToHypertable,
+        ))
+}
+
+/// How `audit_logs` is partitioned on TimescaleDB: by `created_at`, a
+/// week per chunk (the audit trail grows steadily and is kept for a year by
+/// default, so about fifty chunks). `audit:prune` drops whole chunks.
+pub(crate) fn hypertable() -> Hypertable {
+    let mut audit = Hypertable::on("created_at");
+    audit
+        .chunk_interval("7 days")
+        .keys(KeyStrategy::Extend)
+        .migrate_data();
+    audit
+}
+
+/// Makes `audit_logs` a hypertable on TimescaleDB: its primary key becomes
+/// `(id, created_at)` and its rows move into chunks. Elsewhere it stays a
+/// regular table with its `created_at` index, and the migration reports a
+/// notice.
+///
+/// Reverting it keeps the hypertable: TimescaleDB cannot turn one back into
+/// a plain table in place, and the table works the same either way. Running
+/// it again leaves a hypertable as it is.
+struct ConvertAuditLogsToHypertable;
+
+impl Migration for ConvertAuditLogsToHypertable {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        if schema.is_hypertable(AUDIT_TABLE).await? {
+            return Ok(());
+        }
+        schema
+            .convert_to_hypertable(AUDIT_TABLE, hypertable())
+            .await
+    }
+
+    async fn down(&self, _schema: &Schema<'_>) -> SchemaResult {
+        Ok(())
+    }
 }
 
 /// Creates `audit_logs` with indexes on (subject_type, subject_id),

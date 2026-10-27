@@ -1,15 +1,15 @@
 ---
 title: "Dock"
-description: "Run PostgreSQL, Redis, Meilisearch, Mailpit, MinIO and NATS for local development with one command, in Docker or Podman, with your app already pointed at them."
+description: "Run TimescaleDB (or plain PostgreSQL), Redis, Meilisearch, Mailpit, MinIO and NATS for local development with one command, in Docker or Podman, with your app already pointed at them."
 ---
 
 ## Introduction
 
-Dock starts the services your app needs on your machine. List them in `dock.toml`, run `navree dock up`, and PostgreSQL, Redis, Meilisearch, Mailpit, MinIO or NATS start in containers, wait until they are ready, and your app's settings point at them. `navree dock down` stops them; your data stays for next time.
+Dock starts the services your app needs on your machine. List them in `dock.toml`, run `navree dock up`, and TimescaleDB, Redis, Meilisearch, Mailpit, MinIO or NATS start in containers, wait until they are ready, and your app's settings point at them. `navree dock down` stops them; your data stays for next time.
 
 Dock is part of the `navree` CLI and drives Docker or Podman, whichever you have. You write no Compose file and change nothing in your app's code: Dock generates the Compose file from `dock.toml` and runs it with `docker compose` or `podman compose`. The same `dock.toml` starts the same services in CI, so your tests run against what you develop against.
 
-A new Navree app runs on SQLite with mail written to the log, and needs no services at all. Reach for Dock when your app uses PostgreSQL, a search engine, a message broker or object storage, or when you want to see your mail in a real inbox.
+A new Navree app runs on [TimescaleDB](/docs/database/timescaledb/), Navree's default database, and `navree new` writes a `dock.toml` that runs it: `navree dock up` is the first thing you do in a new app. Its mail goes to the log until you add Mailpit. Add more services when your app uses a search engine, a message broker or object storage. (An app made with `navree new --database sqlite` needs no services at all.)
 
 ## What you need
 
@@ -18,7 +18,7 @@ A new Navree app runs on SQLite with mail written to the log, and needs no servi
 
 ## Getting started
 
-Add the services you want, then start them:
+A new app's `dock.toml` already lists `postgres`, which runs TimescaleDB. In an app without one, add the services you want, then start them:
 
 ```sh
 navree dock:add postgres
@@ -32,16 +32,16 @@ Added postgres. Your app needs navree's `postgres` feature.
   updated  dock.toml        # [services.mailpit]
 Added mailpit.
 Starting crm-api services with docker
-  pulling  postgres:17
-  postgres  postgres:17            127.0.0.1:5432  ready in 2.0 s
-  mailpit   axllent/mailpit:v1.31  127.0.0.1:1025  ready in 0.5 s
+  pulling  timescale/timescaledb:2.31.0-pg17
+  postgres  timescale/timescaledb:2.31.0-pg17  127.0.0.1:5432  ready in 2.0 s
+  mailpit   axllent/mailpit:v1.31              127.0.0.1:1025  ready in 0.5 s
 Mailpit's inbox: http://127.0.0.1:8025
 Wrote 2 settings to .env: APP_DATABASE__URL, APP_MAIL__TRANSPORT.
 ```
 
-The first run pulls the images it doesn't have yet, with Docker's or Podman's own progress output. `navree dock:add postgres` prints the feature hint only when your `Cargo.toml` doesn't turn on `postgres` yet, and `navree dock:add minio` says how to point a [storage disk](/docs/digging-deeper/storage/#s3-and-s3-compatible-stores) at its bucket (`driver = "s3"` and the bucket's name; the disk reads MinIO's address and keys from the `AWS_*` settings).
+The first run pulls the images it doesn't have yet, with Docker's or Podman's own progress output. `navree dock:add postgres` prints the feature hint only when your `Cargo.toml` doesn't turn on `postgres` yet (a new app's does), and `navree dock:add minio` says how to point a [storage disk](/docs/digging-deeper/storage/#s3-and-s3-compatible-stores) at its bucket (`driver = "s3"` and the bucket's name; the disk reads MinIO's address and keys from the `AWS_*` settings).
 
-Now run your app as usual. `navree dev` passes the services' settings to it, so it migrates the PostgreSQL database and sends its mail to Mailpit, whose inbox is at `http://127.0.0.1:8025`:
+Now run your app as usual. `navree dev` passes the services' settings to it, so it migrates the TimescaleDB database (where its time-series tables become [hypertables](/docs/database/timescaledb/)) and sends its mail to Mailpit, whose inbox is at `http://127.0.0.1:8025`:
 
 ```sh
 navree migrate
@@ -96,14 +96,14 @@ error: dock.toml: [services.redis]: unknown key `bucket`; redis takes image, ver
 
 | Service | Image | Ports on 127.0.0.1 | Settings your app gets |
 |---|---|---|---|
-| `postgres` | `postgres:17` (`pgvector/pgvector:pg17` with `extensions = ["vector"]`) | 5432 | `APP_DATABASE__URL=postgres://navree:navree@127.0.0.1:5432/crm_api` |
+| `postgres` | `timescale/timescaledb:2.31.0-pg17`: PostgreSQL 17 with TimescaleDB ([below](#postgresql-and-timescaledb)); `postgres:17` with `timescaledb = false` (`pgvector/pgvector:pg17` with `extensions = ["vector"]` too) | 5432 | `APP_DATABASE__URL=postgres://navree:navree@127.0.0.1:5432/crm_api` |
 | `redis` | `redis:7` | 6379 | `REDIS_URL=redis://127.0.0.1:6379`, for [`RedisModule`](/docs/digging-deeper/redis/#configuration), your own code and the [Redis Streams transport](/docs/microservices/transports/#redis-streams) |
 | `meilisearch` | `getmeili/meilisearch:v1.55` | 7700 | `APP_SEARCH__ENGINE=meilisearch`, `APP_SEARCH__URL=http://127.0.0.1:7700`, `APP_SEARCH__KEY` |
 | `mailpit` | `axllent/mailpit:v1.31` | 1025 (SMTP), 8025 (inbox) | `APP_MAIL__TRANSPORT=smtp://127.0.0.1:1025` |
 | `minio` | `pgsty/minio:RELEASE.2026-08-04T00-00-00Z` | 9000 (S3 API), 9001 (console) | `AWS_ENDPOINT_URL=http://127.0.0.1:9000`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION=us-east-1` |
 | `nats` | `nats:2.14` | 4222, 8222 (monitoring) | `APP_MICRO__TRANSPORT=nats`, `APP_MICRO__URL=nats://127.0.0.1:4222` |
 
-Each image is pinned, so everyone on the team runs the same version, and `navree dock up` prints the one it uses. Set `version` (the image tag) or `image` (any image, with or without a tag) to choose another. MinIO no longer publishes container images, so the `minio` service runs `pgsty/minio`, a maintained build of the MinIO server with the same S3 API, console and `mc` client.
+Each image is pinned, so everyone on the team runs the same version, and `navree dock up` prints the one it uses. Set `version` (the image tag; for TimescaleDB, the PostgreSQL major version) or `image` (any image, with or without a tag) to choose another. MinIO no longer publishes container images, so the `minio` service runs `pgsty/minio`, a maintained build of the MinIO server with the same S3 API, console and `mc` client.
 
 ### Service settings
 
@@ -113,7 +113,8 @@ Every service takes `image`, `version`, `port` (the host port of its main port) 
 |---|---|---|---|
 | `postgres` | `database` | the package name with `_` | The database created on first start (`crm-api` gives `crm_api`). |
 | | `user`, `password` | `navree`, `navree` | The role it is created with. |
-| | `extensions` | `[]` | Extensions created in the database once it is ready. `"vector"` switches to the pgvector image of the same major version, for [vector search](/docs/packages/search/). |
+| | `timescaledb` | `true` (`false` for an `image` that isn't TimescaleDB's) | Runs TimescaleDB and creates its extension in the database once it is ready. `false` runs plain PostgreSQL. See [PostgreSQL and TimescaleDB](#postgresql-and-timescaledb). |
+| | `extensions` | `[]` | More extensions created in the database once it is ready, such as `"vector"` for [vector search](/docs/packages/search/). With `timescaledb = false`, `"vector"` switches to the pgvector image of the same major version. |
 | `redis` | `maxmemory_mb` | `256` | Redis's memory limit. Data is saved with the append-only file. |
 | `meilisearch` | `master_key` | `dock-meilisearch-master-key` | The master key, passed to your app as `APP_SEARCH__KEY`. |
 | `mailpit` | `smtp_port`, `ui_port` | `1025`, `8025` | The SMTP port (`smtp_port` is another name for `port`) and the inbox's web port. Mailpit accepts any SMTP credentials. |
@@ -126,6 +127,34 @@ Every service takes `image`, `version`, `port` (the host port of its main port) 
 Users, passwords and keys may use letters, digits, `.`, `_`, `~` and `-`, so they go into URLs and commands as they are.
 
 Every port is bound to `127.0.0.1` only, so nothing on your network can reach the services, and the passwords are development defaults. Dock is for your machine and CI, never for a server: [Harbor](/docs/tools/harbor/) provisions the production equivalents.
+
+### PostgreSQL and TimescaleDB
+
+`[services.postgres]` runs [TimescaleDB](/docs/database/timescaledb/), Navree's default database: TimescaleDB 2.31.0 on PostgreSQL 17, from the `timescale/timescaledb` image, which also has pgvector. Dock starts the server with TimescaleDB preloaded and its telemetry off, and once the server is ready creates the `timescaledb` extension in your database, before the ones `extensions` lists. Your migrations then decide which tables become hypertables.
+
+`version` picks the PostgreSQL major version under TimescaleDB, `"16"`, `"17"` or `"18"`:
+
+```toml title="dock.toml"
+[services.postgres]
+version = "18"         # timescale/timescaledb:2.31.0-pg18
+```
+
+For plain PostgreSQL, turn TimescaleDB off. `version` is then any tag of the `postgres` image, and migrations that declare hypertables give regular tables, with a notice:
+
+```toml title="dock.toml"
+[services.postgres]
+timescaledb = false
+version = "16"         # postgres:16
+```
+
+An `image` of your own runs as named. TimescaleDB is on for TimescaleDB's images (`timescale/timescaledb`, `timescale/timescaledb-ha`, from any registry) and off for any other, such as PostGIS's below; set `timescaledb = true` for an image of your own that preloads TimescaleDB, and Dock creates the extension in it.
+
+```toml title="dock.toml"
+[services.postgres]
+image = "postgis/postgis:17-3.5"
+```
+
+The data volume keeps its PostgreSQL major version. Moving from plain PostgreSQL to TimescaleDB on the same major keeps your data: Dock preloads TimescaleDB on the command line, also on a volume the plain image created. Going back, or to another major version, needs an empty volume (`navree dock down postgres --volumes`), since plain PostgreSQL can't read hypertables.
 
 ## How your app finds the services
 
@@ -191,13 +220,13 @@ A placeholder the service doesn't have is an error that lists the ones it has.
 | `navree dock:add <service>` | Adds a service to `dock.toml`, creating the file if needed. Comments and the rest of the file stay as they are. |
 | `navree dock:remove <service> [--volumes]` | Stops a service and removes it from `dock.toml`. |
 
-`navree dock up` checks every port first: when one is taken, it says which, and names the container that holds it when a container does, before starting anything. Then it waits for each service's own readiness check (`pg_isready` over TCP, a Redis `PING`, Meilisearch's `/health`, Mailpit's `/readyz`, MinIO's `/minio/health/live` and NATS's `/healthz`), creates the PostgreSQL extensions and the MinIO bucket, and fails with the service's last 20 log lines if one isn't ready within 60 seconds. When Docker or Podman doesn't answer within 30 seconds (Docker Desktop isn't running, or the Podman machine is stopped), Dock says so instead of waiting forever.
+`navree dock up` checks every port first: when one is taken, it says which, and names the container that holds it when a container does, before starting anything. Then it waits for each service's own readiness check (`pg_isready` over TCP, a Redis `PING`, Meilisearch's `/health`, Mailpit's `/readyz`, MinIO's `/minio/health/live` and NATS's `/healthz`), creates the PostgreSQL extensions (TimescaleDB's first) and the MinIO bucket, and fails with the service's last 20 log lines if one isn't ready within 60 seconds. Checking over TCP matters for PostgreSQL: during its first start the image sets the database up on a server that only listens on a Unix socket, then restarts it. When Docker or Podman doesn't answer within 30 seconds (Docker Desktop isn't running, or the Podman machine is stopped), Dock says so instead of waiting forever.
 
 ```text title="navree dock status"
-Service      State    Image                  Address
-postgres     running  postgres:17            127.0.0.1:5432
-redis        running  redis:7                127.0.0.1:6379
-mailpit      running  axllent/mailpit:v1.31  127.0.0.1:1025, 127.0.0.1:8025
+Service      State    Image                              Address
+postgres     running  timescale/timescaledb:2.31.0-pg17  127.0.0.1:5432
+redis        running  redis:7                            127.0.0.1:6379
+mailpit      running  axllent/mailpit:v1.31              127.0.0.1:1025, 127.0.0.1:8025
 meilisearch  stopped
 ```
 
@@ -259,17 +288,17 @@ jobs:
 
 `navree dock env >> "$GITHUB_ENV"` makes the settings environment variables for the following steps. GitHub's runners have Docker with Compose, so nothing else is needed.
 
-### Tests against PostgreSQL
+### Tests against TimescaleDB
 
-`TestApp` never reads `.env` or the environment, so tests run on a temporary SQLite database by default and need no service. For tests that must run on PostgreSQL, hand the URL to the test app yourself:
+`TestApp` never reads `.env` or the environment, so tests run on a temporary SQLite database by default and need no service: the same migrations run there, with hypertables as regular tables. For tests that must run on TimescaleDB (a continuous aggregate, `first` and `last`, month buckets), hand the URL to the test app yourself:
 
-```rust title="tests/postgres.rs"
+```rust title="tests/timescaledb.rs"
 use navree::prelude::*;
 use navree::testing::TestApp;
 
 /// Runs only where `navree dock up postgres` (or CI) provided a database.
 #[tokio::test]
-async fn pipeline_totals_on_postgres() {
+async fn pipeline_totals_on_timescaledb() {
     let Ok(url) = std::env::var("APP_DATABASE__URL") else {
         eprintln!("skipped: no APP_DATABASE__URL");
         return;
@@ -286,7 +315,7 @@ async fn pipeline_totals_on_postgres() {
 }
 ```
 
-`cargo test` doesn't go through the CLI, so run `eval "$(navree dock env --export)"` first on your machine. Tests that share one PostgreSQL database see each other's rows: create the records each test needs and assert on those, or run these tests one at a time with `cargo test -- --test-threads=1`.
+`cargo test` doesn't go through the CLI, so run `eval "$(navree dock env --export)"` first on your machine. Tests that share one database see each other's rows: create the records each test needs and assert on those, or run these tests one at a time with `cargo test -- --test-threads=1`.
 
 ## The library
 
@@ -319,7 +348,7 @@ fn main() -> Result<(), navree::dock::DockError> {
     The CLI, a new app and its first run.
   </LinkCard>
   <LinkCard href="/docs/database/getting-started/" title="Database: getting started">
-    SQLite and PostgreSQL.
+    TimescaleDB, PostgreSQL, MySQL and SQLite.
   </LinkCard>
   <LinkCard href="/docs/tools/harbor/" title="Harbor">
     The same services, provisioned on your servers.

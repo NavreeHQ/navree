@@ -34,6 +34,7 @@ const TEMPLATES: &[(&str, &str)] = templates![
     "app/AGENTS.md",
     "app/CLAUDE.md",
     "app/config/app.toml",
+    "app/dock.toml",
     "app/src/main.rs",
     "app/src/lib.rs",
     "app/src/app.rs",

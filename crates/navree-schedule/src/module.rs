@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use navree_config::Config;
 use navree_contracts::{Clock, SystemClock};
+use navree_db::navree_schema::SchemaMigration;
 use navree_db::{Db, MigrationSet, ModuleBuilderDbExt};
 use navree_kernel::{
     AppContext, BoxError, CommandSpec, Factory, Module, ModuleBuilder, ModuleId, ProviderKey,
@@ -12,7 +13,7 @@ use navree_kernel::{
 use navree_telemetry::{Telemetry, TracePolicy};
 use navree_time::Zones;
 
-use crate::store::{CreateScheduleRuns, MIGRATION_MODULE};
+use crate::store::{ConvertScheduleRunsToHypertable, CreateScheduleRuns, MIGRATION_MODULE};
 use crate::{RunStatus, Scheduler, SkipReason, TaskInfo};
 
 /// The scheduler module. Global; provides and exports [`Scheduler`], built
@@ -62,7 +63,14 @@ impl Module for ConfiguredScheduleModule {
 
 fn register(m: &mut ModuleBuilder) {
     m.global()
-        .migrations(MigrationSet::new(MIGRATION_MODULE).migration(CreateScheduleRuns))
+        .migrations(
+            MigrationSet::new(MIGRATION_MODULE)
+                .migration(CreateScheduleRuns)
+                .migration(SchemaMigration::new(
+                    ConvertScheduleRunsToHypertable::NAME,
+                    ConvertScheduleRunsToHypertable,
+                )),
+        )
         .factory(
             Factory::<Scheduler>::new(|r: Resolver| async move {
                 let db = r.get::<Db>().await?;

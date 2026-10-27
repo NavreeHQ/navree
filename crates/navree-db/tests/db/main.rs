@@ -15,5 +15,6 @@ mod schema_migrations;
 mod seed;
 mod telemetry;
 mod text;
+mod time_series;
 mod transaction_settings;
 mod uow;

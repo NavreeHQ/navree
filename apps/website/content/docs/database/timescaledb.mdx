@@ -1,11 +1,47 @@
 ---
 title: "TimescaleDB"
-description: "Time-series tables in migrations: which tables to make hypertables, keys and ids, chunk sizes, compression, retention, reorder policies, continuous aggregates, and how the same migration runs on PostgreSQL, MySQL and SQLite."
+description: "Navree's default database: why it is the default, running it locally and in production, which tables to make hypertables (Navree's own included), keys and ids, chunks, compression, retention, continuous aggregates and time-bucket queries."
 ---
 
 TimescaleDB is Navree's default database: PostgreSQL with an extension for time-series data. Its central idea is the **hypertable**, a table PostgreSQL stores as many chunks, each holding one span of time. Queries over a recent window read only the chunks they need, old chunks can be compressed to a fraction of their size or dropped whole, and continuous aggregates keep rollups (events per day, revenue per hour) up to date incrementally. To your queries a hypertable is an ordinary table.
 
 You decide in your migrations which tables become hypertables, with the [schema builder](/docs/database/schema-builder/). The same migration runs on plain PostgreSQL, MySQL, MariaDB and SQLite, which get a regular table with the right indexes and a notice.
+
+## Why TimescaleDB is the default
+
+- **It is PostgreSQL.** Everything Navree does on PostgreSQL works the same: the [unit of work](/docs/database/unit-of-work/) and its `navree.actor` setting for triggers, row-level security for [workspaces](/docs/workspaces/isolation/), JSONB, `FOR UPDATE` and `SKIP LOCKED` for the queue, full-text search. Your business records are regular tables, as they would be on any PostgreSQL server.
+- **Every app keeps time series.** The audit trail, webhook deliveries, job history and monitoring events grow with every request, are read by time range, and expire. As regular tables they slow down as they grow, and deleting old rows leaves the table bloated. As hypertables, recent data stays fast, old data compresses, and expired data is dropped a chunk at a time. Navree's own time-series tables [are hypertables](#navrees-own-tables) from the start.
+- **One database.** Time series live next to the records they describe, in the same transactions and joins, so there is no second store to run, back up and keep in step.
+- **Nothing is locked in.** A table is regular until a migration declares it a hypertable, and the migration also runs where TimescaleDB isn't installed. Your tests run the production migrations on SQLite.
+
+## Running it
+
+**A new app** is set up for TimescaleDB. `navree new` writes a PostgreSQL URL into `config/app.toml`, turns on the `postgres` feature of the `navree` dependency, and adds a `dock.toml` whose `postgres` service runs TimescaleDB:
+
+```sh
+navree new my-shop
+cd my-shop
+navree dock up               # TimescaleDB on 127.0.0.1:5432
+navree dev
+```
+
+`navree new my-shop --database postgres` sets up plain PostgreSQL instead, `--database mysql` MySQL or MariaDB, and `--database sqlite` a SQLite file with nothing to install.
+
+**An existing app** needs the `postgres` feature of the facade and a server. [Dock](/docs/tools/dock/#postgresql-and-timescaledb) runs one for development:
+
+```sh
+navree dock:add postgres     # TimescaleDB 2.31 on PostgreSQL 17
+navree dock up
+```
+
+**In production**, point `APP_DATABASE__URL` at a TimescaleDB server: a managed TimescaleDB service, or PostgreSQL 16 to 18 with the `timescaledb` package installed and `shared_preload_libraries = 'timescaledb'`. The first migration that declares a hypertable runs `CREATE EXTENSION IF NOT EXISTS timescaledb` when the database user may, or ask your administrator to run it once. Then make the extension a requirement, so a server without it stops the migration instead of falling back to regular tables:
+
+```sh
+export APP_DATABASE__URL=postgres://shop:secret@db.internal:5432/shop
+export APP_SCHEMA__TIMESCALEDB=require
+```
+
+`navree migrate` prints a notice for every table it couldn't make a hypertable. See [the extension](#the-extension) for the three modes.
 
 ## Which tables to convert
 
@@ -16,6 +52,58 @@ Make a table a hypertable when it is:
 - **large, or growing without end**: millions of rows, most of them old.
 
 Good candidates: request and application logs, events and analytics, the audit trail, metrics and readings, notification and webhook delivery history, job runs. Keep as regular tables the records your app updates in place and points foreign keys at: users, workspaces, companies, deals, orders, settings. A hypertable is a poor fit for a table referenced by other tables' foreign keys, or one whose rows change state for months.
+
+## Navree's own tables
+
+Navree's modules make their time-series tables hypertables in their own migrations, so an app on TimescaleDB gets them without writing anything:
+
+| Module | Table | Time column | Chunks of | Kept for (setting) |
+|---|---|---|---|---|
+| Audit | `audit_logs` | `created_at` | 7 days | 365 days (`audit.retention_days`) |
+| Webhooks | `webhook_deliveries`, `webhook_attempts` | `created_at` | 1 day | 30 days (`webhooks.retain_days`) |
+| Fleet | `fleet_jobs` | `finished_at`, Unix milliseconds | 1 hour | 60 minutes (`fleet.trim.recent_minutes`) |
+| Fleet | `fleet_metrics` | `at`, Unix milliseconds | 1 day | 7 days (`fleet.trim.metrics_days`) |
+| Scheduling | `schedule_runs` | `tick` | 1 day | 7 days |
+| Lighthouse | `lighthouse_samples`, `lighthouse_occurrences` | `at` | 1 day | 14 days (`lighthouse.retention_days`) |
+| Lighthouse | `lighthouse_aggregates` | `bucket` | 1 day | 14 days (`lighthouse.retention_days`) |
+
+On TimescaleDB their primary keys become `(id, <time column>)` (the scheduler's `(task, tick)` already has its time), and rows already there move into chunks when the migration runs, so an existing app converts on upgrade. That locks each table while its rows move: on a large audit log, run the upgrade in a quiet window. On every other database the tables stay as they were, with an index on their time column, and the migrations report a notice.
+
+Their prune commands (`audit:prune`, `webhooks:prune`, `lighthouse:prune`, Fleet's trimming and the scheduler's hourly cleanup) drop the chunks that lie entirely before the cutoff and delete only the rows of the chunk that straddles it ([pruning in code](#pruning-in-code) shows the helper they use). The retention stays in your configuration, so changing `audit.retention_days` needs no migration.
+
+Webhook attempts show the [key rule](#keys-and-ids) at work: a hypertable's key includes its time column, so no foreign key can point at a delivery's `id` alone. Attempts reference their endpoint instead (deleting an endpoint still deletes its deliveries and attempts), and `webhooks:prune` deletes a delivery's attempts with it.
+
+Every other table Navree creates (users, workspaces, the queue's `jobs` and `failed_jobs`, Lighthouse's issues, webhook endpoints) stays a regular table: their rows are updated in place, picked one at a time, or referenced by foreign keys.
+
+To size the chunks for your traffic, or add policies, change Navree's tables in a migration of your own:
+
+```rust title="src/modules/ops/migrations/m20261101_090000_tune_time_series.rs"
+use navree::schema::prelude::*;
+
+pub struct Migration;
+
+impl navree::schema::Migration for Migration {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        // A busy app: a day per audit chunk, from the next chunk on.
+        schema.set_chunk_interval("audit_logs", "1 day").await?;
+        // Compress Lighthouse's samples after two days.
+        let mut samples = Compression::new();
+        samples
+            .segment_by(["kind", "name"])
+            .order_by("at DESC")
+            .after("2 days");
+        schema.compress("lighthouse_samples", &samples).await
+    }
+
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.remove_compression_policy("lighthouse_samples").await
+    }
+}
+```
+
+On a database without TimescaleDB both calls report a notice and change nothing. A retention policy you add runs on its own schedule, next to the prune commands: keep its interval no shorter than the module's setting.
+
+With `lighthouse.database_url`, Lighthouse keeps its tables in a database of its own. It makes the same three tables hypertables there when it connects at boot, if that database runs TimescaleDB.
 
 ## Creating hypertables
 
@@ -77,10 +165,10 @@ audit
     .migrate_data()
     .retain_for("365 days");
 audit.compress().segment_by(["workspace_id"]).after("30 days");
-schema.convert_to_hypertable("audit_logs", &audit).await?;
+schema.convert_to_hypertable("visits", &audit).await?;
 ```
 
-A short description can be passed as it is built: `schema.convert_to_hypertable("audit_logs", Hypertable::on("created_at").migrate_data())`. A table that has rows needs `.migrate_data()`, which moves them into chunks and locks the table while it runs; without it, the conversion stops and says so.
+A short description can be passed as it is built: `schema.convert_to_hypertable("visits", Hypertable::on("created_at").migrate_data())`. A table that has rows needs `.migrate_data()`, which moves them into chunks and locks the table while it runs; without it, the conversion stops and says so. `schema.is_hypertable("visits")` tells whether a table already is one, which keeps a conversion you might run twice from doing anything the second time.
 
 ## Keys and ids
 
@@ -88,7 +176,7 @@ TimescaleDB enforces uniqueness inside each chunk, so **every primary key and un
 
 - A primary key that lacks them is widened: `uuid_primary()` on `events` becomes `PRIMARY KEY (id, occurred_at)`, and the migration reports it. The key is widened on every database, so a migration gives the same keys on SQLite in your tests as on TimescaleDB in production. (SQLite keeps an `id()` auto-increment key alone, as it must, and says so.) With `.keys(KeyStrategy::Reject)` on the hypertable, or `schema.hypertable_keys = "reject"` for every hypertable, the migration fails instead and tells you the key to declare.
 - A unique index that lacks them can't be widened without changing what it means, so it is an error on every database: add the time column to it, or drop it.
-- Converting an existing table rebuilds its primary key the same way, unless other tables' foreign keys point at it; then the conversion stops and names them.
+- Converting an existing table rebuilds its primary key the same way, unless other tables' foreign keys point at it; then the conversion stops and names them. Point those foreign keys at a regular table the rows belong to (an endpoint, a device, a workspace), as [webhook attempts](#navrees-own-tables) do, and delete the dependent rows when you prune.
 
 Use **time-ordered ids** for time-series tables: UUID v7 (what Navree generates for `Uuid` keys) or ULID (`ulid_primary()`). Their leading bits are a timestamp, so new rows land at the end of the index, ids sort by creation time, and a lookup by `id` alone still uses the `(id, occurred_at)` key. Two ways to key a time-series table:
 
@@ -97,9 +185,19 @@ Use **time-ordered ids** for time-series tables: UUID v7 (what Navree generates 
 | A time-ordered id | `t.uuid_primary()` (widened to `(id, occurred_at)`) | rows you fetch or link by id: events, audit entries, deliveries |
 | A natural key | `t.primary(["device_id", "taken_at"])` | readings with one value per source and instant |
 
+Your code keeps finding rows by `id`: `find_by_id`, updates and deletes filter on `id` and work the same on a hypertable.
+
 ## Chunks and partitions
 
 TimescaleDB's default chunk spans 7 days. Size chunks so the indexes of the most recent chunk fit in about a quarter of the server's memory: a table receiving millions of rows a day wants `chunk_interval("1 day")` or less, a quiet one can keep the default. `schema.set_chunk_interval("events", "6 hours")` changes it for chunks created from then on.
+
+`schema.time_dimension("events")` reads a hypertable's time column, its type and its chunk interval from TimescaleDB's catalog, and gives `None` for a regular table:
+
+```rust
+if let Some(time) = Schema::new(db.conn()).time_dimension("events").await? {
+    println!("{} ({}), chunks of {}", time.column, time.column_type, time.chunk_interval);
+}
+```
 
 ### Space partitioning
 
@@ -120,6 +218,27 @@ Compression (TimescaleDB's columnstore) stores old chunks by column, often at a 
 ## Retention
 
 `retain_for("90 days")` adds a policy that drops chunks older than 90 days, whole, without the cost of a `DELETE`. On an existing hypertable use `schema.add_retention_policy("events", "90 days")` and `remove_retention_policy`.
+
+### Pruning in code
+
+When the retention period is a setting, or other rows go with the old ones, prune from code: a command or a [scheduled task](/docs/digging-deeper/scheduling/). `navree::db::prune_time_series` deletes the rows older than a cutoff and returns how many. On a hypertable partitioned by that column it drops the chunks that lie entirely before the cutoff and deletes only the rows of the chunk that straddles it; on any other table it is one `DELETE`:
+
+```rust title="src/modules/analytics/prune.rs"
+use chrono::{TimeDelta, Utc};
+use navree::db::{Db, prune_time_series};
+
+/// Deletes the events older than `days`; returns how many.
+pub async fn prune_events(db: &Db, days: i64) -> Result<u64, sea_orm::DbErr> {
+    let cutoff = Utc::now() - TimeDelta::days(days);
+    db.transaction(|uow| async move {
+        let tx = uow.tx().await?;
+        prune_time_series(&*tx, "events", "occurred_at", cutoff).await
+    })
+    .await
+}
+```
+
+The cutoff has the time column's type: a `DateTime<Utc>` for timestamps, an `i64` for integer time columns (`TimePoint::Integer`). Navree's own prune commands use this helper.
 
 ## Reorder policies
 
@@ -151,6 +270,50 @@ The refresh policy refreshes the window from `start_offset` ago to `end_offset` 
 
 `drop_continuous_aggregate`, `add_continuous_aggregate_policy`, `remove_continuous_aggregate_policy` and `refresh_continuous_aggregate` manage them later. TimescaleDB refuses to refresh inside a transaction, so a migration that refreshes returns `false` from `within_transaction`.
 
+A continuous aggregate is a view, so you read it like a table: `table("events_daily")` in the [query builder](#time-bucket-queries).
+
+## Time-bucket queries
+
+The query builder groups rows into time buckets with TimescaleDB's `time_bucket`: the start of the bucket each row's time falls in. A chart of the last day, one point per 15 minutes:
+
+```rust
+use chrono::{TimeDelta, Utc};
+use navree::orm::{Expr, col, table};
+
+let since = Utc::now() - TimeDelta::days(1);
+let points = table("readings")
+    .select_time_bucket("15 minutes", "taken_at", "bucket")
+    .select_expr(Expr::avg(col("celsius")), "average")
+    .select_expr(Expr::count_all(), "samples")
+    .where_(col("taken_at").gte(since))
+    .group_by(["bucket"])
+    .order_by("bucket")
+    .get(&db)
+    .await?;
+for point in &points {
+    let bucket: chrono::DateTime<Utc> = point.get("bucket")?;
+    let average: f64 = point.get("average")?;
+    println!("{bucket}: {average:.1} °C");
+}
+```
+
+Buckets start at Monday, 2000-01-03, plus whole widths, as TimescaleDB's do; `Expr::time_bucket_from("1 day", col("taken_at"), origin)` aligns them to another origin, such as midnight in a time zone. Widths are intervals: `"30 seconds"`, `"5 minutes"`, `"1 hour"`, `"1 day"`, `"1 week"`, `"1 month"`.
+
+`first` and `last` are TimescaleDB's aggregates for the value at the earliest and latest time of each group, such as a day's opening and closing reading:
+
+```rust
+let days = table("readings")
+    .select_time_bucket("1 day", "taken_at", "day")
+    .select_first("celsius", "taken_at", "opening")
+    .select_last("celsius", "taken_at", "closing")
+    .group_by(["day"])
+    .order_by("day")
+    .get(&db)
+    .await?;
+```
+
+On SQLite and MySQL, where your tests run, the builder computes fixed-width buckets (from microseconds to weeks) itself, with the same alignment, so the same query returns the same buckets. Month and year buckets, `first` and `last` need TimescaleDB, and elsewhere the query fails with an error naming what is missing.
+
 ## One migration, every database
 
 A migration that declares a hypertable runs everywhere:
@@ -178,7 +341,7 @@ So your tests run the production migrations on SQLite, and a plain PostgreSQL se
 | `"require"` | Fails a hypertable migration on a PostgreSQL database without TimescaleDB, so production can't silently run without it. Other databases still fall back. |
 | `"off"` | Never uses TimescaleDB; hypertables are regular tables everywhere. |
 
-Set `require` in production's environment (`APP_SCHEMA__TIMESCALEDB=require`) and keep `auto` for development and tests.
+Set `require` in production's environment (`APP_SCHEMA__TIMESCALEDB=require`) and keep `auto` for development and tests. A new app's `config/app.toml` sets `timescaledb = "auto"` in its `[schema]` section.
 
 ## Dumps
 
@@ -190,5 +353,11 @@ Set `require` in production's environment (`APP_SCHEMA__TIMESCALEDB=require`) an
   </LinkCard>
   <LinkCard href="/docs/database/schema-builder/" title="Schema builder">
     Every column type, modifier, index and foreign key.
+  </LinkCard>
+  <LinkCard href="/docs/tools/dock/" title="Dock">
+    TimescaleDB and the other services, on your machine.
+  </LinkCard>
+  <LinkCard href="/docs/database/getting-started/" title="Database: getting started">
+    TimescaleDB, PostgreSQL, MySQL and SQLite: connecting and configuring.
   </LinkCard>
 </LinkCards>

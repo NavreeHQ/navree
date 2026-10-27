@@ -20,7 +20,7 @@ use std::process::Command;
 use navree_cli::clock::Timestamp;
 use navree_cli::make::{MakeKind, MakeOptions, make_item, make_module};
 use navree_cli::names::{AppName, Name};
-use navree_cli::new_app::{NavreeSource, NewApp, Ui, create_app};
+use navree_cli::new_app::{Database, NavreeSource, NewApp, Ui, create_app};
 use navree_cli::resource::make_resource;
 
 /// The workspace root. `std::path::absolute`, not `canonicalize`, which
@@ -34,12 +34,18 @@ fn name(s: &str) -> Name {
 }
 
 /// `cargo <args>` in `dir`, with the outer build's job limit and sccache.
+///
+/// The app is made for TimescaleDB (the default), so it compiles the
+/// `postgres` driver; the commands that boot it (`conformity:check`) run on
+/// a SQLite file instead, since no database server runs here.
+/// `APP_DATABASE__URL` overrides config/app.toml.
 fn cargo(dir: &Path, target: &Path, args: &[&str]) -> bool {
     let mut command = Command::new("cargo");
     command
         .args(args)
         .current_dir(dir)
         .env("CARGO_TARGET_DIR", target)
+        .env("APP_DATABASE__URL", "sqlite://storage/demo.db?mode=rwc")
         .env_remove("RUSTFLAGS");
     let sccache = Command::new("sccache").arg("--version").output();
     if sccache.is_ok_and(|o| o.status.success()) {
@@ -69,6 +75,7 @@ fn navree_new_output_compiles_against_the_workspace() {
         name: AppName::parse("demo").unwrap(),
         ui: Ui::None,
         kit: None,
+        database: Database::Timescaledb,
         navree: NavreeSource::Path(facade),
     };
     let root = create_app(parent.path(), &app, now).unwrap();

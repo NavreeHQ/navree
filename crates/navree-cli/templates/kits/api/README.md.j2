@@ -12,7 +12,7 @@ You need Rust, the `navree` CLI and Docker or Podman{% if web %}, plus Node.js 2
 pnpm for the front end{% endif %}.
 
 ```sh
-navree dock up                 # PostgreSQL and Mailpit (http://localhost:8025)
+navree dock up                 # {{ database_name }} and Mailpit (http://localhost:8025)
 navree key:generate            # then set APP_KEY in .env
 navree migrate:fresh --seed    # tables and a demo workspace
 {% if web %}

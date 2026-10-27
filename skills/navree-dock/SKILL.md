@@ -1,18 +1,22 @@
 ---
 name: navree-dock
-description: "Runs a Navree app's local services with Dock: `dock.toml`, `navree dock:add`, `navree dock up/down/status/logs/env/shell`, `navree dock:remove`, the settings Dock gives the app (`APP_DATABASE__URL`, `APP_MAIL__TRANSPORT`, `REDIS_URL`, ...), the `.env` block, Docker or Podman (`NAVREE_DOCK_RUNTIME`) and CI. Use when the app needs PostgreSQL, Redis, Meilisearch, Mailpit, MinIO or NATS on a developer machine or in CI, when `navree dock` fails (port taken, not ready, Docker not answering), or when tests must run against PostgreSQL."
+description: "Runs a Navree app's local services with Dock: `dock.toml`, `navree dock:add`, `navree dock up/down/status/logs/env/shell`, `navree dock:remove`, the settings Dock gives the app (`APP_DATABASE__URL`, `APP_MAIL__TRANSPORT`, `REDIS_URL`, ...), the `.env` block, Docker or Podman (`NAVREE_DOCK_RUNTIME`) and CI. Use when the app needs its database (TimescaleDB, Navree's default, or plain PostgreSQL), Redis, Meilisearch, Mailpit, MinIO or NATS on a developer machine or in CI, when `navree dock` fails (port taken, not ready, Docker not answering), or when tests must run against TimescaleDB."
 ---
 
 # Dock: local services for a Navree app
 
-Dock (crate `navree-dock`, behind the `navree` CLI) starts PostgreSQL, Redis,
-Meilisearch, Mailpit, MinIO and NATS in containers from `dock.toml`, waits
-until each is ready, and gives the app their settings. It generates a
-Compose file (`.navree/dock/compose.yaml`, never edit it) and runs it with
-`docker compose` or `podman compose`. Nothing in the app's code changes.
+Dock (crate `navree-dock`, behind the `navree` CLI) starts TimescaleDB (or
+plain PostgreSQL), Redis, Meilisearch, Mailpit, MinIO and NATS in containers
+from `dock.toml`, waits until each is ready, and gives the app their
+settings. It generates a Compose file (`.navree/dock/compose.yaml`, never
+edit it) and runs it with `docker compose` or `podman compose`. Nothing in
+the app's code changes.
 
-A new app runs on SQLite with mail in the log and needs no services. Add
-Dock when the app uses PostgreSQL, search, a broker or object storage.
+A new app runs on TimescaleDB: `navree new` writes a `dock.toml` with
+`[services.postgres]` and the matching `database.url`, so `navree dock up`
+is the first command in a new app (apps made with `--database sqlite` need
+no services). Add more services when the app uses search, a broker, object
+storage or a real mail inbox.
 
 ## Steps
 
@@ -23,8 +27,8 @@ Dock when the app uses PostgreSQL, search, a broker or object storage.
    navree dock:add mailpit
    ```
 
-2. For PostgreSQL, turn on the facade's driver in `Cargo.toml`:
-   `navree = { ..., features = ["postgres"] }`.
+2. For the database, the facade's driver must be on in `Cargo.toml`:
+   `navree = { ..., features = ["postgres"] }` (a new app has it).
 3. Start them and run the app:
 
    ```sh
@@ -43,12 +47,14 @@ Dock when the app uses PostgreSQL, search, a broker or object storage.
 # runtime = "auto"      # docker | podman | auto; NAVREE_DOCK_RUNTIME overrides
 # write_env = true      # write the settings into .env
 
-[services.postgres]
-version = "17"               # image tag; or image = "postgis/postgis:17-3.5"
+[services.postgres]           # TimescaleDB 2.31.0 on PostgreSQL 17 (timescale/timescaledb:2.31.0-pg17)
+version = "17"               # the PostgreSQL major under TimescaleDB: 16, 17 or 18
 database = "crm_api"         # default: package name with `_`
+# timescaledb = false        # plain PostgreSQL: postgres:<version>, any tag
+# image = "postgis/postgis:17-3.5"  # TimescaleDB is off for images that aren't TimescaleDB's
 # user = "navree"
 # password = "navree"
-# extensions = ["vector"]    # "vector" switches to pgvector/pgvector:pg17
+# extensions = ["vector"]    # created after timescaledb; with timescaledb = false, switches to pgvector/pgvector:pg17
 # port = 5432
 
 [services.redis]             # maxmemory_mb = 256
@@ -121,10 +127,22 @@ navree dock:remove <service> [--volumes]
       - run: cargo test --locked
 ```
 
-## Tests on PostgreSQL
+## TimescaleDB
 
-`TestApp` reads neither `.env` nor the environment. Pass the URL yourself
-and skip when there is none:
+`[services.postgres]` starts the server with `shared_preload_libraries =
+timescaledb` and telemetry off (also on a volume a plain PostgreSQL image
+created), then runs `CREATE EXTENSION IF NOT EXISTS "timescaledb"` in the
+database before the `extensions` list. Migrations decide which tables
+become hypertables (see the `navree-database` skill). Going back to plain
+PostgreSQL, or to another major version, needs an empty volume:
+`navree dock down postgres --volumes`.
+
+## Tests on TimescaleDB
+
+`TestApp` reads neither `.env` nor the environment, so tests run on SQLite
+(hypertables become regular tables). For a test that needs TimescaleDB
+(`first`/`last`, month buckets, continuous aggregates), pass the URL
+yourself and skip when there is none:
 
 ```rust
 let Ok(url) = std::env::var("APP_DATABASE__URL") else {
@@ -166,8 +184,8 @@ assert!(dock.executor().commands().iter().any(|c| c.contains("compose")));
 - `navree dock env` prints the settings you expect (no Docker needed).
 - `navree dock up` ends with `Wrote N settings to .env` or `.env already has
   the N settings.`; `navree dock status` shows `running`.
-- `navree migrate` succeeds against PostgreSQL (the app has the `postgres`
-  feature).
+- `navree migrate` succeeds against TimescaleDB (the app has the `postgres`
+  feature) without "does not support TimescaleDB" notices.
 
 ## Gotchas
 
@@ -182,6 +200,8 @@ assert!(dock.executor().commands().iter().any(|c| c.contains("compose")));
 - **Not ready within 60 s**: the error carries the last 20 log lines; a
   common cause is an old volume from another PostgreSQL major version:
   `navree dock down postgres --volumes`, then `up` again.
+- **`version` with TimescaleDB** is the PostgreSQL major (`"16"`, `"17"`,
+  `"18"`); anything else is an error that suggests `timescaledb = false`.
 - **PostgreSQL 18+** keeps data in `/var/lib/postgresql`; Dock mounts the
   right path from the version, but a volume made by 17 won't start 18.
 - **Credentials** may use letters, digits, `.`, `_`, `~`, `-` only; MinIO's

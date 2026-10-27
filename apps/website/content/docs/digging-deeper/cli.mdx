@@ -69,17 +69,19 @@ It depends on navree at /home/ada/src/navree/crates/navree.
 
 Next steps:
   cd blog
-  navree key:generate     # then set APP_KEY in .env
-  navree dev              # http://127.0.0.1:8080/api/docs
+  navree dock up             # TimescaleDB on 127.0.0.1:5432
+  navree key:generate        # then set APP_KEY in .env
+  navree dev                 # http://127.0.0.1:8080/api/docs
 ```
 
 <FileTree title="navree new blog">{`
 .env                      # a copy of .env.example (never commit it)
 .env.example
-Cargo.toml
+Cargo.toml                # navree with its postgres feature
 README.md
+dock.toml                 # TimescaleDB for navree dock up
 config/
-  app.toml                # http, database, log, mail, queue, auth, api
+  app.toml                # http, database, schema, log, mail, queue, auth, api
 src/
   main.rs                 # blog::app(ConfigSources::defaults()).run()
   lib.rs
@@ -96,6 +98,7 @@ storage/
 
 | Option | What it does |
 |---|---|
+| `--database <db>` | The database: `timescaledb` (the default; PostgreSQL with hypertables, run by `navree dock up`), `postgres` (plain PostgreSQL, also run by Dock), `mysql` (MySQL or MariaDB, a server of yours) or `sqlite` (a file in `storage/`). It sets `database.url`, the driver feature of the `navree` dependency and, for the first two, `dock.toml`. The [starter kits](/docs/getting-started/starter-kits/) run on `timescaledb` or `postgres`. |
 | `--ui next` | Also creates `web/`, a Next.js front end that talks to the API through its own server and keeps the tokens in httpOnly cookies, like the [CRM's](/docs/example-app/crm-tour/#the-web-app). `navree dev` starts it. Default: `--ui none`, API only. |
 | `--navree-path <path>` | Depend on a local checkout (the repository or its `crates/navree`). Without it, the app gets a `path` dependency on the checkout the CLI was built from when it still exists (after `cargo install --git`, Cargo's own copy of the repository), else `navree = "0.1.0"`, which won't build until the crate is on crates.io. |
 

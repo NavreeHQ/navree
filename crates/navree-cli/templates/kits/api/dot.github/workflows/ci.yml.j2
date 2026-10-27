@@ -14,7 +14,7 @@ jobs:
     services:
       # The same service dock.toml starts locally.
       postgres:
-        image: postgres:17
+        image: {{ postgres_image }}
         env:
           POSTGRES_USER: navree
           POSTGRES_PASSWORD: navree
@@ -73,7 +73,7 @@ jobs:
     needs: [rust, web]
     services:
       postgres:
-        image: postgres:17
+        image: {{ postgres_image }}
         env:
           POSTGRES_USER: navree
           POSTGRES_PASSWORD: navree

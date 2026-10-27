@@ -7,7 +7,7 @@ use clap::{Args, Parser, Subcommand};
 
 pub use crate::kits::Kit;
 use crate::make::MakeKind;
-pub use crate::new_app::Ui;
+pub use crate::new_app::{Database, Ui};
 
 /// The default directory of feature modules.
 pub const MODULES_DIR: &str = "src/modules";
@@ -143,7 +143,7 @@ impl Command {
     }
 }
 
-/// `navree new <name> [--kit saas|api|micro] [--ui next|none] [--navree-path <path>]`.
+/// `navree new <name> [--kit saas|api|micro] [--ui next|none] [--database <db>] [--navree-path <path>]`.
 #[derive(Debug, Args)]
 pub struct NewArgs {
     /// The app (package) name: lower-case letters, digits, `-` and `_`.
@@ -157,6 +157,12 @@ pub struct NewArgs {
     /// `--kit saas`).
     #[arg(long, value_enum, default_value_t = Ui::None)]
     pub ui: Ui,
+    /// The database: TimescaleDB (PostgreSQL with time-series hypertables,
+    /// run by `navree dock up`), plain PostgreSQL, MySQL/MariaDB, or SQLite
+    /// (a file; nothing to install). The kits run on TimescaleDB or
+    /// PostgreSQL.
+    #[arg(long, value_enum, default_value_t = Database::Timescaledb)]
+    pub database: Database,
     /// A local navree checkout (the repository or its crates/navree) to depend
     /// on; default: the checkout this navree was built from, else the
     /// published crate.
@@ -395,6 +401,7 @@ mod tests {
         };
         assert_eq!(args.ui, Ui::None);
         assert_eq!(args.kit, None);
+        assert_eq!(args.database, Database::Timescaledb);
     }
 
     #[test]
@@ -423,6 +430,31 @@ mod tests {
         assert_eq!((args.kit, args.ui), (Some(Kit::Saas), Ui::Next));
         let error = Cli::try_parse_from(["navree", "new", "acme", "--kit", "crm"]).unwrap_err();
         assert_eq!(error.kind(), clap::error::ErrorKind::InvalidValue);
+    }
+
+    #[test]
+    fn new_takes_the_database() {
+        for (flag, database) in [
+            ("timescaledb", Database::Timescaledb),
+            ("timescale", Database::Timescaledb),
+            ("postgres", Database::Postgres),
+            ("postgresql", Database::Postgres),
+            ("mysql", Database::Mysql),
+            ("mariadb", Database::Mysql),
+            ("sqlite", Database::Sqlite),
+        ] {
+            let Command::New(args) = parse(&["new", "blog", "--database", flag]) else {
+                panic!("expected new");
+            };
+            assert_eq!(args.database, database, "{flag}");
+        }
+        let error = Cli::try_parse_from(["navree", "new", "blog", "--database", "oracle"])
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("timescaledb, postgres, mysql, sqlite"),
+            "{error}"
+        );
     }
 
     #[test]

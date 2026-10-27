@@ -22,9 +22,11 @@ schema
     .await
 ```
 
-An existing table: `schema.convert_to_hypertable("audit_logs",
+An existing table: `schema.convert_to_hypertable("visits",
 Hypertable::on("created_at").chunk_interval("1 week").migrate_data())`
-(`.migrate_data()` when it has rows).
+(`.migrate_data()` when it has rows). `schema.is_hypertable("visits")` says
+whether it already is one; `schema.time_dimension("visits")` reads its time
+column, type and chunk interval.
 
 - Every primary key and unique index must include the time column (and a
   `partition_by` column): the builder widens the primary key, on every
@@ -38,6 +40,54 @@ Hypertable::on("created_at").chunk_interval("1 week").migrate_data())`
 - Policies on existing hypertables: `schema.compress`,
   `add_compression_policy`, `add_retention_policy`, `add_reorder_policy`,
   `set_chunk_interval`, and their `remove_*`.
+
+## Navree's own tables
+
+| Table | Time column | Chunks |
+|---|---|---|
+| `audit_logs` | `created_at` | 7 days |
+| `webhook_deliveries`, `webhook_attempts` | `created_at` | 1 day |
+| `fleet_jobs` | `finished_at` (Unix ms) | 1 hour |
+| `fleet_metrics` | `at` (Unix ms) | 1 day |
+| `schedule_runs` | `tick` | 1 day |
+| `lighthouse_samples`, `lighthouse_occurrences` | `at` | 1 day |
+| `lighthouse_aggregates` | `bucket` | 1 day |
+
+Their modules convert them; their prune commands (`audit:prune`,
+`webhooks:prune`, `lighthouse:prune`, Fleet's trim, the scheduler) drop
+whole chunks. Tune them in an app migration:
+`schema.set_chunk_interval("audit_logs", "1 day")`,
+`schema.compress("lighthouse_samples", &compression)`.
+
+## Pruning in code
+
+```rust
+use navree::db::prune_time_series;
+
+// Inside a transaction: count, drop the chunks before the cutoff, delete the rest.
+let deleted = prune_time_series(&*tx, "events", "occurred_at", Utc::now() - TimeDelta::days(90)).await?;
+```
+
+The cutoff is a `DateTime<Utc>` for timestamp columns, an `i64` for integer
+ones. On anything but a TimescaleDB hypertable it is one `DELETE`.
+
+## Queries
+
+```rust
+use navree::orm::{Expr, col, table};
+
+let points = table("readings")
+    .select_time_bucket("15 minutes", "taken_at", "bucket")
+    .select_expr(Expr::avg(col("celsius")), "average")
+    .group_by(["bucket"])
+    .order_by("bucket")
+    .get(&db)
+    .await?;                                    // point.get::<DateTime<Utc>>("bucket")
+```
+
+`select_first(value, time, alias)` / `select_last(...)` and month or year
+buckets need TimescaleDB; fixed-width buckets also run on SQLite and MySQL,
+aligned like TimescaleDB's (Monday 2000-01-03).
 
 ## Continuous aggregates
 

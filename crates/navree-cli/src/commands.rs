@@ -28,6 +28,7 @@ pub fn execute(cli: Cli, cwd: &Path) -> anyhow::Result<ExitCode> {
                 name: AppName::parse(&args.name)?,
                 ui: args.ui,
                 kit: args.kit,
+                database: args.database,
                 navree: NavreeSource::resolve(args.navree_path.as_deref())?,
             };
             let root = create_app(cwd, &app, Timestamp::now())?;

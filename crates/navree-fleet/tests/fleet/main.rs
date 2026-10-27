@@ -8,3 +8,4 @@ mod in_process;
 mod master;
 mod service;
 mod support;
+mod time_series;
