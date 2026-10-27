@@ -457,7 +457,7 @@ tempfile = "3.27.0"
 trybuild = "1.0.122"
 insta = { version = "1.49.0", features = ["json"] }
 # Test certificates (navree-micro's TCP TLS tests), on ring.
-rcgen = { version = "0.13.2", default-features = false, features = ["crypto", "pem", "ring"] }
+rcgen = { version = "0.14.10", default-features = false, features = ["crypto", "pem", "ring"] }
 proptest = "1.12.0"
 # HTTP mock servers for provider integrations (navree-social, navree-billing)
 # and the search engines' REST clients (navree-search).
