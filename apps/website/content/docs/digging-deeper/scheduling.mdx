@@ -185,7 +185,7 @@ m.schedule(|s| {
 });
 ```
 
-At each tick the scheduler asks `Zones` for every workspace and its zone (its `timezone`, else its country's primary zone, else `time.default_zone`) and runs the task for each workspace whose clock shows 09:00. The app needs `TimeModule` (the boot fails without it) and `WorkspaceModule`, which provides the workspaces' zones.
+At each tick the scheduler asks `Zones` for every workspace and its zone (its `timezone`, else its country's primary zone, else its [organization's](/docs/digging-deeper/time-zones/#workspaces-and-organizations) zone, else `time.default_zone`) and runs the task for each workspace whose clock shows 09:00. The app needs `TimeModule` (the boot fails without it) and `WorkspaceModule`, which provides the workspaces' zones.
 
 - Each workspace's run is claimed on its own in `schedule_runs`, as `<task>@<workspace id>`, so a task that runs per workspace has a name of at most 154 characters. `without_overlapping` works per workspace.
 - Inside the run, `LocalRun::current()` gives the workspace (`owner`), its `zone`, and the tick in UTC (`tick`) and on the workspace's clock (`local`). Plain tasks see a `LocalRun` too, with no owner and the zone `UTC`.
