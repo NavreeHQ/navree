@@ -783,14 +783,19 @@ async fn shows_the_signed_in_users_profile() {
 
 See [HTTP tests](/docs/testing/http-tests/) for the test client.
 
-## Social sign-in and OAuth
+## Social sign-in, single sign-on and OAuth
 
-Two packages build on `navree-auth` and its users:
+Three packages build on `navree-auth` and its users:
 
 - [Social sign-in](/docs/packages/social-sign-in/) lets people sign in with Google, GitHub, Apple, Microsoft and other providers, and links those accounts to Navree users.
+- [Single sign-on](/docs/security/single-sign-on/) connects an organization or a workspace to its company's identity provider (SAML 2.0 or OpenID Connect) and can keep its people off passwords.
 - The [OAuth server](/docs/packages/oauth-server/) issues tokens to third-party apps with OAuth 2.1 and OpenID Connect, with scopes and consent, and gives your users personal access tokens.
 
 For API keys of your own design, [write a strategy](#writing-your-own-strategy).
+
+### Password sign-in policies
+
+A module can keep some accounts off passwords with a `PasswordSignInPolicy`, registered with `m.password_sign_in_policy::<P>()` (`ModuleBuilderAuthExt`). `POST /api/auth/login` and `POST /api/auth/register` ask every registered policy before the password is checked, with the email trimmed and lower-cased; the first refusal is the answer, usually `AuthError::PasswordSignInRefused { code, message }` (a 403 with that code). A refused login is audited as `auth.login_refused`. Single sign-on registers one that answers `sso_required` for the verified domains of an enforcing connection. Call `AuthService::check_password_sign_in(email)` from your own password flows to ask the same question.
 
 ## Limits
 

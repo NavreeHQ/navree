@@ -290,6 +290,21 @@ export const ecosystem: EcosystemEntry[] = [
     signature: "self.social.redirect(\"github\").await?",
   },
   {
+    slug: "sso",
+    name: "Single sign-on",
+    kind: "library",
+    category: "capabilities",
+    tagline: "SAML 2.0 and OpenID Connect per organization or workspace",
+    summary:
+      "Connect each customer's identity provider, route sign-in by verified email domain, refuse passwords where single sign-on is enforced and provision members with roles from their groups.",
+    features: ["SAML 2.0 and OpenID Connect", "Verified email domains", "Just-in-time provisioning", "Signatures checked on ring"],
+    crate: "navree-sso",
+    command: "cargo add --git https://github.com/NavreeHQ/navree navree --features sso",
+    href: "/docs/security/single-sign-on/",
+    status: "stable",
+    signature: "self.sso.login(\"acme\", return_to).await?",
+  },
+  {
     slug: "webhooks",
     name: "Webhooks",
     kind: "library",

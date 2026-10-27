@@ -199,8 +199,9 @@ Signatures say who signed a token, not whether it is still valid. Checking `exp`
 
 | Constructor | |
 |---|---|
-| `VerifyingKey::from_pem(&str)` | `PUBLIC KEY` (SubjectPublicKeyInfo: RSA, P-256, P-384, Ed25519) or `RSA PUBLIC KEY` (PKCS#1) |
+| `VerifyingKey::from_pem(&str)` | `PUBLIC KEY` (SubjectPublicKeyInfo: RSA, P-256, P-384, Ed25519), `RSA PUBLIC KEY` (PKCS#1) or `CERTIFICATE` (its public key) |
 | `VerifyingKey::from_spki_der(&[u8])` | A SubjectPublicKeyInfo document as DER |
+| `VerifyingKey::from_certificate_der(&[u8])` | The public key of an X.509 certificate (DER); `from_pem` reads a `CERTIFICATE` too. Only the key is read: the certificate's own signature, dates and extensions are not checked |
 | `VerifyingKey::from_jwk(&jwk)` | A JWK's public members; its `kid` carries over and its `alg` pins the algorithm |
 | `VerifyingKey::rsa(n, e)` | An RSA modulus and exponent, big-endian |
 | `VerifyingKey::ec(alg, x, y)` | P-256 (`ES256`) or P-384 (`ES384`) coordinates |
