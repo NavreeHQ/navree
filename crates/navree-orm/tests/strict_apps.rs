@@ -137,7 +137,13 @@ async fn discarded_attributes_and_lazy_loading_have_handlers_too() {
         .boot()
         .await
         .unwrap();
-    let strictness = app.ctx().get::<OrmRuntime>().await.unwrap().strictness().clone();
+    let strictness = app
+        .ctx()
+        .get::<OrmRuntime>()
+        .await
+        .unwrap()
+        .strictness()
+        .clone();
     strictness
         .check(Violation::DiscardedAttributes {
             model: "Probe",

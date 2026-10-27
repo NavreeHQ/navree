@@ -1,8 +1,8 @@
 //! Broadcasting model changes on real-time channels.
 //!
 //! A model marked `#[model(broadcasts)]` (with `impl Broadcasts for ..`)
-//! announces its records' changes to the app's
-//! [`Broadcaster`](navree_contracts::Broadcaster) (navree-realtime's): on
+//! announces its records' changes to the app's [`Broadcaster`]
+//! (navree-realtime's): on
 //! `created`, `updated`, `deleted`, and for soft-deleting models `trashed`
 //! and `restored`. The broadcast goes out once the unit of work commits
 //! (at once outside one), never for a write that was rolled back:
