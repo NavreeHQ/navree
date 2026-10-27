@@ -262,6 +262,39 @@ async fn alterations_keep_the_data() {
     );
 }
 
+/// A drop after a change that rebuilds the table is part of that rebuild.
+#[tokio::test]
+async fn changing_one_column_and_dropping_another_rebuilds_once() {
+    let db = TempSqlite::new();
+    let conn = db.connect().await;
+    let schema = Schema::new(&conn);
+    schema
+        .create("companies", |t| {
+            t.id();
+            t.text("name");
+            t.string("domain").nullable();
+        })
+        .await
+        .unwrap();
+    exec(&conn, "INSERT INTO companies (name, domain) VALUES ('Acme', 'acme.test')").await;
+    let before = schema.statements().len();
+    schema
+        .table("companies", |t| {
+            t.string("name").change();
+            t.drop_column("domain");
+        })
+        .await
+        .unwrap();
+    let ran = &schema.statements()[before..];
+    assert!(ran[0].starts_with("CREATE TABLE \"__temp__companies\""), "{ran:?}");
+    assert!(
+        !ran.iter().any(|s| s.contains("DROP COLUMN")),
+        "the rebuild leaves the column out: {ran:?}"
+    );
+    assert_eq!(schema.column_listing("companies").await.unwrap(), ["id", "name"]);
+    assert_eq!(texts(rows(&conn, "SELECT name FROM companies").await), [["Acme"]]);
+}
+
 #[tokio::test]
 async fn adding_a_required_column_to_a_table_with_rows_says_how_to_fix_it() {
     let db = TempSqlite::new();

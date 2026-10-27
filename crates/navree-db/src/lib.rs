@@ -85,7 +85,10 @@ mod uow;
 
 pub use db::Db;
 pub use http::map_db_error;
-pub use migrate::{MIGRATIONS_TABLE, MigrationError, MigrationSet, MigrationStatus, Migrator};
+pub use migrate::{
+    FreshOptions, LoadedDump, MIGRATIONS_TABLE, MigrateOptions, MigrationError, MigrationReport,
+    MigrationRun, MigrationSet, MigrationStatus, Migrator, Refreshed, RollbackOptions,
+};
 pub use module::{DatabaseModule, ModuleBuilderDbExt};
 pub use options::DbOptions;
 pub use paginate::{
@@ -98,5 +101,6 @@ pub use seed::{Factory, Seeder, create, create_many, run_seeders};
 pub use text::{contains_ignore_case, eq_ignore_case};
 pub use uow::{ChangeEvent, ChangeObserver, ChangeOp, Uow};
 
+pub use navree_schema;
 pub use sea_orm;
 pub use sea_orm_migration;

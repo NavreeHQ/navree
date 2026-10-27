@@ -70,7 +70,8 @@ const HIERARCHY: &[Rule] = &[
     // tables (and hypertables) with it.
     rule("navree-schema", 2, &["navree-kernel", "navree-contracts", "navree-config"]),
     // L3
-    rule("navree-db", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http"]),
+    // navree-schema: migrations written with the schema builder, schema dumps.
+    rule("navree-db", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http", "navree-schema"]),
     rule("navree-testing", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-http"]),
     rule("navree-observe", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http"]),
     rule("navree-api", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-http"]),

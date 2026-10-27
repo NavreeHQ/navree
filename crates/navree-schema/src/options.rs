@@ -57,6 +57,7 @@ pub enum KeyStrategy {
 /// mysql_charset = "utf8mb4"     # MySQL tables' default character set
 /// # mysql_collation = "utf8mb4_0900_ai_ci"
 /// # mysql_engine = "InnoDB"
+/// dump_path = "database/schema" # where `schema:dump` writes {driver}-schema.sql
 /// ```
 ///
 /// ```
@@ -96,6 +97,26 @@ pub struct SchemaOptions {
     /// The default storage engine of MySQL tables; `None` leaves the
     /// server's default (InnoDB).
     pub mysql_engine: Option<String>,
+    /// The directory (relative to the working directory) where `navree
+    /// schema:dump` writes `{driver}-schema.sql`, and where `navree
+    /// migrate` looks for it when the database is empty.
+    pub dump_path: String,
+}
+
+impl SchemaOptions {
+    /// The schema dump file for `dialect`: `{dump_path}/{driver}-schema.sql`.
+    ///
+    /// ```
+    /// use navree_schema::{Dialect, SchemaOptions};
+    ///
+    /// assert_eq!(
+    ///     SchemaOptions::default().dump_file(Dialect::Postgres),
+    ///     std::path::Path::new("database/schema").join("postgres-schema.sql")
+    /// );
+    /// ```
+    pub fn dump_file(&self, dialect: crate::Dialect) -> std::path::PathBuf {
+        std::path::Path::new(&self.dump_path).join(format!("{}-schema.sql", dialect.driver()))
+    }
 }
 
 impl Default for SchemaOptions {
@@ -110,6 +131,7 @@ impl Default for SchemaOptions {
             mysql_charset: Some("utf8mb4".to_owned()),
             mysql_collation: None,
             mysql_engine: None,
+            dump_path: "database/schema".to_owned(),
         }
     }
 }
@@ -124,6 +146,9 @@ impl ConfigSection for SchemaOptions {
         }
         if self.default_time_precision.is_some_and(|p| p > 6) {
             problems.push("default_time_precision must be between 0 and 6".to_owned());
+        }
+        if self.dump_path.trim().is_empty() {
+            problems.push("dump_path must name a directory".to_owned());
         }
         if problems.is_empty() {
             Ok(())

@@ -3349,6 +3349,7 @@ dependencies = [
  "navree-contracts",
  "navree-http",
  "navree-kernel",
+ "navree-schema",
  "navree-telemetry",
  "sea-orm",
  "sea-orm-migration",
