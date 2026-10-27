@@ -849,6 +849,38 @@ fn active_directory() -> Vec<Entry> {
 
 const BIND_DN: &str = "CN=navree-sync,OU=Service,DC=acme,DC=test";
 
+/// The fixture servers listen on 127.0.0.1, which the LDAP host policy
+/// refuses unless it is allowed.
+fn loopback_ldap(builder: TestAppBuilder) -> TestAppBuilder {
+    builder.config("directory.ldap.allow_hosts", json!(["127.0.0.1"]))
+}
+
+#[tokio::test]
+async fn ldap_connections_may_not_reach_the_apps_own_network_by_default() {
+    let server = LdapServer::start(active_directory(), None).await;
+    let h = real(|b| b).await;
+    let id = ldap_connection(
+        &h,
+        json!({ "url": server.url(), "base_dn": "DC=acme,DC=test" }),
+        None,
+    )
+    .await;
+    let run = h
+        .directory()
+        .await
+        .sync_now(id, SyncOptions::default())
+        .await
+        .unwrap();
+    assert_eq!(run.status, RunStatus::Failed);
+    assert_eq!(
+        run.error.as_deref(),
+        Some(
+            "LDAP could not be read: 127.0.0.1 resolves to a private address (127.0.0.1); allow it in directory.ldap.allow_hosts"
+        )
+    );
+    assert!(server.searches().is_empty() && server.binds().is_empty());
+}
+
 async fn ldap_connection(h: &Harness, settings: Value, secret: Option<&str>) -> Uuid {
     let mut connection = NewConnection::new("Acme AD", "ldap").settings(settings);
     if let Some(secret) = secret {
@@ -866,7 +898,7 @@ async fn ldap_connection(h: &Harness, settings: Value, secret: Option<&str>) -> 
 #[tokio::test]
 async fn active_directory_gives_the_directory_through_paged_searches() {
     let server = LdapServer::start(active_directory(), Some((BIND_DN, "s3cret!"))).await;
-    let h = real(|b| b).await;
+    let h = real(loopback_ldap).await;
     let id = ldap_connection(
         &h,
         json!({ "url": server.url(), "base_dn": "DC=acme,DC=test", "bind_dn": BIND_DN, "page_size": 2 }),
@@ -894,7 +926,7 @@ async fn active_directory_gives_the_directory_through_paged_searches() {
 #[tokio::test]
 async fn a_refused_bind_fails_the_run_without_the_password() {
     let server = LdapServer::start(active_directory(), Some((BIND_DN, "s3cret!"))).await;
-    let h = real(|b| b).await;
+    let h = real(loopback_ldap).await;
     let id = ldap_connection(
         &h,
         json!({ "url": server.url(), "base_dn": "DC=acme,DC=test", "bind_dn": BIND_DN }),
@@ -976,7 +1008,7 @@ async fn openldap_over_ldaps_with_the_servers_certificate() {
             .attr("memberUid", &["ALAN@acme.test"]),
     ];
     let (server, pem) = LdapServer::start_tls(entries, None).await;
-    let h = real(|b| b).await;
+    let h = real(loopback_ldap).await;
     let id = ldap_connection(
         &h,
         json!({

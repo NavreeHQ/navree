@@ -82,7 +82,7 @@ pub use fake::{DirectoryFake, FakePull};
 pub use migration::DIRECTORY_MIGRATIONS;
 pub use module::{DirectoryModule, DirectoryScopes, ModuleBuilderDirectoryExt};
 pub use navree_integrations::{Level, Owner};
-pub use options::{DirectoryOptions, ScimOptions, SyncSettings};
+pub use options::{DirectoryOptions, LdapPolicy, ScimOptions, SyncSettings};
 pub use owner::DirectoryOwner;
 pub use pulled::{MemberChange, Pulled};
 pub use runs::SyncDirectory;

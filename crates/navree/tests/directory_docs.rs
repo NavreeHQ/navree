@@ -8,9 +8,8 @@
 
 use navree::db::Db;
 use navree::directory::{
-    Directory, DirectoryError, DirectorySink, DirectorySource, DirectoryUser,
-    DirectoryUserCreated, NewConnection, Owner, PullRequest, Pulled, RunStatus, SinkContext,
-    SyncOptions, UserChange,
+    Directory, DirectoryError, DirectorySink, DirectorySource, DirectoryUser, DirectoryUserCreated,
+    NewConnection, Owner, PullRequest, Pulled, RunStatus, SinkContext, SyncOptions, UserChange,
 };
 use navree::events::{Listener, ModuleBuilderEventsExt};
 use navree::prelude::*;
@@ -114,9 +113,11 @@ pub struct RecipientsModule;
 impl Module for RecipientsModule {
     fn register(&self, m: &mut ModuleBuilder) {
         m.imports(DirectoryModule::for_feature::<RecipientSink>())
-            .migrations(MigrationSet::new("recipients").migration(
-                navree::schema::migration!(m20261028_090000_create_recipients_table),
-            ))
+            .migrations(
+                MigrationSet::new("recipients").migration(navree::schema::migration!(
+                    m20261028_090000_create_recipients_table
+                )),
+            )
             .listen::<DirectoryUserCreated, Welcome>();
     }
 }
@@ -150,7 +151,11 @@ impl Listener<DirectoryUserCreated> for Welcome {
 pub struct HrSource;
 
 impl DirectorySource for HrSource {
-    fn check_settings(&self, settings: &serde_json::Value, _has_secret: bool) -> Result<(), String> {
+    fn check_settings(
+        &self,
+        settings: &serde_json::Value,
+        _has_secret: bool,
+    ) -> Result<(), String> {
         match settings.get("export_url").and_then(|url| url.as_str()) {
             Some(url) if url.starts_with("https://") => Ok(()),
             _ => Err("settings.export_url must be an https:// URL".to_owned()),
