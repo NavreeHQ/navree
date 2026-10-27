@@ -18,9 +18,7 @@ use crate::entity::{
     workspace,
 };
 use crate::isolation::IsolationDriver;
-use crate::{
-    OrgRole, OrgRoleTable, RoleTable, WorkspaceConfig, WorkspaceError, WorkspaceRole,
-};
+use crate::{OrgRole, OrgRoleTable, RoleTable, WorkspaceConfig, WorkspaceError, WorkspaceRole};
 
 /// The setting that turns organizations on.
 pub(crate) const ORGANIZATIONS_ENABLED: &str = "workspace.organizations.enabled";

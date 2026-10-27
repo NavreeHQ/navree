@@ -822,17 +822,16 @@ impl WorkspaceController {
             }
         };
         let partitions = self.partitions.clone();
-        let show_access =
-            move |ws: CurrentWorkspace, Path((_, user)): Path<(String, Uuid)>| {
-                let partitions = partitions.clone();
-                async move {
-                    let access = partitions.access(ws.id(), user).await?;
-                    Ok::<_, AppError>(Json(PartitionAccessResource {
-                        user_id: user,
-                        partitions: access,
-                    }))
-                }
-            };
+        let show_access = move |ws: CurrentWorkspace, Path((_, user)): Path<(String, Uuid)>| {
+            let partitions = partitions.clone();
+            async move {
+                let access = partitions.access(ws.id(), user).await?;
+                Ok::<_, AppError>(Json(PartitionAccessResource {
+                    user_id: user,
+                    partitions: access,
+                }))
+            }
+        };
         let partitions = self.partitions.clone();
         let grant = move |ws: CurrentWorkspace,
                           scope: PartitionScope,
@@ -888,14 +887,18 @@ impl WorkspaceController {
                     Some(schema_fn::<RenamePartitionInput>),
                     Some(schema_fn::<PartitionResource>),
                 )),
-            RouteDef::on(Method::DELETE, "/{workspace}/partitions/{partition}", destroy)
-                .permissions(&["workspace.partitions.delete"])
-                .guard(guard())
-                .name("workspaces.partitions.destroy")
-                .api(ApiMeta {
-                    success_status: 204,
-                    ..api("Delete a partition", &[401, 403, 404], None, None)
-                }),
+            RouteDef::on(
+                Method::DELETE,
+                "/{workspace}/partitions/{partition}",
+                destroy,
+            )
+            .permissions(&["workspace.partitions.delete"])
+            .guard(guard())
+            .name("workspaces.partitions.destroy")
+            .api(ApiMeta {
+                success_status: 204,
+                ..api("Delete a partition", &[401, 403, 404], None, None)
+            }),
             RouteDef::on(
                 Method::GET,
                 "/{workspace}/members/{user}/partitions",
@@ -910,20 +913,16 @@ impl WorkspaceController {
                 None,
                 Some(schema_fn::<PartitionAccessResource>),
             )),
-            RouteDef::on(
-                Method::PUT,
-                "/{workspace}/members/{user}/partitions",
-                grant,
-            )
-            .permissions(&["workspace.members.update"])
-            .guard(guard())
-            .name("workspaces.members.partitions.update")
-            .api(api(
-                "Set the partitions a member sees",
-                &[400, 401, 403, 404, 409],
-                Some(schema_fn::<PartitionAccessInput>),
-                Some(schema_fn::<PartitionAccessResource>),
-            )),
+            RouteDef::on(Method::PUT, "/{workspace}/members/{user}/partitions", grant)
+                .permissions(&["workspace.members.update"])
+                .guard(guard())
+                .name("workspaces.members.partitions.update")
+                .api(api(
+                    "Set the partitions a member sees",
+                    &[400, 401, 403, 404, 409],
+                    Some(schema_fn::<PartitionAccessInput>),
+                    Some(schema_fn::<PartitionAccessResource>),
+                )),
         ]
     }
 }

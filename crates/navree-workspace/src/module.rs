@@ -18,7 +18,6 @@ use serde::Serialize;
 
 use crate::commands::commands;
 use crate::controller::{InvitationController, WorkspaceController};
-use crate::org_controller::OrganizationController;
 use crate::core::Core;
 use crate::current::{ScopedSubject, TenantCell};
 use crate::directory::{TableUserDirectory, UserDirectory};
@@ -28,6 +27,7 @@ use crate::entity::{
 use crate::error::map_workspace_error;
 use crate::isolation::{IsolationDriver, WorkspaceScoped};
 use crate::migration::migrations;
+use crate::org_controller::OrganizationController;
 use crate::tenant::{WorkspaceDatabases, WorkspaceMigrationSet};
 use crate::{
     AccessRequests, Invitations, Isolation, Members, OrgMembers, Organizations, Partitions,

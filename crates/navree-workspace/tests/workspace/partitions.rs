@@ -14,10 +14,7 @@ async fn partitions_are_created_renamed_listed_and_deleted() {
     let other = world.workspace(ada, "Other").await;
     let partitions = world.partitions().await;
     let mut events = world
-        .events(&[
-            "workspace.partition_created",
-            "workspace.partition_deleted",
-        ])
+        .events(&["workspace.partition_created", "workspace.partition_deleted"])
         .await;
 
     let uk = world.partition(acme.id, "acme.co.uk").await;
@@ -36,7 +33,10 @@ async fn partitions_are_created_renamed_listed_and_deleted() {
                 .await
         })
         .await;
-    assert!(matches!(taken, Err(WorkspaceError::Invalid { field: "slug", .. })));
+    assert!(matches!(
+        taken,
+        Err(WorkspaceError::Invalid { field: "slug", .. })
+    ));
     let service = partitions.clone();
     let derived = world
         .work(|uow| async move {
@@ -49,9 +49,16 @@ async fn partitions_are_created_renamed_listed_and_deleted() {
     assert_eq!(derived.slug, "acme-co-uk-2");
     let service = partitions.clone();
     let empty = world
-        .work(|uow| async move { service.create(&uow, acme.id, NewPartition::named(" ")).await })
+        .work(|uow| async move {
+            service
+                .create(&uow, acme.id, NewPartition::named(" "))
+                .await
+        })
         .await;
-    assert!(matches!(empty, Err(WorkspaceError::Invalid { field: "name", .. })));
+    assert!(matches!(
+        empty,
+        Err(WorkspaceError::Invalid { field: "name", .. })
+    ));
 
     assert_eq!(
         partitions
@@ -63,9 +70,16 @@ async fn partitions_are_created_renamed_listed_and_deleted() {
             .collect::<Vec<_>>(),
         ["acme.co.uk", "acme.co.uk", "acme.de"]
     );
-    assert_eq!(partitions.resolve(acme.id, "acme-de").await.unwrap().id, de.id);
     assert_eq!(
-        partitions.resolve(acme.id, &uk.id.to_string()).await.unwrap().id,
+        partitions.resolve(acme.id, "acme-de").await.unwrap().id,
+        de.id
+    );
+    assert_eq!(
+        partitions
+            .resolve(acme.id, &uk.id.to_string())
+            .await
+            .unwrap()
+            .id,
         uk.id
     );
     // Another workspace's partition is not found here.
@@ -123,7 +137,10 @@ async fn members_see_all_partitions_or_only_their_grants() {
     let partitions = world.partitions().await;
     let mut events = world.events(&["workspace.partition_access_changed"]).await;
 
-    assert_eq!(partitions.access(acme.id, grace).await.unwrap(), Selector::All);
+    assert_eq!(
+        partitions.access(acme.id, grace).await.unwrap(),
+        Selector::All
+    );
     world
         .limit_partitions(acme.id, grace, PartitionSelector::only([uk.id]))
         .await;
@@ -141,7 +158,13 @@ async fn members_see_all_partitions_or_only_their_grants() {
             .collect::<Vec<_>>(),
         [uk.id]
     );
-    let member = world.members().await.find(acme.id, grace).await.unwrap().unwrap();
+    let member = world
+        .members()
+        .await
+        .find(acme.id, grace)
+        .await
+        .unwrap()
+        .unwrap();
     assert!(member.partitions_limited());
 
     // Another workspace's partitions can't be granted; the owner can't be
@@ -188,7 +211,10 @@ async fn members_see_all_partitions_or_only_their_grants() {
     world
         .limit_partitions(acme.id, grace, PartitionSelector::All)
         .await;
-    assert_eq!(partitions.access(acme.id, grace).await.unwrap(), Selector::All);
+    assert_eq!(
+        partitions.access(acme.id, grace).await.unwrap(),
+        Selector::All
+    );
     let _ = de;
     let drained = events.drain();
     assert_eq!(drained.len(), 2);

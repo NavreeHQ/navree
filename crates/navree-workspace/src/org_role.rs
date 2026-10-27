@@ -9,9 +9,9 @@ use serde::de::{self, Deserializer, SeqAccess, Visitor};
 use serde::{Deserialize, Serialize, Serializer};
 use uuid::Uuid;
 
+use crate::WorkspaceRole;
 use crate::config::WorkspaceConfig;
 use crate::role::{ADMIN, MEMBER, OWNER, VIEWER};
-use crate::WorkspaceRole;
 
 /// A member's role in an organization: one of the four built-in roles or a
 /// role the app defines under `workspace.organizations.roles.<name>`.
@@ -82,7 +82,9 @@ impl OrgRole {
                 "organization.members.*",
                 "organization.access_requests.*",
             ],
-            OrgRole::Member | OrgRole::Viewer => &["organization.read", "organization.members.read"],
+            OrgRole::Member | OrgRole::Viewer => {
+                &["organization.read", "organization.members.read"]
+            }
             OrgRole::Custom(_) => &[],
         }
     }
@@ -124,21 +126,25 @@ pub struct OrgRoleTable {
 impl OrgRoleTable {
     /// The roles of `config`.
     pub fn from_config(config: &WorkspaceConfig) -> OrgRoleTable {
-        let mut roles: BTreeMap<String, (BTreeSet<String>, WorkspaceRole)> =
-            [OrgRole::Owner, OrgRole::Admin, OrgRole::Member, OrgRole::Viewer]
+        let mut roles: BTreeMap<String, (BTreeSet<String>, WorkspaceRole)> = [
+            OrgRole::Owner,
+            OrgRole::Admin,
+            OrgRole::Member,
+            OrgRole::Viewer,
+        ]
+        .iter()
+        .map(|role| {
+            let permissions = role
+                .built_in_permissions()
                 .iter()
-                .map(|role| {
-                    let permissions = role
-                        .built_in_permissions()
-                        .iter()
-                        .map(|p| (*p).to_owned())
-                        .collect();
-                    (
-                        role.as_str().to_owned(),
-                        (permissions, WorkspaceRole::parse(role.as_str())),
-                    )
-                })
+                .map(|p| (*p).to_owned())
                 .collect();
+            (
+                role.as_str().to_owned(),
+                (permissions, WorkspaceRole::parse(role.as_str())),
+            )
+        })
+        .collect();
         for (name, options) in &config.organizations.roles {
             let mapped = WorkspaceRole::parse(options.workspace_role.as_deref().unwrap_or(name));
             let entry = roles
@@ -152,7 +158,9 @@ impl OrgRoleTable {
         OrgRoleTable {
             roles: roles
                 .into_iter()
-                .map(|(name, (permissions, role))| (name, (permissions.into_iter().collect(), role)))
+                .map(|(name, (permissions, role))| {
+                    (name, (permissions.into_iter().collect(), role))
+                })
                 .collect(),
         }
     }
@@ -309,7 +317,10 @@ mod tests {
         assert_eq!(OrgRole::Viewer.to_string(), "viewer");
         assert!(OrgRole::Member.is_built_in());
         assert!(!OrgRole::Custom("x".into()).is_built_in());
-        assert_eq!(serde_json::to_value(OrgRole::Admin).unwrap(), json!("admin"));
+        assert_eq!(
+            serde_json::to_value(OrgRole::Admin).unwrap(),
+            json!("admin")
+        );
         let role: OrgRole = serde_json::from_value(json!("partner")).unwrap();
         assert_eq!(role.as_str(), "partner");
     }
@@ -341,7 +352,11 @@ mod tests {
         assert_eq!(table.permissions(&OrgRole::Owner), ["all.*"]);
         assert_eq!(
             table.permissions(&OrgRole::Member),
-            ["organization.members.read", "organization.read", "reports.read"]
+            [
+                "organization.members.read",
+                "organization.read",
+                "reports.read"
+            ]
         );
         assert_eq!(
             table.workspace_role(&OrgRole::Owner),

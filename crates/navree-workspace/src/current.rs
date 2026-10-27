@@ -315,10 +315,7 @@ pub(crate) async fn current_workspace(parts: &mut Parts) -> Result<CurrentWorksp
 }
 
 /// The value of path parameter `name`, if the route has it.
-pub(crate) async fn path_param(
-    parts: &mut Parts,
-    name: &str,
-) -> Result<Option<String>, AppError> {
+pub(crate) async fn path_param(parts: &mut Parts, name: &str) -> Result<Option<String>, AppError> {
     let Path(params) = Path::<HashMap<String, String>>::from_request_parts(parts, &())
         .await
         .map_err(|_| AppError::not_found())?;

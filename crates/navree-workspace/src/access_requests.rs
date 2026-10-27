@@ -228,11 +228,7 @@ impl AccessRequests {
     }
 
     /// Access request `id` of organization `org`.
-    pub async fn find(
-        &self,
-        org: Uuid,
-        id: Uuid,
-    ) -> Result<Option<AccessRequest>, WorkspaceError> {
+    pub async fn find(&self, org: Uuid, id: Uuid) -> Result<Option<AccessRequest>, WorkspaceError> {
         self.core.require_organizations()?;
         Ok(access_request::Entity::find_by_id(id)
             .filter(access_request::Column::OrganizationId.eq(org))
@@ -411,7 +407,10 @@ mod tests {
 
     #[test]
     fn messages_are_trimmed_and_limited() {
-        assert_eq!(check_text("message", Some("  hi ")).unwrap().as_deref(), Some("hi"));
+        assert_eq!(
+            check_text("message", Some("  hi ")).unwrap().as_deref(),
+            Some("hi")
+        );
         assert_eq!(check_text("message", Some("   ")).unwrap(), None);
         assert!(check_text("message", Some(&"x".repeat(1001))).is_err());
     }

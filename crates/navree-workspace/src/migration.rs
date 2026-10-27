@@ -184,7 +184,14 @@ impl MigrationTrait for CreateOrganizationTables {
                     .to_owned(),
             )
             .await?;
-        index(manager, "organizations_owner_id_index", "organizations", &["owner_id"], false).await?;
+        index(
+            manager,
+            "organizations_owner_id_index",
+            "organizations",
+            &["owner_id"],
+            false,
+        )
+        .await?;
         manager
             .create_table(
                 Table::create()

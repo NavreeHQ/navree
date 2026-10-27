@@ -26,8 +26,8 @@ use crate::resolve::Lookup;
 use crate::scoped::{OrgRepo, PartitionRepo, PartitionScoped};
 use crate::workspaces::GrantedBy;
 use crate::{
-    Isolation, OrgRole, OrgRoleTable, Organizations, PartitionSelector, Partitions,
-    ResolverKind, Selector, WorkspaceConfig, WorkspaceError, WorkspaceRole, WorkspaceSelector,
+    Isolation, OrgRole, OrgRoleTable, Organizations, PartitionSelector, Partitions, ResolverKind,
+    Selector, WorkspaceConfig, WorkspaceError, WorkspaceRole, WorkspaceSelector,
 };
 
 /// The organization of the current request, resolved, loaded and checked:
@@ -197,7 +197,14 @@ enum OrgSource {
 async fn request_context(
     parts: &Parts,
     what: &str,
-) -> Result<(AppContext, navree_contracts::Principal, Arc<WorkspaceConfig>), AppError> {
+) -> Result<
+    (
+        AppContext,
+        navree_contracts::Principal,
+        Arc<WorkspaceConfig>,
+    ),
+    AppError,
+> {
     let ctx = parts
         .extensions
         .get::<AppContext>()
@@ -240,8 +247,14 @@ async fn resolve_organization(
     }
     .ok_or(WorkspaceError::NoOrganization)
     .map_err(app_error)?;
-    let organizations = ctx.get::<Organizations>().await.map_err(AppError::internal)?;
-    let organization = organizations.resolve(&identifier).await.map_err(app_error)?;
+    let organizations = ctx
+        .get::<Organizations>()
+        .await
+        .map_err(AppError::internal)?;
+    let organization = organizations
+        .resolve(&identifier)
+        .await
+        .map_err(app_error)?;
     let member = organizations
         .membership(organization.id, principal.user_id)
         .await
@@ -493,7 +506,10 @@ async fn resolve_partitions(parts: &mut Parts) -> Result<PartitionScope, AppErro
             if workspace.isolation() != Isolation::Database
                 && let Some(uow) = parts.extensions.get::<Uow>()
             {
-                partitions.enter(uow, partition.id).await.map_err(app_error)?;
+                partitions
+                    .enter(uow, partition.id)
+                    .await
+                    .map_err(app_error)?;
             }
             Some(CurrentPartition {
                 partition: Arc::new(partition),

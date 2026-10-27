@@ -12,8 +12,7 @@ use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use navree_workspace::{
     CurrentOrganization, CurrentPartition, CurrentWorkspace, GrantedBy, InOrganization, OrgRepo,
-    PartitionRepo, PartitionScope, PartitionSelector, PinnedWorkspace, Selector,
-    WorkspaceSelector,
+    PartitionRepo, PartitionScope, PartitionSelector, PinnedWorkspace, Selector, WorkspaceSelector,
 };
 use sea_orm::sea_query::Query;
 use sea_orm::{ActiveValue::Set, ConnectionTrait, DbErr, EntityTrait};
@@ -245,7 +244,10 @@ async fn every_resolver_finds_the_organization_and_errors_follow_the_shape() {
     let client = world.as_user(ada);
 
     for (request, resolver) in [
-        (client.get("/api/org").header("x-organization", "acme"), "header"),
+        (
+            client.get("/api/org").header("x-organization", "acme"),
+            "header",
+        ),
         (
             client
                 .get("/api/org")
@@ -253,7 +255,10 @@ async fn every_resolver_finds_the_organization_and_errors_follow_the_shape() {
             "header",
         ),
         (client.get("/api/o/acme/org"), "path"),
-        (client.get("/api/org").header("host", "acme.partners.test"), "subdomain"),
+        (
+            client.get("/api/org").header("host", "acme.partners.test"),
+            "subdomain",
+        ),
         (
             client
                 .get("/api/org")

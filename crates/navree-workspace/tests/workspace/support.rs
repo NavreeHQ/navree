@@ -16,10 +16,10 @@ use navree_mail::{MailModule, MailOptions, Mailer, Message, TransportConfig};
 use navree_testing::{TestApp, TestAppBuilder, principal};
 use navree_view::{ViewModule, ViewOptions};
 use navree_workspace::{
-    AccessRequests, Invitations, Members, ModuleBuilderWorkspaceExt, NewOrganization,
-    NewPartition, NewWorkspace, OrgMembers, OrgRole, Organization, Organizations, Partition,
-    PartitionScoped, PartitionSelector, Partitions, Workspace, WorkspaceModule, WorkspaceScoped,
-    WorkspaceSelector, Workspaces,
+    AccessRequests, Invitations, Members, ModuleBuilderWorkspaceExt, NewOrganization, NewPartition,
+    NewWorkspace, OrgMembers, OrgRole, Organization, Organizations, Partition, PartitionScoped,
+    PartitionSelector, Partitions, Workspace, WorkspaceModule, WorkspaceScoped, WorkspaceSelector,
+    Workspaces,
 };
 use sea_orm::sea_query::{ColumnDef, Query, Table};
 use sea_orm::{ConnectionTrait, DbErr};

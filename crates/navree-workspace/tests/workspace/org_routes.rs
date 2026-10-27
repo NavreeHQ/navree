@@ -305,7 +305,10 @@ async fn workspaces_are_attached_and_detached_over_http() {
         .json(&json!({ "workspace": theirs.id }))
         .send()
         .await
-        .assert_error(403, "Only the workspace's owner can attach it to an organization.");
+        .assert_error(
+            403,
+            "Only the workspace's owner can attach it to an organization.",
+        );
     world
         .as_user(grace)
         .post("/api/organizations/acme/workspaces")
@@ -380,7 +383,9 @@ async fn access_requests_over_http() {
         .assert_json_path("data.0.user.email", json!("grace@example.com"))
         .assert_json_path("data.0.message", json!("UK lead"));
     owner
-        .post(&format!("/api/organizations/acme/access-requests/{id}/approve"))
+        .post(&format!(
+            "/api/organizations/acme/access-requests/{id}/approve"
+        ))
         .send()
         .await
         .assert_status(200)
@@ -388,7 +393,9 @@ async fn access_requests_over_http() {
         .assert_json_path("member.role", json!("member"))
         .assert_json_path("member.workspaces", json!([uk.id]));
     owner
-        .post(&format!("/api/organizations/acme/access-requests/{id}/decline"))
+        .post(&format!(
+            "/api/organizations/acme/access-requests/{id}/decline"
+        ))
         .send()
         .await
         .assert_error(409, "The access request has already been decided.");
@@ -481,15 +488,18 @@ async fn partitions_over_http() {
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("data", json!([{
-            "__type": "WorkspacePartition",
-            "id": uk.id,
-            "workspace_id": acme.id,
-            "name": "acme.co.uk",
-            "slug": "acme-co-uk",
-            "created_at": uk.created_at,
-            "updated_at": uk.updated_at,
-        }]));
+        .assert_json_path(
+            "data",
+            json!([{
+                "__type": "WorkspacePartition",
+                "id": uk.id,
+                "workspace_id": acme.id,
+                "name": "acme.co.uk",
+                "slug": "acme-co-uk",
+                "created_at": uk.created_at,
+                "updated_at": uk.updated_at,
+            }]),
+        );
 
     // A partition-limited admin can't widen anyone, themselves included,
     // or manage partitions.
@@ -513,7 +523,10 @@ async fn partitions_over_http() {
         .delete(&format!("/api/workspaces/acme/partitions/{}", uk.id))
         .send()
         .await
-        .assert_error(403, "Only members who see every partition can manage partitions.");
+        .assert_error(
+            403,
+            "Only members who see every partition can manage partitions.",
+        );
 
     owner
         .delete(&format!("/api/workspaces/acme/partitions/{}", de.id))
