@@ -5,7 +5,7 @@
 use navree_db::{Db, DbOptions, IsolationLevel, MySqlOptions};
 use sea_orm::{ConnectionTrait, DbBackend, Statement, TransactionTrait};
 
-use crate::support::{Scratch, count, string};
+use crate::support::{Account, Scratch, count, is_mariadb, string, with_param};
 
 /// The session's isolation level as the server names it
 /// (`READ-COMMITTED`): `transaction_isolation` on MySQL 8 and MariaDB
@@ -275,6 +275,93 @@ async fn connection_errors_name_the_server_without_the_password() {
         assert!(!error.contains("not-the-password-42"), "{error}");
         assert!(!error.contains("enable the `mysql` feature"), "{error}");
     }
+}
+
+/// The value column of a `SHOW ... LIKE 'name'` statement, when the server
+/// has that variable.
+async fn show(conn: &impl ConnectionTrait, statement: &str) -> Option<String> {
+    let rows = conn
+        .query_all_raw(Statement::from_string(DbBackend::MySql, statement))
+        .await
+        .ok()?;
+    rows.first()?.try_get_by_index::<String>(1).ok()
+}
+
+/// The default `ssl-mode` (PREFERRED) uses TLS when the server offers it.
+#[tokio::test]
+async fn connections_use_tls_when_the_server_offers_it() {
+    let Some(scratch) = Scratch::new("connections_use_tls_when_the_server_offers_it").await
+    else {
+        return;
+    };
+    let db = scratch.db().await;
+    // `have_ssl` on MariaDB (and MySQL before 8.4), a loaded certificate on MySQL 8.
+    let offered = show(db.conn(), "SHOW GLOBAL VARIABLES LIKE 'have_ssl'")
+        .await
+        .as_deref()
+        == Some("YES")
+        || show(db.conn(), "SHOW GLOBAL STATUS LIKE 'Current_tls_cert'")
+            .await
+            .is_some_and(|cert| !cert.is_empty());
+    let session = show(db.conn(), "SHOW SESSION STATUS LIKE 'Ssl_version'")
+        .await
+        .unwrap_or_default();
+    if offered {
+        assert!(session.starts_with("TLS"), "a TLS session: {session:?}");
+    } else {
+        eprintln!("the server offers no TLS; nothing to check");
+    }
+}
+
+/// A `caching_sha2_password` account (MySQL 8's default) signs in with its
+/// password over TLS, or encrypted with the server's RSA key on a connection
+/// without TLS, which needs the `mysql-rsa` feature. Without it, the
+/// connection error says how to fix it. The account is new, so the server
+/// has no cached hash of its password and asks for the password itself.
+#[tokio::test]
+async fn caching_sha2_password_accounts_without_tls() {
+    let Some(scratch) = Scratch::new("caching_sha2_password_accounts_without_tls").await else {
+        return;
+    };
+    if is_mariadb(scratch.db().await.conn()).await {
+        eprintln!("MariaDB has no caching_sha2_password; nothing to check");
+        return;
+    }
+    let account = Account::create(&scratch, "caching_sha2_password").await;
+    let plain = DbOptions {
+        url: with_param(&account.url, "ssl-mode", "DISABLED"),
+        connect_timeout_secs: 5,
+        ..DbOptions::default()
+    };
+    let connected = Db::connect(&plain).await;
+
+    #[cfg(feature = "mysql-rsa")]
+    {
+        let db = connected.expect("signs in with the RSA exchange");
+        assert_eq!(string(db.conn(), "SELECT DATABASE()").await, scratch.name);
+    }
+    #[cfg(not(feature = "mysql-rsa"))]
+    {
+        let error = connected.expect_err("no TLS, no RSA").to_string();
+        assert!(
+            error.contains("this caching_sha2_password account needs TLS or the RSA exchange"),
+            "{error}"
+        );
+        assert!(
+            error.contains("enable the `mysql-rsa` feature of navree"),
+            "{error}"
+        );
+        assert!(!error.contains(&account.password), "{error}");
+    }
+
+    // Over TLS, the default, the same account signs in either way.
+    let db = Db::connect(&DbOptions {
+        url: account.url.clone(),
+        ..DbOptions::default()
+    })
+    .await
+    .expect("signs in over TLS");
+    assert_eq!(string(db.conn(), "SELECT DATABASE()").await, scratch.name);
 }
 
 /// Raw statements use `?` placeholders on MySQL.

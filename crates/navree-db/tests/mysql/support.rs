@@ -108,6 +108,88 @@ impl Drop for Scratch {
     }
 }
 
+/// A server account that may use one scratch database, dropped with the
+/// guard (also when the test panics). Accounts belong to the server, not to
+/// a database, so a test that needs its own (a password never used to sign
+/// in, which the server has not cached) creates one.
+pub struct Account {
+    admin: String,
+    /// The account name, `nv_<16 hex digits>` (MySQL allows 32 characters).
+    pub user: String,
+    /// Its password.
+    pub password: String,
+    /// A `mysql://` URL of the scratch database as this account.
+    pub url: String,
+}
+
+impl Account {
+    /// Creates an account identified with `plugin` (e.g.
+    /// `caching_sha2_password`) and grants it every privilege on
+    /// `scratch`'s database.
+    pub async fn create(scratch: &Scratch, plugin: &str) -> Account {
+        let id = Uuid::now_v7().simple().to_string();
+        let user = format!("nv_{}", &id[16..]);
+        let password = format!("pw-{}", &id[..16]);
+        let conn = Database::connect(scratch.admin.as_str())
+            .await
+            .expect("connects as the admin");
+        for sql in [
+            format!("CREATE USER '{user}'@'%' IDENTIFIED WITH {plugin} BY '{password}'"),
+            format!("GRANT ALL ON `{}`.* TO '{user}'@'%'", scratch.name),
+        ] {
+            conn.execute_unprepared(&sql)
+                .await
+                .unwrap_or_else(|error| panic!("{sql}: {error}"));
+        }
+        conn.close().await.expect("closes the admin connection");
+        let (scheme, rest) = scratch.url.split_once("://").expect("a URL");
+        let (_, host_and_db) = rest.split_once('@').expect("a URL with a user");
+        let url = format!("{scheme}://{user}:{password}@{host_and_db}");
+        Account {
+            admin: scratch.admin.clone(),
+            user,
+            password,
+            url,
+        }
+    }
+}
+
+impl Drop for Account {
+    fn drop(&mut self) {
+        let admin = self.admin.clone();
+        let user = self.user.clone();
+        let dropped = std::thread::spawn(move || {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("a runtime");
+            runtime.block_on(async move {
+                let conn = Database::connect(admin.as_str()).await?;
+                conn.execute_unprepared(&format!("DROP USER IF EXISTS '{user}'@'%'"))
+                    .await?;
+                conn.close().await
+            })
+        })
+        .join();
+        match dropped {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) => eprintln!("the account {} was not dropped: {error}", self.user),
+            Err(_) => eprintln!("dropping the account {} panicked", self.user),
+        }
+    }
+}
+
+/// Whether the server behind `conn` is MariaDB (`VERSION()` names it).
+pub async fn is_mariadb(conn: &impl ConnectionTrait) -> bool {
+    string(conn, "SELECT VERSION()").await.contains("MariaDB")
+}
+
+/// `url` with `key=value` added to its query.
+pub fn with_param(url: &str, key: &str, value: &str) -> String {
+    let separator = if url.contains('?') { '&' } else { '?' };
+    format!("{url}{separator}{key}={value}")
+}
+
 /// `url` with its database replaced by `database` (the query is kept).
 pub fn with_database(url: &str, database: &str) -> String {
     let (scheme, rest) = url.split_once("://").expect("a URL with a scheme");
@@ -159,6 +241,18 @@ pub async fn tables(conn: &impl ConnectionTrait) -> Vec<String> {
          WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE' ORDER BY 1",
     )
     .await
+}
+
+#[test]
+fn adds_query_parameters_to_a_url() {
+    assert_eq!(
+        with_param("mysql://root@db/app", "ssl-mode", "DISABLED"),
+        "mysql://root@db/app?ssl-mode=DISABLED"
+    );
+    assert_eq!(
+        with_param("mysql://root@db/app?charset=utf8mb4", "ssl-mode", "DISABLED"),
+        "mysql://root@db/app?charset=utf8mb4&ssl-mode=DISABLED"
+    );
 }
 
 #[test]
