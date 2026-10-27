@@ -216,16 +216,45 @@ pub(super) fn heartbeat(backend: DbBackend, id: Uuid, now: i64) -> Statement {
     )
 }
 
-/// Restarted by the watchdog.
-pub(super) fn redispatched(backend: DbBackend, id: Uuid, now: i64) -> Statement {
+/// An operation with no sign of life since before `before` (the watchdog's
+/// cutoff).
+const STALE: &str = "COALESCE(heartbeat_at, started_at, created_at) < ?";
+
+/// Restarted by the watchdog, if it is still stale (its heartbeat is
+/// renewed, so a second sweep of the same operation changes nothing).
+pub(super) fn redispatched(backend: DbBackend, id: Uuid, before: i64, now: i64) -> Statement {
     statement(
         backend,
         &format!(
             "UPDATE {OPERATIONS_TABLE} SET redispatches = redispatches + 1, heartbeat_at = ?, \
              progress_note = 'Restarted after it stopped responding', updated_at = ?, \
-             version = version + 1 WHERE id = ? AND {ACTIVE}"
+             version = version + 1 WHERE id = ? AND {ACTIVE} AND {STALE}"
         ),
-        vec![now.into(), now.into(), id.to_string().into()],
+        vec![
+            now.into(),
+            now.into(),
+            id.to_string().into(),
+            before.into(),
+        ],
+    )
+}
+
+/// Failed by the watchdog with `error`, if it is still stale (a heartbeat
+/// that arrived during the sweep keeps it alive).
+pub(super) fn stalled(backend: DbBackend, id: Uuid, error: &str, before: i64, now: i64) -> Statement {
+    statement(
+        backend,
+        &format!(
+            "UPDATE {OPERATIONS_TABLE} SET status = 'failed', error = ?, finished_at = ?, \
+             updated_at = ?, version = version + 1 WHERE id = ? AND {ACTIVE} AND {STALE}"
+        ),
+        vec![
+            error.into(),
+            now.into(),
+            now.into(),
+            id.to_string().into(),
+            before.into(),
+        ],
     )
 }
 
@@ -343,8 +372,8 @@ pub(super) async fn stale<C: ConnectionTrait>(
         .query_all_raw(statement(
             backend,
             &format!(
-                "SELECT {COLUMNS} FROM {OPERATIONS_TABLE} WHERE {ACTIVE} \
-                 AND COALESCE(heartbeat_at, started_at, created_at) < ? ORDER BY created_at, id"
+                "SELECT {COLUMNS} FROM {OPERATIONS_TABLE} WHERE {ACTIVE} AND {STALE} \
+                 ORDER BY created_at, id"
             ),
             vec![before.into()],
         ))
