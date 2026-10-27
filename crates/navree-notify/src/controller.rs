@@ -7,22 +7,27 @@ use std::sync::Arc;
 use axum::extract::{FromRequestParts, Path, Query};
 use axum::http::request::Parts;
 use axum::http::{HeaderMap, Method, Uri, header};
+use navree_contracts::Principal;
 use navree_db::{Page, PageQuery, Uow};
 use navree_http::{
     ApiMeta, AppError, Controller, Created, CurrentPrincipal, Json, NoContent, RouteDef,
 };
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
+use navree_time::Zone;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
+use crate::deferred::recipient_zone;
 use crate::schema::{
-    new_push_subscription_schema, notification_page_schema, push_key_schema,
-    push_subscription_schema, unread_count_schema, unsubscribe_schema,
+    new_push_subscription_schema, notification_page_schema, preferences_patch_schema,
+    preferences_schema, push_key_schema, push_subscription_schema, unread_count_schema,
+    unsubscribe_schema,
 };
 use crate::{
-    DatabaseNotification, NewPushSubscription, Notifiable, Notifier, NotifyError,
-    PushSubscriptions, USER_NOTIFIABLE_TYPE,
+    DatabaseNotification, Digest, NewPushSubscription, Notifiable, NotificationCatalog,
+    NotificationCategory, NotificationPreferences, Notifier, NotifyError, PreferenceOwner,
+    PushSubscriptions, ResolvedPreferences, USER_NOTIFIABLE_TYPE,
 };
 
 /// Serves `GET /notifications`, `GET /notifications/unread-count`,
@@ -30,10 +35,13 @@ use crate::{
 /// the signed-in user (notifiable type `user`), when
 /// [`NotifyOptions::routes`](crate::NotifyOptions::routes) is on; and
 /// `GET /notifications/push-key` (with a VAPID key pair) and `POST` /
-/// `DELETE /notifications/push-subscriptions`.
+/// `DELETE /notifications/push-subscriptions`; and `GET` / `PATCH
+/// /notifications/preferences` and `/notifications/preferences/workspace`.
 pub(crate) struct NotificationsController {
     notifier: Arc<Notifier>,
     push: Arc<PushSubscriptions>,
+    preferences: Arc<NotificationPreferences>,
+    catalog: Arc<NotificationCatalog>,
 }
 
 impl Injectable for NotificationsController {
@@ -41,6 +49,8 @@ impl Injectable for NotificationsController {
         vec![
             ProviderKey::of::<Notifier>(),
             ProviderKey::of::<PushSubscriptions>(),
+            ProviderKey::of::<NotificationPreferences>(),
+            ProviderKey::of::<NotificationCatalog>(),
         ]
     }
 
@@ -49,6 +59,8 @@ impl Injectable for NotificationsController {
             Ok(NotificationsController {
                 notifier: r.get::<Notifier>().await?,
                 push: r.get::<PushSubscriptions>().await?,
+                preferences: r.get::<NotificationPreferences>().await?,
+                catalog: r.get::<NotificationCatalog>().await?,
             })
         })
     }
@@ -70,8 +82,237 @@ impl Controller for NotificationsController {
             return Vec::new();
         }
         let mut routes = self.clone().push_routes();
+        routes.extend(self.clone().preference_routes());
         routes.extend(self.read_routes());
         routes
+    }
+}
+
+impl NotificationsController {
+    /// `GET`/`PATCH /notifications/preferences` (the signed-in user's) and
+    /// `GET`/`PATCH /notifications/preferences/workspace` (the request's
+    /// workspace's defaults).
+    fn preference_routes(self: Arc<Self>) -> Vec<RouteDef> {
+        let (show, update, show_workspace, update_workspace) =
+            (self.clone(), self.clone(), self.clone(), self);
+        vec![
+            RouteDef::on(
+                Method::GET,
+                "/preferences",
+                move |CurrentPrincipal(me): CurrentPrincipal, uow: Uow| async move {
+                    show.own_preferences(me.user_id, uow.workspace(), None)
+                        .await
+                },
+            )
+            .authenticated()
+            .name("notifications.preferences.show")
+            .api(api(
+                "The signed-in user's notification preferences, with their workspace's defaults",
+                &[401],
+                Some(preferences_schema),
+            )),
+            RouteDef::on(
+                Method::PATCH,
+                "/preferences",
+                move |CurrentPrincipal(me): CurrentPrincipal,
+                      uow: Uow,
+                      Json(patch): Json<Value>| async move {
+                    update
+                        .own_preferences(me.user_id, uow.workspace(), Some(patch))
+                        .await
+                },
+            )
+            .authenticated()
+            .name("notifications.preferences.update")
+            .api(ApiMeta {
+                request: Some(preferences_patch_schema),
+                ..api(
+                    "Change the signed-in user's notification preferences (a JSON merge patch)",
+                    &[400, 401],
+                    Some(preferences_schema),
+                )
+            }),
+            RouteDef::on(
+                Method::GET,
+                "/preferences/workspace",
+                move |CurrentPrincipal(_me): CurrentPrincipal, uow: Uow| async move {
+                    let workspace = uow.workspace().ok_or_else(no_workspace)?;
+                    show_workspace.workspace_preferences(workspace, None).await
+                },
+            )
+            .authenticated()
+            .name("notifications.preferences.workspace.show")
+            .api(api(
+                "The notification preferences the request's workspace gives its members",
+                &[401, 404],
+                Some(preferences_schema),
+            )),
+            RouteDef::on(
+                Method::PATCH,
+                "/preferences/workspace",
+                move |CurrentPrincipal(me): CurrentPrincipal,
+                      uow: Uow,
+                      Json(patch): Json<Value>| async move {
+                    let workspace = uow.workspace().ok_or_else(no_workspace)?;
+                    update_workspace.authorize_workspace(&me, workspace).await?;
+                    update_workspace
+                        .workspace_preferences(workspace, Some(patch))
+                        .await
+                },
+            )
+            .authenticated()
+            .name("notifications.preferences.workspace.update")
+            .api(ApiMeta {
+                request: Some(preferences_patch_schema),
+                ..api(
+                    "Change the notification preferences the request's workspace gives its members",
+                    &[400, 401, 403, 404],
+                    Some(preferences_schema),
+                )
+            }),
+        ]
+    }
+
+    /// The signed-in user's preferences, changed by `patch` first.
+    async fn own_preferences(
+        &self,
+        user: Uuid,
+        workspace: Option<Uuid>,
+        patch: Option<Value>,
+    ) -> Result<Json<Value>, AppError> {
+        let owner = PreferenceOwner::user(user);
+        let own = match patch {
+            Some(patch) => self.preferences.update(&owner, &patch).await,
+            None => self.preferences.of(&owner).await,
+        }
+        .map_err(to_app_error)?;
+        let resolved = self
+            .preferences
+            .resolve_owner(&owner, workspace)
+            .await
+            .map_err(to_app_error)?;
+        let resolved = ResolvedPreferences { own, ..resolved };
+        let ctx = self.notifier.app().map_err(to_app_error)?;
+        let zone = recipient_zone(&ctx, &SignedIn(user), workspace).await;
+        Ok(Json(self.view(&resolved, zone)))
+    }
+
+    /// The workspace's defaults, changed by `patch` first.
+    async fn workspace_preferences(
+        &self,
+        workspace: Uuid,
+        patch: Option<Value>,
+    ) -> Result<Json<Value>, AppError> {
+        let owner = PreferenceOwner::workspace(workspace);
+        let own = match patch {
+            Some(patch) => self.preferences.update(&owner, &patch).await,
+            None => self.preferences.of(&owner).await,
+        }
+        .map_err(to_app_error)?;
+        let resolved = ResolvedPreferences {
+            own,
+            workspace: None,
+            required: self.preferences.options().required.clone(),
+        };
+        let ctx = self.notifier.app().map_err(to_app_error)?;
+        let zone = recipient_zone(&ctx, &WorkspaceOwner(workspace), Some(workspace)).await;
+        Ok(Json(self.view(&resolved, zone)))
+    }
+
+    /// 403 unless the user may change `workspace`'s defaults
+    /// (`notify.preferences.workspace_permission`).
+    async fn authorize_workspace(
+        &self,
+        principal: &Principal,
+        workspace: Uuid,
+    ) -> Result<(), AppError> {
+        let ctx = self.notifier.app().map_err(to_app_error)?;
+        let permission = &self.preferences.options().workspace_permission;
+        let allowed = navree_contracts::permitted(&ctx, principal, permission, Some(workspace))
+            .await
+            .map_err(|error| AppError::internal(error.to_string()))?;
+        if allowed {
+            Ok(())
+        } else {
+            Err(AppError::forbidden().with_detail(format!(
+                "Changing the workspace's notification preferences needs `{permission}`."
+            )))
+        }
+    }
+
+    /// `{data, workspace, categories, channels, time_zone}`: the owner's own
+    /// choices, the workspace's, and what each category gets.
+    fn view(&self, resolved: &ResolvedPreferences, zone: Zone) -> Value {
+        let options = self.preferences.options();
+        let mut categories = self.catalog.categories(&options.required);
+        let listed: Vec<String> = categories.iter().map(|c| c.category.clone()).collect();
+        let chosen = resolved
+            .own
+            .categories
+            .keys()
+            .chain(resolved.workspace.iter().flat_map(|w| w.categories.keys()));
+        let mut extra: Vec<&String> = chosen.filter(|c| !listed.contains(c)).collect();
+        extra.sort();
+        extra.dedup();
+        for category in extra {
+            categories.push(NotificationCategory {
+                category: category.clone(),
+                types: Vec::new(),
+                digest: Digest::Off,
+                required: options.is_required(category),
+            });
+        }
+        let categories: Vec<Value> = categories
+            .into_iter()
+            .map(|category| {
+                let channels: serde_json::Map<String, Value> = options
+                    .channels
+                    .iter()
+                    .map(|channel| {
+                        (
+                            channel.as_str().to_owned(),
+                            Value::Bool(resolved.allows(&category.category, *channel)),
+                        )
+                    })
+                    .collect();
+                json!({
+                    "category": category.category,
+                    "types": category.types,
+                    "required": category.required,
+                    "digest": resolved.digest(&category.category, category.digest),
+                    "channels": channels,
+                })
+            })
+            .collect();
+        json!({
+            "data": resolved.own,
+            "workspace": resolved.workspace,
+            "categories": categories,
+            "channels": options.channels,
+            "time_zone": zone.name(),
+        })
+    }
+}
+
+/// 404 for the workspace routes outside a workspace.
+fn no_workspace() -> AppError {
+    AppError::not_found().with_detail("This request is not in a workspace.")
+}
+
+/// A workspace as the owner of preferences (its zone is the workspace's).
+struct WorkspaceOwner(Uuid);
+
+impl Notifiable for WorkspaceOwner {
+    fn notifiable_type(&self) -> &'static str {
+        crate::WORKSPACE_OWNER_TYPE
+    }
+
+    fn notifiable_id(&self) -> String {
+        self.0.to_string()
+    }
+
+    fn route_mail(&self) -> Option<String> {
+        None
     }
 }
 
@@ -313,7 +554,8 @@ impl<S: Send + Sync> FromRequestParts<S> for UnreadFilter {
     }
 }
 
-/// The HTTP error of a [`NotifyError`] from the push subscription routes.
+/// The HTTP error of a [`NotifyError`] from the push subscription and
+/// preference routes.
 fn to_app_error(error: NotifyError) -> AppError {
     match error {
         NotifyError::Database(error) => AppError::from(error),
@@ -321,6 +563,7 @@ fn to_app_error(error: NotifyError) -> AppError {
             AppError::validation(BTreeMap::from([("endpoint".to_owned(), vec![message])]))
         }
         NotifyError::Unavailable { reason, .. } => AppError::service_unavailable(reason),
+        NotifyError::InvalidPreferences(errors) => AppError::validation(errors),
         other => AppError::internal(other.to_string()),
     }
 }

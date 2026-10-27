@@ -1,5 +1,7 @@
 //! [`Notifiable`]: who receives notifications.
 
+use uuid::Uuid;
+
 use crate::{SlackRoute, TeamsRoute};
 
 /// Something that receives notifications, usually a
@@ -71,6 +73,26 @@ pub trait Notifiable: Send + Sync {
     /// The WhatsApp number the WhatsApp channel sends to; `None` (the
     /// default) skips it.
     fn route_whatsapp(&self) -> Option<String> {
+        None
+    }
+
+    /// The workspace the notification is sent in: its
+    /// [preferences](crate::Preferences) are the defaults under the
+    /// notifiable's own, its zone stands in when the notifiable has none,
+    /// its mail goes through the workspace's mail transport, with its
+    /// [template overrides](crate::TemplateOverrides). Default: `None`, and
+    /// then the workspace of the current unit of work (a workspace
+    /// request's).
+    fn workspace_id(&self) -> Option<Uuid> {
+        None
+    }
+
+    /// The IANA time zone (`Asia/Kolkata`) quiet hours, send windows and
+    /// digests are counted in. Default: `None`, and then the zone
+    /// `TimeModule` gives the user (for notifiable type
+    /// [`USER_NOTIFIABLE_TYPE`](crate::USER_NOTIFIABLE_TYPE)) or the
+    /// workspace, else `time.default_zone`, else UTC.
+    fn time_zone(&self) -> Option<String> {
         None
     }
 }

@@ -8,8 +8,8 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use crate::{
-    Channel, Notifier, SlackMessage, SlackRoute, SmsMessage, TeamsMessage, TeamsRoute,
-    WebPushMessage, WhatsAppMessage,
+    Channel, Digest, DigestItem, Notifier, SlackMessage, SlackRoute, SmsMessage, TeamsMessage,
+    TeamsRoute, WebPushMessage, WhatsAppMessage,
 };
 
 /// Job `notify.send`: delivers one notification over one channel.
@@ -33,6 +33,15 @@ pub struct SendNotificationJob {
     pub notifiable_id: String,
     /// When the notification was sent.
     pub created_at: DateTime<Utc>,
+    /// [`Notification::CATEGORY`](crate::Notification::CATEGORY) (`None` in
+    /// jobs queued before categories existed).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub category: Option<String>,
+    /// The workspace the notification was sent in
+    /// ([`Notifiable::workspace_id`](crate::Notifiable::workspace_id)), whose
+    /// mail transport and template overrides its mail uses.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace_id: Option<Uuid>,
     /// What to deliver, and where.
     pub delivery: Delivery,
 }
@@ -96,13 +105,23 @@ pub enum Delivery {
         /// The notification.
         message: WebPushMessage,
     },
+    /// One digest mail batching several notifications' mails (over the
+    /// mail channel).
+    Digest {
+        /// How often the recipient gets one.
+        digest: Digest,
+        /// The recipients.
+        to: Vec<String>,
+        /// The mails it batches, oldest first.
+        items: Vec<DigestItem>,
+    },
 }
 
 impl Delivery {
     /// The channel this delivery goes over.
     pub fn channel(&self) -> Channel {
         match self {
-            Delivery::Mail { .. } => Channel::Mail,
+            Delivery::Mail { .. } | Delivery::Digest { .. } => Channel::Mail,
             Delivery::Database { .. } => Channel::Database,
             Delivery::Broadcast { .. } => Channel::Broadcast,
             Delivery::Slack { .. } => Channel::Slack,

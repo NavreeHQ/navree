@@ -10,6 +10,7 @@ mod derive;
 mod fake;
 mod http;
 mod module;
+mod notify;
 mod resolution;
 mod servers;
 mod store;

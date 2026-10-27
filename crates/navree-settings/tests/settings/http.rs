@@ -75,6 +75,13 @@ async fn the_index_lists_every_registered_type() {
     assert_eq!(
         body,
         json!({"data": [
+            // With the `notify` feature, on in the tests.
+            {
+                "key": "notification-templates",
+                "description": "How notification mail looks: logo, brand color, footer, and subject and body overrides per notification type.",
+                "scopes": ["global", "organization", "workspace"],
+                "fields": ["brand_color", "footer", "logo_url", "style", "templates"],
+            },
             {
                 "key": "notifications",
                 "description": "How notification mail is sent.",

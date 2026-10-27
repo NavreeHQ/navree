@@ -1,12 +1,14 @@
 //! [`Notification`]: one message, many channels.
 
 use navree_mail::TemplateMail;
+use navree_time::SendWindow;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
 use crate::{
-    Channel, Notifiable, SlackMessage, SmsMessage, TeamsMessage, WebPushMessage, WhatsAppMessage,
+    Channel, Digest, Notifiable, SlackMessage, SmsMessage, TeamsMessage, WebPushMessage,
+    WhatsAppMessage,
 };
 
 /// A notification: it picks its channels per
@@ -62,9 +64,58 @@ pub trait Notification: Serialize + DeserializeOwned + Send + Sync + 'static {
     /// with broadcasts, e.g. `deal_assigned`.
     const TYPE: &'static str;
 
+    /// The category people switch channels for in their
+    /// [`Preferences`](crate::Preferences) (`deals`, `security`). Several
+    /// types can share one. Default: [`TYPE`](Notification::TYPE).
+    const CATEGORY: &'static str = Self::TYPE;
+
+    /// How often its mail is batched into one digest mail, unless the
+    /// recipient's preferences choose otherwise. Default:
+    /// [`Digest::Off`] (each mail on its own).
+    const DIGEST: Digest = Digest::Off;
+
+    /// Delivered at once whatever the recipient's quiet hours and digest
+    /// (a sign-in code, a security alert). Its
+    /// [`send_window`](Notification::send_window) and the recipient's
+    /// channel preferences still apply. Default: `false`.
+    const URGENT: bool = false;
+
     /// The channels to deliver over for `notifiable`, in delivery order
     /// (duplicates are ignored).
     fn via(&self, notifiable: &dyn Notifiable) -> Vec<Channel>;
+
+    /// When the notification may reach `notifiable` over the channels that
+    /// interrupt (`notify.deferred.channels`: mail, Slack, Teams, SMS,
+    /// WhatsApp and web push), on the recipient's clock: outside it, those
+    /// deliveries wait for the next slot. The database and broadcast
+    /// channels deliver at once. Default: `None` (any time).
+    ///
+    /// ```
+    /// use navree_notify::{Channel, Notifiable, Notification};
+    /// use navree_time::SendWindow;
+    /// use serde::{Deserialize, Serialize};
+    ///
+    /// #[derive(Serialize, Deserialize)]
+    /// struct TrainingDue {
+    ///     course: String,
+    /// }
+    ///
+    /// impl Notification for TrainingDue {
+    ///     const TYPE: &'static str = "training_due";
+    ///
+    ///     fn via(&self, _n: &dyn Notifiable) -> Vec<Channel> {
+    ///         vec![Channel::Database, Channel::Mail]
+    ///     }
+    ///
+    ///     fn send_window(&self, _n: &dyn Notifiable) -> Option<SendWindow> {
+    ///         Some(SendWindow::weekdays().between("09:00", "17:00"))
+    ///     }
+    /// }
+    /// ```
+    fn send_window(&self, notifiable: &dyn Notifiable) -> Option<SendWindow> {
+        let _ = notifiable;
+        None
+    }
 
     /// The mail for the [`Channel::Mail`] channel. A mail without
     /// recipients goes to [`Notifiable::route_mail`] (and is skipped when

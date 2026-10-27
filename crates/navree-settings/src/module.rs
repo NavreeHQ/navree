@@ -213,6 +213,20 @@ fn register(m: &mut ModuleBuilder, options: Option<SettingsOptions>) {
     for command in commands() {
         m.command(command);
     }
+    // How notification mail looks, for navree-notify's `Notifier`.
+    #[cfg(feature = "notify")]
+    m.settings::<crate::notify::NotificationTemplates>()
+        .factory(
+            Factory::<dyn navree_notify::TemplateOverrides>::new(|r: Resolver| async move {
+                let settings = r.get::<Settings>().await?;
+                Ok(
+                    Arc::new(crate::notify::SettingsTemplateOverrides::new(settings))
+                        as Arc<dyn navree_notify::TemplateOverrides>,
+                )
+            })
+            .deps(vec![ProviderKey::of::<Settings>()]),
+        )
+        .exports::<dyn navree_notify::TemplateOverrides>();
 }
 
 /// Settings registrations on a [`ModuleBuilder`].

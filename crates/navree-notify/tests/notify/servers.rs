@@ -235,3 +235,157 @@ async fn channel_tables_work_on_mysql() {
     flow(&scratch).await;
     scratch.drop().await;
 }
+
+/// Preferences and held deliveries on `scratch`: the owner upsert, the
+/// one-query resolution, JSON documents and jobs that come back as they
+/// were written, release times compared on the server, and two releases
+/// at once claiming each row once.
+async fn preference_flow(scratch: &Scratch) {
+    use std::sync::Arc;
+
+    use navree_contracts::{Clock, FixedClock};
+    use navree_notify::{
+        DeferralReason, NotificationDeferral, NotificationPreference, NotificationPreferences,
+        PreferenceOwner,
+    };
+    use serde_json::json;
+
+    use crate::people::{DealUpdate, Mention, Person, at, held};
+
+    let fakes = Fakes::default();
+    let clock = Arc::new(FixedClock::new(at("2026-10-28T20:00:00Z")));
+    let app = fakes
+        .install(
+            TestApp::builder()
+                .config("database.url", scratch.url.as_str())
+                .config("database.migrate_on_boot", true)
+                .module(DatabaseModule)
+                .module(navree_view::ViewModule::for_root(
+                    navree_view::ViewOptions {
+                        dirs: vec![],
+                        reload: false,
+                    },
+                ))
+                .module(support::MailTemplates)
+                .module(navree_mail::MailModule::for_root(
+                    navree_mail::MailOptions {
+                        from: "Navree <noreply@navree.test>".to_owned(),
+                        transport: navree_mail::TransportConfig::Array,
+                        ..navree_mail::MailOptions::default()
+                    },
+                ))
+                .module(NotifyModule::for_root(NotifyOptions {
+                    routes: false,
+                    ..support::channel_options()
+                })),
+        )
+        .override_value::<dyn Clock>(clock.clone())
+        .build()
+        .await;
+    let db = app.get::<Db>().await;
+    let preferences = app.get::<NotificationPreferences>().await;
+    let notifier = app.get::<Notifier>().await;
+    let acme = Uuid::now_v7();
+    let kolkata = Person::in_zone(Some("Asia/Kolkata")).of(acme);
+
+    // Two changes keep one row per owner; the document round-trips.
+    preferences
+        .update(&kolkata.owner(), &json!({"channels": {"whatsapp": false}}))
+        .await
+        .unwrap();
+    let own = preferences
+        .update(
+            &kolkata.owner(),
+            &json!({"quiet_hours": {"start": "22:00", "end": "07:00"}}),
+        )
+        .await
+        .unwrap();
+    preferences
+        .update(
+            &PreferenceOwner::workspace(acme),
+            &json!({"channels": {"slack": false}}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        NotificationPreference::query().count(&*db).await.unwrap(),
+        2
+    );
+    let resolved = preferences.resolve(&kolkata, Some(acme)).await.unwrap();
+    assert_eq!(resolved.own, own);
+    assert!(!resolved.allows("deals", Channel::Slack));
+    assert!(!resolved.allows("deals", Channel::WhatsApp));
+
+    // 01:30 in Kolkata: the digest mail waits for 09:00, the text for 07:00.
+    notifier
+        .send(&kolkata, DealUpdate::new("Acme"))
+        .await
+        .unwrap();
+    notifier
+        .send(&kolkata, Mention { by: "Ada".into() })
+        .await
+        .unwrap();
+    // Both texts and the mention's mail wait for the quiet hours, the deal
+    // update's mail for the digest.
+    let rows = held(&app).await;
+    assert_eq!(rows.len(), 4);
+    let reasons: Vec<Option<DeferralReason>> = rows.iter().map(|r| r.deferral_reason()).collect();
+    assert_eq!(
+        reasons,
+        [
+            Some(DeferralReason::QuietHours),
+            Some(DeferralReason::QuietHours),
+            Some(DeferralReason::QuietHours),
+            Some(DeferralReason::Digest),
+        ]
+    );
+    assert_eq!(rows[0].release_at, at("2026-10-29T01:30:00Z"));
+    assert_eq!(rows[3].release_at, at("2026-10-29T03:30:00Z"));
+    let job = rows[3].send_job().unwrap();
+    assert_eq!(job.workspace_id, Some(acme));
+    assert_eq!(job.category.as_deref(), Some("deals"));
+    assert_eq!(
+        NotificationDeferral::query()
+            .where_(NotificationDeferral::RELEASE_AT.lte(at("2026-10-29T02:00:00Z")))
+            .count(&*db)
+            .await
+            .unwrap(),
+        3
+    );
+
+    // Two releases at once: each row is claimed and sent once.
+    clock.set(at("2026-10-29T03:30:00Z"));
+    let (first, second) = tokio::join!(notifier.release_due(), notifier.release_due());
+    let (first, second) = (first.unwrap(), second.unwrap());
+    assert_eq!(first.sent + second.sent, 3);
+    assert_eq!(first.digests + second.digests, 1);
+    assert_eq!(first.batched + second.batched, 1);
+    assert_eq!(fakes.sms.sent().len(), 2);
+    assert_eq!(support::sent_mail(&app).await.len(), 2);
+    assert!(held(&app).await.is_empty());
+
+    app.shutdown().await.unwrap();
+}
+
+#[cfg(feature = "postgres")]
+#[tokio::test]
+async fn preferences_and_held_deliveries_work_on_postgres() {
+    let Some(scratch) =
+        Scratch::new("NAVREE_TEST_POSTGRES_URL", "postgres preferences", false).await
+    else {
+        return;
+    };
+    preference_flow(&scratch).await;
+    scratch.drop().await;
+}
+
+#[cfg(feature = "mysql")]
+#[tokio::test]
+async fn preferences_and_held_deliveries_work_on_mysql() {
+    let Some(scratch) = Scratch::new("NAVREE_TEST_MYSQL_URL", "mysql preferences", true).await
+    else {
+        return;
+    };
+    preference_flow(&scratch).await;
+    scratch.drop().await;
+}

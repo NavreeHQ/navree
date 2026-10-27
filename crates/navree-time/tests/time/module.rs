@@ -203,6 +203,31 @@ async fn owners_resolve_to_their_zone_their_country_or_the_default() {
     assert_eq!(owners, expected);
     assert!(zones.owners(ZoneLevel::User).await.unwrap().is_empty());
     assert_eq!(zones.levels(), [ZoneLevel::Workspace]);
+
+    // `stored_zone_of` tells an owner without a zone from one whose zone
+    // is the default.
+    let stored = |level, owner| {
+        let zones = zones.clone();
+        async move {
+            zones
+                .stored_zone_of(level, owner)
+                .await
+                .unwrap()
+                .map(|zone| zone.name())
+        }
+    };
+    assert_eq!(
+        stored(ZoneLevel::Workspace, w.kolkata).await,
+        Some("Asia/Kolkata")
+    );
+    assert_eq!(
+        stored(ZoneLevel::Workspace, w.country_only).await,
+        Some("Asia/Dubai")
+    );
+    assert_eq!(stored(ZoneLevel::Workspace, w.broken).await, None);
+    assert_eq!(stored(ZoneLevel::Workspace, w.bare).await, None);
+    assert_eq!(stored(ZoneLevel::Workspace, Uuid::now_v7()).await, None);
+    assert_eq!(stored(ZoneLevel::User, w.kolkata).await, None);
 }
 
 #[tokio::test]

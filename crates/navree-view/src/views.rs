@@ -129,6 +129,42 @@ impl Views {
             })
     }
 
+    /// Renders `source`, a template kept as text (in a database, in
+    /// settings) rather than in a file, with `ctx`. `name` stands for the
+    /// file it would be: its extension picks the escaping (`override.html`
+    /// escapes HTML, `subject.txt` does not) and errors name it. The
+    /// template sees the same environment as files: the filters, the strict
+    /// undefined rule, and `{% extends %}` or `{% include %}` of the
+    /// registered templates (`{% extends "layouts/mail.html" %}`).
+    ///
+    /// ```
+    /// use navree_view::Views;
+    /// use serde_json::json;
+    ///
+    /// let views = Views::from_templates([("layouts/mail.html", "<main>{% block body %}{% endblock %}</main>")]).unwrap();
+    /// let html = views
+    ///     .render_source(
+    ///         "welcome.html",
+    ///         r#"{% extends "layouts/mail.html" %}{% block body %}Hi {{ name }}{% endblock %}"#,
+    ///         json!({ "name": "Ada" }),
+    ///     )
+    ///     .unwrap();
+    /// assert_eq!(html, "<main>Hi Ada</main>");
+    /// ```
+    pub fn render_source(
+        &self,
+        name: &str,
+        source: &str,
+        ctx: impl Serialize,
+    ) -> Result<String, ViewError> {
+        self.env
+            .render_named_str(name, source, Value::from(Serde(ctx)))
+            .map_err(|source| ViewError::Template {
+                name: name.to_owned(),
+                source,
+            })
+    }
+
     /// Whether `name` resolves to a template, following the same rules as
     /// [`render`](Views::render) (for example to send a plain-text part only
     /// when `mail/welcome.txt` exists).

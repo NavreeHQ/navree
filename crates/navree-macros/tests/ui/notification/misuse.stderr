@@ -1,0 +1,35 @@
+error: #[notification] goes on an `impl Notification for ..` block
+ --> tests/ui/notification/misuse.rs:8:1
+  |
+8 | struct NotAnImpl;
+  | ^^^^^^
+
+error: unknown #[notification] key `label`: expected `type = ".."`, `category = ".."`, `digest = "daily"` or `urgent`
+  --> tests/ui/notification/misuse.rs:10:16
+   |
+10 | #[notification(label = "deals")]
+   |                ^^^^^
+
+error: unknown digest `monthly`: use `off`, `hourly`, `daily` or `weekly`
+  --> tests/ui/notification/misuse.rs:15:25
+   |
+15 | #[notification(digest = "monthly")]
+   |                         ^^^^^^^^^
+
+error: invalid category `big deals`: use 1 to 100 letters, digits, `_`, `-`, `.` or `:` (`deals`)
+  --> tests/ui/notification/misuse.rs:20:27
+   |
+20 | #[notification(category = "big deals")]
+   |                           ^^^^^^^^^^^
+
+error: `TYPE` is set twice: by `type` in #[notification] and here
+  --> tests/ui/notification/misuse.rs:27:11
+   |
+27 |     const TYPE: &'static str = "type_twice";
+   |           ^^^^
+
+error: an urgent notification is never batched into a digest: drop `digest` or `urgent`
+  --> tests/ui/notification/misuse.rs:30:34
+   |
+30 | #[notification(digest = "daily", urgent)]
+   |                                  ^^^^^^

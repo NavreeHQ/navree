@@ -32,6 +32,11 @@
 //!   `settings:inherit`.
 //! - **Tests.** `settings.store = "memory"`, or a [`SettingsFake`] that
 //!   records every change.
+//! - **Notification mail** (feature `notify`): the `notification-templates`
+//!   group ([`notify::NotificationTemplates`]: logo, brand color, footer,
+//!   subject and body overrides per notification type), registered with
+//!   the module and read by navree-notify's `Notifier` through
+//!   [`notify::SettingsTemplateOverrides`].
 //!
 //! ```
 //! # tokio::runtime::Runtime::new().unwrap().block_on(async {
@@ -69,6 +74,8 @@
 #![forbid(unsafe_code)]
 
 pub mod entity;
+#[cfg(feature = "notify")]
+pub mod notify;
 
 mod commands;
 mod controller;

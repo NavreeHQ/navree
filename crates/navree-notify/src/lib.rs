@@ -45,13 +45,26 @@
 //!   `dyn Broadcaster`, e.g. navree-realtime). A channel whose service is
 //!   missing fails with [`NotifyError::Unavailable`]; the other channels
 //!   still deliver.
+//! - Preferences: a notification has a category
+//!   ([`Notification::CATEGORY`]), a digest ([`Notification::DIGEST`]), an
+//!   urgency and a send window, set by hand or with `#[notification]`;
+//!   people and workspaces switch channels per category, choose digests
+//!   and quiet hours ([`Preferences`], [`NotificationPreferences`], table
+//!   `notification_preferences`). The notifier skips channels turned off,
+//!   holds digest mail and deliveries outside quiet hours or the send
+//!   window on the recipient's clock ([`NotificationDeferral`], table
+//!   `notification_deferrals`) and `notify:release` (every minute on the
+//!   scheduler, or [`Notifier::release_due`]) sends them, digests as one
+//!   mail. A workspace's mail is restyled through [`TemplateOverrides`].
 //! - Routes (authenticated, for the signed-in user as notifiable type
 //!   [`USER_NOTIFIABLE_TYPE`]): `GET /api/notifications?unread=` (a page,
 //!   newest first), `GET /api/notifications/unread-count` (`{count}`),
 //!   `POST /api/notifications/{id}/read` and
-//!   `POST /api/notifications/read-all` (204), and the push subscriptions:
+//!   `POST /api/notifications/read-all` (204), the push subscriptions:
 //!   `GET /api/notifications/push-key`, `POST` and `DELETE
-//!   /api/notifications/push-subscriptions`. The same read state is
+//!   /api/notifications/push-subscriptions`, and the preferences: `GET` and
+//!   `PATCH /api/notifications/preferences` and
+//!   `/api/notifications/preferences/workspace`. The same read state is
 //!   available in code: [`Notifier::notifications`],
 //!   [`Notifier::unread_count`], [`Notifier::mark_as_read`] and
 //!   [`Notifier::mark_all_as_read`].
@@ -139,12 +152,18 @@
 //! ```
 #![forbid(unsafe_code)]
 
+// `#[notification]` names this crate `::navree_notify`, also from inside.
+extern crate self as navree_notify;
+
 mod callbacks;
+mod catalog;
 mod channel;
 mod channels;
 mod commands;
 mod controller;
+mod deferred;
 mod deliveries;
+mod digest;
 mod drivers;
 mod error;
 mod fake;
@@ -158,19 +177,27 @@ pub mod notifications;
 mod notifier;
 mod opt_outs;
 mod options;
+mod overrides;
+mod preferences;
 mod push;
 mod recipient;
 mod schema;
 mod store;
 mod stored;
+mod timing;
 mod tokens;
 
 pub use callbacks::{
     ChannelCallback, InboundMessage, Keyword, OPT_IN_KEYWORDS, OPT_OUT_KEYWORDS, StatusUpdate,
     keyword,
 };
+pub use catalog::{
+    ModuleBuilderNotifyExt, NotificationCatalog, NotificationCategory, NotificationKind,
+};
 pub use channel::Channel;
+pub use deferred::{DeferralReason, NotificationDeferral, Released};
 pub use deliveries::{DeliveryLog, DeliveryStatus, Ingested, NotificationDelivery};
+pub use digest::{DIGEST_TYPE, DigestItem};
 pub use drivers::log::{LogSms, LogWhatsApp};
 pub use drivers::meta::MetaWhatsApp;
 pub use drivers::slack::SlackApi;
@@ -191,20 +218,34 @@ pub use messages::{
     WhatsAppMessage, WhatsAppTemplate,
 };
 pub use migration::{
-    DELIVERIES_TABLE, NOTIFICATIONS_TABLE, OPT_OUTS_TABLE, PUSH_SUBSCRIPTIONS_TABLE,
+    DEFERRALS_TABLE, DELIVERIES_TABLE, NOTIFICATIONS_TABLE, OPT_OUTS_TABLE, PREFERENCES_TABLE,
+    PUSH_SUBSCRIPTIONS_TABLE,
 };
 pub use module::NotifyModule;
+/// `#[notification(category = "..", digest = "daily", urgent)]` on an
+/// `impl Notification for ..` block: sets [`Notification::CATEGORY`],
+/// [`Notification::DIGEST`] and [`Notification::URGENT`] (see
+/// `navree_macros::notification`).
+pub use navree_macros::notification;
 pub use notifiable::Notifiable;
 pub use notification::Notification;
 pub use notifier::{NOTIFICATION_CREATED, Notifier};
 pub use opt_outs::{NotificationOptOut, OptOutSource, OptOuts};
 pub use options::{
-    MetaOptions, NotifyOptions, SlackOptions, SmsDriverKind, SmsOptions, SnsOptions, TeamsOptions,
-    TwilioOptions, VonageOptions, WebPushOptions, WhatsAppDriverKind, WhatsAppOptions,
+    DeferredOptions, DigestOptions, MetaOptions, NotifyOptions, PreferenceOptions, SlackOptions,
+    SmsDriverKind, SmsOptions, SnsOptions, TeamsOptions, TwilioOptions, VonageOptions,
+    WebPushOptions, WhatsAppDriverKind, WhatsAppOptions,
+};
+pub use overrides::{MailOverride, NotificationOverrides, TemplateOverrides};
+pub use preferences::{
+    CategoryPreferences, MAX_CATEGORIES, MAX_CATEGORY_LEN, NotificationPreference,
+    NotificationPreferences, PreferenceOwner, Preferences, ResolvedPreferences,
+    WORKSPACE_OWNER_TYPE, check_category,
 };
 pub use push::{NewPushSubscription, PushKeys, PushSubscription, PushSubscriptions};
 pub use recipient::RecipientScope;
 pub use stored::DatabaseNotification;
+pub use timing::{Digest, QuietHours};
 pub use tokens::ConnectionTokens;
 
 /// The notifiable type of users: the `/api/notifications` endpoints serve
