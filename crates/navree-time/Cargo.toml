@@ -10,6 +10,10 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+## Runs the PostgreSQL suite (`NAVREE_TEST_POSTGRES_URL`).
+postgres = ["sea-orm/sqlx-postgres"]
+
 [dependencies]
 axum = { workspace = true }
 chrono = { workspace = true }
@@ -20,7 +24,7 @@ navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
-sea-query = { workspace = true }
+sea-orm = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
