@@ -74,6 +74,7 @@ navree-navigator = { path = "crates/navree-navigator", version = "0.1.0" }
 navree-i18n = { path = "crates/navree-i18n", version = "0.1.0" }
 navree-i18n-macros = { path = "crates/navree-i18n-macros", version = "0.1.0" }
 navree-browser = { path = "crates/navree-browser", version = "0.1.0" }
+navree-workflows = { path = "crates/navree-workflows", version = "0.1.0" }
 
 # ---------------------------------------------------------------------------
 # Runtime, async and HTTP (Tokio family)
