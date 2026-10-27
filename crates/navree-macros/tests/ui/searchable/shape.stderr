@@ -1,0 +1,23 @@
+error: #[derive(Searchable)] goes on a SeaORM model struct (`pub struct Model { .. }`)
+ --> tests/ui/searchable/shape.rs:4:10
+  |
+4 | pub enum Status {
+  |          ^^^^^^
+
+error: #[derive(Searchable)] needs a struct with named fields
+ --> tests/ui/searchable/shape.rs:9:16
+  |
+9 | pub struct Pair(u32, String);
+  |                ^^^^^^^^^^^^^
+
+error: one #[searchable(..)] attribute per field: list every flag in it
+  --> tests/ui/searchable/shape.rs:15:5
+   |
+15 |     #[searchable(filter)]
+   |     ^^^^^^^^^^^^^^^^^^^^^
+
+error: two fields are indexed as `email`
+  --> tests/ui/searchable/shape.rs:20:9
+   |
+20 |     pub work_email: String,
+   |         ^^^^^^^^^^

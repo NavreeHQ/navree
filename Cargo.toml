@@ -53,6 +53,7 @@ navree-social = { path = "crates/navree-social", version = "0.1.0" }
 navree-webhooks = { path = "crates/navree-webhooks", version = "0.1.0" }
 navree-oauth = { path = "crates/navree-oauth", version = "0.1.0" }
 navree-flags = { path = "crates/navree-flags", version = "0.1.0" }
+navree-search = { path = "crates/navree-search", version = "0.1.0" }
 navree-graphql = { path = "crates/navree-graphql", version = "0.1.0" }
 navree-billing = { path = "crates/navree-billing", version = "0.1.0" }
 navree-grpc = { path = "crates/navree-grpc", version = "0.1.0" }
@@ -264,6 +265,8 @@ utoipa = { version = "6.0.0", features = ["chrono", "preserve_order", "preserve_
 utoipa-scalar = { version = "0.4.0", features = ["axum"] }
 object_store = { version = "0.14.2", default-features = false, features = ["fs"] }
 csv = "1.4.0"
+# Embedded full-text index (navree-search, `search-tantivy`): no zstd (C), pure Rust.
+tantivy = { version = "0.27.0", default-features = false, features = ["lz4-compression", "mmap", "stemmer", "stopwords"] }
 # GraphQL (navree-graphql): no default features (no handlebars, no
 # multipart temp files); the `chrono` and `uuid` scalars and dataloaders.
 async-graphql = { version = "7.2.1", default-features = false, features = ["chrono", "dataloader", "uuid"] }
@@ -289,7 +292,8 @@ tempfile = "3.27.0"
 trybuild = "1.0.122"
 insta = { version = "1.49.0", features = ["json"] }
 proptest = "1.12.0"
-# HTTP mock servers for provider integrations (navree-social, navree-billing).
+# HTTP mock servers for provider integrations (navree-social, navree-billing)
+# and the search engines' REST clients (navree-search).
 wiremock = "0.6.5"
 
 # Keep debug info small: less memory, faster links (many agents build at once).

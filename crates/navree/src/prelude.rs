@@ -112,3 +112,6 @@ pub use navree_social::SocialModule;
 
 #[cfg(feature = "oauth")]
 pub use navree_oauth::{OAuthServerModule, OAuthToken};
+
+#[cfg(feature = "search")]
+pub use navree_search::SearchModule;

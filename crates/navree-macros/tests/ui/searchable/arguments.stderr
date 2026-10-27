@@ -1,0 +1,23 @@
+error: unknown #[searchable] model argument `table`: expected `name`, `index`, `soft_delete` or `workspace`
+ --> tests/ui/searchable/arguments.rs:4:14
+  |
+4 | #[searchable(table = "contacts")]
+  |              ^^^^^
+
+error: the boost is a whole number from 1 to 10
+  --> tests/ui/searchable/arguments.rs:12:26
+   |
+12 |     #[searchable(boost = 11)]
+   |                          ^^
+
+error: unknown #[searchable] field argument `fuzzy`: expected `boost = N`, `filter`, `sort`, `embed` or `rename = ".."`
+  --> tests/ui/searchable/arguments.rs:14:18
+   |
+14 |     #[searchable(fuzzy)]
+   |                  ^^^^^
+
+error: a field name is letters, digits and `_`, not starting with `_`
+  --> tests/ui/searchable/arguments.rs:16:27
+   |
+16 |     #[searchable(rename = "_amount")]
+   |                           ^^^^^^^^^
