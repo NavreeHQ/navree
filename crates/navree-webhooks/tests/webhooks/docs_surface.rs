@@ -9,16 +9,59 @@ use navree_db::Db;
 use navree_events::Event;
 use navree_http_client::HttpClient;
 use navree_webhooks::{
-    Attempt, CreatedEndpoint, Deliver, Delivery, DeliveryStatus, Endpoint, EndpointChanges,
-    EventType, FanOut, GitHub, Hmac, HmacAlgorithm, IncomingOptions, MAX_ATTEMPTS,
-    ModuleBuilderWebhooksExt, NewEndpoint, Paddle, RETRY_SCHEDULE, SignatureEncoding,
-    SourceOptions, StandardWebhooks, Stripe, Tolerance, Verified, VerifiedWebhook, VerifyError,
+    Attempt, AwsSns, CreatedEndpoint, Deliver, Delivery, DeliveryStatus, Endpoint, EndpointChanges,
+    EventType, FanOut, GitHub, GooglePubSub, GraphNotifications, Handshake, Hmac, HmacAlgorithm,
+    IncomingOptions, IncomingRequest, MAX_ATTEMPTS, Mailgun, MicrosoftGraph,
+    ModuleBuilderWebhooksExt, NewEndpoint, Paddle, Postmark, PubSubMessage, PubSubPush,
+    RETRY_SCHEDULE, SenderKeys, SignatureEncoding, Slack, SnsMessage, SourceOptions,
+    StandardWebhooks, Stripe, Tolerance, Twilio, Verdict, Verified, VerifiedWebhook, VerifyError,
     WebhookContext, WebhookDeliveryFailed, WebhookEndpointDisabled, WebhookEvent, WebhookSource,
     WebhookVerifier, Webhooks, WebhooksError, WebhooksModule, WebhooksOptions,
 };
 use sea_orm::{ConnectionTrait, Statement};
 
 use crate::support::{DealWon, builder, start};
+
+/// The page's custom verifier: a `?challenge=` handshake, then GitHub's
+/// scheme.
+pub struct Partner;
+
+impl WebhookVerifier for Partner {
+    async fn verify_incoming(request: &IncomingRequest<'_>) -> Result<Verdict, VerifyError> {
+        if let Some(challenge) = request.query("challenge") {
+            return Ok(Verdict::Handshake(Handshake::text(challenge)));
+        }
+        GitHub::verify(&request.source().secret, request.headers(), request.body())
+            .map(Verdict::Verified)
+    }
+}
+
+impl WebhookSource for Partner {
+    const NAME: &'static str = "partner";
+    type Verifier = Partner;
+}
+
+#[tokio::test]
+async fn the_documented_custom_verifier_answers_its_handshake_and_verifies() {
+    let source = SourceOptions::new("partner-secret");
+    let headers = http::HeaderMap::new();
+    let challenge = IncomingRequest::new(&source, &headers, b"")
+        .with_url("https://api.acme.example/hooks/partner?challenge=abc");
+    assert_eq!(
+        Partner::verify_incoming(&challenge).await,
+        Ok(Verdict::Handshake(Handshake::text("abc")))
+    );
+    let mut signed = http::HeaderMap::new();
+    signed.insert(
+        "x-hub-signature-256",
+        GitHub::sign("partner-secret", b"{}").parse().unwrap(),
+    );
+    let delivery = IncomingRequest::new(&source, &signed, b"{}");
+    assert!(matches!(
+        Partner::verify_incoming(&delivery).await,
+        Ok(Verdict::Verified(_))
+    ));
+}
 
 /// The page's configuration blocks, merged.
 const DOCUMENTED_TOML: &str = r#"
@@ -47,6 +90,18 @@ tolerance_secs = 180
 timestamp_header = "X-Timestamp"
 id_header = "X-Id"
 event_header = "X-Event"
+
+[webhooks.incoming.aws_sns]
+topics = ["arn:aws:sns:eu-west-1:123456789012:ses-events"]
+auto_confirm = true
+
+[webhooks.incoming.google_pubsub]
+service_account = "gmail-push@acme-crm.iam.gserviceaccount.com"
+audience = "https://api.acme.example/api/v1/mail/gmail-push"
+
+[webhooks.incoming.twilio]
+secret = "set-in-env"
+url = "https://api.acme.example/api/v1/sms/status"
 "#;
 
 #[test]
@@ -60,6 +115,12 @@ fn the_documented_configuration_parses_and_validates() {
     assert_eq!(calendly.algorithm, HmacAlgorithm::Sha256);
     assert_eq!(calendly.encoding, SignatureEncoding::Hex);
     assert_eq!(calendly.tolerance_secs, Some(180));
+    let sns = options.incoming.source("aws_sns").unwrap();
+    assert_eq!(sns.topics.len(), 1);
+    assert!(sns.auto_confirm);
+    let pubsub = options.incoming.source("google_pubsub").unwrap();
+    assert!(pubsub.service_account.is_some() && pubsub.audience.is_some());
+    assert!(options.incoming.source("twilio").unwrap().url.is_some());
     assert_eq!(navree_config::ConfigSection::validate(&options), Ok(()));
     let _: IncomingOptions = options.incoming.clone();
     let _: SourceOptions = SourceOptions::new("s");
@@ -147,6 +208,45 @@ fn the_documented_names_exist() {
     let _ = Tolerance::secs(300);
     let _ = Tolerance::at(start(), 300);
     let _: Option<(Verified, VerifyError)> = None;
+    // The other built-in sources.
+    assert_eq!(source::<AwsSns>(), "aws_sns");
+    assert_eq!(source::<GooglePubSub>(), "google_pubsub");
+    assert_eq!(source::<MicrosoftGraph>(), "microsoft_graph");
+    assert_eq!(source::<Twilio>(), "twilio");
+    assert_eq!(source::<Slack>(), "slack");
+    assert_eq!(source::<Mailgun>(), "mailgun");
+    assert_eq!(source::<Postmark>(), "postmark");
+    assert_eq!(source::<Partner>(), "partner");
+    let _ = VerifiedWebhook::<Twilio>::form::<serde_json::Value>;
+    let _ = Twilio::sign;
+    let _ = Twilio::verify;
+    let _ = Slack::sign;
+    let _ = Slack::verify;
+    let _ = Mailgun::sign;
+    let _ = Postmark::authorization;
+    let _ = SnsMessage::string_to_sign;
+    let _ = SnsMessage::message_json::<serde_json::Value>;
+    let _ = |message: &SnsMessage| message.subscribe_url.clone();
+    let _ = PubSubMessage::data_json::<serde_json::Value>;
+    let _: Option<(
+        PubSubPush,
+        GraphNotifications,
+        SenderKeys,
+        IncomingRequest<'_>,
+    )> = None;
+    assert_eq!(
+        GooglePubSub::KEYS_URL,
+        "https://www.googleapis.com/oauth2/v3/certs"
+    );
+    assert_eq!(
+        AwsSns::missing_setting(&SourceOptions::default()),
+        Some("topics")
+    );
+    assert_eq!(
+        GooglePubSub::missing_setting(&SourceOptions::default()),
+        Some("service_account")
+    );
+    let _ = Verdict::Handshake(Handshake::text("challenge"));
     // Jobs and events.
     assert_eq!(FanOut::NAME, "webhooks.fan_out");
     assert_eq!(Deliver::NAME, "webhooks.deliver");

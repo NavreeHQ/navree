@@ -18,9 +18,12 @@
 //!
 //! **Incoming.** [`VerifiedWebhook<S>`] reads the raw body and verifies it
 //! with the source's verifier and secret before the handler runs:
-//! [`Stripe`], [`GitHub`], [`Paddle`], [`StandardWebhooks`] or the
-//! configurable [`Hmac`]; [`VerifiedWebhook::mark_processed`] drops
-//! redeliveries.
+//! [`Stripe`], [`GitHub`], [`Paddle`], [`StandardWebhooks`], [`AwsSns`],
+//! [`GooglePubSub`], [`MicrosoftGraph`], [`Twilio`], [`Slack`],
+//! [`Mailgun`], [`Postmark`] or the configurable [`Hmac`]; handshakes
+//! (Graph's `validationToken`, Slack's `url_verification`, SNS
+//! subscription confirmations) are answered without running the handler;
+//! [`VerifiedWebhook::mark_processed`] drops redeliveries.
 //!
 //! ```no_run
 //! use navree_config::{ConfigModule, ConfigSources};
@@ -55,12 +58,15 @@ mod error;
 mod event;
 mod extract;
 mod jobs;
+mod keys;
 mod migration;
 mod module;
 mod options;
+mod request;
 mod resources;
 mod service;
 mod signing;
+mod sources;
 mod template;
 mod verify;
 
@@ -72,11 +78,13 @@ pub use event::{WebhookContext, WebhookEvent};
 pub use events::{WebhookDeliveryFailed, WebhookEndpointDisabled};
 pub use extract::{INVALID_SIGNATURE, INVALID_SIGNATURE_CODE, VerifiedWebhook};
 pub use jobs::{Deliver, FanOut, MAX_ATTEMPTS, RETRY_SCHEDULE, retry_delay};
+pub use keys::SenderKeys;
 pub use migration::WEBHOOKS_MIGRATIONS;
 pub use module::{ModuleBuilderWebhooksExt, WebhooksModule};
 pub use options::{
     HmacAlgorithm, IncomingOptions, SignatureEncoding, SourceOptions, WebhooksOptions,
 };
+pub use request::{Handshake, IncomingRequest, Verdict};
 pub use resources::{
     Attempt, CreatedEndpoint, Delivery, DeliveryStatus, Endpoint, EndpointChanges, EventType,
     NewEndpoint,
@@ -85,6 +93,10 @@ pub use service::{
     Dispatch, Pruned, ROTATION_OVERLAP, TEST_EVENT_TYPE, USER_AGENT_VALUE, Webhooks,
 };
 pub use signing::{SECRET_PREFIX, generate_secret};
+pub use sources::{
+    AwsSns, GooglePubSub, GraphNotification, GraphNotifications, Mailgun, MicrosoftGraph, Postmark,
+    PubSubMessage, PubSubPush, Slack, SnsMessage, Twilio,
+};
 pub use verify::{
     GitHub, Hmac, Paddle, StandardWebhooks, Stripe, Tolerance, Verified, VerifyError,
     WebhookSource, WebhookVerifier,

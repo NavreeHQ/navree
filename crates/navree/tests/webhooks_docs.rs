@@ -10,7 +10,8 @@ use navree::prelude::*;
 use navree::queue::Queue;
 use navree::testing::TestApp;
 use navree::webhooks::{
-    GitHub, NewEndpoint, StandardWebhooks, VerifiedWebhook, WebhookContext, WebhookEvent, Webhooks,
+    AwsSns, GitHub, NewEndpoint, SnsMessage, StandardWebhooks, VerifiedWebhook, WebhookContext,
+    WebhookEvent, Webhooks,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -82,8 +83,46 @@ impl GitHubHookController {
     }
 }
 
-/// The GitHub integration.
-#[module(controllers = [GitHubHookController])]
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SesEvent {
+    event_type: String,
+    mail: SesMail,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SesMail {
+    message_id: String,
+}
+
+/// Receives SES events through SNS.
+#[injectable]
+pub struct SesEventsController;
+
+#[controller("/mail/ses-events", version = "1")]
+impl SesEventsController {
+    /// `POST /api/v1/mail/ses-events`.
+    #[post("/")]
+    #[public]
+    async fn receive(&self, uow: Uow, hook: VerifiedWebhook<AwsSns>) -> Result<Json<Value>> {
+        if !hook.mark_processed(&uow).await? {
+            return Ok(Json(json!({ "handled": false })));
+        }
+        let message: SnsMessage = hook.json()?;
+        let event: SesEvent = message
+            .message_json()
+            .map_err(|error| AppError::bad_request(error.to_string()))?;
+        Ok(Json(json!({
+            "handled": true,
+            "event": event.event_type,
+            "mail": event.mail.message_id,
+        })))
+    }
+}
+
+/// The GitHub and SES integrations.
+#[module(controllers = [GitHubHookController, SesEventsController])]
 pub struct IntegrationsModule;
 
 async fn app(client: HttpClient) -> TestApp {
@@ -92,6 +131,10 @@ async fn app(client: HttpClient) -> TestApp {
         .config("queue.driver", "memory")
         .config("webhooks.routes", false)
         .config("webhooks.incoming.github.secret", "test-secret")
+        .config(
+            "webhooks.incoming.aws_sns.topics",
+            "arn:aws:sns:us-east-1:123456789012:ses-events",
+        )
         .module(DatabaseModule::from_config())
         .module(EventsModule::for_root())
         .module(QueueModule::from_config())
@@ -218,6 +261,54 @@ async fn a_verified_github_webhook_reaches_the_handler_once() {
         .assert_status(200)
         .assert_json_path("handled", json!(false));
     send(GitHub::sign("another-secret", &body))
+        .await
+        .assert_error(400, "Invalid webhook signature");
+}
+
+/// A fixture of navree-webhooks' `tests/fixtures/sources` (an SNS signing
+/// certificate and messages signed with its key by OpenSSL).
+fn sns_fixture(name: &str) -> String {
+    let path = format!(
+        "{}/../navree-webhooks/tests/fixtures/sources/{name}",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path}: {e}"))
+}
+
+#[tokio::test]
+async fn ses_events_arrive_verified_through_sns() {
+    let (client, server) = HttpClient::fake();
+    server.on(
+        Method::GET,
+        "https://sns.us-east-1.amazonaws.com/SimpleNotificationService-*.pem",
+        FakeResponse::new(200).text(sns_fixture("signer-cert.pem")),
+    );
+    let app = app(client).await;
+    let messages: Value = serde_json::from_str(&sns_fixture("sns-messages.json")).unwrap();
+    let notification = serde_json::to_vec(&messages["notification_v1"]).unwrap();
+    let send = |body: Vec<u8>| {
+        app.client()
+            .post("/api/v1/mail/ses-events")
+            .header("x-amz-sns-message-type", "Notification")
+            .header("content-type", "text/plain; charset=UTF-8")
+            .body(body)
+            .send()
+    };
+
+    send(notification.clone())
+        .await
+        .assert_status(200)
+        .assert_json_path("handled", json!(true))
+        .assert_json_path("event", json!("Bounce"))
+        .assert_json_path("mail", json!("0100018c-9a7f-4f0e-b2a1-000000000000"));
+    send(notification.clone())
+        .await
+        .assert_status(200)
+        .assert_json_path("handled", json!(false));
+    let forged = String::from_utf8(notification)
+        .unwrap()
+        .replace("ses-events", "other-topic");
+    send(forged.into_bytes())
         .await
         .assert_error(400, "Invalid webhook signature");
 }
