@@ -6,7 +6,8 @@ use navree_crypto::CryptoError;
 use navree_http::AppError;
 use navree_http_client::HttpClientError;
 use navree_kernel::KernelError;
-use sea_orm::DbErr;
+use navree_db::sea_orm::DbErr;
+use navree_orm::OrmError;
 
 /// An integrations error. Returned from handlers with `?`, it becomes an
 /// error response (the module registers the mapping): a bad state, a
@@ -227,6 +228,13 @@ impl IntegrationsError {
                 | IntegrationsError::ConsentDenied { .. }
                 | IntegrationsError::InvalidCredentials(_)
         )
+    }
+}
+
+/// The ORM's errors are database errors (`Db`), mapped the same way.
+impl From<OrmError> for IntegrationsError {
+    fn from(error: OrmError) -> Self {
+        IntegrationsError::Db(DbErr::from(error))
     }
 }
 

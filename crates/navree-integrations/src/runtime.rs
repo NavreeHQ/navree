@@ -14,11 +14,11 @@ use navree_events::{Event, EventBus};
 use navree_http_client::{HttpClient, HttpClientOptions};
 use navree_kernel::{AppContext, BoxError, WeakAppContext};
 use navree_workspace::{WorkspaceConfig, Workspaces};
-use sea_orm::DbBackend;
+use navree_db::sea_orm::DbBackend;
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
-use crate::entity::integration_connection;
+use crate::model::IntegrationConnection;
 use crate::entry::ProviderEntry;
 use crate::fake::FakeState;
 use crate::oauth::{HttpBackend, TokenBackend};
@@ -178,7 +178,7 @@ impl Runtime {
     }
 
     /// The public view of a row.
-    pub(crate) fn info(&self, model: &integration_connection::Model) -> ConnectionInfo {
+    pub(crate) fn info(&self, model: &IntegrationConnection) -> ConnectionInfo {
         let owner = Owner::from_columns(&model.owner_type, model.owner_id);
         ConnectionInfo {
             id: model.id,
@@ -211,7 +211,7 @@ impl Runtime {
     /// The decrypted credentials of a row.
     pub(crate) fn credentials(
         &self,
-        model: &integration_connection::Model,
+        model: &IntegrationConnection,
     ) -> Result<StoredCredentials, IntegrationsError> {
         Ok(self.encrypter.decrypt_json(&model.credentials)?)
     }

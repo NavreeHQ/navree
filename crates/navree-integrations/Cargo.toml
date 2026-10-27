@@ -10,6 +10,11 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+# The database drivers of the gated server tests (`tests/integrations/servers.rs`).
+postgres = ["navree-db/postgres"]
+mysql = ["navree-db/mysql"]
+
 [dependencies]
 axum = { workspace = true }
 base64 = { workspace = true }
@@ -29,12 +34,12 @@ navree-events = { workspace = true }
 navree-http = { workspace = true }
 navree-http-client = { workspace = true }
 navree-kernel = { workspace = true }
+# `integration_connections` is a navree-orm model.
+navree-orm = { workspace = true }
 # `integrations:check` on the scheduler.
 navree-schedule = { workspace = true }
 # Connections belong to the request's workspace or organization.
 navree-workspace = { workspace = true }
-sea-orm = { workspace = true }
-sea-orm-migration = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }

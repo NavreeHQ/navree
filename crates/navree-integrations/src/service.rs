@@ -6,16 +6,14 @@ use std::sync::{Arc, OnceLock};
 
 use chrono::TimeDelta;
 use navree_contracts::{AuditEntry, AuditKind, Secret};
-use navree_db::Repo;
 use navree_kernel::{AppContext, BoxError, BoxFuture, Lifecycle};
-use sea_orm::ActiveValue::{Set, Unchanged};
-use sea_orm::{ColumnTrait, Condition, EntityTrait, QueryFilter, QueryOrder};
+use navree_orm::{Model as _, Record};
 use serde_json::json;
 use url::Url;
 use uuid::Uuid;
 
 use crate::client::IntegrationClient;
-use crate::entity::integration_connection::{self, Column, Entity};
+use crate::model::IntegrationConnection as Row;
 use crate::entry::ProviderEntry;
 use crate::events::{IntegrationConnected, IntegrationDisconnected};
 use crate::fake::{FakeState, IntegrationsFake};
@@ -423,66 +421,43 @@ impl Integrations {
         let display_name = grant.display_name.clone();
         let runtime = rt.clone();
         rt.write(connected_by, |uow| async move {
-            let existing = {
+            let model = {
+                // Written on the transaction, not through the unit of work:
+                // a change event would carry the encrypted credentials. The
+                // audit entry below records the connection instead.
                 let tx = uow.tx().await?;
-                Entity::find()
-                    .filter(Column::OwnerType.eq(owner_type))
-                    .filter(Column::OwnerId.eq(owner_id))
-                    .filter(Column::Provider.eq(provider.as_str()))
-                    .filter(Column::ScopeSet.eq(scope_set.as_str()))
-                    .one(&*tx)
-                    .await?
-            };
-            let model = match existing {
-                Some(row) => {
-                    Repo::<Entity>::update(
-                        &uow,
-                        integration_connection::ActiveModel {
-                            id: Unchanged(row.id),
-                            kind: Set(kind.as_str().to_owned()),
-                            external_id: Set(external_id),
-                            display_name: Set(display_name),
-                            credentials: Set(encrypted),
-                            access_token: Set(access_token),
-                            token_expires_at: Set(expires),
-                            scopes: Set(scopes),
-                            status: Set(ConnectionStatus::Healthy.as_str().to_owned()),
-                            failures: Set(0),
-                            last_error: Set(None),
-                            connected_by: Set(connected_by),
-                            updated_at: Set(now),
-                            ..Default::default()
-                        },
-                    )
-                    .await?
-                }
-                None => {
-                    Repo::<Entity>::insert(
-                        &uow,
-                        integration_connection::ActiveModel {
-                            id: Set(Uuid::now_v7()),
-                            owner_type: Set(owner_type.to_owned()),
-                            owner_id: Set(owner_id),
-                            provider: Set(provider.clone()),
-                            scope_set: Set(scope_set.clone()),
-                            kind: Set(kind.as_str().to_owned()),
-                            external_id: Set(external_id),
-                            display_name: Set(display_name),
-                            credentials: Set(encrypted),
-                            access_token: Set(access_token),
-                            token_expires_at: Set(expires),
-                            scopes: Set(scopes),
-                            status: Set(ConnectionStatus::Healthy.as_str().to_owned()),
-                            failures: Set(0),
-                            last_error: Set(None),
-                            last_checked_at: Set(None),
-                            connected_by: Set(connected_by),
-                            created_at: Set(now),
-                            updated_at: Set(now),
-                        },
-                    )
-                    .await?
-                }
+                let existing = Row::query()
+                    .where_(Row::OWNER_TYPE.eq(owner_type))
+                    .where_(Row::OWNER_ID.eq(owner_id))
+                    .where_(Row::PROVIDER.eq(provider.as_str()))
+                    .where_(Row::SCOPE_SET.eq(scope_set.as_str()))
+                    .first(&*tx)
+                    .await?;
+                let mut record = existing.unwrap_or_else(|| {
+                    Record::new(Row {
+                        owner_type: owner_type.to_owned(),
+                        owner_id,
+                        provider: provider.clone(),
+                        scope_set: scope_set.clone(),
+                        created_at: now,
+                        ..Row::default()
+                    })
+                });
+                record.kind = kind.as_str().to_owned();
+                record.external_id = external_id;
+                record.display_name = display_name;
+                record.credentials = encrypted;
+                record.access_token = access_token;
+                record.token_expires_at = expires;
+                record.scopes = scopes;
+                record.status = ConnectionStatus::Healthy.as_str().to_owned();
+                record.failures = 0;
+                record.last_error = None;
+                record.connected_by = connected_by;
+                record.updated_at = now;
+                record.save(&*tx).await?;
+                uow.mark_modified();
+                record.into_inner()
             };
             runtime
                 .emit_after_commit(
@@ -515,20 +490,19 @@ impl Integrations {
     pub async fn connections(&self, owner: Owner) -> Result<Vec<ConnectionInfo>, IntegrationsError> {
         let rt = self.rt()?;
         let chain = rt.owner_chain(owner).await;
-        let mut condition = Condition::any();
-        for owner in &chain {
-            let (kind, id) = owner.columns();
-            condition = condition.add(
-                Condition::all()
-                    .add(Column::OwnerType.eq(kind))
-                    .add(Column::OwnerId.eq(id)),
-            );
-        }
-        let rows = Entity::find()
-            .filter(condition)
-            .order_by_asc(Column::Provider)
-            .order_by_asc(Column::ScopeSet)
-            .all(&rt.db.reader().await)
+        let rows = Row::query()
+            .where_group(|group| {
+                chain.iter().fold(group, |group, owner| {
+                    let (kind, id) = owner.columns();
+                    group.or_where_group(|pair| {
+                        pair.where_(Row::OWNER_TYPE.eq(kind))
+                            .where_(Row::OWNER_ID.eq(id))
+                    })
+                })
+            })
+            .order_by(Row::PROVIDER)
+            .order_by(Row::SCOPE_SET)
+            .get(&rt.db)
             .await?;
         let mut infos: Vec<ConnectionInfo> = rows.iter().map(|row| rt.info(row)).collect();
         infos.sort_by_key(|info| {
@@ -558,20 +532,20 @@ impl Integrations {
         owner: Owner,
         provider: &str,
         scope_set: &str,
-    ) -> Result<integration_connection::Model, IntegrationsError> {
+    ) -> Result<Row, IntegrationsError> {
         let rt = self.rt()?;
         let entry = rt.provider(provider)?;
         for candidate in rt.owner_chain(owner).await {
             let (kind, id) = candidate.columns();
-            let row = Entity::find()
-                .filter(Column::OwnerType.eq(kind))
-                .filter(Column::OwnerId.eq(id))
-                .filter(Column::Provider.eq(provider))
-                .filter(Column::ScopeSet.eq(scope_set))
-                .one(&rt.db.reader().await)
+            let row = Row::query()
+                .where_(Row::OWNER_TYPE.eq(kind))
+                .where_(Row::OWNER_ID.eq(id))
+                .where_(Row::PROVIDER.eq(provider))
+                .where_(Row::SCOPE_SET.eq(scope_set))
+                .first(&rt.db)
                 .await?;
             if let Some(row) = row {
-                return Ok(row);
+                return Ok(row.into_inner());
             }
         }
         Err(IntegrationsError::NotConnected {
@@ -601,12 +575,12 @@ impl Integrations {
     /// Every connection of every owner (for operators and commands).
     pub async fn all(&self) -> Result<Vec<ConnectionInfo>, IntegrationsError> {
         let rt = self.rt()?;
-        let rows = Entity::find()
-            .order_by_asc(Column::OwnerType)
-            .order_by_asc(Column::OwnerId)
-            .order_by_asc(Column::Provider)
-            .order_by_asc(Column::ScopeSet)
-            .all(&rt.db.reader().await)
+        let rows = Row::query()
+            .order_by(Row::OWNER_TYPE)
+            .order_by(Row::OWNER_ID)
+            .order_by(Row::PROVIDER)
+            .order_by(Row::SCOPE_SET)
+            .get(&rt.db)
             .await?;
         Ok(rows.iter().map(|row| rt.info(row)).collect())
     }
@@ -644,7 +618,7 @@ impl Integrations {
                 scope_set: row.scope_set.clone(),
             };
             let entry = audit_entry(&uow, "integration.disconnected", &row, owner);
-            Repo::<Entity>::delete(&uow, row).await?;
+            Row::query().where_(Row::ID.eq(row.id)).delete(&uow).await?;
             runtime.emit_after_commit(&uow, event).await;
             runtime.audit_after_commit(&uow, entry).await;
             Ok(())
@@ -670,12 +644,11 @@ impl Integrations {
     pub async fn forget(&self, owner: Owner) -> Result<u64, IntegrationsError> {
         let rt = self.rt()?;
         let (kind, id) = owner.columns();
-        let result = Entity::delete_many()
-            .filter(Column::OwnerType.eq(kind))
-            .filter(Column::OwnerId.eq(id))
-            .exec(rt.db.conn())
-            .await?;
-        Ok(result.rows_affected)
+        Ok(Row::query()
+            .where_(Row::OWNER_TYPE.eq(kind))
+            .where_(Row::OWNER_ID.eq(id))
+            .delete(rt.db.conn())
+            .await?)
     }
 
     // -- tokens and clients -------------------------------------------------
@@ -746,7 +719,7 @@ impl Integrations {
 
     fn client_from_row(
         &self,
-        row: &integration_connection::Model,
+        row: &Row,
     ) -> Result<IntegrationClient, IntegrationsError> {
         let rt = self.rt()?;
         let entry = rt.provider(&row.provider)?.clone();
@@ -828,31 +801,24 @@ impl Integrations {
         }
         let cutoff =
             rt.now() - TimeDelta::minutes(i64::try_from(interval).unwrap_or(i64::MAX / 120));
-        let ids: Vec<Uuid> = Entity::find()
-            .filter(
-                Condition::any()
-                    .add(Column::LastCheckedAt.is_null())
-                    .add(Column::LastCheckedAt.lt(cutoff)),
-            )
-            .order_by_asc(Column::Id)
-            .all(&rt.db.reader().await)
-            .await?
-            .into_iter()
-            .map(|row| row.id)
-            .collect();
+        let ids = Row::query()
+            .where_group(|due| {
+                due.where_(Row::LAST_CHECKED_AT.is_null())
+                    .or_where(Row::LAST_CHECKED_AT.lt(cutoff))
+            })
+            .order_by(Row::ID)
+            .pluck(&rt.db, Row::ID)
+            .await?;
         Ok(self.check_many(ids).await)
     }
 
     /// Checks every connection.
     pub async fn check_all(&self) -> Result<CheckSummary, IntegrationsError> {
         let rt = self.rt()?;
-        let ids: Vec<Uuid> = Entity::find()
-            .order_by_asc(Column::Id)
-            .all(&rt.db.reader().await)
-            .await?
-            .into_iter()
-            .map(|row| row.id)
-            .collect();
+        let ids = Row::query()
+            .order_by(Row::ID)
+            .pluck(&rt.db, Row::ID)
+            .await?;
         Ok(self.check_many(ids).await)
     }
 
@@ -880,7 +846,7 @@ impl Integrations {
 fn audit_entry(
     uow: &navree_db::Uow,
     action: &str,
-    row: &integration_connection::Model,
+    row: &Row,
     owner: Owner,
 ) -> AuditEntry {
     let mut entry = AuditEntry::new(AuditKind::Custom, action)

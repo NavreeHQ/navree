@@ -13,7 +13,8 @@
 //! - **Connections** belong to a workspace, an organization or the app
 //!   ([`Owner`]); a workspace without its own uses its organization's.
 //!   Credentials are encrypted with the application key in
-//!   `integration_connections`; [`ConnectionInfo`] never carries them.
+//!   `integration_connections` (the navree-orm model
+//!   [`IntegrationConnection`]); [`ConnectionInfo`] never carries them.
 //! - **Consent flows.** `GET /api/integrations/{provider}/connect` gives
 //!   the consent URL and a sealed state (PKCE where the provider supports
 //!   it); `GET .../callback` with the provider's parameters stores the
@@ -57,7 +58,6 @@
 //! ```
 #![forbid(unsafe_code)]
 
-pub mod entity;
 pub mod events;
 
 mod client;
@@ -69,6 +69,7 @@ mod extract;
 mod fake;
 mod flow;
 mod migration;
+mod model;
 mod module;
 mod oauth;
 mod options;
@@ -94,6 +95,7 @@ pub use flow::{
     NewServiceAccount,
 };
 pub use migration::INTEGRATIONS_MIGRATIONS;
+pub use model::IntegrationConnection;
 pub use module::{IntegrationsModule, ModuleBuilderIntegrationsExt};
 pub use options::{
     AppCredentials, ClientAuth, IntegrationsOptions, Level, MicrosoftMode, ProviderConfig,
