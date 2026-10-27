@@ -99,12 +99,18 @@ pub(crate) struct GuardStages {
     pub(crate) security_headers: bool,
 }
 
-/// Error rendering, maintenance mode and the per-IP rate limit.
+/// Error rendering, maintenance mode and the per-IP rate limit; then, when
+/// no `Session`-slot layer comes between them, navree's authentication.
 pub(crate) struct CheckStages {
     pub(crate) mappers: Vec<ErrorMapper>,
     pub(crate) maintenance: MaintenanceGate,
     pub(crate) per_ip: Option<PerIpLimit>,
+    pub(crate) authentication: Option<Authentication>,
 }
+
+/// Navree's authentication (the first layer of the `AuthContext` slot):
+/// the registered [`Authenticator`], if any.
+pub(crate) struct Authentication(pub(crate) Option<Arc<dyn Authenticator>>);
 
 /// The middleware that runs [`Stages`].
 pub(crate) async fn run_stages(
@@ -146,13 +152,30 @@ impl Stages {
             maintenance(&checks.maintenance, request, move |request| async move {
                 match &checks.per_ip {
                     Some(limit) => {
-                        per_ip_rate_limit(limit, request, move |request| next.run(request)).await
+                        per_ip_rate_limit(limit, request, move |request| {
+                            checks.authenticated(request, next)
+                        })
+                        .await
                     }
-                    None => next.run(request).await,
+                    None => checks.authenticated(request, next).await,
                 }
             })
         })
         .await
+    }
+}
+
+impl CheckStages {
+    async fn authenticated(&self, request: Request, next: Next) -> Response {
+        match &self.authentication {
+            Some(Authentication(authenticator)) => {
+                authenticate(authenticator.as_ref(), request, move |request| {
+                    next.run(request)
+                })
+                .await
+            }
+            None => next.run(request).await,
+        }
     }
 }
 
@@ -672,14 +695,31 @@ pub(crate) async fn record_security(sink: &dyn AuditSink, entry: AuditEntry) {
 // Authentication (first layer of the AuthContext slot)
 // ---------------------------------------------------------------------------
 
-/// Calls the registered [`Authenticator`] and stores the [`AuthState`].
-pub(crate) async fn authenticate(
+/// [`authenticate`] as a layer of its own, in the `AuthContext` slot (when
+/// `Session`-slot layers must run before it).
+pub(crate) async fn authenticate_layer(
     State(authenticator): State<Option<Arc<dyn Authenticator>>>,
     request: Request,
     next: Next,
 ) -> Response {
+    authenticate(authenticator.as_ref(), request, move |request| {
+        next.run(request)
+    })
+    .await
+}
+
+/// Calls the registered [`Authenticator`] and stores the [`AuthState`].
+async fn authenticate<F, Fut>(
+    authenticator: Option<&Arc<dyn Authenticator>>,
+    request: Request,
+    next: F,
+) -> Response
+where
+    F: FnOnce(Request) -> Fut,
+    Fut: Future<Output = Response>,
+{
     let (mut parts, body) = request.into_parts();
-    let state = match &authenticator {
+    let state = match authenticator {
         Some(authenticator) => match authenticator.authenticate(&mut parts).await {
             Ok(principal) => AuthState(principal),
             Err(error) => return error.into_response(),
@@ -698,7 +738,7 @@ pub(crate) async fn authenticate(
         context.set_user_id(user);
     }
     parts.extensions.insert(state);
-    let mut response = next.run(Request::from_parts(parts, body)).await;
+    let mut response = next(Request::from_parts(parts, body)).await;
     if let Some(user) = user {
         response.extensions_mut().insert(LoggedUser(user));
     }
