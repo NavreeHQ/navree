@@ -28,6 +28,9 @@ navree-contracts = { workspace = true }
 navree-db = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
+# Failed jobs are models of `failed_jobs` (`FailedJob`), written and read by
+# the database driver through the ORM.
+navree-orm = { workspace = true }
 # The authorizer of the private channel `operations.{id}`.
 navree-realtime = { workspace = true }
 # The watchdog, scheduled every minute in apps with `ScheduleModule`.

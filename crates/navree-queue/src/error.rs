@@ -38,3 +38,11 @@ pub enum QueueError {
     #[error("operations need the app database: add DatabaseModule to the app")]
     NoDatabase,
 }
+
+/// The database driver's ORM operations fail as database errors
+/// ([`QueueError::Db`]), like its other statements.
+impl From<navree_orm::OrmError> for QueueError {
+    fn from(error: navree_orm::OrmError) -> Self {
+        QueueError::Db(error.into())
+    }
+}
