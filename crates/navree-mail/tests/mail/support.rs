@@ -35,7 +35,7 @@ pub fn array_options() -> MailOptions {
     MailOptions {
         from: FROM.to_owned(),
         transport: TransportConfig::Array,
-        queue: None,
+        ..MailOptions::default()
     }
 }
 

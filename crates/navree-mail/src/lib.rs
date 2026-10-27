@@ -49,7 +49,7 @@
 //!     .module(MailModule::for_root(MailOptions {
 //!         from: "Acme <hello@acme.test>".into(),
 //!         transport: TransportConfig::Array,
-//!         queue: None,
+//!         ..MailOptions::default()
 //!     }))
 //!     .boot()
 //!     .await?;
@@ -71,6 +71,7 @@
 #![forbid(unsafe_code)]
 
 mod array;
+mod delivery;
 mod error;
 mod job;
 mod mailable;
@@ -78,16 +79,23 @@ mod mailer;
 mod message;
 mod module;
 mod options;
+pub mod render;
+mod report;
 mod smtp;
 mod transport;
 
 pub use array::ArrayTransport;
 pub use error::MailError;
 pub use job::SendMailJob;
-pub use mailable::{Mailable, TemplateMail};
-pub use mailer::Mailer;
+pub use mailable::{Held, Mailable, TemplateMail};
+pub use mailer::{Mailer, ScopedMailer};
 pub use message::Message;
 pub use module::MailModule;
-pub use options::{MailOptions, TransportConfig};
+pub use options::{
+    DeliveryOptions, MailOptions, MailgunWebhookOptions, PostmarkWebhookOptions,
+    ResendWebhookOptions, SesWebhookOptions, TrackingOptions, TransportConfig, WebhookOptions,
+};
+pub use render::RenderOptions;
+pub use report::{DeliveryStatus, MailScope, SendReport, TransportTier};
 pub use smtp::{SmtpTls, SmtpTransport};
-pub use transport::{FailoverTransport, LogTransport, MailTransport};
+pub use transport::{FailoverTransport, LogTransport, MailTransport, Sent};
