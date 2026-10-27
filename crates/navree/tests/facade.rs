@@ -441,3 +441,34 @@ fn flags_is_reexported_with_its_feature() {
     assert!(same::<navree::flags::FlagsModule, FlagsModule>());
     assert!(same::<navree::flags::CurrentFlags, CurrentFlags>());
 }
+
+/// SQLite is built in; every other database driver is a feature of its own,
+/// outside `full`, that turns on `db` and the matching feature of navree-db
+/// (`features = ["postgres"]`, `features = ["mysql"]`, and `mysql-rsa` for
+/// MySQL's RSA password exchange on connections without TLS).
+#[test]
+fn database_driver_features_turn_on_db_and_the_driver() {
+    let features = Features::read();
+    let full = features.closure("full");
+    for (feature, driver) in [
+        ("postgres", "navree-db/postgres"),
+        ("mysql", "navree-db/mysql"),
+        ("mysql-rsa", "navree-db/mysql-rsa"),
+    ] {
+        let list = features
+            .table
+            .get(feature)
+            .unwrap_or_else(|| panic!("the facade has no `{feature}` feature"));
+        let enabled = features.closure(feature);
+        assert!(enabled.contains("db"), "`{feature}` must turn on `db`");
+        assert!(
+            list.iter().any(|item| item == driver),
+            "`{feature}` must turn on `{driver}`: {list:?}"
+        );
+        assert!(!full.contains(feature), "`full` turns on `{feature}`");
+    }
+    assert!(
+        features.closure("mysql-rsa").contains("mysql"),
+        "`mysql-rsa` builds on `mysql`"
+    );
+}

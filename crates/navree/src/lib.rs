@@ -45,8 +45,10 @@
 //!
 //! `full` (the default) turns on every module except the opt-in ones
 //! (`social`, `oauth`, `flags`, `graphql`, `grpc`, `billing`, `dock`, `otel`). A feature also turns on the features of the crates its crate
-//! builds on (`auth` turns on `access`, `db`, `http`, ...). The `postgres` feature adds
-//! navree-db's PostgreSQL driver, and the opt-in `otel` feature adds
+//! builds on (`auth` turns on `access`, `db`, `http`, ...). SQLite is built in; the
+//! `postgres` feature adds navree-db's PostgreSQL driver and the `mysql` feature its
+//! MySQL and MariaDB driver (`mysql-rsa` adds MySQL's RSA password exchange, for
+//! `caching_sha2_password` accounts on connections without TLS), and the opt-in `otel` feature adds
 //! navree-observe's OTLP span exporter. `axum` is re-exported with `http`. `dock`
 //! is a development tool (`navree dock`), for tools and tests that read
 //! `dock.toml`.

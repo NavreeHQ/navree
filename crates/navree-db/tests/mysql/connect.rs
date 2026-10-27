@@ -1,10 +1,40 @@
 //! Connecting: `mysql://` and `mariadb://` URLs, the session every pooled
-//! connection starts with, and connection errors.
+//! connection starts with (`database.mysql`: strict mode, an exact SQL
+//! mode, the isolation level), and connection errors.
 
-use navree_db::{Db, DbOptions, MySqlOptions};
+use navree_db::{Db, DbOptions, IsolationLevel, MySqlOptions};
 use sea_orm::{ConnectionTrait, DbBackend, Statement, TransactionTrait};
 
-use crate::support::{Scratch, string};
+use crate::support::{Scratch, count, string};
+
+/// The session's isolation level as the server names it
+/// (`READ-COMMITTED`): `transaction_isolation` on MySQL 8 and MariaDB
+/// 11.1+, `tx_isolation` before.
+async fn isolation(conn: &impl ConnectionTrait) -> String {
+    for variable in ["@@SESSION.transaction_isolation", "@@SESSION.tx_isolation"] {
+        let sql = format!("SELECT CAST({variable} AS CHAR)");
+        if let Ok(rows) = conn
+            .query_all_raw(Statement::from_string(DbBackend::MySql, sql))
+            .await
+            && let Some(row) = rows.first()
+        {
+            return row.try_get_by_index::<String>(0).expect("text");
+        }
+    }
+    panic!("the server reports no isolation level")
+}
+
+/// The SQL mode of `conn`'s session, as a sorted list.
+async fn sql_mode(conn: &impl ConnectionTrait) -> Vec<String> {
+    let mode = string(conn, "SELECT @@SESSION.sql_mode").await;
+    let mut modes: Vec<String> = mode
+        .split(',')
+        .filter(|m| !m.is_empty())
+        .map(str::to_owned)
+        .collect();
+    modes.sort();
+    modes
+}
 
 #[tokio::test]
 async fn connects_with_mysql_and_mariadb_urls() {
@@ -36,8 +66,9 @@ async fn sessions_are_utc_utf8mb4_and_strict() {
         string(db.conn(), "SELECT @@SESSION.character_set_client").await,
         "utf8mb4"
     );
-    let mode = string(db.conn(), "SELECT @@SESSION.sql_mode").await;
+    let mode = sql_mode(db.conn()).await;
     for expected in [
+        "ONLY_FULL_GROUP_BY",
         "STRICT_TRANS_TABLES",
         "NO_ZERO_IN_DATE",
         "NO_ZERO_DATE",
@@ -45,20 +76,116 @@ async fn sessions_are_utc_utf8mb4_and_strict() {
         "PIPES_AS_CONCAT",
         "NO_ENGINE_SUBSTITUTION",
     ] {
-        assert!(mode.split(',').any(|m| m == expected), "{expected} in {mode}");
+        assert!(mode.iter().any(|m| m == expected), "{expected} in {mode:?}");
     }
 
     db.conn()
-        .execute_unprepared("CREATE TABLE codes (code VARCHAR(3) NOT NULL)")
+        .execute_unprepared("CREATE TABLE codes (code VARCHAR(3) NOT NULL, n INT NOT NULL)")
         .await
         .unwrap();
     let error = db
         .conn()
-        .execute_unprepared("INSERT INTO codes (code) VALUES ('ABCDEF')")
+        .execute_unprepared("INSERT INTO codes (code, n) VALUES ('ABCDEF', 1)")
         .await
         .unwrap_err()
         .to_string();
     assert!(error.contains("Data too long"), "{error}");
+
+    // A column neither grouped by nor aggregated is refused, as on PostgreSQL.
+    let error = db
+        .conn()
+        .execute_unprepared("SELECT code, n FROM codes GROUP BY code")
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("only_full_group_by"), "{error}");
+}
+
+/// `modes` is the session's whole SQL mode, whatever `strict` says.
+#[tokio::test]
+async fn explicit_modes_replace_the_sql_mode() {
+    let Some(scratch) = Scratch::new("explicit_modes_replace_the_sql_mode").await else {
+        return;
+    };
+    let db = scratch
+        .db_with(|options| {
+            options.mysql = MySqlOptions {
+                strict: true,
+                modes: Some(vec![
+                    "no_engine_substitution".to_owned(),
+                    "ANSI_QUOTES".to_owned(),
+                ]),
+                isolation_level: None,
+            }
+        })
+        .await;
+    assert_eq!(
+        sql_mode(db.conn()).await,
+        ["ANSI_QUOTES", "NO_ENGINE_SUBSTITUTION"]
+    );
+    // No strict mode, though `strict` is true: a long value is cut.
+    db.conn()
+        .execute_unprepared(r#"CREATE TABLE "codes" ("code" VARCHAR(3) NOT NULL)"#)
+        .await
+        .expect("ANSI_QUOTES: double quotes name identifiers");
+    db.conn()
+        .execute_unprepared(r#"INSERT INTO "codes" ("code") VALUES ('ABCDEF')"#)
+        .await
+        .expect("cut, not refused");
+    assert_eq!(string(db.conn(), "SELECT code FROM codes").await, "ABC");
+
+    let cleared = scratch
+        .db_with(|options| options.mysql.modes = Some(Vec::new()))
+        .await;
+    assert!(sql_mode(cleared.conn()).await.is_empty());
+}
+
+/// Every pooled connection runs at `isolation_level`: under READ COMMITTED
+/// a unit of work's second read sees a row committed in between; under the
+/// server's default REPEATABLE READ it keeps its first snapshot.
+#[tokio::test]
+async fn the_isolation_level_applies_to_every_connection() {
+    let Some(scratch) = Scratch::new("the_isolation_level_applies_to_every_connection").await
+    else {
+        return;
+    };
+    let committed = scratch
+        .db_with(|options| {
+            options.max_connections = 2;
+            options.mysql.isolation_level = Some(IsolationLevel::ReadCommitted);
+        })
+        .await;
+    let repeatable = scratch.db().await;
+    committed
+        .conn()
+        .execute_unprepared("CREATE TABLE seen (id INT PRIMARY KEY)")
+        .await
+        .unwrap();
+
+    let mut held = Vec::new();
+    for _ in 0..2 {
+        held.push(committed.conn().begin().await.unwrap());
+    }
+    for tx in &held {
+        assert_eq!(isolation(tx).await, "READ-COMMITTED");
+    }
+    drop(held);
+    assert_eq!(isolation(repeatable.conn()).await, "REPEATABLE-READ");
+
+    for (db, sees_the_new_row) in [(&committed, true), (&repeatable, false)] {
+        let uow = db.uow(None, None).await;
+        let tx = uow.tx().await.unwrap();
+        let before = count(&*tx, "seen").await;
+        repeatable
+            .conn()
+            .execute_unprepared(&format!("INSERT INTO seen (id) VALUES ({})", before + 1))
+            .await
+            .unwrap();
+        let after = count(&*tx, "seen").await;
+        drop(tx);
+        uow.commit().await.unwrap();
+        assert_eq!(after == before + 1, sees_the_new_row, "{before} then {after}");
+    }
 }
 
 /// `strict = false` turns strict mode off whatever the server's default,
@@ -69,12 +196,17 @@ async fn strict_false_turns_strict_mode_off() {
         return;
     };
     let db = scratch
-        .db_with(|options| options.mysql = MySqlOptions { strict: false })
+        .db_with(|options| {
+            options.mysql = MySqlOptions {
+                strict: false,
+                ..MySqlOptions::default()
+            }
+        })
         .await;
-    let mode = string(db.conn(), "SELECT @@SESSION.sql_mode").await;
+    let mode = sql_mode(db.conn()).await;
     assert!(
-        !mode.split(',').any(|m| m.starts_with("STRICT_")),
-        "no strict mode in {mode}"
+        !mode.iter().any(|m| m.starts_with("STRICT_")),
+        "no strict mode in {mode:?}"
     );
     db.conn()
         .execute_unprepared("CREATE TABLE codes (code VARCHAR(3) NOT NULL)")

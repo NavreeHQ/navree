@@ -1,11 +1,12 @@
 //! [`DbOptions`]: the `database` configuration section, with
-//! [`MySqlOptions`] for MySQL and MariaDB.
+//! [`MySqlOptions`] (and its [`IsolationLevel`]) for MySQL and MariaDB.
 
 use std::borrow::Cow;
 use std::fmt;
+use std::str::FromStr;
 
 use navree_config::{Config, ConfigError, ConfigSection};
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 
 /// The settings of `DatabaseModule`: the `database` configuration section.
 /// Every key is optional.
@@ -22,12 +23,15 @@ use serde::Deserialize;
 ///
 /// [database.mysql]         # MySQL and MariaDB only
 /// strict = true            # every connection runs in strict SQL mode
+/// # modes = ["STRICT_ALL_TABLES", "NO_ENGINE_SUBSTITUTION"]  # the exact SQL mode instead
+/// # isolation_level = "read_committed"                      # the server's (REPEATABLE READ) when unset
 /// ```
 ///
 /// When `database.slow_query_ms` is not set, `log.slow_query_ms` (the
 /// logger's setting) applies. Environment variables map as usual:
 /// `APP_DATABASE__URL` → `database.url`, `APP_DATABASE__MYSQL__STRICT` →
-/// `database.mysql.strict`.
+/// `database.mysql.strict`, `APP_DATABASE__MYSQL__MODES=A,B` →
+/// `database.mysql.modes`.
 ///
 /// The URL picks the database: `sqlite:` (built in), `postgres://` or
 /// `postgresql://` (the `postgres` feature), `mysql://` or `mariadb://`
@@ -85,7 +89,7 @@ impl Default for DbOptions {
 }
 
 /// The MySQL and MariaDB settings of [`DbOptions`]: the `database.mysql`
-/// section.
+/// section. They shape the session of every connection the pool opens.
 ///
 /// Every MySQL connection also gets SQLx's session settings: the time zone
 /// `+00:00` (so `TIMESTAMP` values read and write as UTC), the `utf8mb4`
@@ -94,33 +98,192 @@ impl Default for DbOptions {
 /// `?charset=`, `?collation=`), along with `?ssl-mode=` and `?socket=`.
 ///
 /// ```
-/// use navree_db::{DbOptions, MySqlOptions};
+/// use navree_db::{DbOptions, IsolationLevel, MySqlOptions};
 ///
-/// // Keep a legacy schema's lenient behaviour.
+/// // Fewer gap locks than MySQL's default REPEATABLE READ, as on PostgreSQL.
 /// let options = DbOptions {
-///     url: "mysql://app:secret@127.0.0.1:3306/legacy".into(),
-///     mysql: MySqlOptions { strict: false },
+///     url: "mysql://app:secret@127.0.0.1:3306/crm".into(),
+///     mysql: MySqlOptions {
+///         isolation_level: Some(IsolationLevel::ReadCommitted),
+///         ..MySqlOptions::default()
+///     },
 ///     ..DbOptions::default()
 /// };
-/// assert!(!options.mysql.strict);
+/// assert!(options.mysql.strict);
+///
+/// // Keep a legacy schema's lenient behaviour.
+/// let legacy = MySqlOptions {
+///     strict: false,
+///     ..MySqlOptions::default()
+/// };
+/// assert_eq!(legacy.modes, None);
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 #[serde(default)]
 pub struct MySqlOptions {
     /// Strict SQL mode for every connection (default `true`): the session
-    /// adds `STRICT_TRANS_TABLES`, `NO_ZERO_IN_DATE`, `NO_ZERO_DATE` and
-    /// `ERROR_FOR_DIVISION_BY_ZERO` to the server's SQL mode, so a value
-    /// that does not fit its column (a string too long, a number out of
-    /// range, a zero date) is an error instead of being silently cut or
-    /// replaced. `false` removes `STRICT_TRANS_TABLES` and
-    /// `STRICT_ALL_TABLES` from the session instead, whatever the server's
-    /// default.
+    /// adds `ONLY_FULL_GROUP_BY`, `STRICT_TRANS_TABLES`, `NO_ZERO_IN_DATE`,
+    /// `NO_ZERO_DATE` and `ERROR_FOR_DIVISION_BY_ZERO` to the server's SQL
+    /// mode, so a value that does not fit its column (a string too long, a
+    /// number out of range, a zero date) is an error instead of being
+    /// silently cut or replaced, and a query selecting a column it neither
+    /// groups by nor aggregates is refused, as on PostgreSQL. `false`
+    /// removes `STRICT_TRANS_TABLES` and `STRICT_ALL_TABLES` from the
+    /// session instead, whatever the server's default. Ignored when
+    /// [`modes`](MySqlOptions::modes) is set.
     pub strict: bool,
+    /// The session's exact SQL mode, replacing the server's (and what
+    /// `strict` and SQLx would add): `["STRICT_ALL_TABLES",
+    /// "NO_ENGINE_SUBSTITUTION"]`, or from the environment a
+    /// comma-separated string (`APP_DATABASE__MYSQL__MODES=A,B`). An empty
+    /// list clears the SQL mode. `None` (the default) leaves the mode to
+    /// [`strict`](MySqlOptions::strict). Each entry must be a mode name:
+    /// letters, digits and underscores.
+    #[serde(deserialize_with = "modes_from_list_or_string")]
+    pub modes: Option<Vec<String>>,
+    /// The transaction isolation level of every connection
+    /// (`"read_committed"`, `"REPEATABLE READ"`, ...). `None` (the default)
+    /// keeps the server's, which is `REPEATABLE READ` unless configured
+    /// otherwise.
+    pub isolation_level: Option<IsolationLevel>,
 }
 
 impl Default for MySqlOptions {
     fn default() -> Self {
-        Self { strict: true }
+        Self {
+            strict: true,
+            modes: None,
+            isolation_level: None,
+        }
+    }
+}
+
+impl MySqlOptions {
+    /// What is wrong with these settings, one message per problem.
+    fn problems(&self) -> Vec<String> {
+        self.modes
+            .iter()
+            .flatten()
+            .filter(|mode| !is_mode_name(mode))
+            .map(|mode| {
+                format!(
+                    "mysql.modes: `{mode}` is not an SQL mode name (letters, digits and underscores, e.g. STRICT_ALL_TABLES)"
+                )
+            })
+            .collect()
+    }
+}
+
+/// Whether `mode` can be an SQL mode name (`STRICT_TRANS_TABLES`, `DB2`):
+/// an ASCII letter, then letters, digits and underscores.
+fn is_mode_name(mode: &str) -> bool {
+    mode.chars().next().is_some_and(|c| c.is_ascii_alphabetic())
+        && mode.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+/// `modes` as a list (`["A", "B"]`) or a comma-separated string (`"A,B"`,
+/// the form an environment variable takes); entries are trimmed and empty
+/// ones dropped.
+fn modes_from_list_or_string<'de, D>(deserializer: D) -> Result<Option<Vec<String>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Modes {
+        List(Vec<String>),
+        Text(String),
+    }
+
+    let modes = match Option::<Modes>::deserialize(deserializer)? {
+        None => return Ok(None),
+        Some(Modes::List(list)) => list,
+        Some(Modes::Text(text)) => text.split(',').map(str::to_owned).collect(),
+    };
+    Ok(Some(
+        modes
+            .iter()
+            .map(|mode| mode.trim())
+            .filter(|mode| !mode.is_empty())
+            .map(str::to_owned)
+            .collect(),
+    ))
+}
+
+/// A transaction isolation level: what one transaction sees of others'
+/// writes (`database.mysql.isolation_level`).
+///
+/// Parsed without regard to case, with words joined by underscores,
+/// hyphens or spaces: `"read_committed"`, `"READ-COMMITTED"` and
+/// `"READ COMMITTED"` are all [`ReadCommitted`](IsolationLevel::ReadCommitted).
+///
+/// ```
+/// use navree_db::IsolationLevel;
+///
+/// let level: IsolationLevel = "read committed".parse()?;
+/// assert_eq!(level, IsolationLevel::ReadCommitted);
+/// assert_eq!(level.as_sql(), "READ COMMITTED");
+/// assert!("snapshot".parse::<IsolationLevel>().is_err());
+/// # Ok::<(), String>(())
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum IsolationLevel {
+    /// Reads see uncommitted writes of other transactions (dirty reads).
+    ReadUncommitted,
+    /// Every statement sees the writes committed before it started.
+    ReadCommitted,
+    /// Every read of a transaction sees one snapshot, taken at its first
+    /// read; locking reads (`FOR UPDATE`) see the latest commits. MySQL's
+    /// default.
+    RepeatableRead,
+    /// Like `RepeatableRead`, with every plain read taking shared locks.
+    Serializable,
+}
+
+impl IsolationLevel {
+    /// The level as SQL spells it: `READ UNCOMMITTED`, `READ COMMITTED`,
+    /// `REPEATABLE READ` or `SERIALIZABLE`.
+    pub fn as_sql(self) -> &'static str {
+        match self {
+            IsolationLevel::ReadUncommitted => "READ UNCOMMITTED",
+            IsolationLevel::ReadCommitted => "READ COMMITTED",
+            IsolationLevel::RepeatableRead => "REPEATABLE READ",
+            IsolationLevel::Serializable => "SERIALIZABLE",
+        }
+    }
+}
+
+impl fmt::Display for IsolationLevel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_sql())
+    }
+}
+
+impl FromStr for IsolationLevel {
+    type Err = String;
+
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        let words: Vec<String> = text
+            .split([' ', '_', '-'])
+            .filter(|word| !word.is_empty())
+            .map(str::to_ascii_lowercase)
+            .collect();
+        match words.join("_").as_str() {
+            "read_uncommitted" => Ok(IsolationLevel::ReadUncommitted),
+            "read_committed" => Ok(IsolationLevel::ReadCommitted),
+            "repeatable_read" => Ok(IsolationLevel::RepeatableRead),
+            "serializable" => Ok(IsolationLevel::Serializable),
+            _ => Err(format!(
+                "unknown isolation level `{text}`; expected read_uncommitted, read_committed, repeatable_read or serializable"
+            )),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for IsolationLevel {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let text = String::deserialize(deserializer)?;
+        text.parse().map_err(serde::de::Error::custom)
     }
 }
 
@@ -159,6 +322,7 @@ impl ConfigSection for DbOptions {
         if self.min_connections > self.max_connections {
             problems.push("min_connections must not exceed max_connections".to_owned());
         }
+        problems.extend(self.mysql.problems());
         if problems.is_empty() {
             Ok(())
         } else {
@@ -318,7 +482,109 @@ mod tests {
     fn mysql_connections_are_strict_by_default() {
         let options = DbOptions::default();
         assert!(options.mysql.strict);
+        assert_eq!(options.mysql.modes, None);
+        assert_eq!(options.mysql.isolation_level, None);
         assert!(format!("{options:?}").contains("strict: true"));
+    }
+
+    fn mysql_section(json: serde_json::Value) -> Result<MySqlOptions, serde_json::Error> {
+        serde_json::from_value(json)
+    }
+
+    #[test]
+    fn mysql_modes_come_as_a_list_or_a_comma_separated_string() {
+        let listed = mysql_section(serde_json::json!({
+            "modes": ["STRICT_ALL_TABLES", " NO_ENGINE_SUBSTITUTION "]
+        }))
+        .unwrap();
+        assert_eq!(
+            listed.modes,
+            Some(vec![
+                "STRICT_ALL_TABLES".to_owned(),
+                "NO_ENGINE_SUBSTITUTION".to_owned()
+            ])
+        );
+        // An environment variable is a string.
+        let from_env = mysql_section(serde_json::json!({
+            "modes": "STRICT_ALL_TABLES, NO_ENGINE_SUBSTITUTION,"
+        }))
+        .unwrap();
+        assert_eq!(from_env.modes, listed.modes);
+        // Empty: clear the SQL mode.
+        assert_eq!(
+            mysql_section(serde_json::json!({"modes": ""})).unwrap().modes,
+            Some(vec![])
+        );
+        assert_eq!(
+            mysql_section(serde_json::json!({"modes": null})).unwrap().modes,
+            None
+        );
+        assert!(mysql_section(serde_json::json!({})).unwrap().strict);
+    }
+
+    #[test]
+    fn mysql_modes_must_be_mode_names() {
+        let options = DbOptions {
+            mysql: MySqlOptions {
+                modes: Some(vec![
+                    "STRICT_ALL_TABLES".to_owned(),
+                    "DB2".to_owned(),
+                    "NO_ZERO_DATE'; DROP TABLE users; --".to_owned(),
+                    "2FAST".to_owned(),
+                ]),
+                ..MySqlOptions::default()
+            },
+            ..DbOptions::default()
+        };
+        let problems = options.validate().unwrap_err();
+        assert!(
+            problems.contains(
+                "mysql.modes: `NO_ZERO_DATE'; DROP TABLE users; --` is not an SQL mode name"
+            ),
+            "{problems}"
+        );
+        assert!(
+            problems.contains("mysql.modes: `2FAST` is not an SQL mode name"),
+            "{problems}"
+        );
+        assert!(!problems.contains("`DB2`"), "{problems}");
+        assert!(!problems.contains("`STRICT_ALL_TABLES`"), "{problems}");
+    }
+
+    #[test]
+    fn isolation_levels_parse_in_any_spelling() {
+        for (text, level) in [
+            ("read_uncommitted", IsolationLevel::ReadUncommitted),
+            ("READ COMMITTED", IsolationLevel::ReadCommitted),
+            ("read-committed", IsolationLevel::ReadCommitted),
+            ("Repeatable Read", IsolationLevel::RepeatableRead),
+            ("  serializable ", IsolationLevel::Serializable),
+        ] {
+            assert_eq!(text.parse::<IsolationLevel>(), Ok(level), "{text:?}");
+        }
+        let error = "snapshot".parse::<IsolationLevel>().unwrap_err();
+        assert_eq!(
+            error,
+            "unknown isolation level `snapshot`; expected read_uncommitted, read_committed, repeatable_read or serializable"
+        );
+        assert_eq!(IsolationLevel::RepeatableRead.to_string(), "REPEATABLE READ");
+        assert_eq!(IsolationLevel::ReadUncommitted.as_sql(), "READ UNCOMMITTED");
+    }
+
+    #[test]
+    fn isolation_levels_deserialize_with_a_precise_error() {
+        let section = mysql_section(serde_json::json!({"isolation_level": "READ COMMITTED"}));
+        assert_eq!(
+            section.unwrap().isolation_level,
+            Some(IsolationLevel::ReadCommitted)
+        );
+        let error = mysql_section(serde_json::json!({"isolation_level": "chaos"}))
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("unknown isolation level `chaos`"),
+            "{error}"
+        );
     }
 
     #[test]

@@ -88,7 +88,7 @@ pub use db::Db;
 pub use http::map_db_error;
 pub use migrate::{MIGRATIONS_TABLE, MigrationError, MigrationSet, MigrationStatus, Migrator};
 pub use module::{DatabaseModule, ModuleBuilderDbExt};
-pub use options::{DbOptions, MySqlOptions};
+pub use options::{DbOptions, IsolationLevel, MySqlOptions};
 pub use paginate::{
     CursorPage, CursorQuery, DEFAULT_PER_PAGE, MAX_PER_PAGE, Page, PageMeta, PageQuery,
     cursor_paginate, cursor_paginate_desc, paginate,

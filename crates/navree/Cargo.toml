@@ -170,6 +170,12 @@ billing = [
 ]
 ## PostgreSQL driver for navree-db.
 postgres = ["db", "navree-db/postgres"]
+## MySQL and MariaDB driver for navree-db (`mysql://` and `mariadb://` URLs).
+mysql = ["db", "navree-db/mysql"]
+## MySQL's RSA password exchange for `caching_sha2_password` accounts on
+## connections without TLS (with TLS, the default when the server offers it,
+## `mysql` alone is enough).
+mysql-rsa = ["mysql", "navree-db/mysql-rsa"]
 ## Opt-in, not in `full`: Dock's library (`dock.toml`, the services' settings,
 ## the Compose file), for tools and tests. `navree dock` (the CLI) does not need it.
 dock = ["dep:navree-dock"]
