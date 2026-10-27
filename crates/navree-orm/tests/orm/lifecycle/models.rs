@@ -51,6 +51,13 @@ CREATE TABLE metrics (
     name TEXT NOT NULL,
     recorded_at TEXT NOT NULL
 );
+CREATE TABLE orders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    reference TEXT NOT NULL,
+    total_cents INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 CREATE TABLE members (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     email TEXT NOT NULL UNIQUE,
@@ -263,6 +270,78 @@ impl navree_orm::prune::MassPrunable for Metric {
 
     fn prunable(query: navree_orm::Builder<Self>) -> navree_orm::Builder<Self> {
         query.where_(Metric::RECORDED_AT.lt(prune_cutoff()))
+    }
+}
+
+/// An order: its lifecycle reaches the app as typed events.
+#[derive(Model, Clone, Debug, Default, PartialEq, Serialize)]
+#[model(
+    timestamps,
+    dispatches(saving = OrderSaving, created = OrderPlaced, deleted = OrderRemoved)
+)]
+pub struct Order {
+    pub id: i64,
+    pub reference: String,
+    pub total_cents: i64,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// An order was placed.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct OrderPlaced {
+    pub id: i64,
+    pub reference: String,
+    pub total_cents: i64,
+}
+
+impl navree_events::Event for OrderPlaced {
+    const NAME: &'static str = "order.placed";
+}
+
+impl From<&Record<Order>> for OrderPlaced {
+    fn from(order: &Record<Order>) -> Self {
+        OrderPlaced {
+            id: order.id,
+            reference: order.reference.clone(),
+            total_cents: order.total_cents,
+        }
+    }
+}
+
+/// An order was removed.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct OrderRemoved {
+    pub reference: String,
+}
+
+impl navree_events::Event for OrderRemoved {
+    const NAME: &'static str = "order.removed";
+}
+
+impl From<&Record<Order>> for OrderRemoved {
+    fn from(order: &Record<Order>) -> Self {
+        OrderRemoved {
+            reference: order.reference.clone(),
+        }
+    }
+}
+
+/// An order is about to be saved (a listener may refuse it by failing).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct OrderSaving {
+    pub reference: String,
+}
+
+impl navree_events::Event for OrderSaving {
+    const NAME: &'static str = "order.saving";
+}
+
+impl From<&Record<Order>> for OrderSaving {
+    fn from(order: &Record<Order>) -> Self {
+        OrderSaving {
+            reference: order.reference.clone(),
+        }
     }
 }
 

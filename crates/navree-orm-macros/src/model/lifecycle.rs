@@ -2,14 +2,37 @@
 //! `dispatches(..)`, `broadcasts`, `prunable` and `mass_prunable`, and the
 //! code they add to the expansion.
 
+use heck::ToUpperCamelCase;
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::meta::ParseNestedMeta;
 use syn::punctuated::Punctuated;
+use syn::spanned::Spanned;
 use syn::{Ident, Token};
 
+use crate::errors::{key_name, suggestion};
+
 /// The lifecycle keys `#[model(..)]` takes on a struct.
-pub(crate) const KEYS: &[&str] = &["observers", "prunable", "mass_prunable"];
+pub(crate) const KEYS: &[&str] = &["observers", "dispatches", "prunable", "mass_prunable"];
+
+/// The model events, as `dispatches(..)` names them.
+const EVENTS: &[&str] = &[
+    "retrieved",
+    "saving",
+    "creating",
+    "created",
+    "updating",
+    "updated",
+    "saved",
+    "deleting",
+    "deleted",
+    "trashed",
+    "force_deleting",
+    "force_deleted",
+    "restoring",
+    "restored",
+    "replicating",
+];
 
 /// How the model is pruned.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -25,6 +48,9 @@ pub(crate) enum Prune {
 pub(crate) struct Lifecycle {
     /// `observers(DealObserver, ..)`: expressions building observers.
     pub(crate) observers: Vec<syn::Expr>,
+    /// `dispatches(created = DealCreated, ..)`: the `ModelEvent` variant
+    /// and the application event type.
+    pub(crate) dispatches: Vec<(Ident, syn::Type)>,
     /// `prunable` or `mass_prunable`.
     pub(crate) prune: Option<Prune>,
 }
@@ -40,6 +66,24 @@ pub(crate) fn parse_key(lifecycle: &mut Lifecycle, meta: &ParseNestedMeta<'_>) -
             return Err(meta.error("observers(..) needs at least one observer, e.g. observers(DealObserver)"));
         }
         lifecycle.observers.extend(observers);
+        Ok(true)
+    } else if path.is_ident("dispatches") {
+        meta.parse_nested_meta(|inner| {
+            let name = key_name(&inner.path);
+            if !EVENTS.contains(&name.as_str()) {
+                let hint = suggestion(&name, EVENTS)
+                    .map(|known| format!(" (did you mean `{known}`?)"))
+                    .unwrap_or_default();
+                return Err(inner.error(format!(
+                    "unknown model event `{name}`{hint}; expected one of: {}",
+                    EVENTS.join(", ")
+                )));
+            }
+            let event: syn::Type = inner.value()?.parse()?;
+            let variant = Ident::new(&name.to_upper_camel_case(), inner.path.span());
+            lifecycle.dispatches.push((variant, event));
+            Ok(())
+        })?;
         Ok(true)
     } else if path.is_ident("prunable") || path.is_ident("mass_prunable") {
         let prune = if path.is_ident("prunable") {
@@ -74,17 +118,19 @@ pub(crate) fn meta_additions(lifecycle: &Lifecycle, model: &Ident, krate: &Token
 }
 
 /// The entries of the model's `hooks()`: one `Arc<dyn ModelHook<Self>>`
-/// per declared observer.
+/// per declared observer and dispatched event.
 pub(crate) fn hook_entries(lifecycle: &Lifecycle, krate: &TokenStream) -> Vec<TokenStream> {
     let private = quote!(#krate::__private);
-    lifecycle
-        .observers
-        .iter()
-        .map(|observer| {
-            quote!(#private::Arc::new(#krate::ObserverHook::new(#observer))
-                as #private::Arc<dyn #krate::hooks::ModelHook<Self>>)
-        })
-        .collect()
+    let observers = lifecycle.observers.iter().map(|observer| {
+        quote!(#private::Arc::new(#krate::ObserverHook::new(#observer))
+            as #private::Arc<dyn #krate::hooks::ModelHook<Self>>)
+    });
+    let dispatches = lifecycle.dispatches.iter().map(|(variant, event)| {
+        quote!(#private::Arc::new(
+            #krate::events::Dispatch::<Self, #event>::new(#krate::hooks::ModelEvent::#variant)
+        ) as #private::Arc<dyn #krate::hooks::ModelHook<Self>>)
+    });
+    observers.chain(dispatches).collect()
 }
 
 /// The capability traits a model's declarations give it:

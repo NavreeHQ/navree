@@ -4,6 +4,7 @@
 
 mod models;
 
+mod app_events;
 mod dispatch;
 mod observers;
 mod prune;
