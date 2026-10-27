@@ -25,16 +25,9 @@ pub(crate) fn declarations(style: &str) -> Vec<(String, String)> {
 /// A length in points: `12pt`, `16px`, `5mm`, `1cm`, `0.5in`, `1.2em`
 /// (of `font_size`), `50%` (of `percent_of`), a bare number as pixels.
 pub(crate) fn length(value: &str, font_size: f32, percent_of: Option<f32>) -> Option<f32> {
-    let value = value.trim().to_ascii_lowercase();
-    let split = value
-        .find(|c: char| !(c.is_ascii_digit() || c == '.' || c == '-' || c == '+'))
-        .unwrap_or(value.len());
-    let number: f32 = value[..split].parse().ok()?;
-    if !number.is_finite() {
-        return None;
-    }
-    let unit = value[split..].trim();
-    Some(match unit {
+    let (number, unit) = number_and_unit(value)?;
+    let number = number as f32;
+    Some(match unit.as_str() {
         "pt" => number,
         "px" | "" => number * 0.75,
         "mm" => number * 72.0 / 25.4,
@@ -47,9 +40,31 @@ pub(crate) fn length(value: &str, font_size: f32, percent_of: Option<f32>) -> Op
     })
 }
 
-/// A length in millimeters (page sizes and margins).
+/// A length in millimeters (page sizes and margins); relative units are
+/// not lengths here.
 pub(crate) fn length_mm(value: &str) -> Option<f64> {
-    length(value, 12.0, None).map(|pt| f64::from(pt) * 25.4 / 72.0)
+    let (number, unit) = number_and_unit(value)?;
+    Some(match unit.as_str() {
+        "mm" => number,
+        "cm" => number * 10.0,
+        "in" => number * 25.4,
+        "pt" => number * 25.4 / 72.0,
+        "pc" => number * 25.4 / 6.0,
+        "px" | "" => number * 25.4 / 96.0,
+        _ => return None,
+    })
+}
+
+/// `12.5mm` as (12.5, "mm"), the unit in lower case.
+fn number_and_unit(value: &str) -> Option<(f64, String)> {
+    let value = value.trim().to_ascii_lowercase();
+    let split = value
+        .find(|c: char| !(c.is_ascii_digit() || c == '.' || c == '-' || c == '+'))
+        .unwrap_or(value.len());
+    let number: f64 = value[..split].parse().ok()?;
+    number
+        .is_finite()
+        .then(|| (number, value[split..].trim().to_owned()))
 }
 
 /// A `font-size`: a length, a percentage or `em` of `parent`, or a
@@ -183,6 +198,7 @@ pub(crate) struct PageRule {
 }
 
 impl PageRule {
+    #[cfg(test)]
     pub(crate) fn is_empty(&self) -> bool {
         self.paper.is_none() && self.landscape.is_none() && self.margins.iter().all(Option::is_none)
     }

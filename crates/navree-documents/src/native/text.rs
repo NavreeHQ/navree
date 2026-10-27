@@ -134,12 +134,6 @@ impl Para {
         &self.spans[self.span_at(byte)].style
     }
 
-    /// Whether the paragraph has only whitespace.
-    pub(crate) fn is_blank(&self) -> bool {
-        self.text
-            .chars()
-            .all(|c| c.is_whitespace() && c != LINE_BREAK)
-    }
 }
 
 /// One shaped glyph of a [`GlyphRun`].
@@ -169,26 +163,27 @@ pub(crate) struct GlyphRun {
     pub(crate) text: String,
     /// In visual order (left to right).
     pub(crate) glyphs: Vec<Glyph>,
-    pub(crate) rtl: bool,
 }
 
 /// One line of a paragraph.
 #[derive(Clone, Debug)]
 pub(crate) struct Line {
     pub(crate) runs: Vec<GlyphRun>,
-    /// The width the runs take, after justification.
-    pub(crate) width: f32,
     /// From the line's top to its baseline.
     pub(crate) ascent: f32,
     /// From the baseline to the line's bottom.
     pub(crate) descent: f32,
-    /// The paragraph's bytes on the line.
-    pub(crate) range: Range<usize>,
 }
 
 impl Line {
     pub(crate) fn height(&self) -> f32 {
         self.ascent + self.descent
+    }
+
+    /// The width the runs take, after justification (for tests).
+    #[cfg(test)]
+    pub(crate) fn width(&self) -> f32 {
+        self.runs.iter().map(|run| run.width).sum()
     }
 
     /// The line's text in visual order (for tests).
@@ -542,7 +537,6 @@ impl<'f> Shaper<'f> {
                         item.face,
                         style,
                         para.spans[item.span].link.clone(),
-                        rtl,
                     ));
                 }
             }
@@ -597,10 +591,8 @@ impl<'f> Shaper<'f> {
         }
         Line {
             runs,
-            width: line_width,
             ascent,
             descent,
-            range: start..end,
         }
     }
 }
@@ -613,7 +605,6 @@ fn glyph_run(
     face: FaceId,
     style: Arc<Style>,
     link: Option<Arc<str>>,
-    rtl: bool,
 ) -> GlyphRun {
     let mut clusters: Vec<usize> = shaped.iter().map(|g| g.cluster).collect();
     clusters.sort_unstable();
@@ -644,7 +635,6 @@ fn glyph_run(
         start: range.start,
         text: text[range].to_owned(),
         glyphs,
-        rtl,
     }
 }
 
@@ -816,7 +806,7 @@ mod tests {
         assert!(lines.len() >= 3, "{}", lines.len());
         let mut rebuilt = String::new();
         for line in &lines {
-            assert!(line.width <= 200.0 + EPSILON, "{}", line.width);
+            assert!(line.width() <= 200.0 + EPSILON, "{}", line.width());
             let text = line.visual_text();
             assert!(!text.starts_with(' ') && !text.ends_with(' '), "{text:?}");
             if !rebuilt.is_empty() {
@@ -830,7 +820,7 @@ mod tests {
             let next_word = pair[1].visual_text();
             let next_word = next_word.split(' ').next().unwrap();
             let widened = shaper.lines(&para(&format!("{} {next_word}", pair[0].visual_text())), 1000.0);
-            assert!(widened[0].width > 200.0, "{next_word}");
+            assert!(widened[0].width() > 200.0, "{next_word}");
         }
     }
 
@@ -840,7 +830,7 @@ mod tests {
         let lines = shaper.lines(&para("Supercalifragilisticexpialidocious"), 60.0);
         assert!(lines.len() > 2, "{}", lines.len());
         for line in &lines {
-            assert!(line.width <= 60.0 + EPSILON);
+            assert!(line.width() <= 60.0 + EPSILON);
         }
         let joined: String = lines.iter().map(Line::visual_text).collect();
         assert_eq!(joined, "Supercalifragilisticexpialidocious");
@@ -866,12 +856,12 @@ mod tests {
         let lines = shaper.lines(&justified, 220.0);
         assert!(lines.len() >= 3);
         for line in &lines[..lines.len() - 1] {
-            assert!((line.width - 220.0).abs() < 0.1, "{}", line.width);
+            assert!((line.width() - 220.0).abs() < 0.1, "{}", line.width());
             let end = line.runs.last().map(|r| r.x + r.width).unwrap();
             assert!((end - 220.0).abs() < 0.1, "{end}");
         }
         let last = lines.last().unwrap();
-        assert!(last.width < 220.0 - 1.0);
+        assert!(last.width() < 220.0 - 1.0);
         assert_eq!(last.runs[0].x, 0.0);
     }
 
@@ -882,11 +872,11 @@ mod tests {
         centered.align = Align::Center;
         let line = &shaper.lines(&centered, 300.0)[0];
         let left = line.runs[0].x;
-        assert!((left - (300.0 - line.width) / 2.0).abs() < 0.01);
+        assert!((left - (300.0 - line.width()) / 2.0).abs() < 0.01);
         let mut end = para("At the end");
         end.align = Align::End;
         let line = &shaper.lines(&end, 300.0)[0];
-        assert!((line.runs[0].x + line.width - 300.0).abs() < 0.01);
+        assert!((line.runs[0].x + line.width() - 300.0).abs() < 0.01);
     }
 
     #[test]
@@ -903,11 +893,14 @@ mod tests {
         let first = line.runs.iter().find(|r| r.text.contains("مرحبا")).unwrap();
         let number = line.runs.iter().find(|r| r.text.contains("2026")).unwrap();
         assert!(first.x > number.x, "{line:?}");
-        assert!(first.rtl && !number.rtl);
+        // Right to left: glyphs from the logical end; left to right: from
+        // the start.
+        assert!(first.glyphs[0].range.start > first.glyphs[1].range.start);
+        assert!(number.glyphs[0].range.start < number.glyphs[1].range.start);
         assert_eq!(&number.text[number.glyphs[0].range.clone()], "2");
         // Arabic letters join: fewer glyphs than characters is not
         // required, but the glyphs come right to left.
-        let word = line.runs.iter().find(|r| r.rtl).unwrap();
+        let word = first;
         assert!(word.glyphs.first().unwrap().range.start > word.glyphs.last().unwrap().range.start);
     }
 
@@ -945,8 +938,8 @@ mod tests {
     fn measuring_gives_the_longest_word_and_the_whole_line() {
         let mut shaper = shaper();
         let (min, max) = shaper.measure(&para("a considerable amount"));
-        let word = shaper.lines(&para("considerable"), 1000.0)[0].width;
-        let whole = shaper.lines(&para("a considerable amount"), 1000.0)[0].width;
+        let word = shaper.lines(&para("considerable"), 1000.0)[0].width();
+        let whole = shaper.lines(&para("a considerable amount"), 1000.0)[0].width();
         assert!((min - word).abs() < 0.01, "{min} {word}");
         assert!((max - whole).abs() < 0.01, "{max} {whole}");
     }
@@ -954,9 +947,9 @@ mod tests {
     #[test]
     fn kerning_and_ligatures_are_applied() {
         let mut shaper = shaper();
-        let av = shaper.lines(&para("AV"), 1000.0)[0].width;
-        let a = shaper.lines(&para("A"), 1000.0)[0].width;
-        let v = shaper.lines(&para("V"), 1000.0)[0].width;
+        let av = shaper.lines(&para("AV"), 1000.0)[0].width();
+        let a = shaper.lines(&para("A"), 1000.0)[0].width();
+        let v = shaper.lines(&para("V"), 1000.0)[0].width();
         assert!(av < a + v - 0.1, "kerned: {av} < {a} + {v}");
         let office = &shaper.lines(&para("office"), 1000.0)[0];
         assert!(office.runs[0].glyphs.len() < 6, "the ffi ligature");

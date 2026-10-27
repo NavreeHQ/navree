@@ -2,7 +2,7 @@
 //! operation follows the job, finishes with where the PDF is, fails at
 //! once on a template error, and stops when it is cancelled.
 
-#![cfg_attr(not(feature = "typst"), allow(unused_imports, dead_code))]
+#![cfg_attr(not(feature = "native"), allow(unused_imports, dead_code))]
 
 use std::sync::Arc;
 
@@ -73,7 +73,7 @@ async fn queue(app: &TestApp, owner: Uuid, render: Render, path: &str) -> Uuid {
     op.id
 }
 
-#[cfg(feature = "typst")]
+#[cfg(feature = "native")]
 #[tokio::test]
 async fn a_queued_render_runs_as_an_operation() {
     let app = app().build().await;
@@ -106,7 +106,7 @@ async fn a_queued_render_runs_as_an_operation() {
     assert_eq!(stored.len() as u64, size);
 }
 
-#[cfg(feature = "typst")]
+#[cfg(feature = "native")]
 #[tokio::test]
 async fn a_template_error_fails_the_operation_without_retrying() {
     let app = app().build().await;
@@ -143,7 +143,7 @@ async fn a_template_error_fails_the_operation_without_retrying() {
         .await
         .unwrap();
     assert!(
-        String::from_utf8_lossy(&record).contains("broken.typ"),
+        String::from_utf8_lossy(&record).contains("broken.html"),
         "{record:?}"
     );
 }
@@ -252,7 +252,7 @@ impl JobMonitor for Recording {
     }
 }
 
-#[cfg(feature = "typst")]
+#[cfg(feature = "native")]
 #[tokio::test]
 async fn the_job_reports_its_progress() {
     let monitor = Arc::new(Recording::default());

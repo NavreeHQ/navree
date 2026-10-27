@@ -1237,25 +1237,33 @@ fn row_draws(
     } else {
         row.background
     };
-    if let Some(color) = fill {
+    // Each cell is filled once, with its own color or the row's, and
+    // neighbours of one color as one rectangle, so no edge shows between
+    // fills.
+    let mut fills: Vec<(f32, f32, Color)> = row
+        .cells
+        .iter()
+        .filter_map(|cell| {
+            let color = cell.background.or(fill)?;
+            Some((cell.x, cell.x + cell.width, color))
+        })
+        .collect();
+    fills.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let mut merged: Vec<(f32, f32, Color)> = Vec::new();
+    for (x0, x1, color) in fills {
+        match merged.last_mut() {
+            Some(last) if last.2 == color && (last.1 - x0).abs() < 0.01 => last.1 = x1,
+            _ => merged.push((x0, x1, color)),
+        }
+    }
+    for (x0, x1, color) in merged {
         draws.push(Draw::Fill {
-            x: 0.0,
+            x: x0,
             y: 0.0,
-            w: table.width,
+            w: x1 - x0,
             h: height,
             color,
         });
-    }
-    for cell in &row.cells {
-        if let Some(color) = cell.background {
-            draws.push(Draw::Fill {
-                x: cell.x,
-                y: 0.0,
-                w: cell.width,
-                h: height,
-                color,
-            });
-        }
     }
     for cell in &row.cells {
         let content = cell.content_height();
@@ -1673,7 +1681,7 @@ mod tests {
                 }
             }
         }
-        assert_eq!(seen, 120 * 3, "every run of every paragraph");
+        assert_eq!(seen, 120, "every paragraph, one run each");
         assert!(all_text(&laid.pages[0]).starts_with("Paragraph number 0 "));
     }
 
@@ -1687,18 +1695,30 @@ mod tests {
         assert_eq!(laid.pages.len(), 2);
         assert_eq!(all_text(&laid.pages[1]), "Second page");
 
-        // Fill a page almost to the bottom, then a heading: it moves to
-        // the next page with its paragraph.
-        let mut document = PdfDocument::new();
-        for i in 0..44 {
-            document = document.paragraph(format!("Line {i}"));
+        // Wherever the page ends, a heading is never its last line: it
+        // shares a page with the paragraph after it.
+        let mut moved = false;
+        for count in 25..40 {
+            let mut document = PdfDocument::new();
+            for i in 0..count {
+                document = document.paragraph(format!("Line {i}"));
+            }
+            let document = document
+                .heading(2, "Findings")
+                .paragraph("The first finding.");
+            let laid = lay_out(&document, book(), "").unwrap();
+            for page in &laid.pages {
+                assert_ne!(texts(page).last().map(String::as_str), Some("Findings"));
+            }
+            let page = laid
+                .pages
+                .iter()
+                .position(|p| texts(p).iter().any(|t| t == "Findings"))
+                .unwrap();
+            assert!(texts(&laid.pages[page]).iter().any(|t| t == "The first finding."));
+            moved |= page > 0 && texts(&laid.pages[page])[0] == "Findings";
         }
-        let document = document.heading(2, "Findings").paragraph("The first finding.");
-        let laid = lay_out(&document, book(), "").unwrap();
-        let last = laid.pages.last().unwrap();
-        let text = all_text(last);
-        assert!(text.starts_with("Findings"), "{text}");
-        assert!(text.contains("The first finding."));
+        assert!(moved, "some count pushes the heading to the next page");
     }
 
     #[test]

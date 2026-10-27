@@ -29,7 +29,7 @@ const MAX_PAGE_CONTENT: usize = 64 * 1024 * 1024;
 /// [`stamp`](Pdf::stamp) writes a text stamp (a watermark, "PAID", a copy
 /// number) and [`overlay`](Pdf::overlay) draws the first page of another
 /// PDF over pages of this one (a seal or a signature, in any script, when
-/// the overlay is rendered with Typst).
+/// the overlay is rendered with the native engine).
 ///
 /// ```
 /// use navree_documents::{Pdf, Stamp};
@@ -67,7 +67,7 @@ impl Pdf {
     }
 
     /// Bytes an engine produced, not checked.
-    #[cfg(any(feature = "typst", feature = "chrome"))]
+    #[cfg(any(feature = "native", feature = "chrome"))]
     pub(crate) fn from_engine(bytes: impl Into<Bytes>) -> Pdf {
         Pdf(bytes.into())
     }
