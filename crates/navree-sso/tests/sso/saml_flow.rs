@@ -155,7 +155,9 @@ async fn emails_outside_verified_domains_are_not_trusted() {
         .saml_connection(&fake, SsoOwner::App, "acme", Provisioning::default())
         .await;
     world.verified_domain(&connection, "acme.test").await;
-    world.create_verified_user("Victim", "victim@other.test").await;
+    world
+        .create_verified_user("Victim", "victim@other.test")
+        .await;
     world.create_verified_user("Ann", "ann@acme.test").await;
     // Someone registered an address of the domain without proving it.
     world.create_user("Squatter", "ceo@acme.test").await;

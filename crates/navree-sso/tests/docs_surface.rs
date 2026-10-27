@@ -18,8 +18,8 @@ use navree_sso::{
     FakeResponse, MANAGE_PERMISSION, NewConnection, OidcCallback, OidcOptions, OidcSettings,
     Protocol, Provisioning, RoleRule, SSO_MIGRATIONS, SamlOptions, SamlSettings,
     ServiceProviderInfo, SignatureError, Sso, SsoConnection, SsoDiscovery, SsoDomain,
-    SsoDomainVerified, SsoError, SsoFake, SsoModule, SsoOptions, SsoOwner, SsoProfile,
-    SsoRedirect, SsoSignIn, SsoUserProvisioned, StaticTxtResolver, TxtResolver, XmlError,
+    SsoDomainVerified, SsoError, SsoFake, SsoModule, SsoOptions, SsoOwner, SsoProfile, SsoRedirect,
+    SsoSignIn, SsoUserProvisioned, StaticTxtResolver, TxtResolver, XmlError,
 };
 use serde_json::json;
 use uuid::Uuid;
@@ -98,7 +98,10 @@ fn the_documented_connection_types() {
     else {
         panic!("an OpenID Connect connection")
     };
-    assert_eq!((issuer.as_str(), client_id.as_str()), ("https://login.acme.test", "c"));
+    assert_eq!(
+        (issuer.as_str(), client_id.as_str()),
+        ("https://login.acme.test", "c")
+    );
     assert_eq!((client_secret.as_deref(), scopes.len()), (Some("s"), 0));
 
     let SamlSettings {
@@ -145,7 +148,10 @@ fn the_documented_connection_types() {
         follow_default_enforcement: _,
     } = ConnectionUpdate::default();
     assert_eq!(
-        (SsoOwner::Organization(Uuid::nil()).kind(), Protocol::Saml.as_str()),
+        (
+            SsoOwner::Organization(Uuid::nil()).kind(),
+            Protocol::Saml.as_str()
+        ),
         ("organization", "saml")
     );
     let _ = NewConnection::saml(SsoOwner::Workspace(Uuid::nil()), "Acme", "<xml/>");
@@ -247,7 +253,9 @@ async fn the_documented_service(sso: &Sso, uow: &Uow, meta: &ClientMeta) -> Resu
     let _: Vec<SsoDomain> = sso.domains("acme").await?;
     let _: SsoDiscovery = sso.discover("ada@acme.com").await?;
     let _: SsoRedirect = sso.login("acme", Some("/deals".to_owned())).await?;
-    let sign_in: SsoSignIn = sso.complete_saml("acme", "PHNhbWw+", Some("rs"), meta).await?;
+    let sign_in: SsoSignIn = sso
+        .complete_saml("acme", "PHNhbWw+", Some("rs"), meta)
+        .await?;
     let _: SsoSignIn = sso
         .complete_oidc("acme", &OidcCallback::default(), meta)
         .await?;
@@ -306,8 +314,7 @@ fn the_documented_saml_building_blocks_and_fake() {
     };
     assert!(sp.metadata_xml().contains("SPSSODescriptor"));
     let now: DateTime<Utc> = Utc::now();
-    let request =
-        AuthnRequest::new(&sp, &metadata, "rs", now, &RequestOptions::default()).unwrap();
+    let request = AuthnRequest::new(&sp, &metadata, "rs", now, &RequestOptions::default()).unwrap();
     let response: FakeResponse = idp
         .respond_to(&request.url)
         .unwrap()
