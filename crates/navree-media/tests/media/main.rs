@@ -1,6 +1,7 @@
 //! navree-media's integration tests.
 
 mod archives;
+mod database;
 mod fake;
 mod images;
 mod models;
