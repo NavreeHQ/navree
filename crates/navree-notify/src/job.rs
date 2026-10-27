@@ -7,7 +7,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
-use crate::{Channel, Notifier};
+use crate::{
+    Channel, Notifier, SlackMessage, SlackRoute, SmsMessage, TeamsMessage, TeamsRoute,
+    WebPushMessage, WhatsAppMessage,
+};
 
 /// Job `notify.send`: delivers one notification over one channel.
 ///
@@ -37,6 +40,7 @@ pub struct SendNotificationJob {
 /// A notification rendered for one channel.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "via", rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum Delivery {
     /// A mail with its recipients filled in.
     Mail {
@@ -55,6 +59,43 @@ pub enum Delivery {
         /// The notification's `data` in the event.
         data: Value,
     },
+    /// A Slack message.
+    Slack {
+        /// Where it goes.
+        route: SlackRoute,
+        /// The message.
+        message: SlackMessage,
+    },
+    /// A Microsoft Teams message.
+    #[serde(rename = "teams")]
+    MicrosoftTeams {
+        /// Where it goes.
+        route: TeamsRoute,
+        /// The message.
+        message: TeamsMessage,
+    },
+    /// A text message.
+    Sms {
+        /// The number, as the notification or notifiable gave it (read as
+        /// E.164 when delivered).
+        to: String,
+        /// The message.
+        message: SmsMessage,
+    },
+    /// A WhatsApp message.
+    #[serde(rename = "whatsapp")]
+    WhatsApp {
+        /// The number, as given (read as E.164 when delivered).
+        to: String,
+        /// The message.
+        message: WhatsAppMessage,
+    },
+    /// A browser push notification, to every push subscription the
+    /// notifiable has when it is delivered.
+    WebPush {
+        /// The notification.
+        message: WebPushMessage,
+    },
 }
 
 impl Delivery {
@@ -64,6 +105,11 @@ impl Delivery {
             Delivery::Mail { .. } => Channel::Mail,
             Delivery::Database { .. } => Channel::Database,
             Delivery::Broadcast { .. } => Channel::Broadcast,
+            Delivery::Slack { .. } => Channel::Slack,
+            Delivery::MicrosoftTeams { .. } => Channel::MicrosoftTeams,
+            Delivery::Sms { .. } => Channel::Sms,
+            Delivery::WhatsApp { .. } => Channel::WhatsApp,
+            Delivery::WebPush { .. } => Channel::WebPush,
         }
     }
 }

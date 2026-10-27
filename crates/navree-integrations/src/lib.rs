@@ -31,6 +31,9 @@
 //!   [`Connection<P, S>`] extractor: `graph.get("/users").send().await?`.
 //! - **Tests**: [`Integrations::fake`] gives an [`IntegrationsFake`] that
 //!   answers codes and grants and stubs the APIs.
+//! - **Notifications** (crate feature `notify`): the module registers
+//!   navree-notify's `dyn ConnectionTokens` (`IntegrationTokens`), so Slack
+//!   and Teams bot routes that name a connection send with its token.
 //!
 //! ```no_run
 //! use navree_config::{ConfigModule, ConfigSources};
@@ -71,6 +74,8 @@ mod flow;
 mod migration;
 mod model;
 mod module;
+#[cfg(feature = "notify")]
+mod notify;
 mod oauth;
 mod options;
 mod provider;
@@ -97,6 +102,8 @@ pub use flow::{
 pub use migration::INTEGRATIONS_MIGRATIONS;
 pub use model::IntegrationConnection;
 pub use module::{IntegrationsModule, ModuleBuilderIntegrationsExt};
+#[cfg(feature = "notify")]
+pub use notify::IntegrationTokens;
 pub use options::{
     AppCredentials, ClientAuth, IntegrationsOptions, Level, MicrosoftMode, ProviderConfig,
     ProviderType,

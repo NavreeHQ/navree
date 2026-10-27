@@ -1,6 +1,6 @@
 ---
 name: navree-webhooks
-description: "Webhooks with navree-webhooks: `WebhooksModule` and the `webhooks` config section, outgoing webhooks from events (`WebhookEvent`, `WebhooksModule::for_feature::<E>()`, `m.webhook_type`, `Webhooks::dispatch_json`), endpoints and secrets (`create_endpoint`, `rotate_secret`, `whsec_` secrets), Standard Webhooks signing (`webhook-id`, `webhook-timestamp`, `webhook-signature`), the retry schedule, disabling failing endpoints, the delivery log and the `/api/webhooks` routes, and incoming webhooks verified with `VerifiedWebhook<S>` (`Stripe`, `GitHub`, `Paddle`, `StandardWebhooks`, `AwsSns`, `GooglePubSub`, `MicrosoftGraph`, `Twilio`, `Slack`, `Mailgun`, `Postmark`, `Hmac`, custom `WebhookVerifier`s with `verify_incoming`, handshakes, `mark_processed`). Use when sending webhooks to customers' URLs, letting users manage webhook endpoints, receiving Stripe, GitHub, Paddle, SES-over-SNS, Pub/Sub or Gmail push, Graph change notifications, Twilio, Slack, Mailgun, Postmark or other signed callbacks, testing deliveries or signatures, or debugging a webhook that is not sent, not retried, refused with 400 `Invalid webhook signature`, or an endpoint that got disabled."
+description: "Webhooks with navree-webhooks: `WebhooksModule` and the `webhooks` config section, outgoing webhooks from events (`WebhookEvent`, `WebhooksModule::for_feature::<E>()`, `m.webhook_type`, `Webhooks::dispatch_json`), endpoints and secrets (`create_endpoint`, `rotate_secret`, `whsec_` secrets), Standard Webhooks signing (`webhook-id`, `webhook-timestamp`, `webhook-signature`), the retry schedule, disabling failing endpoints, the delivery log and the `/api/webhooks` routes, and incoming webhooks verified with `VerifiedWebhook<S>` (`Stripe`, `GitHub`, `Paddle`, `StandardWebhooks`, `AwsSns`, `GooglePubSub`, `MicrosoftGraph`, `Twilio`, `Slack`, `Mailgun`, `Postmark`, `Vonage`, `Meta`, `Hmac`, custom `WebhookVerifier`s with `verify_incoming`, handshakes, `mark_processed`). Use when sending webhooks to customers' URLs, letting users manage webhook endpoints, receiving Stripe, GitHub, Paddle, SES-over-SNS, Pub/Sub or Gmail push, Graph change notifications, Twilio, Slack, Mailgun, Postmark or other signed callbacks, testing deliveries or signatures, or debugging a webhook that is not sent, not retried, refused with 400 `Invalid webhook signature`, or an endpoint that got disabled."
 ---
 
 # Webhooks
@@ -237,9 +237,16 @@ signed = "{timestamp}.{body}"            # {timestamp}, {id}, {body}
 | `Slack` | `X-Slack-Signature: v0=<hex>` | `v0:{X-Slack-Request-Timestamp}:{body}` | signing secret | `event_id` / `event.type` or `type` |
 | `Mailgun` | body `signature` (JSON object or form fields) | `{timestamp}{token}` | webhook signing key | `event-data.id` or token / `event-data.event` |
 | `Postmark` | `Authorization: Basic` | (nothing signed) | `username:password` | `MessageID` / `RecordType` |
+| `Vonage` | `Authorization: Bearer <HS256 JWT>` | JWT; `payload_hash` = body SHA-256, `iat` in tolerance | signature secret | `jti` / body `status` or `message_type` |
+| `Meta` | `X-Hub-Signature-256: sha256=<hex>` | body | app secret (+ `verify_token` for the `GET hub.challenge` handshake) | body SHA-256 / body `object` |
 
-`id()` falls back to the hex SHA-256 of the body. GitHub, Twilio, Postmark
-and Graph have no timestamp (`timestamp()` is `None`), so no age check; the
+With the crate feature `notify` (facade `webhooks` + `notify`), configured
+`twilio`, `vonage` and `meta` sources also get `POST /api/webhooks/notify/twilio`,
+`/vonage` and `GET`/`POST /meta`, which apply SMS/WhatsApp statuses and STOP
+replies to navree-notify's delivery log (see `navree-notification-channels`).
+
+`id()` falls back to the hex SHA-256 of the body. GitHub, Twilio, Postmark,
+Meta and Graph have no timestamp (`timestamp()` is `None`), so no age check; the
 SNS `Timestamp` is checked only against the source's own `tolerance_secs`.
 Answers: 400 `Invalid webhook signature` (bad, missing or old signature,
 wrong topic, audience or account; the reason is logged at debug), 413 over

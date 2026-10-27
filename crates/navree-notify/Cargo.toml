@@ -1,6 +1,6 @@
 [package]
 name = "navree-notify"
-description = "Navree NotifyModule: multi-channel notifications (mail, database, broadcast) with read state."
+description = "Navree NotifyModule: notifications over mail, database, broadcast, Slack, Microsoft Teams, SMS (Twilio, Vonage, Amazon SNS), WhatsApp and web push, with read state, a delivery log, STOP opt-outs and push subscriptions."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,29 +10,53 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+# The database drivers of the gated server tests (`tests/notify/servers.rs`).
+postgres = ["navree-db/postgres"]
+mysql = ["navree-db/mysql"]
+
 [dependencies]
 axum = { workspace = true }
+base64 = { workspace = true }
 chrono = { workspace = true }
+form_urlencoded = { workspace = true }
+hex = { workspace = true }
+hmac = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
+# VAPID signatures (ES256 through `jose`) and push message encryption.
+navree-crypto = { workspace = true }
 navree-db = { workspace = true }
 navree-http = { workspace = true }
+# The Slack, Teams, Twilio, Vonage, SNS, WhatsApp and push service calls.
+navree-http-client = { workspace = true }
 navree-kernel = { workspace = true }
 navree-mail = { workspace = true }
 # Stored notifications are models (`notifications::Model`), written by the
-# database channel through the ORM.
+# database channel through the ORM, like the delivery log, the opt-outs and
+# the push subscriptions.
 navree-orm = { workspace = true }
 navree-telemetry = { workspace = true }
+# Numbers in E.164 (`Phone`) for the SMS and WhatsApp channels.
+navree-validation = { workspace = true, features = ["phone"] }
 sea-orm = { workspace = true }
 sea-orm-migration = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+serde_urlencoded = { workspace = true }
+sha2 = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+url = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
 navree-testing = { workspace = true }
 # Lower-layer dev-dependency (spec §3): MailModule needs ViewModule in the app.
 navree-view = { workspace = true }
+# A browser's side of web push in the tests (decrypting what was pushed).
+ring = { workspace = true }
 tokio = { workspace = true }
+# The documented configuration block, parsed in `tests/docs_surface.rs`.
+toml = { workspace = true }
+wiremock = { workspace = true }

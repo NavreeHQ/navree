@@ -1,6 +1,6 @@
 ---
 title: "Notifications"
-description: "One notification over the mail, database and broadcast channels: notifiable users, read state, the `/api/notifications` routes, queueing and testing."
+description: "One notification over the mail, database, broadcast, Slack, Teams, SMS, WhatsApp and web push channels: notifiable users, read state, the `/api/notifications` routes, queueing and testing."
 ---
 
 ## Introduction
@@ -12,8 +12,11 @@ description: "One notification over the mail, database and broadcast channels: n
 | `Channel::Database` | A row in the `notifications` table, with read state. Users list theirs at `/api/notifications`. |
 | `Channel::Mail` | An email, sent with the app's [`Mailer`](/docs/digging-deeper/mail/). |
 | `Channel::Broadcast` | A `notification.created` event on the user's private [real-time channel](/docs/digging-deeper/broadcasting/), so an open web app can show it at once. |
+| `Channel::Slack`, `Channel::MicrosoftTeams` | A message in a Slack channel or a Teams chat. See [notification channels](/docs/digging-deeper/notification-channels/). |
+| `Channel::Sms`, `Channel::WhatsApp` | A text or WhatsApp message through Twilio, Vonage, Amazon SNS or the WhatsApp Cloud API, with STOP opt-outs. |
+| `Channel::WebPush` | A push notification on each browser or phone the user subscribed. |
 
-`NotifyModule` provides the `Notifier`, which asks each notification for its channels, renders it for each one and delivers it. In the CRM, a deal's owner is told over all three channels when someone else assigns them the deal or when it is won, and every user with open tasks gets a daily reminder.
+`NotifyModule` provides the `Notifier`, which asks each notification for its channels, renders it for each one and delivers it. In the CRM, a deal's owner is told over the database, broadcast and mail channels when someone else assigns them the deal or when it is won, and every user with open tasks gets a daily reminder. This page covers those three; [notification channels](/docs/digging-deeper/notification-channels/) covers the other five, their drivers and the delivery log they write.
 
 ## Configuration
 
@@ -33,18 +36,22 @@ Navree::app()
 
 The notifier looks these services up when it sends, so an app without one of them still boots: only the channels that need the missing service fail, with `NotifyError::Unavailable`, and the others still deliver.
 
-The module is global, migrates the `notifications` table (migration set `notify`) and reads the `notify` section:
+The module is global, migrates the `notifications` table and the tables of the other channels (`notification_deliveries`, `notification_opt_outs`, `push_subscriptions`; migration set `notify`) and reads the `notify` section:
 
 ```toml title="config/app.toml"
 [notify]
-queue = false  # deliver at once; true queues one job per channel
-routes = true  # serve /api/notifications
+queue = false      # deliver at once; true queues one job per channel
+routes = true      # serve /api/notifications
+deliveries = true  # record Slack, Teams, SMS, WhatsApp and web push deliveries
 ```
 
 | Key | Default | Meaning |
 |---|---|---|
 | `notify.queue` | `false` | Queue each channel as a job instead of delivering it during `send`; see [queueing](#queueing-notifications). |
-| `notify.routes` | `true` | Serve the signed-in user's notifications under the API prefix. These routes need authentication: in an app without a `dyn Authenticator` (no `AuthModule`), set this to `false`, or the router rejects them ("requires authentication but no `dyn Authenticator` is registered"). |
+| `notify.routes` | `true` | Serve the signed-in user's notifications and push subscriptions under the API prefix. These routes need authentication: in an app without a `dyn Authenticator` (no `AuthModule`), set this to `false`, or the router rejects them ("requires authentication but no `dyn Authenticator` is registered"). |
+| `notify.deliveries` | `true` | Record every delivery over the Slack, Teams, SMS, WhatsApp and web push channels; see [the delivery log](/docs/digging-deeper/notification-channels/#the-delivery-log). |
+
+Those channels' drivers and credentials have tables of their own (`notify.sms`, `notify.twilio`, `notify.web_push`...), described in [notification channels](/docs/digging-deeper/notification-channels/#configuration).
 
 As environment variables: `APP_NOTIFY__QUEUE=true`, `APP_NOTIFY__ROUTES=false`. In code, use `for_root`, and build the options with `..NotifyOptions::default()` so new fields keep compiling:
 
@@ -105,6 +112,7 @@ impl Notifiable for NotifiableUser {
 | `notifiable_id` | The owner id stored with each row. |
 | `route_mail` | The address of the mail channel when the notification's mail names no recipient; `None` skips the mail. |
 | `broadcast_channel` | The real-time channel of the broadcast; `None` skips it. Defaults to `private-users.{id}`. |
+| `route_slack`, `route_teams`, `route_sms`, `route_whatsapp` | Where the [other channels](/docs/digging-deeper/notification-channels/#routing-a-notifiable) reach the recipient. Default `None`: skipped. |
 
 The `/api/notifications` routes find the signed-in user's notifications under the type `USER_NOTIFIABLE_TYPE` (`"user"`) and the user's UUID as a string, so a user must be notifiable exactly like this. Other notifiable types work for the database channel, but only in code: the routes serve users.
 
@@ -149,6 +157,7 @@ impl Notification for ContactMoved {
 | `to_database` | The `data` stored with the row. | the notification serialized as JSON |
 | `to_broadcast` | The `data` of the broadcast. | `to_database` |
 | `to_mail` | A [`TemplateMail`](/docs/digging-deeper/mail/#template-mail). | `None`: no mail |
+| `to_slack`, `to_teams`, `to_sms`, `to_whatsapp`, `to_web_push` | The messages of the [other channels](/docs/digging-deeper/notification-channels/#rendering-for-each-channel). | `None` |
 
 Any `to_*` method may return `None` to skip its channel for this recipient. `TYPE` is stored with every row and sent with every broadcast, so clients can tell notifications apart; keep it stable.
 
@@ -408,6 +417,8 @@ The same table is also a SeaORM entity, `navree::notify::notifications::Entity`,
 | `Mail` | The mail channel failed (a `MailError`, such as a missing template). |
 | `Broadcast` | The broadcaster failed. |
 | `Queue` | Dispatching a `notify.send` job failed. |
+| `Channel` | A Slack, Teams, SMS, WhatsApp or web push driver didn't send; see [errors](/docs/digging-deeper/notification-channels/#errors). |
+| `InvalidRecipient` | A number isn't valid E.164, or a push subscription is invalid. |
 | `Unavailable` | A channel's service isn't in the app (or the app has shut down). |
 | `Several` | More than one channel failed; each error in channel order. |
 
@@ -419,6 +430,7 @@ Build a test app with the channels you want to check and send the notification, 
 - **Mail:** use the `array` transport and read `mailer.array_transport()`, as in [testing mail](/docs/digging-deeper/mail/#testing).
 - **Broadcast:** there is no broadcaster fake yet. Override `dyn Broadcaster` with a small recording one, as below.
 - **Queueing:** with `notify.queue` on and the [queue fake](/docs/digging-deeper/queues/#faking-the-queue), each channel is a recorded `SendNotificationJob`; its `delivery` says which channel and what was rendered.
+- **Slack, Teams, SMS, WhatsApp, web push:** each has a fake (`SmsFake` and the others) that records messages and plays the provider; see [testing the channels](/docs/digging-deeper/notification-channels/#testing).
 
 ```rust title="tests/contact_moved.rs"
 use std::sync::Mutex;
@@ -487,6 +499,9 @@ async fn followers_hear_about_moved_contacts() {
 The CRM tests notifications end to end in `crm-deals/tests/deals/notifications.rs`: a manager reassigns a deal over HTTP, the test checks that nothing was delivered yet, runs the queue with `crm.run_queue()`, then reads the new owner's `/api/notifications` and the mail the array transport kept.
 
 <LinkCards>
+  <LinkCard href="/docs/digging-deeper/notification-channels/" title="Notification channels">
+    Slack, Teams, SMS, WhatsApp and web push, with the delivery log and opt-outs.
+  </LinkCard>
   <LinkCard href="/docs/digging-deeper/mail/" title="Mail">
     Templates and transports behind the mail channel.
   </LinkCard>
