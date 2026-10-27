@@ -128,8 +128,8 @@ pub use pagination::{
     CursorPage, CursorRequest, Page, PageMeta, PageQuery, PageRequest, SimplePage, SimplePageMeta,
 };
 pub use query::{
-    Builder, HasQuery, HasWheres, IntoSelect, JoinClause, Selectable, TableBuilder, WhereGroup,
-    table,
+    Builder, ConflictUpdate, HasQuery, HasWheres, IntoSelect, JoinClause, Selectable, TableBuilder,
+    WhereGroup, table,
 };
 pub use record::Record;
 pub use row::Row;

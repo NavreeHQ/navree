@@ -24,8 +24,8 @@ use crate::error::{OrmError, Result};
 use crate::exec::{ExecContext, Target};
 use crate::hooks::{Flow, Hooks, ModelEvent};
 use crate::ir::{
-    ArithmeticOp, ColumnRef, DeleteIr, Expr, InsertIr, Operator, TableRef, UpdateIr, Where,
-    WhereClause,
+    ArithmeticOp, ColumnRef, DeleteIr, Expr, InsertIr, OnConflict, Operator, TableRef, UpdateIr,
+    Where, WhereClause,
 };
 use crate::model::{KeyKind, Model, PrimaryKey};
 use crate::query::Builder;
@@ -94,9 +94,30 @@ pub(crate) async fn save<M: Model>(target: &Target<'_>, record: &mut Record<M>) 
             true
         }
     } else {
-        insert(target, &ctx, &hooks, record).await?
+        insert(target, &ctx, &hooks, record, None).await?
     };
     if !saved {
+        return Ok(false);
+    }
+    hooks.after(ModelEvent::Saved, &ctx, record).await?;
+    record.sync_original();
+    Ok(true)
+}
+
+/// Inserts the new `record` like [`save`] does; with `on_conflict`, a row
+/// that conflicts with a unique index is skipped and `false` returned (the
+/// record stays new, and no hook after `creating` runs).
+pub(crate) async fn save_new<M: Model>(
+    target: &Target<'_>,
+    record: &mut Record<M>,
+    on_conflict: Option<OnConflict>,
+) -> Result<bool> {
+    let ctx = target.context();
+    let hooks = Hooks::<M>::resolve(&ctx).await?;
+    if hooks.before(ModelEvent::Saving, &ctx, record).await? == Flow::Cancel {
+        return Ok(false);
+    }
+    if !insert(target, &ctx, &hooks, record, on_conflict).await? {
         return Ok(false);
     }
     hooks.after(ModelEvent::Saved, &ctx, record).await?;
@@ -109,6 +130,7 @@ async fn insert<M: Model>(
     ctx: &ExecContext,
     hooks: &Hooks<M>,
     record: &mut Record<M>,
+    on_conflict: Option<OnConflict>,
 ) -> Result<bool> {
     if hooks.before(ModelEvent::Creating, ctx, record).await? == Flow::Cancel {
         return Ok(false);
@@ -153,17 +175,18 @@ async fn insert<M: Model>(
         .filter(|(column, _)| !(assigned_by_database && *column == meta.key_column()))
         .map(|(column, value)| (Cow::Borrowed(*column), Expr::Value(value.clone())))
         .unzip();
-    let insert = InsertIr {
-        table: Cow::Borrowed(meta.table()),
-        columns,
-        rows: vec![row],
-        returning: if assigned_by_database {
-            vec![Cow::Borrowed(meta.key_column())]
-        } else {
-            Vec::new()
-        },
-    };
+    let mut insert = InsertIr::new(meta.table(), columns, vec![row]).returning(if assigned_by_database {
+        vec![Cow::Borrowed(meta.key_column())]
+    } else {
+        Vec::new()
+    });
+    let skips_conflicts = on_conflict.is_some();
+    insert.on_conflict = on_conflict;
     let outcome = target.insert(&insert).await?;
+    if skips_conflicts && outcome.rows_affected == 0 {
+        // The row conflicted and was skipped: the record stays new.
+        return Ok(false);
+    }
 
     if assigned_by_database {
         let key = match (outcome.returned.first(), outcome.last_insert_id) {

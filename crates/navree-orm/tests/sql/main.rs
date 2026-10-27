@@ -7,8 +7,8 @@ use std::fmt::Write as _;
 
 use chrono::{DateTime, NaiveDate, NaiveTime, TimeZone, Utc};
 use navree_orm::ir::{
-    ColumnRef, DeleteIr, Direction, Expr as IrExpr, FullText, InsertIr, Operator, TableRef,
-    UpdateIr, WhereClause,
+    ColumnRef, DeleteIr, Direction, Expr as IrExpr, FullText, InsertIr, OnConflict, Operator,
+    TableRef, UpdateIr, WhereClause,
 };
 use navree_orm::sql::{compile_delete, compile_insert, compile_update};
 use navree_orm::{Builder, Dialect, Expr, Filter, Model, Statement, Value, col, table};
@@ -448,10 +448,10 @@ fn aggregates_count_what_the_query_returns() {
 
 #[test]
 fn writes() {
-    let insert = InsertIr {
-        table: Cow::Borrowed("companies"),
-        columns: vec![Cow::Borrowed("name"), Cow::Borrowed("country")],
-        rows: vec![
+    let insert = InsertIr::new(
+        "companies",
+        vec![Cow::Borrowed("name"), Cow::Borrowed("country")],
+        vec![
             vec![
                 IrExpr::Value(Value::from("Acme")),
                 IrExpr::Value(Value::String(None)),
@@ -461,15 +461,10 @@ fn writes() {
                 IrExpr::Value(Value::from("DE")),
             ],
         ],
-        returning: vec![Cow::Borrowed("id")],
-    };
+    )
+    .returning(vec![Cow::Borrowed("id")]);
     insta::assert_snapshot!(per_dialect(|d| compile_insert(&insert, d)));
-    let empty = InsertIr {
-        table: Cow::Borrowed("counters"),
-        columns: Vec::new(),
-        rows: Vec::new(),
-        returning: Vec::new(),
-    };
+    let empty = InsertIr::new("counters", Vec::new(), Vec::new());
     insta::assert_snapshot!(per_dialect(|d| compile_insert(&empty, d)));
     let update = UpdateIr {
         table: TableRef::new("deals"),
@@ -488,6 +483,172 @@ fn writes() {
         wheres: vec![WhereClause::and(Deal::AMOUNT_CENTS.lt(0).into_where())],
     };
     insta::assert_snapshot!(per_dialect(|d| compile_delete(&delete, d)));
+}
+
+#[test]
+fn inserts_that_skip_or_update_conflicts() {
+    let base = || {
+        InsertIr::new(
+            "tags",
+            vec![Cow::Borrowed("name"), Cow::Borrowed("color")],
+            vec![vec![
+                IrExpr::Value(Value::from("vip")),
+                IrExpr::Value(Value::from("gold")),
+            ]],
+        )
+    };
+    insta::assert_snapshot!(per_dialect(|d| compile_insert(
+        &base().on_conflict(OnConflict::Ignore { target: vec![] }),
+        d
+    )));
+    insta::assert_snapshot!(per_dialect(|d| compile_insert(
+        &base()
+            .returning(vec![Cow::Borrowed("id")])
+            .on_conflict(OnConflict::Ignore {
+                target: vec![Cow::Borrowed("name")]
+            }),
+        d
+    )));
+    insta::assert_snapshot!(per_dialect(|d| compile_insert(
+        &base().on_conflict(OnConflict::Update {
+            target: vec![Cow::Borrowed("name")],
+            sets: vec![
+                (Cow::Borrowed("color"), Expr::excluded("color")),
+                (
+                    Cow::Borrowed("hits"),
+                    Expr::col("tags.hits").add(Expr::excluded("hits"))
+                ),
+                (Cow::Borrowed("note"), Expr::val("merged")),
+            ],
+        }),
+        d
+    )));
+    // PostgreSQL and SQLite need the conflict target of an update.
+    insta::assert_snapshot!(per_dialect(|d| compile_insert(
+        &base().on_conflict(OnConflict::Update {
+            target: vec![],
+            sets: vec![(Cow::Borrowed("color"), Expr::excluded("color"))],
+        }),
+        d
+    )));
+}
+
+#[test]
+fn inserts_from_queries() {
+    let mut archive = InsertIr::new(
+        "archived_deals",
+        vec![Cow::Borrowed("id"), Cow::Borrowed("title")],
+        Vec::new(),
+    );
+    archive.select = Some(Box::new(
+        table("deals")
+            .select(["id", "title"])
+            .where_(col("stage").eq("lost"))
+            .into_ir(),
+    ));
+    insta::assert_snapshot!(per_dialect(|d| compile_insert(&archive, d)));
+    let mut ignore = InsertIr::new(
+        "archived_deals",
+        vec![Cow::Borrowed("id"), Cow::Borrowed("title")],
+        Vec::new(),
+    )
+    .on_conflict(OnConflict::Ignore { target: vec![] });
+    ignore.select = Some(Box::new(table("deals").select(["id", "title"]).into_ir()));
+    insta::assert_snapshot!(per_dialect(|d| compile_insert(&ignore, d)));
+    let mut mismatch = InsertIr::new("archived_deals", vec![Cow::Borrowed("id")], Vec::new());
+    mismatch.select = Some(Box::new(table("deals").select(["id", "title"]).into_ir()));
+    insta::assert_snapshot!(per_dialect(|d| compile_insert(&mismatch, d)));
+}
+
+#[test]
+fn json_path_updates() {
+    let update = UpdateIr {
+        table: TableRef::new("deals"),
+        sets: vec![
+            (Cow::Borrowed("meta->status"), IrExpr::Value(Value::from("won"))),
+            (
+                Cow::Borrowed("meta->owner->name"),
+                IrExpr::Value(Value::from("ada")),
+            ),
+            (
+                Cow::Borrowed("meta->tags[0]"),
+                IrExpr::Value(Value::from(serde_json::json!({"k": true}))),
+            ),
+            (Cow::Borrowed("title"), IrExpr::Value(Value::from("Renewal"))),
+        ],
+        wheres: vec![WhereClause::and(Deal::ID.eq(Uuid::nil()).into_where())],
+    };
+    insta::assert_snapshot!(per_dialect(|d| compile_update(&update, d)));
+    let twice = UpdateIr {
+        table: TableRef::new("deals"),
+        sets: vec![
+            (Cow::Borrowed("meta"), IrExpr::Value(Value::from("{}"))),
+            (Cow::Borrowed("meta->status"), IrExpr::Value(Value::from("won"))),
+        ],
+        wheres: vec![],
+    };
+    insta::assert_snapshot!(per_dialect(|d| compile_update(&twice, d)));
+}
+
+#[test]
+fn table_writes_with_joins_orders_and_limits() {
+    insta::assert_snapshot!(per_dialect(|d| table("deals as d")
+        .join("companies", "companies.id", "=", "d.company_id")
+        .where_(col("companies.active").eq(false))
+        .to_update_sql(d, [col("stage").set("lost")])));
+    insta::assert_snapshot!(per_dialect(|d| table("sessions")
+        .where_(col("user_id").eq(7))
+        .order_by("last_seen_at")
+        .limit(100)
+        .to_delete_sql(d)));
+    insta::assert_snapshot!(per_dialect(|d| table("sessions")
+        .where_(col("user_id").eq(7))
+        .to_delete_sql(d)));
+    insta::assert_snapshot!(per_dialect(|d| table("deals")
+        .group_by(["stage"])
+        .to_update_sql(d, [col("stage").set("x")])));
+}
+
+#[test]
+fn updates_from_joined_tables() {
+    use navree_orm::sql::compile_update_from;
+    let query = table("deals")
+        .join("companies as c", "c.id", "=", "deals.company_id")
+        .where_(col("c.active").eq(false))
+        .into_ir();
+    let sets = vec![(Cow::Borrowed("stage"), IrExpr::Value(Value::from("lost")))];
+    insta::assert_snapshot!(per_dialect(|d| compile_update_from(
+        &query.table,
+        &sets,
+        &query.joins,
+        &query.wheres,
+        d
+    )));
+    let left = table("deals")
+        .left_join("companies", "companies.id", "=", "deals.company_id")
+        .into_ir();
+    insta::assert_snapshot!(per_dialect(|d| compile_update_from(
+        &left.table,
+        &sets,
+        &left.joins,
+        &left.wheres,
+        d
+    )));
+}
+
+#[test]
+fn truncation() {
+    use navree_orm::sql::compile_truncate;
+    let mut out = String::new();
+    for dialect in DIALECTS {
+        for statement in compile_truncate("deals", false, dialect) {
+            writeln!(out, "{dialect}: {statement}").unwrap();
+        }
+    }
+    for statement in compile_truncate("audit.events", true, Dialect::Postgres) {
+        writeln!(out, "cascade: {statement}").unwrap();
+    }
+    insta::assert_snapshot!(out);
 }
 
 #[test]

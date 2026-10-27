@@ -1,0 +1,7 @@
+---
+source: crates/navree-orm/tests/sql/main.rs
+expression: "per_dialect(|d|\ntable(\"deals\").group_by([\"stage\"]).to_update_sql(d, [col(\"stage\").set(\"x\")]))"
+---
+PostgreSQL: error: invalid query: a table update cannot have groups, unions or a subquery as its table; use a model query
+MySQL: error: invalid query: a table update cannot have groups, unions or a subquery as its table; use a model query
+SQLite: error: invalid query: a table update cannot have groups, unions or a subquery as its table; use a model query

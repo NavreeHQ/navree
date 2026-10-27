@@ -228,6 +228,13 @@ pub enum Expr {
         /// The table, for `table.*`.
         table: Option<Cow<'static, str>>,
     },
+    /// In an upsert's update ([`OnConflict::Update`]): the value column
+    /// `column` would have been inserted with (`excluded.column` on
+    /// PostgreSQL and SQLite, `VALUES(column)` on MySQL).
+    Excluded {
+        /// The column.
+        column: Cow<'static, str>,
+    },
 }
 
 /// An aggregate function.
@@ -953,17 +960,86 @@ impl QueryIr {
     }
 }
 
-/// An `INSERT` of one or more rows.
+/// An `INSERT` of one or more rows, or of the rows of a query.
 #[derive(Clone, Debug)]
 pub struct InsertIr {
     /// The table.
     pub table: Cow<'static, str>,
     /// The columns, in the order of each row's values.
     pub columns: Vec<Cow<'static, str>>,
-    /// The rows.
+    /// The rows (empty when [`select`](InsertIr::select) provides them).
     pub rows: Vec<Vec<Expr>>,
     /// Columns to read back from the inserted rows (generated keys).
     pub returning: Vec<Cow<'static, str>>,
+    /// A query whose rows are inserted (`INSERT … SELECT`) instead of
+    /// [`rows`](InsertIr::rows); it selects one value per column.
+    pub select: Option<Box<QueryIr>>,
+    /// What happens to a row that conflicts with a unique index; `None`
+    /// fails the statement.
+    pub on_conflict: Option<OnConflict>,
+}
+
+impl InsertIr {
+    /// An insert of `rows` (each with one value per column) into `table`,
+    /// returning nothing and failing on conflicts.
+    pub fn new(
+        table: impl Into<Cow<'static, str>>,
+        columns: Vec<Cow<'static, str>>,
+        rows: Vec<Vec<Expr>>,
+    ) -> Self {
+        InsertIr {
+            table: table.into(),
+            columns,
+            rows,
+            returning: Vec::new(),
+            select: None,
+            on_conflict: None,
+        }
+    }
+
+    /// The same insert, reading `columns` back from the inserted rows.
+    pub fn returning(mut self, columns: Vec<Cow<'static, str>>) -> Self {
+        self.returning = columns;
+        self
+    }
+
+    /// The same insert, handling conflicting rows with `on_conflict`.
+    pub fn on_conflict(mut self, on_conflict: OnConflict) -> Self {
+        self.on_conflict = Some(on_conflict);
+        self
+    }
+}
+
+/// What an insert does with a row that conflicts with a unique index
+/// (an "upsert" when it updates).
+///
+/// | | PostgreSQL, SQLite | MySQL |
+/// |---|---|---|
+/// | [`Ignore`](OnConflict::Ignore) | `ON CONFLICT [(target)] DO NOTHING` | `INSERT IGNORE` |
+/// | [`Update`](OnConflict::Update) | `ON CONFLICT (target) DO UPDATE SET ..` | `ON DUPLICATE KEY UPDATE ..` |
+///
+/// PostgreSQL and SQLite only skip or update rows that conflict on a
+/// unique index (a target names its columns); MySQL looks at every unique
+/// index, and its `INSERT IGNORE` also turns other errors (a value that
+/// does not fit its column) into warnings.
+#[derive(Clone, Debug)]
+#[non_exhaustive]
+pub enum OnConflict {
+    /// Skip the conflicting rows.
+    Ignore {
+        /// The unique columns whose conflicts are skipped; empty for any
+        /// unique index.
+        target: Vec<Cow<'static, str>>,
+    },
+    /// Update the existing row instead.
+    Update {
+        /// The unique columns the conflict is on (required on PostgreSQL
+        /// and SQLite; MySQL uses every unique index).
+        target: Vec<Cow<'static, str>>,
+        /// `SET column = expr` on the existing row; [`Expr::Excluded`] is
+        /// the value the row would have been inserted with.
+        sets: Vec<(Cow<'static, str>, Expr)>,
+    },
 }
 
 /// An `UPDATE`.
