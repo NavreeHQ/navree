@@ -1,0 +1,108 @@
+{#- The app shell (the shadcn/ui sidebar-07 layout): a sidebar with the app
+    switcher, groups of items and the user menu, collapsible to icons
+    (Ctrl/Cmd+B) and an off-canvas sheet on phones; a 48px top bar with the
+    trigger, the breadcrumb, search and page actions; the command palette
+    (Ctrl/Cmd+K); toasts.
+
+    Blocks: content (the page), actions (top bar, right of search),
+    dialogs (after the shell), main_class (extra classes on <main>, such as
+    " ui-main--narrow"), plus title and head from ui/base.html. -#}
+{%- extends "ui/base.html" -%}
+{%- import "ui/components.html" as ui -%}
+{%- block body %}
+<a class="ui-skip" href="#ui-main">Skip to content</a>
+<div class="ui-shell" data-ui-shell data-sidebar="{{ 'collapsed' if shell.collapsed else 'expanded' }}"{% if shell.from_cookie %} data-sidebar-from-cookie{% endif %}>
+<aside class="ui-sidebar" id="ui-sidebar" data-ui-sidebar aria-label="Sidebar">
+<div class="ui-sidebar__header">
+{%- if shell.switcher %}
+<button type="button" class="ui-sidebar-button" data-ui-menu-trigger aria-controls="ui-switcher" data-match-width data-tooltip="{{ shell.app.name }}">
+{%- else %}
+<a class="ui-sidebar-button" href="{{ shell.app.href }}" data-tooltip="{{ shell.app.name }}">
+{%- endif -%}
+<span class="ui-app-tile">{{ ui.mark(20) }}</span><span class="ui-sidebar-button__text"><span class="ui-sidebar-button__title">{{ shell.app.name }}</span>{% if shell.app.context %}<span class="ui-sidebar-button__sub">{{ shell.app.context }}</span>{% endif %}</span>
+{%- if shell.switcher %}{{ ui.icon("chevrons-up-down") }}</button>{{ ui.menu("ui-switcher", shell.switcher, label="Switch app", tiles=true) }}{% else %}</a>{% endif %}
+</div>
+<nav class="ui-sidebar__content" aria-label="Main">
+{%- for group in shell.groups %}{% set g = loop.index %}
+<div class="ui-nav-group">
+{%- if group.label %}<div class="ui-nav-group__label">{{ group.label }}</div>{% endif %}
+<ul class="ui-nav">
+{%- for item in group.items %}
+<li class="ui-nav__item">
+{%- if item.children %}
+<button type="button" class="ui-nav__link{% if item.has_active_child %} has-active{% endif %}" data-ui-collapsible data-href="{{ item.href }}" aria-expanded="{{ 'true' if item.open else 'false' }}" aria-controls="ui-nav-{{ g }}-{{ loop.index }}" data-tooltip="{{ item.label }}">{% if item.icon %}{{ ui.icon(item.icon) }}{% endif %}<span class="ui-nav__label">{{ item.label }}</span>{% if item.badge %}<span class="ui-nav__badge">{{ item.badge }}</span>{% endif %}{{ ui.icon("chevron-right", class="ui-nav__chevron") }}</button>
+<ul class="ui-nav-sub" id="ui-nav-{{ g }}-{{ loop.index }}"{% if not item.open %} hidden{% endif %}>
+{%- for child in item.children %}
+<li><a class="ui-nav-sub__link" href="{{ child.href }}"{% if child.active %} aria-current="page"{% endif %}><span class="ui-nav__label">{{ child.label }}</span>{% if child.badge %}<span class="ui-nav__badge">{{ child.badge }}</span>{% endif %}</a></li>
+{%- endfor %}
+</ul>
+{%- else %}
+<a class="ui-nav__link" href="{{ item.href }}"{% if item.active %} aria-current="page"{% endif %} data-tooltip="{{ item.label }}">{% if item.icon %}{{ ui.icon(item.icon) }}{% endif %}<span class="ui-nav__label">{{ item.label }}</span>{% if item.badge %}<span class="ui-nav__badge">{{ item.badge }}</span>{% endif %}</a>
+{%- endif %}
+</li>
+{%- endfor %}
+</ul>
+</div>
+{%- endfor %}
+</nav>
+{%- if shell.user %}
+<div class="ui-sidebar__footer">
+<button type="button" class="ui-sidebar-button" data-ui-menu-trigger aria-controls="ui-user-menu" data-side="right" data-align="end" data-tooltip="{{ shell.user.name }}">{{ ui.avatar(shell.user.name, src=shell.user.avatar, initials=shell.user.initials) }}<span class="ui-sidebar-button__text"><span class="ui-sidebar-button__title">{{ shell.user.name }}</span><span class="ui-sidebar-button__sub">{{ shell.user.email }}</span></span>{{ ui.icon("chevrons-up-down") }}</button>
+<div class="ui-menu ui-menu--user" id="ui-user-menu" role="menu" aria-label="Account" hidden>
+<div class="ui-menu__header" role="presentation">{{ ui.avatar(shell.user.name, src=shell.user.avatar, initials=shell.user.initials) }}<span class="ui-sidebar-button__text"><span class="ui-sidebar-button__title">{{ shell.user.name }}</span><span class="ui-sidebar-button__sub">{{ shell.user.email }}</span></span></div>
+{%- if shell.user.menu %}<div class="ui-menu__sep" role="separator"></div>{% endif %}
+{%- for item in shell.user.menu %}
+{%- if item.kind == "separator" %}<div class="ui-menu__sep" role="separator"></div>
+{%- elif item.kind == "label" %}<div class="ui-menu__label" role="presentation">{{ item.label }}</div>
+{%- elif item.href %}<a class="ui-menu__item{% if item.danger %} ui-menu__item--danger{% endif %}" href="{{ item.href }}" role="menuitem" tabindex="-1">{% if item.icon %}{{ ui.icon(item.icon) }}{% endif %}<span class="ui-menu__text">{{ item.label }}</span>{% if item.shortcut %}<span class="ui-menu__shortcut">{{ item.shortcut }}</span>{% endif %}</a>
+{%- else %}<button type="button" class="ui-menu__item{% if item.danger %} ui-menu__item--danger{% endif %}" role="menuitem" tabindex="-1"{% if item.dialog %} data-ui-dialog-open="{{ item.dialog }}"{% endif %}>{% if item.icon %}{{ ui.icon(item.icon) }}{% endif %}<span class="ui-menu__text">{{ item.label }}</span>{% if item.shortcut %}<span class="ui-menu__shortcut">{{ item.shortcut }}</span>{% endif %}</button>
+{%- endif %}
+{%- endfor %}
+</div>
+</div>
+{%- endif %}
+<button type="button" class="ui-sidebar-rail" data-ui-sidebar-trigger aria-label="Toggle sidebar" tabindex="-1" title="Toggle sidebar"></button>
+</aside>
+<div class="ui-overlay" data-ui-overlay aria-hidden="true"></div>
+<div class="ui-inset">
+<header class="ui-topbar">
+<button type="button" class="ui-btn ui-btn--ghost ui-btn--icon ui-btn--sm ui-topbar__trigger" data-ui-sidebar-trigger aria-controls="ui-sidebar" aria-label="Toggle sidebar">{{ ui.icon("panel-left") }}</button>
+<span class="ui-separator-v" aria-hidden="true"></span>
+{{ ui.breadcrumb(shell.breadcrumb) }}
+<div class="ui-topbar__end">
+{%- if shell.search %}<button type="button" class="ui-search" data-ui-command-open aria-label="Search (Ctrl+K)">{{ ui.icon("search") }}<span class="ui-search__text">{{ shell.search }}</span>{{ ui.kbd("mod+K") }}</button>{% endif %}
+{%- block actions %}{% endblock %}
+</div>
+</header>
+<main class="ui-main{% block main_class %}{% endblock %}" id="ui-main" tabindex="-1">
+{%- block content %}{% endblock %}
+</main>
+</div>
+</div>
+<dialog class="ui-command" id="ui-command" aria-label="Command palette">
+<div class="ui-command__search">{{ ui.icon("search") }}<input class="ui-command__input" type="text" placeholder="Type a command or search…" aria-label="Search commands" role="combobox" aria-expanded="true" aria-controls="ui-command-list" aria-autocomplete="list" autocomplete="off" spellcheck="false"><kbd class="ui-kbd">Esc</kbd></div>
+<div class="ui-command__list" id="ui-command-list" role="listbox" aria-label="Commands">
+<div class="ui-command__group" role="group" aria-labelledby="ui-command-goto"><div class="ui-command__group-label" id="ui-command-goto">Go to</div>
+{%- for group in shell.groups %}{% for item in group.items %}
+<div class="ui-command__item" role="option" aria-selected="false" data-href="{{ item.href }}" data-search="{{ item.label }} {{ group.label or '' }}">{% if item.icon %}{{ ui.icon(item.icon) }}{% endif %}<span>{{ item.label }}</span>{% if group.label %}<span class="ui-command__hint">{{ group.label }}</span>{% endif %}</div>
+{%- for child in item.children %}{% if child.href != item.href %}
+<div class="ui-command__item" role="option" aria-selected="false" data-href="{{ child.href }}" data-search="{{ item.label }} {{ child.label }}">{% if item.icon %}{{ ui.icon(item.icon) }}{% endif %}<span>{{ child.label }}</span><span class="ui-command__hint">{{ item.label }}</span></div>
+{%- endif %}{% endfor %}
+{%- endfor %}{% endfor %}
+</div>
+{%- for group in shell.commands %}
+<div class="ui-command__group" role="group" aria-labelledby="ui-command-{{ loop.index }}"><div class="ui-command__group-label" id="ui-command-{{ loop.index }}">{{ group.label }}</div>
+{%- for item in group.items %}
+<div class="ui-command__item" role="option" aria-selected="false"{% if item.href %} data-href="{{ item.href }}"{% endif %}{% if item.dialog %} data-ui-dialog-open="{{ item.dialog }}"{% endif %} data-search="{{ item.label }} {{ item.keywords or '' }} {{ group.label }}">{% if item.icon %}{{ ui.icon(item.icon) }}{% endif %}<span>{{ item.label }}</span>{% if item.hint %}<span class="ui-command__hint">{{ item.hint }}</span>{% endif %}</div>
+{%- endfor %}
+</div>
+{%- endfor %}
+<p class="ui-command__empty" hidden>No results.</p>
+</div>
+<div class="ui-command__footer"><span><kbd class="ui-kbd">↑</kbd><kbd class="ui-kbd">↓</kbd> to move</span><span><kbd class="ui-kbd">↵</kbd> to open</span><span><kbd class="ui-kbd">Esc</kbd> to close</span></div>
+</dialog>
+<ol class="ui-toaster" id="ui-toaster" aria-live="polite">
+{%- for item in shell.toasts %}{{ ui.toast(item) }}{% endfor -%}
+</ol>
+{%- block dialogs %}{% endblock %}
+{%- endblock %}

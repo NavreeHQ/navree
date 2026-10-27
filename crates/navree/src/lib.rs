@@ -32,6 +32,7 @@
 //! | `access` | navree-access | `access` | `AccessModule`: roles, permissions, abilities |
 //! | `schedule` | navree-schedule | `schedule` | `ScheduleModule`: tasks on cron schedules |
 //! | `notify` | navree-notify | `notify` | `NotifyModule`: database, mail and broadcast notifications |
+//! | `ui` | navree-ui | `ui` | `UiModule`: the app shell and components for server-rendered tools, embedded assets |
 //! | `auth` | navree-auth | `auth` | `AuthModule`: JWT access and refresh tokens, users |
 //! | `workspace` | navree-workspace | `workspace` | `WorkspaceModule`: workspaces, members, roles, invitations, isolation |
 //! | `webhooks` | navree-webhooks | `webhooks` | `WebhooksModule`: signed outgoing webhooks with retries, verified incoming ones |
@@ -165,6 +166,8 @@ pub use navree_queue as queue;
 pub use navree_schedule as schedule;
 #[cfg(feature = "session")]
 pub use navree_session as session;
+#[cfg(feature = "ui")]
+pub use navree_ui as ui;
 #[cfg(feature = "validation")]
 pub use navree_validation as validation;
 

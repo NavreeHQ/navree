@@ -1,0 +1,284 @@
+---
+source: crates/navree-ui/tests/components.rs
+expression: lines(&html)
+---
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#040605">
+<title>Invitations · Helm</title>
+<link rel="icon" href="&#x2f;_navree&#x2f;ui&#x2f;v/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="&#x2f;_navree&#x2f;ui&#x2f;v/fonts/geist.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="&#x2f;_navree&#x2f;ui&#x2f;v/navree-ui.css">
+<script src="&#x2f;_navree&#x2f;ui&#x2f;v/navree-ui.js" defer>
+</script>
+</head>
+<body class="ui">
+<a class="ui-skip" href="#ui-main">Skip to content</a>
+<div class="ui-shell" data-ui-shell data-sidebar="expanded">
+<aside class="ui-sidebar" id="ui-sidebar" data-ui-sidebar aria-label="Sidebar">
+<div class="ui-sidebar__header">
+<button type="button" class="ui-sidebar-button" data-ui-menu-trigger aria-controls="ui-switcher" data-match-width data-tooltip="Helm">
+<span class="ui-app-tile">
+<svg class="ui-mark" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 32 32" fill="currentColor" aria-hidden="true" focusable="false">
+<path d="M1.5 9.5 L30.5 7 C29.6 9.4 28.6 11.3 27.4 12.7 L3.4 12.7 C2.6 11.8 2 10.8 1.5 9.5Z"/>
+<path d="M4.4 14.5 L26 14.5 C24.4 16.5 22.4 17.8 19.5 18.3 L10 18.3 C7.6 17.8 5.8 16.5 4.4 14.5Z"/>
+<path d="M13 18.3H19.4L16.4 26H14.4Z"/>
+</svg>
+</span>
+<span class="ui-sidebar-button__text">
+<span class="ui-sidebar-button__title">Helm</span>
+<span class="ui-sidebar-button__sub">Acme Inc.</span>
+</span>
+<svg class="ui-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<path d="m7 15 5 5 5-5"/>
+<path d="m7 9 5-5 5 5"/>
+</svg>
+</button>
+<div class="ui-menu" id="ui-switcher" role="menu" aria-label="Switch app" hidden>
+<a class="ui-menu__item" href="&#x2f;helm" role="menuitemcheckbox" tabindex="-1" aria-checked="true">
+<span class="ui-menu__tile">
+<svg class="ui-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<circle cx="12" cy="12" r="8"/>
+<path d="M12 2v7.5"/>
+<path d="m19 5-5.23 5.23"/>
+<path d="M22 12h-7.5"/>
+<path d="m19 19-5.23-5.23"/>
+<path d="M12 14.5V22"/>
+<path d="M10.23 13.77 5 19"/>
+<path d="M9.5 12H2"/>
+<path d="M10.23 10.23 5 5"/>
+<circle cx="12" cy="12" r="2.5"/>
+</svg>
+</span>
+<span class="ui-menu__text">Helm</span>
+<svg class="ui-icon ui-menu__check ui-menu__check--end" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<path d="M20 6 9 17l-5-5"/>
+</svg>
+</a>
+<a class="ui-menu__item" href="&#x2f;fleet" role="menuitemcheckbox" tabindex="-1" aria-checked="false">
+<span class="ui-menu__tile">
+<svg class="ui-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<path d="M2.97 12.92A2 2 0 0 0 2 14.63v3.24a2 2 0 0 0 .97 1.71l3 1.8a2 2 0 0 0 2.06 0L12 19v-5.5l-5-3-4.03 2.42Z"/>
+<path d="m7 16.5-4.74-2.85"/>
+<path d="m7 16.5 5-3"/>
+<path d="M7 16.5v5.17"/>
+<path d="M12 13.5V19l3.97 2.38a2 2 0 0 0 2.06 0l3-1.8a2 2 0 0 0 .97-1.71v-3.24a2 2 0 0 0-.97-1.71L17 10.5l-5 3Z"/>
+<path d="m17 16.5-5-3"/>
+<path d="m17 16.5 4.74-2.85"/>
+<path d="M17 16.5v5.17"/>
+<path d="M7.97 4.42A2 2 0 0 0 7 6.13v4.37l5 3 5-3V6.13a2 2 0 0 0-.97-1.71l-3-1.8a2 2 0 0 0-2.06 0l-3 1.8Z"/>
+<path d="M12 8 7.26 5.15"/>
+<path d="m12 8 4.74-2.85"/>
+<path d="M12 13.5V8"/>
+</svg>
+</span>
+<span class="ui-menu__text">Fleet</span>
+<svg class="ui-icon ui-menu__check ui-menu__check--end" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<path d="M20 6 9 17l-5-5"/>
+</svg>
+</a>
+</div>
+</div>
+<nav class="ui-sidebar__content" aria-label="Main">
+<div class="ui-nav-group">
+<div class="ui-nav-group__label">Records</div>
+<ul class="ui-nav">
+<li class="ui-nav__item">
+<a class="ui-nav__link" href="&#x2f;helm" data-tooltip="Dashboard">
+<svg class="ui-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<rect width="7" height="9" x="3" y="3" rx="1"/>
+<rect width="7" height="5" x="14" y="3" rx="1"/>
+<rect width="7" height="9" x="14" y="12" rx="1"/>
+<rect width="7" height="5" x="3" y="16" rx="1"/>
+</svg>
+<span class="ui-nav__label">Dashboard</span>
+</a>
+</li>
+<li class="ui-nav__item">
+<button type="button" class="ui-nav__link has-active" data-ui-collapsible data-href="&#x2f;helm&#x2f;users" aria-expanded="true" aria-controls="ui-nav-1-2" data-tooltip="Users">
+<svg class="ui-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+<path d="M16 3.128a4 4 0 0 1 0 7.744"/>
+<path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+<circle cx="9" cy="7" r="4"/>
+</svg>
+<span class="ui-nav__label">Users</span>
+<span class="ui-nav__badge">12</span>
+<svg class="ui-icon ui-nav__chevron" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<path d="m9 18 6-6-6-6"/>
+</svg>
+</button>
+<ul class="ui-nav-sub" id="ui-nav-1-2">
+<li>
+<a class="ui-nav-sub__link" href="&#x2f;helm&#x2f;users">
+<span class="ui-nav__label">All users</span>
+</a>
+</li>
+<li>
+<a class="ui-nav-sub__link" href="&#x2f;helm&#x2f;users&#x2f;invitations" aria-current="page">
+<span class="ui-nav__label">Invitations</span>
+<span class="ui-nav__badge">3</span>
+</a>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+</nav>
+<div class="ui-sidebar__footer">
+<button type="button" class="ui-sidebar-button" data-ui-menu-trigger aria-controls="ui-user-menu" data-side="right" data-align="end" data-tooltip="Ada Lovelace">
+<span class="ui-avatar" aria-hidden="true">AL</span>
+<span class="ui-sidebar-button__text">
+<span class="ui-sidebar-button__title">Ada Lovelace</span>
+<span class="ui-sidebar-button__sub">ada@acme.test</span>
+</span>
+<svg class="ui-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<path d="m7 15 5 5 5-5"/>
+<path d="m7 9 5-5 5 5"/>
+</svg>
+</button>
+<div class="ui-menu ui-menu--user" id="ui-user-menu" role="menu" aria-label="Account" hidden>
+<div class="ui-menu__header" role="presentation">
+<span class="ui-avatar" aria-hidden="true">AL</span>
+<span class="ui-sidebar-button__text">
+<span class="ui-sidebar-button__title">Ada Lovelace</span>
+<span class="ui-sidebar-button__sub">ada@acme.test</span>
+</span>
+</div>
+<div class="ui-menu__sep" role="separator">
+</div>
+<a class="ui-menu__item" href="&#x2f;helm&#x2f;logout" role="menuitem" tabindex="-1">
+<svg class="ui-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<path d="m16 17 5-5-5-5"/>
+<path d="M21 12H9"/>
+<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+</svg>
+<span class="ui-menu__text">Sign out</span>
+</a>
+</div>
+</div>
+<button type="button" class="ui-sidebar-rail" data-ui-sidebar-trigger aria-label="Toggle sidebar" tabindex="-1" title="Toggle sidebar">
+</button>
+</aside>
+<div class="ui-overlay" data-ui-overlay aria-hidden="true">
+</div>
+<div class="ui-inset">
+<header class="ui-topbar">
+<button type="button" class="ui-btn ui-btn--ghost ui-btn--icon ui-btn--sm ui-topbar__trigger" data-ui-sidebar-trigger aria-controls="ui-sidebar" aria-label="Toggle sidebar">
+<svg class="ui-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<rect width="18" height="18" x="3" y="3" rx="2"/>
+<path d="M9 3v18"/>
+</svg>
+</button>
+<span class="ui-separator-v" aria-hidden="true">
+</span>
+<nav class="ui-breadcrumb" aria-label="Breadcrumb">
+<ol class="ui-breadcrumb__list">
+<li class="ui-breadcrumb__item">
+<a href="&#x2f;helm&#x2f;users">Users</a>
+<svg class="ui-icon ui-breadcrumb__sep" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<path d="m9 18 6-6-6-6"/>
+</svg>
+</li>
+<li class="ui-breadcrumb__item">
+<span aria-current="page">Invitations</span>
+</li>
+</ol>
+</nav>
+<div class="ui-topbar__end">
+<button type="button" class="ui-search" data-ui-command-open aria-label="Search (Ctrl+K)">
+<svg class="ui-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<path d="m21 21-4.34-4.34"/>
+<circle cx="11" cy="11" r="8"/>
+</svg>
+<span class="ui-search__text">Search…</span>
+<kbd class="ui-kbd">
+<span data-ui-mod>Ctrl</span>
+<span>K</span>
+</kbd>
+</button>
+</div>
+</header>
+<main class="ui-main" id="ui-main" tabindex="-1">
+<p>Page</p>
+</main>
+</div>
+</div>
+<dialog class="ui-command" id="ui-command" aria-label="Command palette">
+<div class="ui-command__search">
+<svg class="ui-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<path d="m21 21-4.34-4.34"/>
+<circle cx="11" cy="11" r="8"/>
+</svg>
+<input class="ui-command__input" type="text" placeholder="Type a command or search…" aria-label="Search commands" role="combobox" aria-expanded="true" aria-controls="ui-command-list" aria-autocomplete="list" autocomplete="off" spellcheck="false">
+<kbd class="ui-kbd">Esc</kbd>
+</div>
+<div class="ui-command__list" id="ui-command-list" role="listbox" aria-label="Commands">
+<div class="ui-command__group" role="group" aria-labelledby="ui-command-goto">
+<div class="ui-command__group-label" id="ui-command-goto">Go to</div>
+<div class="ui-command__item" role="option" aria-selected="false" data-href="&#x2f;helm" data-search="Dashboard Records">
+<svg class="ui-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<rect width="7" height="9" x="3" y="3" rx="1"/>
+<rect width="7" height="5" x="14" y="3" rx="1"/>
+<rect width="7" height="9" x="14" y="12" rx="1"/>
+<rect width="7" height="5" x="3" y="16" rx="1"/>
+</svg>
+<span>Dashboard</span>
+<span class="ui-command__hint">Records</span>
+</div>
+<div class="ui-command__item" role="option" aria-selected="false" data-href="&#x2f;helm&#x2f;users" data-search="Users Records">
+<svg class="ui-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+<path d="M16 3.128a4 4 0 0 1 0 7.744"/>
+<path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+<circle cx="9" cy="7" r="4"/>
+</svg>
+<span>Users</span>
+<span class="ui-command__hint">Records</span>
+</div>
+<div class="ui-command__item" role="option" aria-selected="false" data-href="&#x2f;helm&#x2f;users&#x2f;invitations" data-search="Users Invitations">
+<svg class="ui-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+<path d="M16 3.128a4 4 0 0 1 0 7.744"/>
+<path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+<circle cx="9" cy="7" r="4"/>
+</svg>
+<span>Invitations</span>
+<span class="ui-command__hint">Users</span>
+</div>
+</div>
+<p class="ui-command__empty" hidden>No results.</p>
+</div>
+<div class="ui-command__footer">
+<span>
+<kbd class="ui-kbd">↑</kbd>
+<kbd class="ui-kbd">↓</kbd> to move</span>
+<span>
+<kbd class="ui-kbd">↵</kbd> to open</span>
+<span>
+<kbd class="ui-kbd">Esc</kbd> to close</span>
+</div>
+</dialog>
+<ol class="ui-toaster" id="ui-toaster" aria-live="polite">
+<li class="ui-toast ui-toast--success" role="status">
+<svg class="ui-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<circle cx="12" cy="12" r="10"/>
+<path d="m16 9-5.5 5.5L8 12"/>
+</svg>
+<div>
+<p class="ui-toast__title">Saved</p>
+</div>
+<button type="button" class="ui-btn ui-btn--ghost ui-btn--icon ui-btn--sm ui-toast__close" data-ui-toast-close aria-label="Dismiss">
+<svg class="ui-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<path d="M18 6 6 18"/>
+<path d="m6 6 12 12"/>
+</svg>
+</button>
+</li>
+</ol>
+</body>
+</html>

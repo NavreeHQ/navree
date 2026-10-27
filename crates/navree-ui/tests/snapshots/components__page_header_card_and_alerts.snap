@@ -1,0 +1,63 @@
+---
+source: crates/navree-ui/tests/components.rs
+expression: "render(r#\"{% call ui.page_header(\"Users\", \"Everyone in <Acme>.\") %}{{ ui.button(\"Invite\", variant=\"primary\") }}{% endcall %}\n{{ ui.page_header(\"Settings\") }}\n{% call ui.card(\"Plan\", \"Business\", link={\"label\": \"Change\", \"href\": \"/billing\"}, footer=\"Renews on 1 Dec\") %}<p>Body</p>{% endcall %}\n{{ ui.alert(\"Webhook failing\", \"Five failures.\", tone=\"danger\", items=[\"503 at 10:02\", \"503 at 10:07\"]) }}\n{{ ui.details([[\"Region\", \"eu-west-1\"], {\"term\": \"Plan\", \"value\": \"Business\"}]) }}\n{{ ui.progress(62, label=\"Storage used\") }}\"#,\njson!({}),)"
+---
+<div class="ui-page-header">
+<div class="ui-page-header__text">
+<h1 class="ui-h1">Users</h1>
+<p class="ui-page-header__desc">Everyone in &lt;Acme&gt;.</p>
+</div>
+<div class="ui-actions">
+<button class="ui-btn ui-btn--primary" type="button">
+<span>Invite</span>
+</button>
+</div>
+</div>
+<div class="ui-page-header">
+<div class="ui-page-header__text">
+<h1 class="ui-h1">Settings</h1>
+</div>
+</div>
+<section class="ui-card">
+<header class="ui-card__header">
+<div>
+<h2 class="ui-card__title">Plan</h2>
+<p class="ui-card__desc">Business</p>
+</div>
+<a class="ui-btn ui-btn--ghost ui-btn--sm" href="&#x2f;billing">
+<span>Change</span>
+<svg class="ui-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<path d="M5 12h14"/>
+<path d="m12 5 7 7-7 7"/>
+</svg>
+</a>
+</header>
+<div class="ui-card__body">
+<p>Body</p>
+</div>
+<footer class="ui-card__footer">Renews on 1 Dec</footer>
+</section>
+<div class="ui-alert ui-alert--danger" role="alert">
+<svg class="ui-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<circle cx="12" cy="12" r="10"/>
+<line x1="12" x2="12" y1="8" y2="12"/>
+<line x1="12" x2="12.01" y1="16" y2="16"/>
+</svg>
+<div>
+<p class="ui-alert__title">Webhook failing</p>
+<div class="ui-alert__body">
+<p>Five failures.</p>
+<ul>
+<li>503 at 10:02</li>
+<li>503 at 10:07</li>
+</ul>
+</div>
+</div>
+</div>
+<dl class="ui-dl">
+<dt>Region</dt>
+<dd>eu-west-1</dd>
+<dt>Plan</dt>
+<dd>Business</dd>
+</dl>
+<progress class="ui-progress" value="62" max="100" aria-label="Storage used">62</progress>

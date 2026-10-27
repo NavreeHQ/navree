@@ -36,6 +36,7 @@ full = [
     "storage",
     "telemetry",
     "testing",
+    "ui",
     "validation",
     "view",
     "webhooks",
@@ -70,6 +71,9 @@ queue = ["dep:navree-queue", "db"]
 schedule = ["dep:navree-schedule", "db"]
 access = ["dep:navree-access", "http", "db"]
 notify = ["dep:navree-notify", "http", "db", "mail"]
+## The UI kit of the server-rendered tools: the app shell, components as
+## MiniJinja macros, embedded CSS, JS and fonts (light: no new dependencies).
+ui = ["dep:navree-ui", "http", "view"]
 ## L5
 auth = [
     "dep:navree-auth",
@@ -212,6 +216,7 @@ navree-social = { workspace = true, optional = true }
 navree-storage = { workspace = true, optional = true }
 navree-telemetry = { workspace = true, optional = true }
 navree-testing = { workspace = true, optional = true }
+navree-ui = { workspace = true, optional = true }
 navree-validation = { workspace = true, optional = true }
 navree-view = { workspace = true, optional = true }
 navree-webhooks = { workspace = true, optional = true }

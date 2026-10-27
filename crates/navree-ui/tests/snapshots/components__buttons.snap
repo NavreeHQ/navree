@@ -1,0 +1,45 @@
+---
+source: crates/navree-ui/tests/components.rs
+expression: "render(r#\"{{ ui.button(\"Save\", variant=\"primary\", type=\"submit\") }}\n{{ ui.button(\"Export\", icon=\"download\", href=\"/export?format=csv&all=1\") }}\n{{ ui.button(\"Search\", icon=\"search\", shortcut=\"mod+K\", size=\"sm\") }}\n{{ ui.button(\"Delete\", variant=\"danger\", dialog=\"confirm-delete\", disabled=true) }}\n{{ ui.icon_button(\"ellipsis\", \"More actions\") }}\n{{ ui.action_button(action) }}\"#,\njson!({\n    \"action\": Action::dialog(\"Invite\", \"invite\").icon(\"user-plus\").primary()\n}),)"
+---
+<button class="ui-btn ui-btn--primary" type="submit">
+<span>Save</span>
+</button>
+<a class="ui-btn ui-btn--secondary" href="&#x2f;export?format=csv&amp;all=1">
+<svg class="ui-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<path d="M12 15V3"/>
+<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+<path d="m7 10 5 5 5-5"/>
+</svg>
+<span>Export</span>
+</a>
+<button class="ui-btn ui-btn--secondary ui-btn--sm" type="button">
+<svg class="ui-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<path d="m21 21-4.34-4.34"/>
+<circle cx="11" cy="11" r="8"/>
+</svg>
+<span>Search</span>
+<kbd class="ui-kbd">
+<span data-ui-mod>Ctrl</span>
+<span>K</span>
+</kbd>
+</button>
+<button class="ui-btn ui-btn--danger" type="button" data-ui-dialog-open="confirm-delete" disabled>
+<span>Delete</span>
+</button>
+<button class="ui-btn ui-btn--ghost ui-btn--icon" type="button" aria-label="More actions">
+<svg class="ui-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<circle cx="12" cy="12" r="1"/>
+<circle cx="19" cy="12" r="1"/>
+<circle cx="5" cy="12" r="1"/>
+</svg>
+</button>
+<button class="ui-btn ui-btn--primary" type="button" data-ui-dialog-open="invite">
+<svg class="ui-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+<circle cx="9" cy="7" r="4"/>
+<line x1="19" x2="19" y1="8" y2="14"/>
+<line x1="22" x2="16" y1="11" y2="11"/>
+</svg>
+<span>Invite</span>
+</button>
