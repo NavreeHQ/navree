@@ -223,11 +223,21 @@ Navree's modules give each refusal its own code, so a login form can say "wrong 
 | social | `last_sign_in_method` | 409 | `Set a password or connect another provider before disconnecting Google` |
 | social | `reauthorization_required` | 409 | `Connect Google again to continue` |
 | social | `provider_unavailable` | 502 | `GitHub is unavailable. Please try again.` |
+| social | `unknown_provider` | 404 | `` Unknown sign-in provider `gitlab` `` |
+| social | `invalid_id_token` | 400 | `Google sent an invalid ID token` |
+| social | `invalid_return_to` | 400 | `return_to must be a relative path` |
+| social | `provider_already_connected` | 409 | `GitHub is already connected. Disconnect it first.` |
+| social | `provider_not_connected` | 404 | `Google is not connected` |
+| social | `no_provider_token` | 404 | `No Google tokens are stored` |
+| social | `too_many_login_attempts` | 429 | `Too many sign-in attempts. Please try again in N seconds.` |
 | billing | `subscription_required` | 402 | `This workspace needs an active subscription` |
 | billing | `already_subscribed` | 409 | `Already subscribed; change the plan with swap instead.` |
 | billing | `no_subscription` | 404 | `No subscription.` |
 | billing | `no_billing_customer` | 404 | `No billing customer yet.` |
+| billing | `invalid_webhook_signature` | 400 | `Invalid webhook signature.` |
+| billing | `invalid_webhook_payload` | 400 | `Invalid webhook payload.` |
 | billing | `payment_provider_error` | 502 | `The payment provider refused the request: ...` |
+| webhooks | `invalid_webhook_signature` | 400 | `Invalid webhook signature` |
 
 Invalid input to these modules (a taken email, an unknown role in a list) is a `validation_failed` error with field messages, like any other validation error.
 
