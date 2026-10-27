@@ -52,12 +52,13 @@ url (`Url` fields) and tokio (task-local scopes). It re-exports the
 macros, so `use navree_orm::Model;` imports the trait and the derive at
 once.
 
-The facade turns it on with the `orm` feature (in `full`): `navree::orm` is
-the whole crate; `navree::prelude` brings `Model` (trait and derive),
-`Record`, `Collection`, `Builder`, `#[accessors]`, `attrs!` and
-`Attributes`; `navree_orm::prelude` has every name an app writes. The facade test treats navree-orm-macros as a companion
-proc-macro crate of navree-orm (`COMPANION_MACROS` in
-`crates/navree/tests/facade.rs`).
+The facade turns it on with the `orm` feature (in `full`; it turns on
+`db`, `http`, `crypto` and `api` too): `navree::orm` is the whole crate;
+`navree::prelude` brings `Model` (trait and derive), `Record`,
+`Collection`, `Builder`, `#[accessors]`, `attrs!` and `Attributes`;
+`navree_orm::prelude` has every name an app writes. The facade test
+treats navree-orm-macros as a companion proc-macro crate of navree-orm
+(`COMPANION_MACROS` in `crates/navree/tests/facade.rs`).
 
 Features of navree-orm: `postgres` (navree-db's PostgreSQL driver, and
 SeaORM's pgvector values for `cast = "vector"`), `mysql` (SeaORM's MySQL
@@ -755,7 +756,9 @@ keys. The model's lists come from the derive; a record overrides them
 (`RecordState`: `make_visible`, `make_hidden`, `append`, `set_*`,
 `merge_*`, `without_appends`, with conditional forms), a collection for
 all its records, and `only` / `except` per call. Failures are
-`OrmError::Serialize` naming the field.
+`OrmError::Serialize` naming the field. A record with nothing to rewrite
+(no casts, date-times, extras, relations, visibility or appends)
+serializes straight through its model's `Serialize`.
 
 **API resources and OpenAPI** (`resource.rs`, `schema.rs`). `Resource<M>`
 (a navree-api `ApiResource` built `from_record`) is the shape a front end
