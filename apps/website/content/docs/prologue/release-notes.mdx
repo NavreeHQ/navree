@@ -48,7 +48,7 @@ Install the CLI from the Git repository, and let new apps depend on the reposito
 
 ### Background work
 
-- **`navree-queue`**: database and memory job queues with workers, retries with backoff, unique and delayed jobs, failed-job storage and the `queue:work`, `queue:failed`, `queue:retry` and `queue:flush` commands. Jobs dispatched during a request are queued only if its transaction commits.
+- **`navree-queue`**: database and memory job queues with workers, retries with backoff, unique and delayed jobs, failed-job storage and the `queue:work`, `queue:failed`, `queue:retry` and `queue:flush` commands. Jobs dispatched during a request are queued only if its transaction commits. [Batches](/docs/digging-deeper/batches-and-operations/) run many jobs as one with `then`, `catch` and `finally` callbacks, jobs report progress with `ctx.progress`, and operations show long work to users: `GET /api/operations/{id}`, an SSE progress stream, a private channel, cooperative cancel and a watchdog that fails or restarts stalled work.
 - **`navree-events`**: a typed event bus with synchronous and queued listeners.
 - **`navree-schedule`**: schedules on cron expressions in UTC, overlap prevention, single-node runs across servers sharing a database, and `schedule:run`, `schedule:work` and `schedule:list`.
 

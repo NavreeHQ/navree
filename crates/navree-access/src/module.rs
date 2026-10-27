@@ -4,6 +4,7 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
+use navree_contracts::PermissionCheck;
 use navree_db::{Db, ModuleBuilderDbExt};
 use navree_http::{ModuleBuilderHttpExt, RouteAuthorizer};
 use navree_kernel::{Factory, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver};
@@ -18,6 +19,7 @@ use crate::error::{AccessError, map_access_error};
 use crate::factory::AbilityFactory;
 use crate::migration::migrations;
 use crate::options::AccessOptions;
+use crate::permission_check::AccessPermissionCheck;
 use crate::service::AccessService;
 use crate::subject::{SubjectRegistration, Subjects};
 
@@ -25,8 +27,10 @@ use crate::subject::{SubjectRegistration, Subjects};
 ///
 /// Global; provides and exports [`AccessService`] and [`AbilityFactory`],
 /// registers the app's `dyn RouteAuthorizer` ([`AccessAuthorizer`](crate::AccessAuthorizer)),
-/// the `access` migrations (after `auth`) and the `AccessError` → error
-/// mapping. Needs `DatabaseModule`.
+/// a `dyn PermissionCheck` (so `navree_contracts::permitted` answers with
+/// the user's app-wide roles and permissions), the `access` migrations
+/// (after `auth`) and the `AccessError` → error mapping. Needs
+/// `DatabaseModule`.
 ///
 /// ```no_run
 /// use navree_access::{AbilityCtx, AccessModule, AccessOptions, READ, Rules};
@@ -152,6 +156,14 @@ fn register(m: &mut ModuleBuilder, options: AccessOptions) {
             .deps(vec![ProviderKey::of::<AbilityFactory>()]),
         )
         .exports::<dyn RouteAuthorizer>()
+        // Permission questions asked outside a route (`permitted`).
+        .multi(
+            Factory::<dyn PermissionCheck>::new(|r: Resolver| async move {
+                let factory = r.get::<AbilityFactory>().await?;
+                Ok(Arc::new(AccessPermissionCheck(factory)) as Arc<dyn PermissionCheck>)
+            })
+            .deps(vec![ProviderKey::of::<AbilityFactory>()]),
+        )
         .controller::<AbilitiesController>()
         .controller::<AccessAdminController>()
         .migrations(migrations())

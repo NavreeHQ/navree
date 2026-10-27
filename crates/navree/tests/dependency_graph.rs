@@ -91,7 +91,10 @@ const HIERARCHY: &[Rule] = &[
     rule("navree-session", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto", "navree-db"]),
     rule("navree-validation", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db"]),
     rule("navree-audit", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db"]),
-    rule("navree-queue", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-db"]),
+    // Queue: operations mount routes with an SSE stream (http), authorize
+    // the private channel `operations.{id}` (realtime) and schedule their
+    // watchdog (schedule, same layer; schedule never depends on queue).
+    rule("navree-queue", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http", "navree-db", "navree-realtime", "navree-schedule"]),
     rule("navree-schedule", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-db"]),
     rule("navree-access", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db", "navree-cache"]),
     rule("navree-notify", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http", "navree-db", "navree-mail"]),
@@ -726,7 +729,7 @@ fn sideways_edge_within_a_layer_is_reported() {
 fn forbidden_dev_and_build_edges_are_reported() {
     let found = violations(&[
         edge("navree-http", "navree-db", Kind::Dev),
-        edge("navree-queue", "navree-http", Kind::Build),
+        edge("navree-queue", "navree-session", Kind::Build),
     ]);
     assert_eq!(found.len(), 2, "{found:?}");
 }

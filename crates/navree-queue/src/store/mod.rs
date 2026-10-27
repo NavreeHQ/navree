@@ -1,20 +1,27 @@
 //! The drivers behind [`Queue`](crate::Queue) and the public
 //! [`QueueStore`] trait other crates implement drivers with.
 
+mod batches;
 mod database;
 mod memory;
 
 use std::sync::Arc;
 
-pub(crate) use database::DatabaseStore;
+pub(crate) use database::{DatabaseStore, statement};
 pub(crate) use memory::MemoryStore;
 
 use navree_contracts::{BoxFuture, JobEnvelope};
+use navree_db::Uow;
 
+use crate::batch::{BatchRow, Finish, Finished};
 use crate::record::{
     FailedJob, NewJob, PendingJob, PendingQuery, QueueStatus, ReservedJob, RetryTarget, from_millis,
 };
 use crate::{QueueError, QueueFake};
+
+/// Turns a batch callback that became due into the job to store.
+pub(crate) type PrepareCallback<'a> =
+    dyn Fn(JobEnvelope, &BatchRow) -> Result<NewJob, QueueError> + Send + Sync + 'a;
 
 /// A queue driver implemented outside this crate (navree-redis's Redis
 /// driver is one): where jobs wait, are reserved by workers and end up when
@@ -41,6 +48,10 @@ use crate::{QueueError, QueueFake};
 /// - **Failed jobs** are kept until [`retry`](QueueStore::retry) (which puts
 ///   them back with [`FailedJob::requeued`]) or
 ///   [`flush_failed`](QueueStore::flush_failed).
+/// - **Membership.** A job's [`membership`](NewJob::membership) (its
+///   operation) is stored with it and handed back on the [`ReservedJob`].
+///   Batches need the `database` or `memory` driver: dispatching one on
+///   another driver is an error.
 ///
 /// Select a store with `queue.driver`: `redis` resolves the provider of
 /// `dyn QueueStore` named `redis`. Jobs dispatched inside a unit of work
@@ -336,11 +347,134 @@ impl Store {
             Err(QueueError::FailedJobNotFound { id: id.to_owned() })
         }
     }
+
+    /// Stores a batch and its jobs at once.
+    pub(crate) async fn insert_batch(
+        &self,
+        row: BatchRow,
+        jobs: Vec<NewJob>,
+    ) -> Result<(), QueueError> {
+        match self {
+            Store::Database(db) => db.insert_batch(&row, &jobs).await,
+            Store::Memory(memory) => {
+                memory.insert_batch(row, jobs);
+                Ok(())
+            }
+            Store::Fake(fake) => {
+                // A batch with no jobs dispatches its callbacks at once:
+                // the fake records them like any other dispatch.
+                let (callbacks, members): (Vec<_>, Vec<_>) =
+                    jobs.into_iter().partition(|job| job.membership.callback);
+                fake.record_batch(row, members.into_iter().map(envelope_of).collect());
+                for callback in callbacks {
+                    fake.record(envelope_of(callback));
+                }
+                Ok(())
+            }
+            Store::Custom(name, _) => Err(no_batches(name)),
+        }
+    }
+
+    /// Stores a batch and its jobs in the transaction of `uow` (database
+    /// driver only; the others store once it commits).
+    pub(crate) async fn insert_batch_in(
+        &self,
+        uow: &Uow,
+        row: &BatchRow,
+        jobs: &[NewJob],
+    ) -> Result<(), QueueError> {
+        match self {
+            Store::Database(db) => db.insert_batch_in(uow, row, jobs).await,
+            Store::Memory(_) | Store::Fake(_) => Ok(()),
+            Store::Custom(name, _) => Err(no_batches(name)),
+        }
+    }
+
+    /// Finishes a reserved job of a batch (see
+    /// [`MemoryStore::finish_batch_job`]).
+    pub(crate) async fn finish_batch_job(
+        &self,
+        job: &ReservedJob,
+        worker: &str,
+        finish: Finish,
+        error: &str,
+        now: i64,
+        prepare: &PrepareCallback<'_>,
+    ) -> Result<Finished, QueueError> {
+        match self {
+            Store::Database(db) => {
+                db.finish_batch_job(job, worker, finish, error, now, prepare)
+                    .await
+            }
+            Store::Memory(memory) => {
+                memory.finish_batch_job(job, worker, finish, error, now, prepare)
+            }
+            Store::Fake(_) => Ok(Finished::Lost),
+            Store::Custom(name, _) => Err(no_batches(name)),
+        }
+    }
+
+    pub(crate) async fn find_batch(&self, id: &str) -> Result<Option<BatchRow>, QueueError> {
+        match self {
+            Store::Database(db) => db.find_batch(id).await,
+            Store::Memory(memory) => Ok(memory.find_batch(id)),
+            Store::Fake(fake) => Ok(fake.find_batch(id)),
+            Store::Custom(..) => Ok(None),
+        }
+    }
+
+    pub(crate) async fn batches(&self, limit: usize) -> Result<Vec<BatchRow>, QueueError> {
+        match self {
+            Store::Database(db) => db.batches(limit).await,
+            Store::Memory(memory) => Ok(memory.batches(limit)),
+            Store::Fake(fake) => Ok(fake.batch_rows(limit)),
+            Store::Custom(..) => Ok(Vec::new()),
+        }
+    }
+
+    pub(crate) async fn cancel_batch(
+        &self,
+        id: &str,
+        now: i64,
+    ) -> Result<Option<BatchRow>, QueueError> {
+        match self {
+            Store::Database(db) => db.cancel_batch(id, now).await,
+            Store::Memory(memory) => Ok(memory.cancel_batch(id, now)),
+            Store::Fake(fake) => Ok(fake.cancel_batch(id, now)),
+            Store::Custom(..) => Ok(None),
+        }
+    }
+
+    pub(crate) async fn prune_batches(&self, before: i64) -> Result<u64, QueueError> {
+        match self {
+            Store::Database(db) => db.prune_batches(before).await,
+            Store::Memory(memory) => Ok(memory.prune_batches(before)),
+            Store::Fake(_) | Store::Custom(..) => Ok(0),
+        }
+    }
+
+    /// How many stored jobs do the work of operation `operation_id`.
+    pub(crate) async fn count_for_operation(&self, operation_id: &str) -> Result<u64, QueueError> {
+        match self {
+            Store::Database(db) => db.count_for_operation(operation_id).await,
+            Store::Memory(memory) => Ok(memory.count_for_operation(operation_id)),
+            Store::Fake(_) => Ok(0),
+            // `QueueStore` cannot look jobs up by operation: count the work
+            // as still queued, so the watchdog never runs it twice (the
+            // driver hands a crashed worker's job to another worker).
+            Store::Custom(..) => Ok(1),
+        }
+    }
+}
+
+/// The error for a batch on a driver that cannot store batches.
+fn no_batches(driver: &str) -> QueueError {
+    QueueError::Store(format!("the {driver} queue driver does not support batches").into())
 }
 
 /// The envelope a fake records for `job` (its delay rounded up to whole
 /// seconds).
-fn envelope_of(job: NewJob) -> JobEnvelope {
+pub(crate) fn envelope_of(job: NewJob) -> JobEnvelope {
     let delay_ms = job.available_at.saturating_sub(job.created_at).max(0);
     let delay_secs = u64::try_from(delay_ms.div_euclid(1000) + i64::from(delay_ms % 1000 != 0))
         .unwrap_or_default();

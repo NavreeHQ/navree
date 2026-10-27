@@ -3,20 +3,35 @@
 use std::sync::Arc;
 
 use navree_config::{Config, ConfigSection, ModuleBuilderConfigExt};
-use navree_contracts::{Clock, Dispatcher, JobRegistration};
+use navree_contracts::{Clock, Dispatcher, JobMonitor, JobRegistration};
 use navree_db::{Db, ModuleBuilderDbExt};
-use navree_kernel::{Factory, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver};
+use navree_http::ModuleBuilderHttpExt;
+use navree_kernel::{
+    AppContext, BoxError, Factory, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver,
+};
+use navree_realtime::ModuleBuilderRealtimeExt;
+use navree_schedule::ModuleBuilderScheduleExt;
 use navree_telemetry::{Telemetry, TracePolicy};
 
+use crate::operations::{QueueMonitor, authorize_channel};
 use crate::store::{DatabaseStore, MemoryStore, Store};
-use crate::{Queue, QueueDriver, QueueOptions, QueueStore, commands, migration};
+use crate::{
+    Operations, OperationsController, Queue, QueueDriver, QueueOptions, QueueStore, SweepReport,
+    commands, migration,
+};
 
 /// The queue module. Global; provides and exports [`Queue`] (also as the
 /// app's `dyn Dispatcher`, so mail, events, notifications and schedules
-/// queue through it) and [`QueueOptions`]; contributes the `queue`
-/// migrations (tables `jobs` and `failed_jobs`); registers the commands
+/// queue through it, and as the `dyn JobMonitor` behind
+/// `ctx.progress(..)`), [`Operations`] and [`QueueOptions`]; contributes
+/// the `queue` migrations (tables `jobs`, `failed_jobs`, `job_batches` and
+/// `operations`), the [`OperationsController`] routes, the private channel
+/// `operations.{id}` and the scheduled task `queue.watchdog` (every
+/// minute, in apps with `ScheduleModule`); registers the commands
 /// `queue:work [--queue a,b] [--once] [--stop-when-empty] [--max-jobs N]`,
-/// `queue:failed`, `queue:retry <id|all>` and `queue:flush`.
+/// `queue:failed`, `queue:retry <id|all>`, `queue:flush`,
+/// `queue:batches [--limit N]`, `queue:watchdog` and
+/// `queue:prune [--hours N]`.
 ///
 /// Workers run the handler of every
 /// [`JobRegistration`](navree_contracts::JobRegistration) contributed by the
@@ -161,8 +176,69 @@ fn register(m: &mut ModuleBuilder, options: Option<QueueOptions>) {
             .deps(vec![ProviderKey::of::<Queue>()]),
         )
         .exports::<dyn Dispatcher>()
+        .factory(
+            Factory::<dyn JobMonitor>::new(|r: Resolver| async move {
+                let queue = (*r.get::<Queue>().await?).clone();
+                Ok(Arc::new(QueueMonitor { queue }) as Arc<dyn JobMonitor>)
+            })
+            .deps(vec![ProviderKey::of::<Queue>()]),
+        )
+        .exports::<dyn JobMonitor>()
+        // Operations live in the app database; an app without
+        // `DatabaseModule` still boots, and using them is
+        // `QueueError::NoDatabase`.
+        .factory(
+            Factory::<Operations>::new(|r: Resolver| async move {
+                let queue = (*r.get::<Queue>().await?).clone();
+                let options = r.get::<QueueOptions>().await?;
+                let app = r.app();
+                let db = app.try_get::<Db>().await.map(|db| (*db).clone());
+                Ok(Arc::new(Operations::new(
+                    db,
+                    queue,
+                    options.operations.clone(),
+                    Some(app.downgrade()),
+                )))
+            })
+            .deps(vec![
+                ProviderKey::of::<Queue>(),
+                ProviderKey::of::<QueueOptions>(),
+            ]),
+        )
+        .exports::<Operations>()
+        .controller::<OperationsController>()
+        .channel("operations.{id}", authorize_channel)
         .migrations(migration::migrations());
+    // Runs only in apps with `ScheduleModule`; inert otherwise.
+    m.schedule(|s| {
+        s.task(WATCHDOG_TASK, run_watchdog)
+            .every_minute()
+            .without_overlapping();
+    });
     for command in commands::commands() {
         m.command(command);
     }
+}
+
+/// The name of the scheduled watchdog task.
+const WATCHDOG_TASK: &str = "queue.watchdog";
+
+/// One scheduled watchdog run: [`Operations::sweep`], unless
+/// `queue.operations.watchdog` is false.
+async fn run_watchdog(app: AppContext) -> Result<(), BoxError> {
+    let options = app.get::<QueueOptions>().await?;
+    if !options.operations.watchdog {
+        return Ok(());
+    }
+    let report = app.get::<Operations>().await?.sweep().await?;
+    if report != SweepReport::default() {
+        tracing::info!(
+            target: "navree::job",
+            failed = report.failed,
+            redispatched = report.redispatched,
+            finished = report.finished,
+            "watchdog swept stale operations"
+        );
+    }
+    Ok(())
 }

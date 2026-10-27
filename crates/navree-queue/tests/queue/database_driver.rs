@@ -11,6 +11,21 @@ use navree_testing::temp_sqlite_url;
 use sea_orm::ConnectionTrait;
 
 use crate::suite::{assert_handled_once, wait_until};
+
+/// With the `postgres` feature and `NAVREE_TEST_POSTGRES_URL` set, every
+/// harness (and so every suite) really runs on PostgreSQL.
+#[cfg(feature = "postgres")]
+#[tokio::test]
+async fn harnesses_run_on_postgres_when_it_is_configured() {
+    let h = harness(QueueDriver::Database).await;
+    let backend = h.app.get::<Db>().await.backend();
+    let expected = if std::env::var("NAVREE_TEST_POSTGRES_URL").is_ok() {
+        sea_orm::DbBackend::Postgres
+    } else {
+        sea_orm::DbBackend::Sqlite
+    };
+    assert_eq!(backend, expected);
+}
 use crate::support::{
     HideJobsTable, Journal, Record, app_on, app_without_jobs_on, harness, harness_with, options,
     start,

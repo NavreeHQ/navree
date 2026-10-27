@@ -70,6 +70,9 @@ pub struct QueueOptions {
     /// `default_queue`).
     #[serde(deserialize_with = "list_or_comma_separated")]
     pub queues: Vec<String>,
+    /// Operations: their routes, heartbeat and watchdog (section
+    /// `queue.operations`).
+    pub operations: OperationsOptions,
 }
 
 impl Default for QueueOptions {
@@ -80,7 +83,113 @@ impl Default for QueueOptions {
             workers: 4,
             poll_interval_ms: 1000,
             queues: Vec::new(),
+            operations: OperationsOptions::default(),
         }
+    }
+}
+
+/// Operations settings: configuration section `queue.operations`.
+///
+/// ```toml
+/// [queue.operations]
+/// routes = true                        # GET/DELETE /api/operations/{id}, the SSE stream
+/// watchdog = true                      # sweep stale operations every minute (with ScheduleModule)
+/// heartbeat_secs = 30                  # how often a running job's operation shows it is alive
+/// stale_after_secs = 300               # no heartbeat for this long: the watchdog steps in
+/// max_redispatches = 3                 # restarts of an idempotent operation's job
+/// progress_interval_ms = 500           # ctx.progress writes at most this often per job
+/// stream_poll_ms = 1000                # how often an SSE stream re-reads the operation
+/// view_permission = "operations.view"  # see other users' operations
+/// cancel_permission = "operations.cancel"
+/// ```
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct OperationsOptions {
+    /// Mounts the `/api/operations` routes (default true; they also need
+    /// `DatabaseModule` and an authenticator).
+    pub routes: bool,
+    /// Schedules the watchdog ([`Operations::sweep`](crate::Operations::sweep))
+    /// every minute, as task `queue.watchdog`, in apps with
+    /// `ScheduleModule` (default true). Without `ScheduleModule`, run
+    /// `queue:watchdog` every minute from system cron instead.
+    pub watchdog: bool,
+    /// How often the worker renews the heartbeat of a running job's
+    /// operation, in seconds (default 30).
+    pub heartbeat_secs: u64,
+    /// A pending or running operation without a heartbeat for this many
+    /// seconds is stale (default 300): see `queue:watchdog`.
+    pub stale_after_secs: u64,
+    /// How many times the watchdog dispatches the job of a stale
+    /// idempotent operation again before failing it (default 3).
+    pub max_redispatches: u32,
+    /// `ctx.progress` writes to the database at most this often per job, in
+    /// milliseconds (default 500); a report with `done == total` is always
+    /// written.
+    pub progress_interval_ms: u64,
+    /// How often an SSE stream re-reads its operation, in milliseconds
+    /// (default 1000). Changes made in the same process arrive at once.
+    pub stream_poll_ms: u64,
+    /// The permission that shows other users' operations (default
+    /// `operations.view`), app-wide or in the operation's workspace.
+    pub view_permission: String,
+    /// The permission that cancels other users' operations (default
+    /// `operations.cancel`).
+    pub cancel_permission: String,
+}
+
+impl Default for OperationsOptions {
+    fn default() -> Self {
+        Self {
+            routes: true,
+            watchdog: true,
+            heartbeat_secs: 30,
+            stale_after_secs: 300,
+            max_redispatches: 3,
+            progress_interval_ms: 500,
+            stream_poll_ms: 1000,
+            view_permission: "operations.view".to_owned(),
+            cancel_permission: "operations.cancel".to_owned(),
+        }
+    }
+}
+
+impl OperationsOptions {
+    /// [`heartbeat_secs`](OperationsOptions::heartbeat_secs) as a `Duration`.
+    pub fn heartbeat_interval(&self) -> Duration {
+        Duration::from_secs(self.heartbeat_secs.max(1))
+    }
+
+    /// [`progress_interval_ms`](OperationsOptions::progress_interval_ms) as
+    /// a `Duration`.
+    pub fn progress_interval(&self) -> Duration {
+        Duration::from_millis(self.progress_interval_ms)
+    }
+
+    /// [`stream_poll_ms`](OperationsOptions::stream_poll_ms) as a
+    /// `Duration`.
+    pub fn stream_poll_interval(&self) -> Duration {
+        Duration::from_millis(self.stream_poll_ms.max(1))
+    }
+
+    fn problems(&self) -> Vec<&'static str> {
+        let mut problems = Vec::new();
+        if self.heartbeat_secs == 0 {
+            problems.push("operations.heartbeat_secs must be at least 1");
+        }
+        if self.stale_after_secs <= self.heartbeat_secs {
+            problems
+                .push("operations.stale_after_secs must be more than operations.heartbeat_secs");
+        }
+        if self.stream_poll_ms == 0 {
+            problems.push("operations.stream_poll_ms must be at least 1");
+        }
+        if self.view_permission.trim().is_empty() {
+            problems.push("operations.view_permission must not be empty");
+        }
+        if self.cancel_permission.trim().is_empty() {
+            problems.push("operations.cancel_permission must not be empty");
+        }
+        problems
     }
 }
 
@@ -115,6 +224,7 @@ impl ConfigSection for QueueOptions {
         if self.poll_interval_ms == 0 {
             problems.push("poll_interval_ms must be at least 1");
         }
+        problems.extend(self.operations.problems());
         if problems.is_empty() {
             Ok(())
         } else {
@@ -210,6 +320,45 @@ mod tests {
         );
         let sources = ConfigSources::new().env_vars("APP_", [("APP_QUEUE__DRIVER", "carrier")]);
         assert!(config(sources).typed::<QueueOptions>().is_err());
+    }
+
+    #[test]
+    fn section_queue_operations_is_read_from_nested_keys() {
+        let sources = ConfigSources::new().env_vars(
+            "APP_",
+            [
+                ("APP_QUEUE__OPERATIONS__ROUTES", "false"),
+                ("APP_QUEUE__OPERATIONS__WATCHDOG", "false"),
+                ("APP_QUEUE__OPERATIONS__STALE_AFTER_SECS", "600"),
+                ("APP_QUEUE__OPERATIONS__VIEW_PERMISSION", "reports.view"),
+            ],
+        );
+        let options = config(sources).typed::<QueueOptions>().expect("valid");
+        let operations = options.operations;
+        assert!(!operations.routes && !operations.watchdog);
+        assert_eq!(operations.stale_after_secs, 600);
+        assert_eq!(operations.view_permission, "reports.view");
+        // The rest keep their defaults.
+        assert_eq!(operations.heartbeat_secs, 30);
+        assert_eq!(operations.max_redispatches, 3);
+        assert_eq!(operations.progress_interval_ms, 500);
+        assert_eq!(operations.stream_poll_ms, 1000);
+        assert_eq!(operations.cancel_permission, "operations.cancel");
+    }
+
+    #[test]
+    fn validation_checks_the_operations_settings() {
+        let invalid = |change: fn(&mut OperationsOptions)| {
+            let mut options = QueueOptions::default();
+            change(&mut options.operations);
+            options.validate().unwrap_err()
+        };
+        assert!(invalid(|o| o.heartbeat_secs = 0).contains("heartbeat_secs"));
+        assert!(invalid(|o| o.stale_after_secs = 30).contains("stale_after_secs"));
+        assert!(invalid(|o| o.stream_poll_ms = 0).contains("stream_poll_ms"));
+        assert!(invalid(|o| o.view_permission = " ".into()).contains("view_permission"));
+        assert!(invalid(|o| o.cancel_permission = String::new()).contains("cancel_permission"));
+        assert!(QueueOptions::default().validate().is_ok());
     }
 
     #[test]

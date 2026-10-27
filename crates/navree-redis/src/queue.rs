@@ -366,6 +366,7 @@ impl QueueStore for RedisQueueStore {
                 options: job.options,
                 attempts,
                 trace_parent: job.trace_parent,
+                membership: job.membership,
             }))
         })
     }

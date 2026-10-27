@@ -109,6 +109,7 @@ mod org_members;
 mod org_role;
 mod organizations;
 mod partitions;
+mod permission_check;
 mod resolve;
 mod role;
 mod scoped;

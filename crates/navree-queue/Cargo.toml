@@ -1,6 +1,6 @@
 [package]
 name = "navree-queue"
-description = "Navree QueueModule: database and memory job queues, workers, retries with backoff, unique and delayed jobs."
+description = "Navree QueueModule: database and memory job queues, workers, retries with backoff, unique and delayed jobs, job batches and operations with progress."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,14 +10,28 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+default = []
+## PostgreSQL for the tests: with `NAVREE_TEST_POSTGRES_URL` set, every
+## test harness runs on its own fresh PostgreSQL database.
+postgres = ["navree-db/postgres"]
+
 [dependencies]
+# The operations routes and their SSE stream.
+axum = { workspace = true }
 chrono = { workspace = true }
 futures-util = { workspace = true }
 hex = { workspace = true }
+http = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-db = { workspace = true }
+navree-http = { workspace = true }
 navree-kernel = { workspace = true }
+# The authorizer of the private channel `operations.{id}`.
+navree-realtime = { workspace = true }
+# The watchdog, scheduled every minute in apps with `ScheduleModule`.
+navree-schedule = { workspace = true }
 navree-telemetry = { workspace = true }
 sea-orm = { workspace = true }
 sea-orm-migration = { workspace = true }
@@ -28,6 +42,7 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
+utoipa = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]

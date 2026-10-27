@@ -97,7 +97,7 @@ navree list                                 # every command of the app
 | Tables, entities, queries, `Repo`, transactions, migrations, seeders, factories, pagination | `navree-database` |
 | Sign-in, tokens, current user, password reset, email verification, two-factor, API keys | `navree-auth` |
 | Roles, permissions, ability rules, record checks, per-user list filters | `navree-access-control` |
-| Background jobs, workers, retries, cron schedules | `navree-queues-and-scheduling` |
+| Background jobs, workers, retries, batches, progress operations, cron schedules | `navree-queues-and-scheduling` |
 | Events and listeners, live updates over WebSockets, private channels | `navree-events-and-broadcasting` |
 | Emails, templates, notifications | `navree-mail-and-notifications` |
 | Uploads, downloads, disks, signed links | `navree-storage` |
