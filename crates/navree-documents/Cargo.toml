@@ -18,6 +18,10 @@ typst = ["dep:typst", "dep:typst-pdf", "dep:typst-layout"]
 chrome = ["dep:tokio-tungstenite", "dep:futures-util", "dep:tempfile", "dep:mime_guess"]
 ## The DOCX writer.
 docx = ["dep:docx-rs"]
+## Queued renders behind an operation of navree-queue
+## (`Documents::queue_operation`). Off by default: the `navree` facade
+## turns it on when its `queue` feature is on too.
+operations = ["dep:navree-queue", "dep:navree-db"]
 
 [dependencies]
 axum = { workspace = true }
@@ -31,8 +35,10 @@ lopdf = { workspace = true }
 mime_guess = { workspace = true, optional = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
+navree-db = { workspace = true, optional = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
+navree-queue = { workspace = true, optional = true }
 navree-storage = { workspace = true }
 navree-view = { workspace = true }
 serde = { workspace = true }
@@ -48,6 +54,9 @@ typst-pdf = { workspace = true, optional = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
+# The tests cover queued renders behind operations too.
+navree-documents = { workspace = true, features = ["operations"] }
+navree-db = { workspace = true }
 navree-queue = { workspace = true }
 navree-testing = { workspace = true }
 tempfile = { workspace = true }
