@@ -104,10 +104,10 @@ impl DatabaseStore {
             }
             tx.execute_raw(update_batch(backend, &row)?).await?;
             let settled_now = !was_settled && row.settled();
-            Ok(Finished::Done(Some(BatchStep {
+            Ok(Finished::Done(Some(Box::new(BatchStep {
                 batch: row,
                 settled_now,
-            })))
+            }))))
         }
         .await;
         finish_uow(uow, result).await

@@ -179,10 +179,10 @@ impl MemoryStore {
                 }
                 let settled_now = !was_settled && row.settled();
                 state.batches.insert(row.id.clone(), row.clone());
-                Some(BatchStep {
+                Some(Box::new(BatchStep {
                     batch: row,
                     settled_now,
-                })
+                }))
             }
             None => None,
         };
