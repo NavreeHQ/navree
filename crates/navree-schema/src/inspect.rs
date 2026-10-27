@@ -125,7 +125,8 @@ fn serialize_action<S: serde::Serializer>(
 
 // ----- reading rows ----------------------------------------------------------
 
-fn text(row: &QueryResult, column: &str) -> Option<String> {
+/// Column `column` of `row` as text, whatever the driver decoded it as.
+pub(crate) fn text(row: &QueryResult, column: &str) -> Option<String> {
     if let Ok(value) = row.try_get::<Option<String>>("", column) {
         return value;
     }
@@ -138,7 +139,8 @@ fn text(row: &QueryResult, column: &str) -> Option<String> {
     None
 }
 
-fn int(row: &QueryResult, column: &str) -> Option<i64> {
+/// Column `column` of `row` as an integer.
+pub(crate) fn int(row: &QueryResult, column: &str) -> Option<i64> {
     if let Ok(value) = row.try_get::<Option<i64>>("", column) {
         return value;
     }
@@ -151,7 +153,8 @@ fn int(row: &QueryResult, column: &str) -> Option<i64> {
     text(row, column).and_then(|t| t.trim().parse().ok())
 }
 
-fn boolean(row: &QueryResult, column: &str) -> bool {
+/// Column `column` of `row` as a boolean (`false` when absent).
+pub(crate) fn boolean(row: &QueryResult, column: &str) -> bool {
     if let Ok(Some(value)) = row.try_get::<Option<bool>>("", column) {
         return value;
     }
@@ -194,7 +197,8 @@ pub(crate) async fn rows(
         .map_err(|source| SchemaError::database(sql, source))
 }
 
-fn s(value: &str) -> Value {
+/// A string parameter.
+pub(crate) fn s(value: &str) -> Value {
     Value::String(Some(value.to_owned()))
 }
 
