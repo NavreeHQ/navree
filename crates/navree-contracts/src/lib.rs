@@ -31,7 +31,7 @@ pub use jobs::{
     ModuleBuilderJobsExt,
 };
 pub use navree_kernel::{BoxError, BoxFuture};
-pub use principal::{AuthState, AuthVia, Principal};
+pub use principal::{AuthState, AuthVia, Impersonator, Principal};
 pub use request_id::RequestId;
 pub use secret::Secret;
 pub use session::{SessionRecord, SessionStore};

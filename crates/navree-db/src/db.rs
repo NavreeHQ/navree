@@ -141,6 +141,19 @@ impl Db {
         Uow::new(self.clone(), actor, request_id)
     }
 
+    /// A new, lazy unit of work for `actor` done by `impersonator` while
+    /// impersonating them ([`Uow::impersonator`]). The `DatabaseModule`
+    /// layer uses it for requests carrying a
+    /// `navree_contracts::Impersonator`.
+    pub async fn impersonated_uow(
+        &self,
+        actor: Uuid,
+        impersonator: Uuid,
+        request_id: Option<String>,
+    ) -> Uow {
+        Uow::impersonated(self.clone(), Some(actor), Some(impersonator), request_id)
+    }
+
     /// Runs `f` in a new unit of work (no actor): commits when it returns
     /// `Ok` (running change observers and after-commit hooks), rolls back
     /// when it returns `Err`. While `f` runs, the unit of work is

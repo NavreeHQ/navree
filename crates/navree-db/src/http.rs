@@ -7,7 +7,7 @@ use axum::extract::{FromRequestParts, Request, State};
 use axum::middleware::{Next, from_fn_with_state};
 use axum::response::{IntoResponse, Response};
 use http::request::Parts;
-use navree_contracts::{AuthState, RequestId};
+use navree_contracts::{AuthState, Impersonator, RequestId};
 use navree_http::{AppError, GlobalLayer, LayerSlot};
 use navree_kernel::AppContext;
 use navree_telemetry::TelemetryContext;
@@ -31,7 +31,8 @@ impl<S: Send + Sync> FromRequestParts<S> for Uow {
 }
 
 /// The [`LayerSlot::Uow`] layer: a lazy [`Uow`] per request with the actor
-/// (from `AuthState`) and the request id. The rest of the pipeline runs in a
+/// (from `AuthState`), the impersonator (from `Impersonator`) and the
+/// request id. The rest of the pipeline runs in a
 /// task on the app's tracker, so it completes (and commits) even if the
 /// client disconnects, with the unit of work as [`Uow::current`]. Commits
 /// when the status is below 400, rolls back otherwise; a failed commit
@@ -65,7 +66,16 @@ async fn unit_of_work(
         .extensions()
         .get::<RequestId>()
         .map(|id| id.as_str().to_owned());
-    let uow = db.uow(actor, request_id).await;
+    let impersonator = request
+        .extensions()
+        .get::<Impersonator>()
+        .map(|impersonator| impersonator.0);
+    let uow = match (actor, impersonator) {
+        (Some(actor), Some(impersonator)) => {
+            db.impersonated_uow(actor, impersonator, request_id).await
+        }
+        _ => db.uow(actor, request_id).await,
+    };
     request.extensions_mut().insert(uow.clone());
 
     // The task keeps the request's telemetry context (request id, trace).

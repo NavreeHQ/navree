@@ -857,3 +857,68 @@ fn controller_without_routes_has_none() {
     assert_eq!(controller.version(), None);
     assert!(controller.routes().is_empty());
 }
+
+mod security {
+    use navree_macros::{controller, injectable};
+
+    #[injectable]
+    pub struct AccountController;
+
+    /// Every route refuses impersonation sessions; one also needs a recent
+    /// sign-in.
+    #[controller("/account")]
+    #[authenticated]
+    #[not_while_impersonating]
+    impl AccountController {
+        #[get("/")]
+        async fn show(&self) -> &'static str {
+            "account"
+        }
+
+        #[delete("/")]
+        #[recent_auth(minutes = 10)]
+        async fn destroy(&self) -> &'static str {
+            "deleted"
+        }
+    }
+
+    #[injectable]
+    pub struct ReportController;
+
+    #[controller("/reports")]
+    impl ReportController {
+        #[post("/export")]
+        #[authenticated]
+        #[recent_auth(minutes = 5)]
+        #[navree_macros::not_while_impersonating]
+        async fn export(&self) -> &'static str {
+            "exported"
+        }
+    }
+}
+
+#[test]
+fn security_attributes_add_the_auth_guards() {
+    use navree_http::Controller;
+
+    let guards = |route: &navree_http::RouteDef| -> Vec<String> {
+        route
+            .meta
+            .guards
+            .iter()
+            .map(|guard| format!("{guard:?}"))
+            .collect()
+    };
+    let routes = Arc::new(security::AccountController).routes();
+    assert_eq!(guards(&routes[0]), ["not_while_impersonating"]);
+    assert_eq!(
+        guards(&routes[1]),
+        ["not_while_impersonating", "recent_auth(600s)"]
+    );
+    let export = Arc::new(security::ReportController).routes();
+    assert_eq!(
+        guards(&export[0]),
+        ["not_while_impersonating", "recent_auth(300s)"]
+    );
+    assert_eq!(export[0].meta.access.describe(), "auth");
+}

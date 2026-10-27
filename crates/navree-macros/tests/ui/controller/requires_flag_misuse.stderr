@@ -1,4 +1,4 @@
-error: #[requires_flag] goes on a route method, not on the impl block: on the impl block only #[public], #[authenticated], #[roles], #[permissions], #[can], #[guard] and #[throttle] apply to every route
+error: #[requires_flag] goes on a route method, not on the impl block: on the impl block only #[public], #[authenticated], #[roles], #[permissions], #[can], #[guard], #[throttle], #[not_while_impersonating] and #[recent_auth] apply to every route
  --> tests/ui/controller/requires_flag_misuse.rs:8:1
   |
 8 | #[requires_flag(NewPipeline)]

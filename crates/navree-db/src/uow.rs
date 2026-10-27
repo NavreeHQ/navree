@@ -118,6 +118,7 @@ pub struct Uow {
 struct UowInner {
     db: Db,
     actor: Option<Uuid>,
+    impersonator: Option<Uuid>,
     request_id: Option<String>,
     tx: tokio::sync::Mutex<TxState>,
     changes: Mutex<Vec<ChangeEvent>>,
@@ -156,10 +157,20 @@ impl Uow {
     }
 
     pub(crate) fn new(db: Db, actor: Option<Uuid>, request_id: Option<String>) -> Self {
+        Self::impersonated(db, actor, None, request_id)
+    }
+
+    pub(crate) fn impersonated(
+        db: Db,
+        actor: Option<Uuid>,
+        impersonator: Option<Uuid>,
+        request_id: Option<String>,
+    ) -> Self {
         Self {
             inner: Arc::new(UowInner {
                 db,
                 actor,
+                impersonator,
                 request_id,
                 tx: tokio::sync::Mutex::new(TxState::Idle),
                 changes: Mutex::new(Vec::new()),
@@ -198,6 +209,13 @@ impl Uow {
     /// The user the work is done for, if any.
     pub fn actor(&self) -> Option<Uuid> {
         self.inner.actor
+    }
+
+    /// The user impersonating the [`actor`](Uow::actor), if the work is
+    /// done in an impersonation session (`navree_contracts::Impersonator`).
+    /// The audit trail records it on the work's entries.
+    pub fn impersonator(&self) -> Option<Uuid> {
+        self.inner.impersonator
     }
 
     /// The request id, if any.
@@ -339,6 +357,7 @@ impl fmt::Debug for Uow {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Uow")
             .field("actor", &self.inner.actor)
+            .field("impersonator", &self.inner.impersonator)
             .field("request_id", &self.inner.request_id)
             .field("changes", &lock(&self.inner.changes).len())
             .finish_non_exhaustive()
