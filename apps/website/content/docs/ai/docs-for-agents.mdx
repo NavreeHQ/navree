@@ -12,6 +12,7 @@ These docs are written for two readers: you, and the model working next to you. 
 | The index | [`/llms.txt`](/llms.txt) | Give a model the map of the docs, one line per page. |
 | Everything | [`/llms-full.txt`](/llms-full.txt) | Load the whole documentation into one context. |
 | One page | `/docs/<section>/<page>.md` | Give a model exactly the page it needs. |
+| One version, as data | `/v/<version>/docs.json` | Every page split at its `##` headings, as Markdown; what [Navigator](/docs/ai/navigator/#search_docs-and-read_doc) downloads for an app on that Navree version. |
 | Page actions | the top of every docs page | Copy a page, or open it in Claude or ChatGPT. |
 | Project instructions | `AGENTS.md` and `CLAUDE.md` in every new app | Tell agents how your app is built before they change it. |
 

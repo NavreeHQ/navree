@@ -18,6 +18,9 @@ pub struct Model {
     pub action: String,
     /// The acting user, if any.
     pub actor_id: Option<Uuid>,
+    /// The user impersonating the actor when the entry was written (an
+    /// impersonation session), if any.
+    pub impersonator_id: Option<Uuid>,
     /// The affected record type, e.g. `Deal`.
     pub subject_type: Option<String>,
     /// The affected record id.

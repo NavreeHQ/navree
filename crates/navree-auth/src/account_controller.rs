@@ -21,7 +21,7 @@ use uuid::Uuid;
 use crate::controller::{api, signed_in};
 use crate::{
     AuthError, AuthOptions, AuthService, ClientMeta, CurrentUser, LoginResponse, ProfileUpdate,
-    TokenPair, TwoFactorProof, TwoFactorSetup, UserResource,
+    TokenPair, TwoFactorProof, TwoFactorSetup, UserResource, not_while_impersonating,
 };
 
 /// `POST /auth/forgot-password`.
@@ -374,6 +374,7 @@ impl Controller for AccountController {
         routes.push(
             RouteDef::on(Method::PATCH, path("/me/password"), change_password)
                 .authenticated()
+                .guard(not_while_impersonating())
                 .name("auth.password.change")
                 .api(ApiMeta {
                     request: Some(schema_fn::<ChangePasswordInput>),
@@ -411,6 +412,7 @@ impl Controller for AccountController {
         routes.push(
             RouteDef::on(Method::PATCH, path("/me"), update_profile)
                 .authenticated()
+                .guard(not_while_impersonating())
                 .name("auth.profile.update")
                 .api(ApiMeta {
                     request: Some(schema_fn::<UpdateProfileInput>),
@@ -446,6 +448,7 @@ impl AccountController {
         routes.push(
             RouteDef::on(Method::POST, path("/2fa/enable"), enable)
                 .authenticated()
+                .guard(not_while_impersonating())
                 .name("auth.two_factor.enable")
                 .api(ApiMeta {
                     response: Some(schema_fn::<TwoFactorSetup>),
@@ -473,6 +476,7 @@ impl AccountController {
         routes.push(
             RouteDef::on(Method::POST, path("/2fa/confirm"), confirm)
                 .authenticated()
+                .guard(not_while_impersonating())
                 .name("auth.two_factor.confirm")
                 .api(ApiMeta {
                     request: Some(schema_fn::<ConfirmTwoFactorInput>),
@@ -501,6 +505,7 @@ impl AccountController {
         routes.push(
             RouteDef::on(Method::POST, path("/2fa/disable"), disable)
                 .authenticated()
+                .guard(not_while_impersonating())
                 .name("auth.two_factor.disable")
                 .api(ApiMeta {
                     success_status: 204,
@@ -526,6 +531,7 @@ impl AccountController {
         routes.push(
             RouteDef::on(Method::POST, path("/2fa/recovery-codes"), regenerate)
                 .authenticated()
+                .guard(not_while_impersonating())
                 .name("auth.two_factor.recovery_codes")
                 .api(ApiMeta {
                     response: Some(schema_fn::<RecoveryCodesResponse>),
@@ -538,22 +544,7 @@ impl AccountController {
             move |meta: ClientMeta, Valid(Json(input)): Valid<Json<TwoFactorVerifyInput>>| {
                 let service = service.clone();
                 async move {
-                    let proof = match (input.code, input.recovery_code) {
-                        (Some(code), None) => TwoFactorProof::Code(code),
-                        (None, Some(code)) => TwoFactorProof::RecoveryCode(code),
-                        (None, None) => {
-                            return Err(field_error(
-                                "code",
-                                "code should not be empty when recovery_code is missing",
-                            ));
-                        }
-                        (Some(_), Some(_)) => {
-                            return Err(field_error(
-                                "code",
-                                "code must be empty when recovery_code is given",
-                            ));
-                        }
-                    };
+                    let proof = two_factor_proof(input.code, input.recovery_code)?;
                     let (user, tokens) = service
                         .verify_two_factor(&input.challenge_token, proof, &meta)
                         .await
@@ -576,6 +567,26 @@ impl AccountController {
         );
 
         routes
+    }
+}
+
+/// The second factor of a `TwoFactorVerifyInput`: exactly one of `code`
+/// and `recovery_code`.
+pub(crate) fn two_factor_proof(
+    code: Option<String>,
+    recovery_code: Option<String>,
+) -> Result<TwoFactorProof, AppError> {
+    match (code, recovery_code) {
+        (Some(code), None) => Ok(TwoFactorProof::Code(code)),
+        (None, Some(code)) => Ok(TwoFactorProof::RecoveryCode(code)),
+        (None, None) => Err(field_error(
+            "code",
+            "code should not be empty when recovery_code is missing",
+        )),
+        (Some(_), Some(_)) => Err(field_error(
+            "code",
+            "code must be empty when recovery_code is given",
+        )),
     }
 }
 

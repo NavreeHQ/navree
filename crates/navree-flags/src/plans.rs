@@ -4,10 +4,11 @@ use navree_kernel::{BoxError, BoxFuture};
 use uuid::Uuid;
 
 /// Tells which plan a workspace is on, for rollouts limited to plans
-/// (`Rollout::plans([..])`). Billing registers one that reads the
-/// workspace's local subscription copy; an app can register its own with
+/// (`Rollout::plans([..])`). Register one with
 /// [`ModuleBuilderFlagsExt::plan_resolver`](crate::ModuleBuilderFlagsExt::plan_resolver)
-/// or as a `dyn PlanResolver` provider.
+/// or as a `dyn PlanResolver` provider; with billing, it reads the
+/// workspace's local subscription copy (`Billing::subscription`). A
+/// workspace it gives no plan (`None`) is outside every rollout by plan.
 ///
 /// ```
 /// use navree_flags::PlanResolver;

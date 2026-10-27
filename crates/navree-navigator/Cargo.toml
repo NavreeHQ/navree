@@ -1,0 +1,39 @@
+[package]
+name = "navree-navigator"
+description = "Navree Navigator: the MCP server for coding agents (`navree mcp`) with the app's routes, module graph, providers, schema, read-only SQL, logs, configuration and version-matched docs, and the agent skills behind `navree skills:install`."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+# Embeds the agent skills (`skills/`) and the docs (`apps/website/content/docs`).
+build = "build.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+chrono = { workspace = true }
+futures-util = { workspace = true }
+# Reads the app's configuration exactly as the app does (decision D7).
+navree-config = { workspace = true }
+# The settings `navree dev` passes to the app when it has a `dock.toml`.
+navree-dock = { workspace = true }
+# Downloads the docs bundle of the app's Navree version (rustls with ring).
+reqwest = { workspace = true }
+rmcp = { workspace = true }
+rustls = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+# SQLite (bundled, from the workspace) and PostgreSQL with rustls and ring.
+sqlx = { workspace = true, features = ["postgres", "tls-rustls-ring-webpki"] }
+sqlparser = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+toml = { workspace = true }
+url = { workspace = true }
+
+[dev-dependencies]
+rmcp = { workspace = true, features = ["client"] }
+tempfile = { workspace = true }
+wiremock = { workspace = true }

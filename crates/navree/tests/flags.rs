@@ -116,7 +116,8 @@ impl DealsController {
 /// The deals module: its flags, service and routes.
 pub struct DealsModule;
 
-/// Plans of workspaces (what billing provides).
+/// Plans of workspaces, set by the test (an app with billing reads them
+/// from subscriptions: see `with_billing` below).
 #[injectable]
 pub struct Plans {
     #[inject(default)]
@@ -130,11 +131,11 @@ impl PlanResolver for Plans {
     }
 }
 
-/// Registers the plan resolver, as billing does.
+/// Registers the plan resolver.
 #[module(global, register = Self::wire)]
-pub struct BillingModule;
+pub struct PlansModule;
 
-impl BillingModule {
+impl PlansModule {
     fn wire(&self, m: &mut ModuleBuilder) {
         m.plan_resolver::<Plans>().exports::<Plans>();
     }
@@ -149,7 +150,7 @@ fn deals_app() -> TestAppBuilder {
         .module(EventsModule::for_root())
         .module(AccessModule::for_root(AccessOptions::default()))
         .module(WorkspaceModule::from_config())
-        .module(BillingModule)
+        .module(PlansModule)
         .module(DealsModule)
         .module(FlagsModule::from_config())
 }
@@ -366,4 +367,124 @@ async fn the_testing_examples_run_through_the_facade() {
         .assert_status(200);
     fake.assert_checked::<NewPipeline>();
     fake.assert_not_checked::<DealExport>();
+}
+
+/// "Rolling out by plan" with billing: a `PlanResolver` that reads the
+/// workspace's subscription from billing's local copy
+/// (`cargo test -p navree --features flags,billing --test flags`).
+#[cfg(feature = "billing")]
+mod with_billing {
+    use navree::BoxFuture;
+    use navree::billing::{BillableRef, Billing, Subscription, WORKSPACE_BILLABLE};
+    use navree::db::Db;
+    use navree::flags::{FlagScope, Flags, PlanResolver, Rollout};
+    use navree::prelude::*;
+    use navree::queue::Queue;
+    use navree::testing::TestApp;
+    use navree::workspace::{NewWorkspace, Workspace, Workspaces};
+    use uuid::Uuid;
+
+    use super::AiSummaries;
+
+    /// The plan of a workspace's valid subscription, from billing's local
+    /// copy (no call to the payment provider).
+    #[injectable]
+    pub struct SubscriptionPlans {
+        billing: Arc<Billing>,
+    }
+
+    impl PlanResolver for SubscriptionPlans {
+        fn plan(&self, workspace: Uuid) -> BoxFuture<'_, Result<Option<String>, BoxError>> {
+            Box::pin(async move {
+                let billable = BillableRef::new(WORKSPACE_BILLABLE, workspace);
+                let subscription = self.billing.subscription(&billable).await?;
+                Ok(subscription
+                    .filter(Subscription::valid)
+                    .map(|subscription| subscription.plan))
+            })
+        }
+    }
+
+    /// The module that owns billing: workspaces are billed, and rollouts by
+    /// plan read their subscriptions.
+    #[module(
+        imports = [
+            BillingModule::for_feature::<Workspace>(),
+            FlagsModule::for_feature::<AiSummaries>(),
+        ],
+        register = Self::wire,
+    )]
+    pub struct SubscriptionsModule;
+
+    impl SubscriptionsModule {
+        fn wire(&self, m: &mut ModuleBuilder) {
+            m.plan_resolver::<SubscriptionPlans>();
+        }
+    }
+
+    #[tokio::test]
+    async fn plan_rollouts_read_billing_subscriptions() {
+        let app = TestApp::builder()
+            .temp_database()
+            .fake_auth()
+            .config("app.key", navree::crypto::generate_key())
+            .config("billing.provider", "fake")
+            .config("billing.plans.pro.prices.monthly", "price_pro")
+            .config(
+                "billing.return_url",
+                "https://app.acme.test/settings/billing",
+            )
+            .config("queue.driver", "memory")
+            .module(CryptoModule::from_config())
+            .module(DatabaseModule::from_config())
+            .module(EventsModule::for_root())
+            .module(QueueModule::from_config())
+            .module(AuthModule::from_config())
+            .module(AccessModule::for_root(AccessOptions::default()))
+            .module(WorkspaceModule::from_config())
+            .module(BillingModule::from_config())
+            .module(SubscriptionsModule)
+            .module(FlagsModule::from_config())
+            .build()
+            .await;
+        let owner = app
+            .get::<AuthService>()
+            .await
+            .create_user("Ada Lovelace", "ada@example.com", "password123")
+            .await
+            .unwrap();
+        let workspaces = app.get::<Workspaces>().await;
+        let uow = app.get::<Db>().await.uow(None, None).await;
+        let acme = workspaces
+            .create(&uow, owner.id, NewWorkspace::named("Acme"))
+            .await
+            .unwrap();
+        let globex = workspaces
+            .create(&uow, owner.id, NewWorkspace::named("Globex"))
+            .await
+            .unwrap();
+        uow.commit().await.unwrap();
+
+        // Acme subscribes to Pro; Globex has no subscription.
+        let billing = app.get::<Billing>().await;
+        let checkout = billing.checkout(&acme, "pro").create().await.unwrap();
+        let fake = billing.fake().expect("the fake provider");
+        fake.complete_checkout(&checkout.id).await.unwrap();
+        app.get::<Queue>().await.run_pending().await.unwrap();
+        assert!(billing.subscribed(&acme, "pro").await.unwrap());
+
+        let flags = app.get::<Flags>().await;
+        flags
+            .rollout::<AiSummaries>(Rollout::plans(["pro", "business"]))
+            .await
+            .unwrap();
+        assert!(flags.active::<AiSummaries>(&acme).await.unwrap());
+        assert!(!flags.active::<AiSummaries>(&globex).await.unwrap());
+        assert!(
+            flags
+                .active::<AiSummaries>(FlagScope::user(owner.id).workspace(acme.id))
+                .await
+                .unwrap()
+        );
+    }
 }

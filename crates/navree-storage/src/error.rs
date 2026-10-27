@@ -132,6 +132,22 @@ pub enum UploadRejection {
     InvalidType,
 }
 
+impl UploadRejection {
+    /// The machine-readable code of the error response this rejection
+    /// becomes (the `code` member of the JSON error body): `empty_file`,
+    /// `payload_too_large`, `file_type_not_allowed`, `missing_content_type`
+    /// or `invalid_content_type`. A front end maps it to a translation key.
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::Empty => "empty_file",
+            Self::TooLarge { .. } => navree_http::codes::PAYLOAD_TOO_LARGE,
+            Self::Type { .. } => "file_type_not_allowed",
+            Self::MissingType { .. } => "missing_content_type",
+            Self::InvalidType => "invalid_content_type",
+        }
+    }
+}
+
 impl fmt::Display for UploadRejection {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -152,6 +168,39 @@ impl fmt::Display for UploadRejection {
             Self::InvalidType => {
                 f.write_str("the declared content type is not a valid `type/subtype`")
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn each_rejection_has_a_stable_code() {
+        let allowed = vec!["image/png".to_owned()];
+        let cases = [
+            (UploadRejection::Empty, "empty_file"),
+            (
+                UploadRejection::TooLarge { max_bytes: 10 },
+                "payload_too_large",
+            ),
+            (
+                UploadRejection::Type {
+                    mime: "text/plain".to_owned(),
+                    allowed: allowed.clone(),
+                },
+                "file_type_not_allowed",
+            ),
+            (
+                UploadRejection::MissingType { allowed },
+                "missing_content_type",
+            ),
+            (UploadRejection::InvalidType, "invalid_content_type"),
+        ];
+        for (rejection, code) in cases {
+            assert_eq!(rejection.code(), code, "{rejection:?}");
+            assert!(navree_http::codes::is_valid(rejection.code()));
         }
     }
 }

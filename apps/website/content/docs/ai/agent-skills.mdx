@@ -24,10 +24,10 @@ Start with **`navree`**. It explains what a Navree app is, how one is laid out, 
 | `navree-validation` | Validate bodies and query strings with garde DTOs, `unique` and `exists` rules, custom rules and messages |
 | `navree-errors-and-responses` | Return errors in Navree's JSON shape, map your error types to statuses, and shape responses, headers and downloads |
 | `navree-database` | Entities, `Repo`, the unit of work, transactions in jobs, migrations, seeders, factories and pagination |
-| `navree-auth` | Sign-in with JWT and rotating refresh tokens, the current user, account flows, two-factor and API keys |
+| `navree-auth` | Sign-in with JWT and rotating refresh tokens, the current user, account flows, two-factor and its policy, sessions and step-up, impersonation, magic links, emailed codes, passkeys, platform sign-in, token exchange and API keys |
 | `navree-access-control` | Roles, permissions, ability rules, record checks with `Authorized` and per-user list filters with `Accessible` |
 | `navree-workspaces` | Workspaces, members, roles and invitations, `CurrentWorkspace` and isolation by row, schema or database |
-| `navree-webhooks` | Signed outgoing webhooks from events, endpoints, retries and the delivery log, and incoming webhooks verified with `VerifiedWebhook` (Stripe, GitHub, Paddle, Standard Webhooks) |
+| `navree-webhooks` | Signed outgoing webhooks from events, endpoints, retries and the delivery log, and incoming webhooks verified with `VerifiedWebhook` (Stripe, GitHub, Paddle, Standard Webhooks, AWS SNS, Google Pub/Sub, Microsoft Graph, Twilio, Slack, Mailgun, Postmark) |
 | `navree-flags` | Feature flags as types with `#[flag]`, checks with `CurrentFlags`, `Flags` and `#[requires_flag]`, overrides, percentage and plan rollouts, the kill switch, and `FlagsFake` in tests |
 | `navree-search` | `#[derive(Searchable)]`, search engines, syncing through the queue, queries with access and workspaces, vector search |
 | `navree-graphql` | GraphQL with `#[resolver]` fields, field access, `ContextExt`, dataloaders, subscriptions and `graphql:schema` |
@@ -35,7 +35,7 @@ Start with **`navree`**. It explains what a Navree app is, how one is laid out, 
 | `navree-billing` | Bill users or workspaces with Stripe or Paddle: `BillingModule`, plans, checkout, subscriptions, trials, seats, metered usage, invoices, the portal, verified webhooks and `BillingFake` |
 | `navree-mcp` | Expose tools, resources and prompts to AI clients with `#[mcp_server]`, per-tool access, bearer or OAuth auth, stdio, and test them with `McpTestClient` |
 | `navree-ai` | The AI SDK: providers and models, `ai.text`, `ai.structured`, `ai.stream`, failover and budgets, agents with `#[tool]` methods run as the user, memory and approvals, embeddings, vector stores and RAG, and `AiFake` in tests |
-| `navree-lighthouse` | Monitor the app with `LighthouseModule`: issues, reports from code, statuses, alerts and your own channels, the `/_lighthouse` dashboard and its JSON API, pruning, and `LighthouseFake` in tests |
+| `navree-lighthouse` | Monitor the app with `LighthouseModule`: issues, reports from code, statuses, alerts and your own channels, the `/_lighthouse` dashboard, its JSON API and MCP tools, pruning, and `LighthouseFake` in tests |
 | `navree-redis` | Share the cache, locks, jobs, sessions, rate limits and WebSocket broadcasts between processes with `RedisModule`, and run Redis commands |
 | `navree-logbook` | The local debugging timeline at `/_logbook`: `LogbookModule`, the filter language, `tag` and `dump`, duplicate-query detection, request replay and `last_request().queries()` in tests |
 | `navree-fleet` | Run queue workers under Fleet: supervisors and balancing, recycling limits, `fleet` in production, pausing, the `/_fleet` dashboard and its abilities, metrics and gauges, long-wait alerts, and `FakeSpawner` tests |
@@ -52,6 +52,7 @@ Start with **`navree`**. It explains what a Navree app is, how one is laid out, 
 | `navree-deployment` | Release builds, production settings, the processes to run, systemd units, migrations and health checks |
 | `navree-security-checklist` | A review before release: routes, abilities, input, rate limits, tokens, CORS, CSRF, secrets and the audit log |
 | `navree-module-conformity` | Audit a module: `navree check` (routes documented, entities classified, workspace data through `WorkspaceRepo`), cross-workspace isolation suites, custom checks and `navree gate` |
+| `navree-navigator` | Connect a coding agent to [Navigator](/docs/ai/navigator/) (`navree mcp`), use its tools before changing routes, providers or the schema, and install the skills |
 
 The [`skills/README.md`](https://github.com/NavreeHQ/navree/blob/main/skills/README.md) in the repository lists the same set. It grows with the framework, and `navree skills:install` always installs the skills of your Navree version.
 
@@ -109,7 +110,7 @@ From your app's directory:
 navree skills:install
 ```
 
-It copies every Navree skill into `.claude/skills/` (Claude Code) and `.agents/skills/` (the shared folder other agents read). Run it again after you upgrade Navree to get the skills of the new version; it replaces the `navree` and `navree-*` folders and leaves your own skills alone.
+It copies every Navree skill into `.claude/skills/` (Claude Code) and `.agents/skills/` (the shared folder other agents read) of the current directory, or of the project `--path <dir>` names. The skills are built into the CLI, so they are always those of its Navree version. Run it again after you upgrade Navree to get the skills of the new version; it replaces the `navree` and `navree-*` folders (removing any that the new version no longer has) and leaves your own skills alone.
 
 </Tab>
 <Tab label="skills CLI">

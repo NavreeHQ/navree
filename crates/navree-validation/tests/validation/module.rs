@@ -2,9 +2,10 @@
 //! from the `validation` configuration section.
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use navree_testing::TestApp;
-use navree_validation::{Messages, ValidationModule, ValidationOptions};
+use navree_validation::{MessageTranslator, Messages, ValidationModule, ValidationOptions};
 use serde_json::{Value, json};
 
 use crate::support::{ValidationTestModule, errors};
@@ -142,5 +143,97 @@ async fn message_lists_every_error_in_field_order() {
                 "tags": ["tags must contain at least 1 elements"],
             },
         })
+    );
+}
+
+/// A translator that renders a small French table, with display names, and
+/// falls back to the app's English templates.
+struct French;
+
+impl MessageTranslator for French {
+    fn message(
+        &self,
+        messages: &Messages,
+        field: &str,
+        rule: &str,
+        params: &[(&str, String)],
+    ) -> String {
+        let mut values = vec![("attribute", self.attribute(messages, field))];
+        values.extend(params.iter().map(|(name, value)| (*name, value.clone())));
+        let template = match rule {
+            "email" => ":attribute doit être une adresse e-mail valide",
+            "min.string" => ":attribute doit contenir au moins :min caractères",
+            _ => messages
+                .lookup(field, rule)
+                .unwrap_or(":attribute is invalid"),
+        };
+        Messages::fill(template, &values)
+    }
+
+    fn attribute(&self, messages: &Messages, field: &str) -> String {
+        match field {
+            "name" => "nom".to_owned(),
+            "odd" => "impair".to_owned(),
+            _ => messages.attribute(field),
+        }
+    }
+}
+
+#[tokio::test]
+async fn a_registered_translator_renders_every_message() {
+    let app = TestApp::builder()
+        .override_value::<dyn MessageTranslator>(Arc::new(French))
+        .config("validation.messages.min.array", "Need :min :attribute.")
+        .module(ValidationModule)
+        .module(ValidationTestModule)
+        .build()
+        .await;
+
+    let response = app
+        .client()
+        .post("/v/users")
+        .json(&bad_user())
+        .send()
+        .await
+        .assert_error(400, None);
+    assert_eq!(
+        errors(&response.json_value()),
+        &json!({
+            "name": ["nom doit contenir au moins 2 caractères"],
+            "email": ["email doit être une adresse e-mail valide"],
+            "tags": ["Need 1 tags."],
+        })
+    );
+
+    // A plain-text message (an app rule's) gets the translated name.
+    let response = app
+        .client()
+        .post("/v/parity")
+        .json(&json!({ "even": 2, "odd": 2 }))
+        .send()
+        .await
+        .assert_error(400, None);
+    assert_eq!(
+        errors(&response.json_value()),
+        &json!({ "odd": ["impair must be an odd number"] })
+    );
+}
+
+#[test]
+fn lookup_and_fill_expose_the_templates() {
+    let messages = Messages::default().with_message("email.unique", "Taken: :attribute");
+    assert_eq!(
+        messages.lookup("email", "unique"),
+        Some("Taken: :attribute")
+    );
+    assert_eq!(
+        messages.lookup("name", "unique"),
+        Some(":attribute has already been taken")
+    );
+    assert_eq!(messages.lookup("name", "no_such_rule"), None);
+    let values = [("attribute", "name".to_owned()), ("min", "2".to_owned())];
+    assert_eq!(
+        Messages::fill(":attribute needs :min (:other)", &values),
+        "name needs 2 (:other)"
     );
 }

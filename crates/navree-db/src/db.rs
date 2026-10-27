@@ -40,6 +40,11 @@ struct DbInner {
     /// The app whose `dyn ChangeObserver` multi-bindings see every commit.
     app: Option<WeakAppContext>,
     observers: OnceCell<Vec<Arc<dyn ChangeObserver>>>,
+    /// Whether the app registers any `dyn ChangeObserver`, decided at boot:
+    /// without one, writes defer preparing their change events.
+    observed: bool,
+    /// `database.transaction_settings`.
+    transaction_settings: bool,
 }
 
 impl Db {
@@ -87,7 +92,16 @@ impl Db {
             .min_connections(options.min_connections)
             .connect_timeout(Duration::from_secs(options.connect_timeout_secs))
             .acquire_timeout(Duration::from_secs(options.connect_timeout_secs.max(1) * 4))
+            .idle_timeout(seconds_or_never(options.idle_timeout_secs))
+            .max_lifetime(seconds_or_never(options.max_lifetime_secs))
             .sqlx_logging(false);
+        if options.test_before_acquire {
+            connect.test_before_acquire(true);
+        } else {
+            // Hot connections go straight out; one that sat idle long
+            // enough to have been dropped on the way is pinged first.
+            connect.test_before_acquire_if_idle_for(Duration::from_secs(DbOptions::IDLE_PING_SECS));
+        }
         if is_sqlite_url(&options.url) {
             create_sqlite_parent_dir(&options.url).await?;
             connect.map_sqlx_sqlite_opts(|o| {
@@ -112,26 +126,63 @@ impl Db {
                 connection: options.redacted_url(),
             },
         );
-        Ok(Self::from_connection(conn))
+        Ok(Self::from_connection(conn).with_transaction_settings(options.transaction_settings))
     }
 
-    /// Wraps an existing SeaORM connection (no change observers).
+    /// Wraps an existing SeaORM connection (no change observers; transaction
+    /// settings on, as `database.transaction_settings` is by default).
     pub fn from_connection(conn: DatabaseConnection) -> Db {
-        Self::build(Arc::new(conn), None)
+        Self::build(Arc::new(conn), None, false, true)
     }
 
     /// The same pool, reporting commits to the `dyn ChangeObserver`
-    /// multi-bindings of `app`.
-    pub(crate) fn with_app(&self, app: WeakAppContext) -> Db {
-        Self::build(self.inner.conn.clone(), Some(app))
+    /// multi-bindings of `app` (and knowing, from its module graph, whether
+    /// it has any).
+    pub(crate) fn with_app(&self, app: &AppContext) -> Db {
+        Self::build(
+            self.inner.conn.clone(),
+            Some(app.downgrade()),
+            app.multi_count::<dyn ChangeObserver>() > 0,
+            self.inner.transaction_settings,
+        )
     }
 
-    fn build(conn: Arc<DatabaseConnection>, app: Option<WeakAppContext>) -> Db {
+    /// The same pool, its units of work setting the actor and request id
+    /// in SQL or not (`database.transaction_settings`, see
+    /// [`DbOptions::transaction_settings`]).
+    pub fn with_transaction_settings(&self, enabled: bool) -> Db {
+        Self::build(
+            self.inner.conn.clone(),
+            self.inner.app.clone(),
+            self.inner.observed,
+            enabled,
+        )
+    }
+
+    /// Whether units of work set the actor and request id in SQL
+    /// (`database.transaction_settings`).
+    pub fn transaction_settings(&self) -> bool {
+        self.inner.transaction_settings
+    }
+
+    /// Whether the app registers a `dyn ChangeObserver` (decided at boot).
+    pub(crate) fn observed(&self) -> bool {
+        self.inner.observed
+    }
+
+    fn build(
+        conn: Arc<DatabaseConnection>,
+        app: Option<WeakAppContext>,
+        observed: bool,
+        transaction_settings: bool,
+    ) -> Db {
         Self {
             inner: Arc::new(DbInner {
                 conn,
                 app,
                 observers: OnceCell::new(),
+                observed,
+                transaction_settings,
             }),
         }
     }
@@ -182,6 +233,19 @@ impl Db {
     /// requests get theirs from the `DatabaseModule` layer).
     pub async fn uow(&self, actor: Option<Uuid>, request_id: Option<String>) -> Uow {
         Uow::new(self.clone(), actor, request_id)
+    }
+
+    /// A new, lazy unit of work for `actor` done by `impersonator` while
+    /// impersonating them ([`Uow::impersonator`]). The `DatabaseModule`
+    /// layer uses it for requests carrying a
+    /// `navree_contracts::Impersonator`.
+    pub async fn impersonated_uow(
+        &self,
+        actor: Uuid,
+        impersonator: Uuid,
+        request_id: Option<String>,
+    ) -> Uow {
+        Uow::impersonated(self.clone(), Some(actor), Some(impersonator), request_id)
     }
 
     /// Runs `f` in a new unit of work (no actor): commits when it returns
@@ -342,6 +406,11 @@ fn connect_error(options: &DbOptions, error: &DbErr) -> DbErr {
         _ => "",
     };
     DbErr::Custom(format!("cannot connect to {redacted}: {message}{hint}"))
+}
+
+/// `secs` as a duration; 0 means none.
+fn seconds_or_never(secs: u64) -> Option<Duration> {
+    (secs > 0).then(|| Duration::from_secs(secs))
 }
 
 fn is_sqlite_url(url: &str) -> bool {

@@ -359,7 +359,7 @@ To use other permission names, set `queue.operations.view_permission` and `cance
 - its batch is cancelled, and its jobs that haven't started are skipped;
 - a running job stops at its next `ctx.progress` (or `check_cancelled`), which returns `JobCancelled`.
 
-Cancelling is cooperative: a job that never reports progress runs to the end, though the operation stays cancelled. Cancelling a finished operation over HTTP answers `409 Conflict`, "The operation has already finished.".
+Cancelling is cooperative: a job that never reports progress runs to the end, though the operation stays cancelled. Cancelling a finished operation over HTTP answers `409 Conflict`, "The operation has already finished.", with the code `operation_finished`.
 
 ### The watchdog
 

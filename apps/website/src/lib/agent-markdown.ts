@@ -164,6 +164,84 @@ export function llmsFullTxt(pages: AgentPage[], markdown: Map<string, string>): 
   return `${head}\n\n---\n\n${parts.join("\n\n---\n\n")}\n`;
 }
 
+// -------------------------------------------------------------- docs.json
+
+export type DocsSection = { heading: string; anchor: string; markdown: string };
+
+export type DocsBundlePage = {
+  slug: string;
+  title: string;
+  description: string;
+  planned: boolean;
+  sections: DocsSection[];
+};
+
+/** A version's docs for Navigator (`navree mcp`): `/v/<version>/docs.json`. */
+export type DocsBundle = { version: string; pages: DocsBundlePage[] };
+
+/** A heading's id on the page, as rehype-slug (github-slugger) makes it. */
+function headingAnchor(heading: string, used: Map<string, number>): string {
+  const text = heading
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/<[^>]+>/g, "")
+    .toLowerCase();
+  const base = text.replace(/[^\p{L}\p{M}\p{N}\p{Pc} -]/gu, "").replace(/ /g, "-");
+  const seen = used.get(base) ?? 0;
+  used.set(base, seen + 1);
+  return seen ? `${base}-${seen}` : base;
+}
+
+/**
+ * Markdown split at its `##` headings (outside code blocks). The text before
+ * the first heading is a section with an empty heading.
+ */
+export function splitSections(markdown: string): DocsSection[] {
+  const sections: DocsSection[] = [];
+  const used = new Map<string, number>();
+  let current: DocsSection = { heading: "", anchor: "", markdown: "" };
+  const lines: string[] = [];
+  let fence: string | null = null;
+  const flush = () => {
+    current.markdown = lines.join("\n").trim();
+    if (current.heading || current.markdown) sections.push(current);
+    lines.length = 0;
+  };
+  for (const line of markdown.split("\n")) {
+    const marker = /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1];
+    if (marker && (fence === null || (marker[0] === fence[0] && marker.length >= fence.length))) {
+      fence = fence === null ? marker : null;
+    }
+    const heading = fence === null && !marker ? /^## +(.+?)\s*#*\s*$/.exec(line) : null;
+    if (heading) {
+      flush();
+      current = { heading: heading[1], anchor: headingAnchor(heading[1], used), markdown: "" };
+      continue;
+    }
+    lines.push(line);
+  }
+  flush();
+  return sections;
+}
+
+/**
+ * `/v/<version>/docs.json`: every page with its title, description, whether
+ * it is planned, and its `##` sections as Markdown (components converted as
+ * for the `.md` files). Navigator downloads it to answer `search_docs` and
+ * `read_doc` with the docs of the Navree version an app uses.
+ */
+export function docsBundle(version: string, pages: AgentPage[]): DocsBundle {
+  return {
+    version,
+    pages: pages.map((page) => ({
+      slug: `${page.section}/${page.page}`,
+      title: page.title,
+      description: page.description,
+      planned: page.planned,
+      sections: splitSections(mdxToMarkdown(page.source)),
+    })),
+  };
+}
+
 // --------------------------------------------------------------- the tree
 
 type Point = { line: number; column: number; offset?: number };

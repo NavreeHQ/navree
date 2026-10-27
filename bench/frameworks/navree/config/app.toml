@@ -18,6 +18,9 @@ per_ip_rate_limit = 1000000000
 max_connections = 64
 # The schema and data already exist (bench/db/init.sql).
 migrate_on_boot = false
+# No trigger or policy here reads navree.actor or navree.request_id, so
+# transactions skip the statement that sets them.
+transaction_settings = false
 
 [auth]
 # The benchmark only verifies tokens; nobody signs up.
