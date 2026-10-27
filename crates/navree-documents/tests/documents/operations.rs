@@ -97,7 +97,12 @@ async fn a_queued_render_runs_as_an_operation() {
     assert!(size > 1000, "{size}");
 
     let documents = app.get::<Documents>().await;
-    let stored = documents.disk().unwrap().get("exports/ada.pdf").await.unwrap();
+    let stored = documents
+        .disk()
+        .unwrap()
+        .get("exports/ada.pdf")
+        .await
+        .unwrap();
     assert_eq!(stored.len() as u64, size);
 }
 

@@ -47,10 +47,7 @@ impl StoredDocument {
     /// A link that downloads it until `expires_at`, without a session: the
     /// cloud store's presigned URL on an S3, GCS or Azure disk, else a
     /// signed link served by navree-storage's `GET /storage/{disk}/{*path}`.
-    pub async fn temporary_url(
-        &self,
-        expires_at: DateTime<Utc>,
-    ) -> Result<String, DocumentsError> {
+    pub async fn temporary_url(&self, expires_at: DateTime<Utc>) -> Result<String, DocumentsError> {
         Ok(self.disk.temporary_url(&self.path, expires_at).await?)
     }
 }
@@ -220,10 +217,7 @@ impl RenderDocument {
             .await
             .map_err(Stop::Cancelled)?;
         let disk = documents.storage_disk(&self.disk).map_err(Stop::Failed)?;
-        let pdf = documents
-            .render(&self.render)
-            .await
-            .map_err(Stop::Failed)?;
+        let pdf = documents.render(&self.render).await.map_err(Stop::Failed)?;
         ctx.progress(1, 2, SAVING_NOTE)
             .await
             .map_err(Stop::Cancelled)?;

@@ -14,8 +14,9 @@ use navree_documents::{
     Documents, DocumentsError, DocumentsFake, DocumentsModule, DocumentsOptions, Docx, DocxFile,
     Download, EngineKind, FAILED_SUFFIX, FONTS_STYLESHEET, FakeEngine, HTML_EXTENSION, Margins,
     ModuleBuilderDocumentsExt, PDF_CONTENT_TYPE, Pages, Paper, Pdf, PdfEngine, Position,
-    PrintOptions, QueuedDocument, QueuedRender, Render, RenderDocument, Stamp, StoredDocument,
-    TYPST_EXTENSION, TemplateSource, Templates, TypstEngine, TypstOptions, is_rtl,
+    PrintOptions, QueuedDocument, QueuedRender, RENDER_FAILED_MESSAGE, Render, RenderDocument,
+    Stamp, StoredDocument, TYPST_EXTENSION, TemplateSource, Templates, TypstEngine, TypstOptions,
+    is_rtl,
 };
 use navree_kernel::ModuleBuilder;
 use serde_json::json;
@@ -30,12 +31,34 @@ async fn documents_methods(documents: &Documents, render: Render) -> Result<(), 
     let _: String = stored.temporary_url(chrono::Utc::now()).await?;
     let _: String = stored.url()?;
     let queued: QueuedDocument = documents.queue(render, "exports/q3.pdf").await?;
+    let _: Option<uuid::Uuid> = queued.operation_id;
     let _: DocumentStatus = documents.status(&queued).await?;
     let _: Vec<String> = documents.font_families().await?;
     documents.shutdown().await;
     let _ = documents.disk()?;
     let _: &Templates = documents.templates();
     let _: Option<Arc<dyn PdfEngine>> = documents.engine(EngineKind::Chrome);
+    Ok(())
+}
+
+/// `queue_operation` (compiled, never run).
+#[allow(dead_code)]
+async fn behind_an_operation(
+    documents: &Documents,
+    operations: &navree_queue::Operations,
+    uow: &navree_db::Uow,
+    render: Render,
+) -> Result<(), DocumentsError> {
+    let op: navree_queue::OperationRecord = documents
+        .queue_operation(
+            operations,
+            uow,
+            navree_queue::Operation::new("audit.export"),
+            render,
+            "exports/audit-q3.pdf",
+        )
+        .await?;
+    let _ = op.result;
     Ok(())
 }
 
@@ -97,6 +120,7 @@ fn the_documented_api_exists() {
     assert_eq!(DOCUMENT_ORIGIN, "https://documents.navree.invalid");
     assert_eq!(FONTS_STYLESHEET, "/_navree/fonts.css");
     assert_eq!(FAILED_SUFFIX, ".failed");
+    assert_eq!(RENDER_FAILED_MESSAGE, "The document could not be rendered.");
     assert_eq!(PDF_CONTENT_TYPE, "application/pdf");
     assert!(DOCX_CONTENT_TYPE.ends_with("wordprocessingml.document"));
     assert_eq!(

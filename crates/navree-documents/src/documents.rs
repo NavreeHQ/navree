@@ -367,7 +367,8 @@ impl Documents {
         render: Render,
         path: impl Into<String>,
     ) -> Result<navree_queue::OperationRecord, DocumentsError> {
-        let queue_error = |error: navree_queue::QueueError| DocumentsError::Queue(error.to_string());
+        let queue_error =
+            |error: navree_queue::QueueError| DocumentsError::Queue(error.to_string());
         let path = path.into();
         if let Some(error) = &render.data_error {
             return Err(DocumentsError::Data(error.clone()));

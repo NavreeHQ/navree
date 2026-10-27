@@ -28,7 +28,7 @@ The `documents` feature of the `navree` facade is opt-in: it is not part of `ful
 navree = { git = "https://github.com/NavreeHQ/navree", features = ["documents"] }
 ```
 
-It brings `navree::documents` (the `navree-documents` crate) and puts `DocumentsModule` and `ModuleBuilderDocumentsExt` in the prelude. The crate's own features are `typst`, `chrome` and `docx`, all on; depend on `navree-documents` directly with `default-features = false` to leave an engine out.
+It brings `navree::documents` (the `navree-documents` crate) and puts `DocumentsModule` and `ModuleBuilderDocumentsExt` in the prelude. The crate's own features are `typst`, `chrome` and `docx`, all on, and `operations`, which the facade turns on along with its `queue` feature; depend on `navree-documents` directly with `default-features = false` to leave an engine out.
 
 Add `DocumentsModule` to your app root:
 
@@ -401,6 +401,62 @@ async fn status(&self, Json(queued): Json<QueuedDocument>) -> Result<Json<Docume
 - An engine failure, a timeout or a disk error fails the attempt, and the queue retries it (three attempts, five minutes each). A template or data error can't be fixed by trying again: it is recorded at once and the job ends.
 - A failure is recorded as `<path>.failed` on the same disk, holding the error message; a later successful render removes it. The message can name template files, so log it and show people a message of your own.
 - The path is checked before anything is queued: `../escape.pdf` is a `DocumentsError::Storage` error.
+- The job reports its progress through `ctx.progress` ("Rendering the document", then "Saving the document"), so a [batch or operation](/docs/digging-deeper/batches-and-operations/) it belongs to shows where it is.
+
+### Behind an operation
+
+An export someone waits for is better followed than polled. `queue_operation` starts an [operation](/docs/digging-deeper/batches-and-operations/#operations) and queues the render as its work, both in your unit of work, and returns the operation:
+
+```rust title="src/modules/reports/controller.rs"
+use navree::documents::{Documents, Render};
+use navree::http::CurrentPrincipal;
+use navree::queue::OperationRecord;
+
+#[injectable]
+pub struct ExportsController {
+    documents: Arc<Documents>,
+    operations: Arc<Operations>,
+}
+
+#[controller("/exports", version = "1")]
+impl ExportsController {
+    #[post("/audit")]
+    #[authenticated]
+    async fn export(
+        &self,
+        uow: Uow,
+        CurrentPrincipal(me): CurrentPrincipal,
+        Json(input): Json<ExportInput>,
+    ) -> Result<Json<OperationRecord>> {
+        let render = Render::template("reports/audit").data(json!({ "quarter": input.quarter }));
+        let op = self
+            .documents
+            .queue_operation(
+                &self.operations,
+                &uow,
+                Operation::new("audit.export").owner(me.user_id),
+                render,
+                format!("exports/audit-{}.pdf", input.quarter),
+            )
+            .await?;
+        Ok(Json(op))
+    }
+}
+```
+
+The client follows the operation with `GET /api/operations/{id}`, its server-sent event stream or the private channel `operations.{id}`. A worker moves it to `running` with the job's progress notes, and the job finishes it:
+
+```json
+{ "status": "succeeded", "progress": { "done": 2, "total": 2, "percent": 100, "note": "Saving the document" },
+  "result": { "disk": "local", "path": "exports/audit-Q3.pdf", "size": 48213 } }
+```
+
+- **A template or data error** fails the operation at once with "The document could not be rendered." (`RENDER_FAILED_MESSAGE`), without retrying. The details are in your logs and in the `<path>.failed` record, never in what the user sees.
+- **An engine, timeout or disk error** is retried like any queued render; after the last attempt the queue fails the operation.
+- **Cancelling** the operation (`DELETE /api/operations/{id}`) skips a render that hasn't started; one that is running stops before it saves, and its failure record says it was cancelled.
+- The path is checked before the operation starts, so a bad path leaves no operation behind.
+
+`queue_operation` needs `QueueModule` and `DatabaseModule` (operations live in the app database). It is part of the facade when both the `documents` and `queue` features are on, which `full` gives you; on `navree-documents` directly, it is the crate's `operations` feature.
 
 ## Templates in modules
 
@@ -481,7 +537,7 @@ app.client().get("/api/v1/certificates/Ada").send().await.assert_status(200);
 fake.assert_rendered_with("certificates/course", |render| render.data["name"] == "Ada");
 ```
 
-The fake's PDF shows the template's name and the data's top-level fields (`name: Ada`), Latin-1 only. `fake.rendered()` lists every `Render`, `assert_rendered`, `assert_not_rendered` and `assert_nothing_rendered` check names, `fake.queued()` and `assert_queued` cover `queue` (queued renders are recorded, not rendered), and `.fail("reports/audit", "message")` makes a template fail. `DocumentsFake::with_templates(templates)` only renders names that exist, as the real engines do.
+The fake's PDF shows the template's name and the data's top-level fields (`name: Ada`), Latin-1 only. `fake.rendered()` lists every `Render`, `assert_rendered`, `assert_not_rendered` and `assert_nothing_rendered` check names, `fake.queued()` and `assert_queued` cover `queue` and `queue_operation` (queued renders are recorded, not rendered; `queue_operation` still starts its operation, which stays `pending`, and the recorded document's `operation_id` names it), and `.fail("reports/audit", "message")` makes a template fail. `DocumentsFake::with_templates(templates)` only renders names that exist, as the real engines do.
 
 Every engine implements `PdfEngine` and passes the same conformance suite: Typst, Chrome and the fake. Chrome's tests run against a stand-in DevTools endpoint, and against a real browser when `NAVREE_BROWSER_CHROME` names one.
 
@@ -512,6 +568,7 @@ Every engine implements `PdfEngine` and passes the same conformance suite: Typst
 | `engine_for(&render)` | The engine a render would use |
 | `save(&render, path)` | Renders and writes to the documents disk; returns a `StoredDocument` (`url`, `temporary_url`) |
 | `queue(render, path)` | Queues the render; returns a `QueuedDocument` |
+| `queue_operation(&operations, &uow, operation, render, path)` | Starts an operation and queues the render as its work; returns the `OperationRecord` |
 | `status(&queued)` | `DocumentStatus::Pending`, `Ready { size }` or `Failed { error }` |
 | `font_families()` | The families Typst templates can use |
 
@@ -532,6 +589,9 @@ Every engine implements `PdfEngine` and passes the same conformance suite: Typst
   </LinkCard>
   <LinkCard href="/docs/digging-deeper/queues/" title="Queues">
     Where queued renders run.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/batches-and-operations/" title="Batches and operations">
+    Following a queued export to the end.
   </LinkCard>
   <LinkCard href="/docs/digging-deeper/views/" title="Views">
     The template language of HTML documents.
