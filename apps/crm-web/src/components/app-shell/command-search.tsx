@@ -3,9 +3,9 @@
 import { useAbility } from "@casl/react";
 import {
   Building2Icon,
-  ColumnsIcon,
   CornerDownLeftIcon,
   GaugeIcon,
+  KanbanIcon,
   ListChecksIcon,
   LogOutIcon,
   PlusIcon,
@@ -47,7 +47,7 @@ const PAGES: Page[] = [
   { href: "/", label: "Dashboard", icon: GaugeIcon, keywords: ["home", "overview"] },
   { href: "/companies", label: "Companies", icon: Building2Icon, keywords: ["accounts"] },
   { href: "/contacts", label: "Contacts", icon: UsersIcon, keywords: ["people"] },
-  { href: "/deals", label: "Deals", icon: ColumnsIcon, keywords: ["pipeline", "board"] },
+  { href: "/deals", label: "Deals", icon: KanbanIcon, keywords: ["pipeline", "board"] },
   { href: "/tasks", label: "Tasks", icon: ListChecksIcon, keywords: ["follow-ups", "todo"] },
   { href: "/settings", label: "Settings", icon: SettingsIcon, keywords: ["profile", "permissions"] },
 ];
@@ -60,6 +60,13 @@ const CREATE: { kind: CreateKind; href: string; label: string; subject: SubjectN
 ];
 
 const isMac = () => typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
+
+const OPEN_EVENT = "navree:command-menu";
+
+/** Opens the command menu from elsewhere in the shell (the workspace menu). */
+export function openCommandMenu(): void {
+  window.dispatchEvent(new Event(OPEN_EVENT));
+}
 
 /** Whether a static command matches what was typed (its label or a keyword). */
 function matches(filter: string, label: string, keywords: readonly string[] = []): boolean {
@@ -93,8 +100,13 @@ export function CommandSearch() {
         setOpen((o) => !o);
       }
     };
+    const onOpen = () => setOpen(true);
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener(OPEN_EVENT, onOpen);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener(OPEN_EVENT, onOpen);
+    };
   }, []);
 
   const close = () => {
@@ -158,18 +170,16 @@ export function CommandSearch() {
 
   return (
     <>
+      {/* An icon button on phones; a search field with its shortcut from md up. */}
       <button
         type="button"
         onClick={() => setOpen(true)}
         aria-keyshortcuts="Control+K Meta+K"
-        className="group flex h-9 w-full max-w-md items-center gap-2.5 rounded-full border border-line-2 bg-ink-1 pr-1.5 pl-3.5 text-sm text-fg-3 transition-colors hover:border-fg-3/50 hover:bg-ink-2 hover:text-fg-2"
+        className="flex size-8 shrink-0 items-center justify-center gap-2 rounded-md text-sm text-fg-2 transition-colors outline-none hover:bg-ink-2 hover:text-fg focus-visible:ring-2 focus-visible:ring-ring/60 md:w-56 md:justify-start md:border md:border-line-2 md:bg-ink-1 md:pr-1 md:pl-2.5 md:text-fg-3 md:hover:border-fg-3/40 md:hover:bg-ink-1 md:hover:text-fg-2 lg:w-72"
       >
         <SearchIcon className="size-4 shrink-0" aria-hidden="true" />
-        <span className="flex-1 truncate text-left">
-          <span className="sm:hidden">Search</span>
-          <span className="hidden sm:inline">Search or jump to…</span>
-        </span>
-        <KbdGroup className="hidden sm:inline-flex">
+        <span className="sr-only flex-1 truncate text-left md:not-sr-only">Search…</span>
+        <KbdGroup className="hidden md:inline-flex">
           <Kbd>{mod}</Kbd>
           <Kbd>K</Kbd>
         </KbdGroup>
@@ -183,7 +193,7 @@ export function CommandSearch() {
         {/* Search results come from the API, so cmdk's own filtering only runs on the static commands. */}
         <Command shouldFilter={false} value={highlighted || firstValue} onValueChange={setHighlighted}>
           <CommandInput
-            placeholder="Search companies, contacts and deals, or type a command"
+            placeholder="Search records or type a command"
             value={query}
             onValueChange={(q) => {
               setQuery(q);
@@ -242,7 +252,7 @@ export function CommandSearch() {
             )}
           </CommandList>
           <div
-            className="flex items-center gap-4 border-t bg-ink-0/40 px-4 py-2.5 text-xs text-fg-3"
+            className="hidden items-center gap-4 border-t bg-ink-0/40 px-4 py-2 text-xs text-fg-3 sm:flex"
             aria-hidden="true"
           >
             <span className="flex items-center gap-1.5">

@@ -46,7 +46,7 @@ function Tile({
       <span
         className={cn(
           "font-display text-[1.5rem] leading-none font-semibold tracking-[-0.03em] figures sm:text-figure",
-          highlight ? "text-accent [text-shadow:0_0_24px_rgb(61_255_143/0.35)]" : "text-fg",
+          highlight ? "text-accent" : "text-fg",
         )}
       >
         {children}
@@ -149,7 +149,7 @@ function PipelineChart({ data }: { data: Dashboard }) {
                   href="/deals"
                   role="row"
                   className={cn(
-                    "group col-span-3 grid grid-cols-subgrid items-center rounded-lg py-2 transition-colors outline-none hover:bg-ink-2/70 focus-visible:bg-ink-2/70",
+                    "group col-span-3 grid grid-cols-subgrid items-center rounded-md py-2 transition-colors outline-none hover:bg-ink-2/70 focus-visible:bg-ink-2/70",
                     i === 4 && "mt-2 rounded-t-none border-t pt-3",
                   )}
                 >
@@ -159,9 +159,9 @@ function PipelineChart({ data }: { data: Dashboard }) {
                     {!closed ? <span className="text-xs text-fg-3 figures">{r.probability}%</span> : null}
                   </span>
                   <span role="cell" className="flex min-w-0 items-center gap-3">
-                    <span className="relative h-2 flex-1 overflow-hidden rounded-full bg-ink-2">
+                    <span className="relative h-1.5 flex-1 overflow-hidden rounded-xs bg-ink-2">
                       <span
-                        className={cn("absolute inset-y-0 left-0 rounded-full", r.stage === "won" && "shadow-glow-sm")}
+                        className="absolute inset-y-0 left-0 rounded-xs"
                         style={{
                           width: `${r.amount === 0 ? 0 : Math.max(1.5, (r.amount / max) * 100)}%`,
                           backgroundColor: `var(--stage-${r.stage})`,
@@ -215,7 +215,7 @@ function MyTasks({ userId }: { userId: string }) {
   if (tasks.length === 0) {
     return (
       <div className="flex flex-col items-start gap-3 py-2">
-        <span className="flex size-9 items-center justify-center rounded-xl border border-line-2 bg-ink-2 text-accent">
+        <span className="flex size-8 items-center justify-center rounded-md border border-line-2 bg-ink-2 text-accent">
           <CheckCheckIcon className="size-4" aria-hidden="true" />
         </span>
         <div className="flex flex-col gap-1">
@@ -256,7 +256,7 @@ function PanelSkeleton({ rows, className }: { rows: number; className?: string }
         {Array.from({ length: rows }, (_, i) => (
           <div key={i} className="flex items-center gap-4" style={{ opacity: 1 - i * 0.11 }}>
             <Skeleton className="h-3 w-24" />
-            <Skeleton className="h-2 flex-1 rounded-full" />
+            <Skeleton className="h-1.5 flex-1 rounded-xs" />
             <Skeleton className="h-3 w-12" />
           </div>
         ))}
@@ -268,7 +268,7 @@ function PanelSkeleton({ rows, className }: { rows: number; className?: string }
 /** The dashboard's shape in placeholders, so nothing jumps when the figures arrive. */
 function DashboardSkeleton() {
   return (
-    <div className="flex flex-col gap-6" aria-busy="true" aria-label="Loading the dashboard">
+    <div className="flex flex-col gap-4" aria-busy="true" aria-label="Loading the dashboard">
       <div className="surface grid grid-cols-2 overflow-hidden xl:grid-cols-4 [&>*]:border-line xl:[&>*:not(:first-child)]:border-l [&>*:nth-child(2n)]:border-l [&>*:nth-child(n+3)]:border-t xl:[&>*:nth-child(n+3)]:border-t-0">
         {Array.from({ length: 4 }, (_, i) => (
           <div key={i} className="flex flex-col gap-3 px-4 py-4 sm:px-5">
@@ -278,7 +278,7 @@ function DashboardSkeleton() {
           </div>
         ))}
       </div>
-      <div className="grid gap-6 lg:grid-cols-5">
+      <div className="grid gap-4 lg:grid-cols-5">
         <PanelSkeleton rows={6} className="lg:col-span-3" />
         <PanelSkeleton rows={3} className="lg:col-span-2" />
       </div>
@@ -292,7 +292,7 @@ export function DashboardView() {
 
   return (
     <div className="flex flex-col">
-      <PageHeader eyebrow={longDate.format(new Date())} title="Dashboard" />
+      <PageHeader title="Dashboard" description={longDate.format(new Date())} />
       {dashboard.isPending ? (
         <DashboardSkeleton />
       ) : dashboard.isError ? (
@@ -300,9 +300,9 @@ export function DashboardView() {
           <p className="text-sm text-muted-foreground">The dashboard couldn&apos;t be loaded. Refresh to try again.</p>
         </Panel>
       ) : (
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-4">
           <KeyFigures data={dashboard.data} />
-          <div className="grid gap-6 lg:grid-cols-5">
+          <div className="grid gap-4 lg:grid-cols-5">
             <Panel
               title="Pipeline by stage"
               className="lg:col-span-3"

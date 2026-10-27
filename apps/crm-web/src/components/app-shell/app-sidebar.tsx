@@ -3,144 +3,139 @@
 import { useAbility } from "@casl/react";
 import {
   Building2Icon,
-  ColumnsIcon,
+  ChevronRightIcon,
   GaugeIcon,
+  KanbanIcon,
   ListChecksIcon,
-  ScrollTextIcon,
   SettingsIcon,
   UsersIcon,
-  UserCogIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { NavreeWordmark } from "@/components/brand";
+import { UserMenu } from "@/components/app-shell/user-menu";
+import { WorkspaceSwitcher } from "@/components/app-shell/workspace-switcher";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
-  SidebarGroupContent,
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
+  SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar";
-import type { AppAbility } from "@/lib/casl/ability";
-import { env } from "@/lib/env";
 import type { User } from "@/lib/api/types";
+import type { AppAbility } from "@/lib/casl/ability";
 
-const WORK = [
+export const SALES = [
   { href: "/", label: "Dashboard", icon: GaugeIcon },
   { href: "/companies", label: "Companies", icon: Building2Icon },
   { href: "/contacts", label: "Contacts", icon: UsersIcon },
-  { href: "/deals", label: "Deals", icon: ColumnsIcon },
+  { href: "/deals", label: "Deals", icon: KanbanIcon },
   { href: "/tasks", label: "Tasks", icon: ListChecksIcon },
 ] as const;
-
-/** The current page carries the green running light: a rule on the left edge and a green icon. */
-const ACTIVE_MARK =
-  "text-fg-2 [&>svg]:text-fg-3 data-[active=true]:shadow-[inset_2px_0_0_var(--color-accent)] data-[active=true]:[&>svg]:text-accent";
 
 export function isActive(pathname: string, href: string): boolean {
   return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
 }
 
+/**
+ * The app sidebar, the shadcn/ui `sidebar-07` layout (DESIGN.md section 9): the
+ * workspace switcher, the Sales and Workspace groups, the user menu in the
+ * footer. Collapses to icons (Ctrl/Cmd+B, the rail, the top bar trigger) and
+ * becomes a sheet on phones.
+ */
 export function AppSidebar({ user }: { user: User }) {
   const pathname = usePathname();
   const ability = useAbility<AppAbility>();
   const { setOpenMobile } = useSidebar();
-  const isAdmin = user.roles.includes("admin");
-  const canManageUsers = ability.can("create", "User");
   const closeMobile = () => setOpenMobile(false);
+
+  const settingsPages = [
+    ability.can("create", "User") ? { href: "/settings/users", label: "Users and roles" } : null,
+    user.roles.includes("admin") ? { href: "/settings/audit", label: "Audit log" } : null,
+  ].filter((p) => p !== null);
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="h-(--header-h) justify-center border-b border-sidebar-border px-3 group-data-[collapsible=icon]:px-2">
-        <Link href="/" onClick={closeMobile} aria-label="Navree CRM home" className="flex items-center rounded-md px-1">
-          <NavreeWordmark className="group-data-[collapsible=icon]:[&>span]:hidden" />
-        </Link>
+      <SidebarHeader>
+        <WorkspaceSwitcher />
       </SidebarHeader>
-      <SidebarContent className="scroll-thin pt-2">
+      <SidebarContent>
         <SidebarGroup>
           <SidebarGroupLabel>Sales</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {WORK.map(({ href, label, icon: Icon }) => (
-                <SidebarMenuItem key={href}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={isActive(pathname, href)}
-                    tooltip={label}
-                    className={ACTIVE_MARK}
-                  >
-                    <Link href={href} onClick={closeMobile}>
-                      <Icon />
-                      <span>{label}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
+          <SidebarMenu>
+            {SALES.map(({ href, label, icon: Icon }) => (
+              <SidebarMenuItem key={href}>
+                <SidebarMenuButton asChild isActive={isActive(pathname, href)} tooltip={label}>
+                  <Link href={href} onClick={closeMobile} aria-current={isActive(pathname, href) ? "page" : undefined}>
+                    <Icon />
+                    <span>{label}</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ))}
+          </SidebarMenu>
         </SidebarGroup>
         <SidebarGroup>
           <SidebarGroupLabel>Workspace</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
+          <SidebarMenu>
+            <Collapsible asChild defaultOpen className="group/collapsible">
               <SidebarMenuItem>
-                <SidebarMenuButton
-                  asChild
-                  isActive={pathname === "/settings"}
-                  tooltip="Settings"
-                  className={ACTIVE_MARK}
-                >
-                  <Link href="/settings" onClick={closeMobile}>
+                <SidebarMenuButton asChild isActive={pathname === "/settings"} tooltip="Settings">
+                  <Link
+                    href="/settings"
+                    onClick={closeMobile}
+                    aria-current={pathname === "/settings" ? "page" : undefined}
+                  >
                     <SettingsIcon />
                     <span>Settings</span>
                   </Link>
                 </SidebarMenuButton>
-                {canManageUsers || isAdmin ? (
-                  <SidebarMenuSub>
-                    {canManageUsers ? (
-                      <SidebarMenuSubItem>
-                        <SidebarMenuSubButton asChild isActive={isActive(pathname, "/settings/users")}>
-                          <Link href="/settings/users" onClick={closeMobile}>
-                            <UserCogIcon />
-                            <span>Users and roles</span>
-                          </Link>
-                        </SidebarMenuSubButton>
-                      </SidebarMenuSubItem>
-                    ) : null}
-                    {isAdmin ? (
-                      <SidebarMenuSubItem>
-                        <SidebarMenuSubButton asChild isActive={isActive(pathname, "/settings/audit")}>
-                          <Link href="/settings/audit" onClick={closeMobile}>
-                            <ScrollTextIcon />
-                            <span>Audit log</span>
-                          </Link>
-                        </SidebarMenuSubButton>
-                      </SidebarMenuSubItem>
-                    ) : null}
-                  </SidebarMenuSub>
+                {settingsPages.length ? (
+                  <>
+                    <CollapsibleTrigger asChild>
+                      <SidebarMenuAction className="text-fg-3 data-[state=open]:rotate-90">
+                        <ChevronRightIcon />
+                        <span className="sr-only">Show or hide settings pages</span>
+                      </SidebarMenuAction>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <SidebarMenuSub>
+                        {settingsPages.map((page) => (
+                          <SidebarMenuSubItem key={page.href}>
+                            <SidebarMenuSubButton asChild isActive={isActive(pathname, page.href)}>
+                              <Link
+                                href={page.href}
+                                onClick={closeMobile}
+                                aria-current={isActive(pathname, page.href) ? "page" : undefined}
+                              >
+                                <span>{page.label}</span>
+                              </Link>
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                        ))}
+                      </SidebarMenuSub>
+                    </CollapsibleContent>
+                  </>
                 ) : null}
               </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
+            </Collapsible>
+          </SidebarMenu>
         </SidebarGroup>
       </SidebarContent>
-      {env.mocks ? (
-        <SidebarFooter className="px-3 pb-3 group-data-[collapsible=icon]:hidden">
-          <p className="flex gap-2 rounded-lg border border-line-2 bg-ink-2/60 px-3 py-2.5 text-xs leading-snug text-fg-2">
-            <span aria-hidden="true" className="mt-1 size-1.5 shrink-0 rounded-full bg-amber" />
-            Demo data from the mock API. Changes last until you close this tab.
-          </p>
-        </SidebarFooter>
-      ) : null}
+      <SidebarFooter>
+        <UserMenu user={user} />
+      </SidebarFooter>
+      <SidebarRail />
     </Sidebar>
   );
 }

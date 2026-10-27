@@ -157,7 +157,6 @@ export function CompanyDetail({ id }: { id: string }) {
   return (
     <div className="flex flex-col">
       <RecordHeader
-        back={BACK}
         title={c.name}
         meta={
           <>
@@ -196,7 +195,7 @@ export function CompanyDetail({ id }: { id: string }) {
             <Can I="delete" this={c}>
               <ConfirmDialog
                 trigger={
-                  <Button variant="ghost" aria-label="Delete company">
+                  <Button variant="ghost" size="icon" aria-label="Delete company">
                     <Trash2Icon />
                   </Button>
                 }
@@ -218,8 +217,8 @@ export function CompanyDetail({ id }: { id: string }) {
         }
       />
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
-        <div className="flex min-w-0 flex-col gap-6">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
+        <div className="flex min-w-0 flex-col gap-4">
           <Figures company={c} />
           <Tabs defaultValue="activity" className="gap-4">
             <TabsList>

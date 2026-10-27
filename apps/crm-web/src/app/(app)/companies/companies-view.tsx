@@ -10,7 +10,7 @@ import { PageHeader } from "@/components/page-header";
 import { PaginationBar } from "@/components/pagination-bar";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { CompanyMonogram, OwnerCell } from "@/components/user-avatar";
+import { OwnerCell } from "@/components/user-avatar";
 import { useCurrentUser } from "@/features/auth/queries";
 import { CompanyFormDialog, INDUSTRIES } from "@/features/companies/company-form";
 import { useCompanies, type CompanyListParams } from "@/features/companies/queries";
@@ -90,6 +90,7 @@ export function CompaniesView() {
                 onSort={(sort) => url.set({ sort })}
                 className="pl-4"
               />
+              <TableHead className="hidden sm:table-cell">Domain</TableHead>
               <TableHead className="hidden md:table-cell">Industry</TableHead>
               <TableHead className="hidden xl:table-cell">Employees</TableHead>
               <TableHead className="hidden lg:table-cell">Location</TableHead>
@@ -108,6 +109,7 @@ export function CompaniesView() {
               <SkeletonRows
                 columns={[
                   "",
+                  "hidden sm:table-cell",
                   "hidden md:table-cell",
                   "hidden xl:table-cell",
                   "hidden lg:table-cell",
@@ -124,16 +126,13 @@ export function CompaniesView() {
                     if (!(e.target as HTMLElement).closest("a,button")) router.push(`/companies/${c.id}`);
                   }}
                 >
-                  <TableCell className="py-2.5 pl-4">
-                    <span className="flex items-center gap-3">
-                      <CompanyMonogram name={c.name} />
-                      <span className="flex min-w-0 flex-col">
-                        <Link href={`/companies/${c.id}`} className="truncate font-medium text-fg hover:underline">
-                          {c.name}
-                        </Link>
-                        {c.domain ? <span className="truncate text-xs text-fg-3">{c.domain}</span> : null}
-                      </span>
-                    </span>
+                  <TableCell className="max-w-72 truncate pl-4">
+                    <Link href={`/companies/${c.id}`} className="font-medium text-fg hover:underline">
+                      {c.name}
+                    </Link>
+                  </TableCell>
+                  <TableCell className="hidden max-w-48 truncate text-fg-2 sm:table-cell">
+                    {c.domain ?? <span className="text-fg-3">None</span>}
                   </TableCell>
                   <TableCell className="hidden text-fg-1 md:table-cell">
                     {c.industry ?? <span className="text-fg-3">Not set</span>}
@@ -154,7 +153,7 @@ export function CompaniesView() {
               ))
             ) : (
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={6}>
+                <TableCell colSpan={7}>
                   {companies.data && companies.data.meta.total > 0 ? (
                     <PastEndNotice
                       noun="companies"

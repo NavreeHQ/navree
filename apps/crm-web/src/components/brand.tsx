@@ -21,17 +21,31 @@ export function NavreeMark({ className }: { className?: string }) {
   );
 }
 
-/** The mark, the wordmark and the product name, as in the sidebar. */
+/** The mark in its 4px app tile (the workspace switcher, the sign-in page). No glow. */
+export function NavreeTile({ className, size = "md" }: { className?: string; size?: "sm" | "md" }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "flex shrink-0 items-center justify-center rounded-md border border-line-2 bg-ink-0",
+        size === "sm" ? "size-6" : "size-8",
+        className,
+      )}
+    >
+      <NavreeMark className={size === "sm" ? "size-4" : "size-5"} />
+    </span>
+  );
+}
+
+/** The mark, the wordmark and the product name (sign-in and error screens). */
 export function NavreeWordmark({ className }: { className?: string }) {
   return (
     <span className={cn("inline-flex items-center gap-2", className)}>
-      <NavreeMark className="size-7 shrink-0 drop-shadow-[0_0_10px_rgb(61_255_143/0.45)]" />
+      <NavreeMark className="size-7 shrink-0" />
       <span className="font-display text-[1.1875rem] leading-none font-semibold tracking-[-0.03em] text-fg">
         navree
       </span>
-      <span className="rounded-full border border-line-2 px-1.5 py-px font-mono text-xs leading-4 tracking-[0.08em] text-fg-2 uppercase">
-        CRM
-      </span>
+      <span className="rounded-sm border border-line-2 px-1 font-mono text-xs leading-4 text-fg-2">CRM</span>
     </span>
   );
 }

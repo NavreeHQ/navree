@@ -59,7 +59,6 @@ export function ContactDetail({ id }: { id: string }) {
   return (
     <div className="flex flex-col">
       <RecordHeader
-        back={BACK}
         title={p.full_name}
         eyebrow={<ContactStatusBadge status={p.status} className="w-fit" />}
         meta={
@@ -104,7 +103,7 @@ export function ContactDetail({ id }: { id: string }) {
             <Can I="delete" this={p}>
               <ConfirmDialog
                 trigger={
-                  <Button variant="ghost" aria-label="Delete contact">
+                  <Button variant="ghost" size="icon" aria-label="Delete contact">
                     <Trash2Icon />
                   </Button>
                 }
@@ -125,11 +124,11 @@ export function ContactDetail({ id }: { id: string }) {
           </>
         }
       />
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
         <Panel title="Activity" className="min-w-0">
           <RecordActivity subjectType="contact" subjectId={p.id} />
         </Panel>
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-4">
           <Panel title="Details" bodyClassName="py-2">
             <dl>
               <DetailRow label="Owner">

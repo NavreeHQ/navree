@@ -4,6 +4,7 @@ import { initials } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 // Ink with a faint tint each, so teammates are told apart without loud colours.
+// Avatars are 4px squares (DESIGN.md section 9), never circles.
 const TINTS = ["#17251f", "#1f2619", "#29241c", "#1a2229", "#271d23", "#162625"];
 
 function tintIndex(seed: string): number {
@@ -33,7 +34,7 @@ export function UserAvatar({
     >
       <AvatarFallback
         className={cn(
-          "border border-line-2 bg-(--tint) font-semibold text-fg-1",
+          "rounded-md border border-line-2 bg-(--tint) font-medium text-fg-1",
           size === "xs" ? "text-[9px]" : size === "sm" ? "text-[10px]" : "text-xs",
         )}
         style={{ "--tint": TINTS[index] } as React.CSSProperties}
@@ -48,22 +49,6 @@ export function UserAvatar({
       <TooltipTrigger asChild>{avatar}</TooltipTrigger>
       <TooltipContent>{name}</TooltipContent>
     </Tooltip>
-  );
-}
-
-/** A rounded-square monogram for a company (people get round avatars). */
-export function CompanyMonogram({ name, className }: { name: string; className?: string }) {
-  return (
-    <span
-      aria-hidden="true"
-      className={cn(
-        "flex size-8 shrink-0 items-center justify-center rounded-lg border border-line-2 bg-(--tint) font-display text-xs font-semibold text-fg-1",
-        className,
-      )}
-      style={{ "--tint": TINTS[tintIndex(name)] } as React.CSSProperties}
-    >
-      {initials(name)}
-    </span>
   );
 }
 

@@ -3,7 +3,7 @@
 import { Toaster as Sonner, type ToasterProps } from "sonner"
 import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from "lucide-react"
 
-/** Toasts on an ink-2 card with a line-2 edge; the icon carries the state (green, amber, red). */
+/** Toasts on an ink-2 card (6px corners) with a line-2 edge; the icon carries the state (green, amber, red). */
 const Toaster = ({ ...props }: ToasterProps) => {
   return (
     <Sonner
@@ -21,7 +21,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
           "--normal-bg": "var(--color-ink-2)",
           "--normal-text": "var(--color-fg)",
           "--normal-border": "var(--color-line-2)",
-          "--border-radius": "12px",
+          "--border-radius": "6px",
         } as React.CSSProperties
       }
       toastOptions={{
@@ -29,7 +29,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
           toast: "cn-toast !font-sans !shadow-float",
           title: "!font-medium",
           description: "!text-fg-2",
-          closeButton: "!border-line-2 !bg-ink-3 !text-fg-2 hover:!text-fg",
+          closeButton: "!rounded-sm !border-line-2 !bg-ink-3 !text-fg-2 hover:!text-fg",
         },
       }}
       {...props}

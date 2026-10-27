@@ -56,7 +56,17 @@ async function settle(page) {
 
 async function shot(page, name, viewport, { fullPage = true } = {}) {
   const file = path.join(outDir, `${name}-${viewport.name}.png`);
-  await page.screenshot({ path: file, fullPage });
+  const height = fullPage ? await page.evaluate(() => document.documentElement.scrollHeight) : 0;
+  if (height > viewport.height) {
+    // Grow the window to the whole page instead of stitching a full-page capture, so the
+    // fixed, full-height sidebar runs down the whole image as it does on screen.
+    await page.setViewportSize({ width: viewport.width, height });
+    await page.waitForTimeout(150);
+    await page.screenshot({ path: file });
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+  } else {
+    await page.screenshot({ path: file });
+  }
   console.log(file);
 }
 
@@ -158,6 +168,32 @@ try {
       await page.getByRole("button", { name: "Toggle Sidebar" }).click();
       await page.waitForTimeout(400);
       await shot(page, "menu", viewport, { fullPage: false });
+    }
+
+    if (want("shell") && !viewport.isMobile) {
+      // The sidebar-07 shell: the workspace and account menus, notifications, collapsed to icons.
+      await page.goto(`${baseURL}/companies`);
+      await settle(page);
+      for (const [name, button] of [
+        ["workspace-menu", { name: "Workspace menu" }],
+        ["account-menu", { name: /Account menu/ }],
+        ["notifications", { name: /Notifications/ }],
+      ]) {
+        await page.getByRole("button", button).click();
+        await page.waitForTimeout(300);
+        await shot(page, name, viewport, { fullPage: false });
+        await page.keyboard.press("Escape");
+      }
+      // Escape returns focus to the last trigger; park it on the content so no focus ring shows.
+      await page.evaluate(() => {
+        document.getElementById("content")?.focus({ preventScroll: true });
+        window.scrollTo(0, 0);
+      });
+      await page.keyboard.press("Control+b");
+      await page.waitForTimeout(400);
+      await shot(page, "collapsed", viewport, { fullPage: false });
+      await page.keyboard.press("Control+b");
+      await page.waitForTimeout(400);
     }
 
     if (want("toast")) {

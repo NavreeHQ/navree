@@ -75,9 +75,8 @@ function DealCardBody({ deal, lockReason, dragging }: { deal: Deal; lockReason?:
   return (
     <div
       className={cn(
-        "flex flex-col gap-2 rounded-xl border border-line bg-ink-1 p-3 text-left shadow-bezel transition-[border-color,background-color] duration-150 group-hover/card:border-line-2 group-hover/card:bg-[color-mix(in_oklab,var(--color-ink-1),var(--color-ink-2))]",
-        deal.stage === "won" && "border-accent/20",
-        dragging && "rotate-[1.5deg] border-accent/40 bg-ink-2 shadow-float ring-1 ring-accent/25",
+        "flex flex-col gap-2 rounded-xl border border-line bg-ink-1 p-3 text-left transition-[border-color,background-color] duration-150 group-hover/card:border-line-2 group-hover/card:bg-[color-mix(in_oklab,var(--color-ink-1),var(--color-ink-2))]",
+        dragging && "rotate-1 border-line-2 bg-ink-2 shadow-float",
       )}
     >
       <div className="flex items-start justify-between gap-2">
@@ -188,27 +187,20 @@ function StageColumn({
       data-stage={stage.stage}
       style={stageStyle(stage.stage)}
       className={cn(
-        "relative flex max-h-full w-[17.5rem] shrink-0 flex-col overflow-hidden rounded-2xl border bg-ink-1/50 transition-[background-color,border-color] duration-150",
+        "relative flex max-h-full w-[17.5rem] shrink-0 flex-col overflow-hidden rounded-xl border bg-ink-1/50 transition-[background-color,border-color] duration-150",
         isOver &&
           "border-[color-mix(in_oklab,var(--stage)_45%,transparent)] bg-[color-mix(in_oklab,var(--stage)_6%,var(--color-ink-1))]",
         closed && stage.stage === "won" && "ml-3",
       )}
     >
-      <span
-        aria-hidden="true"
-        className={cn("absolute inset-x-0 top-0 h-0.5 bg-(--stage)", stage.stage === "won" && "shadow-glow-sm")}
-      />
-      <header className="flex flex-col gap-1.5 px-3.5 pt-3.5 pb-2.5">
+      <span aria-hidden="true" className="absolute inset-x-0 top-0 h-0.5 bg-(--stage)" />
+      <header className="flex flex-col gap-1 px-3 pt-3 pb-2.5">
         <div className="flex items-center justify-between gap-2">
           <h2 id={`stage-${stage.stage}`} className="flex items-center gap-2 text-sm font-semibold text-fg">
             <StageDot stage={stage.stage} />
             {stage.label}
           </h2>
-          {!closed ? (
-            <span className="rounded-full border border-line-2 px-1.5 text-xs leading-5 text-fg-3 figures">
-              {stage.probability}%
-            </span>
-          ) : null}
+          {!closed ? <span className="font-mono text-xs leading-5 text-fg-3">{stage.probability}%</span> : null}
         </div>
         <div className="flex items-baseline justify-between gap-2 text-xs text-fg-3">
           <span className="figures" data-testid="column-count">
@@ -227,7 +219,7 @@ function StageColumn({
             <SortableDealCard key={deal.id} deal={deal} canMove={canMove(deal)} />
           ))}
           {deals.length === 0 ? (
-            <li className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-line-2 px-3 py-8 text-center text-xs text-fg-3">
+            <li className="flex flex-1 items-center justify-center rounded-md border border-dashed border-line-2 px-3 py-8 text-center text-xs text-fg-3">
               {stage.stage === "lost" ? "Drop a deal here to mark it lost" : "No deals in this stage"}
             </li>
           ) : null}
@@ -241,8 +233,8 @@ function BoardSkeleton() {
   return (
     <div className="flex gap-3 overflow-hidden" aria-busy="true">
       {DEAL_STAGES.map((s) => (
-        <div key={s.stage} className="flex w-[17.5rem] shrink-0 flex-col gap-2 rounded-2xl border bg-ink-1/50 p-2">
-          <Skeleton className="h-12 rounded-xl" />
+        <div key={s.stage} className="flex w-[17.5rem] shrink-0 flex-col gap-2 rounded-xl border bg-ink-1/50 p-2">
+          <Skeleton className="h-12 rounded-md" />
           <Skeleton className="h-28 rounded-xl" />
           <Skeleton className="h-28 rounded-xl" />
         </div>
@@ -380,21 +372,19 @@ export function DealsBoardView() {
             "Your pipeline by stage"
           )
         }
+        aside={<OwnerFilter value={ownerId} onChange={(owner) => url.set({ owner })} currentUserId={me.data?.id} />}
         actions={
-          <>
-            <OwnerFilter value={ownerId} onChange={(owner) => url.set({ owner })} currentUserId={me.data?.id} />
-            <Can I="create" a="Deal">
-              <DealFormDialog
-                openOnCreateIntent
-                trigger={
-                  <Button>
-                    <PlusIcon data-icon="inline-start" />
-                    New deal
-                  </Button>
-                }
-              />
-            </Can>
-          </>
+          <Can I="create" a="Deal">
+            <DealFormDialog
+              openOnCreateIntent
+              trigger={
+                <Button>
+                  <PlusIcon data-icon="inline-start" />
+                  New deal
+                </Button>
+              }
+            />
+          </Can>
         }
       />
 

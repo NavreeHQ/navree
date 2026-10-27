@@ -92,18 +92,31 @@ UTC). `E2E_BASE_URL=http://localhost:3000 E2E_REAL_API=1 pnpm e2e` runs them aga
 
 ## Design
 
-The CRM uses navree.com's design system (`apps/website/DESIGN.md`): dark only, ink surfaces, one green
-(`#3dff8f`) for the primary action, focus, the current page and the figure that matters. The tokens in
-`src/app/globals.css` are the site's, mapped onto shadcn/ui's semantic names (`accent` stays green, so the primitives in
-`src/components/ui` use `ink-2`/`ink-3` for hover and highlighted surfaces). Fonts are self-hosted from Fontsource
-packages through `next/font/local` (`src/app/fonts.ts`): Mona Sans for titles and big figures, Geist for the UI,
-Monaspace Neon for eyebrows, table headings and ids. `cn` (`src/lib/utils.ts`) knows the custom type scale.
+The CRM follows `apps/website/DESIGN.md` section 9, **App UI**: the navree.com tokens (dark only, ink surfaces), laid
+out as a calm, dense application. The tokens in `src/app/globals.css` are the site's, mapped onto shadcn/ui's semantic
+names (`accent` stays green, so the primitives in `src/components/ui` use `ink-2`/`ink-3` for hover and selection).
+Fonts are self-hosted from Fontsource packages through `next/font/local` (`src/app/fonts.ts`): Mona Sans for page
+titles and big figures, Geist for the UI, Monaspace Neon for ids and small counts. `cn`
+(`src/lib/utils.ts`) knows the custom type scale.
 
-- Ctrl/Cmd K opens the command menu: jump to a screen, create a deal, company, contact or task, sign out, or search
-  companies, contacts and deals.
+- **The shell** is the shadcn/ui `Sidebar` in the `sidebar-07` layout (`src/components/app-shell`): a workspace
+  switcher with the navree mark, the Sales and Workspace groups (32px items, 16px lucide icons, ink-2 hover, ink-3 for
+  the current page, no green), the user menu in the footer. It collapses to icons with Ctrl/Cmd B or the rail, remembers
+  that in the `sidebar_state` cookie (read by `src/app/(app)/layout.tsx`), and is a sheet on phones.
+- **The top bar** is 48px: the sidebar trigger, the breadcrumb (group, screen, record), the search field (Ctrl/Cmd K
+  opens the command menu: jump to a screen, create a deal, company, contact or task, sign out, or search companies,
+  contacts and deals), notifications, and the screen's actions. Screens pass their "New …", Edit and Export buttons as
+  `actions` to `PageHeader`/`RecordHeader`; `PageActions` (`shell-slots.tsx`) renders them in the top bar from `md` up
+  and in the page header on phones. Record screens name the record in the breadcrumb.
+- **Corners**: 4px on controls (buttons, inputs, menu items, badges, tabs, avatars), 6px on cards, popovers, dialogs
+  and toasts. The radius scale in `globals.css` is pinned to those two values (`rounded-md` = 4px, `rounded-xl` = 6px).
+  No pills and no glows; `rounded-full` is for status dots only.
+- **Green** is for the primary action, focus rings and positive data (won amounts, completed tasks, success toasts).
+- **Density**: 14px body, 13px tables and secondary text, 40px table rows with 12px cell padding, 24px page padding.
 - Every list hides secondary columns on small screens; the app has no horizontal page scroll at 390 px.
-- `pnpm screenshots [baseURL] [outDir]` signs in as the `crm-demo` admin and captures every screen, dialog, empty,
-  error and loading state at 1440 and 390 px into `screenshots/` (git-ignored) for design review.
+- `pnpm screenshots [baseURL] [outDir]` signs in as the `crm-demo` admin and captures every screen, dialog, menu,
+  empty, error and loading state at 1440 and 390 px (and the collapsed sidebar at 1440) into `screenshots/`
+  (git-ignored) for design review.
 
 ## Layout
 

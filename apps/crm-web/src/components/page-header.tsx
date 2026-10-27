@@ -1,11 +1,17 @@
 import type { ReactNode } from "react";
+import { PageActions } from "@/components/app-shell/shell-slots";
 import { cn } from "@/lib/utils";
 
-/** The title block of a screen: an optional mono eyebrow, the H1 in the display face, a line of context. */
+/**
+ * The title block of a screen: an optional small label, the H1, a line of
+ * context. `actions` (the "New …" button, Export) go to the top bar from `md` up
+ * and stay here on phones; `aside` (filters that shape the page) always stays here.
+ */
 export function PageHeader({
   title,
   description,
   actions,
+  aside,
   children,
   eyebrow,
   className,
@@ -13,19 +19,25 @@ export function PageHeader({
   title: ReactNode;
   description?: ReactNode;
   actions?: ReactNode;
+  aside?: ReactNode;
   children?: ReactNode;
   eyebrow?: ReactNode;
   className?: string;
 }) {
   return (
-    <header className={cn("flex flex-col gap-4 pb-6", className)}>
-      <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
-        <div className="flex min-w-0 flex-col gap-2">
+    <header className={cn("flex flex-col gap-4 pb-5", className)}>
+      <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+        <div className="flex min-w-0 flex-col gap-1">
           {eyebrow ? <p className="eyebrow">{eyebrow}</p> : null}
           <h1 className="text-title font-semibold text-fg">{title}</h1>
           {description ? <p className="text-sm text-pretty text-fg-2">{description}</p> : null}
         </div>
-        {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
+        {aside || actions ? (
+          <div className="flex flex-wrap items-center gap-2 empty:hidden">
+            {aside}
+            {actions ? <PageActions className="contents">{actions}</PageActions> : null}
+          </div>
+        ) : null}
       </div>
       {children}
     </header>
@@ -49,8 +61,8 @@ export function Panel({
   return (
     <section className={cn("surface min-w-0 text-card-foreground", className)}>
       {title || actions ? (
-        <div className="flex min-h-11 items-center justify-between gap-3 border-b px-4 py-2">
-          {title ? <h2 className="text-sm font-semibold tracking-[-0.005em] text-fg">{title}</h2> : <span />}
+        <div className="flex min-h-11 items-center justify-between gap-3 border-b px-4 py-1.5">
+          {title ? <h2 className="text-sm font-semibold text-fg">{title}</h2> : <span />}
           {actions ? <div className="flex items-center gap-1.5">{actions}</div> : null}
         </div>
       ) : null}

@@ -13,7 +13,7 @@ import { PaginationBar } from "@/components/pagination-bar";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { OwnerCell, UserAvatar } from "@/components/user-avatar";
+import { OwnerCell } from "@/components/user-avatar";
 import { useCurrentUser } from "@/features/auth/queries";
 import { useCompany } from "@/features/companies/queries";
 import { ContactFormDialog, STATUS_LABEL } from "@/features/contacts/contact-form";
@@ -72,7 +72,7 @@ function ExportButton({ filters }: { filters: ContactListParams }) {
 function CompanyChip({ id, onClear }: { id: string; onClear: () => void }) {
   const company = useCompany(id);
   return (
-    <span className="inline-flex h-8 items-center gap-1 rounded-full border border-line-2 bg-ink-2 pr-1 pl-3 text-sm">
+    <span className="inline-flex h-8 items-center gap-1 rounded-md border border-line-2 bg-ink-2 pr-1 pl-2.5 text-sm">
       <span className="text-fg-3">Company:</span>
       <span className="font-medium">{company.data?.name ?? "…"}</span>
       <Button variant="ghost" size="icon-xs" aria-label="Clear company filter" onClick={onClear}>
@@ -138,9 +138,10 @@ export function ContactsView() {
           <TableHeader>
             <TableRow className="bg-ink-1 hover:bg-ink-1 [&>th]:h-9">
               <TableHead className="pl-4">Name</TableHead>
+              <TableHead className="hidden lg:table-cell">Title</TableHead>
               <TableHead className="hidden sm:table-cell">Company</TableHead>
-              <TableHead className="hidden lg:table-cell">Email</TableHead>
-              <TableHead className="hidden xl:table-cell">Phone</TableHead>
+              <TableHead className="hidden xl:table-cell">Email</TableHead>
+              <TableHead className="hidden 2xl:table-cell">Phone</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="hidden pr-4 md:table-cell">Owner</TableHead>
             </TableRow>
@@ -150,9 +151,10 @@ export function ContactsView() {
               <SkeletonRows
                 columns={[
                   "",
-                  "hidden sm:table-cell",
                   "hidden lg:table-cell",
+                  "hidden sm:table-cell",
                   "hidden xl:table-cell",
+                  "hidden 2xl:table-cell",
                   "",
                   "hidden md:table-cell",
                 ]}
@@ -166,16 +168,13 @@ export function ContactsView() {
                     if (!(e.target as HTMLElement).closest("a,button")) router.push(`/contacts/${p.id}`);
                   }}
                 >
-                  <TableCell className="py-2.5 pl-4">
-                    <span className="flex items-center gap-3">
-                      <UserAvatar name={p.full_name} id={p.id} size="md" />
-                      <span className="flex min-w-0 flex-col">
-                        <Link href={`/contacts/${p.id}`} className="truncate font-medium text-fg hover:underline">
-                          {p.full_name}
-                        </Link>
-                        {p.title ? <span className="truncate text-xs text-fg-3">{p.title}</span> : null}
-                      </span>
-                    </span>
+                  <TableCell className="max-w-64 truncate pl-4">
+                    <Link href={`/contacts/${p.id}`} className="font-medium text-fg hover:underline">
+                      {p.full_name}
+                    </Link>
+                  </TableCell>
+                  <TableCell className="hidden max-w-52 truncate text-fg-2 lg:table-cell">
+                    {p.title ?? <span className="text-fg-3">Not set</span>}
                   </TableCell>
                   <TableCell className="hidden sm:table-cell">
                     {p.company ? (
@@ -186,7 +185,7 @@ export function ContactsView() {
                       <span className="text-fg-3">No company</span>
                     )}
                   </TableCell>
-                  <TableCell className="hidden max-w-56 truncate lg:table-cell">
+                  <TableCell className="hidden max-w-56 truncate xl:table-cell">
                     {p.email ? (
                       <a href={`mailto:${p.email}`} className="text-fg-1 hover:text-fg hover:underline">
                         {p.email}
@@ -195,7 +194,7 @@ export function ContactsView() {
                       <span className="text-fg-3">Not set</span>
                     )}
                   </TableCell>
-                  <TableCell className="hidden whitespace-nowrap text-fg-1 figures xl:table-cell">
+                  <TableCell className="hidden whitespace-nowrap text-fg-1 figures 2xl:table-cell">
                     {p.phone ?? <span className="text-fg-3">Not set</span>}
                   </TableCell>
                   <TableCell>
@@ -208,7 +207,7 @@ export function ContactsView() {
               ))
             ) : (
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={6}>
+                <TableCell colSpan={7}>
                   {contacts.data && contacts.data.meta.total > 0 ? (
                     <PastEndNotice
                       noun="contacts"

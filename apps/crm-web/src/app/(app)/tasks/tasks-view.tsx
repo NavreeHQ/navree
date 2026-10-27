@@ -42,9 +42,8 @@ function TabCount({ tab, assignee, active }: { tab: Tab; assignee: string | unde
   return (
     <span
       className={cn(
-        "rounded-full px-1.5 text-xs leading-4 figures",
-        tab === "overdue" && total > 0 ? "bg-destructive/15 text-destructive" : "bg-ink-2 text-fg-3",
-        active && tab !== "overdue" && "bg-ink-1 text-fg-1",
+        "font-mono text-xs leading-4",
+        tab === "overdue" && total > 0 ? "text-destructive" : active ? "text-fg-2" : "text-fg-3",
       )}
     >
       {total}
@@ -55,7 +54,7 @@ function TabCount({ tab, assignee, active }: { tab: Tab; assignee: string | unde
 function TaskRow({ task, showAssignee }: { task: Activity; showAssignee: boolean }) {
   const done = Boolean(task.completed_at);
   return (
-    <li className="flex items-start gap-3 px-4 py-3.5 transition-colors hover:bg-ink-2/50" data-testid="task-row">
+    <li className="flex items-start gap-3 px-4 py-2.5 transition-colors hover:bg-ink-2/50" data-testid="task-row">
       <span className="pt-0.5">
         <TaskCheckbox activity={task} />
       </span>
@@ -136,7 +135,7 @@ export function TasksView() {
           value={everyone ? "everyone" : "mine"}
           onValueChange={(v) => v && url.set({ scope: v === "everyone" ? "everyone" : undefined })}
           aria-label="Whose tasks"
-          className="rounded-full bg-ink-1 *:data-[slot=toggle-group-item]:rounded-full"
+          className="bg-ink-1"
         >
           <ToggleGroupItem value="mine" className="px-3">
             Assigned to me
@@ -150,8 +149,8 @@ export function TasksView() {
         {list.isPending ? (
           <div className="flex flex-col divide-y">
             {Array.from({ length: 5 }, (_, i) => (
-              <div key={i} className="flex items-start gap-3 px-4 py-3.5" style={{ opacity: 1 - i * 0.15 }}>
-                <Skeleton className="size-4.5 rounded-[5px]" />
+              <div key={i} className="flex items-start gap-3 px-4 py-2.5" style={{ opacity: 1 - i * 0.15 }}>
+                <Skeleton className="size-4.5 rounded-sm" />
                 <div className="flex flex-1 flex-col gap-2">
                   <Skeleton className="h-3.5 w-1/2" />
                   <Skeleton className="h-3 w-1/3" />
@@ -168,7 +167,7 @@ export function TasksView() {
         ) : list.data && list.data.meta.total > 0 ? (
           <PastEndNotice noun="tasks" total={list.data.meta.total} onFirstPage={() => url.set({ page: undefined })} />
         ) : (
-          <Empty className="py-14">
+          <Empty className="py-12">
             <EmptyHeader>
               <EmptyMedia variant="icon">
                 <ListChecksIcon />

@@ -31,7 +31,7 @@ export function SortableHead({
         type="button"
         onClick={() => onSort(active && !desc ? `-${field}` : field)}
         className={cn(
-          "-ml-1 inline-flex items-center gap-1 rounded px-1 py-0.5 uppercase transition-colors hover:text-fg focus-visible:outline-2",
+          "-ml-1 inline-flex items-center gap-1 rounded-sm px-1 py-0.5 transition-colors hover:text-fg focus-visible:outline-2",
           active ? "text-fg-1" : "",
         )}
       >
@@ -53,7 +53,7 @@ export function SkeletonRows({ columns, rows = 8 }: { columns: number | string[]
       {Array.from({ length: rows }, (_, r) => (
         <TableRow key={r} className="hover:bg-transparent">
           {cells.map((className, c) => (
-            <TableCell key={c} className={cn("py-3.5", c === 0 && "pl-4", className)}>
+            <TableCell key={c} className={cn(c === 0 && "pl-4", className)}>
               <Skeleton className={cn("h-3.5", c === 0 ? "w-40" : "w-20")} style={{ opacity: 1 - r * 0.09 }} />
             </TableCell>
           ))}
@@ -78,7 +78,7 @@ export function ListEmpty({
   icon: ReactNode;
 }) {
   return (
-    <Empty className="py-14">
+    <Empty className="py-12">
       <EmptyHeader>
         <EmptyMedia variant="icon">{filtered ? <SearchXIcon /> : icon}</EmptyMedia>
         <EmptyTitle>{filtered ? `No ${noun} match these filters` : `No ${noun} yet`}</EmptyTitle>

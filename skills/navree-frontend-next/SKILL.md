@@ -1,6 +1,6 @@
 ---
 name: navree-frontend-next
-description: "Build a Next.js front end on a Navree API: the backend-for-frontend pattern (route handlers that keep Navree's access token and rotating refresh token in httpOnly cookies), a typed client generated from the app's OpenAPI document, single-flight token refresh, two-factor sign-in, the Origin check that stops CSRF, CASL abilities from `GET /api/me/abilities`, real time over the Pusher protocol with pusher-js, MSW mocks, tests, and the navree.com dark theme. Use when creating or changing a web app that talks to a Navree API, wiring sign-in, refresh or sign-out, calling the API from React, subscribing to private channels in the browser, or theming an app to look like navree.com. The reference app is apps/crm-web."
+description: "Build a Next.js front end on a Navree API: the backend-for-frontend pattern (route handlers that keep Navree's access token and rotating refresh token in httpOnly cookies), a typed client generated from the app's OpenAPI document, single-flight token refresh, two-factor sign-in, the Origin check that stops CSRF, CASL abilities from `GET /api/me/abilities`, real time over the Pusher protocol with pusher-js, MSW mocks, tests, and Navree's app UI (navree.com's dark tokens in the shadcn sidebar-07 shell). Use when creating or changing a web app that talks to a Navree API, wiring sign-in, refresh or sign-out, calling the API from React, subscribing to private channels in the browser, or building an app's shell and theme in Navree's app UI. The reference app is apps/crm-web."
 ---
 
 # A Next.js front end on a Navree API
@@ -221,41 +221,62 @@ pusher.subscribe("private-crm.deals").bind("deal.updated", ({ deal }) => {
 
 ## The theme
 
-The CRM looks like navree.com: dark only, ink surfaces, one green.
+The CRM is an application, so it follows section 9 of
+`apps/website/DESIGN.md` (**App UI**): navree.com's tokens, laid out as a
+calm, dense, sharp product. Sections 1 to 8 (pills, glows, display type,
+eyebrows) are for marketing pages only.
 
 - **Tokens.** Copy the `@theme` block of `apps/website/src/app/globals.css`:
   `ink-0..3` (`#040605`, `#0a0e0c`, `#111714`, `#16201b`), `line`
   (`#1c2420`), `line-2` (`#2a3530`), `fg` (`#e9efeb`), `fg-1..3`,
   `accent` (`#3dff8f`), `accent-ink` (`#03130a`), `amber` (`#ffbf5e`,
-  warnings only), `danger` (`#ff6b6b`), the glow shadows and
-  `--ease-out-quint`. Map shadcn's semantic variables onto them
-  (`background`=ink-0, `card`/`popover`=ink-1, `muted`/`secondary`=ink-2,
-  `primary`/`ring`=accent, `border`=line, `input`=line-2) and put `dark` on
+  warnings only), `danger` (`#ff6b6b`) and `--ease-out-quint`. Map shadcn's
+  semantic variables onto them (`background`=ink-0, `card`/`popover`=ink-1,
+  `muted`/`secondary`=ink-2, `primary`/`ring`=accent, `border`=line,
+  `input`=line-2, `sidebar`=ink-1, `sidebar-accent`=ink-2) and put `dark` on
   `<html>` with `@custom-variant dark (&:where(.dark, .dark *))`.
-- **`accent` is Navree green**, not shadcn's grey hover surface. After
-  `shadcn add`, replace `focus:bg-accent`/`hover:bg-accent` with
-  `bg-ink-3`/`bg-ink-2`. Use green for the one primary action per view
-  (`Button` default: green pill with `hover:shadow-glow`), focus rings, the
-  current navigation item and the one figure that matters (won deals).
-  Record links in tables and timelines are quiet (`.record-link`).
-- **Fonts**, self-hosted with `next/font/local` from `@fontsource-variable/mona-sans`
-  (display: page titles and big figures, `wdth` 112, tight tracking),
-  `@fontsource-variable/geist` (UI) and `@fontsource/monaspace-neon` (eyebrows,
-  table headings, ids). See `src/app/fonts.ts`. No runtime font requests.
+- **Green is for three things**: the primary action (`Button` default, flat,
+  no glow), focus rings, and positive data (won amounts, completed tasks,
+  success toasts). Navigation, selection and hover use the ink steps:
+  `hover:bg-ink-2`, current item or selected option `bg-ink-3`. `accent` is
+  Navree green, not shadcn's grey hover surface: after `shadcn add`, replace
+  `focus:bg-accent`/`hover:bg-accent` with `bg-ink-3`/`bg-ink-2`, and fix the
+  generated `import { cn } from "cn"` to `@/lib/utils`.
+- **Corners**: 4px on controls (buttons, inputs, selects, menu items, badges,
+  tabs, avatars), 6px on surfaces (cards, panels, popovers, dialogs, sheets,
+  toasts). Pin the radius scale in `globals.css` so the CLI's classes land
+  inside the rule: `--radius-sm/md/lg: 4px`, `--radius-xl` and up `6px`; write
+  `rounded-md` on a control and `rounded-xl` on a surface. No pills, no
+  circles (avatars are 4px squares), no glows or dark drop shadows except
+  `shadow-float` under popovers and dialogs; `rounded-full` only for status
+  dots.
+- **The shell** is the shadcn/ui `Sidebar` (`pnpm dlx shadcn@latest add
+  sidebar breadcrumb collapsible`) in the `sidebar-07` layout:
+  `SidebarProvider` (state persisted in the `sidebar_state` cookie, read in
+  the `(app)` layout and passed as `defaultOpen`), `Sidebar
+  collapsible="icon"` with a workspace switcher header (a 32px 4px-radius
+  tile with the mark, name and context, `chevrons-up-down`), groups with a
+  12px fg-3 sentence-case label and 32px items (16px lucide icons at stroke
+  1.75, 14px fg-2 text), sub-items on a 1px `line` guide, the user menu in
+  the footer, a `SidebarRail`. Ctrl/Cmd+B toggles; phones get the sheet. No
+  letter tiles in place of icons, no left bar, no green on the current page.
+- **The top bar** is 48px (`--header-h: 3rem`): `SidebarTrigger`, a vertical
+  `Separator`, the breadcrumb (group, screen, record name), then search
+  (Ctrl/Cmd K opens a `cmdk` command menu: jump to screens, create records,
+  search through the API), notifications and the screen's actions. Screens
+  hand their actions to the top bar through a portal slot (`PageActions` in
+  `src/components/app-shell/shell-slots.tsx`): in the top bar from `md` up,
+  in the page header on phones, mounted once either way.
+- **Density and type**: 14px body, 13px secondary text and tables, table
+  rows 40px with 12px cell padding and 12px fg-3 sentence-case headings, 24px
+  page padding, page titles 24px semibold. Fonts are self-hosted with
+  `next/font/local` from `@fontsource-variable/mona-sans` (page titles and big
+  figures, `wdth` 112), `@fontsource-variable/geist` (UI) and
+  `@fontsource/monaspace-neon` (ids, small counts). No runtime font requests.
 - **`cn` knows the type scale.** `src/lib/utils.ts` builds `cn` with
   `createCn` from `cn/config` and adds `title`, `figure`, `eyebrow` and
   `display-*` to the font-size group; without it `cn("text-figure", "text-fg")`
   drops the size.
-- **Component language.** `.surface` panels (ink-1, 1px line, top highlight),
-  rounded-full buttons and badges, rounded-lg inputs on ink-1 with a line-2
-  edge, mono uppercase `.eyebrow` and table headings, popovers and dialogs on
-  ink-1 with `shadow-float` over an ink scrim, toasts on ink-2 with a colored
-  icon, empty states with an icon tile in a faint green glow, skeletons that
-  mirror the real layout with a slow shimmer.
-- **Shell.** A sticky top bar (blurred ink) with the command menu trigger,
-  notifications and the account menu; an ink-1 sidebar that collapses to
-  icons and becomes a sheet on phones; a **command menu** on Ctrl/Cmd K
-  (`cmdk`) to jump to screens, create records and search through the API.
 - **Accessibility and layout.** WCAG AA on every ink (fg-3 is the faintest
   text), a visible green focus outline, `aria-label` on icon buttons, a skip
   link, keyboard drag and drop on the board, and no horizontal page scroll
@@ -300,5 +321,6 @@ pnpm screenshots http://localhost:3000   # every screen at 1440 and 390 px into 
   listen on `crm.deals`, not `private-crm.deals`.
 - A web origin missing from `realtime.allowed_origins`: the socket is
   refused and the page silently falls back to refetching.
-- Using `bg-accent` as a hover color, raw hex values in components, or a
-  second green element competing with the primary action.
+- Using `bg-accent` as a hover color, green for navigation or selection, raw
+  hex values in components, pills, glows, or a second green element
+  competing with the primary action.
