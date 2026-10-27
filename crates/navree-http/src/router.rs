@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use axum::Router;
 use axum::extract::{DefaultBodyLimit, Request, State};
-use axum::middleware::{Next, from_fn, from_fn_with_state};
+use axum::middleware::{Next, from_fn_with_state};
 use axum::response::{IntoResponse, Response};
 use http::header::{CONTENT_LENGTH, HeaderName, HeaderValue};
 use http::request::Parts;
@@ -26,7 +26,9 @@ use uuid::Uuid;
 use crate::controller::ControllerRegistration;
 use crate::extract::ProxyTrust;
 use crate::limiter::RateLimiter;
-use crate::pipeline::{self, ContextState, ErrorState, TimeoutOverride, X_REQUEST_ID};
+use crate::pipeline::{
+    self, CheckStages, ContextState, GuardStages, Stages, TimeoutOverride, X_REQUEST_ID,
+};
 use crate::{
     AppError, Authenticator, ClientIp, CorsOptions, ErrorMapper, GlobalLayer, HttpOptions,
     HttpServer, LayerSlot, RouteAuthorizer, RouteDef, RouteMeta,
@@ -69,43 +71,38 @@ pub async fn build_router(ctx: &AppContext) -> Result<Router, BoxError> {
     router = apply_slots(ctx, router, authenticator)?;
 
     // Fixed layers, innermost first (`Router::layer` wraps like an onion).
+    // The fixed layers between two Tower layers run as the stages of one
+    // middleware (see `Stages`): the checks inside compression, the guard
+    // inside CORS, the request context outermost.
     router = router.layer(DefaultBodyLimit::max(options.body_limit_bytes));
-    if let Some(limit) = options.per_ip_rate_limit {
-        let limit = Arc::new(pipeline::PerIpLimit {
-            limiter: RateLimiter::<IpAddr>::new(limit, Duration::from_secs(60)),
-            audit: shared.audit.clone(),
-        });
-        router = router.layer(from_fn_with_state(limit, pipeline::per_ip_rate_limit));
-    }
-    router = router.layer(from_fn_with_state(
-        Arc::new(pipeline::MaintenanceGate {
-            mode: server.maintenance.clone(),
-            except: options.maintenance_except.clone(),
-        }),
-        pipeline::maintenance,
-    ));
     let mappers = ctx
         .contributions::<ErrorMapper>()
         .into_iter()
         .map(|c| (*c.value).clone())
         .collect();
-    router = router.layer(from_fn_with_state(
-        Arc::new(ErrorState { mappers }),
-        pipeline::errors,
-    ));
+    let mut stages = Stages {
+        checks: Some(CheckStages {
+            mappers,
+            maintenance: pipeline::MaintenanceGate {
+                mode: server.maintenance.clone(),
+                except: options.maintenance_except.clone(),
+            },
+            per_ip: options.per_ip_rate_limit.map(|limit| pipeline::PerIpLimit {
+                limiter: RateLimiter::<IpAddr>::new(limit, Duration::from_secs(60)),
+                audit: shared.audit.clone(),
+            }),
+        }),
+        ..Stages::default()
+    };
     if options.compression {
-        router = router.layer(CompressionLayer::new());
+        router = with_stages(router, &mut stages).layer(CompressionLayer::new());
     }
-    if options.security_headers {
-        router = router.layer(from_fn(pipeline::security_headers));
-    }
-    router = router.layer(from_fn_with_state(
-        Duration::from_secs(options.timeout_secs),
-        pipeline::timeout,
-    ));
-    router = router.layer(from_fn(pipeline::catch_panic));
+    stages.guard = Some(GuardStages {
+        timeout: Duration::from_secs(options.timeout_secs),
+        security_headers: options.security_headers,
+    });
     if let Some(cors) = cors_layer(&options.cors)? {
-        router = router.layer(cors);
+        router = with_stages(router, &mut stages).layer(cors);
     }
     let telemetry = Telemetry::from_app(ctx).await;
     if telemetry.enabled(EventKind::ExceptionReported) {
@@ -115,16 +112,21 @@ pub async fn build_router(ctx: &AppContext) -> Result<Router, BoxError> {
         Some(config) => trace_policy(&config, |name| std::env::var(name).ok())?,
         None => TracePolicy::default(),
     };
-    router = router.layer(from_fn_with_state(
-        Arc::new(ContextState {
-            ctx: ctx.clone(),
-            proxies: ProxyTrust::new(options.trust_proxy, &options.trusted_proxies),
-            telemetry,
-            policy,
-        }),
-        pipeline::request_context,
-    ));
+    stages.context = Some(ContextState {
+        ctx: ctx.clone(),
+        proxies: ProxyTrust::new(options.trust_proxy, &options.trusted_proxies),
+        telemetry,
+        policy,
+    });
+    router = with_stages(router, &mut stages);
     apply_edge(ctx, router)
+}
+
+/// Wraps `router` in one middleware running `stages`, which are left empty
+/// for the next one.
+fn with_stages(router: Router, stages: &mut Stages) -> Router {
+    let stages = Arc::new(std::mem::take(stages));
+    router.layer(from_fn_with_state(stages, pipeline::run_stages))
 }
 
 /// Applies the contributed [`LayerSlot::Edge`] layers around everything
