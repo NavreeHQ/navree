@@ -11,7 +11,7 @@ use sea_orm::{ConnectionTrait, DatabaseConnection, DbBackend, DbErr, Statement, 
 use sea_orm_migration::{MigrationTrait, SchemaManager};
 use serde::Serialize;
 
-use crate::Db;
+use crate::{Db, mysql};
 
 /// The table recording applied migrations.
 pub const MIGRATIONS_TABLE: &str = "navree_migrations";
@@ -24,11 +24,20 @@ pub const MIGRATIONS_TABLE: &str = "navree_migrations";
 /// ignored), otherwise in module-name order. Inside a set, migrations run
 /// in name order, so name them `m20261025_000001_create_users` and so on.
 ///
-/// Each migration runs in its own transaction (DDL included) unless it
-/// returns `Some(false)` from `use_transaction` (for statements such as
-/// `CREATE INDEX CONCURRENTLY`, or SQLite table rebuilds that switch
-/// `PRAGMA foreign_keys`, which has no effect inside a transaction); the
-/// `navree_migrations` row is written in the same transaction.
+/// On SQLite and PostgreSQL each migration runs in its own transaction (DDL
+/// included) unless it returns `Some(false)` from `use_transaction` (for
+/// statements such as `CREATE INDEX CONCURRENTLY`, or SQLite table rebuilds
+/// that switch `PRAGMA foreign_keys`, which has no effect inside a
+/// transaction); the `navree_migrations` row is written in the same
+/// transaction, so a failed migration leaves nothing behind.
+///
+/// MySQL and MariaDB commit every DDL statement implicitly, so there a
+/// migration runs outside a transaction unless it returns `Some(true)`
+/// (worth it for data migrations, whose `INSERT`s and `UPDATE`s then roll
+/// back with the `navree_migrations` row). A MySQL migration that fails
+/// part way keeps the statements that ran before the failure and is not
+/// recorded: keep one DDL statement per migration, or make its `up`
+/// re-runnable (`IF NOT EXISTS`).
 ///
 /// ```
 /// use navree_db::MigrationSet;
@@ -164,6 +173,13 @@ impl Migrator {
     }
 
     /// Drops every table, then applies every migration as batch 1.
+    ///
+    /// Every table goes, including tables no migration created: on SQLite
+    /// on one connection with foreign key checks off, on PostgreSQL every
+    /// table of the current schema with `CASCADE`, on MySQL and MariaDB
+    /// every base table of the current database in one `DROP TABLE`, on
+    /// one connection with `FOREIGN_KEY_CHECKS = 0` (turned back on before
+    /// the connection returns to the pool, also when the drop fails).
     pub async fn fresh(ctx: &AppContext) -> Result<Vec<String>, BoxError> {
         let db = ctx.get::<Db>().await?;
         let sets = sets_of(ctx);
@@ -276,6 +292,14 @@ struct Applied {
 }
 
 async fn ensure_table(conn: &DatabaseConnection) -> Result<(), DbErr> {
+    let mut applied_at = ColumnDef::new("applied_at");
+    match conn.get_database_backend() {
+        // MySQL's `TIMESTAMP` ends in 2038 and converts through the session
+        // time zone; a `DATETIME` holds the UTC time as written.
+        DbBackend::MySql => applied_at.date_time(),
+        _ => applied_at.timestamp_with_time_zone(),
+    }
+    .not_null();
     conn.execute(
         Table::create()
             .table(MIGRATIONS_TABLE)
@@ -283,11 +307,7 @@ async fn ensure_table(conn: &DatabaseConnection) -> Result<(), DbErr> {
             .col(ColumnDef::new("module").string().not_null())
             .col(ColumnDef::new("name").string().not_null())
             .col(ColumnDef::new("batch").big_integer().not_null())
-            .col(
-                ColumnDef::new("applied_at")
-                    .timestamp_with_time_zone()
-                    .not_null(),
-            )
+            .col(applied_at)
             .primary_key(Index::create().col("module").col("name")),
     )
     .await
@@ -506,10 +526,44 @@ async fn drop_all_tables(conn: &DatabaseConnection) -> Result<(), DbErr> {
             }
             tx.commit().await
         }
-        _ => Err(DbErr::BackendNotSupported {
-            db: "MySQL",
+        DbBackend::MySql => drop_all_mysql_tables(conn).await,
+        other => Err(DbErr::BackendNotSupported {
+            db: other.as_str(),
             ctx: "migrate:fresh",
         }),
+    }
+}
+
+/// MySQL's half of [`drop_all_tables`]: every base table of the current
+/// database in one `DROP TABLE` (all or none), with foreign key checks off
+/// so the order does not matter.
+///
+/// `FOREIGN_KEY_CHECKS` is a session variable, so the statements run on
+/// one connection, pinned by a transaction (`DROP TABLE` commits it
+/// implicitly; the final `COMMIT` is then a no-op). Checks are turned back
+/// on whatever the drop did, before the connection returns to the pool.
+async fn drop_all_mysql_tables(conn: &DatabaseConnection) -> Result<(), DbErr> {
+    let tables: Vec<String> = conn
+        .query_all_raw(Statement::from_string(DbBackend::MySql, mysql::LIST_TABLES))
+        .await?
+        .iter()
+        .map(|row| row.try_get::<String>("", "name"))
+        .collect::<Result<_, _>>()?;
+    if tables.is_empty() {
+        return Ok(());
+    }
+    let tx = conn.begin().await?;
+    tx.execute_unprepared(mysql::FOREIGN_KEY_CHECKS_OFF).await?;
+    let dropped = tx.execute_unprepared(&mysql::drop_tables(&tables)).await;
+    let restored = tx.execute_unprepared(mysql::FOREIGN_KEY_CHECKS_ON).await;
+    match (dropped, restored) {
+        (Ok(_), Ok(_)) => tx.commit().await,
+        (Err(error), _) | (Ok(_), Err(error)) => {
+            if let Err(rollback) = tx.rollback().await {
+                tracing::warn!(target: "navree_db::migrate", error = %rollback, "rollback after a failed migrate:fresh failed");
+            }
+            Err(error)
+        }
     }
 }
 
