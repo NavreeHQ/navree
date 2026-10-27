@@ -11,8 +11,8 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::options::SourceOptions;
 use crate::keys::GOOGLE_KEYS_URL;
+use crate::options::SourceOptions;
 use crate::request::{IncomingRequest, Verdict};
 use crate::verify::{Verified, VerifyError, WebhookSource, WebhookVerifier};
 
@@ -298,7 +298,10 @@ mod tests {
             panic!("{verdict:?}");
         };
         assert_eq!(verified.id.as_deref(), Some("2070443601311540"));
-        assert_eq!(verified.timestamp.unwrap().timestamp(), now().timestamp() - 5);
+        assert_eq!(
+            verified.timestamp.unwrap().timestamp(),
+            now().timestamp() - 5
+        );
         // Cached: the second request fetches nothing.
         verify(&source(), &token(&claims()), &keys).await.unwrap();
         server.assert_sent_count(1);
@@ -306,7 +309,10 @@ mod tests {
         let push: PubSubPush = serde_json::from_slice(&body()).unwrap();
         let gmail: Value = push.message.data_json().unwrap();
         assert_eq!(gmail["historyId"], "9876543210");
-        assert_eq!(push.subscription, "projects/navree-test/subscriptions/gmail-push");
+        assert_eq!(
+            push.subscription,
+            "projects/navree-test/subscriptions/gmail-push"
+        );
     }
 
     #[tokio::test]
@@ -402,7 +408,11 @@ mod tests {
     #[tokio::test]
     async fn unreachable_keys_are_unavailable() {
         let (client, server) = HttpClient::fake();
-        server.on(Method::GET, GOOGLE_KEYS_URL, FakeResponse::connection_failed());
+        server.on(
+            Method::GET,
+            GOOGLE_KEYS_URL,
+            FakeResponse::connection_failed(),
+        );
         let keys = Arc::new(SenderKeys::new(client));
         assert_eq!(
             verify(&source(), &token(&claims()), &keys).await,

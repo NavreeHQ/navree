@@ -84,8 +84,9 @@ impl SenderKeys {
             .ok()
             .filter(|response| response.is_success())
             .ok_or_else(|| VerifyError::Unavailable("the signing certificate".to_owned()))?;
-        let key = VerifyingKey::from_pem(&response.text())
-            .map_err(|_| VerifyError::Rejected("the signing certificate is not valid".to_owned()))?;
+        let key = VerifyingKey::from_pem(&response.text()).map_err(|_| {
+            VerifyError::Rejected("the signing certificate is not valid".to_owned())
+        })?;
         let mut certificates = lock(&self.certificates);
         if certificates.len() >= MAX_CERTIFICATES
             && let Some(oldest) = certificates

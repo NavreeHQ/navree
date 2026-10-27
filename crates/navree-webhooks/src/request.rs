@@ -205,7 +205,10 @@ impl Handshake {
 /// by the request's query string, else rebuilt from `X-Forwarded-Proto`,
 /// `X-Forwarded-Host` and `Host`, and the request target.
 pub(crate) fn public_url(configured: Option<&str>, headers: &HeaderMap, uri: &Uri) -> String {
-    let query = uri.query().map(|query| format!("?{query}")).unwrap_or_default();
+    let query = uri
+        .query()
+        .map(|query| format!("?{query}"))
+        .unwrap_or_default();
     if let Some(base) = configured.map(str::trim).filter(|base| !base.is_empty()) {
         return format!("{base}{query}");
     }

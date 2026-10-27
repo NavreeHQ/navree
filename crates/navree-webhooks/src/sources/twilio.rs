@@ -149,7 +149,9 @@ fn url_variants(url: &str) -> Vec<String> {
     if authority.contains('@') {
         return variants;
     }
-    let host_end = authority.rfind(':').filter(|colon| !authority[*colon..].contains(']'));
+    let host_end = authority
+        .rfind(':')
+        .filter(|colon| !authority[*colon..].contains(']'));
     match host_end {
         Some(colon) if &authority[colon + 1..] == default_port => {
             variants.push(format!("{scheme}://{}{tail}", &authority[..colon]));
@@ -189,7 +191,10 @@ mod tests {
 
     fn signed(signature: &str) -> HeaderMap {
         let mut headers = HeaderMap::new();
-        headers.insert("x-twilio-signature", HeaderValue::from_str(signature).unwrap());
+        headers.insert(
+            "x-twilio-signature",
+            HeaderValue::from_str(signature).unwrap(),
+        );
         headers.insert(
             "i-twilio-idempotency-token",
             HeaderValue::from_static("0f3a8a3c-idem"),
@@ -212,7 +217,11 @@ mod tests {
     fn a_changed_url_parameter_or_token_fails() {
         let body = form(PARAMS);
         for (token, url, body) in [
-            ("12345", "https://mycompany.com/myapp.php?foo=1&bar=3", body.clone()),
+            (
+                "12345",
+                "https://mycompany.com/myapp.php?foo=1&bar=3",
+                body.clone(),
+            ),
             ("12346", URL, body.clone()),
             ("12345", URL, form(&PARAMS[..4])),
         ] {
@@ -262,7 +271,13 @@ mod tests {
                 &[("Media", "a"), ("Media", "b"), ("To", "+2")]
             )
         );
-        Twilio::verify("t", "https://a.example/sms", &signed(&signature), &form(&params)).unwrap();
+        Twilio::verify(
+            "t",
+            "https://a.example/sms",
+            &signed(&signature),
+            &form(&params),
+        )
+        .unwrap();
     }
 
     #[test]
