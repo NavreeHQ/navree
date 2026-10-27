@@ -2,14 +2,14 @@
 //! [`DocumentStatus`] and the [`RenderDocument`] job.
 
 use chrono::{DateTime, Utc};
-use navree_contracts::{Job, JobContext, JobOptions};
+use navree_contracts::{Job, JobCancelled, JobContext, JobOptions};
 use navree_kernel::BoxError;
 use navree_storage::{Disk, StorageError};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::render::Render;
-use crate::{Documents, DocumentsError};
+use crate::{Documents, DocumentsError, Pdf};
 
 /// The suffix of the file that records why a queued render failed for
 /// good, next to where the PDF would be (`exports/q1.pdf.failed`).
@@ -69,6 +69,10 @@ pub struct QueuedDocument {
     /// The queued job's id; `None` when the document was rendered at once
     /// (no dispatcher in the app).
     pub job_id: Option<String>,
+    /// The operation the render is the work of (set by
+    /// `Documents::queue_operation`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operation_id: Option<Uuid>,
 }
 
 impl QueuedDocument {
@@ -87,7 +91,15 @@ impl QueuedDocument {
             disk: disk.into(),
             path,
             job_id,
+            operation_id: None,
         }
+    }
+
+    /// The same document, as the work of operation `id`.
+    #[cfg(feature = "operations")]
+    pub(crate) fn in_operation(mut self, id: Uuid) -> Self {
+        self.operation_id = Some(id);
+        self
     }
 }
 
@@ -136,6 +148,13 @@ pub(crate) async fn status(disk: &Disk, path: &str) -> Result<DocumentStatus, Do
 /// error is recorded at once and the job ends without retrying: rendering
 /// again cannot fix it. The failure record is `<path>.failed` on the same
 /// disk; a later successful render removes it.
+///
+/// The job reports its progress (rendering, then saving) through
+/// `ctx.progress`, and stops when its operation is cancelled, recording
+/// the render as cancelled. As the work of an operation
+/// (`Documents::queue_operation`, crate feature `operations`), it finishes
+/// the operation itself: `succeeded` with `{"disk", "path", "size"}` as the
+/// result, or `failed` at once on a template or data error.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RenderDocument {
     /// The render's id ([`QueuedDocument::id`]).
@@ -146,6 +165,26 @@ pub struct RenderDocument {
     pub disk: String,
     /// The path on the disk.
     pub path: String,
+    /// The operation this render is the work of.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operation: Option<Uuid>,
+}
+
+/// The failure record of a render whose operation was cancelled.
+const CANCELLED_MESSAGE: &str = "the render was cancelled";
+
+/// The progress note while a queued render renders.
+const RENDERING_NOTE: &str = "Rendering the document";
+
+/// The progress note while a queued render is written to its disk.
+const SAVING_NOTE: &str = "Saving the document";
+
+/// Why a queued render stopped.
+enum Stop {
+    /// Its operation or batch was cancelled.
+    Cancelled(JobCancelled),
+    /// Rendering or storing failed.
+    Failed(DocumentsError),
 }
 
 impl RenderDocument {
@@ -155,27 +194,58 @@ impl RenderDocument {
             render,
             disk: disk.to_owned(),
             path: path.to_owned(),
+            operation: None,
         }
     }
 
-    /// Renders and stores the document: what the job does, and what
+    /// The same job, as the work of operation `id`.
+    #[cfg(feature = "operations")]
+    pub(crate) fn in_operation(mut self, id: Uuid) -> Self {
+        self.operation = Some(id);
+        self
+    }
+
+    /// Renders and stores the document, returning its size: what
     /// [`Documents::queue`] does at once without a dispatcher.
-    pub(crate) async fn run(&self, documents: &Documents) -> Result<(), DocumentsError> {
+    pub(crate) async fn run(&self, documents: &Documents) -> Result<u64, DocumentsError> {
         let disk = documents.storage_disk(&self.disk)?;
         let pdf = documents.render(&self.render).await?;
+        self.store(&disk, pdf).await
+    }
+
+    /// What the job does: [`run`](RenderDocument::run), reporting progress
+    /// before each step and stopping once the job is cancelled.
+    async fn attempt(&self, documents: &Documents, ctx: &JobContext) -> Result<u64, Stop> {
+        ctx.progress(0, 2, RENDERING_NOTE)
+            .await
+            .map_err(Stop::Cancelled)?;
+        let disk = documents.storage_disk(&self.disk).map_err(Stop::Failed)?;
+        let pdf = documents
+            .render(&self.render)
+            .await
+            .map_err(Stop::Failed)?;
+        ctx.progress(1, 2, SAVING_NOTE)
+            .await
+            .map_err(Stop::Cancelled)?;
+        self.store(&disk, pdf).await.map_err(Stop::Failed)
+    }
+
+    /// Writes `pdf` and removes an earlier failure record; returns its size.
+    async fn store(&self, disk: &Disk, pdf: Pdf) -> Result<u64, DocumentsError> {
+        let size = pdf.len() as u64;
         disk.put(&self.path, pdf.into_bytes()).await?;
         let marker = format!("{}{FAILED_SUFFIX}", self.path);
         if disk.exists(&marker).await? {
             disk.delete(&marker).await?;
         }
-        Ok(())
+        Ok(size)
     }
 
-    async fn record_failure(&self, documents: &Documents, error: &DocumentsError) {
+    async fn record_failure(&self, documents: &Documents, message: &str) {
         let marker = format!("{}{FAILED_SUFFIX}", self.path);
         let written = match documents.storage_disk(&self.disk) {
             Ok(disk) => disk
-                .put(&marker, error.to_string())
+                .put(&marker, message.to_owned())
                 .await
                 .map_err(DocumentsError::from),
             Err(error) => Err(error),
@@ -189,7 +259,52 @@ impl RenderDocument {
             );
         }
     }
+
+    /// Finishes the render's operation as `succeeded`, with where the
+    /// document is as its result.
+    async fn completed(&self, ctx: &JobContext, size: u64) {
+        #[cfg(feature = "operations")]
+        if let Some(id) = self.operation
+            && let Some(operations) = ctx.app.try_get::<navree_queue::Operations>().await
+        {
+            let result = serde_json::json!({ "disk": self.disk, "path": self.path, "size": size });
+            if let Err(error) = operations.complete(id, result).await {
+                tracing::warn!(
+                    target: "navree_documents",
+                    operation_id = %id,
+                    %error,
+                    "cannot record a rendered document on its operation"
+                );
+            }
+        }
+        #[cfg(not(feature = "operations"))]
+        let _ = (ctx, size);
+    }
+
+    /// Finishes the render's operation as `failed`, with a message for
+    /// people (the details are in the logs and the failure record).
+    async fn failed(&self, ctx: &JobContext) {
+        #[cfg(feature = "operations")]
+        if let Some(id) = self.operation
+            && let Some(operations) = ctx.app.try_get::<navree_queue::Operations>().await
+            && let Err(error) = operations.fail(id, RENDER_FAILED_MESSAGE).await
+        {
+            tracing::warn!(
+                target: "navree_documents",
+                operation_id = %id,
+                %error,
+                "cannot record a failed render on its operation"
+            );
+        }
+        #[cfg(not(feature = "operations"))]
+        let _ = ctx;
+    }
 }
+
+/// The error an operation shows when its render failed for good (a
+/// template or data error); the details are in the logs and in the
+/// `<path>.failed` record.
+pub const RENDER_FAILED_MESSAGE: &str = "The document could not be rendered.";
 
 /// Whether rendering again can succeed after `error`.
 fn retryable(error: &DocumentsError) -> bool {
@@ -216,10 +331,17 @@ impl Job for RenderDocument {
 
     async fn handle(self, ctx: JobContext) -> Result<(), BoxError> {
         let documents = ctx.app.get::<Documents>().await?;
-        let Err(error) = self.run(&documents).await else {
-            return Ok(());
+        let error = match self.attempt(&documents, &ctx).await {
+            Ok(size) => {
+                self.completed(&ctx, size).await;
+                return Ok(());
+            }
+            Err(Stop::Cancelled(cancelled)) => {
+                self.record_failure(&documents, CANCELLED_MESSAGE).await;
+                return Err(Box::new(cancelled));
+            }
+            Err(Stop::Failed(error)) => error,
         };
-        let last_attempt = ctx.attempt >= Self::options().max_attempts;
         if !retryable(&error) {
             tracing::error!(
                 target: "navree_documents",
@@ -228,11 +350,12 @@ impl Job for RenderDocument {
                 %error,
                 "a queued render failed; not retrying"
             );
-            self.record_failure(&documents, &error).await;
+            self.record_failure(&documents, &error.to_string()).await;
+            self.failed(&ctx).await;
             return Ok(());
         }
-        if last_attempt {
-            self.record_failure(&documents, &error).await;
+        if ctx.attempt >= Self::options().max_attempts {
+            self.record_failure(&documents, &error.to_string()).await;
         }
         Err(Box::new(error))
     }

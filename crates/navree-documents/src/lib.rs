@@ -22,7 +22,9 @@
 //!   [`Pdf::download`] names the file ([`Download`]).
 //! - **Stored and queued**: [`Documents::save`] writes to a storage disk;
 //!   [`Documents::queue`] dispatches the `documents.render` job and returns
-//!   a [`QueuedDocument`] to poll with [`Documents::status`].
+//!   a [`QueuedDocument`] to poll with [`Documents::status`]; with the
+//!   `operations` feature, `Documents::queue_operation` queues it as the
+//!   work of a navree-queue operation and returns the operation.
 //! - **Tests**: [`DocumentsFake`] renders without engines and records
 //!   every render; every engine passes the same conformance suite.
 //!
@@ -47,7 +49,8 @@
 //! # }
 //! ```
 //!
-//! Crate features (all on by default): `typst`, `chrome` and `docx`.
+//! Crate features: `typst`, `chrome` and `docx` (on by default), and
+//! `operations` (off by default; it adds navree-queue and navree-db).
 #![forbid(unsafe_code)]
 
 #[cfg(feature = "chrome")]
@@ -89,7 +92,10 @@ pub use module::{DocumentsModule, ModuleBuilderDocumentsExt};
 pub use options::{ChromeOptions, DocumentsOptions, TypstOptions};
 pub use pdf::Pdf;
 pub use print::{Margins, Paper, PrintOptions};
-pub use queue::{DocumentStatus, FAILED_SUFFIX, QueuedDocument, RenderDocument, StoredDocument};
+pub use queue::{
+    DocumentStatus, FAILED_SUFFIX, QueuedDocument, RENDER_FAILED_MESSAGE, RenderDocument,
+    StoredDocument,
+};
 pub use render::{Render, TemplateSource, is_rtl};
 pub use stamp::{Pages, Position, Stamp};
 pub use templates::{HTML_EXTENSION, TYPST_EXTENSION, Templates};

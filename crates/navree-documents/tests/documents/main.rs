@@ -11,6 +11,8 @@ mod conformance;
 mod docx;
 mod fake;
 mod module;
+#[cfg(feature = "operations")]
+mod operations;
 mod pdf;
 mod service;
 mod support;

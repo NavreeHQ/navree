@@ -341,6 +341,61 @@ impl Documents {
         Ok(QueuedDocument::with_id(id, disk.name(), path, Some(job_id)))
     }
 
+    /// Queues `render` as the work of a new operation (crate feature
+    /// `operations`; the facade turns it on with `queue`): starts
+    /// `operation` and queues the `documents.render` job for it, both as
+    /// part of `uow`, and returns the operation, `pending`.
+    ///
+    /// The client follows the operation (`GET /api/operations/{id}`, its
+    /// SSE stream or the `operations.{id}` channel) while a worker renders:
+    /// it moves to `running` with progress notes, then finishes
+    /// `succeeded` with `{"disk", "path", "size"}` as its result, or
+    /// `failed` with [`RENDER_FAILED_MESSAGE`](crate::RENDER_FAILED_MESSAGE)
+    /// on a template or data error (at once, without retrying) and with the
+    /// queue's message once an engine or disk error has used up every
+    /// attempt. Cancelling the operation stops the render.
+    ///
+    /// The path is checked before the operation starts. With the
+    /// [`DocumentsFake`](crate::DocumentsFake), the operation is started
+    /// and the render recorded as queued, with nothing dispatched.
+    #[cfg(feature = "operations")]
+    pub async fn queue_operation(
+        &self,
+        operations: &navree_queue::Operations,
+        uow: &navree_db::Uow,
+        operation: navree_queue::Operation,
+        render: Render,
+        path: impl Into<String>,
+    ) -> Result<navree_queue::OperationRecord, DocumentsError> {
+        let queue_error = |error: navree_queue::QueueError| DocumentsError::Queue(error.to_string());
+        let path = path.into();
+        if let Some(error) = &render.data_error {
+            return Err(DocumentsError::Data(error.clone()));
+        }
+        if let Some(fake) = &self.inner.fake {
+            let record = operations
+                .start(uow, operation)
+                .await
+                .map_err(queue_error)?;
+            let queued = QueuedDocument::new(self.disk_name(), path, None).in_operation(record.id);
+            fake.record_queued(&render, &queued);
+            return Ok(record);
+        }
+        let disk = self.disk()?;
+        // Check the path before anything is started.
+        disk.exists(&path).await?;
+        let record = operations
+            .start(uow, operation)
+            .await
+            .map_err(queue_error)?;
+        let job = RenderDocument::new(render, disk.name(), &path).in_operation(record.id);
+        operations
+            .dispatch(uow, &record, job)
+            .await
+            .map_err(queue_error)?;
+        Ok(record)
+    }
+
     /// Whether the queued document is ready: [`DocumentStatus::Ready`] once
     /// the PDF is on the disk, [`DocumentStatus::Failed`] when rendering
     /// failed for good, [`DocumentStatus::Pending`] until then.
