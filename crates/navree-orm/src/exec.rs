@@ -597,27 +597,31 @@ impl<'a> SqlTarget<'a> {
         self.conn.transaction_id().is_some()
     }
 
-    /// Runs `statement` and returns its rows.
+    /// Runs `statement` and returns its rows. Outside a transaction, a read
+    /// that loses its connection runs once more on another pooled one (see
+    /// [`OrmError::is_lost_connection`]).
     pub async fn query_all(&self, statement: &Statement) -> Result<Vec<QueryResult>, OrmError> {
         ensure_free(self.conn.transaction_id())?;
         self.announce(&statement.sql);
         let statement = statement.to_sea_orm();
         Ok(match &self.conn {
-            SqlConn::Pool(conn) => conn.query_all_raw(statement).await?,
-            SqlConn::Owned(conn) => conn.query_all_raw(statement).await?,
+            SqlConn::Pool(conn) => read_again_if_lost(conn, statement, |conn, s| conn.query_all_raw(s)).await?,
+            SqlConn::Owned(conn) => read_again_if_lost(conn, statement, |conn, s| conn.query_all_raw(s)).await?,
             SqlConn::Transaction(tx) => tx.query_all_raw(statement).await?,
             SqlConn::TransactionRef(tx) => tx.query_all_raw(statement).await?,
         })
     }
 
-    /// Runs `statement` and returns its first row.
+    /// Runs `statement` and returns its first row (read again once outside
+    /// a transaction when the connection is lost, like
+    /// [`query_all`](Self::query_all)).
     pub async fn query_one(&self, statement: &Statement) -> Result<Option<QueryResult>, OrmError> {
         ensure_free(self.conn.transaction_id())?;
         self.announce(&statement.sql);
         let statement = statement.to_sea_orm();
         Ok(match &self.conn {
-            SqlConn::Pool(conn) => conn.query_one_raw(statement).await?,
-            SqlConn::Owned(conn) => conn.query_one_raw(statement).await?,
+            SqlConn::Pool(conn) => read_again_if_lost(conn, statement, |conn, s| conn.query_one_raw(s)).await?,
+            SqlConn::Owned(conn) => read_again_if_lost(conn, statement, |conn, s| conn.query_one_raw(s)).await?,
             SqlConn::Transaction(tx) => tx.query_one_raw(statement).await?,
             SqlConn::TransactionRef(tx) => tx.query_one_raw(statement).await?,
         })
@@ -809,6 +813,26 @@ impl<'a> SqlTarget<'a> {
                 Err(error)
             }
         }
+    }
+}
+
+/// Runs `read` with `statement` on the pool `conn`, and once more (on
+/// another pooled connection) when the connection was lost under it.
+async fn read_again_if_lost<'c, T, F, Fut>(
+    conn: &'c DatabaseConnection,
+    statement: sea_orm::Statement,
+    read: F,
+) -> Result<T, sea_orm::DbErr>
+where
+    F: Fn(&'c DatabaseConnection, sea_orm::Statement) -> Fut,
+    Fut: Future<Output = Result<T, sea_orm::DbErr>>,
+{
+    match read(conn, statement.clone()).await {
+        Err(error) if crate::error::lost_connection(&error) => {
+            tracing::warn!(target: "navree_orm", %error, "the connection was lost under a read; reading again");
+            read(conn, statement).await
+        }
+        result => result,
     }
 }
 
