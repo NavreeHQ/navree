@@ -71,15 +71,16 @@ impl StoredVector {
     }
 
     fn from_bytes(bytes: &[u8]) -> Result<Vec<f32>, FieldError> {
-        if bytes.len() % 4 != 0 {
+        let (floats, rest) = bytes.as_chunks::<4>();
+        if !rest.is_empty() {
             return Err(FieldError::Invalid(format!(
                 "{} bytes are not a vector of 32-bit floats",
                 bytes.len()
             )));
         }
-        Ok(bytes
-            .chunks_exact(4)
-            .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+        Ok(floats
+            .iter()
+            .map(|chunk| f32::from_le_bytes(*chunk))
             .collect())
     }
 

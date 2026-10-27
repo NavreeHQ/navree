@@ -467,11 +467,39 @@ pub(crate) fn write_object<S: Serializer>(
     map.end()
 }
 
+/// Whether the record serializes exactly as its model does: no extras,
+/// relations, visibility or appends, and no column whose output the layer
+/// rewrites (casts, date-times).
+fn serializes_as_model<M: Model>(record: &Record<M>) -> bool {
+    let meta = M::meta();
+    record.extras.is_empty()
+        && record.relations.is_empty()
+        && record.attributes.hidden.is_none()
+        && record.attributes.visible.is_none()
+        && record.attributes.appends.is_none()
+        && meta.hidden_names().is_empty()
+        && meta.visible_names().is_empty()
+        && meta.appended_names().is_empty()
+        && meta
+            .all_columns()
+            .iter()
+            .all(|column| column.cast_name().is_none() && !column.is_date_time())
+}
+
 /// The record as `serializer` writes it (what `Serialize for Record` does).
 pub(crate) fn serialize_record<M: Model, S: Serializer>(
     record: &Record<M>,
     serializer: S,
 ) -> std::result::Result<S::Ok, S::Error> {
+    if serializes_as_model(record) {
+        // Straight through; when it fails, capturing again names the field.
+        return record.model.serialize(serializer).map_err(|error| {
+            match attributes_object(record) {
+                Err(named) => ser::Error::custom(named),
+                Ok(_) => error,
+            }
+        });
+    }
     let object = record_object(record).map_err(ser::Error::custom)?;
     write_object(&object, serializer)
 }

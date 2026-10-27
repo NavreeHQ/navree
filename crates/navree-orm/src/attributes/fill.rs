@@ -73,6 +73,10 @@ use crate::record::Record;
 ///
 /// let attributes = Attributes::from_json(json!({"title": "Renewal", "amount_cents": 1200}))?;
 /// assert_eq!(attributes.get("title"), Some(&json!("Renewal")));
+/// assert_eq!(attributes.len(), 2);
+///
+/// // `attrs!` keeps the order it is written in.
+/// let attributes = navree_orm::attrs! { "title" => "Renewal", "amount_cents" => 1200 };
 /// assert_eq!(attributes.keys().collect::<Vec<_>>(), ["title", "amount_cents"]);
 /// # Ok::<(), navree_orm::OrmError>(())
 /// ```
@@ -94,7 +98,10 @@ impl Attributes {
         pairs.into_iter().collect()
     }
 
-    /// The members of a JSON object; anything else is an error.
+    /// The members of a JSON object, in the object's order (serde_json's
+    /// maps keep insertion order only with its `preserve_order` feature;
+    /// a request body deserialized into `Attributes` keeps the order it was
+    /// sent in); anything else is an error.
     pub fn from_json(json: serde_json::Value) -> Result<Self> {
         match json {
             serde_json::Value::Object(object) => Ok(object.into_iter().collect()),
