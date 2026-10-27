@@ -1383,3 +1383,53 @@ impl<P: Model, R: Model> ErasedRelation<P> for HasMany<P, R> {
         ))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::fmt::Write as _;
+
+    use super::*;
+    use crate::Dialect;
+    use crate::__doc_models::Activity;
+    use crate::relations::keys::in_keys;
+
+    /// The statement of `query` for every dialect.
+    fn per_dialect<M: Model>(query: &Builder<M>) -> String {
+        let mut out = String::new();
+        for dialect in [Dialect::Postgres, Dialect::MySql, Dialect::Sqlite] {
+            let statement = query.to_sql(dialect).unwrap();
+            writeln!(out, "{dialect}: {}", statement.sql).unwrap();
+            writeln!(out, "  values: {:?}", statement.values).unwrap();
+        }
+        out
+    }
+
+    #[test]
+    fn per_parent_limits_number_each_parents_rows() {
+        let keys = distinct_keys([Value::from("b"), Value::from("a")]);
+        let query = Builder::<Activity>::new()
+            .where_(Filter::from(in_keys(qualified("activities", "deal_id"), &keys)))
+            .order_by_desc(Activity::DUE_AT)
+            .offset(1)
+            .limit(3);
+        let query = limit_per_parent(query, Expr::Column(qualified("activities", "deal_id")));
+        insta::assert_snapshot!(per_dialect(&query));
+
+        // Without a limit or offset the query is left as it is.
+        let plain = Builder::<Activity>::new().order_by(Activity::DUE_AT);
+        let unchanged = limit_per_parent(plain.clone(), Expr::Column(qualified("activities", "deal_id")));
+        assert_eq!(
+            unchanged.to_sql(Dialect::Sqlite).unwrap().sql,
+            plain.to_sql(Dialect::Sqlite).unwrap().sql
+        );
+    }
+
+    #[test]
+    fn nulls_order_inside_the_window_on_every_dialect() {
+        let query = Builder::<Activity>::new()
+            .order(Activity::DUE_AT.desc().nulls_last())
+            .limit(1);
+        let query = limit_per_parent(query, Expr::Column(qualified("activities", "deal_id")));
+        insta::assert_snapshot!(per_dialect(&query));
+    }
+}

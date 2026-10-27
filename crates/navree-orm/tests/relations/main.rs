@@ -17,6 +17,7 @@ mod one_of_many;
 mod pivots;
 mod querying;
 mod scopes;
+mod sql;
 mod through;
 mod touches;
 mod writes;
