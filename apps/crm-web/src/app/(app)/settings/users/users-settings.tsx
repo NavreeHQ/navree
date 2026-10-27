@@ -7,6 +7,7 @@ import { useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { PageActions } from "@/components/app-shell/shell-slots";
 import { roleLabel } from "@/components/app-shell/user-menu";
 import { SkeletonRows } from "@/components/data-table";
 import { FormDialog } from "@/components/form-dialog";
@@ -158,15 +159,17 @@ export function UsersSettings() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex flex-col gap-1">
-          <h2 className="font-display text-display-sm font-semibold text-fg">Users and roles</h2>
+          <h2 className="text-base font-semibold text-fg">Users and roles</h2>
           <p className="text-sm text-muted-foreground">
             {users.data ? `${users.data.meta.total} people on the team. ` : ""}A role decides what each person can see
             and change.
           </p>
         </div>
-        <Can I="create" a="User">
-          <CreateUserDialog />
-        </Can>
+        <PageActions>
+          <Can I="create" a="User">
+            <CreateUserDialog />
+          </Can>
+        </PageActions>
       </div>
       <div className="surface overflow-hidden">
         <Table className="text-[13px]">

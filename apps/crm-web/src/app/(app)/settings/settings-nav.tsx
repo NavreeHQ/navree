@@ -18,7 +18,7 @@ export function SettingsNav() {
   ].filter((i) => i.show);
 
   return (
-    <nav aria-label="Settings sections" className="flex scroll-thin gap-1 overflow-x-auto border-b">
+    <nav aria-label="Settings sections" className="flex scroll-thin gap-5 overflow-x-auto border-b">
       {items.map((item) => {
         const active = pathname === item.href;
         return (
@@ -27,8 +27,8 @@ export function SettingsNav() {
             href={item.href}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "-mb-px border-b-2 px-3 py-2.5 text-sm whitespace-nowrap transition-colors",
-              active ? "border-accent font-medium text-fg" : "border-transparent text-fg-2 hover:text-fg",
+              "-mb-px border-b-2 px-1 py-2 text-sm whitespace-nowrap transition-colors",
+              active ? "border-fg font-medium text-fg" : "border-transparent text-fg-2 hover:text-fg",
             )}
           >
             {item.label}

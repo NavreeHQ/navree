@@ -16,7 +16,6 @@ import { errorMessage, isApiError } from "@/lib/api/errors";
 import { applyFieldErrors } from "@/lib/api/form-errors";
 import { DEAL_STAGES } from "@/lib/api/types";
 import { env } from "@/lib/env";
-import { cn } from "@/lib/utils";
 
 const schema = z.object({
   email: z.email("Enter the email address you use for Navree."),
@@ -47,9 +46,9 @@ function Soundings() {
     <ol className="flex flex-col gap-2" aria-label="Deal stages">
       {DEAL_STAGES.filter((s) => s.stage !== "lost").map((s, i) => (
         <li key={s.stage} className="flex items-center gap-4">
-          <span className="relative h-2 w-[58%] overflow-hidden rounded-full bg-ink-2" aria-hidden="true">
+          <span className="relative h-1.5 w-[58%] overflow-hidden rounded-xs bg-ink-2" aria-hidden="true">
             <span
-              className={cn("absolute inset-y-0 left-0 rounded-full", s.stage === "won" && "shadow-glow-sm")}
+              className="absolute inset-y-0 left-0 rounded-xs"
               style={{ width: `${28 + i * 18}%`, backgroundColor: `var(--stage-${s.stage})` }}
             />
           </span>
@@ -109,9 +108,9 @@ function TwoFactorStep({ onSignedIn, onBack }: { onSignedIn: () => void; onBack:
 
   return (
     <div className="flex w-full max-w-sm flex-col gap-8">
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-1.5">
         <p className="eyebrow">Security check</p>
-        <h1 className="font-display text-display-md font-semibold text-fg">Two-step verification</h1>
+        <h1 className="text-title font-semibold text-fg">Two-step verification</h1>
         <p className="text-sm text-fg-2">
           {recovery
             ? "Enter one of the recovery codes you saved when you turned on two-step verification."
@@ -138,7 +137,7 @@ function TwoFactorStep({ onSignedIn, onBack }: { onSignedIn: () => void; onBack:
                 autoComplete="one-time-code"
                 autoFocus
                 aria-invalid={fieldState.invalid || undefined}
-                className="h-10 tracking-[0.2em] figures"
+                className="h-9 tracking-[0.2em] figures"
               />
               <FieldError errors={[fieldState.error]} />
             </Field>
@@ -221,18 +220,14 @@ export function LoginScreen() {
   return (
     <div className="grid min-h-svh lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
       <aside className="relative isolate hidden flex-col justify-between overflow-hidden border-r bg-ink-1 p-10 lg:flex xl:p-12">
-        {/* A hairline dot field fading out from one green light. */}
+        {/* A faint hairline dot field, fading out. */}
         <div
           aria-hidden="true"
-          className="absolute inset-0 -z-10 bg-[radial-gradient(rgb(233_239_235/0.07)_1px,transparent_1px)] [mask-image:radial-gradient(ellipse_80%_70%_at_20%_30%,black,transparent_75%)] [background-size:22px_22px]"
-        />
-        <div
-          aria-hidden="true"
-          className="absolute -top-40 -left-32 -z-10 size-[34rem] rounded-full bg-[radial-gradient(closest-side,rgb(61_255_143/0.13),transparent)]"
+          className="absolute inset-0 -z-10 bg-[radial-gradient(rgb(233_239_235/0.05)_1px,transparent_1px)] [mask-image:radial-gradient(ellipse_80%_70%_at_20%_30%,black,transparent_75%)] [background-size:24px_24px]"
         />
         <LoginBrand />
         <div className="flex flex-col gap-10">
-          <div className="flex flex-col gap-5">
+          <div className="flex flex-col gap-3">
             <p className="eyebrow">Navree CRM</p>
             <p className="max-w-md font-display text-display-md font-semibold text-balance text-fg">
               Every account, deal and follow-up your team is working, in one place.
@@ -240,7 +235,7 @@ export function LoginScreen() {
           </div>
           <Soundings />
         </div>
-        <p className="font-mono text-xs tracking-[0.08em] text-fg-3 uppercase">Built on the Navree framework</p>
+        <p className="text-xs text-fg-3">Built on the Navree framework</p>
       </aside>
 
       <main id="content" className="flex flex-col items-center justify-center gap-10 px-4 py-12 sm:px-6">
@@ -251,9 +246,9 @@ export function LoginScreen() {
           <TwoFactorStep onSignedIn={() => router.replace(next)} onBack={() => setTwoFactor(false)} />
         ) : (
           <div className="flex w-full max-w-sm flex-col gap-8">
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1.5">
               <p className="eyebrow">Welcome back</p>
-              <h1 className="font-display text-display-md font-semibold text-fg">Sign in</h1>
+              <h1 className="text-title font-semibold text-fg">Sign in</h1>
               <p className="text-sm text-fg-2">Use your work email and password.</p>
             </div>
 
@@ -278,7 +273,7 @@ export function LoginScreen() {
                         autoFocus
                         placeholder="you@company.com"
                         aria-invalid={fieldState.invalid || undefined}
-                        className="h-10"
+                        className="h-9"
                       />
                       <FieldError errors={[fieldState.error]} />
                     </Field>
@@ -296,7 +291,7 @@ export function LoginScreen() {
                         type="password"
                         autoComplete="current-password"
                         aria-invalid={fieldState.invalid || undefined}
-                        className="h-10"
+                        className="h-9"
                       />
                       <FieldError errors={[fieldState.error]} />
                     </Field>
@@ -320,7 +315,7 @@ export function LoginScreen() {
                     <button
                       key={a.email}
                       type="button"
-                      className="flex flex-col items-start gap-0.5 rounded-xl border border-line-2 bg-ink-1 px-3 py-2.5 text-left transition-colors hover:border-fg-3/50 hover:bg-ink-2"
+                      className="flex flex-col items-start gap-0.5 rounded-md border border-line-2 bg-ink-1 px-3 py-2 text-left transition-colors hover:border-fg-3/50 hover:bg-ink-2"
                       onClick={() => fillDemo(a.email)}
                     >
                       <span className="font-mono text-[0.8125rem] text-fg">{a.email.replace("@navree.test", "")}</span>

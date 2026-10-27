@@ -68,14 +68,13 @@ function StageBar({ deal }: { deal: Deal }) {
                 aria-current={current ? "step" : undefined}
                 onClick={() => (s.stage === "lost" ? setAskLost(true) : moveTo(s.stage))}
                 style={stageStyle(s.stage)}
-                className="group flex w-full flex-col gap-2 rounded-lg px-1.5 pt-1.5 pb-2 text-left transition-colors enabled:hover:bg-ink-2 disabled:cursor-default"
+                className="group flex w-full flex-col gap-2 rounded-md px-1.5 pt-1.5 pb-2 text-left transition-colors enabled:hover:bg-ink-2 disabled:cursor-default"
                 title={canMove && !current ? `Move to ${s.label}` : undefined}
               >
                 <span
                   className={cn(
-                    "h-1.5 w-full rounded-full transition-colors",
+                    "h-1 w-full rounded-xs transition-colors",
                     filled ? "bg-(--stage)" : "bg-ink-3 group-enabled:group-hover:bg-line-2",
-                    current && s.stage === "won" && "shadow-glow-sm",
                   )}
                   aria-hidden="true"
                 />
@@ -149,7 +148,6 @@ export function DealDetail({ id }: { id: string }) {
   return (
     <div className="flex flex-col">
       <RecordHeader
-        back={BACK}
         title={d.title}
         eyebrow={<StageBadge stage={d.stage} className="w-fit" />}
         meta={
@@ -187,7 +185,7 @@ export function DealDetail({ id }: { id: string }) {
             <Can I="delete" this={d}>
               <ConfirmDialog
                 trigger={
-                  <Button variant="ghost" aria-label="Delete deal">
+                  <Button variant="ghost" size="icon" aria-label="Delete deal">
                     <Trash2Icon />
                   </Button>
                 }
@@ -209,12 +207,12 @@ export function DealDetail({ id }: { id: string }) {
         }
       />
 
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4">
         <Panel bodyClassName="px-3 py-3">
           <StageBar deal={d} />
         </Panel>
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
-          <div className="flex min-w-0 flex-col gap-6">
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
+          <div className="flex min-w-0 flex-col gap-4">
             <Figures deal={d} />
             {d.stage === "lost" && d.lost_reason ? (
               <Panel title="Why it was lost">

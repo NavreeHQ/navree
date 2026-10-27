@@ -1,10 +1,9 @@
 "use client";
 
 import { useAbility } from "@casl/react";
-import { LogOutIcon, SettingsIcon } from "lucide-react";
+import { ChevronsUpDownIcon, LogOutIcon, SettingsIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,6 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/components/ui/sidebar";
 import { UserAvatar } from "@/components/user-avatar";
 import { useLogout } from "@/features/auth/queries";
 import type { User } from "@/lib/api/types";
@@ -26,10 +26,27 @@ export function roleLabel(roles: string[]): string {
   return roles[0] ?? "Member";
 }
 
+function Identity({ user }: { user: User }) {
+  return (
+    <>
+      <UserAvatar name={user.name} id={user.id} size="md" />
+      <span className="grid min-w-0 flex-1 text-left leading-tight">
+        <span className="truncate text-sm font-medium text-fg">{user.name}</span>
+        <span className="truncate text-xs text-fg-3">{user.email}</span>
+      </span>
+    </>
+  );
+}
+
+/**
+ * The sidebar footer (sidebar-07's NavUser): the signed-in person, and their
+ * menu with settings and signing out.
+ */
 export function UserMenu({ user }: { user: User }) {
   const router = useRouter();
   const ability = useAbility<AppAbility>();
   const logout = useLogout();
+  const { isMobile, setOpenMobile } = useSidebar();
 
   const signOut = () => {
     logout.mutate(
@@ -44,45 +61,47 @@ export function UserMenu({ user }: { user: User }) {
   };
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          className="h-9 gap-2.5 rounded-full py-0 pr-1 pl-1 md:pr-3"
-          aria-label={`Account menu for ${user.name}`}
-        >
-          <UserAvatar name={user.name} id={user.id} size="md" />
-          <span className="hidden flex-col items-start leading-tight md:flex">
-            <span className="text-[0.8125rem] font-medium text-fg">{user.name}</span>
-            <span className="text-xs font-normal text-fg-3">{roleLabel(user.roles)}</span>
-          </span>
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-60">
-        <DropdownMenuLabel className="flex items-center gap-3 px-2 py-2">
-          <UserAvatar name={user.name} id={user.id} size="md" />
-          <span className="flex min-w-0 flex-col gap-0.5">
-            <span className="truncate text-sm font-medium text-fg">{user.name}</span>
-            <span className="truncate text-xs font-normal text-fg-3">{user.email}</span>
-          </span>
-        </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuGroup>
-          <DropdownMenuItem asChild>
-            <Link href="/settings">
-              <SettingsIcon />
-              Settings
-            </Link>
-          </DropdownMenuItem>
-        </DropdownMenuGroup>
-        <DropdownMenuSeparator />
-        <DropdownMenuGroup>
-          <DropdownMenuItem onSelect={signOut} disabled={logout.isPending}>
-            <LogOutIcon />
-            Sign out
-          </DropdownMenuItem>
-        </DropdownMenuGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <SidebarMenu>
+      <SidebarMenuItem>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <SidebarMenuButton
+              size="lg"
+              className="gap-2 data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+              aria-label={`Account menu for ${user.name}`}
+            >
+              <Identity user={user} />
+              <ChevronsUpDownIcon className="ml-auto text-fg-3" aria-hidden="true" />
+            </SidebarMenuButton>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            className="w-(--radix-dropdown-menu-trigger-width) min-w-60"
+            side={isMobile ? "top" : "right"}
+            align="end"
+            sideOffset={8}
+          >
+            <DropdownMenuLabel className="flex items-center gap-2 px-1.5 py-1.5 font-normal">
+              <Identity user={user} />
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <DropdownMenuItem asChild>
+                <Link href="/settings" onClick={() => setOpenMobile(false)}>
+                  <SettingsIcon />
+                  Settings
+                </Link>
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <DropdownMenuItem onSelect={signOut} disabled={logout.isPending}>
+                <LogOutIcon />
+                Sign out
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </SidebarMenuItem>
+    </SidebarMenu>
   );
 }

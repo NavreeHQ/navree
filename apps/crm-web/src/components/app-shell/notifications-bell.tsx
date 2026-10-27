@@ -62,14 +62,14 @@ export function NotificationsBell() {
         <Button
           variant="ghost"
           size="icon"
-          className="relative text-fg-2 hover:text-fg"
+          className="relative text-fg-2 hover:text-fg [&_svg]:stroke-[1.75]"
           aria-label={count > 0 ? `Notifications, ${count} unread` : "Notifications"}
         >
           <BellIcon />
           {count > 0 ? (
             <span
               data-testid="unread-count"
-              className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] leading-none font-semibold text-primary-foreground figures shadow-glow-sm ring-2 ring-ink-0"
+              className="absolute top-0.5 right-0.5 flex h-4 min-w-4 items-center justify-center rounded-sm bg-fg px-1 font-mono text-xs leading-none font-medium text-ink-0 figures ring-2 ring-background"
             >
               {count > 99 ? "99+" : count}
             </span>
@@ -77,7 +77,7 @@ export function NotificationsBell() {
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-[min(24rem,calc(100vw-1.5rem))] gap-0 overflow-hidden p-0">
-        <div className="flex items-center justify-between border-b px-4 py-2.5">
+        <div className="flex h-11 items-center justify-between border-b pr-2 pl-4">
           <h2 className="text-sm font-semibold text-fg">Notifications</h2>
           <Button
             variant="ghost"
@@ -107,10 +107,7 @@ export function NotificationsBell() {
                   >
                     <span
                       aria-hidden="true"
-                      className={cn(
-                        "mt-1.5 size-1.5 shrink-0 rounded-full",
-                        n.read_at ? "bg-transparent" : "bg-primary shadow-[0_0_6px_rgb(61_255_143/0.7)]",
-                      )}
+                      className={cn("mt-1.5 size-1.5 shrink-0 rounded-full", n.read_at ? "bg-transparent" : "bg-fg-1")}
                     />
                     <span className="flex min-w-0 flex-col gap-0.5">
                       <span className={cn("leading-snug", !n.read_at && "font-medium")}>
@@ -132,7 +129,7 @@ export function NotificationsBell() {
             </ul>
           ) : (
             <div className="flex flex-col items-center gap-3 px-6 py-10 text-center">
-              <span className="flex size-10 items-center justify-center rounded-xl border border-line-2 bg-ink-2 text-fg-2">
+              <span className="flex size-10 items-center justify-center rounded-md border border-line-2 bg-ink-2 text-fg-2">
                 <BellIcon className="size-4" aria-hidden="true" />
               </span>
               <p className="text-sm text-fg-2">Nothing new. Deal assignments, wins and task reminders show up here.</p>

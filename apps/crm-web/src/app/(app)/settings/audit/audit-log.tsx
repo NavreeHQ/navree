@@ -103,7 +103,7 @@ export function AuditLog() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
-        <h2 className="font-display text-display-sm font-semibold text-fg">Audit log</h2>
+        <h2 className="text-base font-semibold text-fg">Audit log</h2>
         <p className="text-sm text-muted-foreground">Every sign-in and record change, newest first.</p>
       </div>
       <div className="surface overflow-hidden">

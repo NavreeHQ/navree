@@ -60,7 +60,7 @@ export function GeneralSettings() {
   if (!user) return null;
 
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
+    <div className="grid gap-4 lg:grid-cols-2">
       <Panel title="Profile">
         <div className="flex items-center gap-3 pb-3">
           <UserAvatar name={user.name} id={user.id} size="md" />
