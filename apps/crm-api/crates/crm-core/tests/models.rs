@@ -5,6 +5,7 @@
 //! scopes search beyond ASCII, and the activity timeline is a time series.
 
 use chrono::{DateTime, Duration, NaiveDate, TimeZone, Utc};
+use crm_core::embeds::{CompanyRef, ContactRef, OwnerRef};
 use crm_core::enums::{ActivityKind, CompanySize, ContactStatus, Stage, SubjectType};
 use crm_core::factories::{ActivityFactory, ContactFactory, DealFactory};
 use crm_core::models::{
@@ -193,6 +194,38 @@ async fn relations_load_with_the_records_that_name_them() {
     assert_eq!(contact.map(|c| c.full_name()), Some("Ada Lovelace".into()));
     let owner = loaded.loaded(Deal::owner).and_then(Option::as_ref);
     assert_eq!(owner.map(|u| u.id), Some(rep1));
+
+    // The API's embeds come from the loaded relations.
+    assert_eq!(
+        CompanyRef::loaded(loaded.loaded(Deal::company), loaded.company_id),
+        CompanyRef {
+            id: acme.id,
+            name: "Acme".into()
+        }
+    );
+    assert_eq!(
+        contact.map(ContactRef::from),
+        Some(ContactRef {
+            id: ada.id,
+            full_name: "Ada Lovelace".into()
+        })
+    );
+    assert_eq!(
+        OwnerRef::loaded(loaded.loaded(Deal::owner), loaded.owner_id),
+        OwnerRef {
+            id: rep1,
+            name: "Priya Shah".into()
+        }
+    );
+    // Without its relation loaded, an embed keeps the id and has no name.
+    let bare = Deal::find(&*core.db, deal.id).await.unwrap().unwrap();
+    assert_eq!(
+        OwnerRef::loaded(bare.loaded(Deal::owner), bare.owner_id),
+        OwnerRef {
+            id: rep1,
+            name: String::new()
+        }
+    );
 
     let activities = Activity::query()
         .with_all(["subject_record", "owner", "assignee"])

@@ -23,7 +23,6 @@ crm-core = { path = "crates/crm-core" }
 crm-deals = { path = "crates/crm-deals" }
 crm-users = { path = "crates/crm-users" }
 navree = { workspace = true, features = ["mcp"] }
-sea-orm = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
 uuid = { workspace = true }
