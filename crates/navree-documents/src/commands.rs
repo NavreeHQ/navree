@@ -187,7 +187,7 @@ mod tests {
         assert_eq!(parsed.out, PathBuf::from("audit.pdf"));
         assert!(parse_render_args(&args(&[])).is_err());
         assert!(parse_render_args(&args(&["a", "b"])).is_err());
-        assert!(parse_render_args(&args(&["a", "--engine", "pdfkit"])).is_err());
+        assert!(parse_render_args(&args(&["a", "--engine", "unknown"])).is_err());
         assert!(parse_render_args(&args(&["a", "--data"])).is_err());
         assert!(parse_render_args(&args(&["a", "--bogus"])).is_err());
     }
