@@ -34,6 +34,7 @@ conventions, and says which skill to load for each task.
 | [`navree-mail-and-notifications`](navree-mail-and-notifications/SKILL.md) | Mail with templates and transports; notifications over several channels |
 | [`navree-mail-delivery`](navree-mail-delivery/SKILL.md) | Email APIs, tenant transports, the delivery log, suppressions, hold for approval, tracking, DKIM and domain checks |
 | [`navree-notification-channels`](navree-notification-channels/SKILL.md) | Notifications over Slack, Teams, SMS, WhatsApp and web push; opt-outs, push subscriptions, the delivery log and provider callbacks |
+| [`navree-notification-preferences`](navree-notification-preferences/SKILL.md) | What people and workspaces receive: channels per category, digests, quiet hours, send windows, held deliveries and per-workspace mail templates |
 | [`navree-storage`](navree-storage/SKILL.md) | Disks (local, S3, Google Cloud Storage, Azure), uploads, direct browser uploads, signed links and disk sync |
 | [`navree-cache-and-http-client`](navree-cache-and-http-client/SKILL.md) | The cache, locks, and outgoing HTTP with retries and an SSRF guard |
 | [`navree-openapi`](navree-openapi/SKILL.md) | The OpenAPI 3.1 document, schemas and typed clients |
