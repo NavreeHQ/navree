@@ -294,14 +294,14 @@ impl Notifier {
                 Ok(true)
             }
             Delivery::Slack { route, message } => {
-                let driver = self.drivers.slack(ctx).await;
+                let driver = self.drivers.slack(ctx).await?;
                 let result = driver.send(route, message).await;
                 let recipient = slack_recipient(route);
                 self.finish(ctx, job, Channel::Slack, Some(&recipient), result)
                     .await
             }
             Delivery::MicrosoftTeams { route, message } => {
-                let driver = self.drivers.teams(ctx).await;
+                let driver = self.drivers.teams(ctx).await?;
                 let result = driver.send(route, message).await;
                 let recipient = teams_recipient(route);
                 self.finish(ctx, job, Channel::MicrosoftTeams, Some(&recipient), result)
