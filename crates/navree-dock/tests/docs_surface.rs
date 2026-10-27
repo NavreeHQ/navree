@@ -5,8 +5,9 @@ use std::time::Duration;
 
 use navree_dock::compose::{COMPOSE_FILE, PROJECT_LABEL, SERVICE_LABEL};
 use navree_dock::{
-    AddReport, DOCK_FILE, Dock, DockError, DockFile, FakeExecutor, ProcessExecutor, READY_TIMEOUT,
-    RUNTIME_VARIABLE, Runtime, RuntimeChoice, Service,
+    AddReport, DOCK_FILE, Dock, DockError, DockFile, FakeExecutor, POSTGRES_VERSION,
+    ProcessExecutor, READY_TIMEOUT, RUNTIME_VARIABLE, Runtime, RuntimeChoice, Service,
+    TIMESCALEDB_IMAGE, TIMESCALEDB_POSTGRES_VERSIONS, TIMESCALEDB_VERSION,
 };
 
 #[test]
@@ -20,6 +21,16 @@ fn files_variables_labels_and_limits() {
     assert_eq!(Runtime::Docker.program(), "docker");
     assert_eq!(Runtime::Podman.program(), "podman");
     assert_eq!(RuntimeChoice::default(), RuntimeChoice::Auto);
+}
+
+/// "The services": TimescaleDB 2.31.0 on PostgreSQL 17 by default, and the
+/// majors `version` may name while TimescaleDB is on.
+#[test]
+fn the_timescaledb_image_and_versions() {
+    assert_eq!(TIMESCALEDB_IMAGE, "timescale/timescaledb");
+    assert_eq!(TIMESCALEDB_VERSION, "2.31.0");
+    assert_eq!(POSTGRES_VERSION, "17");
+    assert_eq!(TIMESCALEDB_POSTGRES_VERSIONS, [16, 17, 18]);
 }
 
 #[test]
@@ -38,7 +49,7 @@ fn the_six_services_and_their_keys() {
     );
     assert_eq!(
         Service::Postgres.keys(),
-        ["database", "user", "password", "extensions"]
+        ["database", "user", "password", "extensions", "timescaledb"]
     );
     assert_eq!(Service::Redis.keys(), ["maxmemory_mb"]);
     assert_eq!(Service::Meilisearch.keys(), ["master_key"]);
