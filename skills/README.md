@@ -27,7 +27,7 @@ conventions, and says which skill to load for each task.
 | [`navree-database`](navree-database/SKILL.md) | Entities, `Repo`, the unit of work, migrations, seeders, factories, pagination |
 | [`navree-auth`](navree-auth/SKILL.md) | JWT sign-in, refresh tokens, the current user, account flows, two-factor |
 | [`navree-access-control`](navree-access-control/SKILL.md) | Roles, permissions, abilities, record checks and SQL list filters |
-| [`navree-queues-and-scheduling`](navree-queues-and-scheduling/SKILL.md) | Jobs, workers, retries, failed jobs and cron-style schedules |
+| [`navree-queues-and-scheduling`](navree-queues-and-scheduling/SKILL.md) | Jobs, workers, retries, failed jobs, batches, operations with progress, and cron-style schedules |
 | [`navree-events-and-broadcasting`](navree-events-and-broadcasting/SKILL.md) | Events and listeners; real-time channels over WebSockets |
 | [`navree-mail-and-notifications`](navree-mail-and-notifications/SKILL.md) | Mail with templates and transports; notifications over several channels |
 | [`navree-storage`](navree-storage/SKILL.md) | Disks, uploads, downloads and signed temporary URLs |

@@ -27,7 +27,7 @@ compiled in).
 | `navree::storage` | navree-storage | `storage` | `StorageModule::from_config()` | `storage` | `Disk`, `Storage`, `store_upload`, temporary URLs |
 | `navree::session` | navree-session | `session` | `SessionModule::from_config()` | `session` | cookie sessions and CSRF (optional; not used with bearer tokens) |
 | `navree::validation` | navree-validation | `validation` | `ValidationModule::from_config()` | `validation` | `Valid`, `ValidAsync`, `AsyncRule`, `ValidationErrors` |
-| `navree::queue` | navree-queue | `queue` | `QueueModule::from_config()` | `queue` | `Queue`, `QueueFake`, `queue:work` |
+| `navree::queue` | navree-queue | `queue` | `QueueModule::from_config()` | `queue` | `Queue`, `Batch`, `Operations`, `QueueFake`, `queue:work` |
 | `navree::audit` | navree-audit | `audit` | `AuditModule::from_config()` | `audit` | the audit trail, `GET /api/audit`, `audit:prune` |
 | `navree::access` | navree-access | `access` | `AccessModule::for_root(AccessOptions { .. })` | | roles, permissions, abilities, `#[roles]`/`#[permissions]`/`#[can]` |
 | `navree::schedule` | navree-schedule | `schedule` | `ScheduleModule::for_root()` | | `m.schedule`, `schedule:work`, `schedule:run` |
