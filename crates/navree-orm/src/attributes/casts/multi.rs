@@ -112,23 +112,19 @@ stored_columns!(8 => A 0, B 1, C 2, D 3, E 4, F 5, G 6, H 7);
 /// Stores one field across several columns: money as cents and a currency,
 /// an address as its lines, a range as its bounds.
 ///
-/// The model names the columns and their types on the field:
-///
-/// ```ignore
-/// #[model(cast = MoneyColumns, columns(price_cents: i64, price_currency: String))]
-/// pub price: Money,
-/// ```
-///
-/// Each stored column gets its own typed constant (`Deal::PRICE_CENTS:
-/// Column<Deal, i64>`) for conditions and orders, its own dirty tracking
-/// and its own key in `fill`; serialized records write the field under its
-/// own name (its `Serialize`). A nullable field (`Option<Money>`) is
-/// `None` when every column is NULL.
+/// The model names the columns and their types on the field
+/// (`#[model(cast = MoneyColumns, columns(price_cents: i64, price_currency:
+/// String))]`). Each stored column gets its own typed constant
+/// (`Deal::PRICE_CENTS: Column<Deal, i64>`) for conditions and orders, its
+/// own dirty tracking and its own key in `fill`; serialized records write
+/// the field under its own name (its `Serialize`). A nullable field
+/// (`Option<Money>`) is `None` when every column is NULL.
 ///
 /// ```
 /// use navree_orm::cast::{CastError, MultiColumnCast};
+/// use navree_orm::{Model, Value};
 ///
-/// #[derive(Clone, Debug, PartialEq)]
+/// #[derive(Clone, Debug, Default, PartialEq, serde::Serialize)]
 /// pub struct Money {
 ///     pub cents: i64,
 ///     pub currency: String,
@@ -151,10 +147,20 @@ stored_columns!(8 => A 0, B 1, C 2, D 3, E 4, F 5, G 6, H 7);
 ///     }
 /// }
 ///
-/// let stored = MoneyColumns::set(&Money { cents: 999, currency: "EUR".into() })?;
-/// assert_eq!(stored, (999, "EUR".to_owned()));
+/// #[derive(Model, Clone, Debug, Default, serde::Serialize)]
+/// #[model(table = "deals")]
+/// pub struct Deal {
+///     pub id: i64,
+///     #[model(cast = MoneyColumns, columns(price_cents: i64, price_currency: String))]
+///     pub price: Money,
+/// }
+///
+/// let deal = Deal { id: 1, price: Money { cents: 999, currency: "EUR".into() } };
+/// assert_eq!(deal.value("price_cents")?, Some(Value::from(999_i64)));
+/// assert_eq!(deal.value("price_currency")?, Some(Value::from("EUR")));
+/// assert_eq!(Deal::PRICE_CURRENCY.name(), "price_currency");
 /// assert!(MoneyColumns::get((1, "EURO".into())).is_err());
-/// # Ok::<(), CastError>(())
+/// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 pub trait MultiColumnCast<T>: 'static {
     /// The stored columns' types, as a tuple in the order of `columns(..)`.

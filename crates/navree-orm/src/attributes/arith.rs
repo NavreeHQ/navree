@@ -20,10 +20,44 @@ impl<M: Model> Record<M> {
     /// stored is [`OrmError::NotPersisted`](crate::OrmError::NotPersisted),
     /// never a table-wide increment.
     ///
-    /// ```ignore
-    /// // `balance: Money` with `#[model(cast = MoneyCents)]`, where MoneyCents
-    /// // implements Cast::increment and Cast::decrement.
-    /// account.increment_cast(&uow, Account::BALANCE, Money::eur(5)).await?;
+    /// ```no_run
+    /// # use navree_orm::__doc_models::{Record, Result, Uow};
+    /// use navree_orm::Model;
+    /// use navree_orm::cast::{Cast, CastError};
+    ///
+    /// /// An amount in cents that adds up through its cast.
+    /// #[derive(Clone, Copy, Debug, Default, PartialEq, serde::Serialize)]
+    /// pub struct Cents(pub i64);
+    ///
+    /// pub struct AsCents;
+    ///
+    /// impl Cast<Cents> for AsCents {
+    ///     type Stored = i64;
+    ///
+    ///     fn get(stored: i64) -> Result<Cents, CastError> {
+    ///         Ok(Cents(stored))
+    ///     }
+    ///
+    ///     fn set(value: &Cents) -> Result<i64, CastError> {
+    ///         Ok(value.0)
+    ///     }
+    ///
+    ///     fn increment(value: &Cents, amount: &Cents) -> Result<Cents, CastError> {
+    ///         value.0.checked_add(amount.0).map(Cents).ok_or_else(|| CastError::new("the balance overflows"))
+    ///     }
+    /// }
+    ///
+    /// #[derive(Model, Clone, Debug, Default, serde::Serialize)]
+    /// #[model(table = "accounts")]
+    /// pub struct Account {
+    ///     pub id: i64,
+    ///     #[model(cast = AsCents)]
+    ///     pub balance: Cents,
+    /// }
+    ///
+    /// # async fn demo(uow: Uow, mut account: Record<Account>) -> navree_orm::Result<()> {
+    /// account.increment_cast(&uow, Account::BALANCE, Cents(500)).await?;
+    /// # Ok(()) }
     /// ```
     pub async fn increment_cast<E, T>(
         &mut self,

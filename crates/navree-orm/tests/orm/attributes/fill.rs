@@ -287,9 +287,12 @@ async fn a_failing_discard_policy_refuses_before_changing_anything() {
     assert_eq!(member.name, "", "nothing was set");
 }
 
+/// What a reporting discard policy saw: the model and the discarded keys.
+type Discarded = Vec<(String, Vec<String>)>;
+
 #[tokio::test]
 async fn a_reporting_discard_policy_calls_its_handler() {
-    let seen: Arc<Mutex<Vec<(String, Vec<String>)>>> = Arc::default();
+    let seen: Arc<Mutex<Discarded>> = Arc::default();
     let handler = {
         let seen = Arc::clone(&seen);
         DiscardPolicy::Report(Arc::new(move |model, columns| {

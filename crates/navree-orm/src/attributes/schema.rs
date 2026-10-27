@@ -85,12 +85,10 @@ fn nullable(mut schema: Json) -> Json {
                 let single = std::mem::take(single);
                 object.insert("type".to_owned(), json!([single, "null"]));
             }
-            Some(Json::Array(types)) => {
-                if !types.iter().any(|t| t == "null") {
-                    types.push(json!("null"));
-                }
+            Some(Json::Array(types)) if !types.iter().any(|t| t == "null") => {
+                types.push(json!("null"));
             }
-            // Any value already includes null.
+            // Any value (and a list naming null) already includes null.
             _ => {}
         }
     }

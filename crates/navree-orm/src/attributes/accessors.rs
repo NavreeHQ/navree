@@ -166,10 +166,10 @@ mod tests {
 
     #[test]
     fn accessors_are_found_by_name_at_compile_time() {
-        const FOUND: bool = has_accessor(ACCESSORS, "doubled");
-        const MISSING: bool = has_accessor(ACCESSORS, "double");
-        assert!(FOUND);
-        assert!(!MISSING);
+        const {
+            assert!(has_accessor(ACCESSORS, "doubled"));
+            assert!(!has_accessor(ACCESSORS, "double"));
+        }
         assert_eq!(
             ACCESSORS[0].value(&Point { x: 21 }).unwrap(),
             serde_json::json!(42)
