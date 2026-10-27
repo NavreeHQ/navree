@@ -1,6 +1,6 @@
 [package]
 name = "navree-webhooks"
-description = "Navree WebhooksModule: signed outgoing webhooks with queue-backed retries, a delivery log and endpoint management, and verified incoming webhooks from Stripe, GitHub, Paddle and Standard Webhooks senders."
+description = "Navree WebhooksModule: signed outgoing webhooks with queue-backed retries, a delivery log and endpoint management, and verified incoming webhooks from Stripe, GitHub, Paddle, Standard Webhooks senders, AWS SNS, Google Pub/Sub, Microsoft Graph, Twilio, Slack, Mailgun and Postmark."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -15,6 +15,7 @@ axum = { workspace = true }
 base64 = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
+form_urlencoded = { workspace = true }
 hex = { workspace = true }
 hmac = { workspace = true }
 http = { workspace = true }
@@ -32,6 +33,7 @@ sea-orm = { workspace = true }
 sea-orm-migration = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+serde_urlencoded = { workspace = true }
 sha1 = { workspace = true }
 sha2 = { workspace = true }
 subtle = { workspace = true }
