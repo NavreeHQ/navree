@@ -355,8 +355,11 @@ mod tests {
     fn new_takes_the_database() {
         for (flag, database) in [
             ("timescaledb", Database::Timescaledb),
+            ("timescale", Database::Timescaledb),
             ("postgres", Database::Postgres),
+            ("postgresql", Database::Postgres),
             ("mysql", Database::Mysql),
+            ("mariadb", Database::Mysql),
             ("sqlite", Database::Sqlite),
         ] {
             let Command::New(args) = parse(&["new", "blog", "--database", flag]) else {

@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use navree_cli::clock::Timestamp;
 use navree_cli::names::AppName;
-use navree_cli::new_app::{Database, NavreeSource, NewApp, Ui, create_app};
+use navree_cli::new_app::{Database, NavreeSource, NewApp, Ui, create_app, created_message};
 use navree_dock::{DockFile, ServiceOptions};
 
 fn now() -> Timestamp {
@@ -229,18 +229,124 @@ fn plain_postgres_mysql_and_sqlite_are_options() {
 fn a_published_navree_takes_the_driver_feature_too() {
     let source = NavreeSource::Version("0.1.0".to_owned());
     assert_eq!(
-        source.dependency_with(&["postgres"]),
+        source.dependency_with_features(&["postgres"]),
         r#"{ version = "0.1.0", features = ["postgres"] }"#
     );
-    assert_eq!(source.dependency_with(&[]), r#""0.1.0""#);
+    assert_eq!(source.dependency_with_features(&[]), r#""0.1.0""#);
     let path = NavreeSource::Path(PathBuf::from("/opt/navree/crates/navree"));
     assert_eq!(
-        path.dependency_with(&["mysql"]),
+        path.dependency_with_features(&["mysql"]),
         r#"{ path = "/opt/navree/crates/navree", features = ["mysql"] }"#
     );
     assert_eq!(Database::default(), Database::Timescaledb);
     assert_eq!(Database::Timescaledb.feature(), Some("postgres"));
+    assert_eq!(Database::Postgres.feature(), Some("postgres"));
+    assert_eq!(Database::Mysql.feature(), Some("mysql"));
     assert_eq!(Database::Sqlite.feature(), None);
+}
+
+/// The steps `navree new` prints: start the database with Dock first when
+/// Dock runs it.
+#[test]
+fn the_next_steps_start_the_database_first() {
+    let dir = tempfile::tempdir().unwrap();
+    let timescale = app("my-shop", Ui::None);
+    let root = create_app(dir.path(), &timescale, now()).unwrap();
+    let message = created_message(&timescale, &root);
+    let steps: Vec<&str> = message
+        .lines()
+        .skip_while(|line| *line != "Next steps:")
+        .skip(1)
+        .collect();
+    assert_eq!(
+        steps,
+        [
+            "  cd my-shop",
+            "  navree dock up             # TimescaleDB on 127.0.0.1:5432",
+            "  navree key:generate        # then set APP_KEY in .env",
+            "  navree dev                 # http://127.0.0.1:8080/api/docs",
+        ]
+    );
+    assert!(message.starts_with("Created my-shop in "), "{message}");
+    assert!(
+        message.contains("It depends on navree at /opt/navree/crates/navree."),
+        "{message}"
+    );
+
+    let lite = app_on("lite", Ui::Next, Database::Sqlite);
+    let message = created_message(&lite, &dir.path().join("lite"));
+    assert!(!message.contains("dock"), "{message}");
+    assert!(
+        message.contains("  npm --prefix web install   # the front end; `navree dev` starts it"),
+        "{message}"
+    );
+
+    let mysql = app_on("my-shop", Ui::None, Database::Mysql);
+    let message = created_message(&mysql, &dir.path().join("my-shop"));
+    assert!(!message.contains("dock"), "{message}");
+    assert!(
+        message.contains("a MySQL or MariaDB server at mysql://navree:navree@127.0.0.1:3306/my_shop"),
+        "{message}"
+    );
+}
+
+/// The generated files explain the database they were made for.
+#[test]
+fn the_generated_files_describe_the_database() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = create_app(dir.path(), &app("my-shop", Ui::None), now()).unwrap();
+    let dock = read(&root, "dock.toml");
+    assert!(
+        dock.starts_with("# Local services for my-shop. `navree dock up` starts them"),
+        "{dock}"
+    );
+    assert!(dock.contains("PostgreSQL with TimescaleDB"), "{dock}");
+    assert!(
+        dock.ends_with("[services.postgres]\n"),
+        "an empty table: TimescaleDB, Dock's default: {dock}"
+    );
+    let env = read(&root, ".env.example");
+    assert!(
+        env.contains("# TimescaleDB, run by `navree dock up` (see dock.toml).\nAPP_DATABASE__URL="),
+        "{env}"
+    );
+    let readme = read(&root, "README.md");
+    assert!(
+        readme.contains("navree dock up               # the database on 127.0.0.1:5432"),
+        "{readme}"
+    );
+    assert!(readme.contains("dock.toml              the local services"), "{readme}");
+    let agents = read(&root, "AGENTS.md");
+    assert!(agents.contains("storage/               runtime data: logs, uploads"));
+    assert!(agents.contains("schema.create_hypertable(\"events\""), "{agents}");
+
+    let pg = create_app(
+        dir.path(),
+        &app_on("pg-shop", Ui::None, Database::Postgres),
+        now(),
+    )
+    .unwrap();
+    let dock = read(&pg, "dock.toml");
+    assert!(dock.contains("[services.postgres]\ntimescaledb = false\n"), "{dock}");
+    assert!(!read(&pg, "AGENTS.md").contains("hypertable"));
+
+    let lite = create_app(
+        dir.path(),
+        &app_on("lite", Ui::None, Database::Sqlite),
+        now(),
+    )
+    .unwrap();
+    let agents = read(&lite, "AGENTS.md");
+    assert!(
+        agents.contains("storage/               runtime data: the SQLite database, logs, uploads"),
+        "{agents}"
+    );
+    assert!(!agents.contains("dock.toml"), "{agents}");
+    let config = read(&lite, "config/app.toml");
+    assert!(
+        config.contains("[database]\nurl = \"sqlite://storage/lite.db?mode=rwc\""),
+        "{config}"
+    );
 }
 
 /// Coding agents get the project's conventions: AGENTS.md, and a CLAUDE.md
