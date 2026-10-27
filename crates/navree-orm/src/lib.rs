@@ -98,6 +98,7 @@ mod expr;
 pub mod hooks;
 pub mod ir;
 mod model;
+mod operators;
 pub mod pagination;
 mod persist;
 pub mod prelude;
@@ -122,7 +123,7 @@ pub use error::{OrmError, Result};
 pub use exec::{Access, DocumentTarget, ExecContext, Executor, RowsStream, SqlTarget, Target};
 pub use raw::{Raw, affecting_statement, raw, scalar, select, select_one, statement, unprepared};
 pub use streams::{RowStream, cursor};
-pub use ir::{Expr, LockMode};
+pub use ir::{Expr, LockMode, VectorMetric};
 pub use model::{ColumnMeta, KeyKind, Model, ModelMeta, PrimaryKey, Timestamp};
 pub use pagination::{
     CursorPage, CursorRequest, Page, PageMeta, PageQuery, PageRequest, SimplePage, SimplePageMeta,

@@ -15,6 +15,7 @@ mod documents;
 mod find_or_create;
 mod hooks;
 mod http;
+mod json;
 mod locks;
 mod pagination;
 mod query;

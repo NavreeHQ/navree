@@ -528,6 +528,116 @@ macro_rules! filters {
             self.where_($crate::query::filters::json_contains(column, value, true))
         }
 
+        /// Adds `OR` the JSON column (or path) does not contain `value`.
+        pub fn or_where_json_doesnt_contain(
+            self,
+            column: impl $crate::IntoExpr,
+            value: impl serde::Serialize,
+        ) -> Self {
+            self.or_where($crate::query::filters::json_contains(column, value, true))
+        }
+
+        /// Adds: the JSON array at the column (or path) shares an element
+        /// with `values` (an array; a scalar stands for a one-element
+        /// array). `json_overlaps` on MySQL; element containment on
+        /// PostgreSQL; `json_each` on SQLite.
+        ///
+        /// ```
+        /// # use navree_orm::__doc_models::*;
+        /// let deals = Deal::query().where_json_overlaps("meta->labels", ["vip", "renewal"]);
+        /// # let _ = deals;
+        /// ```
+        pub fn where_json_overlaps(
+            self,
+            column: impl $crate::IntoExpr,
+            values: impl serde::Serialize,
+        ) -> Self {
+            self.where_($crate::query::filters::json_overlaps(column, values, false))
+        }
+
+        /// Adds `OR` the JSON array at the column shares an element with
+        /// `values`.
+        pub fn or_where_json_overlaps(
+            self,
+            column: impl $crate::IntoExpr,
+            values: impl serde::Serialize,
+        ) -> Self {
+            self.or_where($crate::query::filters::json_overlaps(column, values, false))
+        }
+
+        /// Adds: the JSON array at the column shares no element with
+        /// `values`.
+        pub fn where_json_doesnt_overlap(
+            self,
+            column: impl $crate::IntoExpr,
+            values: impl serde::Serialize,
+        ) -> Self {
+            self.where_($crate::query::filters::json_overlaps(column, values, true))
+        }
+
+        /// Adds `OR` the JSON array at the column shares no element with
+        /// `values`.
+        pub fn or_where_json_doesnt_overlap(
+            self,
+            column: impl $crate::IntoExpr,
+            values: impl serde::Serialize,
+        ) -> Self {
+            self.or_where($crate::query::filters::json_overlaps(column, values, true))
+        }
+
+        /// Adds: the JSON column has the object key (or array index) its
+        /// path ends with: `where_json_contains_key("meta->owner")`,
+        /// `where_json_contains_key("meta->tags[1]")`.
+        ///
+        /// ```
+        /// use navree_orm::{Dialect, table};
+        ///
+        /// let sql = table("deals").where_json_contains_key("meta->owner").to_sql(Dialect::Postgres).unwrap();
+        /// assert_eq!(sql.sql, r#"SELECT * FROM "deals" WHERE COALESCE(("meta")::jsonb ? $1, false)"#);
+        /// ```
+        pub fn where_json_contains_key(self, column: impl $crate::IntoExpr) -> Self {
+            self.where_($crate::query::filters::json_contains_key(column, false))
+        }
+
+        /// Adds `OR` the JSON column has the key its path ends with.
+        pub fn or_where_json_contains_key(self, column: impl $crate::IntoExpr) -> Self {
+            self.or_where($crate::query::filters::json_contains_key(column, false))
+        }
+
+        /// Adds: the JSON column does not have the key its path ends with.
+        pub fn where_json_doesnt_contain_key(self, column: impl $crate::IntoExpr) -> Self {
+            self.where_($crate::query::filters::json_contains_key(column, true))
+        }
+
+        /// Adds `OR` the JSON column does not have the key its path ends
+        /// with.
+        pub fn or_where_json_doesnt_contain_key(self, column: impl $crate::IntoExpr) -> Self {
+            self.or_where($crate::query::filters::json_contains_key(column, true))
+        }
+
+        /// Adds: the vector column (an embedding) is within cosine distance
+        /// `max_distance` of `vector` (pgvector on PostgreSQL, MariaDB's
+        /// vector functions; unsupported on SQLite).
+        pub fn where_vector_distance_less_than(
+            self,
+            column: impl $crate::IntoExpr,
+            vector: &[f32],
+            max_distance: f64,
+        ) -> Self {
+            self.where_($crate::query::filters::vector_within(column, vector, max_distance))
+        }
+
+        /// Adds `OR` the vector column is within cosine distance
+        /// `max_distance` of `vector`.
+        pub fn or_where_vector_distance_less_than(
+            self,
+            column: impl $crate::IntoExpr,
+            vector: &[f32],
+            max_distance: f64,
+        ) -> Self {
+            self.or_where($crate::query::filters::vector_within(column, vector, max_distance))
+        }
+
         /// Adds a comparison of the length of the JSON array at the column
         /// (or path).
         pub fn where_json_length(
@@ -597,6 +707,16 @@ macro_rules! filters {
             options: $crate::ir::FullText,
         ) -> Self {
             self.where_($crate::query::filters::full_text(columns, query, options))
+        }
+
+        /// Adds `OR` a full-text match with options.
+        pub fn or_where_full_text_with(
+            self,
+            columns: impl IntoIterator<Item = impl $crate::IntoExpr>,
+            query: impl Into<String>,
+            options: $crate::ir::FullText,
+        ) -> Self {
+            self.or_where($crate::query::filters::full_text(columns, query, options))
         }
 
         /// Adds `OR` a full-text match.
@@ -825,6 +945,42 @@ pub(crate) fn json_contains(
             "the value for JSON column `{column}` cannot be encoded: {error}"
         ))),
     }
+}
+
+pub(crate) fn json_overlaps(
+    column: impl IntoExpr,
+    values: impl serde::Serialize,
+    not: bool,
+) -> Filter {
+    let column = match json_column(column, "a JSON overlap check") {
+        Ok(column) => column,
+        Err(message) => return Filter(Where::Invalid(message)),
+    };
+    match serde_json::to_value(values) {
+        Ok(value) => Filter(Where::JsonOverlaps { column, value, not }),
+        Err(error) => Filter(Where::Invalid(format!(
+            "the values for JSON column `{column}` cannot be encoded: {error}"
+        ))),
+    }
+}
+
+pub(crate) fn json_contains_key(column: impl IntoExpr, not: bool) -> Filter {
+    match json_column(column, "a JSON key check") {
+        Ok(column) if column.path.is_empty() => Filter(Where::Invalid(format!(
+            "a JSON key check takes a path to the key (`{column}->key`), not the column alone"
+        ))),
+        Ok(column) => Filter(Where::JsonContainsKey { column, not }),
+        Err(message) => Filter(Where::Invalid(message)),
+    }
+}
+
+/// The vector column within cosine distance `max` of `vector`.
+pub(crate) fn vector_within(column: impl IntoExpr, vector: &[f32], max: f64) -> Filter {
+    Filter::compare(
+        Expr::vector_distance(column.into_expr(), vector),
+        Operator::Lte,
+        Expr::Value(Value::from(max)),
+    )
 }
 
 pub(crate) fn json_length(column: impl IntoExpr, op: impl Into<Operator>, length: i64) -> Filter {

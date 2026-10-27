@@ -486,6 +486,119 @@ fn writes() {
 }
 
 #[test]
+fn json_overlaps_keys_and_containment() {
+    insta::assert_snapshot!(query(
+        Deal::query()
+            .where_json_overlaps(Deal::TAGS, ["vip", "q1"])
+            .or_where_json_doesnt_overlap("meta->labels", "spam")
+    ));
+    insta::assert_snapshot!(query(
+        Deal::query()
+            .where_json_contains_key("meta->owner->email")
+            .where_json_doesnt_contain_key("meta->tags[2]")
+            .or_where_json_contains_key("meta->tags[-1]")
+    ));
+    insta::assert_snapshot!(query(
+        Deal::query()
+            .where_(Deal::TAGS.contained_by(["vip", "q1", "q2"]))
+            .where_(col("meta").has_key("owner"))
+            .where_(Deal::TAGS.overlaps("vip"))
+    ));
+    insta::assert_snapshot!(query(Deal::query().where_json_contains_key(Deal::TAGS)));
+}
+
+#[test]
+fn pattern_and_null_safe_operators() {
+    insta::assert_snapshot!(query(
+        Deal::query()
+            .where_(Deal::TITLE.ilike("%renewal%"))
+            .where_(Deal::TITLE.regex("^[A-Z]"))
+            .where_(Deal::TITLE.not_regex("draft$"))
+            .where_(Deal::TITLE.regex_case_insensitive("^acme"))
+            .where_(Deal::TITLE.not_regex_case_insensitive("test"))
+            .where_(Company::COUNTRY.is_distinct_from("US"))
+    ));
+    insta::assert_snapshot!(query(
+        Deal::query().where_(Deal::TITLE.similar_to("(Renewal|Upsell)%"))
+    ));
+}
+
+#[test]
+fn operators_written_by_hand() {
+    insta::assert_snapshot!(query(Deal::query().where_(Filter::op_raw(
+        Deal::TAGS,
+        "@>",
+        Expr::raw("?::jsonb", ["[\"vip\"]"])
+    ))));
+    insta::assert_snapshot!(query(Deal::query().where_(Filter::op_raw(
+        Deal::TITLE,
+        "sounds like",
+        Expr::val("renewal")
+    ))));
+    insta::assert_snapshot!(query(Deal::query().where_(Filter::op_raw(
+        Deal::TITLE,
+        "glob",
+        Expr::val("Re*")
+    ))));
+    insta::assert_snapshot!(rows(table("deals").select_expr(
+        Expr::col("title").binary("||", Expr::val("!")),
+        "loud"
+    )));
+    insta::assert_snapshot!(rows(table("deals").select_expr(
+        Expr::col("meta").binary("#-", Expr::raw("'{owner,email}'", [] as [i64; 0])),
+        "meta"
+    )));
+}
+
+#[test]
+fn full_text_modes_and_vectors() {
+    insta::assert_snapshot!(query(Deal::query().where_full_text_with(
+        [Deal::TITLE],
+        "fat & (rat | cat)",
+        FullText::raw()
+    )));
+    insta::assert_snapshot!(rows(table("documents").where_full_text_with(
+        ["search_vector"],
+        "renewal pricing",
+        FullText::english().websearch_mode().vectors()
+    )));
+    insta::assert_snapshot!(query(
+        Deal::query()
+            .where_(Deal::STAGE.eq(Stage::Won))
+            .or_where_full_text_with([Deal::TITLE], "pricing", FullText::phrase())
+    ));
+}
+
+#[test]
+fn vector_similarity() {
+    let embedding = [0.25_f32, -1.5, 3.0];
+    insta::assert_snapshot!(rows(
+        table("documents")
+            .select(["id"])
+            .select_vector_distance("embedding", &embedding, "distance")
+            .where_vector_similar_to("embedding", &embedding, 0.75)
+            .limit(5)
+    ));
+    insta::assert_snapshot!(rows(
+        table("documents")
+            .where_vector_distance_less_than("embedding", &embedding, 0.4)
+            .order_by_vector_distance("embedding", &embedding)
+    ));
+    insta::assert_snapshot!(rows(table("documents").select_expr(
+        Expr::vector_distance_by(
+            Expr::col("embedding"),
+            &embedding,
+            navree_orm::VectorMetric::Euclidean
+        ),
+        "l2"
+    )));
+    insta::assert_snapshot!(rows(table("documents").select_expr(
+        Expr::vector_distance(Expr::col("embedding"), &[f32::NAN]),
+        "bad"
+    )));
+}
+
+#[test]
 fn sources_aliases_derived_tables_and_table_functions() {
     insta::assert_snapshot!(rows(
         table("deals").from_as("d").where_(col("d.stage").eq("won"))

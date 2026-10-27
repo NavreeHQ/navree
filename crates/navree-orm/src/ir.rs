@@ -72,12 +72,23 @@ impl ColumnRef {
         let text = text.into();
         let (head, path) = match text.split_once("->") {
             Some((head, rest)) => (head.to_owned(), parse_json_path(rest)),
+            None if text.trim_end().ends_with(']') && text.contains('[') => {
+                // `tags[1]`: an index into the column itself.
+                (text.to_string(), Vec::new())
+            }
             None => {
                 return Self::parse_head(text);
             }
         };
+        let (head, mut indexes) = match head.find('[') {
+            Some(at) if head.trim_end().ends_with(']') => {
+                (head[..at].to_owned(), parse_json_path(&head[at..]))
+            }
+            _ => (head, Vec::new()),
+        };
         let mut column = Self::parse_head(Cow::Owned(head));
-        column.path = path;
+        indexes.extend(path);
+        column.path = indexes;
         column
     }
 
@@ -235,6 +246,45 @@ pub enum Expr {
         /// The column.
         column: Cow<'static, str>,
     },
+    /// `left op right` with an operator written by hand (`||`, `-`, `#-`,
+    /// `->`, ...), checked against the dialect's list of value operators
+    /// when the query compiles. SQL drivers only.
+    Binary {
+        /// The left operand.
+        left: Box<Expr>,
+        /// The operator.
+        op: Cow<'static, str>,
+        /// The right operand.
+        right: Box<Expr>,
+    },
+    /// The distance between the vector in `expr` (an embedding column) and
+    /// `vector`: pgvector's `<=>` (cosine), `<->` (Euclidean) or `<#>`
+    /// (negative inner product) on PostgreSQL, MariaDB's
+    /// `VEC_DISTANCE_COSINE` / `VEC_DISTANCE_EUCLIDEAN` on MySQL;
+    /// unsupported on SQLite.
+    VectorDistance {
+        /// The vector column or expression.
+        expr: Box<Expr>,
+        /// The vector compared with.
+        vector: Vec<f32>,
+        /// How distance is measured.
+        metric: VectorMetric,
+    },
+}
+
+/// How a vector distance is measured.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum VectorMetric {
+    /// Cosine distance, `1 - cosine similarity` (0 for the same direction,
+    /// 2 for opposite ones): the usual measure for text embeddings.
+    #[default]
+    Cosine,
+    /// Euclidean (L2) distance.
+    Euclidean,
+    /// The negative inner product (PostgreSQL only): smaller is more
+    /// similar, for normalized embeddings like cosine but faster.
+    InnerProduct,
 }
 
 /// An aggregate function.
@@ -333,12 +383,25 @@ pub enum Operator {
     ShiftLeft,
     /// `>>`.
     ShiftRight,
-    /// Regular-expression match (`~` on PostgreSQL, `REGEXP` elsewhere).
+    /// Regular-expression match, case-sensitive (`~` on PostgreSQL,
+    /// `REGEXP_LIKE(.., 'c')` on MySQL, `REGEXP` on SQLite).
     Regexp,
-    /// Regular-expression mismatch.
+    /// Regular-expression mismatch, case-sensitive.
     NotRegexp,
+    /// Regular-expression match ignoring case (`~*` on PostgreSQL,
+    /// `REGEXP_LIKE(.., 'i')` on MySQL, `REGEXP` with `(?i)` on SQLite).
+    RegexpIgnoreCase,
+    /// Regular-expression mismatch ignoring case.
+    NotRegexpIgnoreCase,
+    /// Null-safe inequality (`IS DISTINCT FROM`, `NOT <=>`, `IS NOT`): true
+    /// when exactly one side is NULL.
+    NullSafeNe,
     /// A PostgreSQL operator written as is (`~*`, `@>`, `?|`, ...).
     Postgres(&'static str),
+    /// An operator written by hand ([`Filter::op_raw`](crate::Filter::op_raw)),
+    /// checked against the dialect's list of condition operators when the
+    /// query compiles.
+    Raw(String),
     /// An operator that is not recognised; the query fails when it runs.
     Invalid(String),
 }
@@ -379,6 +442,7 @@ impl From<&str> for Operator {
             "ilike" => Operator::ILike,
             "not ilike" => Operator::NotILike,
             "<=>" | "is not distinct from" => Operator::NullSafeEq,
+            "is distinct from" => Operator::NullSafeNe,
             "&" => Operator::BitAnd,
             "|" => Operator::BitOr,
             "^" => Operator::BitXor,
@@ -542,6 +606,35 @@ pub enum Where {
         /// Does not contain.
         not: bool,
     },
+    /// The JSON at the column (or path) is contained in `value`: every
+    /// element (or key and value) it has, `value` has too (`<@` on
+    /// PostgreSQL, `json_contains(value, column)` on MySQL).
+    JsonContainedBy {
+        /// The column and path.
+        column: ColumnRef,
+        /// The value it must fit in.
+        value: serde_json::Value,
+        /// Is not contained.
+        not: bool,
+    },
+    /// The JSON array at the column (or path) shares an element with
+    /// `value` (an array; a scalar stands for a one-element array).
+    JsonOverlaps {
+        /// The column and path.
+        column: ColumnRef,
+        /// The elements looked for.
+        value: serde_json::Value,
+        /// Shares none.
+        not: bool,
+    },
+    /// The JSON column has the object key (or array index) its path ends
+    /// with: `meta->owner` has `owner`, `meta->tags[2]` a third tag.
+    JsonContainsKey {
+        /// The column, with the path whose last step is looked for.
+        column: ColumnRef,
+        /// Does not have it.
+        not: bool,
+    },
     /// The length of the JSON array at the column (or path), compared.
     JsonLength {
         /// The column and path.
@@ -593,6 +686,9 @@ pub enum FullTextMode {
     /// MySQL's boolean mode (`+word -word "phrase"`); websearch syntax on
     /// PostgreSQL.
     Boolean,
+    /// The text search query syntax itself (`to_tsquery`: `'fat & (rat |
+    /// cat)'`); boolean mode on MySQL. The text must be a valid query.
+    Raw,
 }
 
 /// The options of a full-text condition
@@ -614,9 +710,53 @@ pub struct FullText {
     pub language: Option<String>,
     /// MySQL's `WITH QUERY EXPANSION` (natural language mode).
     pub expanded: bool,
+    /// PostgreSQL: the columns hold `tsvector`s already (a generated
+    /// column, indexed), so they are matched as they are instead of
+    /// through `to_tsvector`.
+    pub vectors: bool,
 }
 
 impl FullText {
+    /// Words in English (the default language), in any order.
+    pub fn english() -> Self {
+        FullText::default().language("english")
+    }
+
+    /// PostgreSQL's text search syntax (`to_tsquery`), boolean mode on
+    /// MySQL.
+    pub fn raw() -> Self {
+        FullText {
+            mode: FullTextMode::Raw,
+            ..FullText::default()
+        }
+    }
+
+    /// The same options matching `tsvector` columns as they are
+    /// (PostgreSQL).
+    ///
+    /// ```
+    /// use navree_orm::ir::FullText;
+    ///
+    /// let options = FullText::english().websearch_mode().vectors();
+    /// assert!(options.vectors);
+    /// ```
+    pub fn vectors(mut self) -> Self {
+        self.vectors = true;
+        self
+    }
+
+    /// The same options in search-engine syntax (`websearch_to_tsquery`).
+    pub fn websearch_mode(mut self) -> Self {
+        self.mode = FullTextMode::Websearch;
+        self
+    }
+
+    /// The same options matching the words as a phrase.
+    pub fn phrase_mode(mut self) -> Self {
+        self.mode = FullTextMode::Phrase;
+        self
+    }
+
     /// The words as a phrase.
     pub fn phrase() -> Self {
         FullText {
@@ -1179,6 +1319,17 @@ mod tests {
                 JsonSegment::Index(0),
                 JsonSegment::Key("b".into())
             ]
+        );
+        let indexed = ColumnRef::parse("deals.tags[1]");
+        assert_eq!(
+            (indexed.table.as_deref(), indexed.name.as_ref()),
+            (Some("deals"), "tags")
+        );
+        assert_eq!(indexed.path, [JsonSegment::Index(1)]);
+        let nested = ColumnRef::parse("tags[-1]->name");
+        assert_eq!(
+            nested.path,
+            [JsonSegment::Index(-1), JsonSegment::Key("name".into())]
         );
         assert_eq!(column.to_string(), "meta->a->0->b");
         assert_eq!(column.without_path().to_string(), "meta");

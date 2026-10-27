@@ -4,11 +4,11 @@
 use chrono::{Datelike, Timelike};
 use sea_query::{Alias, BinOper, Condition, ExprTrait, Func};
 
-use super::{Compiler, Dialect, json_path_literal, raw_sql};
+use super::{Compiler, Dialect, raw_sql};
 use crate::error::OrmError;
 use crate::ir::{
-    Boolean, DatePart, Expr, FullText, FullTextMode, InValues, Operator, QueryIr, SelectItem,
-    Where, WhereClause,
+    Boolean, DatePart, Expr, FullText, FullTextMode, InValues, JsonSegment, Operator, QueryIr,
+    SelectItem, Where, WhereClause,
 };
 use crate::value::{Field, Value, to_json};
 
@@ -125,6 +125,27 @@ impl Compiler {
                 condition
             }
             Where::JsonLength { column, op, length } => self.json_length(column, op, *length)?,
+            Where::JsonContainedBy { column, value, not } => {
+                let condition = self.json_contained_by(column, value)?;
+                if *not {
+                    return Ok(Condition::all().add(condition).not());
+                }
+                condition
+            }
+            Where::JsonOverlaps { column, value, not } => {
+                let condition = self.json_overlaps(column, value)?;
+                if *not {
+                    return Ok(Condition::all().add(condition).not());
+                }
+                condition
+            }
+            Where::JsonContainsKey { column, not } => {
+                let condition = self.json_contains_key(column)?;
+                if *not {
+                    return Ok(Condition::all().add(condition).not());
+                }
+                condition
+            }
             Where::FullText {
                 columns,
                 query,
@@ -188,18 +209,77 @@ impl Compiler {
             },
             Operator::ShiftLeft => l.binary(BinOper::LShift, r),
             Operator::ShiftRight => l.binary(BinOper::RShift, r),
-            Operator::Regexp => match self.dialect {
-                Dialect::Postgres => l.binary(BinOper::Custom("~"), r),
-                Dialect::MySql | Dialect::Sqlite => l.binary(BinOper::Custom("REGEXP"), r),
-            },
-            Operator::NotRegexp => match self.dialect {
-                Dialect::Postgres => l.binary(BinOper::Custom("!~"), r),
-                Dialect::MySql | Dialect::Sqlite => l.binary(BinOper::Custom("NOT REGEXP"), r),
+            Operator::Regexp | Operator::NotRegexp => {
+                let not = matches!(op, Operator::NotRegexp);
+                match self.dialect {
+                    Dialect::Postgres => {
+                        l.binary(BinOper::Custom(if not { "!~" } else { "~" }), r)
+                    }
+                    // `REGEXP` follows the column's collation (usually
+                    // case-insensitive); the `c` flag matches case.
+                    Dialect::MySql => self.custom(
+                        if not {
+                            "NOT REGEXP_LIKE({}, {}, 'c')"
+                        } else {
+                            "REGEXP_LIKE({}, {}, 'c')"
+                        },
+                        vec![l, r],
+                    ),
+                    Dialect::Sqlite => l.binary(
+                        BinOper::Custom(if not { "NOT REGEXP" } else { "REGEXP" }),
+                        r,
+                    ),
+                }
+            }
+            Operator::RegexpIgnoreCase | Operator::NotRegexpIgnoreCase => {
+                let not = matches!(op, Operator::NotRegexpIgnoreCase);
+                match self.dialect {
+                    Dialect::Postgres => {
+                        l.binary(BinOper::Custom(if not { "!~*" } else { "~*" }), r)
+                    }
+                    Dialect::MySql => self.custom(
+                        if not {
+                            "NOT REGEXP_LIKE({}, {}, 'i')"
+                        } else {
+                            "REGEXP_LIKE({}, {}, 'i')"
+                        },
+                        vec![l, r],
+                    ),
+                    // The `regexp` function SQLite calls is the app's (sqlx
+                    // registers one with `with_regexp`); `(?i)` turns case off.
+                    Dialect::Sqlite => self.custom(
+                        if not {
+                            "{} NOT REGEXP ('(?i)' || {})"
+                        } else {
+                            "{} REGEXP ('(?i)' || {})"
+                        },
+                        vec![l, r],
+                    ),
+                }
+            }
+            Operator::NullSafeNe => match self.dialect {
+                Dialect::Postgres => l.binary(BinOper::Custom("IS DISTINCT FROM"), r),
+                Dialect::MySql => self.custom("NOT ({} <=> {})", vec![l, r]),
+                Dialect::Sqlite => l.binary(BinOper::Custom("IS NOT"), r),
             },
             Operator::Postgres(op) => match self.dialect {
                 Dialect::Postgres => l.binary(BinOper::Custom(op), r),
                 _ => return Err(self.unsupported(format!("the operator `{op}`"))),
             },
+            Operator::Raw(op) => {
+                let allowed = condition_operators(self.dialect);
+                let normalized = normalize_operator(op);
+                match allowed.iter().find(|known| **known == normalized) {
+                    Some(known) => l.binary(BinOper::Custom(known), r),
+                    None => {
+                        return Err(OrmError::invalid(format!(
+                            "`{op}` is not an operator {} conditions take (they take: {})",
+                            self.dialect.name(),
+                            allowed.join(", ")
+                        )));
+                    }
+                }
+            }
             Operator::Invalid(op) => {
                 return Err(OrmError::invalid(format!(
                     "`{op}` is not a known operator (use =, <>, <, <=, >, >=, like, not like, ilike, not ilike, <=>, &, |, ^, <<, >>, regexp, not regexp)"
@@ -468,7 +548,7 @@ impl Compiler {
                     self.custom(
                         &format!(
                             "json_contains({{}}, {{}}, {})",
-                            json_path_literal(&column.path)
+                            self.json_path(&column.path)
                         ),
                         vec![base, encoded],
                     )
@@ -493,7 +573,7 @@ impl Compiler {
                     self.custom("json_each({})", vec![base])
                 } else {
                     self.custom(
-                        &format!("json_each({{}}, {})", json_path_literal(&column.path)),
+                        &format!("json_each({{}}, {})", self.json_path(&column.path)),
                         vec![base],
                     )
                 };
@@ -503,6 +583,154 @@ impl Compiler {
                 )
             }
         })
+    }
+
+    /// The JSON at `column` is contained in `value` (`<@` on PostgreSQL,
+    /// `json_contains(value, column)` on MySQL).
+    fn json_contained_by(
+        &self,
+        column: &crate::ir::ColumnRef,
+        value: &serde_json::Value,
+    ) -> Result<sea_query::Expr, OrmError> {
+        Ok(match self.dialect {
+            Dialect::Postgres => self.custom(
+                "({})::jsonb <@ {}",
+                vec![
+                    self.json_value(column),
+                    sea_query::Expr::val(Value::Json(Some(Box::new(value.clone())))),
+                ],
+            ),
+            Dialect::MySql => {
+                let target = self.mysql_json(column);
+                self.custom(
+                    "json_contains(CAST({} AS JSON), {})",
+                    vec![sea_query::Expr::val(Value::from(value.to_string())), target],
+                )
+            }
+            Dialect::Sqlite => {
+                return Err(self.unsupported("a JSON contained-by check"));
+            }
+        })
+    }
+
+    /// The JSON array at `column` shares an element with `value`: on
+    /// PostgreSQL the column contains one of the elements (`@>`, so any
+    /// element type works), MySQL's `json_overlaps`, on SQLite the elements
+    /// of both compared through `json_each`.
+    fn json_overlaps(
+        &self,
+        column: &crate::ir::ColumnRef,
+        value: &serde_json::Value,
+    ) -> Result<sea_query::Expr, OrmError> {
+        let elements = match value {
+            serde_json::Value::Array(_) => value.clone(),
+            scalar => serde_json::Value::Array(vec![scalar.clone()]),
+        };
+        Ok(match self.dialect {
+            Dialect::Postgres => self.custom(
+                "EXISTS (SELECT 1 FROM jsonb_array_elements({}) AS \"navree_candidate\" WHERE ({})::jsonb @> jsonb_build_array(\"navree_candidate\".\"value\"))",
+                vec![
+                    sea_query::Expr::val(Value::Json(Some(Box::new(elements)))),
+                    self.json_value(column),
+                ],
+            ),
+            Dialect::MySql => {
+                let target = self.mysql_json(column);
+                self.custom(
+                    "json_overlaps({}, CAST({} AS JSON))",
+                    vec![target, sea_query::Expr::val(Value::from(elements.to_string()))],
+                )
+            }
+            Dialect::Sqlite => {
+                let source = self.sqlite_json_each(column);
+                self.custom(
+                    "EXISTS (SELECT 1 FROM {} AS \"navree_left\", json_each({}) AS \"navree_right\" WHERE \"navree_left\".\"value\" = \"navree_right\".\"value\")",
+                    vec![source, sea_query::Expr::val(Value::from(elements.to_string()))],
+                )
+            }
+        })
+    }
+
+    /// The JSON column has the key (or array index) its path ends with.
+    fn json_contains_key(
+        &self,
+        column: &crate::ir::ColumnRef,
+    ) -> Result<sea_query::Expr, OrmError> {
+        let Some((last, parent_path)) = column.path.split_last() else {
+            return Err(OrmError::invalid(format!(
+                "a JSON key check needs a path to the key (`{}->key`), not the column alone",
+                column.name
+            )));
+        };
+        Ok(match self.dialect {
+            Dialect::Postgres => {
+                let parent = self.json_value(&crate::ir::ColumnRef {
+                    path: parent_path.to_vec(),
+                    ..column.clone()
+                });
+                match last {
+                    JsonSegment::Key(key) => self.custom(
+                        "COALESCE(({})::jsonb ? {}, false)",
+                        vec![parent, sea_query::Expr::val(Value::from(key.clone()))],
+                    ),
+                    JsonSegment::Index(index) => {
+                        // The array is long enough to have the index (from
+                        // the end when negative).
+                        let needed = if *index < 0 { -index } else { index + 1 };
+                        self.custom(
+                            "CASE WHEN jsonb_typeof(({})::jsonb) = 'array' THEN jsonb_array_length(({})::jsonb) >= {} ELSE false END",
+                            vec![parent.clone(), parent, sea_query::Expr::val(needed)],
+                        )
+                    }
+                }
+            }
+            Dialect::MySql => {
+                let base = self.plain_column(column);
+                self.custom(
+                    &format!(
+                        "IFNULL(json_contains_path({{}}, 'one', {}), 0)",
+                        self.json_path(&column.path)
+                    ),
+                    vec![base],
+                )
+            }
+            Dialect::Sqlite => {
+                let base = self.plain_column(column);
+                self.custom(
+                    &format!(
+                        "json_type({{}}, {}) IS NOT NULL",
+                        self.json_path(&column.path)
+                    ),
+                    vec![base],
+                )
+            }
+        })
+    }
+
+    /// MySQL: the JSON at `column` (its path extracted, still JSON).
+    fn mysql_json(&self, column: &crate::ir::ColumnRef) -> sea_query::Expr {
+        let base = self.plain_column(column);
+        if column.path.is_empty() {
+            base
+        } else {
+            self.custom(
+                &format!("json_extract({{}}, {})", self.json_path(&column.path)),
+                vec![base],
+            )
+        }
+    }
+
+    /// SQLite: the elements of the JSON at `column`, as `json_each` rows.
+    fn sqlite_json_each(&self, column: &crate::ir::ColumnRef) -> sea_query::Expr {
+        let base = self.plain_column(column);
+        if column.path.is_empty() {
+            self.custom("json_each({})", vec![base])
+        } else {
+            self.custom(
+                &format!("json_each({{}}, {})", self.json_path(&column.path)),
+                vec![base],
+            )
+        }
     }
 
     fn json_length(
@@ -522,7 +750,7 @@ impl Compiler {
                     self.custom("json_length({})", vec![base])
                 } else {
                     self.custom(
-                        &format!("json_length({{}}, {})", json_path_literal(&column.path)),
+                        &format!("json_length({{}}, {})", self.json_path(&column.path)),
                         vec![base],
                     )
                 }
@@ -535,7 +763,7 @@ impl Compiler {
                     self.custom(
                         &format!(
                             "json_array_length({{}}, {})",
-                            json_path_literal(&column.path)
+                            self.json_path(&column.path)
                         ),
                         vec![base],
                     )
@@ -544,6 +772,94 @@ impl Compiler {
         };
         self.compare_compiled(left, op, sea_query::Expr::val(length))
     }
+}
+
+/// The operators a hand-written condition ([`Operator::Raw`]) may use on
+/// each database: the comparisons, and the ones that answer true or false
+/// (JSON containment and key existence, array and range overlaps, text
+/// search and pattern matches on PostgreSQL).
+fn condition_operators(dialect: Dialect) -> &'static [&'static str] {
+    match dialect {
+        Dialect::Postgres => &[
+            "=",
+            "<>",
+            "!=",
+            "<",
+            "<=",
+            ">",
+            ">=",
+            "@>",
+            "<@",
+            "?",
+            "?|",
+            "?&",
+            "&&",
+            "@?",
+            "@@",
+            "-|-",
+            "&<",
+            "&>",
+            "<<",
+            ">>",
+            "~",
+            "~*",
+            "!~",
+            "!~*",
+            "^@",
+            "LIKE",
+            "NOT LIKE",
+            "ILIKE",
+            "NOT ILIKE",
+            "SIMILAR TO",
+            "NOT SIMILAR TO",
+            "IS DISTINCT FROM",
+            "IS NOT DISTINCT FROM",
+        ],
+        Dialect::MySql => &[
+            "=",
+            "<>",
+            "!=",
+            "<",
+            "<=",
+            ">",
+            ">=",
+            "<=>",
+            "LIKE",
+            "NOT LIKE",
+            "REGEXP",
+            "NOT REGEXP",
+            "RLIKE",
+            "NOT RLIKE",
+            "SOUNDS LIKE",
+        ],
+        Dialect::Sqlite => &[
+            "=",
+            "==",
+            "<>",
+            "!=",
+            "<",
+            "<=",
+            ">",
+            ">=",
+            "IS",
+            "IS NOT",
+            "LIKE",
+            "NOT LIKE",
+            "GLOB",
+            "NOT GLOB",
+            "MATCH",
+            "REGEXP",
+            "NOT REGEXP",
+        ],
+    }
+}
+
+/// An operator as the lists above spell it: upper case, single spaces.
+fn normalize_operator(op: &str) -> String {
+    op.split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_ascii_uppercase()
 }
 
 /// PostgreSQL's built-in text search configurations: a full-text
@@ -608,10 +924,16 @@ impl Compiler {
                 let function = match options.mode {
                     FullTextMode::Phrase => "phraseto_tsquery",
                     FullTextMode::Websearch | FullTextMode::Boolean => "websearch_to_tsquery",
+                    FullTextMode::Raw => "to_tsquery",
                     _ => "plainto_tsquery",
                 };
-                let vectors =
-                    vec![format!("to_tsvector('{language}', {{}})"); compiled.len()].join(" || ");
+                // `tsvector` columns are matched as they are.
+                let vector = if options.vectors {
+                    "{}".to_owned()
+                } else {
+                    format!("to_tsvector('{language}', {{}})")
+                };
+                let vectors = vec![vector; compiled.len()].join(" || ");
                 let mut exprs = compiled;
                 exprs.push(search);
                 Ok(self.custom(
@@ -621,7 +943,9 @@ impl Compiler {
             }
             Dialect::MySql => {
                 let mode = match options.mode {
-                    FullTextMode::Boolean | FullTextMode::Websearch => "IN BOOLEAN MODE",
+                    FullTextMode::Boolean | FullTextMode::Websearch | FullTextMode::Raw => {
+                        "IN BOOLEAN MODE"
+                    }
                     _ if options.expanded => "IN NATURAL LANGUAGE MODE WITH QUERY EXPANSION",
                     _ => "IN NATURAL LANGUAGE MODE",
                 };

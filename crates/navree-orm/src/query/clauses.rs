@@ -566,6 +566,71 @@ macro_rules! clauses {
             self
         }
 
+        /// Keeps the rows whose vector column (an embedding) has cosine
+        /// similarity `min_similarity` or more with `vector` (distance at
+        /// most `1 - min_similarity`), most similar first. pgvector on
+        /// PostgreSQL, MariaDB's vector functions; unsupported on SQLite.
+        ///
+        /// ```
+        /// # use navree_orm::__doc_models::*;
+        /// # let embedding = vec![0.1_f32, 0.7, 0.2];
+        /// let similar = Deal::query().where_vector_similar_to("embedding", &embedding, 0.8).limit(5);
+        /// assert!(similar.to_sql(Dialect::Postgres)?.sql.ends_with(
+        ///     r#"WHERE ("embedding" <=> CAST($1 AS vector)) <= $2 ORDER BY ("embedding" <=> CAST($3 AS vector)) ASC LIMIT $4"#
+        /// ));
+        /// # Ok::<(), navree_orm::OrmError>(())
+        /// ```
+        pub fn where_vector_similar_to(
+            self,
+            column: impl $crate::IntoExpr,
+            vector: &[f32],
+            min_similarity: f64,
+        ) -> Self {
+            let column = $crate::IntoExpr::into_expr(column);
+            self.where_vector_distance_less_than(column.clone(), vector, 1.0 - min_similarity)
+                .order_by_vector_distance(column, vector)
+        }
+
+        /// `OR` the vector column has cosine similarity `min_similarity` or
+        /// more with `vector`, most similar first.
+        pub fn or_where_vector_similar_to(
+            self,
+            column: impl $crate::IntoExpr,
+            vector: &[f32],
+            min_similarity: f64,
+        ) -> Self {
+            let column = $crate::IntoExpr::into_expr(column);
+            self.or_where_vector_distance_less_than(column.clone(), vector, 1.0 - min_similarity)
+                .order_by_vector_distance(column, vector)
+        }
+
+        /// Adds the cosine distance between the vector column and `vector`
+        /// to the select list as `alias`.
+        pub fn select_vector_distance(
+            self,
+            column: impl $crate::IntoExpr,
+            vector: &[f32],
+            alias: impl Into<std::borrow::Cow<'static, str>>,
+        ) -> Self {
+            self.select_expr(
+                $crate::Expr::vector_distance($crate::IntoExpr::into_expr(column), vector),
+                alias,
+            )
+        }
+
+        /// Orders by the cosine distance between the vector column and
+        /// `vector`, nearest first.
+        pub fn order_by_vector_distance(
+            self,
+            column: impl $crate::IntoExpr,
+            vector: &[f32],
+        ) -> Self {
+            self.order($crate::ir::Order::asc($crate::Expr::vector_distance(
+                $crate::IntoExpr::into_expr(column),
+                vector,
+            )))
+        }
+
         /// `INNER JOIN (subquery) AS alias ON ...` with the conditions built
         /// in `on`.
         pub fn join_sub_on(
