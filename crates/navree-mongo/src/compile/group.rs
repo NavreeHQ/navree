@@ -364,9 +364,21 @@ pub(crate) fn stages(
     let mut groups = Vec::with_capacity(query.groups.len());
     let mut id = Document::new();
     for (i, group) in query.groups.iter().enumerate() {
+        // `group_by(["bucket"])` names a selected expression by its alias.
+        let group = match group {
+            Expr::Column(column) if column.table.is_none() && column.path.is_empty() => query
+                .columns
+                .iter()
+                .find(|item| {
+                    item.alias.as_deref() == Some(column.name.as_ref())
+                        && !matches!(&item.expr, Expr::Column(own) if own.name == column.name)
+                })
+                .map_or_else(|| group.clone(), |item| item.expr.clone()),
+            other => other.clone(),
+        };
         let field = format!("g{i}");
-        id.insert(field.clone(), expr::value(cx, scope, &mut pending, group)?);
-        groups.push((group.clone(), field));
+        id.insert(field.clone(), expr::value(cx, scope, &mut pending, &group)?);
+        groups.push((group, field));
     }
     let items: Vec<SelectItem> = if query.columns.is_empty() {
         query
