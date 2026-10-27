@@ -11,9 +11,7 @@ use chrono::{DateTime, Utc};
 use navree_db::Uow;
 use navree_kernel::{AppContext, BoxError, BoxFuture};
 use sea_orm::sea_query::{Alias, Expr, ExprTrait, Query};
-use sea_orm::{
-    ColumnTrait, ConnectionTrait, DbErr, EntityTrait, QueryFilter, QueryOrder,
-};
+use sea_orm::{ColumnTrait, ConnectionTrait, DbErr, EntityTrait, QueryFilter, QueryOrder};
 use serde::de::DeserializeOwned;
 use uuid::Uuid;
 

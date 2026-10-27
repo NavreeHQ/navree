@@ -355,9 +355,8 @@ impl Controller for WorkspaceController {
             let (workspaces, demos) = (workspaces.clone(), demos.clone());
             let guest_role = guest_role.clone();
             async move {
-                let data =
-                    visible_workspaces(&workspaces, &demos, guest_role.as_ref(), me.user_id)
-                        .await?;
+                let data = visible_workspaces(&workspaces, &demos, guest_role.as_ref(), me.user_id)
+                    .await?;
                 Ok::<_, AppError>(Json(DataList::<WorkspaceResource> { data }))
             }
         };

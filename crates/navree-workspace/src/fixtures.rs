@@ -200,7 +200,10 @@ mod tests {
         ] {
             let mut value = json!(text);
             let error = resolve(&mut value, now()).unwrap_err().to_string();
-            assert!(error.contains("malformed fixture placeholder"), "{text}: {error}");
+            assert!(
+                error.contains("malformed fixture placeholder"),
+                "{text}: {error}"
+            );
         }
     }
 
@@ -229,7 +232,9 @@ mod tests {
                 created_at: Utc.with_ymd_and_hms(2026, 10, 25, 9, 30, 0).unwrap(),
             }]
         );
-        let missing = read::<Value>(&dir, "missing", now()).unwrap_err().to_string();
+        let missing = read::<Value>(&dir, "missing", now())
+            .unwrap_err()
+            .to_string();
         assert!(missing.contains("missing.json"), "{missing}");
         for name in ["../secrets", "", "/etc/passwd"] {
             let error = read::<Value>(&dir, name, now()).unwrap_err().to_string();

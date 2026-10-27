@@ -20,12 +20,12 @@ use navree_schedule::ModuleBuilderScheduleExt;
 use sea_orm::{DbBackend, IntoActiveModel};
 use serde::Serialize;
 
-use crate::commands::{DEMO_RESET_COMMAND, commands};
-use crate::demo::{DEMO_HEADER, DemoSeeder, DemoWorkspaces};
 use crate::DemoMode;
+use crate::commands::{DEMO_RESET_COMMAND, commands};
 use crate::controller::{InvitationController, WorkspaceController};
 use crate::core::Core;
 use crate::current::{ScopedSubject, TenantCell};
+use crate::demo::{DEMO_HEADER, DemoSeeder, DemoWorkspaces};
 use crate::directory::{TableUserDirectory, UserDirectory};
 use crate::entity::{invitation, member, workspace};
 use crate::error::map_workspace_error;
