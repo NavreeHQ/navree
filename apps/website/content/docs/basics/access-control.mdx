@@ -256,7 +256,7 @@ The [route pipeline](/docs/architecture/request-lifecycle/#the-route-pipeline) c
 A guest calling `GET /api/v1/reports/team` gets a 401, and a signed-in user without the role gets a 403:
 
 ```json
-{ "statusCode": 403, "message": "Forbidden", "error": "Forbidden" }
+{ "statusCode": 403, "message": "Forbidden", "error": "Forbidden", "code": "forbidden" }
 ```
 
 The first row matters for clients: an invalid token is refused before routing, so even a `#[public]` route answers 401 to a request that carries an expired token. Don't send stale tokens to public routes such as sign-in or refresh.

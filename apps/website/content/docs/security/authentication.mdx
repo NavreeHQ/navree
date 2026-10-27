@@ -134,7 +134,7 @@ Content-Type: application/json
 A wrong password and an unknown email get the same answer. For an unknown email Navree still verifies the password against a dummy hash, so the response time doesn't reveal which addresses have accounts:
 
 ```json
-{"statusCode": 401, "message": "Invalid credentials", "error": "Unauthorized"}
+{"statusCode": 401, "message": "Invalid credentials", "error": "Unauthorized", "code": "invalid_credentials"}
 ```
 
 A missing or malformed field is a 400 validation error: without a password, the message is `password should not be empty`.
@@ -188,7 +188,7 @@ Content-Type: application/json
 The route is public: it needs no access token. The refresh token you sent is now spent, so store the new one. Sending a spent token again is treated as theft (see [Reuse detection](#reuse-detection)). An unknown, expired, revoked or spent token gets:
 
 ```json
-{"statusCode": 401, "message": "Invalid refresh token", "error": "Unauthorized"}
+{"statusCode": 401, "message": "Invalid refresh token", "error": "Unauthorized", "code": "invalid_refresh_token"}
 ```
 
 ### Signing out
@@ -608,7 +608,7 @@ HTTP/1.1 429 Too Many Requests
 Retry-After: 60
 Content-Type: application/json
 
-{"statusCode": 429, "message": "Too many login attempts. Please try again in 60 seconds.", "error": "Too Many Requests"}
+{"statusCode": 429, "message": "Too many login attempts. Please try again in 60 seconds.", "error": "Too Many Requests", "code": "too_many_login_attempts"}
 ```
 
 - The same account from another address, and other accounts from the same address, are not affected.

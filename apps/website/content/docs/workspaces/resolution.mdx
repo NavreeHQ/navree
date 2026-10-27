@@ -141,7 +141,7 @@ The guard and the extractor answer in Navree's JSON error shape:
 | A pinned credential names another workspace | 403 | `This token is limited to another workspace.` |
 
 ```json title="400 Bad Request"
-{ "statusCode": 400, "message": "The request names no workspace.", "error": "Bad Request" }
+{ "statusCode": 400, "message": "The request names no workspace.", "error": "Bad Request", "code": "workspace_required" }
 ```
 
 ## Jobs and commands

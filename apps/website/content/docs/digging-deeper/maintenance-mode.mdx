@@ -65,7 +65,7 @@ retry-after: 60
 content-type: application/json
 x-request-id: 01a177469d297760b4efb91b0ac2e32a
 
-{"statusCode":503,"message":"Upgrading the database. Back in a minute.","error":"Service Unavailable"}
+{"statusCode":503,"message":"Upgrading the database. Back in a minute.","error":"Service Unavailable","code":"maintenance"}
 ```
 
 The response still goes through the outer layers of the [request pipeline](/docs/basics/middleware/): it carries an `X-Request-Id`, the security headers and, for allowed origins, the CORS headers, so a browser app can read the message and show it. Maintenance mode answers before the per-IP rate limit, authentication and your routes, so nothing of your app runs.
