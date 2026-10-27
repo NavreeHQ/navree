@@ -287,10 +287,11 @@ impl TaskBuilder {
 
     /// Runs once per workspace, when the workspace's own clock reaches the
     /// frequency: `daily_at("09:00").per_workspace_local()` runs at 09:00
-    /// in each workspace's zone (its zone, else its country's, else the
-    /// app's default). Workspaces come from navree-time's `Zones`, so the
-    /// app needs `TimeModule` (the boot fails without it) and a
-    /// workspace-level zone source (navree-workspace registers one).
+    /// in each workspace's zone (its zone, else its country's, else its
+    /// organization's, else the app's default). Workspaces come from
+    /// navree-time's `Zones`, so the app needs `TimeModule` (the boot fails
+    /// without it) and a workspace-level zone source (navree-workspace
+    /// registers one).
     ///
     /// Each workspace's run is claimed on its own, as
     /// `<task>@<workspace id>` in `schedule_runs`, so the task name may be
