@@ -90,6 +90,9 @@ impl Batch {
     }
 
     /// Adds `jobs` to the batch.
+    // The builder's verb (`Batch::new(..).add(jobs)`); it takes jobs, not
+    // another batch, so `std::ops::Add` does not fit.
+    #[allow(clippy::should_implement_trait)]
     pub fn add<J: Job>(mut self, jobs: impl IntoIterator<Item = J>) -> Self {
         for job in jobs {
             if let Some(envelope) = self.envelope(&job) {
@@ -299,7 +302,7 @@ pub(crate) enum Finished {
     Lost,
     /// The job is gone (into the failed jobs when it failed); the batch
     /// step, when its batch still exists.
-    Done(Option<BatchStep>),
+    Done(Option<Box<BatchStep>>),
 }
 
 /// What finishing a batch job or callback changed.

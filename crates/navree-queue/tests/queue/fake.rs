@@ -173,7 +173,10 @@ async fn queue_fake_records_batches_apart_from_single_jobs() {
         queue.find_batch(&batch.id).await.unwrap(),
         Some(batch.clone())
     );
-    assert_eq!(queue.batches(10).await.unwrap(), [batch.clone()]);
+    assert_eq!(
+        queue.batches(10).await.unwrap(),
+        std::slice::from_ref(&batch)
+    );
     let cancelled = queue.cancel_batch(&batch.id).await.unwrap().unwrap();
     assert!(cancelled.cancelled());
     assert_eq!(queue.run_pending().await.unwrap(), WorkStats::default());
