@@ -323,6 +323,16 @@ Navree's modules give each refusal its own code, so a login form can say "wrong 
 | workflows | `enrollment_finished` | 409 | `The enrollment has already finished (completed).` |
 | workflows | `invalid_automation_event` | 400 | ``The event is not a `deal.won` event: missing field `owner_id` `` |
 | workflows | `unknown_automation_version` | 400 | `The automation has no version 9.` |
+| directory | `unknown_directory_source` | 400 | ``Unknown directory source `workday` `` |
+| directory | `invalid_directory_settings` | 400 | `settings.base_dn is required` (settings a source refuses, an empty name) |
+| directory | `directory_push_only` | 400 | `SCIM connections are kept up to date by the identity provider` |
+| directory | `directory_not_scim` | 400 | `Only SCIM connections have a token` |
+| directory | `directory_connection_not_found` | 404 | `Directory connection not found` |
+| directory | `directory_run_not_found` | 404 | `Directory run not found` |
+| directory | `directory_connection_paused` | 409 | `The directory connection is paused` |
+| directory | `directory_sync_running` | 409 | `A sync of this connection is already running` |
+| directory | `directory_run_not_held` | 409 | `Only a held run can be approved` |
+| directory | `directory_source_failed` | 502 | `LDAP could not be read: the bind as ... failed: result code 49` |
 
 Invalid input to these modules (a taken email, an unknown role in a list) is a `validation_failed` error with field messages, like any other validation error.
 

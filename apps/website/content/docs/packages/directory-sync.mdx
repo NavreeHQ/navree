@@ -1,0 +1,657 @@
+---
+title: "Directory sync"
+description: "Keep each customer's people in step with their directory: a SCIM 2.0 server for identity providers, and pull connectors for Microsoft Graph, Google Workspace, Okta, LDAP and Active Directory, synced into your model through a sink, in runs with dry runs, a deactivation limit and progress."
+---
+
+## Introduction
+
+<Badge feature="directory" /> A business app is used by your customers' employees, and those employees already live in a directory: Microsoft Entra ID, Google Workspace, Okta, or an Active Directory on the customer's own network. People join, change departments and leave every week. Your app has to see those changes without anyone typing them in.
+
+`navree-directory` keeps each workspace or organization in step with its directory, in two ways:
+
+- **Push, over SCIM 2.0:** the identity provider calls your app. Navree serves `/scim/v2/Users`, `/Groups`, `/ServiceProviderConfig`, `/ResourceTypes` and `/Schemas` (RFC 7643 and RFC 7644), with filters, PATCH, paging and attribute projection. Each connection has its own bearer token, kept as a SHA-256 hash, so Microsoft Entra ID, Okta, OneLogin or JumpCloud provision people into the right workspace.
+- **Pull, on a schedule:** your app reads the directory. Navree ships connectors for Microsoft Graph (with delta queries), Google Workspace, Okta, and LDAP or Active Directory through [ldap3](https://docs.rs/ldap3) with rustls. The API connectors use the owner's [integrations](/docs/packages/integrations/) connection; you can register sources of your own.
+
+Both end in the same place:
+
+- **A normalized directory:** `DirectoryUser` and `DirectoryGroup`, the same shape whatever the source, kept per connection in navree-orm models.
+- **Your model:** you implement `DirectorySink` once (`impl DirectorySink for RecipientSink`) and get every change inside its unit of work.
+- **Runs** that stage (pull), diff and apply, with dry runs, a deactivation limit that holds a suspicious run for approval, progress on [operations](/docs/digging-deeper/batches-and-operations/), and every change recorded for review.
+- **Events** `DirectoryUserCreated`, `DirectoryUserUpdated`, `DirectoryUserDeactivated` and `DirectorySyncFinished`, the commands `directory:sync` and `directory:runs`, admin routes for a settings page, and `DirectoryFake` for tests.
+
+## Installation
+
+Turn on the `directory` feature of the `navree` facade. It is part of the default `full` feature.
+
+```toml title="Cargo.toml"
+[dependencies]
+navree = { git = "https://github.com/NavreeHQ/navree", features = ["directory"] }
+```
+
+Add `DirectoryModule` to your app:
+
+```rust title="src/app.rs"
+Navree::app()
+    .module(ConfigModule::for_root(sources))
+    .module(CryptoModule::from_config())          // seals LDAP bind passwords
+    .module(HttpModule::from_config())
+    .module(HttpClientModule::from_config())
+    .module(DatabaseModule::from_config())
+    .module(EventsModule::for_root())
+    .module(QueueModule::from_config())           // syncs run as operations
+    .module(ScheduleModule::for_root())           // runs directory:sync --due
+    .module(AccessModule::for_root(access))       // the routes' permission
+    .module(AuthModule::from_config())
+    .module(WorkspaceModule::from_config())       // workspace and organization owners
+    .module(IntegrationsModule::from_config())    // Microsoft Graph, Google, Okta
+    .module(DirectoryModule::from_config())       // section `directory`
+    .module(RecipientsModule)                     // your sink
+    // ...
+```
+
+Only `ConfigModule` and `DatabaseModule` are required. `CryptoModule` with an application key is needed to store a connection's secret (the LDAP bind password). `IntegrationsModule` is needed for the `microsoft`, `google` and `okta` sources; a SCIM-only or LDAP-only app can leave it out. Without `QueueModule`, a queued sync runs in a task of the process once its run is stored. Without `WorkspaceModule`, connections belong to the app itself.
+
+The module contributes the migration set `directory`, which creates six tables: `directory_connections` (the connections, their sealed secret, the SCIM token's hash and the delta cursor), `directory_users`, `directory_groups` and `directory_memberships` (the synced directory, per connection), `directory_runs` and `directory_run_changes` (runs and the changes they planned or applied). They run on PostgreSQL (with or without TimescaleDB), MySQL, MariaDB and SQLite; UUID columns are `BINARY(16)` on MySQL and MariaDB.
+
+## Configuration
+
+Every key has a default; most apps set only the SCIM base URL.
+
+```toml title="config/app.toml"
+[directory]
+level = "workspace"                    # workspace | organization | app
+
+[directory.scim]
+base_url = "https://app.acme.test/scim/v2"
+
+[directory.sync]
+default_interval_mins = 60             # a new pull connection's schedule
+max_deactivation_percent = 20          # hold runs that deactivate more...
+min_deactivations = 10                 # ...and more than this many users
+```
+
+Each key also comes from the environment: `APP_DIRECTORY__SYNC__MAX_DEACTIVATION_PERCENT=10`. A path that does not start with `/`, a base URL that is not absolute, a chunk size of 0 or a percentage over 100 fails the boot, naming the key. `DirectoryModule::for_root(DirectoryOptions { .. })` takes the same options in code. The [reference](#reference) lists every key.
+
+## Connections
+
+A connection is one directory an owner syncs from: a workspace's Entra ID tenant over SCIM, an organization's Active Directory over LDAP. Admins create them from your settings page through the [routes](#routes), or you create them in code:
+
+```rust
+let directory = ctx.get::<Directory>().await?;
+
+// A SCIM connection: give the identity provider the URL and the token.
+let scim = directory
+    .create_connection(workspace, NewConnection::new("Acme Entra ID", "scim"))
+    .await?;
+let token = scim.scim_token.unwrap(); // shown once; only its hash is kept
+
+// An LDAP connection: the bind password is sealed with the app key.
+let ldap = directory
+    .create_connection(
+        workspace,
+        NewConnection::new("Acme Active Directory", "ldap")
+            .settings(json!({
+                "url": "ldaps://dc1.acme.test",
+                "base_dn": "DC=acme,DC=test",
+                "bind_dn": "CN=navree-sync,OU=Service Accounts,DC=acme,DC=test"
+            }))
+            .secret("bind password from your secret store")
+            .interval(30),
+    )
+    .await?;
+```
+
+`workspace` is an `Owner` (`Owner::Workspace(id)`, `Owner::Organization(id)` or `Owner::App`). The source checks the settings when the connection is saved, so a missing `base_dn` is a 400 `invalid_directory_settings` before anything runs. A pull connection's first scheduled sync is due at once; `interval(0)` keeps it to syncs you start. `update_connection` changes the name, settings, secret (an empty string removes it), interval or status (`paused` stops syncs and makes SCIM requests 403); new settings drop the delta cursor, so the next run reads everything. `delete_connection` removes the connection with its synced users, groups and runs; your records stay as your sink left them. When a workspace or organization is deleted, its connections go with it.
+
+### Sources
+
+| Source | Reads | Settings | Credentials |
+|---|---|---|---|
+| `scim` | Nothing: the identity provider pushes | none | A bearer token per connection (`nvscim_...`) |
+| `microsoft` | Microsoft Graph `/users/delta` and `/groups/delta` | `provider` (`microsoft`), `scope_set` (`directory`), `groups` (`true`) | The owner's integrations connection: admin consent, app-only tokens |
+| `google` | Admin SDK Directory API users, groups and members | `provider` (`google`), `scope_set`, `customer` (`my_customer`) or `domain`, `query`, `admin_email`, `groups` | A service account with domain-wide delegation acting as `admin_email`, or OAuth consent |
+| `okta` | `/api/v1/users`, `/api/v1/groups` and their users | `provider` (`okta`), `scope_set`, `search`, `group_filter`, `groups` | An `api_key` integration with `scheme = "SSWS"`, or an `oauth2` service app |
+| `ldap` | LDAP or Active Directory, with paged searches | See [LDAP and Active Directory](#ldap-and-active-directory) | The bind password, as the connection's secret |
+
+### SCIM connections
+
+Create a `scim` connection, then enter its URL and token in the identity provider:
+
+- **Microsoft Entra ID:** Enterprise application → Provisioning → Automatic. Tenant URL: `https://app.acme.test/scim/v2`; Secret token: the `nvscim_...` token. Entra tests the connection with `GET /Users?filter=userName eq "..."`.
+- **Okta:** an app integration with SCIM provisioning. SCIM connector base URL: `https://app.acme.test/scim/v2`; unique identifier field for users: `userName`; authentication mode: HTTP Header, the token as the Bearer value. Turn on Push New Users, Push Profile Updates, Push Groups and Deactivate Users.
+
+The URL is `directory.scim.base_url`, else `app.url` followed by `directory.scim.path`. The token picks the connection, so one URL serves every tenant. `rotate_scim_token(id)` (or `POST /api/directory/connections/{id}/token`, or `directory:token <id>`) gives the connection a new token and stops the old one at once.
+
+### Microsoft Graph, Google Workspace and Okta
+
+These sources call the API through the owner's [integrations](/docs/packages/integrations/) connection in the scope set `directory`. `DirectoryModule` registers that scope set (`DirectoryScopes`): read users, groups and memberships, nothing else.
+
+| Provider | Scopes of `directory` |
+|---|---|
+| `microsoft` | `User.Read.All`, `GroupMember.Read.All` (app-only tokens carry the app registration's permissions; give it a registration of its own under `integrations.providers.microsoft.apps.directory`) |
+| `google` | `admin.directory.user.readonly`, `admin.directory.group.readonly`, `admin.directory.group.member.readonly` |
+| `okta` | `okta.users.read`, `okta.groups.read` |
+
+So an admin connects Microsoft 365 with `?scope_set=directory`, uploads a Google service-account key with `"scope_set": "directory"`, or pastes an Okta API token with its org URL as the connection's `api_url`:
+
+```toml title="config/app.toml"
+[integrations.providers.okta]
+type = "api_key"
+name = "Okta"
+scheme = "SSWS"          # Authorization: SSWS <token>
+```
+
+A workspace without its own integrations connection uses its organization's. A provider configured under another key (`okta-preview`) is named in the settings (`"provider": "okta-preview"`); register a scope set of your own for it, or set `"scope_set": "default"`.
+
+**Microsoft Graph** reads with delta queries. The first run reads `/users/delta` and `/groups/delta` to the end (a snapshot) and keeps their delta links; later runs read only what changed since. Graph sends changed objects with only some of their properties, so changed users and groups are read again in full, 15 at a time. Removed users and groups, and members added to or removed from groups, come from the delta. When Graph no longer knows a delta link (410 Gone), the run starts over with a snapshot. Graph doesn't give managers in delta queries, so `manager_id` stays empty.
+
+**Google Workspace** and **Okta** read everything on each run. Suspended and archived Google users are inactive; Okta users who are suspended, staged or deprovisioned are inactive, and Okta leaves deprovisioned users out of its listing, so they are deactivated as missing. Google managers come by email and are matched to their user's id.
+
+### LDAP and Active Directory
+
+The `ldap` source binds, then searches users and groups with paged results (500 a page). Two flavors set the defaults:
+
+| | `active_directory` (default) | `openldap` |
+|---|---|---|
+| Users | `(&(objectCategory=person)(objectClass=user))` | `(\|(objectClass=inetOrgPerson)(objectClass=person))` |
+| Groups | `(objectClass=group)` | `(\|(objectClass=groupOfNames)(objectClass=groupOfUniqueNames)(objectClass=posixGroup))` |
+| Id | `objectGUID`, as a UUID | `entryUUID` |
+| Sign-in name | `userPrincipalName`, else `sAMAccountName` | `uid`, else `mail` |
+| Disabled | `userAccountControl` with the account-disabled bit | `pwdAccountLockedTime` set, or `nsAccountLock: true` |
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `url` | required | `ldap://host:389` or `ldaps://host:636` |
+| `base_dn` | required | Where users and groups are searched |
+| `user_base_dn`, `group_base_dn` | `base_dn` | Narrower bases |
+| `bind_dn` | anonymous | The account to bind as; its password is the connection's secret |
+| `starttls` | `false` | Upgrade an `ldap://` connection with StartTLS |
+| `ca_certificate` | the system's roots | PEM certificates to trust (an internal CA) |
+| `insecure_skip_verify` | `false` | Accept any certificate; for test servers only |
+| `flavor` | `active_directory` | `active_directory` or `openldap` |
+| `user_filter`, `group_filter` | the flavor's | LDAP filters |
+| `id_attribute` | the flavor's | The attribute that identifies an entry for good |
+| `attributes` | `[]` | Extra attributes copied into `DirectoryUser.attributes` |
+| `page_size` | `500` | Entries per page |
+| `timeout_secs` | `30` | Per connection attempt and per operation |
+| `groups` | `true` | Read groups |
+
+Group members come from the groups' `member`, `uniqueMember` and `memberUid`, and from the users' `memberOf`, which also covers Active Directory groups too large for one `member` list. Nested groups are not expanded: a group's members are its users. TLS runs on rustls with ring. The bind password is never written to logs or runs: a refused bind is recorded as `the bind as CN=... failed: result code 49`.
+
+### A source of your own
+
+An HR system, a CSV drop, a partner API: implement `DirectorySource` and register it under a name. `check_settings` refuses bad settings when a connection is saved; `pull` returns a `Pulled`.
+
+```rust title="src/modules/hr/source.rs"
+use navree::directory::{DirectoryError, DirectorySource, DirectoryUser, PullRequest, Pulled};
+
+pub struct HrSource;
+
+impl DirectorySource for HrSource {
+    fn check_settings(&self, settings: &serde_json::Value, _has_secret: bool) -> Result<(), String> {
+        match settings.get("export_url").and_then(|url| url.as_str()) {
+            Some(url) if url.starts_with("https://") => Ok(()),
+            _ => Err("settings.export_url must be an https:// URL".to_owned()),
+        }
+    }
+
+    fn pull<'a>(
+        &'a self,
+        request: &'a PullRequest,
+    ) -> navree::BoxFuture<'a, Result<Pulled, DirectoryError>> {
+        Box::pin(async move {
+            // Read request.setting("export_url") with your HTTP client.
+            let _export = request.setting("export_url");
+            let people = vec![
+                DirectoryUser::new("E-1001", "ada@acme.test")
+                    .name("Ada", "Lovelace")
+                    .email("ada@acme.test")
+                    .department("Engineering"),
+            ];
+            Ok(Pulled::snapshot(people, Vec::new()))
+        })
+    }
+}
+```
+
+Register it with `m.directory_source("hr", HrSource)`; connections with `"source": "hr"` then read it. `PullRequest` carries the connection (its `settings`, owner and id), the decrypted `secret`, the `cursor` the last complete run stored and the app. `Pulled::snapshot(users, groups)` is everything: users missing from it are deactivated and groups missing from it deleted. `Pulled::delta(users, groups)` is only what changed, with `removed_user`, `removed_group`, `member_added` and `member_removed`; in a delta, members change only through those. `.cursor(..)` is stored once the run has applied every change, and handed to the next pull.
+
+## Mapping the directory into your model
+
+Every source ends as `DirectoryUser` and `DirectoryGroup`:
+
+| `DirectoryUser` | Meaning |
+|---|---|
+| `external_id` | The person's id in the directory: the Entra object id, Google user id, Okta id, `objectGUID` or `entryUUID`; for SCIM, the client's `externalId`, else the SCIM id |
+| `user_name` | The sign-in name (user principal name, primary email, Okta login, `userPrincipalName` or `uid`, SCIM `userName`) |
+| `active` | Whether the account is enabled |
+| `given_name`, `family_name`, `display_name` | The names; `full_name()` picks the display name, then the parts, then the sign-in name |
+| `emails`, `phone_numbers` | `ContactValue { value, kind, primary }` lists; `primary_email()` and `primary_phone()` |
+| `title`, `department`, `organization`, `employee_number` | Job attributes |
+| `manager_id` | The manager's `external_id`, when the directory names one |
+| `locale`, `time_zone` | Preferences |
+| `attributes` | Everything else, by the source's name (`usageLocation`, `orgUnitPath`, SCIM's `addresses`, LDAP attributes named in `attributes`) |
+
+`DirectoryGroup` has `external_id`, `display_name`, `description`, `email`, `members` (user `external_id`s) and `attributes`.
+
+Your sink turns changes into your records. It is a provider, so it gets its dependencies injected:
+
+```rust title="src/modules/recipients/sink.rs"
+use navree::directory::{DirectorySink, SinkContext, UserChange};
+use navree::prelude::*;
+
+#[injectable]
+pub struct RecipientSink;
+
+impl DirectorySink for RecipientSink {
+    fn upsert_user<'a>(
+        &'a self,
+        ctx: &'a SinkContext,
+        change: &'a UserChange,
+    ) -> navree::BoxFuture<'a, Result<Option<String>, BoxError>> {
+        Box::pin(async move {
+            let user = &change.user;
+            let tx = ctx.uow().tx().await?;
+            let mut recipient = match Recipient::query()
+                .where_(Recipient::DIRECTORY_USER_ID.eq(change.directory_user_id))
+                .first(&*tx)
+                .await?
+            {
+                Some(recipient) => recipient,
+                None => Record::new(Recipient {
+                    workspace_id: ctx.owner().id(),
+                    directory_user_id: change.directory_user_id,
+                    ..Recipient::default()
+                }),
+            };
+            recipient.email = user.primary_email().unwrap_or(&user.user_name).to_owned();
+            recipient.name = user.full_name();
+            recipient.department = user.department.clone();
+            recipient.active = user.active;
+            recipient.save(&*tx).await?;
+            Ok(Some(recipient.id.to_string()))
+        })
+    }
+
+    fn deactivate_user<'a>(
+        &'a self,
+        ctx: &'a SinkContext,
+        change: &'a UserChange,
+    ) -> navree::BoxFuture<'a, Result<(), BoxError>> {
+        Box::pin(async move {
+            let tx = ctx.uow().tx().await?;
+            Recipient::query()
+                .where_(Recipient::DIRECTORY_USER_ID.eq(change.directory_user_id))
+                .update(&*tx, [Recipient::ACTIVE.set(false)])
+                .await?;
+            Ok(())
+        })
+    }
+}
+```
+
+Register it from the feature module that owns `Recipient`:
+
+```rust title="src/modules/recipients/mod.rs"
+pub struct RecipientsModule;
+
+impl Module for RecipientsModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.imports(DirectoryModule::for_feature::<RecipientSink>())
+            .migrations(MigrationSet::new("recipients").migration(
+                navree::schema::migration!(m20261028_090000_create_recipients_table),
+            ));
+    }
+}
+```
+
+`m.directory_sink::<RecipientSink>()` in a module's `register` does the same. Several sinks are called in registration order.
+
+- `upsert_user` gets created, updated and reactivated users (`change.action` is `Create`, `Update` or `Reactivate`). A user can arrive inactive (`change.user.active` is false), for example a disabled account in a first pull. Return your record's id: it is kept as the user's `local_id` and handed back on later changes.
+- `deactivate_user` gets users disabled in the directory, removed from it, missing from a full pull, set inactive over SCIM, or deleted over SCIM (`change.deleted`).
+- `upsert_group` and `delete_group` get group changes, with `added` and `removed` members by `external_id`. They do nothing unless you implement them. `ctx.local_ids(&change.added)` gives the `local_id`s of those users, to map members to your records.
+
+`UserChange` also carries `directory_user_id` (Navree's id for the person, stable within the connection: key your records on it), `previous` (the user before the change) and `changed` (the fields that changed, sorted by name). `SinkContext` gives the connection, its `owner()` (the workspace or organization your records go in), the change's `uow()`, the app and the `run_id`.
+
+Each sink call runs inside the change's unit of work. Write through `ctx.uow()`, and the directory row, your rows and the event commit or roll back together. A sync applies its changes in chunks of `directory.sync.chunk_size`, one transaction per chunk. When a chunk fails, its changes are tried one by one; a change your sink refuses is rolled back and recorded as failed, and the others apply. SCIM changes run in the request's unit of work, and a sink error answers 500, which the identity provider retries.
+
+## Sync runs
+
+A run reads the directory, compares it with what the connection holds, and applies the difference:
+
+1. **Stage:** the source pulls a snapshot, or a delta from the stored cursor.
+2. **Diff:** each user is created, updated, reactivated, deactivated or left unchanged by comparing a fingerprint of its normalized form; groups are created, updated (attributes or members) or deleted. Records without an id or a name are skipped, and group members who are not users of the pull are left out (`skipped`, `unknown_members`).
+3. **Apply:** users created, updated and reactivated, then groups, then deleted groups, then deactivations, in chunks, through your sink.
+
+```rust
+let run = directory.sync(connection.id, SyncOptions::default()).await?;      // queued
+let run = directory.sync_now(connection.id, SyncOptions::default()).await?;  // here, to the end
+```
+
+`sync` queues the run. With navree-queue's operations in the app, the run is the work of an operation of kind `directory.sync` (owned by the user who started it, in the connection's workspace), so a settings page follows it on `GET /api/operations/{id}` and its event stream, and cancelling the operation stops the run at its next chunk. Without operations it goes through the job dispatcher (`directory.sync`, one attempt, an hour at most), and without a queue it runs in a task of its own once the run is stored. `sync_now` runs in the calling task and returns the finished run: use it in commands, jobs and tests, not inside a request.
+
+A run carries its `status` (`queued`, `running`, `succeeded`, `partial`, `held`, `failed`, `cancelled`), its `summary` (users and groups seen, created, updated, reactivated, deactivated, deleted and unchanged, memberships added and removed, skipped, failed), `done` of `total` changes, and `error`. `directory.runs(connection, 20)` lists them, newest first, and `directory.changes(run, offset, limit)` the recorded changes: subject, action, external id, label, changed fields, member counts, `planned`, `applied` or `failed`, and the error. A run records up to `directory.sync.max_recorded_changes` changes (5000); its counts are always complete.
+
+### Dry runs
+
+`SyncOptions::dry_run()` pulls and diffs, records every change as `planned`, and applies nothing. It keeps no cursor and does not move the schedule: run one before turning a new connection on, and show its changes for review.
+
+### The deactivation limit
+
+A filter typed wrong, an expired service account that suddenly sees no one: a pull that returns half the company would deactivate half the company. A run that would deactivate more than `directory.sync.min_deactivations` users (10) and more than `directory.sync.max_deactivation_percent` percent of the active ones (20) stops before applying anything, as `held`, with its changes recorded as planned:
+
+```text
+the run would deactivate 30 of 40 active users (more than 20 percent); approve it to apply
+```
+
+`directory.approve(run_id)` (or `POST /api/directory/runs/{id}/approve`) queues a new run of the connection with `force` set; `SyncOptions { force: true, .. }` and `directory:sync <id> --force` do the same. SCIM changes are never held: the identity provider decides them one by one. Set the percentage to 100 to turn the limit off.
+
+### Failures
+
+A source that can't be read (an LDAP bind refused, an API answering 403) fails the run with the source's message, and nothing changes. Changes that fail make the run `partial`. A partial or failed run keeps the previous cursor, so the next run sees those changes again; changes that applied are unchanged the second time. A run queued or running for longer than `directory.sync.stale_after_mins` (120) is taken for a crashed worker's and closed as failed when the next sync starts; until then a second sync of the connection is a 409 `directory_sync_running`.
+
+### The schedule
+
+The module schedules `directory:sync --due` every five minutes: it queues a run for each active pull connection whose `next_sync_at` has come, and moves it on by the connection's `sync_interval_mins`. `directory:prune` runs daily at 03:50 and deletes runs older than `directory.sync.keep_runs_days` (90). Add `ScheduleModule` and run `schedule:work` to start them.
+
+## The SCIM server
+
+The server follows RFC 7643 and RFC 7644. Answers are `application/scim+json`; errors use the SCIM error shape, which identity providers read:
+
+```json
+{
+  "schemas": ["urn:ietf:params:scim:api:messages:2.0:Error"],
+  "status": "409",
+  "scimType": "uniqueness",
+  "detail": "userName ada@acme.test is already taken"
+}
+```
+
+| Endpoint | Does |
+|---|---|
+| `GET /ServiceProviderConfig` | PATCH and filters supported (`maxResults` 200); bulk, sort, ETags and password changes not supported; bearer token authentication |
+| `GET /ResourceTypes`, `GET /ResourceTypes/{id}` | `User` (with the enterprise extension) and `Group` |
+| `GET /Schemas`, `GET /Schemas/{id}` | The User, Group and enterprise user schemas |
+| `GET /Users`, `GET /Groups` | A list response: `filter`, `startIndex` (1-based), `count`, `attributes`, `excludedAttributes` |
+| `POST /Users`, `POST /Groups` | 201 with the resource and its `Location` |
+| `GET`, `PUT`, `PATCH /Users/{id}` and `/Groups/{id}` | The resource |
+| `DELETE /Users/{id}` and `/Groups/{id}` | 204 |
+
+Every request carries the connection's token (`Authorization: Bearer nvscim_...`); the three discovery endpoints answer without one. A missing or unknown token is a 401 with `WWW-Authenticate: Bearer realm="SCIM"`, a paused connection a 403. The routes are public routes of your app: they are mounted at `directory.scim.path`, outside the API prefix, and need no authenticator.
+
+**Resources.** The resource a client writes is kept as written, so it reads back unchanged, and the normalized user is derived from it: `userName`, `externalId`, `active`, `name.givenName`, `name.familyName`, `displayName`, `emails`, `phoneNumbers`, `title`, `locale` (else `preferredLanguage`), and the enterprise extension's `employeeNumber`, `department`, `organization` and `manager`. Everything else goes to `attributes`. A `password` is never stored. Users carry their `groups` (read-only); groups carry their `members` with each user's `display` name. `meta` has `created`, `lastModified`, `location` and a weak `version`.
+
+**Filters.** The full filter language: `eq`, `ne`, `co`, `sw`, `ew`, `gt`, `ge`, `lt`, `le`, `pr`, `and`, `or`, `not ( )`, value paths (`emails[type eq "work"]`), sub-attributes and schema URNs (`urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:department eq "Sales"`). Attribute names and strings compare without regard to case, except `id`, `externalId` and `$ref`. `userName eq`, `externalId eq` and `id eq` on users, and `displayName eq`, `externalId eq` and `id eq` on groups, are indexed lookups (what identity providers send); other filters are evaluated over the connection's resources.
+
+**PATCH.** `add`, `remove` and `replace` with plain paths, sub-attributes, value filters and schema URNs, and path-less operations whose value is an object. It also accepts what identity providers send in practice:
+
+- operation names in any case (`"op": "Replace"`) and booleans as strings (`"value": "False"`);
+- path-less values whose keys are paths (`{"name.givenName": "Ada"}`, `{"urn:...:enterprise:2.0:User:department": "Sales"}`);
+- `remove` on `members` with a value list naming the members to remove;
+- `add` or `replace` with a value filter that matches nothing (`emails[type eq "work"].value`), which adds the element the filter describes.
+
+**Uniqueness.** `userName` is unique per connection without regard to case, and so is `externalId`: a duplicate is a 409 `uniqueness`. Two connections never see each other's users.
+
+**Deletes.** `DELETE /Users/{id}` calls your sink's `deactivate_user` with `deleted` set, emits `DirectoryUserDeactivated`, and removes the user and their memberships; the user name is free again. `PATCH` with `active: false` keeps the user, deactivated.
+
+The server doesn't support bulk operations, sorting, `POST /.search`, `/Me`, ETags or `If-Match`, password changes, or nested groups as members.
+
+## Events
+
+| Event | `NAME` | When |
+|---|---|---|
+| `DirectoryUserCreated` | `directory.user_created` | A user appeared: the first pull that saw them, or a SCIM `POST /Users` |
+| `DirectoryUserUpdated` | `directory.user_updated` | A user's attributes changed (`changed`), or a disabled or removed user came back (`reactivated`) |
+| `DirectoryUserDeactivated` | `directory.user_deactivated` | A user was disabled, removed, missing from a full pull, set inactive, or deleted over SCIM (`deleted`) |
+| `DirectorySyncFinished` | `directory.sync_finished` | A run ended: its `status`, `dry_run`, `summary` and `error` |
+
+The user events carry `connection_id`, `owner`, `directory_user_id`, `local_id`, the normalized `user` and the `run_id` (none for SCIM). They are emitted after the change commits, when `EventsModule` is in the app. A listener that welcomes new colleagues:
+
+```rust title="src/modules/recipients/welcome.rs"
+use navree::directory::DirectoryUserCreated;
+use navree::events::Listener;
+use navree::prelude::*;
+
+#[injectable]
+pub struct Welcome;
+
+impl Listener<DirectoryUserCreated> for Welcome {
+    fn handle<'a>(
+        &'a self,
+        event: &'a DirectoryUserCreated,
+        _ctx: &'a AppContext,
+    ) -> navree::BoxFuture<'a, Result<(), BoxError>> {
+        Box::pin(async move {
+            if event.user.active
+                && let Some(email) = event.user.primary_email()
+            {
+                tracing::info!(%email, "a new colleague: send the welcome mail");
+            }
+            Ok(())
+        })
+    }
+}
+```
+
+Register it with `m.listen::<DirectoryUserCreated, Welcome>()`. With the [audit log](/docs/security/audit-log/), creating, changing and deleting a connection and rotating its token are recorded (`directory.connection_created`, `directory.connection_updated`, `directory.connection_deleted`, `directory.scim_token_rotated`) with the connection as the subject. The synced users and groups are written without row-level change events, so directory data doesn't fill the audit log.
+
+## Routes
+
+The routes of a directory settings page are mounted under `{http.api_prefix}/directory` (default `/api/directory`) when `directory.routes` is true. Every route requires the `directory.manage` permission; at `level = "workspace"` they act on the request's workspace (the `InWorkspace` guard), at `organization` on its organization, at `app` on the app's own connections.
+
+```http
+POST /api/directory/connections HTTP/1.1
+Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+X-Workspace: acme
+Content-Type: application/json
+
+{ "name": "Acme Entra ID", "source": "scim" }
+```
+
+```json
+{
+  "connection": {
+    "id": "019a2c4e-1f3a-7b2c-9d4e-5f6a7b8c9d0e",
+    "owner_type": "workspace",
+    "owner_id": "019a1f00-2e3d-7c4b-9a8f-7e6d5c4b3a29",
+    "name": "Acme Entra ID",
+    "source": "scim",
+    "settings": {},
+    "has_secret": false,
+    "status": "active",
+    "scim_token_hint": "nvscim_3fQx",
+    "sync_interval_mins": 0,
+    "last_run_id": null,
+    "last_synced_at": null,
+    "next_sync_at": null,
+    "created_by": "019a1eff-9b8a-7d6c-8e5f-4a3b2c1d0e9f",
+    "created_at": "2026-10-28T08:00:00Z",
+    "updated_at": "2026-10-28T08:00:00Z"
+  },
+  "scim_token": "nvscim_3fQxW8kLp2...",
+  "scim_url": "https://app.acme.test/scim/v2"
+}
+```
+
+| Route | Answer |
+|---|---|
+| `GET /api/directory/sources` | `{data: ["scim", "google", "ldap", "microsoft", "okta", ...]}` |
+| `GET /api/directory/connections` | `{data: [DirectoryConnection]}` |
+| `POST /api/directory/connections` `{name, source, settings?, secret?, sync_interval_mins?}` | 201 `{connection, scim_token?, scim_url?}` |
+| `GET /api/directory/connections/{id}` | The connection |
+| `PATCH /api/directory/connections/{id}` `{name?, settings?, secret?, sync_interval_mins?, status?}` | The connection |
+| `DELETE /api/directory/connections/{id}` | 204 |
+| `POST /api/directory/connections/{id}/token` | 201 `{token, scim_url}` |
+| `POST /api/directory/connections/{id}/sync` `{dry_run?, force?, full?}` | 202, the queued run (with its `operation_id`) |
+| `GET /api/directory/connections/{id}/runs` | `{data: [SyncRun]}`, the latest 50 |
+| `GET /api/directory/connections/{id}/users?page&per_page` | A page of `SyncedUser` |
+| `GET /api/directory/connections/{id}/groups` | `{data: [SyncedGroup]}` |
+| `GET /api/directory/runs/{id}` | The run |
+| `GET /api/directory/runs/{id}/changes?page&per_page` | A page of `SyncChange` |
+| `POST /api/directory/runs/{id}/approve` | 202, the queued run |
+
+Pages have `{data, meta: {current_page, per_page, total, last_page}}`, 50 a page by default, at most 200. A connection's secret is never returned, only `has_secret`; its SCIM token only once, when it is made.
+
+## Errors
+
+| Answer | `code` | When |
+|---|---|---|
+| 400 ``Unknown directory source `workday` `` | `unknown_directory_source` | No source is registered under this name |
+| 400 `settings.base_dn is required` | `invalid_directory_settings` | The source refused the settings, or the name is empty |
+| 400 | `directory_push_only` | A sync of a SCIM connection |
+| 400 | `directory_not_scim` | A token for a connection that isn't a SCIM one |
+| 404 | `directory_connection_not_found` | No connection has this id, or it belongs to someone else |
+| 404 | `directory_run_not_found` | No run has this id |
+| 409 | `directory_connection_paused` | A sync of a paused connection |
+| 409 | `directory_sync_running` | A run of the connection is queued or running |
+| 409 | `directory_run_not_held` | Approving a run that isn't held |
+| 502 | `directory_source_failed` | `DirectoryError::Source` returned from a handler (runs record their source failures instead) |
+
+`DirectoryError` returned from a handler with `?` keeps its answer; the `microsoft`, `google` and `okta` sources pass on navree-integrations' answers (`integration_not_connected`). SCIM requests answer in the SCIM error shape: `invalidSyntax`, `invalidFilter`, `invalidPath`, `invalidValue`, `noTarget` and `uniqueness`.
+
+## Commands
+
+```sh
+cargo run -- directory:sync 019a2c4e-1f3a-7b2c-9d4e-5f6a7b8c9d0e --dry-run
+cargo run -- directory:sync --all
+cargo run -- directory:runs --limit 5
+```
+
+```text
+019a2c51-7d2e-7a1b-8c3d-4e5f6a7b8c9d  019a2c4e-1f3a-7b2c-9d4e-5f6a7b8c9d0e  succeeded (dry run)  users +412 ~0 ^0 -0  groups +37 ~0 -0
+```
+
+| Command | Does |
+|---|---|
+| `directory:sync <id>` | Syncs one connection in this process; `--dry-run`, `--force`, `--full` (ignore the cursor) |
+| `directory:sync --all` | Syncs every active pull connection, one after the other |
+| `directory:sync --due` | Queues the connections whose next sync is due (what the scheduler runs) |
+| `directory:runs [<id>] [--limit N]` | Lists the latest runs with their counts |
+| `directory:connections` | Lists the connections with their owner, source, status and last sync |
+| `directory:token <id>` | Gives a SCIM connection a new token and prints it once |
+| `directory:prune` | Deletes runs older than `directory.sync.keep_runs_days` |
+
+`directory:sync` exits with an error when a run failed.
+
+## Testing
+
+`Directory::fake()` returns a `Directory` whose pull connections all read a `DirectoryFake`: a directory in memory. Everything else is real: the diff, the runs, your sink, the events and the SCIM server.
+
+```rust title="tests/directory.rs"
+use navree::db::Db;
+use navree::directory::{Directory, DirectoryUser, NewConnection, Owner, SyncOptions};
+use navree::prelude::*;
+use navree::testing::TestApp;
+
+#[tokio::test]
+async fn directory_people_become_recipients() {
+    let (directory, fake) = Directory::fake();
+    let app = TestApp::builder()
+        .temp_database()
+        .config("directory.routes", false)
+        .module(DatabaseModule::from_config())
+        .module(DirectoryModule::from_config())
+        .module(RecipientsModule)
+        .override_value(Arc::new(directory))
+        .build()
+        .await;
+    fake.user(
+        DirectoryUser::new("00u1", "ada@acme.test")
+            .name("Ada", "Lovelace")
+            .email("ada@acme.test"),
+    )
+    .user(DirectoryUser::new("00u2", "grace@acme.test").inactive());
+
+    let directory = app.get::<Directory>().await;
+    let connection = directory
+        .create_connection(Owner::App, NewConnection::new("Acme Okta", "okta"))
+        .await
+        .unwrap()
+        .connection;
+    let run = directory
+        .sync_now(connection.id, SyncOptions::default())
+        .await
+        .unwrap();
+    assert_eq!(run.summary.users_created, 2);
+
+    let db = app.get::<Db>().await;
+    let ada = Recipient::query()
+        .where_(Recipient::EMAIL.eq("ada@acme.test"))
+        .first(&*db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(ada.active);
+
+    // Ada leaves the company.
+    fake.remove_user("00u1");
+    directory
+        .sync_now(connection.id, SyncOptions::default())
+        .await
+        .unwrap();
+    let ada = Recipient::query()
+        .where_(Recipient::EMAIL.eq("ada@acme.test"))
+        .first(&*db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!ada.active);
+}
+```
+
+| `DirectoryFake` | Does |
+|---|---|
+| `user(DirectoryUser)`, `users([..])` | Adds or replaces a user; replaces every user |
+| `remove_user(id)` | Removes a user and their memberships |
+| `group(DirectoryGroup)`, `groups([..])`, `remove_group(id)` | The same for groups |
+| `next_pull(Pulled)` | The next pull answers with this (a delta, for instance) instead of the snapshot |
+| `fail_next_pull(message)` | The next pull fails: the run fails with the message |
+| `snapshot()` | What a pull answers |
+| `pulls()` | The pulls answered: `FakePull { connection_id, source, cursor }` |
+
+To test SCIM, create a `scim` connection and send requests with its token through the [test client](/docs/testing/http-tests/): `app.client().post("/scim/v2/Users").bearer(token.expose()).json(&user)`. To test a source against an API's real responses, keep the real `Directory`, point the provider's `api_url` at a local mock server (see [integrations](/docs/packages/integrations/#testing)), or point an `ldap` connection at a test LDAP server.
+
+## Reference
+
+| Key | Default | Meaning |
+|---|---|---|
+| `directory.routes` | `true` | Mounts the `/api/directory` routes |
+| `directory.level` | `workspace` | `workspace`, `organization` or `app` |
+| `directory.scim.enabled` | `true` | Serves SCIM |
+| `directory.scim.path` | `/scim/v2` | Where the SCIM endpoints are mounted |
+| `directory.scim.base_url` | `app.url` + `path` | The public URL of the SCIM endpoints, for `meta.location` and identity providers |
+| `directory.scim.max_results` | `200` | The most resources in one list response |
+| `directory.sync.default_interval_mins` | `60` | A new pull connection's minutes between scheduled syncs |
+| `directory.sync.chunk_size` | `100` | Changes applied per transaction |
+| `directory.sync.max_deactivation_percent` | `20` | Hold runs that deactivate more of the active users than this |
+| `directory.sync.min_deactivations` | `10` | ...and more users than this |
+| `directory.sync.max_recorded_changes` | `5000` | Changes recorded per run |
+| `directory.sync.keep_runs_days` | `90` | `directory:prune` deletes older runs |
+| `directory.sync.stale_after_mins` | `120` | A queued or running run older than this is taken for a crashed worker's |
+
+| Type | What it is |
+|---|---|
+| `Directory` | The service: connections, SCIM tokens, `sync`, `sync_now`, `sync_due`, `approve`, runs, changes, synced users and groups |
+| `DirectoryModule` | `for_root`, `from_config`, `for_feature::<S>()` |
+| `ModuleBuilderDirectoryExt` | `m.directory_sink::<S>()`, `m.directory_source(name, source)` |
+| `DirectorySink`, `SinkContext`, `UserChange`, `GroupChange` | Your model's side |
+| `DirectorySource`, `PullRequest`, `Pulled`, `MemberChange` | A source's side |
+| `DirectoryConnection`, `SyncRun`, `SyncChange`, `SyncedUser`, `SyncedGroup` | What the service returns |
+| `models::{Connection, User, Group, Membership, Run, RunChange}` | The tables as navree-orm models, to read |
+| `DirectoryScopes` | The integrations scope set `directory` |
+| `DirectoryFake` | The test directory |
+
+<LinkCards>
+  <LinkCard href="/docs/packages/integrations/" title="Integrations">
+    The connections the Microsoft, Google and Okta sources read through.
+  </LinkCard>
+  <LinkCard href="/docs/workspaces/organizations/" title="Organizations">
+    Sync once for every workspace in an organization.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/batches-and-operations/" title="Batches and operations">
+    Progress and cancel for long work.
+  </LinkCard>
+  <LinkCard href="/docs/security/single-sign-on/" title="Single sign-on">
+    Sign the synced people in with their identity provider.
+  </LinkCard>
+</LinkCards>
