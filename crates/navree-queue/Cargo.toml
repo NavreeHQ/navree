@@ -1,6 +1,6 @@
 [package]
 name = "navree-queue"
-description = "Navree QueueModule: database and memory job queues, workers, retries with backoff, unique and delayed jobs."
+description = "Navree QueueModule: database and memory job queues, workers, retries with backoff, unique and delayed jobs, job batches and operations with progress."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,6 +9,12 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[features]
+default = []
+## PostgreSQL for the tests: with `NAVREE_TEST_POSTGRES_URL` set, every
+## test harness runs on its own fresh PostgreSQL database.
+postgres = ["navree-db/postgres"]
 
 [dependencies]
 # The operations routes and their SSE stream.

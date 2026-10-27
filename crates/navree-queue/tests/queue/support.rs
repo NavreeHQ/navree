@@ -33,6 +33,95 @@ pub struct Harness {
     pub clock: Arc<FixedClock>,
     pub journal: Arc<Journal>,
     pub broadcasts: Arc<Broadcasts>,
+    /// The test's own PostgreSQL database, dropped with the harness (last,
+    /// after the app's connections).
+    database: Option<postgres::Scratch>,
+}
+
+/// With the `postgres` feature and `NAVREE_TEST_POSTGRES_URL` set (a URL
+/// whose user may create databases), every harness runs on its own fresh
+/// PostgreSQL database instead of a SQLite file:
+/// `cargo test -p navree-queue --features postgres`.
+#[cfg(feature = "postgres")]
+mod postgres {
+    use sea_orm::{ConnectionTrait, Database};
+    use uuid::Uuid;
+
+    /// A database created for one test; dropped when this is.
+    pub struct Scratch {
+        admin: String,
+        name: String,
+        pub url: String,
+    }
+
+    impl Scratch {
+        /// `None` when `NAVREE_TEST_POSTGRES_URL` is not set.
+        pub async fn new() -> Option<Scratch> {
+            let admin = std::env::var("NAVREE_TEST_POSTGRES_URL").ok()?;
+            let name = format!("navree_queue_{}", Uuid::now_v7().simple());
+            let conn = Database::connect(&admin)
+                .await
+                .expect("PostgreSQL is reachable");
+            conn.execute_unprepared(&format!("CREATE DATABASE {name}"))
+                .await
+                .expect("the test user may create databases");
+            conn.close().await.expect("closes");
+            let base = admin.split('?').next().unwrap_or(&admin);
+            let server = base.rsplit_once('/').map_or(base, |(server, _)| server);
+            let url = format!("{server}/{name}");
+            Some(Scratch { admin, name, url })
+        }
+    }
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let admin = self.admin.clone();
+            let name = self.name.clone();
+            // A runtime of its own: the test's runtime may be shutting down.
+            let _ = std::thread::spawn(move || {
+                let runtime = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .expect("runtime");
+                runtime.block_on(async move {
+                    if let Ok(conn) = Database::connect(&admin).await {
+                        let _ = conn
+                            .execute_unprepared(&format!(
+                                "DROP DATABASE IF EXISTS {name} WITH (FORCE)"
+                            ))
+                            .await;
+                        let _ = conn.close().await;
+                    }
+                });
+            })
+            .join();
+        }
+    }
+}
+
+#[cfg(not(feature = "postgres"))]
+mod postgres {
+    /// Without the `postgres` feature every harness uses SQLite.
+    pub struct Scratch;
+
+    impl Scratch {
+        pub async fn new() -> Option<Scratch> {
+            None
+        }
+    }
+}
+
+/// `builder` on a fresh database: the test's own PostgreSQL database (see
+/// [`postgres`]) or a temporary SQLite file.
+async fn with_database(builder: TestAppBuilder) -> (TestAppBuilder, Option<postgres::Scratch>) {
+    #[cfg(feature = "postgres")]
+    if let Some(scratch) = postgres::Scratch::new().await {
+        let builder = builder
+            .config("database.url", scratch.url.clone())
+            .config("database.migrate_on_boot", true);
+        return (builder, Some(scratch));
+    }
+    (builder.temp_database(), None)
 }
 
 impl Harness {
@@ -88,8 +177,8 @@ pub async fn harness_using(
     let clock = Arc::new(FixedClock::new(start()));
     let journal = Arc::new(Journal::default());
     let broadcasts = Arc::new(Broadcasts::default());
-    let builder = TestApp::builder()
-        .temp_database()
+    let (builder, database) = with_database(TestApp::builder()).await;
+    let builder = builder
         .module(DatabaseModule)
         .module(QueueModule::for_root(options))
         .module(JobsModule)
@@ -106,6 +195,7 @@ pub async fn harness_using(
         clock,
         journal,
         broadcasts,
+        database,
     }
 }
 
