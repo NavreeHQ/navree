@@ -1,25 +1,25 @@
 ---
 title: "Getting started"
-description: "Connect to TimescaleDB (the default), PostgreSQL, MySQL or SQLite, configure the pool and run your first queries with SeaORM."
+description: "Connect to TimescaleDB (the default), PostgreSQL, MySQL or SQLite, configure the pool and run your first queries with the ORM."
 ---
 
-Navree talks to databases through [SeaORM 2](https://www.sea-ql.org/SeaORM/), which runs on SQLx. The `navree-db` crate (the `db` feature of the `navree` facade, on by default) adds what an application needs around it:
+A Navree app works with its data through the [ORM](/docs/orm/getting-started/): models are plain Rust structs with `#[derive(Model)]`, queried with typed columns and saved as records that track their own changes. Underneath, the `navree-db` crate (the `db` feature of the `navree` facade, on by default) owns the connections, which run on SQLx through [SeaORM 2](https://www.sea-ql.org/SeaORM/), and adds what an application needs around them:
 
 - a connection pool configured from the `database` section of your configuration;
-- a [unit of work](/docs/database/unit-of-work/) per request: one lazy transaction that commits when the response succeeds;
-- [migrations](/docs/database/migrations/) owned by modules and written with the [schema builder](/docs/database/schema-builder/) (with [TimescaleDB hypertables](/docs/database/timescaledb/)), with `migrate`, `migrate:rollback`, `migrate:refresh`, `migrate:fresh` and `schema:dump` commands;
-- [seeders and factories](/docs/database/seeding-and-factories/);
+- a [unit of work](/docs/database/unit-of-work/) per request: one lazy transaction that commits when the response succeeds, and records every change for the [audit log](/docs/security/audit-log/);
+- [migrations](/docs/database/migrations/) owned by modules and written with the [schema builder](/docs/database/schema-builder/) (with [TimescaleDB hypertables](/docs/database/timescaledb/)), [run](/docs/database/running-migrations/) by `migrate` and its sibling commands and [squashed](/docs/database/squashing-migrations/) by `schema:dump`;
+- [seeders](/docs/database/seeding-and-factories/) and the `db:seed` command;
 - [pagination](/docs/database/pagination/) with `{data, meta}` page responses;
-- [repository helpers](/docs/database/entities-and-repositories/) that record every change for the [audit log](/docs/security/audit-log/).
+- [SeaORM entities and repository helpers](/docs/database/entities-and-repositories/), for code that uses SeaORM directly.
 
-Navree supports four databases:
+Navree supports four SQL databases:
 
 - **TimescaleDB** is the default: PostgreSQL with hypertables for time-series data. `navree new` sets an app up for it and [Dock](/docs/tools/dock/) runs it on your machine ([below](#timescaledb)).
 - **PostgreSQL** without TimescaleDB works the same; tables declared as hypertables are regular tables there ([below](#postgresql)). Both need the `postgres` Cargo feature.
 - **MySQL** and **MariaDB** are behind the `mysql` Cargo feature ([below](#mysql-and-mariadb)).
 - **SQLite** is compiled into your app (bundled), so there is nothing to install. Every test runs on it, each in a file of its own, and an app whose configuration names no database uses a SQLite file ([below](#sqlite)).
 
-`navree new my-app` makes a TimescaleDB app; `--database postgres`, `--database mysql` and `--database sqlite` make the others.
+`navree new my-app` makes a TimescaleDB app; `--database postgres`, `--database mysql` and `--database sqlite` make the others. MongoDB is supported too, by the ORM's [document driver](/docs/orm/mongodb/).
 
 ## Configuration
 
@@ -60,7 +60,7 @@ An invalid section stops the boot with a message naming `database` and the probl
 
 ## Registering the module
 
-Add `DatabaseModule` to your app's root, after `ConfigModule`:
+Add `DatabaseModule` to your app's root, after `ConfigModule`, and `OrmModule` after it:
 
 ```rust title="src/app.rs"
 use navree::prelude::*;
@@ -70,12 +70,13 @@ pub fn app(sources: ConfigSources) -> AppBuilder {
         .module(ConfigModule::for_root(sources))
         .module(HttpModule::from_config())
         .module(DatabaseModule::from_config())
+        .module(OrmModule::from_config())
         .module(CompaniesModule)
         .module(DealsModule)
 }
 ```
 
-`DatabaseModule::from_config()` and a plain `.module(DatabaseModule)` both read the `database` section when the app boots. To configure the module in code instead, pass the options to `for_root`:
+`navree new` writes both. `OrmModule` reads the `orm` section, which configures the models ([ORM configuration](/docs/orm/getting-started/#configuration)). `DatabaseModule::from_config()` and a plain `.module(DatabaseModule)` both read the `database` section when the app boots. To configure the module in code instead, pass the options to `for_root`:
 
 ```rust
 use navree::db::DbOptions;
@@ -136,13 +137,15 @@ On PostgreSQL, Navree behaves differently in a few places:
 
 <Callout type="warning" title="What has been run on PostgreSQL">
 
-The tests of Navree and of the reference CRM run on SQLite only. On PostgreSQL 17, the app behind Navree's [performance](/performance/) measurements (`bench/frameworks/navree`) has exercised, under load: the pool, the unit of work (`BEGIN`, the `set_config` call, `COMMIT`), `paginate`, `Repo::insert` and navree-auth's user lookup. No Navree code had to change for it.
+Most tests of Navree and of the reference CRM run on SQLite. On PostgreSQL 17, the app behind Navree's [performance](/performance/) measurements (`bench/frameworks/navree`) has exercised, under load: the pool, the unit of work (`BEGIN`, the `set_config` call, `COMMIT`), `paginate`, `Repo::insert` and navree-auth's user lookup. No Navree code had to change for it.
+
+The ORM's real-server suite runs on PostgreSQL 17 with TimescaleDB 2.31, and on MySQL 8.4: records round-tripping every column type and cast (vectors with pgvector), conditions with JSON operators and regular expressions, joins, aggregates and compound queries, bulk writes and upserts, offset and cursor pagination, chunks, streams and cursors, row locks between two units of work (`SKIP LOCKED`, `NOWAIT` and shared locks), the unit of work's change events and rollbacks, relations and eager loading, model events, soft deletes and pruning, time buckets, statement timeouts and, on PostgreSQL, reads retried after a lost connection. `cargo test -p navree-orm --features postgres,mysql --test servers` runs it against your servers.
 
 Migrations have run against PostgreSQL 17 with TimescaleDB 2.31 (and against MySQL 8.4) in the opt-in real-server tests of navree-schema and navree-db: the schema builder's statements, hypertables with their policies and continuous aggregates, migrations written with the schema builder and with SeaORM, `--pretend`, `migrate:rollback`, `migrate:refresh`, `migrate:fresh`, and schema dumps loaded into empty databases.
 
 The facade's `time_series` suite boots the audit, webhooks, Fleet, scheduling and Lighthouse modules on the same servers: their time-series tables become hypertables with the documented time columns, chunk intervals and keys on TimescaleDB, and stay regular tables with time indexes on MySQL; running their conversions again changes nothing; `audit:prune` drops whole chunks; and the [time-bucket queries](/docs/database/timescaledb/#time-bucket-queries) return the same buckets as on SQLite.
 
-These PostgreSQL paths are written but have not yet run against a real server: `Repo::update` and `Repo::delete`, `FOR UPDATE` row locks, cursor pagination and the queue's `SKIP LOCKED` job reservation. Try them in a staging environment before you rely on them.
+These PostgreSQL paths outside the ORM are written but have not yet run against a real server: `Repo::update`, `Repo::delete` and `Repo::find_for_update` (`FOR UPDATE`), navree-db's own cursor pagination, and the queue's `SKIP LOCKED` job reservation. Try them in a staging environment before you rely on them.
 
 </Callout>
 
@@ -218,7 +221,7 @@ strict = true
 
 ### How Navree behaves on MySQL
 
-- Each unit-of-work transaction begins with `BEGIN`, then `SET @navree_actor = ?, @navree_request_id = ?`: the signed-in user's id as text, or `NULL`, and the request id. Triggers can read them. (With `transaction_settings = false`, neither this statement nor the one clearing the variables is sent.) Navree ids are `BINARY(16)` columns on MySQL, so a trigger that records who changed a row converts the text:
+- Each unit-of-work transaction begins with `BEGIN`, then `SET @navree_actor = ?, @navree_request_id = ?`: the signed-in user's id as text, or `NULL`, and the request id. Triggers can read them. (With `transaction_settings = false`, neither this statement nor the one clearing the variables is sent.) The UUIDs that models and entities write are 16 bytes on MySQL, in `BINARY(16)` columns ([below](#types-and-collations)), so a trigger that records who changed a row converts the text:
 
   ```sql
   CREATE TRIGGER deals_updated_by BEFORE UPDATE ON deals FOR EACH ROW
@@ -237,11 +240,11 @@ strict = true
 
 ### Types and collations
 
-SeaORM writes MySQL's types for you, and a few of them behave differently:
+The [schema builder](/docs/database/columns/#column-types) writes MySQL's types for you, and a few of them behave differently:
 
-- `uuid()` columns are `BINARY(16)`. A UUID v7 sorts by creation time, so [cursor pagination](/docs/database/pagination/) pages in creation order. In raw SQL, bind a `Uuid` value: a UUID string such as `'0199a7a0-…'` doesn't match a binary column (`UNHEX(REPLACE(?, '-', ''))` converts one).
-- `timestamp_with_time_zone()` columns are `TIMESTAMP`. They store UTC, but the type ends on 2038-01-19. A `DATETIME` has no such limit, and `DateTimeUtc` fields read and write it as UTC on MySQL.
-- `TIMESTAMP` and `DATETIME` keep whole seconds unless the column declares a precision (`DATETIME(6)` keeps microseconds). MySQL rounds a longer fraction instead of storing it.
+- Models and SeaORM entities write a `Uuid` as its 16 bytes, which belong in a `BINARY(16)` column. The schema builder's `uuid_primary()`, `uuid` and `foreign_uuid` columns are `CHAR(36)` on MySQL, which refuse those bytes, so declare UUID columns as binaries there ([UUID columns on MySQL](/docs/database/columns/#uuid-columns-on-mysql)). A UUID v7 sorts by creation time, so [cursor pagination](/docs/orm/pagination-and-streaming/#cursor-pagination) pages in creation order. In raw SQL, bind a `Uuid` value: a UUID string such as `'0199a7a0-…'` doesn't match a binary column (`UNHEX(REPLACE(?, '-', ''))` converts one).
+- `timestamp_tz` columns (and `timestamps_tz()`) are `TIMESTAMP(6)`. They store UTC, but the type ends on 2038-01-19. `date_time_tz` columns are `DATETIME(6)`, which has no such limit, and `DateTime<Utc>` fields read and write both as UTC.
+- Time columns keep microseconds, the schema builder's `default_time_precision`. A column declared without a precision (`.default_precision()`, or SeaORM's own column types) keeps whole seconds, and MySQL rounds a longer fraction instead of storing it.
 - Comparisons and unique indexes follow each column's collation. MySQL 8's default for `utf8mb4`, `utf8mb4_0900_ai_ci`, ignores case and accents: `WHERE name = 'equipe'` finds "Équipe", and a unique index refuses "Equipe" next to "Équipe". Give columns that must compare exactly a binary collation such as `utf8mb4_bin`.
 
 <Callout type="note" title="What has been run on MySQL">
@@ -251,6 +254,8 @@ navree-db's MySQL test suite runs against MySQL 8.4: connections and their sessi
 ```sh
 NAVREE_TEST_MYSQL_URL=mysql://root:secret@127.0.0.1:3306/navree_test cargo test -p navree-db --features mysql --test mysql
 ```
+
+The ORM's real-server suite runs on MySQL 8.4 as well ([above](#postgresql)), on tables whose UUID columns are `BINARY(16)`.
 
 MariaDB connects through the same code but hasn't been run against a server yet, and the other modules' test suites (auth, queue, audit, workspaces and the rest) run on SQLite. Try them in a staging environment before you rely on them.
 
@@ -278,44 +283,51 @@ An in-memory database (`sqlite::memory:`) is private to one connection, so every
 
 ## Running queries
 
-Queries are plain SeaORM: `Entity::find()`, filters, `.one(conn)`, `.all(conn)` and so on. What Navree decides is which connection you pass:
+Queries go through [models](/docs/orm/models/): a struct with `#[derive(Model)]` maps a table, and its typed columns build the conditions:
 
-| Where the code runs | Connection |
+```rust
+let deals = Deal::query()
+    .where_(Deal::STAGE.eq(Stage::Won))
+    .latest()
+    .get(&uow)
+    .await?;
+```
+
+Every method that touches the database takes an **executor** first, and what Navree decides is which one you pass:
+
+| Where the code runs | Executor |
 |---|---|
-| A handler, or a service that takes `&Uow` | The unit of work's transaction: `&*uow.tx().await?` |
-| A service with no `&Uow` | `&db.reader().await` |
-| A command, seeder or test outside any unit of work | The pool, `db.conn()`, or a transaction from `db.transaction(..)` |
+| A handler, or a service that takes `&Uow` | The request's unit of work: `&uow` |
+| A service with no `&Uow` | Its injected `Arc<Db>`, which joins the current unit of work |
+| A command, seeder or test outside any unit of work | The pool, `&db`, or a unit of work you open and commit |
+
+[Connections and transactions](/docs/orm/connections-and-transactions/) has the details, named connections and read replicas included.
 
 ### In a request
 
-Take the request's unit of work as an extractor and read through its transaction. The transaction begins with the first `uow.tx()` call and commits when the response status is below 400:
+Take the request's unit of work as an extractor and pass it to the model. The transaction begins with the first statement and commits when the response status is below 400:
 
 ```rust title="src/modules/companies/controller.rs"
 #[controller("/companies", version = "1")]
 impl CompaniesController {
     #[get("/{id}")]
     #[authenticated]
-    async fn show(&self, uow: Uow, Path(id): Path<Uuid>) -> Result<Json<company::Model>> {
-        let tx = uow.tx().await?;
-        let company = company::Entity::find_by_id(id)
-            .one(&*tx)
-            .await?
-            .ok_or_else(AppError::not_found)?;
+    async fn show(&self, uow: Uow, Path(id): Path<Uuid>) -> Result<Json<Record<Company>>> {
+        let company = Company::find_or_fail(&uow, id).await?;
         Ok(Json(company))
     }
 }
 ```
 
-Services take the unit of work as a `&Uow` parameter rather than having it injected. [The unit of work](/docs/database/unit-of-work/) covers it in detail.
+`find_or_fail` answers 404 when no company has that id; [route model binding](/docs/orm/route-model-binding/) does the lookup for you. Services take the unit of work as a `&Uow` parameter rather than having it injected. [The unit of work](/docs/database/unit-of-work/) covers it in detail.
 
 ### In services without a unit of work
 
-Some code can't take a `&Uow`: a service called from many places, or a trait whose signature you don't control. Inject `Arc<Db>` and read with `db.reader()`:
+Some code can't take a `&Uow`: a service called from many places, or a trait whose signature you don't control. Inject `Arc<Db>` and pass it instead:
 
 ```rust title="src/modules/companies/directory.rs"
 use navree::db::Db;
 use navree::prelude::*;
-use sea_orm::{ColumnTrait, DbErr, EntityTrait, QueryFilter};
 use uuid::Uuid;
 
 #[injectable]
@@ -325,22 +337,41 @@ pub struct CompanyDirectory {
 
 impl CompanyDirectory {
     /// The company with `id`, unless it is soft-deleted.
-    pub async fn find(&self, id: Uuid) -> Result<Option<company::Model>, DbErr> {
-        company::Entity::find_by_id(id)
-            .filter(company::Column::DeletedAt.is_null())
-            .one(&self.db.reader().await)
-            .await
+    pub async fn find(&self, id: Uuid) -> navree::orm::Result<Option<Record<Company>>> {
+        Company::find(&self.db, id).await
     }
 }
 ```
 
-`db.reader()` returns the open transaction of the current task's unit of work (the request's, while a handler runs) when there is one, and the pool otherwise. That matters on SQLite: an open unit of work holds the write lock on its connection, and a request that then waits for a second pool connection can starve the pool once about `max_connections` requests run together. Reading through the transaction also sees the request's own uncommitted writes. Use the reader as a temporary, as above, so it's dropped before the unit of work commits.
+A `Db` executor reads through the open transaction of the current task's unit of work (the request's, while a handler runs) when there is one, and through the pool otherwise; its writes join that unit of work too. That matters on SQLite: an open unit of work holds the write lock on its connection, and a request that then waits for a second pool connection can starve the pool once about `max_connections` requests run together. Reading through the transaction also sees the request's own uncommitted writes. `Company` declares [soft deletes](/docs/orm/scopes-and-soft-deletes/#soft-deletes), so `find` leaves deleted companies out by itself.
 
-`db.conn()` always returns the pool. Use it where no unit of work is running: commands, seeders and test assertions.
+Where no unit of work is running (commands, seeders, test assertions), `&db` runs on the pool. To write atomically there, open a unit of work and commit it ([transactions in commands and jobs](/docs/orm/connections-and-transactions/#transactions-in-commands-and-jobs)).
+
+### SeaORM entities
+
+[SeaORM entities](/docs/database/entities-and-repositories/) run on the same connections. Pass them the unit of work's transaction in a request, and `db.reader()` elsewhere, which follows the same rule as a `Db` executor:
+
+```rust
+let tx = uow.tx().await?;
+let company = company::Entity::find_by_id(id).one(&*tx).await?;
+
+let companies = company::Entity::find().all(&db.reader().await).await?;
+```
+
+Use the reader as a temporary, as above, so it's dropped before the unit of work commits. `db.conn()` always returns the pool.
 
 ### Raw SQL
 
-SeaORM's query builder writes portable SQL. When you need raw SQL, build a `Statement` for the app's backend and bind values rather than formatting them into the string:
+When the query builder can't express a statement, write the SQL with `?` placeholders and pass the values; the ORM binds them on every database ([raw SQL](/docs/orm/query-builder/#raw-sql)):
+
+```rust
+use navree::orm::{raw, scalar};
+
+let owned: Option<i64> =
+    scalar(&db, raw("SELECT COUNT(*) FROM companies WHERE owner_id = ?", [owner_id])).await?;
+```
+
+Through SeaORM, build a `Statement` for the app's backend, whose placeholders differ: `?` on SQLite and MySQL, `$1`, `$2` on PostgreSQL.
 
 ```rust
 use sea_orm::{ConnectionTrait, DbBackend, Statement};
@@ -355,8 +386,6 @@ let row = db
     .await?;
 ```
 
-Placeholders differ: `?` on SQLite and MySQL, `$1`, `$2` on PostgreSQL.
-
 ### Searching text
 
 SQLite's `LOWER`, `UPPER` and `LIKE` only fold ASCII letters, so `LOWER(name) LIKE '%équipe%'` misses "Équipe". On MySQL, comparisons follow the column's collation, which may ignore accents as well as case, or neither. Navree has two helpers that ignore case for every letter, and never ignore accents, on every database:
@@ -364,21 +393,19 @@ SQLite's `LOWER`, `UPPER` and `LIKE` only fold ASCII letters, so `LOWER(name) LI
 - `contains_ignore_case(backend, expr, term)`: `expr` contains `term`;
 - `eq_ignore_case(backend, expr, value)`: `expr` equals `value`.
 
+They return a condition, for a model query's `where_` or a SeaORM `filter`:
+
 ```rust
 use navree::db::contains_ignore_case;
-use sea_orm::sea_query::Expr;
+use navree::db::sea_orm::sea_query::Expr;
 
-let companies = company::Entity::find()
-    .filter(contains_ignore_case(
-        db.backend(),
-        Expr::col(company::Column::Name),
-        "équipe",
-    ))
-    .all(&db.reader().await)
+let companies = Company::query()
+    .where_(contains_ignore_case(db.backend(), Expr::col("name"), "équipe"))
+    .get(&db)
     .await?;
 ```
 
-On SQLite they build a `GLOB` pattern listing every case variant of each letter (`*[éÉ][qQ][uU][iI][pP][eE]*`); on PostgreSQL they use `LOWER(..) LIKE`. On MySQL and MariaDB they compare the lower-cased column byte for byte (`INSTR(CAST(LOWER(name) AS BINARY), CAST('équipe' AS BINARY)) > 0`), which ignores case under any collation, `_bin` and `_cs` ones included; the column must be `utf8mb4`, the connection's character set. Wildcards in the term (`%`, `_`, `*`, `?`) match themselves. Like any "contains" search, `contains_ignore_case` can't use an index, so it reads the whole table.
+On SQLite they build a `GLOB` pattern listing every case variant of each letter (`*[éÉ][qQ][uU][iI][pP][eE]*`); on PostgreSQL they use `LOWER(..) LIKE`. On MySQL and MariaDB they compare the lower-cased column byte for byte (`INSTR(CAST(LOWER(name) AS BINARY), CAST('équipe' AS BINARY)) > 0`), which ignores case under any collation, `_bin` and `_cs` ones included; the column must be `utf8mb4`, the connection's character set. Wildcards in the term (`%`, `_`, `*`, `?`) match themselves. Like any "contains" search, `contains_ignore_case` can't use an index, so it reads the whole table. The query builder's own `like` and `ilike` conditions ([conditions](/docs/orm/query-builder/#conditions)) fold case as each database does.
 
 ## Database errors
 
@@ -393,7 +420,7 @@ A handler can return a `DbErr` with `?`. `DatabaseModule` turns it into an error
 
 Navree recognises the violations on every database: SQLite's extended result codes, PostgreSQL's SQLSTATEs `23505` and `23503`, and MySQL's and MariaDB's error numbers (1062 for a duplicate entry, 1451 and 1452 for foreign keys, and their relatives, such as 1859 for a duplicate found while `ALTER TABLE` builds a unique index).
 
-The same mapping applies to an error raised while the unit of work commits, after the handler returned: a constraint that is only checked at commit, or a constraint violation from a [change observer](/docs/database/unit-of-work/#change-events-and-observers), is a 409, and any other commit failure is a 500.
+The same mapping applies to an error raised while the unit of work commits, after the handler returned: a constraint that is only checked at commit, or a constraint violation from a [change observer](/docs/database/unit-of-work/#change-events-and-observers), is a 409, and any other commit failure is a 500. The ORM's `OrmError` answers the same way, with a 404 for a record `find_or_fail` didn't find ([ORM errors](/docs/orm/getting-started/#errors)).
 
 ## Logging queries
 
@@ -401,20 +428,23 @@ Set `database.log_queries = true` to log every statement at debug level, and `da
 
 ## Testing
 
-Each test gets its own SQLite file, migrated when the test app boots, and deleted afterwards, also in an app made for TimescaleDB: the same migrations run there. [Database tests](/docs/testing/database-tests/) shows how to prepare data and assert on it; [Dock](/docs/tools/dock/#tests-against-timescaledb) shows how to run a test against the server it runs.
+Each test gets its own SQLite file, migrated when the test app boots, and deleted afterwards, also in an app made for TimescaleDB: the same migrations run there. [Database tests](/docs/testing/database-tests/) shows how to prepare data and assert on it, and the ORM's [testing helpers](/docs/orm/testing/) add `#[navree::test]` databases, templates copied per test, and assertions on rows and records; [Dock](/docs/tools/dock/#tests-against-timescaledb) shows how to run a test against the server it runs.
 
 <LinkCards>
+  <LinkCard href="/docs/orm/getting-started/" title="The ORM">
+    Models, queries, relationships and records that track their changes.
+  </LinkCard>
   <LinkCard href="/docs/database/timescaledb/" title="TimescaleDB">
     Hypertables, compression, retention and time-bucket queries.
-  </LinkCard>
-  <LinkCard href="/docs/database/entities-and-repositories/" title="Entities and repositories">
-    SeaORM entities, relations, soft deletes and the `Repo` helpers.
   </LinkCard>
   <LinkCard href="/docs/database/unit-of-work/" title="The unit of work">
     One lazy transaction per request, committed when it succeeds.
   </LinkCard>
   <LinkCard href="/docs/database/migrations/" title="Migrations">
-    Module-owned migrations and the `migrate` commands.
+    Module-owned migrations written with the schema builder.
+  </LinkCard>
+  <LinkCard href="/docs/database/entities-and-repositories/" title="Entities and repositories">
+    SeaORM entities and the `Repo` helpers, next to models.
   </LinkCard>
   <LinkCard href="/docs/testing/database-tests/" title="Database tests">
     A fresh database per test, factories and assertions.

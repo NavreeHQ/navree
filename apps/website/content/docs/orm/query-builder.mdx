@@ -97,7 +97,7 @@ A condition on a [cast](/docs/orm/casts-and-accessors/) field compares the store
 
 ### OR, NOT and groups
 
-`or_where` joins a condition with `OR`, `where_not` and `or_where_not` negate one. A closure builds a parenthesised group:
+`or_where` joins a condition with `OR`, `where_not` and `or_where_not` negate one. A closure builds a parenthesized group:
 
 ```rust
 // WHERE closed_at IS NULL AND (stage = 'negotiation' OR amount_cents >= 1000000)
