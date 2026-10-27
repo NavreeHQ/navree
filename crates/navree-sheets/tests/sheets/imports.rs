@@ -155,6 +155,47 @@ async fn an_upload_is_staged_previewed_and_applied() {
 }
 
 #[tokio::test]
+async fn tens_of_thousands_of_windows_1256_rows_are_staged_and_previewed() {
+    let app = support::app().await;
+    let admin = app.acting_as(principal(ADMIN));
+    let mut text = String::from("البريد الإلكتروني,الاسم,Age\n");
+    for n in 0..25_000 {
+        let email = if n % 1_000 == 999 {
+            format!("مستلم{n}")
+        } else {
+            format!("recipient{n}@example.com")
+        };
+        text.push_str(&format!("{email},مستلم رقم {n},{}\n", 18 + n % 60));
+    }
+    let (bytes, _, unmappable) = WINDOWS_1256.encode(&text);
+    assert!(!unmappable);
+    let record = staged(&app, &admin, "مستلمون.csv", &bytes, &[]).await;
+    assert_eq!(record["status"], "staged", "{record}");
+    assert_eq!(record["encoding"], "windows-1256");
+    assert_eq!(record["counts"]["total"], 25_000, "{record}");
+    assert_eq!(record["counts"]["valid"], 24_975);
+    assert_eq!(record["counts"]["invalid"], 25);
+    let id = id_of(&record);
+    let page = admin
+        .get(&format!(
+            "/api/imports/{id}/rows?status=invalid&per_page=10&page=3"
+        ))
+        .send()
+        .await
+        .assert_status(200)
+        .json_value();
+    assert_eq!(page["meta"]["total"], 25);
+    assert_eq!(page["meta"]["last_page"], 3);
+    let rows = page["data"].as_array().unwrap();
+    assert_eq!(rows.len(), 5);
+    // The 21st invalid row is recipient 20999: spreadsheet row 21001 (the
+    // header is row 1).
+    assert_eq!(rows[0]["row"], 21_001);
+    assert_eq!(rows[0]["values"]["email"], "مستلم20999");
+    assert_eq!(rows[0]["values"]["name"], "مستلم رقم 20999");
+}
+
+#[tokio::test]
 async fn windows_1256_arabic_files_are_detected_and_read() {
     let app = support::app().await;
     let admin = app.acting_as(principal(ADMIN));

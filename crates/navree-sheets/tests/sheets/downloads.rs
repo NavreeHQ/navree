@@ -124,6 +124,32 @@ async fn an_xlsx_download_has_typed_cells_and_the_sheet_name() {
 }
 
 #[tokio::test]
+async fn large_downloads_keep_every_row() {
+    let many = || {
+        (0u32..50_000).map(|n| DealRow {
+            title: format!("صفقة {n}"),
+            amount: f64::from(n) / 4.0,
+            closed_on: NaiveDate::from_ymd_opt(2026, 1, 1)
+                .map(|day| day + chrono::Days::new(u64::from(n % 365))),
+            won: n % 3 == 0,
+            internal: String::new(),
+        })
+    };
+
+    let (_, bytes) = body(Download::xlsx("many", many()).unwrap()).await;
+    let (_, rows) = read_xlsx(&bytes);
+    assert_eq!(rows.len(), 50_001, "the header and every row");
+    assert_eq!(rows[50_000][0], Data::String("صفقة 49999".into()));
+    assert_eq!(rows[50_000][1], Data::Float(12_499.75));
+    assert_eq!(rows[50_000][3], Data::Bool(false));
+
+    let (_, bytes) = body(Download::csv("many", many())).await;
+    let lines = csv_lines(&bytes);
+    assert_eq!(lines.len(), 50_001);
+    assert_eq!(lines[50_000], "صفقة 49999,12499.75,2026-12-26,false");
+}
+
+#[tokio::test]
 async fn a_streamed_csv_download_writes_rows_as_they_come() {
     let rows = stream::iter((1..=600).map(|n| {
         Ok::<_, std::io::Error>(DealRow {
