@@ -463,6 +463,11 @@ impl<'a> Alter<'a> {
                 self.blueprint.table()
             )));
         }
+        if self.pending {
+            // A rebuild is coming anyway: it leaves the column out.
+            state.drop_column(column);
+            return Ok(());
+        }
         if modern && !state.column_is_entangled(column) {
             let indexes = state.indexes_using(column);
             state.drop_column(column);
