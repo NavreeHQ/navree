@@ -128,17 +128,33 @@ impl IncomingOptions {
         self
     }
 
-    /// Checks the limits and every source: a source needs a secret, and a
-    /// `format` or `signed` template must be well-formed.
+    /// Checks the limits and every source: a source needs a secret (unless
+    /// it verifies with the sender's keys: `topics` or `service_account`),
+    /// a `format` or `signed` template must be well-formed, `url` must be
+    /// an absolute http(s) URL and `topics` must be ARNs.
     fn validate(&self) -> Result<(), String> {
         if self.max_body_bytes == 0 {
             return Err("`incoming.max_body_bytes` must be at least 1".to_owned());
         }
         for (name, source) in &self.sources {
-            if source.secret.trim().is_empty() {
+            if source.secret.trim().is_empty() && !source.is_keyless() {
                 return Err(format!(
                     "`incoming.{name}.secret` is empty: set webhooks.incoming.{name}.secret (APP_WEBHOOKS__INCOMING__{}__SECRET)",
                     name.to_ascii_uppercase()
+                ));
+            }
+            if let Some(url) = &source.url {
+                let absolute = url::Url::parse(url)
+                    .is_ok_and(|url| matches!(url.scheme(), "http" | "https") && url.has_host());
+                if !absolute {
+                    return Err(format!(
+                        "`incoming.{name}.url` must be an absolute http(s) URL, not `{url}`"
+                    ));
+                }
+            }
+            if let Some(topic) = source.topics.iter().find(|topic| !topic.starts_with("arn:")) {
+                return Err(format!(
+                    "`incoming.{name}.topics`: `{topic}` is not a topic ARN (arn:aws:sns:<region>:<account>:<topic>)"
                 ));
             }
             if let Some(format) = &source.format {
@@ -204,11 +220,19 @@ impl<'de> Deserialize<'de> for IncomingOptions {
 /// signed = "{timestamp}.{body}"
 /// ```
 ///
+/// The built-in sources read more keys: `url` ([`Twilio`](crate::Twilio),
+/// [`GooglePubSub`](crate::GooglePubSub)), `topics` and `auto_confirm`
+/// ([`AwsSns`](crate::AwsSns)), `audience` and `service_account`
+/// ([`GooglePubSub`](crate::GooglePubSub)).
+///
 /// `Debug` never shows the secret.
-#[derive(Clone, PartialEq, Eq, Default, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Deserialize)]
 #[serde(default)]
 pub struct SourceOptions {
-    /// The signing secret. Required.
+    /// The signing secret (the auth token, signing key, `clientState` or
+    /// `username:password`, depending on the sender). Required, except for
+    /// [`AwsSns`](crate::AwsSns) and [`GooglePubSub`](crate::GooglePubSub),
+    /// which verify with the sender's public keys.
     pub secret: String,
     /// The accepted age of this source's signatures, in seconds, instead of
     /// `webhooks.incoming.tolerance_secs`.
@@ -232,6 +256,50 @@ pub struct SourceOptions {
     pub id_header: Option<String>,
     /// [`Hmac`](crate::Hmac): the header carrying the sender's event type.
     pub event_header: Option<String>,
+    /// The public URL of the route as the sender calls it
+    /// (`https://api.example.com/api/hooks/twilio`), for schemes that sign
+    /// the URL ([`Twilio`](crate::Twilio)) and as the default audience of
+    /// [`GooglePubSub`](crate::GooglePubSub). The request's query string is
+    /// appended. When unset, the URL is rebuilt from `X-Forwarded-Proto`,
+    /// `X-Forwarded-Host` and `Host`.
+    pub url: Option<String>,
+    /// [`AwsSns`](crate::AwsSns): the topic ARNs accepted. Required: SNS
+    /// signs every topic's messages with the same keys. From the
+    /// environment, a comma-separated list.
+    #[serde(deserialize_with = "list_or_comma_separated")]
+    pub topics: Vec<String>,
+    /// [`AwsSns`](crate::AwsSns): confirm subscriptions (and acknowledge
+    /// unsubscriptions) without running the handler (default true).
+    pub auto_confirm: bool,
+    /// [`GooglePubSub`](crate::GooglePubSub): the `aud` of the push
+    /// subscription's OIDC token (default: the public URL of the request).
+    pub audience: Option<String>,
+    /// [`GooglePubSub`](crate::GooglePubSub): the service account email the
+    /// push subscription authenticates as. Required: any Google account can
+    /// mint a token for any audience.
+    pub service_account: Option<String>,
+}
+
+impl Default for SourceOptions {
+    fn default() -> Self {
+        Self {
+            secret: String::new(),
+            tolerance_secs: None,
+            header: None,
+            algorithm: HmacAlgorithm::default(),
+            encoding: SignatureEncoding::default(),
+            format: None,
+            signed: None,
+            timestamp_header: None,
+            id_header: None,
+            event_header: None,
+            url: None,
+            topics: Vec::new(),
+            auto_confirm: true,
+            audience: None,
+            service_account: None,
+        }
+    }
 }
 
 impl SourceOptions {
@@ -241,6 +309,12 @@ impl SourceOptions {
             secret: secret.into(),
             ..Self::default()
         }
+    }
+
+    /// Whether the source verifies with the sender's public keys rather
+    /// than a secret (it sets `topics` or `service_account`).
+    fn is_keyless(&self) -> bool {
+        !self.topics.is_empty() || self.service_account.is_some()
     }
 }
 
@@ -257,8 +331,35 @@ impl fmt::Debug for SourceOptions {
             .field("timestamp_header", &self.timestamp_header)
             .field("id_header", &self.id_header)
             .field("event_header", &self.event_header)
+            .field("url", &self.url)
+            .field("topics", &self.topics)
+            .field("auto_confirm", &self.auto_confirm)
+            .field("audience", &self.audience)
+            .field("service_account", &self.service_account)
             .finish()
     }
+}
+
+/// A list, or one comma-separated string (what an environment variable
+/// holds); entries are trimmed and empty ones dropped.
+fn list_or_comma_separated<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Vec<String>, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Entries {
+        List(Vec<String>),
+        Joined(String),
+    }
+    let entries = match Entries::deserialize(deserializer)? {
+        Entries::List(entries) => entries,
+        Entries::Joined(joined) => joined.split(',').map(str::to_owned).collect(),
+    };
+    Ok(entries
+        .into_iter()
+        .map(|entry| entry.trim().to_owned())
+        .filter(|entry| !entry.is_empty())
+        .collect())
 }
 
 /// The hash of an HMAC signature.
@@ -377,6 +478,51 @@ mod tests {
         assert!(no_timeout.validate().unwrap_err().contains("timeout_secs"));
         let no_queue = parse(json!({ "queue": " " }));
         assert!(no_queue.validate().unwrap_err().contains("queue"));
+    }
+
+    #[test]
+    fn keyless_sources_need_no_secret_but_valid_settings() {
+        let options = parse(json!({
+            "incoming": {
+                "aws_sns": { "topics": "arn:aws:sns:us-east-1:1:a, arn:aws:sns:us-east-1:1:b" },
+                "google_pubsub": {
+                    "service_account": "push@project.iam.gserviceaccount.com",
+                    "audience": "https://api.example.com/hooks/pubsub"
+                },
+                "twilio": { "secret": "token", "url": "https://api.example.com/hooks/twilio" }
+            }
+        }));
+        assert_eq!(options.validate(), Ok(()));
+        let sns = options.incoming.source("aws_sns").unwrap();
+        assert_eq!(
+            sns.topics,
+            ["arn:aws:sns:us-east-1:1:a", "arn:aws:sns:us-east-1:1:b"]
+        );
+        assert!(sns.auto_confirm);
+        assert!(SourceOptions::default().auto_confirm);
+        let manual = parse(json!({
+            "incoming": { "aws_sns": { "topics": ["arn:aws:sns:x:1:a"], "auto_confirm": false } }
+        }));
+        assert!(!manual.incoming.source("aws_sns").unwrap().auto_confirm);
+
+        let bad_topic = parse(json!({ "incoming": { "aws_sns": { "topics": ["ses-events"] } } }));
+        assert!(
+            bad_topic
+                .validate()
+                .unwrap_err()
+                .contains("incoming.aws_sns.topics")
+        );
+        let bad_url = parse(json!({
+            "incoming": { "twilio": { "secret": "t", "url": "/hooks/twilio" } }
+        }));
+        assert!(bad_url.validate().unwrap_err().contains("incoming.twilio.url"));
+        let neither = parse(json!({ "incoming": { "aws_sns": { "auto_confirm": true } } }));
+        assert!(
+            neither
+                .validate()
+                .unwrap_err()
+                .contains("incoming.aws_sns.secret")
+        );
     }
 
     #[test]

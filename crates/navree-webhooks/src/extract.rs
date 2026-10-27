@@ -7,9 +7,11 @@ use std::sync::Arc;
 
 use axum::body::to_bytes;
 use axum::extract::{FromRequest, Request};
+use axum::response::{IntoResponse as _, Response};
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use http::HeaderMap;
+use http::header::CONTENT_TYPE;
 use navree_contracts::{Clock, SystemClock};
 use navree_db::Uow;
 use navree_http::AppError;
@@ -21,8 +23,9 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::entity::receipt;
-use crate::verify::{Tolerance, WebhookSource, WebhookVerifier};
-use crate::{WebhooksError, WebhooksOptions};
+use crate::request::{Handshake, IncomingRequest, Verdict, public_url};
+use crate::verify::{Tolerance, VerifyError, WebhookSource, WebhookVerifier};
+use crate::{SourceOptions, WebhooksError, WebhooksOptions};
 
 /// The message every failed verification answers with (400).
 pub const INVALID_SIGNATURE: &str = "Invalid webhook signature";
@@ -45,13 +48,17 @@ pub const INVALID_SIGNATURE: &str = "Invalid webhook signature";
 /// ```
 ///
 /// It reads the raw body (up to `webhooks.incoming.max_body_bytes`, a 413
-/// beyond), verifies it with `S::Verifier` and the secret under
-/// `webhooks.incoming.<S::NAME>.secret`, and checks the signed timestamp
+/// beyond), verifies it with `S::Verifier` and the options under
+/// `webhooks.incoming.<S::NAME>` (the secret, or the settings of a source
+/// that verifies with the sender's keys), and checks the signed timestamp
 /// against the tolerance (`webhooks.incoming.<S::NAME>.tolerance_secs`, else
 /// `webhooks.incoming.tolerance_secs`) and the app's `dyn Clock`. A request
 /// that fails is answered with 400 `Invalid webhook signature` and never
-/// reaches the handler. A source with no secret configured is a 500 (and an
-/// error log naming the key). The app must include `WebhooksModule`.
+/// reaches the handler; a handshake ([`Verdict::Handshake`]) is answered
+/// as the sender expects, without the handler. A source missing its secret
+/// (or required setting) is a 500, with an error log naming the key; a key
+/// that cannot be fetched from the sender is a 503, so the sender retries.
+/// The app must include `WebhooksModule`.
 pub struct VerifiedWebhook<S> {
     body: Bytes,
     headers: HeaderMap,
@@ -66,6 +73,13 @@ impl<S: WebhookSource> VerifiedWebhook<S> {
     /// The body as `T`; a body that does not match is a 400.
     pub fn json<T: DeserializeOwned>(&self) -> Result<T, AppError> {
         serde_json::from_slice(&self.body)
+            .map_err(|error| AppError::bad_request(format!("Invalid webhook payload: {error}")))
+    }
+
+    /// The form-encoded body (Twilio, Slack commands, Mailgun routes) as
+    /// `T`; a body that does not match is a 400.
+    pub fn form<T: DeserializeOwned>(&self) -> Result<T, AppError> {
+        serde_urlencoded::from_bytes(&self.body)
             .map_err(|error| AppError::bad_request(format!("Invalid webhook payload: {error}")))
     }
 
@@ -147,7 +161,7 @@ impl<S> fmt::Debug for VerifiedWebhook<S> {
 }
 
 impl<S: WebhookSource, St: Send + Sync> FromRequest<St> for VerifiedWebhook<S> {
-    type Rejection = AppError;
+    type Rejection = Response;
 
     async fn from_request(request: Request, _state: &St) -> Result<Self, Self::Rejection> {
         let ctx = request
@@ -156,25 +170,28 @@ impl<S: WebhookSource, St: Send + Sync> FromRequest<St> for VerifiedWebhook<S> {
             .cloned()
             .ok_or_else(|| {
                 AppError::internal("VerifiedWebhook needs the navree request pipeline")
+                    .into_response()
             })?;
-        let options = ctx
-            .get::<WebhooksOptions>()
-            .await
-            .map_err(|_| AppError::internal("VerifiedWebhook needs WebhooksModule in the app"))?;
+        let options = ctx.get::<WebhooksOptions>().await.map_err(|_| {
+            AppError::internal("VerifiedWebhook needs WebhooksModule in the app").into_response()
+        })?;
         let incoming = &options.incoming;
-        let Some(source) = incoming
-            .source(S::NAME)
-            .filter(|source| !source.secret.is_empty())
-        else {
-            let key = format!("webhooks.incoming.{}.secret", S::NAME);
+        let unconfigured = SourceOptions::default();
+        let source = incoming.source(S::NAME).unwrap_or(&unconfigured);
+        if let Some(setting) = S::Verifier::missing_setting(source) {
+            let key = format!("webhooks.incoming.{}.{setting}", S::NAME);
             tracing::error!(
                 target: "navree::webhooks",
                 source = S::NAME,
                 "incoming webhook refused: `{key}` is not set ({})",
-                format_args!("APP_WEBHOOKS__INCOMING__{}__SECRET", S::NAME.to_ascii_uppercase())
+                format_args!(
+                    "APP_WEBHOOKS__INCOMING__{}__{}",
+                    S::NAME.to_ascii_uppercase(),
+                    setting.to_ascii_uppercase()
+                )
             );
-            return Err(AppError::internal(format!("`{key}` is not set")));
-        };
+            return Err(AppError::internal(format!("`{key}` is not set")).into_response());
+        }
         let clock: Arc<dyn Clock> = match ctx.try_get::<dyn Clock>().await {
             Some(clock) => clock,
             None => Arc::new(SystemClock),
@@ -187,17 +204,19 @@ impl<S: WebhookSource, St: Send + Sync> FromRequest<St> for VerifiedWebhook<S> {
         let (parts, body) = request.into_parts();
         let body = to_bytes(body, incoming.max_body_bytes)
             .await
-            .map_err(|_| AppError::payload_too_large(incoming.max_body_bytes))?;
-        let verified = S::Verifier::verify_request(source, &parts.headers, &body, Some(tolerance))
-            .map_err(|error| {
-                tracing::debug!(
-                    target: "navree::webhooks",
-                    source = S::NAME,
-                    %error,
-                    "incoming webhook failed verification"
-                );
-                AppError::bad_request(INVALID_SIGNATURE)
-            })?;
+            .map_err(|_| AppError::payload_too_large(incoming.max_body_bytes).into_response())?;
+        let url = public_url(source.url.as_deref(), &parts.headers, &parts.uri);
+        let request = IncomingRequest::new(source, &parts.headers, &body)
+            .with_url(url)
+            .at(now)
+            .with_tolerance(tolerance)
+            .with_app(ctx.clone());
+        let verified = match S::Verifier::verify_incoming(&request).await {
+            Ok(Verdict::Verified(verified)) => verified,
+            Ok(Verdict::Handshake(handshake)) => return Err(answer(handshake)),
+            Err(error) => return Err(refuse(S::NAME, &error)),
+        };
+        drop(request);
         let id = verified
             .id
             .filter(|id| !id.is_empty())
@@ -211,5 +230,54 @@ impl<S: WebhookSource, St: Send + Sync> FromRequest<St> for VerifiedWebhook<S> {
             received_at: now,
             source: PhantomData,
         })
+    }
+}
+
+/// The response to a handshake: its status and `text/plain` body.
+fn answer(handshake: Handshake) -> Response {
+    if handshake.body.is_empty() {
+        return handshake.status.into_response();
+    }
+    (
+        handshake.status,
+        [(CONTENT_TYPE, "text/plain; charset=utf-8")],
+        handshake.body,
+    )
+        .into_response()
+}
+
+/// The response to a request that failed: 400 `Invalid webhook signature`
+/// for a request that is not authentic, 503 when a key could not be
+/// fetched (the sender retries), 500 when the source is misconfigured.
+fn refuse(source: &'static str, error: &VerifyError) -> Response {
+    match error {
+        VerifyError::Unavailable(_) => {
+            tracing::warn!(
+                target: "navree::webhooks",
+                source,
+                %error,
+                "incoming webhook not verified"
+            );
+            AppError::service_unavailable("The webhook cannot be verified right now")
+                .into_response()
+        }
+        VerifyError::Misconfigured(_) | VerifyError::MissingSecret => {
+            tracing::error!(
+                target: "navree::webhooks",
+                source,
+                %error,
+                "incoming webhook refused: the source is misconfigured"
+            );
+            AppError::internal(error.to_string()).into_response()
+        }
+        _ => {
+            tracing::debug!(
+                target: "navree::webhooks",
+                source,
+                %error,
+                "incoming webhook failed verification"
+            );
+            AppError::bad_request(INVALID_SIGNATURE).into_response()
+        }
     }
 }
