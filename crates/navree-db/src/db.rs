@@ -17,7 +17,8 @@ use tokio::sync::OnceCell;
 use uuid::Uuid;
 
 use crate::options::{driver_url, redact_url, scheme, url_password};
-use crate::{ChangeObserver, DbOptions, Reader, SqliteOptions, Uow};
+use crate::queries::Watchers;
+use crate::{ChangeObserver, DbOptions, LoggedQuery, Reader, SqliteOptions, Uow};
 
 /// The database: a cheap, cloneable handle to the connection pool (and to
 /// the pools of its read replicas).
@@ -57,6 +58,9 @@ struct DbInner {
     sticky: bool,
     /// The connection's name: `default`, or a named connection's.
     name: Arc<str>,
+    /// The statement listeners and hooks, shared with the pools' timing
+    /// callbacks.
+    watchers: Arc<Watchers>,
     /// The app whose `dyn ChangeObserver` multi-bindings see every commit.
     app: Option<WeakAppContext>,
     observers: OnceCell<Vec<Arc<dyn ChangeObserver>>>,
@@ -133,28 +137,32 @@ impl Db {
         options
             .validate()
             .map_err(|problems| DbErr::Custom(format!("invalid database options: {problems}")))?;
-        let conn = open_pool(&options.url, options, telemetry.clone()).await?;
+        let name: Arc<str> = Arc::from(name);
+        let watchers = Arc::new(Watchers::new(name.clone()));
+        let conn = open_pool(&options.url, options, telemetry.clone(), &watchers).await?;
         let mut replicas = Vec::with_capacity(options.read_urls.len());
         for url in &options.read_urls {
-            replicas.push(open_pool(url, options, telemetry.clone()).await?);
+            replicas.push(open_pool(url, options, telemetry.clone(), &watchers).await?);
         }
         Ok(Self::build(
             Arc::new(conn),
             Arc::new(replicas),
             options.sticky,
-            Arc::from(name),
+            watchers,
             None,
         ))
     }
 
     /// Wraps an existing SeaORM connection (no replicas, no change
-    /// observers).
+    /// observers). Its statements are not watched: query listeners, query
+    /// logs and unit-of-work statistics see only pools opened by
+    /// [`connect`](Db::connect) and its siblings.
     pub fn from_connection(conn: DatabaseConnection) -> Db {
         Self::build(
             Arc::new(conn),
             Arc::new(Vec::new()),
             true,
-            Arc::from(DEFAULT_CONNECTION),
+            Arc::new(Watchers::new(Arc::from(DEFAULT_CONNECTION))),
             None,
         )
     }
@@ -166,7 +174,7 @@ impl Db {
             self.inner.conn.clone(),
             self.inner.replicas.clone(),
             self.inner.sticky,
-            self.inner.name.clone(),
+            self.inner.watchers.clone(),
             Some(app),
         )
     }
@@ -175,7 +183,7 @@ impl Db {
         conn: Arc<DatabaseConnection>,
         replicas: Arc<Vec<DatabaseConnection>>,
         sticky: bool,
-        name: Arc<str>,
+        watchers: Arc<Watchers>,
         app: Option<WeakAppContext>,
     ) -> Db {
         Self {
@@ -184,11 +192,87 @@ impl Db {
                 replicas,
                 next_replica: Arc::new(AtomicUsize::new(0)),
                 sticky,
-                name,
+                name: watchers.name().clone(),
+                watchers,
                 app,
                 observers: OnceCell::new(),
             }),
         }
+    }
+
+    /// Calls `listener` after every statement this connection runs (its
+    /// writer and replicas; named connections have their own listeners),
+    /// with the SQL, the bound values, the time it took and whether it
+    /// failed. Listeners run inside the statement's task, so keep them
+    /// short (spawn slow work). SeaORM does not time
+    /// `execute_unprepared`, so those statements are not seen.
+    ///
+    /// ```no_run
+    /// # fn demo(db: navree_db::Db) {
+    /// db.on_query(|query| {
+    ///     if query.duration > std::time::Duration::from_millis(200) {
+    ///         tracing::warn!(sql = %query.sql, "slow statement");
+    ///     }
+    /// });
+    /// # }
+    /// ```
+    pub fn on_query(&self, listener: impl Fn(&LoggedQuery) + Send + Sync + 'static) {
+        self.inner.watchers.add_listener(Arc::new(listener));
+    }
+
+    /// Calls `hook` with the SQL of every statement the ORM sends through
+    /// this connection (its `Db` and its units of work), right before the
+    /// statement runs; and before the statements of code that announces
+    /// them with [`run_before_executing`](Db::run_before_executing).
+    pub fn before_executing(&self, hook: impl Fn(&str) + Send + Sync + 'static) {
+        self.inner.watchers.add_before_executing(Arc::new(hook));
+    }
+
+    /// Runs the [`before_executing`](Db::before_executing) hooks for `sql`
+    /// (for code that sends statements itself, as the ORM does).
+    pub fn run_before_executing(&self, sql: &str) {
+        self.inner.watchers.before_executing(sql);
+    }
+
+    /// Calls `hook` right before a transaction of this connection begins:
+    /// a unit of work's (requests, [`Db::transaction`]) and the ORM's own.
+    pub fn before_starting_transaction(&self, hook: impl Fn() + Send + Sync + 'static) {
+        self.inner.watchers.add_before_transaction(Arc::new(hook));
+    }
+
+    /// Runs the [`before_starting_transaction`](Db::before_starting_transaction)
+    /// hooks (for code that begins transactions itself, as the ORM does).
+    pub fn run_before_starting_transaction(&self) {
+        self.inner.watchers.before_transaction();
+    }
+
+    /// Calls `handler` once per unit of work whose statements on this
+    /// connection take longer than `threshold` in total, with the unit of
+    /// work and the total so far: the statements run while it is
+    /// [current](crate::Uow::current) (a request's, [`Db::transaction`]).
+    /// [`Uow::allow_duration_handlers_again`](crate::Uow::allow_duration_handlers_again)
+    /// lets it run again.
+    ///
+    /// ```no_run
+    /// # fn demo(db: navree_db::Db) {
+    /// db.when_querying_for_longer_than(std::time::Duration::from_secs(2), |uow, total| {
+    ///     tracing::warn!(request_id = uow.request_id(), ?total, "slow database work");
+    /// });
+    /// # }
+    /// ```
+    pub fn when_querying_for_longer_than(
+        &self,
+        threshold: Duration,
+        handler: impl Fn(&Uow, Duration) + Send + Sync + 'static,
+    ) {
+        self.inner
+            .watchers
+            .add_duration_handler(threshold, Arc::new(handler));
+    }
+
+    /// Whether `watchers` watch this connection's statements.
+    pub(crate) fn is_watched_by(&self, watchers: &Arc<Watchers>) -> bool {
+        Arc::ptr_eq(&self.inner.watchers, watchers)
     }
 
     /// The SeaORM connection (pool) of the writer.
@@ -501,6 +585,7 @@ async fn open_pool(
     url: &str,
     options: &DbOptions,
     telemetry: Telemetry,
+    watchers: &Arc<Watchers>,
 ) -> Result<DatabaseConnection, DbErr> {
     let mut connect = ConnectOptions::new(driver_url(url).into_owned());
     connect
@@ -542,6 +627,7 @@ async fn open_pool(
             telemetry,
             connection: redact_url(url),
         },
+        watchers.clone(),
     );
     Ok(conn)
 }
@@ -640,19 +726,18 @@ struct QueryTelemetry {
 /// `slow_query_ms` at warn level. Only the SQL text is logged, never the
 /// bound values. SeaORM does not time `execute_unprepared` statements, so
 /// those are not logged. Also reports every statement to the telemetry
-/// sinks that want `QueryExecuted` events. Installs nothing when there is
-/// nothing to log and no telemetry registry.
+/// sinks that want `QueryExecuted` events, and to `watchers` (query logs,
+/// listeners, unit-of-work statistics).
 fn install_query_log(
     conn: &mut DatabaseConnection,
     log_queries: bool,
     slow_query_ms: u64,
     report: QueryTelemetry,
+    watchers: Arc<Watchers>,
 ) {
-    if !log_queries && slow_query_ms == 0 && report.telemetry.is_disabled() {
-        return;
-    }
     let slow = (slow_query_ms > 0).then(|| Duration::from_millis(slow_query_ms));
     conn.set_metric_callback(move |info| {
+        watchers.observe(info);
         let sql = info.statement.sql.as_str();
         report.telemetry.emit_with(EventKind::QueryExecuted, || {
             TelemetryEvent::QueryExecuted(QueryExecuted {

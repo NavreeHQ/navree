@@ -222,6 +222,9 @@ pub struct SqlTarget<'a> {
     dialect: Dialect,
     uow: Option<Uow>,
     app: Option<AppContext>,
+    /// The connection whose statement and transaction hooks run
+    /// ([`Db::before_executing`], [`Db::before_starting_transaction`]).
+    db: Option<Db>,
 }
 
 enum SqlConn<'a> {
@@ -377,8 +380,14 @@ impl Target<'_> {
     pub(crate) async fn begin_atomic(&self) -> Result<Option<DatabaseTransaction>, OrmError> {
         match self {
             Target::Sql(sql) => match &sql.conn {
-                SqlConn::Pool(conn) => Ok(Some(conn.begin().await?)),
-                SqlConn::Owned(conn) => Ok(Some(conn.begin().await?)),
+                SqlConn::Pool(conn) => {
+                    sql.announce_transaction();
+                    Ok(Some(conn.begin().await?))
+                }
+                SqlConn::Owned(conn) => {
+                    sql.announce_transaction();
+                    Ok(Some(conn.begin().await?))
+                }
                 SqlConn::Transaction(_) | SqlConn::TransactionRef(_) => self.begin_savepoint().await,
             },
             Target::Document(_) => Ok(None),
@@ -388,12 +397,15 @@ impl Target<'_> {
     /// The same target running on `tx` (a savepoint of its transaction).
     pub(crate) fn on_transaction<'b>(&self, tx: &'b DatabaseTransaction) -> Target<'b> {
         match self {
-            Target::Sql(sql) => Target::Sql(SqlTarget::new(
-                SqlConn::TransactionRef(tx),
-                sql.dialect,
-                sql.uow.clone(),
-                sql.app.clone(),
-            )),
+            Target::Sql(sql) => Target::Sql(SqlTarget {
+                db: sql.db.clone(),
+                ..SqlTarget::new(
+                    SqlConn::TransactionRef(tx),
+                    sql.dialect,
+                    sql.uow.clone(),
+                    sql.app.clone(),
+                )
+            }),
             Target::Document(document) => Target::Document(document.clone()),
         }
     }
@@ -534,6 +546,27 @@ impl<'a> SqlTarget<'a> {
             dialect,
             uow,
             app,
+            db: None,
+        }
+    }
+
+    /// The target, running the statement and transaction hooks of `db`.
+    fn watched_by(mut self, db: &Db) -> Self {
+        self.db = Some(db.clone());
+        self
+    }
+
+    /// Runs the connection's before-executing hooks for `sql`.
+    fn announce(&self, sql: &str) {
+        if let Some(db) = &self.db {
+            db.run_before_executing(sql);
+        }
+    }
+
+    /// Runs the connection's before-transaction hooks.
+    fn announce_transaction(&self) {
+        if let Some(db) = &self.db {
+            db.run_before_starting_transaction();
         }
     }
 
@@ -551,6 +584,7 @@ impl<'a> SqlTarget<'a> {
     /// Runs `statement` and returns its rows.
     pub async fn query_all(&self, statement: &Statement) -> Result<Vec<QueryResult>, OrmError> {
         ensure_free(self.conn.transaction_id())?;
+        self.announce(&statement.sql);
         let statement = statement.to_sea_orm();
         Ok(match &self.conn {
             SqlConn::Pool(conn) => conn.query_all_raw(statement).await?,
@@ -563,6 +597,7 @@ impl<'a> SqlTarget<'a> {
     /// Runs `statement` and returns its first row.
     pub async fn query_one(&self, statement: &Statement) -> Result<Option<QueryResult>, OrmError> {
         ensure_free(self.conn.transaction_id())?;
+        self.announce(&statement.sql);
         let statement = statement.to_sea_orm();
         Ok(match &self.conn {
             SqlConn::Pool(conn) => conn.query_one_raw(statement).await?,
@@ -575,6 +610,7 @@ impl<'a> SqlTarget<'a> {
     /// Runs `statement` for its effect.
     pub async fn execute(&self, statement: &Statement) -> Result<ExecResult, OrmError> {
         ensure_free(self.conn.transaction_id())?;
+        self.announce(&statement.sql);
         let statement = statement.to_sea_orm();
         Ok(match &self.conn {
             SqlConn::Pool(conn) => conn.execute_raw(statement).await?,
@@ -588,6 +624,7 @@ impl<'a> SqlTarget<'a> {
     /// separated by `;`).
     pub async fn execute_unprepared(&self, sql: &str) -> Result<ExecResult, OrmError> {
         ensure_free(self.conn.transaction_id())?;
+        self.announce(sql);
         Ok(match &self.conn {
             SqlConn::Pool(conn) => conn.execute_unprepared(sql).await?,
             SqlConn::Owned(conn) => conn.execute_unprepared(sql).await?,
@@ -603,6 +640,7 @@ impl<'a> SqlTarget<'a> {
     pub async fn stream(&self, statement: &Statement) -> Result<RowsStream<'_>, OrmError> {
         let id = self.conn.transaction_id();
         ensure_free(id)?;
+        self.announce(&statement.sql);
         let statement = statement.to_sea_orm();
         let rows: RowsStream<'_> = match &self.conn {
             SqlConn::Pool(conn) => conn
@@ -681,45 +719,30 @@ async fn db_target(db: &Db, access: Access, writer: bool) -> Result<Target<'stat
     let dialect = Dialect::from_backend(db.backend())?;
     let app = db.app();
     let current = Uow::current().filter(|uow| same_pool(db, uow));
-    match access {
+    let target = match access {
         Access::Read => match db.reader().await {
-            Reader::Transaction(tx) => Ok(Target::Sql(SqlTarget::new(
-                SqlConn::Transaction(tx),
-                dialect,
-                current,
-                app,
-            ))),
+            Reader::Transaction(tx) => {
+                SqlTarget::new(SqlConn::Transaction(tx), dialect, current, app)
+            }
             Reader::Pool(conn) => {
                 let conn = if writer { db.conn() } else { conn };
-                Ok(Target::Sql(SqlTarget::new(
-                    SqlConn::Owned(conn.clone()),
-                    dialect,
-                    None,
-                    app,
-                )))
+                SqlTarget::new(SqlConn::Owned(conn.clone()), dialect, None, app)
             }
         },
-        Access::Write => {
-            if let Some(uow) = current {
+        Access::Write => match current {
+            Some(uow) => {
                 uow.mark_modified();
-                if !uow.is_finished().await {
+                if uow.is_finished().await {
+                    SqlTarget::new(SqlConn::Owned(db.conn().clone()), dialect, None, app)
+                } else {
                     let tx = uow.tx().await?;
-                    return Ok(Target::Sql(SqlTarget::new(
-                        SqlConn::Transaction(tx),
-                        dialect,
-                        Some(uow),
-                        app,
-                    )));
+                    SqlTarget::new(SqlConn::Transaction(tx), dialect, Some(uow), app)
                 }
             }
-            Ok(Target::Sql(SqlTarget::new(
-                SqlConn::Owned(db.conn().clone()),
-                dialect,
-                None,
-                app,
-            )))
-        }
-    }
+            None => SqlTarget::new(SqlConn::Owned(db.conn().clone()), dialect, None, app),
+        },
+    };
+    Ok(Target::Sql(target.watched_by(db)))
 }
 
 /// An [`OrmError::Connection`] for connection `name`.
@@ -769,12 +792,15 @@ impl Executor for Uow {
             self.mark_modified();
         }
         let tx = self.tx().await?;
-        Ok(Target::Sql(SqlTarget::new(
-            SqlConn::Transaction(tx),
-            Dialect::from_backend(self.db().backend())?,
-            Some(self.clone()),
-            self.db().app(),
-        )))
+        Ok(Target::Sql(
+            SqlTarget::new(
+                SqlConn::Transaction(tx),
+                Dialect::from_backend(self.db().backend())?,
+                Some(self.clone()),
+                self.db().app(),
+            )
+            .watched_by(self.db()),
+        ))
     }
 
     async fn target_routed(&self, access: Access, route: Route<'_>) -> Result<Target<'_>, OrmError> {
