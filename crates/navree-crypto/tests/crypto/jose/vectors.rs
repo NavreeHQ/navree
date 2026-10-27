@@ -78,8 +78,12 @@ fn rfc7515_a2_rs256_signature_matches_and_verifies() {
         .unwrap();
 
     // The same key from its raw components (`RsaPublicKeyComponents`).
-    let n = URL_SAFE_NO_PAD.decode(public.n.as_deref().unwrap()).unwrap();
-    let e = URL_SAFE_NO_PAD.decode(public.e.as_deref().unwrap()).unwrap();
+    let n = URL_SAFE_NO_PAD
+        .decode(public.n.as_deref().unwrap())
+        .unwrap();
+    let e = URL_SAFE_NO_PAD
+        .decode(public.e.as_deref().unwrap())
+        .unwrap();
     jws.verify(&VerifyingKey::rsa(&n, &e).unwrap()).unwrap();
 }
 

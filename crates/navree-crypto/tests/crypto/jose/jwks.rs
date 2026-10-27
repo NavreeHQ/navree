@@ -19,7 +19,11 @@ fn provider_key_sets_parse_into_verifying_keys() {
     for name in ["google", "apple", "microsoft"] {
         let set = provider(name);
         let raw = json_fixture(&format!("{name}-jwks.json"));
-        assert_eq!(set.keys.len(), raw["keys"].as_array().unwrap().len(), "{name}");
+        assert_eq!(
+            set.keys.len(),
+            raw["keys"].as_array().unwrap().len(),
+            "{name}"
+        );
         assert!(!set.keys.is_empty(), "{name}");
         let mut kids = BTreeSet::new();
         for jwk in &set.keys {
@@ -50,8 +54,16 @@ fn provider_specific_members_survive_a_round_trip() {
 
     let apple = provider("apple");
     assert!(apple.keys.iter().all(|k| k.alg.as_deref() == Some("RS256")));
-    assert!(apple.keys.iter().all(|k| k.algorithm() == Some(Algorithm::RS256)));
-    assert_eq!(serde_json::to_value(&apple).unwrap(), json_fixture("apple-jwks.json"));
+    assert!(
+        apple
+            .keys
+            .iter()
+            .all(|k| k.algorithm() == Some(Algorithm::RS256))
+    );
+    assert_eq!(
+        serde_json::to_value(&apple).unwrap(),
+        json_fixture("apple-jwks.json")
+    );
 }
 
 #[test]
@@ -89,7 +101,13 @@ fn publishing_a_set_shows_only_public_keys() {
     assert_eq!(published["keys"].as_array().unwrap().len(), 2);
     assert_eq!(published["keys"][0]["kid"], current.kid().unwrap());
     assert_eq!(published["keys"][1]["kid"], "2025-01");
-    assert!(published["keys"].as_array().unwrap().iter().all(|k| k.get("d").is_none()));
+    assert!(
+        published["keys"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|k| k.get("d").is_none())
+    );
 
     // A token signed by either key verifies against the published set
     // after a round trip through JSON, as a client would fetch it.
@@ -151,7 +169,14 @@ fn thumbprints_need_the_required_members() {
         thumbprint,
         URL_SAFE_NO_PAD.encode(sha2::Sha256::digest(canonical.as_bytes()))
     );
-    assert!(Jwk { kty: "nope".into(), ..Jwk::default() }.thumbprint().is_err());
+    assert!(
+        Jwk {
+            kty: "nope".into(),
+            ..Jwk::default()
+        }
+        .thumbprint()
+        .is_err()
+    );
     let value: Value = serde_json::to_value(&jwk).unwrap();
     assert_eq!(value["kty"], "EC");
 }

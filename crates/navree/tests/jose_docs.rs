@@ -11,7 +11,9 @@
 ))]
 
 use navree::axum::http::Method;
-use navree::crypto::jose::{Algorithm, Header, JoseError, Jwk, JwkSet, Jws, SigningKey, VerifyingKey};
+use navree::crypto::jose::{
+    Algorithm, Header, JoseError, Jwk, JwkSet, Jws, SigningKey, VerifyingKey,
+};
 use navree::http_client::{FakeResponse, HttpClient};
 use navree::prelude::*;
 use navree::testing::TestApp;
@@ -119,7 +121,10 @@ fn generated_keys_export_as_pkcs8() {
 #[test]
 fn key_ids_and_algorithms() -> Result<(), JoseError> {
     let key = SigningKey::generate_ed25519().with_thumbprint_kid();
-    assert_eq!(key.kid(), Some(key.public_jwk().unwrap().thumbprint()?.as_str()));
+    assert_eq!(
+        key.kid(),
+        Some(key.public_jwk().unwrap().thumbprint()?.as_str())
+    );
 
     let pem = RSA_PEM.to_owned();
     let key = SigningKey::from_pem(&pem)?.with_algorithm(Algorithm::PS256)?;
@@ -185,7 +190,11 @@ fn rsa_public_pem(jwk: &Jwk) -> String {
         out
     };
     let int = |bytes: Vec<u8>| {
-        let mut value = if bytes[0] & 0x80 != 0 { vec![0] } else { vec![] };
+        let mut value = if bytes[0] & 0x80 != 0 {
+            vec![0]
+        } else {
+            vec![]
+        };
         value.extend(bytes);
         element(0x02, &value)
     };
@@ -193,12 +202,18 @@ fn rsa_public_pem(jwk: &Jwk) -> String {
     let algorithm = element(
         0x30,
         &[
-            element(0x06, &[0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01]),
+            element(
+                0x06,
+                &[0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01],
+            ),
             vec![0x05, 0x00],
         ]
         .concat(),
     );
-    let spki = element(0x30, &[algorithm, element(0x03, &[&[0][..], &rsa_key].concat())].concat());
+    let spki = element(
+        0x30,
+        &[algorithm, element(0x03, &[&[0][..], &rsa_key].concat())].concat(),
+    );
     pem("PUBLIC KEY", &spki)
 }
 
@@ -222,7 +237,10 @@ fn callbacks_verify_until_they_expire() {
 
 #[test]
 fn pinned_keys_verify_one_algorithm() -> Result<(), JoseError> {
-    let jwk = SigningKey::from_pem(RSA_PEM)?.verifying_key().to_jwk().unwrap();
+    let jwk = SigningKey::from_pem(RSA_PEM)?
+        .verifying_key()
+        .to_jwk()
+        .unwrap();
     let key = VerifyingKey::from_jwk(&jwk)?.with_algorithm(Algorithm::RS256)?;
     let ps256 = SigningKey::from_pem(RSA_PEM)?
         .with_algorithm(Algorithm::PS256)?
@@ -275,8 +293,10 @@ mod id_tokens {
                 .map_err(|_| AppError::unauthenticated())?;
             let claims: Value = jws.claims().map_err(|_| AppError::unauthenticated())?;
             let issuer = claims["iss"].as_str().unwrap_or_default();
-            let valid = matches!(issuer, "https://accounts.google.com" | "accounts.google.com")
-                && claims["aud"] == client_id
+            let valid = matches!(
+                issuer,
+                "https://accounts.google.com" | "accounts.google.com"
+            ) && claims["aud"] == client_id
                 && claims["exp"].as_i64().is_some_and(|exp| exp > now);
             if !valid {
                 return Err(AppError::unauthenticated());
@@ -310,9 +330,7 @@ async fn google_id_tokens_verify_against_the_cached_key_set() {
         .await;
     let tokens = app.get::<id_tokens::GoogleIdTokens>().await;
 
-    let claims = |aud: &str, exp: i64| {
-        json!({"iss": "https://accounts.google.com", "aud": aud, "sub": "1093", "exp": exp})
-    };
+    let claims = |aud: &str, exp: i64| json!({"iss": "https://accounts.google.com", "aud": aud, "sub": "1093", "exp": exp});
     let token = google.sign_jwt(&claims("client-1", 2_000)).unwrap();
     let verified = tokens.verify(&token, "client-1", 1_000).await.unwrap();
     assert_eq!(verified["sub"], "1093");
@@ -352,7 +370,13 @@ mod jwks {
         #[get("!/.well-known/jwks.json")]
         #[public]
         async fn jwks(&self) -> Json<JwkSet> {
-            Json(self.keys.0.iter().filter_map(SigningKey::public_jwk).collect())
+            Json(
+                self.keys
+                    .0
+                    .iter()
+                    .filter_map(SigningKey::public_jwk)
+                    .collect(),
+            )
         }
     }
 
@@ -405,13 +429,20 @@ async fn the_jwks_endpoint_publishes_public_keys_only() {
             "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"
         })
     );
-    assert_eq!(body["keys"].as_array().unwrap().len(), 2, "HMAC keys are skipped");
+    assert_eq!(
+        body["keys"].as_array().unwrap().len(),
+        2,
+        "HMAC keys are skipped"
+    );
     // A client verifies both keys' tokens against the published set.
     let published: JwkSet = serde_json::from_value(body).unwrap();
     for key in [&current, &previous] {
         let token = key.sign_jwt(&json!({"sub": "ada"})).unwrap();
         let jws = Jws::parse(&token).unwrap();
-        assert_eq!(jws.verify_with(&published).unwrap().kid.as_deref(), key.kid());
+        assert_eq!(
+            jws.verify_with(&published).unwrap().kid.as_deref(),
+            key.kid()
+        );
     }
     assert!(published.keys.iter().all(|key| !key.is_private()));
 }

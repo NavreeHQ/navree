@@ -20,7 +20,10 @@ fn apple_p8_keys_load_and_sign_es256() {
     assert_eq!(key.algorithm(), Algorithm::ES256);
     assert_eq!(key.kid(), Some("KEYID"));
     let token = key
-        .sign_json(&key.header(), &json!({"iss": "TEAMID", "sub": "com.acme.web"}))
+        .sign_json(
+            &key.header(),
+            &json!({"iss": "TEAMID", "sub": "com.acme.web"}),
+        )
         .unwrap();
     let jws = Jws::parse(&token).unwrap();
     assert_eq!(jws.header().kid.as_deref(), Some("KEYID"));
@@ -36,7 +39,10 @@ fn apple_p8_keys_load_and_sign_es256() {
         SigningKey::from_pem(&bare).unwrap(),
         SigningKey::from_pkcs8_der(&der(&pem)).unwrap(),
     ] {
-        assert_eq!(variant.public_jwk(), SigningKey::from_pem(&pem).unwrap().public_jwk());
+        assert_eq!(
+            variant.public_jwk(),
+            SigningKey::from_pem(&pem).unwrap().public_jwk()
+        );
     }
 }
 
@@ -44,14 +50,26 @@ fn apple_p8_keys_load_and_sign_es256() {
 fn pkcs8_loading_detects_the_key_type() {
     let v = json_fixture("independent-vectors.json");
     let cases = [
-        (v["ed25519"]["private_pem"].as_str().unwrap().to_owned(), Algorithm::EdDSA),
-        (v["p256"]["apple_p8"].as_str().unwrap().to_owned(), Algorithm::ES256),
-        (v["p384"]["private_pem"].as_str().unwrap().to_owned(), Algorithm::ES384),
+        (
+            v["ed25519"]["private_pem"].as_str().unwrap().to_owned(),
+            Algorithm::EdDSA,
+        ),
+        (
+            v["p256"]["apple_p8"].as_str().unwrap().to_owned(),
+            Algorithm::ES256,
+        ),
+        (
+            v["p384"]["private_pem"].as_str().unwrap().to_owned(),
+            Algorithm::ES384,
+        ),
         (fixture("rsa-2048.pem"), Algorithm::RS256),
     ];
     for (pem, alg) in cases {
         assert_eq!(SigningKey::from_pem(&pem).unwrap().algorithm(), alg);
-        assert_eq!(SigningKey::from_pkcs8_der(&der(&pem)).unwrap().algorithm(), alg);
+        assert_eq!(
+            SigningKey::from_pkcs8_der(&der(&pem)).unwrap().algorithm(),
+            alg
+        );
     }
 }
 
@@ -61,7 +79,10 @@ fn bad_keys_are_refused_with_a_reason() {
     for (input, why) in [
         ("not a key", "not PEM"),
         ("", "empty"),
-        ("-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----", "not PKCS#8"),
+        (
+            "-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----",
+            "not PKCS#8",
+        ),
     ] {
         assert!(
             matches!(SigningKey::from_pem(input), Err(JoseError::InvalidKey(_))),
@@ -79,9 +100,10 @@ fn bad_keys_are_refused_with_a_reason() {
     assert!(SigningKey::from_pkcs8_der(&short).is_err());
 
     // Errors never echo the input.
-    let error = SigningKey::from_pem("-----BEGIN PRIVATE KEY-----\nU0VDUkVU\n-----END PRIVATE KEY-----")
-        .unwrap_err()
-        .to_string();
+    let error =
+        SigningKey::from_pem("-----BEGIN PRIVATE KEY-----\nU0VDUkVU\n-----END PRIVATE KEY-----")
+            .unwrap_err()
+            .to_string();
     assert!(!error.contains("U0VDUkVU"), "{error}");
 }
 
@@ -145,7 +167,10 @@ fn es256_keys_generate_and_export_as_pkcs8() {
     let again = SigningKey::from_pem(&pem).unwrap();
     assert_eq!(again.public_jwk(), key.public_jwk());
     let token = again.sign_jwt(&json!({"sub": "1"})).unwrap();
-    Jws::parse(&token).unwrap().verify(&key.verifying_key()).unwrap();
+    Jws::parse(&token)
+        .unwrap()
+        .verify(&key.verifying_key())
+        .unwrap();
     // The Apple-style document exports in the plain layout and loads back.
     let apple = SigningKey::from_pem(&fixture("apple-authkey.p8")).unwrap();
     let exported = SigningKey::from_pem(&apple.to_pkcs8_pem().unwrap()).unwrap();
@@ -160,7 +185,10 @@ fn rsa_keys_load_from_pkcs8_and_pkcs1() {
     let public = key.public_jwk().unwrap();
     assert_eq!(public.kty, "RSA");
     assert_eq!(public.e.as_deref(), Some("AQAB"));
-    assert_eq!(URL_SAFE_NO_PAD.decode(public.n.unwrap()).unwrap().len(), 256);
+    assert_eq!(
+        URL_SAFE_NO_PAD.decode(public.n.unwrap()).unwrap().len(),
+        256
+    );
 
     // The PKCS#1 `RSA PRIVATE KEY` inside the PKCS#8 document.
     let pkcs8 = der(&pem);
@@ -175,17 +203,31 @@ fn rsa_keys_load_from_pkcs8_and_pkcs1() {
     );
     // Only the RSA family is allowed.
     assert!(key.clone().with_algorithm(Algorithm::ES256).is_err());
-    assert!(SigningKey::generate_ed25519().with_algorithm(Algorithm::ES256).is_err());
-    assert!(SigningKey::generate_ed25519().with_algorithm(Algorithm::EdDSA).is_ok());
+    assert!(
+        SigningKey::generate_ed25519()
+            .with_algorithm(Algorithm::ES256)
+            .is_err()
+    );
+    assert!(
+        SigningKey::generate_ed25519()
+            .with_algorithm(Algorithm::EdDSA)
+            .is_ok()
+    );
 }
 
 #[test]
 fn private_jwks_load_for_each_key_type() {
     let v = json_fixture("independent-vectors.json");
     let ed: Jwk = serde_json::from_value(v["ed25519"]["private_jwk"].clone()).unwrap();
-    assert_eq!(SigningKey::from_jwk(&ed).unwrap().algorithm(), Algorithm::EdDSA);
+    assert_eq!(
+        SigningKey::from_jwk(&ed).unwrap().algorithm(),
+        Algorithm::EdDSA
+    );
     let ec: Jwk = serde_json::from_value(v["p256"]["private_jwk"].clone()).unwrap();
-    assert_eq!(SigningKey::from_jwk(&ec).unwrap().algorithm(), Algorithm::ES256);
+    assert_eq!(
+        SigningKey::from_jwk(&ec).unwrap().algorithm(),
+        Algorithm::ES256
+    );
 
     // An oct key with an `alg` signs with it; without, HS256.
     let oct = Jwk {
@@ -193,24 +235,56 @@ fn private_jwks_load_for_each_key_type() {
         k: Some(URL_SAFE_NO_PAD.encode([1_u8; 64])),
         ..Jwk::default()
     };
-    assert_eq!(SigningKey::from_jwk(&oct).unwrap().algorithm(), Algorithm::HS256);
-    let hs512 = Jwk { alg: Some("HS512".into()), ..oct.clone() };
-    assert_eq!(SigningKey::from_jwk(&hs512).unwrap().algorithm(), Algorithm::HS512);
+    assert_eq!(
+        SigningKey::from_jwk(&oct).unwrap().algorithm(),
+        Algorithm::HS256
+    );
+    let hs512 = Jwk {
+        alg: Some("HS512".into()),
+        ..oct.clone()
+    };
+    assert_eq!(
+        SigningKey::from_jwk(&hs512).unwrap().algorithm(),
+        Algorithm::HS512
+    );
 
     // The JWK's kid and alg carry over.
-    let named = Jwk { kid: Some("ed".into()), alg: Some("EdDSA".into()), ..ed.clone() };
+    let named = Jwk {
+        kid: Some("ed".into()),
+        alg: Some("EdDSA".into()),
+        ..ed.clone()
+    };
     assert_eq!(SigningKey::from_jwk(&named).unwrap().kid(), Some("ed"));
     assert_eq!(VerifyingKey::from_jwk(&named).unwrap().kid(), Some("ed"));
 
     // Public JWKs, wrong curves and inconsistent halves are refused.
     for bad in [
         ed.to_public(),
-        Jwk { crv: Some("X25519".into()), ..ed.clone() },
-        Jwk { x: ec.x.clone(), ..ed.clone() },
-        Jwk { kty: "EC".into(), crv: Some("P-521".into()), ..ec.clone() },
-        Jwk { d: Some("AAAA".into()), ..ec.clone() },
-        Jwk { alg: Some("RS256".into()), ..ec.clone() },
-        Jwk { kty: "dsa".into(), ..Jwk::default() },
+        Jwk {
+            crv: Some("X25519".into()),
+            ..ed.clone()
+        },
+        Jwk {
+            x: ec.x.clone(),
+            ..ed.clone()
+        },
+        Jwk {
+            kty: "EC".into(),
+            crv: Some("P-521".into()),
+            ..ec.clone()
+        },
+        Jwk {
+            d: Some("AAAA".into()),
+            ..ec.clone()
+        },
+        Jwk {
+            alg: Some("RS256".into()),
+            ..ec.clone()
+        },
+        Jwk {
+            kty: "dsa".into(),
+            ..Jwk::default()
+        },
     ] {
         assert!(SigningKey::from_jwk(&bad).is_err(), "{bad:?}");
     }
@@ -219,7 +293,9 @@ fn private_jwks_load_for_each_key_type() {
 #[test]
 fn public_keys_load_from_raw_components() {
     let ed = SigningKey::ed25519_from_seed(&[5; 32]);
-    let x = URL_SAFE_NO_PAD.decode(ed.public_jwk().unwrap().x.unwrap()).unwrap();
+    let x = URL_SAFE_NO_PAD
+        .decode(ed.public_jwk().unwrap().x.unwrap())
+        .unwrap();
     let token = ed.sign_jwt(&json!({})).unwrap();
     Jws::parse(&token)
         .unwrap()
@@ -246,8 +322,16 @@ fn public_keys_load_from_raw_components() {
     let mut padded = vec![0, 0];
     padded.extend_from_slice(&[0xff; 256]);
     assert_eq!(
-        VerifyingKey::rsa(&padded, &[1, 0, 1]).unwrap().to_jwk().unwrap().n,
-        VerifyingKey::rsa(&[0xff; 256], &[1, 0, 1]).unwrap().to_jwk().unwrap().n
+        VerifyingKey::rsa(&padded, &[1, 0, 1])
+            .unwrap()
+            .to_jwk()
+            .unwrap()
+            .n,
+        VerifyingKey::rsa(&[0xff; 256], &[1, 0, 1])
+            .unwrap()
+            .to_jwk()
+            .unwrap()
+            .n
     );
 }
 

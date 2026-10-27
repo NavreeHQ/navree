@@ -298,9 +298,7 @@ pub(crate) fn rsa_public_key(der: &[u8]) -> Option<PublicKeyInfo<'_>> {
     let mut reader = Reader::new(Reader::only(der, SEQUENCE)?);
     let n = unsigned(reader.expect(INTEGER)?)?;
     let e = unsigned(reader.expect(INTEGER)?)?;
-    reader
-        .is_empty()
-        .then_some(PublicKeyInfo::Rsa { n, e })
+    reader.is_empty().then_some(PublicKeyInfo::Rsa { n, e })
 }
 
 /// A DER element.

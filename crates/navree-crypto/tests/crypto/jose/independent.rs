@@ -40,7 +40,10 @@ fn eddsa_tokens_verify_with_the_public_pem_and_jwk() {
         &VerifyingKey::from_jwk(&jwk(&ed["public_jwk"])).unwrap(),
         &v["claims"],
     );
-    assert_eq!(Jws::parse(token).unwrap().header().kid.as_deref(), Some("ed-1"));
+    assert_eq!(
+        Jws::parse(token).unwrap().header().kid.as_deref(),
+        Some("ed-1")
+    );
 }
 
 #[test]
@@ -50,7 +53,10 @@ fn ed25519_private_keys_load_from_pkcs8_v1_pem_and_jwk() {
     let from_pem = SigningKey::from_pem(ed["private_pem"].as_str().unwrap()).unwrap();
     let from_jwk = SigningKey::from_jwk(&jwk(&ed["private_jwk"])).unwrap();
     assert_eq!(from_pem.algorithm(), Algorithm::EdDSA);
-    assert_eq!(from_pem.public_jwk().unwrap().x, ed["public_jwk"]["x"].as_str().map(str::to_owned));
+    assert_eq!(
+        from_pem.public_jwk().unwrap().x,
+        ed["public_jwk"]["x"].as_str().map(str::to_owned)
+    );
     // Deterministic signatures: both keys sign alike, and the other
     // implementation's token is reproduced exactly.
     let token = ed["jws"].as_str().unwrap();
@@ -150,7 +156,12 @@ fn rsa_private_keys_sign_what_the_public_key_verifies() {
     let public = VerifyingKey::from_pem(rsa["public_pem"].as_str().unwrap()).unwrap();
     let key = SigningKey::from_pem(rsa["private_pem"].as_str().unwrap()).unwrap();
     assert_eq!(key.algorithm(), Algorithm::RS256);
-    for alg in [Algorithm::RS256, Algorithm::RS512, Algorithm::PS256, Algorithm::PS384] {
+    for alg in [
+        Algorithm::RS256,
+        Algorithm::RS512,
+        Algorithm::PS256,
+        Algorithm::PS384,
+    ] {
         let key = SigningKey::from_pem(rsa["private_pem"].as_str().unwrap())
             .unwrap()
             .with_algorithm(alg)
@@ -169,7 +180,11 @@ fn hmac_tokens_verify_for_each_hash() {
         .unwrap();
     for alg in [Algorithm::HS256, Algorithm::HS384, Algorithm::HS512] {
         let token = v["hmac"]["jws"][alg.as_str()].as_str().unwrap();
-        verifies(token, &VerifyingKey::hmac(alg, &secret).unwrap(), &v["claims"]);
+        verifies(
+            token,
+            &VerifyingKey::hmac(alg, &secret).unwrap(),
+            &v["claims"],
+        );
         // The same secret signs the same token (HMAC is deterministic, and
         // the header is the same JSON).
         let (input, signature) = token.rsplit_once('.').unwrap();
