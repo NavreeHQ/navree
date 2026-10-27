@@ -353,6 +353,7 @@ fn too_large(max_bytes: u64) -> AppError {
 /// 400: not the declared size.
 fn wrong_size(size: u64) -> AppError {
     AppError::bad_request(format!("The upload must be exactly {size} bytes long."))
+        .with_code("upload_size_mismatch")
 }
 
 /// `expires` and `signature` from the query; `None` unless each appears
