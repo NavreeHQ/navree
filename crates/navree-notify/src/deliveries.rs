@@ -286,6 +286,34 @@ impl DeliveryLog {
         Ok(rows.into_iter().map(Record::into_inner).collect())
     }
 
+    /// The recipients notification `id` already reached over `channel`
+    /// (status other than `failed` and `opted_out`), on the pool.
+    pub(crate) async fn sent_recipients(
+        &self,
+        id: Uuid,
+        channel: Channel,
+    ) -> Result<Vec<String>, NotifyError> {
+        let exec = Exec::pool(&self.app).await?;
+        let rows = on!(&exec, e => NotificationDelivery::query()
+            .where_(NotificationDelivery::NOTIFICATION_ID.eq(id))
+            .where_(NotificationDelivery::CHANNEL.eq(channel.as_str()))
+            .where_in(
+                NotificationDelivery::STATUS,
+                [
+                    DeliveryStatus::Sent.as_str(),
+                    DeliveryStatus::Delivered.as_str(),
+                    DeliveryStatus::Read.as_str(),
+                ],
+            )
+            .get(e)
+            .await)
+        .map_err(DbErr::from)?;
+        Ok(rows
+            .into_iter()
+            .filter_map(|row| row.into_inner().recipient)
+            .collect())
+    }
+
     /// The delivery a provider's message id names.
     pub async fn find_by_message(
         &self,

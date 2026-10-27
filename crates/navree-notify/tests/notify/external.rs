@@ -436,6 +436,40 @@ async fn web_push_goes_to_every_subscription_and_drops_gone_ones() {
 }
 
 #[tokio::test]
+async fn a_retried_web_push_job_skips_the_subscriptions_it_reached() {
+    let dispatcher = Arc::new(RecordingDispatcher::default());
+    let fakes = Fakes::default();
+    let app = fakes
+        .install(support::builder(NotifyOptions {
+            queue: true,
+            ..support::channel_options()
+        }))
+        .override_value::<dyn Dispatcher>(dispatcher.clone())
+        .build()
+        .await;
+    let member = Member::new();
+    let push = app.get::<PushSubscriptions>().await;
+    let phone = subscription("https://fcm.googleapis.com/fcm/send/phone");
+    push.subscribe(&member, phone.clone(), None).await.unwrap();
+    app.get::<Notifier>()
+        .await
+        .send(&member, Alert::via(&[Channel::WebPush], "Deal won"))
+        .await
+        .unwrap();
+    let job = dispatcher.jobs().remove(0);
+
+    support::run_job(&app, &job).await.unwrap();
+    // The job runs again (a retry after a later failure): the phone already
+    // has it, a laptop subscribed since gets it.
+    let laptop = subscription("https://updates.push.services.mozilla.com/wpush/v2/laptop");
+    push.subscribe(&member, laptop.clone(), None).await.unwrap();
+    support::run_job(&app, &job).await.unwrap();
+
+    assert_eq!(fakes.web_push.sent_to(&phone.endpoint).len(), 1);
+    assert_eq!(fakes.web_push.sent_to(&laptop.endpoint).len(), 1);
+}
+
+#[tokio::test]
 async fn web_push_without_subscriptions_sends_nothing() {
     let recorder = TelemetryRecorder::new();
     let fakes = Fakes::default();

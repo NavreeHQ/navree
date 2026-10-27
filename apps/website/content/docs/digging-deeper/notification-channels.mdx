@@ -430,7 +430,7 @@ The routes are part of the [notification routes](/docs/digging-deeper/notificati
 
 A subscription needs an `https` endpoint (`http` only on `localhost`), a P-256 `p256dh` key and an `auth` secret of at least 16 bytes; otherwise the answer is a 400 naming the field. Saving an endpoint that is already saved moves it to the signed-in user, with the new keys: a browser profile belongs to whoever signed in on it last. In code, `PushSubscriptions` has `subscribe`, `unsubscribe`, `of(notifiable_type, notifiable_id)` and `delete`.
 
-The channel sends to every subscription of the notifiable when the notification goes out. A push service that answers `404` or `410` has dropped the subscription, so it is deleted, and the notification still succeeds. Push endpoints come from browsers, so the driver calls them with the default [SSRF policy](/docs/digging-deeper/http-client/): an endpoint at an internal address is refused.
+The channel sends to every subscription of the notifiable when the notification goes out. A push service that answers `404` or `410` has dropped the subscription, so it is deleted, and the notification still succeeds. With `notify.deliveries` on, a retried `notify.send` job skips the subscriptions an earlier attempt reached, so a failure at one push service doesn't push twice to the others. Push endpoints come from browsers, so the driver calls them with the default [SSRF policy](/docs/digging-deeper/http-client/): an endpoint at an internal address is refused.
 
 | `WebPushMessage` | |
 |---|---|

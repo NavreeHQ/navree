@@ -442,10 +442,19 @@ impl Notifier {
             .push
             .of(&job.notifiable_type, &job.notifiable_id)
             .await?;
+        // A retried job skips the subscriptions an earlier attempt reached.
+        let reached = if self.options.deliveries {
+            self.log.sent_recipients(job.id, Channel::WebPush).await?
+        } else {
+            Vec::new()
+        };
         let mut sent_any = false;
         let mut errors = Vec::new();
         for subscription in subscriptions {
             let recipient = subscription.id.to_string();
+            if reached.contains(&recipient) {
+                continue;
+            }
             let outcome = match driver.send(&subscription.target(), message).await {
                 Ok(sent) => {
                     sent_any = true;
