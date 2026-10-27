@@ -110,6 +110,7 @@ navree list                                 # every command of the app
 | Events and listeners, live updates over WebSockets, private channels | `navree-events-and-broadcasting` |
 | Emails, templates, notifications | `navree-mail-and-notifications` |
 | SES, Mailgun, Postmark or Resend; customers' own mail transports or domains; bounces, complaints, suppressions; the mail log; holding mail for approval; open and click tracking; SPF, DKIM and DMARC | `navree-mail-delivery` |
+| Receiving mail: replies to notifications or tickets, a support or reporting address, forwarded phishing reports, signed reply addresses, SES, Mailgun or Postmark inbound, a customer's Microsoft 365 or Gmail mailbox | `navree-inbound-mail` |
 | Slack or Teams messages, SMS (Twilio, Vonage, SNS), WhatsApp, browser push notifications; STOP opt-outs, delivery statuses, VAPID keys | `navree-notification-channels` |
 | Notification preference screens, turning channels off per category, daily or weekly digest mail, quiet hours, business-hours send windows, tenants restyling notification mail | `navree-notification-preferences` |
 | Uploads, downloads, disks, signed links | `navree-storage` |

@@ -70,7 +70,7 @@ Every module crate is re-exported whole, as a module of the facade. `navree::db:
 | `navree::testing` | navree-testing | `testing` | `TestApp`, `TestClient` |
 | `navree::observe` | navree-observe | `observe` | `ObserveModule`: health checks and metrics |
 | `navree::api` | navree-api | `api` | `ApiModule`: OpenAPI document and docs UI |
-| `navree::mail` | navree-mail | `mail` | `MailModule`: mailables, transports (SMTP, SES, Mailgun, Postmark, Resend), queued mail, the delivery log, suppressions, tracking |
+| `navree::mail` | navree-mail | `mail` | `MailModule`: mailables, transports (SMTP, SES, Mailgun, Postmark, Resend), queued mail, the delivery log, suppressions, tracking; [inbound mail](/docs/digging-deeper/inbound-mail/) with `mail-inbound` |
 | `navree::realtime` | navree-realtime | `realtime` | `RealtimeModule`: Pusher-protocol broadcasting |
 | `navree::storage` | navree-storage | `storage` | `StorageModule`: [disks](/docs/digging-deeper/storage/), signed links, direct uploads, disk sync |
 | `navree::time` | navree-time | `time` | `TimeModule`: [time zones](/docs/digging-deeper/time-zones/), `CurrentZone`, local days, send windows, holidays |
@@ -179,6 +179,7 @@ navree = { git = "https://github.com/NavreeHQ/navree", default-features = false,
 | `db` | `http`, `schema` |
 | `testing`, `observe`, `api`, `time` | `http` |
 | `mail` | `view`, `http`, `crypto`, `events`, `http-client`, `db` |
+| `mail-inbound` (in `full`) | `mail`, `storage`, and navree-mail's inbound mail; with `integrations` on, watched Microsoft 365 and Gmail mailboxes |
 | `realtime`, `storage` | `http`, `crypto` |
 | `session` | `http`, `crypto`, `db` |
 | `validation`, `audit`, `access` | `http`, `db` |
