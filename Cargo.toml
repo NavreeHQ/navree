@@ -82,6 +82,7 @@ navree-sso = { path = "crates/navree-sso", version = "0.1.0" }
 navree-documents = { path = "crates/navree-documents", version = "0.1.0" }
 navree-sheets = { path = "crates/navree-sheets", version = "0.1.0" }
 navree-workflows = { path = "crates/navree-workflows", version = "0.1.0" }
+navree-media = { path = "crates/navree-media", version = "0.1.0" }
 
 # ---------------------------------------------------------------------------
 # Runtime, async and HTTP (Tokio family)
@@ -388,6 +389,15 @@ rmcp = { version = "3.7.0", default-features = false, features = [
     "transport-streamable-http-server",
 ] }
 async-trait = "0.1.92"
+# Media (navree-media), all pure Rust: image codecs without AVIF (rav1e and
+# dav1d need NASM or C), SIMD resizing, SVG rendering on tiny-skia, PDF text
+# through lopdf (its row is under Documents), DOCX through quick-xml (its row
+# is under navree-sso) and HTML text through html5ever's tokenizer (already in
+# the tree through ammonia).
+image = { version = "0.25.10", default-features = false, features = ["bmp", "gif", "jpeg", "png", "webp"] }
+fast_image_resize = { version = "6.1.0", features = ["image"] }
+resvg = { version = "0.49.0", default-features = false, features = ["raster-images", "system-fonts", "text"] }
+html5ever = "0.40.1"
 # Helm: Markdown fields (rendered without raw HTML) and field patterns.
 pulldown-cmark = { version = "0.13.5", default-features = false, features = ["html"] }
 regex = "1.13.1"
