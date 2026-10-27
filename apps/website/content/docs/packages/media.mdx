@@ -457,7 +457,7 @@ for (number, page) in document.pages.iter().enumerate() {
 
 ## Video and audio
 
-<Badge feature="media-ffmpeg" /> With `media-ffmpeg`, video and audio files are probed when they are added, and conversions can grab frames and transcode. The work runs in `ffmpeg` and `ffprobe`, started as child processes without a shell and killed after `media.ffmpeg.timeout_secs`.
+<Badge feature="media-ffmpeg" /> With `media-ffmpeg`, video and audio files are probed when they are added, and conversions can grab frames and transcode. The work runs in `ffmpeg` and `ffprobe`, started as child processes without a shell and killed after `media.ffmpeg.timeout_secs`. Inputs are opened with `-protocol_whitelist file`, so a crafted upload (a playlist hidden in a container) cannot make FFmpeg fetch URLs. FFmpeg still parses whatever people upload: run it with the least privileges you can, in its own container or as a user that can read nothing else.
 
 ```rust
 use navree::media::video::Transcode;
