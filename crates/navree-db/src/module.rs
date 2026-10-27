@@ -104,7 +104,7 @@ fn register(m: &mut ModuleBuilder, options: Option<DbOptions>) {
                 let telemetry = Telemetry::from_app(&r.app()).await;
                 let db = Db::connect_with_telemetry(&options, telemetry)
                     .await?
-                    .with_app(r.app().downgrade());
+                    .with_app(&r.app());
                 if options.migrate_on_boot {
                     migrate::run_up(&db, &migrate::sets_of(&r.app())).await?;
                 }
