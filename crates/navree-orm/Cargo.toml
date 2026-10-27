@@ -28,6 +28,7 @@ indexmap = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-db = { workspace = true }
+navree-events = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
 navree-orm-macros = { workspace = true }

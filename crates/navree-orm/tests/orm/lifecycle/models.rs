@@ -39,6 +39,18 @@ CREATE TABLE probes (
     note TEXT NULL,
     level TEXT NOT NULL
 );
+CREATE TABLE log_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    message TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted_at TEXT NULL
+);
+CREATE TABLE metrics (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    recorded_at TEXT NOT NULL
+);
 CREATE TABLE members (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     email TEXT NOT NULL UNIQUE,
@@ -188,6 +200,70 @@ pub struct Probe {
     pub note: Option<String>,
     #[model(cast = "string_enum")]
     pub level: Level,
+}
+
+/// Before this, records are old enough to prune.
+pub fn prune_cutoff() -> DateTime<Utc> {
+    use chrono::TimeZone;
+    Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap()
+}
+
+/// What `LogEntry::pruning` saw, across tests (each test uses its own
+/// messages).
+pub static PRUNING_LOG: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+/// The lines of `PRUNING_LOG` starting with `prefix`, taken out.
+pub fn pruned_with_prefix(prefix: &str) -> Vec<String> {
+    let mut log = PRUNING_LOG.lock().unwrap();
+    let (mine, others): (Vec<String>, Vec<String>) =
+        log.drain(..).partition(|line| line.starts_with(prefix));
+    *log = others;
+    mine
+}
+
+/// A log line, pruned record by record once it is old.
+#[derive(Model, Clone, Debug, Default, PartialEq, Serialize)]
+#[model(timestamps, soft_deletes, prunable)]
+pub struct LogEntry {
+    pub id: i64,
+    pub message: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub deleted_at: Option<DateTime<Utc>>,
+}
+
+impl navree_orm::prune::Prunable for LogEntry {
+    fn prunable(query: navree_orm::Builder<Self>) -> navree_orm::Builder<Self> {
+        query.where_(LogEntry::CREATED_AT.lt(prune_cutoff()))
+    }
+
+    async fn pruning(&self, _ctx: &ExecContext) -> Result<()> {
+        if self.message.ends_with("explode") {
+            return Err(navree_orm::OrmError::Hook {
+                model: "LogEntry".into(),
+                message: format!("cannot archive {}", self.message),
+            });
+        }
+        PRUNING_LOG.lock().unwrap().push(self.message.clone());
+        Ok(())
+    }
+}
+
+/// A measurement, pruned a chunk per statement once it is old.
+#[derive(Model, Clone, Debug, Default, PartialEq, Serialize)]
+#[model(mass_prunable)]
+pub struct Metric {
+    pub id: i64,
+    pub name: String,
+    pub recorded_at: DateTime<Utc>,
+}
+
+impl navree_orm::prune::MassPrunable for Metric {
+    const CHUNK_SIZE: Option<u64> = Some(2);
+
+    fn prunable(query: navree_orm::Builder<Self>) -> navree_orm::Builder<Self> {
+        query.where_(Metric::RECORDED_AT.lt(prune_cutoff()))
+    }
 }
 
 /// A soft-deleting model with a unique column.

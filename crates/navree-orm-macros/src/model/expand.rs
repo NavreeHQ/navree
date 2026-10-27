@@ -181,6 +181,8 @@ pub(crate) fn expand(model: &Model, krate: &TokenStream) -> TokenStream {
     if let Some(per_page) = &model.per_page {
         meta = quote!(#meta.per_page(#per_page));
     }
+    let lifecycle_meta = super::lifecycle::meta_additions(&model.lifecycle, ident, krate);
+    meta = quote!(#meta #lifecycle_meta);
 
     // from_row.
     let reads = model.columns.iter().zip(&codecs).map(|(column, codec)| {
