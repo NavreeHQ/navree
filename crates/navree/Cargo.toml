@@ -28,6 +28,7 @@ full = [
     "helm",
     "http",
     "http-client",
+    "integrations",
     "lighthouse",
     "log",
     "logbook",
@@ -139,6 +140,21 @@ webhooks = [
     "events",
     "http-client",
     "db",
+    "workspace",
+]
+## Integrations: workspace and organization connections to Microsoft 365,
+## Google Workspace, Slack, OAuth 2.0 APIs and API keys, with encrypted
+## credentials, token refresh, scope sets and health checks (pure Rust; in
+## `full`).
+integrations = [
+    "dep:navree-integrations",
+    "http",
+    "crypto",
+    "cache",
+    "events",
+    "http-client",
+    "db",
+    "schedule",
     "workspace",
 ]
 ## L6 (opt-in, not in `full`)
@@ -397,6 +413,7 @@ navree-harbor = { workspace = true, optional = true }
 navree-http = { workspace = true, optional = true }
 navree-http-client = { workspace = true, optional = true }
 navree-i18n = { workspace = true, optional = true }
+navree-integrations = { workspace = true, optional = true }
 navree-lighthouse = { workspace = true, optional = true }
 navree-log = { workspace = true, optional = true }
 navree-logbook = { workspace = true, optional = true }
@@ -440,6 +457,9 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
+# `tests/integrations_docs.rs`: the page's listener logs with tracing, as
+# an app does.
+tracing = { workspace = true }
 utoipa = { workspace = true }
 uuid = { workspace = true }
 # The gRPC docs example: tonic's generated code names these crates.

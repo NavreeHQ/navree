@@ -131,6 +131,9 @@ pub use navree_workspace::{
 #[cfg(feature = "webhooks")]
 pub use navree_webhooks::{ModuleBuilderWebhooksExt as _, WebhooksModule};
 
+#[cfg(feature = "integrations")]
+pub use navree_integrations::{IntegrationsModule, ModuleBuilderIntegrationsExt as _};
+
 #[cfg(feature = "social")]
 pub use navree_social::SocialModule;
 

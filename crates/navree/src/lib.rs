@@ -41,6 +41,7 @@
 //! | `workspace` | navree-workspace | `workspace` | `WorkspaceModule`: workspaces, members, roles, invitations, isolation, organizations, partitions |
 //! | `redis` | navree-redis | `redis` (opt-in) | `RedisModule`: shared Redis connections; Redis cache, locks, queue, sessions, rate limits and real-time backplane |
 //! | `webhooks` | navree-webhooks | `webhooks` | `WebhooksModule`: signed outgoing webhooks with retries, verified incoming ones |
+//! | `integrations` | navree-integrations | `integrations` | `IntegrationsModule`: workspace and organization connections to Microsoft 365, Google Workspace, Slack, OAuth 2.0 APIs and API keys |
 //! | `social` | navree-social | `social` (opt-in) | `SocialModule`: sign-in with Google, GitHub, Apple and other providers |
 //! | `oauth` | navree-oauth | `oauth` (opt-in) | `OAuthServerModule`: OAuth 2.1 and OpenID Connect provider, personal access tokens |
 //! | `flags` | navree-flags (plus `#[flag]`) | `flags` (opt-in) | `FlagsModule`: feature flags per user, workspace, plan or percentage |
@@ -216,6 +217,8 @@ pub use navree_redis as redis;
 // L6: ecosystem libraries.
 #[cfg(feature = "webhooks")]
 pub use navree_webhooks as webhooks;
+#[cfg(feature = "integrations")]
+pub use navree_integrations as integrations;
 
 // L6 (opt-in)
 #[cfg(feature = "grpc")]

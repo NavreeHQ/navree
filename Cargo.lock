@@ -4157,6 +4157,7 @@ dependencies = [
  "navree-http",
  "navree-http-client",
  "navree-i18n",
+ "navree-integrations",
  "navree-kernel",
  "navree-lighthouse",
  "navree-log",
@@ -4196,6 +4197,7 @@ dependencies = [
  "tokio-stream",
  "tonic",
  "tonic-prost",
+ "tracing",
  "utoipa",
  "uuid",
 ]
