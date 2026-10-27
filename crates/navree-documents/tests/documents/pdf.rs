@@ -22,17 +22,19 @@ fn merge_keeps_every_page_in_order() {
     ));
 }
 
-#[cfg(feature = "typst")]
+#[cfg(feature = "native")]
 #[tokio::test]
 async fn merge_works_on_rendered_documents_with_fonts() {
-    use navree_documents::{Render, TypstEngine};
-    let engine = TypstEngine::new(crate::support::fixture_templates());
+    use navree_documents::{NativeEngine, Render};
+    let engine = NativeEngine::new(crate::support::fixture_templates());
     let arabic = engine
-        .render(&Render::typst("مرحبا بالعالم").locale("ar"))
+        .render(&Render::html("<p>مرحبا بالعالم</p>").locale("ar"))
         .await
         .unwrap();
     let english = engine
-        .render(&Render::typst("Hello\n#pagebreak()\nWorld"))
+        .render(&Render::html(
+            "<p>Hello</p><div class=\"page-break\"></div><p>World</p>",
+        ))
         .await
         .unwrap();
     let merged = Pdf::merge([&arabic, &english]).unwrap();
@@ -102,15 +104,16 @@ fn a_stamp_in_another_script_points_to_overlays() {
     assert!(error.to_string().contains("Pdf::overlay"), "{error}");
 }
 
-#[cfg(feature = "typst")]
+#[cfg(feature = "native")]
 #[tokio::test]
-async fn an_overlay_rendered_with_typst_carries_any_script() {
-    use navree_documents::{Render, TypstEngine};
-    let engine = TypstEngine::new(crate::support::fixture_templates());
+async fn an_overlay_rendered_natively_carries_any_script() {
+    use navree_documents::{Margins, NativeEngine, PrintOptions, Render};
+    let engine = NativeEngine::new(crate::support::fixture_templates());
     let seal = engine
-        .render(&Render::typst(
-            "#set page(paper: \"a4\", margin: 0pt)\n#place(bottom + right, dx: -2cm, dy: -2cm, text(size: 16pt)[مدفوع — PAID])",
-        ))
+        .render(
+            &Render::html("<p style=\"text-align: right; font-size: 16pt\">مدفوع — PAID</p>")
+                .print(PrintOptions::a4().margin(Margins::all(20.0))),
+        )
         .await
         .unwrap();
     let invoice = Pdf::from_lines(["Invoice 42", "Total 120.00 EUR"]);
@@ -122,14 +125,14 @@ async fn an_overlay_rendered_with_typst_carries_any_script() {
     assert!(text.contains("PAID"), "{text}");
 }
 
-#[cfg(feature = "typst")]
+#[cfg(feature = "native")]
 #[tokio::test]
 async fn an_overlay_of_another_size_is_scaled_to_fit() {
-    use navree_documents::{Render, TypstEngine};
-    let engine = TypstEngine::new(crate::support::fixture_templates());
+    use navree_documents::{NativeEngine, Render};
+    let engine = NativeEngine::new(crate::support::fixture_templates());
     let small = engine
-        .render(&Render::typst(
-            "#set page(width: 6cm, height: 3cm, margin: 0pt)\n#align(center + horizon)[SEAL]",
+        .render(&Render::html(
+            "<style>@page { size: 60mm 30mm; margin: 0 }</style><p style=\"text-align: center\">SEAL</p>",
         ))
         .await
         .unwrap();

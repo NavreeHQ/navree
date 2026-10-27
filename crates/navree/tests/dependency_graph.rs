@@ -308,8 +308,8 @@ const HIERARCHY: &[Rule] = &[
         "navree-db", "navree-validation", "navree-notify", "navree-workspace",
         "navree-i18n-macros",
     ]),
-    // Documents: PDF from Typst templates (an embedded compiler) or HTML
-    // templates (navree-view, printed by headless Chrome), DOCX, and PDF
+    // Documents: PDF from HTML templates (navree-view) laid out by the
+    // native engine or printed by headless Chrome, DOCX, and PDF
     // merge and stamp. Queued renders go through the job dispatcher of
     // navree-contracts and land on a storage disk; with its `operations`
     // feature, a render runs as the work of a navree-queue operation

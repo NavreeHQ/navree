@@ -53,7 +53,7 @@
 //! | `graphql` | navree-graphql | `graphql` (opt-in) | `GraphqlModule`: `#[resolver]`, dataloaders, subscriptions |
 //! | `grpc` | navree-grpc | `grpc` (opt-in) | `GrpcModule`: tonic services with gRPC-Web, Connect, health and reflection |
 //! | `lighthouse` | navree-lighthouse | `lighthouse` | `LighthouseModule`: issues, traces, alerts and the `/_lighthouse` dashboard |
-//! | `documents` | navree-documents | `documents` (opt-in) | `DocumentsModule`: PDF from Typst or HTML templates, DOCX, merge and stamps |
+//! | `documents` | navree-documents | `documents` (opt-in) | `DocumentsModule`: PDF from HTML templates or `PdfDocument` (native engine or Chrome), DOCX, merge and stamps |
 //! | `billing` | navree-billing | `billing` (opt-in) | `BillingModule`: subscriptions, trials, usage, invoices with Stripe or Paddle |
 //! | `search` | navree-search | `search` (opt-in) | `SearchModule`: full-text and vector search, `#[derive(Searchable)]` |
 //! | `logbook` | navree-logbook | `logbook` | `LogbookModule`: the local debugging timeline at `/_logbook`, with replay |
