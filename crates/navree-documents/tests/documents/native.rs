@@ -28,17 +28,27 @@ fn load(pdf: &Pdf) -> Document {
 }
 
 fn catalog(document: &Document) -> &Dictionary {
-    let root = document.trailer.get(b"Root").unwrap().as_reference().unwrap();
+    let root = document
+        .trailer
+        .get(b"Root")
+        .unwrap()
+        .as_reference()
+        .unwrap();
     document.get_dictionary(root).unwrap()
 }
 
 fn resolve<'a>(document: &'a Document, object: &'a Object) -> &'a Object {
-    document.dereference(object).map(|(_, o)| o).unwrap_or(object)
+    document
+        .dereference(object)
+        .map(|(_, o)| o)
+        .unwrap_or(object)
 }
 
 /// A string of the Info dictionary.
 fn info(document: &Document, key: &[u8]) -> Option<String> {
-    let info = resolve(document, document.trailer.get(b"Info").ok()?).as_dict().ok()?;
+    let info = resolve(document, document.trailer.get(b"Info").ok()?)
+        .as_dict()
+        .ok()?;
     let bytes = info.get(key).ok()?.as_str().ok()?;
     Some(match bytes.strip_prefix(&[0xfe, 0xff]) {
         Some(utf16) => String::from_utf16_lossy(
@@ -61,7 +71,8 @@ fn fonts(document: &Document) -> Vec<(String, bool)> {
         {
             continue;
         }
-        let name = String::from_utf8_lossy(dict.get(b"BaseFont").unwrap().as_name().unwrap()).into_owned();
+        let name =
+            String::from_utf8_lossy(dict.get(b"BaseFont").unwrap().as_name().unwrap()).into_owned();
         let descendant = resolve(document, dict.get(b"DescendantFonts").unwrap())
             .as_array()
             .unwrap()[0]
@@ -84,7 +95,9 @@ fn fonts(document: &Document) -> Vec<(String, bool)> {
 fn page_size(document: &Document, index: usize) -> (f32, f32) {
     let id = document.get_pages()[&(index as u32 + 1)];
     let page = document.get_dictionary(id).unwrap();
-    let media = resolve(document, page.get(b"MediaBox").unwrap()).as_array().unwrap();
+    let media = resolve(document, page.get(b"MediaBox").unwrap())
+        .as_array()
+        .unwrap();
     let n = |i: usize| resolve(document, &media[i]).as_float().unwrap();
     (n(2) - n(0), n(3) - n(1))
 }
@@ -92,7 +105,12 @@ fn page_size(document: &Document, index: usize) -> (f32, f32) {
 /// How many images the document draws (an image's alpha channel, its
 /// soft mask, is an image too and is not counted).
 fn images(document: &Document) -> usize {
-    let streams = || document.objects.iter().filter_map(|(id, o)| Some((*id, o.as_stream().ok()?)));
+    let streams = || {
+        document
+            .objects
+            .iter()
+            .filter_map(|(id, o)| Some((*id, o.as_stream().ok()?)))
+    };
     let masks: std::collections::HashSet<lopdf::ObjectId> = streams()
         .filter_map(|(_, s)| s.dict.get(b"SMask").and_then(Object::as_reference).ok())
         .collect();
@@ -151,7 +169,10 @@ async fn a_template_renders_with_its_data_and_its_layout() {
     // `{% extends %}` brought the layout's <title> and @page rule.
     assert_eq!(pdf.title().unwrap().as_deref(), Some("Certificate"));
     let (w, h) = page_size(&load(&pdf), 0);
-    assert!((w - 595.3).abs() < 1.0 && (h - 841.9).abs() < 1.0, "{w} x {h}");
+    assert!(
+        (w - 595.3).abs() < 1.0 && (h - 841.9).abs() < 1.0,
+        "{w} x {h}"
+    );
     // The name may carry the extension.
     let pdf = engine()
         .render(&Render::template("certificates/classic.html").data(json!({
@@ -159,12 +180,19 @@ async fn a_template_renders_with_its_data_and_its_layout() {
         })))
         .await
         .unwrap();
-    assert!(pdf.text().unwrap().contains("Grace Hopper completed Compilers"));
+    assert!(
+        pdf.text()
+            .unwrap()
+            .contains("Grace Hopper completed Compilers")
+    );
 }
 
 #[tokio::test]
 async fn unknown_and_broken_templates_name_the_file() {
-    match engine().render(&Render::template("certificates/missing")).await {
+    match engine()
+        .render(&Render::template("certificates/missing"))
+        .await
+    {
         Err(DocumentsError::TemplateNotFound { name, tried }) => {
             assert_eq!(name, "certificates/missing");
             assert_eq!(tried, vec!["certificates/missing.html"]);
@@ -265,7 +293,11 @@ async fn the_html_subset_prints() {
     assert_eq!(pages[1], "Signed off.");
     let document = load(&pdf);
     assert_eq!(links(&document), vec!["https://audit.example/q3"]);
-    assert_eq!(images(&document), 2, "the PNG and the JPEG; missing and remote ones are skipped");
+    assert_eq!(
+        images(&document),
+        2,
+        "the PNG and the JPEG; missing and remote ones are skipped"
+    );
     let names: Vec<String> = fonts(&document).into_iter().map(|(n, _)| n).collect();
     // The heading's <em> is bold italic.
     for face in [
@@ -281,7 +313,9 @@ async fn the_html_subset_prints() {
 #[tokio::test]
 async fn fonts_are_embedded_as_subsets() {
     let pdf = engine()
-        .render(&Render::html("<p>Invoice 42 — فاتورة — חשבונית — चालान</p>"))
+        .render(&Render::html(
+            "<p>Invoice 42 — فاتورة — חשבונית — चालान</p>",
+        ))
         .await
         .unwrap();
     let fonts = fonts(&load(&pdf));
@@ -290,7 +324,10 @@ async fn fonts_are_embedded_as_subsets() {
         assert!(embedded, "{name} is embedded");
         // A subset's name starts with six capitals and a plus sign.
         let (tag, _) = name.split_once('+').unwrap_or_else(|| panic!("{name}"));
-        assert!(tag.len() == 6 && tag.chars().all(|c| c.is_ascii_uppercase()), "{name}");
+        assert!(
+            tag.len() == 6 && tag.chars().all(|c| c.is_ascii_uppercase()),
+            "{name}"
+        );
     }
     // Subsets: the whole document is far smaller than the four fonts.
     assert!(pdf.len() < 60_000, "{} bytes", pdf.len());
@@ -305,11 +342,16 @@ async fn the_pdf_is_tagged_and_carries_its_metadata() {
     let document = load(&pdf);
     let catalog = catalog(&document);
     assert!(catalog.has(b"StructTreeRoot"));
-    let mark_info = resolve(&document, catalog.get(b"MarkInfo").unwrap()).as_dict().unwrap();
-    assert_eq!(mark_info.get(b"Marked").unwrap().as_bool().unwrap(), true);
+    let mark_info = resolve(&document, catalog.get(b"MarkInfo").unwrap())
+        .as_dict()
+        .unwrap();
+    assert!(mark_info.get(b"Marked").unwrap().as_bool().unwrap());
     assert_eq!(catalog.get(b"Lang").unwrap().as_str().unwrap(), b"en-GB");
     assert_eq!(pdf.title().unwrap().as_deref(), Some("Audit"));
-    assert_eq!(info(&document, b"Author").as_deref(), Some("Acme audit team"));
+    assert_eq!(
+        info(&document, b"Author").as_deref(),
+        Some("Acme audit team")
+    );
     assert!(catalog.has(b"Outlines"), "headings make the outline");
     // The structure: every kind the HTML used.
     let mut roles: Vec<String> = document
@@ -321,7 +363,9 @@ async fn the_pdf_is_tagged_and_carries_its_metadata() {
         .collect();
     roles.sort();
     roles.dedup();
-    for role in ["H1", "P", "L", "LI", "Lbl", "LBody", "Table", "TR", "TH", "TD", "Figure"] {
+    for role in [
+        "H1", "P", "L", "LI", "Lbl", "LBody", "Table", "TR", "TH", "TD", "Figure",
+    ] {
         assert!(roles.iter().any(|r| r == role), "{role}: {roles:?}");
     }
     // A render's title wins over the template's.
@@ -340,13 +384,19 @@ async fn the_locale_sets_the_language_and_the_direction() {
         .unwrap();
     assert_eq!(pdf.text().unwrap(), "مرحبا بالعالم 2026");
     let document = load(&pdf);
-    assert_eq!(catalog(&document).get(b"Lang").unwrap().as_str().unwrap(), b"ar");
+    assert_eq!(
+        catalog(&document).get(b"Lang").unwrap().as_str().unwrap(),
+        b"ar"
+    );
     // Templates get the locale and direction as variables.
     let engine = NativeEngine::new(Templates::from_files([(
         "x.html",
         "<html lang=\"{{ locale }}\" dir=\"{{ dir }}\"><p>{{ locale }} {{ dir }}</p></html>",
     )]));
-    let pdf = engine.render(&Render::template("x").locale("he")).await.unwrap();
+    let pdf = engine
+        .render(&Render::template("x").locale("he"))
+        .await
+        .unwrap();
     assert_eq!(pdf.text().unwrap(), "he rtl");
 }
 
@@ -367,7 +417,10 @@ async fn arabic_renders_right_to_left_with_the_bundled_fonts() {
     assert_golden("multilingual-ar.txt", &pdf.text().unwrap());
     // @page { size: A5 landscape } in the template.
     let (w, h) = page_size(&load(&pdf), 0);
-    assert!((w - 595.3).abs() < 1.0 && (h - 419.5).abs() < 1.0, "{w} x {h}");
+    assert!(
+        (w - 595.3).abs() < 1.0 && (h - 419.5).abs() < 1.0,
+        "{w} x {h}"
+    );
 }
 
 #[tokio::test]
@@ -425,7 +478,10 @@ async fn fonts_come_from_the_bundle_and_the_font_directories() {
     }
     let dir = tempfile::tempdir().unwrap();
     std::fs::copy(
-        concat!(env!("CARGO_MANIFEST_DIR"), "/fonts/NotoSansHebrew-Regular.ttf"),
+        concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/fonts/NotoSansHebrew-Regular.ttf"
+        ),
         dir.path().join("Hebrew.ttf"),
     )
     .unwrap();
@@ -435,7 +491,9 @@ async fn fonts_come_from_the_bundle_and_the_font_directories() {
         .font_dirs(vec![dir.path().to_path_buf()]);
     assert_eq!(custom.font_families(), vec!["Noto Sans Hebrew".to_owned()]);
     let pdf = custom
-        .render(&Render::html("<p style=\"font-family: 'Noto Sans Hebrew'\">שלום</p>"))
+        .render(&Render::html(
+            "<p style=\"font-family: 'Noto Sans Hebrew'\">שלום</p>",
+        ))
         .await
         .unwrap();
     assert_eq!(pdf.text().unwrap(), "שלום");
@@ -448,7 +506,10 @@ async fn page_settings_come_from_the_render_then_the_template() {
         .await
         .unwrap();
     let (w, h) = page_size(&load(&letter), 0);
-    assert!((w - 792.0).abs() < 0.5 && (h - 612.0).abs() < 0.5, "{w} x {h}");
+    assert!(
+        (w - 792.0).abs() < 0.5 && (h - 612.0).abs() < 0.5,
+        "{w} x {h}"
+    );
     // @page wins while prefer_css_page_size is on…
     let a5 = "<style>@page { size: A5; margin: 10mm }</style><p>x</p>";
     let pdf = engine()
@@ -456,11 +517,17 @@ async fn page_settings_come_from_the_render_then_the_template() {
         .await
         .unwrap();
     let (w, h) = page_size(&load(&pdf), 0);
-    assert!((w - 419.5).abs() < 1.0 && (h - 595.3).abs() < 1.0, "{w} x {h}");
+    assert!(
+        (w - 419.5).abs() < 1.0 && (h - 595.3).abs() < 1.0,
+        "{w} x {h}"
+    );
     // …and not when it is off.
     let mut print = PrintOptions::letter();
     print.prefer_css_page_size = false;
-    let pdf = engine().render(&Render::html(a5).print(print)).await.unwrap();
+    let pdf = engine()
+        .render(&Render::html(a5).print(print))
+        .await
+        .unwrap();
     let (w, _) = page_size(&load(&pdf), 0);
     assert!((w - 612.0).abs() < 0.5, "{w}");
     // A custom size from the engine's own settings.
@@ -474,7 +541,10 @@ async fn page_settings_come_from_the_render_then_the_template() {
     });
     let pdf = custom.render(&Render::html("<p>Label</p>")).await.unwrap();
     let (w, h) = page_size(&load(&pdf), 0);
-    assert!((w - 283.5).abs() < 0.5 && (h - 141.7).abs() < 0.5, "{w} x {h}");
+    assert!(
+        (w - 283.5).abs() < 0.5 && (h - 141.7).abs() < 0.5,
+        "{w} x {h}"
+    );
 }
 
 #[tokio::test]
@@ -496,8 +566,14 @@ async fn headers_and_footers_number_the_pages() {
         let lines: Vec<&str> = page.lines().collect();
         assert_eq!(lines[0], "Acme audit");
         assert_eq!(lines[1], "Control Status", "the header row repeats");
-        assert_eq!(*lines.last().unwrap(), format!("Page {} of {count}", index + 1));
-        seen += lines.iter().filter(|l| l.starts_with("Control ") && l.ends_with("Passed")).count();
+        assert_eq!(
+            *lines.last().unwrap(),
+            format!("Page {} of {count}", index + 1)
+        );
+        seen += lines
+            .iter()
+            .filter(|l| l.starts_with("Control ") && l.ends_with("Passed"))
+            .count();
     }
     assert_eq!(seen, 80, "every row once");
     // The print options' footer, with Chrome's classes, works the same.
@@ -576,14 +652,22 @@ async fn renders_run_concurrently_and_time_out() {
     for (i, handle) in renders.enumerate() {
         assert_eq!(handle.await.unwrap(), format!("Document {i}"));
     }
-    let rows: String = (0..3000).map(|i| format!("<tr><td>{i}</td></tr>")).collect();
+    let rows: String = (0..3000)
+        .map(|i| format!("<tr><td>{i}</td></tr>"))
+        .collect();
     let error = engine
         .timeout(Duration::ZERO)
         .render(&Render::html(format!("<table>{rows}</table>")))
         .await
         .unwrap_err();
     assert!(
-        matches!(error, DocumentsError::Timeout { engine: "native", .. }),
+        matches!(
+            error,
+            DocumentsError::Timeout {
+                engine: "native",
+                ..
+            }
+        ),
         "{error:?}"
     );
     assert_eq!(error.status(), http::StatusCode::SERVICE_UNAVAILABLE);
@@ -608,10 +692,25 @@ async fn documents_render_built_documents_with_the_configured_engine() {
 #[tokio::test]
 async fn sample_invoice() {
     let lines: Vec<Value> = [
-        ("Security audit", "Quarterly review of 42 controls", 1, 450_000),
+        (
+            "Security audit",
+            "Quarterly review of 42 controls",
+            1,
+            450_000,
+        ),
         ("Penetration test", "External perimeter, 3 days", 3, 120_000),
-        ("Multi-factor rollout", "Configuration and training", 12, 9_500),
-        ("Backup restore drill", "Database and object storage", 2, 35_000),
+        (
+            "Multi-factor rollout",
+            "Configuration and training",
+            12,
+            9_500,
+        ),
+        (
+            "Backup restore drill",
+            "Database and object storage",
+            2,
+            35_000,
+        ),
         ("Incident response retainer", "October 2026", 1, 80_000),
         ("Travel", "Two on-site visits", 2, 18_250),
     ]
@@ -626,7 +725,10 @@ async fn sample_invoice() {
         })
     })
     .collect();
-    let subtotal: i64 = lines.iter().map(|l| l["amount_cents"].as_i64().unwrap()).sum();
+    let subtotal: i64 = lines
+        .iter()
+        .map(|l| l["amount_cents"].as_i64().unwrap())
+        .sum();
     let vat = subtotal * 20 / 100;
     let data = json!({
         "number": "INV-2026-0042",
@@ -675,10 +777,16 @@ async fn sample_invoice() {
     ] {
         assert!(text.contains(expected), "{expected}: {text}");
     }
-    assert_eq!(pdf.title().unwrap().as_deref(), Some("Invoice INV-2026-0042"));
+    assert_eq!(
+        pdf.title().unwrap().as_deref(),
+        Some("Invoice INV-2026-0042")
+    );
     let document = load(&pdf);
     assert_eq!(images(&document), 1);
-    assert_eq!(links(&document), vec!["https://pay.acme.example/INV-2026-0042"]);
+    assert_eq!(
+        links(&document),
+        vec!["https://pay.acme.example/INV-2026-0042"]
+    );
 }
 
 /// The report sample: a document built in code, with a table long enough
@@ -686,7 +794,14 @@ async fn sample_invoice() {
 fn report() -> PdfDocument {
     let photo = std::fs::read(fixtures_dir().join("images/photo.jpg")).unwrap();
     let owners = ["Platform", "Security", "IT operations", "Finance", "People"];
-    let statuses = ["Passed", "Passed", "Passed", "Open", "Passed", "In progress"];
+    let statuses = [
+        "Passed",
+        "Passed",
+        "Passed",
+        "Open",
+        "Passed",
+        "In progress",
+    ];
     let mut table = Table::new()
         .header([
             Cell::new("#"),
@@ -698,7 +813,10 @@ fn report() -> PdfDocument {
     for i in 1..=120 {
         let control = match i % 4 {
             0 => format!("Access reviews for production systems, batch {i}"),
-            1 => format!("Encryption at rest for storage volumes in region {}", i % 7 + 1),
+            1 => format!(
+                "Encryption at rest for storage volumes in region {}",
+                i % 7 + 1
+            ),
             2 => format!("Multi-factor sign-in for administrators ({i})"),
             _ => format!("Restore test of backup set {i:03}"),
         };
@@ -718,7 +836,12 @@ fn report() -> PdfDocument {
         .title("Quarterly security review")
         .author("Acme audit team")
         .locale("en")
-        .header(Paragraph::new().run(Run::title()).text(" · Q3 2026").align(Align::End))
+        .header(
+            Paragraph::new()
+                .run(Run::title())
+                .text(" · Q3 2026")
+                .align(Align::End),
+        )
         .footer_page_numbers()
         .heading(1, "Quarterly security review")
         .paragraph(
@@ -767,7 +890,10 @@ fn report() -> PdfDocument {
         .paragraph(
             Paragraph::new()
                 .text("The full evidence pack is at ")
-                .link("security.acme.example/q3", "https://security.acme.example/q3")
+                .link(
+                    "security.acme.example/q3",
+                    "https://security.acme.example/q3",
+                )
                 .text("."),
         )
         .rule()
@@ -790,19 +916,32 @@ async fn sample_report() {
     for (index, page) in pages.iter().enumerate() {
         let lines: Vec<&str> = page.lines().collect();
         assert_eq!(lines[0], "Quarterly security review · Q3 2026", "{page}");
-        assert_eq!(*lines.last().unwrap(), format!("Page {} of {count}", index + 1));
+        assert_eq!(
+            *lines.last().unwrap(),
+            format!("Page {} of {count}", index + 1)
+        );
         let body_rows = lines
             .iter()
-            .filter(|l| l.split(' ').next().is_some_and(|n| n.parse::<u32>().is_ok()))
+            .filter(|l| {
+                l.split(' ')
+                    .next()
+                    .is_some_and(|n| n.parse::<u32>().is_ok())
+            })
             .count();
         if body_rows > 0 && index > 0 {
-            assert!(lines.contains(&"# Control Owner Status"), "the header repeats: {page}");
+            assert!(
+                lines.contains(&"# Control Owner Status"),
+                "the header repeats: {page}"
+            );
         }
         rows += body_rows;
     }
     assert!(rows >= 120, "{rows}");
     let document = load(&pdf);
-    assert_eq!(info(&document, b"Author").as_deref(), Some("Acme audit team"));
+    assert_eq!(
+        info(&document, b"Author").as_deref(),
+        Some("Acme audit team")
+    );
     assert_eq!(images(&document), 1);
     assert_eq!(links(&document), vec!["https://security.acme.example/q3"]);
     assert!(fonts(&document).iter().all(|(_, embedded)| *embedded));
@@ -837,7 +976,10 @@ async fn sample_multilingual() {
         assert!(text.contains(expected), "{expected}: {text}");
     }
     let document = load(&pdf);
-    assert_eq!(catalog(&document).get(b"Lang").unwrap().as_str().unwrap(), b"ar");
+    assert_eq!(
+        catalog(&document).get(b"Lang").unwrap().as_str().unwrap(),
+        b"ar"
+    );
     let names: Vec<String> = fonts(&document).into_iter().map(|(n, _)| n).collect();
     for face in ["NotoSansArabic", "NotoSansHebrew", "NotoSansDevanagari"] {
         assert!(names.iter().any(|n| n.contains(face)), "{face}: {names:?}");

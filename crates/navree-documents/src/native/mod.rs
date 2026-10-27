@@ -41,13 +41,13 @@ use std::time::Duration;
 use bytes::Bytes;
 use navree_contracts::{Clock, SystemClock};
 
+use self::fonts::FontBook;
+use self::layout::LayoutError;
+use self::model::PageSetup;
 pub use self::model::{
     Align, Block, Borders, Cell, Color, Direction, Image, List, ListKind, Paragraph, PdfDocument,
     Run, Table, VAlign,
 };
-use self::fonts::FontBook;
-use self::layout::LayoutError;
-use self::model::PageSetup;
 use crate::engine::{EngineKind, PdfEngine};
 use crate::options::NativeOptions;
 use crate::print::{Margins, PrintOptions};
@@ -218,14 +218,8 @@ impl NativeEngine {
     pub async fn render_html(&self, render: &Render) -> Result<String, DocumentsError> {
         let engine = self.clone();
         let render = render.clone();
-        self.blocking(move || {
-            Ok(engine
-                .state
-                .html
-                .document(&engine.templates, &render)?
-                .1)
-        })
-        .await
+        self.blocking(move || Ok(engine.state.html.document(&engine.templates, &render)?.1))
+            .await
     }
 
     /// Lays out and writes `document` with this engine's fonts and clock,
@@ -324,9 +318,15 @@ impl NativeEngine {
             }
         }
         let lang = converted.lang.or_else(|| render.locale.clone());
-        document.direction = converted
-            .direction
-            .or_else(|| lang.as_deref().map(|l| if is_rtl(l) { Direction::Rtl } else { Direction::Ltr }));
+        document.direction = converted.direction.or_else(|| {
+            lang.as_deref().map(|l| {
+                if is_rtl(l) {
+                    Direction::Rtl
+                } else {
+                    Direction::Ltr
+                }
+            })
+        });
         document.lang = lang;
         if let Some(title) = &render.title {
             document.title = Some(title.clone());
@@ -448,12 +448,27 @@ mod tests {
             ("invoices/stamp.png", &b"stamp"[..]),
         ]);
         let found = |path: &str, src: &str| image_source(&templates, path, src).map(|(_, p)| p);
-        assert_eq!(found("invoices/show.html", "/images/logo.png").as_deref(), Some("images/logo.png"));
-        assert_eq!(found("invoices/show.html", "../images/logo.png").as_deref(), Some("images/logo.png"));
-        assert_eq!(found("invoices/show.html", "stamp.png?v=2").as_deref(), Some("invoices/stamp.png"));
-        assert_eq!(found("inline.html", "images/logo.png").as_deref(), Some("images/logo.png"));
+        assert_eq!(
+            found("invoices/show.html", "/images/logo.png").as_deref(),
+            Some("images/logo.png")
+        );
+        assert_eq!(
+            found("invoices/show.html", "../images/logo.png").as_deref(),
+            Some("images/logo.png")
+        );
+        assert_eq!(
+            found("invoices/show.html", "stamp.png?v=2").as_deref(),
+            Some("invoices/stamp.png")
+        );
+        assert_eq!(
+            found("inline.html", "images/logo.png").as_deref(),
+            Some("images/logo.png")
+        );
         assert_eq!(found("invoices/show.html", "../../etc/passwd"), None);
-        assert_eq!(found("invoices/show.html", "https://example.com/logo.png"), None);
+        assert_eq!(
+            found("invoices/show.html", "https://example.com/logo.png"),
+            None
+        );
         assert_eq!(found("invoices/show.html", "//example.com/logo.png"), None);
         assert_eq!(found("invoices/show.html", "C:/logo.png"), None);
         assert_eq!(found("invoices/show.html", "missing.png"), None);

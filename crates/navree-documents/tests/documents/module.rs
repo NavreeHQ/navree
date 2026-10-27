@@ -109,7 +109,10 @@ struct ReceiptsModule;
 impl Module for ReceiptsModule {
     fn register(&self, m: &mut ModuleBuilder) {
         m.controller::<DocumentsController>().document_files([
-            ("receipts/simple.html", &b"<p>Receipt for {{ name }}</p>"[..]),
+            (
+                "receipts/simple.html",
+                &b"<p>Receipt for {{ name }}</p>"[..],
+            ),
             // Not a valid path: ignored.
             ("../outside.html", &b"x"[..]),
         ]);

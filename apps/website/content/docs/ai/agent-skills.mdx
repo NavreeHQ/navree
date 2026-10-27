@@ -34,7 +34,7 @@ Start with **`navree`**. It explains what a Navree app is, how one is laid out, 
 | `navree-search` | `#[derive(Searchable)]`, search engines, syncing through the queue, queries with access and workspaces, vector search |
 | `navree-graphql` | GraphQL with `#[resolver]` fields, field access, `ContextExt`, dataloaders, subscriptions and `graphql:schema` |
 | `navree-grpc` | gRPC services from `.proto` files with `#[grpc_service]`, access rules and extractors on methods, gRPC-Web and Connect, `GrpcChannels` clients and `TestChannel` tests |
-| `navree-documents` | PDF from Typst templates or HTML printed by Chrome, right-to-left documents, `Docx`, merge, stamps and overlays, saved and queued renders, and `DocumentsFake` in tests |
+| `navree-documents` | PDF from HTML templates (native engine or Chrome) and `PdfDocument`, right-to-left documents, `Docx`, merge, stamps and overlays, saved and queued renders, and `DocumentsFake` in tests |
 | `navree-billing` | Bill users or workspaces with Stripe or Paddle: `BillingModule`, plans, checkout, subscriptions, trials, seats, metered usage, invoices, the portal, verified webhooks and `BillingFake` |
 | `navree-mcp` | Expose tools, resources and prompts to AI clients with `#[mcp_server]`, per-tool access, bearer or OAuth auth, stdio, and test them with `McpTestClient` |
 | `navree-ai` | The AI SDK: providers and models, `ai.text`, `ai.structured`, `ai.stream`, failover and budgets, agents with `#[tool]` methods run as the user, memory and approvals, embeddings, vector stores and RAG, and `AiFake` in tests |

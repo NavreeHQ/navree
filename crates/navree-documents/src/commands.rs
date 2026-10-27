@@ -142,7 +142,8 @@ async fn fonts(ctx: AppContext, args: Vec<String>) -> Result<String, BoxError> {
     let families = documents.font_families().await?;
     if families.is_empty() {
         return Ok(
-            "No fonts: documents.native.bundled_fonts is off and no font directory has fonts".into(),
+            "No fonts: documents.native.bundled_fonts is off and no font directory has fonts"
+                .into(),
         );
     }
     Ok(families.join("\n"))

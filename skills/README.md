@@ -69,7 +69,7 @@ conventions, and says which skill to load for each task.
 | [`navree-i18n`](navree-i18n/SKILL.md) | Localization: Fluent files, `t!`, the request's locale, formatting, translated validation, mail and notifications (feature `i18n`) |
 | [`navree-browser-testing`](navree-browser-testing/SKILL.md) | Browser tests with navree-browser: Chrome over the DevTools Protocol, waiting steps, failure screenshots, `TestServer` and `FrontEnd` |
 | [`navree-performance`](navree-performance/SKILL.md) | Measure and lower per-request cost: the pipeline benchmarks, pool and transaction settings, hot-path habits |
-| [`navree-documents`](navree-documents/SKILL.md) | PDF from Typst or HTML templates, DOCX, merge and stamps, queued renders, `DocumentsFake` (feature `documents`) |
+| [`navree-documents`](navree-documents/SKILL.md) | PDF from HTML templates (native engine or Chrome) or `PdfDocument`, DOCX, merge and stamps, queued renders, `DocumentsFake` (feature `documents`) |
 
 ## Installing
 

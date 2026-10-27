@@ -324,7 +324,11 @@ mod tests {
     fn characters_fall_back_to_a_family_that_has_them() {
         let book = FontBook::bundled();
         let serif = vec!["Noto Serif".to_owned()];
-        let family = |c: char| book.face(book.select(&serif, false, false, c).unwrap()).family.clone();
+        let family = |c: char| {
+            book.face(book.select(&serif, false, false, c).unwrap())
+                .family
+                .clone()
+        };
         assert_eq!(family('A'), "Noto Serif");
         assert_eq!(family('م'), "Noto Sans Arabic");
         assert_eq!(family('ש'), "Noto Sans Hebrew");

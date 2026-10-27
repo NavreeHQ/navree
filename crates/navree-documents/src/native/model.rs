@@ -36,11 +36,7 @@ impl Color {
         let hex = hex.trim().trim_start_matches('#');
         let digit = |i: usize| u8::from_str_radix(hex.get(i..i + 1)?, 16).ok();
         match hex.len() {
-            3 => Some(Color::rgb(
-                digit(0)? * 17,
-                digit(1)? * 17,
-                digit(2)? * 17,
-            )),
+            3 => Some(Color::rgb(digit(0)? * 17, digit(1)? * 17, digit(2)? * 17)),
             6 => {
                 let byte = |i: usize| u8::from_str_radix(hex.get(i..i + 2)?, 16).ok();
                 Some(Color::rgb(byte(0)?, byte(2)?, byte(4)?))
@@ -990,7 +986,8 @@ impl PdfDocument {
 
     /// Adds a heading, level 1 to 6.
     pub fn heading(mut self, level: u8, text: impl Into<Paragraph>) -> Self {
-        self.blocks.push(Block::Heading(level.clamp(1, 6), text.into()));
+        self.blocks
+            .push(Block::Heading(level.clamp(1, 6), text.into()));
         self
     }
 
@@ -1119,7 +1116,10 @@ mod tests {
         );
         let landscape = PdfDocument::new().paper(Paper::Letter).landscape();
         let (w, h) = landscape.page.size();
-        assert!((w - 792.0).abs() < 0.1 && (h - 612.0).abs() < 0.1, "{w} {h}");
+        assert!(
+            (w - 792.0).abs() < 0.1 && (h - 612.0).abs() < 0.1,
+            "{w} {h}"
+        );
     }
 
     #[test]

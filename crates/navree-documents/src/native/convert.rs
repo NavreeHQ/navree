@@ -106,7 +106,9 @@ fn collect_head(element: &Element, document: &mut PdfDocument, stylesheet: &mut 
                 }
             }
             "meta" => {
-                if child.attr("name").is_some_and(|n| n.eq_ignore_ascii_case("author"))
+                if child
+                    .attr("name")
+                    .is_some_and(|n| n.eq_ignore_ascii_case("author"))
                     && let Some(author) = child.attr("content")
                 {
                     document.author = Some(author.trim().to_owned());
@@ -233,7 +235,8 @@ impl State {
                         }
                     }
                     "white-space" => {
-                        state.preformatted = matches!(value.trim(), "pre" | "pre-wrap" | "break-spaces");
+                        state.preformatted =
+                            matches!(value.trim(), "pre" | "pre-wrap" | "break-spaces");
                     }
                     _ => {}
                 }
@@ -282,9 +285,9 @@ const SKIPPED: [&str; 14] = [
 
 /// Inline elements: their content joins the paragraph around them.
 const INLINE: [&str; 27] = [
-    "a", "abbr", "b", "bdi", "bdo", "big", "cite", "code", "data", "del", "dfn", "em", "font",
-    "i", "ins", "kbd", "label", "mark", "q", "s", "samp", "small", "span", "strike", "strong",
-    "time", "u",
+    "a", "abbr", "b", "bdi", "bdo", "big", "cite", "code", "data", "del", "dfn", "em", "font", "i",
+    "ins", "kbd", "label", "mark", "q", "s", "samp", "small", "span", "strike", "strong", "time",
+    "u",
 ];
 
 struct Walker<'a, 'i> {
@@ -320,10 +323,14 @@ impl Walker<'_, '_> {
         if SKIPPED.contains(&name) {
             return;
         }
-        let style = element.attr("style").map(css::declarations).unwrap_or_default();
+        let style = element
+            .attr("style")
+            .map(css::declarations)
+            .unwrap_or_default();
         let declared = |properties: &[&str], values: &[&str]| {
             style.iter().any(|(p, v)| {
-                properties.contains(&p.as_str()) && values.contains(&v.trim().to_ascii_lowercase().as_str())
+                properties.contains(&p.as_str())
+                    && values.contains(&v.trim().to_ascii_lowercase().as_str())
             })
         };
         let break_before = declared(
@@ -367,9 +374,9 @@ impl Walker<'_, '_> {
                     let level = name[1..].parse::<u8>().unwrap_or(1);
                     let mut inner = state.enter(element, true);
                     // The heading's size is its level's unless it sets one.
-                    let own_size = element
-                        .attr("style")
-                        .is_some_and(|s| css::declarations(s).iter().any(|(p, _)| p == "font-size"));
+                    let own_size = element.attr("style").is_some_and(|s| {
+                        css::declarations(s).iter().any(|(p, _)| p == "font-size")
+                    });
                     if !own_size {
                         inner.block.size = None;
                     }
@@ -493,7 +500,9 @@ impl Walker<'_, '_> {
                     _ => break,
                 }
             }
-            paragraph.runs.retain(|run| !matches!(&run.kind, RunKind::Text(t) if t.is_empty()));
+            paragraph
+                .runs
+                .retain(|run| !matches!(&run.kind, RunKind::Text(t) if t.is_empty()));
         }
         paragraph.style = state.block.clone();
         paragraph.align = state.align;
@@ -524,7 +533,10 @@ impl Walker<'_, '_> {
             ListKind::Bullets
         };
         let mut list = List::new(kind);
-        if let Some(start) = element.attr("start").and_then(|s| s.trim().parse::<u32>().ok()) {
+        if let Some(start) = element
+            .attr("start")
+            .and_then(|s| s.trim().parse::<u32>().ok())
+        {
             list = list.start(start);
         }
         for node in &element.children {
@@ -652,10 +664,12 @@ impl Walker<'_, '_> {
                 .attr("valign")
                 .map(str::to_owned)
                 .or_else(|| style_value(cell, "vertical-align"))
-                .map_or(VAlign::Top, |v| match v.trim().to_ascii_lowercase().as_str() {
-                    "middle" | "center" => VAlign::Middle,
-                    "bottom" => VAlign::Bottom,
-                    _ => VAlign::Top,
+                .map_or(VAlign::Top, |v| {
+                    match v.trim().to_ascii_lowercase().as_str() {
+                        "middle" | "center" => VAlign::Middle,
+                        "bottom" => VAlign::Bottom,
+                        _ => VAlign::Top,
+                    }
                 });
             row.cells.push(laid);
         }
@@ -688,11 +702,13 @@ impl Walker<'_, '_> {
         };
         let mut image = Image::new(bytes);
         image.source = Some(source);
-        image.alt = element.attr("alt").map(str::to_owned).filter(|a| !a.is_empty());
+        image.alt = element
+            .attr("alt")
+            .map(str::to_owned)
+            .filter(|a| !a.is_empty());
         let size = state.size();
         let dimension = |attr: &str| {
-            style_value(element, attr)
-                .or_else(|| element.attr(attr).map(str::to_owned))
+            style_value(element, attr).or_else(|| element.attr(attr).map(str::to_owned))
         };
         if let Some(width) = dimension("width") {
             if let Some(p) = width.trim().strip_suffix('%') {
@@ -706,10 +722,7 @@ impl Walker<'_, '_> {
         {
             image.height = css::length(&height, size, None);
         }
-        image.align = element
-            .attr("align")
-            .and_then(align_value)
-            .or(state.align);
+        image.align = element.attr("align").and_then(align_value).or(state.align);
         Some(image)
     }
 }
@@ -757,7 +770,11 @@ fn background(element: &Element) -> Option<super::model::Color> {
 fn percent(element: &Element) -> Option<f32> {
     style_value(element, "width")
         .or_else(|| element.attr("width").map(str::to_owned))
-        .and_then(|w| w.trim().strip_suffix('%').and_then(|p| p.trim().parse().ok()))
+        .and_then(|w| {
+            w.trim()
+                .strip_suffix('%')
+                .and_then(|p| p.trim().parse().ok())
+        })
 }
 
 /// Whitespace collapsed and trimmed.
@@ -802,7 +819,10 @@ mod tests {
         let [Block::Paragraph(first), Block::Paragraph(second)] = document.blocks.as_slice() else {
             panic!("{:?}", document.blocks);
         };
-        assert_eq!(texts(first), vec!["Hello ", "bold", " and ", "italic ", "under"]);
+        assert_eq!(
+            texts(first),
+            vec!["Hello ", "bold", " and ", "italic ", "under"]
+        );
         assert_eq!(first.runs[1].style.bold, Some(true));
         assert_eq!(first.runs[4].style.italic, Some(true));
         assert_eq!(first.runs[4].style.underline, Some(true));
@@ -822,12 +842,16 @@ mod tests {
             document.style.font.as_deref(),
             Some(&["Noto Serif".to_owned()][..])
         );
-        let Block::Paragraph(due) = &document.blocks[0] else { panic!() };
+        let Block::Paragraph(due) = &document.blocks[0] else {
+            panic!()
+        };
         assert_eq!(due.align, Some(Align::Right));
         assert_eq!(due.style.color, Some(Color::rgb(0xc0, 0, 0)));
         assert_eq!(due.runs[1].style.bold, Some(true));
         assert_eq!(due.runs[1].style.size, Some(15.0));
-        let Block::Paragraph(centered) = &document.blocks[1] else { panic!() };
+        let Block::Paragraph(centered) = &document.blocks[1] else {
+            panic!()
+        };
         assert_eq!(centered.align, Some(Align::Center));
     }
 
@@ -851,10 +875,14 @@ mod tests {
             })
             .collect();
         assert_eq!(kinds, vec!["h", "list", "hr", "break", "break", "p"]);
-        let Block::Heading(1, heading) = &document.blocks[0] else { panic!() };
+        let Block::Heading(1, heading) = &document.blocks[0] else {
+            panic!()
+        };
         assert_eq!(heading.style.color, Some(Color::rgb(0, 0, 128)));
         assert_eq!(heading.style.size, None);
-        let Block::List(list) = &document.blocks[1] else { panic!() };
+        let Block::List(list) = &document.blocks[1] else {
+            panic!()
+        };
         assert_eq!(list.items.len(), 2);
         let Block::List(nested) = &list.items[1].blocks[1] else {
             panic!("{:?}", list.items[1]);
@@ -870,7 +898,9 @@ mod tests {
              <tr><td colspan=2 valign=middle style=\"text-align: end\"><b>Total</b></td></tbody></table>",
         )
         .document;
-        let Block::Table(table) = &document.blocks[0] else { panic!("{:?}", document.blocks) };
+        let Block::Table(table) = &document.blocks[0] else {
+            panic!("{:?}", document.blocks)
+        };
         assert_eq!(table.borders, Borders::Grid);
         assert_eq!(table.padding, (6.0, 6.0));
         assert_eq!(table.header.len(), 1);
@@ -879,10 +909,15 @@ mod tests {
         assert_eq!(table.rows[0].background, Some(Color::rgb(0xf5, 0xf5, 0xf5)));
         assert_eq!(table.rows[0].cells[1].align, Some(Align::Right));
         let total = &table.rows[1].cells[0];
-        assert_eq!((total.colspan, total.valign, total.align), (2, VAlign::Middle, Some(Align::End)));
+        assert_eq!(
+            (total.colspan, total.valign, total.align),
+            (2, VAlign::Middle, Some(Align::End))
+        );
         // A first row of <th> without <thead> is the header too.
         let document = convert_html("<table><tr><th>A<th>B<tr><td>1<td>2</table>").document;
-        let Block::Table(table) = &document.blocks[0] else { panic!() };
+        let Block::Table(table) = &document.blocks[0] else {
+            panic!()
+        };
         assert_eq!((table.header.len(), table.rows.len()), (1, 1));
         assert_eq!(table.borders, Borders::Rows);
     }
@@ -926,14 +961,21 @@ mod tests {
         let document = converted.document;
         assert_eq!(document.blocks.len(), 1);
         assert_eq!(document.header.len(), 1);
-        let Block::Paragraph(footer) = &document.footer[0] else { panic!() };
-        assert_eq!(texts(footer), vec!["Page ", "PageNumber", " of ", "PageCount"]);
+        let Block::Paragraph(footer) = &document.footer[0] else {
+            panic!()
+        };
+        assert_eq!(
+            texts(footer),
+            vec!["Page ", "PageNumber", " of ", "PageCount"]
+        );
     }
 
     #[test]
     fn preformatted_text_keeps_its_spaces() {
         let document = convert_html("<pre>let x  = 1;\n    y</pre>").document;
-        let Block::Paragraph(pre) = &document.blocks[0] else { panic!() };
+        let Block::Paragraph(pre) = &document.blocks[0] else {
+            panic!()
+        };
         assert!(pre.preformatted);
         assert_eq!(texts(pre), vec!["let x  = 1;\n    y"]);
         assert_eq!(

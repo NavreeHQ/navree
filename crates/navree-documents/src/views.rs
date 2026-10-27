@@ -6,9 +6,9 @@ use std::sync::{Arc, OnceLock};
 use navree_view::{ViewError, ViewOptions, Views};
 use serde_json::{Value, json};
 
+use crate::DocumentsError;
 use crate::render::{Render, TemplateSource};
 use crate::templates::{HTML_EXTENSION, Templates};
-use crate::DocumentsError;
 
 /// An engine's HTML templates, loaded on first use and re-read when files
 /// change.
@@ -151,11 +151,16 @@ mod tests {
         let templates = Templates::from_files([("greeting.html", "<p>Hello {{ name }}</p>")]);
         let views = HtmlTemplates::default();
         let (path, html) = views
-            .document(&templates, &Render::template("greeting").data(json!({"name": "Ada"})))
+            .document(
+                &templates,
+                &Render::template("greeting").data(json!({"name": "Ada"})),
+            )
             .unwrap();
         assert_eq!(path, "greeting.html");
         assert_eq!(html, "<p>Hello Ada</p>");
-        let inline = views.document(&templates, &Render::html("<b>x</b>")).unwrap();
+        let inline = views
+            .document(&templates, &Render::html("<b>x</b>"))
+            .unwrap();
         assert_eq!(inline, ("inline.html".to_owned(), "<b>x</b>".to_owned()));
         assert!(matches!(
             views.document(&templates, &Render::template("missing")),
