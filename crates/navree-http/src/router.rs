@@ -24,9 +24,9 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 use uuid::Uuid;
 
 use crate::controller::ControllerRegistration;
+use crate::error::ErrorFormat;
 use crate::extract::ProxyTrust;
 use crate::limiter::RateLimiter;
-use crate::error::ErrorFormat;
 use crate::pipeline::{
     self, ContextState, ErrorState, TimeoutOverride, TimeoutState, X_REQUEST_ID,
 };

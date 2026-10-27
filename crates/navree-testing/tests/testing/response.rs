@@ -218,7 +218,8 @@ async fn assert_error_code_checks_the_machine_readable_code() {
         response.clone().assert_error_code(404, "deal_not_found");
     });
     assert!(
-        wrong.contains(r#"expected code "deal_not_found""#) && wrong.contains(r#""code":"not_found""#),
+        wrong.contains(r#"expected code "deal_not_found""#)
+            && wrong.contains(r#""code":"not_found""#),
         "{wrong}"
     );
 
@@ -230,7 +231,10 @@ async fn assert_error_code_checks_the_machine_readable_code() {
     let wrong_status = panic_message(|| {
         response.clone().assert_error_code(410, "not_found");
     });
-    assert!(wrong_status.contains("expected status 410"), "{wrong_status}");
+    assert!(
+        wrong_status.contains("expected status 410"),
+        "{wrong_status}"
+    );
 }
 
 #[tokio::test]

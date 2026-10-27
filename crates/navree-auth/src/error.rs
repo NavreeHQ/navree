@@ -373,7 +373,11 @@ mod tests {
                 409,
                 "two_factor_already_enabled",
             ),
-            (AuthError::TwoFactorNotEnabled, 400, "two_factor_not_enabled"),
+            (
+                AuthError::TwoFactorNotEnabled,
+                400,
+                "two_factor_not_enabled",
+            ),
             (
                 AuthError::InvalidTwoFactorCode,
                 401,

@@ -660,7 +660,10 @@ mod tests {
     fn statuses_without_a_constructor_derive_their_code() {
         let cases = [
             (StatusCode::METHOD_NOT_ALLOWED, codes::METHOD_NOT_ALLOWED),
-            (StatusCode::UNSUPPORTED_MEDIA_TYPE, codes::UNSUPPORTED_MEDIA_TYPE),
+            (
+                StatusCode::UNSUPPORTED_MEDIA_TYPE,
+                codes::UNSUPPORTED_MEDIA_TYPE,
+            ),
             (StatusCode::PAYMENT_REQUIRED, "payment_required"),
             (StatusCode::GONE, "gone"),
         ];

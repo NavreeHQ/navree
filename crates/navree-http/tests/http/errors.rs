@@ -71,9 +71,9 @@ async fn json_error_shape_and_content_type() {
         "\"code\"",
         "\"errors\"",
     ]
-        .iter()
-        .map(|key| text.find(key).expect(key))
-        .collect();
+    .iter()
+    .map(|key| text.find(key).expect(key))
+    .collect();
     assert!(positions.is_sorted(), "error member order: {text}");
 }
 

@@ -222,7 +222,10 @@ async fn error_responses_reference_http_error_schema() {
     assert_eq!(error["type"], "object");
     let mut properties: Vec<&String> = error["properties"].as_object().unwrap().keys().collect();
     properties.sort();
-    assert_eq!(properties, ["code", "error", "errors", "message", "statusCode"]);
+    assert_eq!(
+        properties,
+        ["code", "error", "errors", "message", "statusCode"]
+    );
     let mut required: Vec<&str> = error["required"]
         .as_array()
         .unwrap()
