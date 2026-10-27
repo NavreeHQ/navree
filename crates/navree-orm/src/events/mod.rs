@@ -1,8 +1,7 @@
 //! Model events: how they reach listeners, and silencing them.
 //!
-//! Every persistence flow announces its steps as
-//! [`ModelEvent`](crate::hooks::ModelEvent)s to the model's
-//! [`ModelHook`](crate::hooks::ModelHook)s. On top of that seam:
+//! Every persistence flow announces its steps as [`ModelEvent`]s to the
+//! model's [`ModelHook`]s. On top of that seam:
 //!
 //! - **Observers** ([`Observer`]): one async method per event, declared on
 //!   the model (`#[model(observers(DealObserver))]`) or registered by a
