@@ -75,7 +75,7 @@ How the transaction begins depends on the database:
 
 When no trigger or policy of yours reads the actor or the request id, set `database.transaction_settings = false`: PostgreSQL, MySQL and MariaDB transactions then start with a plain `BEGIN`, one statement (on MySQL two) fewer per unit of work. `uow.actor()` and `uow.request_id()` are unaffected.
 
-Besides your own calls, `Repo` functions and the record checks of `#[can(.., from = "id")]` routes begin the transaction too.
+Besides your own calls, model queries and writes given the unit of work (`Deal::create(&uow, ..)`), `Repo` functions and the record checks of `#[can(.., from = "id")]` routes begin the transaction too.
 
 ### The actor and the request id
 
@@ -227,7 +227,7 @@ Two requests that read a row and then write it can overwrite each other's work. 
 - **SQLite** serialises writers: every unit of work starts with `BEGIN IMMEDIATE`, so a second writer waits until the first commits. There is nothing to lock.
 - **PostgreSQL** and **MySQL** run units of work side by side, so read the rows you're about to change with `SELECT ... FOR UPDATE`.
 
-`uow.lock_for_update()` tells you which case you're in (true on PostgreSQL and MySQL, false on SQLite). Add SeaORM's `lock_exclusive()` to a query only when it's true:
+Model queries lock with `lock_for_update()`, which writes `FOR UPDATE` where the database has row locks and leaves it out on SQLite ([locking rows](/docs/orm/query-builder/#locking-rows)); the ORM's real-server suite runs it on PostgreSQL and MySQL. For SeaORM queries, `uow.lock_for_update()` tells you which case you're in (true on PostgreSQL and MySQL, false on SQLite). Add SeaORM's `lock_exclusive()` to a query only when it's true:
 
 ```rust
 use sea_orm::QuerySelect;
@@ -248,7 +248,7 @@ The CRM locks a pipeline column this way before it renumbers the deals in it. `R
 
 ## Change events and observers
 
-`Repo` records a [change event](/docs/database/entities-and-repositories/#change-events) for each write, and `uow.record_change` records one by hand. When the unit of work commits, every **change observer** receives all of them, in order, inside the transaction, right before it commits. `AuditModule` is an observer: it writes the audit rows, so they commit or roll back with the data they describe.
+Models record a [change event](/docs/database/entities-and-repositories/#change-events) for each record they create, save or delete through the unit of work, `Repo` one for each write, and `uow.record_change` one by hand. When the unit of work commits, every **change observer** receives all of them, in order, inside the transaction, right before it commits. `AuditModule` is an observer: it writes the audit rows, so they commit or roll back with the data they describe.
 
 To write your own, implement `ChangeObserver` and register it with `m.change_observer::<O>()`. This one keeps a history of deal stages:
 

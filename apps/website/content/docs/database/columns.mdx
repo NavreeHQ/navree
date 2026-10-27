@@ -1,0 +1,204 @@
+---
+title: "Columns"
+description: "Every column type of the schema builder and the SQL it writes on PostgreSQL, MySQL, MariaDB and SQLite; the helpers for keys, timestamps and polymorphic columns; modifiers, defaults, generated columns; and changing, renaming and dropping columns."
+---
+
+Column methods of the [schema builder](/docs/database/schema-builder/) add a column to the table a blueprint describes, and return a builder for its modifiers:
+
+```rust
+schema
+    .create("deals", |t| {
+        t.uuid_primary();
+        t.foreign_uuid("company_id").constrained();
+        t.string("title");
+        t.big_integer("amount_cents").default(0);
+        t.char("currency", 3).default("USD");
+        t.string("stage").length(16).default("lead").index();
+        t.date("expected_close_date").nullable();
+        t.json("meta").nullable();
+        t.timestamps_tz();
+    })
+    .await?;
+```
+
+Columns are `NOT NULL` unless you say `.nullable()`. A type a database doesn't have fails before any SQL runs, with a message saying what to use instead: "PostgreSQL does not support `set` columns (column `tags`): `set` is a MySQL type; use a `jsonb` array or a join table".
+
+## Column types
+
+| Method | PostgreSQL | MySQL | SQLite |
+|---|---|---|---|
+| `id()` | `BIGINT` identity primary key | `BIGINT UNSIGNED AUTO_INCREMENT` primary key | `INTEGER PRIMARY KEY AUTOINCREMENT` |
+| `uuid_primary()` | `UUID` primary key `id` | `CHAR(36)` (`UUID` on MariaDB) | `VARCHAR` |
+| `ulid_primary()` | `CHAR(26)` primary key `id` | `CHAR(26)` | `VARCHAR` |
+| `increments(name)`, `big_increments`, `small_increments`, `tiny_increments`, `medium_increments`, `integer_increments` | identity columns | `AUTO_INCREMENT` | `AUTOINCREMENT` |
+| `string(name)` | `VARCHAR(255)`, or `.length(n)` | `VARCHAR(255)` | `VARCHAR` |
+| `char(name, n)` | `CHAR(n)` | `CHAR(n)` | `VARCHAR` |
+| `tiny_text(name)` | `VARCHAR(255)` | `TINYTEXT` | `TEXT` |
+| `text`, `medium_text`, `long_text` | `TEXT` | `TEXT`, `MEDIUMTEXT`, `LONGTEXT` | `TEXT` |
+| `tiny_integer`, `small_integer` | `SMALLINT` | `TINYINT`, `SMALLINT` | `INTEGER` |
+| `medium_integer`, `integer` | `INTEGER` | `MEDIUMINT`, `INT` | `INTEGER` |
+| `big_integer` | `BIGINT` | `BIGINT` | `INTEGER` |
+| `unsigned_integer`, `unsigned_big_integer`, ... | as signed | `UNSIGNED` | `INTEGER` |
+| `decimal(name, precision, scale)` | `DECIMAL(p, s)` | `DECIMAL(p, s)` | `NUMERIC` |
+| `float(name)`, `double(name)` | `FLOAT(53)`, `DOUBLE PRECISION` | `FLOAT(53)`, `DOUBLE` | `FLOAT`, `DOUBLE` |
+| `boolean(name)` | `BOOLEAN` | `TINYINT(1)` | `TINYINT(1)` |
+| `date(name)` | `DATE` | `DATE` | `DATE` |
+| `time`, `time_tz` | `TIME WITHOUT TIME ZONE`, `TIME WITH TIME ZONE` | `TIME(6)` | `TIME` |
+| `date_time`, `date_time_tz` | `TIMESTAMP WITHOUT TIME ZONE`, `TIMESTAMP WITH TIME ZONE` | `DATETIME(6)` | `DATETIME` |
+| `timestamp`, `timestamp_tz` | `TIMESTAMP WITHOUT TIME ZONE`, `TIMESTAMP WITH TIME ZONE` | `TIMESTAMP(6)` | `DATETIME` |
+| `year(name)` | `INTEGER` | `YEAR` | `INTEGER` |
+| `json`, `jsonb` | `JSON`, `JSONB` | `JSON` | `TEXT` |
+| `binary(name)` | `BYTEA` | `BLOB`; `VARBINARY(n)` with `.length(n)`, `BINARY(n)` with `.fixed()` | `BLOB` |
+| `uuid(name)`, `ulid(name)` | `UUID`, `CHAR(26)` | `CHAR(36)` (`UUID` on MariaDB), `CHAR(26)` | `VARCHAR` |
+| `ip_address`, `mac_address` | `INET`, `MACADDR` | `VARCHAR(45)`, `VARCHAR(17)` | `VARCHAR` |
+| `enumeration(name, [values])` | `VARCHAR(255)` with a `CHECK` | `ENUM(..)` | `VARCHAR` with a `CHECK` |
+| `set(name, [values])` | not supported | `SET(..)` | not supported |
+| `geometry`, `geography` | PostGIS `GEOMETRY`, `GEOGRAPHY(POINT, 4326)` | `GEOMETRY`, `POINT SRID 4326` | `GEOMETRY` |
+| `vector(name, dimensions)` | pgvector `VECTOR(n)` | `VECTOR(n)` on MySQL 9 and MariaDB 11.7 | not supported |
+| `tsvector(name)` | `TSVECTOR` | not supported | not supported |
+| `raw_column(name, "SMALLINT CHECK (..)")` | as written | as written | as written |
+
+Time columns keep six fractional digits (microseconds) by default: set `.precision(p)` per column, `.default_precision()` for the database's own default, or `schema.default_time_precision` for all. On PostgreSQL six is the default precision, so the SQL doesn't repeat it. `.subtype("point")` and `.srid(4326)` refine geometry and geography columns.
+
+### Matching model fields
+
+When an [ORM model](/docs/orm/models/) maps the table, pick the column for the field's type:
+
+| Model field | Column |
+|---|---|
+| `Uuid` key | `uuid_primary()` (on MySQL, [a binary](#uuid-columns-on-mysql)) |
+| `i64` key the database assigns | `id()` |
+| `Ulid` key | `ulid_primary()` |
+| `Uuid` foreign key | `foreign_uuid("company_id")` (on MySQL, a binary) |
+| `String` | `string`, `text`, `char` |
+| `i32`, `i64` | `integer`, `big_integer` |
+| `bool` | `boolean` |
+| `Decimal` | `decimal(name, p, s)` |
+| `DateTime<Utc>` | `timestamp_tz` (`timestamps_tz()` and `soft_deletes_tz()` for the conventional ones) |
+| `NaiveDate` | `date` |
+| JSON casts, `serde_json::Value` | `json` (`jsonb` on PostgreSQL) |
+| string enum cast | `string` with a `.length(..)`, or `enumeration` |
+| `Option<T>` | the same, `.nullable()` |
+
+### UUID columns on MySQL
+
+A model writes a `Uuid` field as a native `UUID` on PostgreSQL and as its 16 bytes on MySQL, MariaDB and SQLite. SQLite stores those bytes in any column, but on MySQL `uuid_primary()`, `uuid` and `foreign_uuid` are `CHAR(36)`, which refuses them: the insert fails with error 1366, "Incorrect string value". Declare the UUID columns of models as 16-byte binaries there, `BINARY(16)`, and on MariaDB, which models reach through the same driver. A migration that runs on several databases asks the schema which one it is talking to:
+
+```rust
+use navree::schema::Dialect;
+
+let mysql = schema.target().await?.dialect() == Dialect::MySql; // MariaDB too
+schema
+    .create("deals", |t| {
+        if mysql {
+            t.binary("id").length(16).fixed().primary();
+            t.binary("company_id").length(16).fixed();
+            t.foreign("company_id").references("id").on("companies").cascade_on_delete();
+        } else {
+            t.uuid_primary();
+            t.foreign_uuid("company_id").constrained().cascade_on_delete();
+        }
+        t.string("title");
+    })
+    .await?;
+```
+
+On PostgreSQL a binary column would be `BYTEA`, which a model's `Uuid` doesn't fit, so keep `uuid_primary()` there.
+
+## Helpers
+
+Some methods add the conventional columns of a pattern at once:
+
+| Method | Adds |
+|---|---|
+| `timestamps()`, `timestamps_tz()` | Nullable `created_at` and `updated_at` (`timestamp` or `timestamp_tz`); `nullable_timestamps()` is the same as `timestamps()`, `datetimes()` uses `date_time`. |
+| `soft_deletes()`, `soft_deletes_tz()`, `soft_deletes_datetime()` | A nullable `deleted_at`. |
+| `foreign_id(name)`, `foreign_uuid(name)`, `foreign_ulid(name)` | A column of the type `id()`, `uuid_primary()` and `ulid_primary()` use, ready for `.constrained()` ([foreign keys](/docs/database/indexes-and-foreign-keys/#foreign-keys)). |
+| `morphs("subject")` | `subject_type` (a string) and `subject_id`, indexed together, for a [polymorphic relation](/docs/orm/relationships/#polymorphic-relations). The id's type follows `schema.morph_key` (an unsigned big integer by default). |
+| `uuid_morphs`, `ulid_morphs`, `numeric_morphs` | `morphs` with a UUID, ULID or integer id, whatever the configuration. |
+| `nullable_morphs`, `nullable_uuid_morphs`, ... | The same, nullable. |
+| `morphs_with_index(name, index)` | `morphs` with a named index. |
+| `remember_token()` | A nullable `remember_token` of 100 characters. |
+
+## Modifiers
+
+Chain modifiers on the builder a column method returns:
+
+| Modifier | Does |
+|---|---|
+| `.nullable()`, `.not_null()` | Allows `NULL`; requires a value (the default, stated). |
+| `.default(value)` | A default ([below](#defaults)). |
+| `.use_current()` | Defaults to the current date or time. |
+| `.use_current_on_update()`, `.on_update(expression)` | Sets the current time (or an expression) on every update (MySQL). |
+| `.unsigned()` | Unsigned (MySQL; other databases have no unsigned integers). |
+| `.auto_increment()` | Auto-increments: an identity column on PostgreSQL. |
+| `.length(n)`, `.fixed()` | The length of a `string`, `char` or `binary`; a fixed-length binary. |
+| `.precision(p)` | Fractional-second digits of a time column (0 to 6), bits of a `float`. |
+| `.comment("..")` | A column comment (PostgreSQL as `COMMENT ON`, MySQL inline; SQLite ignores it). |
+| `.collation("C")`, `.charset("utf8mb4")` | The collation; the character set (MySQL). |
+| `.after("column")`, `.first()` | Where a new column goes (MySQL; ignored elsewhere). |
+| `.stored_as("expr")`, `.virtual_as("expr")` | A generated column ([below](#generated-columns)). |
+| `.generated_as()`, `.generated_as_with("START WITH 1000")`, `.always()` | An identity column (PostgreSQL). |
+| `.starting_value(n)` | The first value of an auto-incrementing column. |
+| `.invisible()` | Hidden from `SELECT *` (MySQL 8.0.23 and later). |
+| `.primary()`, `.unique()`, `.index()`, `.fulltext()`, `.spatial_index()` | An index on the column; `unique_named` and `index_named` name it. |
+| `.change()` | Alters the existing column ([below](#changing-columns)). |
+| `.using("amount::numeric(12, 2)")` | How existing values convert when the type changes (PostgreSQL). |
+
+A modifier that doesn't apply to its column, such as `.length(10)` on an integer or `.auto_increment()` on a string, fails before any SQL runs.
+
+### Defaults
+
+Defaults are typed: integers and floats are written bare, strings quoted (with backslashes escaped on MySQL), booleans as `TRUE`/`FALSE` on PostgreSQL and `1`/`0` elsewhere, and a `serde_json::Value` as JSON text. `raw("..")` is SQL written as is:
+
+```rust
+t.string("stage").default("lead");
+t.boolean("active").default(true);
+t.integer("rank").default(0);
+t.json("settings").default(serde_json::json!({ "theme": "light" }));
+t.timestamp_tz("seen_at").default(raw("CURRENT_TIMESTAMP"));
+t.timestamp_tz("checked_at").use_current();
+```
+
+On MySQL, defaults of `TEXT`, `BLOB`, `JSON` and geometry columns are written in parentheses, which needs MySQL 8.0.13.
+
+### Generated columns
+
+```rust
+t.decimal("total", 12, 2).stored_as("price * quantity");    // computed when written
+t.string("search_name").virtual_as("lower(name)");           // computed when read
+```
+
+A stored column is computed when the row is written and takes space; a virtual one is computed when it's read (PostgreSQL 18 and later, MySQL, MariaDB, SQLite). Generated columns can be indexed.
+
+## Changing columns
+
+Inside `schema.table`, `.change()` alters an existing column to the definition you give:
+
+```rust
+schema
+    .table("deals", |t| {
+        t.decimal("amount", 14, 2).change();
+        t.string("title").length(500).nullable().change();
+        t.big_integer("views").using("views::bigint").change();
+    })
+    .await?;
+```
+
+The definition is complete: a default, `nullable` or comment you leave out is removed, so restate what the column should keep. On PostgreSQL, `.using(..)` converts existing values when the type changes. `.without_index()`, `.without_unique()` and `.without_primary()` drop a column's conventional index as it changes.
+
+`rename_column(from, to)` renames a column, and `drop_column("name")` or `drop_column(["a", "b"])` drops columns. `drop_timestamps()`, `drop_timestamps_tz()`, `drop_soft_deletes()`, `drop_soft_deletes_tz()`, `drop_remember_token()` and `drop_morphs("subject")` drop the helpers' columns.
+
+On SQLite, changing a column rebuilds the table, keeping its rows ([SQLite](/docs/database/schema-builder/#sqlite)). Adding a `NOT NULL` column without a default to a table that has rows fails with how to fix it: give it a default, or add it nullable, fill it, then change it.
+
+<LinkCards>
+  <LinkCard href="/docs/database/indexes-and-foreign-keys/" title="Indexes and foreign keys">
+    Indexes of every kind and the constraints between tables.
+  </LinkCard>
+  <LinkCard href="/docs/database/schema-builder/" title="Schema builder">
+    Tables, reading the schema and previews.
+  </LinkCard>
+  <LinkCard href="/docs/orm/models/" title="Models">
+    The models that map your tables.
+  </LinkCard>
+</LinkCards>

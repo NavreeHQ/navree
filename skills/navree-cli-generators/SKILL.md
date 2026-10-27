@@ -38,7 +38,10 @@ hint with the line to add. Keep the markers:
 | `navree make:module posts --crud` | the same with five JSON routes (`#[can]` on `Post`), DTOs with `changed_fields`, `Subject` impl, owner-based tests | same |
 | `make:controller posts admin` | `controllers/admin.rs`, `AdminController` at `/api/v1/admin` | the controller in `wire` |
 | `make:service posts pricing` | `services/pricing.rs`, `PricingService` | `m.provider::<..>()` in `wire` |
-| `make:entity posts tag` | `entities/tag.rs` (table `tags`: id, timestamps) | nothing; prints the `make:migration` to run |
+| `make:model posts Tag` | `models/tag.rs`, an ORM model (table `tags`: id, name, timestamps); `--migration`, `--factory`, `--seeder`, `--controller`, `--policy`, or `--all`, add companions that refer to each other (see `navree-orm`) | `m.model::<..>()` in `wire` (and each companion's registration) |
+| `make:factory posts tag` | `factories/tag.rs`, a model factory (`--model <model>` when the names differ) | nothing; link it with `#[model(factory = ..)]` |
+| `make:seeder posts demo_data` | `seeders/demo_data.rs`, `DemoDataSeeder` named `demo_data` | `seeder::<..>` in `wire` |
+| `make:entity posts tag` | `entities/tag.rs`, a SeaORM entity (table `tags`: id, timestamps) | nothing; prints the `make:migration` to run |
 | `make:migration posts create_tags_table` | `migrations/m<timestamp>_create_tags_table.rs` (CREATE TABLE when named `create_<table>_table`, else empty up/down) | adds it to the module's `MigrationSet` (creating the set and `m.migrations(..)` if needed) |
 | `make:job posts publish_post` | `jobs/publish_post.rs`, job `posts.publish_post` | `m.job::<..>()` in `wire` |
 | `make:event posts post_published` | `events/post_published.rs`, event `posts.post_published` | nothing |
@@ -53,11 +56,11 @@ hint with the line to add. Keep the markers:
 
 All `make:<kind>` take `--path <dir>` (default `src/modules`). The module
 must exist (`make:module` first); `make:listener --event` needs the event
-(`make:event` first). There is no generator for seeders or factories.
+(`make:event` first).
 
-After generating: replace the placeholder logic, add columns to both the entity
-and the migration, then `cargo test` (generated tests pass as written) and
-`navree routes`.
+After generating: replace the placeholder logic, add columns to both the
+model (or entity) and the migration, then `cargo test` (generated tests pass
+as written) and `navree routes`.
 
 ## The dev loop
 

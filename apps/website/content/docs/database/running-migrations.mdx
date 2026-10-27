@@ -1,0 +1,151 @@
+---
+title: "Running migrations"
+description: "The migration commands: `migrate`, `migrate:status`, `--pretend`, rolling back by batch or step, reset, refresh and fresh, the production guard, migrating on boot, and the migrator's API for code and tests."
+---
+
+Migrations run through commands that `DatabaseModule` registers on your app. The `navree` CLI forwards them to your app's binary (`navree migrate` runs `cargo run --quiet -- migrate` in the project); in a deployment, run the built binary directly (`./crm-api migrate`). Every command boots the app first, so it reads the same configuration and connects to the same database as the app does.
+
+| Command | What it does |
+|---|---|
+| `migrate` | Runs every pending migration, as one new batch. |
+| `migrate --step` | Runs them as one batch each, so they roll back one at a time. |
+| `migrate --pretend` | Prints the SQL the pending migrations would run, and runs nothing. |
+| `migrate --seed` | Runs the [seeders](/docs/database/seeding-and-factories/) afterwards. |
+| `migrate --schema-path <path>` | Loads the [schema dump](/docs/database/squashing-migrations/) from another file. |
+| `migrate:status` | Every migration in run order, with its batch and whether it ran. `--pending` lists only those that haven't; `--json` prints `module`, `name`, `applied`, `batch` and `applied_at` for each. |
+| `migrate:rollback` | Reverts the last batch, newest migration first. |
+| `migrate:rollback --step 3` | Reverts the last three migrations, whatever their batches. |
+| `migrate:rollback --batch 2` | Reverts batch 2. |
+| `migrate:reset` | Reverts every migration, newest first. |
+| `migrate:refresh` | Reverts every migration (or the last `--step N`), then migrates again (`--seed` to seed). |
+| `migrate:fresh` | Drops every table, then migrates (`--seed`, `--step`, `--drop-views`, `--drop-types`, `--schema-path`). |
+| `migrate:install` | Creates the migrations table. |
+| `schema:dump` | Writes the schema to `database/schema/<driver>-schema.sql` ([squashing migrations](/docs/database/squashing-migrations/)). |
+
+Options take a value after a space or an `=` (`--step 3`, `--batch=2`). An unknown option, a missing value, or `--step` together with `--batch` stops the command before it changes anything, with a message saying what is wrong; for an unknown option, it lists the options the command takes.
+
+## Migrating
+
+```sh
+navree migrate
+```
+
+```text
+Migrated: companies/m20261026_090000_create_companies_table (4 ms)
+Migrated: deals/m20261026_093000_create_deals_table (6 ms)
+Migrated: events/m20261026_100000_create_events_table (5 ms)
+  notice: SQLite does not support TimescaleDB: `events` is a regular table with an index on `occurred_at`; its retention (90 days) policy is skipped
+```
+
+A notice says what the database couldn't do as asked; the migration still ran. `migrate` prints "Nothing to migrate." when everything has run. Each `migrate` run that applies something is one **batch**, which `migrate:rollback` reverts together.
+
+`migrate:status` shows where the database stands:
+
+```text
+Batch   Status   Migration
+1       Ran      companies/m20261026_090000_create_companies_table
+1       Ran      deals/m20261026_093000_create_deals_table
+        Pending  deals/m20261027_120000_add_currency_to_deals
+```
+
+### Pretending
+
+`--pretend` (on `migrate`, `migrate:rollback` and `migrate:reset`) prints each migration's SQL and changes nothing, not even the migrations table:
+
+```text
+deals/m20261027_120000_add_currency_to_deals:
+  ALTER TABLE "deals" ADD COLUMN "currency" CHAR(3) NOT NULL DEFAULT 'USD';
+  ALTER TABLE "deals" ALTER COLUMN "title" TYPE TEXT, ALTER COLUMN "title" SET NOT NULL, ALTER COLUMN "title" DROP DEFAULT, ALTER COLUMN "title" DROP IDENTITY IF EXISTS;
+  COMMENT ON COLUMN "deals"."title" IS NULL;
+```
+
+Schema builder migrations read the real database while pretending, so a SQLite table rebuild or a hypertable conversion is planned against the tables as they are. A migration that changes a table an earlier pending migration creates can't be planned until that one has run, and says so. SeaORM migrations can't read while pretending; their statements are printed as written.
+
+Use it before deploying a migration to a database you care about: it shows exactly what will run there, for that database's dialect and version.
+
+## Rolling back
+
+`migrate:rollback` calls `down` on every migration of the last batch, newest first, and deletes their rows; `--step N` reverts the last N migrations across batches, and `--batch N` one batch. If the migrations to revert include one that no module registers any more (you deleted the file), the rollback reverts the others, then fails with an error naming it.
+
+`migrate:reset` reverts everything. `migrate:refresh` reverts everything (or the last `--step N`) and migrates again, which checks that every `down` undoes its `up`: run it before you push a new migration.
+
+## Starting over
+
+`migrate:fresh` drops **every table in the database**, including tables no migration created, then runs every migration again as batch 1:
+
+- SQLite: every table, on one connection with foreign-key checks off.
+- PostgreSQL: every table of the current schema, with `CASCADE`.
+- MySQL and MariaDB: every base table of the current database in one `DROP TABLE`, on one connection with `FOREIGN_KEY_CHECKS = 0`, turned back on before that connection returns to the pool.
+
+`--drop-views` also drops the views, and `--drop-types` PostgreSQL's types and domains (an error on other databases, checked before anything is dropped). It is the quickest way back to a clean development database: `navree migrate:fresh --seed`.
+
+## In production
+
+`migrate:rollback`, `migrate:reset`, `migrate:refresh` and `migrate:fresh` change or drop tables, so they refuse to run when the configuration's `env` is `production` (`APP_ENV=production`, or `app.env`), unless you pass `--force`:
+
+```text wrap
+migrate:fresh would change or drop tables and this app runs in production (`env = "production"`); pass --force to run it anyway
+```
+
+`migrate` itself runs as usual in production: it is the release step of a deployment. It also accepts `--force`, so a deploy script that passes it works. Run it once per release, before the new version takes traffic, so a failing migration stops the deploy instead of the app ([deployment](/docs/getting-started/deployment/)).
+
+### Migrating on boot
+
+With `database.migrate_on_boot = true`, pending migrations run while the app boots, before any provider that uses the database is built. Test apps turn it on for their temporary databases, and a new app's `config/app.toml` turns it on for development. That file applies in every environment, so in production turn it off with `APP_DATABASE__MIGRATE_ON_BOOT=false` and run `migrate` as a release step.
+
+Every command boots the app, so with `migrate_on_boot` on, `migrate:rollback` would first apply anything pending. Turn it off for the rollback:
+
+```sh
+APP_DATABASE__MIGRATE_ON_BOOT=false navree migrate:rollback
+```
+
+## The migrations table
+
+Navree records applied migrations in `navree_migrations` (the `MIGRATIONS_TABLE` constant), created on first use or by `migrate:install`:
+
+| Column | Holds |
+|---|---|
+| `module` | The set's name, e.g. `deals`. |
+| `name` | The migration's name. |
+| `batch` | The batch it ran in. |
+| `applied_at` | When it ran, in UTC. |
+
+The primary key is `(module, name)`, so two modules may use the same migration name.
+
+## Running migrations from code
+
+`Migrator` exposes the same operations to Rust code:
+
+| Function | Does |
+|---|---|
+| `Migrator::run(&ctx, &MigrateOptions { pretend, step, schema_path })` | `migrate`; returns a `MigrationReport` |
+| `Migrator::rollback_with(&ctx, &RollbackOptions { step, batch, pretend })` | `migrate:rollback` |
+| `Migrator::reset`, `refresh`, `fresh_with` | the other commands |
+| `Migrator::up`, `rollback`, `fresh` | the same, returning the `module/name` of each migration they ran |
+| `Migrator::status(&ctx)` | a `MigrationStatus` per migration: `module`, `name`, `applied`, `batch`, `applied_at` |
+| `Migrator::install`, `Migrator::dump` | `migrate:install`, `schema:dump` |
+
+A `MigrationReport` holds the dump it loaded, if any, and for each migration its `module`, `name`, `batch`, `statements`, `notices` and `duration`. In tests, `TestApp::run_command` runs the commands themselves:
+
+```rust
+use navree::db::{MigrateOptions, Migrator};
+
+let report = Migrator::run(app.ctx(), &MigrateOptions { pretend: true, ..Default::default() }).await?;
+assert!(report.migrations.iter().all(|m| !m.statements.is_empty()));
+
+app.run_command("migrate:rollback", &["--step", "1"]).await?;
+let status = Migrator::status(app.ctx()).await?;
+assert!(!status.last().unwrap().applied);
+```
+
+<LinkCards>
+  <LinkCard href="/docs/database/migrations/" title="Migrations">
+    Writing migrations and ordering sets.
+  </LinkCard>
+  <LinkCard href="/docs/database/squashing-migrations/" title="Squashing migrations">
+    `schema:dump` and loading the dump.
+  </LinkCard>
+  <LinkCard href="/docs/getting-started/deployment/" title="Deployment">
+    Running `migrate` as a release step.
+  </LinkCard>
+</LinkCards>

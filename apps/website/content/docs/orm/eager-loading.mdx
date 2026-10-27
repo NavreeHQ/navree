@@ -1,0 +1,172 @@
+---
+title: "Eager loading"
+description: "Load relationships for a whole result in one query per relation: nested and constrained loads, related counts and sums, loading after the fact, reading loaded relations, and stopping N+1 queries in development."
+---
+
+Reading a relation record by record costs one query per record: a page of 50 deals that shows each deal's company runs 51 queries. This is the N+1 problem. Eager loading reads the relation for every record at once, with one batched query per relation:
+
+```rust
+let deals = Deal::query().with("company").get(&db).await?;
+for deal in &deals {
+    let company: Option<&Record<Company>> = deal.loaded(Deal::company).and_then(Option::as_ref);
+    println!("{} at {}", deal.title, company.map_or("-", |c| c.name.as_str()));
+}
+```
+
+```sql
+SELECT "deals".* FROM "deals"
+SELECT "companies".* FROM "companies" WHERE "companies"."id" IN (?, ?, ?, ...) AND "companies"."deleted_at" IS NULL
+```
+
+Two queries, whatever the number of deals. The related model's [global scopes](/docs/orm/scopes-and-soft-deletes/#global-scopes) apply (soft-deleted companies stay out), and a record whose foreign key is `NULL` gets `None` without adding to the `IN` list. When every key is `NULL`, the second query doesn't run at all.
+
+## Eager loading relations
+
+`with` takes a relation name or a relation method. Call it once per relation:
+
+```rust
+let deals = Deal::query()
+    .with(Deal::company)        // a relation method: a typo doesn't compile
+    .with("activities")
+    .with("tags")               // many to many: one query joining the pivot table
+    .with("contact.company")    // nested: the contact, then the contact's company
+    .get(&db)
+    .await?;
+```
+
+A nested path loads each level for all the records of the level above, one query per level. `with_all(["company", "activities"])` takes several paths. Loading a relation is part of the query: `paginate`, `first` and `find` load it too, and [chunks and lazy streams](/docs/orm/pagination-and-streaming/#chunks-and-streams) load it per page (a `cursor` loads none).
+
+A column list after `:` selects only those columns of the related model: `with("company:id,name")`. It must include the columns the relation matches records by (here `id`), or the query fails naming them; and in [strict mode](/docs/orm/getting-started/#configuration) the related model's other fields must be marked `#[model(default)]`, since the related records are read with only those columns.
+
+### Constraining eager loads
+
+`with_constrained` narrows what loads with a closure, which gets the relation's query:
+
+```rust
+let deals = Deal::query()
+    .with_constrained(Deal::activities, |q| {
+        q.where_(Activity::COMPLETED_AT.is_null()).latest().limit(3)
+    })
+    .with_constrained("company", |q: Builder<Company>| q.with_trashed())
+    .get(&db)
+    .await?;
+```
+
+A limit applies to each parent: every deal gets its three latest open activities, through `ROW_NUMBER()` in one query, not three activities in total. A relation method fixes the closure's type; with a string path, annotate the parameter. On a many-to-many relation the closure gets the relation itself, so pivot conditions (`where_pivot`) work there.
+
+### Defaults on the model
+
+A relation the model's queries almost always need can load by default:
+
+```rust
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "deals", with = ["company"], with_count = ["activities"])]
+pub struct Deal { /* .. */ }
+```
+
+Every `Deal::query()` and every relation query of deals then loads the company and counts the activities. `without("company")` takes a default (or any eager load) off one query, `with_only([..])` replaces them, and `without_eager_loads()` removes them all. `eager_loads()` lists what a query will load. Keep defaults acyclic: a company that loads its deals by default, whose deals load their company by default, never finishes.
+
+## Counting related records
+
+`with_count` adds the number of related records to each record as an extra column, `{relation}_count`, without loading them:
+
+```rust
+let deals = Deal::query()
+    .with_count("activities")
+    .with_count_constrained(Deal::activities, |q| q.where_(Activity::COMPLETED_AT.is_null()))
+    .with_exists("notes")
+    .get(&db)
+    .await?;
+let total: Option<i64> = deals[0].extra("activities_count")?;
+let has_notes: Option<bool> = deals[0].extra("notes_exists")?;
+```
+
+Each is a correlated subquery in the select list, so counting adds no query. `"activities as open_activities"` names the column; give two counts of the same relation different names. The other aggregates work the same way:
+
+| Method | Extra column |
+|---|---|
+| `with_count(path)`, `with_count_constrained(path, f)` | `{relation}_count` |
+| `with_sum(path, column)` | `{relation}_sum_{column}` |
+| `with_avg(path, column)`, `with_min(..)`, `with_max(..)` | `{relation}_avg_{column}`, ... |
+| `with_exists(path)` | `{relation}_exists` |
+| `with_aggregate(path, column, function)` | `{relation}_{function}_{column}` |
+
+```rust
+let companies = Company::query()
+    .with_sum("deals", Deal::AMOUNT_CENTS)
+    .get(&db)
+    .await?;
+let pipeline: Option<i64> = companies[0].extra("deals_sum_amount_cents")?;
+```
+
+The extra columns serialize with the records, and you can order by them: `.with_count("activities").order_by_desc("activities_count")`.
+
+## Loading after the fact
+
+When the records are already in hand, load relations onto them. A collection loads for all its records at once:
+
+```rust
+deals.load(&db, "company").await?;                  // again, if it was loaded
+deals.load_missing(&db, ["activities"]).await?;     // only where it isn't loaded yet
+deals.load_count(&db, ["activities"]).await?;       // activities_count, one query
+deal.load_constrained(&db, Deal::activities, |q| q.latest().limit(5)).await?;
+```
+
+Records and collections have `load`, `load_all`, `load_constrained`, `load_missing` (which also fills in what's missing down a nested path), `load_count`, `load_exists`, `load_sum`, `load_avg`, `load_min`, `load_max` and `load_aggregate`. A collection of `morph_to` records loads the targets' own relations per type with `load_morph`, and their counts with `load_morph_count`.
+
+## Reading loaded relations
+
+A loaded relation lives on the record, typed by the relation:
+
+```rust
+let deals = Deal::query().with("company").with("activities").get(&db).await?;
+let first = &deals[0];
+
+let company: Option<&Option<Record<Company>>> = first.loaded(Deal::company);
+let activities: Option<&Collection<Activity>> = first.loaded(Deal::activities);
+let loaded: bool = first.relation_loaded("activities");
+```
+
+`loaded` runs no query: it returns `None` when the relation isn't loaded, and the relation's value otherwise (`Option<Record<R>>` for a to-one relation, `Collection<R>` for a to-many one, `Option<AnyRecord>` for a `morph_to`). `relation::<T>("name")` reads one by name. To read a relation and load it if needed, ask the record:
+
+```rust
+let company: &Option<Record<Company>> = deal.related(&db, Deal::company).await?;
+let activities: &Collection<Activity> = deal.relation_or_load(&db, "activities").await?;
+```
+
+That is a lazy load, which the rules below apply to. Loaded relations [serialize](/docs/orm/serialization/) with their record, under the relation's name. `set_relation`, `unset_relation` and `without_relations()` change them by hand.
+
+## Preventing lazy loading
+
+A lazy load on a record that came with others is where N+1 queries come from: `related` inside a loop over a list loads the relation once per record. With the strict mode `prevent_lazy_loading`, on in development by default ([configuration](/docs/orm/getting-started/#configuration)), it is an error instead:
+
+```text wrap
+relation `company` of Deal was loaded lazily, one record at a time: eager load it (with("company")) on the query that read the records, or on the collection (load)
+```
+
+A record fetched alone (`find`, `first`, a route binding) may still load its relations lazily: there is no N+1 there. In production the mode is off, so a missed `with` costs queries rather than a failed request. To log violations instead of failing, give `OrmModule` a handler:
+
+```rust
+OrmModule::from_config().on_lazy_loading(|violation| {
+    tracing::warn!(%violation, "N+1 query");
+    Ok(()) // load it anyway
+})
+```
+
+### Automatic eager loading
+
+With `auto_eager_load = true` in `[orm]`, a lazy load on one record of a result loads the relation for every record of that result, in one query, so the loop above runs two queries instead of N+1. `deals.with_relationship_autoloading()` turns this on for one collection.
+
+`LazyLoading` sets the rules in code, over the configuration: `LazyLoading::new().prevented().on_violation(..).install()` for the process, `.scope(future)` for one task (in tests), `.automatic()` for automatic loading.
+
+<LinkCards>
+  <LinkCard href="/docs/orm/relationships/" title="Relationships">
+    Defining the relations you load.
+  </LinkCard>
+  <LinkCard href="/docs/orm/serialization/" title="Serialization">
+    Loaded relations and counts in a record's JSON.
+  </LinkCard>
+  <LinkCard href="/docs/tools/logbook/" title="Logbook">
+    Every request's queries, with N+1 warnings.
+  </LinkCard>
+</LinkCards>

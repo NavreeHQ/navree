@@ -8,6 +8,8 @@ Lists should come back a page at a time. `navree-db` gives you two kinds of pagi
 - **Offset pagination**, `?page=2&per_page=15`, with the total and the number of pages in a `{data, meta}` response. Use it for tables a user pages through.
 - **Cursor pagination**, `?cursor=...&limit=15`, which only knows "the next page". Use it for feeds and infinite scrolling, where rows arrive while people read.
 
+Model queries paginate themselves, `Deal::query().latest().paginate(&uow, page)`, with the same `PageQuery`, `Page` and `{data, meta}` response ([pagination and streaming](/docs/orm/pagination-and-streaming/)). This page covers `navree::db::paginate`, for SeaORM selects.
+
 ## Paginating a query
 
 Take a `PageQuery` in the handler, build an ordered SeaORM query, and pass both to `paginate` with a connection:

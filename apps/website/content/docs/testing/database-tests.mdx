@@ -26,7 +26,7 @@ async fn app() -> TestApp {
 
 There is nothing to reset between tests, and tests aren't wrapped in a transaction that rolls back at the end. Each request commits or rolls back as it would in production, so a test can check what was committed, after-commit hooks included.
 
-These databases are SQLite only. There is no PostgreSQL counterpart: `temp_database()` always creates a SQLite file, and nothing creates a PostgreSQL database per test.
+`temp_database()` always creates a SQLite file. For tests on PostgreSQL or MySQL, the ORM's `#[navree::test(database = "postgres")]` gives each test a database of its own on a real server, copied from a template ([ORM testing](/docs/orm/testing/#real-servers)).
 
 To reach the database in a test, resolve `Db` from the app and query the pool with `db.conn()`:
 
@@ -40,7 +40,21 @@ let db = app.get::<Db>().await;
 
 ### With factories
 
-[Factories](/docs/database/seeding-and-factories/#factories) insert records with defaults you override where the test cares:
+[Model factories](/docs/orm/factories/) create records with fake data, saved through the models like any other record, and you override what the test cares about:
+
+```rust
+let acme = Company::factory().set(Company::NAME, "Acme").create_one(&db).await.unwrap();
+Deal::factory().count(3).for_record(&acme, Deal::COMPANY_ID).create(&db).await.unwrap();
+Deal::factory()
+    .count(2)
+    .for_record(&acme, Deal::COMPANY_ID)
+    .state(DealFactory::won)
+    .create(&db)
+    .await
+    .unwrap();
+```
+
+Records saved outside a unit of work record no change events. SeaORM entities have [factories of their own](/docs/database/seeding-and-factories/#seaorm-entity-factories), which insert active models:
 
 ```rust
 use navree::db::{create, create_many};
@@ -86,7 +100,17 @@ For records another module owns, whose API isn't part of the test app, the CRM i
 
 ## Asserting on the database
 
-After a request, query the table with SeaORM and check what's there:
+The ORM's assertions check rows directly, and report the closest rows when they fail ([database assertions](/docs/orm/testing/#database-assertions)):
+
+```rust
+use navree::orm::testing::*;
+
+assert_database_has(&db, "deals", [("title", "Acme renewal")]).await;
+assert_database_count(&db, "deals", 1).await;
+assert_soft_deleted(&db, &company).await;
+```
+
+Or query the table, through a model or with SeaORM, and check what's there:
 
 ```rust
 use sea_orm::EntityTrait;
