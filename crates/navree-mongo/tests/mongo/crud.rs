@@ -55,23 +55,32 @@ async fn models_are_created_found_saved_and_deleted() {
 
     // Stored natively: an ObjectId, a Decimal128, a date, an embedded
     // document and an array.
-    let raw = t
-        .db
-        .collection("deals")
-        .find_one(doc! { "_id": bson::oid::ObjectId::from(deal.id) })
-        .await
-        .unwrap()
-        .expect("the document");
+    let raw =
+        t.db.collection("deals")
+            .find_one(doc! { "_id": bson::oid::ObjectId::from(deal.id) })
+            .await
+            .unwrap()
+            .expect("the document");
     assert_eq!(raw.get_object_id("company_id").unwrap(), acme.id.into());
     assert!(matches!(raw.get("price"), Some(bson::Bson::Decimal128(_))));
     assert_eq!(raw.get_str("stage").unwrap(), "qualified");
-    assert_eq!(raw.get_document("meta").unwrap().get_str("source").unwrap(), "web");
+    assert_eq!(
+        raw.get_document("meta").unwrap().get_str("source").unwrap(),
+        "web"
+    );
     assert_eq!(raw.get_array("tags").unwrap().len(), 2);
     assert!(raw.get_datetime("closes_on").is_ok());
-    assert!(raw.get("deleted_at").is_some_and(|value| *value == bson::Bson::Null));
+    assert!(
+        raw.get("deleted_at")
+            .is_some_and(|value| *value == bson::Bson::Null)
+    );
 
     let found = Deal::find_or_fail(mongo, deal.id).await.unwrap();
-    assert_eq!(found.model(), deal.model(), "every field reads back as written");
+    assert_eq!(
+        found.model(),
+        deal.model(),
+        "every field reads back as written"
+    );
 
     deal.amount = 150_000;
     deal.stage = Stage::Won;
@@ -94,7 +103,9 @@ async fn models_are_created_found_saved_and_deleted() {
         .expect("still stored");
     assert!(trashed.deleted_at.is_some());
 
-    let error = Deal::find_or_fail(mongo, ObjectId::new()).await.unwrap_err();
+    let error = Deal::find_or_fail(mongo, ObjectId::new())
+        .await
+        .unwrap_err();
     assert!(error.is_not_found(), "{error}");
 
     let mut acme = acme;
@@ -123,13 +134,12 @@ async fn integer_keys_are_counted_per_collection() {
         ids.push(ticket.id);
     }
     assert_eq!(ids, [1, 2, 3]);
-    let counter = t
-        .db
-        .collection("navree_sequences")
-        .find_one(doc! { "_id": "tickets._id" })
-        .await
-        .unwrap()
-        .expect("the counter");
+    let counter =
+        t.db.collection("navree_sequences")
+            .find_one(doc! { "_id": "tickets._id" })
+            .await
+            .unwrap()
+            .expect("the counter");
     assert_eq!(counter.get_i64("value").unwrap(), 3);
     assert_eq!(Ticket::find_or_fail(mongo, 2).await.unwrap().subject, "b");
     t.cleanup().await;
@@ -149,7 +159,9 @@ async fn manual_keys_and_duplicates() {
         })
         .await
         .unwrap();
-    let error = Account::create(mongo, Account::default()).await.unwrap_err();
+    let error = Account::create(mongo, Account::default())
+        .await
+        .unwrap_err();
     assert!(matches!(error, OrmError::MissingKey { .. }), "{error:?}");
     let ada = Account {
         email: "ada@example.com".into(),
@@ -160,7 +172,10 @@ async fn manual_keys_and_duplicates() {
     let found = Account::find_or_fail(mongo, "ada@example.com".to_owned())
         .await
         .unwrap();
-    assert_eq!(found.external, ada.external, "UUIDs round-trip (binary subtype 4)");
+    assert_eq!(
+        found.external, ada.external,
+        "UUIDs round-trip (binary subtype 4)"
+    );
 
     // A duplicate key is a unique violation, as on the SQL databases.
     let error = Account::create(mongo, ada.clone()).await.unwrap_err();
@@ -174,13 +189,12 @@ async fn manual_keys_and_duplicates() {
         .unwrap();
     assert_eq!(existing.name, "Ada");
     let (first, created) = {
-        let record: Record<Account> = Account::first_or_create(
-            mongo,
-            [Account::EMAIL.set("grace@example.com")],
-            |a| a.name = "Grace".into(),
-        )
-        .await
-        .unwrap();
+        let record: Record<Account> =
+            Account::first_or_create(mongo, [Account::EMAIL.set("grace@example.com")], |a| {
+                a.name = "Grace".into()
+            })
+            .await
+            .unwrap();
         let created = record.was_recently_created();
         (record, created)
     };

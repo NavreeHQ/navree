@@ -53,9 +53,9 @@ mod m20261027_000002_seed_companies {
             if schema.is_pretend() {
                 return Ok(());
             }
-            let uow = schema
-                .uow()
-                .ok_or_else(|| MongoError::Custom("a data migration runs in a transaction".into()))?;
+            let uow = schema.uow().ok_or_else(|| {
+                MongoError::Custom("a data migration runs in a transaction".into())
+            })?;
             Company::create(
                 uow,
                 Company {
@@ -179,7 +179,8 @@ const ALL: [&str; 3] = [
 
 #[tokio::test]
 async fn migrations_apply_record_and_roll_back_in_batches() {
-    let Some(t) = TestMongo::connect("migrations_apply_record_and_roll_back_in_batches").await else {
+    let Some(t) = TestMongo::connect("migrations_apply_record_and_roll_back_in_batches").await
+    else {
         return;
     };
     let app = boot(t.options(), false).await;
@@ -190,20 +191,51 @@ async fn migrations_apply_record_and_roll_back_in_batches() {
     assert!(status.iter().all(|migration| !migration.applied));
 
     let report = migrator.up(&MongoMigrateOptions::default()).await.unwrap();
-    assert_eq!(report.labels(), ALL, "sets after their dependencies, migrations by name");
-    assert!(report.migrations[0].statements[0].starts_with(r#"db.runCommand({"create": "companies""#));
-    assert_eq!(Company::query().count(&*mongo).await.unwrap(), 1, "the data migration committed");
+    assert_eq!(
+        report.labels(),
+        ALL,
+        "sets after their dependencies, migrations by name"
+    );
+    assert!(
+        report.migrations[0].statements[0].starts_with(r#"db.runCommand({"create": "companies""#)
+    );
+    assert_eq!(
+        Company::query().count(&*mongo).await.unwrap(),
+        1,
+        "the data migration committed"
+    );
     let status = migrator.status().await.unwrap();
-    assert!(status.iter().all(|migration| migration.applied && migration.batch == Some(1)));
+    assert!(
+        status
+            .iter()
+            .all(|migration| migration.applied && migration.batch == Some(1))
+    );
     assert!(status[0].applied_at.is_some());
-    assert!(migrator.up(&MongoMigrateOptions::default()).await.unwrap().migrations.is_empty());
+    assert!(
+        migrator
+            .up(&MongoMigrateOptions::default())
+            .await
+            .unwrap()
+            .migrations
+            .is_empty()
+    );
 
     // The last batch rolls back, newest first.
-    let reverted = migrator.rollback(&MongoRollbackOptions::default()).await.unwrap();
+    let reverted = migrator
+        .rollback(&MongoRollbackOptions::default())
+        .await
+        .unwrap();
     assert_eq!(reverted.labels(), [ALL[2], ALL[1], ALL[0]]);
     let schema = mongo.schema();
     assert!(!schema.has_table("companies").await.unwrap());
-    assert!(migrator.status().await.unwrap().iter().all(|migration| !migration.applied));
+    assert!(
+        migrator
+            .status()
+            .await
+            .unwrap()
+            .iter()
+            .all(|migration| !migration.applied)
+    );
 
     // Step by step: a batch each.
     migrator
@@ -238,16 +270,26 @@ async fn migrations_apply_record_and_roll_back_in_batches() {
         .await
         .unwrap();
     assert_eq!(batch_two.labels(), [ALL[1]]);
-    assert_eq!(Company::query().count(&*mongo).await.unwrap(), 0, "the seed was undone");
+    assert_eq!(
+        Company::query().count(&*mongo).await.unwrap(),
+        0,
+        "the seed was undone"
+    );
 
     // Refresh: everything back, then forward.
     let (reverted, migrated) = migrator.refresh(None).await.unwrap();
     assert_eq!(reverted.labels(), [ALL[0]]);
     assert_eq!(migrated.labels(), ALL);
     // Fresh: every collection dropped, every migration in batch 1.
-    mongo.collection("stray").insert_one(bson::doc! { "x": 1 }).await.unwrap();
+    mongo
+        .collection("stray")
+        .insert_one(bson::doc! { "x": 1 })
+        .await
+        .unwrap();
     let (dropped, migrated) = migrator.fresh().await.unwrap();
-    assert!(dropped.contains(&"stray".to_owned()) && dropped.contains(&"navree_migrations".to_owned()));
+    assert!(
+        dropped.contains(&"stray".to_owned()) && dropped.contains(&"navree_migrations".to_owned())
+    );
     assert_eq!(migrated.labels(), ALL);
     assert!(!schema.has_table("stray").await.unwrap());
     let reset = migrator.reset(false).await.unwrap();
@@ -271,32 +313,56 @@ async fn pretending_changes_nothing() {
         .await
         .unwrap();
     assert_eq!(report.labels(), ALL);
-    assert!(report.migrations[2].statements.iter().any(|statement| statement.contains("createIndexes")));
+    assert!(
+        report.migrations[2]
+            .statements
+            .iter()
+            .any(|statement| statement.contains("createIndexes"))
+    );
     assert!(mongo.schema().collections().await.unwrap().is_empty());
-    assert!(migrator.status().await.unwrap().iter().all(|migration| !migration.applied));
+    assert!(
+        migrator
+            .status()
+            .await
+            .unwrap()
+            .iter()
+            .all(|migration| !migration.applied)
+    );
     t.cleanup().await;
 }
 
 #[tokio::test]
 async fn a_failed_migration_rolls_back_its_transaction_and_is_not_recorded() {
-    let Some(t) = TestMongo::connect("a_failed_migration_rolls_back_its_transaction_and_is_not_recorded").await
+    let Some(t) =
+        TestMongo::connect("a_failed_migration_rolls_back_its_transaction_and_is_not_recorded")
+            .await
     else {
         return;
     };
     let app = boot(t.options(), true).await;
     let mongo = app.get::<MongoDb>().await;
     let migrator = MongoMigrator::of(app.ctx()).await.unwrap();
-    let error = migrator.up(&MongoMigrateOptions::default()).await.unwrap_err();
+    let error = migrator
+        .up(&MongoMigrateOptions::default())
+        .await
+        .unwrap_err();
     assert!(matches!(error, MongoError::Migration { .. }), "{error:?}");
     assert_eq!(
         error.to_string(),
         "migration `zz_broken/m20261027_000004_refuse` failed: the data is not ready"
     );
-    let names: Vec<String> = Company::query().pluck(&*mongo, Company::NAME).await.unwrap();
+    let names: Vec<String> = Company::query()
+        .pluck(&*mongo, Company::NAME)
+        .await
+        .unwrap();
     assert_eq!(names, ["Acme"], "the failed migration's write rolled back");
     let status = migrator.status().await.unwrap();
     let applied: Vec<bool> = status.iter().map(|migration| migration.applied).collect();
-    assert_eq!(applied, [true, true, true, false], "the ones before it stay applied");
+    assert_eq!(
+        applied,
+        [true, true, true, false],
+        "the ones before it stay applied"
+    );
     t.cleanup().await;
 }
 
@@ -308,17 +374,24 @@ async fn commands_and_boot_run_the_migrations() {
     let app = boot(t.options(), false).await;
     let mongo = app.get::<MongoDb>().await;
     app.run_command("mongo:migrate:status", &[]).await.unwrap();
-    app.run_command("mongo:migrate", &["--pretend"]).await.unwrap();
+    app.run_command("mongo:migrate", &["--pretend"])
+        .await
+        .unwrap();
     assert!(!mongo.schema().has_table("companies").await.unwrap());
     app.run_command("mongo:migrate", &[]).await.unwrap();
     assert!(mongo.schema().has_table("deals").await.unwrap());
-    app.run_command("mongo:migrate:rollback", &["--step", "1"]).await.unwrap();
+    app.run_command("mongo:migrate:rollback", &["--step", "1"])
+        .await
+        .unwrap();
     assert!(!mongo.schema().has_table("deals").await.unwrap());
     app.run_command("mongo:migrate:refresh", &[]).await.unwrap();
     app.run_command("mongo:migrate:fresh", &[]).await.unwrap();
     app.run_command("mongo:migrate:reset", &[]).await.unwrap();
     assert!(!mongo.schema().has_table("companies").await.unwrap());
-    let error = app.run_command("mongo:migrate:rollback", &["--step", "x"]).await.unwrap_err();
+    let error = app
+        .run_command("mongo:migrate:rollback", &["--step", "x"])
+        .await
+        .unwrap_err();
     assert!(error.to_string().contains("--step"), "{error}");
     drop(app);
 

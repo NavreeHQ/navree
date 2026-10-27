@@ -130,7 +130,9 @@ fn names_outside(query: &QueryIr, known: &[String]) -> bool {
                 .is_some_and(|table| !own.iter().any(|name| name == table))
         };
         match filter {
-            Where::Compare { left, right, .. } => expr_outside(left, own) || expr_outside(right, own),
+            Where::Compare { left, right, .. } => {
+                expr_outside(left, own) || expr_outside(right, own)
+            }
             Where::Null { expr, .. } => expr_outside(expr, own),
             Where::In { expr, values, .. } => {
                 expr_outside(expr, own)
@@ -143,14 +145,22 @@ fn names_outside(query: &QueryIr, known: &[String]) -> bool {
             Where::Between {
                 expr, low, high, ..
             } => expr_outside(expr, own) || expr_outside(low, own) || expr_outside(high, own),
-            Where::Like { expr, pattern, .. } => expr_outside(expr, own) || expr_outside(pattern, own),
-            Where::DatePart { expr, value, .. } => expr_outside(expr, own) || expr_outside(value, own),
+            Where::Like { expr, pattern, .. } => {
+                expr_outside(expr, own) || expr_outside(pattern, own)
+            }
+            Where::DatePart { expr, value, .. } => {
+                expr_outside(expr, own) || expr_outside(value, own)
+            }
             Where::Exists { query, .. } => names_outside(query, own),
-            Where::Group(clauses) => clauses.iter().any(|clause| where_outside(&clause.filter, own)),
+            Where::Group(clauses) => clauses
+                .iter()
+                .any(|clause| where_outside(&clause.filter, own)),
             Where::JsonContains { column, .. } | Where::JsonLength { column, .. } => {
                 column_outside(column)
             }
-            Where::FullText { columns, .. } => columns.iter().any(|column| expr_outside(column, own)),
+            Where::FullText { columns, .. } => {
+                columns.iter().any(|column| expr_outside(column, own))
+            }
             _ => false,
         }
     }
@@ -159,17 +169,30 @@ fn names_outside(query: &QueryIr, known: &[String]) -> bool {
     {
         return true;
     }
-    query.columns.iter().any(|item| expr_outside(&item.expr, &own))
-        || query.wheres.iter().any(|clause| where_outside(&clause.filter, &own))
+    query
+        .columns
+        .iter()
+        .any(|item| expr_outside(&item.expr, &own))
+        || query
+            .wheres
+            .iter()
+            .any(|clause| where_outside(&clause.filter, &own))
         || query.groups.iter().any(|group| expr_outside(group, &own))
-        || query.havings.iter().any(|clause| where_outside(&clause.filter, &own))
+        || query
+            .havings
+            .iter()
+            .any(|clause| where_outside(&clause.filter, &own))
         || query.orders.iter().any(|order| match order {
             navree_orm::ir::Order::By { expr, .. } => expr_outside(expr, &own),
             _ => false,
         })
+        || query.joins.iter().any(|join| {
+            join.on
+                .iter()
+                .any(|clause| where_outside(&clause.filter, &own))
+        })
         || query
-            .joins
+            .unions
             .iter()
-            .any(|join| join.on.iter().any(|clause| where_outside(&clause.filter, &own)))
-        || query.unions.iter().any(|union| names_outside(&union.query, known))
+            .any(|union| names_outside(&union.query, known))
 }

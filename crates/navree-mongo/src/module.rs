@@ -91,9 +91,9 @@ fn register(m: &mut ModuleBuilder, options: Option<MongoOptions>) {
         Some(options) => m.factory(Factory::<MongoOptions>::new(move |_| {
             let options = options.clone();
             async move {
-                options
-                    .check()
-                    .map_err(|problems| format!("invalid MongoDB options: {}", problems.join("; ")))?;
+                options.check().map_err(|problems| {
+                    format!("invalid MongoDB options: {}", problems.join("; "))
+                })?;
                 Ok(Arc::new(options))
             }
         })),

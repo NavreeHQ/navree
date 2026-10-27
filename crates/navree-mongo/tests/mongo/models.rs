@@ -93,7 +93,12 @@ pub struct Reading {
 
 /// An account keyed by its email (the document's `_id` is MongoDB's own).
 #[derive(Model, Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[model(collection = "accounts", driver = "mongodb", primary_key = "email", key_type = "manual")]
+#[model(
+    collection = "accounts",
+    driver = "mongodb",
+    primary_key = "email",
+    key_type = "manual"
+)]
 pub struct Account {
     pub email: String,
     pub name: String,
@@ -102,7 +107,11 @@ pub struct Account {
 
 /// A workspace-scoped note (global scope tests).
 #[derive(Model, Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[model(collection = "notes", driver = "mongodb", global_scopes(crate::models::InWorkspace))]
+#[model(
+    collection = "notes",
+    driver = "mongodb",
+    global_scopes(crate::models::InWorkspace)
+)]
 pub struct Note {
     pub id: ObjectId,
     pub workspace_id: ObjectId,

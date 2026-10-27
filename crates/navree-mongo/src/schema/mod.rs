@@ -317,7 +317,10 @@ impl MongoSchema {
             if blueprint.creates_if_missing() {
                 return Ok(());
             }
-            return Err(MongoError::schema(&collection, "the collection already exists"));
+            return Err(MongoError::schema(
+                &collection,
+                "the collection already exists",
+            ));
         }
         let plan = compile::create(&blueprint.blueprint, &blueprint.extras)?;
         for notice in plan.notices {
@@ -481,7 +484,9 @@ impl MongoSchema {
                         };
                         let renamed: Document = key
                             .iter()
-                            .map(|(k, v)| (if *k == from { to.clone() } else { k.clone() }, v.clone()))
+                            .map(|(k, v)| {
+                                (if *k == from { to.clone() } else { k.clone() }, v.clone())
+                            })
                             .collect();
                         let mut rebuilt = rebuildable(&index);
                         rebuilt.insert("key", renamed);
@@ -611,7 +616,12 @@ impl MongoSchema {
     /// so the validator they are leaving does not check them (the new one
     /// is set once the change is done). A document the server refuses
     /// fails the change.
-    async fn update_all(&self, collection: &str, filter: Document, update: Document) -> MongoResult {
+    async fn update_all(
+        &self,
+        collection: &str,
+        filter: Document,
+        update: Document,
+    ) -> MongoResult {
         let reply = self
             .run(SchemaCommand::database(doc! {
                 "update": collection,
@@ -685,7 +695,10 @@ impl MongoSchema {
     /// Drops `collection` (a missing one is an error).
     pub async fn drop(&self, collection: &str) -> MongoResult {
         if !self.pretend && !self.has_table(collection).await? {
-            return Err(MongoError::schema(collection, "the collection does not exist"));
+            return Err(MongoError::schema(
+                collection,
+                "the collection does not exist",
+            ));
         }
         self.run(SchemaCommand::database(doc! { "drop": collection }))
             .await?;
@@ -745,7 +758,13 @@ impl MongoSchema {
             .get_document("cursor")
             .ok()
             .and_then(|cursor| cursor.get_array("firstBatch").ok())
-            .map(|batch| batch.iter().filter_map(Bson::as_document).cloned().collect())
+            .map(|batch| {
+                batch
+                    .iter()
+                    .filter_map(Bson::as_document)
+                    .cloned()
+                    .collect()
+            })
             .unwrap_or_default())
     }
 
@@ -767,7 +786,10 @@ impl MongoSchema {
     /// A continuous aggregate described with `ContinuousAggregate::over`,
     /// as a view grouping by its time bucket and groups (MongoDB computes
     /// views when they are read).
-    pub async fn create_continuous_aggregate(&self, aggregate: &ContinuousAggregate) -> MongoResult {
+    pub async fn create_continuous_aggregate(
+        &self,
+        aggregate: &ContinuousAggregate,
+    ) -> MongoResult {
         let mut notices = Vec::new();
         let command = compile::view(aggregate, &mut notices)?;
         for notice in notices {
@@ -903,7 +925,10 @@ mod tests {
 
     #[test]
     fn write_replies_name_what_was_refused() {
-        assert_eq!(write_problem(&doc! { "ok": 1, "n": 2, "nModified": 2 }), None);
+        assert_eq!(
+            write_problem(&doc! { "ok": 1, "n": 2, "nModified": 2 }),
+            None
+        );
         let refused = doc! {
             "ok": 1,
             "writeErrors": [
@@ -925,7 +950,12 @@ mod tests {
     #[test]
     fn validators_change_property_by_property() {
         let mut schema = doc! { "bsonType": "object", "properties": {} };
-        set_property(&mut schema, "title", Bson::Document(doc! { "bsonType": "string" }), true);
+        set_property(
+            &mut schema,
+            "title",
+            Bson::Document(doc! { "bsonType": "string" }),
+            true,
+        );
         set_property(&mut schema, "note", Bson::Document(doc! {}), false);
         assert_eq!(
             schema,
@@ -936,11 +966,22 @@ mod tests {
             }
         );
         rename_property(&mut schema, "title", "name");
-        assert_eq!(schema.get_array("required").unwrap(), &vec![Bson::String("name".into())]);
-        assert!(schema.get_document("properties").unwrap().contains_key("name"));
+        assert_eq!(
+            schema.get_array("required").unwrap(),
+            &vec![Bson::String("name".into())]
+        );
+        assert!(
+            schema
+                .get_document("properties")
+                .unwrap()
+                .contains_key("name")
+        );
         remove_property(&mut schema, "name");
         assert!(!schema.contains_key("required"));
-        assert_eq!(schema.get_document("properties").unwrap(), &doc! { "note": {} });
+        assert_eq!(
+            schema.get_document("properties").unwrap(),
+            &doc! { "note": {} }
+        );
     }
 
     #[test]

@@ -93,12 +93,17 @@ pub(crate) fn key_column(blueprint: &Blueprint) -> Option<String> {
             return Some(column.name.clone());
         }
     }
-    blueprint.commands().iter().find_map(|command| match command {
-        Command::Index(index) if index.kind == IndexKind::Primary && index.columns.len() == 1 => {
-            Some(index.columns[0].clone())
-        }
-        _ => None,
-    })
+    blueprint
+        .commands()
+        .iter()
+        .find_map(|command| match command {
+            Command::Index(index)
+                if index.kind == IndexKind::Primary && index.columns.len() == 1 =>
+            {
+                Some(index.columns[0].clone())
+            }
+            _ => None,
+        })
 }
 
 /// The BSON type aliases MongoDB's `$jsonSchema` knows, accepted as the
@@ -196,16 +201,18 @@ pub(crate) fn property(
                 ),
             ));
         }
-        ColumnType::Raw { definition } => match BSON_TYPES.iter().find(|alias| **alias == definition.trim()) {
-            Some(alias) => Some(vec![*alias]),
-            None => {
-                notices.push(format!(
+        ColumnType::Raw { definition } => {
+            match BSON_TYPES.iter().find(|alias| **alias == definition.trim()) {
+                Some(alias) => Some(vec![*alias]),
+                None => {
+                    notices.push(format!(
                     "MongoDB does not check the type of `{collection}.{}`: `{definition}` is SQL (a raw column type of BSON's, such as `objectId`, is checked)",
                     column.name
                 ));
-                None
+                    None
+                }
             }
-        },
+        }
         other => {
             notices.push(format!(
                 "MongoDB does not check the type of `{collection}.{}` ({})",
@@ -219,7 +226,10 @@ pub(crate) fn property(
         property.insert("minimum", 0);
     }
     if let Some(types) = types {
-        let mut types: Vec<Bson> = types.into_iter().map(|t| Bson::String(t.to_owned())).collect();
+        let mut types: Vec<Bson> = types
+            .into_iter()
+            .map(|t| Bson::String(t.to_owned()))
+            .collect();
         if column.nullable == Some(true) {
             types.push(Bson::String("null".into()));
         }
@@ -363,9 +373,9 @@ pub(crate) fn indexes(
             (IndexKind::Spatial, &column.spatial_index),
         ] {
             if let Some(navree_schema::FluentIndex::Add(name)) = fluent {
-                let name = name.clone().unwrap_or_else(|| {
-                    format!("{collection}_{}_{}", column.name, kind.suffix())
-                });
+                let name = name
+                    .clone()
+                    .unwrap_or_else(|| format!("{collection}_{}_{}", column.name, kind.suffix()));
                 declared.push(IndexDefinition::new(kind, name, vec![column.name.clone()]));
             }
         }
@@ -377,7 +387,14 @@ pub(crate) fn indexes(
         if is_id {
             continue; // MongoDB's own `_id` index.
         }
-        specs.push(index_spec(collection, &index, &field, &nullable, time_series, notices)?);
+        specs.push(index_spec(
+            collection,
+            &index,
+            &field,
+            &nullable,
+            time_series,
+            notices,
+        )?);
     }
     for foreign in foreign_keys {
         let covered = specs.iter().any(|spec| {
@@ -392,7 +409,14 @@ pub(crate) fn indexes(
             })
         }) || (foreign.columns.len() == 1 && field(&foreign.columns[0]) == "_id");
         if !covered {
-            specs.push(index_spec(collection, &foreign, &field, &nullable, time_series, notices)?);
+            specs.push(index_spec(
+                collection,
+                &foreign,
+                &field,
+                &nullable,
+                time_series,
+                notices,
+            )?);
         }
     }
     for (column, seconds) in &extras.expire {
@@ -451,7 +475,9 @@ pub(crate) fn column_indexes(
                         name.clone().unwrap_or(conventional),
                         vec![column.name.clone()],
                     );
-                    specs.push(index_spec(collection, &index, &field, &nullable, false, notices)?);
+                    specs.push(index_spec(
+                        collection, &index, &field, &nullable, false, notices,
+                    )?);
                 }
                 Some(navree_schema::FluentIndex::Drop) if column.change => drops.push(conventional),
                 _ => {}
@@ -506,14 +532,20 @@ pub(crate) fn index_spec(
         match (index.kind, index.algorithm.as_deref()) {
             (IndexKind::Fulltext, _) => Bson::String("text".into()),
             (IndexKind::Spatial, _) => Bson::String("2dsphere".into()),
-            (_, Some(algorithm)) if algorithm.eq_ignore_ascii_case("hash") || algorithm.eq_ignore_ascii_case("hashed") => {
+            (_, Some(algorithm))
+                if algorithm.eq_ignore_ascii_case("hash")
+                    || algorithm.eq_ignore_ascii_case("hashed") =>
+            {
                 Bson::String("hashed".into())
             }
             _ => Bson::Int32(1),
         }
     };
     if let Some(algorithm) = &index.algorithm
-        && !matches!(algorithm.to_ascii_lowercase().as_str(), "hash" | "hashed" | "btree")
+        && !matches!(
+            algorithm.to_ascii_lowercase().as_str(),
+            "hash" | "hashed" | "btree"
+        )
     {
         notices.push(format!(
             "MongoDB has no `{algorithm}` indexes: `{}` is a regular index",
@@ -538,7 +570,10 @@ pub(crate) fn index_spec(
         if !nullable_fields.is_empty() {
             let mut filter = Document::new();
             for field in nullable_fields {
-                filter.insert(field, doc! { "$exists": true, "$type": NOT_NULL_TYPES.to_vec() });
+                filter.insert(
+                    field,
+                    doc! { "$exists": true, "$type": NOT_NULL_TYPES.to_vec() },
+                );
             }
             spec.insert("partialFilterExpression", filter);
         }
@@ -570,8 +605,20 @@ pub(crate) fn index_spec(
 
 /// Every BSON type but null, for unique indexes over nullable fields.
 const NOT_NULL_TYPES: [&str; 14] = [
-    "double", "string", "object", "array", "binData", "objectId", "bool", "date", "int",
-    "timestamp", "long", "decimal", "regex", "javascript",
+    "double",
+    "string",
+    "object",
+    "array",
+    "binData",
+    "objectId",
+    "bool",
+    "date",
+    "int",
+    "timestamp",
+    "long",
+    "decimal",
+    "regex",
+    "javascript",
 ];
 
 /// The `timeseries` options and `expireAfterSeconds` of a hypertable.
@@ -653,10 +700,14 @@ pub(crate) fn time_series(
 pub(crate) fn create(blueprint: &Blueprint, extras: &Extras) -> MongoResult<Plan> {
     let mut plan = Plan::default();
     let collection = blueprint.table();
-    let comment = blueprint.commands().iter().rev().find_map(|command| match command {
-        Command::Comment(comment) => Some(comment.as_str()),
-        _ => None,
-    });
+    let comment = blueprint
+        .commands()
+        .iter()
+        .rev()
+        .find_map(|command| match command {
+            Command::Comment(comment) => Some(comment.as_str()),
+            _ => None,
+        });
     let mut create = doc! { "create": collection };
     let hypertable = blueprint.hypertable_definition();
     if let Some(hypertable) = hypertable {
@@ -720,7 +771,10 @@ pub(crate) fn time_series_unchecked(collection: &str) -> String {
 /// The `create` command of the view a continuous aggregate described with
 /// [`ContinuousAggregate::over`] becomes: a `$group` by the time bucket and
 /// the groups, computed when read.
-pub(crate) fn view(aggregate: &ContinuousAggregate, notices: &mut Vec<String>) -> MongoResult<SchemaCommand> {
+pub(crate) fn view(
+    aggregate: &ContinuousAggregate,
+    notices: &mut Vec<String>,
+) -> MongoResult<SchemaCommand> {
     let name = aggregate.name();
     let AggregateSpec::Described {
         from,
@@ -748,7 +802,10 @@ pub(crate) fn view(aggregate: &ContinuousAggregate, notices: &mut Vec<String>) -
         match crate::convert::json_to_bson(&json) {
             Ok(Bson::Document(filter)) => pipeline.push(doc! { "$match": filter }),
             _ => {
-                return Err(MongoError::schema(name, "the filter is not a JSON document"));
+                return Err(MongoError::schema(
+                    name,
+                    "the filter is not a JSON document",
+                ));
             }
         }
     }
@@ -804,13 +861,19 @@ fn accumulator(view: &str, expression: &str) -> MongoResult<Bson> {
     }
     let function = text[..open].trim().to_ascii_lowercase();
     let argument = text[open + 1..text.len() - 1].trim();
-    if argument != "*" && !argument.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+    if argument != "*"
+        && !argument
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_')
+    {
         return Err(unknown());
     }
     let field = format!("${argument}");
     Ok(Bson::Document(match (function.as_str(), argument) {
         ("count", "*") => doc! { "$sum": 1 },
-        ("count", _) => doc! { "$sum": { "$cond": [{ "$eq": [{ "$ifNull": [field, Bson::Null] }, Bson::Null] }, 0, 1] } },
+        ("count", _) => {
+            doc! { "$sum": { "$cond": [{ "$eq": [{ "$ifNull": [field, Bson::Null] }, Bson::Null] }, 0, 1] } }
+        }
         ("sum", a) if a != "*" => doc! { "$sum": field },
         ("avg", a) if a != "*" => doc! { "$avg": field },
         ("min", a) if a != "*" => doc! { "$min": field },
@@ -836,7 +899,9 @@ mod tests {
             t.string("title").length(120);
             t.decimal("amount", 12, 2);
             t.enumeration("stage", ["lead", "won"]);
-            t.timestamp_tz("closed_at").nullable().comment("when it closed");
+            t.timestamp_tz("closed_at")
+                .nullable()
+                .comment("when it closed");
             t.json("meta").nullable();
             t.unsigned_integer("seats");
         });
@@ -866,7 +931,10 @@ mod tests {
             properties.get_document("title").unwrap(),
             &doc! { "bsonType": "string", "maxLength": 120_i64 }
         );
-        assert_eq!(properties.get_document("amount").unwrap(), &doc! { "bsonType": "decimal" });
+        assert_eq!(
+            properties.get_document("amount").unwrap(),
+            &doc! { "bsonType": "decimal" }
+        );
         assert_eq!(
             properties.get_document("stage").unwrap(),
             &doc! { "bsonType": "string", "enum": ["lead", "won"] }
@@ -906,11 +974,21 @@ mod tests {
             "the foreign key is covered by the compound index on company_id"
         );
         let slug = indexes[3].as_document().unwrap();
-        assert!(slug.get_document("partialFilterExpression").unwrap().contains_key("slug"));
+        assert!(
+            slug.get_document("partialFilterExpression")
+                .unwrap()
+                .contains_key("slug")
+        );
         let text = indexes[0].as_document().unwrap();
         assert_eq!(text.get_document("key").unwrap(), &doc! { "body": "text" });
         assert_eq!(text.get_str("default_language").unwrap(), "german");
-        assert!(plan.notices.iter().any(|notice| notice.contains("no foreign keys")), "{:?}", plan.notices);
+        assert!(
+            plan.notices
+                .iter()
+                .any(|notice| notice.contains("no foreign keys")),
+            "{:?}",
+            plan.notices
+        );
     }
 
     #[test]
@@ -920,8 +998,14 @@ mod tests {
         t.foreign_uuid("workspace_id");
         t.timestamp_tz("occurred_at");
         let events = t.hypertable("occurred_at");
-        events.chunk_interval("1 day").partition_by("workspace_id", 4).retain_for("90 days");
-        events.compress().segment_by(["workspace_id"]).after("7 days");
+        events
+            .chunk_interval("1 day")
+            .partition_by("workspace_id", 4)
+            .retain_for("90 days");
+        events
+            .compress()
+            .segment_by(["workspace_id"])
+            .after("7 days");
         let plan = create(&t, &Extras::default()).unwrap();
         let command = &plan.commands[0].document;
         assert_eq!(
@@ -929,7 +1013,11 @@ mod tests {
             &doc! { "timeField": "occurred_at", "metaField": "workspace_id", "granularity": "minutes" }
         );
         assert_eq!(command.get_i64("expireAfterSeconds").unwrap(), 90 * 86_400);
-        assert!(plan.notices.iter().any(|notice| notice.contains("compresses")));
+        assert!(
+            plan.notices
+                .iter()
+                .any(|notice| notice.contains("compresses"))
+        );
 
         let mut unique = Blueprint::new("events");
         unique.uuid_primary();
@@ -942,7 +1030,12 @@ mod tests {
         let mut wrong = Blueprint::new("events");
         wrong.string("at");
         wrong.hypertable("at");
-        assert!(create(&wrong, &Extras::default()).unwrap_err().to_string().contains("must be a date column"));
+        assert!(
+            create(&wrong, &Extras::default())
+                .unwrap_err()
+                .to_string()
+                .contains("must be a date column")
+        );
     }
 
     #[test]
@@ -961,18 +1054,33 @@ mod tests {
         assert_eq!(command.get_str("validationLevel").unwrap(), "moderate");
         assert!(command.get_bool("capped").unwrap());
         let owner = command
-            .get_document("validator").unwrap()
-            .get_document("$jsonSchema").unwrap()
-            .get_document("properties").unwrap()
-            .get_document("owner_id").unwrap();
+            .get_document("validator")
+            .unwrap()
+            .get_document("$jsonSchema")
+            .unwrap()
+            .get_document("properties")
+            .unwrap()
+            .get_document("owner_id")
+            .unwrap();
         assert_eq!(owner, &doc! { "bsonType": "objectId" });
-        let ttl = plan.commands[1].document.get_array("indexes").unwrap()[0].as_document().unwrap().clone();
-        assert_eq!(ttl, doc! { "key": { "expires_at": 1 }, "name": "sessions_expires_at_ttl", "expireAfterSeconds": 0_i64 });
+        let ttl = plan.commands[1].document.get_array("indexes").unwrap()[0]
+            .as_document()
+            .unwrap()
+            .clone();
+        assert_eq!(
+            ttl,
+            doc! { "key": { "expires_at": 1 }, "name": "sessions_expires_at_ttl", "expireAfterSeconds": 0_i64 }
+        );
 
         let mut generated = Blueprint::new("totals");
         generated.integer("a");
         generated.integer("b").stored_as("a + 1");
-        assert!(create(&generated, &Extras::default()).unwrap_err().to_string().contains("generated column"));
+        assert!(
+            create(&generated, &Extras::default())
+                .unwrap_err()
+                .to_string()
+                .contains("generated column")
+        );
         let mut tsv = Blueprint::new("docs");
         tsv.tsvector("search");
         assert!(create(&tsv, &Extras::default()).is_err());
@@ -991,11 +1099,20 @@ mod tests {
         assert_eq!(command.document.get_str("viewOn").unwrap(), "events");
         let pipeline = command.document.get_array("pipeline").unwrap();
         assert_eq!(pipeline.len(), 3);
-        let group = pipeline[0].as_document().unwrap().get_document("$group").unwrap();
+        let group = pipeline[0]
+            .as_document()
+            .unwrap()
+            .get_document("$group")
+            .unwrap();
         assert_eq!(group.get_document("total").unwrap(), &doc! { "$sum": 1 });
         assert!(group.get_document("_id").unwrap().contains_key("day"));
         let sql = ContinuousAggregate::new("x", "SELECT 1");
-        assert!(view(&sql, &mut notices).unwrap_err().to_string().contains("written in SQL"));
+        assert!(
+            view(&sql, &mut notices)
+                .unwrap_err()
+                .to_string()
+                .contains("written in SQL")
+        );
         let odd = ContinuousAggregate::over("y", "events").aggregate("percentile(a)", "p");
         assert!(view(&odd, &mut notices).is_err());
     }

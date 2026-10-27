@@ -610,7 +610,10 @@ impl<T: std::any::Any + fmt::Debug + Send + Sync> NativeValue for T {
 impl NativeFilter {
     /// `value`, a condition only driver `driver` (its name, e.g.
     /// `mongodb`) understands.
-    pub fn new<T: std::any::Any + fmt::Debug + Send + Sync>(driver: &'static str, value: T) -> Self {
+    pub fn new<T: std::any::Any + fmt::Debug + Send + Sync>(
+        driver: &'static str,
+        value: T,
+    ) -> Self {
         NativeFilter {
             driver,
             value: std::sync::Arc::new(value),

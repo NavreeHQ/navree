@@ -54,10 +54,19 @@ async fn inserts_skip_what_a_unique_index_refuses() {
 
     // Any other refusal is an error: here the validator's.
     let error = table("rates")
-        .insert_or_ignore(mongo, [vec![("code", Value::from("DKK")), ("rate", Value::from("high"))]])
+        .insert_or_ignore(
+            mongo,
+            [vec![
+                ("code", Value::from("DKK")),
+                ("rate", Value::from("high")),
+            ]],
+        )
         .await
         .unwrap_err();
-    assert!(error.to_string().contains("Document failed validation"), "{error}");
+    assert!(
+        error.to_string().contains("Document failed validation"),
+        "{error}"
+    );
 
     // Inside a transaction MongoDB aborts on any write error.
     let uow = mongo.begin().await.unwrap();
@@ -65,7 +74,10 @@ async fn inserts_skip_what_a_unique_index_refuses() {
         .insert_or_ignore(&uow, [row("EUR", 1.0)])
         .await
         .unwrap_err();
-    assert!(error.to_string().contains("inside a transaction"), "{error}");
+    assert!(
+        error.to_string().contains("inside a transaction"),
+        "{error}"
+    );
     uow.rollback().await.unwrap();
     t.cleanup().await;
 }
@@ -77,7 +89,10 @@ async fn upserts_update_by_unique_fields_or_insert() {
     };
     rates_collection(&t).await;
     let mongo = &t.db;
-    table("rates").insert_or_ignore(mongo, [row("EUR", 1.08)]).await.unwrap();
+    table("rates")
+        .insert_or_ignore(mongo, [row("EUR", 1.08)])
+        .await
+        .unwrap();
     let with_source = |code: &str, rate: f64| {
         vec![
             ("code", Value::from(code)),
@@ -86,7 +101,12 @@ async fn upserts_update_by_unique_fields_or_insert() {
         ]
     };
     let written = table("rates")
-        .upsert(mongo, [with_source("EUR", 1.09), with_source("DKK", 0.13)], &["code"], &["rate"])
+        .upsert(
+            mongo,
+            [with_source("EUR", 1.09), with_source("DKK", 0.13)],
+            &["code"],
+            &["rate"],
+        )
         .await
         .unwrap();
     assert_eq!(written, 2, "one matched, one inserted");
@@ -100,7 +120,12 @@ async fn upserts_update_by_unique_fields_or_insert() {
         .await
         .unwrap()
         .iter()
-        .map(|row| (row.get::<Value>("code").unwrap(), row.get::<Value>("source").unwrap()))
+        .map(|row| {
+            (
+                row.get::<Value>("code").unwrap(),
+                row.get::<Value>("source").unwrap(),
+            )
+        })
         .collect();
     assert_eq!(
         sources,

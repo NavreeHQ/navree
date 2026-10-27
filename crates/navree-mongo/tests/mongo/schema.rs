@@ -36,7 +36,9 @@ async fn validators_refuse_what_the_blueprint_forbids() {
         .unwrap();
     let deals = t.db.collection("deals");
     deals
-        .insert_one(doc! { "title": "Renewal", "amount": 5, "stage": "won", "closed_at": Bson::Null })
+        .insert_one(
+            doc! { "title": "Renewal", "amount": 5, "stage": "won", "closed_at": Bson::Null },
+        )
         .await
         .unwrap();
     deals
@@ -44,20 +46,46 @@ async fn validators_refuse_what_the_blueprint_forbids() {
         .await
         .expect("a nullable field may be missing");
     for (broken, why) in [
-        (doc! { "amount": 5, "stage": "won" }, "a required field is missing"),
-        (doc! { "title": "x".repeat(21), "amount": 5, "stage": "won" }, "too long"),
-        (doc! { "title": "A", "amount": -1, "stage": "won" }, "unsigned"),
-        (doc! { "title": "A", "amount": 5, "stage": "lost" }, "not an allowed value"),
-        (doc! { "title": "A", "amount": "5", "stage": "won" }, "the wrong type"),
-        (doc! { "title": "A", "amount": 5, "stage": "won", "closed_at": "today" }, "not a date"),
+        (
+            doc! { "amount": 5, "stage": "won" },
+            "a required field is missing",
+        ),
+        (
+            doc! { "title": "x".repeat(21), "amount": 5, "stage": "won" },
+            "too long",
+        ),
+        (
+            doc! { "title": "A", "amount": -1, "stage": "won" },
+            "unsigned",
+        ),
+        (
+            doc! { "title": "A", "amount": 5, "stage": "lost" },
+            "not an allowed value",
+        ),
+        (
+            doc! { "title": "A", "amount": "5", "stage": "won" },
+            "the wrong type",
+        ),
+        (
+            doc! { "title": "A", "amount": 5, "stage": "won", "closed_at": "today" },
+            "not a date",
+        ),
     ] {
         let error = deals.insert_one(broken).await.expect_err(why);
-        assert!(error.to_string().contains("Document failed validation"), "{why}: {error}");
+        assert!(
+            error.to_string().contains("Document failed validation"),
+            "{why}: {error}"
+        );
     }
     let validator = schema.validator("deals").await.unwrap();
     assert_eq!(
         validator.get_array("required").unwrap(),
-        &vec![Bson::from("_id"), Bson::from("title"), Bson::from("amount"), Bson::from("stage")]
+        &vec![
+            Bson::from("_id"),
+            Bson::from("title"),
+            Bson::from("amount"),
+            Bson::from("stage")
+        ]
     );
     assert!(schema.has_table("deals").await.unwrap());
     assert!(schema.has_column("deals", "title").await.unwrap());
@@ -132,7 +160,10 @@ async fn alterations_change_documents_validators_and_indexes() {
         .unwrap();
     let deals = t.db.collection("deals");
     deals
-        .insert_many([doc! { "title": "A", "amount": 1 }, doc! { "title": "B", "amount": 2 }])
+        .insert_many([
+            doc! { "title": "A", "amount": 1 },
+            doc! { "title": "B", "amount": 2 },
+        ])
         .await
         .unwrap();
 
@@ -143,7 +174,13 @@ async fn alterations_change_documents_validators_and_indexes() {
         })
         .await
         .unwrap();
-    assert_eq!(deals.count_documents(doc! { "stage": "lead" }).await.unwrap(), 2);
+    assert_eq!(
+        deals
+            .count_documents(doc! { "stage": "lead" })
+            .await
+            .unwrap(),
+        2
+    );
     assert!(schema.has_column("deals", "stage").await.unwrap());
     // A required field without one cannot be added to documents lacking it.
     let error = schema
@@ -158,7 +195,11 @@ async fn alterations_change_documents_validators_and_indexes() {
     let before = schema.indexes("deals").await.unwrap();
     let amount_index = before
         .iter()
-        .find(|index| index.get_document("key").is_ok_and(|key| key.contains_key("amount")))
+        .find(|index| {
+            index
+                .get_document("key")
+                .is_ok_and(|key| key.contains_key("amount"))
+        })
         .and_then(|index| index.get_str("name").ok())
         .expect("the index over amount")
         .to_owned();
@@ -168,8 +209,20 @@ async fn alterations_change_documents_validators_and_indexes() {
         })
         .await
         .unwrap();
-    assert_eq!(deals.count_documents(doc! { "value": { "$exists": true } }).await.unwrap(), 2);
-    assert_eq!(deals.count_documents(doc! { "amount": { "$exists": true } }).await.unwrap(), 0);
+    assert_eq!(
+        deals
+            .count_documents(doc! { "value": { "$exists": true } })
+            .await
+            .unwrap(),
+        2
+    );
+    assert_eq!(
+        deals
+            .count_documents(doc! { "amount": { "$exists": true } })
+            .await
+            .unwrap(),
+        0
+    );
     let properties = schema.validator("deals").await.unwrap();
     let properties = properties.get_document("properties").unwrap();
     assert!(properties.contains_key("value") && !properties.contains_key("amount"));
@@ -193,7 +246,13 @@ async fn alterations_change_documents_validators_and_indexes() {
         })
         .await
         .unwrap();
-    assert_eq!(deals.count_documents(doc! { "value": { "$exists": true } }).await.unwrap(), 0);
+    assert_eq!(
+        deals
+            .count_documents(doc! { "value": { "$exists": true } })
+            .await
+            .unwrap(),
+        0
+    );
     assert!(index_named(&schema.indexes("deals").await.unwrap(), "deals_value_index").is_none());
     assert!(!schema.has_column("deals", "value").await.unwrap());
     // The validator follows: documents without `value` are valid again.
@@ -223,15 +282,25 @@ async fn hypertables_are_time_series_collections() {
         })
         .await
         .unwrap();
-    let options = schema.collection_options("readings").await.unwrap().unwrap();
+    let options = schema
+        .collection_options("readings")
+        .await
+        .unwrap()
+        .unwrap();
     let series = options.get_document("timeseries").unwrap();
     assert_eq!(series.get_str("timeField").unwrap(), "taken_at");
     assert_eq!(series.get_str("metaField").unwrap(), "sensor");
     assert_eq!(series.get_str("granularity").unwrap(), "seconds");
-    assert_eq!(options.get_i64("expireAfterSeconds").unwrap(), 30 * 24 * 3600);
+    assert_eq!(
+        options.get_i64("expireAfterSeconds").unwrap(),
+        30 * 24 * 3600
+    );
     assert!(!options.contains_key("validator"));
     assert!(
-        schema.notices().iter().any(|notice| notice.contains("take no validator")),
+        schema
+            .notices()
+            .iter()
+            .any(|notice| notice.contains("take no validator")),
         "{:?}",
         schema.notices()
     );
@@ -258,7 +327,14 @@ async fn hypertables_are_time_series_collections() {
         .await
         .unwrap();
     }
-    assert_eq!(Reading::query().where_(Reading::SENSOR.eq("roof")).count(&t.db).await.unwrap(), 2);
+    assert_eq!(
+        Reading::query()
+            .where_(Reading::SENSOR.eq("roof"))
+            .count(&t.db)
+            .await
+            .unwrap(),
+        2
+    );
 
     // A continuous aggregate is a view, computed when read.
     schema
@@ -297,11 +373,19 @@ async fn hypertables_are_time_series_collections() {
         ]
     );
     assert!(
-        schema.collection_options("readings_hourly").await.unwrap().unwrap().contains_key("viewOn")
+        schema
+            .collection_options("readings_hourly")
+            .await
+            .unwrap()
+            .unwrap()
+            .contains_key("viewOn")
     );
 
     // An existing collection cannot become one.
-    let error = schema.convert_to_hypertable("deals", "created_at").await.unwrap_err();
+    let error = schema
+        .convert_to_hypertable("deals", "created_at")
+        .await
+        .unwrap_err();
     assert!(error.to_string().contains("time-series"), "{error}");
     t.cleanup().await;
 }
@@ -325,7 +409,10 @@ async fn pretending_records_the_commands_and_changes_nothing() {
     assert!(!t.db.schema().has_table("tickets").await.unwrap());
     insta::assert_snapshot!(schema.statements().join("\n"));
     assert!(
-        schema.notices().iter().any(|notice| notice.contains("no foreign keys")),
+        schema
+            .notices()
+            .iter()
+            .any(|notice| notice.contains("no foreign keys")),
         "{:?}",
         schema.notices()
     );

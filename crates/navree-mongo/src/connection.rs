@@ -156,7 +156,13 @@ impl MongoDb {
             return Ok(connection.clone());
         }
         let Some(settings) = self.inner.options.connections.get(name) else {
-            let known: Vec<&str> = self.inner.options.connections.keys().map(String::as_str).collect();
+            let known: Vec<&str> = self
+                .inner
+                .options
+                .connections
+                .keys()
+                .map(String::as_str)
+                .collect();
             return Err(MongoError::Options {
                 problems: vec![format!(
                     "there is no MongoDB connection `{name}` (configured: default{}{})",
@@ -192,14 +198,23 @@ impl MongoDb {
     /// sharded cluster, not a standalone server.
     pub async fn supports_transactions(&self) -> MongoResult<bool> {
         let hello = self.inner.database.run_command(doc! { "hello": 1 }).await?;
-        Ok(hello.contains_key("setName") || hello.get_str("msg").is_ok_and(|msg| msg == "isdbgrid"))
+        Ok(
+            hello.contains_key("setName")
+                || hello.get_str("msg").is_ok_and(|msg| msg == "isdbgrid"),
+        )
     }
 
     /// The server's version, `(major, minor)`.
     pub async fn server_version(&self) -> MongoResult<(u32, u32)> {
-        let info = self.inner.database.run_command(doc! { "buildInfo": 1 }).await?;
+        let info = self
+            .inner
+            .database
+            .run_command(doc! { "buildInfo": 1 })
+            .await?;
         let version = info.get_str("version").unwrap_or("0.0");
-        let mut parts = version.split('.').map(|part| part.parse::<u32>().unwrap_or(0));
+        let mut parts = version
+            .split('.')
+            .map(|part| part.parse::<u32>().unwrap_or(0));
         Ok((parts.next().unwrap_or(0), parts.next().unwrap_or(0)))
     }
 

@@ -267,8 +267,14 @@ mod tests {
         let place = |scope: &Scope<'_>, cx: &mut Cx, text: &'static str| {
             scope.place(cx, &ColumnRef::parse(text))
         };
-        assert_eq!(place(&scope, &mut cx, "title").unwrap(), Place::Field("title".into()));
-        assert_eq!(place(&scope, &mut cx, "d.title").unwrap(), Place::Field("title".into()));
+        assert_eq!(
+            place(&scope, &mut cx, "title").unwrap(),
+            Place::Field("title".into())
+        );
+        assert_eq!(
+            place(&scope, &mut cx, "d.title").unwrap(),
+            Place::Field("title".into())
+        );
         assert_eq!(
             place(&scope, &mut cx, "deals.meta->tags->0").unwrap(),
             Place::Field("meta.tags.0".into())
@@ -299,10 +305,15 @@ mod tests {
             Place::Variable("navree0".into())
         );
         assert_eq!(
-            inner.place(&mut cx, &ColumnRef::parse("deals.company_id")).unwrap(),
+            inner
+                .place(&mut cx, &ColumnRef::parse("deals.company_id"))
+                .unwrap(),
             Place::Field("company_id".into())
         );
-        assert_eq!(inner.lets(), [("navree0".to_owned(), Bson::String("$id".into()))]);
+        assert_eq!(
+            inner.lets(),
+            [("navree0".to_owned(), Bson::String("$id".into()))]
+        );
         // Two levels down, the binding goes through the middle pipeline.
         let innermost = inner.child(&TableRef::new("activities"));
         assert_eq!(
@@ -320,11 +331,22 @@ mod tests {
         let mut outer = Scope::of(&TableRef::new("companies"));
         outer.join("owner", "owner");
         let inner = outer.child(&TableRef::new("deals"));
-        let field_of = |scope: &Scope<'_>, text: &'static str| scope.field_of(&ColumnRef::parse(text));
+        let field_of =
+            |scope: &Scope<'_>, text: &'static str| scope.field_of(&ColumnRef::parse(text));
         assert_eq!(field_of(&outer, "companies._id").as_deref(), Some("_id"));
-        assert_eq!(field_of(&outer, "owner.email").as_deref(), Some("owner.email"));
-        assert_eq!(field_of(&inner, "company_id").as_deref(), Some("company_id"));
-        assert_eq!(field_of(&inner, "companies._id"), None, "an enclosing query's column");
+        assert_eq!(
+            field_of(&outer, "owner.email").as_deref(),
+            Some("owner.email")
+        );
+        assert_eq!(
+            field_of(&inner, "company_id").as_deref(),
+            Some("company_id")
+        );
+        assert_eq!(
+            field_of(&inner, "companies._id"),
+            None,
+            "an enclosing query's column"
+        );
         assert_eq!(field_of(&inner, "deals.$where"), None);
         assert!(inner.lets().is_empty(), "nothing was bound");
     }
@@ -335,11 +357,15 @@ mod tests {
         let outer = Scope::of(&TableRef::new("companies"));
         let twins = outer.child(&TableRef::aliased("companies", "twins"));
         assert_eq!(
-            twins.place(&mut cx, &ColumnRef::parse("twins.country")).unwrap(),
+            twins
+                .place(&mut cx, &ColumnRef::parse("twins.country"))
+                .unwrap(),
             Place::Field("country".into())
         );
         assert_eq!(
-            twins.place(&mut cx, &ColumnRef::parse("companies.country")).unwrap(),
+            twins
+                .place(&mut cx, &ColumnRef::parse("companies.country"))
+                .unwrap(),
             Place::Variable("navree0".into()),
             "the enclosing query's companies"
         );

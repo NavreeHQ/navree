@@ -38,13 +38,24 @@ async fn units_of_work_commit_together_or_not_at_all() {
         .unit_of_work(Some(actor), Some("req-1".into()))
         .await
         .unwrap();
-    assert_eq!((uow.actor(), uow.request_id()), (Some(actor), Some("req-1")));
+    assert_eq!(
+        (uow.actor(), uow.request_id()),
+        (Some(actor), Some("req-1"))
+    );
     Company::create(&uow, company("Acme")).await.unwrap();
     let mut globex = Company::create(&uow, company("Globex")).await.unwrap();
     globex.employees = 250;
     globex.save(&uow).await.unwrap();
-    assert_eq!(Company::query().count(&uow).await.unwrap(), 2, "the transaction sees its writes");
-    assert_eq!(Company::query().count(mongo).await.unwrap(), 0, "nobody else does yet");
+    assert_eq!(
+        Company::query().count(&uow).await.unwrap(),
+        2,
+        "the transaction sees its writes"
+    );
+    assert_eq!(
+        Company::query().count(mongo).await.unwrap(),
+        0,
+        "nobody else does yet"
+    );
 
     let changes = uow.changes();
     let ops: Vec<(&str, ChangeOp)> = changes
@@ -110,7 +121,11 @@ async fn sessions_run_models_and_transactions_by_hand() {
     session.start_transaction().await.unwrap();
     assert!(session.in_transaction());
     Company::create(&session, company("Globex")).await.unwrap();
-    assert_eq!(Company::query().count(&session).await.unwrap(), 2, "it reads its own writes");
+    assert_eq!(
+        Company::query().count(&session).await.unwrap(),
+        2,
+        "it reads its own writes"
+    );
     assert_eq!(Company::query().count(mongo).await.unwrap(), 1);
     session.abort_transaction().await.unwrap();
     assert!(!session.in_transaction());
@@ -130,7 +145,8 @@ async fn sessions_run_models_and_transactions_by_hand() {
 
 #[tokio::test]
 async fn the_connection_runs_in_the_current_unit_of_work() {
-    let Some(t) = TestMongo::connect("the_connection_runs_in_the_current_unit_of_work").await else {
+    let Some(t) = TestMongo::connect("the_connection_runs_in_the_current_unit_of_work").await
+    else {
         return;
     };
     let mongo = &t.db;
@@ -167,7 +183,10 @@ async fn transactions_run_again_after_a_write_conflict() {
         return;
     };
     let mongo = &t.db;
-    let acme = Company::create(mongo, company("Acme")).await.unwrap().into_inner();
+    let acme = Company::create(mongo, company("Acme"))
+        .await
+        .unwrap()
+        .into_inner();
     let attempts = Arc::new(AtomicU32::new(0));
     let result = mongo
         .transaction(|uow: MongoUow| {
@@ -196,7 +215,13 @@ async fn transactions_run_again_after_a_write_conflict() {
         .await
         .unwrap();
     assert_eq!(result, 2, "the conflicting first attempt ran again");
-    assert_eq!(Company::find_or_fail(mongo, acme.id).await.unwrap().employees, 12);
+    assert_eq!(
+        Company::find_or_fail(mongo, acme.id)
+            .await
+            .unwrap()
+            .employees,
+        12
+    );
 
     // Other errors roll back and come back as they are.
     let error = mongo
@@ -207,7 +232,14 @@ async fn transactions_run_again_after_a_write_conflict() {
         .await
         .unwrap_err();
     assert_eq!(error.to_string(), "changed my mind");
-    assert_eq!(Company::query().where_(Company::NAME.eq("Doomed")).count(mongo).await.unwrap(), 0);
+    assert_eq!(
+        Company::query()
+            .where_(Company::NAME.eq("Doomed"))
+            .count(mongo)
+            .await
+            .unwrap(),
+        0
+    );
     t.cleanup().await;
 }
 
@@ -222,7 +254,11 @@ impl Injectable for AuditTrail {
 }
 
 impl MongoChangeObserver for AuditTrail {
-    fn observe<'a>(&'a self, uow: &'a MongoUow, changes: &'a [ChangeEvent]) -> BoxFuture<'a, MongoResult> {
+    fn observe<'a>(
+        &'a self,
+        uow: &'a MongoUow,
+        changes: &'a [ChangeEvent],
+    ) -> BoxFuture<'a, MongoResult> {
         Box::pin(async move {
             for change in changes {
                 let name = change
@@ -231,7 +267,9 @@ impl MongoChangeObserver for AuditTrail {
                     .and_then(|new| new.get("name"))
                     .and_then(serde_json::Value::as_str);
                 if name == Some("Forbidden") {
-                    return Err(MongoError::Custom("companies cannot be called Forbidden".into()));
+                    return Err(MongoError::Custom(
+                        "companies cannot be called Forbidden".into(),
+                    ));
                 }
                 table("audit")
                     .insert(
@@ -240,8 +278,14 @@ impl MongoChangeObserver for AuditTrail {
                             ("entity", Value::from(change.entity.clone())),
                             ("op", Value::from(change.op.as_str())),
                             ("key", Value::from(change.id.clone())),
-                            ("actor", Value::from(uow.actor().map(|actor| actor.to_string()))),
-                            ("request_id", Value::from(uow.request_id().map(str::to_owned))),
+                            (
+                                "actor",
+                                Value::from(uow.actor().map(|actor| actor.to_string())),
+                            ),
+                            (
+                                "request_id",
+                                Value::from(uow.request_id().map(str::to_owned)),
+                            ),
                         ]],
                     )
                     .await?;
@@ -261,7 +305,8 @@ impl Module for AuditModule {
 
 #[tokio::test]
 async fn observers_see_the_changes_inside_the_transaction() {
-    let Some(t) = TestMongo::connect("observers_see_the_changes_inside_the_transaction").await else {
+    let Some(t) = TestMongo::connect("observers_see_the_changes_inside_the_transaction").await
+    else {
         return;
     };
     let app = TestApp::builder()
@@ -293,13 +338,18 @@ async fn observers_see_the_changes_inside_the_transaction() {
     assert_eq!(error.to_string(), "companies cannot be called Forbidden");
     assert!(uow.is_finished());
     assert_eq!(Company::query().count(&*mongo).await.unwrap(), 1);
-    assert_eq!(table("audit").count(&*mongo).await.unwrap(), 1, "the audit rolled back too");
+    assert_eq!(
+        table("audit").count(&*mongo).await.unwrap(),
+        1,
+        "the audit rolled back too"
+    );
     t.cleanup().await;
 }
 
 #[tokio::test]
 async fn a_unit_of_work_joins_the_databases_and_commits_after_it() {
-    let Some(t) = TestMongo::connect("a_unit_of_work_joins_the_databases_and_commits_after_it").await
+    let Some(t) =
+        TestMongo::connect("a_unit_of_work_joins_the_databases_and_commits_after_it").await
     else {
         return;
     };
@@ -313,13 +363,19 @@ async fn a_unit_of_work_joins_the_databases_and_commits_after_it() {
     let actor = Uuid::now_v7();
     let uow = sql.uow(Some(actor), Some("req-7".into())).await;
     let joined = mongo.begin_in(&uow).await.unwrap();
-    assert_eq!((joined.actor(), joined.request_id()), (Some(actor), Some("req-7")));
+    assert_eq!(
+        (joined.actor(), joined.request_id()),
+        (Some(actor), Some("req-7"))
+    );
     assert!(joined.joined().is_some_and(|sql_uow| sql_uow.same_as(&uow)));
     Company::create(&joined, company("Acme")).await.unwrap();
     // The change belongs to the database's unit of work, for its observers.
     let changes = uow.changes();
     assert_eq!(changes.len(), 1);
-    assert_eq!((changes[0].entity.as_str(), changes[0].op), ("companies", ChangeOp::Created));
+    assert_eq!(
+        (changes[0].entity.as_str(), changes[0].op),
+        ("companies", ChangeOp::Created)
+    );
     assert_eq!(Company::query().count(mongo).await.unwrap(), 0);
     uow.commit().await.unwrap();
     assert!(joined.is_finished(), "MongoDB committed right after");

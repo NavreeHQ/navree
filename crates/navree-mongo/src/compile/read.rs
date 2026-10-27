@@ -10,12 +10,12 @@ use navree_orm::ir::{
     Join, JoinKind, Nulls, Order, QueryIr, SelectItem, TableRef, Where, WhereClause,
 };
 
+use super::Pending;
 use super::expr::{self, Accumulator};
 use super::filter::{self, nothing};
 use super::group;
 use super::scope::{Cx, Place, Scope, output_name};
 use super::subquery::{self, Keys};
-use super::Pending;
 use crate::command::{Aggregate, Count, Find, MongoCommand};
 use crate::error::{invalid, unsupported};
 
@@ -146,7 +146,10 @@ pub(crate) fn plan(cx: &mut Cx, scope: &mut Scope<'_>, query: &QueryIr) -> Resul
 /// The `$project` giving a union's documents the first query's column
 /// names, by position, as SQL names a union's columns; `None` when the
 /// names already agree or either query selects whole documents.
-fn union_names(first: Option<&[String]>, other: Option<&[String]>) -> Result<Option<Document>, OrmError> {
+fn union_names(
+    first: Option<&[String]>,
+    other: Option<&[String]>,
+) -> Result<Option<Document>, OrmError> {
     let (Some(first), Some(other)) = (first, other) else {
         return Ok(None);
     };
@@ -751,7 +754,10 @@ pub(crate) fn exists(query: &QueryIr) -> Result<MongoCommand, OrmError> {
 /// unions, a limit or an offset is aggregated over what it returns; any
 /// other over the documents it matches. A plain `count(*)` is a
 /// `countDocuments`.
-pub(crate) fn aggregate(query: &QueryIr, aggregate: &AggregateIr) -> Result<MongoCommand, OrmError> {
+pub(crate) fn aggregate(
+    query: &QueryIr,
+    aggregate: &AggregateIr,
+) -> Result<MongoCommand, OrmError> {
     let wrap = !query.groups.is_empty()
         || !query.havings.is_empty()
         || !query.unions.is_empty()
@@ -810,7 +816,11 @@ pub(crate) fn aggregate(query: &QueryIr, aggregate: &AggregateIr) -> Result<Mong
     let mut pending = Pending::default();
     let argument = match &aggregate.arg {
         Some(arg) => {
-            let arg = if wrap { unqualified_expr(arg) } else { arg.clone() };
+            let arg = if wrap {
+                unqualified_expr(arg)
+            } else {
+                arg.clone()
+            };
             Some(expr::value(&mut cx, arg_scope, &mut pending, &arg)?)
         }
         None => None,
@@ -825,7 +835,8 @@ pub(crate) fn aggregate(query: &QueryIr, aggregate: &AggregateIr) -> Result<Mong
         let accumulator: Accumulator =
             expr::accumulator(aggregate.function, argument, aggregate.distinct)?;
         stages.push(doc! { "$group": { "_id": Bson::Null, "aggregate": accumulator.op.clone() } });
-        stages.push(doc! { "$project": { "_id": 0, "aggregate": accumulator.output("aggregate") } });
+        stages
+            .push(doc! { "$project": { "_id": 0, "aggregate": accumulator.output("aggregate") } });
     }
     Ok(MongoCommand::Aggregate(Aggregate {
         collection: plan.collection,

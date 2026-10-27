@@ -183,16 +183,20 @@ impl MongoDriver {
         if let Some(limit) = find.limit {
             action = action.limit(i64::try_from(limit).unwrap_or(i64::MAX));
         }
-        self.timed(&command, |documents: &Vec<Document>| Some(documents.len() as u64), async {
-            match &self.session {
-                None => action.await?.try_collect().await,
-                Some(state) => {
-                    let mut session = state.session.lock().await;
-                    let mut cursor = action.session(&mut *session).await?;
-                    cursor.stream(&mut *session).try_collect().await
+        self.timed(
+            &command,
+            |documents: &Vec<Document>| Some(documents.len() as u64),
+            async {
+                match &self.session {
+                    None => action.await?.try_collect().await,
+                    Some(state) => {
+                        let mut session = state.session.lock().await;
+                        let mut cursor = action.session(&mut *session).await?;
+                        cursor.stream(&mut *session).try_collect().await
+                    }
                 }
-            }
-        })
+            },
+        )
         .await
     }
 
@@ -204,16 +208,20 @@ impl MongoDriver {
         let command = MongoCommand::Aggregate(aggregate.clone());
         let collection = self.database.collection::<Document>(&aggregate.collection);
         let action = collection.aggregate(aggregate.pipeline.clone());
-        self.timed(&command, |documents: &Vec<Document>| Some(documents.len() as u64), async {
-            match &self.session {
-                None => action.await?.try_collect().await,
-                Some(state) => {
-                    let mut session = state.session.lock().await;
-                    let mut cursor = action.session(&mut *session).await?;
-                    cursor.stream(&mut *session).try_collect().await
+        self.timed(
+            &command,
+            |documents: &Vec<Document>| Some(documents.len() as u64),
+            async {
+                match &self.session {
+                    None => action.await?.try_collect().await,
+                    Some(state) => {
+                        let mut session = state.session.lock().await;
+                        let mut cursor = action.session(&mut *session).await?;
+                        cursor.stream(&mut *session).try_collect().await
+                    }
                 }
-            }
-        })
+            },
+        )
         .await
     }
 
@@ -347,17 +355,19 @@ impl MongoDriver {
         };
         let action = collection.update_many(update.filter.clone(), modifications);
         let result = self
-            .timed(&command, |result: &mongodb::results::UpdateResult| {
-                Some(result.matched_count)
-            }, async {
-                match &self.session {
-                    None => action.await,
-                    Some(state) => {
-                        let mut session = state.session.lock().await;
-                        action.session(&mut *session).await
+            .timed(
+                &command,
+                |result: &mongodb::results::UpdateResult| Some(result.matched_count),
+                async {
+                    match &self.session {
+                        None => action.await,
+                        Some(state) => {
+                            let mut session = state.session.lock().await;
+                            action.session(&mut *session).await
+                        }
                     }
-                }
-            })
+                },
+            )
             .await?;
         Ok(result.matched_count)
     }
@@ -367,17 +377,19 @@ impl MongoDriver {
         let collection = self.database.collection::<Document>(&delete.collection);
         let action = collection.delete_many(delete.filter.clone());
         let result = self
-            .timed(&command, |result: &mongodb::results::DeleteResult| {
-                Some(result.deleted_count)
-            }, async {
-                match &self.session {
-                    None => action.await,
-                    Some(state) => {
-                        let mut session = state.session.lock().await;
-                        action.session(&mut *session).await
+            .timed(
+                &command,
+                |result: &mongodb::results::DeleteResult| Some(result.deleted_count),
+                async {
+                    match &self.session {
+                        None => action.await,
+                        Some(state) => {
+                            let mut session = state.session.lock().await;
+                            action.session(&mut *session).await
+                        }
                     }
-                }
-            })
+                },
+            )
             .await?;
         Ok(result.deleted_count)
     }
@@ -420,11 +432,19 @@ impl MongoDriver {
             Err(error) => error,
         };
         let duplicates = match error.kind.as_ref() {
-            mongodb::error::ErrorKind::InsertMany(failure) if failure.write_concern_error.is_none() => failure
-                .write_errors
-                .as_ref()
-                .filter(|errors| errors.iter().all(|write| crate::error::is_duplicate_code(write.code)))
-                .map(Vec::len),
+            mongodb::error::ErrorKind::InsertMany(failure)
+                if failure.write_concern_error.is_none() =>
+            {
+                failure
+                    .write_errors
+                    .as_ref()
+                    .filter(|errors| {
+                        errors
+                            .iter()
+                            .all(|write| crate::error::is_duplicate_code(write.code))
+                    })
+                    .map(Vec::len)
+            }
             _ => None,
         };
         match duplicates {
@@ -523,11 +543,9 @@ impl MongoDriver {
                 }
             })
             .await?
-            .ok_or_else(|| {
-                OrmError::Driver {
-                    driver: Cow::Borrowed(DRIVER),
-                    message: format!("the key counter of `{collection}.{field}` was not returned"),
-                }
+            .ok_or_else(|| OrmError::Driver {
+                driver: Cow::Borrowed(DRIVER),
+                message: format!("the key counter of `{collection}.{field}` was not returned"),
             })?;
         let value = match counter.get("value") {
             Some(Bson::Int64(value)) => *value,
@@ -698,7 +716,10 @@ impl DocumentDriver for MongoDriver {
         })
     }
 
-    fn insert<'a>(&'a self, insert: &'a InsertIr) -> BoxFuture<'a, Result<InsertOutcome, OrmError>> {
+    fn insert<'a>(
+        &'a self,
+        insert: &'a InsertIr,
+    ) -> BoxFuture<'a, Result<InsertOutcome, OrmError>> {
         Box::pin(async move {
             let mut command = compile::insert(insert)?;
             let mut returned = Vec::new();

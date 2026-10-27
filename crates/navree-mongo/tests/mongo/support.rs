@@ -37,7 +37,10 @@ impl TestMongo {
     /// A fresh database, or `None` when no server is configured.
     pub async fn connect(test: &str) -> Option<TestMongo> {
         let url = server_url(test)?;
-        let name = format!("navree_test_{}", &uuid::Uuid::new_v4().simple().to_string()[..16]);
+        let name = format!(
+            "navree_test_{}",
+            &uuid::Uuid::new_v4().simple().to_string()[..16]
+        );
         let db = MongoDb::connect(&TestMongo::options_for(&url, &name))
             .await
             .expect("NAVREE_TEST_MONGODB_URL is a MongoDB URL");

@@ -256,7 +256,10 @@ pub struct MongoMigrationReport {
 impl MongoMigrationReport {
     /// `module/name` of each migration.
     pub fn labels(&self) -> Vec<String> {
-        self.migrations.iter().map(MongoMigrationRun::label).collect()
+        self.migrations
+            .iter()
+            .map(MongoMigrationRun::label)
+            .collect()
     }
 }
 
@@ -419,7 +422,10 @@ impl MongoMigrator {
                 Some(Bson::Int32(batch)) => i64::from(*batch),
                 _ => 0,
             };
-            let applied_at = document.get_datetime("applied_at").ok().map(|at| at.to_chrono());
+            let applied_at = document
+                .get_datetime("applied_at")
+                .ok()
+                .map(|at| at.to_chrono());
             applied.insert(id.to_owned(), Applied { batch, applied_at });
         }
         Ok(applied)
@@ -433,7 +439,10 @@ impl MongoMigrator {
         let mut batch = applied.values().map(|a| a.batch).max().unwrap_or(0) + 1;
         let mut report = MongoMigrationReport::default();
         let transactions = self.db.supports_transactions().await?;
-        for step in steps.iter().filter(|step| !applied.contains_key(&step.label())) {
+        for step in steps
+            .iter()
+            .filter(|step| !applied.contains_key(&step.label()))
+        {
             let run = self
                 .run(step, true, batch, options.pretend, transactions)
                 .await
@@ -448,7 +457,10 @@ impl MongoMigrator {
 
     /// Reverts the last batch, the last `step` migrations or batch `batch`,
     /// newest first.
-    pub async fn rollback(&self, options: &MongoRollbackOptions) -> MongoResult<MongoMigrationReport> {
+    pub async fn rollback(
+        &self,
+        options: &MongoRollbackOptions,
+    ) -> MongoResult<MongoMigrationReport> {
         let steps = self.plan()?;
         let applied = self.applied().await?;
         let known: HashSet<String> = steps.iter().map(Step::label).collect();
@@ -500,7 +512,11 @@ impl MongoMigrator {
             .await
     }
 
-    async fn revert(&self, steps: Vec<&Step<'_>>, pretend: bool) -> MongoResult<MongoMigrationReport> {
+    async fn revert(
+        &self,
+        steps: Vec<&Step<'_>>,
+        pretend: bool,
+    ) -> MongoResult<MongoMigrationReport> {
         let transactions = self.db.supports_transactions().await?;
         let mut report = MongoMigrationReport::default();
         for step in steps {
@@ -621,7 +637,10 @@ impl MongoMigrator {
                     } else {
                         doc! { "delete": collection, "deletes": [{ "q": { "_id": label.clone() }, "limit": 1 }] }
                     };
-                    match crate::MongoExecutor::mongo_driver(uow)?.run_command(command).await {
+                    match crate::MongoExecutor::mongo_driver(uow)?
+                        .run_command(command)
+                        .await
+                    {
                         Ok(reply) => match crate::schema::write_problem(&reply) {
                             Some(problem) => Err(MongoError::Migrations(format!(
                                 "recording `{label}` in the migrations collection failed: {problem}"
@@ -631,7 +650,12 @@ impl MongoMigrator {
                         Err(error) => Err(error),
                     }
                 }
-                None if up => self.records().insert_one(record).await.map(drop).map_err(MongoError::from),
+                None if up => self
+                    .records()
+                    .insert_one(record)
+                    .await
+                    .map(drop)
+                    .map_err(MongoError::from),
                 None => self
                     .records()
                     .delete_one(doc! { "_id": label.clone() })
@@ -715,14 +739,28 @@ mod tests {
             MongoMigrationSet::new("a"),
         ])
         .await;
-        assert!(duplicate.plan().err().unwrap().to_string().contains("named `a`"));
+        assert!(
+            duplicate
+                .plan()
+                .err()
+                .unwrap()
+                .to_string()
+                .contains("named `a`")
+        );
         let twice = migrator(vec![
             MongoMigrationSet::new("a")
                 .migration(NamedMongoMigration::new("m1", Noop))
                 .migration(NamedMongoMigration::new("m1", Noop)),
         ])
         .await;
-        assert!(twice.plan().err().unwrap().to_string().contains("registered twice"));
+        assert!(
+            twice
+                .plan()
+                .err()
+                .unwrap()
+                .to_string()
+                .contains("registered twice")
+        );
         let cycle = migrator(vec![
             MongoMigrationSet::new("a").after(["b"]),
             MongoMigrationSet::new("b").after(["a"]),

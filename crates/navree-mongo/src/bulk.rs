@@ -117,9 +117,8 @@ impl MongoBulkWrites for TableBuilder {
         C: Into<Cow<'static, str>>,
         V: Into<Value>,
     {
-        let upsert = collection_of(self.into_ir(), "upsert").and_then(|collection| {
-            upserts(collection, documents(rows)?, unique_by, update)
-        });
+        let upsert = collection_of(self.into_ir(), "upsert")
+            .and_then(|collection| upserts(collection, documents(rows)?, unique_by, update));
         async move {
             let upsert = upsert?;
             exec.mongo_driver()?.upsert(&upsert).await
@@ -196,7 +195,9 @@ fn upserts(
         let mut filter = Document::new();
         for field in unique_by {
             let value = document.get(*field).cloned().ok_or_else(|| {
-                invalid(format!("a row lacks the unique field `{field}` its document is found by"))
+                invalid(format!(
+                    "a row lacks the unique field `{field}` its document is found by"
+                ))
             })?;
             filter.insert(*field, value);
         }
@@ -242,14 +243,28 @@ mod tests {
 
     fn rows() -> Vec<Vec<(&'static str, Value)>> {
         vec![
-            vec![("code", Value::from("EUR")), ("rate", Value::from(1.09)), ("source", Value::from("ecb"))],
-            vec![("code", Value::from("NOK")), ("rate", Value::from(0.09)), ("source", Value::from("ecb"))],
+            vec![
+                ("code", Value::from("EUR")),
+                ("rate", Value::from(1.09)),
+                ("source", Value::from("ecb")),
+            ],
+            vec![
+                ("code", Value::from("NOK")),
+                ("rate", Value::from(0.09)),
+                ("source", Value::from("ecb")),
+            ],
         ]
     }
 
     #[test]
     fn upserts_set_the_updated_fields_and_insert_the_rest() {
-        let upsert = upserts("rates".into(), documents(rows()).unwrap(), &["code"], &["rate"]).unwrap();
+        let upsert = upserts(
+            "rates".into(),
+            documents(rows()).unwrap(),
+            &["code"],
+            &["rate"],
+        )
+        .unwrap();
         assert_eq!(
             upsert.rows[0],
             (
@@ -257,7 +272,8 @@ mod tests {
                 doc! { "$set": { "rate": 1.09 }, "$setOnInsert": { "source": "ecb" } }
             )
         );
-        let only_missing = upserts("rates".into(), documents(rows()).unwrap(), &["code"], &[]).unwrap();
+        let only_missing =
+            upserts("rates".into(), documents(rows()).unwrap(), &["code"], &[]).unwrap();
         assert_eq!(
             only_missing.rows[1].1,
             doc! { "$setOnInsert": { "rate": 0.09, "source": "ecb" } }
@@ -269,15 +285,23 @@ mod tests {
             &[],
         )
         .unwrap();
-        assert_eq!(keys_only.rows[0].1, doc! { "$setOnInsert": { "name": "vip" } });
+        assert_eq!(
+            keys_only.rows[0].1,
+            doc! { "$setOnInsert": { "name": "vip" } }
+        );
     }
 
     #[test]
     fn upserts_name_what_is_wrong() {
         let wrong = |unique_by: &[&str], update: &[&str]| {
-            upserts("rates".into(), documents(rows()).unwrap(), unique_by, update)
-                .unwrap_err()
-                .to_string()
+            upserts(
+                "rates".into(),
+                documents(rows()).unwrap(),
+                unique_by,
+                update,
+            )
+            .unwrap_err()
+            .to_string()
         };
         assert!(wrong(&[], &["rate"]).contains("unique fields"));
         assert!(wrong(&["code"], &["code"]).contains("both"));
@@ -291,12 +315,20 @@ mod tests {
 
     #[test]
     fn bulk_writes_go_to_a_plain_collection() {
-        assert_eq!(collection_of(table("rates").into_ir(), "upsert").unwrap(), "rates");
+        assert_eq!(
+            collection_of(table("rates").into_ir(), "upsert").unwrap(),
+            "rates"
+        );
         let error = collection_of(
-            table("rates").where_(navree_orm::col("code").eq("EUR")).into_ir(),
+            table("rates")
+                .where_(navree_orm::col("code").eq("EUR"))
+                .into_ir(),
             "upsert",
         )
         .unwrap_err();
-        assert!(error.to_string().contains("`table(\"name\")` alone"), "{error}");
+        assert!(
+            error.to_string().contains("`table(\"name\")` alone"),
+            "{error}"
+        );
     }
 }

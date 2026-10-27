@@ -163,7 +163,9 @@ impl MongoCommand {
             MongoCommand::Find(find) => &find.collection,
             MongoCommand::Aggregate(aggregate) => &aggregate.collection,
             MongoCommand::Count(count) => &count.collection,
-            MongoCommand::Insert(insert) | MongoCommand::InsertOrIgnore(insert) => &insert.collection,
+            MongoCommand::Insert(insert) | MongoCommand::InsertOrIgnore(insert) => {
+                &insert.collection
+            }
             MongoCommand::Update(update) => &update.collection,
             MongoCommand::Upsert(upsert) => &upsert.collection,
             MongoCommand::Delete(delete) => &delete.collection,
@@ -188,7 +190,8 @@ impl MongoCommand {
                     pipeline.push(bson::doc! { "$skip": i64::try_from(skip).unwrap_or(i64::MAX) });
                 }
                 if let Some(limit) = find.limit {
-                    pipeline.push(bson::doc! { "$limit": i64::try_from(limit).unwrap_or(i64::MAX) });
+                    pipeline
+                        .push(bson::doc! { "$limit": i64::try_from(limit).unwrap_or(i64::MAX) });
                 }
                 if let Some(projection) = find.projection {
                     pipeline.push(bson::doc! { "$project": projection });
@@ -253,12 +256,16 @@ impl MongoCommand {
             }
             MongoCommand::Insert(insert) => {
                 let _ = write!(out, "db.{}.insertMany([", insert.collection);
-                rows(out, &insert.documents, mode, pretty, |out, doc| document(out, doc, mode));
+                rows(out, &insert.documents, mode, pretty, |out, doc| {
+                    document(out, doc, mode)
+                });
                 out.push_str("])");
             }
             MongoCommand::InsertOrIgnore(insert) => {
                 let _ = write!(out, "db.{}.insertMany([", insert.collection);
-                rows(out, &insert.documents, mode, pretty, |out, doc| document(out, doc, mode));
+                rows(out, &insert.documents, mode, pretty, |out, doc| {
+                    document(out, doc, mode)
+                });
                 out.push_str("], {\"ordered\": false})");
             }
             MongoCommand::Upsert(upsert) => {
@@ -318,7 +325,9 @@ enum Mode {
 /// own, indented, when `pretty`. In shape mode every stage shows (they are
 /// structure).
 fn stages(out: &mut String, pipeline: &[Document], mode: Mode, pretty: bool) {
-    list(out, pipeline, pretty, |out, stage| document(out, stage, mode));
+    list(out, pipeline, pretty, |out, stage| {
+        document(out, stage, mode)
+    });
 }
 
 /// The rows of a write: like [`stages`], but in shape mode only the first,
@@ -375,8 +384,11 @@ fn document(out: &mut String, document: &Document, mode: Mode) {
         let mode = match (mode, key.as_str()) {
             // Structure, not data: directions, inclusions, collection and
             // field names of stages.
-            (Mode::Shape, "$sort" | "$project" | "$unset" | "from" | "as" | "localField"
-            | "foreignField" | "coll" | "unit" | "format") => Mode::Plain,
+            (
+                Mode::Shape,
+                "$sort" | "$project" | "$unset" | "from" | "as" | "localField" | "foreignField"
+                | "coll" | "unit" | "format",
+            ) => Mode::Plain,
             (mode, _) => mode,
         };
         bson(out, value, mode);
@@ -494,11 +506,16 @@ mod tests {
             insert.to_string(),
             r#"db.deals.insertMany([{"title": "A"}, {"title": "B"}])"#
         );
-        assert_eq!(insert.shape(), r#"db.deals.insertMany([{"title": ?}, ...])"#);
+        assert_eq!(
+            insert.shape(),
+            r#"db.deals.insertMany([{"title": ?}, ...])"#
+        );
         let update = MongoCommand::Update(Update {
             collection: "deals".into(),
             filter: doc! { "_id": 7 },
-            update: UpdateDocument::Operators(doc! { "$set": { "title": "C" }, "$inc": { "n": 1 } }),
+            update: UpdateDocument::Operators(
+                doc! { "$set": { "title": "C" }, "$inc": { "n": 1 } },
+            ),
         });
         assert_eq!(
             update.to_string(),
@@ -515,10 +532,7 @@ mod tests {
     fn the_alternate_form_puts_each_stage_on_its_own_line() {
         let aggregate = MongoCommand::Aggregate(Aggregate {
             collection: "events".into(),
-            pipeline: vec![
-                doc! { "$match": { "kind": "a" } },
-                doc! { "$count": "n" },
-            ],
+            pipeline: vec![doc! { "$match": { "kind": "a" } }, doc! { "$count": "n" }],
         });
         assert_eq!(
             format!("{aggregate:#}"),
