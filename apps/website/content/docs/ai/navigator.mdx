@@ -27,7 +27,7 @@ Connect your agent to it once, and it can ask your app:
 | `read_config` | The merged configuration, secrets redacted |
 | `search_docs`, `read_doc` | These docs, for the Navree version your app uses |
 
-When the app includes [Lighthouse](/docs/tools/lighthouse/#the-json-api-for-scripts-and-agents), Navigator adds its five read tools (`lighthouse_list_issues`, `lighthouse_get_issue`, `lighthouse_slow_routes`, `lighthouse_slow_queries` and `lighthouse_failed_jobs`), reading Lighthouse's tables in your local database.
+When the app includes [Lighthouse](/docs/tools/lighthouse/#the-json-api-for-scripts-and-agents) (a file under `src/` adds `LighthouseModule`, as `navree new` apps do), Navigator adds its five read tools (`lighthouse_list_issues`, `lighthouse_get_issue`, `lighthouse_slow_routes`, `lighthouse_slow_queries` and `lighthouse_failed_jobs`), reading Lighthouse's tables in your local database. See [Lighthouse's tools](#lighthouses-tools).
 
 Everything is read-only, and Navigator runs only on your machine, over stdio, for the project you start it in. It is for development; your production binary doesn't contain it. The code lives in the `navree-navigator` crate, which the CLI runs; the facade re-exports it as `navree::navigator` behind the opt-in `navigator` feature, for tools and tests.
 
@@ -196,6 +196,20 @@ The configuration tree your app sees, merged from `.env`, `config/app.toml` and 
 
 A version's docs are one JSON file, `docs.json`: `{"version": "0.1.0", "pages": [{"slug": "ai/navigator", "title": "Navigator", "description": "...", "planned": false, "sections": [{"heading": "Options", "anchor": "options", "markdown": "..."}]}]}`, each page split at its `##` headings, the site's components written as plain Markdown.
 
+### Lighthouse's tools
+
+When a file under your app's `src/` adds `LighthouseModule`, Navigator lists five more tools. They read Lighthouse's tables (`lighthouse_issues`, `lighthouse_occurrences`, `lighthouse_aggregates`, `lighthouse_alerts`) in the database Lighthouse writes to: `lighthouse.database_url` when it is set, otherwise `database.url`, with the same rules as `query_database` (local databases only unless `--allow-remote-database`, read-only, 5 seconds). Your app doesn't have to be running, and nothing needs an access token: the data is your local database's.
+
+| Tool | Arguments | Answers |
+|---|---|---|
+| `lighthouse_list_issues` | `status` (`open`, the default, `resolved`, `resolved_in_next_release`, `ignored` or `all`), `kind`, `level`, `search` (text in the title or culprit, any case), `sort` (`last_seen`, the default, `first_seen` or `count`), `limit` (default 20, at most 100) | Issues, most recently seen first: `id`, `kind`, `level`, `status`, `title`, `culprit`, `count`, `first_seen`, `last_seen`, `last_release`, `environment` |
+| `lighthouse_get_issue` | `id` | The issue with its `message`, source `chain`, `location`, `error_type`, releases and resolution; its five latest `occurrences` (time, request id, method, route, path, status, user, workspace, release, backtrace and context); the `alerts` sent for it |
+| `lighthouse_slow_routes` | `period` (`1h`, `24h`, the default, or `7d`), `limit` (default 10, at most 50) | Routes, slowest p95 first: `endpoint`, `requests`, `errors`, `error_rate`, `avg_ms`, `p50_ms`, `p95_ms`, `p99_ms`, `max_ms` |
+| `lighthouse_slow_queries` | `period`, `limit` | Normalized statements by total time: `statement`, `count`, `errors`, `total_ms`, `avg_ms`, `p95_ms`, `max_ms` |
+| `lighthouse_failed_jobs` | `period`, `limit` | Job types with failed attempts, most failures first (`job_type`, `attempts`, `failed_attempts`, `failed_jobs`, `avg_ms`, `p95_ms`), and the open `failed_job` issues |
+
+The figures are the dashboard's: Navigator merges the per-hour rows of every process (per-minute rows for `1h`) and their latency histograms, so a p95 covers every recorded request, not a sample. When the tables don't exist yet, the tools say to run `navree migrate`. To change an issue (resolve, ignore, reopen), use the dashboard or [Lighthouse's JSON API](/docs/tools/lighthouse/#the-json-api-for-scripts-and-agents); Navigator only reads.
+
 ## Working with Navigator
 
 Agents use tools they know about. Two things help them reach for Navigator at the right moments:
@@ -227,7 +241,7 @@ adds it hasn't run on your database. Run `navree migrate` and reload the page.
 |---|---|
 | `--path <dir>` | The app to serve, instead of the current directory. |
 | `--no-build` | Never run `cargo build`; use the last built binary (`target/debug/<app>`), or answer without one. |
-| `--allow-remote-database` | Let `query_database` and `describe_schema` connect to a database that isn't on this machine. |
+| `--allow-remote-database` | Let `query_database`, `describe_schema` and Lighthouse's tools connect to a database that isn't on this machine. |
 | `--docs-offline` | Never download docs; use the cache, or the docs Navigator ships with (and say so). |
 
 ## Security
@@ -236,7 +250,7 @@ Navigator gives a model a view into your app, so it is built to show and never t
 
 - **Development only.** It runs on your machine, as you, over stdio. It opens no port, and it isn't part of your app's binary, so nothing you deploy contains it.
 - **Read-only.** No tool writes anything. `query_database` parses the statement before sending it and refuses anything but one `SELECT`, `WITH`, `EXPLAIN` or `SHOW`: writes, DDL, `PRAGMA`, `ATTACH`, `SET`, transaction control, several statements, data-changing `WITH` clauses, `EXPLAIN` of a write, `SELECT ... INTO`, `FOR UPDATE` and `FOR SHARE`, and functions that act outside the transaction (`pg_sleep`, `pg_terminate_backend`, `pg_read_file`, advisory locks, `dblink`, `lo_*`, `set_config`, `load_extension`, ...). What is sent is the statement as parsed, never the raw text. It then runs read-only: on PostgreSQL in a session whose transactions default to read-only, inside `BEGIN READ ONLY` with a 5 second `statement_timeout`, through a cursor that fetches at most 101 rows, then rolled back; on SQLite on a connection with `PRAGMA query_only` on, interrupted after 5 seconds. At most 100 rows come back.
-- **Local databases.** Unless you pass `--allow-remote-database`, Navigator only connects to SQLite files and to databases on `localhost`, a loopback address (`127.0.0.1`, `::1`) or a Unix socket. A `database.url` pointing at a server elsewhere, such as a staging database in a `.env` you forgot to change, is refused with a message that says why. Navigator never creates a SQLite file that doesn't exist. It reads SQLite and PostgreSQL databases; other drivers are refused.
+- **Local databases.** Unless you pass `--allow-remote-database`, Navigator only connects to SQLite files and to databases on `localhost`, a loopback address (`127.0.0.1`, `::1`) or a Unix socket. The same goes for `lighthouse.database_url`. A `database.url` pointing at a server elsewhere, such as a staging database in a `.env` you forgot to change, is refused with a message that says why. Navigator never creates a SQLite file that doesn't exist. It reads SQLite and PostgreSQL databases; other drivers are refused.
 - **Asking the app.** `routes --json` and `migrate:status --json` boot your app the way `navree routes` does, with `migrate_on_boot` turned off for that process; `introspect --json` constructs nothing.
 - **Secrets redacted.** Configuration is redacted like `Config::redacted()`, query results mask secret-looking columns, and logs carry what your app's `log.redact` already left out.
 - **What leaves your machine.** Tool results go to the model your agent uses, like any file the agent reads. Keep customer data out of your development database: seed it with [factories](/docs/database/seeding-and-factories/) instead of copying production. Navigator itself only reaches the network to download the docs of your Navree version once.

@@ -1,6 +1,6 @@
 ---
 name: navree-navigator
-description: "Uses Navigator, Navree's MCP server for coding agents (`navree mcp`), and installs the Navree agent skills (`navree skills:install`). Covers connecting Claude Code, Cursor, Codex or VS Code; the twelve read-only tools (`app_info`, `list_routes`, `module_graph`, `list_providers`, `list_commands`, `describe_schema`, `query_database`, `read_logs`, `last_error`, `read_config`, `search_docs`, `read_doc`); the options `--path`, `--no-build`, `--allow-remote-database` and `--docs-offline`; the log file the log tools need; and the security limits. Use when setting up an agent on a Navree app, when a Navigator tool returns an error (a build error, a refused query, no log file, a remote database), before adding a route, wiring a provider or writing a migration, or when asked why a request failed."
+description: "Uses Navigator, Navree's MCP server for coding agents (`navree mcp`), and installs the Navree agent skills (`navree skills:install`). Covers connecting Claude Code, Cursor, Codex or VS Code; the twelve read-only tools (`app_info`, `list_routes`, `module_graph`, `list_providers`, `list_commands`, `describe_schema`, `query_database`, `read_logs`, `last_error`, `read_config`, `search_docs`, `read_doc`) and, when the app includes Lighthouse, its five (`lighthouse_list_issues`, `lighthouse_get_issue`, `lighthouse_slow_routes`, `lighthouse_slow_queries`, `lighthouse_failed_jobs`); the options `--path`, `--no-build`, `--allow-remote-database` and `--docs-offline`; the log file the log tools need; and the security limits. Use when setting up an agent on a Navree app, when a Navigator tool returns an error (a build error, a refused query, no log file, a remote database), before adding a route, wiring a provider or writing a migration, or when asked why a request failed or what is slow."
 ---
 
 # Navigator
@@ -54,6 +54,18 @@ tool is read-only.
 | `search_docs` | `query` (required), `limit` | `{version, source, note?, results: [{slug, title, section, url, excerpt, score}]}` |
 | `read_doc` | `slug` (required), `section` | the page (or section) as Markdown |
 
+When a file under the app's `src/` adds `LighthouseModule`, five more tools
+read Lighthouse's tables in `lighthouse.database_url` (else `database.url`),
+with the same local-only, read-only rules:
+
+| Tool | Arguments | Answers |
+|---|---|---|
+| `lighthouse_list_issues` | `status` (`open` default, `resolved`, `resolved_in_next_release`, `ignored`, `all`), `kind`, `level`, `search`, `sort` (`last_seen`, `first_seen`, `count`), `limit` (20, max 100) | `{issues: [{id, kind, level, status, title, culprit, count, first_seen, last_seen, last_release, environment}]}` |
+| `lighthouse_get_issue` | `id` (required, a UUID) | `{issue: {..., message, chain, location, error_type}, occurrences: [5 latest, with request_id, route, status, backtrace, context], alerts}` |
+| `lighthouse_slow_routes` | `period` (`1h`, `24h` default, `7d`), `limit` (10, max 50) | `{period, routes: [{endpoint, requests, errors, error_rate, avg_ms, p50_ms, p95_ms, p99_ms, max_ms}]}`, p95 first |
+| `lighthouse_slow_queries` | `period`, `limit` | `{period, queries: [{statement, count, errors, total_ms, avg_ms, p95_ms, max_ms}]}`, by total time |
+| `lighthouse_failed_jobs` | `period`, `limit` | `{period, jobs: [{job_type, attempts, failed_attempts, failed_jobs, avg_ms, p95_ms}], issues}` |
+
 How the app tools work: Navigator runs `cargo build --message-format=json
 --bin <app>` (debug profile, your target directory), then the binary with
 `introspect --json` (graph, providers, commands; nothing constructed),
@@ -71,6 +83,11 @@ the environment. Answers are cached while the binary is unchanged.
   explain "no such column").
 - When a request fails: `last_error`, then `read_logs` with its
   `request_id`.
+- When asked to fix what broke recently (Lighthouse apps):
+  `lighthouse_list_issues`, then `lighthouse_get_issue` for the chain,
+  backtrace and failing request; `lighthouse_slow_routes` and
+  `lighthouse_slow_queries` before performance work. Resolving an issue is
+  the dashboard's or Lighthouse's JSON API's job, not Navigator's.
 - For API questions: `search_docs`, then `read_doc` with the slug.
 
 ## Options
@@ -79,7 +96,7 @@ the environment. Answers are cached while the binary is unchanged.
 |---|---|
 | `--path <dir>` | The app to serve instead of the current directory |
 | `--no-build` | Never run `cargo build`; use `target/debug/<app>` if it exists |
-| `--allow-remote-database` | Allow a `database.url` that isn't on this machine |
+| `--allow-remote-database` | Allow a `database.url` (or `lighthouse.database_url`) that isn't on this machine |
 | `--docs-offline` | Never download docs; use the cache or the built-in docs |
 
 `NAVREE_HOME` moves the docs cache (default `~/.navree`, so
@@ -111,6 +128,9 @@ cargo test -p navree-navigator
   `navree migrate`.
 - **No log file**: set `log.file` (above) and restart `navree dev`.
 - **MySQL** URLs are not supported (SQLite and PostgreSQL are).
+- **No `lighthouse_*` tools listed**: no file under `src/` adds
+  `LighthouseModule`. "Lighthouse's tables aren't in the database": run
+  `navree migrate`.
 - Values of columns whose names contain `password`, `secret`, `token`,
   `api_key` or `private_key` come back as `[redacted]`; that is expected.
 
