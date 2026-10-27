@@ -119,7 +119,10 @@ enum TxState {
 /// is query scoping (every query of a workspace-scoped repository filters
 /// on `workspace_id`), and only PostgreSQL can also enforce it with
 /// policies. Rows are locked with `SELECT ... FOR UPDATE` on PostgreSQL
-/// and MySQL ([`lock_for_update`](Uow::lock_for_update)).
+/// and MySQL ([`lock_for_update`](Uow::lock_for_update)). A deadlock
+/// (error 1213) makes MySQL roll the whole transaction back at once, and
+/// whatever runs through it afterwards commits on its own, beyond the reach
+/// of [`rollback`](Uow::rollback): return the error instead of carrying on.
 ///
 /// **Current unit of work.** While a request's handler runs (and inside
 /// [`Db::transaction`] or [`scope`](Uow::scope)), [`Uow::current`] returns
