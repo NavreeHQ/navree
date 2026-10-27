@@ -1,0 +1,10 @@
+---
+source: crates/navree-orm/tests/relations/sql.rs
+expression: "query(Deal::query().where_belongs_to(&Record::new(Company\n{ id: 3, ..Company::default() })))"
+---
+PostgreSQL: SELECT "deals"."id", "deals"."company_id", "deals"."owner_id", "deals"."title", "deals"."amount_cents", "deals"."stage", "deals"."created_at", "deals"."updated_at", "deals"."deleted_at" FROM "deals" WHERE "deals"."company_id" IN ($1) AND "deals"."deleted_at" IS NULL
+  values: [BigInt(Some(3))]
+MySQL: SELECT `deals`.`id`, `deals`.`company_id`, `deals`.`owner_id`, `deals`.`title`, `deals`.`amount_cents`, `deals`.`stage`, `deals`.`created_at`, `deals`.`updated_at`, `deals`.`deleted_at` FROM `deals` WHERE `deals`.`company_id` IN (?) AND `deals`.`deleted_at` IS NULL
+  values: [BigInt(Some(3))]
+SQLite: SELECT "deals"."id", "deals"."company_id", "deals"."owner_id", "deals"."title", "deals"."amount_cents", "deals"."stage", "deals"."created_at", "deals"."updated_at", "deals"."deleted_at" FROM "deals" WHERE "deals"."company_id" IN (?) AND "deals"."deleted_at" IS NULL
+  values: [BigInt(Some(3))]

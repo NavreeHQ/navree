@@ -1,0 +1,10 @@
+---
+source: crates/navree-orm/src/relations/has.rs
+expression: per_dialect(&query)
+---
+PostgreSQL: SELECT * FROM (SELECT "activities"."id", "activities"."deal_id", "activities"."subject", "activities"."due_at", "activities"."created_at", "activities"."updated_at", ROW_NUMBER() OVER (PARTITION BY "activities"."deal_id" ORDER BY "activities"."due_at" DESC) AS "navree_row" FROM "activities" WHERE "activities"."deal_id" IN ($1, $2)) AS "navree_table" WHERE "navree_row" > $3 AND "navree_row" <= $4 ORDER BY "navree_row" ASC
+  values: [String(Some("a")), String(Some("b")), BigInt(Some(1)), BigInt(Some(4))]
+MySQL: SELECT * FROM (SELECT `activities`.`id`, `activities`.`deal_id`, `activities`.`subject`, `activities`.`due_at`, `activities`.`created_at`, `activities`.`updated_at`, ROW_NUMBER() OVER (PARTITION BY `activities`.`deal_id` ORDER BY `activities`.`due_at` DESC) AS `navree_row` FROM `activities` WHERE `activities`.`deal_id` IN (?, ?)) AS `navree_table` WHERE `navree_row` > ? AND `navree_row` <= ? ORDER BY `navree_row` ASC
+  values: [String(Some("a")), String(Some("b")), BigInt(Some(1)), BigInt(Some(4))]
+SQLite: SELECT * FROM (SELECT "activities"."id", "activities"."deal_id", "activities"."subject", "activities"."due_at", "activities"."created_at", "activities"."updated_at", ROW_NUMBER() OVER (PARTITION BY "activities"."deal_id" ORDER BY "activities"."due_at" DESC) AS "navree_row" FROM "activities" WHERE "activities"."deal_id" IN (?, ?)) AS "navree_table" WHERE "navree_row" > ? AND "navree_row" <= ? ORDER BY "navree_row" ASC
+  values: [String(Some("a")), String(Some("b")), BigInt(Some(1)), BigInt(Some(4))]
