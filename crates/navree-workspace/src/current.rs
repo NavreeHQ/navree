@@ -24,6 +24,7 @@ use tokio::sync::OnceCell;
 use uuid::Uuid;
 
 use crate::access::{permission_target, subjects_of, workspace_access};
+use crate::demo::DemoIntent;
 use crate::entity::{Member, Workspace, member};
 use crate::isolation::{WorkspaceRepo, WorkspaceScoped};
 use crate::resolve;
@@ -341,6 +342,9 @@ fn check_demo_write(
     if let Some(cell) = parts.extensions.get::<TenantCell>() {
         cell.mark_demo(mode);
     }
+    if !writes(&parts.method, parts.extensions.get::<DemoIntent>().copied()) {
+        return Ok(());
+    }
     let meta = parts.extensions.get::<Arc<RouteMeta>>();
     let name = meta.and_then(|meta| meta.name.as_deref());
     let path = meta
@@ -353,6 +357,19 @@ fn check_demo_write(
         Ok(())
     } else {
         Err(app_error(WorkspaceError::DemoReadOnly))
+    }
+}
+
+/// Whether a request writes: as its [`DemoIntent`] says, else unless its
+/// method is `GET`, `HEAD`, `OPTIONS` or `TRACE`.
+fn writes(method: &http::Method, intent: Option<DemoIntent>) -> bool {
+    match intent {
+        Some(DemoIntent::Read) => false,
+        Some(DemoIntent::Write) => true,
+        None => !matches!(
+            *method,
+            http::Method::GET | http::Method::HEAD | http::Method::OPTIONS | http::Method::TRACE
+        ),
     }
 }
 
@@ -646,6 +663,19 @@ async fn tenant_uow(parts: &Parts, current: &CurrentWorkspace) -> Result<Uow, Ap
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn requests_write_by_method_unless_they_declare_their_intent() {
+        use http::Method;
+        for method in [Method::GET, Method::HEAD, Method::OPTIONS, Method::TRACE] {
+            assert!(!writes(&method, None), "{method}");
+            assert!(writes(&method, Some(DemoIntent::Write)), "{method}");
+        }
+        for method in [Method::POST, Method::PUT, Method::PATCH, Method::DELETE] {
+            assert!(writes(&method, None), "{method}");
+            assert!(!writes(&method, Some(DemoIntent::Read)), "{method}");
+        }
+    }
 
     #[test]
     fn keys_take_the_column_type() {

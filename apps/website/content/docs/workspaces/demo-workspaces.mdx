@@ -225,6 +225,19 @@ allow = ["reports.preview", "POST /api/v1/search"]
 - `editor_roles` lists the workspace roles that still write: the people who curate the demo.
 - `allow` lists the routes that write nothing lasting, or that a demo should accept anyway: a route name (`RouteDef::name`) or a method and the mounted path, as the route table shows it.
 
+### Endpoints that read with `POST`
+
+Some protocols send reads as `POST`. [GraphQL](/docs/microservices/graphql/) tells the workspace module which operation it runs: `ctx.workspace()` in a query or a subscription reads a read-only demo, in a mutation it is refused with the same 403 (the error's `extensions.code` is `FORBIDDEN`). For an endpoint of your own, put a `DemoIntent` in the request extensions before the workspace is resolved, from a layer or a guard:
+
+```rust
+use navree::workspace::DemoIntent;
+
+// This POST only reads: a read-only demo answers it.
+parts.extensions.insert(DemoIntent::Read);
+```
+
+`DemoIntent::Write` does the opposite, for a `GET` that changes data. gRPC calls are `POST`s too, so a read-only demo treats each one as a write unless its request carries `DemoIntent::Read`.
+
 ## Reset demos
 
 With `workspace.demo.mode = "reset"`, demo workspaces take writes like any other workspace, so a prospect can create a deal and move it through the pipeline. Every night the demos are cleared and seeded again, and the next visitor finds them as the fixtures describe.
