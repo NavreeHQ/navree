@@ -1,6 +1,6 @@
 ---
 name: navree-lighthouse
-description: "Application monitoring with navree-lighthouse: the `lighthouse` facade feature (in `full`), `LighthouseModule::from_config()` / `for_root(LighthouseOptions)` and the `lighthouse` config section, what it records through its telemetry sink (5xx and panics, slow requests and queries, failed jobs and scheduled tasks, failing outgoing calls), issues grouped by fingerprint with statuses (open, resolved, resolved in the next release, ignored), reporting handled errors with `Arc<Lighthouse>` (`report`, `capture(Report::..)`, `tag_current`), sampling and the buffer, alerts (email, Slack, signed Standard Webhooks, your own `AlertChannel` via `m.alert_channel::<C>()`, `lighthouse.alert` jobs, cooldown, spikes, `raise_alert`), the `/_lighthouse` dashboard and its sign-in, the JSON API under `/_lighthouse/api` behind the `view` and `resolve` abilities (`lighthouse.view`, `lighthouse.resolve`), `lighthouse:prune` and `lighthouse:test-alerts`, a separate database, and `LighthouseFake` in tests. Use when adding monitoring to an app, reporting an error you handle, configuring alerts, giving someone or an agent access to the dashboard or its API, writing tests that assert on reports, or debugging why an error is not an issue, why an alert was not sent, or why the dashboard answers 401, 403 or 404."
+description: "Application monitoring with navree-lighthouse: the `lighthouse` facade feature (in `full`), `LighthouseModule::from_config()` / `for_root(LighthouseOptions)` and the `lighthouse` config section, what it records through its telemetry sink (5xx and panics, slow requests and queries, failed jobs and scheduled tasks, failing outgoing calls), issues grouped by fingerprint with statuses (open, resolved, resolved in the next release, ignored), reporting handled errors with `Arc<Lighthouse>` (`report`, `capture(Report::..)`, `tag_current`), sampling and the buffer, alerts (email, Slack, signed Standard Webhooks, your own `AlertChannel` via `m.alert_channel::<C>()`, `lighthouse.alert` jobs, cooldown, spikes, `raise_alert`), the `/_lighthouse` dashboard and its sign-in, the JSON API under `/_lighthouse/api` behind the `view` and `resolve` abilities (`lighthouse.view`, `lighthouse.resolve`), MCP tools for agents (`lighthouse_list_issues`, `lighthouse_get_issue`, `lighthouse_resolve_issue`, ..., the resource `lighthouse://issues/{id}` and the prompt `fix-lighthouse-issue`, with the `mcp` feature and `McpModule`), `lighthouse:prune` and `lighthouse:test-alerts`, a separate database, and `LighthouseFake` in tests. Use when adding monitoring to an app, reporting an error you handle, configuring alerts, giving someone or an agent access to the dashboard, its API or its MCP tools, writing tests that assert on reports, or debugging why an error is not an issue, why an alert was not sent, or why the dashboard answers 401, 403 or 404."
 ---
 
 # Lighthouse
@@ -165,7 +165,58 @@ works too, with an `x-csrf-token` header on changes):
 | `POST /api/issues/{id}/reopen` | resolve |
 | `GET /api/routes`, `/api/routes/detail?endpoint=GET /api/v1/x`, `/api/queries`, `/api/jobs`, `/api/outgoing`, `/api/traces/{id}`, `/api/alerts` | view |
 
-There are no MCP tools yet: agents use this API with a token.
+## MCP tools (agents)
+
+With the facade features `lighthouse` and `mcp` both on (`mcp` is opt-in;
+the facade then turns on navree-lighthouse's own `mcp` feature) and
+`McpModule` in the app, `LighthouseModule` registers `LighthouseMcp` on the
+app's MCP server at `/mcp`. Nothing to write:
+
+```toml
+navree = { git = "https://github.com/NavreeHQ/navree", features = ["mcp"] }
+```
+
+```rust
+Navree::app()
+    // ... DatabaseModule, AuthModule, AccessModule
+    .module(LighthouseModule::from_config())
+    .module(McpModule::from_config())
+```
+
+| Tool | Arguments | Ability |
+|---|---|---|
+| `lighthouse_list_issues` | `status` (`open` default, `resolved`, `resolved_in_next_release`, `ignored`, `any`), `kind`, `level`, `release`, `environment`, `route`, `job`, `tag` (`key:value`), `user`, `workspace`, `search`, `sort` (`last_seen`, `first_seen`, `count`), `page`, `per_page` (1..=100) | view |
+| `lighthouse_get_issue` | `issue_id` | view |
+| `lighthouse_list_occurrences` | `issue_id`, `page`, `per_page` | view |
+| `lighthouse_get_trace` | `trace_id` (an occurrence's `sample_id`) | view |
+| `lighthouse_get_overview` | `period` (`1h`, `24h` default, `7d`) | view |
+| `lighthouse_list_routes` / `_queries` / `_jobs` / `_outgoing` | `period` | view |
+| `lighthouse_get_route` | `endpoint` (`GET /api/v1/deals/{id}`), `period` | view |
+| `lighthouse_list_alerts` | none | view |
+| `lighthouse_resolve_issue` | `issue_id`, `in_next_release`, `comment` | resolve |
+| `lighthouse_ignore_issue` | `issue_id`, `until` or `occurrences` (not both), `comment` | resolve |
+| `lighthouse_reopen_issue` | `issue_id` | resolve |
+
+Also the resource `lighthouse://issues/{id}` (`navree::lighthouse::mcp::ISSUE_RESOURCE`,
+the issue's JSON) and the prompt `fix-lighthouse-issue`
+(`FIX_ISSUE_PROMPT`, argument `issue_id`): the issue as a resource plus
+steps (find the cause, failing test, fix, run tests, then
+`lighthouse_resolve_issue` with `in_next_release: true` and a comment).
+Results are the JSON API's bodies; a list is also `{"result": [..]}` in
+`structuredContent`. Unknown ids are tool errors with a 404 body, invalid
+arguments 400. `lighthouse.mcp = false` (`APP_LIGHTHOUSE__MCP=false`)
+or `lighthouse.store = "off"` offers nothing.
+
+Test with `navree::mcp::testing::McpTestClient`:
+
+```rust
+let mcp = McpTestClient::new(app.client()).bearer(token).initialize().await;
+mcp.call_tool("lighthouse_resolve_issue",
+        json!({ "issue_id": id, "in_next_release": true, "comment": "fixed in #812" }))
+    .await
+    .assert_ok()
+    .assert_json_path("status", json!("resolved_in_next_release"));
+```
 
 ## Tests
 
@@ -205,7 +256,10 @@ assert_eq!(fake.reports()[0].level, Level::Error);
 
 ## Checks
 
-- `cargo test -p navree-lighthouse` and `cargo test -p navree --test lighthouse_docs`.
+- `cargo test -p navree-lighthouse --features mcp` (the MCP tests are
+  behind the crate's `mcp` feature), `cargo test -p navree --test
+  lighthouse_docs` and `cargo test -p navree --features mcp --test
+  lighthouse_mcp`.
 - After changing options: `LighthouseOptions::check()` names the key of every
   problem (sample rates 0..=1, `path` absolute, `prune_at` "HH:MM" or empty,
   `buffer` >= 100, `spike.minutes` 1..=60, webhook `secret` >= 32 bytes).
@@ -227,6 +281,11 @@ assert_eq!(fake.reports()[0].level, Level::Error);
   request was fast, OK and reported nothing. Counts stay exact.
 - **"dropped" banner / `lighthouse_dropped_total`**: the database is not
   keeping up with the buffer (`lighthouse.buffer`); samples go first.
+- **No `lighthouse_*` tools on `/mcp`**: the facade's `mcp` feature is
+  off (it is not in `full`), `McpModule` is missing, `lighthouse.mcp =
+  false`, `lighthouse.store = "off"`, or the user lacks `lighthouse.view`
+  (lists show only what the user may call; calling a hidden tool answers
+  `Unknown tool`). Resolve tools need `lighthouse.resolve`.
 - **Separate database** (`lighthouse.database_url`): tables are created
   there at boot; the app database keeps empty ones from the migration.
 - **Release**: `lighthouse.release` (deploys set `APP_LIGHTHOUSE__RELEASE`),
