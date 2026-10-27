@@ -1,6 +1,7 @@
 //! Workers: [`Queue::work`], [`WorkOptions`] and [`WorkStats`].
 
 use std::any::Any;
+use std::fmt;
 use std::ops::AddAssign;
 use std::panic::AssertUnwindSafe;
 use std::sync::Arc;
@@ -11,6 +12,7 @@ use futures_util::FutureExt;
 use navree_contracts::{JobContext, JobRegistration};
 use navree_kernel::AppContext;
 use navree_telemetry::{EventKind, JobFailed, JobProcessed, TelemetryContext, TelemetryEvent};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
@@ -64,26 +66,95 @@ impl AddAssign for WorkStats {
     }
 }
 
-/// How one attempt ended.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Outcome {
+/// How one attempt of a job ended.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AttemptOutcome {
+    /// The job is done.
     Succeeded,
+    /// It failed and goes back on its queue for another attempt.
     Released,
+    /// It failed for good and moved to the failed jobs.
     Failed,
 }
 
-impl Outcome {
+impl AttemptOutcome {
+    /// The name in logs and reports: `succeeded`, `released` or `failed`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            AttemptOutcome::Succeeded => "succeeded",
+            AttemptOutcome::Released => "released",
+            AttemptOutcome::Failed => "failed",
+        }
+    }
+
     fn stats(self) -> WorkStats {
         let mut stats = WorkStats {
             processed: 1,
             ..WorkStats::default()
         };
         match self {
-            Outcome::Succeeded => stats.succeeded = 1,
-            Outcome::Released => stats.released = 1,
-            Outcome::Failed => stats.failed = 1,
+            AttemptOutcome::Succeeded => stats.succeeded = 1,
+            AttemptOutcome::Released => stats.released = 1,
+            AttemptOutcome::Failed => stats.failed = 1,
         }
         stats
+    }
+}
+
+/// One finished attempt, as a supervised worker tells its
+/// [`WorkHooks`].
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Attempt {
+    /// The job id.
+    pub job_id: String,
+    /// The queue it came from.
+    pub queue: String,
+    /// The job type.
+    pub job_type: String,
+    /// Which attempt this was (1 for the first).
+    pub attempt: u32,
+    /// How it ended.
+    pub outcome: AttemptOutcome,
+    /// How long it ran, in milliseconds.
+    pub runtime_ms: u64,
+}
+
+/// What a supervisor (navree-fleet's workers) puts around a worker: asked
+/// before every reservation, told after every attempt. Both run on the
+/// worker's task, so keep them quick.
+pub trait WorkHooks: Send + Sync + 'static {
+    /// Whether the worker may take a job now. `false` holds it (a paused
+    /// supervisor): it takes nothing and asks again after a poll interval
+    /// (a worker that stops when empty stops instead). Default: `true`.
+    fn may_reserve(&self) -> bool {
+        true
+    }
+
+    /// Told after each attempt, whatever its outcome.
+    fn attempted(&self, attempt: &Attempt) {
+        let _ = attempt;
+    }
+}
+
+/// How [`Queue::work_supervised`] runs besides its [`WorkOptions`].
+#[derive(Clone)]
+pub struct Supervision {
+    /// Concurrent workers (`None`: [`QueueOptions::workers`](crate::QueueOptions::workers)).
+    pub workers: Option<usize>,
+    /// Cancelled to stop the call as the app's shutdown would: no new job
+    /// is taken, running jobs finish.
+    pub stop: CancellationToken,
+    /// Asked before each reservation, told after each attempt.
+    pub hooks: Arc<dyn WorkHooks>,
+}
+
+impl fmt::Debug for Supervision {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Supervision")
+            .field("workers", &self.workers)
+            .field("stopped", &self.stop.is_cancelled())
+            .finish_non_exhaustive()
     }
 }
 
@@ -126,7 +197,28 @@ impl Queue {
             stop_when_empty: true,
             ..WorkOptions::default()
         };
-        self.work_with(opts, 1).await
+        self.work_with(opts, 1, None).await
+    }
+
+    /// [`work`](Queue::work) under a supervisor (navree-fleet's workers):
+    /// with [`Supervision::workers`] concurrent workers, stopped by
+    /// [`Supervision::stop`] as well as by the app's shutdown, asking the
+    /// hooks before each reservation (a paused supervisor holds its
+    /// workers) and telling them every attempt.
+    pub async fn work_supervised(
+        &self,
+        opts: WorkOptions,
+        supervision: Supervision,
+    ) -> Result<WorkStats, QueueError> {
+        let workers = if opts.once {
+            1
+        } else {
+            supervision
+                .workers
+                .unwrap_or(self.inner.options.workers)
+                .max(1)
+        };
+        self.work_with(opts, workers, Some(supervision)).await
     }
 
     /// Runs jobs with [`workers`](crate::QueueOptions::workers) concurrent
@@ -148,11 +240,17 @@ impl Queue {
         } else {
             self.inner.options.workers.max(1)
         };
-        self.work_with(opts, workers).await
+        self.work_with(opts, workers, None).await
     }
 
-    /// [`work`](Queue::work) with `workers` concurrent workers.
-    async fn work_with(&self, opts: WorkOptions, workers: usize) -> Result<WorkStats, QueueError> {
+    /// [`work`](Queue::work) with `workers` concurrent workers, supervised
+    /// or not.
+    async fn work_with(
+        &self,
+        opts: WorkOptions,
+        workers: usize,
+        supervision: Option<Supervision>,
+    ) -> Result<WorkStats, QueueError> {
         if matches!(self.inner.store, Store::Fake(_)) {
             return Ok(WorkStats::default());
         }
@@ -163,7 +261,27 @@ impl Queue {
             opts.queues.clone()
         };
         let budget = Arc::new(Budget::new(if opts.once { Some(1) } else { opts.max_jobs }));
-        let token = ctx.shutdown_token();
+        let shutdown = ctx.shutdown_token();
+        // Stops on the app's shutdown, or on the supervisor's stop.
+        let token = CancellationToken::new();
+        let hooks = supervision.as_ref().map(|s| s.hooks.clone());
+        let linked = {
+            let token = token.clone();
+            let stop = supervision.map(|s| s.stop);
+            tokio::spawn(async move {
+                let stopped = async {
+                    match stop {
+                        Some(stop) => stop.cancelled().await,
+                        None => std::future::pending().await,
+                    }
+                };
+                tokio::select! {
+                    () = shutdown.cancelled() => token.cancel(),
+                    () = stopped => token.cancel(),
+                    () = token.cancelled() => {}
+                }
+            })
+        };
         let mut set = JoinSet::new();
         for _ in 0..workers {
             let worker = Worker {
@@ -173,10 +291,22 @@ impl Queue {
                 finite: opts.once || opts.stop_when_empty,
                 budget: budget.clone(),
                 token: token.clone(),
+                hooks: hooks.clone(),
                 id: format!("worker-{}", Uuid::now_v7()),
             };
             set.spawn(worker.run());
         }
+        let result = Self::join_workers(set).await;
+        token.cancel();
+        linked.abort();
+        result
+    }
+
+    /// Waits for every worker of a `work` call; their stats summed, or the
+    /// first error.
+    async fn join_workers(
+        mut set: JoinSet<Result<WorkStats, QueueError>>,
+    ) -> Result<WorkStats, QueueError> {
         let mut stats = WorkStats::default();
         let mut first_error = None;
         while let Some(joined) = set.join_next().await {
@@ -203,7 +333,7 @@ impl Queue {
         ctx: &AppContext,
         job: ReservedJob,
         worker: &str,
-    ) -> Result<Outcome, QueueError> {
+    ) -> Result<AttemptOutcome, QueueError> {
         let mut context =
             TelemetryContext::new(self.inner.telemetry.clone()).with_job_id(job.id.as_str());
         if let Some(trace) = self.inner.policy.resume(job.trace_parent.as_deref()) {
@@ -218,7 +348,7 @@ impl Queue {
         ctx: &AppContext,
         job: ReservedJob,
         worker: &str,
-    ) -> Result<Outcome, QueueError> {
+    ) -> Result<AttemptOutcome, QueueError> {
         let started = Instant::now();
         if job.attempts > job.options.max_attempts.max(1) {
             let error = format!(
@@ -226,7 +356,7 @@ impl Queue {
                 job.attempts, job.options.max_attempts
             );
             self.fail(&job, worker, &error, started).await?;
-            return Ok(Outcome::Failed);
+            return Ok(AttemptOutcome::Failed);
         }
         let Some(registration) = self.inner.registry.get(job.job_type.as_str()) else {
             let error = format!(
@@ -234,7 +364,7 @@ impl Queue {
                 job.job_type
             );
             self.fail(&job, worker, &error, started).await?;
-            return Ok(Outcome::Failed);
+            return Ok(AttemptOutcome::Failed);
         };
         let job_ctx = JobContext {
             app: ctx.clone(),
@@ -264,15 +394,15 @@ impl Queue {
                     outcome = "succeeded",
                     "job succeeded"
                 );
-                Ok(Outcome::Succeeded)
+                Ok(AttemptOutcome::Succeeded)
             }
             Err(error) if job.attempts >= job.options.max_attempts.max(1) => {
                 self.fail(&job, worker, &error, started).await?;
-                Ok(Outcome::Failed)
+                Ok(AttemptOutcome::Failed)
             }
             Err(error) => {
                 self.release(&job, worker, &error, started).await?;
-                Ok(Outcome::Released)
+                Ok(AttemptOutcome::Released)
             }
         }
     }
@@ -368,25 +498,58 @@ struct Worker {
     finite: bool,
     budget: Arc<Budget>,
     token: CancellationToken,
+    /// A supervisor's hooks.
+    hooks: Option<Arc<dyn WorkHooks>>,
     id: String,
 }
 
 impl Worker {
     async fn run(self) -> Result<WorkStats, QueueError> {
         let mut stats = WorkStats::default();
-        while !self.token.is_cancelled() && self.budget.take() {
+        while !self.token.is_cancelled() {
+            if self.hooks.as_ref().is_some_and(|hooks| !hooks.may_reserve()) {
+                // Held by the supervisor (paused).
+                if self.finite || !self.idle().await {
+                    break;
+                }
+                continue;
+            }
+            if !self.budget.take() {
+                break;
+            }
             match self.reserve().await {
-                Ok(Some(job)) => match self.queue.run_reserved(&self.ctx, job, &self.id).await {
-                    Ok(outcome) => stats += outcome.stats(),
-                    // The job ran (or was skipped) but its outcome could not be
-                    // stored; the reservation goes stale and another worker
-                    // retries it.
-                    Err(error) => {
-                        if !self.recover(error, "cannot record a job's outcome").await? {
-                            break;
+                Ok(Some(job)) => {
+                    let started = Instant::now();
+                    let (job_id, queue, job_type, attempt) = (
+                        job.id.clone(),
+                        job.queue.clone(),
+                        job.job_type.clone(),
+                        job.attempts,
+                    );
+                    match self.queue.run_reserved(&self.ctx, job, &self.id).await {
+                        Ok(outcome) => {
+                            stats += outcome.stats();
+                            if let Some(hooks) = &self.hooks {
+                                hooks.attempted(&Attempt {
+                                    job_id,
+                                    queue,
+                                    job_type,
+                                    attempt,
+                                    outcome,
+                                    runtime_ms: elapsed_ms(started),
+                                });
+                            }
+                        }
+                        // The job ran (or was skipped) but its outcome could not be
+                        // stored; the reservation goes stale and another worker
+                        // retries it.
+                        Err(error) => {
+                            if !self.recover(error, "cannot record a job's outcome").await? {
+                                break;
+                            }
                         }
                     }
-                },
+                }
                 Ok(None) => {
                     self.budget.give_back();
                     if self.finite || !self.idle().await {

@@ -28,6 +28,121 @@ pub struct FailedJob {
     pub failed_at: DateTime<Utc>,
 }
 
+/// Where a job that is not finished yet stands ([`PendingJob::state`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PendingState {
+    /// Available now and waiting for a worker.
+    Waiting,
+    /// Available later: dispatched with a delay, or released for a retry
+    /// after its backoff.
+    Delayed,
+    /// Reserved by a worker (a crashed worker's reservation counts until
+    /// another worker takes the job over).
+    Running,
+}
+
+/// A job that is not finished yet, as [`Queue::pending_jobs`](crate::Queue::pending_jobs)
+/// lists it.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct PendingJob {
+    /// The job id.
+    pub id: String,
+    /// The queue it is on.
+    pub queue: String,
+    /// The job type ([`Job::NAME`](navree_contracts::Job::NAME)).
+    pub job_type: String,
+    /// The job value as JSON.
+    pub payload: Value,
+    /// The options it was dispatched with.
+    pub options: JobOptions,
+    /// Attempts started so far (a running job's current one included).
+    pub attempts: u32,
+    /// Waiting, delayed or running.
+    pub state: PendingState,
+    /// When it is (or was) available to workers.
+    pub available_at: DateTime<Utc>,
+    /// When a worker reserved it, while it runs.
+    pub reserved_at: Option<DateTime<Utc>>,
+    /// When it was queued (or last retried from the failed jobs).
+    pub created_at: DateTime<Utc>,
+}
+
+/// Which pending jobs [`Queue::pending_jobs`](crate::Queue::pending_jobs)
+/// lists.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PendingQuery {
+    /// Only jobs of this queue.
+    pub queue: Option<String>,
+    /// Only jobs whose type or queue contains this text (case-insensitive).
+    pub search: Option<String>,
+    /// At most this many (default [`PendingQuery::DEFAULT_LIMIT`]).
+    pub limit: Option<u64>,
+}
+
+impl PendingQuery {
+    /// How many jobs a query without a limit returns.
+    pub const DEFAULT_LIMIT: u64 = 500;
+
+    /// The limit to apply.
+    pub(crate) fn limit(&self) -> u64 {
+        self.limit.unwrap_or(Self::DEFAULT_LIMIT)
+    }
+
+    /// The lowercased search text, if any.
+    pub(crate) fn needle(&self) -> Option<String> {
+        self.search
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_lowercase)
+    }
+
+    /// Whether a job of `queue` and `job_type` matches.
+    pub(crate) fn matches(&self, queue: &str, job_type: &str) -> bool {
+        if self.queue.as_deref().is_some_and(|q| q != queue) {
+            return false;
+        }
+        match self.needle() {
+            Some(needle) => {
+                queue.to_lowercase().contains(&needle) || job_type.to_lowercase().contains(&needle)
+            }
+            None => true,
+        }
+    }
+}
+
+/// One queue's unfinished jobs at a moment, from [`Queue::status`](crate::Queue::status).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct QueueStatus {
+    /// The queue.
+    pub queue: String,
+    /// Jobs available now, waiting for a worker.
+    pub waiting: u64,
+    /// Jobs available later (delayed, or released for a retry).
+    pub delayed: u64,
+    /// Jobs reserved by a worker.
+    pub running: u64,
+    /// When the oldest waiting job became available (`None`: none waits).
+    pub oldest_available_at: Option<DateTime<Utc>>,
+    /// When the status was taken (the queue's clock).
+    pub at: DateTime<Utc>,
+}
+
+impl QueueStatus {
+    /// Every job that is not finished yet: waiting, delayed and running.
+    pub fn pending(&self) -> u64 {
+        self.waiting + self.delayed + self.running
+    }
+
+    /// How long the oldest waiting job has waited (zero when none waits).
+    pub fn oldest_wait(&self) -> std::time::Duration {
+        self.oldest_available_at
+            .and_then(|since| (self.at - since).to_std().ok())
+            .unwrap_or_default()
+    }
+}
+
 /// Which failed jobs [`Queue::retry`](crate::Queue::retry) puts back on
 /// their queues. Converts from a string: `"all"` is [`All`](RetryTarget::All),
 /// anything else a job id.

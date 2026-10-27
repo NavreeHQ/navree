@@ -8,7 +8,9 @@ pub(crate) use memory::MemoryStore;
 
 use navree_contracts::JobEnvelope;
 
-use crate::record::{FailedJob, NewJob, ReservedJob, RetryTarget};
+use crate::record::{
+    FailedJob, NewJob, PendingJob, PendingQuery, QueueStatus, ReservedJob, RetryTarget, from_millis,
+};
 use crate::{QueueError, QueueFake};
 
 /// The driver of a queue.
@@ -127,6 +129,73 @@ impl Store {
             Store::Database(db) => db.pending_count(queue).await,
             Store::Memory(memory) => Ok(memory.pending_count(queue)),
             Store::Fake(fake) => Ok(fake.count_on(queue)),
+        }
+    }
+
+    /// `queue`'s waiting, delayed and running jobs at `now`. A fake's
+    /// recorded jobs all count as waiting since `now`.
+    pub(crate) async fn status(&self, queue: &str, now: i64) -> Result<QueueStatus, QueueError> {
+        match self {
+            Store::Database(db) => db.status(queue, now).await,
+            Store::Memory(memory) => Ok(memory.status(queue, now)),
+            Store::Fake(fake) => {
+                let waiting = fake.count_on(queue);
+                Ok(QueueStatus {
+                    queue: queue.to_owned(),
+                    waiting,
+                    delayed: 0,
+                    running: 0,
+                    oldest_available_at: (waiting > 0).then(|| from_millis(now)),
+                    at: from_millis(now),
+                })
+            }
+        }
+    }
+
+    pub(crate) async fn pending_jobs(
+        &self,
+        query: &PendingQuery,
+        now: i64,
+    ) -> Result<Vec<PendingJob>, QueueError> {
+        match self {
+            Store::Database(db) => db.pending_jobs(query, now).await,
+            Store::Memory(memory) => Ok(memory.pending_jobs(query, now)),
+            Store::Fake(_) => Ok(Vec::new()),
+        }
+    }
+
+    pub(crate) async fn pending_job(
+        &self,
+        id: &str,
+        now: i64,
+    ) -> Result<Option<PendingJob>, QueueError> {
+        match self {
+            Store::Database(db) => db.pending_job(id, now).await,
+            Store::Memory(memory) => Ok(memory.pending_job(id, now)),
+            Store::Fake(_) => Ok(None),
+        }
+    }
+
+    pub(crate) async fn failed_job(&self, id: &str) -> Result<Option<FailedJob>, QueueError> {
+        match self {
+            Store::Database(db) => db.failed_job(id).await,
+            Store::Memory(memory) => Ok(memory.failed_job(id)),
+            Store::Fake(_) => Ok(None),
+        }
+    }
+
+    /// Deletes failed job `id`; [`QueueError::FailedJobNotFound`] when
+    /// there is none.
+    pub(crate) async fn forget(&self, id: &str) -> Result<(), QueueError> {
+        let deleted = match self {
+            Store::Database(db) => db.forget(id).await?,
+            Store::Memory(memory) => memory.forget(id),
+            Store::Fake(_) => false,
+        };
+        if deleted {
+            Ok(())
+        } else {
+            Err(QueueError::FailedJobNotFound { id: id.to_owned() })
         }
     }
 }

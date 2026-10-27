@@ -5,7 +5,8 @@ use sea_orm::{ConnectionTrait, DbBackend, DbErr, QueryResult, Statement, Value};
 
 use crate::migration::{FAILED_JOBS_TABLE, JOBS_TABLE};
 use crate::record::{
-    FailedJob, NewJob, ReservedJob, RetryTarget, UNLIMITED_RESERVATION_SECS, from_millis,
+    FailedJob, NewJob, PendingJob, PendingQuery, PendingState, QueueStatus, ReservedJob,
+    RetryTarget, UNLIMITED_RESERVATION_SECS, from_millis,
 };
 use crate::{QueueError, STALE_RESERVATION_GRACE_SECS};
 
@@ -227,6 +228,161 @@ impl DatabaseStore {
         };
         Ok(u64::try_from(n).unwrap_or_default())
     }
+
+    /// Waiting, delayed and running counts of `queue` at `now`, and the
+    /// oldest waiting job's availability: one aggregate query.
+    pub(crate) async fn status(&self, queue: &str, now: i64) -> Result<QueueStatus, QueueError> {
+        let row = self
+            .db
+            .conn()
+            .query_one_raw(self.stmt(
+                &format!(
+                    "SELECT \
+                     COALESCE(SUM(CASE WHEN reserved_at IS NULL AND available_at <= ? THEN 1 ELSE 0 END), 0) AS waiting, \
+                     COALESCE(SUM(CASE WHEN reserved_at IS NULL AND available_at > ? THEN 1 ELSE 0 END), 0) AS delayed, \
+                     COALESCE(SUM(CASE WHEN reserved_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS running, \
+                     MIN(CASE WHEN reserved_at IS NULL AND available_at <= ? THEN available_at END) AS oldest \
+                     FROM {JOBS_TABLE} WHERE queue = ?"
+                ),
+                vec![now.into(), now.into(), now.into(), queue.into()],
+            ))
+            .await?;
+        let mut status = QueueStatus {
+            queue: queue.to_owned(),
+            waiting: 0,
+            delayed: 0,
+            running: 0,
+            oldest_available_at: None,
+            at: from_millis(now),
+        };
+        if let Some(row) = row {
+            let number = |column: &str| -> Result<u64, DbErr> {
+                let n: i64 = row.try_get("", column)?;
+                Ok(u64::try_from(n).unwrap_or_default())
+            };
+            status.waiting = number("waiting")?;
+            status.delayed = number("delayed")?;
+            status.running = number("running")?;
+            let oldest: Option<i64> = row.try_get("", "oldest")?;
+            status.oldest_available_at = oldest.map(from_millis);
+        }
+        Ok(status)
+    }
+
+    /// Unfinished jobs matching `query`, oldest first.
+    pub(crate) async fn pending_jobs(
+        &self,
+        query: &PendingQuery,
+        now: i64,
+    ) -> Result<Vec<PendingJob>, QueueError> {
+        let mut sql = format!("SELECT {PENDING_COLUMNS} FROM {JOBS_TABLE} WHERE 1 = 1");
+        let mut values: Vec<Value> = Vec::new();
+        if let Some(queue) = &query.queue {
+            sql.push_str(" AND queue = ?");
+            values.push(queue.as_str().into());
+        }
+        if let Some(needle) = query.needle() {
+            let pattern = format!("%{}%", escape_like(&needle));
+            sql.push_str(
+                " AND (LOWER(job_type) LIKE ? ESCAPE '\\' OR LOWER(queue) LIKE ? ESCAPE '\\')",
+            );
+            values.push(pattern.clone().into());
+            values.push(pattern.into());
+        }
+        sql.push_str(" ORDER BY available_at, id LIMIT ?");
+        values.push(i64::try_from(query.limit()).unwrap_or(i64::MAX).into());
+        let rows = self
+            .db
+            .conn()
+            .query_all_raw(self.stmt(&sql, values))
+            .await?;
+        rows.iter().map(|row| pending_job(row, now)).collect()
+    }
+
+    pub(crate) async fn pending_job(
+        &self,
+        id: &str,
+        now: i64,
+    ) -> Result<Option<PendingJob>, QueueError> {
+        let row = self
+            .db
+            .conn()
+            .query_one_raw(self.stmt(
+                &format!("SELECT {PENDING_COLUMNS} FROM {JOBS_TABLE} WHERE id = ?"),
+                vec![id.into()],
+            ))
+            .await?;
+        row.map(|row| pending_job(&row, now)).transpose()
+    }
+
+    pub(crate) async fn failed_job(&self, id: &str) -> Result<Option<FailedJob>, QueueError> {
+        let row = self
+            .db
+            .conn()
+            .query_one_raw(self.stmt(
+                &format!(
+                    "SELECT id, queue, job_type, payload, options, error, attempts, failed_at \
+                     FROM {FAILED_JOBS_TABLE} WHERE id = ?"
+                ),
+                vec![id.into()],
+            ))
+            .await?;
+        row.map(|row| failed_job(&row)).transpose()
+    }
+
+    /// Deletes failed job `id`; false when there is none.
+    pub(crate) async fn forget(&self, id: &str) -> Result<bool, QueueError> {
+        let result = self
+            .db
+            .conn()
+            .execute_raw(self.stmt(
+                &format!("DELETE FROM {FAILED_JOBS_TABLE} WHERE id = ?"),
+                vec![id.into()],
+            ))
+            .await?;
+        Ok(result.rows_affected() == 1)
+    }
+}
+
+/// The columns [`pending_job`] reads.
+const PENDING_COLUMNS: &str =
+    "id, queue, job_type, payload, options, attempts, available_at, reserved_at, created_at";
+
+/// `text` with the `LIKE` wildcards (and the escape character) escaped
+/// with `\`.
+fn escape_like(text: &str) -> String {
+    let mut escaped = String::with_capacity(text.len());
+    for c in text.chars() {
+        if matches!(c, '\\' | '%' | '_') {
+            escaped.push('\\');
+        }
+        escaped.push(c);
+    }
+    escaped
+}
+
+fn pending_job(row: &QueryResult, now: i64) -> Result<PendingJob, QueueError> {
+    let available_at: i64 = row.try_get("", "available_at")?;
+    let reserved_at: Option<i64> = row.try_get("", "reserved_at")?;
+    let state = if reserved_at.is_some() {
+        PendingState::Running
+    } else if available_at <= now {
+        PendingState::Waiting
+    } else {
+        PendingState::Delayed
+    };
+    Ok(PendingJob {
+        id: row.try_get("", "id")?,
+        queue: row.try_get("", "queue")?,
+        job_type: row.try_get("", "job_type")?,
+        payload: json(&row.try_get::<String>("", "payload")?)?,
+        options: json(&row.try_get::<String>("", "options")?)?,
+        attempts: count(row, "attempts")?,
+        state,
+        available_at: from_millis(available_at),
+        reserved_at: reserved_at.map(from_millis),
+        created_at: from_millis(row.try_get("", "created_at")?),
+    })
 }
 
 /// A statement for `backend`: `?` placeholders become `$1, $2, …` on
@@ -413,6 +569,12 @@ mod tests {
         assert_eq!(stmt.sql, "UPDATE jobs SET a = $1 WHERE b = $2 AND c = $3");
         let stmt = statement(DbBackend::Sqlite, "SELECT ?", vec![1_i64.into()]);
         assert_eq!(stmt.sql, "SELECT ?");
+    }
+
+    #[test]
+    fn like_wildcards_are_escaped() {
+        assert_eq!(escape_like("a%b_c\\d"), "a\\%b\\_c\\\\d");
+        assert_eq!(escape_like("plain"), "plain");
     }
 
     #[test]
