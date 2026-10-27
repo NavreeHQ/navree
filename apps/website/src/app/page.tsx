@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { AiSection } from "@/components/home/ai-section";
 import { ArchitectureSection } from "@/components/home/architecture-section";
+import { CrmSection } from "@/components/home/crm-section";
 import { EcosystemSection } from "@/components/home/ecosystem-section";
 import { FinalCta } from "@/components/home/final-cta";
 import { Hero } from "@/components/home/hero";
@@ -15,7 +16,7 @@ import { Workspaces } from "@/components/home/workspaces";
 
 /**
  * The homepage, top to bottom: what Navree is, what every app gets, the
- * code, the shapes of system it builds, workspaces, AI, the ecosystem,
+ * code, the reference CRM built with it, the shapes of system it builds, workspaces, AI, the ecosystem,
  * shipping, performance, the crates, and the way in. Sections owned by
  * other pages' workers (architecture, AI, ecosystem, performance) render
  * their own content; each sits under a hairline divider drawn here.
@@ -27,6 +28,7 @@ export default function Home() {
       <WhatIs />
       <Pillars />
       <Showcase />
+      <CrmSection />
       <Divided>
         <ArchitectureSection />
       </Divided>

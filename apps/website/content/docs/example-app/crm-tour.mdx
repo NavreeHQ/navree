@@ -1,18 +1,29 @@
 ---
 title: "A tour of the CRM"
-description: "The reference CRM built with Navree: feature crates, roles and abilities, the deal pipeline, events, real time, scheduled reminders, the Next.js BFF and the tests."
+description: "The reference CRM built with Navree: feature crates, roles and abilities, the deal pipeline, events, real time, scheduled reminders, its Next.js and Nuxt front ends with their BFF, and the tests."
 ---
 
 Navree ships with a complete application built on it: a CRM for a small sales team, with companies, contacts, a deal pipeline, tasks and a dashboard. It lives in the repository next to the framework and is tested with it, so it shows how the pieces fit together in real code rather than in snippets. This page walks through it and links to the documentation of each feature it uses.
 
-There are two apps:
+There are three apps:
 
 - `apps/crm-api`, the API: a Navree application split into feature crates;
-- `apps/crm-web`, the front end: a Next.js 16 app whose server is a backend-for-frontend (BFF), so the browser never sees a token.
+- `apps/crm-web`, a front end on Next.js 16 and React;
+- `apps/crm-nuxt`, the same front end on Nuxt 4 and Vue 3, screen for screen.
+
+Each front end's server is a backend-for-frontend (BFF), so the browser never sees a token, and both follow the same contract against the same API. Pick either one: the API doesn't change.
+
+## What it looks like
+
+![The CRM dashboard in the Next.js front end: open pipeline, weighted forecast, deals won this month, the pipeline by stage and the manager's tasks](/images/crm/next/dashboard-1440.webp)
+
+![The deal pipeline in the Nuxt front end: lead, qualified, proposal and negotiation columns of deal cards with amounts, close dates and owners](/images/crm/nuxt/pipeline-1440.webp)
+
+Both front ends are dark, on the navree.com design tokens, with a sidebar that folds to icons (Ctrl B), a 48px top bar with a breadcrumb, a command palette (Ctrl K) and every screen working at 390 px. The [CRM showcase](/showcase/crm/) has every screen of both at full size.
 
 ## Running it
 
-You need Rust (1.95 or newer), Node.js 20.9 or newer and pnpm. No database server: development uses SQLite. Run each long-running command in its own terminal.
+You need Rust (1.95 or newer), Node.js 20.9 or newer and pnpm. No database server: development uses SQLite. Run each long-running command in its own terminal. Start the API, then either front end, or both.
 
 <Steps>
 <Step title="Create an application key">
@@ -25,6 +36,12 @@ cargo run -p crm-api -- key:generate
 ```
 
 Without a key, the API signs tokens with a random key per process, so every restart signs everyone out.
+
+To use the Nuxt front end with live updates, also let its origin open WebSockets, next to the Next.js app's:
+
+```env title="apps/crm-api/.env"
+APP_REALTIME__ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3102
+```
 
 </Step>
 <Step title="Create and seed the database">
@@ -53,7 +70,10 @@ cargo run -p crm-api -- schedule:work   # 08:00 UTC task reminders, daily audit 
 ```
 
 </Step>
-<Step title="Start the web app">
+<Step title="Start a front end">
+
+<Tabs>
+<Tab label="Next.js">
 
 ```sh
 cd apps/crm-web
@@ -61,7 +81,23 @@ pnpm install
 pnpm dev   # http://localhost:3000
 ```
 
-It talks to the API at `NAVREE_API_URL` (default `http://127.0.0.1:8080`). `pnpm dev:mock` runs it alone, against an in-browser mock of the API with the same demo accounts.
+It talks to the API at `NAVREE_API_URL` (default `http://127.0.0.1:8080`) and opens its WebSocket at `NEXT_PUBLIC_WS_HOST` and `NEXT_PUBLIC_WS_PORT` (default `127.0.0.1:8080`).
+
+</Tab>
+<Tab label="Nuxt">
+
+```sh
+cd apps/crm-nuxt
+pnpm install
+NAVREE_API_URL=http://127.0.0.1:8080 NUXT_PUBLIC_WS_PORT=8080 pnpm dev   # http://localhost:3102
+```
+
+Its defaults point at port 8092, where `pnpm api` runs a separate copy of the API for this app on its own SQLite file (from a binary you name in `CRM_API_BIN`; see `apps/crm-nuxt/README.md`). The two variables above point it at the API you started instead. `NUXT_PUBLIC_DEMO_ACCOUNTS=1` lists the demo accounts on the login page.
+
+</Tab>
+</Tabs>
+
+`pnpm dev:mock` runs either front end alone, against an in-browser mock of the API with the same demo accounts.
 
 </Step>
 </Steps>
@@ -79,7 +115,7 @@ Every account's password is `password123`.
 | `rep1@navree.test` | rep | Read everything, create records, edit and delete only their own; can't delete or reopen won or lost deals |
 | `rep2@navree.test` | rep | The same as rep1: a second owner, to see ownership rules and live updates |
 
-Open the deal board as `rep1` in one browser and as `manager` in another, and move a deal: it moves on the other board too.
+Open the deal board as `rep1` in one browser and as `manager` in another, and move a deal: it moves on the other board too. It works across front ends as well: move it in the Next.js app and watch it move in the Nuxt one.
 
 ## How the API is organised
 
@@ -249,7 +285,14 @@ Every day at 08:00 UTC, `crm:task-reminders` sends everyone with open tasks due 
 
 ## The web app
 
-`apps/crm-web` is a Next.js 16 app (React, TanStack Query, shadcn/ui). Its server is a backend-for-frontend: the browser only calls same-origin routes, and the BFF calls Navree with the tokens, which never reach JavaScript.
+The browser-facing side of the CRM comes in two front ends with the same screens, the same design and the same BFF contract:
+
+| App | Built with | The BFF | Served at |
+|---|---|---|---|
+| `apps/crm-web` | Next.js 16, React, TanStack Query, shadcn/ui | `src/lib/bff/`, wired into route handlers (`src/app/api/[...path]/route.ts`) | `http://localhost:3000` |
+| `apps/crm-nuxt` | Nuxt 4, Vue 3, Pinia, TanStack Query for Vue, shadcn-vue | `server/lib/bff.ts`, wired into Nitro server routes (`server/api/[...path].ts`) | `http://localhost:3102` |
+
+In both, the server is a backend-for-frontend: the browser only calls same-origin routes, and the BFF calls Navree with the tokens, which never reach JavaScript. Each BFF is framework-free TypeScript (a web `Request` in, a `Response` out), so the rules below are the same in both, and each is unit-tested without a server. See [Backend for frontend](/docs/patterns/backend-for-frontend/) for the code.
 
 - **Login.** `POST /api/auth/login` on the BFF signs in at Navree, stores the JWT access token and the rotating refresh token in httpOnly cookies (`navree_at` and `navree_rt`; `SameSite=Lax`, `Secure` in production) and returns only `{user}`. Accounts with two-factor authentication get a challenge instead, kept in its own httpOnly cookie until the code step.
 - **Proxying.** Every other `/api/*` request, and `/broadcasting/auth`, is forwarded with `Authorization: Bearer`. On a `401` the BFF refreshes once (single-flight per refresh token, because reusing a rotated refresh token revokes its whole family), updates the cookies and retries; if that fails, it clears them and the browser goes to `/login`.
@@ -259,7 +302,9 @@ Every day at 08:00 UTC, `crm:task-reminders` sends everyone with open tasks due 
 - **Permissions.** The rules from `GET /api/me/abilities`, read by `@casl/ability`, decide what the UI shows, with `__type` as the subject type.
 - **Real time.** A Pusher client (pusher-js) connects straight to Navree's WebSocket and authorises private channels through the BFF; see [Through a backend-for-frontend](/docs/digging-deeper/broadcasting/#through-a-backend-for-frontend).
 
-`navree new --ui next` generates a smaller version of the same BFF for your own app; see [Creating an app](/docs/digging-deeper/cli/#creating-an-app).
+Nuxt adds one more piece: a server middleware (`server/middleware/session-gate.ts`) answers a page request that has neither cookie with a redirect to `/login?next=...` before the app loads.
+
+`navree new --ui next` generates a smaller version of the same BFF for your own app; see [Creating an app](/docs/digging-deeper/cli/#creating-an-app). The [SaaS starter kit](/docs/getting-started/starter-kits/) takes `--ui next` or `--ui nuxt`.
 
 ## Tests
 
@@ -288,12 +333,16 @@ The deals suite also checks the broadcasts over a real WebSocket, notifications 
 
 **System tests**, in `apps/crm-api/tests`, boot the whole API: `app.rs` (it boots, passes `check` and seeds), `e2e.rs` (a rep builds a pipeline, a manager reassigns a deal and the new owner is notified once the queue runs, and every change is in the audit trail), `bff.rs` (the login throttle and rate limits are per browser behind the BFF), `security_audit.rs` (security events reach the audit table) and `pool.rs` (no request needs two database connections at once).
 
-**Web tests**: Vitest covers the BFF route handlers, the API client, the CASL setup and the mock API (`pnpm test`). Playwright drives the whole system in a real Chromium: with `E2E_REAL_API=1 pnpm e2e` it starts the API on a fresh seeded database and the production build of the web app, then runs the end-to-end specs, such as signing in with tokens kept in httpOnly cookies only, a rep who can't edit another rep's deal, an admin adding a user, a task completed from the Today tab, and a deal moved in one browser moving on another person's board. Without `E2E_REAL_API=1`, only the smoke tests run, against the mock API.
+**Web tests**: in `apps/crm-web`, Vitest covers the BFF route handlers, the API client, the CASL setup and the mock API (`pnpm test`). Playwright drives the whole system in a real Chromium: with `E2E_REAL_API=1 pnpm e2e` it starts the API on a fresh seeded database and the production build of the web app, then runs the end-to-end specs, such as signing in with tokens kept in httpOnly cookies only, a rep who can't edit another rep's deal, an admin adding a user, a task completed from the Today tab, and a deal moved in one browser moving on another person's board. Without `E2E_REAL_API=1`, only the smoke tests run, against the mock API.
+
+`apps/crm-nuxt` has the same layers. Vitest covers the BFF and its Nitro handlers, the API client and the login page in a real Nuxt app, and `pnpm typecheck` runs `vue-tsc` in strict mode. `pnpm e2e` always runs against the real API: it starts crm-api on a fresh database and the production build on port 3102, then runs specs for signing in, the BFF's CSRF check and token rotation, the shell (the breadcrumb, Ctrl B, the menus, the phone sheet), deals moved with the mouse and with the keyboard alone, live updates between two browsers, and the companies, tasks and admin screens.
 
 ```sh
 cargo test --workspace              # framework and CRM API
 cd apps/crm-web && pnpm test        # Vitest
 E2E_REAL_API=1 pnpm e2e             # Playwright, the whole system
+cd ../crm-nuxt && pnpm typecheck && pnpm test
+pnpm e2e                            # Playwright against the real API
 ```
 
 See [Testing](/docs/testing/getting-started/) for the tools these tests use.
@@ -312,5 +361,8 @@ See [Testing](/docs/testing/getting-started/) for the tools these tests use.
   </LinkCard>
   <LinkCard href="/docs/testing/http-tests/" title="HTTP tests">
     Testing routes the way the CRM does.
+  </LinkCard>
+  <LinkCard href="/docs/patterns/backend-for-frontend/" title="Backend for frontend">
+    The BFF both front ends use, in Next.js and in Nuxt.
   </LinkCard>
 </LinkCards>
