@@ -228,7 +228,7 @@ impl DirectoryUser {
     }
 
     /// The fields that differ from `other`, by their names in this struct
-    /// (`title`, `emails`, `attributes`), in field order.
+    /// (`title`, `emails`, `attributes`), sorted by name.
     pub fn changed_fields(&self, other: &DirectoryUser) -> Vec<String> {
         changed_fields(self, other)
     }
@@ -352,10 +352,13 @@ fn changed_fields<T: Serialize>(new: &T, old: &T) -> Vec<String> {
     else {
         return Vec::new();
     };
-    new.iter()
+    let mut changed: Vec<String> = new
+        .iter()
         .filter(|(key, value)| old.get(*key) != Some(*value))
         .map(|(key, _)| key.clone())
-        .collect()
+        .collect();
+    changed.sort();
+    changed
 }
 
 #[cfg(test)]
