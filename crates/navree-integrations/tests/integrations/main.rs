@@ -9,6 +9,7 @@ mod audit;
 mod clients;
 mod connect;
 mod health;
+mod notify;
 mod real;
 mod routes;
 mod scopes;

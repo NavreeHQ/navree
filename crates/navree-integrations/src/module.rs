@@ -163,6 +163,16 @@ fn register(m: &mut ModuleBuilder, options: Option<IntegrationsOptions>) {
     for command in commands() {
         m.command(command);
     }
+    // Connection tokens for navree-notify's Slack and Teams bot routes.
+    #[cfg(feature = "notify")]
+    m.factory(
+        Factory::<dyn navree_notify::ConnectionTokens>::new(|r: Resolver| async move {
+            let tokens = crate::IntegrationTokens::new(r.get::<Integrations>().await?);
+            Ok(Arc::new(tokens) as Arc<dyn navree_notify::ConnectionTokens>)
+        })
+        .deps(vec![ProviderKey::of::<Integrations>()]),
+    )
+    .exports::<dyn navree_notify::ConnectionTokens>();
 }
 
 /// `IntegrationsModule::for_feature::<S>()`.
