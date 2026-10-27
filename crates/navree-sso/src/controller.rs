@@ -360,6 +360,9 @@ impl Controller for SsoController {
 
         // -- management ------------------------------------------------------
 
+        if !self.options.management_routes {
+            return routes;
+        }
         let manage = [MANAGE_PERMISSION];
 
         let sso = self.sso.clone();

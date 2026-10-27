@@ -34,21 +34,53 @@ async fn options_come_from_the_sso_section() {
         .assert_status(200);
 }
 
-#[tokio::test]
-#[should_panic(expected = "sso.base_url")]
-async fn invalid_options_fail_the_boot() {
+/// An app with auth and single sign-on only (no access module).
+fn minimal() -> navree_testing::TestAppBuilder {
     TestApp::builder()
         .temp_database()
         .config("app.key", navree_crypto::generate_key())
         .module(navree_crypto::CryptoModule::from_config())
         .module(navree_db::DatabaseModule::from_config())
         .module(navree_auth::AuthModule::from_config())
+}
+
+#[tokio::test]
+#[should_panic(expected = "sso.base_url")]
+async fn invalid_options_fail_the_boot() {
+    minimal()
         .module(SsoModule::for_root(SsoOptions {
             base_url: Some("not a url".to_owned()),
+            management_routes: false,
             ..SsoOptions::default()
         }))
         .build()
         .await;
+}
+
+#[tokio::test]
+#[should_panic(expected = "declares permissions:sso.manage but no `dyn RouteAuthorizer`")]
+async fn the_management_routes_need_an_authorizer() {
+    minimal().module(SsoModule::from_config()).build().await;
+}
+
+#[tokio::test]
+async fn an_app_without_access_turns_the_management_routes_off() {
+    let app = minimal()
+        .config("sso.management_routes", false)
+        .module(SsoModule::from_config())
+        .build()
+        .await;
+    app.client()
+        .post("/api/sso/discover")
+        .json(&serde_json::json!({ "email": "a@b.test" }))
+        .send()
+        .await
+        .assert_status(200);
+    app.client()
+        .get("/api/sso/connections")
+        .send()
+        .await
+        .assert_status(404);
 }
 
 #[tokio::test]
