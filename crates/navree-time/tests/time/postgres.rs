@@ -12,7 +12,8 @@ use std::collections::BTreeSet;
 use navree_time::{LocalDay, Zone};
 use sea_orm::sea_query::{Alias, Expr, PostgresQueryBuilder, Query};
 use sea_orm::{
-    ConnectionTrait, Database, DatabaseConnection, DbBackend, FromQueryResult, Statement,
+    ConnectOptions, ConnectionTrait, Database, DatabaseConnection, DbBackend, FromQueryResult,
+    Statement,
 };
 
 use crate::support::utc;
@@ -23,7 +24,13 @@ const RECENT_ZONES: &[&str] = &["America/Coyhaique"];
 
 async fn connect(test: &str) -> Option<DatabaseConnection> {
     match std::env::var("NAVREE_TEST_POSTGRES_URL") {
-        Ok(url) => Some(Database::connect(url).await.expect("connect to PostgreSQL")),
+        // One connection: the temporary table lives on the connection that
+        // created it.
+        Ok(url) => Some(
+            Database::connect(ConnectOptions::new(url).max_connections(1).to_owned())
+                .await
+                .expect("connect to PostgreSQL"),
+        ),
         Err(_) => {
             assert!(
                 std::env::var("NAVREE_TEST_REQUIRE_SERVICES").as_deref() != Ok("1"),
