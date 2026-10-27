@@ -32,6 +32,12 @@
 //!   (permissions `lighthouse.view` and `lighthouse.resolve`). Its JSON API
 //!   ([`LighthouseApiController`]) serves the same data to scripts and
 //!   agents with an access token.
+//! - **MCP** (feature `mcp`): with navree-mcp's `McpModule` in the app,
+//!   `LighthouseMcp` offers the same reads and status changes as tools
+//!   (`lighthouse_list_issues`, `lighthouse_get_issue`,
+//!   `lighthouse_resolve_issue`, ...), each issue as the resource
+//!   `lighthouse://issues/{id}` and the prompt `fix-lighthouse-issue`,
+//!   behind the same abilities (`lighthouse.mcp = false` turns them off).
 //! - **Commands**: `lighthouse:prune [--days N]` and
 //!   `lighthouse:test-alerts [channel]`; the scheduler prunes daily at
 //!   `lighthouse.prune_at`.
@@ -54,6 +60,8 @@
 #![forbid(unsafe_code)]
 
 pub mod entity;
+#[cfg(feature = "mcp")]
+pub mod mcp;
 
 mod aggregate;
 mod alert;
@@ -92,6 +100,8 @@ pub use engine::Span;
 pub use fake::{LighthouseFake, Reported};
 pub use histogram::Histogram;
 pub use migration::LIGHTHOUSE_MIGRATIONS;
+#[cfg(feature = "mcp")]
+pub use mcp::LighthouseMcp;
 pub use model::{Issue, IssueKind, IssueStatus, Level};
 pub use module::{LighthouseModule, LighthouseSubject, RESOLVE, VIEW};
 pub use normalize::{normalize_message, normalize_sql, path_matches};

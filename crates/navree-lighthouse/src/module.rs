@@ -61,7 +61,9 @@ pub const RESOLVE: &str = "resolve";
 ///   `lighthouse`);
 /// - the `lighthouse.alert` job, the `lighthouse:prune` and
 ///   `lighthouse:test-alerts` commands, and the daily `lighthouse:prune`
-///   task for the scheduler.
+///   task for the scheduler;
+/// - with the `mcp` feature, `LighthouseMcp`: tools, a resource and a
+///   prompt on the app's MCP server when it has `McpModule`.
 ///
 /// It needs `DatabaseModule` (unless `lighthouse.store = "off"`); the
 /// dashboard needs `AccessModule` (and `AuthModule` and `CryptoModule` for
@@ -171,6 +173,11 @@ fn register(m: &mut ModuleBuilder, options: Option<LighthouseOptions>) {
         });
     for command in commands() {
         m.command(command);
+    }
+    #[cfg(feature = "mcp")]
+    {
+        use navree_mcp::ModuleBuilderMcpExt as _;
+        m.mcp_server::<crate::mcp::LighthouseMcp>();
     }
 }
 

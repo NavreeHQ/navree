@@ -10,6 +10,12 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+## MCP tools, a resource and a prompt on the app's MCP server (navree-mcp),
+## so agents read and resolve issues. The facade turns it on when both its
+## `lighthouse` and `mcp` features are on.
+mcp = ["dep:navree-mcp", "dep:garde", "dep:utoipa"]
+
 [dependencies]
 axum = { workspace = true }
 base64 = { workspace = true }
@@ -17,6 +23,7 @@ bytes = { workspace = true }
 chrono = { workspace = true }
 cookie = { workspace = true }
 form_urlencoded = { workspace = true }
+garde = { workspace = true, optional = true }
 hex = { workspace = true }
 hmac = { workspace = true }
 http = { workspace = true }
@@ -31,6 +38,7 @@ navree-http = { workspace = true }
 navree-http-client = { workspace = true }
 navree-kernel = { workspace = true }
 navree-mail = { workspace = true }
+navree-mcp = { workspace = true, optional = true }
 navree-schedule = { workspace = true }
 navree-telemetry = { workspace = true }
 navree-view = { workspace = true }
@@ -42,6 +50,7 @@ sha2 = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
+utoipa = { workspace = true, optional = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
