@@ -25,6 +25,10 @@ access = ["dep:navree-access"]
 ## Testing helpers on navree-testing's `TestApp` (`app.seed::<S>()`). The
 ## facade turns it on when both `orm` and `testing` are on.
 testing = ["dep:navree-testing"]
+## Validation rules that query models (`validation::unique`,
+## `validation::exists`) for navree-validation's `ValidAsync`. The facade
+## turns it on when both `orm` and `validation` are on.
+validation = ["dep:navree-validation"]
 
 [dependencies]
 axum = { workspace = true }
@@ -39,6 +43,7 @@ navree-http = { workspace = true }
 navree-kernel = { workspace = true }
 navree-orm-macros = { workspace = true }
 navree-testing = { workspace = true, optional = true }
+navree-validation = { workspace = true, optional = true }
 rust_decimal = { workspace = true }
 sea-orm = { workspace = true, features = ["with-rust_decimal"] }
 sea-query = { workspace = true, features = ["backend-mysql", "with-rust_decimal"] }
@@ -53,10 +58,13 @@ uuid = { workspace = true }
 
 [dev-dependencies]
 futures = { workspace = true }
+# `#[derive(garde::Validate)]` in the validation tests names `::garde`.
+garde = { workspace = true }
 insta = { workspace = true }
 navree-config = { workspace = true }
-# The crate's own tests use its `access` and `testing` features.
-navree-orm = { workspace = true, features = ["access", "testing"] }
+# The crate's own tests use its `access`, `testing` and `validation`
+# features.
+navree-orm = { workspace = true, features = ["access", "testing", "validation"] }
 navree-testing = { workspace = true }
 proptest = { workspace = true }
 tempfile = { workspace = true }

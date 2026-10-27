@@ -114,6 +114,8 @@ mod scope;
 pub mod sql;
 pub mod testing;
 mod ulid;
+#[cfg(feature = "validation")]
+pub mod validation;
 mod value;
 pub mod workspace;
 
