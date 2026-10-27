@@ -99,6 +99,34 @@ async fn events_can_be_delivered_by_name() {
     assert_eq!(workflows.run(id).await.unwrap().output, Some(json!(12)));
 }
 
+/// An event emitted inside a unit of work (a handler's) counts once the
+/// work commits, and never when it rolls back.
+#[tokio::test]
+async fn an_event_emitted_in_a_unit_of_work_counts_after_the_commit() {
+    let h = harness(|b| b).await;
+    let id = h.start(AwaitCourse { user_id: 5 }).await;
+    let bus = h.app.get::<navree_events::EventBus>().await;
+    let event = || CourseCompleted {
+        user_id: 5,
+        course_id: 1,
+        score: 70,
+    };
+
+    let rolled_back = h.db().await.uow(None, None).await;
+    rolled_back.scope(bus.emit(event())).await.unwrap();
+    assert_eq!(h.status(id).await, RunStatus::Waiting);
+    rolled_back.rollback().await.unwrap();
+    assert_eq!(h.status(id).await, RunStatus::Waiting);
+
+    let committed = h.db().await.uow(None, None).await;
+    committed.scope(bus.emit(event())).await.unwrap();
+    assert_eq!(h.status(id).await, RunStatus::Waiting);
+    committed.commit().await.unwrap();
+    let run = h.workflows().await.run(id).await.unwrap();
+    assert_eq!(run.status, RunStatus::Completed);
+    assert_eq!(run.output, Some(json!(70)));
+}
+
 #[tokio::test]
 async fn waiting_for_an_unregistered_event_fails_the_run_with_the_fix() {
     let h = harness(|b| b).await;

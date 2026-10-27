@@ -304,7 +304,7 @@ let completed = ctx
 - **Only events emitted after the wait began count.** An event that arrived earlier does not resolve a later wait.
 - **The event type must be registered** with `m.workflow_event::<E>()`. Waiting for another type fails at once with `WorkflowsError::UnregisteredEvent`, whose message names the call to add.
 
-Emit the event as you emit any [event](/docs/digging-deeper/events/): `bus.emit(CourseCompleted { user_id: 7, course_id: 1 })`. Every waiting run it matches is woken; its wait returns the event. `ctx.wait_for_event(name, filter, timeout)` waits by event name and returns its JSON, and `Workflows::deliver(name, &payload)` hands an event to the engine by name, for events that arrive another way (a webhook, another service).
+Emit the event as you emit any [event](/docs/digging-deeper/events/): `bus.emit(CourseCompleted { user_id: 7, course_id: 1 })`. Every waiting run it matches is woken; its wait returns the event. An event emitted inside a unit of work (in a handler, after your writes) counts once that work commits, so the run sees what the handler wrote; a rollback drops it. `ctx.wait_for_event(name, filter, timeout)` waits by event name and returns its JSON, and `Workflows::deliver(name, &payload)` hands an event to the engine by name, for events that arrive another way (a webhook, another service).
 
 ## How runs execute
 

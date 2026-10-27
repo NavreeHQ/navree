@@ -14,13 +14,31 @@
 //! results) and goes on. A run survives restarts and crashes, keeps the
 //! version it started on, and can be cancelled or retried.
 //!
-//! ```ignore
+//! ```
+//! use std::time::Duration;
+//!
+//! use navree_kernel::BoxError;
+//! use navree_workflows::{EventMatch, Workflow, WorkflowCtx, workflow};
+//! use serde::{Deserialize, Serialize};
+//! # use navree_events::Event;
+//! # #[derive(Clone, Serialize, Deserialize)]
+//! # struct CourseCompleted { user_id: u64 }
+//! # impl Event for CourseCompleted { const NAME: &'static str = "course.completed"; }
+//! # async fn send_welcome(_user: u64) -> Result<(), BoxError> { Ok(()) }
+//! # async fn send_nudge(_user: u64) -> Result<(), BoxError> { Ok(()) }
+//!
+//! const WEEK: Duration = Duration::from_secs(7 * 86_400);
+//!
+//! #[derive(Serialize, Deserialize)]
+//! struct Onboarding {
+//!     user_id: u64,
+//! }
+//!
 //! /// Welcomes a new user, then nudges them if they have not finished the
 //! /// course after a week.
 //! #[workflow]
 //! async fn onboarding(ctx: WorkflowCtx, input: Onboarding) -> Result<(), BoxError> {
 //!     ctx.step("send-welcome", || send_welcome(input.user_id)).await?;
-//!     ctx.sleep(Duration::from_secs(3 * 86_400)).await;
 //!     let done = ctx
 //!         .wait_for::<CourseCompleted>(EventMatch::field("user_id", input.user_id), WEEK)
 //!         .await?;
@@ -30,7 +48,8 @@
 //!     Ok(())
 //! }
 //!
-//! let run_id = workflows.start(&uow, Onboarding { user_id }).await?;
+//! assert_eq!(<Onboarding as Workflow>::NAME, "onboarding");
+//! // let run_id = workflows.start(&uow, Onboarding { user_id: 7 }).await?;
 //! ```
 //!
 //! **Automations.** Modules register [`Trigger`]s (events), [`Condition`]s
