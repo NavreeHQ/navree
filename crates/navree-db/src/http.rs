@@ -1,23 +1,24 @@
 //! HTTP integration: the unit-of-work layer, the [`Uow`] extractor and the
 //! mapping of database errors to error responses.
 
+use std::convert::Infallible;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use axum::extract::{FromRequestParts, Request, State};
-use axum::middleware::{Next, from_fn_with_state};
+use axum::extract::{FromRequestParts, Request};
 use axum::response::{IntoResponse, Response};
 use http::request::Parts;
 use navree_contracts::{AuthState, RequestId};
 use navree_http::{AppError, GlobalLayer, LayerSlot};
 use navree_kernel::{AppContext, BoxFuture};
 use navree_telemetry::TelemetryContext;
-use tracing::Instrument;
 use sea_orm::sqlx::error::ErrorKind;
 use sea_orm::{DbErr, RuntimeErr, SqlErr};
 use tokio::sync::OnceCell;
+use tower::{Layer, Service, ServiceExt};
+use tracing::Instrument;
 
 use crate::{Db, Uow};
 
@@ -45,20 +46,82 @@ impl<S: Send + Sync> FromRequestParts<S> for Uow {
 /// back otherwise; a failed commit becomes an error response.
 pub(crate) fn uow_layer() -> GlobalLayer {
     GlobalLayer::new(LayerSlot::Uow, "uow", |_ctx, router| {
-        let db: Arc<OnceCell<Arc<Db>>> = Arc::new(OnceCell::new());
-        Ok(router.layer(from_fn_with_state(db, unit_of_work)))
+        Ok(router.layer(UowLayer {
+            db: Arc::new(OnceCell::new()),
+        }))
     })
 }
 
-async fn unit_of_work(
-    State(db): State<Arc<OnceCell<Arc<Db>>>>,
+/// The unit-of-work layer: a Tower layer of its own (not a `from_fn`
+/// middleware), whose one boxed future per request is the detachable
+/// [`RunToCompletion`].
+#[derive(Clone)]
+struct UowLayer {
+    /// The app's [`Db`], resolved by the first request.
+    db: Arc<OnceCell<Arc<Db>>>,
+}
+
+impl<S> Layer<S> for UowLayer {
+    type Service = UowService<S>;
+
+    fn layer(&self, inner: S) -> UowService<S> {
+        UowService {
+            db: self.db.clone(),
+            inner,
+        }
+    }
+}
+
+/// The rest of the pipeline in a unit of work.
+#[derive(Clone)]
+struct UowService<S> {
+    db: Arc<OnceCell<Arc<Db>>>,
+    inner: S,
+}
+
+impl<S> Service<Request> for UowService<S>
+where
+    S: Service<Request, Response = Response, Error = Infallible> + Clone + Send + 'static,
+    S::Future: Send + 'static,
+{
+    type Response = Response;
+    type Error = Infallible;
+    type Future = RunToCompletion;
+
+    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Infallible>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn call(&mut self, request: Request) -> RunToCompletion {
+        let Some(ctx) = request.extensions().get::<AppContext>().cloned() else {
+            let error =
+                AppError::internal("the unit-of-work layer runs outside the navree pipeline");
+            return RunToCompletion::ready(error.into_response());
+        };
+        // What a detached remainder needs to run as the request did.
+        let context = request.extensions().get::<TelemetryContext>().cloned();
+        let future = unit_of_work(ctx.clone(), self.db.clone(), request, self.inner.clone());
+        RunToCompletion {
+            future: Some(Box::pin(future)),
+            polling: false,
+            ctx: Some(ctx),
+            context,
+            span: tracing::Span::current(),
+        }
+    }
+}
+
+/// Opens the request's unit of work, runs `handler` (the rest of the
+/// pipeline) with it as [`Uow::current`], then commits or rolls back.
+async fn unit_of_work<S>(
+    ctx: AppContext,
+    db: Arc<OnceCell<Arc<Db>>>,
     mut request: Request,
-    next: Next,
-) -> Response {
-    let Some(ctx) = request.extensions().get::<AppContext>().cloned() else {
-        return AppError::internal("the unit-of-work layer runs outside the navree pipeline")
-            .into_response();
-    };
+    handler: S,
+) -> Response
+where
+    S: Service<Request, Response = Response, Error = Infallible>,
+{
     let db = match db.get_or_try_init(|| ctx.get::<Db>()).await {
         Ok(db) => db.clone(),
         Err(error) => return AppError::internal(error).into_response(),
@@ -74,21 +137,16 @@ async fn unit_of_work(
         .map(|id| id.as_str().to_owned());
     let uow = db.uow(actor, request_id).await;
     request.extensions_mut().insert(uow.clone());
-    // What a detached remainder needs to run as the request did.
-    let context = request.extensions().get::<TelemetryContext>().cloned();
-
-    RunToCompletion {
-        future: Some(Box::pin(async move {
-            // After-commit hooks run outside the scope: by then it is finished.
-            let response = uow.scope(next.run(request)).await;
-            finish(&uow, response).await
-        })),
-        polling: false,
-        ctx,
-        context,
-        span: tracing::Span::current(),
-    }
-    .await
+    let response = uow
+        .scope(async move {
+            match handler.oneshot(request).await {
+                Ok(response) => response,
+                Err(never) => match never {},
+            }
+        })
+        .await;
+    // After-commit hooks run outside the scope: by then it is finished.
+    finish(&uow, response).await
 }
 
 /// The rest of a request: polled in place by the task that polls the
@@ -100,15 +158,29 @@ struct RunToCompletion {
     /// Set while `future` is polled: still set when `Drop` runs means the
     /// poll panicked, and a panicked future must not be polled again.
     polling: bool,
-    ctx: AppContext,
+    /// The app whose tracker takes a detached remainder.
+    ctx: Option<AppContext>,
     context: Option<TelemetryContext>,
     span: tracing::Span,
 }
 
-impl Future for RunToCompletion {
-    type Output = Response;
+impl RunToCompletion {
+    /// A request answered with `response` at once.
+    fn ready(response: Response) -> Self {
+        Self {
+            future: Some(Box::pin(std::future::ready(response))),
+            polling: false,
+            ctx: None,
+            context: None,
+            span: tracing::Span::none(),
+        }
+    }
+}
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Response> {
+impl Future for RunToCompletion {
+    type Output = Result<Response, Infallible>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = &mut *self;
         let Some(future) = this.future.as_mut() else {
             return Poll::Pending;
@@ -116,16 +188,19 @@ impl Future for RunToCompletion {
         this.polling = true;
         let polled = future.as_mut().poll(cx);
         this.polling = false;
-        if polled.is_ready() {
-            this.future = None;
+        match polled {
+            Poll::Ready(response) => {
+                this.future = None;
+                Poll::Ready(Ok(response))
+            }
+            Poll::Pending => Poll::Pending,
         }
-        polled
     }
 }
 
 impl Drop for RunToCompletion {
     fn drop(&mut self) {
-        let Some(future) = self.future.take() else {
+        let (Some(future), Some(ctx)) = (self.future.take(), self.ctx.take()) else {
             return;
         };
         if self.polling {
@@ -139,9 +214,7 @@ impl Drop for RunToCompletion {
                 None => drop(future.await),
             }
         };
-        self.ctx
-            .tracker()
-            .spawn(remainder.instrument(self.span.clone()));
+        ctx.tracker().spawn(remainder.instrument(self.span.clone()));
     }
 }
 

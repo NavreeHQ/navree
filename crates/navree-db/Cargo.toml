@@ -33,6 +33,8 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
+# The unit-of-work layer is a Tower layer of its own.
+tower = { workspace = true }
 tracing = { workspace = true }
 uuid = { workspace = true }
 
