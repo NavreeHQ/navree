@@ -1,109 +1,61 @@
-//! The integrations module's migrations (`MigrationSet` `integrations`).
+//! The integrations module's migrations (`MigrationSet` `integrations`),
+//! written with the schema builder.
 
 use navree_db::MigrationSet;
-use sea_orm::DbErr;
-use sea_orm::sea_query::{ColumnDef, Expr, Index, Table};
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
+use navree_db::navree_schema::{Migration, Schema, SchemaMigration, SchemaResult};
 
 /// The name of the integrations module's migration set.
 pub const INTEGRATIONS_MIGRATIONS: &str = "integrations";
 
+/// The table of connections.
+pub(crate) const CONNECTIONS_TABLE: &str = "integration_connections";
+
 /// The integrations module's migration set.
 pub(crate) fn migrations() -> MigrationSet {
-    MigrationSet::new(INTEGRATIONS_MIGRATIONS).migration(CreateIntegrationConnections)
+    MigrationSet::new(INTEGRATIONS_MIGRATIONS).migration(SchemaMigration::new(
+        "m20261027_000001_create_integration_connections_table",
+        CreateIntegrationConnections,
+    ))
 }
 
-/// Creates `integration_connections`.
+/// Creates `integration_connections`: unique per owner, provider and scope
+/// set, indexed by the last check (`integrations:check --due`). Owners are
+/// not foreign keys, so the module works with or without navree-workspace;
+/// the module forgets a deleted workspace's or organization's connections.
 struct CreateIntegrationConnections;
 
-impl MigrationName for CreateIntegrationConnections {
-    fn name(&self) -> &str {
-        "m20261027_000001_create_integration_connections_table"
-    }
-}
-
-fn timestamp(name: &'static str) -> ColumnDef {
-    ColumnDef::new(name)
-        .timestamp_with_time_zone()
-        .not_null()
-        .to_owned()
-}
-
-#[async_trait]
-impl MigrationTrait for CreateIntegrationConnections {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table("integration_connections")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("owner_type").string_len(16).not_null())
-                    .col(ColumnDef::new("owner_id").uuid().not_null())
-                    .col(ColumnDef::new("provider").string_len(64).not_null())
-                    .col(ColumnDef::new("scope_set").string_len(64).not_null())
-                    .col(ColumnDef::new("kind").string_len(32).not_null())
-                    .col(ColumnDef::new("external_id").string().null())
-                    .col(ColumnDef::new("display_name").string().null())
-                    .col(ColumnDef::new("credentials").text().not_null())
-                    .col(ColumnDef::new("access_token").text().null())
-                    .col(
-                        ColumnDef::new("token_expires_at")
-                            .timestamp_with_time_zone()
-                            .null(),
-                    )
-                    .col(ColumnDef::new("scopes").text().null())
-                    .col(
-                        ColumnDef::new("status")
-                            .string_len(16)
-                            .not_null()
-                            .default(Expr::val("healthy")),
-                    )
-                    .col(
-                        ColumnDef::new("failures")
-                            .integer()
-                            .not_null()
-                            .default(Expr::val(0)),
-                    )
-                    .col(ColumnDef::new("last_error").text().null())
-                    .col(
-                        ColumnDef::new("last_checked_at")
-                            .timestamp_with_time_zone()
-                            .null(),
-                    )
-                    .col(ColumnDef::new("connected_by").uuid().null())
-                    .col(timestamp("created_at"))
-                    .col(timestamp("updated_at"))
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("integration_connections_owner_provider_unique")
-                    .table("integration_connections")
-                    .col("owner_type")
-                    .col("owner_id")
-                    .col("provider")
-                    .col("scope_set")
-                    .unique()
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("integration_connections_last_checked_index")
-                    .table("integration_connections")
-                    .col("last_checked_at")
-                    .to_owned(),
-            )
+impl Migration for CreateIntegrationConnections {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema
+            .create(CONNECTIONS_TABLE, |t| {
+                t.uuid_primary();
+                t.string("owner_type").length(16);
+                t.uuid("owner_id");
+                t.string("provider").length(64);
+                t.string("scope_set").length(64);
+                t.string("kind").length(32);
+                t.string("external_id").nullable();
+                t.string("display_name").nullable();
+                t.text("credentials");
+                t.text("access_token").nullable();
+                t.timestamp_tz("token_expires_at").nullable();
+                t.text("scopes").nullable();
+                t.string("status").length(16).default("healthy");
+                t.integer("failures").default(0);
+                t.text("last_error").nullable();
+                t.timestamp_tz("last_checked_at")
+                    .nullable()
+                    .index_named("integration_connections_last_checked_index");
+                t.uuid("connected_by").nullable();
+                t.timestamp_tz("created_at");
+                t.timestamp_tz("updated_at");
+                t.unique(["owner_type", "owner_id", "provider", "scope_set"])
+                    .name("integration_connections_owner_provider_unique");
+            })
             .await
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .drop_table(Table::drop().table("integration_connections").to_owned())
-            .await
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop_if_exists(CONNECTIONS_TABLE).await
     }
 }

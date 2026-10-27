@@ -7,12 +7,11 @@ use std::time::Duration;
 
 use chrono::{DateTime, TimeDelta, Utc};
 use http::Method;
-use sea_orm::sea_query::Expr;
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+use navree_orm::{Model as _, Record};
 use serde_json::Value;
 use uuid::Uuid;
 
-use crate::entity::integration_connection::{self, Column, Entity};
+use crate::model::IntegrationConnection as Row;
 use crate::entry::{Probe, ProviderEntry};
 use crate::events::{ConnectionRestored, ConnectionUnhealthy};
 use crate::oauth::{Exchange, Grant};
@@ -40,17 +39,17 @@ impl Runtime {
     pub(crate) async fn load(
         &self,
         id: Uuid,
-    ) -> Result<integration_connection::Model, IntegrationsError> {
-        Entity::find_by_id(id)
-            .one(&self.db.reader().await)
+    ) -> Result<Row, IntegrationsError> {
+        Row::find(&self.db, id)
             .await?
+            .map(Record::into_inner)
             .ok_or(IntegrationsError::ConnectionNotFound)
     }
 
     /// The cached token of `model`, when `want` accepts it.
     fn cached(
         &self,
-        model: &integration_connection::Model,
+        model: &Row,
         want: &Want,
     ) -> Result<Option<String>, IntegrationsError> {
         let Some(encrypted) = &model.access_token else {
@@ -155,7 +154,7 @@ impl Runtime {
     async fn subject_token(
         &self,
         entry: &ProviderEntry,
-        model: &integration_connection::Model,
+        model: &Row,
         credentials: &StoredCredentials,
         subject: &str,
         want: &Want,
@@ -185,7 +184,7 @@ impl Runtime {
     pub(crate) async fn mint(
         &self,
         entry: &ProviderEntry,
-        model: &integration_connection::Model,
+        model: &Row,
         credentials: &StoredCredentials,
         subject: Option<&str>,
     ) -> Result<Grant, IntegrationsError> {
@@ -241,7 +240,7 @@ impl Runtime {
     /// was unhealthy is healthy again.
     async fn save_grant(
         &self,
-        model: &integration_connection::Model,
+        model: &Row,
         credentials: &StoredCredentials,
         grant: &Grant,
     ) -> Result<(), IntegrationsError> {
@@ -270,24 +269,26 @@ impl Runtime {
             scope_set: model.scope_set.clone(),
         });
         self.housekeeping(|uow| async move {
-            let mut update = Entity::update_many()
-                .col_expr(Column::AccessToken, Expr::value(Some(token)))
-                .col_expr(Column::TokenExpiresAt, Expr::value(expires))
-                .filter(Column::Id.eq(id));
+            let mut sets = vec![
+                Row::ACCESS_TOKEN.set(token),
+                Row::TOKEN_EXPIRES_AT.set(expires),
+            ];
             if let Some(credentials) = rotated {
-                update = update.col_expr(Column::Credentials, Expr::value(credentials));
+                sets.push(Row::CREDENTIALS.set(credentials));
             }
             if let Some(scopes) = scopes {
-                update = update.col_expr(Column::Scopes, Expr::value(Some(scopes)));
+                sets.push(Row::SCOPES.set(scopes));
             }
             if restored {
-                update = update
-                    .col_expr(Column::Status, Expr::value(ConnectionStatus::Healthy.as_str()))
-                    .col_expr(Column::Failures, Expr::value(0))
-                    .col_expr(Column::LastError, Expr::value(None::<String>))
-                    .col_expr(Column::UpdatedAt, Expr::value(now));
+                sets.extend([
+                    Row::STATUS.set(ConnectionStatus::Healthy.as_str()),
+                    Row::FAILURES.set(0),
+                    Row::LAST_ERROR.set(None::<String>),
+                    Row::UPDATED_AT.set(now),
+                ]);
             }
-            update.exec(&*uow.tx().await?).await?;
+            // No change event: the row holds encrypted credentials.
+            Row::query().where_(Row::ID.eq(id)).update(&uow, sets).await?;
             if let Some(event) = event {
                 self.emit_after_commit(&uow, event).await;
             }
@@ -300,7 +301,7 @@ impl Runtime {
     /// message and whether it was a refusal; `checked_at` is set by checks.
     pub(crate) async fn record(
         &self,
-        model: &integration_connection::Model,
+        model: &Row,
         failure: Option<(String, bool)>,
         checked_at: Option<DateTime<Utc>>,
     ) -> Result<Health, IntegrationsError> {
@@ -341,18 +342,18 @@ impl Runtime {
         let changed = before != status;
         let last_error = error.clone();
         self.housekeeping(|uow| async move {
-            let mut update = Entity::update_many()
-                .col_expr(Column::Status, Expr::value(status.as_str()))
-                .col_expr(Column::Failures, Expr::value(failures))
-                .col_expr(Column::LastError, Expr::value(last_error))
-                .filter(Column::Id.eq(id));
+            let mut sets = vec![
+                Row::STATUS.set(status.as_str()),
+                Row::FAILURES.set(failures),
+                Row::LAST_ERROR.set(last_error),
+            ];
             if let Some(checked_at) = checked_at {
-                update = update.col_expr(Column::LastCheckedAt, Expr::value(Some(checked_at)));
+                sets.push(Row::LAST_CHECKED_AT.set(checked_at));
             }
             if changed {
-                update = update.col_expr(Column::UpdatedAt, Expr::value(now));
+                sets.push(Row::UPDATED_AT.set(now));
             }
-            update.exec(&*uow.tx().await?).await?;
+            Row::query().where_(Row::ID.eq(id)).update(&uow, sets).await?;
             if let Some(event) = unhealthy {
                 self.emit_after_commit(&uow, event).await;
             }
@@ -461,7 +462,7 @@ impl Runtime {
 /// Why a token could not be had.
 pub(crate) enum TokenFailure {
     /// The provider refused the connection's own credentials.
-    Connection(Box<integration_connection::Model>, IntegrationsError),
+    Connection(Box<Row>, IntegrationsError),
     /// Anything else (unreachable provider, internal errors).
     Other(IntegrationsError),
 }
