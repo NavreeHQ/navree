@@ -1,10 +1,17 @@
 //! The `lighthouse` migration set: five tables prefixed `lighthouse_`.
+//! Samples, occurrences and aggregates are time series: TimescaleDB
+//! hypertables.
 //!
 //! With `lighthouse.database_url` set, Lighthouse also creates the same
-//! tables (when missing) in that database as it connects at boot, and
+//! tables (when missing) in that database as it connects at boot, makes
+//! the time-series ones hypertables there when it runs TimescaleDB, and
 //! reads and writes there.
 
 use navree_db::MigrationSet;
+use navree_db::navree_schema::{
+    Dialect, Hypertable, KeyStrategy, Migration, Schema, SchemaMigration, SchemaResult,
+    TimescaleMode,
+};
 use sea_orm::DbErr;
 use sea_orm::sea_query::{ColumnDef, ForeignKey, ForeignKeyAction, Index, Table};
 use sea_orm_migration::async_trait::async_trait;
@@ -13,9 +20,95 @@ use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
 /// The name of the Lighthouse migration set.
 pub const LIGHTHOUSE_MIGRATIONS: &str = "lighthouse";
 
+/// The table of sampled requests, jobs and queries.
+pub(crate) const SAMPLES_TABLE: &str = "lighthouse_samples";
+
+/// The table of issue occurrences.
+pub(crate) const OCCURRENCES_TABLE: &str = "lighthouse_occurrences";
+
+/// The table of per-minute and per-hour aggregates.
+pub(crate) const AGGREGATES_TABLE: &str = "lighthouse_aggregates";
+
 /// The Lighthouse migration set.
 pub(crate) fn migrations() -> MigrationSet {
-    MigrationSet::new(LIGHTHOUSE_MIGRATIONS).migration(CreateLighthouseTables)
+    MigrationSet::new(LIGHTHOUSE_MIGRATIONS)
+        .migration(CreateLighthouseTables)
+        .migration(SchemaMigration::new(
+            "m20261027_000002_convert_lighthouse_events_to_hypertables",
+            ConvertEventsToHypertables,
+        ))
+}
+
+/// How Lighthouse's events are partitioned on TimescaleDB, a day per chunk
+/// (kept 14 days by default, `lighthouse.retention_days`): samples and
+/// occurrences by `at`, aggregates by `bucket`. Their unique keys gain the
+/// time column (the aggregates' row key already has it), and
+/// `lighthouse:prune` drops whole chunks.
+pub(crate) fn hypertables() -> [(&'static str, Hypertable); 3] {
+    let table = |column: &str| {
+        let mut hypertable = Hypertable::on(column);
+        hypertable
+            .chunk_interval("1 day")
+            .keys(KeyStrategy::Extend)
+            .migrate_data();
+        hypertable
+    };
+    [
+        (SAMPLES_TABLE, table("at")),
+        (OCCURRENCES_TABLE, table("at")),
+        (AGGREGATES_TABLE, table("bucket")),
+    ]
+}
+
+/// Makes the event tables hypertables, unless they are already.
+pub(crate) async fn convert_time_series(schema: &Schema<'_>) -> SchemaResult {
+    for (table, hypertable) in hypertables() {
+        if !schema.is_hypertable(table).await? {
+            schema.convert_to_hypertable(table, hypertable).await?;
+        }
+    }
+    Ok(())
+}
+
+/// [`convert_time_series`] in the database of `lighthouse.database_url`, as
+/// Lighthouse connects at boot: on PostgreSQL where TimescaleDB is (or may
+/// be) installed, and where `schema.timescaledb = "require"` asks for it,
+/// which then fails the boot when it is missing. Other databases keep the
+/// tables as created, without a notice at every boot.
+pub(crate) async fn convert_time_series_at_boot(schema: &Schema<'_>) -> SchemaResult {
+    let target = schema.target().await?;
+    if target.dialect() != Dialect::Postgres {
+        return Ok(());
+    }
+    let options = schema.options();
+    let usable = target.timescaledb().is_some()
+        || (options.create_extensions && target.timescaledb_installable().is_some());
+    match options.timescaledb {
+        TimescaleMode::Off => Ok(()),
+        TimescaleMode::Require => convert_time_series(schema).await,
+        TimescaleMode::Auto if usable => convert_time_series(schema).await,
+        TimescaleMode::Auto => Ok(()),
+    }
+}
+
+/// Makes `lighthouse_samples`, `lighthouse_occurrences` and
+/// `lighthouse_aggregates` hypertables on TimescaleDB; elsewhere they stay
+/// regular tables with time indexes (aggregates gain one on `bucket`), and
+/// the migration reports a notice.
+///
+/// Reverting it keeps the hypertables: TimescaleDB cannot turn one back
+/// into a plain table in place, and the tables work the same either way.
+/// Running it again changes nothing.
+struct ConvertEventsToHypertables;
+
+impl Migration for ConvertEventsToHypertables {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        convert_time_series(schema).await
+    }
+
+    async fn down(&self, _schema: &Schema<'_>) -> SchemaResult {
+        Ok(())
+    }
 }
 
 /// Creates the five tables.
