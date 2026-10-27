@@ -16,7 +16,7 @@ use serde::de::DeserializeOwned;
 use serde_json::Value;
 
 use crate::failure::{self, Failure};
-use crate::{AsyncRule, AsyncRules, Messages};
+use crate::{AsyncRule, AsyncRules, MessageTranslator, Messages};
 
 /// Validated input: `Valid<Json<T>>`, `Valid<Query<T>>` or `Valid<Form<T>>`
 /// deserializes `T`, then runs its garde rules.
@@ -308,10 +308,22 @@ impl Invalid {
         Self::new(failures, None, "query")
     }
 
-    /// The 400 error, with the app's messages.
+    /// The 400 error, with the app's messages (through its
+    /// [`MessageTranslator`], when it has one).
     pub(crate) async fn reject(self, ctx: Option<&AppContext>) -> AppError {
         let messages = messages(ctx).await;
-        failure::render(&self.failures, &messages, self.input.as_ref(), self.root).into_app_error()
+        let translator = match ctx {
+            Some(ctx) => ctx.try_get::<dyn MessageTranslator>().await,
+            None => None,
+        };
+        failure::render(
+            &self.failures,
+            &messages,
+            translator.as_deref(),
+            self.input.as_ref(),
+            self.root,
+        )
+        .into_app_error()
     }
 }
 

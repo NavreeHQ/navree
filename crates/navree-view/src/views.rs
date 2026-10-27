@@ -136,6 +136,24 @@ impl Views {
         !matches!(self.find(name), Err(ViewError::NotFound { .. }))
     }
 
+    /// Changes the template environment: adds functions, filters or
+    /// globals, or replaces the built-in `money` and `date` filters. Call it
+    /// before rendering (modules use
+    /// [`ModuleBuilderViewExt::view_environment`](crate::ModuleBuilderViewExt::view_environment),
+    /// applied when `ViewModule` builds `Views`).
+    ///
+    /// ```
+    /// use navree_view::Views;
+    /// use serde_json::json;
+    ///
+    /// let mut views = Views::from_templates([("hi.txt", "{{ shout(name) }}")]).unwrap();
+    /// views.configure(|env| env.add_function("shout", |name: &str| name.to_uppercase()));
+    /// assert_eq!(views.render("hi", json!({ "name": "ada" })).unwrap(), "ADA");
+    /// ```
+    pub fn configure(&mut self, configure: impl FnOnce(&mut Environment<'static>)) {
+        configure(&mut self.env);
+    }
+
     /// The first candidate for `name` that exists, with its full name.
     fn find(&self, name: &str) -> Result<(String, Template<'_, '_>), ViewError> {
         let candidates = candidates(name);

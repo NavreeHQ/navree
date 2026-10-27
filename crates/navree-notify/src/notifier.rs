@@ -15,6 +15,7 @@ use sea_orm::{ActiveValue::Set, ConnectionTrait, EntityTrait};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
+use crate::recipient::within;
 use crate::{
     Channel, Delivery, Notifiable, Notification, NotifyError, NotifyOptions, SendNotificationJob,
     notifications,
@@ -229,7 +230,15 @@ impl Notifier {
                     .try_get::<Mailer>()
                     .await
                     .ok_or_else(|| unavailable(Channel::Mail, "add MailModule"))?;
-                Ok(mailer.send(mail).await?)
+                // The template renders here, in the recipient's context.
+                let sent = within(
+                    ctx,
+                    &job.notifiable_type,
+                    &job.notifiable_id,
+                    mailer.send(mail),
+                )
+                .await;
+                Ok(sent?)
             }
             Delivery::Broadcast { channel, data } => {
                 let broadcaster = ctx.try_get::<dyn Broadcaster>().await.ok_or_else(|| {
@@ -288,7 +297,9 @@ impl fmt::Debug for Notifier {
 }
 
 /// The notification rendered for each channel `via` lists (duplicates
-/// dropped, channels that render nothing skipped), with a new id.
+/// dropped, channels that render nothing skipped), with a new id; in the
+/// recipient's context when the app has a
+/// [`RecipientScope`](crate::RecipientScope).
 async fn render<N: Notification>(
     ctx: &AppContext,
     notifiable: &dyn Notifiable,
@@ -296,11 +307,18 @@ async fn render<N: Notification>(
 ) -> (Uuid, Vec<SendNotificationJob>) {
     let id = Uuid::now_v7();
     let created_at = now(ctx).await;
-    let mut channels = notification.via(notifiable);
-    dedup(&mut channels);
-    let jobs = channels
+    let notifiable_id = notifiable.notifiable_id();
+    let deliveries = within(ctx, notifiable.notifiable_type(), &notifiable_id, async {
+        let mut channels = notification.via(notifiable);
+        dedup(&mut channels);
+        channels
+            .into_iter()
+            .filter_map(|channel| render_channel(channel, notifiable, notification))
+            .collect::<Vec<_>>()
+    })
+    .await;
+    let jobs = deliveries
         .into_iter()
-        .filter_map(|channel| render_channel(channel, notifiable, notification))
         .map(|delivery| SendNotificationJob {
             id,
             notification_type: N::TYPE.to_owned(),
