@@ -129,7 +129,7 @@ impl MemoryStore {
             return false;
         }
         state.jobs.remove(&job.id);
-        state.failed.push(failed_job(job, error, now));
+        state.failed.push(FailedJob::of(job, error, now));
         true
     }
 
@@ -191,7 +191,7 @@ impl MemoryStore {
         };
         state.jobs.remove(&job.id);
         if finish == Finish::Failed {
-            state.failed.push(failed_job(job, error, now));
+            state.failed.push(FailedJob::of(job, error, now));
         }
         Ok(Finished::Done(step))
     }
@@ -386,18 +386,5 @@ impl State {
                 reserved_at: None,
             },
         );
-    }
-}
-
-fn failed_job(job: &ReservedJob, error: &str, now: i64) -> FailedJob {
-    FailedJob {
-        id: job.id.clone(),
-        queue: job.queue.clone(),
-        job_type: job.job_type.clone(),
-        payload: job.payload.clone(),
-        options: job.options.clone(),
-        error: error.to_owned(),
-        attempts: job.attempts,
-        failed_at: from_millis(now),
     }
 }

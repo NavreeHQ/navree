@@ -6,6 +6,7 @@ mod batches;
 mod commands;
 mod custom_store;
 mod database_driver;
+mod failed_jobs;
 mod fake;
 mod http;
 mod module;

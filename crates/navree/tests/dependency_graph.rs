@@ -108,7 +108,9 @@ const HIERARCHY: &[Rule] = &[
     // Queue: operations mount routes with an SSE stream (http), authorize
     // the private channel `operations.{id}` (realtime) and schedule their
     // watchdog (schedule, same layer; schedule never depends on queue).
-    rule("navree-queue", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http", "navree-db", "navree-realtime", "navree-schedule"]),
+    // Failed jobs are navree-orm models (same layer; the ORM never depends
+    // on the queue: it dispatches through navree-contracts).
+    rule("navree-queue", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http", "navree-db", "navree-realtime", "navree-schedule", "navree-orm"]),
     // Schedule: `in_zone` and `per_workspace_local` evaluate cron
     // expressions on local clocks (navree-time).
     rule("navree-schedule", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-db", "navree-time"]),

@@ -5464,6 +5464,7 @@ dependencies = [
  "navree-db",
  "navree-http",
  "navree-kernel",
+ "navree-orm",
  "navree-realtime",
  "navree-schedule",
  "navree-telemetry",
