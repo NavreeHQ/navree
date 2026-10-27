@@ -56,6 +56,8 @@ navree-flags = { path = "crates/navree-flags", version = "0.1.0" }
 navree-graphql = { path = "crates/navree-graphql", version = "0.1.0" }
 navree-billing = { path = "crates/navree-billing", version = "0.1.0" }
 navree-grpc = { path = "crates/navree-grpc", version = "0.1.0" }
+navree-orm = { path = "crates/navree-orm", version = "0.1.0" }
+navree-orm-macros = { path = "crates/navree-orm-macros", version = "0.1.0" }
 
 # ---------------------------------------------------------------------------
 # Runtime, async and HTTP (Tokio family)
@@ -148,6 +150,8 @@ thiserror = "2.0.21"
 anyhow = "1.0.104"
 uuid = { version = "1.29.0", features = ["serde", "v4", "v7"] }
 chrono = { version = "0.4.45", features = ["serde"] }
+# Exact decimals: navree-orm's `Decimal` fields (SeaORM's `with-rust_decimal`).
+rust_decimal = { version = "1.43.0", default-features = false, features = ["serde", "std"] }
 base64 = "0.23.1"
 hex = "0.4.3"
 
