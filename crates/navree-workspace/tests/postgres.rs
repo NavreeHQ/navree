@@ -13,6 +13,7 @@ use std::sync::Arc;
 use axum::extract::Path;
 use http::Method;
 use navree_access::{AccessModule, AccessOptions};
+use navree_contracts::{ConformityOptions, ConformityReport};
 use navree_db::{DatabaseModule, Factory, MigrationSet, ModuleBuilderDbExt, Repo};
 use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
@@ -22,7 +23,7 @@ use navree_workspace::{
     CurrentWorkspace, ModuleBuilderWorkspaceExt, NewWorkspace, RlsPolicy, WorkspaceModule,
     WorkspaceRepo, WorkspaceScoped, WorkspaceUow, Workspaces,
 };
-use sea_orm::sea_query::{ColumnDef, Table};
+use sea_orm::sea_query::{ColumnDef, Index, Table};
 use sea_orm::{
     ActiveValue::Set, ConnectionTrait, Database, DbBackend, DbErr, EntityTrait, Statement,
 };
@@ -402,6 +403,114 @@ async fn schema_isolation_gives_each_workspace_its_own_tables() {
         .await
         .unwrap();
     assert!(left.is_none());
+
+    app.shutdown().await.unwrap();
+    scratch.drop().await;
+}
+
+/// `notes(id, workspace_id)`: indexed by workspace, without the policy.
+mod note {
+    use sea_orm::entity::prelude::*;
+
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
+    #[sea_orm(table_name = "notes")]
+    pub struct Model {
+        #[sea_orm(primary_key, auto_increment = false)]
+        pub id: Uuid,
+        pub workspace_id: Uuid,
+    }
+
+    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+    pub enum Relation {}
+
+    impl ActiveModelBehavior for ActiveModel {}
+}
+
+impl WorkspaceScoped for note::Entity {}
+
+struct CreateNotes;
+
+impl MigrationName for CreateNotes {
+    fn name(&self) -> &str {
+        "m20261026_000002_create_notes"
+    }
+}
+
+#[async_trait]
+impl MigrationTrait for CreateNotes {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .create_table(
+                Table::create()
+                    .table("notes")
+                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
+                    .col(ColumnDef::new("workspace_id").uuid().not_null())
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .create_index(
+                Index::create()
+                    .name("notes_workspace_id_idx")
+                    .table("notes")
+                    .col("workspace_id")
+                    .to_owned(),
+            )
+            .await
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_table(Table::drop().table("notes").to_owned())
+            .await
+    }
+}
+
+/// `items` (policy, no workspace index) and `notes` (index, no policy),
+/// both classified as workspace entities.
+struct ClassifiedModule;
+
+impl Module for ClassifiedModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.migrations(
+            MigrationSet::new("classified")
+                .after(["workspace"])
+                .migration(CreateItems)
+                .migration(CreateNotes),
+        )
+        .workspace_entity::<item::Entity>()
+        .workspace_entity::<note::Entity>();
+    }
+}
+
+/// `workspace.tables` reads indexes and row-level security from the
+/// PostgreSQL catalog.
+#[tokio::test]
+async fn workspace_tables_reads_indexes_and_row_level_security_from_the_catalog() {
+    let Some(scratch) = Scratch::new().await else {
+        return;
+    };
+    let app = app(&scratch, "row", ClassifiedModule).await;
+    let report = ConformityReport::run(
+        app.ctx(),
+        &ConformityOptions::new(".").only(["workspace.tables".to_owned()]),
+    )
+    .await;
+    let check = report.check("workspace.tables").unwrap();
+    assert_eq!(check.outcome.checked, 2);
+    let findings: Vec<(&str, &str)> = check
+        .outcome
+        .findings
+        .iter()
+        .map(|f| (f.subject.as_str(), f.message.as_str()))
+        .collect();
+    assert_eq!(
+        findings,
+        [
+            ("items", "no index starts with `workspace_id`"),
+            ("notes", "row-level security is off"),
+        ]
+    );
 
     app.shutdown().await.unwrap();
     scratch.drop().await;
