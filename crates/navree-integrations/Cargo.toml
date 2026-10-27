@@ -1,6 +1,6 @@
 [package]
 name = "navree-integrations"
-description = "Navree IntegrationsModule: workspace and organization connections to third-party APIs (Microsoft Graph, Google Workspace, Slack, any OAuth 2.0 API, API keys) with admin consent, service accounts, encrypted credentials, token refresh, scope sets, health checks and typed clients."
+description = "Navree IntegrationsModule: workspace and organization connections to third-party APIs (Microsoft Graph, Google Workspace, Slack, any OAuth 2.0 API, API keys) with admin consent, service accounts, encrypted credentials, token refresh, scope sets, health checks and typed clients; watched Microsoft 365 and Gmail mailboxes (feature mail)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

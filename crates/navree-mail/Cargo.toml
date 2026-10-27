@@ -1,6 +1,6 @@
 [package]
 name = "navree-mail"
-description = "Navree MailModule: mailables rendered from templates; SMTP, SES, Mailgun, Postmark, Resend, log, array and failover transports; tenant transports, a delivery log, suppressions, hold for approval, tracking and sending-domain checks."
+description = "Navree MailModule: mailables rendered from templates; SMTP, SES, Mailgun, Postmark, Resend, log, array and failover transports; tenant transports, a delivery log, suppressions, hold for approval, tracking and sending-domain checks; inbound mail parsed, routed to mailboxes by address, with signed reply tokens (feature inbound)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

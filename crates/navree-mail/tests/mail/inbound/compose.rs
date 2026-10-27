@@ -174,3 +174,20 @@ fn incoming_builders_set_the_envelope() {
     let debug = format!("{incoming:?}");
     assert!(!debug.contains("hi"), "{debug}");
 }
+
+#[test]
+fn a_forwarded_message_keeps_bytes_that_are_not_utf8() {
+    let original = b"From: a@b.test\r\nTo: c@d.test\r\nSubject: menu\r\nContent-Type: text/plain; charset=ISO-8859-1\r\nContent-Transfer-Encoding: 8bit\r\n\r\nCaf\xe9 cr\xe8me\r\n".to_vec();
+
+    let mail = Incoming::compose()
+        .from("x@y.test")
+        .to("phish@in.acme.test")
+        .text("fwd")
+        .forward("menu.eml", original)
+        .build()
+        .parse()
+        .unwrap();
+
+    let forwarded = mail.attachments[0].as_mail().unwrap();
+    assert_eq!(forwarded.text.as_deref().map(str::trim), Some("Café crème"));
+}
