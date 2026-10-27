@@ -5,6 +5,7 @@
 mod models;
 
 mod app_events;
+mod broadcast;
 mod dispatch;
 mod observers;
 mod prune;

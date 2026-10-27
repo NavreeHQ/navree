@@ -58,6 +58,17 @@ CREATE TABLE orders (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
+CREATE TABLE rooms (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted_at TEXT NULL
+);
+CREATE TABLE pings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    target TEXT NOT NULL
+);
 CREATE TABLE members (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     email TEXT NOT NULL UNIQUE,
@@ -342,6 +353,55 @@ impl From<&Record<Order>> for OrderSaving {
         OrderSaving {
             reference: order.reference.clone(),
         }
+    }
+}
+
+/// A chat room: its changes are broadcast on its default channel.
+#[derive(Model, Clone, Debug, Default, PartialEq, Serialize)]
+#[model(timestamps, soft_deletes, broadcasts)]
+pub struct Room {
+    pub id: i64,
+    pub name: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub deleted_at: Option<DateTime<Utc>>,
+}
+
+impl navree_orm::broadcast::Broadcasts for Room {}
+
+/// A ping: broadcast on channels of its own choosing, through the queue.
+#[derive(Model, Clone, Debug, Default, PartialEq, Serialize)]
+#[model(broadcasts)]
+pub struct Ping {
+    pub id: i64,
+    pub target: String,
+}
+
+impl navree_orm::broadcast::Broadcasts for Ping {
+    fn broadcast_on(ping: &Record<Self>, _event: navree_orm::hooks::ModelEvent) -> Vec<String> {
+        if ping.target == "nobody" {
+            Vec::new()
+        } else {
+            vec![format!("private-pings.{}", ping.target)]
+        }
+    }
+
+    fn broadcast_as(_ping: &Record<Self>, event: navree_orm::hooks::ModelEvent) -> String {
+        format!("ping.{event}")
+    }
+
+    fn broadcast_with(
+        ping: &Record<Self>,
+        _event: navree_orm::hooks::ModelEvent,
+    ) -> Result<serde_json::Value> {
+        Ok(serde_json::json!({ "target": ping.target }))
+    }
+
+    fn broadcast_queue(
+        _ping: &Record<Self>,
+        _event: navree_orm::hooks::ModelEvent,
+    ) -> Option<String> {
+        Some("broadcasts".into())
     }
 }
 
