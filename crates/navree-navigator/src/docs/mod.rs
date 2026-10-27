@@ -283,7 +283,10 @@ impl DocsLibrary {
         if version == EMBEDDED_VERSION {
             return Self::embedded(None);
         }
-        let cache = settings.home.as_deref().map(|home| cache_file(home, version));
+        let cache = settings
+            .home
+            .as_deref()
+            .map(|home| cache_file(home, version));
         if let Some(cache) = &cache
             && let Ok(text) = std::fs::read_to_string(cache)
             && let Ok(bundle) = serde_json::from_str::<DocsBundle>(&text)
@@ -291,7 +294,7 @@ impl DocsLibrary {
             return Self::from_bundle(bundle, DocsSource::Cache, None);
         }
         let reason = if settings.offline {
-            format!("they aren't cached and --docs-offline is on")
+            "they aren't cached and --docs-offline is on".to_owned()
         } else {
             let url = format!(
                 "{}/v/{version}/docs.json",
@@ -364,7 +367,11 @@ mod tests {
         }
     }
 
-    fn settings(home: &Path, offline: bool, body: Result<Option<String>, String>) -> (DocsSettings, Arc<StubFetcher>) {
+    fn settings(
+        home: &Path,
+        offline: bool,
+        body: Result<Option<String>, String>,
+    ) -> (DocsSettings, Arc<StubFetcher>) {
         let fetcher = Arc::new(StubFetcher {
             body,
             asked: Mutex::new(Vec::new()),
@@ -405,15 +412,29 @@ mod tests {
         assert_eq!(navigator.title, "Navigator");
         assert!(bundle.pages.len() > 50, "{}", bundle.pages.len());
         assert!(bundle.page("/docs/ai/navigator/").is_some());
-        assert!(bundle.page("https://navree.com/docs/ai/navigator/#options").is_some());
+        assert!(
+            bundle
+                .page("https://navree.com/docs/ai/navigator/#options")
+                .is_some()
+        );
         assert!(bundle.page("ai/navigator.md").is_some());
-        assert!(bundle.similar("navigator").contains(&"ai/navigator".to_owned()));
+        assert!(
+            bundle
+                .similar("navigator")
+                .contains(&"ai/navigator".to_owned())
+        );
     }
 
     #[test]
     fn slugs_are_normalized() {
-        assert_eq!(normalize_slug("https://navree.com/docs/ai/navigator/#x"), "ai/navigator");
-        assert_eq!(normalize_slug("/docs/basics/validation.md"), "basics/validation");
+        assert_eq!(
+            normalize_slug("https://navree.com/docs/ai/navigator/#x"),
+            "ai/navigator"
+        );
+        assert_eq!(
+            normalize_slug("/docs/basics/validation.md"),
+            "basics/validation"
+        );
         assert_eq!(normalize_slug("basics/validation/"), "basics/validation");
     }
 
@@ -436,7 +457,10 @@ mod tests {
         let library = DocsLibrary::load(Some("0.0.1"), &settings).await;
         assert_eq!(library.source, DocsSource::Download);
         assert_eq!(library.note, None);
-        assert_eq!(*fetcher.asked.lock().unwrap(), ["https://docs.test/v/0.0.1/docs.json"]);
+        assert_eq!(
+            *fetcher.asked.lock().unwrap(),
+            ["https://docs.test/v/0.0.1/docs.json"]
+        );
         assert!(cache_file(home.path(), "0.0.1").is_file());
 
         let library = DocsLibrary::load(Some("0.0.1"), &settings).await;
@@ -463,7 +487,10 @@ mod tests {
         assert_eq!(library.source, DocsSource::Embedded);
         let note = library.note.unwrap();
         assert!(note.contains("--docs-offline"), "{note}");
-        assert!(fetcher.asked.lock().unwrap().is_empty(), "offline never downloads");
+        assert!(
+            fetcher.asked.lock().unwrap().is_empty(),
+            "offline never downloads"
+        );
 
         let (settings, _) = settings_404(home.path());
         let library = DocsLibrary::load(Some("0.0.2"), &settings).await;

@@ -129,7 +129,11 @@ fn defaults_in_reads_the_files_of_another_directory() {
         "[mail]\nhost = \"smtp.toml\"\nport = 25\n",
     )
     .unwrap();
-    std::fs::write(dir.path().join(".env"), "APP_MAIL__HOST=smtp.env\nAPP_KEY=k\n").unwrap();
+    std::fs::write(
+        dir.path().join(".env"),
+        "APP_MAIL__HOST=smtp.env\nAPP_KEY=k\n",
+    )
+    .unwrap();
     let config = Config::load(&ConfigSources::defaults_in(dir.path())).expect("load");
     // The same order as `defaults()`: config/app.toml over .env.
     assert_eq!(config.get_string("mail.host").as_deref(), Some("smtp.toml"));

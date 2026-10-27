@@ -15,7 +15,8 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 fn main() {
-    let manifest = PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"));
+    let manifest =
+        PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"));
     let out = PathBuf::from(std::env::var_os("OUT_DIR").expect("OUT_DIR"));
     println!("cargo:rerun-if-changed=build.rs");
 
@@ -47,7 +48,9 @@ fn main() {
             );
         }
     } else {
-        println!("cargo:warning=no skills/ directory found: `navree skills:install` will install nothing");
+        println!(
+            "cargo:warning=no skills/ directory found: `navree skills:install` will install nothing"
+        );
     }
     code.push_str("];\n\n");
 

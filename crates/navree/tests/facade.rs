@@ -239,7 +239,15 @@ struct Features {
 /// `features = ["flags"]`, `features = ["graphql"]`, `features = ["grpc"]`,
 /// `features = ["billing"]`, `features = ["search"]`).
 const OPT_IN: &[&str] = &[
-    "dock", "navigator", "social", "oauth", "flags", "graphql", "grpc", "billing", "search",
+    "dock",
+    "navigator",
+    "social",
+    "oauth",
+    "flags",
+    "graphql",
+    "grpc",
+    "billing",
+    "search",
 ];
 
 /// Always compiled into the facade (not behind a feature).

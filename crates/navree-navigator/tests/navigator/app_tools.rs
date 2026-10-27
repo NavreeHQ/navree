@@ -41,7 +41,8 @@ fn routes() -> Value {
 }
 
 fn fixture() -> Fixture {
-    let fixture = Fixture::new("[database]\nurl = \"postgres://navree:secret@127.0.0.1:5432/crm\"\n");
+    let fixture =
+        Fixture::new("[database]\nurl = \"postgres://navree:secret@127.0.0.1:5432/crm\"\n");
     fixture.built();
     fixture.answers(&["introspect", "--json"], graph());
     fixture.answers(&["routes", "--json"], routes());
@@ -75,7 +76,12 @@ async fn routes_are_filtered_by_path_method_and_module() {
     assert_eq!(deals[0]["handler"], "DealsController::index");
     let posts = call(&navigator, "list_routes", json!({"method": "post"})).await;
     assert_eq!(posts.as_array().unwrap().len(), 1);
-    let companies = call(&navigator, "list_routes", json!({"module": "CompaniesModule"})).await;
+    let companies = call(
+        &navigator,
+        "list_routes",
+        json!({"module": "CompaniesModule"}),
+    )
+    .await;
     assert_eq!(companies[0]["path"], "/api/v1/companies");
     let message = refused(&navigator, "list_routes", json!({"verb": "GET"})).await;
     assert!(message.contains("invalid arguments"), "{message}");
@@ -107,7 +113,12 @@ async fn providers_carry_their_module() {
     assert_eq!(service["module"], "DealsModule");
     assert_eq!(service["exported"], true);
     assert_eq!(service["dependencies"], json!(["navree_db::Db"]));
-    let only = call(&fixture.navigator(), "list_providers", json!({"module": "DatabaseModule"})).await;
+    let only = call(
+        &fixture.navigator(),
+        "list_providers",
+        json!({"module": "DatabaseModule"}),
+    )
+    .await;
     assert_eq!(only.as_array().unwrap().len(), 1);
 }
 
@@ -141,17 +152,33 @@ async fn a_build_error_reaches_the_app_tools_and_the_others_keep_working() {
         &["build"],
         ProcessOutput {
             success: false,
-            stdout: format!("{error}\n{}", json!({"reason": "build-finished", "success": false})),
+            stdout: format!(
+                "{error}\n{}",
+                json!({"reason": "build-finished", "success": false})
+            ),
             stderr: String::new(),
         },
     );
     let navigator = fixture.navigator();
-    for tool in ["list_routes", "module_graph", "list_providers", "list_commands"] {
+    for tool in [
+        "list_routes",
+        "module_graph",
+        "list_providers",
+        "list_commands",
+    ] {
         let message = refused(&navigator, tool, json!({})).await;
-        assert!(message.contains("cannot find value `deal`"), "{tool}: {message}");
+        assert!(
+            message.contains("cannot find value `deal`"),
+            "{tool}: {message}"
+        );
     }
     let info = call(&navigator, "app_info", json!({})).await;
-    assert!(info["modules"]["error"].as_str().unwrap().contains("doesn't build"));
+    assert!(
+        info["modules"]["error"]
+            .as_str()
+            .unwrap()
+            .contains("doesn't build")
+    );
     let config = call(&navigator, "read_config", json!({})).await;
     assert_eq!(config["app"]["name"], "crm");
 }

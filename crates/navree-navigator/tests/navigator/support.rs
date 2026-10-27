@@ -80,13 +80,21 @@ impl Fixture {
         self.runner
             .on("cargo", &["metadata"], ok(&metadata.to_string()))
             .on("cargo", &["build"], ok(&build))
-            .on("rustc", &["--version"], ok("rustc 1.95.0 (abc 2026-09-01)\n"));
+            .on(
+                "rustc",
+                &["--version"],
+                ok("rustc 1.95.0 (abc 2026-09-01)\n"),
+            );
         binary
     }
 
     /// Scripts the binary's answer to `args`.
     pub fn answers(&self, args: &[&str], value: Value) {
-        self.runner.on("crm", args, ok(&serde_json::to_string_pretty(&value).unwrap()));
+        self.runner.on(
+            "crm",
+            args,
+            ok(&serde_json::to_string_pretty(&value).unwrap()),
+        );
     }
 }
 

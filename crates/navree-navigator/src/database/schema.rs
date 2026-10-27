@@ -144,7 +144,10 @@ pub(super) async fn sqlite(
         {
             let index: String = row.get("name");
             let columns = conn
-                .fetch_all(AssertSqlSafe(format!("PRAGMA index_info({})", quote(&index))))
+                .fetch_all(AssertSqlSafe(format!(
+                    "PRAGMA index_info({})",
+                    quote(&index)
+                )))
                 .await?
                 .iter()
                 .map(|r| {
@@ -162,7 +165,10 @@ pub(super) async fn sqlite(
         }
         let mut keys: Vec<(i64, ForeignKey)> = Vec::new();
         for row in conn
-            .fetch_all(AssertSqlSafe(format!("PRAGMA foreign_key_list({})", quote(name))))
+            .fetch_all(AssertSqlSafe(format!(
+                "PRAGMA foreign_key_list({})",
+                quote(name)
+            )))
             .await?
         {
             let id: i64 = row.get("id");

@@ -175,16 +175,16 @@ fn json_line(object: &Value) -> LogLine {
 fn pretty_line(line: &str) -> LogLine {
     let mut words = line.splitn(2, char::is_whitespace);
     let first = words.next().unwrap_or_default();
-    let timestamp = DateTime::parse_from_rfc3339(first).ok().map(|_| first.to_owned());
+    let timestamp = DateTime::parse_from_rfc3339(first)
+        .ok()
+        .map(|_| first.to_owned());
     let rest = if timestamp.is_some() {
         words.next().unwrap_or_default().trim_start()
     } else {
         line
     };
     let (level, rest) = match rest.split_once(char::is_whitespace) {
-        Some((word, after))
-            if ["ERROR", "WARN", "INFO", "DEBUG", "TRACE"].contains(&word) =>
-        {
+        Some((word, after)) if ["ERROR", "WARN", "INFO", "DEBUG", "TRACE"].contains(&word) => {
             (Some(word.to_owned()), after.trim_start())
         }
         _ => (None, rest),
@@ -213,7 +213,10 @@ fn split_target(rest: &str) -> (Option<String>, &str) {
     };
     let first_is_target = |first: &str| -> (Option<String>, &str) {
         let start = first.len() + 2;
-        (Some(first.to_owned()), rest.get(start..).unwrap_or_default())
+        (
+            Some(first.to_owned()),
+            rest.get(start..).unwrap_or_default(),
+        )
     };
     match pieces.as_slice() {
         // `request{...}: target: message`
@@ -241,10 +244,7 @@ fn split_top_level(s: &str, n: usize) -> Vec<&str> {
         match bytes[i] {
             b'{' => depth += 1,
             b'}' => depth = depth.saturating_sub(1),
-            b':' if depth == 0
-                && bytes.get(i + 1) == Some(&b' ')
-                && pieces.len() + 1 < n =>
-            {
+            b':' if depth == 0 && bytes.get(i + 1) == Some(&b' ') && pieces.len() + 1 < n => {
                 pieces.push(&s[start..i]);
                 start = i + 2;
                 i += 1;
@@ -318,9 +318,9 @@ impl LogFilter {
             return Ok(Some(time.with_timezone(&Utc)));
         }
         let (number, unit) = since.split_at(since.len().saturating_sub(1));
-        let amount: i64 = number
-            .parse()
-            .map_err(|_| format!("`since` must be an RFC 3339 time or a duration such as 15m, got `{since}`"))?;
+        let amount: i64 = number.parse().map_err(|_| {
+            format!("`since` must be an RFC 3339 time or a duration such as 15m, got `{since}`")
+        })?;
         let delta = match unit {
             "s" => TimeDelta::seconds(amount),
             "m" => TimeDelta::minutes(amount),
@@ -333,7 +333,10 @@ impl LogFilter {
 
     fn matches(&self, line: &LogLine, since: Option<DateTime<Utc>>) -> bool {
         if let Some(level) = &self.level
-            && line.level.as_deref().is_none_or(|l| severity(l) < severity(level))
+            && line
+                .level
+                .as_deref()
+                .is_none_or(|l| severity(l) < severity(level))
         {
             return false;
         }
@@ -483,7 +486,10 @@ mod tests {
     #[test]
     fn json_lines_keep_every_field() {
         let line = parse_line(JSON_LINE);
-        assert_eq!(line.timestamp.as_deref(), Some("2026-10-27T09:12:01.123456Z"));
+        assert_eq!(
+            line.timestamp.as_deref(),
+            Some("2026-10-27T09:12:01.123456Z")
+        );
         assert_eq!(line.level.as_deref(), Some("ERROR"));
         assert_eq!(line.target.as_deref(), Some("navree::http"));
         assert_eq!(line.message, "handler failed");
@@ -502,13 +508,17 @@ mod tests {
         assert_eq!(line.message, "handler failed error=no such column");
         assert_eq!(line.request_id.as_deref(), Some("0199c4b1"));
 
-        let plain = parse_line("2026-10-20T09:00:00Z  INFO navree::http: server listening addr=127.0.0.1:8080");
+        let plain = parse_line(
+            "2026-10-20T09:00:00Z  INFO navree::http: server listening addr=127.0.0.1:8080",
+        );
         assert_eq!(plain.level.as_deref(), Some("INFO"));
         assert_eq!(plain.target.as_deref(), Some("navree::http"));
         assert_eq!(plain.message, "server listening addr=127.0.0.1:8080");
         assert_eq!(plain.request_id, None);
 
-        let quoted = parse_line(r#"2026-10-20T09:00:00Z  WARN job{request_id="r-9"}:inner: crm::jobs: slow"#);
+        let quoted = parse_line(
+            r#"2026-10-20T09:00:00Z  WARN job{request_id="r-9"}:inner: crm::jobs: slow"#,
+        );
         assert_eq!(quoted.request_id.as_deref(), Some("r-9"));
         assert_eq!(quoted.target.as_deref(), Some("crm::jobs"));
         assert_eq!(quoted.message, "slow");
@@ -546,7 +556,13 @@ mod tests {
             ]
         );
         std::fs::write(logs.join("navree.log"), "x\n").unwrap();
-        assert!(LogFile::default().files(dir.path()).last().unwrap().ends_with("navree.log"));
+        assert!(
+            LogFile::default()
+                .files(dir.path())
+                .last()
+                .unwrap()
+                .ends_with("navree.log")
+        );
     }
 
     #[test]
@@ -554,9 +570,10 @@ mod tests {
         use navree_config::{Config, ConfigSources};
         let config = Config::load(&ConfigSources::new()).unwrap();
         assert_eq!(LogFile::from_config(&config), None);
-        let config = Config::load(
-            &ConfigSources::new().set("log.file", serde_json::json!({"path": "var/app.log", "rotation": "never"})),
-        )
+        let config = Config::load(&ConfigSources::new().set(
+            "log.file",
+            serde_json::json!({"path": "var/app.log", "rotation": "never"}),
+        ))
         .unwrap();
         assert_eq!(
             LogFile::from_config(&config),
@@ -587,23 +604,83 @@ mod tests {
         assert_eq!(all.len(), 5);
         assert_eq!(all.last().unwrap().message, "last");
 
-        let warn = read_logs(&files, &LogFilter { level: Some("warn".into()), ..Default::default() }).unwrap();
-        assert_eq!(warn.iter().map(|l| l.message.as_str()).collect::<Vec<_>>(), ["slow job", "failed request_id=r-1"]);
+        let warn = read_logs(
+            &files,
+            &LogFilter {
+                level: Some("warn".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            warn.iter().map(|l| l.message.as_str()).collect::<Vec<_>>(),
+            ["slow job", "failed request_id=r-1"]
+        );
 
-        let job = read_logs(&files, &LogFilter { target: Some("navree::job".into()), ..Default::default() }).unwrap();
+        let job = read_logs(
+            &files,
+            &LogFilter {
+                target: Some("navree::job".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
         assert_eq!(job.len(), 2);
 
-        let request = read_logs(&files, &LogFilter { request_id: Some("r-1".into()), ..Default::default() }).unwrap();
+        let request = read_logs(
+            &files,
+            &LogFilter {
+                request_id: Some("r-1".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
         assert_eq!(request.len(), 1);
 
-        let since = read_logs(&files, &LogFilter { since: Some("2026-10-20T09:00:03Z".into()), ..Default::default() }).unwrap();
+        let since = read_logs(
+            &files,
+            &LogFilter {
+                since: Some("2026-10-20T09:00:03Z".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
         assert_eq!(since.len(), 2);
 
-        let limited = read_logs(&files, &LogFilter { limit: Some(2), ..Default::default() }).unwrap();
-        assert_eq!(limited.iter().map(|l| l.message.as_str()).collect::<Vec<_>>(), ["noisy", "last"]);
+        let limited = read_logs(
+            &files,
+            &LogFilter {
+                limit: Some(2),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            limited
+                .iter()
+                .map(|l| l.message.as_str())
+                .collect::<Vec<_>>(),
+            ["noisy", "last"]
+        );
 
-        assert!(read_logs(&files, &LogFilter { since: Some("yesterday".into()), ..Default::default() }).is_err());
-        let recent = read_logs(&files, &LogFilter { since: Some("15m".into()), ..Default::default() }).unwrap();
+        assert!(
+            read_logs(
+                &files,
+                &LogFilter {
+                    since: Some("yesterday".into()),
+                    ..Default::default()
+                }
+            )
+            .is_err()
+        );
+        let recent = read_logs(
+            &files,
+            &LogFilter {
+                since: Some("15m".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
         assert!(recent.is_empty(), "these lines are older than 15 minutes");
     }
 

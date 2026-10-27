@@ -188,10 +188,16 @@ mod tests {
     #[test]
     fn the_nearest_package_is_the_app() {
         let dir = tempfile::tempdir().unwrap();
-        write(&dir.path().join("Cargo.toml"), "[workspace]\nmembers = [\"apps/crm\"]\n");
+        write(
+            &dir.path().join("Cargo.toml"),
+            "[workspace]\nmembers = [\"apps/crm\"]\n",
+        );
         write(&dir.path().join("Cargo.lock"), "version = 4\n");
         let app = dir.path().join("apps/crm");
-        write(&app.join("Cargo.toml"), "[package]\nname = \"crm\"\nversion = \"0.1.0\"\n");
+        write(
+            &app.join("Cargo.toml"),
+            "[package]\nname = \"crm\"\nversion = \"0.1.0\"\n",
+        );
         let project = Project::find(&app.join("src")).unwrap();
         assert_eq!(project.root, app);
         assert_eq!(project.package, "crm");
@@ -233,7 +239,10 @@ version = "0.11.0"
             "[package]\nname = \"app\"\n[dependencies]\nnavree = { workspace = true, features = [\"social\"] }\n",
         );
         let project = Project::find(&app).unwrap();
-        assert_eq!(project.declared_features(), ["default", "social", "postgres"]);
+        assert_eq!(
+            project.declared_features(),
+            ["default", "social", "postgres"]
+        );
 
         write(
             &app.join("Cargo.toml"),
@@ -245,7 +254,10 @@ version = "0.11.0"
     #[test]
     fn configuration_is_read_from_the_app_directory() {
         let dir = tempfile::tempdir().unwrap();
-        write(&dir.path().join("Cargo.toml"), "[package]\nname = \"app\"\n");
+        write(
+            &dir.path().join("Cargo.toml"),
+            "[package]\nname = \"app\"\n",
+        );
         write(
             &dir.path().join("config/app.toml"),
             "[database]\nurl = \"sqlite://storage/app.db?mode=rwc\"\n[mail]\npassword = \"hunter2\"\n",

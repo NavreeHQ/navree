@@ -44,6 +44,7 @@ Start with **`navree`**. It explains what a Navree app is, how one is laid out, 
 | `navree-cli-generators` | The `navree` CLI, every `make:*` generator, the marker comments and console commands |
 | `navree-deployment` | Release builds, production settings, the processes to run, systemd units, migrations and health checks |
 | `navree-security-checklist` | A review before release: routes, abilities, input, rate limits, tokens, CORS, CSRF, secrets and the audit log |
+| `navree-navigator` | Connect a coding agent to [Navigator](/docs/ai/navigator/) (`navree mcp`), use its tools before changing routes, providers or the schema, and install the skills |
 
 The [`skills/README.md`](https://github.com/NavreeHQ/navree/blob/main/skills/README.md) in the repository lists the same set. It grows with the framework, and `navree skills:install` always installs the skills of your Navree version.
 
@@ -101,7 +102,7 @@ From your app's directory:
 navree skills:install
 ```
 
-It copies every Navree skill into `.claude/skills/` (Claude Code) and `.agents/skills/` (the shared folder other agents read). Run it again after you upgrade Navree to get the skills of the new version; it replaces the `navree` and `navree-*` folders and leaves your own skills alone.
+It copies every Navree skill into `.claude/skills/` (Claude Code) and `.agents/skills/` (the shared folder other agents read) of the current directory, or of the project `--path <dir>` names. The skills are built into the CLI, so they are always those of its Navree version. Run it again after you upgrade Navree to get the skills of the new version; it replaces the `navree` and `navree-*` folders (removing any that the new version no longer has) and leaves your own skills alone.
 
 </Tab>
 <Tab label="skills CLI">

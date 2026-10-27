@@ -87,7 +87,9 @@ impl ServerHandler for NavigatorServer {
         _request: Option<PaginatedRequestParams>,
         _context: RequestContext<RoleServer>,
     ) -> Result<ListToolsResult, ErrorData> {
-        Ok(ListToolsResult::with_all_items(tools().iter().map(tool).collect()))
+        Ok(ListToolsResult::with_all_items(
+            tools().iter().map(tool).collect(),
+        ))
     }
 
     async fn call_tool(
@@ -97,7 +99,10 @@ impl ServerHandler for NavigatorServer {
     ) -> Result<CallToolResponse, ErrorData> {
         let name = request.name.to_string();
         if !tools().iter().any(|t| t.name == name) {
-            return Err(ErrorData::invalid_params(format!("Unknown tool: {name}"), None));
+            return Err(ErrorData::invalid_params(
+                format!("Unknown tool: {name}"),
+                None,
+            ));
         }
         let args = request.arguments.map_or(Value::Null, Value::Object);
         Ok(result(self.navigator.call(&name, args).await).into())

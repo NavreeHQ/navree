@@ -10,7 +10,12 @@ use crate::support::{Fixture, call, refused, write};
 async fn the_apps_version_is_served_from_the_embedded_docs() {
     let fixture = Fixture::new("");
     let navigator = fixture.navigator();
-    let answer = call(&navigator, "search_docs", json!({"query": "read-only SQL query_database"})).await;
+    let answer = call(
+        &navigator,
+        "search_docs",
+        json!({"query": "read-only SQL query_database"}),
+    )
+    .await;
     assert_eq!(answer["source"], "embedded");
     assert!(answer.get("note").is_none(), "the versions match: {answer}");
     let results = answer["results"].as_array().unwrap();
@@ -19,9 +24,19 @@ async fn the_apps_version_is_served_from_the_embedded_docs() {
         results.iter().any(|r| r["slug"] == "ai/navigator"),
         "{results:?}"
     );
-    assert!(results[0]["url"].as_str().unwrap().starts_with("https://navree.com/docs/"));
+    assert!(
+        results[0]["url"]
+            .as_str()
+            .unwrap()
+            .starts_with("https://navree.com/docs/")
+    );
 
-    let limited = call(&navigator, "search_docs", json!({"query": "migrations", "limit": 2})).await;
+    let limited = call(
+        &navigator,
+        "search_docs",
+        json!({"query": "migrations", "limit": 2}),
+    )
+    .await;
     assert_eq!(limited["results"].as_array().unwrap().len(), 2);
 }
 
@@ -35,13 +50,26 @@ async fn a_page_is_read_as_markdown() {
     assert!(page.contains("## Security"), "{page}");
     assert!(!page.contains("<Tabs>"), "components are converted");
 
-    let section = call(&navigator, "read_doc", json!({"slug": "/docs/ai/navigator/", "section": "options"})).await;
+    let section = call(
+        &navigator,
+        "read_doc",
+        json!({"slug": "/docs/ai/navigator/", "section": "options"}),
+    )
+    .await;
     let section = section.as_str().unwrap();
-    assert!(section.contains("## Options") && !section.contains("## Security"), "{section}");
+    assert!(
+        section.contains("## Options") && !section.contains("## Security"),
+        "{section}"
+    );
 
     let message = refused(&navigator, "read_doc", json!({"slug": "ai/navigatr"})).await;
     assert!(message.contains("no docs page"), "{message}");
-    let message = refused(&navigator, "read_doc", json!({"slug": "ai/navigator", "section": "nope"})).await;
+    let message = refused(
+        &navigator,
+        "read_doc",
+        json!({"slug": "ai/navigator", "section": "nope"}),
+    )
+    .await;
     assert!(message.contains("options"), "lists the sections: {message}");
 }
 
@@ -88,7 +116,14 @@ async fn an_uncached_version_offline_falls_back_with_a_note() {
     });
     let answer = call(&navigator, "search_docs", json!({"query": "routes"})).await;
     assert_eq!(answer["source"], "embedded");
-    assert!(answer["note"].as_str().unwrap().contains("0.0.2"), "{answer}");
+    assert!(
+        answer["note"].as_str().unwrap().contains("0.0.2"),
+        "{answer}"
+    );
     let page = call(&navigator, "read_doc", json!({"slug": "ai/navigator"})).await;
-    assert!(page.as_str().unwrap().starts_with("> The docs of Navree 0.0.2"));
+    assert!(
+        page.as_str()
+            .unwrap()
+            .starts_with("> The docs of Navree 0.0.2")
+    );
 }
