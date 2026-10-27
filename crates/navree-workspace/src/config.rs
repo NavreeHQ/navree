@@ -200,9 +200,11 @@ impl DemoOptions {
         parse_hh_mm(&self.reset_at)
     }
 
-    /// Whether a request with `method` to the route named `name`, mounted
-    /// at `path`, may write to a demo workspace in this mode for a member
-    /// with `role`.
+    /// Whether a request that writes, with `method` to the route named
+    /// `name` mounted at `path`, may write to a demo workspace in this mode
+    /// for a member with `role`: always in `reset` mode; in `read_only`
+    /// mode for [`editor_roles`](Self::editor_roles) and the routes in
+    /// [`allow`](Self::allow).
     pub fn allows_write(
         &self,
         method: &http::Method,
@@ -210,7 +212,7 @@ impl DemoOptions {
         path: Option<&str>,
         role: &str,
     ) -> bool {
-        if self.mode == DemoMode::Reset || is_safe(method) {
+        if self.mode == DemoMode::Reset {
             return true;
         }
         if self.editor_roles.iter().any(|editor| editor == role) {
@@ -271,14 +273,6 @@ impl DemoOptions {
             errors.push("workspace.demo.fixtures must name a directory".to_owned());
         }
     }
-}
-
-/// `GET`, `HEAD`, `OPTIONS` and `TRACE` don't write.
-fn is_safe(method: &http::Method) -> bool {
-    matches!(
-        *method,
-        http::Method::GET | http::Method::HEAD | http::Method::OPTIONS | http::Method::TRACE
-    )
 }
 
 /// Parses `"HH:MM"` (hour 0–23 with one or two digits, minute 00–59).
@@ -736,7 +730,7 @@ mod tests {
     }
 
     #[test]
-    fn read_only_demos_allow_reads_editors_and_listed_routes() {
+    fn read_only_demos_allow_editors_and_listed_routes_to_write() {
         use http::Method;
         let demo = DemoOptions {
             editor_roles: vec!["admin".into()],
@@ -744,9 +738,6 @@ mod tests {
             ..DemoOptions::default()
         };
         let path = Some("/api/deals");
-        for method in [Method::GET, Method::HEAD, Method::OPTIONS] {
-            assert!(demo.allows_write(&method, None, path, "member"), "{method}");
-        }
         for method in [Method::POST, Method::PUT, Method::PATCH, Method::DELETE] {
             assert!(!demo.allows_write(&method, Some("deals.store"), path, "member"));
             assert!(demo.allows_write(&method, Some("deals.store"), path, "admin"));

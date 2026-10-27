@@ -28,6 +28,20 @@ use crate::{DemoMode, DemoOptions, Isolation, NewWorkspace, WorkspaceError, Work
 /// `Access-Control-Expose-Headers` list.
 pub const DEMO_HEADER: &str = "x-navree-demo";
 
+/// Whether a request reads or writes a demo workspace's data, for requests
+/// whose HTTP method doesn't say: a GraphQL query or an RPC that reads is a
+/// `POST`. Put it in the request extensions before the workspace is
+/// resolved; without it, `GET`, `HEAD`, `OPTIONS` and `TRACE` read and
+/// every other method writes. A read-only demo refuses a
+/// [`Write`](DemoIntent::Write).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum DemoIntent {
+    /// The request only reads.
+    Read,
+    /// The request may write.
+    Write,
+}
+
 /// Fills a demo workspace with a module's sample data.
 ///
 /// Register one per module with

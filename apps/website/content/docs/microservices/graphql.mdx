@@ -192,7 +192,7 @@ Navree's request state comes from the context through `ContextExt`:
 | `ctx.abilities().await` | The viewer's abilities. |
 | `ctx.accessible::<E, A>().await` | A SQL filter for the records of `E` the viewer may `A`. |
 | `ctx.authorized::<E, A>()` | The record a `#[can(.., from = "arg")]` check loaded. |
-| `ctx.workspace().await` | The current [workspace](/docs/workspaces/introduction/), resolved and checked like the `CurrentWorkspace` extractor. |
+| `ctx.workspace().await` | The current [workspace](/docs/workspaces/introduction/), resolved and checked like the `CurrentWorkspace` extractor. A [read-only demo workspace](/docs/workspaces/demo-workspaces/#read-only-demos) answers queries and subscriptions and refuses mutations. |
 | `ctx.loader::<L>()` | This request's [dataloader](#dataloaders) of type `L`. |
 | `ctx.app()?` | The `AppContext`, to resolve any provider. |
 
