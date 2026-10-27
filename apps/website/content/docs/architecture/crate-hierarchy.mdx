@@ -15,19 +15,20 @@ This keeps the framework honest: the kernel knows nothing about HTTP, HTTP knows
 L9+ apps/crm-api (Navree app)                    apps/crm-web (Next.js 16)
 L8  navree (facade: re-exports + prelude)        navree-cli (binary `navree`; no runtime navree deps, uses navree-dock)
 L7  navree-billing  navree-search  navree-lighthouse  navree-logbook  navree-helm (packages built on other packages)
-L6  navree-social  navree-webhooks  navree-flags  navree-mcp  navree-ai (ecosystem libraries)
+L6  navree-social  navree-webhooks  navree-flags  navree-mcp  navree-ai  navree-i18n (ecosystem libraries)
 L5  navree-auth  navree-workspace  navree-redis
 L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify  navree-ui
 L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage
 L2  navree-http  navree-log  navree-crypto  navree-events  navree-view  navree-cache  navree-http-client  navree-schema
 L1  navree-contracts  navree-config
-L0  navree-kernel                                navree-macros (proc-macro; no runtime navree deps)   navree-dock (dev tool; no navree deps)
+L0  navree-kernel                                navree-macros, navree-i18n-macros (proc-macros; no runtime navree deps)   navree-dock (dev tool; no navree deps)
 ```
 
 | Layer | Crate | What it provides |
 |---|---|---|
 | L0 | `navree-kernel` | Module graph, type-keyed DI container, lifecycle, command runner |
 | L0 | `navree-macros` | `#[module]`, `#[injectable]`, `#[controller]`, route and access attributes, `#[mcp_server]` |
+| L0 | `navree-i18n-macros` | `embed_locales!`: Fluent files embedded in the binary, checked at compile time (through navree-i18n) |
 | L0 | `navree-dock` | [Dock](/docs/tools/dock/): `dock.toml`, local services through `docker compose` or `podman compose`, the app's `.env` settings |
 | L1 | `navree-contracts` | Shared traits and types: `Secret<T>`, `RequestId`, `Principal`, `AuthState`, sinks, `Broadcaster`, jobs, `Clock` |
 | L1 | `navree-config` | Typed configuration from `.env`, TOML files and `APP_*` variables |
@@ -62,6 +63,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L6 | `navree-flags` | [Feature flags](/docs/packages/feature-flags/): flags as types, per user, workspace, plan or percentage |
 | L6 | `navree-mcp` | [MCP servers](/docs/ai/mcp-servers/): tools, resources and prompts over streamable HTTP and stdio |
 | L6 | `navree-ai` | The [AI SDK](/docs/ai/ai-sdk/): models from six providers with failover and budgets, agents with tools, embeddings and vector stores |
+| L6 | `navree-i18n` | [Localization](/docs/packages/localization/): Fluent files, `t!`, the request's locale, ICU4X formatting, translated validation messages, templates and notifications |
 | L7 | `navree-search` | [Search](/docs/packages/search/): full-text and vector search over entities, synced through the queue |
 | L7 | `navree-billing` | [Billing](/docs/packages/billing/) for users or workspaces with Stripe or Paddle: plans, trials, seats, metered usage, invoices, the portal, verified webhooks |
 | L7 | `navree-lighthouse` | [Lighthouse](/docs/tools/lighthouse/): application monitoring inside the app, issues, traces, alerts and the `/_lighthouse` dashboard |
@@ -100,6 +102,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | `navree-search` | kernel, contracts, config, macros, http, http-client, db, queue, access, workspace |
 | `navree-billing` | kernel, contracts, config, http, cache, events, http-client, db, queue, schedule, access, auth, workspace |
 | `navree-ai` | kernel, contracts, config, macros, http, http-client, cache, db, storage, validation, access, auth |
+| `navree-i18n` | kernel, contracts, config, http, view, db, validation, notify, workspace, i18n-macros |
 | `navree-lighthouse` | kernel, contracts, config, telemetry, http, crypto, view, http-client, db, mail, schedule, access, auth, mcp (with its `mcp` feature) |
 | `navree-logbook` | kernel, contracts, config, telemetry, http, view, db, auth |
 | `navree-helm` | kernel, contracts, config, http, view, cache, crypto, db, storage, queue, validation, audit, access, auth, workspace |

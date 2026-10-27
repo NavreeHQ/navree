@@ -1,0 +1,55 @@
+[package]
+name = "navree-i18n"
+description = "Navree I18nModule: Fluent translations with plurals and variables, the request's locale negotiated per request, and translated validation messages, views and notifications."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+axum = { workspace = true }
+chrono = { workspace = true }
+fixed_decimal = { workspace = true }
+fluent-bundle = { workspace = true }
+fluent-syntax = { workspace = true }
+form_urlencoded = { workspace = true }
+http = { workspace = true }
+icu_calendar = { workspace = true }
+icu_datetime = { workspace = true }
+icu_decimal = { workspace = true }
+icu_locale_core = { workspace = true }
+icu_provider = { workspace = true }
+intl-memoizer = { workspace = true }
+minijinja = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-db = { workspace = true }
+navree-http = { workspace = true }
+navree-i18n-macros = { workspace = true }
+navree-kernel = { workspace = true }
+navree-notify = { workspace = true }
+navree-validation = { workspace = true }
+navree-view = { workspace = true }
+navree-workspace = { workspace = true }
+sea-orm = { workspace = true }
+sea-orm-migration = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+unic-langid = { workspace = true }
+utoipa = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+garde = { workspace = true }
+navree-access = { workspace = true }
+navree-macros = { workspace = true }
+navree-mail = { workspace = true }
+navree-testing = { workspace = true }
+tempfile = { workspace = true }

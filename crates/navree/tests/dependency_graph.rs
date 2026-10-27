@@ -60,6 +60,8 @@ const HIERARCHY: &[Rule] = &[
     // Harbor: servers and deployments. A tool crate for the CLI (and the
     // facade's opt-in `harbor` feature) that builds on no navree crate.
     rule("navree-harbor", 0, &[]),
+    // `embed_locales!` for navree-i18n (proc-macro; no navree dependencies).
+    rule("navree-i18n-macros", 0, &[]),
     // L1
     rule("navree-contracts", 1, &["navree-kernel"]),
     rule("navree-config", 1, &["navree-kernel", "navree-contracts"]),
@@ -209,6 +211,15 @@ const HIERARCHY: &[Rule] = &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http",
         "navree-events", "navree-db", "navree-testing", "navree-validation",
     ]),
+    // Localization: Fluent messages, the request's locale (the signed-in
+    // user's or the workspace's saved one, a query parameter, a cookie,
+    // Accept-Language), translated validation messages, a `t` function in
+    // views and notifications in the recipient's locale.
+    rule("navree-i18n", 6, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-view",
+        "navree-db", "navree-validation", "navree-notify", "navree-workspace",
+        "navree-i18n-macros",
+    ]),
     // L7: packages built on other packages.
     // Search: full-text and vector search over entities. The server engines
     // talk HTTP through navree-http-client; the `Searchable` derive lives in
@@ -342,6 +353,8 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-micro",
     "navree-fleet",
     "navree-helm",
+    "navree-i18n",
+    "navree-i18n-macros",
 ];
 
 /// Cargo dependency kind of an edge.

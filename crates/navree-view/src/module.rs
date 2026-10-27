@@ -3,6 +3,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use minijinja::Environment;
 use navree_config::Config;
 use navree_kernel::{
     AppContext, BoxError, Factory, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver,
@@ -120,10 +121,11 @@ fn register(m: &mut ModuleBuilder, source: Source) {
                     let options = source.options(&r).await?;
                     let embedded = embedded_templates(&r.app());
                     // Reads template files: keep it off the async workers.
-                    let views = tokio::task::spawn_blocking(move || {
+                    let mut views = tokio::task::spawn_blocking(move || {
                         Views::with_templates(&options, embedded)
                     })
                     .await??;
+                    configure_environment(&r.app(), &mut views);
                     tracing::debug!(views = ?views, "views loaded");
                     Ok(Arc::new(views))
                 }
@@ -160,6 +162,22 @@ fn embedded_templates(ctx: &AppContext) -> Vec<(&'static str, &'static str)> {
 /// Templates a module embeds (contributed by [`ModuleBuilderViewExt::templates`]).
 struct EmbeddedTemplates(Vec<(&'static str, &'static str)>);
 
+/// A change to the template environment (contributed by
+/// [`ModuleBuilderViewExt::view_environment`]).
+type ConfigureEnvironment = dyn Fn(&mut Environment<'static>) + Send + Sync;
+
+/// Environment changes a module contributes.
+struct EnvironmentHook(Arc<ConfigureEnvironment>);
+
+/// Applies every contributed environment change to `views`, modules in
+/// dependency order (a later module's filter replaces an earlier one's).
+fn configure_environment(ctx: &AppContext, views: &mut Views) {
+    for contributed in ctx.contributions::<EnvironmentHook>() {
+        let configure = contributed.value.0.clone();
+        views.configure(|env| configure(env));
+    }
+}
+
 /// Embeds templates in a module, so it works without template files.
 pub trait ModuleBuilderViewExt {
     /// Contributes templates as (name, source) pairs, typically with
@@ -186,10 +204,41 @@ pub trait ModuleBuilderViewExt {
     /// }
     /// ```
     fn templates(&mut self, templates: &[(&'static str, &'static str)]) -> &mut Self;
+
+    /// Changes the template environment when `Views` is built: adds
+    /// functions, filters or globals, or replaces the built-in `money` and
+    /// `date` filters. Modules apply their changes in dependency order.
+    ///
+    /// ```
+    /// use navree_kernel::{Module, ModuleBuilder};
+    /// use navree_view::ModuleBuilderViewExt;
+    ///
+    /// struct BrandModule;
+    ///
+    /// impl Module for BrandModule {
+    ///     fn register(&self, m: &mut ModuleBuilder) {
+    ///         m.view_environment(|env| {
+    ///             env.add_global("brand", "Acme");
+    ///             env.add_filter("shout", |text: &str| text.to_uppercase());
+    ///         });
+    ///     }
+    /// }
+    /// ```
+    fn view_environment(
+        &mut self,
+        configure: impl Fn(&mut Environment<'static>) + Send + Sync + 'static,
+    ) -> &mut Self;
 }
 
 impl ModuleBuilderViewExt for ModuleBuilder {
     fn templates(&mut self, templates: &[(&'static str, &'static str)]) -> &mut Self {
         self.contribute(EmbeddedTemplates(templates.to_vec()))
+    }
+
+    fn view_environment(
+        &mut self,
+        configure: impl Fn(&mut Environment<'static>) + Send + Sync + 'static,
+    ) -> &mut Self {
+        self.contribute(EnvironmentHook(Arc::new(configure)))
     }
 }
