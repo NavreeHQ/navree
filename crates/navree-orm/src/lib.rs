@@ -14,6 +14,12 @@
 //!   `last`. [`TableBuilder`] queries tables without a model.
 //! - **Records** ([`Record`]) carry dirty tracking, extras and loaded
 //!   relations; saving inserts or updates, with lifecycle [`hooks`].
+//! - **The lifecycle**: model [`events`] heard by observers, closures,
+//!   typed application events and [`broadcast`]s (after the commit inside a
+//!   unit of work), quiet operations, soft deletes (`restore`,
+//!   `force_delete`, `only_trashed`), global scopes registered at boot,
+//!   [`strict`] modes, and [`prune`] (`model:prune`), configured by
+//!   [`OrmModule`].
 //! - **Executors**: every terminal method takes the executor first — a
 //!   [`Db`](navree_db::Db) or a [`Uow`](navree_db::Uow) — so statements run
 //!   in the request's transaction, with its actor, workspace settings and

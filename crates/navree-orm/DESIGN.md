@@ -813,4 +813,6 @@ prunes the registered models that have one (`--model`, `--except`,
 `--chunk`: the model's `CHUNK_SIZE`, else the option, else
 `[orm] prune_chunk`; `--pretend` counts). `ModelsPruned` (a running total
 per chunk), `ModelPruningStarting` and `ModelPruningFinished` go through
-the app's `EventBus`.
+the app's `EventBus`. Apps made by `navree new` add `OrmModule` and
+`ScheduleModule` and schedule `model:prune` daily at 03:00 (the
+`Housekeeping` module of the generated `src/app.rs`).
