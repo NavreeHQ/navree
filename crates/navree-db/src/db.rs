@@ -24,8 +24,9 @@ const SQLITE_BUSY_TIMEOUT: Duration = Duration::from_millis(5000);
 /// [`Uow`](crate::Uow) per request. SQLite connections use WAL,
 /// `busy_timeout = 5000` and `foreign_keys = ON`. MySQL and MariaDB
 /// connections (`mysql://` or `mariadb://`, the `mysql` feature) run in
-/// the UTC time zone with `utf8mb4`, and in strict SQL mode unless
-/// `database.mysql.strict` is `false` (see [`MySqlOptions`](crate::MySqlOptions)).
+/// the UTC time zone with `utf8mb4`, over TLS when the server offers it,
+/// in strict SQL mode unless `database.mysql` says otherwise, and at its
+/// `isolation_level` when set (see [`MySqlOptions`](crate::MySqlOptions)).
 #[derive(Clone)]
 pub struct Db {
     inner: Arc<DbInner>,

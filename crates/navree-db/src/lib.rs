@@ -4,19 +4,27 @@
 //! module-owned migrations, seeders, factories and pagination.
 //!
 //! - [`DatabaseModule`] is global: it connects the pool at boot and exports
-//!   [`Db`] and [`DbOptions`] (section `database`). SQLite connections use
-//!   WAL, `busy_timeout = 5000` and `foreign_keys = ON`; PostgreSQL is
-//!   behind the `postgres` feature. It registers the `database` health
-//!   check and the commands `migrate`, `migrate:rollback`,
-//!   `migrate:fresh [--seed]`, `migrate:status` and `db:seed`.
+//!   [`Db`] and [`DbOptions`] (section `database`). SQLite is built in (its
+//!   connections use WAL, `busy_timeout = 5000` and `foreign_keys = ON`);
+//!   PostgreSQL is behind the `postgres` feature, MySQL and MariaDB behind
+//!   the `mysql` feature (`mysql://` or `mariadb://` URLs; connections in
+//!   UTC, `utf8mb4` and strict SQL mode, see [`MySqlOptions`]), with
+//!   `mysql-rsa` for MySQL accounts that sign in without TLS. It registers
+//!   the `database` health check and the commands `migrate`,
+//!   `migrate:rollback`, `migrate:fresh [--seed]`, `migrate:status` and
+//!   `db:seed`.
 //! - [`Uow`] is the unit of work: one per HTTP request (opened by the
 //!   module's [`LayerSlot::Uow`](navree_http::LayerSlot::Uow) layer, taken as
 //!   an extractor), job run or command ([`Db::uow`]). Its transaction opens
 //!   lazily; the layer commits when the status is below 400 and rolls back
 //!   otherwise, and the request runs to completion even if the client
-//!   disconnects. [`ChangeObserver`]s see every recorded [`ChangeEvent`]
-//!   inside the transaction, right before commit; after-commit hooks run
-//!   once it is durable.
+//!   disconnects. The actor and request id reach SQL as `navree.actor` and
+//!   `navree.request_id` on PostgreSQL (`set_config`) and as
+//!   `@navree_actor` and `@navree_request_id` on MySQL (session variables,
+//!   cleared before the connection goes back to the pool).
+//!   [`ChangeObserver`]s see every recorded [`ChangeEvent`] inside the
+//!   transaction, right before commit; after-commit hooks run once it is
+//!   durable.
 //! - [`Repo`] writes entities through a unit of work and records the
 //!   change events (old and new values) automatically.
 //! - [`MigrationSet`]s are contributed per module and run by the

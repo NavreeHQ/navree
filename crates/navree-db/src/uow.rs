@@ -109,9 +109,10 @@ enum TxState {
 /// `@navree_request_id` (text, `NULL` when absent): set right after `BEGIN`
 /// and cleared right before `COMMIT` or `ROLLBACK`, because a session
 /// variable outlives the transaction and the connection goes back to the
-/// pool. Read them in triggers (`NEW.updated_by = @navree_actor`, or
-/// `UUID_TO_BIN(@navree_actor)` for a `BINARY(16)` column); outside a unit
-/// of work they are `NULL`.
+/// pool. Read them in triggers (`SET NEW.updated_by = @navree_actor` for a
+/// text column, `UNHEX(REPLACE(@navree_actor, '-', ''))` for a `BINARY(16)`
+/// UUID column, on MySQL and MariaDB alike); outside a unit of work they are
+/// `NULL`.
 ///
 /// MySQL has no row-level security, so nothing in the database itself
 /// keeps one workspace's rows from another's: on MySQL, workspace isolation
