@@ -569,12 +569,12 @@ impl Module for UpgradeModule {
     }
 }
 
-/// With the `postgres` feature and `NAVREE_TEST_POSTGRES_URL` set (a URL
-/// whose user may create databases), every harness runs on a fresh
-/// PostgreSQL database of its own:
-/// `cargo test -p navree-workflows --features postgres`.
-#[cfg(feature = "postgres")]
-pub mod postgres {
+/// With the `postgres` feature and `NAVREE_TEST_POSTGRES_URL` set, or the
+/// `mysql` feature and `NAVREE_TEST_MYSQL_URL` set (URLs whose user may
+/// create databases), every harness runs on a fresh database of its own on
+/// that server: `cargo test -p navree-workflows --features postgres`.
+#[cfg(any(feature = "postgres", feature = "mysql"))]
+pub mod servers {
     use sea_orm::{ConnectionTrait, Database};
     use uuid::Uuid;
 
@@ -582,32 +582,63 @@ pub mod postgres {
     pub struct Scratch {
         admin: String,
         name: String,
+        mysql: bool,
         pub url: String,
     }
 
     impl Scratch {
-        /// `None` when `NAVREE_TEST_POSTGRES_URL` is not set.
+        /// `None` when no server URL is set for an enabled feature.
         pub async fn new() -> Option<Scratch> {
-            let admin = std::env::var("NAVREE_TEST_POSTGRES_URL").ok()?;
+            let (admin, mysql) = server()?;
             let name = format!("navree_workflows_{}", Uuid::now_v7().simple());
             let conn = Database::connect(&admin)
                 .await
-                .expect("PostgreSQL is reachable");
-            conn.execute_unprepared(&format!("CREATE DATABASE {name}"))
+                .expect("the test server is reachable");
+            let create = if mysql {
+                format!("CREATE DATABASE `{name}` CHARACTER SET utf8mb4")
+            } else {
+                format!("CREATE DATABASE {name}")
+            };
+            conn.execute_unprepared(&create)
                 .await
                 .expect("the test user may create databases");
             conn.close().await.expect("closes");
-            let base = admin.split('?').next().unwrap_or(&admin);
-            let server = base.rsplit_once('/').map_or(base, |(server, _)| server);
-            let url = format!("{server}/{name}");
-            Some(Scratch { admin, name, url })
+            let (base, rest) = admin.rsplit_once('/').expect("a database URL");
+            let options = rest.find('?').map_or("", |at| &rest[at..]);
+            let url = format!("{base}/{name}{options}");
+            Some(Scratch {
+                admin,
+                name,
+                mysql,
+                url,
+            })
         }
+    }
+
+    /// The admin URL and whether it is MySQL: PostgreSQL first.
+    fn server() -> Option<(String, bool)> {
+        let var = |name: &str| std::env::var(name).ok().filter(|url| !url.is_empty());
+        if cfg!(feature = "postgres")
+            && let Some(url) = var("NAVREE_TEST_POSTGRES_URL")
+        {
+            return Some((url, false));
+        }
+        if cfg!(feature = "mysql")
+            && let Some(url) = var("NAVREE_TEST_MYSQL_URL")
+        {
+            return Some((url, true));
+        }
+        None
     }
 
     impl Drop for Scratch {
         fn drop(&mut self) {
             let admin = self.admin.clone();
-            let name = self.name.clone();
+            let drop = if self.mysql {
+                format!("DROP DATABASE IF EXISTS `{}`", self.name)
+            } else {
+                format!("DROP DATABASE IF EXISTS {} WITH (FORCE)", self.name)
+            };
             let _ = std::thread::spawn(move || {
                 let runtime = tokio::runtime::Builder::new_current_thread()
                     .enable_all()
@@ -615,11 +646,7 @@ pub mod postgres {
                     .expect("runtime");
                 runtime.block_on(async move {
                     if let Ok(conn) = Database::connect(&admin).await {
-                        let _ = conn
-                            .execute_unprepared(&format!(
-                                "DROP DATABASE IF EXISTS {name} WITH (FORCE)"
-                            ))
-                            .await;
+                        let _ = conn.execute_unprepared(&drop).await;
                         let _ = conn.close().await;
                     }
                 });
@@ -629,9 +656,10 @@ pub mod postgres {
     }
 }
 
-#[cfg(not(feature = "postgres"))]
-pub mod postgres {
-    /// Without the `postgres` feature every harness uses SQLite.
+#[cfg(not(any(feature = "postgres", feature = "mysql")))]
+pub mod servers {
+    /// Without the `postgres` and `mysql` features every harness uses
+    /// SQLite.
     pub struct Scratch {
         pub url: String,
     }
@@ -643,17 +671,17 @@ pub mod postgres {
     }
 }
 
-/// A database for one test: a fresh PostgreSQL database (see
-/// [`postgres`]) or a SQLite file.
+/// A database for one test: a fresh PostgreSQL or MySQL database (see
+/// [`servers`]) or a SQLite file.
 pub struct TestDatabase {
     pub url: String,
-    _scratch: Option<postgres::Scratch>,
+    _scratch: Option<servers::Scratch>,
     _guard: Option<navree_testing::TempDirGuard>,
 }
 
 impl TestDatabase {
     pub async fn new() -> TestDatabase {
-        if let Some(scratch) = postgres::Scratch::new().await {
+        if let Some(scratch) = servers::Scratch::new().await {
             return TestDatabase {
                 url: scratch.url.clone(),
                 _scratch: Some(scratch),
