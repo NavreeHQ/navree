@@ -17,7 +17,8 @@ use typst::utils::LazyHash;
 use typst::{Library, LibraryExt, World, WorldExt};
 use typst_layout::PagedDocument;
 
-use self::fonts::{DEFAULT_FAMILIES, FontSet};
+use self::fonts::FontSet;
+use crate::fonts::DEFAULT_FAMILIES;
 use self::world::{DATA_PATH, INLINE_PATH, RenderWorld, project_file};
 use crate::engine::{EngineKind, PdfEngine};
 use crate::render::{Render, TemplateSource};

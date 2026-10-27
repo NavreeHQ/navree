@@ -189,6 +189,12 @@ async fn answer(job: &PageJob, url: &str) -> Answer {
     if path == job.path {
         return Answer::Document;
     }
+    if let Some(reserved) = path.strip_prefix(crate::fonts::RESERVED_PREFIX) {
+        return match crate::fonts::reserved_file(reserved) {
+            Some((bytes, content_type)) => Answer::File(bytes, content_type.to_owned()),
+            None => Answer::NotFound,
+        };
+    }
     let templates = job.templates.clone();
     let lookup = path.clone();
     let read = tokio::task::spawn_blocking(move || templates.read(&lookup)).await;
