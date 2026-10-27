@@ -106,9 +106,11 @@ const HIERARCHY: &[Rule] = &[
     // through navree-events, encrypted and hashed casts through
     // navree-crypto (ORM brief §2). navree-access (same layer, optional
     // feature `access`): models as subjects, abilities as query filters.
+    // navree-testing (optional feature `testing`): `TestApp` seeding.
     rule("navree-orm", 4, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http",
         "navree-db", "navree-events", "navree-crypto", "navree-orm-macros", "navree-access",
+        "navree-testing",
     ]),
     // L5
     rule("navree-auth", 5, &[

@@ -22,6 +22,9 @@ mysql = ["sea-orm/sqlx-mysql"]
 ## (`AbilityExt`), `Authorized<Model, A>` routes. The facade turns it on
 ## when both `orm` and `access` are on.
 access = ["dep:navree-access"]
+## Testing helpers on navree-testing's `TestApp` (`app.seed::<S>()`). The
+## facade turns it on when both `orm` and `testing` are on.
+testing = ["dep:navree-testing"]
 
 [dependencies]
 axum = { workspace = true }
@@ -35,6 +38,7 @@ navree-db = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
 navree-orm-macros = { workspace = true }
+navree-testing = { workspace = true, optional = true }
 rust_decimal = { workspace = true }
 sea-orm = { workspace = true, features = ["with-rust_decimal"] }
 sea-query = { workspace = true, features = ["backend-mysql", "with-rust_decimal"] }
@@ -51,8 +55,8 @@ uuid = { workspace = true }
 futures = { workspace = true }
 insta = { workspace = true }
 navree-config = { workspace = true }
-# The crate's own tests use its `access` feature (models as subjects).
-navree-orm = { workspace = true, features = ["access"] }
+# The crate's own tests use its `access` and `testing` features.
+navree-orm = { workspace = true, features = ["access", "testing"] }
 navree-testing = { workspace = true }
 proptest = { workspace = true }
 tempfile = { workspace = true }

@@ -19,7 +19,9 @@ pub(crate) async fn scope<F: Future>(future: F) -> F::Output {
     QUIET.scope((), future).await
 }
 
-/// Whether the running task is inside a quiet operation.
+/// Whether the running task is inside a quiet operation (or a seeder that
+/// runs without model events, see navree-db's
+/// `Seeder::without_model_events`).
 pub(crate) fn is_active() -> bool {
-    QUIET.try_with(|_| ()).is_ok()
+    QUIET.try_with(|_| ()).is_ok() || navree_db::seeding_without_model_events()
 }

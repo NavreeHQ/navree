@@ -10,4 +10,5 @@ mod assertions;
 mod binding;
 mod factories_create;
 mod factories_make;
+mod seeding;
 mod workspaces;

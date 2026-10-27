@@ -32,6 +32,8 @@
 //! # Ok(()) }
 //! ```
 
+#[cfg(feature = "testing")]
+mod app;
 mod queries;
 
 use std::borrow::Cow;
@@ -40,6 +42,8 @@ use std::fmt::Write as _;
 use chrono::{DateTime, FixedOffset, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use uuid::Uuid;
 
+#[cfg(feature = "testing")]
+pub use app::TestAppExt;
 pub use queries::{count_queries, expect_query_count};
 
 pub(crate) use queries::note_statement;
