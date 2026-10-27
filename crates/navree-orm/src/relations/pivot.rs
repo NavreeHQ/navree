@@ -338,6 +338,10 @@ impl RelationValue for Pivot {
             Ok(true)
         })
     }
+
+    fn column(&self, column: &str) -> Option<Value> {
+        self.get(column).cloned()
+    }
 }
 
 /// What a many-to-many relation's pivot rows are: plain [`Pivot`]s, or
