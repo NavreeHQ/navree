@@ -69,7 +69,10 @@ async fn an_agent_reads_and_resolves_issues_over_mcp() {
         .iter()
         .map(|tool| tool.name.to_string())
         .collect();
-    assert!(tools.contains(&"lighthouse_resolve_issue".to_owned()), "{tools:?}");
+    assert!(
+        tools.contains(&"lighthouse_resolve_issue".to_owned()),
+        "{tools:?}"
+    );
     let page = mcp
         .call_tool("lighthouse_list_issues", json!({}))
         .await
