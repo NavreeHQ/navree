@@ -454,3 +454,32 @@ async fn prune_deletes_finished_runs_only() {
     assert!(workflows.run(sleeping).await.is_ok());
     let _ = Arc::clone(&workflows);
 }
+
+#[tokio::test]
+async fn the_tick_runs_a_start_whose_wake_up_was_lost() {
+    let h = harness(|b| b).await;
+    // A run stored without being woken (a crash right after the commit).
+    let store = navree_workflows::DatabaseWorkflowStore::new((*h.db().await).clone());
+    let run = navree_workflows::WorkflowRun {
+        id: uuid::Uuid::now_v7(),
+        workflow: "greet".into(),
+        version: 1,
+        status: RunStatus::Pending,
+        input: json!({"name": "lost"}),
+        output: None,
+        error: None,
+        workspace_id: None,
+        key: None,
+        wake_at: None,
+        created_at: start(),
+        updated_at: start(),
+        finished_at: None,
+    };
+    navree_workflows::WorkflowStore::insert_run(&store, None, &run)
+        .await
+        .unwrap();
+    // Within a lease its wake-up may still come.
+    assert_eq!(h.advance(Duration::from_secs(60)).await, 0);
+    assert_eq!(h.advance(Duration::from_secs(240)).await, 1);
+    assert_eq!(h.status(run.id).await, RunStatus::Completed);
+}
