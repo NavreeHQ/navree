@@ -12,7 +12,7 @@ use crate::migration::MigrationContext;
 use crate::naming::index_name;
 use crate::options::SchemaOptions;
 use crate::target::{Dialect, Target};
-use crate::timescale::{Compression, ContinuousAggregate, Hypertable};
+use crate::timescale::{Compression, ContinuousAggregate, Hypertable, RefreshPolicy};
 
 /// The schema builder: creates, alters, renames and drops tables, reads the
 /// database's structure, and manages TimescaleDB hypertables, policies and
@@ -47,7 +47,7 @@ use crate::timescale::{Compression, ContinuousAggregate, Hypertable};
 ///          \"updated_at\" TIMESTAMP WITH TIME ZONE NULL)"
 ///     ]
 /// );
-/// # });
+/// # }
 /// ```
 ///
 /// Inside a migration the schema runs on the migration's connection (its
@@ -264,17 +264,40 @@ impl<'c> Schema<'c> {
         self.build(blueprint).await
     }
 
-    /// Creates `table` as a hypertable partitioned by `time_column`
-    /// (configure it further with `t.hypertable(Hypertable::on(..)...)`
-    /// inside `define`).
+    /// Creates `table` as a hypertable: `hypertable` is its time column or a
+    /// configured [`Hypertable`]; inside `define`, `t.hypertable("<time
+    /// column>")` returns it to configure further.
+    ///
+    /// ```
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() -> Result<(), navree_schema::SchemaError> {
+    /// use navree_schema::{Schema, Target};
+    ///
+    /// let schema = Schema::offline(Target::postgres(17).with_timescaledb((2, 17)));
+    /// schema
+    ///     .create_hypertable("events", "occurred_at", |t| {
+    ///         t.uuid_primary();
+    ///         t.foreign_uuid("workspace_id");
+    ///         t.timestamp_tz("occurred_at");
+    ///         t.jsonb("payload");
+    ///         t.hypertable("occurred_at").chunk_interval("1 day").retain_for("90 days");
+    ///     })
+    ///     .await?;
+    /// assert_eq!(
+    ///     schema.statements()[1],
+    ///     "SELECT create_hypertable('events', by_range('occurred_at', INTERVAL '1 day'))"
+    /// );
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn create_hypertable(
         &self,
         table: &str,
-        time_column: &str,
+        hypertable: impl Into<Hypertable>,
         define: impl FnOnce(&mut Blueprint),
     ) -> SchemaResult {
         let mut blueprint = self.blueprint(table, true);
-        blueprint.hypertable(time_column);
+        blueprint.hypertable(hypertable);
         define(&mut blueprint);
         self.build(blueprint).await
     }
@@ -674,25 +697,51 @@ impl<'c> Schema<'c> {
         self.run(compiled).await
     }
 
-    async fn policy(&self, table: &str, what: &str, statement: SchemaResult<String>) -> SchemaResult {
+    /// Runs `statement` on TimescaleDB; elsewhere reports `"{reason}: {skipped}"`.
+    async fn timescale_statement(
+        &self,
+        table: &str,
+        statement: String,
+        skipped: String,
+    ) -> SchemaResult {
         let target = self.target().await?;
-        let compiled = timescale::policy_or_notice(table, what, statement?, &self.context(&target))?;
+        let compiled =
+            timescale::policy_or_notice(table, statement, &skipped, &self.context(&target))?;
         self.run(compiled).await
     }
 
-    /// Sets the chunk interval of hypertable `table` for new chunks.
+    /// Sets the chunk interval of hypertable `table` for chunks created from
+    /// now on (`"1 day"`, or a whole number for an integer time column).
     pub async fn set_chunk_interval(&self, table: &str, interval: &str) -> SchemaResult {
-        self.policy(
+        self.timescale_statement(
             table,
-            "chunk interval",
-            timescale::set_chunk_interval_statement(table, interval),
+            timescale::set_chunk_interval_statement(table, interval)?,
+            format!("setting the chunk interval of `{table}` is skipped"),
         )
         .await
     }
 
-    /// Compresses hypertable `table` as described (settings and, with
-    /// `after`, a compression policy).
-    pub async fn compress(&self, table: &str, compression: Compression) -> SchemaResult {
+    /// Compresses hypertable `table` as described: the settings, and with
+    /// [`after`](Compression::after) a compression policy.
+    ///
+    /// ```
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() -> Result<(), navree_schema::SchemaError> {
+    /// use navree_schema::{Compression, Schema, Target};
+    ///
+    /// let schema = Schema::offline(Target::postgres(17).with_timescaledb((2, 17)));
+    /// let mut compression = Compression::new();
+    /// compression.segment_by(["device_id"]).order_by("taken_at DESC").after("7 days");
+    /// schema.compress("readings", &compression).await?;
+    /// assert_eq!(
+    ///     schema.statements()[1],
+    ///     "SELECT add_compression_policy('readings', INTERVAL '7 days')"
+    /// );
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn compress(&self, table: &str, compression: impl Into<Compression>) -> SchemaResult {
+        let compression = compression.into();
         let target = self.target().await?;
         let ctx = self.context(&target);
         let mut compiled = Compiled::default();
@@ -706,82 +755,123 @@ impl<'c> Schema<'c> {
                     .extend(timescale::compression_statements(table, &compression)?);
             }
             timescale::Mode::Fallback { reason } => {
+                // Check the intervals anyway, so a typo fails on every database.
+                timescale::compression_statements(table, &compression)?;
                 compiled.notice(format!("{reason}: the compression of `{table}` is skipped"));
             }
         }
         self.run(compiled).await
     }
 
-    /// Removes the compression policy of `table`.
-    pub async fn remove_compression_policy(&self, table: &str) -> SchemaResult {
-        self.policy(
+    /// Compresses the chunks of hypertable `table` once they are older than
+    /// `after`, with a compression policy (the table's compression must be
+    /// on: see [`compress`](Schema::compress)).
+    pub async fn add_compression_policy(&self, table: &str, after: &str) -> SchemaResult {
+        self.timescale_statement(
             table,
-            "compression policy",
-            Ok(format!(
+            format!(
+                "SELECT add_compression_policy({}, {})",
+                timescale::regclass(table),
+                timescale::interval_arg(after)?
+            ),
+            format!("the compression policy of `{table}` is skipped"),
+        )
+        .await
+    }
+
+    /// Removes the compression policy of `table`, if it has one.
+    pub async fn remove_compression_policy(&self, table: &str) -> SchemaResult {
+        self.timescale_statement(
+            table,
+            format!(
                 "SELECT remove_compression_policy({}, if_exists => TRUE)",
                 timescale::regclass(table)
-            )),
+            ),
+            format!("`{table}` has no compression policy to remove"),
         )
         .await
     }
 
-    /// Drops chunks of `table` older than `interval`, with a retention
-    /// policy.
+    /// Drops the chunks of `table` older than `interval` (`"90 days"`), with
+    /// a retention policy.
     pub async fn add_retention_policy(&self, table: &str, interval: &str) -> SchemaResult {
-        self.policy(
+        self.timescale_statement(
             table,
-            "retention policy",
-            timescale::interval_arg(interval).map(|interval| {
-                format!(
-                    "SELECT add_retention_policy({}, {interval})",
-                    timescale::regclass(table)
-                )
-            }),
+            format!(
+                "SELECT add_retention_policy({}, {})",
+                timescale::regclass(table),
+                timescale::interval_arg(interval)?
+            ),
+            format!("the retention policy of `{table}` is skipped"),
         )
         .await
     }
 
-    /// Removes the retention policy of `table`.
+    /// Removes the retention policy of `table`, if it has one.
     pub async fn remove_retention_policy(&self, table: &str) -> SchemaResult {
-        self.policy(
+        self.timescale_statement(
             table,
-            "retention policy",
-            Ok(format!(
+            format!(
                 "SELECT remove_retention_policy({}, if_exists => TRUE)",
                 timescale::regclass(table)
-            )),
+            ),
+            format!("`{table}` has no retention policy to remove"),
         )
         .await
     }
 
-    /// Reorders chunks of `table` by `index`, with a reorder policy.
+    /// Reorders the chunks of `table` by the index named `index` once they
+    /// stop receiving writes, with a reorder policy.
     pub async fn add_reorder_policy(&self, table: &str, index: &str) -> SchemaResult {
-        self.policy(
+        self.timescale_statement(
             table,
-            "reorder policy",
-            Ok(format!(
+            format!(
                 "SELECT add_reorder_policy({}, {})",
                 timescale::regclass(table),
                 grammar::string(Dialect::Postgres, index)
-            )),
+            ),
+            format!("the reorder policy of `{table}` is skipped"),
         )
         .await
     }
 
-    /// Removes the reorder policy of `table`.
+    /// Removes the reorder policy of `table`, if it has one.
     pub async fn remove_reorder_policy(&self, table: &str) -> SchemaResult {
-        self.policy(
+        self.timescale_statement(
             table,
-            "reorder policy",
-            Ok(format!(
+            format!(
                 "SELECT remove_reorder_policy({}, if_exists => TRUE)",
                 timescale::regclass(table)
-            )),
+            ),
+            format!("`{table}` has no reorder policy to remove"),
         )
         .await
     }
 
-    /// Creates a continuous aggregate (a plain view without TimescaleDB).
+    /// Creates a continuous aggregate with its refresh policy. Without
+    /// TimescaleDB it is a plain view (a described aggregate compiles its
+    /// bucket for the database), and a notice says so.
+    ///
+    /// ```
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() -> Result<(), navree_schema::SchemaError> {
+    /// use navree_schema::{ContinuousAggregate, RefreshPolicy, Schema, Target};
+    ///
+    /// let schema = Schema::offline(Target::sqlite((3, 46)));
+    /// schema
+    ///     .create_continuous_aggregate(
+    ///         ContinuousAggregate::over("events_daily", "events")
+    ///             .time_bucket("1 day", "occurred_at", "day")
+    ///             .group_by("workspace_id")
+    ///             .aggregate("count(*)", "total")
+    ///             .refresh(RefreshPolicy::every("1 hour").start_offset("3 days")),
+    ///     )
+    ///     .await?;
+    /// assert!(schema.statements()[0].starts_with("CREATE VIEW \"events_daily\""));
+    /// assert_eq!(schema.notices().len(), 1);
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn create_continuous_aggregate(
         &self,
         aggregate: impl Into<ContinuousAggregate>,
@@ -792,7 +882,37 @@ impl<'c> Schema<'c> {
         self.run(compiled).await
     }
 
-    /// Drops continuous aggregate `name` if it exists.
+    /// Refreshes continuous aggregate `name` on `policy`'s schedule (for an
+    /// aggregate created without one).
+    pub async fn add_continuous_aggregate_policy(
+        &self,
+        name: &str,
+        policy: &RefreshPolicy,
+    ) -> SchemaResult {
+        self.timescale_statement(
+            name,
+            timescale::refresh_policy_statement(name, policy)?,
+            format!("the refresh policy of `{name}` is skipped: as a plain view it is always current"),
+        )
+        .await
+    }
+
+    /// Removes the refresh policy of continuous aggregate `name`, if it has
+    /// one.
+    pub async fn remove_continuous_aggregate_policy(&self, name: &str) -> SchemaResult {
+        self.timescale_statement(
+            name,
+            format!(
+                "SELECT remove_continuous_aggregate_policy({}, if_exists => TRUE)",
+                timescale::regclass(name)
+            ),
+            format!("`{name}` has no refresh policy to remove"),
+        )
+        .await
+    }
+
+    /// Drops continuous aggregate `name` if it exists, with its
+    /// materialized data and refresh policy.
     pub async fn drop_continuous_aggregate(&self, name: &str) -> SchemaResult {
         let target = self.target().await?;
         let statement = timescale::drop_continuous_aggregate(name, &self.context(&target));
@@ -802,7 +922,9 @@ impl<'c> Schema<'c> {
     /// Refreshes continuous aggregate `name` over the window from
     /// `start_offset` ago to `end_offset` ago (`None`: unbounded on that
     /// side). TimescaleDB refuses this inside a transaction, so call it from
-    /// a migration whose `within_transaction` is `false`.
+    /// a migration whose
+    /// [`within_transaction`](crate::Migration::within_transaction) is
+    /// `false`.
     pub async fn refresh_continuous_aggregate(
         &self,
         name: &str,
@@ -810,10 +932,7 @@ impl<'c> Schema<'c> {
         end_offset: Option<&str>,
     ) -> SchemaResult {
         let bound = |value: Option<&str>| match value {
-            Some(value) => Ok(format!(
-                "now() - {}",
-                timescale::interval_arg(value)?
-            )),
+            Some(value) => Ok(format!("now() - {}", timescale::interval_arg(value)?)),
             None => Ok::<_, SchemaError>("NULL".to_owned()),
         };
         let statement = format!(
@@ -822,7 +941,12 @@ impl<'c> Schema<'c> {
             bound(start_offset)?,
             bound(end_offset)?
         );
-        self.policy(name, "refresh", Ok(statement)).await
+        self.timescale_statement(
+            name,
+            statement,
+            format!("refreshing `{name}` is skipped: as a plain view it is always current"),
+        )
+        .await
     }
 
     /// The conventional name of an index of `kind` on `columns` of `table`

@@ -24,7 +24,7 @@
 //! ```
 //! # #[tokio::main(flavor = "current_thread")]
 //! # async fn main() -> Result<(), navree_schema::SchemaError> {
-//! use navree_schema::{Compression, Hypertable, Schema, Target};
+//! use navree_schema::{Schema, Target};
 //!
 //! let schema = Schema::offline(Target::postgres(17).with_timescaledb((2, 17)));
 //! schema
@@ -42,12 +42,9 @@
 //!         t.uuid_primary();
 //!         t.timestamp_tz("occurred_at");
 //!         t.jsonb("payload");
-//!         t.hypertable(
-//!             Hypertable::on("occurred_at")
-//!                 .chunk_interval("1 day")
-//!                 .compress(Compression::new().order_by("occurred_at DESC").after("7 days"))
-//!                 .retain_for("90 days"),
-//!         );
+//!         let events = t.hypertable("occurred_at");
+//!         events.chunk_interval("1 day").retain_for("90 days");
+//!         events.compress().order_by("occurred_at DESC").after("7 days");
 //!     })
 //!     .await?;
 //! assert!(schema.statements().iter().any(|s| s.starts_with("SELECT create_hypertable")));
