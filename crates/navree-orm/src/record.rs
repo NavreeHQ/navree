@@ -6,6 +6,8 @@ use std::ops::{Deref, DerefMut};
 
 use serde::{Serialize, Serializer};
 
+use crate::attributes::CastContext;
+use crate::attributes::state::RecordState;
 use crate::column::{Assignment, Column, ColumnName};
 use crate::error::{OrmError, Result};
 use crate::exec::{Access, Executor};
@@ -13,7 +15,7 @@ use crate::model::Model;
 use crate::persist;
 use crate::relations::Relations;
 use crate::row::Row;
-use crate::value::{Field, Numeric, Value, same_value, to_json};
+use crate::value::{Field, Numeric, Value};
 
 /// A model instance as the ORM knows it: the model itself (a `Record<M>`
 /// dereferences to `M`, so fields read and write directly), whether it is
@@ -48,6 +50,7 @@ pub struct Record<M: Model> {
     /// The lazy-loading rules' marks (see
     /// [`LazyLoading`](crate::relations::LazyLoading)).
     pub(crate) loading: crate::relations::lazy::LoadState<M>,
+    pub(crate) attributes: RecordState,
 }
 
 impl<M: Model> Record<M> {
@@ -65,6 +68,7 @@ impl<M: Model> Record<M> {
             relations: Relations::new(),
             force_deleting: false,
             loading: crate::relations::lazy::LoadState::default(),
+            attributes: RecordState::default(),
         }
     }
 
@@ -82,6 +86,7 @@ impl<M: Model> Record<M> {
             relations: Relations::new(),
             force_deleting: false,
             loading: crate::relations::lazy::LoadState::default(),
+            attributes: RecordState::default(),
         }
     }
 
@@ -108,7 +113,32 @@ impl<M: Model> Record<M> {
             relations: Relations::new(),
             force_deleting: false,
             loading: crate::relations::lazy::LoadState::default(),
+            attributes: RecordState {
+                stale: M::stale_columns(row),
+                context: if meta.uses_cast_context() {
+                    CastContext::scoped()
+                } else {
+                    None
+                },
+                ..RecordState::default()
+            },
         })
+    }
+
+    /// Runs `f` with the cast context the record was read or saved under,
+    /// when no scope is running (see [`CastContext`]).
+    pub(crate) fn in_cast_context<R>(&self, f: impl FnOnce() -> R) -> R {
+        CastContext::with_record(self.attributes.context.as_ref(), f)
+    }
+
+    /// Keeps the running scope's cast context as the record's (after a
+    /// save), for models whose casts use one.
+    pub(crate) fn keep_cast_context(&mut self) {
+        if M::meta().uses_cast_context()
+            && let Some(context) = CastContext::scoped()
+        {
+            self.attributes.context = Some(context);
+        }
     }
 
     /// The model.
@@ -164,37 +194,63 @@ impl<M: Model> Record<M> {
     // ---------------------------------------------------------------------
 
     /// The columns whose values differ from the original (every column of
-    /// a record that was never saved), with their current values.
+    /// a record that was never saved), with their current stored values.
     ///
     /// Values are compared as stored: decimals numerically, floats within
-    /// a small tolerance, date-times by instant, JSON structurally.
+    /// a small tolerance, date-times by instant, JSON structurally, cast
+    /// fields as their cast compares them (encrypted fields by their plain
+    /// value). An encrypted column read under a previous key is dirty until
+    /// it is saved again (and so re-encrypted with the current key).
     pub fn get_dirty(&self) -> Result<Vec<(&'static str, Value)>> {
-        let current = self.model.values()?;
+        self.in_cast_context(|| {
+            let columns = match &self.original {
+                Some(_) => self.dirty_columns()?,
+                None => return self.model.values(),
+            };
+            columns
+                .into_iter()
+                .map(|column| {
+                    let value = self
+                        .model
+                        .value(column)?
+                        .ok_or_else(|| crate::model::derive_support::unknown_column::<M>(column))?;
+                    Ok((column, value))
+                })
+                .collect()
+        })
+    }
+
+    /// The dirty columns, in field order, without encoding their values.
+    fn dirty_columns(&self) -> Result<Vec<&'static str>> {
         let Some(original) = &self.original else {
-            return Ok(current);
+            return Ok(M::meta().all_columns().iter().map(|c| c.name()).collect());
         };
-        let before = original.values()?;
-        Ok(current
-            .into_iter()
-            .zip(before)
-            .filter(|((_, now), (_, then))| !same_value(now, then))
-            .map(|(now, _)| now)
-            .collect())
+        let mut columns = self.in_cast_context(|| self.model.changed_columns(original))?;
+        if !self.attributes.stale.is_empty() {
+            for &column in &self.attributes.stale {
+                if !columns.contains(&column) {
+                    columns.push(column);
+                }
+            }
+            let order = M::meta().all_columns();
+            columns.sort_by_key(|column| order.iter().position(|meta| meta.name() == *column));
+        }
+        Ok(columns)
     }
 
     /// Whether any column changed since the record was read or saved. A
-    /// column that cannot be encoded counts as changed (saving reports the
-    /// error).
+    /// column that cannot be compared counts as changed (saving reports
+    /// the error).
     pub fn is_dirty(&self) -> bool {
-        self.get_dirty().map_or(true, |dirty| !dirty.is_empty())
+        self.dirty_columns().map_or(true, |dirty| !dirty.is_empty())
     }
 
     /// Whether any of `columns` changed since the record was read or saved.
     pub fn is_dirty_on<C: ColumnName>(&self, columns: impl IntoIterator<Item = C>) -> bool {
-        match self.get_dirty() {
+        match self.dirty_columns() {
             Ok(dirty) => columns
                 .into_iter()
-                .any(|column| dirty.iter().any(|(name, _)| *name == column.column_name())),
+                .any(|column| dirty.iter().any(|name| *name == column.column_name())),
             Err(_) => true,
         }
     }
@@ -242,7 +298,7 @@ impl<M: Model> Record<M> {
     /// or saved; `None` for a new record or a column the model lacks.
     pub fn get_original_value(&self, column: impl ColumnName) -> Result<Option<Value>> {
         match &self.original {
-            Some(original) => original.value(&column.column_name()),
+            Some(original) => self.in_cast_context(|| original.value(&column.column_name())),
             None => Ok(None),
         }
     }
@@ -251,6 +307,7 @@ impl<M: Model> Record<M> {
     /// afterwards).
     pub fn sync_original(&mut self) {
         self.original = Some(self.model.clone());
+        self.attributes.stale.clear();
     }
 
     /// Accepts the current values of `columns` as their original ones.
@@ -261,11 +318,16 @@ impl<M: Model> Record<M> {
         let Some(original) = &mut self.original else {
             return Ok(());
         };
+        let context = self.attributes.context.clone();
         for column in columns {
             let name = column.column_name();
-            if let Some(value) = self.model.value(&name)? {
-                original.set_value(&name, value)?;
-            }
+            CastContext::with_record(context.as_ref(), || -> Result<()> {
+                if let Some(value) = self.model.value(&name)? {
+                    original.set_value(&name, value)?;
+                }
+                Ok(())
+            })?;
+            self.attributes.stale.retain(|stale| *stale != name);
         }
         Ok(())
     }
@@ -597,6 +659,7 @@ impl<M: Model> Clone for Record<M> {
             relations: self.relations.clone(),
             force_deleting: self.force_deleting,
             loading: self.loading.clone(),
+            attributes: self.attributes.clone(),
         }
     }
 }
@@ -617,25 +680,12 @@ impl<M: Model + fmt::Debug> fmt::Debug for Record<M> {
     }
 }
 
-/// The model, followed by the extra columns and the loaded relations.
+/// The model (as its own `Serialize` writes it, with cast outputs and the
+/// model's date format), then the extra columns, the appended accessors and
+/// the loaded relations, after the record's visibility (see
+/// [`attributes::serialize`](crate::attributes::serialize)).
 impl<M: Model> Serialize for Record<M> {
     fn serialize<S: Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> {
-        if self.extras.is_empty() && self.relations.is_empty() {
-            return self.model.serialize(serializer);
-        }
-        let mut value = serde_json::to_value(&self.model).map_err(serde::ser::Error::custom)?;
-        if let serde_json::Value::Object(object) = &mut value {
-            for (name, extra) in &self.extras {
-                object.insert(name.clone(), to_json(extra));
-            }
-            if let serde_json::Value::Object(relations) = self
-                .relations
-                .to_json()
-                .map_err(serde::ser::Error::custom)?
-            {
-                object.extend(relations);
-            }
-        }
-        value.serialize(serializer)
+        crate::attributes::serialize::serialize_record(self, serializer)
     }
 }

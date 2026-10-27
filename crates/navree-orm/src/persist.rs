@@ -20,6 +20,7 @@ use std::borrow::Cow;
 
 use navree_db::{ChangeEvent, ChangeOp};
 
+use crate::attributes::{CastContext, in_model_scope};
 use crate::column::{Assignment, Column};
 use crate::error::{OrmError, Result};
 use crate::exec::{ExecContext, Target};
@@ -111,9 +112,25 @@ fn record_change<M: Model>(
     }
 }
 
+/// Runs the casts' asynchronous preparation of `record` (hashing, rounding
+/// to the stored precision) before its values are written.
+async fn prepare<M: Model>(record: &mut Record<M>) -> Result<()> {
+    let context = CastContext::current();
+    record.model.prepare_for_write(&context).await
+}
+
 /// Inserts or updates `record`.
 pub(crate) async fn save<M: Model>(target: &Target<'_>, record: &mut Record<M>) -> Result<bool> {
     let ctx = target.context();
+    in_model_scope::<M, _, _>(&ctx, save_in_scope(target, &ctx, record)).await
+}
+
+async fn save_in_scope<M: Model>(
+    target: &Target<'_>,
+    ctx: &ExecContext,
+    record: &mut Record<M>,
+) -> Result<bool> {
+    let ctx = ctx.clone();
     let hooks = Hooks::<M>::resolve(&ctx).await?;
     if hooks.before(ModelEvent::Saving, &ctx, record).await? == Flow::Cancel {
         return Ok(false);
@@ -136,6 +153,7 @@ pub(crate) async fn save<M: Model>(target: &Target<'_>, record: &mut Record<M>) 
         crate::relations::touch::touch_owners(target, record).await?;
     }
     record.sync_original();
+    record.keep_cast_context();
     Ok(true)
 }
 
@@ -182,6 +200,7 @@ async fn insert<M: Model>(
         }
     }
 
+    prepare(record).await?;
     let values = record.model.values()?;
     let (columns, row): (Vec<Cow<'static, str>>, Vec<Expr>) = values
         .iter()
@@ -247,6 +266,7 @@ async fn update<M: Model>(
         let now = ctx.now().await;
         record.model.touch_timestamp(updated_at, now)?;
     }
+    prepare(record).await?;
     let dirty = record.get_dirty()?;
     if dirty.is_empty() {
         return Ok(true);
@@ -281,6 +301,15 @@ pub(crate) async fn delete<M: Model>(target: &Target<'_>, record: &mut Record<M>
         return Ok(false);
     }
     let ctx = target.context();
+    in_model_scope::<M, _, _>(&ctx, delete_in_scope(target, &ctx, record)).await
+}
+
+async fn delete_in_scope<M: Model>(
+    target: &Target<'_>,
+    ctx: &ExecContext,
+    record: &mut Record<M>,
+) -> Result<bool> {
+    let ctx = ctx.clone();
     let hooks = Hooks::<M>::resolve(&ctx).await?;
     if hooks.before(ModelEvent::Deleting, &ctx, record).await? == Flow::Cancel {
         return Ok(false);
@@ -372,6 +401,10 @@ pub(crate) async fn refresh<M: Model>(target: &Target<'_>, record: &mut Record<M
     record.model = fresh.model;
     record.extras = fresh.extras;
     record.sync_original();
+    record.attributes.stale = fresh.attributes.stale;
+    if fresh.attributes.context.is_some() {
+        record.attributes.context = fresh.attributes.context;
+    }
     crate::relations::lazy::reload_relations(target, record).await
 }
 
@@ -458,8 +491,7 @@ pub(crate) async fn increment<M: Model, T: Numeric>(
         )));
     }
 
-    let mut sets: Vec<(Cow<'static, str>, Expr)> = Vec::with_capacity(steps.len());
-    let mut written = Vec::with_capacity(steps.len());
+    let mut amounts = Vec::with_capacity(steps.len());
     for ((_, amount), name) in steps.into_iter().zip(names) {
         let current = record
             .model
@@ -490,6 +522,97 @@ pub(crate) async fn increment<M: Model, T: Numeric>(
             .to_value()
         };
         record.model.set_value(&name, next)?;
+        amounts.push((name, amount.to_value()));
+    }
+    let ctx = target.context();
+    in_model_scope::<M, _, _>(
+        &ctx,
+        apply_increment(target, &ctx, record, amounts, decrement, extra),
+    )
+    .await
+}
+
+/// `column = column ± amount` on the stored record through `column`'s cast
+/// ([`Cast::increment`](crate::cast::Cast::increment)): the record's field
+/// moves by `amount`, the database's column by `amount`'s stored form.
+pub(crate) async fn increment_cast<M: Model, T>(
+    target: &Target<'_>,
+    record: &mut Record<M>,
+    column: &Column<M, T>,
+    amount: &T,
+    decrement: bool,
+    extra: Vec<Assignment>,
+) -> Result<bool> {
+    if !record.exists {
+        return Err(Record::<M>::not_persisted(if decrement {
+            "decrement"
+        } else {
+            "increment"
+        }));
+    }
+    let ctx = target.context();
+    let name = column.column_ref().name.into_owned();
+    in_model_scope::<M, _, _>(&ctx, async {
+        let stored = column.encode(amount).map_err(|message| OrmError::Cast {
+            model: M::meta().name().into(),
+            column: name.clone(),
+            message,
+        })?;
+        if !is_number(&stored) {
+            return Err(OrmError::invalid(format!(
+                "`{name}` of {} stores {}, which the database cannot add to: increments through a cast need a numeric stored form",
+                M::meta().name(),
+                crate::value::describe(&stored)
+            )));
+        }
+        record.model.increment_cast(&name, stored.clone(), decrement)?;
+        apply_increment(
+            target,
+            &ctx,
+            record,
+            vec![(name.clone(), stored)],
+            decrement,
+            extra,
+        )
+        .await
+    })
+    .await
+}
+
+/// Whether `value` is a number the database can add to.
+fn is_number(value: &Value) -> bool {
+    matches!(
+        value,
+        Value::TinyInt(Some(_))
+            | Value::SmallInt(Some(_))
+            | Value::Int(Some(_))
+            | Value::BigInt(Some(_))
+            | Value::TinyUnsigned(Some(_))
+            | Value::SmallUnsigned(Some(_))
+            | Value::Unsigned(Some(_))
+            | Value::BigUnsigned(Some(_))
+            | Value::Float(Some(_))
+            | Value::Double(Some(_))
+            | Value::Decimal(Some(_))
+    )
+}
+
+/// Writes increments the record already holds in memory: `name = name ±
+/// amount` for each of `amounts` (stored forms), plus `extra` columns and
+/// the update timestamp, with the `updating` / `updated` hooks and the
+/// change event.
+async fn apply_increment<M: Model>(
+    target: &Target<'_>,
+    ctx: &ExecContext,
+    record: &mut Record<M>,
+    amounts: Vec<(String, Value)>,
+    decrement: bool,
+    extra: Vec<Assignment>,
+) -> Result<bool> {
+    let meta = M::meta();
+    let mut sets: Vec<(Cow<'static, str>, Expr)> = Vec::with_capacity(amounts.len());
+    let mut written = Vec::with_capacity(amounts.len());
+    for (name, amount) in amounts {
         sets.push((
             Cow::Owned(name.clone()),
             Expr::Arithmetic {
@@ -499,7 +622,7 @@ pub(crate) async fn increment<M: Model, T: Numeric>(
                 } else {
                     ArithmeticOp::Add
                 },
-                right: Box::new(Expr::Value(amount.to_value())),
+                right: Box::new(Expr::Value(amount)),
             },
         ));
         written.push(name);
@@ -512,7 +635,6 @@ pub(crate) async fn increment<M: Model, T: Numeric>(
         written.push(extra_column.to_string());
         sets.push((extra_column, value));
     }
-    let ctx = target.context();
     if let Some(updated_at) = meta.updated_at()
         && !written.iter().any(|column| column == updated_at)
     {
@@ -526,9 +648,9 @@ pub(crate) async fn increment<M: Model, T: Numeric>(
         written.push(updated_at.to_owned());
     }
 
-    let hooks = Hooks::<M>::resolve(&ctx).await?;
+    let hooks = Hooks::<M>::resolve(ctx).await?;
     // Cancelled: the new values stay on the record, unsaved (dirty).
-    if hooks.before(ModelEvent::Updating, &ctx, record).await? == Flow::Cancel {
+    if hooks.before(ModelEvent::Updating, ctx, record).await? == Flow::Cancel {
         return Ok(false);
     }
     let key = stored_key(record);
@@ -547,7 +669,7 @@ pub(crate) async fn increment<M: Model, T: Numeric>(
         Some(json_object(&record.previous)),
         Some(json_object(&record.changes)),
     );
-    hooks.after(ModelEvent::Updated, &ctx, record).await?;
+    hooks.after(ModelEvent::Updated, ctx, record).await?;
     record.sync_original_on(written.iter().map(String::as_str))?;
     Ok(true)
 }

@@ -101,13 +101,17 @@ notify = ["dep:navree-notify", "http", "db", "mail"]
 ui = ["dep:navree-ui", "http", "view"]
 ## The ORM: `#[derive(Model)]` models, the query builder, records,
 ## collections and pagination on navree-db's pool and unit of work; model
-## events and observers, soft deletes, strict modes and pruning (`OrmModule`).
+## events and observers, soft deletes, strict modes and pruning (`OrmModule`);
+## encrypted and hashed attributes (crypto) and records as API resources
+## (api).
 orm = [
     "dep:navree-orm",
     "db",
     "events",
     "http",
     "telemetry",
+    "crypto",
+    "api",
 ]
 ## L5
 auth = [

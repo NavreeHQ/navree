@@ -68,6 +68,7 @@ impl Violation {
             Violation::DiscardedAttributes { model, columns } => OrmError::MassAssignment {
                 model: Cow::Borrowed(model),
                 columns,
+                totally_guarded: false,
             },
             Violation::LazyLoading { model, relation } => OrmError::LazyLoading {
                 model: Cow::Borrowed(model),
@@ -360,6 +361,19 @@ pub fn current() -> Strictness {
         .unwrap_or_else(PoisonError::into_inner)
         .clone()
         .unwrap_or_default()
+}
+
+/// The strictness the running task's [`scope`] set, if any.
+pub(crate) fn scoped() -> Option<Strictness> {
+    SCOPED.try_with(Strictness::clone).ok()
+}
+
+/// The strictness of the app that booted last with `OrmModule`, if any.
+pub(crate) fn installed() -> Option<Strictness> {
+    PROCESS
+        .read()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clone()
 }
 
 /// Makes `strictness` the process's (what `OrmModule` does at boot).

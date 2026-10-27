@@ -7,6 +7,7 @@
 //! (`ModelLifecycle`, `SoftDeleting`), the module and its registrations
 //! (`OrmModule`, `ModuleBuilderOrmExt`).
 
+pub use crate::attributes::{Attributes, CastContext};
 pub use crate::hooks::{Flow, HookKind, ModelEvent, ModelHook};
 pub use crate::relations;
 pub use crate::relations::{
@@ -20,3 +21,4 @@ pub use crate::{
     SoftDeleting, TableBuilder, Ulid, Value, ValueFor, WhereGroup, col, col_as, scopes, table,
     without_events,
 };
+pub use crate::{accessors, attrs};

@@ -608,6 +608,7 @@ impl<M: Model> Record<M> {
             relations: Relations::new(),
             force_deleting: self.force_deleting,
             loading: LoadState::default(),
+            attributes: self.attributes.clone(),
         }
     }
 

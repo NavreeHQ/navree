@@ -85,8 +85,11 @@ pub use navree_audit::AuditModule;
 #[cfg(feature = "notify")]
 pub use navree_notify::NotifyModule;
 #[cfg(feature = "orm")]
+pub use navree_orm::attributes::Attributes;
+#[cfg(feature = "orm")]
 pub use navree_orm::{
     Builder, Collection, Model, ModelLifecycle as _, ModuleBuilderOrmExt as _, OrmModule, Record,
+    accessors, attrs,
 };
 #[cfg(feature = "queue")]
 pub use navree_queue::{Batch, Operation, Operations, QueueModule};

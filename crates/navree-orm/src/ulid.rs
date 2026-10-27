@@ -9,7 +9,7 @@ use sea_orm::QueryResult;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use uuid::Uuid;
 
-use crate::value::{Field, FieldError, Value, sql_get};
+use crate::value::{Field, FieldError, FieldKind, Value, sql_get};
 
 /// Crockford's base32 alphabet (no I, L, O or U).
 const ALPHABET: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
@@ -174,6 +174,8 @@ impl From<Ulid> for Value {
 }
 
 impl Field for Ulid {
+    const KIND: FieldKind = FieldKind::Ulid;
+
     fn to_value(&self) -> Value {
         Value::from(*self)
     }

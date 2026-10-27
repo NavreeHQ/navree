@@ -9,6 +9,9 @@ pub type Result<T, E = OrmError> = std::result::Result<T, E>;
 
 /// An ORM error.
 ///
+/// Every message names the model and, where one is involved, the column,
+/// and says how to fix the problem.
+///
 /// Returned from an HTTP handler with `?`, an `OrmError` keeps its meaning:
 /// a missing record ([`ModelNotFound`](OrmError::ModelNotFound)) answers 404
 /// and a unique or foreign-key violation ([`Db`](OrmError::Db)) answers 409,
@@ -133,18 +136,18 @@ pub enum OrmError {
         /// The columns the row has.
         selected: Vec<String>,
     },
-    /// Mass assignment would silently skip columns that are not fillable,
-    /// and the strict mode `prevent_discarding_attributes` is on.
-    #[error(
-        "cannot fill {} of {model}: not fillable (add {} to its fillable list, or use force_fill)",
-        quoted(columns),
-        if columns.len() == 1 { "it" } else { "them" }
-    )]
+    /// Mass assignment (`fill`) was given columns it may not set: the
+    /// model declares no fillable columns at all, or the app refuses to
+    /// discard attributes silently and these are not fillable.
+    #[error("{}", mass_assignment_message(model, columns, *totally_guarded))]
     MassAssignment {
         /// The model.
         model: Cow<'static, str>,
-        /// The columns that are not fillable.
+        /// The columns (or keys) that were refused.
         columns: Vec<String>,
+        /// Whether the model declares neither `fillable` nor `guarded`
+        /// columns (every `fill` is refused).
+        totally_guarded: bool,
     },
     /// A relation was loaded lazily for a record that came with others (one
     /// query per record), and the strict mode `prevent_lazy_loading` is on
@@ -188,21 +191,48 @@ pub enum OrmError {
         /// The stored type name.
         name: String,
     },
-}
-
-/// `a`, `b` and `c` as `` `a`, `b`, `c` ``.
-fn quoted(columns: &[String]) -> String {
-    columns
-        .iter()
-        .map(|column| format!("`{column}`"))
-        .collect::<Vec<_>>()
-        .join(", ")
+    /// A record could not be serialized.
+    #[error("{}", serialize_message(model, column.as_deref(), message))]
+    Serialize {
+        /// The model.
+        model: Cow<'static, str>,
+        /// The column, appended value or relation whose value failed;
+        /// `None` when the model as a whole did not serialize.
+        column: Option<String>,
+        /// What went wrong.
+        message: String,
+    },
 }
 
 fn known_relations(known: &[String]) -> String {
     match known {
         [] => " (it declares no relations: add them in a #[relations] impl block)".to_owned(),
         known => format!(" (it has: {})", known.join(", ")),
+    }
+}
+
+fn mass_assignment_message(model: &str, columns: &[String], totally_guarded: bool) -> String {
+    let list = columns
+        .iter()
+        .map(|column| format!("`{column}`"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    if totally_guarded {
+        format!(
+            "cannot mass-assign {list} on {model}: {model} declares no fillable columns; list them with #[model(fillable(..))] (or guard some with #[model(guarded(..))]), or use force_fill"
+        )
+    } else {
+        format!(
+            "cannot mass-assign {list} on {model}: not fillable; add {} to #[model(fillable(..))], or use force_fill",
+            if columns.len() == 1 { "it" } else { "them" }
+        )
+    }
+}
+
+fn serialize_message(model: &str, column: Option<&str>, message: &str) -> String {
+    match column {
+        Some(column) => format!("cannot serialize `{column}` of {model}: {message}"),
+        None => format!("cannot serialize {model}: {message}"),
     }
 }
 
@@ -293,10 +323,11 @@ mod tests {
         let discarded = OrmError::MassAssignment {
             model: "User".into(),
             columns: vec!["role".into()],
+            totally_guarded: false,
         };
         assert_eq!(
             discarded.to_string(),
-            "cannot fill `role` of User: not fillable (add it to its fillable list, or use force_fill)"
+            "cannot mass-assign `role` on User: not fillable; add it to #[model(fillable(..))], or use force_fill"
         );
         let lazy = OrmError::LazyLoading {
             model: "Deal".into(),
@@ -305,6 +336,50 @@ mod tests {
         assert!(
             lazy.to_string()
                 .starts_with("relation `company` of Deal was loaded lazily")
+        );
+    }
+
+    #[test]
+    fn mass_assignment_messages_name_the_fix() {
+        let guarded = OrmError::MassAssignment {
+            model: "Deal".into(),
+            columns: vec!["title".into()],
+            totally_guarded: true,
+        };
+        assert_eq!(
+            guarded.to_string(),
+            "cannot mass-assign `title` on Deal: Deal declares no fillable columns; list them with #[model(fillable(..))] (or guard some with #[model(guarded(..))]), or use force_fill"
+        );
+        let refused = OrmError::MassAssignment {
+            model: "Deal".into(),
+            columns: vec!["owner_id".into(), "is_admin".into()],
+            totally_guarded: false,
+        };
+        assert_eq!(
+            refused.to_string(),
+            "cannot mass-assign `owner_id`, `is_admin` on Deal: not fillable; add them to #[model(fillable(..))], or use force_fill"
+        );
+    }
+
+    #[test]
+    fn serialize_errors_name_the_model_and_column() {
+        let error = OrmError::Serialize {
+            model: "Deal".into(),
+            column: Some("meta".into()),
+            message: "key must be a string".into(),
+        };
+        assert_eq!(
+            error.to_string(),
+            "cannot serialize `meta` of Deal: key must be a string"
+        );
+        let whole = OrmError::Serialize {
+            model: "Deal".into(),
+            column: None,
+            message: "it serializes as a string, not an object".into(),
+        };
+        assert_eq!(
+            whole.to_string(),
+            "cannot serialize Deal: it serializes as a string, not an object"
         );
     }
 

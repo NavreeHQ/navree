@@ -6,6 +6,7 @@ use syn::meta::ParseNestedMeta;
 use syn::punctuated::Punctuated;
 use syn::{Attribute, LitBool, LitInt, LitStr, Token};
 
+use super::attributes;
 use crate::errors::{Errors, key_name, suggestion};
 use crate::model::lifecycle::{self, Lifecycle};
 
@@ -62,9 +63,12 @@ pub(crate) struct Container {
     pub(crate) global_scopes: Vec<syn::Expr>,
     /// `touches`, `morph_name`, `with`, `with_count`, `pivot`.
     pub(crate) relations: super::relations::RelationAttrs,
+    /// The attribute layer's keys.
+    pub(crate) attributes: attributes::ContainerAttrs,
 }
 
-/// The keys `#[model(...)]` takes on a struct.
+/// The keys `#[model(...)]` takes on a struct (the attribute layer's come
+/// from [`attributes::CONTAINER_KEYS`]).
 const KEYS: &[&str] = &[
     "table",
     "primary_key",
@@ -142,9 +146,16 @@ fn parse_key(container: &mut Container, meta: &ParseNestedMeta<'_>) -> syn::Resu
         container.global_scopes.extend(scopes);
     } else if super::relations::parse_key(&mut container.relations, meta)? {
         // A relation attribute.
+    } else if attributes::parse_container_key(&mut container.attributes, meta)? {
+        // An attribute-layer key.
     } else {
         let key = key_name(path);
-        let known: Vec<&str> = KEYS.iter().chain(lifecycle::KEYS).copied().collect();
+        let known: Vec<&str> = KEYS
+            .iter()
+            .chain(lifecycle::KEYS)
+            .chain(attributes::CONTAINER_KEYS)
+            .copied()
+            .collect();
         let hint = suggestion(&key, &known)
             .map(|known| format!(" (did you mean `{known}`?)"))
             .unwrap_or_default();

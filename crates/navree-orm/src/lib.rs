@@ -100,6 +100,7 @@
 
 extern crate self as navree_orm;
 
+pub mod attributes;
 pub mod broadcast;
 pub mod cast;
 mod collection;
@@ -144,7 +145,9 @@ pub use exec::{Access, DocumentTarget, ExecContext, Executor, SqlTarget, Target}
 pub use global_scopes::ClosureScope;
 pub use ir::Expr;
 pub use lifecycle::ModelLifecycle;
-pub use model::{ColumnMeta, KeyKind, Model, ModelMeta, PrimaryKey, Timestamp};
+pub use model::{
+    ColumnMeta, DateSerializer, KeyKind, Model, ModelMeta, PartialSchemaFn, PrimaryKey, Timestamp,
+};
 pub use module::{
     ConfiguredOrmModule, ModuleBuilderOrmExt, OrmModule, OrmRuntime, RegisteredModel,
     registered_models,
@@ -164,22 +167,26 @@ pub use soft_deletes::SoftDeleting;
 pub use sql::{Dialect, Statement};
 pub use ulid::{Ulid, UlidError};
 pub use value::{
-    Decimal, Field, FieldError, Numeric, Value, ValueFor, is_null, same_value, to_json,
+    Decimal, Field, FieldError, FieldKind, Numeric, Value, ValueFor, is_null, same_value, to_json,
 };
 
-/// `#[derive(Model)]`, `#[scopes]` and `#[relations]` (see their
-/// documentation in navree-orm-macros).
-pub use navree_orm_macros::{Model, relations, scopes};
+/// `#[derive(Model)]`, `#[scopes]`, `#[relations]` and `#[accessors]` (see
+/// their documentation in navree-orm-macros).
+pub use navree_orm_macros::{Model, accessor, accessors, relations, scopes};
 
 /// What the macros expand to. Not part of the API.
 #[doc(hidden)]
 pub mod __private {
+    pub use crate::attributes::{CastContext, NoAccessors, has_accessor};
     pub use crate::cast::{decode, decode_option, encode, encode_option};
     pub use crate::model::derive_support::*;
     pub use crate::relations::derive_support as relations;
-    pub use chrono::{DateTime, Utc};
+    pub use chrono::{DateTime, FixedOffset, Utc};
+    pub use navree_kernel::BoxFuture;
     pub use serde;
+    pub use serde_json;
     pub use std::sync::{Arc, OnceLock};
+    pub use utoipa;
 }
 
 /// The models the documentation examples use, so every example compiles.

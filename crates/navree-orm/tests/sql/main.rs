@@ -2,6 +2,8 @@
 //! shows the PostgreSQL (TimescaleDB), MySQL and SQLite statement with its
 //! bound values (or the error a dialect answers).
 
+mod attributes;
+
 use std::borrow::Cow;
 use std::fmt::Write as _;
 
