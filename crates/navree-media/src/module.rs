@@ -37,7 +37,8 @@ use crate::{ArchiveError, Media, MediaError, MediaOptions};
 /// - the command `media:regenerate`;
 /// - a change observer that deletes a model's media when the model is
 ///   deleted (models registered with [`for_feature`](MediaModule::for_feature)
-///   that name a `MEDIA_TABLE`, while `media.delete_with_model` is on);
+///   that name a `MEDIA_TABLE` and have no `deleted_at` column, while
+///   `media.delete_with_model` is on);
 /// - the mapping of [`MediaError`]s and [`ArchiveError`]s returned from
 ///   handlers to error responses (4xx with their own codes for refused
 ///   files, 500 otherwise).
@@ -269,7 +270,7 @@ impl ChangeObserver for DeleteWithModel {
             }
             let owners: Vec<(&str, &str)> = changes
                 .iter()
-                .filter(|change| change.op == ChangeOp::Deleted)
+                .filter(|change| change.op == ChangeOp::Deleted && !soft_deletes(change))
                 .filter_map(|change| {
                     self.tables
                         .get(&change.entity)
@@ -298,4 +299,16 @@ impl ChangeObserver for DeleteWithModel {
                 })
         })
     }
+}
+
+/// Whether the deleted record has a `deleted_at` column: a soft delete
+/// and a force delete record the same change, so the media of a
+/// soft-deleting model are never deleted with it (a restore would find
+/// them gone).
+fn soft_deletes(change: &ChangeEvent) -> bool {
+    change
+        .old
+        .as_ref()
+        .and_then(|old| old.as_object())
+        .is_some_and(|old| old.contains_key("deleted_at"))
 }

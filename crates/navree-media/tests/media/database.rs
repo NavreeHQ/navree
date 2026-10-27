@@ -50,7 +50,26 @@ impl HasMedia for Lecture {
     }
 }
 
-/// Creates `lectures` after the media table.
+/// A handout, stored in `handouts` with soft deletes: its media stay when
+/// it is deleted.
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "handouts", soft_deletes)]
+pub struct Handout {
+    pub id: Uuid,
+    pub title: String,
+    pub deleted_at: Option<DateTime<Utc>>,
+}
+
+impl HasMedia for Handout {
+    const MEDIA_TYPE: &'static str = "Handout";
+    const MEDIA_TABLE: &'static str = "handouts";
+
+    fn media_key(&self) -> String {
+        self.id.to_string()
+    }
+}
+
+/// Creates `lectures` and `handouts` after the media table.
 struct CreateLectures;
 
 fn uuid<'a>(t: &'a mut Blueprint, name: &str, mysql: bool) -> ColumnBuilder<'a> {
@@ -69,10 +88,18 @@ impl Migration for CreateLectures {
                 uuid(t, "id", mysql).primary();
                 t.string("title");
             })
+            .await?;
+        schema
+            .create("handouts", |t| {
+                uuid(t, "id", mysql).primary();
+                t.string("title");
+                t.timestamp_tz("deleted_at").nullable();
+            })
             .await
     }
 
     async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop_if_exists("handouts").await?;
         schema.drop_if_exists("lectures").await
     }
 }
@@ -103,6 +130,7 @@ fn app(builder: TestAppBuilder) -> TestAppBuilder {
         .module(StorageModule::for_root(storage()))
         .module(MediaModule::from_config())
         .module(MediaModule::for_feature::<Lecture>())
+        .module(MediaModule::for_feature::<Handout>())
         .module(LecturesModule)
 }
 
@@ -267,6 +295,30 @@ async fn store_flow(app: &TestApp) {
     assert!(!disk.exists(&slide.path).await.unwrap());
     assert!(!disk.exists(&slide.conversions["thumb"].path).await.unwrap());
     assert!(!disk.exists(&second.path).await.unwrap());
+
+    // A soft-deleting model keeps its media: a restore finds them.
+    let handout = Handout::create(
+        &*db,
+        Handout {
+            title: "Checklist".into(),
+            ..Handout::default()
+        },
+    )
+    .await
+    .unwrap()
+    .into_inner();
+    let sheet = media
+        .add(&handout, "sheets", MediaSource::bytes("list.txt", "1. Lock"))
+        .save(None)
+        .await
+        .unwrap();
+    let uow = db.uow(None, None).await;
+    let mut record = Handout::find(&uow, handout.id).await.unwrap().unwrap();
+    record.delete(&uow).await.unwrap();
+    uow.commit().await.unwrap();
+    assert!(Handout::find(&*db, handout.id).await.unwrap().is_none());
+    assert_eq!(media.all(&handout).await.unwrap().len(), 1);
+    assert!(disk.exists(&sheet.path).await.unwrap());
 }
 
 #[tokio::test]
