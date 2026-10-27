@@ -128,7 +128,7 @@ src/
   app.rs                # the platform plus every CRM module
   seed.rs               # the crm-demo seeder
 crates/
-  crm-core/             # entities, enums, migrations, roles, abilities, platform
+  crm-core/             # models, factories, enums, migrations, roles, abilities, platform
   crm-users/            # /api/v1/users, /api/v1/me
   crm-companies/        # /api/v1/companies, /api/v1/contacts (and the CSV export)
   crm-deals/            # /api/v1/deals, the board, moves, notifications
@@ -160,14 +160,14 @@ Each feature is its own crate, and the feature crates depend only on `crm-core`,
 
 | Crate | What it holds |
 |---|---|
-| `crm-core` | What every feature shares: the SeaORM entities of every table (companies, contacts, deals, activities), the enums (`Stage`, `ContactStatus`, ...), the one `crm` migration set, roles, permissions and the abilities function, the custom actions `Move`, `Export` and `Complete`, embeds such as `OwnerRef`, the notification data shape, the roles seeder, and `platform()` |
+| `crm-core` | What every feature shares: the ORM models of every table (companies, contacts, deals, activities) with their relations, scopes and factories, the enums (`Stage`, `ContactStatus`, ...), the one `crm` migration set (the activity timeline is a TimescaleDB hypertable on PostgreSQL), roles, permissions and the abilities function, the custom actions `Move`, `Export` and `Complete`, embeds such as `OwnerRef`, the notification data shape, the roles seeder, and `platform()` |
 | `crm-users` | User administration for admins, and the `roles` field added to Navree's user resource |
 | `crm-companies` | Companies and contacts, with soft deletes and the contacts CSV export |
 | `crm-deals` | Deals, the pipeline board, moves, deal events, notifications and broadcasts |
 | `crm-activities` | Notes, calls, emails, meetings and tasks, the dashboard and the daily reminders |
 | `crm-testkit` | `TestCrm`, which boots the platform and the modules a test needs |
 
-Splitting this way keeps boundaries honest (a deal can't reach into the contacts code, only into shared entities), lets Cargo build and test the features in parallel, and gives each crate a test suite that boots only what it needs. The framework itself is organised the same way; see [The crate hierarchy](/docs/architecture/crate-hierarchy/) and [Modules](/docs/architecture/modules/).
+Splitting this way keeps boundaries honest (a deal can't reach into the contacts code, only into shared models), lets Cargo build and test the features in parallel, and gives each crate a test suite that boots only what it needs. The framework itself is organised the same way; see [The crate hierarchy](/docs/architecture/crate-hierarchy/) and [Modules](/docs/architecture/modules/).
 
 ### The platform
 

@@ -588,6 +588,18 @@ pub enum Where {
         /// `NOT LIKE`.
         not: bool,
     },
+    /// Text compared with `text` ignoring letter case on every database,
+    /// non-ASCII letters included, and keeping accents (`équipe` finds
+    /// `Équipe`, not `Equipe`). `text` is taken literally: it has no
+    /// wildcards. A NULL expression never matches.
+    IgnoreCase {
+        /// The text expression.
+        expr: Expr,
+        /// The text compared with.
+        text: String,
+        /// Whether the expression contains the text or equals it.
+        mode: IgnoreCaseMode,
+    },
     /// A comparison of part of a date-time: `date(created_at) = ?`,
     /// `month(created_at) = ?`, ...
     DatePart {
@@ -751,6 +763,16 @@ impl fmt::Debug for NativeFilter {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "NativeFilter({}: {:?})", self.driver, self.value)
     }
+}
+
+/// How a [`Where::IgnoreCase`] condition compares its text.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum IgnoreCaseMode {
+    /// The expression contains the text (`Column::contains_ignore_case`).
+    Contains,
+    /// The expression equals the text (`Column::eq_ignore_case`).
+    Equals,
 }
 
 /// How a full-text condition matches.

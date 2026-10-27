@@ -1,11 +1,11 @@
-//! The CRM's closed value sets. Each is stored as a string column and sent
-//! over the API as the same string (spec §7), and parses back with
-//! [`FromStr`].
+//! The CRM's closed value sets. Each is stored as a string column (the
+//! models declare `#[model(cast = "string_enum")]`, which stores the serde
+//! name) and sent over the API as the same string (spec §7), and parses
+//! back with [`FromStr`].
 
 use std::fmt;
 use std::str::FromStr;
 
-use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
@@ -26,13 +26,13 @@ impl fmt::Display for UnknownValue {
 
 impl std::error::Error for UnknownValue {}
 
-/// Declares a string enum: the SeaORM active enum (string column), serde
-/// and OpenAPI with the same strings, `ALL` in declaration order,
-/// `as_str`, `Display` and `FromStr`.
+/// Declares a string enum: serde and OpenAPI with the contract strings
+/// (which the ORM stores), `ALL` in declaration order, `as_str`, `Display`
+/// and `FromStr`.
 macro_rules! string_enum {
     (
         $(#[$meta:meta])*
-        $name:ident, $kind:literal, db_type = $db_type:literal {
+        $name:ident, $kind:literal {
             // `tt`, not `literal`: a `literal` fragment reaches the derives
             // wrapped in an invisible group, which utoipa does not see through,
             // so the OpenAPI enum would list the variant names instead.
@@ -42,13 +42,11 @@ macro_rules! string_enum {
         $(#[$meta])*
         #[derive(
             Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord,
-            EnumIter, DeriveActiveEnum, Serialize, Deserialize, ToSchema,
+            Serialize, Deserialize, ToSchema,
         )]
-        #[sea_orm(rs_type = "String", db_type = $db_type)]
         pub enum $name {
             $(
                 $(#[$vmeta])*
-                #[sea_orm(string_value = $value)]
                 #[serde(rename = $value)]
                 $variant,
             )+
@@ -91,7 +89,7 @@ macro_rules! string_enum {
 
 string_enum! {
     /// A company's head count (`companies.size`).
-    CompanySize, "company size", db_type = "String(StringLen::N(16))" {
+    CompanySize, "company size" {
         /// 1 to 10 people.
         Tiny => "1-10",
         /// 11 to 50 people.
@@ -108,7 +106,7 @@ string_enum! {
 string_enum! {
     /// Where a contact is in the customer life cycle (`contacts.status`).
     #[derive(Default)]
-    ContactStatus, "contact status", db_type = "String(StringLen::N(16))" {
+    ContactStatus, "contact status" {
         /// Not qualified yet (the default).
         #[default]
         Lead => "lead",
@@ -125,7 +123,7 @@ string_enum! {
     /// A deal's pipeline stage (`deals.stage`), in board order; new deals
     /// start as `lead`.
     #[derive(Default)]
-    Stage, "stage", db_type = "String(StringLen::N(16))" {
+    Stage, "stage" {
         /// 10% (the default).
         #[default]
         Lead => "lead",
@@ -176,8 +174,10 @@ impl Stage {
 string_enum! {
     /// What an activity records (`activities.kind`); only tasks have due
     /// dates that matter and can be completed.
-    ActivityKind, "activity kind", db_type = "String(StringLen::N(16))" {
-        /// A note.
+    #[derive(Default)]
+    ActivityKind, "activity kind" {
+        /// A note (the default: the plainest kind).
+        #[default]
         Note => "note",
         /// A phone call.
         Call => "call",
@@ -190,15 +190,20 @@ string_enum! {
     }
 }
 
+// Each value is the morph name of a model (`#[model(morph_name = ..)]`):
+// the one an activity's `subject_record` relation loads. The doc comment
+// below is the OpenAPI description, which the API contract keeps.
 string_enum! {
     /// The kind of record an activity is attached to
     /// (`activities.subject_type`).
-    SubjectType, "subject type", db_type = "String(StringLen::N(16))" {
+    #[derive(Default)]
+    SubjectType, "subject type" {
         /// A company.
         Company => "company",
         /// A contact.
         Contact => "contact",
-        /// A deal.
+        /// A deal (the default: most activities are about deals).
+        #[default]
         Deal => "deal",
     }
 }

@@ -13,26 +13,23 @@
 //! across currencies.
 
 use std::collections::HashMap;
-use std::str::FromStr;
+
 use std::sync::Arc;
 
 use chrono::{DateTime, Datelike, Months, NaiveTime, Utc};
-use crm_core::entities::{activity, deal};
-use crm_core::{Activity, Deal, Stage};
+use crm_core::Stage;
+use crm_core::models::{Activity, ActivityScopes, Deal, DealScopes};
 use navree::access::{Accessible, CurrentAccess, Read};
 use navree::contracts::Clock;
+use navree::orm::access::AccessibleQuery;
+use navree::orm::{Builder, Expr, OrmError, Row, TableBuilder};
 use navree::prelude::*;
-use sea_orm::sea_query::{Expr, ExprTrait, Func};
-use sea_orm::{
-    ColumnTrait, Condition, ConnectionTrait, DbErr, EntityTrait, PaginatorTrait, QueryFilter,
-    QueryOrder, QuerySelect, Select,
-};
 use serde::Serialize;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::due::{Due, Today, open_tasks};
-use crate::resource::{ActivityResource, present};
+use crate::due::{Due, Today};
+use crate::resource::ActivityResource;
 
 /// How many activities `recent_activities` lists.
 pub const RECENT_ACTIVITIES: u64 = 10;
@@ -115,9 +112,7 @@ impl DashboardService {
         activities: Accessible<Activity, Read>,
     ) -> Result<Dashboard> {
         let now = self.clock.now();
-        let tx = uow.tx().await?;
-        let conn = &*tx;
-        let by_stage = stage_totals(conn, deals.clone()).await?;
+        let by_stage = stage_totals(uow, &deals).await?;
         let pipeline: Vec<PipelineStage> = Stage::ALL
             .iter()
             .map(|&stage| {
@@ -142,21 +137,23 @@ impl DashboardService {
                 .fold(0, i64::saturating_add),
             weighted_amount_cents: i64::try_from(weighted).unwrap_or(i64::MAX),
         };
-        let won_this_month = won_between(conn, deals, month_of(now)).await?;
-        let tasks = task_counts(conn, &activities, me, Today::of(now)).await?;
+        let (start, end) = month_of(now);
+        let won_this_month =
+            totals(uow, deals.apply(Deal::query()).won_between(start, end)).await?;
+        let tasks = task_counts(uow, &activities, me, Today::of(now)).await?;
         let recent = activities
-            .apply(activity::Entity::find())
-            .order_by_desc(activity::Column::CreatedAt)
-            .order_by_desc(activity::Column::Id)
+            .apply(Activity::query())
+            .newest_first()
             .limit(RECENT_ACTIVITIES)
-            .all(conn)
+            .with_all(ActivityResource::EMBEDS)
+            .get(uow)
             .await?;
         Ok(Dashboard {
             pipeline,
             won_this_month,
             open_deals,
             tasks,
-            recent_activities: present(conn, recent).await?,
+            recent_activities: recent.to_resource_collection(),
         })
     }
 }
@@ -167,24 +164,31 @@ impl DashboardService {
 /// `SUM` overflows), and [`combine`] puts them back together.
 const AMOUNT_SPLIT: i64 = 1 << 32;
 
-/// `COUNT(id)` and the two parts of the amount sum ([`AMOUNT_SPLIT`]),
-/// each `CAST(COALESCE(SUM(..), 0) AS BIGINT)`, of the deals `select`
-/// matches (the cast keeps PostgreSQL's `NUMERIC` sums readable as `i64`).
-fn with_totals(select: Select<deal::Entity>) -> Select<deal::Entity> {
-    let sum = |part: Expr| {
-        Expr::from(Func::cast_as(
-            Func::coalesce([Expr::from(Func::sum(part)), Expr::val(0_i64)]),
-            "BIGINT",
-        ))
-    };
-    let amount = || Expr::col(deal::Column::AmountCents);
-    select
-        .column_as(
-            Expr::from(Func::count(Expr::col(deal::Column::Id))),
-            "count",
+/// The deals of `deals` counted, with the two parts of their amount sum
+/// ([`AMOUNT_SPLIT`]) as `count`, `amount_high` and `amount_low`, read from
+/// a derived table of the query (its conditions, the access filter
+/// included, stay inside it). The high part is `(amount - amount % 2^32) /
+/// 2^32`, an exact division on every database (MySQL's `/` keeps
+/// decimals), and empty sums are zero.
+fn with_totals(deals: Builder<Deal>) -> TableBuilder {
+    let amount = || Expr::col("amount_cents");
+    let low = || amount().binary("%", Expr::val(AMOUNT_SPLIT));
+    let sum = |part: Expr| Expr::coalesce([Expr::sum(part), Expr::val(0_i64)]);
+    TableBuilder::from_sub(deals, "deals")
+        .select_expr(Expr::count(Expr::col("id")), "count")
+        .select_expr(
+            sum(amount().sub(low()).div(Expr::val(AMOUNT_SPLIT))),
+            "amount_high",
         )
-        .column_as(sum(amount().div(AMOUNT_SPLIT)), "amount_high")
-        .column_as(sum(amount().modulo(AMOUNT_SPLIT)), "amount_low")
+        .select_expr(sum(low()), "amount_low")
+}
+
+/// The [`DealTotals`] of a row of [`with_totals`].
+fn totals_of(row: &Row) -> Result<DealTotals, OrmError> {
+    Ok(DealTotals {
+        count: row.get("count")?,
+        amount_cents: combine(row.get("amount_high")?, row.get("amount_low")?),
+    })
 }
 
 /// `high * 2^32 + low` ([`with_totals`]), saturated to `i64`.
@@ -193,52 +197,32 @@ fn combine(high: i64, low: i64) -> i64 {
     i64::try_from(total).unwrap_or(if total < 0 { i64::MIN } else { i64::MAX })
 }
 
-/// The count and amount of the deals in each stage that has any.
-async fn stage_totals<C: ConnectionTrait>(
-    conn: &C,
-    deals: Accessible<Deal, Read>,
-) -> Result<HashMap<Stage, DealTotals>, DbErr> {
-    let select = deals
-        .apply(deal::Entity::find())
-        .select_only()
-        .column(deal::Column::Stage);
-    let rows: Vec<(String, i64, i64, i64)> = with_totals(select)
-        .group_by(deal::Column::Stage)
-        .into_tuple()
-        .all(conn)
+/// The count and amount of the deals in each stage that has any: one
+/// grouped query.
+async fn stage_totals(
+    uow: &Uow,
+    deals: &Accessible<Deal, Read>,
+) -> Result<HashMap<Stage, DealTotals>> {
+    let rows = with_totals(deals.apply(Deal::query()))
+        .select_expr(Expr::col("stage"), "stage")
+        .group_by(["stage"])
+        .get(uow)
         .await?;
-    rows.into_iter()
-        .map(|(stage, count, high, low)| {
-            let stage = Stage::from_str(&stage).map_err(|error| DbErr::Type(error.to_string()))?;
-            Ok((
-                stage,
-                DealTotals {
-                    count,
-                    amount_cents: combine(high, low),
-                },
-            ))
+    rows.iter()
+        .map(|row| {
+            // Read through the model's column, so its cast parses the stage.
+            let stage = Deal::STAGE.decode(row).map_err(AppError::internal)?;
+            Ok((stage, totals_of(row)?))
         })
         .collect()
 }
 
-/// The deals won within `[start, end)`.
-async fn won_between<C: ConnectionTrait>(
-    conn: &C,
-    deals: Accessible<Deal, Read>,
-    (start, end): (DateTime<Utc>, DateTime<Utc>),
-) -> Result<DealTotals, DbErr> {
-    let select = deals
-        .apply(deal::Entity::find())
-        .select_only()
-        .filter(deal::Column::Stage.eq(Stage::Won))
-        .filter(deal::Column::ClosedAt.gte(start))
-        .filter(deal::Column::ClosedAt.lt(end));
-    let totals: Option<(i64, i64, i64)> = with_totals(select).into_tuple().one(conn).await?;
-    let (count, high, low) = totals.unwrap_or_default();
-    Ok(DealTotals {
-        count,
-        amount_cents: combine(high, low),
-    })
+/// The count and amount of the deals `deals` matches.
+async fn totals(uow: &Uow, deals: Builder<Deal>) -> Result<DealTotals, OrmError> {
+    match with_totals(deals).first(uow).await? {
+        Some(row) => totals_of(&row),
+        None => Ok(DealTotals::default()),
+    }
 }
 
 /// The first instants of `now`'s month and of the next one (UTC).
@@ -256,27 +240,18 @@ fn month_of(now: DateTime<Utc>) -> (DateTime<Utc>, DateTime<Utc>) {
 
 /// `me`'s open tasks, overdue, due today and upcoming: assigned to `me`,
 /// or owned by `me` when unassigned.
-async fn task_counts<C: ConnectionTrait>(
-    conn: &C,
+async fn task_counts(
+    uow: &Uow,
     activities: &Accessible<Activity, Read>,
     me: Uuid,
     today: Today,
-) -> Result<TaskCounts, DbErr> {
-    let mine = Condition::any()
-        .add(activity::Column::AssigneeId.eq(me))
-        .add(
-            Condition::all()
-                .add(activity::Column::AssigneeId.is_null())
-                .add(activity::Column::OwnerId.eq(me)),
-        );
+) -> Result<TaskCounts, OrmError> {
     let count = |due: Due| {
-        activities
-            .clone()
-            .apply(activity::Entity::find())
-            .filter(open_tasks())
-            .filter(mine.clone())
-            .filter(due.condition(today))
-            .count(conn)
+        let tasks = activities
+            .apply(Activity::query())
+            .open_tasks()
+            .for_user(me);
+        due.apply(tasks, today).count(uow)
     };
     Ok(TaskCounts {
         overdue: count(Due::Overdue).await?,

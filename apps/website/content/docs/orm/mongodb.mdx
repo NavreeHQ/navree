@@ -111,6 +111,7 @@ db.deals.find({"amount": {"$gte": 10000}, "tags": "vip", "deleted_at": null}, {"
 | comparisons with a value | the query language: `{"amount": {"$gte": 10000}}` |
 | comparisons between fields or computed values | `$expr` |
 | `LIKE` | an escaped `$regex`, anchored unless the pattern starts or ends with `%` |
+| `contains_ignore_case`, `eq_ignore_case` | the text as an escaped `$regex` with the `i` option, which folds non-ASCII letters too and keeps accents |
 | date parts | `$dateToString`, `$dayOfMonth`, `$month`, `$year`, in UTC |
 | JSON paths, containment, length, keys | dot paths, `$all`, `$size`, `$exists` |
 | full text | `$text` |

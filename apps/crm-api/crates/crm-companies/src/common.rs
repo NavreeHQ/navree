@@ -1,10 +1,8 @@
 //! Helpers both resources share: input normalisation (serde
-//! `deserialize_with` functions), the `not_blank` rule, case-insensitive
-//! `LIKE` search and the documented page shape.
+//! `deserialize_with` functions), the `not_blank` rule, the search text of
+//! a query, the documented page shape and CSV cells.
 
-use navree::db::{PageMeta, contains_ignore_case};
-use sea_orm::sea_query::Expr;
-use sea_orm::{ActiveValue, ColumnTrait, Condition, DbBackend};
+use navree::db::PageMeta;
 use serde::de::value::StringDeserializer;
 use serde::{Deserialize, Deserializer, Serialize};
 use utoipa::ToSchema;
@@ -91,29 +89,16 @@ pub(crate) fn not_blank<T: AsRef<str> + ?Sized>(value: &T, _ctx: &()) -> garde::
     }
 }
 
-/// Any of `columns` contains `term`, ignoring case, non-ASCII letters
-/// included (navree-db's `contains_ignore_case`: SQLite's own `LOWER` and
-/// `LIKE` fold ASCII only). Wildcards in `term` match themselves.
-pub(crate) fn any_contains<C: ColumnTrait>(
-    backend: DbBackend,
-    columns: &[C],
-    term: &str,
-) -> Condition {
-    columns.iter().fold(Condition::any(), |condition, column| {
-        condition.add(contains_ignore_case(backend, Expr::col(*column), term))
-    })
-}
-
 /// The trimmed search text, or `None` when there is nothing to search for.
 pub(crate) fn search_text(search: Option<&str>) -> Option<&str> {
     search.map(str::trim).filter(|search| !search.is_empty())
 }
 
-/// Sets an active model's `field` when the request sent a value for it
-/// (PATCH semantics: a field left out stays unchanged).
-pub(crate) fn set_some<T: Into<sea_orm::Value>>(field: &mut ActiveValue<T>, value: Option<T>) {
+/// Sets `field` when the request sent a value for it (PATCH semantics: a
+/// field left out stays unchanged).
+pub(crate) fn set_some<T>(field: &mut T, value: Option<T>) {
     if let Some(value) = value {
-        *field = ActiveValue::Set(value);
+        *field = value;
     }
 }
 
@@ -165,22 +150,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn searches_match_any_column_ignoring_case() {
-        use crm_core::entities::company;
-        use sea_orm::sea_query::{Query, SqliteQueryBuilder};
-        let sql = Query::select()
-            .column(company::Column::Name)
-            .from(company::Entity)
-            .cond_where(any_contains(
-                DbBackend::Sqlite,
-                &[company::Column::Name, company::Column::Domain],
-                "É_%",
-            ))
-            .to_string(SqliteQueryBuilder);
-        assert!(
-            sql.contains(r#"("name" GLOB '*[Éé]_%*') OR ("domain" GLOB '*[Éé]_%*')"#),
-            "{sql}"
-        );
+    fn search_text_is_the_trimmed_term() {
+        assert_eq!(search_text(Some("  Acme ")), Some("Acme"));
+        assert_eq!(search_text(Some("   ")), None);
+        assert_eq!(search_text(None), None);
+    }
+
+    #[test]
+    fn patches_change_only_what_was_sent() {
+        let mut name = "Acme".to_owned();
+        set_some(&mut name, None);
+        assert_eq!(name, "Acme");
+        set_some(&mut name, Some("Globex".to_owned()));
+        assert_eq!(name, "Globex");
     }
 
     #[test]

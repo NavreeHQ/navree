@@ -267,11 +267,11 @@ function Built() {
           <ChapterHeading label="01 · Modules" title="Feature crates on one core.">
             <p>
               Each feature is a crate with its own module, controller, service and tests. Feature crates depend only on{" "}
-              <Code>crm-core</Code>, never on each other, so a deal can reach shared entities but never the contacts code.
+              <Code>crm-core</Code>, never on each other, so a deal can reach shared models but never the contacts code.
               Cargo builds and tests them in parallel.
             </p>
             <p>
-              <Code>crm-core</Code> holds the SeaORM entities, the migrations, the roles and the abilities function, and its{" "}
+              <Code>crm-core</Code> holds the ORM models and their factories, the migrations, the roles and the abilities function, and its{" "}
               <Code>platform()</Code> configures the framework modules once for the API and every test.
             </p>
           </ChapterHeading>

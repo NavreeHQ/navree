@@ -874,6 +874,86 @@ async fn full_text_runs_on_text_indexes() {
     t.cleanup().await;
 }
 
+/// `contains_ignore_case` and `eq_ignore_case` answer as on the SQL
+/// databases: every letter with case forms folded, accents kept, the text
+/// literal, a missing value never matching.
+#[tokio::test]
+async fn text_matches_ignoring_case_beyond_ascii() {
+    let Some(t) = TestMongo::connect("text_matches_ignoring_case_beyond_ascii").await else {
+        return;
+    };
+    let mongo = &t.db;
+    for name in [
+        "Équipe Lyon",
+        "EQUIPE PARIS",
+        "Ölwechsel GmbH",
+        "50% Off",
+        "500 Offices",
+        "A_B Ltd",
+        "AXB Ltd",
+        "[x]*?",
+    ] {
+        Company::create(
+            mongo,
+            Company {
+                name: name.into(),
+                ..Company::default()
+            },
+        )
+        .await
+        .unwrap();
+    }
+    let names = |filter: Filter| async move {
+        Company::query()
+            .where_(filter)
+            .order_by(Company::NAME)
+            .pluck(mongo, Company::NAME)
+            .await
+            .unwrap()
+    };
+    for term in ["équipe", "ÉQUIPE", "Équipe", "pe ly"] {
+        assert_eq!(
+            names(Company::NAME.contains_ignore_case(term)).await,
+            ["Équipe Lyon"],
+            "{term}"
+        );
+    }
+    // Accents are kept: `equipe` is another word.
+    assert_eq!(
+        names(Company::NAME.contains_ignore_case("equipe")).await,
+        ["EQUIPE PARIS"]
+    );
+    assert_eq!(
+        names(Company::NAME.contains_ignore_case("ölwechsel")).await,
+        ["Ölwechsel GmbH"]
+    );
+    // The text is literal.
+    assert_eq!(
+        names(Company::NAME.contains_ignore_case("50%")).await,
+        ["50% Off"]
+    );
+    assert_eq!(
+        names(Company::NAME.contains_ignore_case("a_b")).await,
+        ["A_B Ltd"]
+    );
+    assert_eq!(
+        names(Company::NAME.contains_ignore_case("[X]*?")).await,
+        ["[x]*?"]
+    );
+    assert_eq!(
+        names(Company::NAME.eq_ignore_case("a_b LTD")).await,
+        ["A_B Ltd"]
+    );
+    assert!(names(Company::NAME.eq_ignore_case("a_b")).await.is_empty());
+    // No company has a country: nothing matches, not even the empty text.
+    assert!(
+        names(Company::COUNTRY.contains_ignore_case(""))
+            .await
+            .is_empty()
+    );
+    t.cleanup().await;
+}
+
 #[tokio::test]
 async fn native_filters_and_pipelines() {
     let Some(t) = TestMongo::connect("native_filters_and_pipelines").await else {

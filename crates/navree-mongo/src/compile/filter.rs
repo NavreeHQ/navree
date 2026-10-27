@@ -6,8 +6,8 @@
 use bson::{Bson, Document, doc};
 use chrono::{Datelike, NaiveDate, NaiveTime, Timelike};
 use navree_orm::ir::{
-    Boolean, ColumnRef, DatePart, Expr, FullText, FullTextMode, InValues, Operator, Where,
-    WhereClause,
+    Boolean, ColumnRef, DatePart, Expr, FullText, FullTextMode, IgnoreCaseMode, InValues, Operator,
+    Where, WhereClause,
 };
 use navree_orm::{OrmError, Value};
 
@@ -219,6 +219,15 @@ pub(crate) fn condition(
                 *not,
             )?
         }
+        Where::IgnoreCase { expr, text, mode } => regex_condition(
+            cx,
+            scope,
+            pending,
+            expr,
+            &ignore_case_regex(text, *mode)?,
+            true,
+            false,
+        )?,
         Where::DatePart {
             part,
             expr,
@@ -267,6 +276,26 @@ pub(crate) fn condition(
         Where::Invalid(message) => return Err(invalid(message.clone())),
         other => return Err(unsupported(format!("the condition {other:?}"))),
     })
+}
+
+/// The regular expression of a [`Where::IgnoreCase`] condition: `text`
+/// literally (its LIKE wildcards escaped), anywhere in the value or as the
+/// whole value. Matched with the `i` option, which folds every letter with
+/// case forms (MongoDB's regular expressions are Unicode) and keeps
+/// accents.
+fn ignore_case_regex(text: &str, mode: IgnoreCaseMode) -> Result<String, OrmError> {
+    let mut literal = String::with_capacity(text.len() + 2);
+    for c in text.chars() {
+        if matches!(c, '\\' | '%' | '_') {
+            literal.push('\\');
+        }
+        literal.push(c);
+    }
+    Ok(like_regex(&match mode {
+        IgnoreCaseMode::Contains => format!("%{literal}%"),
+        IgnoreCaseMode::Equals => literal,
+        other => return Err(unsupported(format!("the text comparison {other:?}"))),
+    }))
 }
 
 /// The field path of `expr` when it is a column of the document (not a
@@ -375,6 +404,7 @@ pub(crate) fn kind(filter: &Where) -> &'static str {
         Where::In { .. } => "IN",
         Where::Between { .. } => "BETWEEN",
         Where::Like { .. } => "LIKE",
+        Where::IgnoreCase { .. } => "a text match ignoring case",
         Where::DatePart { .. } => "a date-part condition (`where_date`, `where_month`, ...)",
         Where::Exists { .. } => "EXISTS (`where_exists`, `where_has`)",
         Where::Group(_) => "a group of conditions",
@@ -1092,6 +1122,27 @@ mod tests {
         assert_eq!(
             compile(cmp("title", "ilike", "%co_")).unwrap(),
             doc! { "title": { "$regex": "co.\\z", "$options": "is" } }
+        );
+    }
+
+    #[test]
+    fn text_ignoring_case_becomes_a_literal_case_insensitive_regex() {
+        let ignore_case = |text: &str, mode| Where::IgnoreCase {
+            expr: column("title"),
+            text: text.to_owned(),
+            mode,
+        };
+        assert_eq!(
+            compile(ignore_case("Équipe", IgnoreCaseMode::Contains)).unwrap(),
+            doc! { "title": { "$regex": "Équipe", "$options": "is" } }
+        );
+        assert_eq!(
+            compile(ignore_case("50%_off\\", IgnoreCaseMode::Contains)).unwrap(),
+            doc! { "title": { "$regex": "50%_off\\\\", "$options": "is" } }
+        );
+        assert_eq!(
+            compile(ignore_case("a.c+", IgnoreCaseMode::Equals)).unwrap(),
+            doc! { "title": { "$regex": "^a\\.c\\+\\z", "$options": "is" } }
         );
     }
 

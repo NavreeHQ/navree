@@ -3,10 +3,10 @@ import { ACTION_OPTIONS, entryLabel } from "@/features/audit/actions";
 
 /**
  * The audit actions crm-api records for each operation the CRM offers. Data rows come from
- * navree-audit's change observer (`<entity>.<created|updated|deleted>` for each write through
- * `Repo`); companies and contacts are soft-deleted with `Repo::update` (crm-companies
- * companies/service.rs, contacts/service.rs), deals and activities with `Repo::delete`; users
- * are never deleted. Role changes come from navree-access (`assign_role` on create,
+ * navree-audit's change observer (`<model>.<created|updated|deleted>` for each model write in a
+ * request's unit of work); companies and contacts are soft-deleted by an update that sets
+ * `deleted_at` (crm-companies companies/service.rs, contacts/service.rs), deals and activities
+ * are deleted; users are never deleted. Role changes come from navree-access (`assign_role` on create,
  * `sync_user_roles` on PATCH, crm-users service.rs); sign-ins from navree-auth.
  */
 const RECORDED_BY_OPERATION: Record<string, string[]> = {
