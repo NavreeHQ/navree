@@ -376,7 +376,9 @@ pub(crate) fn identifier(sql: &str, token: &Token) -> Option<String> {
 }
 
 fn is_word(sql: &str, token: Option<&Token>, word: &str) -> bool {
-    token.is_some_and(|t| t.kind == TokenKind::Word && sql[t.start..t.end].eq_ignore_ascii_case(word))
+    token.is_some_and(|t| {
+        t.kind == TokenKind::Word && sql[t.start..t.end].eq_ignore_ascii_case(word)
+    })
 }
 
 /// Whether `sql` mentions identifier `name` (bare or quoted, any case).
@@ -418,7 +420,10 @@ pub(crate) fn rename_index_sql(sql: &str, to: &str) -> String {
     match tokens.get(i) {
         Some(name) => {
             // A schema-qualified name: `"main"."old"`.
-            let name = if tokens.get(i + 1).is_some_and(|t| &sql[t.start..t.end] == ".") {
+            let name = if tokens
+                .get(i + 1)
+                .is_some_and(|t| &sql[t.start..t.end] == ".")
+            {
                 tokens.get(i + 2).unwrap_or(name)
             } else {
                 name
@@ -674,7 +679,10 @@ mod tests {
         assert!(id.primary && id.autoincrement);
         assert_eq!(id.definition, "INTEGER NOT NULL");
         assert_eq!(parsed.columns[1].definition, "INTEGER NOT NULL");
-        assert_eq!(parsed.columns[2].definition, "VARCHAR NOT NULL COLLATE NOCASE");
+        assert_eq!(
+            parsed.columns[2].definition,
+            "VARCHAR NOT NULL COLLATE NOCASE"
+        );
         assert_eq!(
             parsed.columns[3].definition,
             "VARCHAR CHECK (\"status\" IN ('a', 'b')) DEFAULT 'a'"
@@ -722,7 +730,10 @@ mod tests {
     #[test]
     fn renames_indexes_in_sql() {
         assert_eq!(
-            rename_index_sql(r#"CREATE UNIQUE INDEX "old" ON "t" ("a") WHERE a > 0"#, "new"),
+            rename_index_sql(
+                r#"CREATE UNIQUE INDEX "old" ON "t" ("a") WHERE a > 0"#,
+                "new"
+            ),
             r#"CREATE UNIQUE INDEX "new" ON "t" ("a") WHERE a > 0"#
         );
         assert_eq!(

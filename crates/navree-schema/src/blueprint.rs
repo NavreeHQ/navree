@@ -817,9 +817,8 @@ impl Blueprint {
     pub fn foreign(&mut self, columns: impl Columns) -> ForeignKeyBuilder<'_> {
         let columns = columns.into_columns();
         let name = self.foreign_name(&columns);
-        self.commands.push(Command::Foreign(ForeignKeyDefinition::new(
-            name, columns,
-        )));
+        self.commands
+            .push(Command::Foreign(ForeignKeyDefinition::new(name, columns)));
         match self.commands.last_mut() {
             Some(Command::Foreign(foreign)) => ForeignKeyBuilder::new(foreign),
             _ => unreachable!("a foreign key command was just pushed"),
@@ -828,13 +827,16 @@ impl Blueprint {
 
     // ----- drops and renames ----------------------------------------------
 
-    /// Drops the table.
-    pub fn drop(&mut self) {
+    /// Drops the table ([`Schema::drop`](crate::Schema::drop) does it in one
+    /// call).
+    pub fn drop_table(&mut self) {
         self.commands.push(Command::Drop);
     }
 
-    /// Drops the table if it exists.
-    pub fn drop_if_exists(&mut self) {
+    /// Drops the table if it exists
+    /// ([`Schema::drop_if_exists`](crate::Schema::drop_if_exists) does it in
+    /// one call).
+    pub fn drop_table_if_exists(&mut self) {
         self.commands.push(Command::DropIfExists);
     }
 

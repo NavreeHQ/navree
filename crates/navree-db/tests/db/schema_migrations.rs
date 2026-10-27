@@ -333,7 +333,11 @@ async fn refresh_rolls_back_then_migrates() {
     let refreshed = Migrator::refresh(app.ctx(), None).await.unwrap();
     assert_eq!(refreshed.reverted.migrations.len(), 3);
     assert_eq!(refreshed.migrated.migrations.len(), 3);
-    assert_eq!(count(&db, "companies").await, 0, "the tables were recreated");
+    assert_eq!(
+        count(&db, "companies").await,
+        0,
+        "the tables were recreated"
+    );
 
     Migrator::rollback(app.ctx()).await.unwrap();
     Migrator::run(
@@ -375,7 +379,10 @@ async fn pretend_records_the_sql_and_changes_nothing() {
         tags[0].starts_with("CREATE TABLE \"tags\""),
         "a SeaORM migration's statements are recorded too: {tags:?}"
     );
-    assert!(tables(&db).await.is_empty(), "nothing ran, not even the migrations table");
+    assert!(
+        tables(&db).await.is_empty(),
+        "nothing ran, not even the migrations table"
+    );
 
     Migrator::up(app.ctx()).await.unwrap();
     let report = Migrator::rollback_with(
@@ -453,7 +460,9 @@ async fn a_migration_leaving_dangling_references_rolls_back() {
     let error = Migrator::up(app.ctx()).await.unwrap_err().to_string();
     assert!(error.contains("crm/m0005_orphan_deal"), "{error}");
     assert!(
-        error.contains("leaves 1 row whose foreign key points nowhere: `deals` row 1 references `companies`"),
+        error.contains(
+            "leaves 1 row whose foreign key points nowhere: `deals` row 1 references `companies`"
+        ),
         "{error}"
     );
     let db = db(&app).await;
@@ -599,7 +608,9 @@ async fn the_commands() {
     run(&app, "migrate", &["--step"]).await.unwrap();
     assert_eq!(batches(&db).await.len(), 3);
     run(&app, "migrate:status", &["--pending"]).await.unwrap();
-    run(&app, "migrate:rollback", &["--step", "1"]).await.unwrap();
+    run(&app, "migrate:rollback", &["--step", "1"])
+        .await
+        .unwrap();
     assert!(!tables(&db).await.contains(&"tags".to_owned()));
     run(&app, "migrate:rollback", &["--batch=2"]).await.unwrap();
     assert!(!tables(&db).await.contains(&"deals".to_owned()));
@@ -616,7 +627,11 @@ async fn the_commands() {
             .unwrap_err(),
         "--drop-types drops PostgreSQL types; this database is SQLite"
     );
-    assert_eq!(batches(&db).await.len(), 3, "checked before dropping anything");
+    assert_eq!(
+        batches(&db).await.len(),
+        3,
+        "checked before dropping anything"
+    );
     run(&app, "migrate:fresh", &["--drop-views"]).await.unwrap();
     assert_eq!(batches(&db).await.len(), 3);
     let dir = tempfile::tempdir().unwrap();
@@ -627,11 +642,15 @@ async fn the_commands() {
     assert!(Path::new(&path).is_file());
 
     assert_eq!(
-        run(&app, "migrate:rollback", &["--steps", "2"]).await.unwrap_err(),
+        run(&app, "migrate:rollback", &["--steps", "2"])
+            .await
+            .unwrap_err(),
         "unknown option `--steps` for migrate:rollback; it takes --step <n>, --batch <n>, --pretend, --force"
     );
     assert_eq!(
-        run(&app, "migrate:rollback", &["--step", "two"]).await.unwrap_err(),
+        run(&app, "migrate:rollback", &["--step", "two"])
+            .await
+            .unwrap_err(),
         "`--step` takes a positive whole number, not `two`"
     );
     assert_eq!(
@@ -655,7 +674,12 @@ async fn destructive_commands_need_force_in_production() {
     )
     .await;
     run(&app, "migrate", &[]).await.unwrap();
-    for command in ["migrate:fresh", "migrate:reset", "migrate:refresh", "migrate:rollback"] {
+    for command in [
+        "migrate:fresh",
+        "migrate:reset",
+        "migrate:refresh",
+        "migrate:rollback",
+    ] {
         let error = run(&app, command, &[]).await.unwrap_err();
         assert!(
             error.starts_with(&format!(

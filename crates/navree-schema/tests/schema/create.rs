@@ -32,11 +32,14 @@ async fn keys_and_indexes() {
                 t.uuid("user_id");
                 t.string("email").unique();
                 t.string("role").index();
-                t.string("nickname").nullable().unique_named("memberships_nick");
+                t.string("nickname")
+                    .nullable()
+                    .unique_named("memberships_nick");
                 t.text("bio").nullable();
                 t.timestamp_tz("deleted_at").nullable();
                 t.primary(["workspace_id", "user_id"]);
-                t.unique(["workspace_id", "email"]).name("memberships_workspace_email");
+                t.unique(["workspace_id", "email"])
+                    .name("memberships_workspace_email");
                 t.index(["workspace_id", "role"]).algorithm("btree");
                 t.index("deleted_at").where_raw("deleted_at IS NULL");
                 t.raw_index("lower(email)", "memberships_email_lower_index");
@@ -48,7 +51,7 @@ async fn keys_and_indexes() {
 
 #[tokio::test]
 async fn postgres_index_options() {
-    let sql = sql_for!(vec![("postgres", postgres())], |schema| {
+    let sql = sql_for!([("postgres", postgres())], |schema| {
         schema
             .create("articles", |t| {
                 t.id();
@@ -144,7 +147,7 @@ async fn table_options() {
 
 #[tokio::test]
 async fn schema_qualified_tables() {
-    let sql = sql_for!(vec![("postgres", postgres())], |schema| {
+    let sql = sql_for!([("postgres", postgres())], |schema| {
         schema
             .create("analytics.events", |t| {
                 t.id();

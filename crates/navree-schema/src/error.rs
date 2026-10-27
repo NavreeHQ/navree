@@ -69,7 +69,9 @@ pub enum SchemaError {
     },
     /// The operation needs a live database, but the schema is offline
     /// ([`Schema::offline`](crate::Schema::offline)).
-    #[error("{operation} needs a database connection; this schema is offline (it only records statements)")]
+    #[error(
+        "{operation} needs a database connection; this schema is offline (it only records statements)"
+    )]
     Offline {
         /// What was attempted, e.g. `reading the columns of \`deals\``.
         operation: String,

@@ -17,7 +17,9 @@ async fn adding_columns() {
                     t.boolean("taxed").default(false);
                 });
                 t.integer("position").default(0).first();
-                t.foreign_uuid("owner_id").nullable().constrained_on("users", "id");
+                t.foreign_uuid("owner_id")
+                    .nullable()
+                    .constrained_on("users", "id");
                 t.json("tags").nullable().comment("free-form labels");
             })
             .await
@@ -27,23 +29,24 @@ async fn adding_columns() {
 
 #[tokio::test]
 async fn adding_an_auto_increment_key() {
-    let sql = sql_for!(
-        vec![("postgres", postgres()), ("mysql", mysql())],
-        |schema| {
-            schema
-                .table("legacy", |t| {
-                    t.id();
-                })
-                .await
-        }
-    );
+    let sql = sql_for!([("postgres", postgres()), ("mysql", mysql())], |schema| {
+        schema
+            .table("legacy", |t| {
+                t.id();
+            })
+            .await
+    });
     insta::assert_snapshot!(sql);
 }
 
 #[tokio::test]
 async fn changing_columns() {
     let sql = sql_for!(
-        vec![("postgres", postgres()), ("mysql", mysql()), ("mariadb", mariadb())],
+        [
+            ("postgres", postgres()),
+            ("mysql", mysql()),
+            ("mariadb", mariadb())
+        ],
         |schema| {
             schema
                 .table("deals", |t| {
@@ -67,7 +70,7 @@ async fn changing_columns() {
 #[tokio::test]
 async fn changing_identity_and_generated_columns_on_postgres() {
     let sql = sql_for!(
-        vec![
+        [
             ("postgres 16", navree_schema::Target::postgres(16)),
             ("postgres 17", postgres()),
         ],
@@ -106,22 +109,19 @@ async fn renaming_and_dropping() {
 
 #[tokio::test]
 async fn dropping_keys() {
-    let sql = sql_for!(
-        vec![("postgres", postgres()), ("mysql", mysql())],
-        |schema| {
-            schema
-                .table("deals", |t| {
-                    t.drop_primary();
-                    t.drop_foreign(["company_id"]);
-                    t.drop_constrained_foreign_id("owner_id");
-                    t.drop_fulltext(["title", "body"]);
-                    t.rename_index("deals_title_index", "deals_title");
-                    t.primary(["id", "created_at"]);
-                    t.comment("pipeline deals");
-                })
-                .await
-        }
-    );
+    let sql = sql_for!([("postgres", postgres()), ("mysql", mysql())], |schema| {
+        schema
+            .table("deals", |t| {
+                t.drop_primary();
+                t.drop_foreign(["company_id"]);
+                t.drop_constrained_foreign_id("owner_id");
+                t.drop_fulltext(["title", "body"]);
+                t.rename_index("deals_title_index", "deals_title");
+                t.primary(["id", "created_at"]);
+                t.comment("pipeline deals");
+            })
+            .await
+    });
     insta::assert_snapshot!(sql);
 }
 

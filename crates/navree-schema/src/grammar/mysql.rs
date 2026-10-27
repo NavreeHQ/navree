@@ -151,7 +151,11 @@ fn create_table(
     }
     let mut sql = format!(
         "CREATE {}TABLE {}{} ({})",
-        if blueprint.temporary { "TEMPORARY " } else { "" },
+        if blueprint.temporary {
+            "TEMPORARY "
+        } else {
+            ""
+        },
         if blueprint.if_not_exists {
             "IF NOT EXISTS "
         } else {
@@ -161,7 +165,11 @@ fn create_table(
         body.join(", ")
     );
     let options = ctx.options;
-    if let Some(charset) = blueprint.charset.as_ref().or(options.mysql_charset.as_ref()) {
+    if let Some(charset) = blueprint
+        .charset
+        .as_ref()
+        .or(options.mysql_charset.as_ref())
+    {
         sql.push_str(&format!(" DEFAULT CHARACTER SET {charset}"));
     }
     if let Some(collation) = blueprint
@@ -293,7 +301,10 @@ pub(crate) fn column_definition(
     if let Some(on_update) = &column.on_update {
         sql.push_str(&format!(" ON UPDATE {on_update}"));
     } else if column.use_current_on_update {
-        sql.push_str(&format!(" ON UPDATE {}", current_time(column.kind.precision())));
+        sql.push_str(&format!(
+            " ON UPDATE {}",
+            current_time(column.kind.precision())
+        ));
     }
     if column.invisible {
         sql.push_str(" INVISIBLE");

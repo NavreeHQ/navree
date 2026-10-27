@@ -111,7 +111,10 @@ pub(super) async fn dump(conn: &dyn SchemaConnection, script: &mut Script) -> Sc
             Vec::new(),
         )
         .await?;
-        if let Some(sql) = shown.first().and_then(|r| text(r, "SQL Original Statement")) {
+        if let Some(sql) = shown
+            .first()
+            .and_then(|r| text(r, "SQL Original Statement"))
+        {
             triggers.push(without_definer(&sql));
         }
     }
@@ -132,10 +135,8 @@ async fn in_dependency_order(conn: &dyn SchemaConnection, views: Vec<String>) ->
     .await
     .unwrap_or_default();
     let names: BTreeSet<&str> = views.iter().map(String::as_str).collect();
-    let mut waiting: BTreeMap<String, BTreeSet<String>> = views
-        .iter()
-        .map(|v| (v.clone(), BTreeSet::new()))
-        .collect();
+    let mut waiting: BTreeMap<String, BTreeSet<String>> =
+        views.iter().map(|v| (v.clone(), BTreeSet::new())).collect();
     for row in &usage {
         if let (Some(view), Some(used)) = (text(row, "view_name"), text(row, "used"))
             && view != used
@@ -271,7 +272,10 @@ mod tests {
             without_definer("CREATE DEFINER=app@'%' PROCEDURE `p`() SELECT 1"),
             "CREATE PROCEDURE `p`() SELECT 1"
         );
-        assert_eq!(without_definer("CREATE TABLE t (a INT)"), "CREATE TABLE t (a INT)");
+        assert_eq!(
+            without_definer("CREATE TABLE t (a INT)"),
+            "CREATE TABLE t (a INT)"
+        );
     }
 
     #[test]

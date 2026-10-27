@@ -206,7 +206,10 @@ impl<'c> Schema<'c> {
         self.notices.lock().expect("notices lock").clone()
     }
 
-    fn connection(&self, operation: impl FnOnce() -> String) -> SchemaResult<&dyn SchemaConnection> {
+    fn connection(
+        &self,
+        operation: impl FnOnce() -> String,
+    ) -> SchemaResult<&dyn SchemaConnection> {
         self.conn
             .as_ref()
             .map(Conn::get)
@@ -275,18 +278,17 @@ impl<'c> Schema<'c> {
     pub async fn build(&self, blueprint: Blueprint) -> SchemaResult {
         let target = self.target().await?;
         let commands = blueprint.resolved_commands();
-        let state = if target.dialect() == Dialect::Sqlite
-            && sqlite::needs_state(&blueprint, &commands)
-        {
-            match &self.conn {
-                Some(conn) => {
-                    Some(inspect::sqlite_table_state(conn.get(), blueprint.table()).await?)
+        let state =
+            if target.dialect() == Dialect::Sqlite && sqlite::needs_state(&blueprint, &commands) {
+                match &self.conn {
+                    Some(conn) => {
+                        Some(inspect::sqlite_table_state(conn.get(), blueprint.table()).await?)
+                    }
+                    None => None,
                 }
-                None => None,
-            }
-        } else {
-            None
-        };
+            } else {
+                None
+            };
         let ctx = Context {
             target: &target,
             options: &self.options,
@@ -406,14 +408,14 @@ impl<'c> Schema<'c> {
     /// Drops `table`.
     pub async fn drop(&self, table: &str) -> SchemaResult {
         let mut blueprint = self.blueprint(table, false);
-        blueprint.drop();
+        blueprint.drop_table();
         self.build(blueprint).await
     }
 
     /// Drops `table` if it exists.
     pub async fn drop_if_exists(&self, table: &str) -> SchemaResult {
         let mut blueprint = self.blueprint(table, false);
-        blueprint.drop_if_exists();
+        blueprint.drop_table_if_exists();
         self.build(blueprint).await
     }
 
@@ -440,11 +442,10 @@ impl<'c> Schema<'c> {
 
     /// Whether view `view` exists.
     pub async fn has_view(&self, view: &str) -> SchemaResult<bool> {
-        Ok(self
-            .views()
-            .await?
-            .iter()
-            .any(|v| v.name.eq_ignore_ascii_case(crate::grammar::unqualified(view))))
+        Ok(self.views().await?.iter().any(|v| {
+            v.name
+                .eq_ignore_ascii_case(crate::grammar::unqualified(view))
+        }))
     }
 
     /// The tables of the current schema.
@@ -493,7 +494,11 @@ impl<'c> Schema<'c> {
     }
 
     /// Whether `table` has every one of `columns`.
-    pub async fn has_columns(&self, table: &str, columns: impl crate::Columns) -> SchemaResult<bool> {
+    pub async fn has_columns(
+        &self,
+        table: &str,
+        columns: impl crate::Columns,
+    ) -> SchemaResult<bool> {
         let existing = self.column_listing(table).await?;
         Ok(columns
             .into_columns()
@@ -567,12 +572,23 @@ impl<'c> Schema<'c> {
 
     /// Whether `table` has a foreign key named so, or on exactly these
     /// columns.
-    pub async fn has_foreign_key(&self, table: &str, foreign: impl Into<IndexRef>) -> SchemaResult<bool> {
+    pub async fn has_foreign_key(
+        &self,
+        table: &str,
+        foreign: impl Into<IndexRef>,
+    ) -> SchemaResult<bool> {
         let foreign = foreign.into();
-        Ok(self.foreign_keys(table).await?.iter().any(|found| match &foreign {
-            IndexRef::Name(name) => found.name.as_deref().is_some_and(|n| n.eq_ignore_ascii_case(name)),
-            IndexRef::Columns(columns) => &found.columns == columns,
-        }))
+        Ok(self
+            .foreign_keys(table)
+            .await?
+            .iter()
+            .any(|found| match &foreign {
+                IndexRef::Name(name) => found
+                    .name
+                    .as_deref()
+                    .is_some_and(|n| n.eq_ignore_ascii_case(name)),
+                IndexRef::Columns(columns) => &found.columns == columns,
+            }))
     }
 
     /// Alters `table` with `define` when it has `column`.
@@ -696,7 +712,9 @@ impl<'c> Schema<'c> {
         let names: Vec<String> = views
             .iter()
             .map(|v| match (&v.schema, dialect) {
-                (Some(schema), Dialect::Postgres) => table(dialect, &format!("{schema}.{}", v.name)),
+                (Some(schema), Dialect::Postgres) => {
+                    table(dialect, &format!("{schema}.{}", v.name))
+                }
                 _ => table(dialect, &v.name),
             })
             .collect();
@@ -705,7 +723,10 @@ impl<'c> Schema<'c> {
                 self.execute(&format!("DROP VIEW {} CASCADE", names.join(", ")))
                     .await
             }
-            Dialect::MySql => self.execute(&format!("DROP VIEW {}", names.join(", "))).await,
+            Dialect::MySql => {
+                self.execute(&format!("DROP VIEW {}", names.join(", ")))
+                    .await
+            }
             Dialect::Sqlite => {
                 for name in names {
                     self.execute(&format!("DROP VIEW IF EXISTS {name}")).await?;
@@ -1006,7 +1027,9 @@ impl<'c> Schema<'c> {
         self.timescale_statement(
             name,
             timescale::refresh_policy_statement(name, policy)?,
-            format!("the refresh policy of `{name}` is skipped: as a plain view it is always current"),
+            format!(
+                "the refresh policy of `{name}` is skipped: as a plain view it is always current"
+            ),
         )
         .await
     }

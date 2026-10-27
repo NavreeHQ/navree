@@ -52,7 +52,11 @@ async fn rows(conn: &DatabaseConnection, sql: &str) -> Vec<Vec<Option<String>>> 
 
 fn texts(rows: Vec<Vec<Option<String>>>) -> Vec<Vec<String>> {
     rows.into_iter()
-        .map(|row| row.into_iter().map(|c| c.unwrap_or_else(|| "NULL".to_owned())).collect())
+        .map(|row| {
+            row.into_iter()
+                .map(|c| c.unwrap_or_else(|| "NULL".to_owned()))
+                .collect()
+        })
         .collect()
 }
 
@@ -87,7 +91,8 @@ async fn creates_and_reads_back_tables() {
             t.foreign_id("company_id").constrained().cascade_on_delete();
             t.string("title").comment("SQLite keeps no comments");
             t.decimal("amount", 12, 2).default(0);
-            t.enumeration("stage", ["lead", "won", "lost"]).default("lead");
+            t.enumeration("stage", ["lead", "won", "lost"])
+                .default("lead");
             t.integer("total").stored_as("amount * 100");
             t.timestamps();
             t.soft_deletes();
@@ -111,7 +116,12 @@ async fn creates_and_reads_back_tables() {
             .await
             .unwrap()
     );
-    assert!(!schema.has_columns("deals", ["title", "nope"]).await.unwrap());
+    assert!(
+        !schema
+            .has_columns("deals", ["title", "nope"])
+            .await
+            .unwrap()
+    );
     assert_eq!(
         schema.column_listing("deals").await.unwrap(),
         [
@@ -126,7 +136,10 @@ async fn creates_and_reads_back_tables() {
             "deleted_at"
         ]
     );
-    assert_eq!(schema.column_type("deals", "amount", false).await.unwrap(), "numeric");
+    assert_eq!(
+        schema.column_type("deals", "amount", false).await.unwrap(),
+        "numeric"
+    );
     let columns = schema.columns("deals").await.unwrap();
     let id = &columns[0];
     assert!(id.auto_increment && !id.nullable);
@@ -147,21 +160,39 @@ async fn creates_and_reads_back_tables() {
     );
     assert!(
         schema
-            .has_index("companies", "companies_name_unique", Some(IndexKind::Unique))
+            .has_index(
+                "companies",
+                "companies_name_unique",
+                Some(IndexKind::Unique)
+            )
             .await
             .unwrap()
     );
-    assert!(schema.has_index("deals", ["id"], Some(IndexKind::Primary)).await.unwrap());
+    assert!(
+        schema
+            .has_index("deals", ["id"], Some(IndexKind::Primary))
+            .await
+            .unwrap()
+    );
     let foreign = schema.foreign_keys("deals").await.unwrap();
     assert_eq!(foreign.len(), 1);
     assert_eq!(foreign[0].columns, ["company_id"]);
     assert_eq!(foreign[0].foreign_table, "companies");
     assert_eq!(foreign[0].foreign_columns, ["id"]);
     assert_eq!(foreign[0].on_delete, Some(ReferentialAction::Cascade));
-    assert!(schema.has_foreign_key("deals", ["company_id"]).await.unwrap());
+    assert!(
+        schema
+            .has_foreign_key("deals", ["company_id"])
+            .await
+            .unwrap()
+    );
 
     exec(&conn, "INSERT INTO companies (name) VALUES ('Acme')").await;
-    exec(&conn, "INSERT INTO deals (company_id, title) VALUES (1, 'Big one')").await;
+    exec(
+        &conn,
+        "INSERT INTO deals (company_id, title) VALUES (1, 'Big one')",
+    )
+    .await;
     assert_eq!(
         texts(rows(&conn, "SELECT stage, amount, total FROM deals").await),
         [["lead", "0", "0"]]
@@ -230,13 +261,22 @@ async fn alterations_keep_the_data() {
         "a NULL stays NULL when the column gains a default"
     );
     let listed = rows(&conn, "SELECT listed_at FROM products").await;
-    assert!(listed.iter().all(|r| r[0].is_some()), "CURRENT_TIMESTAMP filled the rows");
+    assert!(
+        listed.iter().all(|r| r[0].is_some()),
+        "CURRENT_TIMESTAMP filled the rows"
+    );
     let sql = table_sql(&conn, "products").await;
     assert!(sql.contains("\"price\" NUMERIC DEFAULT 0"), "{sql}");
     assert!(!sql.contains("legacy"), "{sql}");
     let indexes = schema.index_listing("products").await.unwrap();
-    assert!(indexes.contains(&"products_sku_unique".to_owned()), "{indexes:?}");
-    assert!(indexes.contains(&"products_name_index".to_owned()), "{indexes:?}");
+    assert!(
+        indexes.contains(&"products_sku_unique".to_owned()),
+        "{indexes:?}"
+    );
+    assert!(
+        indexes.contains(&"products_name_index".to_owned()),
+        "{indexes:?}"
+    );
     let partial = rows(
         &conn,
         "SELECT sql FROM sqlite_master WHERE name = 'products_name_index'",
@@ -244,10 +284,16 @@ async fn alterations_keep_the_data() {
     .await;
     assert_eq!(
         partial[0][0].as_deref(),
-        Some("CREATE INDEX \"products_name_index\" ON \"products\" (\"title\") WHERE price IS NOT NULL"),
+        Some(
+            "CREATE INDEX \"products_name_index\" ON \"products\" (\"title\") WHERE price IS NOT NULL"
+        ),
         "the renamed column is renamed in the index too"
     );
-    let triggers = rows(&conn, "SELECT name FROM sqlite_master WHERE type = 'trigger'").await;
+    let triggers = rows(
+        &conn,
+        "SELECT name FROM sqlite_master WHERE type = 'trigger'",
+    )
+    .await;
     assert_eq!(texts(triggers), [["products_touch"]]);
     let duplicate = conn
         .execute_unprepared("INSERT INTO products (sku, title) VALUES ('a-1', 'Again')")
@@ -255,7 +301,11 @@ async fn alterations_keep_the_data() {
     assert!(duplicate.is_err(), "the unique index survived the rebuild");
 
     // The new id continues after the existing rows (AUTOINCREMENT kept).
-    exec(&conn, "INSERT INTO products (sku, title) VALUES ('c-3', 'Clamp')").await;
+    exec(
+        &conn,
+        "INSERT INTO products (sku, title) VALUES ('c-3', 'Clamp')",
+    )
+    .await;
     assert_eq!(
         texts(rows(&conn, "SELECT max(id) FROM products").await),
         [["3"]]
@@ -276,7 +326,11 @@ async fn changing_one_column_and_dropping_another_rebuilds_once() {
         })
         .await
         .unwrap();
-    exec(&conn, "INSERT INTO companies (name, domain) VALUES ('Acme', 'acme.test')").await;
+    exec(
+        &conn,
+        "INSERT INTO companies (name, domain) VALUES ('Acme', 'acme.test')",
+    )
+    .await;
     let before = schema.statements().len();
     schema
         .table("companies", |t| {
@@ -286,13 +340,22 @@ async fn changing_one_column_and_dropping_another_rebuilds_once() {
         .await
         .unwrap();
     let ran = &schema.statements()[before..];
-    assert!(ran[0].starts_with("CREATE TABLE \"__temp__companies\""), "{ran:?}");
+    assert!(
+        ran[0].starts_with("CREATE TABLE \"__temp__companies\""),
+        "{ran:?}"
+    );
     assert!(
         !ran.iter().any(|s| s.contains("DROP COLUMN")),
         "the rebuild leaves the column out: {ran:?}"
     );
-    assert_eq!(schema.column_listing("companies").await.unwrap(), ["id", "name"]);
-    assert_eq!(texts(rows(&conn, "SELECT name FROM companies").await), [["Acme"]]);
+    assert_eq!(
+        schema.column_listing("companies").await.unwrap(),
+        ["id", "name"]
+    );
+    assert_eq!(
+        texts(rows(&conn, "SELECT name FROM companies").await),
+        [["Acme"]]
+    );
 }
 
 #[tokio::test]
@@ -318,7 +381,10 @@ async fn adding_a_required_column_to_a_table_with_rows_says_how_to_fix_it() {
         error.to_string(),
         "invalid definition of `notes`: column `title` is NOT NULL without a default, and the table has rows: give it a default or make it nullable"
     );
-    assert_eq!(texts(rows(&conn, "SELECT body FROM notes").await), [["hello"]]);
+    assert_eq!(
+        texts(rows(&conn, "SELECT body FROM notes").await),
+        [["hello"]]
+    );
 }
 
 #[tokio::test]
@@ -352,13 +418,29 @@ async fn keys_and_foreign_keys_change_by_rebuild() {
     schema
         .table("books", |t| {
             t.primary("id");
-            t.foreign("author_id").references("id").on("authors").cascade_on_delete();
+            t.foreign("author_id")
+                .references("id")
+                .on("authors")
+                .cascade_on_delete();
         })
         .await
         .unwrap();
-    assert!(schema.has_index("books", ["id"], Some(IndexKind::Primary)).await.unwrap());
-    assert!(schema.has_foreign_key("books", ["author_id"]).await.unwrap());
-    assert_eq!(texts(rows(&conn, "SELECT title FROM books").await), [["First"]]);
+    assert!(
+        schema
+            .has_index("books", ["id"], Some(IndexKind::Primary))
+            .await
+            .unwrap()
+    );
+    assert!(
+        schema
+            .has_foreign_key("books", ["author_id"])
+            .await
+            .unwrap()
+    );
+    assert_eq!(
+        texts(rows(&conn, "SELECT title FROM books").await),
+        [["First"]]
+    );
 
     // Dropping a referenced table's column by rebuild keeps the children.
     schema
@@ -367,7 +449,10 @@ async fn keys_and_foreign_keys_change_by_rebuild() {
         })
         .await
         .unwrap();
-    assert_eq!(texts(rows(&conn, "SELECT count(*) FROM books").await), [["1"]]);
+    assert_eq!(
+        texts(rows(&conn, "SELECT count(*) FROM books").await),
+        [["1"]]
+    );
     assert!(
         rows(&conn, "PRAGMA foreign_key_check").await.is_empty(),
         "no dangling references"
@@ -381,13 +466,20 @@ async fn keys_and_foreign_keys_change_by_rebuild() {
         .await
         .unwrap();
     assert!(schema.foreign_keys("books").await.unwrap().is_empty());
-    assert!(!schema.has_index("books", ["id"], Some(IndexKind::Primary)).await.unwrap());
+    assert!(
+        !schema
+            .has_index("books", ["id"], Some(IndexKind::Primary))
+            .await
+            .unwrap()
+    );
     let error = schema
         .table("books", |t| t.drop_foreign("books_author_id_foreign"))
         .await
         .unwrap_err();
     assert!(
-        error.to_string().contains("SQLite foreign keys have no names"),
+        error
+            .to_string()
+            .contains("SQLite foreign keys have no names"),
         "{error}"
     );
 }
@@ -419,7 +511,10 @@ async fn rebuilding_a_referenced_table_with_foreign_keys_on_is_refused() {
         })
         .await
         .unwrap_err();
-    assert!(matches!(error, SchemaError::Unsupported { .. }), "{error:?}");
+    assert!(
+        matches!(error, SchemaError::Unsupported { .. }),
+        "{error:?}"
+    );
     assert_eq!(
         error.to_string(),
         "SQLite does not support rebuilding `parents` while foreign keys are on and children references it: dropping the old table would run their ON DELETE actions; run the change through the migrator (it migrates SQLite with foreign keys off and checks them before committing), or turn `PRAGMA foreign_keys` off outside a transaction"
@@ -501,7 +596,12 @@ async fn hypertables_are_indexed_tables_on_sqlite() {
             "SQLite does not support TimescaleDB: `events` is a regular table with an index on `occurred_at`; its retention (90 days) policy is skipped"
         ]
     );
-    assert!(schema.has_index("events", ["occurred_at"], None).await.unwrap());
+    assert!(
+        schema
+            .has_index("events", ["occurred_at"], None)
+            .await
+            .unwrap()
+    );
 
     exec(
         &conn,
@@ -522,13 +622,22 @@ async fn hypertables_are_indexed_tables_on_sqlite() {
         .unwrap();
     assert!(schema.has_view("events_daily").await.unwrap());
     assert_eq!(
-        texts(rows(&conn, "SELECT day, kind, total, amount FROM events_daily ORDER BY day, kind").await),
+        texts(
+            rows(
+                &conn,
+                "SELECT day, kind, total, amount FROM events_daily ORDER BY day, kind"
+            )
+            .await
+        ),
         [
             ["2026-10-26 00:00:00", "sale", "2", "12"],
             ["2026-10-27 00:00:00", "refund", "1", "2"]
         ]
     );
-    schema.drop_continuous_aggregate("events_daily").await.unwrap();
+    schema
+        .drop_continuous_aggregate("events_daily")
+        .await
+        .unwrap();
     assert!(!schema.has_view("events_daily").await.unwrap());
 
     // Converting an existing table adds the index it lacks.
@@ -540,18 +649,31 @@ async fn hypertables_are_indexed_tables_on_sqlite() {
         })
         .await
         .unwrap();
-    exec(&conn, "INSERT INTO audit_logs (action, created_at) VALUES ('login', '2026-10-27 08:00:00')").await;
+    exec(
+        &conn,
+        "INSERT INTO audit_logs (action, created_at) VALUES ('login', '2026-10-27 08:00:00')",
+    )
+    .await;
     schema
         .convert_to_hypertable(
             "audit_logs",
-            Hypertable::on("created_at").chunk_interval("1 day").migrate_data(),
+            Hypertable::on("created_at")
+                .chunk_interval("1 day")
+                .migrate_data(),
         )
         .await
         .unwrap();
-    assert!(schema.has_index("audit_logs", ["created_at"], None).await.unwrap());
+    assert!(
+        schema
+            .has_index("audit_logs", ["created_at"], None)
+            .await
+            .unwrap()
+    );
     assert_eq!(
         schema.notices().last().map(String::as_str),
-        Some("SQLite does not support TimescaleDB: `audit_logs` is a regular table with an index on `created_at`")
+        Some(
+            "SQLite does not support TimescaleDB: `audit_logs` is a regular table with an index on `created_at`"
+        )
     );
     // Converting again finds the index and adds nothing.
     let before = schema.statements().len();
@@ -601,7 +723,8 @@ async fn pretending_reads_the_database_and_changes_nothing() {
     // The migrator pretends through the migration context: reads go to its
     // reader, statements are recorded in the context.
     let reader: Arc<dyn SchemaConnection> = Arc::new(conn.clone());
-    let cx = MigrationContext::pretending("notes/m0002_drop_body", SchemaOptions::default(), reader);
+    let cx =
+        MigrationContext::pretending("notes/m0002_drop_body", SchemaOptions::default(), reader);
     cx.clone()
         .scope(async {
             let schema = Schema::new(&conn);
@@ -611,8 +734,16 @@ async fn pretending_reads_the_database_and_changes_nothing() {
         })
         .await
         .unwrap();
-    assert_eq!(cx.statements(), ["ALTER TABLE \"notes\" DROP COLUMN \"body\""]);
-    assert!(Schema::new(&conn).has_column("notes", "body").await.unwrap());
+    assert_eq!(
+        cx.statements(),
+        ["ALTER TABLE \"notes\" DROP COLUMN \"body\""]
+    );
+    assert!(
+        Schema::new(&conn)
+            .has_column("notes", "body")
+            .await
+            .unwrap()
+    );
 }
 
 #[tokio::test]
@@ -664,15 +795,30 @@ async fn dumps_load_into_an_empty_database_and_dump_the_same() {
     let target = TempSqlite::new();
     let fresh = target.connect().await;
     let loaded = Schema::new(&fresh).load(&dump).await.unwrap();
-    assert_eq!(loaded, 9, "tables, indexes, the view, the trigger and two rows");
+    assert_eq!(
+        loaded, 9,
+        "tables, indexes, the view, the trigger and two rows"
+    );
     let again = Schema::new(&fresh)
         .dump(&DumpOptions::default().with_data("navree_migrations"))
         .await
         .unwrap();
-    assert_eq!(again, dump, "loading a dump and dumping again gives the same script");
     assert_eq!(
-        texts(rows(&fresh, "SELECT module, name, batch FROM navree_migrations ORDER BY name").await),
-        [["crm", "m0001_create_companies", "1"], ["crm", "m0002_create_deals", "1"]]
+        again, dump,
+        "loading a dump and dumping again gives the same script"
+    );
+    assert_eq!(
+        texts(
+            rows(
+                &fresh,
+                "SELECT module, name, batch FROM navree_migrations ORDER BY name"
+            )
+            .await
+        ),
+        [
+            ["crm", "m0001_create_companies", "1"],
+            ["crm", "m0002_create_deals", "1"]
+        ]
     );
     assert!(
         rows(&fresh, "SELECT * FROM companies").await.is_empty(),

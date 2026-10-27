@@ -166,7 +166,8 @@ pub fn add_migration(src: &str, stem: &str) -> Option<Edit> {
     };
     let (lines, trailing) = split(src);
     let present = |line: &str| {
-        line.contains(&format!("migration!({stem})")) || line.contains(&format!("{stem}::Migration)"))
+        line.contains(&format!("migration!({stem})"))
+            || line.contains(&format!("{stem}::Migration)"))
     };
     if lines.iter().any(|l| present(l)) {
         return Some(Edit::Unchanged);

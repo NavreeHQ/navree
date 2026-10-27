@@ -246,8 +246,7 @@ pub(crate) async fn detect(conn: &dyn SchemaConnection) -> SchemaResult<Target> 
                 } else if let Some(available) =
                     text(row, "available").and_then(|v| Version::parse(&v))
                 {
-                    let preloaded =
-                        text(row, "preload").is_some_and(|p| p.contains("timescaledb"));
+                    let preloaded = text(row, "preload").is_some_and(|p| p.contains("timescaledb"));
                     if preloaded && boolean(row, "superuser") {
                         target = target.with_timescaledb_installable(available);
                     }
@@ -404,7 +403,9 @@ pub(crate) async fn views(
 
 /// The user-defined types of the current schema(s) (PostgreSQL), with
 /// their kind (`e` enum, `d` domain, `c` composite, `r` range ...).
-pub(crate) async fn postgres_types(conn: &dyn SchemaConnection) -> SchemaResult<Vec<(String, String)>> {
+pub(crate) async fn postgres_types(
+    conn: &dyn SchemaConnection,
+) -> SchemaResult<Vec<(String, String)>> {
     let sql = "SELECT t.typname AS name, n.nspname AS schema, t.typtype AS kind \
         FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace \
         LEFT JOIN pg_class c ON c.oid = t.typrelid \
@@ -417,7 +418,10 @@ pub(crate) async fn postgres_types(conn: &dyn SchemaConnection) -> SchemaResult<
         .map(|r| {
             let name = text(r, "name").unwrap_or_default();
             let schema = text(r, "schema").unwrap_or_default();
-            (format!("{schema}.{name}"), text(r, "kind").unwrap_or_default())
+            (
+                format!("{schema}.{name}"),
+                text(r, "kind").unwrap_or_default(),
+            )
         })
         .collect())
 }
@@ -468,7 +472,9 @@ pub(crate) async fn columns(
                         collation: text(r, "collation"),
                         nullable: boolean(r, "nullable"),
                         auto_increment: identity.is_some()
-                            || default.as_deref().is_some_and(|d| d.starts_with("nextval(")),
+                            || default
+                                .as_deref()
+                                .is_some_and(|d| d.starts_with("nextval(")),
                         default: if generated.is_some() {
                             None
                         } else {
@@ -534,7 +540,9 @@ pub(crate) async fn columns(
                 values.push(s(schema));
             }
             let found = rows(conn, &sql, values).await?;
-            let create = sqlite_create_sql(conn, table_name).await?.unwrap_or_default();
+            let create = sqlite_create_sql(conn, table_name)
+                .await?
+                .unwrap_or_default();
             let parsed = TableState::from_create_sql(&create);
             let primary_count = found
                 .iter()
@@ -1037,7 +1045,9 @@ pub(crate) async fn key_state(
         if index.primary {
             state.primary = Some((index.name.clone(), index.columns.clone()));
         } else if index.unique {
-            state.uniques.push((index.name.clone(), index.columns.clone()));
+            state
+                .uniques
+                .push((index.name.clone(), index.columns.clone()));
         }
     }
     let name = unqualified(table_name);

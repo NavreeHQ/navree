@@ -97,7 +97,9 @@ fn compile_command(
             ident(D, from),
             ident(D, to)
         )),
-        Command::DropIndex { kind, name: index, .. } => match kind {
+        Command::DropIndex {
+            kind, name: index, ..
+        } => match kind {
             IndexKind::Primary => {
                 let constraint = index
                     .clone()
@@ -131,10 +133,9 @@ fn compile_command(
         )),
         Command::Drop => out.push(format!("DROP TABLE {t}")),
         Command::DropIfExists => out.push(format!("DROP TABLE IF EXISTS {t}")),
-        Command::Comment(comment) => out.push(format!(
-            "COMMENT ON TABLE {t} IS {}",
-            string(D, comment)
-        )),
+        Command::Comment(comment) => {
+            out.push(format!("COMMENT ON TABLE {t} IS {}", string(D, comment)))
+        }
     }
     Ok(())
 }
@@ -158,7 +159,11 @@ fn create_table(
     }
     Ok(format!(
         "CREATE {}TABLE {}{} ({})",
-        if blueprint.temporary { "TEMPORARY " } else { "" },
+        if blueprint.temporary {
+            "TEMPORARY "
+        } else {
+            ""
+        },
         if blueprint.if_not_exists {
             "IF NOT EXISTS "
         } else {

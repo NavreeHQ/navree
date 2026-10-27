@@ -26,7 +26,8 @@ async fn tables_columns_keys_and_alterations() {
             t.foreign_id("company_id").constrained().cascade_on_delete();
             t.string("title").comment("what is being sold");
             t.decimal("amount", 12, 2).unsigned().default(0);
-            t.enumeration("stage", ["lead", "won", "lost"]).default("lead");
+            t.enumeration("stage", ["lead", "won", "lost"])
+                .default("lead");
             t.set("flags", ["hot", "cold"]).nullable();
             t.integer("cents").stored_as("amount * 100");
             t.integer("half").virtual_as("cents / 2");
@@ -64,14 +65,22 @@ async fn tables_columns_keys_and_alterations() {
             t.ulid("public_id");
             t.ip_address("ip");
             t.mac_address("mac");
-            t.geometry("spot").subtype("point").srid(4326).spatial_index();
+            t.geometry("spot")
+                .subtype("point")
+                .srid(4326)
+                .spatial_index();
             t.integer("secret").invisible().default(0);
         })
         .await
         .unwrap();
 
     assert!(schema.has_table("deals").await.unwrap());
-    assert!(schema.has_columns("deals", ["stage", "flags"]).await.unwrap());
+    assert!(
+        schema
+            .has_columns("deals", ["stage", "flags"])
+            .await
+            .unwrap()
+    );
     let columns = schema.columns("deals").await.unwrap();
     assert!(columns[0].auto_increment);
     let half = columns.iter().find(|c| c.name == "half").unwrap();
@@ -126,7 +135,12 @@ async fn tables_columns_keys_and_alterations() {
         "owner",
         "placed after title"
     );
-    assert!(schema.has_index("deals", "deals_by_phase", None).await.unwrap());
+    assert!(
+        schema
+            .has_index("deals", "deals_by_phase", None)
+            .await
+            .unwrap()
+    );
     assert_eq!(column(&conn, "SELECT title FROM deals").await, ["Big"]);
 
     schema
@@ -167,12 +181,21 @@ async fn hypertables_and_aggregates_fall_back_to_tables_and_views() {
         .unwrap();
     assert!(
         schema
-            .has_index("readings", ["id", "taken_at", "sensor_id"], Some(IndexKind::Primary))
+            .has_index(
+                "readings",
+                ["id", "taken_at", "sensor_id"],
+                Some(IndexKind::Primary)
+            )
             .await
             .unwrap(),
         "the same key as on TimescaleDB"
     );
-    assert!(schema.has_index("readings", ["taken_at"], None).await.unwrap());
+    assert!(
+        schema
+            .has_index("readings", ["taken_at"], None)
+            .await
+            .unwrap()
+    );
     assert!(
         schema
             .has_index("readings", ["sensor_id", "taken_at"], None)

@@ -89,11 +89,13 @@ impl<'a> Splitter<'a> {
 
     fn run(mut self) -> Vec<String> {
         while self.at < self.bytes.len() {
-            if self.dialect == Dialect::MySql && self.start.is_none() && self.at_line_start() {
-                if let Some(next) = self.delimiter_directive() {
-                    self.at = next;
-                    continue;
-                }
+            if self.dialect == Dialect::MySql
+                && self.start.is_none()
+                && self.at_line_start()
+                && let Some(next) = self.delimiter_directive()
+            {
+                self.at = next;
+                continue;
             }
             if self.depth == 0 && self.sql[self.at..].starts_with(self.delimiter.as_str()) {
                 let end = self.at;
@@ -172,10 +174,7 @@ impl<'a> Splitter<'a> {
 
     /// `--` starts a comment, except on MySQL when no space follows (`1--1`).
     fn dash_comment(&self) -> bool {
-        self.dialect != Dialect::MySql
-            || self
-                .peek(2)
-                .is_none_or(|b| b.is_ascii_whitespace())
+        self.dialect != Dialect::MySql || self.peek(2).is_none_or(|b| b.is_ascii_whitespace())
     }
 
     fn skip_line(&mut self) {

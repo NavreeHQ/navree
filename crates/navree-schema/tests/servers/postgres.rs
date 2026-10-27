@@ -30,7 +30,8 @@ async fn tables_columns_keys_and_alterations() {
             t.foreign_id("company_id").constrained().cascade_on_delete();
             t.string("title").comment("what is being sold");
             t.decimal("amount", 12, 2).default(0);
-            t.enumeration("stage", ["lead", "won", "lost"]).default("lead");
+            t.enumeration("stage", ["lead", "won", "lost"])
+                .default("lead");
             t.integer("probability").default(10);
             t.integer("cents").stored_as("(amount * 100)::integer");
             t.jsonb("meta").default(serde_json::json!({}));
@@ -75,7 +76,8 @@ async fn tables_columns_keys_and_alterations() {
             t.ip_address("ip");
             t.mac_address("mac");
             t.tsvector("search");
-            t.big_integer("ordinal").generated_as_with("START WITH 1000 INCREMENT BY 10");
+            t.big_integer("ordinal")
+                .generated_as_with("START WITH 1000 INCREMENT BY 10");
         })
         .await
         .unwrap();
@@ -97,11 +99,17 @@ async fn tables_columns_keys_and_alterations() {
         Some("what is being sold")
     );
     assert_eq!(
-        schema.column_type("samples", "synced_at", true).await.unwrap(),
+        schema
+            .column_type("samples", "synced_at", true)
+            .await
+            .unwrap(),
         "timestamp with time zone"
     );
     assert_eq!(
-        schema.column_type("samples", "legacy_at", true).await.unwrap(),
+        schema
+            .column_type("samples", "legacy_at", true)
+            .await
+            .unwrap(),
         "timestamp(0) without time zone"
     );
     assert!(
@@ -112,7 +120,11 @@ async fn tables_columns_keys_and_alterations() {
     );
     assert!(
         schema
-            .has_index("deals", "deals_company_id_title_unique", Some(IndexKind::Unique))
+            .has_index(
+                "deals",
+                "deals_company_id_title_unique",
+                Some(IndexKind::Unique)
+            )
             .await
             .unwrap()
     );
@@ -130,7 +142,10 @@ async fn tables_columns_keys_and_alterations() {
         "INSERT INTO deals (company_id, title, amount) VALUES (1, 'Big', 12.5)",
     )
     .await;
-    assert_eq!(column(&conn, "SELECT cents::text FROM deals").await, ["1250"]);
+    assert_eq!(
+        column(&conn, "SELECT cents::text FROM deals").await,
+        ["1250"]
+    );
 
     schema
         .table("deals", |t| {
@@ -162,7 +177,12 @@ async fn tables_columns_keys_and_alterations() {
     assert_eq!(probability.default.as_deref(), Some("25"));
     assert!(schema.has_column("deals", "phase").await.unwrap());
     assert!(!schema.has_column("deals", "meta").await.unwrap());
-    assert!(schema.has_index("deals", "deals_by_phase", None).await.unwrap());
+    assert!(
+        schema
+            .has_index("deals", "deals_by_phase", None)
+            .await
+            .unwrap()
+    );
     assert_eq!(
         column(&conn, "SELECT title FROM deals").await,
         ["Big"],
@@ -246,7 +266,11 @@ async fn hypertables_policies_and_continuous_aggregates() {
     );
     assert!(
         schema
-            .has_index("events", ["id", "occurred_at", "workspace_id"], Some(IndexKind::Primary))
+            .has_index(
+                "events",
+                ["id", "occurred_at", "workspace_id"],
+                Some(IndexKind::Primary)
+            )
             .await
             .unwrap(),
         "the primary key was widened with the time and partition columns"
@@ -279,7 +303,11 @@ async fn hypertables_policies_and_continuous_aggregates() {
         .await
         .unwrap();
     assert_eq!(
-        column(&conn, "SELECT total::text || '/' || amount::text FROM events_daily").await,
+        column(
+            &conn,
+            "SELECT total::text || '/' || amount::text FROM events_daily"
+        )
+        .await,
         ["2/12"]
     );
 
@@ -293,7 +321,11 @@ async fn hypertables_policies_and_continuous_aggregates() {
         })
         .await
         .unwrap();
-    exec(&conn, "INSERT INTO audit_logs (action) VALUES ('login'), ('logout')").await;
+    exec(
+        &conn,
+        "INSERT INTO audit_logs (action) VALUES ('login'), ('logout')",
+    )
+    .await;
     let refused = schema
         .convert_to_hypertable("audit_logs", "created_at")
         .await
@@ -302,7 +334,9 @@ async fn hypertables_policies_and_continuous_aggregates() {
     schema
         .convert_to_hypertable(
             "audit_logs",
-            Hypertable::on("created_at").chunk_interval("1 week").migrate_data(),
+            Hypertable::on("created_at")
+                .chunk_interval("1 week")
+                .migrate_data(),
         )
         .await
         .unwrap();
@@ -312,7 +346,10 @@ async fn hypertables_policies_and_continuous_aggregates() {
             .await
             .unwrap()
     );
-    assert_eq!(column(&conn, "SELECT count(*) FROM audit_logs").await, ["2"]);
+    assert_eq!(
+        column(&conn, "SELECT count(*) FROM audit_logs").await,
+        ["2"]
+    );
 
     // A table referenced by a foreign key cannot have its key widened.
     schema
@@ -395,7 +432,9 @@ async fn without_timescaledb_hypertables_are_regular_tables() {
     assert!(schema.has_index("metrics", ["at"], None).await.unwrap());
     assert_eq!(
         schema.notices(),
-        ["TimescaleDB is turned off (`schema.timescaledb = \"off\"`): `metrics` is a regular table with an index on `at`; its retention (30 days) policy is skipped"]
+        [
+            "TimescaleDB is turned off (`schema.timescaledb = \"off\"`): `metrics` is a regular table with an index on `at`; its retention (30 days) policy is skipped"
+        ]
     );
     schema
         .create_continuous_aggregate(
@@ -411,7 +450,11 @@ async fn without_timescaledb_hypertables_are_regular_tables() {
     )
     .await;
     assert_eq!(
-        column(&conn, "SELECT hour::text || '=' || mean::text FROM metrics_hourly").await,
+        column(
+            &conn,
+            "SELECT hour::text || '=' || mean::text FROM metrics_hourly"
+        )
+        .await,
         ["2026-10-27 10:00:00+00=3"]
     );
     conn.close().await.unwrap();
