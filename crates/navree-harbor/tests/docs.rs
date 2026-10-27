@@ -298,7 +298,9 @@ fn the_skill() {
     };
     example().unwrap();
     assert!(
-        skill.contains("fake.run(&Cmd::new(\"ssh\").arg(\"navree@203.0.113.10\").arg(\"bash -s\"))?;"),
+        skill.contains(
+            "fake.run(&Cmd::new(\"ssh\").arg(\"navree@203.0.113.10\").arg(\"bash -s\"))?;"
+        ),
         "the skill's example changed: update this test"
     );
 }

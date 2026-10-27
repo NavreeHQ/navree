@@ -629,7 +629,10 @@ mod tests {
             "cargo build --release --package crm-api --features postgres --target x86_64-unknown-linux-gnu && cp /target/x86_64-unknown-linux-gnu/release/crm-api /out/crm-api"
         );
         let joined = args.join(" ");
-        assert!(joined.starts_with("run --rm --platform linux/amd64 "), "{joined}");
+        assert!(
+            joined.starts_with("run --rm --platform linux/amd64 "),
+            "{joined}"
+        );
         assert!(
             joined.contains("--mount type=bind,source=/home/me/crm,target=/src"),
             "{joined}"
