@@ -59,8 +59,13 @@ pub enum MongoCommand {
     Count(Count),
     /// `insertMany`.
     Insert(Insert),
+    /// `insertMany` with `ordered: false`, skipping the documents a unique
+    /// index refuses as duplicates.
+    InsertOrIgnore(Insert),
     /// `updateMany`.
     Update(Update),
+    /// `bulkWrite` of `updateOne`s with `upsert: true`.
+    Upsert(Upsert),
     /// `deleteMany`.
     Delete(Delete),
 }
@@ -131,6 +136,17 @@ pub enum UpdateDocument {
     Pipeline(Vec<Document>),
 }
 
+/// A `bulkWrite` of upserts: per row, the document matching its filter is
+/// updated, or one is inserted from the filter's fields and the update's
+/// when none matches.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Upsert {
+    /// The collection.
+    pub collection: String,
+    /// `(filter, update)` per row, in order.
+    pub rows: Vec<(Document, Document)>,
+}
+
 /// A `deleteMany`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Delete {
@@ -147,8 +163,9 @@ impl MongoCommand {
             MongoCommand::Find(find) => &find.collection,
             MongoCommand::Aggregate(aggregate) => &aggregate.collection,
             MongoCommand::Count(count) => &count.collection,
-            MongoCommand::Insert(insert) => &insert.collection,
+            MongoCommand::Insert(insert) | MongoCommand::InsertOrIgnore(insert) => &insert.collection,
             MongoCommand::Update(update) => &update.collection,
+            MongoCommand::Upsert(upsert) => &upsert.collection,
             MongoCommand::Delete(delete) => &delete.collection,
         }
     }
@@ -236,18 +253,24 @@ impl MongoCommand {
             }
             MongoCommand::Insert(insert) => {
                 let _ = write!(out, "db.{}.insertMany([", insert.collection);
-                match mode {
-                    Mode::Plain => stages(out, &insert.documents, mode, pretty),
-                    Mode::Shape => {
-                        if let Some(first) = insert.documents.first() {
-                            document(out, first, mode);
-                            if insert.documents.len() > 1 {
-                                out.push_str(", ...");
-                            }
-                        }
-                    }
-                }
+                rows(out, &insert.documents, mode, pretty, |out, doc| document(out, doc, mode));
                 out.push_str("])");
+            }
+            MongoCommand::InsertOrIgnore(insert) => {
+                let _ = write!(out, "db.{}.insertMany([", insert.collection);
+                rows(out, &insert.documents, mode, pretty, |out, doc| document(out, doc, mode));
+                out.push_str("], {\"ordered\": false})");
+            }
+            MongoCommand::Upsert(upsert) => {
+                let _ = write!(out, "db.{}.bulkWrite([", upsert.collection);
+                rows(out, &upsert.rows, mode, pretty, |out, (filter, update)| {
+                    out.push_str("{\"updateOne\": {\"filter\": ");
+                    document(out, filter, mode);
+                    out.push_str(", \"update\": ");
+                    document(out, update, mode);
+                    out.push_str(", \"upsert\": true}}");
+                });
+                out.push_str("], {\"ordered\": false})");
             }
             MongoCommand::Update(update) => {
                 let _ = write!(out, "db.{}.updateMany(", update.collection);
@@ -291,19 +314,42 @@ enum Mode {
     Shape,
 }
 
-/// Documents in a list: separated by commas, or each on a line of its own,
-/// indented, when `pretty`.
+/// The stages of a pipeline: separated by commas, or each on a line of its
+/// own, indented, when `pretty`. In shape mode every stage shows (they are
+/// structure).
 fn stages(out: &mut String, pipeline: &[Document], mode: Mode, pretty: bool) {
-    for (i, stage) in pipeline.iter().enumerate() {
+    list(out, pipeline, pretty, |out, stage| document(out, stage, mode));
+}
+
+/// The rows of a write: like [`stages`], but in shape mode only the first,
+/// then `...` (the rest only repeat its shape with other values).
+fn rows<T>(out: &mut String, rows: &[T], mode: Mode, pretty: bool, item: impl Fn(&mut String, &T)) {
+    match mode {
+        Mode::Plain => list(out, rows, pretty, item),
+        Mode::Shape => {
+            if let Some(first) = rows.first() {
+                item(out, first);
+                if rows.len() > 1 {
+                    out.push_str(", ...");
+                }
+            }
+        }
+    }
+}
+
+/// Items separated by commas, or each on a line of its own, indented, when
+/// `pretty`.
+fn list<T>(out: &mut String, items: &[T], pretty: bool, item: impl Fn(&mut String, &T)) {
+    for (i, value) in items.iter().enumerate() {
         match (pretty, i) {
             (true, 0) => out.push_str("\n  "),
             (true, _) => out.push_str(",\n  "),
             (false, 0) => {}
             (false, _) => out.push_str(", "),
         }
-        document(out, stage, mode);
+        item(out, value);
     }
-    if pretty && !pipeline.is_empty() {
+    if pretty && !items.is_empty() {
         out.push('\n');
     }
 }
@@ -509,5 +555,42 @@ mod tests {
             limit: None,
         });
         assert_eq!(format!("{find:#}"), find.to_string(), "a find is one line");
+    }
+
+    #[test]
+    fn bulk_writes_render_as_the_shell_takes_them() {
+        let ignore = MongoCommand::InsertOrIgnore(Insert {
+            collection: "tags".into(),
+            documents: vec![doc! { "name": "vip" }, doc! { "name": "new" }],
+        });
+        assert_eq!(
+            ignore.to_string(),
+            r#"db.tags.insertMany([{"name": "vip"}, {"name": "new"}], {"ordered": false})"#
+        );
+        assert_eq!(
+            ignore.shape(),
+            r#"db.tags.insertMany([{"name": ?}, ...], {"ordered": false})"#
+        );
+        let upsert = MongoCommand::Upsert(Upsert {
+            collection: "rates".into(),
+            rows: vec![
+                (doc! { "code": "EUR" }, doc! { "$set": { "rate": 1.1 } }),
+                (doc! { "code": "NOK" }, doc! { "$set": { "rate": 0.09 } }),
+            ],
+        });
+        assert_eq!(
+            upsert.to_string(),
+            r#"db.rates.bulkWrite([{"updateOne": {"filter": {"code": "EUR"}, "update": {"$set": {"rate": 1.1}}, "upsert": true}}, {"updateOne": {"filter": {"code": "NOK"}, "update": {"$set": {"rate": 0.09}}, "upsert": true}}], {"ordered": false})"#
+        );
+        assert_eq!(
+            upsert.shape(),
+            r#"db.rates.bulkWrite([{"updateOne": {"filter": {"code": ?}, "update": {"$set": {"rate": ?}}, "upsert": true}}, ...], {"ordered": false})"#
+        );
+        assert_eq!(
+            format!("{upsert:#}"),
+            "db.rates.bulkWrite([\n  {\"updateOne\": {\"filter\": {\"code\": \"EUR\"}, \"update\": {\"$set\": {\"rate\": 1.1}}, \"upsert\": true}},\n  {\"updateOne\": {\"filter\": {\"code\": \"NOK\"}, \"update\": {\"$set\": {\"rate\": 0.09}}, \"upsert\": true}}\n], {\"ordered\": false})"
+        );
+        assert_eq!(upsert.collection(), "rates");
+        assert!(upsert.into_aggregate().is_none());
     }
 }

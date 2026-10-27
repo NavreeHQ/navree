@@ -6,6 +6,7 @@
 mod models;
 mod support;
 
+mod bulk;
 mod commands;
 mod crud;
 mod migrations;

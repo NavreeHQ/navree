@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use bson::{Document, doc};
@@ -216,7 +216,6 @@ impl MongoDb {
             )),
             db: self.clone(),
             state,
-            transaction: AtomicBool::new(false),
         })
     }
 
@@ -358,7 +357,6 @@ pub struct MongoSession {
     db: MongoDb,
     state: Arc<SessionState>,
     driver: Arc<MongoDriver>,
-    transaction: AtomicBool,
 }
 
 impl MongoSession {
@@ -371,27 +369,27 @@ impl MongoSession {
     /// session are in it.
     pub async fn start_transaction(&self) -> MongoResult {
         self.state.session.lock().await.start_transaction().await?;
-        self.transaction.store(true, Ordering::Relaxed);
+        self.state.transaction.store(true, Ordering::Relaxed);
         Ok(())
     }
 
     /// Commits the transaction.
     pub async fn commit_transaction(&self) -> MongoResult {
         let result = self.state.session.lock().await.commit_transaction().await;
-        self.transaction.store(false, Ordering::Relaxed);
+        self.state.transaction.store(false, Ordering::Relaxed);
         Ok(result?)
     }
 
     /// Aborts the transaction.
     pub async fn abort_transaction(&self) -> MongoResult {
         let result = self.state.session.lock().await.abort_transaction().await;
-        self.transaction.store(false, Ordering::Relaxed);
+        self.state.transaction.store(false, Ordering::Relaxed);
         Ok(result?)
     }
 
     /// Whether a transaction is open.
     pub fn in_transaction(&self) -> bool {
-        self.transaction.load(Ordering::Relaxed)
+        self.state.transaction.load(Ordering::Relaxed)
     }
 }
 

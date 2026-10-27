@@ -83,7 +83,7 @@ pub(crate) fn insert(insert: &InsertIr) -> Result<Insert, OrmError> {
 }
 
 /// A column written by name: a field, no table, no path.
-fn plain_field(column: &str) -> Result<String, OrmError> {
+pub(crate) fn plain_field(column: &str) -> Result<String, OrmError> {
     let parsed = ColumnRef::parse(column.to_owned());
     if parsed.table.is_some() || !parsed.path.is_empty() {
         return Err(invalid(format!(

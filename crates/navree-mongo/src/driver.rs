@@ -18,7 +18,9 @@ use navree_orm::{DocumentDriver, InsertOutcome, OrmError, Row, Value};
 use navree_telemetry::{EventKind, QueryExecuted, Telemetry, TelemetryEvent};
 use tokio::sync::Mutex;
 
-use crate::command::{Aggregate, Count, Delete, Find, Insert, MongoCommand, Update, UpdateDocument};
+use crate::command::{
+    Aggregate, Count, Delete, Find, Insert, MongoCommand, Update, UpdateDocument, Upsert,
+};
 use crate::compile::{self, Target};
 use crate::convert::{document_row, from_bson};
 use crate::error::{DRIVER, MongoError, invalid, orm_error};
@@ -43,6 +45,8 @@ pub(crate) struct Shared {
 pub(crate) struct SessionState {
     /// The session.
     pub(crate) session: Mutex<ClientSession>,
+    /// Whether a transaction is open in it.
+    pub(crate) transaction: AtomicBool,
     /// Whether an operation failed with a transient transaction error
     /// (a write conflict): the transaction can be retried.
     pub(crate) transient: AtomicBool,
@@ -52,6 +56,7 @@ impl SessionState {
     pub(crate) fn new(session: ClientSession) -> Arc<SessionState> {
         Arc::new(SessionState {
             session: Mutex::new(session),
+            transaction: AtomicBool::new(false),
             transient: AtomicBool::new(false),
         })
     }
@@ -309,6 +314,120 @@ impl MongoDriver {
             })
             .await?;
         Ok(result.deleted_count)
+    }
+
+    /// Whether the driver runs in a session with an open transaction.
+    fn in_transaction(&self) -> bool {
+        self.session
+            .as_ref()
+            .is_some_and(|state| state.transaction.load(Ordering::Relaxed))
+    }
+
+    /// Inserts the documents of `insert` unordered, skipping those a unique
+    /// index refuses as duplicates; returns how many went in. Any other
+    /// refusal is an error, and so is a duplicate inside a transaction,
+    /// which MongoDB aborts on any write error.
+    pub(crate) async fn insert_or_ignore(&self, insert: &Insert) -> Result<u64, OrmError> {
+        if insert.documents.is_empty() {
+            return Ok(0);
+        }
+        let command = MongoCommand::InsertOrIgnore(insert.clone());
+        let collection = self.database.collection::<Document>(&insert.collection);
+        let action = collection
+            .insert_many(insert.documents.clone())
+            .ordered(false);
+        let started = Instant::now();
+        let result = match &self.session {
+            None => action.await,
+            Some(state) => {
+                let mut session = state.session.lock().await;
+                action.session(&mut *session).await
+            }
+        };
+        let elapsed = started.elapsed();
+        let error = match result {
+            Ok(result) => {
+                let inserted = result.inserted_ids.len() as u64;
+                self.report(&command, elapsed, Some(inserted), false);
+                return Ok(inserted);
+            }
+            Err(error) => error,
+        };
+        let duplicates = match error.kind.as_ref() {
+            mongodb::error::ErrorKind::InsertMany(failure) if failure.write_concern_error.is_none() => failure
+                .write_errors
+                .as_ref()
+                .filter(|errors| errors.iter().all(|write| crate::error::is_duplicate_code(write.code)))
+                .map(Vec::len),
+            _ => None,
+        };
+        match duplicates {
+            Some(skipped) if !self.in_transaction() => {
+                let inserted = (insert.documents.len() - skipped) as u64;
+                self.report(&command, elapsed, Some(inserted), false);
+                Ok(inserted)
+            }
+            Some(_) => {
+                self.note(&error);
+                self.report(&command, elapsed, None, true);
+                Err(OrmError::Driver {
+                    driver: Cow::Borrowed(DRIVER),
+                    message: format!(
+                        "insert_or_ignore met duplicates inside a transaction, which MongoDB aborts on any write error: upsert by the unique fields instead (`upsert(.., unique_by, [])` inserts only what is missing), or insert outside the unit of work ({error})"
+                    ),
+                })
+            }
+            None => {
+                self.note(&error);
+                self.report(&command, elapsed, None, true);
+                Err(orm_error(&error))
+            }
+        }
+    }
+
+    /// Runs the upserts of `upsert` in one unordered `update` command;
+    /// returns how many documents they matched or inserted.
+    pub(crate) async fn upsert(&self, upsert: &Upsert) -> Result<u64, OrmError> {
+        if upsert.rows.is_empty() {
+            return Ok(0);
+        }
+        let command = MongoCommand::Upsert(upsert.clone());
+        let updates: Vec<Document> = upsert
+            .rows
+            .iter()
+            .map(|(filter, update)| doc! { "q": filter.clone(), "u": update.clone(), "upsert": true })
+            .collect();
+        let action = self.database.run_command(doc! {
+            "update": upsert.collection.clone(),
+            "updates": updates,
+            "ordered": false,
+        });
+        let reply = self
+            .timed(&command, |reply: &Document| reply_count(reply), async {
+                match &self.session {
+                    None => action.await,
+                    Some(state) => {
+                        let mut session = state.session.lock().await;
+                        action.session(&mut *session).await
+                    }
+                }
+            })
+            .await?;
+        if let Ok(errors) = reply.get_array("writeErrors")
+            && let Some(first) = errors.iter().find_map(Bson::as_document)
+        {
+            let message = first.get_str("errmsg").unwrap_or("refused").to_owned();
+            let code = first.get("code").and_then(Bson::as_i32).unwrap_or_default();
+            return Err(if crate::error::is_duplicate_code(code) {
+                OrmError::unique_violation(DRIVER, message)
+            } else {
+                OrmError::Driver {
+                    driver: Cow::Borrowed(DRIVER),
+                    message: format!("an upsert into `{}` failed: {message}", upsert.collection),
+                }
+            });
+        }
+        Ok(reply_count(&reply).unwrap_or_default())
     }
 
     /// Takes `count` numbers from the counter of `collection.field`;
@@ -583,5 +702,15 @@ impl std::fmt::Debug for MongoDriver {
             .field("connection", &self.shared.connection)
             .field("in_session", &self.session.is_some())
             .finish()
+    }
+}
+
+/// The documents an `update` command's reply says it matched or inserted
+/// (`n`).
+fn reply_count(reply: &Document) -> Option<u64> {
+    match reply.get("n") {
+        Some(Bson::Int32(n)) => u64::try_from(*n).ok(),
+        Some(Bson::Int64(n)) => u64::try_from(*n).ok(),
+        _ => None,
     }
 }

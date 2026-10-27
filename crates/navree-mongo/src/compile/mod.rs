@@ -35,7 +35,7 @@ use navree_orm::ir::{Aggregate, QueryIr};
 
 pub(crate) use expr::time_bucket;
 pub(crate) use read::read_with_columns;
-pub(crate) use write::{Target, insert, target, update_document};
+pub(crate) use write::{Target, insert, plain_field, target, update_document};
 
 use crate::command::MongoCommand;
 

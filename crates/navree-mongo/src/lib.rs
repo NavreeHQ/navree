@@ -3,6 +3,7 @@
 //! MongoDB for Navree.
 #![forbid(unsafe_code)]
 
+mod bulk;
 mod command;
 pub mod compile;
 mod connection;
@@ -18,7 +19,10 @@ mod options;
 pub mod schema;
 mod uow;
 
-pub use command::{Aggregate, Count, Delete, Find, Insert, MongoCommand, Update, UpdateDocument};
+pub use bulk::MongoBulkWrites;
+pub use command::{
+    Aggregate, Count, Delete, Find, Insert, MongoCommand, Update, UpdateDocument, Upsert,
+};
 pub use connection::{MongoDb, MongoExecutor, MongoSession};
 pub use convert::{document_row, from_bson, to_bson};
 pub use driver::MongoDriver;
