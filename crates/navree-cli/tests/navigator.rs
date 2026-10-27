@@ -69,8 +69,10 @@ async fn create_database(app: &Path) {
     sqlx::Connection::close(conn).await.unwrap();
 }
 
-/// `navree mcp <args>` as a child process, connected.
-async fn navigator(app: &Path, extra: &[&str]) -> RunningService<RoleClient, ()> {
+/// `navree mcp <args>` as a child process, connected. With `own_target`,
+/// the app builds into its own `target/` instead of the shared
+/// `CARGO_TARGET_DIR`, so no earlier build is found.
+async fn navigator(app: &Path, extra: &[&str], own_target: bool) -> RunningService<RoleClient, ()> {
     let mut args = vec![
         "mcp".to_owned(),
         "--path".to_owned(),
@@ -81,6 +83,9 @@ async fn navigator(app: &Path, extra: &[&str]) -> RunningService<RoleClient, ()>
     let transport = TokioChildProcess::new(
         tokio::process::Command::new(env!("CARGO_BIN_EXE_navree")).configure(|command| {
             command.args(&args).env("NAVREE_HOME", &home);
+            if own_target {
+                command.env("CARGO_TARGET_DIR", app.join("target"));
+            }
         }),
     )
     .expect("navree mcp starts");
@@ -104,7 +109,7 @@ async fn call(client: &RunningService<RoleClient, ()>, tool: &str, args: Value) 
 async fn navree_mcp_serves_the_tools_over_stdio() {
     let app = fixture_app();
     create_database(app.path()).await;
-    let client = navigator(app.path(), &["--no-build", "--docs-offline"]).await;
+    let client = navigator(app.path(), &["--no-build", "--docs-offline"], true).await;
 
     let info = client.peer_info().expect("server info");
     assert_eq!(
@@ -156,9 +161,9 @@ async fn navree_mcp_serves_the_tools_over_stdio() {
     assert!(!error, "{text}");
     assert!(text.contains("ai/agent-skills"), "{text}");
 
-    // Nothing is built with --no-build: the app tools say so.
+    // Nothing is built, and --no-build never builds: the app tools say so.
     let (error, text) = call(&client, "list_routes", json!({})).await;
-    assert!(error, "{text}");
+    assert!(error && text.contains("--no-build"), "{text}");
 
     client.cancel().await.unwrap();
 }
@@ -212,7 +217,7 @@ fn skills_install_writes_every_skill_into_both_folders() {
 #[ignore = "builds a Navree app; run with --ignored"]
 async fn navree_mcp_asks_a_built_app() {
     let app = fixture_app();
-    let client = navigator(app.path(), &["--docs-offline"]).await;
+    let client = navigator(app.path(), &["--docs-offline"], false).await;
 
     let (error, text) = call(&client, "list_routes", json!({"path": "/api/notes"})).await;
     assert!(!error, "{text}");
