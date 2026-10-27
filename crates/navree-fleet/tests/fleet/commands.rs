@@ -21,19 +21,33 @@ fn supervisors() -> serde_json::Value {
 #[tokio::test]
 async fn pause_and_continue_take_an_optional_supervisor() {
     let h = Harness::new(builder().config("fleet.supervisors", supervisors())).await;
-    h.app.run_command("fleet:pause", &["exports"]).await.unwrap();
+    h.app
+        .run_command("fleet:pause", &["exports"])
+        .await
+        .unwrap();
     assert!(h.fleet.is_paused("exports").await.unwrap());
     assert!(!h.fleet.is_paused("default").await.unwrap());
     h.app.run_command("fleet:pause", &[]).await.unwrap();
     assert_eq!(h.fleet.paused().await.unwrap().len(), 2);
-    h.app.run_command("fleet:continue", &["default"]).await.unwrap();
+    h.app
+        .run_command("fleet:continue", &["default"])
+        .await
+        .unwrap();
     assert!(!h.fleet.is_paused("default").await.unwrap());
     h.app.run_command("fleet:continue", &[]).await.unwrap();
     assert!(h.fleet.paused().await.unwrap().is_empty());
 
-    let error = h.app.run_command("fleet:pause", &["nope"]).await.unwrap_err();
+    let error = h
+        .app
+        .run_command("fleet:pause", &["nope"])
+        .await
+        .unwrap_err();
     assert!(error.to_string().contains("nope"), "{error}");
-    let error = h.app.run_command("fleet:pause", &["a", "b"]).await.unwrap_err();
+    let error = h
+        .app
+        .run_command("fleet:pause", &["a", "b"])
+        .await
+        .unwrap_err();
     assert!(error.to_string().contains("usage"), "{error}");
 }
 
@@ -77,7 +91,10 @@ async fn status_fails_without_a_running_master() {
         .with_settings(fast());
     let stop = CancellationToken::new();
     let task = tokio::spawn(master.run(stop.clone()));
-    eventually("a master", || async { !h.fleet.masters().await.unwrap().is_empty() }).await;
+    eventually("a master", || async {
+        !h.fleet.masters().await.unwrap().is_empty()
+    })
+    .await;
     h.app.run_command("fleet:status", &[]).await.unwrap();
 
     // `fleet:terminate` stops it.

@@ -18,7 +18,7 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::balance::{Allocation, initial_allocation, next_allocation};
-use crate::protocol::{ExitReason, WorkerCommand, WorkerReport, WorkerSpec, WORKER_HEARTBEAT};
+use crate::protocol::{ExitReason, WORKER_HEARTBEAT, WorkerCommand, WorkerReport, WorkerSpec};
 use crate::record::{CompletedJob, MasterReport, ProcessReport, SupervisorReport};
 use crate::snapshot::snapshots;
 use crate::spawner::{ProcessSpawner, Spawner};
@@ -201,7 +201,11 @@ impl Master {
             run.flush().await?;
             run.snapshot().await?;
         }
-        run.master.fleet.store().delete_master(&run.master.id).await?;
+        run.master
+            .fleet
+            .store()
+            .delete_master(&run.master.id)
+            .await?;
         result.map(|()| run.summary)
     }
 }

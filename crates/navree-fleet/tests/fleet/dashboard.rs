@@ -79,8 +79,17 @@ async fn fail_one_export(h: &Harness) -> String {
 #[tokio::test]
 async fn the_page_and_its_assets_are_public_and_hold_no_data() {
     let h = dashboard().await;
-    let page = h.app.client().get("/_fleet").send().await.assert_status(200);
-    assert_eq!(page.header("content-type"), Some("text/html; charset=utf-8"));
+    let page = h
+        .app
+        .client()
+        .get("/_fleet")
+        .send()
+        .await
+        .assert_status(200);
+    assert_eq!(
+        page.header("content-type"),
+        Some("text/html; charset=utf-8")
+    );
     let csp = page.header("content-security-policy").unwrap();
     assert!(csp.contains("script-src 'self'"), "{csp}");
     assert!(!csp.contains("unsafe-inline"), "{csp}");
@@ -94,7 +103,10 @@ async fn the_page_and_its_assets_are_public_and_hold_no_data() {
     assert!(html.contains(&script), "{html}");
     assert!(html.contains(&styles), "{html}");
     assert!(html.contains("/_fleet/api"), "{html}");
-    assert!(html.contains("/api/auth/login"), "the sign-in route: {html}");
+    assert!(
+        html.contains("/api/auth/login"),
+        "the sign-in route: {html}"
+    );
     assert!(!html.contains("<script>"), "no inline script: {html}");
 
     for (path, kind) in [(script, "text/javascript"), (styles, "text/css")] {
@@ -156,7 +168,10 @@ async fn a_stored_fleet_view_permission_opens_the_dashboard() {
     let access = h.app.get::<AccessService>().await;
     let db = h.app.get::<Db>().await;
     let uow = db.uow(None, None).await;
-    access.grant_to_user(&uow, MANAGER, "fleet.view").await.unwrap();
+    access
+        .grant_to_user(&uow, MANAGER, "fleet.view")
+        .await
+        .unwrap();
     uow.commit().await.unwrap();
     let manager = h.app.acting_as(principal(MANAGER));
     manager
@@ -334,17 +349,32 @@ async fn operators_pause_and_continue_supervisors() {
 #[tokio::test]
 async fn the_path_is_configurable_and_the_dashboard_can_be_off() {
     let h = Harness::new(dashboard_builder().config("fleet.path", "/ops/fleet/")).await;
-    h.app.client().get("/ops/fleet").send().await.assert_status(200);
+    h.app
+        .client()
+        .get("/ops/fleet")
+        .send()
+        .await
+        .assert_status(200);
     h.app
         .acting_as(principal(VIEWER))
         .get("/ops/fleet/api/overview")
         .send()
         .await
         .assert_status(200);
-    h.app.client().get("/_fleet").send().await.assert_status(404);
+    h.app
+        .client()
+        .get("/_fleet")
+        .send()
+        .await
+        .assert_status(404);
 
     let off = Harness::new(builder()).await;
-    off.app.client().get("/_fleet").send().await.assert_status(404);
+    off.app
+        .client()
+        .get("/_fleet")
+        .send()
+        .await
+        .assert_status(404);
     off.app
         .acting_as(principal(VIEWER))
         .get("/_fleet/api/overview")

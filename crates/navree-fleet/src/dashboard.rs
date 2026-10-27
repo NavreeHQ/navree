@@ -208,154 +208,180 @@ impl Controller for FleetController {
         );
 
         let f = fleet.clone();
-        routes.push(view(RouteDef::on(Method::GET, format!("{api}/overview"), move || {
-            let fleet = f.clone();
-            async move {
-                fleet
-                    .overview()
-                    .await
-                    .map(Json::<Overview>)
-                    .map_err(api_error)
-            }
-        }))
-        .name("fleet.overview"));
+        routes.push(
+            view(RouteDef::on(
+                Method::GET,
+                format!("{api}/overview"),
+                move || {
+                    let fleet = f.clone();
+                    async move {
+                        fleet
+                            .overview()
+                            .await
+                            .map(Json::<Overview>)
+                            .map_err(api_error)
+                    }
+                },
+            ))
+            .name("fleet.overview"),
+        );
 
         let f = fleet.clone();
-        routes.push(view(RouteDef::on(Method::GET, format!("{api}/masters"), move || {
-            let fleet = f.clone();
-            async move {
-                let data = fleet.masters().await.map_err(api_error)?;
-                Ok::<_, AppError>(Json(MastersView { data }))
-            }
-        }))
-        .name("fleet.masters"));
+        routes.push(
+            view(RouteDef::on(
+                Method::GET,
+                format!("{api}/masters"),
+                move || {
+                    let fleet = f.clone();
+                    async move {
+                        let data = fleet.masters().await.map_err(api_error)?;
+                        Ok::<_, AppError>(Json(MastersView { data }))
+                    }
+                },
+            ))
+            .name("fleet.masters"),
+        );
 
         let f = fleet.clone();
-        routes.push(view(RouteDef::on(
-            Method::GET,
-            format!("{api}/jobs"),
-            move |Query(q): Query<Search>| {
-                let fleet = f.clone();
-                async move {
-                    let search = q.search.as_deref();
-                    let pending = fleet
-                        .pending_jobs(search)
-                        .await
-                        .map_err(api_error)?
-                        .into_iter()
-                        .map(|mut job| {
-                            job.payload = fleet.redact(&job.payload);
-                            job
-                        })
-                        .collect();
-                    let completed = fleet.completed_jobs(search).await.map_err(api_error)?;
-                    Ok::<_, AppError>(Json(JobsView { pending, completed }))
-                }
-            },
-        ))
-        .name("fleet.jobs"));
+        routes.push(
+            view(RouteDef::on(
+                Method::GET,
+                format!("{api}/jobs"),
+                move |Query(q): Query<Search>| {
+                    let fleet = f.clone();
+                    async move {
+                        let search = q.search.as_deref();
+                        let pending = fleet
+                            .pending_jobs(search)
+                            .await
+                            .map_err(api_error)?
+                            .into_iter()
+                            .map(|mut job| {
+                                job.payload = fleet.redact(&job.payload);
+                                job
+                            })
+                            .collect();
+                        let completed = fleet.completed_jobs(search).await.map_err(api_error)?;
+                        Ok::<_, AppError>(Json(JobsView { pending, completed }))
+                    }
+                },
+            ))
+            .name("fleet.jobs"),
+        );
 
         let f = fleet.clone();
-        routes.push(view(RouteDef::on(
-            Method::GET,
-            format!("{api}/jobs/{{id}}"),
-            move |Path(id): Path<String>| {
-                let fleet = f.clone();
-                async move {
-                    let mut job = fleet
-                        .pending_job(&id)
-                        .await
-                        .map_err(api_error)?
-                        .ok_or_else(AppError::not_found)?;
-                    job.payload = fleet.redact(&job.payload);
-                    Ok::<_, AppError>(Json(job))
-                }
-            },
-        ))
-        .name("fleet.jobs.show"));
+        routes.push(
+            view(RouteDef::on(
+                Method::GET,
+                format!("{api}/jobs/{{id}}"),
+                move |Path(id): Path<String>| {
+                    let fleet = f.clone();
+                    async move {
+                        let mut job = fleet
+                            .pending_job(&id)
+                            .await
+                            .map_err(api_error)?
+                            .ok_or_else(AppError::not_found)?;
+                        job.payload = fleet.redact(&job.payload);
+                        Ok::<_, AppError>(Json(job))
+                    }
+                },
+            ))
+            .name("fleet.jobs.show"),
+        );
 
         let f = fleet.clone();
-        routes.push(view(RouteDef::on(
-            Method::GET,
-            format!("{api}/failed"),
-            move |Query(q): Query<Search>| {
-                let fleet = f.clone();
-                async move {
-                    let data = fleet
-                        .failed_jobs(q.search.as_deref())
-                        .await
-                        .map_err(api_error)?
-                        .into_iter()
-                        .map(|job| redacted(&fleet, job))
-                        .collect();
-                    Ok::<_, AppError>(Json(FailedView { data }))
-                }
-            },
-        ))
-        .name("fleet.failed"));
+        routes.push(
+            view(RouteDef::on(
+                Method::GET,
+                format!("{api}/failed"),
+                move |Query(q): Query<Search>| {
+                    let fleet = f.clone();
+                    async move {
+                        let data = fleet
+                            .failed_jobs(q.search.as_deref())
+                            .await
+                            .map_err(api_error)?
+                            .into_iter()
+                            .map(|job| redacted(&fleet, job))
+                            .collect();
+                        Ok::<_, AppError>(Json(FailedView { data }))
+                    }
+                },
+            ))
+            .name("fleet.failed"),
+        );
 
         let f = fleet.clone();
-        routes.push(view(RouteDef::on(
-            Method::GET,
-            format!("{api}/failed/{{id}}"),
-            move |Path(id): Path<String>| {
-                let fleet = f.clone();
-                async move {
-                    let job = fleet
-                        .failed_job(&id)
-                        .await
-                        .map_err(api_error)?
-                        .ok_or_else(AppError::not_found)?;
-                    Ok::<_, AppError>(Json(redacted(&fleet, job)))
-                }
-            },
-        ))
-        .name("fleet.failed.show"));
+        routes.push(
+            view(RouteDef::on(
+                Method::GET,
+                format!("{api}/failed/{{id}}"),
+                move |Path(id): Path<String>| {
+                    let fleet = f.clone();
+                    async move {
+                        let job = fleet
+                            .failed_job(&id)
+                            .await
+                            .map_err(api_error)?
+                            .ok_or_else(AppError::not_found)?;
+                        Ok::<_, AppError>(Json(redacted(&fleet, job)))
+                    }
+                },
+            ))
+            .name("fleet.failed.show"),
+        );
 
         let f = fleet.clone();
-        routes.push(operate(RouteDef::on(
-            Method::POST,
-            format!("{api}/failed/{{id}}/retry"),
-            move |Path(id): Path<String>| {
-                let fleet = f.clone();
-                async move {
-                    fleet.retry(&id).await.map_err(api_error)?;
-                    Ok::<_, AppError>(Json(json!({ "retried": 1 })))
-                }
-            },
-        ))
-        .name("fleet.failed.retry"));
+        routes.push(
+            operate(RouteDef::on(
+                Method::POST,
+                format!("{api}/failed/{{id}}/retry"),
+                move |Path(id): Path<String>| {
+                    let fleet = f.clone();
+                    async move {
+                        fleet.retry(&id).await.map_err(api_error)?;
+                        Ok::<_, AppError>(Json(json!({ "retried": 1 })))
+                    }
+                },
+            ))
+            .name("fleet.failed.retry"),
+        );
 
         let f = fleet.clone();
-        routes.push(operate(RouteDef::on(
-            Method::POST,
-            format!("{api}/failed/retry"),
-            move |Query(q): Query<Search>| {
-                let fleet = f.clone();
-                async move {
-                    let retried = fleet
-                        .retry_all(q.search.as_deref())
-                        .await
-                        .map_err(api_error)?;
-                    Ok::<_, AppError>(Json(json!({ "retried": retried })))
-                }
-            },
-        ))
-        .name("fleet.failed.retry_all"));
+        routes.push(
+            operate(RouteDef::on(
+                Method::POST,
+                format!("{api}/failed/retry"),
+                move |Query(q): Query<Search>| {
+                    let fleet = f.clone();
+                    async move {
+                        let retried = fleet
+                            .retry_all(q.search.as_deref())
+                            .await
+                            .map_err(api_error)?;
+                        Ok::<_, AppError>(Json(json!({ "retried": retried })))
+                    }
+                },
+            ))
+            .name("fleet.failed.retry_all"),
+        );
 
         let f = fleet.clone();
-        routes.push(operate(RouteDef::on(
-            Method::DELETE,
-            format!("{api}/failed/{{id}}"),
-            move |Path(id): Path<String>| {
-                let fleet = f.clone();
-                async move {
-                    fleet.forget(&id).await.map_err(api_error)?;
-                    Ok::<_, AppError>(StatusCode::NO_CONTENT)
-                }
-            },
-        ))
-        .name("fleet.failed.forget"));
+        routes.push(
+            operate(RouteDef::on(
+                Method::DELETE,
+                format!("{api}/failed/{{id}}"),
+                move |Path(id): Path<String>| {
+                    let fleet = f.clone();
+                    async move {
+                        fleet.forget(&id).await.map_err(api_error)?;
+                        Ok::<_, AppError>(StatusCode::NO_CONTENT)
+                    }
+                },
+            ))
+            .name("fleet.failed.forget"),
+        );
 
         for (action, pause) in [("pause", true), ("continue", false)] {
             let f = fleet.clone();
@@ -373,8 +399,12 @@ impl Controller for FleetController {
                                 fleet.resume(name.as_deref()).await
                             };
                             result.map_err(api_error)?;
-                            let paused: Vec<String> =
-                                fleet.paused().await.map_err(api_error)?.into_iter().collect();
+                            let paused: Vec<String> = fleet
+                                .paused()
+                                .await
+                                .map_err(api_error)?
+                                .into_iter()
+                                .collect();
                             Ok::<_, AppError>(Json(json!({ "paused": paused })))
                         }
                     },
@@ -384,25 +414,27 @@ impl Controller for FleetController {
         }
 
         let f = fleet.clone();
-        routes.push(view(RouteDef::on(
-            Method::GET,
-            format!("{api}/metrics"),
-            move |Query(p): Query<Period>| {
-                let fleet = f.clone();
-                async move {
-                    let series = fleet.metrics(p.period).await.map_err(api_error)?;
-                    let (queues, jobs) = series
-                        .into_iter()
-                        .partition(|s| s.kind == crate::record::MetricKind::Queue);
-                    Ok::<_, AppError>(Json(MetricsView {
-                        period: p.period,
-                        queues,
-                        jobs,
-                    }))
-                }
-            },
-        ))
-        .name("fleet.metrics"));
+        routes.push(
+            view(RouteDef::on(
+                Method::GET,
+                format!("{api}/metrics"),
+                move |Query(p): Query<Period>| {
+                    let fleet = f.clone();
+                    async move {
+                        let series = fleet.metrics(p.period).await.map_err(api_error)?;
+                        let (queues, jobs) = series
+                            .into_iter()
+                            .partition(|s| s.kind == crate::record::MetricKind::Queue);
+                        Ok::<_, AppError>(Json(MetricsView {
+                            period: p.period,
+                            queues,
+                            jobs,
+                        }))
+                    }
+                },
+            ))
+            .name("fleet.metrics"),
+        );
 
         routes
     }
@@ -424,7 +456,10 @@ fn redacted(fleet: &Fleet, mut job: FailedJob) -> FailedJobView {
 /// Security headers of the page: scripts and styles only from the app.
 fn page_headers() -> [(HeaderName, HeaderValue); 4] {
     [
-        (CONTENT_TYPE, HeaderValue::from_static("text/html; charset=utf-8")),
+        (
+            CONTENT_TYPE,
+            HeaderValue::from_static("text/html; charset=utf-8"),
+        ),
         (CACHE_CONTROL, HeaderValue::from_static("no-store")),
         (
             HeaderName::from_static("content-security-policy"),

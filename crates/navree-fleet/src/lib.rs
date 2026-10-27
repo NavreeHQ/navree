@@ -108,8 +108,8 @@ pub use options::{
 };
 pub use protocol::{ExitReason, REPORT_PREFIX, WorkerCommand, WorkerReport, WorkerSpec};
 pub use record::{
-    CompletedJob, FleetStatus, MasterReport, MetricKind, MetricPoint, MetricSeries,
-    MetricSnapshot, MetricsPeriod, ProcessReport, SupervisorReport,
+    CompletedJob, FleetStatus, MasterReport, MetricKind, MetricPoint, MetricSeries, MetricSnapshot,
+    MetricsPeriod, ProcessReport, SupervisorReport,
 };
 pub use recorder::JobRecorder;
 pub use redact::REDACTED;

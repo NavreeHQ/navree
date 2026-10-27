@@ -54,7 +54,10 @@ fn worker_app() -> AppBuilder {
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    if args.first().is_some_and(|command| command.starts_with("fleet")) {
+    if args
+        .first()
+        .is_some_and(|command| command.starts_with("fleet"))
+    {
         let runtime = tokio::runtime::Runtime::new().expect("a runtime");
         return match runtime.block_on(worker_app().run_with_args(args)) {
             Ok(()) => ExitCode::SUCCESS,
@@ -139,9 +142,9 @@ async fn a_master_supervises_real_worker_processes() {
             .collect();
         // An idle `auto` supervisor keeps `min_processes` (1).
         !processes.is_empty()
-            && processes
-                .iter()
-                .all(|p| p.pid.is_some_and(|pid| pid != std::process::id()) && p.memory_mb.is_some())
+            && processes.iter().all(|p| {
+                p.pid.is_some_and(|pid| pid != std::process::id()) && p.memory_mb.is_some()
+            })
     })
     .await;
 
@@ -165,7 +168,10 @@ async fn a_master_supervises_real_worker_processes() {
         .expect("the master stops")
         .unwrap()
         .expect("the master ran");
-    assert!(summary.recycled >= 1, "max_jobs = 4 recycles workers: {summary:?}");
+    assert!(
+        summary.recycled >= 1,
+        "max_jobs = 4 recycles workers: {summary:?}"
+    );
     assert_eq!(summary.crashed, 0, "{summary:?}");
     assert_eq!(summary.jobs, 13, "{summary:?}");
     assert!(fleet.masters().await.unwrap().is_empty());

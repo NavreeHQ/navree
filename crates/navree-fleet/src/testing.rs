@@ -109,7 +109,9 @@ impl Spawner for FakeSpawner {
                 let mut failures = self.failures.lock().unwrap_or_else(PoisonError::into_inner);
                 if *failures > 0 {
                     *failures -= 1;
-                    return Err(FleetError::Spawn("the fake spawner was told to fail".to_owned()));
+                    return Err(FleetError::Spawn(
+                        "the fake spawner was told to fail".to_owned(),
+                    ));
                 }
             }
             let (command_tx, mut command_rx) = mpsc::unbounded_channel();

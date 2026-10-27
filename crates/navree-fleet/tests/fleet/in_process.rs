@@ -48,7 +48,10 @@ async fn workers_run_jobs_and_the_master_stores_them() {
     let h = Harness::new(builder().config("fleet.supervisors", two_queues())).await;
     let master = Running::start(&h).await;
     for i in 0..5 {
-        h.queue.dispatch(Record::new(&format!("r{i}"))).await.unwrap();
+        h.queue
+            .dispatch(Record::new(&format!("r{i}")))
+            .await
+            .unwrap();
     }
     h.queue
         .dispatch(SendDigest {
@@ -91,20 +94,29 @@ async fn a_pause_holds_the_workers_of_every_master() {
     let h = Harness::new(builder()).await;
     let one = Running::start(&h).await;
     let two = Running::start(&h).await;
-    eventually("two masters", || async { h.fleet.masters().await.unwrap().len() == 2 }).await;
+    eventually("two masters", || async {
+        h.fleet.masters().await.unwrap().len() == 2
+    })
+    .await;
     h.queue.dispatch(Record::new("before")).await.unwrap();
     eventually("the first job ran", || async { h.journal.count() == 1 }).await;
 
     h.fleet.pause(None).await.unwrap();
     eventually("both masters paused", || async {
         let masters = h.fleet.masters().await.unwrap();
-        masters.len() == 2 && masters.iter().all(|m| m.supervisors.iter().all(|s| s.paused))
+        masters.len() == 2
+            && masters
+                .iter()
+                .all(|m| m.supervisors.iter().all(|s| s.paused))
     })
     .await;
     // Give the workers time to hear about it.
     tokio::time::sleep(Duration::from_millis(100)).await;
     for i in 0..3 {
-        h.queue.dispatch(Record::new(&format!("held{i}"))).await.unwrap();
+        h.queue
+            .dispatch(Record::new(&format!("held{i}")))
+            .await
+            .unwrap();
     }
     tokio::time::sleep(Duration::from_millis(400)).await;
     assert_eq!(h.journal.count(), 1, "nothing ran while paused");
@@ -125,7 +137,10 @@ async fn workers_are_recycled_after_max_jobs() {
     .await;
     let master = Running::start(&h).await;
     for i in 0..5 {
-        h.queue.dispatch(Record::new(&format!("r{i}"))).await.unwrap();
+        h.queue
+            .dispatch(Record::new(&format!("r{i}")))
+            .await
+            .unwrap();
     }
     eventually("every job ran", || async { h.journal.count() == 5 }).await;
     let summary = master.stop().await;
@@ -150,5 +165,9 @@ async fn stopping_lets_running_jobs_finish() {
     })
     .await;
     master.stop().await;
-    assert_eq!(h.journal.labels(), ["slow"], "the job finished before the master stopped");
+    assert_eq!(
+        h.journal.labels(),
+        ["slow"],
+        "the job finished before the master stopped"
+    );
 }

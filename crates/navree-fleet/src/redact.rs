@@ -41,9 +41,7 @@ impl Redactor {
     /// comma-separated string.
     pub(crate) fn from_setting(setting: Option<&Value>) -> Self {
         match setting {
-            Some(Value::Array(items)) => {
-                Self::new(items.iter().filter_map(Value::as_str))
-            }
+            Some(Value::Array(items)) => Self::new(items.iter().filter_map(Value::as_str)),
             Some(Value::String(joined)) => Self::new(joined.split(',')),
             _ => Self::default(),
         }
@@ -102,9 +100,15 @@ mod tests {
     #[test]
     fn the_setting_may_be_a_list_or_a_comma_separated_string() {
         let list = Redactor::from_setting(Some(&json!(["pin"])));
-        assert_eq!(list.redact(&json!({"pin": 1, "password": 2})), json!({"pin": REDACTED, "password": 2}));
+        assert_eq!(
+            list.redact(&json!({"pin": 1, "password": 2})),
+            json!({"pin": REDACTED, "password": 2})
+        );
         let joined = Redactor::from_setting(Some(&json!("pin, iban")));
-        assert_eq!(joined.redact(&json!({"iban": "x"})), json!({"iban": REDACTED}));
+        assert_eq!(
+            joined.redact(&json!({"iban": "x"})),
+            json!({"iban": REDACTED})
+        );
         assert_eq!(Redactor::from_setting(None), Redactor::default());
     }
 }

@@ -292,22 +292,28 @@ fn sample_value(body: &str, name: &str) -> Option<f64> {
 
 #[tokio::test]
 async fn collectors_refresh_their_metrics_on_every_scrape() {
-    let app = TestApp::boot(
-        app_with(ObserveOptions::default(), vec![]).module(CollectorsModule(false)),
-    )
-    .await;
+    let app =
+        TestApp::boot(app_with(ObserveOptions::default(), vec![]).module(CollectorsModule(false)))
+            .await;
     let first = app.get("/metrics").await.text();
-    assert_eq!(sample_value(&first, "observe_test_backlog"), Some(1.0), "{first}");
+    assert_eq!(
+        sample_value(&first, "observe_test_backlog"),
+        Some(1.0),
+        "{first}"
+    );
     let second = app.get("/metrics").await.text();
-    assert_eq!(sample_value(&second, "observe_test_backlog"), Some(2.0), "{second}");
+    assert_eq!(
+        sample_value(&second, "observe_test_backlog"),
+        Some(2.0),
+        "{second}"
+    );
 }
 
 #[tokio::test(start_paused = true)]
 async fn a_stuck_collector_does_not_hold_up_the_scrape() {
-    let app = TestApp::boot(
-        app_with(ObserveOptions::default(), vec![]).module(CollectorsModule(true)),
-    )
-    .await;
+    let app =
+        TestApp::boot(app_with(ObserveOptions::default(), vec![]).module(CollectorsModule(true)))
+            .await;
     let response = app.get("/metrics").await;
     assert_eq!(response.status, StatusCode::OK, "{}", response.text());
 }

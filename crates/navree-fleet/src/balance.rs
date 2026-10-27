@@ -193,9 +193,15 @@ mod tests {
         let s = supervisor(Balance::Simple, &["a", "b", "c"], 1, 8);
         assert_eq!(counts(&initial_allocation(&s)), [3, 3, 2]);
         let busy = [load("a", 5000, 100)];
-        assert_eq!(counts(&next_allocation(&s, &initial_allocation(&s), &busy, 1)), [3, 3, 2]);
+        assert_eq!(
+            counts(&next_allocation(&s, &initial_allocation(&s), &busy, 1)),
+            [3, 3, 2]
+        );
         let s = supervisor(Balance::Off, &["exports", "default"], 1, 2);
-        assert_eq!(initial_allocation(&s), vec![("exports,default".to_owned(), 2)]);
+        assert_eq!(
+            initial_allocation(&s),
+            vec![("exports,default".to_owned(), 2)]
+        );
     }
 
     /// The docs' newsletter: 3,000 mails arrive, `mail` grows from one to
@@ -257,14 +263,8 @@ mod tests {
         assert!(counts(&next).iter().all(|n| *n >= 1), "{next:?}");
     }
 
-    fn arbitrary_case() -> impl Strategy<
-        Value = (
-            Supervisor,
-            Allocation,
-            Vec<QueueWorkload>,
-            usize,
-        ),
-    > {
+    fn arbitrary_case() -> impl Strategy<Value = (Supervisor, Allocation, Vec<QueueWorkload>, usize)>
+    {
         (1usize..6, 0usize..3, 0usize..12, 1usize..4).prop_flat_map(|(n, min, extra, shift)| {
             let queues: Vec<String> = (0..n).map(|i| format!("q{i}")).collect();
             let max = (min * n).max(1) + extra;

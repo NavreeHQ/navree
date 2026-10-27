@@ -346,7 +346,11 @@ impl Fleet {
             .unwrap_or(i64::MAX / 60_000)
             .saturating_mul(60_000);
         self.store
-            .claim(&format!("{LONG_WAIT_PREFIX}{queue}"), self.now_ms(), cooldown)
+            .claim(
+                &format!("{LONG_WAIT_PREFIX}{queue}"),
+                self.now_ms(),
+                cooldown,
+            )
             .await
     }
 
@@ -466,7 +470,10 @@ impl Fleet {
 
     /// Attempts finished within `fleet.trim.recent_minutes`, newest first,
     /// whose type or queue contains `search`; at most 500.
-    pub async fn completed_jobs(&self, search: Option<&str>) -> Result<Vec<CompletedJob>, FleetError> {
+    pub async fn completed_jobs(
+        &self,
+        search: Option<&str>,
+    ) -> Result<Vec<CompletedJob>, FleetError> {
         let minutes = i64::try_from(self.options.trim.recent_minutes).unwrap_or(i64::MAX / 60_000);
         let since = self.now() - TimeDelta::minutes(minutes);
         self.store
@@ -475,7 +482,11 @@ impl Fleet {
     }
 
     /// Stores finished attempts (a master does this for its workers).
-    pub async fn record(&self, master: Option<&str>, jobs: &[CompletedJob]) -> Result<(), FleetError> {
+    pub async fn record(
+        &self,
+        master: Option<&str>,
+        jobs: &[CompletedJob],
+    ) -> Result<(), FleetError> {
         self.store.insert_jobs(master, jobs).await
     }
 

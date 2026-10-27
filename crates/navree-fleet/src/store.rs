@@ -104,7 +104,12 @@ impl FleetStore {
 
     // --------------------------------------------------------------- state
 
-    pub(crate) async fn set_state(&self, key: &str, value: &str, now: i64) -> Result<(), FleetError> {
+    pub(crate) async fn set_state(
+        &self,
+        key: &str,
+        value: &str,
+        now: i64,
+    ) -> Result<(), FleetError> {
         self.execute(
             &format!(
                 "INSERT INTO {STATE_TABLE} (key, value, updated_at) VALUES (?, ?, ?) \
@@ -170,7 +175,12 @@ impl FleetStore {
     /// Claims `key` for `now` when its stored time is at least `cooldown_ms`
     /// old (or there is none): true for exactly one caller per cooldown,
     /// across processes.
-    pub(crate) async fn claim(&self, key: &str, now: i64, cooldown_ms: i64) -> Result<bool, FleetError> {
+    pub(crate) async fn claim(
+        &self,
+        key: &str,
+        now: i64,
+        cooldown_ms: i64,
+    ) -> Result<bool, FleetError> {
         let updated = self
             .execute(
                 &format!(
@@ -316,9 +326,7 @@ impl FleetStore {
     ) -> Result<BTreeMap<String, Vec<u64>>, FleetError> {
         let rows = self
             .query(
-                &format!(
-                    "SELECT job_type, runtime_ms FROM {JOBS_TABLE} WHERE finished_at >= ?"
-                ),
+                &format!("SELECT job_type, runtime_ms FROM {JOBS_TABLE} WHERE finished_at >= ?"),
                 vec![since.into()],
             )
             .await?;
@@ -452,7 +460,9 @@ pub(crate) fn parse_outcome(text: &str) -> Result<AttemptOutcome, FleetError> {
         "succeeded" => Ok(AttemptOutcome::Succeeded),
         "released" => Ok(AttemptOutcome::Released),
         "failed" => Ok(AttemptOutcome::Failed),
-        other => Err(FleetError::Corrupt(format!("unknown job outcome `{other}`"))),
+        other => Err(FleetError::Corrupt(format!(
+            "unknown job outcome `{other}`"
+        ))),
     }
 }
 
@@ -506,7 +516,11 @@ mod tests {
 
     #[test]
     fn placeholders_are_numbered_on_postgres() {
-        let s = statement(DbBackend::Postgres, "a = ? AND b = ?", vec![1.into(), 2.into()]);
+        let s = statement(
+            DbBackend::Postgres,
+            "a = ? AND b = ?",
+            vec![1.into(), 2.into()],
+        );
         assert_eq!(s.sql, "a = $1 AND b = $2");
         let s = statement(DbBackend::Sqlite, "a = ?", vec![1.into()]);
         assert_eq!(s.sql, "a = ?");

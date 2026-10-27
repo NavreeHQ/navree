@@ -284,7 +284,9 @@ impl FleetOptions {
 
     /// The long-wait threshold of `queue`, if it has one.
     pub fn long_wait_threshold(&self, queue: &str) -> Option<Duration> {
-        self.long_wait.get(queue).map(|secs| Duration::from_secs(*secs))
+        self.long_wait
+            .get(queue)
+            .map(|secs| Duration::from_secs(*secs))
     }
 
     /// The dashboard path without a trailing slash.
@@ -568,7 +570,10 @@ mod tests {
             snapshot_secs: 0,
             only: vec!["nope".into()],
             supervisors: BTreeMap::from([
-                ("empty".to_owned(), SupervisorOptions::new(Vec::<String>::new())),
+                (
+                    "empty".to_owned(),
+                    SupervisorOptions::new(Vec::<String>::new()),
+                ),
                 (
                     "simple".to_owned(),
                     SupervisorOptions {

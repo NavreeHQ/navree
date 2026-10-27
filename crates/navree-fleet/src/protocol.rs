@@ -286,7 +286,10 @@ mod tests {
     fn specs_round_trip_through_arguments() {
         let spec = spec();
         assert_eq!(WorkerSpec::from_args(&spec.to_args()).unwrap(), spec);
-        let args: Vec<String> = ["--queue=a", "--max-jobs=5"].iter().map(|s| (*s).to_owned()).collect();
+        let args: Vec<String> = ["--queue=a", "--max-jobs=5"]
+            .iter()
+            .map(|s| (*s).to_owned())
+            .collect();
         let parsed = WorkerSpec::from_args(&args).unwrap();
         assert_eq!(parsed.queues, ["a"]);
         assert_eq!(parsed.max_jobs, 5);
@@ -296,16 +299,31 @@ mod tests {
     #[test]
     fn bad_worker_arguments_are_rejected() {
         let args = |list: &[&str]| list.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
-        assert!(WorkerSpec::from_args(&args(&[])).unwrap_err().contains("--queue"));
-        assert!(WorkerSpec::from_args(&args(&["--queue", "a", "--bogus"])).unwrap_err().contains("--bogus"));
-        assert!(WorkerSpec::from_args(&args(&["--queue", "a", "--max-jobs", "x"])).unwrap_err().contains("--max-jobs"));
+        assert!(
+            WorkerSpec::from_args(&args(&[]))
+                .unwrap_err()
+                .contains("--queue")
+        );
+        assert!(
+            WorkerSpec::from_args(&args(&["--queue", "a", "--bogus"]))
+                .unwrap_err()
+                .contains("--bogus")
+        );
+        assert!(
+            WorkerSpec::from_args(&args(&["--queue", "a", "--max-jobs", "x"]))
+                .unwrap_err()
+                .contains("--max-jobs")
+        );
     }
 
     #[test]
     fn reports_round_trip_through_lines() {
         let reports = [
             WorkerReport::Started { pid: 7 },
-            WorkerReport::Heartbeat { jobs: 3, memory_mb: Some(40) },
+            WorkerReport::Heartbeat {
+                jobs: 3,
+                memory_mb: Some(40),
+            },
             WorkerReport::Jobs {
                 jobs: vec![CompletedJob {
                     job_id: "j".into(),
@@ -317,8 +335,14 @@ mod tests {
                     finished_at: Utc::now(),
                 }],
             },
-            WorkerReport::Exiting { reason: ExitReason::MaxJobs },
-            WorkerReport::Exited { reason: ExitReason::Crashed { error: "boom".into() } },
+            WorkerReport::Exiting {
+                reason: ExitReason::MaxJobs,
+            },
+            WorkerReport::Exited {
+                reason: ExitReason::Crashed {
+                    error: "boom".into(),
+                },
+            },
         ];
         for report in reports {
             let line = report.to_line();
@@ -330,7 +354,11 @@ mod tests {
 
     #[test]
     fn commands_are_single_words() {
-        for command in [WorkerCommand::Pause, WorkerCommand::Continue, WorkerCommand::Stop] {
+        for command in [
+            WorkerCommand::Pause,
+            WorkerCommand::Continue,
+            WorkerCommand::Stop,
+        ] {
             assert_eq!(WorkerCommand::parse(command.as_str()), Some(command));
         }
         assert_eq!(WorkerCommand::parse(" stop\r\n"), Some(WorkerCommand::Stop));

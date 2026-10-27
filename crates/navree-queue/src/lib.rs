@@ -122,12 +122,10 @@ pub use migration::{FAILED_JOBS_TABLE, JOBS_TABLE};
 pub use module::QueueModule;
 pub use options::{QueueDriver, QueueOptions};
 pub use queue::Queue;
-pub use record::{
-    FailedJob, PendingJob, PendingQuery, PendingState, QueueStatus, RetryTarget,
-};
+pub use record::{FailedJob, PendingJob, PendingQuery, PendingState, QueueStatus, RetryTarget};
+/// The cancellation token [`Supervision::stop`] takes (tokio-util's).
+pub use tokio_util::sync::CancellationToken;
 pub use worker::{
     Attempt, AttemptOutcome, STALE_RESERVATION_GRACE_SECS, Supervision, WorkHooks, WorkOptions,
     WorkStats,
 };
-/// The cancellation token [`Supervision::stop`] takes (tokio-util's).
-pub use tokio_util::sync::CancellationToken;

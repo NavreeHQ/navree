@@ -48,7 +48,10 @@ pub struct ProcessSpawner {
 
 impl ProcessSpawner {
     /// Spawns `program` with `args` before `fleet:work` and its flags.
-    pub fn new(program: impl Into<PathBuf>, args: impl IntoIterator<Item = impl Into<OsString>>) -> Self {
+    pub fn new(
+        program: impl Into<PathBuf>,
+        args: impl IntoIterator<Item = impl Into<OsString>>,
+    ) -> Self {
         Self {
             program: program.into(),
             args: args.into_iter().map(Into::into).collect(),
@@ -67,8 +70,9 @@ impl ProcessSpawner {
     /// The running binary (`std::env::current_exe`), with no extra
     /// arguments.
     pub fn current_exe() -> Result<Self, FleetError> {
-        let program = std::env::current_exe()
-            .map_err(|error| FleetError::Spawn(format!("cannot find the running binary: {error}")))?;
+        let program = std::env::current_exe().map_err(|error| {
+            FleetError::Spawn(format!("cannot find the running binary: {error}"))
+        })?;
         Ok(Self::new(program, Vec::<OsString>::new()))
     }
 }
