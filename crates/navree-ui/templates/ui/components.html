@@ -1,0 +1,497 @@
+{#- navree-ui components. Import them in a page:
+
+      {% import "ui/components.html" as ui %}
+      {{ ui.button("Save", variant="primary") }}
+
+    Macros that take a body are used with `call`:
+      {% call ui.card("Recent activity") %} ... {% endcall %}
+
+    Every macro renders markup styled by navree-ui.css and wired by
+    navree-ui.js through data attributes; nothing needs inline styles or
+    scripts. -#}
+{%- from "ui/icons.html" import icon as svg_icon, mark as svg_mark -%}
+
+{#- ---------------------------------------------------------------------- -#}
+{#- Icons and small pieces                                                  -#}
+{#- ---------------------------------------------------------------------- -#}
+
+{#- A lucide icon: `ui.icon("users")`, `ui.icon("check", 14, class="x")`. -#}
+{%- macro icon(name, size=16, class="", label=none) -%}{{ svg_icon(name, size, class, label) }}{%- endmacro -%}
+
+{#- The Navree mark. -#}
+{%- macro mark(size=16, class="") -%}{{ svg_mark(size, class) }}{%- endmacro -%}
+
+{#- Extra attributes from a mapping: `attrs={"data-id": "42"}` (values are escaped). -#}
+{%- macro attributes(attrs) -%}{% if attrs %}{% for name, value in attrs|items %} {{ name }}="{{ value }}"{% endfor %}{% endif %}{%- endmacro -%}
+
+{#- A keyboard shortcut: `ui.kbd("mod+K")` shows Ctrl+K, or ⌘K on a Mac. -#}
+{%- macro kbd(keys) -%}
+<kbd class="ui-kbd">{% for key in keys|split("+") %}{% if key == "mod" %}<span data-ui-mod>Ctrl</span>{% else %}<span>{{ key }}</span>{% endif %}{% endfor %}</kbd>
+{%- endmacro -%}
+
+{#- 1234567 as 1,234,567 (non-negative integers). -#}
+{%- macro thousands(n) -%}
+{%- set s = n|string -%}
+{%- if s|length <= 3 -%}{{ s }}{%- else -%}
+{%- set head = s|length % 3 -%}
+{{ s[:head] }}{% for i in range(head, s|length, 3) %}{% if i > 0 %},{% endif %}{{ s[i:i + 3] }}{% endfor %}
+{%- endif -%}
+{%- endmacro -%}
+
+{#- ---------------------------------------------------------------------- -#}
+{#- Buttons                                                                 -#}
+{#- ---------------------------------------------------------------------- -#}
+
+{#- A button, or a link drawn as one (with `href`).
+    variant: primary (the one green action of a view), secondary, ghost,
+    danger, dashed. size: sm, lg. Without a label it is an icon button and
+    needs `aria_label`. `dialog` opens the dialog with that id; `shortcut`
+    adds a keycap ("mod+S"). -#}
+{%- macro button(label=none, variant="secondary", size=none, icon=none, icon_end=none, href=none, type="button", dialog=none, shortcut=none, disabled=false, block=false, aria_label=none, id=none, name=none, value=none, form=none, attrs=none) -%}
+{%- set classes = "ui-btn ui-btn--" ~ variant ~ (" ui-btn--" ~ size if size else "") ~ ("" if label else " ui-btn--icon") ~ (" ui-btn--block" if block else "") -%}
+{%- set inner -%}
+{% if icon %}{{ svg_icon(icon) }}{% endif %}{% if label %}<span>{{ label }}</span>{% endif %}{% if icon_end %}{{ svg_icon(icon_end) }}{% endif %}{% if shortcut %}{{ kbd(shortcut) }}{% endif %}
+{%- endset -%}
+{%- if href -%}
+<a class="{{ classes }}" href="{{ href }}"{% if id %} id="{{ id }}"{% endif %}{% if disabled %} aria-disabled="true" tabindex="-1"{% endif %}{% if aria_label %} aria-label="{{ aria_label }}"{% endif %}{{ attributes(attrs) }}>{{ inner }}</a>
+{%- else -%}
+<button class="{{ classes }}" type="{{ type }}"{% if id %} id="{{ id }}"{% endif %}{% if name %} name="{{ name }}"{% endif %}{% if value is not none %} value="{{ value }}"{% endif %}{% if form %} form="{{ form }}"{% endif %}{% if dialog %} data-ui-dialog-open="{{ dialog }}"{% endif %}{% if disabled %} disabled{% endif %}{% if aria_label %} aria-label="{{ aria_label }}"{% endif %}{{ attributes(attrs) }}>{{ inner }}</button>
+{%- endif -%}
+{%- endmacro -%}
+
+{#- An icon-only button: `ui.icon_button("refresh-cw", "Refresh")`. -#}
+{%- macro icon_button(icon, label, variant="ghost", size=none, href=none, dialog=none, attrs=none) -%}
+{{ button(none, variant=variant, size=size, icon=icon, href=href, dialog=dialog, aria_label=label, attrs=attrs) }}
+{%- endmacro -%}
+
+{#- A button from an `Action` (label, href or dialog, icon, variant). -#}
+{%- macro action_button(action, size=none) -%}
+{{ button(action.label, variant=action.variant, size=size, icon=action.icon, href=action.href, dialog=action.dialog) }}
+{%- endmacro -%}
+
+{#- ---------------------------------------------------------------------- -#}
+{#- Badges, status, avatars                                                 -#}
+{#- ---------------------------------------------------------------------- -#}
+
+{#- A badge. tone: neutral (default), success, warning, danger, outline, mono. -#}
+{%- macro badge(label, tone=none, icon=none, dot=false) -%}
+<span class="ui-badge{% if tone and tone != 'neutral' %} ui-badge--{{ tone }}{% endif %}">{% if dot %}<span class="ui-dot ui-dot--current"></span>{% endif %}{% if icon %}{{ svg_icon(icon, 12) }}{% endif %}{{ label }}</span>
+{%- endmacro -%}
+
+{#- A status: a dot and its label. tone: success, warning, danger, neutral. -#}
+{%- macro status(label, tone="neutral") -%}
+<span class="ui-status"><span class="ui-dot ui-dot--{{ tone or 'neutral' }}" aria-hidden="true"></span>{{ label }}</span>
+{%- endmacro -%}
+
+{#- A 32px square avatar: the image, or up to two initials. -#}
+{%- macro avatar(name, src=none, initials=none, size=none) -%}
+<span class="ui-avatar{% if size %} ui-avatar--{{ size }}{% endif %}"{% if not src %} aria-hidden="true"{% endif %}>{% if src %}<img src="{{ src }}" alt="{{ name }}">{% else %}{% if initials %}{{ initials }}{% else %}{% for word in (name|split|list)[:2] %}{{ word[:1]|upper }}{% endfor %}{% endif %}{% endif %}</span>
+{%- endmacro -%}
+
+{#- ---------------------------------------------------------------------- -#}
+{#- Page structure                                                          -#}
+{#- ---------------------------------------------------------------------- -#}
+
+{#- The page title, a description, and actions (the `call` body):
+      {% call ui.page_header("Users", "Everyone in Acme.") %}{{ ui.button(...) }}{% endcall %} -#}
+{%- macro page_header(title, description=none) -%}
+<div class="ui-page-header"><div class="ui-page-header__text"><h1 class="ui-h1">{{ title }}</h1>{% if description %}<p class="ui-page-header__desc">{{ description }}</p>{% endif %}</div>{% if caller %}<div class="ui-actions">{{ caller() }}</div>{% endif %}</div>
+{%- endmacro -%}
+
+{#- The breadcrumb (the top bar renders `shell.breadcrumb` with it). -#}
+{%- macro breadcrumb(items) -%}
+<nav class="ui-breadcrumb" aria-label="Breadcrumb"><ol class="ui-breadcrumb__list">
+{%- for item in items -%}
+<li class="ui-breadcrumb__item">{% if item.href and not loop.last %}<a href="{{ item.href }}">{{ item.label }}</a>{% else %}<span aria-current="page">{{ item.label }}</span>{% endif %}{% if not loop.last %}{{ svg_icon("chevron-right", 14, class="ui-breadcrumb__sep") }}{% endif %}</li>
+{%- endfor -%}
+</ol></nav>
+{%- endmacro -%}
+
+{#- A card: a title, a description, an optional header link (`link` with
+    label and href) and a footer; the `call` body is its content. -#}
+{%- macro card(title=none, description=none, link=none, footer=none, flush=false, id=none) -%}
+<section class="ui-card"{% if id %} id="{{ id }}"{% endif %}>
+{%- if title %}<header class="ui-card__header"><div><h2 class="ui-card__title">{{ title }}</h2>{% if description %}<p class="ui-card__desc">{{ description }}</p>{% endif %}</div>{% if link %}<a class="ui-btn ui-btn--ghost ui-btn--sm" href="{{ link.href }}"><span>{{ link.label }}</span>{{ svg_icon("arrow-right", 14) }}</a>{% endif %}</header>{% endif -%}
+<div class="ui-card__body{% if flush %} ui-card__body--flush{% endif %}">{% if caller %}{{ caller() }}{% endif %}</div>
+{%- if footer %}<footer class="ui-card__footer">{{ footer }}</footer>{% endif -%}
+</section>
+{%- endmacro -%}
+
+{#- A section heading inside a page, with an optional link on the right. -#}
+{%- macro section_title(title, link=none) -%}
+<div class="ui-section-title"><h2 class="ui-h2">{{ title }}</h2>{% if link %}<a class="ui-btn ui-btn--ghost ui-btn--sm" href="{{ link.href }}"><span>{{ link.label }}</span>{{ svg_icon("arrow-right", 14) }}</a>{% endif %}</div>
+{%- endmacro -%}
+
+{#- ---------------------------------------------------------------------- -#}
+{#- Stats and charts                                                        -#}
+{#- ---------------------------------------------------------------------- -#}
+
+{#- A sparkline from a `Sparkline`. -#}
+{%- macro sparkline(spark) -%}
+<svg class="ui-stat__spark ui-spark ui-spark--{{ spark.tone }}" viewBox="0 0 100 32" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path class="ui-spark__area" d="{{ spark.area }}"/><path class="ui-spark__line" d="{{ spark.line }}" vector-effect="non-scaling-stroke"/></svg>
+{%- endmacro -%}
+
+{#- A stat card. `trend` (up, down, flat) picks the delta's arrow; its
+    color follows it (up in the accent, down in danger) unless `tone` says
+    otherwise (positive, negative, neutral), for values where down is good. -#}
+{%- macro stat(label, value, delta=none, trend=none, tone=none, note=none, icon=none, spark=none) -%}
+{%- set tone = tone or ("positive" if trend == "up" else ("negative" if trend == "down" else "neutral")) -%}
+<div class="ui-card ui-stat">
+<div class="ui-stat__label"><span>{{ label }}</span>{% if icon %}{{ svg_icon(icon) }}{% endif %}</div>
+<div class="ui-stat__value">{{ value }}</div>
+{%- if delta or note %}<div class="ui-stat__meta">{% if delta %}<span class="ui-delta{% if tone == 'positive' %} ui-delta--up{% elif tone == 'negative' %} ui-delta--down{% endif %}">{% if trend == "up" %}{{ svg_icon("trending-up", 14) }}{% elif trend == "down" %}{{ svg_icon("trending-down", 14) }}{% endif %}{{ delta }}</span>{% endif %}{% if note %}<span>{{ note }}</span>{% endif %}</div>{% endif -%}
+{%- if spark %}{{ sparkline(spark) }}{% endif -%}
+</div>
+{%- endmacro -%}
+
+{#- A chart's legend. -#}
+{%- macro legend(data) -%}
+<div class="ui-legend">{% for item in data.legend %}<span class="ui-legend__item"><span class="ui-legend__swatch ui-legend__swatch--{{ item.tone }}{% if item.dashed %} ui-legend__swatch--dashed{% endif %}" aria-hidden="true"></span>{{ item.name }}</span>{% endfor %}</div>
+{%- endmacro -%}
+
+{#- A bar or line chart from a `Chart`: y ticks, a stretched SVG plot,
+    x labels. Each bar or x position has a tooltip with its values. -#}
+{%- macro chart(data, label=none) -%}
+<figure class="ui-chart ui-chart--{{ data.size }}" role="img" aria-label="{{ label or data.summary }}">
+<div class="ui-chart__y" aria-hidden="true">{% for tick in data.ticks %}<span>{{ tick }}</span>{% endfor %}</div>
+<div class="ui-chart__plot"><svg class="ui-chart__svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+{%- for y in data.grid %}<line class="ui-chart__grid" x1="0" x2="100" y1="{{ y }}" y2="{{ y }}" vector-effect="non-scaling-stroke"/>{% endfor -%}
+{%- for bar in data.bars %}<rect class="ui-chart__bar{% if bar.tone != 'muted' %} ui-chart__bar--{{ bar.tone }}{% endif %}" x="{{ bar.x }}" y="{{ bar.y }}" width="{{ bar.w }}" height="{{ bar.h }}"><title>{{ bar.title }}</title></rect>{% endfor -%}
+{%- for line in data.lines %}{% if line.area %}<path class="ui-chart__area ui-chart__area--{{ line.tone }}" d="{{ line.area }}"/>{% endif %}<path class="ui-chart__line ui-chart__line--{{ line.tone }}{% if line.dashed %} ui-chart__line--dashed{% endif %}" d="{{ line.line }}" vector-effect="non-scaling-stroke"/>{% endfor -%}
+{%- for hover in data.hovers %}<rect class="ui-chart__hover" x="{{ hover.x }}" y="0" width="{{ hover.w }}" height="100"><title>{{ hover.title }}</title></rect>{% endfor -%}
+</svg></div>
+<div class="ui-chart__x{% if data.kind == 'line' %} ui-chart__x--line{% endif %}" aria-hidden="true">{% for x in data.x_labels %}{% if data.kind == 'line' %}{% if x.show %}<span>{{ x.text }}</span>{% endif %}{% else %}<span>{% if x.show %}{{ x.text }}{% endif %}</span>{% endif %}{% endfor %}</div>
+</figure>
+{%- endmacro -%}
+
+{#- A card holding a chart, with its title, description and legend. -#}
+{%- macro chart_card(title, data, description=none, value=none) -%}
+<section class="ui-card">
+<header class="ui-card__header"><div><h2 class="ui-card__title">{{ title }}</h2>{% if description %}<p class="ui-card__desc">{{ description }}</p>{% endif %}</div>{% if data.legend|length > 1 %}{{ legend(data) }}{% elif value %}<span class="ui-stat__value ui-chart__value">{{ value }}</span>{% endif %}</header>
+<div class="ui-card__body">{{ chart(data) }}</div>
+</section>
+{%- endmacro -%}
+
+{#- A progress bar (a native <progress>). tone: success. -#}
+{%- macro progress(value, max=100, label="Progress", tone=none) -%}
+<progress class="ui-progress{% if tone == 'success' %} ui-progress--success{% endif %}" value="{{ value }}" max="{{ max }}" aria-label="{{ label }}">{{ value }}</progress>
+{%- endmacro -%}
+
+{#- A description list from (term, value) pairs. -#}
+{%- macro details(items) -%}
+<dl class="ui-dl">{% for item in items %}{% if item is mapping %}<dt>{{ item.term }}</dt><dd>{{ item.value }}</dd>{% else %}<dt>{{ item[0] }}</dt><dd>{{ item[1] }}</dd>{% endif %}{% endfor %}</dl>
+{%- endmacro -%}
+
+{#- An alert. tone: danger, warning, success, or none (neutral). `items`
+    lists messages under the body. -#}
+{%- macro alert(title, body=none, tone=none, icon=none, items=none) -%}
+{%- set icon = icon or ("circle-alert" if tone == "danger" else ("triangle-alert" if tone == "warning" else ("circle-check" if tone == "success" else "info"))) -%}
+<div class="ui-alert{% if tone %} ui-alert--{{ tone }}{% endif %}" role="{{ 'alert' if tone == 'danger' else 'status' }}">{{ svg_icon(icon) }}<div><p class="ui-alert__title">{{ title }}</p>{% if body or items %}<div class="ui-alert__body">{% if body %}<p>{{ body }}</p>{% endif %}{% if items %}<ul>{% for item in items %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}</div>{% endif %}</div></div>
+{%- endmacro -%}
+
+{#- ---------------------------------------------------------------------- -#}
+{#- Empty and loading states                                                -#}
+{#- ---------------------------------------------------------------------- -#}
+
+{#- An empty state: an icon, a title, a sentence and an action (`Action`). -#}
+{%- macro empty_state(title, description=none, icon="inbox", action=none) -%}
+<div class="ui-empty"><div class="ui-empty__icon">{{ svg_icon(icon, 20) }}</div><p class="ui-empty__title">{{ title }}</p>{% if description %}<p class="ui-empty__desc">{{ description }}</p>{% endif %}{% if action %}<div class="ui-empty__action">{{ action_button(action, size="sm") }}</div>{% endif %}</div>
+{%- endmacro -%}
+
+{#- A spinner and a label, for content that is on its way. -#}
+{%- macro loading(label="Loading…") -%}
+<div class="ui-loading" role="status">{{ svg_icon("loader-circle", class="ui-spin") }}<span>{{ label }}</span></div>
+{%- endmacro -%}
+
+{#- A placeholder bar. width: xs, sm, md, lg; `box` for a 16px square. -#}
+{%- macro skeleton(width="md") -%}
+<span class="ui-skeleton ui-skeleton--{{ 'box' if width == 'box' else 'w-' ~ width }}" aria-hidden="true"></span>
+{%- endmacro -%}
+
+{#- ---------------------------------------------------------------------- -#}
+{#- Menus                                                                   -#}
+{#- ---------------------------------------------------------------------- -#}
+
+{#- A menu (hidden until its trigger opens it) from `MenuItem`s. `tiles`
+    draws each icon in a small square (the app switcher). -#}
+{%- macro menu(id, items, label=none, tiles=false) -%}
+<div class="ui-menu" id="{{ id }}" role="menu"{% if label %} aria-label="{{ label }}"{% endif %} hidden>
+{%- for item in items -%}
+{%- if item.kind == "separator" -%}<div class="ui-menu__sep" role="separator"></div>
+{%- elif item.kind == "label" -%}<div class="ui-menu__label" role="presentation">{{ item.label }}</div>
+{%- else -%}
+{%- set role = "menuitem" if item.checked is none else "menuitemcheckbox" -%}
+{%- set classes = "ui-menu__item" ~ (" ui-menu__item--danger" if item.danger else "") ~ (" ui-menu__item--tall" if item.description else "") -%}
+{%- set inner -%}
+{% if item.checked is not none and not tiles and not item.icon %}{{ svg_icon("check", class="ui-menu__check") }}{% endif %}{% if item.icon %}{% if tiles %}<span class="ui-menu__tile">{{ svg_icon(item.icon) }}</span>{% else %}{{ svg_icon(item.icon) }}{% endif %}{% endif %}{% if item.description %}<span class="ui-menu__text"><span>{{ item.label }}</span><span class="ui-menu__desc">{{ item.description }}</span></span>{% else %}<span class="ui-menu__text">{{ item.label }}</span>{% endif %}{% if item.shortcut %}<span class="ui-menu__shortcut">{{ item.shortcut }}</span>{% endif %}{% if item.checked is not none and (tiles or item.icon) %}{{ svg_icon("check", class="ui-menu__check ui-menu__check--end") }}{% endif %}
+{%- endset -%}
+{%- if item.href -%}
+<a class="{{ classes }}" href="{{ item.href }}" role="{{ role }}" tabindex="-1"{% if item.checked is not none %} aria-checked="{{ 'true' if item.checked else 'false' }}"{% endif %}>{{ inner }}</a>
+{%- else -%}
+<button type="button" class="{{ classes }}" role="{{ role }}" tabindex="-1"{% if item.dialog %} data-ui-dialog-open="{{ item.dialog }}"{% endif %}{% if item.checked is not none %} aria-checked="{{ 'true' if item.checked else 'false' }}"{% endif %}>{{ inner }}</button>
+{%- endif -%}
+{%- endif -%}
+{%- endfor -%}
+</div>
+{%- endmacro -%}
+
+{#- A button that opens a menu. align: start or end; side: bottom, top, right. -#}
+{%- macro dropdown(id, label, items, icon=none, variant="secondary", size=none, align="start", side="bottom") -%}
+<button type="button" class="ui-btn ui-btn--{{ variant }}{% if size %} ui-btn--{{ size }}{% endif %}{% if not label %} ui-btn--icon{% endif %}" data-ui-menu-trigger aria-controls="{{ id }}" data-align="{{ align }}" data-side="{{ side }}">{% if icon %}{{ svg_icon(icon) }}{% endif %}{% if label %}<span>{{ label }}</span>{{ svg_icon("chevron-down", 14) }}{% endif %}</button>{{ menu(id, items) }}
+{%- endmacro -%}
+
+{#- The ellipsis button of a table row and its menu. -#}
+{%- macro row_actions(id, items, label="Row actions") -%}
+<button type="button" class="ui-btn ui-btn--ghost ui-btn--icon ui-btn--sm" data-ui-menu-trigger aria-controls="{{ id }}" data-align="end" aria-label="{{ label }}">{{ svg_icon("ellipsis") }}</button>{{ menu(id, items, label=label) }}
+{%- endmacro -%}
+
+{#- ---------------------------------------------------------------------- -#}
+{#- Tables                                                                  -#}
+{#- ---------------------------------------------------------------------- -#}
+
+{#- A table cell from a `Cell`, in column `column`. -#}
+{%- macro table_cell(cell, column) -%}
+{%- set numeric = column.numeric or cell.kind == "number" -%}
+{%- set classes = [] -%}
+{%- if numeric %}{% set classes = classes + ["ui-col-num"] %}{% endif -%}
+{%- if cell.kind in ["strong", "muted", "mono"] %}{% set classes = classes + ["ui-cell-" ~ cell.kind] %}{% endif -%}
+{%- if cell.tone == "success" and cell.kind == "number" %}{% set classes = classes + ["ui-cell-positive"] %}{% endif -%}
+{%- if column.hide_on_mobile %}{% set classes = classes + ["ui-hide-sm"] %}{% endif -%}
+<td{% if classes %} class="{{ classes|join(' ') }}"{% endif %}>
+{%- if cell.kind == "badge" -%}{{ badge(cell.text, cell.tone) }}
+{%- elif cell.kind == "status" -%}{{ status(cell.text, cell.tone) }}
+{%- elif cell.kind == "lines" -%}<div class="ui-cell-lines">{% if cell.href %}<a class="ui-cell-link" href="{{ cell.href }}">{{ cell.text }}</a>{% else %}<span class="ui-strong">{{ cell.text }}</span>{% endif %}<span>{{ cell.sub }}</span></div>
+{%- elif cell.href -%}<a class="ui-cell-link" href="{{ cell.href }}">{{ cell.text }}</a>
+{%- else -%}{{ cell.text }}
+{%- endif -%}
+</td>
+{%- endmacro -%}
+
+{#- A sortable header's link. `sort` is the current sort ("name" or
+    "-name"), `url` the pattern with {sort}. -#}
+{%- macro sort_link(label, key, sort, url) -%}
+{%- set direction = "ascending" if sort == key else ("descending" if sort == "-" ~ key else none) -%}
+<a class="ui-sort" href="{{ url|replace('{sort}', ('-' ~ key) if direction == 'ascending' else key) }}">{{ label }}{{ svg_icon("arrow-up" if direction == "ascending" else ("arrow-down" if direction == "descending" else "arrow-up-down"), 14) }}</a>
+{%- endmacro -%}
+
+{%- macro page_link(url, number, icon, label, disabled, class="") -%}
+{%- if disabled -%}
+<span class="ui-btn ui-btn--secondary ui-btn--icon ui-btn--sm {{ class }}" aria-disabled="true" aria-label="{{ label }}">{{ svg_icon(icon) }}</span>
+{%- else -%}
+<a class="ui-btn ui-btn--secondary ui-btn--icon ui-btn--sm {{ class }}" href="{{ url|replace('{page}', number|string) }}" aria-label="{{ label }}">{{ svg_icon(icon) }}</a>
+{%- endif -%}
+{%- endmacro -%}
+
+{#- Pagination in Navree's page shape (`current_page`, `per_page`,
+    `total`, `last_page`): `url` replaces {page}; `per_page_url` (with
+    {per_page}) adds a rows-per-page select. -#}
+{%- macro pagination(page, url, per_page_url=none, options=none) -%}
+{%- set first = 0 if page.total == 0 else (page.current_page - 1) * page.per_page + 1 -%}
+{%- set last = [page.current_page * page.per_page, page.total]|min -%}
+<nav class="ui-pagination" aria-label="Pagination">
+<p class="ui-pagination__summary">{% if page.total == 0 %}No results{% else %}{{ thousands(first) }}–{{ thousands(last) }} of {{ thousands(page.total) }}{% endif %}</p>
+<div class="ui-pagination__controls">
+{%- if per_page_url %}<label class="ui-pagination__per-page"><span>Rows per page</span><span class="ui-select-wrap"><select class="ui-select" data-ui-per-page data-url="{{ per_page_url }}">{% for n in options or [10, 15, 25, 50, 100] %}<option value="{{ n }}"{% if n == page.per_page %} selected{% endif %}>{{ n }}</option>{% endfor %}</select>{{ svg_icon("chevron-down", 14) }}</span></label>{% endif -%}
+<span class="ui-pagination__page">Page {{ thousands(page.current_page) }} of {{ thousands(page.last_page) }}</span>
+<div class="ui-pagination__nav">
+{{- page_link(url, 1, "chevrons-left", "First page", page.current_page <= 1, "ui-pagination__first") -}}
+{{- page_link(url, page.current_page - 1, "chevron-left", "Previous page", page.current_page <= 1) -}}
+{{- page_link(url, page.current_page + 1, "chevron-right", "Next page", page.current_page >= page.last_page) -}}
+{{- page_link(url, page.last_page, "chevrons-right", "Last page", page.current_page >= page.last_page, "ui-pagination__last") -}}
+</div>
+</div>
+</nav>
+{%- endmacro -%}
+
+
+
+{#- A data table from a `Table`: sortable headers, row selection (with a
+    bar of bulk actions while rows are selected), row actions, pagination,
+    and its empty and loading states. -#}
+{%- macro data_table(table) -%}
+{%- set span = table.columns|length + (1 if table.selectable else 0) + (1 if table.has_actions else 0) -%}
+<div class="ui-table-wrap"{% if table.loading %} aria-busy="true"{% endif %}>
+<table class="ui-table" id="{{ table.id }}"{% if table.selectable %} data-ui-table{% endif %}>
+{%- if table.caption %}<caption class="ui-sr-only">{{ table.caption }}</caption>{% endif -%}
+<thead><tr>
+{%- if table.selectable %}<th class="ui-col-check" scope="col"><input type="checkbox" class="ui-checkbox" data-ui-select-all aria-label="Select all rows"{% if table.loading or not table.rows %} disabled{% endif %}></th>{% endif -%}
+{%- for column in table.columns -%}
+{%- set direction = "ascending" if table.sort == column.key else ("descending" if table.sort and table.sort == "-" ~ column.key else none) -%}
+{%- set header_classes = (["ui-col-num"] if column.numeric else []) + (["ui-hide-sm"] if column.hide_on_mobile else []) -%}
+<th scope="col"{% if header_classes %} class="{{ header_classes|join(' ') }}"{% endif %}{% if direction %} aria-sort="{{ direction }}"{% endif %}>{% if column.sortable and table.sort_url %}{{ sort_link(column.label, column.key, table.sort, table.sort_url) }}{% else %}{{ column.label }}{% endif %}</th>
+{%- endfor -%}
+{%- if table.has_actions %}<th class="ui-col-actions" scope="col"><span class="ui-sr-only">Actions</span></th>{% endif -%}
+</tr></thead>
+<tbody>
+{%- if table.loading -%}
+{%- for _ in range(table.loading_rows) -%}
+<tr aria-hidden="true">{% if table.selectable %}<td class="ui-col-check">{{ skeleton("box") }}</td>{% endif %}{% for column in table.columns %}<td{% if column.numeric %} class="ui-col-num"{% endif %}>{{ skeleton(["lg", "md", "sm", "xs"][loop.index0 % 4] if not column.numeric else "xs") }}</td>{% endfor %}{% if table.has_actions %}<td class="ui-col-actions"></td>{% endif %}</tr>
+{%- endfor -%}
+{%- elif table.rows -%}
+{%- for row in table.rows -%}
+<tr{% if row.selected %} data-selected{% endif %}>
+{%- if table.selectable %}<td class="ui-col-check"><input type="checkbox" class="ui-checkbox" name="selected[]" value="{{ row.id }}" data-ui-select-row aria-label="Select row {{ row.id }}"{% if row.selected %} checked{% endif %}></td>{% endif -%}
+{%- for cell in row.cells %}{{ table_cell(cell, table.columns[loop.index0]) }}{% endfor -%}
+{%- if table.has_actions %}<td class="ui-col-actions">{% if row.actions %}{{ row_actions(table.id ~ "-" ~ row.id ~ "-actions", row.actions) }}{% endif %}</td>{% endif -%}
+</tr>
+{%- endfor -%}
+{%- else -%}
+<tr class="ui-table__empty"><td colspan="{{ span }}">{{ empty_state(table.empty.title, table.empty.description, table.empty.icon, table.empty.action) }}</td></tr>
+{%- endif -%}
+</tbody>
+</table>
+</div>
+{%- if table.bulk %}<div class="ui-selection-bar" data-ui-selection-bar="{{ table.id }}" role="region" aria-label="Selected rows" hidden><span class="ui-selection-bar__count" data-ui-selection-count>0 selected</span><span class="ui-separator-v" aria-hidden="true"></span>{% for action in table.bulk %}{{ action_button(action, size="sm") }}{% endfor %}</div>{% endif -%}
+{%- if table.page and not table.loading %}{{ pagination(table.page, table.page_url, table.per_page_url, table.per_page_options) }}{% endif -%}
+{%- endmacro -%}
+
+{#- A search box for a table toolbar (a GET form field). -#}
+{%- macro search_input(name="search", placeholder="Search…", value=none, label="Search") -%}
+<span class="ui-input-wrap">{{ svg_icon("search") }}<input class="ui-input" type="search" name="{{ name }}" placeholder="{{ placeholder }}" aria-label="{{ label }}"{% if value %} value="{{ value }}"{% endif %}></span>
+{%- endmacro -%}
+
+{#- ---------------------------------------------------------------------- -#}
+{#- Forms                                                                   -#}
+{#- `errors` is a `FormErrors` (or a Navree validation error body, or its
+    `errors` map): a field shows its messages and is marked invalid.        -#}
+{#- ---------------------------------------------------------------------- -#}
+
+{#- The messages for field `name`. -#}
+{%- macro field_messages(name, errors) -%}
+{%- set map = (errors.errors if errors and errors.errors is defined else errors) or {} -%}
+{{- (map[name] if map[name] is defined else [])|join(" ") -}}
+{%- endmacro -%}
+
+{%- macro field_id(name, id=none) -%}{{ id or "field-" ~ name|replace(".", "-")|replace("[", "-")|replace("]", "") }}{%- endmacro -%}
+
+{#- A label, an input, a hint and the field's errors. -#}
+{%- macro field(name, label, type="text", value=none, errors=none, hint=none, placeholder=none, required=false, optional=false, autocomplete=none, icon=none, id=none, readonly=false, disabled=false, attrs=none) -%}
+{%- set fid = field_id(name, id) -%}
+{%- set message = field_messages(name, errors) -%}
+<div class="ui-field">
+<label class="ui-label" for="{{ fid }}">{{ label }}{% if optional %}<span class="ui-label__optional">(optional)</span>{% endif %}</label>
+{%- if icon %}<span class="ui-input-wrap">{{ svg_icon(icon) }}{% endif -%}
+<input class="ui-input" id="{{ fid }}" name="{{ name }}" type="{{ type }}"{% if value is not none %} value="{{ value }}"{% endif %}{% if placeholder %} placeholder="{{ placeholder }}"{% endif %}{% if required %} required{% endif %}{% if autocomplete %} autocomplete="{{ autocomplete }}"{% endif %}{% if readonly %} readonly{% endif %}{% if disabled %} disabled{% endif %}{% if message %} aria-invalid="true"{% endif %}{% if hint or message %} aria-describedby="{% if hint %}{{ fid }}-hint{% endif %}{% if hint and message %} {% endif %}{% if message %}{{ fid }}-error{% endif %}"{% endif %}{{ attributes(attrs) }}>
+{%- if icon %}</span>{% endif -%}
+{%- if hint %}<p class="ui-field__hint" id="{{ fid }}-hint">{{ hint }}</p>{% endif -%}
+{%- if message %}<p class="ui-field__error" id="{{ fid }}-error">{{ message }}</p>{% endif -%}
+</div>
+{%- endmacro -%}
+
+{#- A label, a textarea, a hint and the field's errors. -#}
+{%- macro textarea_field(name, label, value=none, errors=none, hint=none, placeholder=none, rows=4, required=false, optional=false, id=none) -%}
+{%- set fid = field_id(name, id) -%}
+{%- set message = field_messages(name, errors) -%}
+<div class="ui-field">
+<label class="ui-label" for="{{ fid }}">{{ label }}{% if optional %}<span class="ui-label__optional">(optional)</span>{% endif %}</label>
+<textarea class="ui-textarea" id="{{ fid }}" name="{{ name }}" rows="{{ rows }}"{% if placeholder %} placeholder="{{ placeholder }}"{% endif %}{% if required %} required{% endif %}{% if message %} aria-invalid="true"{% endif %}{% if hint or message %} aria-describedby="{% if hint %}{{ fid }}-hint{% endif %}{% if hint and message %} {% endif %}{% if message %}{{ fid }}-error{% endif %}"{% endif %}>{% if value is not none %}{{ value }}{% endif %}</textarea>
+{%- if hint %}<p class="ui-field__hint" id="{{ fid }}-hint">{{ hint }}</p>{% endif -%}
+{%- if message %}<p class="ui-field__error" id="{{ fid }}-error">{{ message }}</p>{% endif -%}
+</div>
+{%- endmacro -%}
+
+{#- A label, a select, a hint and the field's errors. `options` holds
+    (value, label) pairs, {value, label} mappings or plain strings. -#}
+{%- macro select_field(name, label, options, value=none, errors=none, hint=none, placeholder=none, required=false, id=none) -%}
+{%- set fid = field_id(name, id) -%}
+{%- set message = field_messages(name, errors) -%}
+<div class="ui-field">
+<label class="ui-label" for="{{ fid }}">{{ label }}</label>
+<span class="ui-select-wrap"><select class="ui-select" id="{{ fid }}" name="{{ name }}"{% if required %} required{% endif %}{% if message %} aria-invalid="true"{% endif %}{% if hint or message %} aria-describedby="{% if hint %}{{ fid }}-hint{% endif %}{% if hint and message %} {% endif %}{% if message %}{{ fid }}-error{% endif %}"{% endif %}>
+{%- if placeholder %}<option value=""{% if value is none %} selected{% endif %} disabled>{{ placeholder }}</option>{% endif -%}
+{%- for option in options -%}
+{%- if option is mapping %}{% set v = option.value %}{% set l = option.label %}{% elif option is string %}{% set v = option %}{% set l = option %}{% else %}{% set v = option[0] %}{% set l = option[1] %}{% endif -%}
+<option value="{{ v }}"{% if value is not none and v|string == value|string %} selected{% endif %}>{{ l }}</option>
+{%- endfor -%}
+</select>{{ svg_icon("chevron-down") }}</span>
+{%- if hint %}<p class="ui-field__hint" id="{{ fid }}-hint">{{ hint }}</p>{% endif -%}
+{%- if message %}<p class="ui-field__error" id="{{ fid }}-error">{{ message }}</p>{% endif -%}
+</div>
+{%- endmacro -%}
+
+{#- A checkbox with its label and hint. -#}
+{%- macro checkbox_field(name, label, checked=false, hint=none, errors=none, value="1", id=none, disabled=false) -%}
+{%- set fid = field_id(name, id) -%}
+{%- set message = field_messages(name, errors) -%}
+<div class="ui-field">
+<label class="ui-check" for="{{ fid }}"><input type="checkbox" class="ui-checkbox" id="{{ fid }}" name="{{ name }}" value="{{ value }}"{% if checked %} checked{% endif %}{% if disabled %} disabled{% endif %}{% if message %} aria-invalid="true" aria-describedby="{{ fid }}-error"{% endif %}><span class="ui-check__text"><span class="ui-check__label">{{ label }}</span>{% if hint %}<span class="ui-check__hint">{{ hint }}</span>{% endif %}</span></label>
+{%- if message %}<p class="ui-field__error" id="{{ fid }}-error">{{ message }}</p>{% endif -%}
+</div>
+{%- endmacro -%}
+
+{#- A switch (an on/off setting) with its label and hint, in a bordered row. -#}
+{%- macro switch_field(name, label, checked=false, hint=none, value="1", id=none, disabled=false) -%}
+{%- set fid = field_id(name, id) -%}
+<label class="ui-switch-row" for="{{ fid }}"><span class="ui-check__text"><span class="ui-check__label">{{ label }}</span>{% if hint %}<span class="ui-check__hint">{{ hint }}</span>{% endif %}</span><input type="checkbox" role="switch" class="ui-switch" id="{{ fid }}" name="{{ name }}" value="{{ value }}"{% if checked %} checked{% endif %}{% if disabled %} disabled{% endif %}></label>
+{%- endmacro -%}
+
+{#- The summary of a failed submission: every message of a `FormErrors`
+    (or of a Navree error body), in a danger alert. Renders nothing without
+    messages. -#}
+{%- macro form_errors(errors, title="Please correct the highlighted fields.") -%}
+{%- set messages = errors.message if errors and errors.message is defined else [] -%}
+{%- if messages is string %}{% set messages = [messages] %}{% endif -%}
+{%- if messages %}{{ alert(title, tone="danger", items=messages) }}{% endif -%}
+{%- endmacro -%}
+
+{#- ---------------------------------------------------------------------- -#}
+{#- Tabs                                                                    -#}
+{#- ---------------------------------------------------------------------- -#}
+
+{#- Tabs with panels: `items` holds {id, label, count?}; the `call` body
+    renders each panel: {% call(tab) ui.tabs("deal", tabs) %}...{% endcall %}.
+    variant: none (segmented) or "line". -#}
+{%- macro tabs(id, items, selected=none, variant=none, label=none) -%}
+{%- set selected = selected or items[0].id -%}
+<div class="ui-tabs{% if variant == 'line' %} ui-tabs--line{% endif %}" data-ui-tabs>
+<div class="ui-tabs__list" role="tablist"{% if label %} aria-label="{{ label }}"{% endif %}>
+{%- for tab in items -%}
+<button type="button" class="ui-tabs__tab" role="tab" id="{{ id }}-tab-{{ tab.id }}" aria-controls="{{ id }}-panel-{{ tab.id }}" aria-selected="{{ 'true' if tab.id == selected else 'false' }}" tabindex="{{ 0 if tab.id == selected else -1 }}">{{ tab.label }}{% if tab.count is defined and tab.count is not none %}<span class="ui-tabs__count">{{ tab.count }}</span>{% endif %}</button>
+{%- endfor -%}
+</div>
+{%- for tab in items -%}
+<div class="ui-tabs__panel" role="tabpanel" id="{{ id }}-panel-{{ tab.id }}" aria-labelledby="{{ id }}-tab-{{ tab.id }}" tabindex="0"{% if tab.id != selected %} hidden{% endif %}>{{ caller(tab) }}</div>
+{%- endfor -%}
+</div>
+{%- endmacro -%}
+
+{#- Tabs as links between pages: `items` holds {label, href, active, count?}. -#}
+{%- macro link_tabs(items, variant=none, label="Sections") -%}
+<nav class="ui-tabs{% if variant == 'line' %} ui-tabs--line{% endif %}" aria-label="{{ label }}"><div class="ui-tabs__list">
+{%- for tab in items -%}
+<a class="ui-tabs__tab" href="{{ tab.href }}"{% if tab.active %} aria-current="page"{% endif %}>{{ tab.label }}{% if tab.count is defined and tab.count is not none %}<span class="ui-tabs__count">{{ tab.count }}</span>{% endif %}</a>
+{%- endfor -%}
+</div></nav>
+{%- endmacro -%}
+
+{#- ---------------------------------------------------------------------- -#}
+{#- Dialogs and toasts                                                      -#}
+{#- ---------------------------------------------------------------------- -#}
+
+{#- A modal dialog (opened by `data-ui-dialog-open="{id}"`, a button's
+    `dialog=` or a menu item's). The `call` body follows the header; use
+    `<div class="ui-dialog__body">` and `<footer class="ui-dialog__footer">`.
+    size: sm, lg. -#}
+{%- macro dialog(id, title, description=none, size=none) -%}
+<dialog class="ui-dialog{% if size %} ui-dialog--{{ size }}{% endif %}" id="{{ id }}" aria-labelledby="{{ id }}-title"{% if description %} aria-describedby="{{ id }}-desc"{% endif %}>
+<header class="ui-dialog__header"><h2 class="ui-dialog__title" id="{{ id }}-title">{{ title }}</h2>{% if description %}<p class="ui-dialog__desc" id="{{ id }}-desc">{{ description }}</p>{% endif %}<button type="button" class="ui-btn ui-btn--ghost ui-btn--icon ui-btn--sm ui-dialog__close" data-ui-dialog-close aria-label="Close">{{ svg_icon("x") }}</button></header>
+{%- if caller %}{{ caller() }}{% endif -%}
+</dialog>
+{%- endmacro -%}
+
+{#- A confirmation dialog. With `action` the confirm button submits a form
+    there (`method`, plus a hidden `csrf` field given as {name, value});
+    without, it just closes. -#}
+{%- macro confirm_dialog(id, title, description=none, confirm="Confirm", variant="danger", action=none, method="post", csrf=none) -%}
+<dialog class="ui-dialog ui-dialog--sm" id="{{ id }}" role="alertdialog" aria-labelledby="{{ id }}-title"{% if description %} aria-describedby="{{ id }}-desc"{% endif %}>
+<header class="ui-dialog__header"><h2 class="ui-dialog__title" id="{{ id }}-title">{{ title }}</h2>{% if description %}<p class="ui-dialog__desc" id="{{ id }}-desc">{{ description }}</p>{% endif %}</header>
+<form class="ui-dialog__footer" method="{{ method if action else 'dialog' }}"{% if action %} action="{{ action }}"{% endif %}>{% if csrf %}<input type="hidden" name="{{ csrf.name }}" value="{{ csrf.value }}">{% endif %}<button type="button" class="ui-btn ui-btn--secondary" data-ui-dialog-close autofocus>Cancel</button><button type="submit" class="ui-btn ui-btn--{{ variant }}">{{ confirm }}</button></form>
+</dialog>
+{%- endmacro -%}
+
+{#- A toast from a `Toast` (the shell renders `shell.toasts` with it). -#}
+{%- macro toast(item) -%}
+{%- set names = {"success": "circle-check", "error": "circle-alert", "warning": "triangle-alert"} -%}
+{%- set name = names[item.variant] if item.variant in names else "info" -%}
+<li class="ui-toast ui-toast--{{ item.variant }}" role="{{ 'alert' if item.variant == 'error' else 'status' }}">{{ svg_icon(name) }}<div><p class="ui-toast__title">{{ item.title }}</p>{% if item.description %}<p class="ui-toast__desc">{{ item.description }}</p>{% endif %}</div><button type="button" class="ui-btn ui-btn--ghost ui-btn--icon ui-btn--sm ui-toast__close" data-ui-toast-close aria-label="Dismiss">{{ svg_icon("x") }}</button></li>
+{%- endmacro -%}
