@@ -79,7 +79,10 @@ return Err(AppError::conflict("The campaign is already running.")
 - Modules send their own: auth `invalid_credentials`, `token_expired`,
   `invalid_two_factor_code`, `too_many_login_attempts`; workspace
   `not_a_member`, `workspace_not_found`, `invitation_expired`; access
-  `role_not_found`, `forbidden_fields`. The errors page lists them all.
+  `role_not_found`, `forbidden_fields`; social `email_taken`,
+  `registration_closed`; billing `subscription_required`,
+  `already_subscribed`; webhooks `invalid_webhook_signature`. The errors
+  page lists them all.
 - `http.errors.code = false` (`APP_HTTP__ERRORS__CODE=false`) leaves the
   member out of every body; `AppError::code` keeps its value.
 
