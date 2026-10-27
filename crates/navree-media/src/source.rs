@@ -214,9 +214,28 @@ fn http_error(error: HttpClientError, url: &str) -> MediaError {
         },
         other => MediaError::Download {
             url: url.to_owned(),
-            reason: other.to_string(),
+            reason: scrub_urls(&other.to_string()),
         },
     }
+}
+
+/// `text` with every `http(s)://` URL in it shown without its query
+/// string, fragment or credentials (client errors name the URL they
+/// failed on, signed query strings included).
+pub(crate) fn scrub_urls(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(start) = rest.find("http://").into_iter().chain(rest.find("https://")).min() {
+        out.push_str(&rest[..start]);
+        let tail = &rest[start..];
+        let end = tail
+            .find(|c: char| c.is_whitespace() || matches!(c, ')' | '(' | '`' | '"' | '\'' | '<' | '>'))
+            .unwrap_or(tail.len());
+        out.push_str(&display_url(&tail[..end]));
+        rest = &tail[end..];
+    }
+    out.push_str(rest);
+    out
 }
 
 /// The URL without its query string, fragment or credentials.
@@ -340,5 +359,10 @@ mod tests {
             display_url("https://user:pw@cdn.example.com/a.png?token=secret#x"),
             "https://cdn.example.com/a.png"
         );
+        assert_eq!(
+            scrub_urls("request to https://cdn.example.com/a.png?sig=abc timed out (http://x.test/?k=1)"),
+            "request to https://cdn.example.com/a.png timed out (http://x.test/)"
+        );
+        assert_eq!(scrub_urls("no url here"), "no url here");
     }
 }

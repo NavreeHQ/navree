@@ -174,9 +174,20 @@ async fn downloads_are_capped_in_size_status_and_time() {
     assert_eq!((error.status(), error.code()), (400, "remote_file_unavailable"));
 
     let error = media
-        .add_from_url(&course, "attachments", format!("{}/slow.txt", server.uri()))
+        .add_from_url(&course, "attachments", format!("{}/slow.txt?token=abc", server.uri()))
         .save(None)
         .await
         .unwrap_err();
     assert!(matches!(error, MediaError::Download { .. }), "{error}");
+    assert!(!error.to_string().contains("token"), "{error}");
+
+    // Nothing listens on port 9: the client's error names the URL, and
+    // the message shows it without its query string.
+    let error = media
+        .add_from_url(&course, "attachments", "http://127.0.0.1:9/a.txt?signature=s3cr3t")
+        .save(None)
+        .await
+        .unwrap_err();
+    assert!(matches!(error, MediaError::Download { .. }), "{error}");
+    assert!(!error.to_string().contains("s3cr3t"), "{error}");
 }
