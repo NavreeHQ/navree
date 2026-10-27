@@ -1,0 +1,50 @@
+[package]
+name = "navree-fleet"
+description = "Navree FleetModule: supervised queue workers per queue with auto-balancing, recycling and graceful restarts, throughput, wait and runtime metrics, failed jobs, pause and continue, long-wait alerts and a dashboard at /_fleet."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+axum = { workspace = true }
+chrono = { workspace = true }
+http = { workspace = true }
+memory-stats = { workspace = true }
+metrics = { workspace = true }
+navree-access = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-db = { workspace = true }
+navree-events = { workspace = true }
+navree-http = { workspace = true }
+navree-kernel = { workspace = true }
+navree-observe = { workspace = true }
+navree-queue = { workspace = true }
+navree-telemetry = { workspace = true }
+navree-view = { workspace = true }
+sea-orm = { workspace = true }
+sea-orm-migration = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+navree-testing = { workspace = true }
+proptest = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
+
+# Spawns its own binary as the workers of a real `fleet` master (the test's
+# `main` runs the app when it is started with a command).
+[[test]]
+name = "processes"
+harness = false
