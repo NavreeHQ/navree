@@ -27,6 +27,7 @@ base64 = { workspace = true }
 chrono = { workspace = true }
 http = { workspace = true }
 indexmap = { workspace = true }
+navree-api = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-crypto = { workspace = true }

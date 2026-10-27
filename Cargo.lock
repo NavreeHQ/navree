@@ -4935,6 +4935,7 @@ dependencies = [
  "http",
  "indexmap",
  "insta",
+ "navree-api",
  "navree-config",
  "navree-contracts",
  "navree-crypto",

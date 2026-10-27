@@ -503,6 +503,7 @@ pub(crate) struct SerdeField {
     skip: bool,
     flatten: bool,
     custom: bool,
+    optional: bool,
 }
 
 impl SerdeField {
@@ -510,6 +511,11 @@ impl SerdeField {
     /// `with`, `flatten`).
     pub(crate) fn is_custom(&self) -> bool {
         self.custom
+    }
+
+    /// Whether serde may leave the field out (`skip_serializing_if`).
+    pub(crate) fn is_optional(&self) -> bool {
+        self.optional
     }
 }
 
@@ -575,6 +581,9 @@ pub(crate) fn serde_field(attrs: &[Attribute]) -> SerdeField {
                 }
             } else if path.is_ident("skip") || path.is_ident("skip_serializing") {
                 serde.skip = true;
+            } else if path.is_ident("skip_serializing_if") {
+                serde.optional = true;
+                skip_serde_value(&meta)?;
             } else if path.is_ident("flatten") {
                 serde.flatten = true;
                 serde.custom = true;
@@ -618,6 +627,8 @@ pub(crate) struct FieldInfo {
     pub(crate) serialized: Option<String>,
     /// Serde writes the field its own way.
     pub(crate) serde_custom: bool,
+    /// Serde may leave the field out.
+    pub(crate) serde_optional: bool,
     /// The mutator.
     pub(crate) set_with: Option<syn::Path>,
     /// The OpenAPI schema type.
@@ -918,11 +929,14 @@ pub(crate) fn column_meta_calls(model: &Model, column: &Column, krate: &TokenStr
     if field.serde_custom {
         calls.extend(quote!(.serde_custom()));
     }
+    if field.serde_optional {
+        calls.extend(quote!(.serde_optional()));
+    }
     if field.set_with.is_some() {
         calls.extend(quote!(.mutator()));
     }
     if let Some(schema) = &field.schema {
-        calls.extend(quote!(.schema(#krate::__private::schema_json::<#schema>)));
+        calls.extend(quote!(.schema(<#schema as #krate::__private::utoipa::PartialSchema>::schema)));
     }
     calls
 }
@@ -1328,6 +1342,14 @@ pub(crate) fn module_items(model: &Model, krate: &TokenStream) -> TokenStream {
         }
     }
     let ident = &model.ident;
+    if let Some(resource) = &model.attributes.resource {
+        items.push(quote! {
+            #[automatically_derived]
+            impl #krate::attributes::HasResource for #ident {
+                type Resource = #resource;
+            }
+        });
+    }
     for append in &model.attributes.appends {
         let name = plain_name(append);
         let message = format!(

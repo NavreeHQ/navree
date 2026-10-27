@@ -18,12 +18,16 @@ pub(crate) mod casts;
 mod context;
 pub(crate) mod extras;
 pub mod fill;
+mod resource;
+pub mod schema;
 pub mod serialize;
 pub(crate) mod state;
 mod visibility;
 
 pub use accessors::Accessor;
 pub use extras::ExtraCast;
+pub use resource::{HasResource, Resource};
+pub use schema::{ModelSchema, cursor_page_schema, page_schema, simple_page_schema};
 pub use visibility::Condition;
 #[doc(hidden)]
 pub use accessors::{NoAccessors, has_accessor};
