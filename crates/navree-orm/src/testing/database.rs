@@ -10,6 +10,8 @@
 //!   `TestAppBuilder::memory_database` for apps).
 //! - **Truncation** ([`TestDb::truncate`]): empty every table but the ones
 //!   named, for suites that share one database.
+//! - **A transaction per test** ([`TestDb::transaction`]): the test's unit
+//!   of work rolls back afterwards, its after-commit hooks still running.
 //! - **Lazy databases** ([`LazyTestDb`]): created when a test first uses
 //!   one, so tests that never touch the database never pay for it.
 //! - **Real servers** ([`TestServer`]): PostgreSQL, MySQL and MongoDB from
@@ -302,6 +304,42 @@ impl TestDb {
     /// while emptying).
     pub async fn truncate(&self, except: &[&str]) -> Result<(), BoxError> {
         truncate_tables(&self.db, except).await
+    }
+
+    /// Runs `test` with a unit of work on this database, then rolls it
+    /// back: the transaction-per-test strategy, for tests sharing a
+    /// database. Nothing `test` writes through the unit of work stays; its
+    /// change observers and after-commit hooks still run, as on a commit
+    /// ([`Uow::rollback_as_committed`](navree_db::Uow::rollback_as_committed)).
+    /// Drop every transaction handle `test` took from the unit of work
+    /// before it returns. Requests a test sends commit units of work of
+    /// their own: give HTTP tests a copy ([`Template`]) or truncate.
+    ///
+    /// ```
+    /// use navree_orm::testing::database::TestDb;
+    ///
+    /// # #[tokio::main(flavor = "current_thread")]
+    /// # async fn main() {
+    /// let test = TestDb::memory().await.unwrap();
+    /// let ran = test
+    ///     .transaction(|uow| async move {
+    ///         uow.after_commit(|| Box::pin(async { println!("as on a commit") }));
+    ///         "done"
+    ///     })
+    ///     .await
+    ///     .unwrap();
+    /// assert_eq!(ran, "done");
+    /// # }
+    /// ```
+    pub async fn transaction<F, Fut, T>(&self, test: F) -> Result<T, BoxError>
+    where
+        F: FnOnce(navree_db::Uow) -> Fut,
+        Fut: std::future::Future<Output = T>,
+    {
+        let uow = self.db.uow(None, None).await;
+        let output = test(uow.clone()).await;
+        uow.rollback_as_committed().await?;
+        Ok(output)
     }
 
     /// Closes the pool and removes the database now (dropping the
