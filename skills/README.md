@@ -50,6 +50,7 @@ conventions, and says which skill to load for each task.
 | [`navree-graphql`](navree-graphql/SKILL.md) | GraphQL resolvers, dataloaders and subscriptions (feature `graphql`) |
 | [`navree-grpc`](navree-grpc/SKILL.md) | gRPC, gRPC-Web and Connect services in modules, gRPC clients, and their tests |
 | [`navree-mcp`](navree-mcp/SKILL.md) | An MCP server for the product: tools, resources and prompts for AI clients |
+| [`navree-ai`](navree-ai/SKILL.md) | Models in your app: text, structured output, streaming, failover, budgets, agents with tools, embeddings, vector stores, `AiFake` |
 
 ## Installing
 

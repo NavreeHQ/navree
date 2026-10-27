@@ -244,6 +244,9 @@ pub enum MakeKind {
     Policy,
     /// `commands/<name>.rs`: a CLI command, registered with the module.
     Command,
+    /// `agents/<name>.rs`: an AI agent with one tool, registered with the
+    /// module (needs the `ai` feature of `navree`).
+    Agent,
     /// `tests/<name>.rs`: a test booting the module.
     Test,
     /// `mcp/<name>.rs`: an MCP server with one tool, registered with the
@@ -253,7 +256,7 @@ pub enum MakeKind {
 
 impl MakeKind {
     /// Every kind, in `navree help` order.
-    pub const ALL: [MakeKind; 13] = [
+    pub const ALL: [MakeKind; 14] = [
         MakeKind::Controller,
         MakeKind::Service,
         MakeKind::Entity,
@@ -265,6 +268,7 @@ impl MakeKind {
         MakeKind::Notification,
         MakeKind::Policy,
         MakeKind::Command,
+        MakeKind::Agent,
         MakeKind::Test,
         MakeKind::Mcp,
     ];
@@ -283,6 +287,7 @@ impl MakeKind {
             MakeKind::Notification => "notification",
             MakeKind::Policy => "policy",
             MakeKind::Command => "command",
+            MakeKind::Agent => "agent",
             MakeKind::Test => "test",
             MakeKind::Mcp => "mcp",
         }
@@ -302,6 +307,7 @@ impl MakeKind {
             MakeKind::Notification => "notifications",
             MakeKind::Policy => "policies",
             MakeKind::Command => "commands",
+            MakeKind::Agent => "agents",
             MakeKind::Test => "tests",
             MakeKind::Mcp => "mcp",
         }
@@ -321,6 +327,7 @@ impl MakeKind {
             MakeKind::Notification => "Notifications",
             MakeKind::Policy => "Ability policies",
             MakeKind::Command => "CLI commands",
+            MakeKind::Agent => "AI agents",
             MakeKind::Test => "Tests",
             MakeKind::Mcp => "MCP servers",
         };
@@ -469,6 +476,12 @@ fn wire_line(kind: MakeKind, stem: &str, ctx: &ItemContext, new_dir: bool) -> Op
         MakeKind::Mcp => Some(generic_call(
             "navree::mcp::ModuleBuilderMcpExt::mcp_server",
             &[format!("mcp::{stem}::{pascal}Mcp")],
+            "m",
+            WIRE_INDENT,
+        )),
+        MakeKind::Agent => Some(generic_call(
+            "navree::ai::ModuleBuilderAiExt::agent",
+            &[format!("agents::{stem}::{pascal}")],
             "m",
             WIRE_INDENT,
         )),
@@ -628,6 +641,11 @@ pub fn make_item(
             "serve /mcp: add `.module(McpModule::from_config())` to the app root, after HttpModule and AuthModule"
                 .to_owned(),
         ]),
+        MakeKind::Agent => report.hints.push(
+            "agents need the `ai` feature of navree (features = [\"ai\"]) and \
+             `AiModule::from_config()` in the app"
+                .to_owned(),
+        ),
         MakeKind::Listener if options.event.is_none() => report.hints.push(format!(
             "subscribe it in the module's `wire`: navree::events::ModuleBuilderEventsExt::listen::<SomeEvent, listeners::{stem}::{}>(m);",
             ctx.pascal

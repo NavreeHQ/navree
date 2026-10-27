@@ -18,7 +18,9 @@ use crate::error::display_url;
 use crate::fake::{FakeServer, FakeState};
 use crate::request::PreparedRequest;
 use crate::ssrf::{Refused, SsrfGuard, SsrfResolver};
-use crate::{HttpClientError, HttpClientOptions, RequestBuilder, Response};
+use crate::streaming::BodyStream;
+use crate::{HttpClientError, HttpClientOptions, RequestBuilder, Response, StreamingResponse};
+use futures_util::StreamExt;
 
 /// The outgoing HTTP client: cheap to clone, shared as a singleton.
 ///
@@ -272,7 +274,8 @@ impl HttpClient {
         };
         let elapsed = started.elapsed();
         let elapsed_ms = elapsed.as_millis() as u64;
-        self.report(&request, &url, &outcome, elapsed, attempts, span_id);
+        let status = outcome.as_ref().map(Response::status);
+        self.report(&request, &url, status, elapsed, attempts, span_id);
         match &outcome {
             Ok(response) => tracing::debug!(
                 method = %request.method,
@@ -300,7 +303,7 @@ impl HttpClient {
         &self,
         request: &PreparedRequest,
         url: &str,
-        outcome: &Result<Response, HttpClientError>,
+        outcome: Result<StatusCode, &HttpClientError>,
         duration: Duration,
         attempts: u32,
         span_id: Option<SpanId>,
@@ -314,7 +317,7 @@ impl HttpClient {
         };
         telemetry.emit_with(EventKind::HttpClientRequest, || {
             let (status, error) = match outcome {
-                Ok(response) => (Some(response.status().as_u16()), None),
+                Ok(status) => (Some(status.as_u16()), None),
                 Err(error) => (None, Some(error.to_string())),
             };
             TelemetryEvent::HttpClientRequest(HttpClientRequest {
@@ -327,6 +330,65 @@ impl HttpClient {
                 span_id,
             })
         });
+    }
+
+    /// Sends `request` once and returns at its response headers; `timeout`
+    /// (default: the options' attempt timeout) covers the wait for them.
+    pub(crate) async fn send_streaming(
+        &self,
+        mut request: PreparedRequest,
+        timeout: Option<Duration>,
+    ) -> Result<StreamingResponse, HttpClientError> {
+        self.inner.guard.check_url(&request.url)?;
+        let span_id = inject_trace(&mut request.headers);
+        let options = &self.inner.options;
+        let timeout = timeout.unwrap_or(Duration::from_secs(options.timeout_secs));
+        let url = display_url(&request.url);
+        let limit = options.max_response_bytes;
+        let started = Instant::now();
+        let method = request.method.clone();
+        let outcome = match &self.inner.transport {
+            Transport::Real(client) => {
+                tokio::time::timeout(timeout, open_real(client, request.clone(), limit))
+                    .await
+                    .unwrap_or_else(|_| Err(HttpClientError::Timeout { url: url.clone() }))
+            }
+            Transport::Fake(state) => tokio::time::timeout(timeout, state.execute(&request))
+                .await
+                .unwrap_or_else(|_| Err(HttpClientError::Timeout { url: url.clone() }))
+                .map(|response| {
+                    let body = response.bytes();
+                    let stream: BodyStream = Box::pin(futures_util::stream::iter([Ok(body)]));
+                    StreamingResponse::new(
+                        response.status(),
+                        response.headers().clone(),
+                        response.url().clone(),
+                        stream,
+                        limit,
+                    )
+                }),
+        };
+        let elapsed = started.elapsed();
+        let elapsed_ms = elapsed.as_millis() as u64;
+        let status = outcome.as_ref().map(StreamingResponse::status);
+        self.report(&request, &url, status, elapsed, 1, span_id);
+        match &outcome {
+            Ok(response) => tracing::debug!(
+                method = %method,
+                url = %url,
+                status = response.status().as_u16(),
+                elapsed_ms,
+                "outgoing streaming request"
+            ),
+            Err(error) => tracing::debug!(
+                method = %method,
+                url = %url,
+                %error,
+                elapsed_ms,
+                "outgoing streaming request failed"
+            ),
+        }
+        outcome
     }
 
     /// Sends `request` once.
@@ -391,6 +453,35 @@ async fn execute_real(
     let headers = response.headers().clone();
     let url = response.url().clone();
     Ok(Response::new(status, headers, body.freeze(), url))
+}
+
+/// Sends `request` with reqwest and returns at the response headers, the
+/// body as a stream.
+async fn open_real(
+    client: &reqwest::Client,
+    request: PreparedRequest,
+    limit: u64,
+) -> Result<StreamingResponse, HttpClientError> {
+    let mut builder = client
+        .request(request.method, request.url.clone())
+        .headers(request.headers);
+    if let Some(body) = request.body {
+        builder = builder.body(body);
+    }
+    let response = builder
+        .send()
+        .await
+        .map_err(|error| transport_error(error, &request.url))?;
+    let status = response.status();
+    let headers = response.headers().clone();
+    let url = response.url().clone();
+    let request_url = request.url;
+    let body: BodyStream = Box::pin(
+        response
+            .bytes_stream()
+            .map(move |chunk| chunk.map_err(|error| transport_error(error, &request_url))),
+    );
+    Ok(StreamingResponse::new(status, headers, url, body, limit))
 }
 
 /// Maps a reqwest error: an SSRF refusal anywhere in the chain is

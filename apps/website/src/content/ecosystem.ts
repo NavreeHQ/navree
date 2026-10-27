@@ -418,7 +418,7 @@ export const ecosystem: EcosystemEntry[] = [
     crate: "navree-ai",
     command: "cargo add --git https://github.com/NavreeHQ/navree navree --features ai",
     href: "/docs/ai/ai-sdk/",
-    status: "planned",
+    status: "stable",
     signature: "ai.structured::<ContractTerms>(prompt).await?",
   },
   {

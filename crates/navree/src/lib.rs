@@ -45,10 +45,11 @@
 //! | `search` | navree-search | `search` (opt-in) | `SearchModule`: full-text and vector search, `#[derive(Searchable)]` |
 //! | `dock` | navree-dock | `dock` (opt-in) | Dock's `dock.toml`, the services' settings and the Compose file |
 //! | `mcp` | navree-mcp | `mcp` (opt-in) | `McpModule`: MCP servers over streamable HTTP and stdio, with `#[mcp_server]` |
+//! | `ai` | navree-ai | `ai` (opt-in) | `AiModule`: models, structured output, streaming, agents, embeddings, vector stores |
 //!
 //! `full` (the default) turns on every module except the opt-in ones
 //! (`social`, `oauth`, `flags`, `graphql`, `grpc`, `billing`, `search`,
-//! `mcp`, `dock`, `otel`). A feature also turns on the features of the
+//! `mcp`, `ai`, `dock`, `otel`). A feature also turns on the features of the
 //! crates its crate builds on (`auth` turns on `access`, `db`, `http`, ...).
 //! SQLite is built in; the `postgres` feature adds navree-db's PostgreSQL
 //! driver and the `mysql` feature its MySQL and MariaDB driver, and the
@@ -211,6 +212,8 @@ pub mod flags {
     /// `#[flag]`: a feature flag as a unit struct (see navree-macros).
     pub use navree_macros::flag;
 }
+#[cfg(feature = "ai")]
+pub use navree_ai as ai;
 
 /// MCP servers: navree-mcp, plus the `#[mcp_server]` attribute and the
 /// `#[mcp_tool]`, `#[mcp_resource]` and `#[mcp_prompt]` markers it consumes.

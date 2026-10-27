@@ -1,7 +1,6 @@
 ---
 title: "Embeddings and RAG"
 description: "Turn your records into vectors with `Embeddings`, keep them in pgvector, Qdrant or memory with `VectorStore`, index through the queue, and answer questions grounded in your own data, with sources and the user's permissions."
-status: "planned"
 ---
 
 ## Introduction
@@ -50,7 +49,7 @@ dimensions = 1536           # must match the embedding model
 metric = "cosine"           # cosine | dot | euclidean
 
 # store = "qdrant"
-# url = "http://127.0.0.1:6334"   # APP_AI__VECTORS__KEY for the API key
+# url = "http://127.0.0.1:6333"   # the REST port; APP_AI__VECTORS__KEY for the API key
 ```
 
 | Key | Default | Meaning |
@@ -61,9 +60,9 @@ metric = "cosine"           # cosine | dot | euclidean
 | `ai.vectors.store` | `memory` | `pgvector`, `qdrant` or `memory`. |
 | `ai.vectors.dimensions` | `1536` | The vector size. Every collection uses it. |
 | `ai.vectors.metric` | `cosine` | `cosine`, `dot` or `euclidean`. |
-| `ai.vectors.url`, `ai.vectors.key` | none | The Qdrant server and its API key. |
+| `ai.vectors.url`, `ai.vectors.key` | none | The Qdrant server's REST address (required with `qdrant`) and its API key. |
 
-From the environment: `APP_AI__VECTORS__STORE=qdrant`, `APP_AI__VECTORS__URL=https://qdrant.internal:6334`, `APP_AI__VECTORS__KEY=...`. A model whose vectors don't have `ai.vectors.dimensions` entries fails the first embedding with `AiError::Config`, naming both sizes.
+From the environment: `APP_AI__VECTORS__STORE=qdrant`, `APP_AI__VECTORS__URL=https://qdrant.internal:6333`, `APP_AI__VECTORS__KEY=...`. A model whose vectors don't have `ai.vectors.dimensions` entries fails the first embedding with `AiError::Config`, naming both sizes. The Qdrant host is let through the HTTP client's SSRF guard because you configured it.
 
 ### Embedding models
 
@@ -76,7 +75,7 @@ Anthropic doesn't offer an embedding model, so an app that writes with Claude em
 | Google Gemini | `gemini-embedding-001` | 3072 (or fewer) |
 | Mistral | `mistral-embed` | 1024 |
 | Ollama | `nomic-embed-text`, or any embedding model you pull | 768 for `nomic-embed-text` |
-| AWS Bedrock | the embedding models enabled on your account | per model |
+| AWS Bedrock | Amazon Titan (`amazon.titan-embed-...`, one text per call) and Cohere (`cohere.embed-...`) models enabled on your account | per model |
 
 Changing the embedding model changes every vector: re-index after you switch (see [backfilling](#backfilling-existing-records)).
 
@@ -85,14 +84,14 @@ Changing the embedding model changes every vector: re-index after you switch (se
 | Store | Where vectors live | Use it for |
 |---|---|---|
 | `pgvector` | Tables in your app's PostgreSQL database, with an HNSW index | Most apps: no extra service, and vectors back up with your data. |
-| `qdrant` | A [Qdrant](https://qdrant.tech/) server, one collection per Navree collection | Tens of millions of vectors, or a search cluster of its own. |
+| `qdrant` | A [Qdrant](https://qdrant.tech/) server over its REST API, one collection per Navree collection | Tens of millions of vectors, or a search cluster of its own. |
 | `memory` | The process's memory, searched exhaustively | Tests, and development on SQLite. Lost on restart. |
 
-With `pgvector`, the `ai` migration set enables the `vector` extension (`CREATE EXTENSION IF NOT EXISTS vector`; on managed PostgreSQL, allow the extension first) and creates one table per collection. With `qdrant`, missing collections are created at boot with the configured size and metric, and an existing collection of another size fails the boot.
+Collections declared with `m.vector_collection(..)` are created at boot; any other collection is created the first time it is used. With `pgvector`, creating one enables the `vector` extension (`CREATE EXTENSION IF NOT EXISTS vector`; on managed PostgreSQL, allow the extension first) and creates its table and indexes; the database must be PostgreSQL. With `qdrant`, a missing collection is created with the configured size and metric. In both, an existing collection of another size fails the boot (or, for an undeclared one, its first use) with `AiError::Config`.
 
 ## Collections
 
-A collection is a named set of vectors with their text and metadata, usually one per kind of content. Declare it in the module that owns the content:
+A collection is a named set of vectors with their text and metadata, usually one per kind of content. Its name uses lower-case letters, digits and `_`. Declare it in the module that owns the content:
 
 ```rust title="crates/crm-activities/src/lib.rs"
 use navree::ai::VectorCollection;
@@ -137,17 +136,17 @@ for m in &matches {
 }
 ```
 
-`search` takes a text, which it embeds with `Embeddings` (and the cache), or an `Embedding` you computed. It returns `Vec<VectorMatch>`, best first; each has `id`, `score` (higher is closer, whatever the metric), `text` and `metadata`.
+`search` takes a text, which it embeds with `Embeddings` (and the cache), or an `Embedding` you computed. It returns `Vec<VectorMatch>`, best first; each has `id`, `score` (higher is closer, whatever the metric: the cosine similarity, the dot product, or `1 / (1 + distance)` for `euclidean`), `text` and `metadata`. With Qdrant, which keys points by UUID, each record is stored under a UUID derived from its `id`, and the `id` comes back unchanged.
 
 | Method | |
 |---|---|
-| `upsert(record)`, `upsert_many(records)` | Insert or replace by `id`. |
+| `upsert(record)`, `upsert_many(records)` | Insert or replace by `id`. A record whose vector isn't `ai.vectors.dimensions` long, or whose metadata isn't a JSON object, fails with `AiError::Config`. |
 | `delete(id)` | Remove one. |
 | `delete_where(filter)` | Remove every record matching a filter, e.g. all chunks of one activity. |
 | `search(query)` | A query builder: `.filter(f)`, `.limit(n)` (default 10), `.min_score(s)`, then await. |
 | `count()` | The number of records. |
 
-Filters work on metadata fields: `Filter::eq("kind", "call")`, `Filter::any_of("subject_id", ids)`, `Filter::gte("created_at", "2026-10-01")`, combined with `.and(..)` and `.or(..)`, negated with `Filter::not(..)`. They are applied inside the vector search, so `limit(8)` returns eight matching records, not eight records of which some match.
+Filters work on metadata fields: `Filter::eq("kind", "call")`, `Filter::any_of("subject_id", ids)`, `Filter::gte("created_at", "2026-10-01")`, combined with `.and(..)` and `.or(..)`, negated with `Filter::not(..)`. They are applied inside the vector search, so `limit(8)` returns eight matching records, not eight records of which some match. A dotted name (`owner.id`) reaches a nested field; names are letters, digits and `_`. `gt`, `gte`, `lt` and `lte` compare numbers with numbers and strings with strings (RFC 3339 dates compare correctly as strings). Calling `.filter(..)` twice combines both with `and`.
 
 ## Embeddings
 
@@ -161,8 +160,9 @@ let many = embeddings.embed_many(&["first passage", "second passage"]).await?; /
 assert_eq!(one.dimensions(), 1536);
 ```
 
-- `embed_many` sends `ai.embeddings.batch_size` texts per provider call, in parallel, and returns the vectors in input order.
-- Vectors are cached by model and text in the app's cache for `ai.embeddings.cache_ttl_days`, so re-indexing unchanged text costs no tokens.
+- `embed_many` takes any iterator of strings, sends `ai.embeddings.batch_size` texts per provider call, in parallel, and returns the vectors in input order.
+- Vectors are cached by model and text (a SHA-256 of both) in the app's cache for `ai.embeddings.cache_ttl_days`, so re-indexing unchanged text costs no tokens.
+- Embedding calls carry no user, so they don't count against [budgets](/docs/ai/ai-sdk/#token-limits-and-budgets); they do appear in the metrics.
 - Calls go through the model's [failover chain](/docs/ai/ai-sdk/#failover-and-retries). Fallbacks of an embedding model must be embedding models of the same size, or the boot fails, since mixing models in one collection breaks its distances.
 - `Embedding` derefs to `[f32]` and has `cosine(&other)` for comparing two texts in memory.
 
@@ -179,7 +179,7 @@ for chunk in &chunks {
 }
 ```
 
-`Chunker::markdown()` splits at headings first and keeps each chunk's heading path at its start ("Pricing > Discounts"), which helps both the embedding and the model reading it. Tokens are counted with the embedding model's tokenizer when Navree knows it, and as four characters per token otherwise. A text shorter than `max_tokens` is one chunk, so most CRM notes are a single passage.
+`Chunker::markdown()` splits at headings first (ignoring `#` inside code fences) and keeps each chunk's heading path at its start ("Pricing > Discounts"), which helps both the embedding and the model reading it. Tokens are counted as four characters each, which is close for English text with every common embedding tokenizer. The defaults are `max_tokens(512)` and `overlap(64)`; a word longer than a chunk is cut. A text shorter than `max_tokens` is one chunk, so most CRM notes are a single passage, and blank text gives none.
 
 ## Indexing through the queue
 
@@ -323,7 +323,7 @@ let candidates = notes.search(&question).filter(Filter::eq("subject_id", deal_id
 let best = ai.rerank(&question, candidates).model("fast").top(6).await?;
 ```
 
-`ai.rerank` scores every candidate in one call to the model you name and returns the top ones with `score` replaced by the reranker's (0 to 1). It costs one model call, so skip it when the collection is small and the vector scores already separate well.
+`ai.rerank` scores every candidate in one structured-output call to the model you name (default `ai.default`), reading at most 2,000 characters of each, and returns the top ones with `score` replaced by the reranker's (0 to 1). `.user(id)` counts the call against that user's budget. It costs one model call, so skip it when the collection is small and the vector scores already separate well.
 
 ## A RAG endpoint
 
@@ -511,15 +511,18 @@ async fn answers_use_only_the_deals_own_activity() {
 
 | Type | |
 |---|---|
-| `Embeddings` | `embed(text)`, `embed_many(texts)`. Inject `Arc<Embeddings>`. |
-| `Embedding` | A vector: derefs to `[f32]`; `dimensions()`, `cosine(&other)`. |
-| `VectorStore` | `collection(name)`. Inject `Arc<VectorStore>`. |
+| `Embeddings` | `embed(text)`, `embed_many(texts)`, `model()`, `dimensions()`. Inject `Arc<Embeddings>`, or build one with `Embeddings::new(ai)`. |
+| `Embedding` | A vector: derefs to `[f32]`; `dimensions()`, `cosine(&other)`, `into_vec()`; `Embedding::new(values)` or `From<Vec<f32>>`. |
+| `VectorStore` | `collection(name)`, `kind()`, `ensure_collection(name)`. Inject `Arc<VectorStore>`; `VectorStore::memory(embeddings)` builds a memory store. |
+| `Collection` | `upsert`, `upsert_many`, `delete`, `delete_where`, `search`, `count`, `name()`. |
+| `SearchRequest`, `SearchQuery` | What `search` returns (`.filter`, `.limit`, `.min_score`, then await), and what it takes: a text or an `Embedding`. |
 | `VectorCollection` | A collection declaration, for `m.vector_collection(..)`. |
 | `VectorRecord` | `VectorRecord::new(id, embedding).text(..).metadata(..)`. |
 | `VectorMatch` | A search result: `id`, `score`, `text`, `metadata`. |
-| `Filter` | `eq`, `any_of`, `gt`, `gte`, `lt`, `lte`, `not`, `.and`, `.or`. |
-| `Chunker`, `Chunk` | `Chunker::new()`, `Chunker::markdown()`, `.max_tokens(n)`, `.overlap(n)`, `.split(text)`. |
-| `ai.rerank(query, matches)` | `.model(name)`, `.top(n)`, then await. |
+| `Filter` | `eq`, `any_of`, `gt`, `gte`, `lt`, `lte`, `not`, `.and`, `.or`; `matches(&metadata)` checks one in memory. |
+| `Chunker`, `Chunk` | `Chunker::new()`, `Chunker::markdown()`, `.max_tokens(n)`, `.overlap(n)`, `.split(text)`; a `Chunk` has `index` and `text`. |
+| `ai.rerank(query, matches)` | A `RerankRequest`: `.model(name)`, `.top(n)`, `.user(id)`, then await. |
+| `VectorStoreKind`, `Metric` | `ai.vectors.store` and `ai.vectors.metric`. |
 
 <LinkCards>
   <LinkCard href="/docs/ai/ai-sdk/" title="AI SDK">

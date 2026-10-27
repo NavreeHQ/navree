@@ -70,6 +70,12 @@ pub(crate) const MCP: RuntimeCrate = RuntimeCrate {
 /// integration tests and doctests are separate crates).
 const NAMED_FROM_INSIDE: &[(&str, &str)] = &[("navree-mcp", "navree_mcp")];
 
+/// navree-ai: `ToolSpec`, `ToolAccess` and the dispatch helpers (`#[agent]`).
+pub(crate) const AI: RuntimeCrate = RuntimeCrate {
+    package: "navree-ai",
+    facade_module: "ai",
+};
+
 /// The facade package, preferred over the individual crates.
 const FACADE: &str = "navree";
 

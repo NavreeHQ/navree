@@ -47,6 +47,7 @@ hint with the line to add. Keep the markers:
 | `make:notification posts post_liked` | `notifications/post_liked.rs` (database + broadcast) | nothing |
 | `make:policy posts moderation` | `policies/moderation.rs` (ability rules) | a call in `src/abilities.rs` |
 | `make:command posts publish_scheduled` | `commands/publish_scheduled.rs`, command `posts:publish-scheduled` | `m.command(..)` in `wire` |
+| `make:agent posts assistant` | `agents/assistant.rs`, agent `Assistant` named `posts-assistant` with one `#[tool(read_only)]` (needs navree's `ai` feature and `AiModule`) | `navree::ai::ModuleBuilderAiExt::agent::<..>(m)` in `wire` |
 | `make:test posts publishing` | `tests/publishing.rs`, a test booting the module | `mod publishing;` in `tests/mod.rs` |
 | `make:mcp posts assistant` | `mcp/assistant.rs`, `AssistantMcp` with one tool `assistant_echo` (see `navree-mcp`) | `navree::mcp::ModuleBuilderMcpExt::mcp_server::<..>(m)` in `wire`; prints the `mcp` feature, utoipa and `McpModule` steps |
 

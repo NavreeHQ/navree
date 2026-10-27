@@ -34,6 +34,7 @@ Start with **`navree`**. It explains what a Navree app is, how one is laid out, 
 | `navree-grpc` | gRPC services from `.proto` files with `#[grpc_service]`, access rules and extractors on methods, gRPC-Web and Connect, `GrpcChannels` clients and `TestChannel` tests |
 | `navree-billing` | Bill users or workspaces with Stripe or Paddle: `BillingModule`, plans, checkout, subscriptions, trials, seats, metered usage, invoices, the portal, verified webhooks and `BillingFake` |
 | `navree-mcp` | Expose tools, resources and prompts to AI clients with `#[mcp_server]`, per-tool access, bearer or OAuth auth, stdio, and test them with `McpTestClient` |
+| `navree-ai` | The AI SDK: providers and models, `ai.text`, `ai.structured`, `ai.stream`, failover and budgets, agents with `#[tool]` methods run as the user, memory and approvals, embeddings, vector stores and RAG, and `AiFake` in tests |
 | `navree-queues-and-scheduling` | Jobs, workers, retries and failed jobs, and cron-style schedules |
 | `navree-events-and-broadcasting` | Events and listeners, and live updates over the Pusher-protocol WebSocket server |
 | `navree-mail-and-notifications` | Mail with templates and transports, and notifications over the database, mail and broadcast channels |

@@ -41,6 +41,7 @@ Commands:
   make:notification  Generate a notification in a module (notifications/NAME.rs)
   make:policy        Generate ability rules in a module (policies/NAME.rs), added to src/abilities.rs
   make:command       Generate a CLI command in a module (commands/NAME.rs)
+  make:agent         Generate an AI agent with one tool in a module (agents/NAME.rs)
   make:test          Generate a test in a module (tests/NAME.rs)
   make:mcp           Generate an MCP server with one tool in a module (mcp/NAME.rs)
   dev                Serve the app, rebuilding and restarting it when the code changes
@@ -164,6 +165,7 @@ The report lists a file once per edit: here `mod.rs` gets the `pub mod jobs;` de
 | `make:notification posts post_liked` | `notifications/post_liked.rs`, a database and broadcast notification | nothing |
 | `make:policy posts moderation` | `policies/moderation.rs`, ability rules | a call in `src/abilities.rs` |
 | `make:command posts publish_scheduled` | `commands/publish_scheduled.rs`, the command `posts:publish-scheduled` | `m.command(..)`, in `wire` |
+| `make:agent posts assistant` | `agents/assistant.rs`, an [agent](/docs/ai/agents-and-tools/) `Assistant` named `posts-assistant` with one read-only tool (needs the `ai` feature) | `m.agent::<..>()`, in `wire` |
 | `make:test posts publishing` | `tests/publishing.rs`, a test booting the module | declares it in `tests/mod.rs` |
 | `make:mcp posts assistant` | `mcp/assistant.rs`, `AssistantMcp`, an [MCP server](/docs/ai/mcp-servers/) with one tool (`assistant_echo`) | `m.mcp_server::<..>()`, in `wire`; prints the steps it leaves to you (the `mcp` feature, utoipa, `McpModule`) |
 

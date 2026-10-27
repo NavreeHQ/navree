@@ -15,7 +15,7 @@ This keeps the framework honest: the kernel knows nothing about HTTP, HTTP knows
 L9+ apps/crm-api (Navree app)                    apps/crm-web (Next.js 16)
 L8  navree (facade: re-exports + prelude)        navree-cli (binary `navree`; no runtime navree deps, uses navree-dock)
 L7  navree-billing  navree-search (packages built on other packages)
-L6  navree-social  navree-webhooks  navree-flags  navree-mcp (ecosystem libraries)
+L6  navree-social  navree-webhooks  navree-flags  navree-mcp  navree-ai (ecosystem libraries)
 L5  navree-auth  navree-workspace
 L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify  navree-ui
 L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage
@@ -59,6 +59,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L6 | `navree-webhooks` | [Webhooks](/docs/packages/webhooks/): signed outgoing deliveries with retries and a delivery log, verified incoming webhooks |
 | L6 | `navree-flags` | [Feature flags](/docs/packages/feature-flags/): flags as types, per user, workspace, plan or percentage |
 | L6 | `navree-mcp` | [MCP servers](/docs/ai/mcp-servers/): tools, resources and prompts over streamable HTTP and stdio |
+| L6 | `navree-ai` | The [AI SDK](/docs/ai/ai-sdk/): models from six providers with failover and budgets, agents with tools, embeddings and vector stores |
 | L7 | `navree-search` | [Search](/docs/packages/search/): full-text and vector search over entities, synced through the queue |
 | L7 | `navree-billing` | [Billing](/docs/packages/billing/) for users or workspaces with Stripe or Paddle: plans, trials, seats, metered usage, invoices, the portal, verified webhooks |
 | L8 | `navree` | The facade: re-exports every module crate and the macros |
@@ -91,6 +92,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | `navree-mcp` | kernel, contracts, config, http, cache, db, testing, validation, access, auth |
 | `navree-search` | kernel, contracts, config, macros, http, http-client, db, queue, access, workspace |
 | `navree-billing` | kernel, contracts, config, http, cache, events, http-client, db, queue, schedule, access, auth, workspace |
+| `navree-ai` | kernel, contracts, config, macros, http, http-client, cache, db, storage, validation, access, auth |
 | `navree` | Every runtime crate and the macros |
 | `navree-cli` | `navree-dock` only (for `navree dock`): everything else it knows about the framework is in the code it generates |
 
