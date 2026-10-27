@@ -119,9 +119,10 @@ pub fn decode_option<C: Cast<T>, T>(row: &Row, column: &str) -> Result<Option<T>
 ///     city: String,
 /// }
 ///
-/// let stored = AsJson::set(&Address { city: "Oslo".into() }).unwrap();
+/// let stored = <AsJson as Cast<Address>>::set(&Address { city: "Oslo".into() }).unwrap();
 /// assert_eq!(stored, serde_json::json!({"city": "Oslo"}));
-/// assert_eq!(AsJson::get(stored).unwrap(), Address { city: "Oslo".into() });
+/// let address: Address = AsJson::get(stored).unwrap();
+/// assert_eq!(address, Address { city: "Oslo".into() });
 /// ```
 #[derive(Clone, Copy, Debug, Default)]
 pub struct AsJson;
@@ -153,8 +154,9 @@ impl<T: Serialize + DeserializeOwned> Cast<T> for AsJson {
 ///     ClosedWon,
 /// }
 ///
-/// assert_eq!(StringEnum::set(&Stage::ClosedWon).unwrap(), "closed_won");
-/// assert_eq!(StringEnum::get("lead".into()).unwrap(), Stage::Lead);
+/// assert_eq!(<StringEnum as Cast<Stage>>::set(&Stage::ClosedWon).unwrap(), "closed_won");
+/// let stage: Stage = StringEnum::get("lead".into()).unwrap();
+/// assert_eq!(stage, Stage::Lead);
 /// assert!(<StringEnum as Cast<Stage>>::get("won".into()).is_err());
 /// ```
 #[derive(Clone, Copy, Debug, Default)]
