@@ -176,7 +176,7 @@ fn level_of(entry: &RegisteredSettings, selection: &Selection) -> Result<ScopeKi
     let level = match &selection.level {
         Some(raw) => raw
             .parse::<ScopeKind>()
-            .map_err(|message| AppError::bad_request(message))?,
+            .map_err(AppError::bad_request)?,
         None => entry
             .definition
             .levels()
