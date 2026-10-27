@@ -213,6 +213,6 @@ mod tests {
         assert_eq!(options.chrome.args, vec!["--lang=ar", "--disable-gpu"]);
         assert_eq!(options.chrome.print.paper, crate::Paper::Letter);
         assert_eq!(options.chrome.pool_size, 2);
-        assert!(serde_json::from_value::<DocumentsOptions>(json!({"engine": "pdfkit"})).is_err());
+        assert!(serde_json::from_value::<DocumentsOptions>(json!({"engine": "unknown"})).is_err());
     }
 }
