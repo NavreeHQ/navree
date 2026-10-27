@@ -19,8 +19,14 @@ use crate::{BrowserError, Target, Viewport, artifacts, keys};
 
 /// The page script (`page.js`).
 const LIB: &str = include_str!("page.js");
+/// Answered by the short page expression when the script is not installed
+/// in the current document yet.
+const MISSING: &str = "navree-browser: script missing";
 /// How often a waiting step looks again.
 const POLL: Duration = Duration::from_millis(40);
+/// The least time one look at the page may take, even when the step's
+/// timeout is shorter: a busy page is reported as slow, not as failing.
+const PROBE_MIN: Duration = Duration::from_secs(2);
 /// The least time a navigation may take, whatever the step timeout.
 const NAVIGATION_MIN: Duration = Duration::from_secs(30);
 /// How long capturing the failure files may take.
@@ -343,10 +349,21 @@ impl Scope {
         Ok(answer["result"].clone())
     }
 
+/// Calls the page script's `func`. The script is installed once per
+    /// document (under a symbol on `globalThis`); later calls send only the
+    /// call.
     async fn lib(&self, func: &str, args: Value) -> Result<Value, EvalError> {
-        let result = self
-            .evaluate(format!("({LIB})().{func}({args})"), true)
-            .await?;
+        let key = format!("navree-browser:{}:{}", env!("CARGO_PKG_VERSION"), LIB.len());
+        let call = format!(
+            "(() => {{ const n = globalThis[Symbol.for({key:?})]; return n ? n.{func}({args}) : {MISSING:?}; }})()"
+        );
+        let result = self.evaluate(call, true).await?;
+        let value = result.get("value").cloned().unwrap_or(Value::Null);
+        if value != MISSING {
+            return Ok(value);
+        }
+        let install = format!("(globalThis[Symbol.for({key:?})] = ({LIB})()).{func}({args})");
+        let result = self.evaluate(install, true).await?;
         Ok(result.get("value").cloned().unwrap_or(Value::Null))
     }
 
@@ -363,7 +380,7 @@ impl Scope {
                 return Err(Fail::Now(gone));
             }
             let left = deadline.saturating_duration_since(Instant::now());
-            match tokio::time::timeout(left.max(Duration::from_millis(250)), probe()).await {
+            match tokio::time::timeout(left.max(PROBE_MIN), probe()).await {
                 Ok(Ok(Probe::Ready(value))) => return Ok(value),
                 Ok(Ok(Probe::Wait(why))) => reason = why,
                 Ok(Err(EvalError::Lost)) => {
@@ -372,7 +389,11 @@ impl Scope {
                     }
                 }
                 Ok(Err(EvalError::Fail(fail))) => return Err(fail),
-                Err(_) => reason = "the page did not answer".to_owned(),
+                Err(_) => {
+                    if reason.is_empty() {
+                        reason = "the page did not answer".to_owned();
+                    }
+                }
             }
             let now = Instant::now();
             if now >= deadline {
@@ -1387,6 +1408,9 @@ macro_rules! scope_api {
             /// exception since it opened (failed requests are only logged).
             pub async fn assert_no_console_errors(&self) -> Result<(), BrowserError> {
                 let s = &self.scope;
+                // A round trip to the page first: console events sent before
+                // its answer are in the log when it arrives.
+                let _ = tokio::time::timeout(PROBE_MIN, s.lib("location", json!({}))).await;
                 let errors = s.core.log().errors.clone();
                 s.step("assert_no_console_errors()".to_owned(), false, async {
                     if errors.is_empty() {
