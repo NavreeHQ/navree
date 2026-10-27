@@ -1,0 +1,110 @@
+//! # navree-lighthouse
+//!
+//! `LighthouseModule`: application monitoring inside your app. It records
+//! exceptions, slow requests and queries, failed jobs, failed scheduled
+//! tasks and failing outgoing calls, groups them into **issues** by
+//! fingerprint, keeps per-minute aggregates and sampled traces in the app's
+//! database, sends alerts, and serves a dashboard and a JSON API at
+//! `lighthouse.path` (`/_lighthouse`).
+//!
+//! - **Recording.** The module registers a telemetry sink
+//!   (navree-telemetry): every request, query, job attempt, scheduled run,
+//!   mail, cache call, outgoing call and exception the framework reports.
+//!   The sink and [`Lighthouse::report`] only copy the record into a
+//!   bounded channel; one background task groups each request's or job's
+//!   events, decides what to keep and writes in batches (every second, or
+//!   at 500 records).
+//! - **Issues** ([`Issue`]) group occurrences by fingerprint ([`IssueKind`]
+//!   lists the kinds); statuses ([`IssueStatus`]) are open, resolved,
+//!   resolved in the next release and ignored, and a resolved issue that
+//!   happens again reopens as a regression.
+//! - **Counts are exact; details are sampled** (`lighthouse.sample.*`):
+//!   per-minute histograms of every request give the percentiles, and slow
+//!   requests, failures and the first 100 occurrences of an issue per
+//!   hour are always kept. A full buffer drops samples first, never counts.
+//! - **Alerts** ([`AlertKind`]): email (navree-mail), Slack, signed
+//!   webhooks (Standard Webhooks) and your own [`AlertChannel`]s, sent as
+//!   `lighthouse.alert` jobs when the app has a queue, with a cooldown per
+//!   issue and kind.
+//! - **The dashboard** is server-rendered (navree-view templates compiled
+//!   into the crate, its own small stylesheet and script) and protected by
+//!   the `view` and `resolve` abilities on the subject `Lighthouse`
+//!   (permissions `lighthouse.view` and `lighthouse.resolve`). Its JSON API
+//!   ([`LighthouseApiController`]) serves the same data to scripts and
+//!   agents with an access token.
+//! - **Commands**: `lighthouse:prune [--days N]` and
+//!   `lighthouse:test-alerts [channel]`; the scheduler prunes daily at
+//!   `lighthouse.prune_at`.
+//! - **Tests** use [`LighthouseFake`].
+//!
+//! ```
+//! use navree_lighthouse::{Level, LighthouseFake, Report};
+//!
+//! let fake = LighthouseFake::new();
+//! let lighthouse = fake.lighthouse();
+//! let error = std::io::Error::other("card declined");
+//! lighthouse.capture(
+//!     Report::error(&error)
+//!         .level(Level::Warning)
+//!         .tag("provider", "acme-pay")
+//!         .fingerprint(["acme-pay", "card-declined"]),
+//! );
+//! assert_eq!(fake.reports()[0].tags["provider"], "acme-pay");
+//! ```
+#![forbid(unsafe_code)]
+
+pub mod entity;
+
+mod aggregate;
+mod alert;
+mod api;
+mod chart;
+mod commands;
+mod dashboard;
+mod dispatch;
+mod engine;
+mod fake;
+mod histogram;
+mod http;
+mod migration;
+mod model;
+mod module;
+mod normalize;
+mod options;
+mod redact;
+mod report;
+mod service;
+mod session;
+mod store;
+
+pub use aggregate::SlowCall;
+pub use alert::{
+    Alert, AlertChannel, AlertKind, DeliverAlert, ModuleBuilderLighthouseExt, webhook_signature,
+};
+pub use api::{
+    IgnoreInput, LighthouseApiController, PageQuery, PeriodQuery, ResolveInput, RouteQuery,
+};
+pub use dashboard::{
+    CONTENT_SECURITY_POLICY, DASHBOARD_CSS, DASHBOARD_JS, LighthouseDashboardController,
+};
+pub use dispatch::ChannelResult;
+pub use engine::Span;
+pub use fake::{LighthouseFake, Reported};
+pub use histogram::Histogram;
+pub use migration::LIGHTHOUSE_MIGRATIONS;
+pub use model::{Issue, IssueKind, IssueStatus, Level};
+pub use module::{LighthouseModule, LighthouseSubject, RESOLVE, VIEW};
+pub use normalize::{normalize_message, normalize_sql, path_matches};
+pub use options::{
+    AlertOptions, CaptureOptions, DEFAULT_ALERT_KINDS, EmailAlertOptions, IgnoreOptions,
+    LighthouseOptions, Period, SampleRates, SlackAlertOptions, SpikeOptions, StoreKind, Thresholds,
+    WebhookAlertOptions,
+};
+pub use redact::REDACTED;
+pub use report::{AsError, Report};
+pub use service::Lighthouse;
+pub use store::{
+    AlertRecord, FeedItem, HostStats, IgnoreFor, IssueDetail, IssueFilter, IssueSort, IssueSummary,
+    JobStats, LighthouseError, LighthouseStore, ListPage, Occurrence, Origin, Overview, PageMeta,
+    PruneSummary, QueryStats, RouteDetail, RouteStats, Sample, SampleSummary, TimelinePoint,
+};

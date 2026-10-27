@@ -1,17 +1,16 @@
 ---
 title: "Lighthouse"
-description: "Application monitoring inside your app: exceptions, slow requests and queries, failed jobs and outgoing HTTP, grouped into issues, with alerts, MCP tools and OpenTelemetry export."
-status: "planned"
+description: "Application monitoring inside your app: exceptions, slow requests and queries, failed jobs and outgoing HTTP, grouped into issues, with alerts, a dashboard and a JSON API for scripts and agents."
 ---
 
 ## Introduction
 
-<Badge feature="lighthouse" /> Lighthouse watches your app in production and tells you what went wrong. It records every exception, slow request, slow query, failed job and failing outgoing call, groups them into **issues** by fingerprint, and shows them on a dashboard served by your own app at `/_lighthouse`. When something new breaks, it sends an alert to email, Slack or a webhook. Your coding agent can read and resolve issues through MCP tools, and everything can also go to an OpenTelemetry collector.
+<Badge feature="lighthouse" /> Lighthouse watches your app in production and tells you what went wrong. It records every exception, slow request, slow query, failed job and failing outgoing call, groups them into **issues** by fingerprint, and shows them on a dashboard served by your own app at `/_lighthouse`. When something new breaks, it sends an alert to email, Slack or a webhook. Scripts and coding agents read and resolve issues through its JSON API, and your traces can also go to an OpenTelemetry collector through [ObserveModule](/docs/microservices/tracing/).
 
 Lighthouse runs inside your app and stores its data in your database. There is no agent to install, no service to host and no data leaving your servers unless you configure an alert or an export.
 
-- **Every process reports.** `serve`, `queue:work`, `schedule:work`, [Fleet](/docs/tools/fleet/) workers and one-off commands all write to the same store, so a job that fails on a worker shows up next to the request that queued it.
-- **No code changes.** Lighthouse reads what the framework already produces: the request pipeline, the `navree::error` log target, query timings from navree-db, job outcomes from navree-queue, scheduled runs and the HTTP client. You add the module; the rest is configuration.
+- **Every process reports.** `serve`, `queue:work`, `schedule:work`, [Fleet](/docs/tools/fleet/) workers and one-off commands all write to the same store, so a job that fails on a worker shows up next to the request that failed on the web server.
+- **No code changes.** Lighthouse reads what the framework already produces: the request pipeline and its exceptions and panics, query timings from navree-db, job outcomes from navree-queue, scheduled runs, mail, cache calls and the HTTP client. You add the module; the rest is configuration.
 - **Off the request path.** Recording copies a few fields into an in-memory buffer. A background task writes them to the database in batches, so a request never waits for Lighthouse.
 
 ## Installation
@@ -39,10 +38,10 @@ pub fn app(sources: ConfigSources) -> AppBuilder {
 | `AuthModule` and `AccessModule` | The dashboard signs users in and checks their abilities. Turn the dashboard off with `lighthouse.dashboard = false` in an app without them. |
 | `CryptoModule` | The dashboard's session cookie is encrypted with the application key. |
 | `MailModule` | Only for [email alerts](#email). |
-| `QueueModule` | Optional. Alerts are sent as `lighthouse.alert` jobs when the app has a queue, and from the background writer otherwise. |
+| `QueueModule` | Optional. Alerts are sent as `lighthouse.alert` jobs when the app has a queue, and at once from the background writer otherwise. |
 | `ScheduleModule` | Optional. Lighthouse schedules its own [pruning](#retention-and-pruning) when the app has a scheduler. |
 
-The module contributes the migration set `lighthouse`, which `migrate` runs with your app's migrations. It creates five tables, all prefixed `lighthouse_`: `issues`, `occurrences`, `samples` (request, job and query samples with their spans), `aggregates` (per-minute counts and latency histograms) and `alerts` (the alerts sent).
+The module contributes the migration set `lighthouse`, which `migrate` runs with your app's migrations. It creates five tables, all prefixed `lighthouse_`: `issues`, `occurrences`, `samples` (request and job samples with their spans), `aggregates` (per-minute and per-hour counts and latency histograms) and `alerts` (the alerts sent).
 
 ```sh
 navree migrate
@@ -51,6 +50,7 @@ navree migrate
 Then give yourself access and open the dashboard. Lighthouse registers the subject `Lighthouse` with the permission prefix `lighthouse`, so the [permission](/docs/security/authorization/#permission-strings) `lighthouse.view` lets a role look and `lighthouse.resolve` lets it change issues:
 
 ```sh
+navree access:role manager
 navree access:grant manager lighthouse.view
 navree access:grant manager lighthouse.resolve
 ```
@@ -63,34 +63,36 @@ Users with the super-admin role need nothing: they pass every check. Open `http:
 |---|---|---|
 | Exception | A request answers 500 or above, a handler panics, or your code [reports an error](#reporting-errors-yourself) | An occurrence of an issue |
 | Request | Every request completes | Counts, error rates and latency per route, every request; a [sampled](#sampling) trace |
-| Slow request | A request takes longer than `lighthouse.thresholds.slow_request_ms` (1 s) | An issue per route, with the full trace of each occurrence |
-| Slow query | A query takes longer than `lighthouse.thresholds.slow_query_ms` (200 ms) | An issue per normalized statement, with the route or job that ran it |
+| Slow request | A request takes `lighthouse.thresholds.slow_request_ms` (1 s) or longer | An issue per route, with the full trace of each occurrence |
+| Slow query | A query takes `lighthouse.thresholds.slow_query_ms` (200 ms) or longer | An issue per normalized statement, with the route or job that ran it |
 | Job | A queued job finishes an attempt | Counts and runtimes per job type; a failed attempt with its error |
 | Failed job | A job uses up its attempts and moves to the failed jobs | An issue per job type and error |
-| Scheduled task | A task of the [scheduler](/docs/digging-deeper/scheduling/) fails or overlaps | An issue per task |
-| Outgoing request | A call through `HttpClient` fails or takes longer than `lighthouse.thresholds.slow_outgoing_ms` (2 s) | Counts and latency per host; an issue per host and failure |
+| Scheduled task | A task of the [scheduler](/docs/digging-deeper/scheduling/) fails | An issue per task and error |
+| Outgoing request | A call through `HttpClient` fails, answers 5xx or takes `lighthouse.thresholds.slow_outgoing_ms` (2 s) or longer | Counts and latency per host; an issue per host and failure |
 
 A 4xx response is not an exception: it is the app working as intended. Requests answering 4xx count towards the route's error rate on the dashboard, and that's all.
 
 Each record carries the context Lighthouse can find without your help:
 
 - the request id (the `X-Request-Id` your client saw), the method, the route template and the status;
-- the signed-in user's id, and with [workspaces](/docs/workspaces/introduction/) the workspace's id and slug;
+- the signed-in user's id, and with [workspaces](/docs/workspaces/introduction/) the workspace's id;
 - the release, the environment, the server's host name and the process (`serve`, `queue:work`, the command's name);
-- for a job, its id, type, queue and attempt, and the request that dispatched it;
+- for a job, its id, type, queue and attempt;
 - the trace id, which is also the one [exported to OpenTelemetry](#opentelemetry-export).
 
 ### Traces
 
-A trace is the timeline of one request or job: every query, outgoing call, cache call and queued job it made, as spans with their durations. Lighthouse keeps the trace of every slow request and slow job, and of a [sample](#sampling) of the others. A trace shows you where the time went: in the slow request below, eleven identical queries for contacts take most of the 1.4 seconds.
+A trace is the timeline of one request or job: every query, outgoing call, cache call and mail it made, as spans with their durations. Lighthouse keeps the trace of every slow request, slow job, failed request or job, request that reported an error, and of a [sample](#sampling) of the others. A trace shows you where the time went: in the slow request below, eleven identical queries for contacts take most of the 1.4 seconds, and the waterfall shows them as one row.
 
 ```text title="GET /api/v1/deals/board · 1,412 ms · trace 4bf92f3577b34da6"
     0 ms  db    SELECT ... FROM deals WHERE stage <> ?          38 ms
    39 ms  db    SELECT ... FROM companies WHERE id IN (...)     12 ms
    52 ms  db    SELECT ... FROM contacts WHERE id = ?  x 11  1,203 ms
-1,256 ms  cache get dashboard:wins:0192f0c1...                   1 ms
+1,256 ms  cache hit dashboard:wins:0192f0c1...                   0 ms
 1,258 ms  http  GET https://api.exchangerate.example/latest    150 ms
 ```
+
+A trace keeps at most 200 spans; the rest are counted.
 
 ### Reporting errors yourself
 
@@ -117,7 +119,7 @@ impl PaymentWebhooks {
 }
 ```
 
-`report` takes any `&(dyn std::error::Error + 'static)` and returns at once: the occurrence goes into the buffer with the context of the current request or job. For more control, build a `Report`:
+`report` takes any error, a concrete type (its type name joins the [fingerprint](#fingerprints)) or a `dyn std::error::Error`, and returns at once: the occurrence goes into the buffer with the context of the current request or job and the location of the call. For more control, build a `Report`:
 
 ```rust
 use navree::lighthouse::{Level, Report};
@@ -140,7 +142,7 @@ self.lighthouse.capture(Report::message("Payment event without a customer").leve
 | `Report::error(&e)`, `Report::message(text)` | Starts a report from an error (its whole source chain is kept) or from a message. |
 | `.level(Level::Error)` | `Error` (the default), `Warning` or `Info`. The dashboard filters by level, and [alerts](#alerts) ignore `Info`. |
 | `.context(key, value)` | Adds a value shown on the occurrence. Any `Serialize` value. |
-| `.tag(key, value)` | Adds a tag: a short string you can filter and search issues by. |
+| `.tag(key, value)` | Adds a tag: a short string you can filter issues by. |
 | `.fingerprint([..])` | Replaces the [fingerprint](#fingerprints), so these reports group together however their messages differ. |
 | `.user(id)` | Sets the user when there is no request, for example in a job working for someone. |
 | `.backtrace()` | Captures a backtrace where the report is built. |
@@ -153,19 +155,19 @@ An issue is every occurrence of one problem. Lighthouse computes a **fingerprint
 
 ### Fingerprints
 
-Rust errors don't carry a stack trace, so Lighthouse fingerprints what they do carry: the error's type chain, where it happened (the route or the job), and the message with its variable parts taken out. Numbers, UUIDs, quoted strings, email addresses and hexadecimal ids in a message are replaced before hashing, so `deal 0199c1d2-… not found` and `deal 0199c1e7-… not found` are one issue.
+Rust errors don't carry a stack trace, so Lighthouse fingerprints what they do carry: the error's type, where it happened (the route or the job), and the message chain with its variable parts taken out. Numbers, UUIDs, quoted strings, email addresses and hexadecimal ids in a message are replaced before hashing, so `deal 0199c1d2-… not found` and `deal 0199c1e7-… not found` are one issue.
 
 | Kind | Grouped by |
 |---|---|
-| Exception | Error type chain + route or job + normalized message |
+| Exception | Error type (when `report` was given a concrete type) + route or job + normalized message chain |
 | Panic | File and line of the panic + normalized message |
 | Slow request | Method + route template |
-| Slow query | The normalized statement: literals become `?`, `IN` lists collapse to one item |
-| Failed job | Job type + error type chain + normalized message |
+| Slow query | The normalized statement: literals become `?`, `IN` lists and multi-row `VALUES` collapse to one item |
+| Failed job | Job type + normalized error message |
 | Scheduled task | Task name + normalized message |
-| Outgoing request | Host + status class or error kind (`timeout`, `connect`, `5xx`) |
+| Outgoing request | Host + `5xx`, `slow`, or the error kind (`timeout`, `connect`, `error`) |
 
-Panics carry their location, and Lighthouse captures a backtrace for each. For a report you build yourself, `.backtrace()` adds one, and `.fingerprint([..])` decides the grouping outright.
+Panics carry their location. For a report you build yourself, `.backtrace()` adds a backtrace, and `.fingerprint([..])` decides the grouping outright.
 
 ### Statuses
 
@@ -173,28 +175,30 @@ Panics carry their location, and Lighthouse captures a backtrace for each. For a
 |---|---|
 | Open | New, or seen again after it was resolved. Open issues send [alerts](#alerts). |
 | Resolved | You fixed it. A new occurrence reopens it as a **regression**. |
-| Resolved in next release | Reopens only when it happens again in a release after the current one, so stragglers from the old release don't reopen it. |
+| Resolved in next release | Reopens only when it happens again in a release other than the one current when you resolved it, so stragglers from the old release don't reopen it. |
 | Ignored | Kept and counted, but never alerts. Ignore forever, until a date, or until it occurs N more times. |
 
-The release comes from `lighthouse.release`. [Harbor](/docs/tools/harbor/) sets it to the release id on every deploy (`APP_LIGHTHOUSE__RELEASE`); without it, Lighthouse uses the version of your app's package.
+The release comes from `lighthouse.release`. [Harbor](/docs/tools/harbor/) sets it to the release id on every deploy (`APP_LIGHTHOUSE__RELEASE`); without it, Lighthouse uses the `app.version` setting, else `unknown`.
 
 ## The dashboard
 
-The dashboard is a single-page app compiled into the crate and served by your app at `lighthouse.path` (`/_lighthouse`), outside the API prefix. No Node.js, no CDN and no separate process. It updates live while you watch.
+The dashboard is served by your app at `lighthouse.path` (`/_lighthouse`), outside the API prefix: server-rendered pages from templates compiled into the crate, with a small stylesheet and script of its own. No Node.js, no CDN and no separate process. The overview refreshes its figures and its feed every ten seconds while you watch.
 
-- **Overview.** A row of figures for the selected period (the last hour, 24 hours or 7 days): requests per minute, the error rate, the 95th percentile latency, failed jobs and open issues. Below them, a timeline of requests and exceptions, and a live feed of new occurrences sliding in at the top.
-- **Issues.** One line per issue: its title (the first line of the message), the route or job it comes from, a sparkline of the last 24 hours, the number of occurrences, users and workspaces affected, and first and last seen. Filter by status, kind, level, release, environment, route, job, tag, user or workspace, and sort by last seen, first seen or count.
-- **An issue.** The message and the error's source chain, the backtrace when there is one, and the latest occurrence's context: the request (method, route, headers with secrets masked), the user, the workspace, the release, the server, tags and your report's context values. A chart shows occurrences over time, and a list shows every occurrence with a link to its trace. Buttons resolve, resolve in the next release, ignore or reopen it.
+- **Overview.** A row of figures for the selected period (the last hour, 24 hours or 7 days): requests per minute, the error rate, the 95th percentile latency, failed jobs and open issues. Below them, a timeline of requests and exceptions, and a feed of the latest occurrences, new ones sliding in at the top.
+- **Issues.** One line per issue (open ones by default): its title (the first line of the message), the route or job it comes from, a sparkline of the last 24 hours, the number of occurrences, users and workspaces affected, and first and last seen. Filter by status, kind, level, release, environment, route, job, tag (`key:value`), user or workspace, search titles, and sort by last seen, first seen or count.
+- **An issue.** The message and the error's source chain, the backtrace when there is one, and the latest occurrence: the request (method, route, headers with secrets masked), the user, the workspace, the release, the server, tags and your report's context values. A chart shows occurrences per hour over seven days, and a list shows recent occurrences with a link to each trace. Buttons resolve, resolve in the next release, ignore (forever, for an hour, a day or 100 more events) or reopen it, and a table shows the alerts sent about it.
 - **Requests.** Every route with its throughput, error rate and p50, p95 and p99 latency, slowest first. A route's page lists its slowest traces, each drawn as a waterfall of spans.
-- **Queries.** Normalized statements with how often they ran, their total and p95 time, and the routes and jobs that ran them.
+- **Queries.** Normalized statements with how often they ran, their total, average and p95 time, and the routes and jobs that ran them.
 - **Jobs.** Every job type with throughput, runtime, failed attempts and failed jobs. For queue workers and wait times in depth, see [Fleet](/docs/tools/fleet/).
 - **Outgoing.** Every host your app calls through `HttpClient`, with latency, error rate and the slowest calls.
 
+When `observe.tracing.trace_url` is set, each trace id links to the trace in your [tracing backend](/docs/microservices/tracing/).
+
 ### Signing in and access
 
-The dashboard's sign-in screen uses your app's own users: an email and password through `AuthService`, then a two-factor code when the account has [two-factor authentication](/docs/security/account-flows/) on. It is subject to the same login throttle as `POST /api/auth/login`. The session lives in an encrypted, httpOnly, `SameSite=Strict` cookie scoped to `/_lighthouse`, so the rest of your API never sees it, and every change the dashboard makes carries a CSRF token.
+The dashboard's sign-in screen uses your app's own users: an email and password through `AuthService`, then a two-factor code (or a recovery code) when the account has [two-factor authentication](/docs/security/account-flows/) on. It is subject to the same login throttle as `POST /api/auth/login`. Signing in starts no API session (the refresh token the sign-in creates is revoked at once): the dashboard session lives in an encrypted, httpOnly, `SameSite=Strict` cookie scoped to `/_lighthouse` for twelve hours, so the rest of your API never sees it, and every change the dashboard makes carries a CSRF token.
 
-Its JSON API, under `/_lighthouse/api`, also accepts an access token in `Authorization: Bearer`, for scripts and tests.
+Its JSON API, under `/_lighthouse/api`, also accepts an access token in `Authorization: Bearer`, for scripts, agents and tests.
 
 Every route of the dashboard and its API checks an [ability](/docs/security/authorization/) on the subject `Lighthouse`:
 
@@ -209,17 +213,38 @@ Grant the permissions to a role, as in [installation](#installation), or write t
 pub fn define(ctx: &AbilityCtx, rules: &mut Rules) {
     ctx.grant_permissions(rules);
 
-    if let Some(user) = &ctx.user {
-        if user.has_role("ops") {
-            rules.can("view", "Lighthouse");
-            rules.can("resolve", "Lighthouse");
-        }
+    if let Some(user) = &ctx.user
+        && user.has_role("ops")
+    {
+        rules.can("view", "Lighthouse");
+        rules.can("resolve", "Lighthouse");
     }
     // ...
 }
 ```
 
-A signed-in user without `view` gets a 403 page; a guest goes to the sign-in screen.
+A signed-in user without `view` gets a 403 page; a guest goes to the sign-in screen. The API answers 401 and 403 in the usual JSON error shape.
+
+## The JSON API for scripts and agents
+
+Everything on the dashboard is also JSON under `/_lighthouse/api`, for scripts, CI jobs and coding agents. Send an access token of a user with the right ability:
+
+| Route | What it returns or does | Ability |
+|---|---|---|
+| `GET /api/overview?period=24h` | The overview's figures, timeline and latest occurrences (`period` is `1h`, `24h` or `7d`) | `view` |
+| `GET /api/issues` | A page of issues, `{"data": [..], "meta": {..}}`, with the filters of the Issues page as query parameters: `status`, `kind`, `level`, `release`, `environment`, `route`, `job`, `tag`, `user`, `workspace`, `search`, `sort` (`last_seen`, `first_seen`, `count`), `page`, `per_page` | `view` |
+| `GET /api/issues/{id}` | One issue: the message, the source chain, the latest occurrence with its context and backtrace, the timeline and the alerts | `view` |
+| `GET /api/issues/{id}/occurrences` | Its stored occurrences, newest first (`page`, `per_page`) | `view` |
+| `POST /api/issues/{id}/resolve` | Resolves it: `{"in_next_release": true, "comment": "fixed in #812"}`, both optional | `resolve` |
+| `POST /api/issues/{id}/ignore` | Ignores it: forever (`{}`), `{"until": "2026-11-01T00:00:00Z"}` or `{"occurrences": 100}`, with an optional `comment` | `resolve` |
+| `POST /api/issues/{id}/reopen` | Reopens it | `resolve` |
+| `GET /api/routes` | Every route with throughput, error rate and p50, p95 and p99 latency, slowest first | `view` |
+| `GET /api/routes/detail?endpoint=GET /api/v1/deals/{id}` | One route's figures, timeline and slowest traces | `view` |
+| `GET /api/queries`, `/api/jobs`, `/api/outgoing` | The Queries, Jobs and Outgoing pages | `view` |
+| `GET /api/traces/{id}` | A trace with its spans | `view` |
+| `GET /api/alerts` | The latest alerts and whether they were delivered | `view` |
+
+A session with a coding agent then looks like this: you ask it to fix the newest Lighthouse issue; it fetches `/api/issues?sort=first_seen`, reads the source chain and the failing request from `/api/issues/{id}`, opens the code, writes the fix and a test, and resolves the issue in the next release with a comment linking the change. Give it a token for a user with `lighthouse.view` to let it read, and `lighthouse.resolve` to let it close issues.
 
 ## Alerts
 
@@ -229,9 +254,9 @@ Lighthouse sends an alert when something needs a person. Each channel says which
 |---|---|
 | `new_issue` | An issue is opened for the first time. |
 | `regression` | A resolved issue occurs again. |
-| `spike` | An issue occurs more than `alerts.spike.occurrences` times (50) within `alerts.spike.minutes` (5). |
+| `spike` | An open issue occurs `alerts.spike.occurrences` times (50) or more within `alerts.spike.minutes` (5). |
 | `failed_job` | A job moves to the failed jobs. |
-| `long_wait` | A queue's oldest job has waited longer than its threshold. [Fleet](/docs/tools/fleet/#long-wait-alerts) raises it. |
+| `long_wait` | A queue's oldest job has waited longer than its threshold. [Fleet](/docs/tools/fleet/#long-wait-alerts) raises it through `Lighthouse::raise_alert`. |
 
 Configure the channels in the `lighthouse.alerts` section:
 
@@ -258,7 +283,7 @@ A channel without `on` gets `new_issue`, `regression` and `spike`. Issues at lev
 
 ### Email
 
-Email alerts go through your app's `Mailer`, queued when the app has a queue, from the configured sender. The message names the issue, its kind, count, release and environment, and links to it. `to` takes one address or a list; from the environment, a comma-separated string (`APP_LIGHTHOUSE__ALERTS__EMAIL__TO=oncall@example.com,cto@example.com`).
+Email alerts go through your app's `Mailer`, from the configured sender. The message names the issue, its kind, count, release and environment, and links to it. `to` takes one address or a list; from the environment, a comma-separated string (`APP_LIGHTHOUSE__ALERTS__EMAIL__TO=oncall@example.com,cto@example.com`).
 
 ### Slack
 
@@ -272,7 +297,7 @@ Each alert is one message with the issue's title, the route or job, the count an
 
 ### Webhooks
 
-A webhook alert is a `POST` of JSON to your URL, signed following the [Standard Webhooks](https://www.standardwebhooks.com) specification: `webhook-id`, `webhook-timestamp` and `webhook-signature` headers, an HMAC-SHA256 over the id, the timestamp and the body with your `secret`. Verify the signature before you trust the body.
+A webhook alert is a `POST` of JSON to your URL, signed following the [Standard Webhooks](https://www.standardwebhooks.com) specification: `webhook-id`, `webhook-timestamp` and `webhook-signature` headers, an HMAC-SHA256 over the id, the timestamp and the body with your `secret` (a `whsec_` secret is base64-decoded first, as the specification says). Verify the signature before you trust the body; `navree::lighthouse::webhook_signature` computes it.
 
 ```json title="POST https://ops.example.com/hooks/lighthouse"
 {
@@ -295,7 +320,7 @@ A webhook alert is a `POST` of JSON to your URL, signed following the [Standard 
 }
 ```
 
-A failed delivery is retried with backoff, like any job. The `lighthouse_alerts` table and the issue's page show each alert and whether it was delivered.
+With a queue, each alert is a `lighthouse.alert` job per channel, and a failed delivery is retried with backoff, like any job: five attempts, from ten seconds up to ten minutes apart. Without a queue it is sent once, at once. The `lighthouse_alerts` table and the issue's page show each alert and whether it was delivered.
 
 ### Your own channels
 
@@ -338,7 +363,7 @@ impl OpsModule {
 }
 ```
 
-To check every channel, `navree lighthouse:test-alerts` sends a test alert through each one (or `navree lighthouse:test-alerts slack` through one) and prints whether it was delivered.
+To check every channel, `navree lighthouse:test-alerts` sends a test alert (`"test": true` in a webhook's body) through each one, or `navree lighthouse:test-alerts slack` through one, and prints whether it was delivered. Test alerts are not stored.
 
 ## Sampling
 
@@ -351,15 +376,15 @@ jobs = 0.25
 exceptions = 1.0  # store every occurrence (counts stay exact either way)
 ```
 
-- Slow requests, slow jobs, failed jobs and the first 100 occurrences of each issue per hour are always stored, whatever the rates.
+- Slow requests, slow jobs, failed requests and jobs, and the first 100 occurrences of each issue per hour are always stored, whatever the rates.
 - The latency percentiles on the Requests page come from per-minute histograms of every request, not from samples.
-- Sampling is per request: a sampled request keeps its whole trace, with every query in it.
+- Sampling is per request: a sampled request keeps its whole trace, with every query in it. Whether a request is sampled depends only on its request id, so every process agrees.
 
 On a busy app, start with `requests = 0.1` and raise it if you want more traces to look at.
 
 ## Retention and pruning
 
-`lighthouse:prune` deletes samples, occurrences, aggregates and sent alerts older than `lighthouse.retention_days` (14), and resolved or ignored issues with no occurrence left. Open issues are kept with their counts.
+`lighthouse:prune` deletes samples, occurrences, aggregates and sent alerts older than `lighthouse.retention_days` (14), per-minute aggregates older than two days (hourly ones stay for the 24-hour and 7-day views), and resolved or ignored issues with no occurrence left. Open issues are kept with their counts.
 
 ```sh
 navree lighthouse:prune
@@ -367,10 +392,10 @@ navree lighthouse:prune --days 7
 ```
 
 ```text wrap
-Pruned 182,340 samples, 2,114 occurrences, 40,320 aggregate rows and 12 issues older than 14 days.
+Pruned 182,340 samples, 2,114 occurrences, 40,320 aggregate rows, 3 alerts and 12 issues older than 14 days.
 ```
 
-When the app includes `ScheduleModule`, Lighthouse adds the command to the schedule itself, every day at `lighthouse.prune_at` (`"03:10"`, UTC), without overlapping; a [`schedule:work`](/docs/digging-deeper/scheduling/) process runs it. Set `prune_at = ""` to schedule it yourself, or run it from cron in an app without a scheduler.
+When the app includes `ScheduleModule`, Lighthouse adds a `lighthouse:prune` task to the schedule itself, run every day at `lighthouse.prune_at` (`"03:10"`, UTC), without overlapping; a [`schedule:work`](/docs/digging-deeper/scheduling/) process runs it. Set `prune_at = ""` to schedule it yourself, or run it from cron in an app without a scheduler.
 
 ## Storage
 
@@ -380,58 +405,27 @@ By default Lighthouse writes to the app's database. To keep monitoring writes aw
 APP_LIGHTHOUSE__DATABASE_URL=postgres://lighthouse:secret@db.internal:5432/crm_lighthouse
 ```
 
-`migrate` then runs the `lighthouse` migrations against that database, and the dashboard reads from it. The URL takes the same forms as `database.url`.
+Lighthouse connects to it when the app boots, creates its five tables there if they are missing, and reads and writes there; the dashboard reads from it too. The URL takes the same forms as `database.url`. (The `lighthouse` migration still creates the tables in the app's database, where they stay empty, so removing the setting later works.)
 
-The background writer flushes the buffer every second, or as soon as it holds 500 records. If the database can't keep up and the buffer reaches `lighthouse.buffer` records (10,000), Lighthouse drops samples first and occurrences last, never counts, and says so: the dashboard shows a banner with the number dropped, and `/metrics` has `lighthouse_dropped_total`. On shutdown the writer flushes what it holds before the app exits.
+The background writer flushes the buffer every second, or as soon as it holds 500 records. If the database can't keep up and the buffer reaches `lighthouse.buffer` records (10,000), Lighthouse drops samples first and occurrences last, never counts, and says so: the dashboard shows a banner with the number this process dropped, and `/metrics` has `lighthouse_dropped_total`. On shutdown the writer flushes what it holds before the app exits.
 
 ## Privacy and security
 
 Lighthouse stores what your app handles, so it treats it with care:
 
-- **Secrets are masked.** Header values, context values and query bindings whose names contain a fragment of `log.redact` (`password`, `token`, `authorization`, `cookie`, `secret` by default) are stored as `[redacted]`, plus any fragment you add to `lighthouse.redact`. `Authorization`, `Cookie` and `Set-Cookie` headers are always masked.
+- **Secrets are masked.** Header values, report context values and JSON body fields whose names contain a fragment of `log.redact` (`password`, `token`, `authorization`, `cookie`, `secret` by default) are stored as `[redacted]`, plus any fragment you add to `lighthouse.redact`. `Authorization`, `Proxy-Authorization`, `Cookie` and `Set-Cookie` headers are always masked. Queries are stored as SQL with placeholders, never their bound values.
 - **No bodies by default.** Request bodies are not recorded unless you set `lighthouse.capture.request_body = true`, and then only JSON bodies up to 16 KiB, with the same masking. Response bodies are never recorded.
 - **Client addresses.** The client IP is stored with each request sample. Set `lighthouse.capture.ip = false` to leave it out.
-- **The dashboard denies by default.** Nobody sees it without the `view` ability, sign-in attempts are throttled, the cookie is encrypted and scoped to the dashboard's path, and its pages are served with a strict Content Security Policy.
+- **The dashboard denies by default.** Nobody sees it without the `view` ability, sign-in attempts are throttled, the cookie is encrypted and scoped to the dashboard's path, and its pages are served with a strict Content Security Policy (only the dashboard's own stylesheet, script and API).
 - **Data stays with you.** Nothing leaves your servers except the alerts and exports you configure.
 
-Lighthouse's own routes are left out of its recordings, as are the paths in `lighthouse.ignore.routes` (`/health/*` and `/metrics` by default). Ignore noisy jobs with `lighthouse.ignore.jobs`.
-
-## MCP tools for agents
-
-Lighthouse gives AI agents the same view you have. It registers these tools:
-
-| Tool | What it returns or does | Ability |
-|---|---|---|
-| `lighthouse_list_issues` | Open issues, newest or most frequent first, with filters for kind, route, job and release | `view` |
-| `lighthouse_get_issue` | One issue: the message, the source chain, the backtrace, recent occurrences with their context, and the trace of the latest one | `view` |
-| `lighthouse_slow_routes` | The slowest routes over a period, with p95 latency and their slowest trace | `view` |
-| `lighthouse_slow_queries` | The slowest normalized statements and where they run | `view` |
-| `lighthouse_failed_jobs` | Failed jobs grouped by type and error | `view` |
-| `lighthouse_resolve_issue` | Resolves an issue, now or in the next release, with a comment | `resolve` |
-| `lighthouse_ignore_issue` | Ignores an issue, with a comment | `resolve` |
-
-When your app includes `McpModule`, Lighthouse adds the tools to your app's own [MCP server](/docs/ai/mcp-servers/), where each one checks its ability for the token that calls it: give an agent a token for a user with `lighthouse.view` to let it read, and `lighthouse.resolve` to let it close issues. During development, [Navigator](/docs/ai/navigator/) (`navree mcp`) offers the five read tools next to its own, reading Lighthouse's tables read-only the way it reads the rest of your local database. Set `lighthouse.mcp = false` to leave the tools out.
-
-A session with a coding agent then looks like this: you ask it to fix the newest Lighthouse issue; it calls `lighthouse_list_issues`, reads the backtrace and the failing request with `lighthouse_get_issue`, opens the code, writes the fix and a test, and resolves the issue in the next release with a comment linking the change.
+Lighthouse's own routes are left out of its recordings, as are the paths in `lighthouse.ignore.routes` (`/health/*` and `/metrics` by default) and the `lighthouse.alert` jobs. Ignore noisy jobs with `lighthouse.ignore.jobs`.
 
 ## OpenTelemetry export
 
-Lighthouse can send its traces and metrics to any OpenTelemetry collector over OTLP, alongside its own dashboard:
+Lighthouse keeps what it records in your database. To send traces to an OpenTelemetry collector as well, turn on the export of [ObserveModule](/docs/microservices/tracing/) (the facade's `otel` feature and the `observe.tracing` section): it turns the same telemetry events into spans, named and attributed following the OpenTelemetry semantic conventions, and Lighthouse's trace ids are the ones it exports. With `observe.tracing.trace_url` set, the dashboard links each trace id to your tracing backend. Metrics are on `/metrics`.
 
-```toml title="config/app.toml"
-[lighthouse.otel]
-endpoint = "http://otel-collector.internal:4318"   # OTLP over HTTP; use port 4317 with protocol = "grpc"
-protocol = "http"
-service_name = "crm-api"
-headers = { "x-api-key" = "..." }                  # better: APP_LIGHTHOUSE__OTEL__HEADERS__X_API_KEY
-```
-
-- **Traces.** A span for each request, job, scheduled task and command, with child spans for queries, outgoing calls and cache calls, named and attributed following the OpenTelemetry semantic conventions for HTTP and databases. Exceptions are recorded as span events.
-- **Metrics.** Request counts and durations by route and status, job counts and runtimes by type and outcome, and queue wait times.
-- **Context propagation.** Lighthouse reads the W3C `traceparent` header on incoming requests and sends it on outgoing calls through `HttpClient`, and a queued job continues the trace of the request that dispatched it. A request that crosses several of your services is one trace; see [distributed tracing](/docs/microservices/tracing/).
-- **Logs and traces together.** Log lines written during a request carry its `trace_id` and `span_id`, so your log platform can jump from a line to its trace.
-
-`lighthouse.otel.sample` (1.0) is the fraction of traces exported, independent of what Lighthouse stores. The standard `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS` and `OTEL_SERVICE_NAME` variables are read when the keys aren't set. To use only the export, set `lighthouse.store = "off"`: nothing is written to the database and the dashboard isn't mounted.
+To keep only the export, set `lighthouse.store = "off"`: nothing is recorded, nothing is written to the database and the dashboard isn't mounted.
 
 ## Configuration
 
@@ -440,34 +434,33 @@ Every key of the `lighthouse` section is optional. As environment variables: `AP
 | Key | Default | What it does |
 |---|---|---|
 | `lighthouse.enabled` | `true` | Record anything at all. When off, the dashboard still shows what was recorded. |
-| `lighthouse.store` | `database` | `database`, or `off` to only [export](#opentelemetry-export). |
+| `lighthouse.store` | `database` | `database`, or `off` to record nothing and mount no dashboard. |
 | `lighthouse.database_url` | none | A separate database for Lighthouse's tables. |
 | `lighthouse.dashboard` | `true` | Mount the dashboard and its API. |
 | `lighthouse.path` | `/_lighthouse` | Where the dashboard is served. |
 | `lighthouse.url` | `app.url` + `path` | The dashboard's public URL, for links in alerts. |
 | `lighthouse.environment` | `production` in release builds, `development` in debug builds | The environment label on every record. |
-| `lighthouse.release` | the package version | The release label. Harbor sets it on deploy. |
+| `lighthouse.release` | `app.version`, else `unknown` | The release label. Harbor sets it on deploy. |
 | `lighthouse.server` | the host name | The server label. |
 | `lighthouse.thresholds.slow_request_ms` | `1000` | When a request is slow. |
 | `lighthouse.thresholds.slow_query_ms` | `200` | When a query is slow. |
-| `lighthouse.thresholds.slow_job_ms` | `30000` | When a job attempt is slow. |
+| `lighthouse.thresholds.slow_job_ms` | `30000` | When a job attempt is slow (its trace is kept). |
 | `lighthouse.thresholds.slow_outgoing_ms` | `2000` | When an outgoing request is slow. |
 | `lighthouse.sample.requests` | `1.0` | Fraction of request traces stored. |
 | `lighthouse.sample.jobs` | `1.0` | Fraction of job traces stored. |
 | `lighthouse.sample.exceptions` | `1.0` | Fraction of occurrences stored beyond the first 100 per issue per hour. |
 | `lighthouse.retention_days` | `14` | What `lighthouse:prune` keeps. |
 | `lighthouse.prune_at` | `"03:10"` | When the scheduler prunes (UTC); empty to not schedule it. |
-| `lighthouse.buffer` | `10000` | Records held in memory before dropping. |
-| `lighthouse.capture.request_body` | `false` | Store JSON request bodies (up to 16 KiB) with exceptions and slow requests. |
+| `lighthouse.buffer` | `10000` | Records held in memory before dropping (at least 100). |
+| `lighthouse.capture.request_body` | `false` | Store JSON request bodies (up to 16 KiB) with stored requests. |
 | `lighthouse.capture.request_headers` | `true` | Store request headers, masked. |
 | `lighthouse.capture.ip` | `true` | Store the client address. |
 | `lighthouse.redact` | `[]` | Name fragments masked in addition to `log.redact`. |
 | `lighthouse.ignore.routes` | `["/health/*", "/metrics"]` | Paths never recorded (`*` matches one or more segments at the end). |
 | `lighthouse.ignore.jobs` | `[]` | Job types never recorded. |
-| `lighthouse.mcp` | `true` | Register the MCP tools. |
 | `lighthouse.alerts.cooldown_minutes` | `30` | Minimum time between two alerts for one issue and kind. |
 | `lighthouse.alerts.spike.occurrences` | `50` | Occurrences that make a spike. |
-| `lighthouse.alerts.spike.minutes` | `5` | The spike window. |
+| `lighthouse.alerts.spike.minutes` | `5` | The spike window (1 to 60). |
 | `lighthouse.alerts.email.to` | none | Recipients of email alerts. |
 | `lighthouse.alerts.email.on` | `new_issue`, `regression`, `spike` | Kinds sent by email. |
 | `lighthouse.alerts.slack.webhook_url` | none | The Slack incoming webhook. |
@@ -475,11 +468,6 @@ Every key of the `lighthouse` section is optional. As environment variables: `AP
 | `lighthouse.alerts.webhook.url` | none | Where webhook alerts are posted. |
 | `lighthouse.alerts.webhook.secret` | none | The signing secret (at least 32 bytes). Required with `url`. |
 | `lighthouse.alerts.webhook.on` | `new_issue`, `regression`, `spike` | Kinds sent to the webhook. |
-| `lighthouse.otel.endpoint` | `OTEL_EXPORTER_OTLP_ENDPOINT`, else off | The OTLP collector. |
-| `lighthouse.otel.protocol` | `http` | `http` (OTLP/HTTP with protobuf) or `grpc`. |
-| `lighthouse.otel.service_name` | `OTEL_SERVICE_NAME`, else the package name | The service name on every span. |
-| `lighthouse.otel.headers` | none | Headers sent to the collector. |
-| `lighthouse.otel.sample` | `1.0` | Fraction of traces exported. |
 
 To configure the module in code instead:
 
@@ -529,7 +517,7 @@ async fn a_payment_for_an_unknown_invoice_is_reported() {
     let webhooks = app.get::<PaymentWebhooks>().await;
     webhooks.handle(PaymentEvent::paid("inv_missing")).await.unwrap();
 
-    fake.assert_reported::<InvoiceError>(|error| matches!(error, InvoiceError::NotFound(_)));
+    fake.assert_reported::<InvoiceError>(|report| report.message.contains("not found"));
     fake.assert_reported_times(1);
     assert_eq!(fake.reports()[0].level, Level::Error);
     app.shutdown().await.unwrap();
@@ -538,15 +526,15 @@ async fn a_payment_for_an_unknown_invoice_is_reported() {
 
 | Method | What it does |
 |---|---|
-| `assert_reported::<E>(predicate)` | Asserts an error of type `E` (anywhere in the source chain) was reported and `predicate(&error)` holds. |
+| `assert_reported::<E>(predicate)` | Asserts a report of an error of type `E` (the type given to `report`) for which `predicate(&report)` holds. |
 | `assert_reported_message(text)` | Asserts a report whose message contains `text`. |
 | `assert_reported_times(n)` | Asserts exactly `n` reports. |
 | `assert_nothing_reported()` | Asserts there was no report. |
-| `reports()` | Every recorded report: message, level, fingerprint, tags, context. |
-| `alerts()` | The alerts that would have been sent, with their kind and channel. |
+| `reports()` | Every recorded report: message, source chain, error type, the error's `Debug` form, level, fingerprint, tags, context, user, route, request id. |
+| `alerts()` | The alerts raised through `raise_alert`. |
 | `clear()` | Forgets what was recorded. |
 
-The fake also records the exceptions the framework captures for you. A handler that answers 500 in a test shows up in `reports()` with its route, so you can assert that an error you expect is reported once and an error you handle isn't reported at all. In tests that don't install the fake, set `lighthouse.enabled = false` to keep Lighthouse out of the way.
+The fake also records the exceptions the framework captures for you. A handler that answers 500 in a test shows up in `reports()` with its route, so you can assert that an error you expect is reported once and an error you handle isn't reported at all. In tests that don't install the fake, set `lighthouse.enabled = false` to keep Lighthouse out of the way, and call `flush()` on the injected `Lighthouse` before reading its store.
 
 <LinkCards>
   <LinkCard href="/docs/digging-deeper/health-and-metrics/" title="Health and metrics">
@@ -559,6 +547,6 @@ The fake also records the exceptions the framework captures for you. A handler t
     Queue workers, wait times and failed jobs.
   </LinkCard>
   <LinkCard href="/docs/microservices/tracing/" title="Distributed tracing">
-    One trace across services.
+    One trace across services, exported over OTLP.
   </LinkCard>
 </LinkCards>

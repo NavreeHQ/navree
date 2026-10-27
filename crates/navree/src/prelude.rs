@@ -103,6 +103,9 @@ pub use navree_billing::BillingModule;
 #[cfg(feature = "mcp")]
 pub use navree_mcp::{McpModule, ModuleBuilderMcpExt as _};
 
+#[cfg(feature = "lighthouse")]
+pub use navree_lighthouse::{LighthouseModule, ModuleBuilderLighthouseExt as _};
+
 #[cfg(feature = "workspace")]
 pub use navree_workspace::{
     CurrentWorkspace, InWorkspace, ModuleBuilderWorkspaceExt as _, WorkspaceModule, WorkspaceRepo,

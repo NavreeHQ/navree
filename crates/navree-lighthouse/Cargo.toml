@@ -1,0 +1,51 @@
+[package]
+name = "navree-lighthouse"
+description = "Navree LighthouseModule: application monitoring inside your app. Exceptions, slow requests and queries, failed jobs and outgoing HTTP grouped into issues, per-minute aggregates and traces, alerts to email, Slack and webhooks, and a dashboard at /_lighthouse."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+axum = { workspace = true }
+base64 = { workspace = true }
+bytes = { workspace = true }
+chrono = { workspace = true }
+cookie = { workspace = true }
+form_urlencoded = { workspace = true }
+hex = { workspace = true }
+hmac = { workspace = true }
+http = { workspace = true }
+metrics = { workspace = true }
+navree-access = { workspace = true }
+navree-auth = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-crypto = { workspace = true }
+navree-db = { workspace = true }
+navree-http = { workspace = true }
+navree-http-client = { workspace = true }
+navree-kernel = { workspace = true }
+navree-mail = { workspace = true }
+navree-schedule = { workspace = true }
+navree-telemetry = { workspace = true }
+navree-view = { workspace = true }
+sea-orm = { workspace = true }
+sea-orm-migration = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+navree-queue = { workspace = true }
+navree-testing = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }

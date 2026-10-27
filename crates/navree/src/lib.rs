@@ -41,6 +41,7 @@
 //! | `flags` | navree-flags (plus `#[flag]`) | `flags` (opt-in) | `FlagsModule`: feature flags per user, workspace, plan or percentage |
 //! | `graphql` | navree-graphql | `graphql` (opt-in) | `GraphqlModule`: `#[resolver]`, dataloaders, subscriptions |
 //! | `grpc` | navree-grpc | `grpc` (opt-in) | `GrpcModule`: tonic services with gRPC-Web, Connect, health and reflection |
+//! | `lighthouse` | navree-lighthouse | `lighthouse` | `LighthouseModule`: issues, traces, alerts and the `/_lighthouse` dashboard |
 //! | `billing` | navree-billing | `billing` (opt-in) | `BillingModule`: subscriptions, trials, usage, invoices with Stripe or Paddle |
 //! | `search` | navree-search | `search` (opt-in) | `SearchModule`: full-text and vector search, `#[derive(Searchable)]` |
 //! | `dock` | navree-dock | `dock` (opt-in) | Dock's `dock.toml`, the services' settings and the Compose file |
@@ -226,6 +227,8 @@ pub mod mcp {
 // L7 (opt-in)
 #[cfg(feature = "billing")]
 pub use navree_billing as billing;
+#[cfg(feature = "lighthouse")]
+pub use navree_lighthouse as lighthouse;
 #[cfg(feature = "search")]
 pub use navree_search as search;
 
