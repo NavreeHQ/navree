@@ -10,10 +10,10 @@ use navree::documents::{
     DocumentStatus, Documents, DocumentsFake, Docx, Download, Pdf, Position, QueuedDocument,
     Render, Stamp,
 };
+use navree::prelude::*;
 use navree::queue::{Queue, QueueDriver, QueueOptions};
 use navree::storage::{DiskConfig, StorageOptions};
 use navree::testing::TestApp;
-use navree::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -47,7 +47,10 @@ impl CertificatesController {
             course: "Security awareness".into(),
             completed_on: "27 October 2026".into(),
         };
-        let pdf = self.documents.pdf("certificates/course", &completion).await?;
+        let pdf = self
+            .documents
+            .pdf("certificates/course", &completion)
+            .await?;
         Ok(pdf.download("certificate.pdf"))
     }
 
@@ -55,7 +58,9 @@ impl CertificatesController {
     #[public]
     async fn show_arabic(&self, Path(name): Path<String>) -> Result<Pdf> {
         let render = Render::template("certificates/course")
-            .data(json!({ "name": name, "course": "الوعي الأمني", "completed_on": "٢٧ أكتوبر ٢٠٢٦" }))
+            .data(
+                json!({ "name": name, "course": "الوعي الأمني", "completed_on": "٢٧ أكتوبر ٢٠٢٦" }),
+            )
             .locale("ar")
             .title("شهادة إتمام");
         Ok(self.documents.render(&render).await?)
@@ -90,7 +95,12 @@ impl ReportsController {
         let file = Docx::new()
             .title("Quarterly audit report")
             .heading(1, "Quarterly audit report")
-            .paragraph(Paragraph::new().text("Prepared for ").bold("Acme Ltd").text("."))
+            .paragraph(
+                Paragraph::new()
+                    .text("Prepared for ")
+                    .bold("Acme Ltd")
+                    .text("."),
+            )
             .bullets(["Every control was tested", "Two findings are open"])
             .table(
                 Table::new()
@@ -213,7 +223,11 @@ async fn certificates_download_and_reports_queue() {
         .await
         .assert_status(200);
     let file = navree::documents::DocxFile::from_bytes(response.bytes().clone()).unwrap();
-    assert!(file.text().unwrap().contains("Multi-factor sign-in\tPassed"));
+    assert!(
+        file.text()
+            .unwrap()
+            .contains("Multi-factor sign-in\tPassed")
+    );
 }
 
 #[test]
