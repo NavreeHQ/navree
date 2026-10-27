@@ -1,0 +1,180 @@
+{#- The component gallery: every navree-ui component with sample data. -#}
+{%- extends "ui/app.html" -%}
+{%- import "ui/components.html" as ui -%}
+
+{%- block actions %}{{ ui.icon_button("refresh-cw", "Refresh") }}{{ ui.button("Invite user", variant="primary", icon="user-plus", dialog="invite-dialog", size="sm") }}{% endblock %}
+
+{%- block content %}
+{% call ui.page_header("Components", "Every piece of the navree-ui kit, as Helm, Lighthouse, Fleet and Logbook render it.") %}
+{{ ui.button("Dashboard example", icon="layout-dashboard", href=links.dashboard) }}{{ ui.button("Sign-in example", icon="log-in", href=links.sign_in) }}
+{% endcall %}
+<div class="ui-stack ui-stack--lg">
+
+<section class="ui-gallery__section" id="buttons" aria-labelledby="buttons-title">
+<div class="ui-gallery__head"><h2 class="ui-h2" id="buttons-title">Buttons</h2><p>Primary is the one green action of a view; everything else is ink. 4px corners, 32px tall (28px small, 36px large).</p></div>
+<div class="ui-gallery__demo">
+{{ ui.button("Save changes", variant="primary") }}
+{{ ui.button("Export", icon="download") }}
+{{ ui.button("Filters", variant="ghost", icon="sliders-horizontal") }}
+{{ ui.button("Delete", variant="danger", icon="trash-2") }}
+{{ ui.button("Status", variant="dashed", icon="circle-plus") }}
+{{ ui.button("Search", icon="search", shortcut="mod+K") }}
+{{ ui.button("Disabled", disabled=true) }}
+{{ ui.icon_button("ellipsis", "More", variant="secondary") }}
+</div>
+<div class="ui-gallery__demo">
+{{ ui.button("Small", size="sm") }}
+{{ ui.button("Small primary", variant="primary", size="sm", icon="plus") }}
+{{ ui.button("Large", size="lg") }}
+<span class="ui-btn-group">{{ ui.button("Day", size="sm") }}{{ ui.button("Week", size="sm") }}{{ ui.button("Month", size="sm") }}</span>
+{{ ui.icon_button("pencil", "Edit", size="sm") }}
+{{ ui.icon_button("copy", "Copy", size="sm") }}
+</div>
+</section>
+
+<section class="ui-gallery__section" id="badges" aria-labelledby="badges-title">
+<div class="ui-gallery__head"><h2 class="ui-h2" id="badges-title">Badges and status</h2><p>Square-cornered labels; status dots are the only round shapes.</p></div>
+<div class="ui-gallery__demo">
+{{ ui.badge("Admin") }}
+{{ ui.badge("Paid", "success", icon="check") }}
+{{ ui.badge("Past due", "warning") }}
+{{ ui.badge("Failed", "danger") }}
+{{ ui.badge("Draft", "outline") }}
+{{ ui.badge("v0.1.0", "mono") }}
+{{ ui.badge("Live", "success", dot=true) }}
+</div>
+<div class="ui-gallery__demo">
+{{ ui.status("Operational", "success") }}
+{{ ui.status("Degraded", "warning") }}
+{{ ui.status("Down", "danger") }}
+{{ ui.status("Paused") }}
+<span class="ui-row">{{ ui.kbd("mod+K") }}{{ ui.kbd("mod+B") }}{{ ui.kbd("Esc") }}</span>
+<code class="ui-code">navree-ui</code>
+{{ ui.avatar("Ada Lovelace") }}
+{{ ui.avatar("Grace Hopper", size="sm") }}
+</div>
+</section>
+
+<section class="ui-gallery__section" id="stats" aria-labelledby="stats-title">
+<div class="ui-gallery__head"><h2 class="ui-h2" id="stats-title">Stat cards</h2><p>A label, a value in tabular figures, the change, and a sparkline. Green marks positive data only.</p></div>
+<div class="ui-grid ui-grid--stats">
+{{ ui.stat("Revenue", "$48,210", delta="+12.5%", trend="up", note="vs. last month", icon="wallet", spark=sparks.revenue) }}
+{{ ui.stat("Active users", "1,204", delta="+48", trend="up", note="this week", icon="users", spark=sparks.users) }}
+{{ ui.stat("Error rate", "0.42%", delta="−0.18%", trend="down", tone="positive", note="vs. yesterday", icon="activity", spark=sparks.errors) }}
+{{ ui.stat("p95 latency", "61 ms", delta="+9 ms", trend="up", tone="negative", note="vs. yesterday", icon="timer", spark=sparks.latency) }}
+</div>
+</section>
+
+<section class="ui-gallery__section" id="charts" aria-labelledby="charts-title">
+<div class="ui-gallery__head"><h2 class="ui-h2" id="charts-title">Charts</h2><p>The chart container: y ticks, a plot drawn from SVG attributes (no inline styles), x labels, and a tooltip per point.</p></div>
+<div class="ui-grid ui-grid--main-side">
+{{ ui.chart_card("Requests", requests, description="Requests per minute, last 30 days") }}
+{{ ui.chart_card("Sign-ups", signups, description="New accounts per month", value="318") }}
+</div>
+{{ ui.chart_card("Latency by hour", latency, description="Today, all routes") }}
+</section>
+
+<section class="ui-gallery__section" id="tables" aria-labelledby="tables-title">
+<div class="ui-gallery__head"><h2 class="ui-h2" id="tables-title">Data table</h2><p>Sortable headers, row selection with bulk actions, row actions, and pagination in Navree's page shape.</p></div>
+<div>
+<form class="ui-table-toolbar" method="get" role="search">
+{{ ui.search_input(placeholder="Filter users…") }}
+{{ ui.button("Role", variant="dashed", size="sm", icon="circle-plus") }}
+{{ ui.button("Status", variant="dashed", size="sm", icon="circle-plus") }}
+<div class="ui-table-toolbar__end">{{ ui.dropdown("users-view", "View", menu, icon="sliders-horizontal", size="sm", align="end") }}</div>
+</form>
+{{ ui.data_table(users) }}
+</div>
+</section>
+
+<section class="ui-gallery__section" id="states" aria-labelledby="states-title">
+<div class="ui-gallery__head"><h2 class="ui-h2" id="states-title">Empty and loading states</h2><p>What a table shows before it has rows, and while they load.</p></div>
+<div class="ui-grid ui-grid--2">
+<div>{{ ui.data_table(empty_table) }}</div>
+<div class="ui-stack ui-stack--sm">{{ ui.data_table(loading_table) }}{{ ui.loading("Loading jobs…") }}</div>
+</div>
+</section>
+
+<section class="ui-gallery__section" id="forms" aria-labelledby="forms-title">
+<div class="ui-gallery__head"><h2 class="ui-h2" id="forms-title">Forms</h2><p>Inputs, selects, checkboxes and switches; field errors come from Navree's validation error shape.</p></div>
+<div class="ui-grid ui-grid--2">
+{% call ui.card("Profile", "Shown to everyone in the workspace.") %}
+<form class="ui-form" method="post" novalidate>
+{{ ui.form_errors(form_errors) }}
+<div class="ui-form__row">
+{{ ui.field("name", "Full name", value="", errors=form_errors, autocomplete="name", required=true) }}
+{{ ui.field("email", "Email", type="email", value="ada@acme", errors=form_errors, autocomplete="email") }}
+</div>
+{{ ui.select_field("role", "Role", roles, value="manager", hint="Managers can reassign deals and export contacts.") }}
+{{ ui.field("website", "Website", placeholder="https://", icon="globe", optional=true) }}
+{{ ui.textarea_field("bio", "Bio", placeholder="A sentence or two.", optional=true, rows=3) }}
+<div class="ui-form__actions">{{ ui.button("Cancel", variant="ghost") }}{{ ui.button("Save profile", variant="primary", type="submit") }}</div>
+</form>
+{% endcall %}
+<div class="ui-stack ui-stack--sm">
+{% call ui.card("Notifications", "Where Helm reaches you.") %}
+<div class="ui-stack ui-stack--sm">
+{{ ui.switch_field("notify_mail", "Email", checked=true, hint="Deal changes and mentions.") }}
+{{ ui.switch_field("notify_push", "Browser", hint="While Helm is open.") }}
+{{ ui.switch_field("notify_digest", "Weekly digest", checked=true, disabled=true, hint="Required on the Business plan.") }}
+</div>
+{% endcall %}
+{% call ui.card("Permissions") %}
+<div class="ui-stack ui-stack--sm">
+{{ ui.checkbox_field("perm_export", "Export contacts", checked=true, hint="Download CSV files of any list.") }}
+{{ ui.checkbox_field("perm_reassign", "Reassign deals") }}
+{{ ui.checkbox_field("perm_terms", "I understand these permissions apply to every workspace", errors={"perm_terms": ["Confirm to continue"]}) }}
+{{ ui.select_field("timezone", "Time zone", timezones, placeholder="Select a time zone") }}
+</div>
+{% endcall %}
+</div>
+</div>
+</section>
+
+<section class="ui-gallery__section" id="tabs" aria-labelledby="tabs-title">
+<div class="ui-gallery__head"><h2 class="ui-h2" id="tabs-title">Tabs</h2><p>Segmented tabs for views of one thing; line tabs for sections of a page. Arrow keys move between tabs.</p></div>
+{% call(tab) ui.tabs("deal-tabs", [{"id": "overview", "label": "Overview"}, {"id": "activity", "label": "Activity", "count": 12}, {"id": "files", "label": "Files", "count": 3}], label="Deal") %}
+{% if tab.id == "overview" %}{% call ui.card(flush=false) %}{{ ui.details(details) }}{% endcall %}
+{% elif tab.id == "activity" %}{{ ui.alert("Activity is on its way", "This panel renders whatever the page puts in it.") }}
+{% else %}{{ ui.empty_state("No files", "Drop files on the deal to attach them.", icon="file") }}{% endif %}
+{% endcall %}
+{{ ui.link_tabs([{"label": "General", "href": "#tabs", "active": true}, {"label": "Members", "href": "#tabs", "count": 24}, {"label": "Billing", "href": "#tabs"}, {"label": "Danger zone", "href": "#tabs"}], variant="line") }}
+</section>
+
+<section class="ui-gallery__section" id="overlays" aria-labelledby="overlays-title">
+<div class="ui-gallery__head"><h2 class="ui-h2" id="overlays-title">Menus, dialogs, toasts and the command palette</h2><p>Menus open below their trigger and move with the keyboard; dialogs are native modal dialogs; Ctrl/Cmd+K opens the palette.</p></div>
+<div class="ui-gallery__demo">
+{{ ui.dropdown("demo-menu", "Options", menu) }}
+{{ ui.button("Invite user", icon="user-plus", dialog="invite-dialog") }}
+{{ ui.button("Remove user", variant="danger", icon="trash-2", dialog="remove-dialog") }}
+{{ ui.button("Show toast", icon="bell", attrs={"data-ui-toast-trigger": "", "data-toast-title": "Changes saved", "data-toast-description": "Ada Lovelace is now a manager.", "data-toast-variant": "success"}) }}
+{{ ui.button("Show error", icon="circle-alert", attrs={"data-ui-toast-trigger": "", "data-toast-title": "Could not reach the mail server", "data-toast-description": "Retrying in 30 seconds.", "data-toast-variant": "error"}) }}
+{{ ui.button("Command palette", icon="command", shortcut="mod+K", attrs={"data-ui-command-open": ""}) }}
+</div>
+<div class="ui-grid ui-grid--3">
+{{ ui.alert("Deploy finished", "Version 2.14.0 is live in production.", tone="success") }}
+{{ ui.alert("Usage at 85%", "You will reach the plan's job limit in about four days.", tone="warning") }}
+{{ ui.alert("Webhook failing", "billing.acme.test answered 503 five times in a row.", tone="danger") }}
+</div>
+<div class="ui-grid ui-grid--3">
+{% call ui.card("Storage", "12.4 GB of 20 GB") %}{{ ui.progress(62, label="Storage used") }}{% endcall %}
+{% call ui.card("Onboarding", "4 of 5 steps") %}{{ ui.progress(80, label="Onboarding", tone="success") }}{% endcall %}
+{% call ui.card("Workspace", link={"label": "Settings", "href": "#settings"}) %}{{ ui.details(details[:2]) }}{% endcall %}
+</div>
+</section>
+
+</div>
+{%- endblock %}
+
+{%- block dialogs %}
+{% call ui.dialog("invite-dialog", "Invite a user", "They get an email with a link to join Acme Inc.") %}
+<form method="dialog">
+<div class="ui-dialog__body ui-form">
+{{ ui.field("invite_email", "Email", type="email", placeholder="name@company.com", attrs={"autofocus": "autofocus"}) }}
+{{ ui.select_field("invite_role", "Role", roles, value="rep") }}
+</div>
+<footer class="ui-dialog__footer">{{ ui.button("Cancel", attrs={"data-ui-dialog-close": ""}) }}{{ ui.button("Send invitation", variant="primary", type="submit") }}</footer>
+</form>
+{% endcall %}
+{{ ui.confirm_dialog("remove-dialog", "Remove Grace Hopper?", "She loses access to Acme Inc. at once. Her deals stay, unassigned.", confirm="Remove user") }}
+{%- endblock %}

@@ -1,0 +1,21 @@
+{#- The document: head, the kit's assets (from `shell.assets`), and the
+    `body` block. Blocks: title, head (extra tags; scripts must be files,
+    the policy forbids inline ones), body. -#}
+<!doctype html>
+<html lang="{{ shell.lang }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#040605">
+<title>{% block title %}{{ shell.title }}{% endblock %}</title>
+<link rel="icon" href="{{ shell.assets }}/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="{{ shell.assets }}/fonts/geist.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="{{ shell.assets }}/navree-ui.css">
+<script src="{{ shell.assets }}/navree-ui.js" defer></script>
+{%- block head %}{% endblock %}
+</head>
+<body class="ui">
+{%- block body %}{% endblock %}
+</body>
+</html>

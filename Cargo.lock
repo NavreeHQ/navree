@@ -3945,6 +3945,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "navree-ui"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "insta",
+ "navree-config",
+ "navree-http",
+ "navree-kernel",
+ "navree-testing",
+ "navree-view",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "navree-validation"
 version = "0.1.0"
 dependencies = [

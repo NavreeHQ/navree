@@ -1,0 +1,19 @@
+{#- An example sign-in page on the centered layout. -#}
+{%- extends "ui/auth.html" -%}
+{%- import "ui/components.html" as ui -%}
+
+{%- block content %}
+<section class="ui-card">
+<header class="ui-card__header ui-card__header--stacked"><div><h1 class="ui-dialog__title">Sign in to Helm</h1><p class="ui-card__desc">Use your Acme Inc. account.</p></div></header>
+<div class="ui-card__body">
+<form class="ui-form" method="post" action="{{ links.dashboard }}">
+{{ ui.field("email", "Email", type="email", placeholder="name@company.com", autocomplete="username", required=true) }}
+{{ ui.field("password", "Password", type="password", autocomplete="current-password", required=true, errors={"password": ["These credentials do not match our records."]}) }}
+{{ ui.checkbox_field("remember", "Keep me signed in on this device") }}
+{{ ui.button("Sign in", variant="primary", type="submit", block=true) }}
+</form>
+</div>
+<footer class="ui-card__footer"><span>Trouble signing in?</span><a class="ui-link" href="#reset">Reset your password</a></footer>
+</section>
+<p class="ui-center__note">Protected by two-factor authentication. <a class="ui-link" href="{{ links.components }}">Back to the components</a></p>
+{%- endblock %}

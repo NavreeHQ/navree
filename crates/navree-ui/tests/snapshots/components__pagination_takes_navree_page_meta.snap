@@ -1,0 +1,34 @@
+---
+source: crates/navree-ui/tests/components.rs
+expression: "render(r#\"{{ ui.pagination(meta, \"/deals?page={page}\") }}\"#,\njson!({ \"meta\": meta }),)"
+---
+<nav class="ui-pagination" aria-label="Pagination">
+<p class="ui-pagination__summary">1–15 of 31</p>
+<div class="ui-pagination__controls">
+<span class="ui-pagination__page">Page 1 of 3</span>
+<div class="ui-pagination__nav">
+<span class="ui-btn ui-btn--secondary ui-btn--icon ui-btn--sm ui-pagination__first" aria-disabled="true" aria-label="First page">
+<svg class="ui-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<path d="m11 17-5-5 5-5"/>
+<path d="m18 17-5-5 5-5"/>
+</svg>
+</span>
+<span class="ui-btn ui-btn--secondary ui-btn--icon ui-btn--sm " aria-disabled="true" aria-label="Previous page">
+<svg class="ui-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<path d="m15 18-6-6 6-6"/>
+</svg>
+</span>
+<a class="ui-btn ui-btn--secondary ui-btn--icon ui-btn--sm " href="&#x2f;deals?page=2" aria-label="Next page">
+<svg class="ui-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<path d="m9 18 6-6-6-6"/>
+</svg>
+</a>
+<a class="ui-btn ui-btn--secondary ui-btn--icon ui-btn--sm ui-pagination__last" href="&#x2f;deals?page=3" aria-label="Last page">
+<svg class="ui-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<path d="m6 17 5-5-5-5"/>
+<path d="m13 17 5-5-5-5"/>
+</svg>
+</a>
+</div>
+</div>
+</nav>
