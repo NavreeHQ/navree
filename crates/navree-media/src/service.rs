@@ -999,13 +999,19 @@ impl PendingMedia {
         self
     }
 
-    /// Stores the file and its row, then generates the conversions: the
-    /// non-queued ones now, the others in one `media.conversions` job
-    /// (all of them now when the app has no queue).
+    /// Checks and stores the file, generates the conversions that run now
+    /// (the non-queued ones, or all of them when the app has no queue),
+    /// writes the row, removes the files a `single_file` or
+    /// `only_keep_latest` collection no longer keeps, and queues the other
+    /// conversions in one `media.conversions` job.
+    ///
+    /// A refused file, or a conversion that fails now, keeps nothing: the
+    /// error is returned and the files written so far are deleted.
     ///
     /// With a unit of work the row (and the job) are part of it; the files
-    /// are written at once. Pass `None` to write the row on its own (the
-    /// current unit of work is joined when there is one).
+    /// are written at once, and the replaced files are deleted after it
+    /// commits. Pass `None` to write the row on its own (the current unit
+    /// of work is joined when there is one).
     pub async fn save<'u>(self, uow: impl Into<Option<&'u Uow>>) -> Result<MediaItem, MediaError> {
         match uow.into() {
             Some(uow) => uow.scope(self.run(Some(uow))).await,
@@ -1140,19 +1146,6 @@ impl PendingMedia {
             created_at: now,
             updated_at: now,
         };
-        if let Err(error) = media.inner.store.insert(uow, &item).await {
-            media.delete_files(std::slice::from_ref(&item)).await;
-            return Err(error);
-        }
-
-        if let Some(keep) = collection.keep_latest
-            && existing.len() + 1 > keep
-        {
-            let surplus = existing.len() + 1 - keep;
-            let old: Vec<MediaItem> = existing.into_iter().take(surplus).collect();
-            media.remove(uow, old).await?;
-        }
-
         let applicable: Vec<Conversion> = collection
             .conversions
             .iter()
@@ -1167,10 +1160,30 @@ impl PendingMedia {
         let (now, later): (Vec<Conversion>, Vec<Conversion>) = applicable
             .into_iter()
             .partition(|c| dispatcher.is_none() || !c.runs_queued(options.queue_conversions));
+        // Conversions that run now are generated before the row is
+        // written: when one fails, nothing of the file is kept.
         if !now.is_empty() {
-            item = media.generate(item, &now, Some(bytes)).await?;
-            media.inner.store.update(uow, &item).await?;
+            match media.generate(item.clone(), &now, Some(bytes)).await {
+                Ok(generated) => item = generated,
+                Err(error) => {
+                    media.delete_files(std::slice::from_ref(&item)).await;
+                    return Err(error);
+                }
+            }
         }
+        if let Err(error) = media.inner.store.insert(uow, &item).await {
+            media.delete_files(std::slice::from_ref(&item)).await;
+            return Err(error);
+        }
+
+        if let Some(keep) = collection.keep_latest
+            && existing.len() + 1 > keep
+        {
+            let surplus = existing.len() + 1 - keep;
+            let old: Vec<MediaItem> = existing.into_iter().take(surplus).collect();
+            media.remove(uow, old).await?;
+        }
+
         if let (Some(dispatcher), false) = (dispatcher, later.is_empty()) {
             let job = GenerateConversions {
                 media_id: item.id,
