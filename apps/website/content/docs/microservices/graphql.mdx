@@ -24,7 +24,7 @@ You get:
 ```toml title="Cargo.toml"
 [dependencies]
 navree = { git = "https://github.com/NavreeHQ/navree", features = ["graphql"] }
-async-graphql = { version = "7.2", default-features = false, features = ["chrono", "dataloader", "uuid"] }
+async-graphql = { version = "7.2", default-features = false, features = ["chrono", "uuid"] }
 ```
 
 The `graphql` feature isn't in the default `full` set: turn it on yourself. It brings `navree::graphql` (the crate, plus the `#[resolver]` macro) and puts `GraphqlModule` and `ModuleBuilderGraphqlExt` in the prelude. Add `GraphqlModule` to the app root:
@@ -307,15 +307,15 @@ The HTTP status of the response is `200` whenever the query ran, with or without
 
 Listing 50 deals with their company would run 50 company queries, one per deal. A dataloader collects the ids that the fields of one request ask for and loads them in one query.
 
-A loader implements async-graphql's `Loader` and is an injectable provider:
+A loader implements `navree::graphql::Loader` and is an injectable provider:
 
 ```rust title="src/companies/graphql/loader.rs"
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use async_graphql::dataloader::Loader;
 use crm_core::entities::company;
 use navree::db::Db;
+use navree::graphql::Loader;
 use navree::injectable;
 use sea_orm::{ColumnTrait, DbErr, EntityTrait, QueryFilter};
 use uuid::Uuid;
@@ -353,7 +353,7 @@ impl DealObject {
 }
 ```
 
-Navree creates a new `DataLoader` for every request (`RequestLoader<L>`, around the app's one `L`), so its cache lives as long as one query: results are never shared between two viewers, and a mutation never reads a value cached before it. Loads requested in the same tick are batched into one call to `load`. Loaders read through the pool, outside the field's unit of work, and don't check access: load only what the parent field was allowed to show, or filter with `ctx.accessible` before you call the loader. Asking for a loader that wasn't registered is a programming error: `ctx.loader` panics, naming it.
+Navree creates a new dataloader for every request (`RequestLoader<L>`, around the app's one `L`), so its cache lives as long as one query: results are never shared between two viewers, and a mutation never reads a value cached before it. Loads requested in the same tick are batched into one call to `load`, with each key once; `load_many` takes several keys. A batch that fails gives its error to every field waiting on it, and neither errors nor missing keys are cached. Loaders read through the pool, outside the field's unit of work, and don't check access: load only what the parent field was allowed to show, or filter with `ctx.accessible` before you call the loader. Asking for a loader that wasn't registered is a programming error: `ctx.loader` panics, naming it.
 
 ## The unit of work
 

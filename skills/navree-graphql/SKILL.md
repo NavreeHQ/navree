@@ -20,7 +20,7 @@ and its tests (`tests/graphql/`, `tests/docs_examples.rs`).
 ```toml
 [dependencies]
 navree = { git = "https://github.com/NavreeHQ/navree", features = ["graphql"] }
-async-graphql = { version = "7.2", default-features = false, features = ["chrono", "dataloader", "uuid"] }
+async-graphql = { version = "7.2", default-features = false, features = ["chrono", "uuid"] }
 garde = "0.23"   # for Valid<T> inputs (the derive names ::garde)
 ```
 
@@ -166,7 +166,7 @@ pub struct CompanyLoader {
     db: Arc<Db>,
 }
 
-impl Loader<Uuid> for CompanyLoader {          // async_graphql::dataloader::Loader
+impl Loader<Uuid> for CompanyLoader {          // navree::graphql::Loader
     type Value = CompanyObject;
     type Error = Arc<DbErr>;
 

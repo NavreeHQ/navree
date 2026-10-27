@@ -411,7 +411,7 @@ Without `Folded`, `"٦٥٤٣٢١"` is 12 bytes long and fails both the length an
 | `07400 123456` | none | `phone must be a valid phone number` |
 | `+44 12` | any | `phone must be a valid phone number` |
 
-Valid means the number fits its region's numbering plan (country code, length, prefixes), from the metadata of the [phonenumber](https://docs.rs/phonenumber) crate. Nothing checks that the line is in service: send a code to it for that.
+Valid means the number fits its region's numbering plan (country code, length, prefixes), from libphonenumber's metadata, through the [rlibphonenumber](https://docs.rs/rlibphonenumber) crate. Nothing checks that the line is in service: send a code to it for that.
 
 | Method | Returns |
 |---|---|

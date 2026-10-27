@@ -127,9 +127,9 @@ pub trait ModuleBuilderGraphqlExt {
     /// root fields to the app's schema.
     fn resolver<R: GraphqlResolver + Injectable>(&mut self) -> &mut Self;
 
-    /// Registers loader `L` (an injectable type implementing async-graphql's
-    /// `Loader<K>`) as a singleton provider of this module; every operation
-    /// gets its own dataloader of it (`ctx.loader::<L>()`).
+    /// Registers loader `L` (an injectable type implementing
+    /// [`Loader<K>`](crate::Loader)) as a singleton provider of this module;
+    /// every operation gets its own dataloader of it (`ctx.loader::<L>()`).
     fn dataloader<L: Injectable>(&mut self) -> &mut Self;
 }
 
