@@ -216,6 +216,47 @@ async fn queue_fake_batches_match_the_drivers() {
     fake.assert_dispatched::<Record>(|job| job.label == "then");
 }
 
+/// Like single jobs, a batch dispatched in a unit of work is recorded when
+/// it commits and never when it rolls back.
+#[tokio::test]
+async fn queue_fake_records_unit_of_work_batches_at_commit() {
+    let fake = QueueFake::new();
+    let app = faked_app(&fake).await;
+    let queue = app.get::<Queue>().await;
+    let db = app.get::<Db>().await;
+
+    let uow = db.uow(None, None).await;
+    Batch::new("rolled back")
+        .push(Record::new("r"))
+        .dispatch_in(&queue, &uow)
+        .await
+        .unwrap();
+    uow.rollback().await.unwrap();
+
+    let uow = db.uow(None, None).await;
+    let batch = Batch::new("committed")
+        .push(Record::new("c"))
+        .then(Record::new("then"))
+        .dispatch_in(&queue, &uow)
+        .await
+        .unwrap();
+    fake.assert_nothing_batched();
+    uow.commit().await.unwrap();
+
+    let recorded = fake.batches();
+    assert_eq!(recorded.len(), 1, "{recorded:?}");
+    assert_eq!(recorded[0].batch, batch);
+    assert_eq!(recorded[0].jobs_of::<Record>(), [Record::new("c")]);
+
+    // Outside a unit of work it is recorded at once.
+    Batch::new("now")
+        .push(Record::new("n"))
+        .dispatch(&queue)
+        .await
+        .unwrap();
+    fake.assert_batched(|b| b.name() == "now");
+}
+
 #[tokio::test]
 #[should_panic(expected = "recipients.import")]
 async fn assert_nothing_batched_names_the_batches() {

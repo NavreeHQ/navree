@@ -3,17 +3,19 @@
 
 use chrono::{DateTime, Utc};
 use navree_contracts::{Job, JobEnvelope};
+use navree_db::Uow;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::QueueError;
 use crate::record::from_millis;
+use crate::{Queue, QueueError};
 
 /// A group of jobs dispatched together and followed as one: how many are
 /// still pending, how many failed, whether the group was cancelled, plus
-/// callbacks for its outcome. Dispatch it with
-/// [`Queue::dispatch_batch`](crate::Queue::dispatch_batch) or
-/// [`dispatch_batch_in`](crate::Queue::dispatch_batch_in).
+/// callbacks for its outcome. Dispatch it with [`dispatch`](Batch::dispatch)
+/// or [`dispatch_in`](Batch::dispatch_in) (or the same methods on
+/// [`Queue`]: [`dispatch_batch`](crate::Queue::dispatch_batch),
+/// [`dispatch_batch_in`](crate::Queue::dispatch_batch_in)).
 ///
 /// ```no_run
 /// # use navree_contracts::{BoxError, Job, JobContext};
@@ -28,14 +30,11 @@ use crate::record::from_millis;
 ///
 /// # async fn example(queue: &Queue, uow: &navree_db::Uow) -> Result<(), navree_queue::QueueError> {
 /// let chunks = vec![vec![1, 2], vec![3, 4]];
-/// let batch = queue
-///     .dispatch_batch_in(
-///         uow,
-///         Batch::new("recipients.import")
-///             .add(chunks.into_iter().map(|rows| ImportChunk { rows }))
-///             .then(FinishImport { id: 7 })
-///             .catch(ReportImportFailure { id: 7 }),
-///     )
+/// let batch = Batch::new("recipients.import")
+///     .add(chunks.into_iter().map(|rows| ImportChunk { rows }))
+///     .then(FinishImport { id: 7 })
+///     .catch(ReportImportFailure { id: 7 })
+///     .dispatch_in(queue, uow)
 ///     .await?;
 /// println!("batch {} has {} jobs", batch.id, batch.total_jobs);
 /// # Ok(())
@@ -157,6 +156,19 @@ impl Batch {
     /// The batch's name.
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    /// Dispatches the batch on `queue`: the fluent form of
+    /// [`Queue::dispatch_batch`] (it joins the current unit of work the
+    /// same way).
+    pub async fn dispatch(self, queue: &Queue) -> Result<JobBatch, QueueError> {
+        queue.dispatch_batch(self).await
+    }
+
+    /// Dispatches the batch on `queue` as part of `uow`: the fluent form of
+    /// [`Queue::dispatch_batch_in`]. Nothing is stored if `uow` rolls back.
+    pub async fn dispatch_in(self, queue: &Queue, uow: &Uow) -> Result<JobBatch, QueueError> {
+        queue.dispatch_batch_in(uow, self).await
     }
 
     fn envelope<J: Job>(&mut self, job: &J) -> Option<JobEnvelope> {
