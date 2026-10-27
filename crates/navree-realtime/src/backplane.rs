@@ -180,13 +180,19 @@ mod tests {
         let (first, mut first_rx) = collector();
         let (second, mut second_rx) = collector();
         let (other, mut other_rx) = collector();
-        backplane.subscribe("t", first, token.clone()).await.unwrap();
+        backplane
+            .subscribe("t", first, token.clone())
+            .await
+            .unwrap();
         backplane
             .clone()
             .subscribe("t", second, token.clone())
             .await
             .unwrap();
-        backplane.subscribe("u", other, token.clone()).await.unwrap();
+        backplane
+            .subscribe("u", other, token.clone())
+            .await
+            .unwrap();
         assert_eq!(backplane.subscribers("t"), 2);
 
         backplane.publish("t", Bytes::from_static(b"1"));
@@ -208,7 +214,10 @@ mod tests {
         let backplane = MemoryBackplane::new();
         let token = CancellationToken::new();
         let (handler, mut receiver) = collector();
-        backplane.subscribe("t", handler, token.clone()).await.unwrap();
+        backplane
+            .subscribe("t", handler, token.clone())
+            .await
+            .unwrap();
         token.cancel();
         for _ in 0..50 {
             if backplane.subscribers("t") == 0 {

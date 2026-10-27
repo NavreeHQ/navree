@@ -106,7 +106,8 @@ async fn the_health_check_reports_a_server_that_does_not_answer() {
         panic!("nothing listens, so the check is down");
     };
     assert!(
-        reason.contains("Redis connection `default`") && reason.contains("Redis connection `queue`"),
+        reason.contains("Redis connection `default`")
+            && reason.contains("Redis connection `queue`"),
         "{reason}"
     );
     assert!(!reason.contains("hunter2"), "{reason}");

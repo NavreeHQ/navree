@@ -17,10 +17,7 @@ const QUIET: Duration = Duration::from_millis(200);
 
 /// Serves the test app on `backplane`.
 async fn node(backplane: &MemoryBackplane) -> Server {
-    Server::serve(
-        app(options()).override_value::<dyn Backplane>(Arc::new(backplane.clone())),
-    )
-    .await
+    Server::serve(app(options()).override_value::<dyn Backplane>(Arc::new(backplane.clone()))).await
 }
 
 /// Waits until `realtime` lists exactly `expected` on `channel`.
@@ -65,7 +62,11 @@ async fn broadcasts_reach_the_sockets_of_every_process() {
     // the backplane too, never twice to the same socket.
     let broadcaster: Arc<dyn Broadcaster> = b.realtime.clone();
     broadcaster
-        .broadcast(vec!["news".to_owned()], "edited".to_owned(), json!({ "id": 2 }))
+        .broadcast(
+            vec!["news".to_owned()],
+            "edited".to_owned(),
+            json!({ "id": 2 }),
+        )
         .await
         .unwrap();
     for client in [&mut on_a, &mut on_b] {

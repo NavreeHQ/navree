@@ -45,7 +45,10 @@ async fn messages_reach_every_subscriber_of_the_topic() {
         )
     };
     let (sender, receiver) = (backplane(()), backplane(()));
-    assert_eq!(sender.channel("realtime:crm"), format!("{}realtime:crm", t.prefix));
+    assert_eq!(
+        sender.channel("realtime:crm"),
+        format!("{}realtime:crm", t.prefix)
+    );
 
     let received = Arc::new(Mutex::new(Vec::new()));
     let sink = received.clone();
@@ -70,7 +73,9 @@ async fn messages_reach_every_subscriber_of_the_topic() {
     let received: Vec<Bytes> = received.lock().unwrap().clone();
     assert_eq!(
         received,
-        (0..5).map(|i| Bytes::from(format!("m{i}"))).collect::<Vec<_>>(),
+        (0..5)
+            .map(|i| Bytes::from(format!("m{i}")))
+            .collect::<Vec<_>>(),
         "in order, and only the topic's"
     );
     shutdown.cancel();
@@ -132,7 +137,9 @@ struct Client {
 impl Client {
     async fn connect(node: &Node) -> Client {
         let url = format!("ws://{}/app/{KEY}?protocol=7", node.addr);
-        let (ws, _) = tokio_tungstenite::connect_async(url).await.expect("handshake");
+        let (ws, _) = tokio_tungstenite::connect_async(url)
+            .await
+            .expect("handshake");
         let mut client = Client {
             ws,
             socket_id: String::new(),
@@ -181,13 +188,17 @@ impl Client {
     /// Joins presence channel `ROOM` as `user`, signed by `node`.
     async fn join(&mut self, node: &Node, user: &str) -> Value {
         let channel_data = json!({ "user_id": user, "user_info": { "name": user } }).to_string();
-        let auth = node.realtime.sign(&self.socket_id, ROOM, Some(&channel_data));
+        let auth = node
+            .realtime
+            .sign(&self.socket_id, ROOM, Some(&channel_data));
         self.send(
             "pusher:subscribe",
             json!({ "channel": ROOM, "auth": auth, "channel_data": channel_data }),
         )
         .await;
-        self.expect("pusher_internal:subscription_succeeded").await.2
+        self.expect("pusher_internal:subscription_succeeded")
+            .await
+            .2
     }
 }
 
@@ -209,11 +220,20 @@ async fn two_processes_share_broadcasts_and_presence() {
     let (a, b) = (node(&t).await, node(&t).await);
 
     let mut on_b = Client::connect(&b).await;
-    on_b.send("pusher:subscribe", json!({ "channel": "news" })).await;
+    on_b.send("pusher:subscribe", json!({ "channel": "news" }))
+        .await;
     on_b.expect("pusher_internal:subscription_succeeded").await;
-    assert_eq!(a.realtime.broadcast(["news"], "posted", json!({ "id": 1 })).unwrap(), 0);
+    assert_eq!(
+        a.realtime
+            .broadcast(["news"], "posted", json!({ "id": 1 }))
+            .unwrap(),
+        0
+    );
     let (_, channel, data) = on_b.expect("posted").await;
-    assert_eq!((channel.as_deref(), data), (Some("news"), json!({ "id": 1 })));
+    assert_eq!(
+        (channel.as_deref(), data),
+        (Some("news"), json!({ "id": 1 }))
+    );
 
     let mut ada = Client::connect(&a).await;
     ada.join(&a, "ada").await;

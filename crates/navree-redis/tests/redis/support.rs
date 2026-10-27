@@ -43,7 +43,9 @@ impl TestRedis {
             .filter(|url| !url.trim().is_empty())
         else {
             if std::env::var("NAVREE_TEST_REQUIRE_SERVICES").as_deref() == Ok("1") {
-                panic!("{test}: NAVREE_TEST_REDIS_URL is not set and NAVREE_TEST_REQUIRE_SERVICES=1");
+                panic!(
+                    "{test}: NAVREE_TEST_REDIS_URL is not set and NAVREE_TEST_REQUIRE_SERVICES=1"
+                );
             }
             eprintln!("skipped {test}: set NAVREE_TEST_REDIS_URL to run it against Redis");
             return None;

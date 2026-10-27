@@ -70,12 +70,10 @@ impl SessionStore for RedisSessionStore {
             let Some(stored) = stored else {
                 return Ok(None);
             };
-            let record: SessionRecord = serde_json::from_slice(&stored)
-                .map_err(|error| format!("the session record under `{key}` is not valid: {error}"))?;
-            if record
-                .expires_at
-                .is_some_and(|at| at <= self.clock.now())
-            {
+            let record: SessionRecord = serde_json::from_slice(&stored).map_err(|error| {
+                format!("the session record under `{key}` is not valid: {error}")
+            })?;
+            if record.expires_at.is_some_and(|at| at <= self.clock.now()) {
                 let _: u64 = self
                     .connection
                     .manager()

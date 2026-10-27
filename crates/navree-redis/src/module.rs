@@ -139,7 +139,8 @@ fn register(m: &mut ModuleBuilder, options: Option<RedisOptions>) {
         .factory(
             Factory::<dyn CacheStore>::new(|r: Resolver| async move {
                 let redis = r.get::<Redis>().await?;
-                let store = RedisCacheStore::new(redis.connection_for("cache").clone(), redis.prefix());
+                let store =
+                    RedisCacheStore::new(redis.connection_for("cache").clone(), redis.prefix());
                 Ok(Arc::new(store) as Arc<dyn CacheStore>)
             })
             .named(DRIVER)
@@ -149,7 +150,8 @@ fn register(m: &mut ModuleBuilder, options: Option<RedisOptions>) {
         .factory(
             Factory::<dyn LockStore>::new(|r: Resolver| async move {
                 let redis = r.get::<Redis>().await?;
-                let store = RedisLockStore::new(redis.connection_for("cache").clone(), redis.prefix());
+                let store =
+                    RedisLockStore::new(redis.connection_for("cache").clone(), redis.prefix());
                 Ok(Arc::new(store) as Arc<dyn LockStore>)
             })
             .named(DRIVER)
@@ -159,7 +161,8 @@ fn register(m: &mut ModuleBuilder, options: Option<RedisOptions>) {
         .factory(
             Factory::<dyn QueueStore>::new(|r: Resolver| async move {
                 let redis = r.get::<Redis>().await?;
-                let store = RedisQueueStore::new(redis.connection_for("queue").clone(), redis.prefix());
+                let store =
+                    RedisQueueStore::new(redis.connection_for("queue").clone(), redis.prefix());
                 Ok(Arc::new(store) as Arc<dyn QueueStore>)
             })
             .named(DRIVER)

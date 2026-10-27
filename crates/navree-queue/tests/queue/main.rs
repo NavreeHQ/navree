@@ -4,10 +4,10 @@
 
 mod commands;
 mod custom_store;
-mod reference_store;
 mod database_driver;
 mod fake;
 mod module;
+mod reference_store;
 mod suite;
 mod support;
 mod telemetry;

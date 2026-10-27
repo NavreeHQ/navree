@@ -202,7 +202,11 @@ async fn the_redis_store_is_the_provider_named_redis() {
         .await;
     let client = app.client();
     let id = support::put(&client, "k", json!(1)).await;
-    let record = store.load(&id).await.unwrap().expect("saved in the named store");
+    let record = store
+        .load(&id)
+        .await
+        .unwrap()
+        .expect("saved in the named store");
     assert_eq!(record.data["k"], json!(1));
 }
 

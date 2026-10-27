@@ -32,14 +32,30 @@ async fn a_burst_then_one_request_per_interval() {
         retry_after > Duration::from_secs(29) && retry_after <= Duration::from_secs(30),
         "{retry_after:?}"
     );
-    assert!(!limiter.hit("exports:ada", 2, minute).await.unwrap().is_allowed());
     assert!(
-        limiter.hit("exports:bob", 2, minute).await.unwrap().is_allowed(),
+        !limiter
+            .hit("exports:ada", 2, minute)
+            .await
+            .unwrap()
+            .is_allowed()
+    );
+    assert!(
+        limiter
+            .hit("exports:bob", 2, minute)
+            .await
+            .unwrap()
+            .is_allowed(),
         "keys are independent"
     );
 
     limiter.reset("exports:ada").await.unwrap();
-    assert!(limiter.hit("exports:ada", 2, minute).await.unwrap().is_allowed());
+    assert!(
+        limiter
+            .hit("exports:ada", 2, minute)
+            .await
+            .unwrap()
+            .is_allowed()
+    );
 
     // The window refills one request per interval.
     let fast = Duration::from_millis(200);

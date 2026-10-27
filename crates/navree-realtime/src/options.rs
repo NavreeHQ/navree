@@ -275,11 +275,10 @@ mod tests {
         let defaults = load(ConfigSources::new()).unwrap();
         assert_eq!(defaults.backplane, BackplaneKind::None);
 
-        let error = load(
-            ConfigSources::new().set("realtime", serde_json::json!({"backplane": "redis"})),
-        )
-        .expect_err("no secret")
-        .to_string();
+        let error =
+            load(ConfigSources::new().set("realtime", serde_json::json!({"backplane": "redis"})))
+                .expect_err("no secret")
+                .to_string();
         assert!(
             error.contains("realtime.backplane = \"redis\" needs realtime.secret"),
             "{error}"

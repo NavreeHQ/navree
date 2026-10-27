@@ -31,7 +31,10 @@ async fn values_are_stored_with_their_ttl() {
     };
     let cache = cache(&t);
     cache.put("greeting", &"hello", MINUTE).await.unwrap();
-    assert_eq!(cache.get::<String>("greeting").await.unwrap().as_deref(), Some("hello"));
+    assert_eq!(
+        cache.get::<String>("greeting").await.unwrap().as_deref(),
+        Some("hello")
+    );
     assert!(cache.has("greeting").await.unwrap());
 
     let key = format!("{}cache:app:greeting", t.prefix);
@@ -50,11 +53,17 @@ async fn values_are_stored_with_their_ttl() {
         .unwrap();
     assert_eq!(ttl, -1, "forever has no expiry");
 
-    cache.put("short", &1, Duration::from_millis(100)).await.unwrap();
+    cache
+        .put("short", &1, Duration::from_millis(100))
+        .await
+        .unwrap();
     tokio::time::sleep(Duration::from_millis(250)).await;
     assert_eq!(cache.get::<u32>("short").await.unwrap(), None, "expired");
 
-    assert_eq!(cache.pull::<String>("greeting").await.unwrap().as_deref(), Some("hello"));
+    assert_eq!(
+        cache.pull::<String>("greeting").await.unwrap().as_deref(),
+        Some("hello")
+    );
     assert!(!cache.has("greeting").await.unwrap());
     assert!(!cache.forget("greeting").await.unwrap());
     assert!(cache.forget("setting").await.unwrap());
@@ -80,7 +89,11 @@ async fn counters_increment_atomically_and_keep_their_ttl() {
         return;
     };
     let cache = cache(&t);
-    assert_eq!(cache.increment("visits", 1).await.unwrap(), 1, "missing is 0");
+    assert_eq!(
+        cache.increment("visits", 1).await.unwrap(),
+        1,
+        "missing is 0"
+    );
     assert_eq!(cache.increment("visits", 5).await.unwrap(), 6);
     assert_eq!(cache.decrement("visits", 2).await.unwrap(), 4);
     assert_eq!(cache.get::<i64>("visits").await.unwrap(), Some(4));
@@ -138,9 +151,16 @@ async fn remember_tags_and_flexible_work_on_redis() {
 
     let deals = cache.tags(&["deals", "company:1"]);
     deals.put("board", &"cards", MINUTE).await.unwrap();
-    assert_eq!(deals.get::<String>("board").await.unwrap().as_deref(), Some("cards"));
+    assert_eq!(
+        deals.get::<String>("board").await.unwrap().as_deref(),
+        Some("cards")
+    );
     cache.tags(&["company:1"]).flush().await.unwrap();
-    assert_eq!(deals.get::<String>("board").await.unwrap(), None, "flushed by tag");
+    assert_eq!(
+        deals.get::<String>("board").await.unwrap(),
+        None,
+        "flushed by tag"
+    );
 
     let rate: f64 = cache
         .flexible("fx", MINUTE, MINUTE, || async { Ok(1.25) })
@@ -196,14 +216,28 @@ async fn locks_are_shared_and_owned() {
         .await
         .unwrap()
         .expect("free");
-    assert!(there.lock("import", MINUTE).acquire().await.unwrap().is_none());
+    assert!(
+        there
+            .lock("import", MINUTE)
+            .acquire()
+            .await
+            .unwrap()
+            .is_none()
+    );
     assert!(
         !there.lock("import", MINUTE).release().await.unwrap(),
         "another owner cannot release it"
     );
 
     let owner = guard.into_owner();
-    assert!(there.lock("import", MINUTE).acquire().await.unwrap().is_none());
+    assert!(
+        there
+            .lock("import", MINUTE)
+            .acquire()
+            .await
+            .unwrap()
+            .is_none()
+    );
     assert!(
         there
             .lock("import", MINUTE)
@@ -225,10 +259,22 @@ async fn locks_are_shared_and_owned() {
         .unwrap();
     let _ = short.into_owner();
     tokio::time::sleep(Duration::from_millis(250)).await;
-    assert!(there.lock("short", MINUTE).acquire().await.unwrap().is_some());
+    assert!(
+        there
+            .lock("short", MINUTE)
+            .acquire()
+            .await
+            .unwrap()
+            .is_some()
+    );
 
     // `block` waits for the holder.
-    let held = here.lock("report", Duration::from_millis(200)).acquire().await.unwrap().unwrap();
+    let held = here
+        .lock("report", Duration::from_millis(200))
+        .acquire()
+        .await
+        .unwrap()
+        .unwrap();
     let _ = held.into_owner();
     let waited = there
         .lock("report", MINUTE)
@@ -263,6 +309,10 @@ async fn cache_store_redis_runs_through_the_modules() {
         Some("across processes")
     );
     second.run_command("cache:clear", Vec::new()).await.unwrap();
-    assert_eq!(a.get::<String>("shared").await.unwrap(), None, "cleared for every process");
+    assert_eq!(
+        a.get::<String>("shared").await.unwrap(),
+        None,
+        "cleared for every process"
+    );
     t.cleanup().await;
 }
