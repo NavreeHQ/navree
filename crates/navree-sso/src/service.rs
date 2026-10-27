@@ -180,7 +180,17 @@ fn normalize_domain(domain: &str) -> Result<String, SsoError> {
                 .chars()
                 .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
     };
-    if domain.len() > 253 || !domain.contains('.') || !domain.split('.').all(label_ok) {
+    // The last label is a top-level domain: never all digits (no IP
+    // addresses).
+    let tld_ok = domain
+        .rsplit('.')
+        .next()
+        .is_some_and(|tld| tld.chars().any(|c| c.is_ascii_lowercase()));
+    if domain.len() > 253
+        || !domain.contains('.')
+        || !domain.split('.').all(label_ok)
+        || !tld_ok
+    {
         return Err(SsoError::invalid(
             "domain",
             "domain must be a domain name such as acme.com",
@@ -465,31 +475,39 @@ impl Sso {
             .collect()
     }
 
-    async fn check_owner(&self, owner: SsoOwner) -> Result<(), SsoError> {
+    /// The owner exists: read through `uow`, so an organization or
+    /// workspace created in the same unit of work counts.
+    async fn check_owner(&self, uow: &Uow, owner: SsoOwner) -> Result<(), SsoError> {
         let Some(app) = self.app.upgrade() else {
             return Ok(());
         };
+        let needs_workspaces = || {
+            SsoError::invalid(
+                "owner",
+                "organization and workspace owners need WorkspaceModule in the app",
+            )
+        };
         let found = match owner {
             SsoOwner::App => true,
-            SsoOwner::Workspace(id) => match app.try_get::<navree_workspace::Workspaces>().await {
-                Some(workspaces) => workspaces.find(id).await?.is_some(),
-                None => {
-                    return Err(SsoError::invalid(
-                        "owner",
-                        "workspace owners need WorkspaceModule in the app",
-                    ));
+            SsoOwner::Workspace(id) => {
+                if app.try_get::<navree_workspace::Workspaces>().await.is_none() {
+                    return Err(needs_workspaces());
                 }
-            },
+                navree_workspace::entity::workspace::Entity::find_by_id(id)
+                    .one(&*uow.tx().await?)
+                    .await?
+                    .is_some()
+            }
             SsoOwner::Organization(id) => {
-                match app.try_get::<navree_workspace::Organizations>().await {
-                    Some(organizations) => organizations.find(id).await?.is_some(),
-                    None => {
-                        return Err(SsoError::invalid(
-                            "owner",
-                            "organization owners need WorkspaceModule in the app",
-                        ));
-                    }
+                if app.try_get::<navree_workspace::Organizations>().await.is_none() {
+                    return Err(needs_workspaces());
                 }
+                // Without organizations (`workspace.organizations.enabled`)
+                // the table may be missing: no such owner either way.
+                navree_workspace::entity::organization::Entity::find_by_id(id)
+                    .one(&*uow.tx().await?)
+                    .await
+                    .is_ok_and(|found| found.is_some())
             }
         };
         if found {
@@ -575,7 +593,7 @@ impl Sso {
                 "name must be 1 to 120 characters",
             ));
         }
-        self.check_owner(input.owner).await?;
+        self.check_owner(uow, input.owner).await?;
         self.check_settings(&input.settings)?;
         Self::check_provisioning(&input.provisioning)?;
         let slug = {
@@ -1749,6 +1767,7 @@ mod tests {
             "acme.com/x",
             "a@b.com",
             "ünï.com",
+            "10.0.0.1",
         ] {
             assert!(normalize_domain(bad).is_err(), "{bad}");
         }

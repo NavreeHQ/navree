@@ -1,0 +1,574 @@
+---
+title: "Single sign-on"
+description: "SAML 2.0 and OpenID Connect sign-in per organization or workspace, verified email domains that route sign-in and can refuse passwords, and just-in-time provisioning with group to role mapping."
+---
+
+## Introduction
+
+<Badge feature="sso" /> Companies want their people to sign in to your app with the company's identity provider: Okta, Microsoft Entra ID, Google Workspace, AD FS, Ping, Keycloak or anything else that speaks SAML 2.0 or OpenID Connect. `navree-sso` gives each organization or workspace its own connection, and a sign-in through it ends with the same Navree user and the same access and refresh tokens as a [password login](/docs/security/authentication/), so every route, permission and audit entry behaves as before.
+
+It covers the whole flow:
+
+- **Connections per tenant.** A connection belongs to the app, an [organization or a workspace](/docs/workspaces/organizations/), and talks SAML 2.0 (the identity provider's metadata, by URL or pasted) or OpenID Connect (an issuer, a client id and a secret).
+- **Verified domains.** A DNS TXT record proves `acme.com` belongs to Acme's connection. From then on `POST /api/sso/discover {email}` sends `@acme.com` addresses to it, and the connection can refuse their passwords.
+- **Just-in-time provisioning.** The first sign-in creates the user, makes them a member of the connection's organization or workspace and gives them the role their identity provider groups map to.
+- **Signatures checked in Rust.** SAML responses are verified by Navree itself: XML read into a strict tree, exclusive canonicalization, RSA-SHA256 or ECDSA on `ring`. SHA-1 is refused, signature wrapping can't move what a signature covers, and every assertion works once.
+- **A fake identity provider** for your tests, whose responses pass the same checks.
+
+## Installation
+
+The `sso` feature is part of the facade's default `full` feature. With your own feature list, add it:
+
+```toml title="Cargo.toml"
+[dependencies]
+navree = { git = "https://github.com/NavreeHQ/navree", features = ["sso"] }
+```
+
+Add `SsoModule` after `AuthModule`, and after `WorkspaceModule` when connections belong to organizations or workspaces:
+
+```rust title="src/app.rs"
+Navree::app()
+    .module(ConfigModule::for_root(sources))
+    .module(CryptoModule::from_config())      // encrypts client secrets
+    .module(HttpModule::from_config())
+    .module(HttpClientModule::from_config())  // metadata, discovery, key sets
+    .module(DatabaseModule::from_config())
+    .module(CacheModule::from_config())       // states, used assertions, codes
+    .module(AuthModule::from_config())
+    .module(WorkspaceModule::from_config())
+    .module(SsoModule::from_config())         // section `sso`
+    // ...
+```
+
+`CacheModule` is optional: without it, sign-in states, used assertion ids and one-time codes live in the process, which is enough for a single instance. With several instances, give the cache a shared store, so a state or an assertion used on one instance is refused on the others. The management routes check a permission, so the app needs [`AccessModule`](/docs/security/authorization/) for them; without it, set `sso.management_routes = false` (the boot fails otherwise, naming the routes).
+
+The module contributes the migration set `sso` (after `auth`), which creates three tables:
+
+| Table | One row per |
+|---|---|
+| `sso_connections` | connection: its owner, slug, name, protocol, settings (the client secret encrypted with the app key), provisioning rules and switches |
+| `sso_domains` | email domain of a connection, with its verification token and when it was verified |
+| `sso_identities` | person at an identity provider (the SAML name id or the OpenID Connect `sub`), linked to a user, with the attributes of their last sign-in |
+
+Deleting a connection deletes its domains and identities; deleting a user deletes their identities.
+
+## Configuration
+
+```toml title="config/app.toml"
+[sso]
+base_url = "https://api.acme.test"                     # default: app.url
+complete_url = "https://app.acme.test/auth/sso/complete"
+enforce_for_verified_domains = true
+
+[sso.saml]
+allow_idp_initiated = false
+clock_skew_secs = 120
+```
+
+| Key | Default | What it does |
+|---|---|---|
+| `sso.base_url` | `app.url` | The API's public URL. The assertion consumer service, metadata and callback URLs you give identity providers start with it. |
+| `sso.complete_url` | none | The front end's page that finishes a sign-in (see [Finishing a sign-in](#finishing-a-sign-in)). Without it, the assertion consumer service and the callback answer with the login JSON. |
+| `sso.enforce_for_verified_domains` | `false` | Refuse passwords for every verified domain of an enabled connection. A connection's own `enforce` overrides it. |
+| `sso.routes` | `true` | Mount the routes. |
+| `sso.management_routes` | `true` | Mount the management routes too (they need `AccessModule`). |
+| `sso.routes_prefix` | `/sso` | The routes' prefix under `http.api_prefix`. |
+| `sso.state_ttl_secs` | `600` | How long a sign-in may take from the login route to the identity provider's answer. |
+| `sso.code_ttl_secs` | `60` | How long the one-time code of a finished sign-in works. |
+| `sso.domains.txt_prefix` | `navree-sso-verification` | The TXT record's value is `{txt_prefix}={token}`. |
+| `sso.domains.doh_url` | `https://cloudflare-dns.com/dns-query` | The DNS-over-HTTPS resolver TXT records are read from (JSON API). |
+| `sso.saml.allow_idp_initiated` | `false` | Accept responses that answer no request, sent from the identity provider's dashboard. |
+| `sso.saml.clock_skew_secs` | `120` | How far an identity provider's clock may be off. |
+| `sso.saml.metadata_ttl_secs` | `3600` | How long metadata fetched from a `metadata_url` is used. |
+| `sso.saml.max_response_bytes` | `1048576` | The largest `SAMLResponse` accepted. |
+| `sso.oidc.scopes` | `openid email profile` | The scopes asked for when a connection names none. |
+| `sso.oidc.clock_skew_secs` | `60` | How far a provider's clock may be off. |
+
+Environment variables follow the usual pattern: `APP_SSO__BASE_URL`, `APP_SSO__SAML__ALLOW_IDP_INITIATED=true`, and `APP_SSO__OIDC__SCOPES="openid,email,groups"` (a comma-separated list). A `base_url` or `complete_url` that isn't an absolute URL, a prefix without a leading `/`, a zero time-to-live or scopes without `openid` fail the boot, naming the key. `SsoModule::for_root(SsoOptions { .. })` takes the same options in code.
+
+## Connections
+
+A connection is one identity provider for one owner:
+
+| Owner | JSON | A signed-in person becomes |
+|---|---|---|
+| `SsoOwner::App` | `{"type": "app"}` | a user (single-tenant apps, your own staff) |
+| `SsoOwner::Organization(id)` | `{"type": "organization", "id": "..."}` | a member of the organization, reaching all its workspaces |
+| `SsoOwner::Workspace(id)` | `{"type": "workspace", "id": "..."}` | a member of the workspace |
+
+Each connection has a `slug`, the URL segment of its routes (`acme` in `/api/sso/acme/login`). It is derived from the name when you leave it out (`Acme Okta` becomes `acme-okta`, then `acme-okta-2`), and it is lower-case letters, digits and dashes. Changing a slug changes the URLs the identity provider knows, so set it once.
+
+### SAML connections
+
+Give the identity provider's metadata as a URL or as the document itself:
+
+```json
+{
+  "owner": { "type": "workspace", "id": "01a1795b-63c7-7c5e-bf09-5b1d1c38b1a2" },
+  "name": "Acme Okta",
+  "slug": "acme",
+  "settings": {
+    "protocol": "saml",
+    "metadata_url": "https://acme.okta.com/app/exk8acme4x7/sso/saml/metadata"
+  }
+}
+```
+
+| Setting | Default | What it does |
+|---|---|---|
+| `metadata_url` | | Fetched over `https` and kept `sso.saml.metadata_ttl_secs` |
+| `metadata_xml` | | The metadata document (give exactly one of the two) |
+| `name_id_format` | the identity provider's | The `NameIDPolicy` format to ask for. Prefer `persistent` or `emailAddress`: a `transient` name id changes at every sign-in. |
+| `force_authn` | `false` | Ask the identity provider to authenticate the person again, even with a session |
+| `require_signed_assertion` | `false` | Refuse a signed response around an unsigned assertion |
+
+Navree reads the metadata's entity id, the HTTP-Redirect sign-on URL and every signing certificate (a rotation can list two). Pasted metadata that doesn't parse, has no signing certificate or has an RSA key under 2048 bits is refused when you save the connection; metadata from a URL is read at the first sign-in, and the same problems refuse that sign-in. The metadata's own signature is not checked: trust comes from where the document comes from, an `https` URL or XML an administrator pasted.
+
+Give the identity provider Navree's side, which every connection carries in `service_provider`:
+
+| Identity provider field | Value |
+|---|---|
+| Entity id, audience, identifier | `{base_url}/api/sso/saml/{slug}/metadata` |
+| Assertion consumer service, reply URL, ACS URL (HTTP-POST) | `{base_url}/api/sso/saml/{slug}/acs` |
+| Metadata URL (to import) | `{base_url}/api/sso/saml/{slug}/metadata` |
+
+- **Okta**: create a SAML 2.0 app with those two URLs, name id format `EmailAddress` or `Persistent`, and attribute statements `email`, `firstName`, `lastName` plus a group attribute statement `groups`. Copy the app's metadata URL into the connection.
+- **Microsoft Entra ID**: create an enterprise application with SAML sign-on, paste the identifier and reply URL, and add a group claim (it sends group object ids). Copy the "App Federation Metadata Url".
+- **Google Workspace**: add a custom SAML app, download its metadata (paste it as `metadata_xml`), set the ACS URL and entity id, and map `first_name`, `last_name` and group membership to `groups`.
+
+### OpenID Connect connections
+
+```json
+{
+  "owner": { "type": "organization", "id": "01a1795b-63c7-7c5e-bf09-5b1d1c38b1a2" },
+  "name": "Acme Entra",
+  "settings": {
+    "protocol": "oidc",
+    "issuer": "https://login.microsoftonline.com/9e3c5a0f-1b2d-4c6e-8f0a-2b4c6d8e0f1a/v2.0",
+    "client_id": "0f6c1d2e-8a3b-4c5d-9e7f-1a2b3c4d5e6f",
+    "client_secret": "Q8a8Q~mX2...",
+    "scopes": ["openid", "email", "profile"]
+  }
+}
+```
+
+Navree reads the issuer's discovery document (`{issuer}/.well-known/openid-configuration`), which must name the same issuer. Register `{base_url}/api/sso/oidc/{slug}/callback` as the client's redirect URI; it is in `service_provider.redirect_uri`. The client secret is encrypted with the app key before it is stored and never comes back from the API (`has_client_secret` says whether there is one); an update without `client_secret` keeps the stored one. A public client with no secret works too, with PKCE.
+
+### Managing connections
+
+The management routes need the permission `sso.manage` (`MANAGE_PERMISSION`), which [roles](/docs/security/authorization/) grant like any other:
+
+| Route | Does |
+|---|---|
+| `GET /api/sso/connections?owner_type=&owner_id=` | List connections, of one owner when given |
+| `POST /api/sso/connections` | Create one (201): `owner`, `name`, `slug?`, `settings`, `provisioning?`, `enforce?`, `enabled?` |
+| `GET /api/sso/connections/{id}` | Show one (by id or slug) |
+| `PATCH /api/sso/connections/{id}` | Change `name`, `slug`, `settings` (same protocol), `provisioning`, `enabled`, `enforce`, or `follow_default_enforcement: true` |
+| `DELETE /api/sso/connections/{id}` | Delete it with its domains and identities (204) |
+| `GET /api/sso/connections/{id}/domains` | Its domains |
+| `POST /api/sso/connections/{id}/domains` | Add a domain (201) |
+| `POST /api/sso/domains/{id}/verify` | Look its TXT record up |
+| `DELETE /api/sso/domains/{id}` | Remove a domain (204) |
+
+A taken or reserved slug, settings without metadata or with metadata that doesn't parse, a metadata URL or issuer that isn't `https`, rules that grant the `owner` role, and an owner that doesn't exist are 400s with field errors (`errors.slug`, `errors["settings.metadata_xml"]`, `errors.owner`, ...). Every change is written through `Repo`, so the [audit log](/docs/security/audit-log/) records it (client secrets only as ciphertext).
+
+To let workspace administrators manage their own connection, mount your own routes on the `Sso` service (see [Using the Sso service](#using-the-sso-service)).
+
+## Verified domains
+
+A domain routes sign-in only once its owner proves it is theirs. Adding one answers the TXT record to create:
+
+```http
+POST /api/sso/connections/acme/domains HTTP/1.1
+Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+Content-Type: application/json
+
+{ "domain": "acme.com" }
+```
+
+```json wrap
+{
+  "__type": "SsoDomain",
+  "id": "01a17c2e-91c4-7a2b-8d3e-5f6a7b8c9d0e",
+  "connection_id": "01a17c2d-17f0-7e55-a9a3-2a3b4c5d6e7f",
+  "domain": "acme.com",
+  "verified": false,
+  "verified_at": null,
+  "txt_name": "acme.com",
+  "txt_value": "navree-sso-verification=V3kq8ZbT1mN0pL4xR7cY2dF6hJ9sW5aE",
+  "created_at": "2026-10-27T12:00:00Z"
+}
+```
+
+Once the record is published, `POST /api/sso/domains/{id}/verify` reads the domain's TXT records through DNS over HTTPS and marks it verified. A missing record is a 400 (`domain_not_verified`; DNS changes take a while to appear, so try again later), and a domain already verified for another connection is a 409 (`domain_taken`). Operators and seeders can skip DNS with `Sso::mark_domain_verified`.
+
+Domains are lower-cased and checked (`acme.com`, `mail.acme.co.uk`; no IP addresses, no single labels, ASCII only: write internationalized domains in their `xn--` form). Verification emits `SsoDomainVerified { connection_id, domain }`.
+
+### Discovery
+
+A sign-in page asks for the email first, then shows the password field or sends the person to their identity provider:
+
+```http
+POST /api/sso/discover HTTP/1.1
+Content-Type: application/json
+
+{ "email": "ada@acme.com" }
+```
+
+```json
+{
+  "sso": true,
+  "connection": "acme",
+  "name": "Acme Okta",
+  "protocol": "saml",
+  "login_url": "https://api.acme.test/api/sso/acme/login",
+  "password_allowed": false
+}
+```
+
+An email whose domain no enabled connection has verified answers `{"sso": false, "password_allowed": true}` and nulls.
+
+### Refusing passwords
+
+With `sso.enforce_for_verified_domains = true`, or `enforce: true` on a connection, people of its verified domains can't use a password: `POST /api/auth/login` and `POST /api/auth/register` answer 403 with code `sso_required` before any password is checked.
+
+```json
+{ "statusCode": 403, "message": "Sign in with Acme Okta", "error": "Forbidden", "code": "sso_required" }
+```
+
+The refusal is audited as `auth.login_refused`. It comes from a navree-auth `PasswordSignInPolicy` the module registers; your own password flows can ask the same question with `AuthService::check_password_sign_in(email)`. A connection with `enforce: false` keeps passwords working for its domains whatever the app's default; `follow_default_enforcement: true` goes back to the default.
+
+## How sign-in works
+
+1. The sign-in page sends the browser to `GET /api/sso/{connection}/login?return_to=/deals`. Navree creates a state, keeps it in the cache for `sso.state_ttl_secs`, and redirects (302) to the identity provider: a SAML `AuthnRequest` with the HTTP-Redirect binding, or an OpenID Connect authorization request with PKCE (S256) and a nonce. With `Accept: application/json` the route answers `{"url": "..."}` instead, for a front end that redirects itself.
+2. The person signs in at their identity provider.
+3. The identity provider posts a `SAMLResponse` and the `RelayState` to `POST /api/sso/saml/{connection}/acs`, or redirects the browser to `GET /api/sso/oidc/{connection}/callback?code=...&state=...`.
+4. Navree takes the state (it works once), checks the answer, finds, links or creates the user, provisions their membership, and finishes the sign-in.
+
+`return_to` must be a relative path (`/deals`, never `https://...` or `//...`); it comes back when the sign-in finishes.
+
+### Finishing a sign-in
+
+The identity provider talks to the API directly, but tokens belong in your front end. With `sso.complete_url` set, the assertion consumer service and the callback redirect (303) there with a one-time code:
+
+```text wrap
+https://app.acme.test/auth/sso/complete?code=QmM2yH8w0tW9pLx3vZ1nR7cK4dF6aJ2sE5uB8gT0hYi
+```
+
+The front end (or its [backend-for-frontend](/docs/patterns/backend-for-frontend/)) exchanges the code within `sso.code_ttl_secs`, once:
+
+```http
+POST /api/sso/exchange HTTP/1.1
+Content-Type: application/json
+
+{ "code": "QmM2yH8w0tW9pLx3vZ1nR7cK4dF6aJ2sE5uB8gT0hYi" }
+```
+
+```json
+{
+  "user": { "__type": "User", "id": "01a17d03-5a1e-7f2c-b3d4-e5f6a7b8c9d0", "name": "Ada Lovelace", "email": "ada@acme.com", "email_verified_at": "2026-10-27T12:00:03Z", "created_at": "2026-10-27T12:00:03Z" },
+  "access_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
+  "refresh_token": "01a17d03-5a2b-7d10-8c9e-0f1a2b3c4d5e.k3Lq9...",
+  "token_type": "Bearer",
+  "expires_in": 900,
+  "return_to": "/deals"
+}
+```
+
+When the sign-in fails, the redirect carries the error instead, so the page can show it in the person's language: `?error=unverified_domain&message=...`. Without `complete_url`, the assertion consumer service and the callback answer with the JSON above, or with the error.
+
+A single sign-on skips Navree's own [two-factor challenge](/docs/security/account-flows/#two-factor-authentication): the identity provider does its own.
+
+### What can go wrong
+
+| Answer | `code` | When |
+|---|---|---|
+| 404 | `sso_connection_not_found` | No connection has this slug or id |
+| 403 | `sso_connection_disabled` | The connection is turned off (`enabled: false`) |
+| 400 | `invalid_state` | The state is unknown, expired, used, or for another connection |
+| 400 | `invalid_saml_response` | The SAML response failed a check (the reason is logged under `navree::security`, never sent) |
+| 403 | `sso_refused` | The identity provider answered with an error status (the person isn't assigned to the app, say) |
+| 400 | `assertion_replayed` | The assertion was used already |
+| 400 | `sso_provider_refused` | The OpenID Connect provider refused the sign-in or the code (`access_denied`, `invalid_grant`) |
+| 400 | `invalid_id_token` | The ID token's signature, issuer, audience, expiry or nonce is wrong |
+| 400 | `missing_email` | A new user would be created, but the identity provider sent no email |
+| 403 | `unverified_domain` | A new user's email isn't in a verified domain of the connection |
+| 409 | `email_taken` | The email belongs to a user and can't be linked (see below) |
+| 403 | `sso_provisioning_disabled` | No linked user, and just-in-time provisioning is off |
+| 403 | `sso_not_assigned` | The person's groups map to no role and the connection has no default role |
+| 400 | `invalid_sso_code` | The one-time code is unknown, expired or used |
+| 400 | `invalid_return_to` | `return_to` isn't a relative path |
+| 502 | `sso_provider_unavailable` | Metadata, discovery, the key set or the token endpoint couldn't be reached |
+
+A sign-in that fails half way writes nothing: the user, the identity and the membership are written in one transaction of their own.
+
+## Just-in-time provisioning
+
+Navree finds the user of a sign-in in this order:
+
+1. **A linked identity.** An `sso_identities` row for this connection and subject (name id or `sub`) signs in its user, and is updated with the latest email and attributes.
+2. **The same email, in a verified domain.** When the email's domain is a verified domain of this connection, a user with that email gets the identity linked. An email outside the connection's verified domains never links: one company's identity provider must not take over another company's accounts. An OpenID Connect token that says `email_verified: false` never links either.
+3. **A new user**, when `provisioning.jit` is on (the default) and the email is in a verified domain. The user gets the profile's name and email, no password, and a verified email. With `allow_unverified_emails: true`, users outside the verified domains are created too, with an unverified email.
+4. **Otherwise** the answer is 409 `email_taken` (the email belongs to someone) or 403 (`unverified_domain`, `sso_provisioning_disabled`).
+
+Then the person's membership of the connection's owner follows their groups. The first rule whose group they have wins; without one, `default_role` applies:
+
+```json
+{
+  "provisioning": {
+    "jit": true,
+    "default_role": "member",
+    "roles": [
+      { "group": "Acme Admins", "role": "admin" },
+      { "group": "Contractors", "role": "viewer" }
+    ],
+    "sync_roles": true,
+    "allow_unverified_emails": false
+  }
+}
+```
+
+- A workspace connection adds the person to the workspace with the role ([`Members::add`](/docs/workspaces/members-and-roles/)); an organization connection adds them to the organization with that organization role, reaching all its workspaces.
+- With `sync_roles` (the default), the role follows the groups at every sign-in. The owner's role never changes, and no rule may grant `owner`.
+- `default_role: null` refuses people whose groups match no rule (403 `sso_not_assigned`), which keeps everyone outside the listed groups out.
+- Groups are compared ignoring ASCII case. Entra ID sends group object ids, so write those in `group`.
+
+A sign-in that created the user or changed a membership emits `SsoUserProvisioned { connection_id, user_id, owner, role, created }` after the commit. Sign-ins are audited as `sso.login` (with `metadata.connection`), new users as `auth.register`.
+
+### Attribute mapping
+
+The profile is read from the SAML attributes or the ID token claims, the first name present winning. The defaults cover Okta, Entra ID, Google Workspace, AD FS and the standard claims:
+
+| Field | Default names |
+|---|---|
+| `email` | `email`, `mail`, `Email`, `emailAddress`, `http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress`, `urn:oid:0.9.2342.19200300.100.1.3` |
+| `name` | `name`, `displayName`, `http://schemas.microsoft.com/identity/claims/displayname`, `http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name`, `urn:oid:2.16.840.1.113730.3.1.241` |
+| `first_name` | `given_name`, `firstName`, `first_name`, `givenName`, `http://schemas.xmlsoap.org/ws/2005/05/identity/claims/givenname`, `urn:oid:2.5.4.42` |
+| `last_name` | `family_name`, `lastName`, `last_name`, `surname`, `sn`, `http://schemas.xmlsoap.org/ws/2005/05/identity/claims/surname`, `urn:oid:2.5.4.4` |
+| `groups` | `groups`, `memberOf`, `http://schemas.microsoft.com/ws/2008/06/identity/claims/groups`, `Group` |
+
+Override any list in `provisioning.attributes` (`"attributes": {"groups": ["department"]}`). A SAML name id that is an email address stands in for a missing email attribute; the name is the display name, or the first and last names joined.
+
+## SAML in detail
+
+Navree verifies SAML in Rust, with no XML security library: quick-xml reads the message into a strict tree, the crate canonicalizes it and `ring` checks the signature through `navree_crypto::jose`. A response must pass, in order:
+
+1. **XML.** UTF-8 XML 1.0. A document type declaration (and so any entity expansion or external entity), an entity other than the five predefined ones, an unbound prefix, a duplicate attribute, more than 64 levels or 100,000 nodes is refused.
+2. **Status.** `Success`; otherwise 403 `sso_refused`, with the identity provider's status and message in the log.
+3. **One assertion.** Exactly one `Assertion`, a direct child of the `Response`. An `EncryptedAssertion` is refused: Navree reads assertions protected by TLS, so turn assertion encryption off at the identity provider.
+4. **Signatures.** The response, the assertion or both are signed by a certificate of the metadata (`require_signed_assertion` insists on the assertion). Every signature present must verify, ids must be unique in the document, and signatures may appear nowhere else.
+5. **Destination and issuers.** `Destination` (when present) is the assertion consumer service; the response's and the assertion's `Issuer` are the metadata's entity id.
+6. **The request.** `InResponseTo` names the request the login route sent. A response without one is accepted only with `sso.saml.allow_idp_initiated`; its `RelayState`, when it is a relative path, becomes `return_to`.
+7. **The subject.** A bearer `SubjectConfirmationData` whose `Recipient` is the assertion consumer service and whose `NotOnOrAfter` hasn't passed.
+8. **Conditions.** `NotBefore` and `NotOnOrAfter` (with `sso.saml.clock_skew_secs` either way), and an `AudienceRestriction` naming the service provider's entity id.
+9. **The session.** An `AuthnStatement` whose `SessionNotOnOrAfter` hasn't passed.
+10. **Once.** The assertion id is remembered until the assertion expires; using it again is 400 `assertion_replayed`.
+
+The signature rules:
+
+- **Algorithms.** Signatures RSA-SHA256, RSA-SHA384, RSA-SHA512, ECDSA-SHA256 and ECDSA-SHA384; digests SHA-256, SHA-384 and SHA-512. SHA-1 and MD5 signatures and digests are refused, and RSA keys need 2048 bits or more.
+- **Canonicalization.** Exclusive XML Canonicalization 1.0 (with its `InclusiveNamespaces` prefix list) or Canonical XML 1.0, with or without comments.
+- **The reference.** Exactly one `Reference`, whose URI is `#` and the id of the element the signature sits in, with the transforms `enveloped-signature` and a canonicalization. XPath, XSLT and other transforms are refused.
+- **Keys.** Only the metadata's certificates. A certificate inside the message's `KeyInfo` is ignored.
+- **What is read.** Only the element a signature covers. An attacker who moves the signed assertion somewhere else and puts their own in its place (signature wrapping) gets a refusal, because the document then has two assertions, or a duplicate id, or a signature in the wrong place. Text is read whole, so a comment inside a name id can't shorten it.
+
+The crate's tests check the canonical forms against signatures made by AD FS, SimpleSAMLphp and the JDK's XML Signature implementation, with Okta-, Entra ID- and Google Workspace-shaped responses among them.
+
+<Callout type="warning" title="Cookie sessions and the assertion consumer service">
+
+The identity provider posts to the assertion consumer service from its own origin. With [`SessionModule`](/docs/basics/sessions-and-csrf/) in the app, exempt it from the CSRF check: `session.csrf_except = ["/api/sso/saml/*"]`. Apps with bearer tokens only need nothing.
+
+</Callout>
+
+`GET /api/sso/saml/{connection}/metadata` serves the service provider metadata (`application/samlmetadata+xml`): the entity id, the HTTP-POST assertion consumer service, the email and persistent name id formats, and `WantAssertionsSigned`. Requests are not signed (`AuthnRequestsSigned="false"`), and the HTTP-Redirect binding is used for them, so an identity provider needs an HTTP-Redirect sign-on URL in its metadata.
+
+## OpenID Connect in detail
+
+- **Discovery** is read when a connection is first used and kept for an hour; the document must name the configured issuer.
+- **The authorization request** uses the code flow with PKCE (S256), a nonce and the state; the verifier and the nonce stay on the server, in the state.
+- **The code exchange** sends the client's credentials with HTTP Basic, or in the form when the provider supports only `client_secret_post`.
+- **The ID token** is verified against the provider's JSON Web Key Set (RS256, RS384, RS512, PS256, PS384, PS512, ES256, ES384 or EdDSA; never `none` or an HMAC token), then its issuer, audience (and `azp` with several audiences), expiry, `iat`, `nbf`, nonce and `sub`. Key sets are kept for an hour and fetched again when a new key id appears, at most every 30 seconds.
+- **Userinfo.** When the ID token carries no email claim, the userinfo endpoint fills the missing claims in (for the same `sub`).
+
+## Using the Sso service
+
+The routes are built on the `Sso` service. Use it from seeders, commands, an onboarding flow or your own routes:
+
+```rust title="src/modules/onboarding/sso.rs"
+use navree::prelude::*;
+use navree::sso::{NewConnection, Provisioning, RoleRule, Sso, SsoDomain, SsoOwner};
+use uuid::Uuid;
+
+/// Connects a workspace to its company's identity provider and returns
+/// the TXT record its administrator must publish.
+pub async fn connect_workspace(
+    sso: &Sso,
+    uow: &Uow,
+    workspace: Uuid,
+    metadata_xml: String,
+    domain: &str,
+) -> Result<SsoDomain, BoxError> {
+    let connection = sso
+        .create_connection(
+            uow,
+            NewConnection::saml(SsoOwner::Workspace(workspace), "Acme Okta", metadata_xml)
+                .provisioning(Provisioning {
+                    roles: vec![RoleRule {
+                        group: "Acme Admins".to_owned(),
+                        role: "admin".to_owned(),
+                    }],
+                    ..Provisioning::default()
+                }),
+        )
+        .await?;
+    Ok(sso.add_domain(uow, &connection.slug, domain).await?)
+}
+```
+
+A workspace administrator's own page lists the workspace's connections. Behind `InWorkspace::guard()`, the `sso.manage` permission comes from the member's [workspace role](/docs/workspaces/members-and-roles/):
+
+```rust title="src/modules/settings/sso_controller.rs"
+use navree::prelude::*;
+use navree::sso::{Sso, SsoConnection, SsoOwner};
+
+/// The workspace's single sign-on settings.
+#[injectable]
+pub struct WorkspaceSsoController {
+    sso: Arc<Sso>,
+}
+
+#[controller("/workspace/sso", version = "1")]
+#[guard(InWorkspace::guard())]
+impl WorkspaceSsoController {
+    #[get("/")]
+    #[permissions("sso.manage")]
+    async fn index(&self, workspace: CurrentWorkspace) -> Result<Json<Vec<SsoConnection>>> {
+        let owner = SsoOwner::Workspace(workspace.id());
+        Ok(Json(self.sso.connections(Some(owner)).await?))
+    }
+}
+```
+
+| Method | Does |
+|---|---|
+| `create_connection(&uow, NewConnection)`, `update_connection(&uow, key, ConnectionUpdate)`, `delete_connection(&uow, key)` | Manage connections (`key` is an id or a slug) |
+| `connection(key)`, `connections(Option<SsoOwner>)` | Read them |
+| `add_domain(&uow, key, domain)`, `verify_domain(&uow, id)`, `mark_domain_verified(&uow, id)`, `remove_domain(&uow, id)`, `domains(key)` | Manage domains |
+| `discover(email)` | Where an email signs in |
+| `login(key, return_to)` | The identity provider URL to send the browser to (`SsoRedirect { url }`) |
+| `complete_saml(key, saml_response, relay_state, &meta)`, `complete_oidc(key, &OidcCallback, &meta)` | Check an answer and sign the person in (`SsoSignIn { user, connection_id, return_to, created }`) |
+| `sign_in_profile(key, SsoProfile, &meta)` | Sign in a profile your own code verified, with the same linking and provisioning |
+| `issue_code(&sign_in)`, `exchange(code, &meta)` | The one-time code of a finished sign-in, and its tokens |
+| `saml_metadata(key)` | The service provider metadata XML |
+
+The SAML building blocks are public in `navree::sso::saml`: `IdpMetadata::parse`, `ServiceProvider::metadata_xml`, `AuthnRequest::new` and `validate_response` with a `ResponseCheck`, which returns the verified `SamlAssertion`.
+
+## Testing
+
+`SsoFake` is a SAML identity provider for tests: give a connection its `metadata_xml()`, call the login route, and answer the request it redirected to. Its responses are signed like a real identity provider's (RSA-SHA256 over the exclusive canonical form) and pass every check:
+
+```rust title="tests/sso.rs"
+use navree::prelude::*;
+use navree::sso::{NewConnection, Sso, SsoFake, SsoOwner};
+use navree::testing::TestApp;
+use serde_json::json;
+
+#[tokio::test]
+async fn alice_signs_in_with_her_company_identity_provider() -> Result<(), BoxError> {
+    let app = TestApp::builder()
+        .temp_database()
+        .config("app.key", navree::crypto::generate_key())
+        .config("sso.base_url", "https://api.acme.test")
+        .config("sso.management_routes", false) // no AccessModule here
+        .module(CryptoModule::from_config())
+        .module(DatabaseModule::from_config())
+        .module(AuthModule::from_config())
+        .module(SsoModule::from_config())
+        .build()
+        .await;
+
+    // A connection to the fake identity provider, with a verified domain.
+    let idp = SsoFake::new();
+    let sso = app.get::<Sso>().await;
+    let uow = app.get::<navree::db::Db>().await.uow(None, None).await;
+    let connection = NewConnection::saml(SsoOwner::App, "Acme", idp.metadata_xml()).slug("acme");
+    sso.create_connection(&uow, connection).await?;
+    let domain = sso.add_domain(&uow, "acme", "acme.test").await?;
+    sso.mark_domain_verified(&uow, domain.id).await?;
+    uow.commit().await?;
+
+    // The login route sends the browser to the identity provider...
+    let login = app.client().get("/api/sso/acme/login").send().await;
+    let url = login.json_value()["url"].as_str().unwrap().to_owned();
+
+    // ...which posts its signed answer to the assertion consumer service.
+    let answer = idp
+        .respond_to(&url)?
+        .name_id("alice@acme.test")
+        .attribute("groups", ["Engineering"]);
+    app.client()
+        .post("/api/sso/saml/acme/acs")
+        .form(&answer.form())
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("user.email", json!("alice@acme.test"));
+    Ok(())
+}
+```
+
+A `FakeResponse` can also be unsigned (`sign_assertion(false)`), signed on the response (`sign_response(true)`), a failure (`failure(status, message)`), for another audience, reuse an assertion id (`assertion_id(..)`) or expire sooner (`valid_for(..)`), to test your app's handling of each refusal. `SsoFake::unsolicited(&sp, at)` answers no request, for IdP-initiated sign-in. Its key and certificate are published with Navree, so never trust `SsoFake::CERTIFICATE_PEM` outside tests.
+
+For domain verification, replace the resolver with a `StaticTxtResolver`:
+
+```rust
+let dns = Arc::new(StaticTxtResolver::new());
+let app = builder
+    .override_value::<dyn TxtResolver>(dns.clone())
+    .build()
+    .await;
+dns.add("acme.test", &domain.txt_value);
+```
+
+OpenID Connect connections talk to a provider over HTTP; point a connection's `issuer` at a mock server (wiremock) that serves discovery, a key set and a token endpoint, as the crate's own tests do. `http://127.0.0.1` and `http://localhost` issuers and metadata URLs are accepted for that.
+
+## Reference
+
+### Routes
+
+| Route | Access | Answer |
+|---|---|---|
+| `POST /api/sso/discover` | public | `SsoDiscovery` |
+| `GET /api/sso/{connection}/login` | public | 302 to the identity provider, or `{url}` |
+| `POST /api/sso/saml/{connection}/acs` | public | 303 to `complete_url`, or the login JSON |
+| `GET /api/sso/saml/{connection}/metadata` | public | service provider metadata XML |
+| `GET /api/sso/oidc/{connection}/callback` | public | 303 to `complete_url`, or the login JSON |
+| `POST /api/sso/exchange` | public | the login JSON, plus `return_to` |
+| `/api/sso/connections...`, `/api/sso/domains...` | `sso.manage` | see [Managing connections](#managing-connections) |
+
+### Events
+
+| Event | Name | When |
+|---|---|---|
+| `SsoUserProvisioned` | `sso.user_provisioned` | A sign-in created a user, or created or changed a membership |
+| `SsoDomainVerified` | `sso.domain_verified` | A domain was verified |
+
+### Limits
+
+- Encrypted assertions and encrypted name ids are refused; requests are not signed; single logout isn't offered. Sign-out ends the Navree session ([`POST /api/auth/logout`](/docs/security/authentication/)), not the identity provider's.
+- Only the HTTP-Redirect binding is used for requests, and HTTP-POST for responses.
+- Directory sync (SCIM) is not part of the module: users are created and their roles updated at sign-in.
+- States, used assertion ids and one-time codes are kept in the cache: give it a shared store with several instances.
+- Social sign-in providers (`navree-social`) are separate; a password refusal for a verified domain doesn't stop a social provider that you also offer from signing the same person in.
+
+<LinkCards>
+  <LinkCard href="/docs/security/authentication/" title="Authentication">
+    Access and refresh tokens, the login route and strategies.
+  </LinkCard>
+  <LinkCard href="/docs/workspaces/organizations/" title="Organizations">
+    Members and roles across an organization's workspaces.
+  </LinkCard>
+  <LinkCard href="/docs/security/signatures-and-keys/" title="Signatures and keys">
+    JWS, JWK and the `ring` keys single sign-on verifies with.
+  </LinkCard>
+</LinkCards>

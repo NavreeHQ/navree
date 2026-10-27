@@ -34,6 +34,11 @@ pub struct SsoOptions {
     pub enforce_for_verified_domains: bool,
     /// Whether the routes are mounted (default `true`).
     pub routes: bool,
+    /// Whether the management routes (`connections`, `domains`; permission
+    /// `sso.manage`) are mounted with the others (default `true`). They
+    /// need a `RouteAuthorizer` (`AccessModule`): turn them off in an app
+    /// without one.
+    pub management_routes: bool,
     /// The routes' prefix under `http.api_prefix` (default `/sso`).
     pub routes_prefix: String,
     /// How long a sign-in may take from the login route to the identity
@@ -57,6 +62,7 @@ impl Default for SsoOptions {
             complete_url: None,
             enforce_for_verified_domains: false,
             routes: true,
+            management_routes: true,
             routes_prefix: "/sso".to_owned(),
             state_ttl_secs: 600,
             code_ttl_secs: 60,
