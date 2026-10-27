@@ -1,0 +1,67 @@
+# navree-mongo's suite against a real server: MongoDB 8.0 as a single-node
+# replica set (transactions need one), on pushes to main and pull requests
+# that touch the MongoDB crate or what it builds on.
+name: MongoDB
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "crates/navree-mongo/**"
+      - "crates/navree-orm/**"
+      - "crates/navree-orm-macros/**"
+      - "crates/navree-schema/**"
+      - "crates/navree-db/**"
+      - "Cargo.lock"
+      - ".github/workflows/mongodb.yml"
+  pull_request:
+    paths:
+      - "crates/navree-mongo/**"
+      - "crates/navree-orm/**"
+      - "crates/navree-orm-macros/**"
+      - "crates/navree-schema/**"
+      - "crates/navree-db/**"
+      - "Cargo.lock"
+      - ".github/workflows/mongodb.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  navree-mongo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CARGO_TERM_COLOR: always
+      NAVREE_TEST_MONGODB_URL: mongodb://127.0.0.1:27017/navree_test?replicaSet=rs0
+      # Fail instead of skipping when the server is missing.
+      NAVREE_TEST_REQUIRE_SERVICES: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start MongoDB 8.0 as a single-node replica set
+        run: |
+          docker run --detach --name mongodb --publish 27017:27017 mongo:8.0 --replSet rs0 --bind_ip_all
+          for attempt in $(seq 1 30); do
+            docker exec mongodb mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok' && break
+            sleep 2
+          done
+          # The member's address is the one the tests reach it by.
+          docker exec mongodb mongosh --quiet --eval 'rs.initiate({ _id: "rs0", members: [{ _id: 0, host: "127.0.0.1:27017" }] })'
+          for attempt in $(seq 1 30); do
+            if [ "$(docker exec mongodb mongosh --quiet --eval 'db.hello().isWritablePrimary')" = "true" ]; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "MongoDB did not become the replica set's primary" >&2
+          docker logs mongodb >&2
+          exit 1
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Test navree-mongo
+        run: cargo test -p navree-mongo
