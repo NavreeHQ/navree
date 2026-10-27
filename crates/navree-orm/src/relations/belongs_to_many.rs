@@ -30,7 +30,7 @@ use crate::relations::define::KeyColumn;
 use crate::relations::eager::{EagerNode, EagerTree, RelationParts, constrained, prepare_query};
 use crate::relations::existence::{ExistsRequest, build_subquery, columns_equal};
 use crate::relations::has::{drop_row_numbers, limit_per_parent};
-use crate::relations::keys::{RelationKey, distinct_keys, in_keys, key_of};
+use crate::relations::keys::{RelationKey, distinct_keys, in_keys, in_keys_on, key_of};
 use crate::relations::pivot::{
     PivotKind, PivotSpec, RelatedId, SyncChanges, assigned, canonical_id,
 };
@@ -1668,7 +1668,8 @@ impl<P: Model, R: Model, X: PivotKind> ErasedRelation<P> for BelongsToMany<P, R,
             if !keys.is_empty() {
                 let query = prepare_query(relation.core.query.clone(), node, R::meta().table(), &[])?;
                 let query = relation.joined(query);
-                let mut conditions = vec![in_keys(
+                let mut conditions = vec![in_keys_on(
+                    target,
                     qualified(&relation.table, &relation.foreign_pivot_key),
                     &keys,
                 )];

@@ -345,7 +345,9 @@ impl<M: Model> Builder<M> {
     /// ```
     /// # use navree_orm::__doc_models::*;
     /// let sql = Deal::query().has("activities").to_sql(Dialect::Sqlite).unwrap();
-    /// assert!(sql.sql.contains(r#"EXISTS (SELECT 1 FROM "activities" WHERE "deals"."id" = "activities"."deal_id")"#));
+    /// assert!(sql.sql.ends_with(
+    ///     r#"FROM "deals" WHERE EXISTS(SELECT 1 FROM "activities" WHERE "deals"."id" = "activities"."deal_id")"#
+    /// ));
     /// ```
     pub fn has(self, path: impl RelationPath<M>) -> Self {
         let text = path.relation_path().into_owned();

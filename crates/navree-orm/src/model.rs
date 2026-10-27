@@ -586,8 +586,9 @@ impl ModelMeta {
         self.with_count
     }
 
-    /// The two pivot columns identifying a row of a pivot model without
-    /// an `id` column: `(foreign_key, related_key)`.
+    /// The two pivot columns of a pivot model (`#[model(pivot(..))]`):
+    /// `(foreign_key, related_key)`. A pivot model without an `id` column
+    /// is keyed by `related_key`, and its rows are identified by both.
     pub const fn pivot_key_columns(&self) -> Option<(&'static str, &'static str)> {
         self.pivot_keys
     }

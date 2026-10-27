@@ -57,7 +57,12 @@ fn stored_key<M: Model>(record: &Record<M>) -> M::Key {
 fn identity<M: Model>(record: &Record<M>) -> Result<Vec<WhereClause>> {
     let meta = M::meta();
     let mut wheres = by_key::<M>(&stored_key(record));
-    if let Some((foreign, related)) = meta.pivot_key_columns() {
+    // A pivot model keyed by one of its two pivot keys is identified by
+    // both; one with an id of its own, by the id alone.
+    let pivot_keys = meta
+        .pivot_key_columns()
+        .filter(|(foreign, related)| meta.key_column() == *foreign || meta.key_column() == *related);
+    if let Some((foreign, related)) = pivot_keys {
         let other = if meta.key_column() == related {
             foreign
         } else {

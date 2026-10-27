@@ -27,7 +27,7 @@ use crate::relations::core::{
 use crate::relations::define::KeyColumn;
 use crate::relations::eager::{EagerNode, EagerTree, RelationParts, constrained, prepare_query};
 use crate::relations::existence::{ExistsRequest, build_subquery, columns_equal};
-use crate::relations::keys::{RelationKey, distinct_keys, in_keys, key_of};
+use crate::relations::keys::{RelationKey, distinct_keys, in_keys_on, key_of};
 use crate::relations::morph::stored_type_of;
 use crate::relations::one_of_many::OneOfMany;
 use crate::relations::registry::{ErasedRelation, RelationKind, RelationMeta};
@@ -136,10 +136,15 @@ impl HasKeys<'_> {
         Ok(Some(conditions))
     }
 
-    /// The conditions of the records related to parents with `keys`.
-    fn eager_conditions<P: Model, R: Model>(&self, keys: &[(RelationKey, Value)]) -> Vec<Where> {
+    /// The conditions of the records related to parents with `keys`, for a
+    /// query on `target`.
+    fn eager_conditions<P: Model, R: Model>(
+        &self,
+        target: &Target<'_>,
+        keys: &[(RelationKey, Value)],
+    ) -> Vec<Where> {
         let table = R::meta().table();
-        let mut conditions = vec![in_keys(qualified(table, self.foreign_key), keys)];
+        let mut conditions = vec![in_keys_on(target, qualified(table, self.foreign_key), keys)];
         conditions.extend(self.morph_condition::<P, R>(table));
         conditions
     }
@@ -222,7 +227,7 @@ impl HasKeys<'_> {
         }
         let table = R::meta().table();
         let query = prepare_query(query, node, table, &[self.foreign_key])?;
-        let conditions = self.eager_conditions::<P, R>(&keys);
+        let conditions = self.eager_conditions::<P, R>(target, &keys);
         let query = match one_of_many {
             Some(one) => one.apply(query, self.name, &self.group_by::<R>(), conditions),
             None => constrain(query, conditions),

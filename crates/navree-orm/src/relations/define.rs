@@ -44,11 +44,11 @@ impl<M> KeyColumn<M> for String {
 /// relation.
 ///
 /// ```
-/// # use navree_orm::__doc_models::{Activity, Company, Model, Record, Serialize, Tag, Uuid};
+/// # use navree_orm::__doc_models::{Activity, Company, Tag, Uuid};
 /// use navree_orm::prelude::*;
 /// use navree_orm::relations::{BelongsTo, BelongsToMany, HasMany};
 ///
-/// #[derive(Model, Clone, Debug, Default, Serialize)]
+/// #[derive(Model, Clone, Debug, Default, serde::Serialize)]
 /// pub struct Deal {
 ///     pub id: Uuid,
 ///     pub company_id: Option<i64>,
