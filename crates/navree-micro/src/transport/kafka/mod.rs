@@ -728,17 +728,16 @@ impl GroupConsumer {
     /// Heartbeats, follows the assignment, releases revoked partitions and
     /// commits offsets, until `stop`.
     async fn run_membership(self: Arc<Self>, stop: CancellationToken) {
-        let mut interval = Duration::from_millis(500);
         let mut next_heartbeat = Instant::now();
         let mut last_commit = Instant::now();
         let mut failures = 0u32;
         loop {
             if Instant::now() >= next_heartbeat {
-                match self.heartbeat(lock(&self.state).epoch).await {
+                let epoch = lock(&self.state).epoch;
+                match self.heartbeat(epoch).await {
                     Ok(Some(every)) => {
                         failures = 0;
-                        interval = every;
-                        next_heartbeat = Instant::now() + interval;
+                        next_heartbeat = Instant::now() + every;
                     }
                     Ok(None) => next_heartbeat = Instant::now(),
                     Err(error) => {
