@@ -3,6 +3,7 @@
 
 mod api;
 mod dkim;
+mod domains;
 mod log;
 mod mailer;
 mod message;

@@ -8,7 +8,9 @@ use navree_kernel::{BoxError, Factory, Module, ModuleBuilder, ModuleId, Provider
 use navree_telemetry::Telemetry;
 use navree_view::Views;
 
-use crate::{MailOptions, MailTransport, Mailer, SendMailJob};
+use crate::{
+    DnsResolver, MailOptions, MailTransport, Mailer, SendMailJob, SendingDomains, SystemResolver,
+};
 
 /// The global mail module: provides and exports [`Mailer`] and
 /// `Arc<dyn MailTransport>`, and registers job `mail.send`
@@ -160,5 +162,16 @@ fn register(m: &mut ModuleBuilder, source: Source) {
         )
         .exports::<Mailer>()
         .exports::<dyn MailTransport>()
+        .factory(Factory::<dyn DnsResolver>::new(|_| async move {
+            Ok(Arc::new(SystemResolver::new()) as Arc<dyn DnsResolver>)
+        }))
+        .factory(
+            Factory::<SendingDomains>::new(|r| async move {
+                Ok(Arc::new(SendingDomains::new(r.get::<dyn DnsResolver>().await?)))
+            })
+            .deps(vec![ProviderKey::of::<dyn DnsResolver>()]),
+        )
+        .exports::<dyn DnsResolver>()
+        .exports::<SendingDomains>()
         .job::<SendMailJob>();
 }
