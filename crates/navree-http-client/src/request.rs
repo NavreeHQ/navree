@@ -11,7 +11,7 @@ use serde::Serialize;
 use url::Url;
 
 use crate::error::display_url;
-use crate::{HttpClient, HttpClientError, Response};
+use crate::{HttpClient, HttpClientError, Response, StreamingResponse};
 
 /// A request being built; nothing is sent until [`send`](RequestBuilder::send).
 ///
@@ -164,6 +164,27 @@ impl RequestBuilder {
 
     /// Sends the request, then reads the whole response body.
     pub async fn send(self) -> Result<Response, HttpClientError> {
+        let (client, request, retries, timeout) = self.prepare()?;
+        client.send(request, retries, timeout).await
+    }
+
+    /// Sends the request once (never retried) and returns as soon as the
+    /// response headers arrive; read the body with
+    /// [`StreamingResponse::chunk`] or as a stream. The SSRF policy applies
+    /// as for [`send`](Self::send); the attempt timeout covers the wait for
+    /// the headers, not the body, and the body is not limited to
+    /// `max_response_bytes` (except through [`StreamingResponse::bytes`]).
+    pub async fn send_streaming(self) -> Result<StreamingResponse, HttpClientError> {
+        let (client, request, _, timeout) = self.prepare()?;
+        client.send_streaming(request, timeout).await
+    }
+
+    /// The request ready to send (the URL with its query, the headers with a
+    /// user agent), with its client, retries and timeout.
+    #[allow(clippy::type_complexity)]
+    fn prepare(
+        self,
+    ) -> Result<(HttpClient, PreparedRequest, Option<u32>, Option<Duration>), HttpClientError> {
         if let Some(error) = self.error {
             return Err(error);
         }
@@ -187,7 +208,7 @@ impl RequestBuilder {
             headers,
             body: self.body,
         };
-        self.client.send(request, self.retries, self.timeout).await
+        Ok((self.client, request, self.retries, self.timeout))
     }
 
     /// Keeps the first build error.
