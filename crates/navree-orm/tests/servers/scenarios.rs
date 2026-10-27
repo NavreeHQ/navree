@@ -637,6 +637,108 @@ pub async fn unit_of_work(db: Db, server: Server) {
     assert_eq!(Company::query().count(&db).await.unwrap(), 1);
 }
 
+/// Chunks, lazy streams and cursors, on the pool and inside a unit of
+/// work, and raw cursors.
+pub async fn streams(db: Db) {
+    use std::ops::ControlFlow;
+
+    use futures::{StreamExt, TryStreamExt};
+
+    for n in 1..=7 {
+        Company::create(
+            &db,
+            Company {
+                name: format!("C{n}"),
+                employees: n,
+                active: true,
+                ..Company::default()
+            },
+        )
+        .await
+        .unwrap();
+    }
+    // Key pages stay correct while the callback moves rows out of the set.
+    let pool = db.clone();
+    let mut pages = Vec::new();
+    Company::query()
+        .where_(Company::ACTIVE.eq(true))
+        .chunk_by_id(&db, 3, |companies| {
+            pages.push(companies.map(|c| c.name.clone()));
+            let pool = pool.clone();
+            async move {
+                Company::query()
+                    .where_key_in(companies.model_keys())
+                    .update(&pool, [Company::ACTIVE.set(false)])
+                    .await?;
+                Ok(ControlFlow::Continue(()))
+            }
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        pages,
+        [vec!["C1", "C2", "C3"], vec!["C4", "C5", "C6"], vec!["C7"]]
+    );
+    let down: Vec<i32> = Company::query()
+        .lazy_by_id_desc(&db, 2)
+        .map_ok(|c| c.employees)
+        .try_collect()
+        .await
+        .unwrap();
+    assert_eq!(down, [7, 6, 5, 4, 3, 2, 1]);
+    let evens: Vec<String> = Company::query()
+        .where_raw("employees % 2 = ?", [0])
+        .order_by(Company::EMPLOYEES)
+        .cursor(&db)
+        .map_ok(|c| c.name.clone())
+        .try_collect()
+        .await
+        .unwrap();
+    assert_eq!(evens, ["C2", "C4", "C6"]);
+
+    // In a unit of work the cursor reads the uncommitted rows and holds the
+    // transaction's connection: statements through it are refused until
+    // the cursor is dropped.
+    let uow = db.uow(None, None).await;
+    Company::create(
+        &uow,
+        Company {
+            name: "C8".into(),
+            employees: 8,
+            ..Company::default()
+        },
+    )
+    .await
+    .unwrap();
+    {
+        let mut cursor = Company::query().order_by(Company::EMPLOYEES).cursor(&uow);
+        assert_eq!(cursor.try_next().await.unwrap().unwrap().name, "C1");
+        let busy = Company::query().count(&uow).await.unwrap_err();
+        assert!(busy.to_string().contains("busy streaming a cursor"), "{busy}");
+        let rest: Vec<String> = cursor
+            .map_ok(|c| c.name.clone())
+            .try_collect()
+            .await
+            .unwrap();
+        assert_eq!(rest.len(), 7);
+        assert_eq!(rest.last().map(String::as_str), Some("C8"));
+    }
+    assert_eq!(Company::query().count(&uow).await.unwrap(), 8);
+    uow.rollback().await.unwrap();
+
+    let raw_rows: Vec<i64> = navree_orm::cursor(
+        &db,
+        navree_orm::raw(
+            "SELECT employees FROM companies WHERE employees > ? ORDER BY employees",
+            [4_i64],
+        ),
+    )
+    .map(|row| row.unwrap().get::<i64>("employees").unwrap())
+    .collect()
+    .await;
+    assert_eq!(raw_rows, [5, 6, 7]);
+}
+
 /// Time buckets: TimescaleDB's on PostgreSQL, the emulation on MySQL give
 /// the same buckets.
 pub async fn time_buckets(db: Db, server: Server) {

@@ -15,6 +15,7 @@ mod hooks;
 mod http;
 mod pagination;
 mod query;
+mod raw;
 mod retrieve;
 mod scopes;
 mod soft_deletes;

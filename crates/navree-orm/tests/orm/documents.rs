@@ -407,3 +407,50 @@ async fn models_run_on_a_document_store() {
     assert!(matches!(error, OrmError::Unsupported { .. }), "{error:?}");
     assert!(Company::meta().name() == "Company");
 }
+
+/// Cursors and lazy streams run on a document store: the driver's default
+/// `stream` hands out what `find` returns; raw SQL is refused.
+#[tokio::test]
+async fn documents_stream_through_cursors_and_pages() {
+    use futures::TryStreamExt;
+
+    let store = MemoryStore(Arc::new(Memory::default()));
+    for (name, employees) in [("Acme", 5), ("Globex", 50), ("Initech", 15)] {
+        Company::create(
+            &store,
+            Company {
+                name: name.into(),
+                employees,
+                ..Company::default()
+            },
+        )
+        .await
+        .unwrap();
+    }
+    let streamed: Vec<String> = Company::query()
+        .where_(Company::EMPLOYEES.gte(10))
+        .order_by(Company::NAME)
+        .cursor(&store)
+        .map_ok(|company| company.name.clone())
+        .try_collect()
+        .await
+        .unwrap();
+    assert_eq!(streamed, ["Globex", "Initech"]);
+    let paged: Vec<i64> = Company::query()
+        .lazy_by_id(&store, 2)
+        .map_ok(|company| company.id)
+        .try_collect()
+        .await
+        .unwrap();
+    assert_eq!(paged, [1, 2, 3]);
+
+    let error = navree_orm::cursor(&store, navree_orm::raw("SELECT 1", Vec::<Value>::new()))
+        .try_collect::<Vec<_>>()
+        .await
+        .unwrap_err();
+    assert_eq!(error.to_string(), "raw SQL is not supported on memory");
+    let error = navree_orm::select(&store, navree_orm::raw("SELECT 1", Vec::<Value>::new()))
+        .await
+        .unwrap_err();
+    assert!(matches!(error, OrmError::Unsupported { .. }), "{error:?}");
+}
