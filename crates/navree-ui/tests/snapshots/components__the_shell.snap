@@ -161,6 +161,8 @@ expression: lines(&html)
 </a>
 </div>
 </div>
+<button type="button" class="ui-sidebar-rail" data-ui-sidebar-trigger aria-label="Toggle sidebar" tabindex="-1" title="Toggle sidebar">
+</button>
 </aside>
 <div class="ui-overlay" data-ui-overlay aria-hidden="true">
 </div>
