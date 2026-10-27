@@ -40,9 +40,9 @@ fn up_starts_postgres_and_mailpit_and_writes_env() {
     let dir = app("[services.postgres]\n\n[services.mailpit]\n");
     std::fs::write(dir.path().join(".env"), "APP_KEY=base64:abc=\n").unwrap();
     let exec = FakeExecutor::new()
-        // postgres:17 is not on the machine yet.
+        // The TimescaleDB image is not on the machine yet.
         .respond_once(
-            "'{{.Id}}' postgres:17",
+            "'{{.Id}}' timescale/timescaledb:2.31.0-pg17",
             CmdOutput::failed(1, "No such image"),
         )
         // PostgreSQL needs a few checks; Mailpit's inbox answers on the second.
@@ -66,7 +66,7 @@ fn up_starts_postgres_and_mailpit_and_writes_env() {
 #[test]
 fn running_up_again_leaves_running_services_alone() {
     let dir = app("[services.postgres]\n[services.mailpit]\n");
-    let ps = "crm-api-postgres|running|postgres:17|127.0.0.1:5432->5432/tcp\n\
+    let ps = "crm-api-postgres|running|timescale/timescaledb:2.31.0-pg17|127.0.0.1:5432->5432/tcp\n\
               crm-api-mailpit|running|axllent/mailpit:v1.31|127.0.0.1:1025->1025/tcp, 127.0.0.1:8025->8025/tcp\n";
     // The ports answer: our own containers hold them.
     let exec = FakeExecutor::new()
@@ -79,7 +79,9 @@ fn running_up_again_leaves_running_services_alone() {
     dock.up(&[], &mut out).unwrap();
     let printed = String::from_utf8(out).unwrap();
     assert!(
-        printed.contains("  postgres  postgres:17            127.0.0.1:5432  already running\n"),
+        printed.contains(
+            "  postgres  timescale/timescaledb:2.31.0-pg17  127.0.0.1:5432  already running\n"
+        ),
         "{printed}"
     );
     assert!(printed.contains("Wrote 2 settings to .env"), "{printed}");
@@ -103,7 +105,7 @@ fn running_up_again_leaves_running_services_alone() {
 #[test]
 fn a_changed_port_counts_as_a_new_start() {
     let dir = app("[services.postgres]\nport = 5433\n");
-    let ps = "crm-api-postgres|running|postgres:17|127.0.0.1:5432->5432/tcp\n";
+    let ps = "crm-api-postgres|running|timescale/timescaledb:2.31.0-pg17|127.0.0.1:5432->5432/tcp\n";
     let dock = dock(
         dir.path(),
         FakeExecutor::new().respond(PS_ALL, CmdOutput::ok(ps)),
@@ -286,10 +288,55 @@ fn extensions_and_the_bucket_are_created_once_ready() {
 }
 
 #[test]
+fn timescaledb_is_created_in_the_database_once_ready() {
+    let dir = app("[services.postgres]\n");
+    let dock = dock(dir.path(), FakeExecutor::new());
+    dock.up(&[], &mut Vec::new()).unwrap();
+    let commands = dock.executor().commands();
+    let ready = commands
+        .iter()
+        .position(|c| c.contains("pg_isready"))
+        .unwrap();
+    let created = commands
+        .iter()
+        .position(|c| {
+            c == "docker exec crm-api-postgres psql -v ON_ERROR_STOP=1 -U navree -d crm_api -c 'CREATE EXTENSION IF NOT EXISTS \"timescaledb\"'"
+        })
+        .unwrap_or_else(|| panic!("{commands:#?}"));
+    assert!(ready < created, "{commands:#?}");
+    let compose = std::fs::read_to_string(dir.path().join(".navree/dock/compose.yaml")).unwrap();
+    assert!(
+        compose.contains("    image: \"timescale/timescaledb:2.31.0-pg17\"\n"),
+        "{compose}"
+    );
+}
+
+#[test]
+fn plain_postgres_runs_without_timescaledb() {
+    let dir = app("[services.postgres]\ntimescaledb = false\n");
+    let dock = dock(dir.path(), FakeExecutor::new());
+    let mut out = Vec::new();
+    dock.up(&[], &mut out).unwrap();
+    let printed = String::from_utf8(out).unwrap();
+    assert!(
+        printed.contains("  postgres  postgres:17  127.0.0.1:5432  ready in "),
+        "{printed}"
+    );
+    assert!(
+        !dock
+            .executor()
+            .commands()
+            .iter()
+            .any(|c| c.contains("CREATE EXTENSION")),
+        "nothing to create"
+    );
+}
+
+#[test]
 fn a_failed_setup_step_is_an_error() {
     let dir = app("[services.postgres]\nextensions = [\"postgis\"]\n");
     let exec = FakeExecutor::new().respond(
-        "CREATE EXTENSION",
+        "EXISTS \"postgis\"",
         CmdOutput::failed(1, "ERROR:  extension \"postgis\" is not available"),
     );
     let dock = dock(dir.path(), exec);
@@ -347,7 +394,7 @@ fn down_stops_everything_or_the_services_named() {
 fn status_lists_every_service() {
     let dir =
         app("[services.postgres]\n[services.redis]\n[services.mailpit]\n[services.meilisearch]\n");
-    let ps = "crm-api-postgres|running|postgres:17|127.0.0.1:5432->5432/tcp\n\
+    let ps = "crm-api-postgres|running|timescale/timescaledb:2.31.0-pg17|127.0.0.1:5432->5432/tcp\n\
               crm-api-redis|running|redis:7|127.0.0.1:6379->6379/tcp\n\
               crm-api-mailpit|running|axllent/mailpit:v1.31|127.0.0.1:1025->1025/tcp, 127.0.0.1:8025->8025/tcp\n\
               crm-api-meilisearch|exited|getmeili/meilisearch:v1.55|\n";
