@@ -333,7 +333,11 @@ fn level_of(entry: &RegisteredSettings, query: &ScopeQuery) -> Result<ScopeKind,
 }
 
 /// The permission `intent` needs at `level` for `entry`, if any.
-fn permission(entry: &RegisteredSettings, level: ScopeKind, intent: Intent) -> Option<&'static str> {
+fn permission(
+    entry: &RegisteredSettings,
+    level: ScopeKind,
+    intent: Intent,
+) -> Option<&'static str> {
     match (intent, level) {
         (_, ScopeKind::User) => None,
         (Intent::Read, _) => entry.definition.read_permission,

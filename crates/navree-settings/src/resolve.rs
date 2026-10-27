@@ -97,7 +97,10 @@ impl<T> Resolved<T> {
 
 impl<T: SettingsGroup> Resolved<T> {
     /// The typed form of `resolved`, for `scope`.
-    pub(crate) fn from_json(resolved: ResolvedSettings, scope: Scope) -> Result<Self, SettingsError> {
+    pub(crate) fn from_json(
+        resolved: ResolvedSettings,
+        scope: Scope,
+    ) -> Result<Self, SettingsError> {
         Ok(Resolved {
             value: resolved.typed::<T>()?,
             sources: resolved.sources,
@@ -255,12 +258,18 @@ mod tests {
             Value::Object(merged.data),
             json!({"show_leaderboard": false, "welcome_text": "", "max_items": 0})
         );
-        assert!(merged.sources.values().all(|source| *source == Source::Default));
+        assert!(
+            merged
+                .sources
+                .values()
+                .all(|source| *source == Source::Default)
+        );
     }
 
     #[test]
     fn the_most_specific_level_wins_field_by_field() {
-        let global = map(json!({"show_leaderboard": true, "welcome_text": "Hello", "max_items": 5}));
+        let global =
+            map(json!({"show_leaderboard": true, "welcome_text": "Hello", "max_items": 5}));
         let organization = map(json!({"welcome_text": "Hello from the holding"}));
         let workspace = map(json!({"max_items": 9}));
         let merged = merge(

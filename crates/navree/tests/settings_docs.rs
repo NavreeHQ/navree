@@ -45,10 +45,13 @@ fn app(sources: ConfigSources) -> AppBuilder {
 #[derive(navree::settings::Settings, Clone, Debug, Serialize, Deserialize, Validate)]
 #[settings(key = "portal", scopes(global, organization, workspace, user))]
 pub struct PortalSettings {
+    /// Whether the leaderboard is on the home page.
     #[garde(skip)]
     pub show_leaderboard: bool,
+    /// The greeting on the home page.
     #[garde(length(max = 200))]
     pub welcome_text: String,
+    /// Rows per page.
     #[garde(range(min = 1, max = 100))]
     pub page_size: u32,
 }
@@ -67,6 +70,7 @@ impl Default for PortalSettings {
 #[derive(navree::settings::Settings, Clone, Debug, Default, Serialize, Deserialize, Validate)]
 #[settings(key = "notifications", scopes(global, workspace))]
 pub struct NotificationSettings {
+    /// Whether members get a daily digest.
     #[garde(skip)]
     pub daily_digest: bool,
 }
@@ -90,6 +94,7 @@ pub struct PortalHome {
     leaderboard: bool,
 }
 
+/// The portal routes.
 #[injectable]
 pub struct PortalController;
 
@@ -105,12 +110,14 @@ impl PortalController {
     }
 }
 
+/// Reads the portal's settings.
 #[injectable]
 pub struct PortalService {
     settings: Arc<Settings>,
 }
 
 impl PortalService {
+    /// The workspace's welcome text, or a greeting naming it.
     pub async fn welcome(&self, workspace: &Workspace) -> Result<String, SettingsError> {
         let portal = self.settings.resolve::<PortalSettings>(workspace).await?;
         if portal.source("welcome_text") == Some(Source::Default) {
@@ -119,6 +126,7 @@ impl PortalService {
         Ok(portal.welcome_text.clone())
     }
 
+    /// Whether the workspace shows the leaderboard.
     pub async fn leaderboard(&self, workspace: Uuid) -> Result<bool, SettingsError> {
         let portal = self
             .settings
@@ -127,6 +135,7 @@ impl PortalService {
         Ok(portal.show_leaderboard)
     }
 
+    /// The user's page size.
     pub async fn page_size(&self, user: Uuid) -> Result<u32, SettingsError> {
         Ok(self
             .settings

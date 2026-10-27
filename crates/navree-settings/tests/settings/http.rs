@@ -20,7 +20,11 @@ use crate::support::{NotificationSettings, PortalSettings, World, builder};
     serde::Deserialize,
     garde::Validate,
 )]
-#[settings(key = "billing-contact", scopes(workspace), read_permission = "billing.read")]
+#[settings(
+    key = "billing-contact",
+    scopes(workspace),
+    read_permission = "billing.read"
+)]
 struct BillingContact {
     #[garde(skip)]
     email: String,
@@ -108,7 +112,10 @@ async fn reads_resolve_for_the_scope_with_sources_and_overrides() {
                 Scope::organization(holding.id),
                 json!({"show_leaderboard": true}),
             ),
-            (Scope::workspace(acme.id), json!({"welcome_text": "Hi Acme"})),
+            (
+                Scope::workspace(acme.id),
+                json!({"welcome_text": "Hi Acme"}),
+            ),
             (Scope::user(ada), json!({"page_size": 10})),
         ],
     )
@@ -440,12 +447,18 @@ async fn invalid_patches_are_400s_naming_the_field() {
         .await
         .assert_status(400)
         .assert_json_path("statusCode", json!(400))
-        .assert_json_path("errors.page_size.0", json!("page_size must not be less than 1"));
+        .assert_json_path(
+            "errors.page_size.0",
+            json!("page_size must not be less than 1"),
+        );
     patch(json!({"colour": "red"}))
         .send()
         .await
         .assert_status(400)
-        .assert_json_path("errors.colour.0", json!("colour is not a setting of portal"));
+        .assert_json_path(
+            "errors.colour.0",
+            json!("colour is not a setting of portal"),
+        );
     world
         .as_user(ada)
         .patch("/api/settings/nope?scope=global")
@@ -521,7 +534,10 @@ async fn the_extractor_resolves_for_the_request() {
                 Scope::organization(holding.id),
                 json!({"show_leaderboard": true}),
             ),
-            (Scope::workspace(acme.id), json!({"welcome_text": "Hi Acme"})),
+            (
+                Scope::workspace(acme.id),
+                json!({"welcome_text": "Hi Acme"}),
+            ),
         ],
     )
     .await;

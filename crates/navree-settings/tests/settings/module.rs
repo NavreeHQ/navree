@@ -130,15 +130,13 @@ async fn options_come_from_the_settings_section() {
 
 #[tokio::test]
 async fn for_root_takes_explicit_options() {
-    let world = World::with(
-        platform()
-            .module(crate::support::PortalModule)
-            .module(SettingsModule::for_root(SettingsOptions {
-                store: SettingsStoreKind::Memory,
-                cache_ttl_secs: 0,
-                routes: false,
-            })),
-    )
+    let world = World::with(platform().module(crate::support::PortalModule).module(
+        SettingsModule::for_root(SettingsOptions {
+            store: SettingsStoreKind::Memory,
+            cache_ttl_secs: 0,
+            routes: false,
+        }),
+    ))
     .await;
     let options = world.app.get::<SettingsOptions>().await;
     assert_eq!(options.store, SettingsStoreKind::Memory);
@@ -189,9 +187,18 @@ async fn deleted_workspaces_and_organizations_lose_their_values() {
     let globex = world.workspace(ada, "Globex").await;
     world.attach(holding.id, acme.id).await;
     for (scope, patch) in [
-        (Scope::organization(holding.id), json!({"show_leaderboard": true})),
-        (Scope::workspace(acme.id), json!({"welcome_text": "Hi Acme"})),
-        (Scope::workspace(globex.id), json!({"welcome_text": "Hi Globex"})),
+        (
+            Scope::organization(holding.id),
+            json!({"show_leaderboard": true}),
+        ),
+        (
+            Scope::workspace(acme.id),
+            json!({"welcome_text": "Hi Acme"}),
+        ),
+        (
+            Scope::workspace(globex.id),
+            json!({"welcome_text": "Hi Globex"}),
+        ),
     ] {
         let settings = settings.clone();
         world

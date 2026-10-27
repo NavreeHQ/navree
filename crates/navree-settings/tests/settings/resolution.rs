@@ -42,7 +42,10 @@ async fn nothing_stored_resolves_to_the_defaults() {
     );
     assert!(portal.overridden.is_empty());
     assert_eq!(
-        settings.get::<PortalSettings>(Scope::global()).await.unwrap(),
+        settings
+            .get::<PortalSettings>(Scope::global())
+            .await
+            .unwrap(),
         PortalSettings::default()
     );
 }
@@ -77,7 +80,11 @@ async fn the_inheritance_matrix() {
                         let scope = *scope;
                         async move {
                             settings
-                                .update::<PortalSettings>(&uow, scope, json!({"welcome_text": text}))
+                                .update::<PortalSettings>(
+                                    &uow,
+                                    scope,
+                                    json!({"welcome_text": text}),
+                                )
                                 .await
                         }
                     })
@@ -91,8 +98,15 @@ async fn the_inheritance_matrix() {
             .find(|bit| mask & (1 << bit) != 0)
             .map(|bit| levels[bit].1)
             .unwrap_or(Source::Default);
-        let resolved = settings.resolve::<PortalSettings>(user_scope).await.unwrap();
-        assert_eq!(resolved.source("welcome_text"), Some(expected), "mask {mask:04b}");
+        let resolved = settings
+            .resolve::<PortalSettings>(user_scope)
+            .await
+            .unwrap();
+        assert_eq!(
+            resolved.source("welcome_text"),
+            Some(expected),
+            "mask {mask:04b}"
+        );
         let text = match expected {
             Source::Default => "Welcome".to_owned(),
             source => format!("from {source}"),
@@ -147,7 +161,12 @@ async fn every_field_reports_its_own_source() {
     // The workspace as attached: it carries its organization.
     let acme = world.attach(holding.id, acme.id).await;
 
-    set(&world, Scope::global(), json!({"page_size": 50, "welcome_text": "Hello"})).await;
+    set(
+        &world,
+        Scope::global(),
+        json!({"page_size": 50, "welcome_text": "Hello"}),
+    )
+    .await;
     set(
         &world,
         Scope::organization(holding.id),
@@ -205,7 +224,10 @@ async fn every_field_reports_its_own_source() {
     let workspace = settings.resolve::<PortalSettings>(&acme).await.unwrap();
     assert_eq!(workspace.overridden, ["welcome_text"]);
     assert_eq!(workspace.source("page_size"), Some(Source::Global));
-    assert_eq!(workspace.source("show_leaderboard"), Some(Source::Organization));
+    assert_eq!(
+        workspace.source("show_leaderboard"),
+        Some(Source::Organization)
+    );
     assert_eq!(workspace.page_size, 50);
 
     // By key, as JSON (what the routes and commands use).
@@ -213,7 +235,10 @@ async fn every_field_reports_its_own_source() {
         .resolve_key("portal", Scope::workspace(acme.id))
         .await
         .unwrap();
-    assert_eq!(by_key.source("show_leaderboard"), Some(Source::Organization));
+    assert_eq!(
+        by_key.source("show_leaderboard"),
+        Some(Source::Organization)
+    );
     assert_eq!(by_key.data["welcome_text"], "Welcome to Acme");
     assert!(matches!(
         settings.resolve_key("nope", Scope::global()).await,
@@ -280,7 +305,10 @@ async fn levels_a_type_does_not_allow_are_skipped_and_refused() {
         .await
         .unwrap();
     assert!(notifications.daily_digest);
-    assert_eq!(notifications.source("daily_digest"), Some(Source::Workspace));
+    assert_eq!(
+        notifications.source("daily_digest"),
+        Some(Source::Workspace)
+    );
     assert_eq!(notifications.source("sender_name"), Some(Source::Global));
     // The user level is not the target's level: nothing is overridden there.
     assert!(notifications.overridden.is_empty());
@@ -321,7 +349,13 @@ async fn levels_a_type_does_not_allow_are_skipped_and_refused() {
         .await
         .unwrap_err();
     assert!(
-        matches!(error, SettingsError::ScopeNotAllowed { scope: ScopeKind::Global, .. }),
+        matches!(
+            error,
+            SettingsError::ScopeNotAllowed {
+                scope: ScopeKind::Global,
+                ..
+            }
+        ),
         "{error}"
     );
 }

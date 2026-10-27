@@ -42,9 +42,13 @@ async fn patches_are_validated_and_errors_name_the_field() {
     let world = World::new().await;
     let settings = world.settings().await;
 
-    let error = update(&world, Scope::global(), json!({"welcome_text": "x".repeat(41)}))
-        .await
-        .unwrap_err();
+    let error = update(
+        &world,
+        Scope::global(),
+        json!({"welcome_text": "x".repeat(41)}),
+    )
+    .await
+    .unwrap_err();
     let SettingsError::Invalid(errors) = &error else {
         panic!("expected Invalid, got {error:?}");
     };
@@ -77,9 +81,13 @@ async fn patches_are_validated_and_errors_name_the_field() {
     };
     assert!(errors.get("page_size").is_some(), "{errors:?}");
 
-    let error = update(&world, Scope::global(), json!({"colour": "red", "page_size": 5}))
-        .await
-        .unwrap_err();
+    let error = update(
+        &world,
+        Scope::global(),
+        json!({"colour": "red", "page_size": 5}),
+    )
+    .await
+    .unwrap_err();
     assert_eq!(
         error.to_string(),
         "the `portal` settings have no field `colour`"
@@ -135,9 +143,8 @@ async fn the_inherited_values_are_validated_with_the_patch() {
     }
 
     let world = World::with(
-        crate::support::builder().module(navree_settings::SettingsModule::for_feature::<
-            BoardSettings,
-        >()),
+        crate::support::builder()
+            .module(navree_settings::SettingsModule::for_feature::<BoardSettings>()),
     )
     .await;
     let settings = world.settings().await;
@@ -233,9 +240,13 @@ async fn inherit_and_reset_make_fields_follow_the_level_above() {
     let world = World::new().await;
     let settings = world.settings().await;
     let acme = Scope::workspace(Uuid::now_v7()).in_organization(None);
-    update(&world, Scope::global(), json!({"welcome_text": "Hello", "page_size": 50}))
-        .await
-        .unwrap();
+    update(
+        &world,
+        Scope::global(),
+        json!({"welcome_text": "Hello", "page_size": 50}),
+    )
+    .await
+    .unwrap();
     let portal = update(
         &world,
         acme,
@@ -307,7 +318,11 @@ async fn a_value_equal_to_the_inherited_one_is_still_an_override() {
         .unwrap();
     let settings = world.settings().await;
     assert_eq!(
-        settings.get::<PortalSettings>(acme).await.unwrap().page_size,
+        settings
+            .get::<PortalSettings>(acme)
+            .await
+            .unwrap()
+            .page_size,
         50
     );
 }
@@ -532,7 +547,11 @@ async fn write_behind_the_cache(db: &Db, scope_type: &str, scope_id: Uuid, value
 }
 
 async fn page_size(settings: &Settings, scope: Scope) -> u32 {
-    settings.get::<PortalSettings>(scope).await.unwrap().page_size
+    settings
+        .get::<PortalSettings>(scope)
+        .await
+        .unwrap()
+        .page_size
 }
 
 #[tokio::test]
@@ -590,7 +609,9 @@ async fn without_a_cache_lifetime_every_read_hits_the_store() {
     let db = world.db().await;
     let acme = Uuid::now_v7();
     let scope = Scope::workspace(acme).in_organization(None);
-    update(&world, scope, json!({"page_size": 10})).await.unwrap();
+    update(&world, scope, json!({"page_size": 10}))
+        .await
+        .unwrap();
     assert_eq!(page_size(&settings, scope).await, 10);
     write_behind_the_cache(&db, "workspace", acme, json!({"page_size": 11})).await;
     assert_eq!(page_size(&settings, scope).await, 11);
@@ -606,7 +627,9 @@ async fn stored_values_the_type_no_longer_accepts_are_skipped() {
     update(&world, Scope::global(), json!({"page_size": 50}))
         .await
         .unwrap();
-    update(&world, scope, json!({"page_size": 10})).await.unwrap();
+    update(&world, scope, json!({"page_size": 10}))
+        .await
+        .unwrap();
     // The field's type changed since the value was stored, and a field was
     // removed from the type.
     write_behind_the_cache(
@@ -627,7 +650,9 @@ async fn stored_values_the_type_no_longer_accepts_are_skipped() {
     assert_eq!(portal.overridden, ["welcome_text"]);
 
     // Setting the field again replaces the unreadable value.
-    let fixed = update(&world, scope, json!({"page_size": 15})).await.unwrap();
+    let fixed = update(&world, scope, json!({"page_size": 15}))
+        .await
+        .unwrap();
     assert_eq!(fixed.page_size, 15);
     assert_eq!(fixed.overridden, ["page_size", "welcome_text"]);
 }

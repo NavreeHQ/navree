@@ -4,8 +4,10 @@
 use heck::ToKebabCase;
 use proc_macro2::{Span, TokenStream};
 use quote::{format_ident, quote};
+use syn::ext::IdentExt;
+use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
-use syn::{Data, DeriveInput, Expr, Fields, Ident, Lit, LitStr, Meta};
+use syn::{Data, DeriveInput, Expr, Fields, Ident, Lit, LitStr, Meta, Token};
 
 use crate::attr::{Errors, key_name};
 use crate::paths::SETTINGS;
@@ -125,7 +127,10 @@ pub(crate) fn parse(input: TokenStream) -> syn::Result<ParsedSettings> {
             Some(variants)
         }
     };
-    for permission in [&args.permission, &args.read_permission].into_iter().flatten() {
+    for permission in [&args.permission, &args.read_permission]
+        .into_iter()
+        .flatten()
+    {
         if permission.value().trim().is_empty() {
             errors.push(syn::Error::new(permission.span(), "must not be empty"));
         }
@@ -155,10 +160,8 @@ pub(crate) fn generate(parsed: &ParsedSettings, settings: &TokenStream) -> Token
         Some(value) => quote!(::core::option::Option::Some(#value)),
         None => quote!(::core::option::Option::None),
     };
-    let (permission, read_permission) = (
-        option(&parsed.permission),
-        option(&parsed.read_permission),
-    );
+    let (permission, read_permission) =
+        (option(&parsed.permission), option(&parsed.read_permission));
     quote! {
         #[automatically_derived]
         impl #settings::SettingsGroup for #ident {
@@ -190,15 +193,18 @@ fn parse_args(input: &DeriveInput) -> syn::Result<Args> {
                 "scopes" => {
                     let span = meta.path.span();
                     let mut listed = Vec::new();
-                    if meta.input.is_empty() || meta.input.peek(syn::Token![,]) {
-                        args.scopes = Some((span, listed));
-                    } else {
-                        meta.parse_nested_meta(|level| {
-                            listed.push((key_name(&level.path), level.path.span()));
-                            Ok(())
-                        })?;
-                        args.scopes = Some((span, listed));
+                    // `scopes(a, b)`; a bare or empty `scopes` lists nothing
+                    // and is reported below.
+                    if meta.input.peek(syn::token::Paren) {
+                        let content;
+                        syn::parenthesized!(content in meta.input);
+                        let names = Punctuated::<Ident, Token![,]>::parse_terminated_with(
+                            &content,
+                            Ident::parse_any,
+                        )?;
+                        listed.extend(names.iter().map(|name| (name.to_string(), name.span())));
                     }
+                    args.scopes = Some((span, listed));
                 }
                 _ => {
                     return Err(meta.error(format!(
@@ -311,10 +317,19 @@ mod tests {
         let out = expand_with_facade(quote! {
             pub struct TeamPortalSettings { pub visible: bool }
         });
-        assert!(out.contains("const KEY : & 'static str = \"team-portal\""), "{out}");
+        assert!(
+            out.contains("const KEY : & 'static str = \"team-portal\""),
+            "{out}"
+        );
         assert!(!out.contains("SCOPES"), "{out}");
-        assert!(out.contains("const DESCRIPTION : & 'static str = \"\""), "{out}");
-        assert_eq!(default_key("Notifications").as_deref(), Some("notifications"));
+        assert!(
+            out.contains("const DESCRIPTION : & 'static str = \"\""),
+            "{out}"
+        );
+        assert_eq!(
+            default_key("Notifications").as_deref(),
+            Some("notifications")
+        );
         assert_eq!(default_key("Settings"), None);
     }
 
@@ -322,38 +337,96 @@ mod tests {
     fn misuse_is_reported() {
         for (input, message) in [
             (
-                quote!(#[settings(key = "Portal")] struct P { a: bool }),
+                quote!(
+                    #[settings(key = "Portal")]
+                    struct P {
+                        a: bool,
+                    }
+                ),
                 "invalid settings key `Portal`",
             ),
             (
-                quote!(#[settings(scopes(team))] struct PortalSettings { a: bool }),
+                quote!(
+                    #[settings(scopes(team))]
+                    struct PortalSettings {
+                        a: bool,
+                    }
+                ),
                 "unknown level `team`",
             ),
             (
-                quote!(#[settings(scopes())] struct PortalSettings { a: bool }),
+                quote!(
+                    #[settings(scopes())]
+                    struct PortalSettings {
+                        a: bool,
+                    }
+                ),
                 "list at least one level",
             ),
             (
-                quote!(#[settings(scopes(user, user))] struct PortalSettings { a: bool }),
+                quote!(
+                    #[settings(scopes(user, user))]
+                    struct PortalSettings {
+                        a: bool,
+                    }
+                ),
                 "duplicate level `user`",
             ),
             (
-                quote!(#[settings(colour = "red")] struct PortalSettings { a: bool }),
+                quote!(
+                    #[settings(colour = "red")]
+                    struct PortalSettings {
+                        a: bool,
+                    }
+                ),
                 "unknown #[settings] key `colour`",
             ),
             (
-                quote!(#[settings(key = "a", key = "b")] struct PortalSettings { a: bool }),
+                quote!(
+                    #[settings(key = "a", key = "b")]
+                    struct PortalSettings {
+                        a: bool,
+                    }
+                ),
                 "duplicate `key` key",
             ),
-            (quote!(struct PortalSettings(bool);), "named fields"),
-            (quote!(enum PortalSettings { A }), "goes on a struct"),
             (
-                quote!(struct PortalSettings<T> { a: T }),
+                quote!(
+                    struct PortalSettings(bool);
+                ),
+                "named fields",
+            ),
+            (
+                quote!(
+                    enum PortalSettings {
+                        A,
+                    }
+                ),
+                "goes on a struct",
+            ),
+            (
+                quote!(
+                    struct PortalSettings<T> {
+                        a: T,
+                    }
+                ),
                 "cannot be generic",
             ),
-            (quote!(struct Settings { a: bool }), "name the key"),
             (
-                quote!(#[settings(permission = " ")] struct PortalSettings { a: bool }),
+                quote!(
+                    struct Settings {
+                        a: bool,
+                    }
+                ),
+                "name the key",
+            ),
+            (
+                quote!(
+                    #[settings(permission = " ")]
+                    struct PortalSettings {
+                        a: bool,
+                    }
+                ),
                 "must not be empty",
             ),
         ] {

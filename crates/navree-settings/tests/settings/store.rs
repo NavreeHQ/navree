@@ -62,11 +62,17 @@ pub async fn contract(store: &dyn SettingsStore) {
         .await
         .unwrap();
     store
-        .save(None, &row("notifications", workspace, json!({"daily_digest": true})))
+        .save(
+            None,
+            &row("notifications", workspace, json!({"daily_digest": true})),
+        )
         .await
         .unwrap();
     store
-        .save(None, &row("view-preferences", user, json!({"theme": "dark"})))
+        .save(
+            None,
+            &row("view-preferences", user, json!({"theme": "dark"})),
+        )
         .await
         .unwrap();
 
@@ -88,7 +94,7 @@ pub async fn contract(store: &dyn SettingsStore) {
     store.save(None, &replaced).await.unwrap();
     assert_eq!(
         store.load(None, "portal", &[workspace]).await.unwrap(),
-        [replaced.clone()]
+        std::slice::from_ref(&replaced)
     );
 
     // Lists by key, then level (global first), then id.
@@ -107,7 +113,10 @@ pub async fn contract(store: &dyn SettingsStore) {
             ("view-preferences".to_owned(), ScopeKind::User),
         ]
     );
-    let portal_ids: Vec<Uuid> = listed[2..4].iter().map(|row| row.scope.stored_id()).collect();
+    let portal_ids: Vec<Uuid> = listed[2..4]
+        .iter()
+        .map(|row| row.scope.stored_id())
+        .collect();
     let mut sorted = portal_ids.clone();
     sorted.sort();
     assert_eq!(portal_ids, sorted);
@@ -120,7 +129,13 @@ pub async fn contract(store: &dyn SettingsStore) {
         store.delete_scope(None, workspace).await.unwrap(),
         ["notifications", "portal"]
     );
-    assert!(store.delete_scope(None, workspace).await.unwrap().is_empty());
+    assert!(
+        store
+            .delete_scope(None, workspace)
+            .await
+            .unwrap()
+            .is_empty()
+    );
     let left: Vec<String> = store
         .list(None, None)
         .await
@@ -161,7 +176,10 @@ async fn rows_keep_the_documented_columns() {
         .await
         .unwrap();
     store
-        .save(None, &row("portal", ScopeTarget::GLOBAL, json!({"page_size": 5})))
+        .save(
+            None,
+            &row("portal", ScopeTarget::GLOBAL, json!({"page_size": 5})),
+        )
         .await
         .unwrap();
     let backend = db.conn().get_database_backend();
@@ -176,7 +194,10 @@ async fn rows_keep_the_documented_columns() {
         .unwrap();
     assert_eq!(rows.len(), 2);
     let global = &rows[0];
-    assert_eq!(global.try_get::<String>("", "scope_type").unwrap(), "global");
+    assert_eq!(
+        global.try_get::<String>("", "scope_type").unwrap(),
+        "global"
+    );
     assert_eq!(global.try_get::<Uuid>("", "scope_id").unwrap(), Uuid::nil());
     let workspace = &rows[1];
     assert_eq!(workspace.try_get::<String>("", "key").unwrap(), "portal");
@@ -197,7 +218,10 @@ async fn an_unreadable_row_is_reported_not_guessed() {
     let db = world.db().await;
     let store = DatabaseSettingsStore::new(db.clone());
     store
-        .save(None, &row("portal", ScopeTarget::GLOBAL, json!({"page_size": 5})))
+        .save(
+            None,
+            &row("portal", ScopeTarget::GLOBAL, json!({"page_size": 5})),
+        )
         .await
         .unwrap();
     db.conn()
@@ -205,5 +229,8 @@ async fn an_unreadable_row_is_reported_not_guessed() {
         .await
         .unwrap();
     let error = store.list(None, None).await.unwrap_err();
-    assert!(error.to_string().contains("unknown scope `team`"), "{error}");
+    assert!(
+        error.to_string().contains("unknown scope `team`"),
+        "{error}"
+    );
 }

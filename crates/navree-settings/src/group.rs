@@ -357,7 +357,13 @@ mod tests {
 
     #[test]
     fn keys_are_checked() {
-        for good in ["portal", "team_portal", "team-portal", "mail.delivery", "2fa"] {
+        for good in [
+            "portal",
+            "team_portal",
+            "team-portal",
+            "mail.delivery",
+            "2fa",
+        ] {
             assert_eq!(check_key(good), Ok(()), "{good}");
         }
         for bad in ["", "Portal", "team portal", "-x", ".x", "émoji"] {

@@ -465,10 +465,7 @@ mod tests {
             ScopeTarget::new(ScopeKind::Workspace, id).to_string(),
             format!("workspace {id}")
         );
-        assert_eq!(
-            Scope::user(id).to_string(),
-            format!("user {id} < global")
-        );
+        assert_eq!(Scope::user(id).to_string(), format!("user {id} < global"));
     }
 
     #[test]

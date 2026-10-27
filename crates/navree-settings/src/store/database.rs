@@ -96,7 +96,11 @@ fn is_target(target: &ScopeTarget) -> Condition {
 
 fn sorted(mut rows: Vec<StoredSetting>) -> Vec<StoredSetting> {
     rows.sort_by(|a, b| {
-        (&a.key, a.scope.kind, a.scope.stored_id()).cmp(&(&b.key, b.scope.kind, b.scope.stored_id()))
+        (&a.key, a.scope.kind, a.scope.stored_id()).cmp(&(
+            &b.key,
+            b.scope.kind,
+            b.scope.stored_id(),
+        ))
     });
     rows
 }
@@ -258,9 +262,7 @@ impl SettingsStore for DatabaseSettingsStore {
         uow: Option<&'a Uow>,
         target: ScopeTarget,
     ) -> BoxFuture<'a, Result<Vec<String>, SettingsError>> {
-        Box::pin(
-            async move { with_writer!(self, uow, |conn| delete_scope_in(conn, target).await) },
-        )
+        Box::pin(async move { with_writer!(self, uow, |conn| delete_scope_in(conn, target).await) })
     }
 
     fn list<'a>(

@@ -36,9 +36,7 @@ pub enum SettingsError {
     #[error("unknown settings `{0}`")]
     UnknownKey(String),
     /// The settings cannot be stored at this level.
-    #[error(
-        "the `{key}` settings cannot be stored at the {scope} level; they allow {allowed}"
-    )]
+    #[error("the `{key}` settings cannot be stored at the {scope} level; they allow {allowed}")]
     ScopeNotAllowed {
         /// The settings key.
         key: String,
@@ -110,19 +108,17 @@ impl SettingsError {
                 "input".to_owned(),
                 vec![message.clone()],
             )]))),
-            SettingsError::UnknownFields { key, fields } => {
-                Some(AppError::validation(
-                    fields
-                        .iter()
-                        .map(|field| {
-                            (
-                                field.clone(),
-                                vec![format!("{field} is not a setting of {key}")],
-                            )
-                        })
-                        .collect(),
-                ))
-            }
+            SettingsError::UnknownFields { key, fields } => Some(AppError::validation(
+                fields
+                    .iter()
+                    .map(|field| {
+                        (
+                            field.clone(),
+                            vec![format!("{field} is not a setting of {key}")],
+                        )
+                    })
+                    .collect(),
+            )),
             SettingsError::Invalid(errors) => Some(errors.clone().into_app_error()),
             _ => None,
         }
@@ -167,7 +163,10 @@ mod tests {
         );
         let body = fields.to_app_error().unwrap().body();
         assert_eq!(body["statusCode"], 400);
-        assert_eq!(body["errors"]["colour"][0], "colour is not a setting of portal");
+        assert_eq!(
+            body["errors"]["colour"][0],
+            "colour is not a setting of portal"
+        );
 
         let mut errors = ValidationErrors::new();
         errors.add("welcome_text", "welcome_text should not be empty");

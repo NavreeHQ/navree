@@ -114,11 +114,20 @@ async fn the_menu_and_index_show_the_types_the_user_manages() {
     let dashboard = text(&page(&rep, "/admin").await.assert_status(200));
     assert!(!dashboard.contains("/admin/settings"), "{dashboard}");
     page(&rep, "/admin/settings").await.assert_status(403);
-    page(&rep, "/admin/settings/portal").await.assert_status(403);
+    page(&rep, "/admin/settings/portal")
+        .await
+        .assert_status(403);
 
     let dashboard = text(&page(&settings_admin, "/admin").await.assert_status(200));
-    assert!(dashboard.contains("href=\"/admin/settings\""), "{dashboard}");
-    let index = text(&page(&settings_admin, "/admin/settings").await.assert_status(200));
+    assert!(
+        dashboard.contains("href=\"/admin/settings\""),
+        "{dashboard}"
+    );
+    let index = text(
+        &page(&settings_admin, "/admin/settings")
+            .await
+            .assert_status(200),
+    );
     assert!(index.contains("What the member portal shows."), "{index}");
     assert!(index.contains("/admin/settings/portal"), "{index}");
     // Billing mail needs its own permission.
@@ -149,7 +158,11 @@ async fn the_form_shows_values_and_where_they_come_from() {
         .unwrap();
     uow.commit().await.unwrap();
 
-    let form = text(&page(&admin, "/admin/settings/portal").await.assert_status(200));
+    let form = text(
+        &page(&admin, "/admin/settings/portal")
+            .await
+            .assert_status(200),
+    );
     assert!(form.contains("value=\"Hello\""), "{form}");
     assert!(form.contains("Set at this level"), "{form}");
     assert!(form.contains("Default value"), "{form}");

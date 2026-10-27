@@ -26,7 +26,10 @@ const MESSAGE: (&str, &str) = ("helm/message.html", include_str!("templates/mess
 /// The Settings screens (feature `settings`).
 #[cfg(feature = "settings")]
 const SETTINGS: [(&str, &str); 2] = [
-    ("helm/settings.html", include_str!("templates/settings.html")),
+    (
+        "helm/settings.html",
+        include_str!("templates/settings.html"),
+    ),
     (
         "helm/settings_form.html",
         include_str!("templates/settings_form.html"),

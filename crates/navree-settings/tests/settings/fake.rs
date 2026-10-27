@@ -16,9 +16,12 @@ async fn presets_resolve_like_the_real_service_and_are_not_changes() {
     fake.set::<PortalSettings>(Scope::global(), json!({"page_size": 50}))
         .await
         .unwrap();
-    fake.set::<PortalSettings>(Scope::organization(holding), json!({"show_leaderboard": true}))
-        .await
-        .unwrap();
+    fake.set::<PortalSettings>(
+        Scope::organization(holding),
+        json!({"show_leaderboard": true}),
+    )
+    .await
+    .unwrap();
     fake.set::<PortalSettings>(Scope::user(ada), json!({"welcome_text": "Hi Ada"}))
         .await
         .unwrap();
@@ -29,7 +32,10 @@ async fn presets_resolve_like_the_real_service_and_are_not_changes() {
         .await
         .unwrap();
     assert_eq!(portal.page_size, 50);
-    assert_eq!(portal.source("show_leaderboard"), Some(Source::Organization));
+    assert_eq!(
+        portal.source("show_leaderboard"),
+        Some(Source::Organization)
+    );
     assert_eq!(portal.source("welcome_text"), Some(Source::User));
     assert!(fake.changes().is_empty());
     fake.assert_not_changed::<PortalSettings>();
@@ -70,7 +76,10 @@ async fn writes_through_the_service_are_recorded() {
     assert_eq!(changes[0].actor_id, Some(actor));
     assert_eq!(changes[1].old["welcome_text"], "Hi");
     assert!(changes[1].new.is_empty());
-    assert!(fake.changes_of::<PortalSettings>(Scope::global()).is_empty());
+    assert!(
+        fake.changes_of::<PortalSettings>(Scope::global())
+            .is_empty()
+    );
     fake.assert_not_changed::<NotificationSettings>();
 
     fake.clear();
