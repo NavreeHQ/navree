@@ -1,0 +1,762 @@
+//! [`Value`], [`Field`] and the conversions between Rust types and column
+//! values.
+//!
+//! [`Value`] is sea-query's value enum, so the ORM binds parameters exactly
+//! as SeaORM does (typed NULLs included: PostgreSQL needs the type of a
+//! NULL parameter). Its variant set grows with cargo features (PostgreSQL
+//! arrays, for example), so code matching on it keeps a `_` arm.
+//!
+//! [`Field`] is implemented by every Rust type a model field can have
+//! without a cast. Reading from an SQL row is exact (SeaORM's decoders for
+//! that very type); reading from a [`Value`] (document rows, aggregates,
+//! dynamic columns) is lenient between representations of the same thing:
+//! `NUMERIC` 42 reads as an `i64`, the text `2026-10-27 08:00:00+00:00`
+//! (SQLite's date-times) as a `DateTime<Utc>`.
+
+use std::borrow::Cow;
+use std::fmt;
+use std::str::FromStr;
+
+use chrono::{DateTime, FixedOffset, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc};
+use rust_decimal::prelude::{FromPrimitive, ToPrimitive};
+use sea_orm::{QueryResult, TryGetError, TryGetable};
+use uuid::Uuid;
+
+pub use rust_decimal::Decimal;
+pub use sea_query::Value;
+
+/// Why a column value could not become a field.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FieldError {
+    /// The value is NULL and the field is not an `Option`.
+    Null,
+    /// The row has no such column.
+    Missing,
+    /// The value has another type, or does not fit the field.
+    Invalid(String),
+}
+
+impl fmt::Display for FieldError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            FieldError::Null => f.write_str("the value is NULL (make the field an Option)"),
+            FieldError::Missing => f.write_str("the row has no such column"),
+            FieldError::Invalid(message) => f.write_str(message),
+        }
+    }
+}
+
+impl std::error::Error for FieldError {}
+
+/// A Rust type a model field (or a column read with
+/// [`Row::get`](crate::Row::get)) can have.
+///
+/// Implemented for `bool`, `i8`..`i64`, `u8`..`u64`, `f32`, `f64`,
+/// [`Decimal`], `String`, `Vec<u8>`, `Uuid`, [`Ulid`](crate::Ulid),
+/// `chrono`'s `NaiveDate`, `NaiveTime`, `NaiveDateTime`, `DateTime<Utc>`
+/// and `DateTime<FixedOffset>`, `serde_json::Value`, [`Value`] (any
+/// column, decoded dynamically) and `Option<T>` of any of them. Other
+/// types (enums, serde structs) use a [cast](crate::cast).
+///
+/// ```
+/// use navree_orm::{Field, Value};
+///
+/// assert_eq!(42_i64.to_value(), Value::BigInt(Some(42)));
+/// assert_eq!(<Option<i64>>::null(), Value::BigInt(None));
+/// // Lenient between representations of the same number:
+/// assert_eq!(i64::from_value(Value::Double(Some(42.0))).unwrap(), 42);
+/// assert!(i64::from_value(Value::Double(Some(4.2))).is_err());
+/// assert_eq!(<Option<i64>>::from_value(Value::BigInt(None)).unwrap(), None);
+/// ```
+pub trait Field: Sized + Send + Sync + 'static {
+    /// The column value of `self`.
+    fn to_value(&self) -> Value;
+
+    /// A NULL of this field's type.
+    fn null() -> Value;
+
+    /// Reads the field from column `column` of an SQL result row, with the
+    /// database driver's decoder for this exact type.
+    fn from_sql(row: &QueryResult, column: &str) -> Result<Self, FieldError>;
+
+    /// Converts a value: a document field, a dynamically decoded column, an
+    /// aggregate, an assignment.
+    fn from_value(value: Value) -> Result<Self, FieldError>;
+
+    /// The type's name in error messages, e.g. `i64` or `Option<String>`.
+    fn type_name() -> Cow<'static, str>;
+}
+
+/// Reads `T` from `column` with SeaORM's decoder, telling a NULL, a missing
+/// column and a type mismatch apart.
+pub(crate) fn sql_get<T: TryGetable>(row: &QueryResult, column: &str) -> Result<T, FieldError> {
+    match T::try_get(row, "", column) {
+        Ok(value) => Ok(value),
+        Err(TryGetError::Null(_)) => Err(FieldError::Null),
+        Err(TryGetError::DbErr(error)) => {
+            if row.column_names().iter().any(|name| name == column) {
+                Err(FieldError::Invalid(error.to_string()))
+            } else {
+                Err(FieldError::Missing)
+            }
+        }
+    }
+}
+
+/// Whether `value` is a NULL (of any type).
+pub fn is_null(value: &Value) -> bool {
+    match value {
+        Value::Bool(v) => v.is_none(),
+        Value::TinyInt(v) => v.is_none(),
+        Value::SmallInt(v) => v.is_none(),
+        Value::Int(v) => v.is_none(),
+        Value::BigInt(v) => v.is_none(),
+        Value::TinyUnsigned(v) => v.is_none(),
+        Value::SmallUnsigned(v) => v.is_none(),
+        Value::Unsigned(v) => v.is_none(),
+        Value::BigUnsigned(v) => v.is_none(),
+        Value::Float(v) => v.is_none(),
+        Value::Double(v) => v.is_none(),
+        Value::String(v) => v.is_none(),
+        Value::Char(v) => v.is_none(),
+        Value::Bytes(v) => v.is_none(),
+        Value::Json(v) => v.is_none(),
+        Value::ChronoDate(v) => v.is_none(),
+        Value::ChronoTime(v) => v.is_none(),
+        Value::ChronoDateTime(v) => v.is_none(),
+        Value::ChronoDateTimeUtc(v) => v.is_none(),
+        Value::ChronoDateTimeLocal(v) => v.is_none(),
+        Value::ChronoDateTimeWithTimeZone(v) => v.is_none(),
+        Value::Uuid(v) => v.is_none(),
+        Value::Decimal(v) => v.is_none(),
+        other => to_json(other).is_null(),
+    }
+}
+
+/// `value` as JSON: numbers as numbers, text, UUIDs and date-times as
+/// strings, JSON as itself, NULL as `null`.
+pub fn to_json(value: &Value) -> serde_json::Value {
+    sea_query::value::sea_value_to_json_value(value)
+}
+
+/// A short description of a value's type for error messages.
+pub(crate) fn describe(value: &Value) -> &'static str {
+    match value {
+        Value::Bool(_) => "a boolean",
+        Value::TinyInt(_)
+        | Value::SmallInt(_)
+        | Value::Int(_)
+        | Value::BigInt(_)
+        | Value::TinyUnsigned(_)
+        | Value::SmallUnsigned(_)
+        | Value::Unsigned(_)
+        | Value::BigUnsigned(_) => "an integer",
+        Value::Float(_) | Value::Double(_) => "a float",
+        Value::Decimal(_) => "a decimal",
+        Value::String(_) | Value::Char(_) => "a string",
+        Value::Bytes(_) => "bytes",
+        Value::Json(_) => "JSON",
+        Value::ChronoDate(_) => "a date",
+        Value::ChronoTime(_) => "a time",
+        Value::ChronoDateTime(_)
+        | Value::ChronoDateTimeUtc(_)
+        | Value::ChronoDateTimeLocal(_)
+        | Value::ChronoDateTimeWithTimeZone(_) => "a date-time",
+        Value::Uuid(_) => "a UUID",
+        _ => "a value of another type",
+    }
+}
+
+fn mismatch(value: &Value, wanted: &str) -> FieldError {
+    FieldError::Invalid(format!("expected {wanted}, found {}", describe(value)))
+}
+
+fn null_check(value: &Value) -> Result<(), FieldError> {
+    if is_null(value) {
+        Err(FieldError::Null)
+    } else {
+        Ok(())
+    }
+}
+
+/// An integer in `value`, from any integer, an integral float or decimal,
+/// a boolean or a numeric string.
+fn integer(value: &Value) -> Result<i128, FieldError> {
+    null_check(value)?;
+    let wanted = "an integer";
+    match value {
+        Value::Bool(Some(b)) => Ok(i128::from(*b)),
+        Value::TinyInt(Some(v)) => Ok(i128::from(*v)),
+        Value::SmallInt(Some(v)) => Ok(i128::from(*v)),
+        Value::Int(Some(v)) => Ok(i128::from(*v)),
+        Value::BigInt(Some(v)) => Ok(i128::from(*v)),
+        Value::TinyUnsigned(Some(v)) => Ok(i128::from(*v)),
+        Value::SmallUnsigned(Some(v)) => Ok(i128::from(*v)),
+        Value::Unsigned(Some(v)) => Ok(i128::from(*v)),
+        Value::BigUnsigned(Some(v)) => Ok(i128::from(*v)),
+        Value::Float(Some(v)) => integral_float(f64::from(*v)),
+        Value::Double(Some(v)) => integral_float(*v),
+        Value::Decimal(Some(v)) if v.fract().is_zero() => v
+            .to_i128()
+            .ok_or_else(|| FieldError::Invalid(format!("{v} is out of range"))),
+        Value::Decimal(Some(v)) => Err(FieldError::Invalid(format!("{v} is not a whole number"))),
+        Value::String(Some(s)) => s
+            .trim()
+            .parse::<i128>()
+            .map_err(|_| FieldError::Invalid(format!("`{s}` is not an integer"))),
+        Value::Json(Some(json)) => json
+            .as_i64()
+            .map(i128::from)
+            .ok_or_else(|| mismatch(value, wanted)),
+        other => Err(mismatch(other, wanted)),
+    }
+}
+
+fn integral_float(v: f64) -> Result<i128, FieldError> {
+    if v.is_finite() && v.fract() == 0.0 && v.abs() < 1.7e38 {
+        // In range and integral: the cast is exact.
+        #[allow(clippy::cast_possible_truncation)]
+        Ok(v as i128)
+    } else {
+        Err(FieldError::Invalid(format!("{v} is not a whole number")))
+    }
+}
+
+/// A float in `value`, from any number or a numeric string.
+fn float(value: &Value) -> Result<f64, FieldError> {
+    null_check(value)?;
+    match value {
+        Value::Float(Some(v)) => Ok(f64::from(*v)),
+        Value::Double(Some(v)) => Ok(*v),
+        Value::Decimal(Some(v)) => v
+            .to_f64()
+            .ok_or_else(|| FieldError::Invalid(format!("{v} does not fit a float"))),
+        Value::String(Some(s)) => s
+            .trim()
+            .parse::<f64>()
+            .map_err(|_| FieldError::Invalid(format!("`{s}` is not a number"))),
+        Value::Json(Some(json)) => json.as_f64().ok_or_else(|| mismatch(value, "a number")),
+        other => {
+            let int = integer(other).map_err(|_| mismatch(other, "a number"))?;
+            // Integers from the database fit an f64 closely enough for a float field.
+            #[allow(clippy::cast_precision_loss)]
+            Ok(int as f64)
+        }
+    }
+}
+
+/// A decimal in `value`, from any number or a numeric string.
+fn decimal(value: &Value) -> Result<Decimal, FieldError> {
+    null_check(value)?;
+    match value {
+        Value::Decimal(Some(v)) => Ok(*v),
+        Value::Float(Some(v)) => Decimal::from_f32(*v)
+            .ok_or_else(|| FieldError::Invalid(format!("{v} does not fit a decimal"))),
+        Value::Double(Some(v)) => Decimal::from_f64(*v)
+            .ok_or_else(|| FieldError::Invalid(format!("{v} does not fit a decimal"))),
+        Value::String(Some(s)) => Decimal::from_str(s.trim())
+            .or_else(|_| Decimal::from_scientific(s.trim()))
+            .map_err(|_| FieldError::Invalid(format!("`{s}` is not a decimal"))),
+        other => {
+            let int = integer(other).map_err(|_| mismatch(other, "a decimal"))?;
+            Decimal::from_i128(int)
+                .ok_or_else(|| FieldError::Invalid(format!("{int} does not fit a decimal")))
+        }
+    }
+}
+
+fn boolean(value: &Value) -> Result<bool, FieldError> {
+    null_check(value)?;
+    match value {
+        Value::Bool(Some(b)) => Ok(*b),
+        Value::String(Some(s)) => match s.trim().to_ascii_lowercase().as_str() {
+            "true" | "t" | "1" | "yes" | "y" | "on" => Ok(true),
+            "false" | "f" | "0" | "no" | "n" | "off" => Ok(false),
+            _ => Err(FieldError::Invalid(format!("`{s}` is not a boolean"))),
+        },
+        Value::Json(Some(json)) => json.as_bool().ok_or_else(|| mismatch(value, "a boolean")),
+        other => match integer(other) {
+            Ok(0) => Ok(false),
+            Ok(1) => Ok(true),
+            Ok(n) => Err(FieldError::Invalid(format!("{n} is not a boolean (0 or 1)"))),
+            Err(_) => Err(mismatch(other, "a boolean")),
+        },
+    }
+}
+
+fn string(value: Value) -> Result<String, FieldError> {
+    null_check(&value)?;
+    match value {
+        Value::String(Some(s)) => Ok(s),
+        Value::Char(Some(c)) => Ok(c.to_string()),
+        Value::Uuid(Some(u)) => Ok(u.to_string()),
+        Value::Json(Some(json)) => match *json {
+            serde_json::Value::String(s) => Ok(s),
+            other => Ok(other.to_string()),
+        },
+        Value::Bytes(Some(bytes)) => String::from_utf8(bytes)
+            .map_err(|_| FieldError::Invalid("the bytes are not UTF-8 text".to_owned())),
+        Value::Decimal(Some(d)) => Ok(d.to_string()),
+        other => Err(mismatch(&other, "a string")),
+    }
+}
+
+fn bytes(value: Value) -> Result<Vec<u8>, FieldError> {
+    null_check(&value)?;
+    match value {
+        Value::Bytes(Some(b)) => Ok(b),
+        Value::String(Some(s)) => Ok(s.into_bytes()),
+        Value::Uuid(Some(u)) => Ok(u.as_bytes().to_vec()),
+        other => Err(mismatch(&other, "bytes")),
+    }
+}
+
+fn uuid(value: Value) -> Result<Uuid, FieldError> {
+    null_check(&value)?;
+    match value {
+        Value::Uuid(Some(u)) => Ok(u),
+        Value::String(Some(s)) => {
+            Uuid::parse_str(s.trim()).map_err(|_| FieldError::Invalid(format!("`{s}` is not a UUID")))
+        }
+        Value::Bytes(Some(b)) => Uuid::from_slice(&b)
+            .map_err(|_| FieldError::Invalid(format!("{} bytes are not a UUID", b.len()))),
+        Value::Json(Some(json)) => match json.as_str() {
+            Some(s) => Uuid::parse_str(s)
+                .map_err(|_| FieldError::Invalid(format!("`{s}` is not a UUID"))),
+            None => Err(FieldError::Invalid("JSON that is not a UUID string".to_owned())),
+        },
+        other => Err(mismatch(&other, "a UUID")),
+    }
+}
+
+fn json(value: Value) -> Result<serde_json::Value, FieldError> {
+    null_check(&value)?;
+    match value {
+        Value::Json(Some(json)) => Ok(*json),
+        Value::String(Some(s)) => serde_json::from_str(&s)
+            .map_err(|error| FieldError::Invalid(format!("the text is not JSON: {error}"))),
+        Value::Bytes(Some(b)) => serde_json::from_slice(&b)
+            .map_err(|error| FieldError::Invalid(format!("the bytes are not JSON: {error}"))),
+        other => Ok(to_json(&other)),
+    }
+}
+
+/// The text formats date-times come back in: RFC 3339, and the
+/// space-separated form SQLite and MySQL use, with or without an offset.
+const DATE_TIME_FORMATS: [&str; 2] = ["%Y-%m-%d %H:%M:%S%.f", "%Y-%m-%dT%H:%M:%S%.f"];
+
+fn parse_offset_date_time(s: &str) -> Option<DateTime<FixedOffset>> {
+    let s = s.trim();
+    DateTime::parse_from_rfc3339(s)
+        .ok()
+        .or_else(|| DateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S%.f%:z").ok())
+        .or_else(|| DateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S%.f%z").ok())
+        .or_else(|| DateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S%.f %:z").ok())
+}
+
+fn parse_naive_date_time(s: &str) -> Option<NaiveDateTime> {
+    let s = s.trim();
+    DATE_TIME_FORMATS
+        .iter()
+        .find_map(|format| NaiveDateTime::parse_from_str(s, format).ok())
+        .or_else(|| {
+            NaiveDate::parse_from_str(s, "%Y-%m-%d")
+                .ok()
+                .and_then(|date| date.and_hms_opt(0, 0, 0))
+        })
+}
+
+fn date_time_utc(value: Value) -> Result<DateTime<Utc>, FieldError> {
+    null_check(&value)?;
+    match value {
+        Value::ChronoDateTimeUtc(Some(v)) => Ok(v),
+        Value::ChronoDateTimeWithTimeZone(Some(v)) => Ok(v.with_timezone(&Utc)),
+        Value::ChronoDateTimeLocal(Some(v)) => Ok(v.with_timezone(&Utc)),
+        Value::ChronoDateTime(Some(v)) => Ok(Utc.from_utc_datetime(&v)),
+        Value::ChronoDate(Some(v)) => Ok(Utc.from_utc_datetime(&v.and_time(NaiveTime::MIN))),
+        Value::String(Some(s)) => parse_offset_date_time(&s)
+            .map(|v| v.with_timezone(&Utc))
+            .or_else(|| parse_naive_date_time(&s).map(|v| Utc.from_utc_datetime(&v)))
+            .ok_or_else(|| FieldError::Invalid(format!("`{s}` is not a date-time"))),
+        other => match integer(&other) {
+            // Unix seconds (timestamps stored as integers).
+            Ok(seconds) => i64::try_from(seconds)
+                .ok()
+                .and_then(|s| DateTime::from_timestamp(s, 0))
+                .ok_or_else(|| FieldError::Invalid(format!("{seconds} is out of range"))),
+            Err(_) => Err(mismatch(&other, "a date-time")),
+        },
+    }
+}
+
+fn date_time_offset(value: Value) -> Result<DateTime<FixedOffset>, FieldError> {
+    null_check(&value)?;
+    match value {
+        Value::ChronoDateTimeWithTimeZone(Some(v)) => Ok(v),
+        Value::String(Some(s)) => parse_offset_date_time(&s)
+            .or_else(|| parse_naive_date_time(&s).map(|v| Utc.from_utc_datetime(&v).fixed_offset()))
+            .ok_or_else(|| FieldError::Invalid(format!("`{s}` is not a date-time"))),
+        other => date_time_utc(other).map(|v| v.fixed_offset()),
+    }
+}
+
+fn naive_date_time(value: Value) -> Result<NaiveDateTime, FieldError> {
+    null_check(&value)?;
+    match value {
+        Value::ChronoDateTime(Some(v)) => Ok(v),
+        Value::ChronoDateTimeUtc(Some(v)) => Ok(v.naive_utc()),
+        Value::ChronoDateTimeWithTimeZone(Some(v)) => Ok(v.naive_utc()),
+        Value::ChronoDateTimeLocal(Some(v)) => Ok(v.naive_utc()),
+        Value::ChronoDate(Some(v)) => Ok(v.and_time(NaiveTime::MIN)),
+        Value::String(Some(s)) => parse_naive_date_time(&s)
+            .or_else(|| parse_offset_date_time(&s).map(|v| v.naive_utc()))
+            .ok_or_else(|| FieldError::Invalid(format!("`{s}` is not a date-time"))),
+        other => Err(mismatch(&other, "a date-time")),
+    }
+}
+
+fn naive_date(value: Value) -> Result<NaiveDate, FieldError> {
+    null_check(&value)?;
+    match value {
+        Value::ChronoDate(Some(v)) => Ok(v),
+        Value::ChronoDateTime(Some(v)) => Ok(v.date()),
+        Value::ChronoDateTimeUtc(Some(v)) => Ok(v.date_naive()),
+        Value::ChronoDateTimeWithTimeZone(Some(v)) => Ok(v.date_naive()),
+        Value::String(Some(s)) => NaiveDate::parse_from_str(s.trim(), "%Y-%m-%d")
+            .ok()
+            .or_else(|| parse_naive_date_time(&s).map(|v| v.date()))
+            .ok_or_else(|| FieldError::Invalid(format!("`{s}` is not a date"))),
+        other => Err(mismatch(&other, "a date")),
+    }
+}
+
+fn naive_time(value: Value) -> Result<NaiveTime, FieldError> {
+    null_check(&value)?;
+    match value {
+        Value::ChronoTime(Some(v)) => Ok(v),
+        Value::ChronoDateTime(Some(v)) => Ok(v.time()),
+        Value::String(Some(s)) => NaiveTime::parse_from_str(s.trim(), "%H:%M:%S%.f")
+            .or_else(|_| NaiveTime::parse_from_str(s.trim(), "%H:%M"))
+            .map_err(|_| FieldError::Invalid(format!("`{s}` is not a time"))),
+        other => Err(mismatch(&other, "a time")),
+    }
+}
+
+/// `Field` for a type SeaORM decodes exactly, with a lenient conversion
+/// from values.
+macro_rules! exact_field {
+    ($ty:ty, $name:literal, $null:expr, $from_value:expr) => {
+        impl Field for $ty {
+            fn to_value(&self) -> Value {
+                Value::from(self.clone())
+            }
+
+            fn null() -> Value {
+                $null
+            }
+
+            fn from_sql(row: &QueryResult, column: &str) -> Result<Self, FieldError> {
+                sql_get::<$ty>(row, column)
+            }
+
+            fn from_value(value: Value) -> Result<Self, FieldError> {
+                $from_value(value)
+            }
+
+            fn type_name() -> Cow<'static, str> {
+                Cow::Borrowed($name)
+            }
+        }
+    };
+}
+
+/// `Field` for an integer type: exact from SQL, range-checked from values.
+macro_rules! integer_field {
+    ($ty:ty, $name:literal, $null:expr) => {
+        exact_field!($ty, $name, $null, |value: Value| {
+            let int = integer(&value)?;
+            <$ty>::try_from(int)
+                .map_err(|_| FieldError::Invalid(format!("{int} does not fit {}", $name)))
+        });
+    };
+}
+
+integer_field!(i8, "i8", Value::TinyInt(None));
+integer_field!(i16, "i16", Value::SmallInt(None));
+integer_field!(i32, "i32", Value::Int(None));
+integer_field!(i64, "i64", Value::BigInt(None));
+integer_field!(u8, "u8", Value::TinyUnsigned(None));
+integer_field!(u16, "u16", Value::SmallUnsigned(None));
+integer_field!(u32, "u32", Value::Unsigned(None));
+
+exact_field!(bool, "bool", Value::Bool(None), |value: Value| boolean(&value));
+exact_field!(f32, "f32", Value::Float(None), |value: Value| {
+    // Narrowing to the field's own precision.
+    #[allow(clippy::cast_possible_truncation)]
+    float(&value).map(|v| v as f32)
+});
+exact_field!(f64, "f64", Value::Double(None), |value: Value| float(&value));
+exact_field!(String, "String", Value::String(None), string);
+exact_field!(Vec<u8>, "Vec<u8>", Value::Bytes(None), bytes);
+exact_field!(Uuid, "Uuid", Value::Uuid(None), uuid);
+exact_field!(
+    serde_json::Value,
+    "serde_json::Value",
+    Value::Json(None),
+    json
+);
+exact_field!(NaiveDate, "NaiveDate", Value::ChronoDate(None), naive_date);
+exact_field!(NaiveTime, "NaiveTime", Value::ChronoTime(None), naive_time);
+exact_field!(
+    NaiveDateTime,
+    "NaiveDateTime",
+    Value::ChronoDateTime(None),
+    naive_date_time
+);
+exact_field!(
+    DateTime<Utc>,
+    "DateTime<Utc>",
+    Value::ChronoDateTimeUtc(None),
+    date_time_utc
+);
+exact_field!(
+    DateTime<FixedOffset>,
+    "DateTime<FixedOffset>",
+    Value::ChronoDateTimeWithTimeZone(None),
+    date_time_offset
+);
+
+/// `u64`: MySQL's `BIGINT UNSIGNED`; elsewhere a non-negative `BIGINT`.
+impl Field for u64 {
+    fn to_value(&self) -> Value {
+        Value::BigUnsigned(Some(*self))
+    }
+
+    fn null() -> Value {
+        Value::BigUnsigned(None)
+    }
+
+    fn from_sql(row: &QueryResult, column: &str) -> Result<Self, FieldError> {
+        match sql_get::<u64>(row, column) {
+            Ok(value) => Ok(value),
+            Err(FieldError::Invalid(_)) => {
+                let signed = sql_get::<i64>(row, column)?;
+                u64::try_from(signed)
+                    .map_err(|_| FieldError::Invalid(format!("{signed} does not fit u64")))
+            }
+            Err(other) => Err(other),
+        }
+    }
+
+    fn from_value(value: Value) -> Result<Self, FieldError> {
+        let int = integer(&value)?;
+        u64::try_from(int).map_err(|_| FieldError::Invalid(format!("{int} does not fit u64")))
+    }
+
+    fn type_name() -> Cow<'static, str> {
+        Cow::Borrowed("u64")
+    }
+}
+
+/// [`Decimal`]: exact on PostgreSQL and MySQL; on SQLite, whose `NUMERIC`
+/// columns keep numbers as integers or floats, read from those or from
+/// text.
+impl Field for Decimal {
+    fn to_value(&self) -> Value {
+        Value::Decimal(Some(*self))
+    }
+
+    fn null() -> Value {
+        Value::Decimal(None)
+    }
+
+    fn from_sql(row: &QueryResult, column: &str) -> Result<Self, FieldError> {
+        match sql_get::<Decimal>(row, column) {
+            Ok(value) => Ok(value),
+            Err(FieldError::Invalid(error)) => match sql_get::<String>(row, column) {
+                Ok(text) => decimal(&Value::String(Some(text))),
+                Err(_) => Err(FieldError::Invalid(error)),
+            },
+            Err(other) => Err(other),
+        }
+    }
+
+    fn from_value(value: Value) -> Result<Self, FieldError> {
+        decimal(&value)
+    }
+
+    fn type_name() -> Cow<'static, str> {
+        Cow::Borrowed("Decimal")
+    }
+}
+
+impl<T: Field> Field for Option<T> {
+    fn to_value(&self) -> Value {
+        match self {
+            Some(value) => value.to_value(),
+            None => T::null(),
+        }
+    }
+
+    fn null() -> Value {
+        T::null()
+    }
+
+    fn from_sql(row: &QueryResult, column: &str) -> Result<Self, FieldError> {
+        match T::from_sql(row, column) {
+            Ok(value) => Ok(Some(value)),
+            Err(FieldError::Null) => Ok(None),
+            Err(error) => Err(error),
+        }
+    }
+
+    fn from_value(value: Value) -> Result<Self, FieldError> {
+        if is_null(&value) {
+            Ok(None)
+        } else {
+            T::from_value(value).map(Some)
+        }
+    }
+
+    fn type_name() -> Cow<'static, str> {
+        Cow::Owned(format!("Option<{}>", T::type_name()))
+    }
+}
+
+/// Any column, decoded dynamically (the column's own type decides the
+/// variant). For untyped columns and expressions.
+impl Field for Value {
+    fn to_value(&self) -> Value {
+        self.clone()
+    }
+
+    fn null() -> Value {
+        Value::String(None)
+    }
+
+    fn from_sql(row: &QueryResult, column: &str) -> Result<Self, FieldError> {
+        crate::row::sniff(row, column)
+    }
+
+    fn from_value(value: Value) -> Result<Self, FieldError> {
+        Ok(value)
+    }
+
+    fn type_name() -> Cow<'static, str> {
+        Cow::Borrowed("Value")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn integers_convert_leniently_and_check_ranges() {
+        assert_eq!(i32::from_value(Value::BigInt(Some(7))).unwrap(), 7);
+        assert_eq!(
+            i64::from_value(Value::Decimal(Some(Decimal::new(4200, 2)))).unwrap(),
+            42
+        );
+        assert_eq!(i64::from_value(Value::String(Some(" 12 ".into()))).unwrap(), 12);
+        assert!(matches!(
+            i8::from_value(Value::BigInt(Some(300))),
+            Err(FieldError::Invalid(message)) if message == "300 does not fit i8"
+        ));
+        assert_eq!(i64::from_value(Value::BigInt(None)), Err(FieldError::Null));
+        assert!(i64::from_value(Value::Decimal(Some(Decimal::new(425, 1)))).is_err());
+        assert_eq!(u64::from_value(Value::BigInt(Some(5))).unwrap(), 5);
+        assert!(u64::from_value(Value::BigInt(Some(-5))).is_err());
+    }
+
+    #[test]
+    fn booleans_read_integers_and_words() {
+        assert!(bool::from_value(Value::BigInt(Some(1))).unwrap());
+        assert!(!bool::from_value(Value::Int(Some(0))).unwrap());
+        assert!(bool::from_value(Value::String(Some("true".into()))).unwrap());
+        assert!(bool::from_value(Value::BigInt(Some(2))).is_err());
+    }
+
+    #[test]
+    fn floats_and_decimals() {
+        assert_eq!(f64::from_value(Value::BigInt(Some(3))).unwrap(), 3.0);
+        assert_eq!(
+            f64::from_value(Value::Decimal(Some(Decimal::new(125, 2)))).unwrap(),
+            1.25
+        );
+        assert_eq!(
+            Decimal::from_value(Value::String(Some("12.50".into()))).unwrap(),
+            Decimal::new(1250, 2)
+        );
+        assert_eq!(
+            Decimal::from_value(Value::BigInt(Some(3))).unwrap(),
+            Decimal::from(3)
+        );
+    }
+
+    #[test]
+    fn date_times_parse_the_text_forms_databases_return() {
+        let expected = Utc.with_ymd_and_hms(2026, 10, 27, 8, 30, 0).unwrap();
+        for text in [
+            "2026-10-27T08:30:00Z",
+            "2026-10-27 08:30:00+00:00",
+            "2026-10-27 08:30:00",
+            "2026-10-27T10:30:00+02:00",
+        ] {
+            assert_eq!(
+                DateTime::<Utc>::from_value(Value::String(Some(text.into()))).unwrap(),
+                expected,
+                "{text}"
+            );
+        }
+        assert_eq!(
+            NaiveDate::from_value(Value::String(Some("2026-10-27".into()))).unwrap(),
+            NaiveDate::from_ymd_opt(2026, 10, 27).unwrap()
+        );
+        assert_eq!(
+            NaiveTime::from_value(Value::String(Some("08:30:15".into()))).unwrap(),
+            NaiveTime::from_hms_opt(8, 30, 15).unwrap()
+        );
+        assert!(DateTime::<Utc>::from_value(Value::String(Some("soon".into()))).is_err());
+    }
+
+    #[test]
+    fn options_map_nulls_to_none() {
+        assert_eq!(<Option<String>>::null(), Value::String(None));
+        assert_eq!(
+            <Option<String>>::from_value(Value::String(None)).unwrap(),
+            None
+        );
+        assert_eq!(
+            <Option<String>>::from_value(Value::String(Some("x".into()))).unwrap(),
+            Some("x".to_owned())
+        );
+        assert_eq!(
+            <Option<Uuid>>::type_name(),
+            Cow::<str>::Owned("Option<Uuid>".into())
+        );
+        assert_eq!(Some(3_i32).to_value(), Value::Int(Some(3)));
+        assert_eq!(None::<i32>.to_value(), Value::Int(None));
+    }
+
+    #[test]
+    fn uuids_and_json() {
+        let id = Uuid::now_v7();
+        assert_eq!(Uuid::from_value(Value::String(Some(id.to_string()))).unwrap(), id);
+        assert_eq!(
+            Uuid::from_value(Value::Bytes(Some(id.as_bytes().to_vec()))).unwrap(),
+            id
+        );
+        assert_eq!(
+            serde_json::Value::from_value(Value::String(Some(r#"{"a":1}"#.into()))).unwrap(),
+            serde_json::json!({"a": 1})
+        );
+    }
+
+    #[test]
+    fn nulls_of_every_type_are_detected() {
+        assert!(is_null(&Value::Uuid(None)));
+        assert!(is_null(&Value::Json(None)));
+        assert!(!is_null(&Value::Bool(Some(false))));
+    }
+}
