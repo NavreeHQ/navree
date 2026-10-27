@@ -7,47 +7,7 @@ use typst::foundations::Bytes;
 use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
 
-/// The bundled fonts (SIL Open Font License 1.1, see `fonts/OFL.txt`):
-/// Noto Sans (Latin, Greek and Cyrillic) in regular, bold, italic and bold
-/// italic, Noto Sans Arabic and Noto Sans Devanagari in regular and bold.
-pub(crate) const BUNDLED: [(&str, &[u8]); 8] = [
-    (
-        "NotoSans-Regular.ttf",
-        include_bytes!("../../fonts/NotoSans-Regular.ttf"),
-    ),
-    (
-        "NotoSans-Bold.ttf",
-        include_bytes!("../../fonts/NotoSans-Bold.ttf"),
-    ),
-    (
-        "NotoSans-Italic.ttf",
-        include_bytes!("../../fonts/NotoSans-Italic.ttf"),
-    ),
-    (
-        "NotoSans-BoldItalic.ttf",
-        include_bytes!("../../fonts/NotoSans-BoldItalic.ttf"),
-    ),
-    (
-        "NotoSansArabic-Regular.ttf",
-        include_bytes!("../../fonts/NotoSansArabic-Regular.ttf"),
-    ),
-    (
-        "NotoSansArabic-Bold.ttf",
-        include_bytes!("../../fonts/NotoSansArabic-Bold.ttf"),
-    ),
-    (
-        "NotoSansDevanagari-Regular.ttf",
-        include_bytes!("../../fonts/NotoSansDevanagari-Regular.ttf"),
-    ),
-    (
-        "NotoSansDevanagari-Bold.ttf",
-        include_bytes!("../../fonts/NotoSansDevanagari-Bold.ttf"),
-    ),
-];
-
-/// The families text falls back through by default, in order: Latin,
-/// Greek and Cyrillic first, then Arabic, then Devanagari.
-pub(crate) const DEFAULT_FAMILIES: [&str; 3] = ["Noto Sans", "Noto Sans Arabic", "Noto Sans Devanagari"];
+use crate::fonts::BUNDLED;
 
 /// The loaded fonts and their book.
 pub(crate) struct FontSet {
@@ -62,8 +22,8 @@ impl FontSet {
     pub(crate) fn load(bundled: bool, dirs: &[PathBuf]) -> FontSet {
         let mut fonts = Vec::new();
         if bundled {
-            for (_, data) in BUNDLED {
-                fonts.extend(Font::iter(Bytes::new(data)));
+            for font in BUNDLED {
+                fonts.extend(Font::iter(Bytes::new(font.data)));
             }
         }
         for dir in dirs {

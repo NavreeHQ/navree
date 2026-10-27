@@ -5,8 +5,8 @@
 use std::time::Duration;
 
 use navree_documents::{
-    ChromeEngine, ChromeOptions, DOCUMENT_ORIGIN, DocumentsError, Margins, PrintOptions, Render,
-    Templates,
+    ChromeEngine, ChromeOptions, DOCUMENT_ORIGIN, DocumentsError, FONTS_STYLESHEET, Margins,
+    PrintOptions, Render, Templates,
 };
 use serde_json::json;
 
@@ -140,6 +140,28 @@ async fn assets_come_from_the_template_tree_and_other_origins_are_blocked() {
     assert!(png.starts_with(b"\x89PNG"));
     assert_eq!(seen.blocked, vec!["https://tracker.example.com/pixel.png"]);
     assert!(seen.continued.is_empty());
+}
+
+#[tokio::test]
+async fn the_bundled_fonts_are_served_from_the_reserved_prefix() {
+    let mock = MockChrome::start(Behavior::default()).await;
+    engine(&mock)
+        .render(&Render::template("certificates/multilingual").data(json!({
+            "title": "t", "name": "n", "course": "c",
+        })))
+        .await
+        .unwrap();
+    let seen = mock.seen();
+    let css_url = format!("{DOCUMENT_ORIGIN}{FONTS_STYLESHEET}");
+    let (_, status, css) = seen
+        .fulfilled
+        .iter()
+        .find(|(url, ..)| *url == css_url)
+        .expect("the stylesheet was requested");
+    assert_eq!(*status, 200);
+    let css = String::from_utf8(css.clone()).unwrap();
+    assert!(css.contains("font-family: \"Noto Sans Arabic\""), "{css}");
+    assert!(css.contains("url(\"/_navree/fonts/NotoSansDevanagari-Bold.ttf\")"), "{css}");
 }
 
 #[tokio::test]
