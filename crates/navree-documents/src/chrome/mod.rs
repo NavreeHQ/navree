@@ -9,9 +9,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use navree_view::{ViewError, ViewOptions, Views};
-use serde_json::{Value, json};
-use tokio::sync::{Mutex, OnceCell, Semaphore};
+use serde_json::json;
+use tokio::sync::{Mutex, Semaphore};
 
 use self::cdp::Cdp;
 pub use self::launch::CHROME_ENV;
@@ -20,8 +19,9 @@ pub use self::page::DOCUMENT_ORIGIN;
 use self::page::PageJob;
 use crate::engine::{EngineKind, PdfEngine};
 use crate::options::ChromeOptions;
-use crate::render::{Render, TemplateSource};
-use crate::templates::{HTML_EXTENSION, Templates};
+use crate::render::Render;
+use crate::templates::Templates;
+use crate::views::HtmlTemplates;
 use crate::{DocumentsError, Pdf};
 
 const ENGINE: &str = "chrome";
@@ -65,7 +65,7 @@ struct Inner {
     options: ChromeOptions,
     /// The value of [`CHROME_ENV`] when the engine was built.
     env_path: Option<PathBuf>,
-    views: OnceCell<Arc<Views>>,
+    html: HtmlTemplates,
     browser: Mutex<Option<Browser>>,
     slots: Semaphore,
 }
@@ -95,7 +95,7 @@ impl ChromeEngine {
                 templates,
                 options,
                 env_path: std::env::var_os(CHROME_ENV).map(PathBuf::from),
-                views: OnceCell::new(),
+                html: HtmlTemplates::default(),
                 browser: Mutex::new(None),
                 slots: Semaphore::new(slots),
             }),
@@ -244,59 +244,18 @@ impl ChromeEngine {
         })
     }
 
-    /// The document's path in the template tree and its HTML.
+    /// The document's path in the template tree and its HTML, rendered
+    /// on Tokio's blocking pool (templates are read on the first HTML
+    /// render and re-read when files change).
     async fn document(&self, render: &Render) -> Result<(String, String), DocumentsError> {
         if let Some(error) = &render.data_error {
             return Err(DocumentsError::Data(error.clone()));
         }
-        match &render.source {
-            TemplateSource::Html(html) => Ok(("inline.html".to_owned(), html.clone())),
-            TemplateSource::Typst(_) => Err(DocumentsError::EngineUnavailable {
-                engine: ENGINE,
-                reason: "Typst markup is compiled by the typst engine".into(),
-            }),
-            TemplateSource::Template(name) => {
-                let path = Templates::template_path(name, HTML_EXTENSION).ok_or_else(|| {
-                    DocumentsError::TemplateNotFound {
-                        name: name.clone(),
-                        tried: Vec::new(),
-                    }
-                })?;
-                let views = self.views().await?;
-                let context = template_context(render);
-                let lookup = path.clone();
-                let html = tokio::task::spawn_blocking(move || views.render(&lookup, context))
-                    .await
-                    .map_err(|error| {
-                        engine_error(format!("the template renderer stopped: {error}"))
-                    })?
-                    .map_err(|error| view_error(name, error))?;
-                Ok((path, html))
-            }
-        }
-    }
-
-    /// The HTML templates, read on the first HTML render and re-read when
-    /// files change.
-    async fn views(&self) -> Result<Arc<Views>, DocumentsError> {
-        self.inner
-            .views
-            .get_or_try_init(|| async {
-                let templates = self.inner.templates.clone();
-                let views = tokio::task::spawn_blocking(move || {
-                    let options = ViewOptions {
-                        dirs: templates.view_dirs(),
-                        reload: true,
-                    };
-                    Views::with_templates(&options, templates.embedded_html())
-                })
-                .await
-                .map_err(|error| engine_error(format!("loading the templates stopped: {error}")))?
-                .map_err(|error| view_error("", error))?;
-                Ok::<_, DocumentsError>(Arc::new(views))
-            })
+        let inner = self.inner.clone();
+        let render = render.clone();
+        tokio::task::spawn_blocking(move || inner.html.document(&inner.templates, &render))
             .await
-            .cloned()
+            .map_err(|error| engine_error(format!("the template renderer stopped: {error}")))?
     }
 }
 
@@ -317,57 +276,6 @@ impl PdfEngine for ChromeEngine {
     }
 }
 
-/// The variables of an HTML template: the data's fields (or `data` for
-/// data that is not an object), plus `locale` and `dir`.
-pub(crate) fn template_context(render: &Render) -> Value {
-    let locale = Value::String(render.locale.clone().unwrap_or_else(|| "en".into()));
-    let dir = Value::String(render.direction().into());
-    match &render.data {
-        Value::Object(map) => {
-            let mut map = map.clone();
-            map.entry("locale").or_insert(locale);
-            map.entry("dir").or_insert(dir);
-            Value::Object(map)
-        }
-        Value::Null => json!({ "locale": locale, "dir": dir }),
-        other => json!({ "data": other, "locale": locale, "dir": dir }),
-    }
-}
-
-fn view_error(name: &str, error: ViewError) -> DocumentsError {
-    match error {
-        ViewError::NotFound { tried, .. } => DocumentsError::TemplateNotFound {
-            name: name.to_owned(),
-            tried,
-        },
-        ViewError::Template { name, source } => {
-            let file = source.name().map(str::to_owned).unwrap_or(name);
-            let message = match source.detail() {
-                Some(detail) => format!("{}: {detail}", source.kind()),
-                None => source.kind().to_string(),
-            };
-            DocumentsError::Template {
-                file,
-                line: source.line(),
-                column: None,
-                message,
-            }
-        }
-        ViewError::Io { path, source } => DocumentsError::Template {
-            file: path.display().to_string(),
-            line: None,
-            column: None,
-            message: source.to_string(),
-        },
-        other => DocumentsError::Template {
-            file: name.to_owned(),
-            line: None,
-            column: None,
-            message: other.to_string(),
-        },
-    }
-}
-
 fn engine_error(message: impl Into<String>) -> DocumentsError {
     DocumentsError::Engine {
         engine: ENGINE,
@@ -379,34 +287,5 @@ fn unavailable(reason: impl Into<String>) -> DocumentsError {
     DocumentsError::EngineUnavailable {
         engine: ENGINE,
         reason: reason.into(),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn template_variables_add_locale_and_direction() {
-        let render = Render::template("x")
-            .data(json!({"name": "Ada"}))
-            .locale("ar");
-        assert_eq!(
-            template_context(&render),
-            json!({"name": "Ada", "locale": "ar", "dir": "rtl"})
-        );
-        let render = Render::template("x").data(json!({"locale": "custom"}));
-        assert_eq!(
-            template_context(&render),
-            json!({"locale": "custom", "dir": "ltr"})
-        );
-        assert_eq!(
-            template_context(&Render::template("x")),
-            json!({"locale": "en", "dir": "ltr"})
-        );
-        assert_eq!(
-            template_context(&Render::template("x").data([1, 2])),
-            json!({"data": [1, 2], "locale": "en", "dir": "ltr"})
-        );
     }
 }
