@@ -5,10 +5,12 @@ use std::time::Duration;
 
 use navree_contracts::{Dispatcher, Job};
 use navree_db::{DatabaseModule, Db};
-use navree_queue::{Queue, QueueDriver, QueueFake, QueueModule, QueueOptions, WorkStats};
+use navree_queue::{
+    Batch, JobBatch, Queue, QueueDriver, QueueFake, QueueModule, QueueOptions, WorkStats,
+};
 use navree_testing::TestApp;
 
-use crate::support::{JobsModule, Journal, Record, Toggle, Urgent};
+use crate::support::{JobsModule, Journal, Record, Toggle, Urgent, harness};
 
 async fn faked_app(fake: &QueueFake) -> TestApp {
     TestApp::builder()
@@ -116,4 +118,108 @@ async fn assert_not_dispatched_names_the_dispatched_job_type() {
     let fake = QueueFake::new();
     fake.queue().dispatch(Record::new("a")).await.unwrap();
     fake.assert_not_dispatched::<Record>();
+}
+
+// ---------------------------------------------------------------------------
+// Batches
+// ---------------------------------------------------------------------------
+
+fn import_batch() -> Batch {
+    Batch::new("recipients.import")
+        .add([Record::new("a"), Record::new("b")])
+        .push(Urgent { label: "u".into() })
+        .then(Record::new("then"))
+        .catch(Toggle {
+            label: "catch".into(),
+        })
+        .finally(Record::new("finally"))
+}
+
+#[tokio::test]
+async fn queue_fake_records_batches_apart_from_single_jobs() {
+    let fake = QueueFake::new();
+    let queue = fake.queue();
+
+    let batch = queue.dispatch_batch(import_batch()).await.unwrap();
+
+    let recorded = fake.batches();
+    assert_eq!(recorded.len(), 1);
+    let recorded = &recorded[0];
+    assert_eq!(recorded.name(), "recipients.import");
+    assert_eq!(recorded.batch, batch);
+    assert_eq!(
+        recorded.jobs_of::<Record>(),
+        [Record::new("a"), Record::new("b")]
+    );
+    assert_eq!(recorded.jobs_of::<Urgent>().len(), 1);
+    assert_eq!(recorded.then_of::<Record>(), Some(Record::new("then")));
+    assert_eq!(
+        recorded.catch_of::<Toggle>(),
+        Some(Toggle {
+            label: "catch".into()
+        })
+    );
+    assert_eq!(recorded.finally_of::<Record>(), Some(Record::new("finally")));
+    assert_eq!(recorded.then_of::<Toggle>(), None);
+    fake.assert_batched(|b| b.name() == "recipients.import" && b.jobs.len() == 3);
+    // A batch's jobs are not single dispatches.
+    fake.assert_nothing_dispatched();
+
+    // The fake keeps the batch as dispatched and cancels it on demand.
+    assert_eq!(
+        queue.find_batch(&batch.id).await.unwrap(),
+        Some(batch.clone())
+    );
+    assert_eq!(queue.batches(10).await.unwrap(), [batch.clone()]);
+    let cancelled = queue.cancel_batch(&batch.id).await.unwrap().unwrap();
+    assert!(cancelled.cancelled());
+    assert_eq!(queue.run_pending().await.unwrap(), WorkStats::default());
+
+    fake.clear();
+    fake.assert_nothing_batched();
+}
+
+/// The fake stores a dispatched batch exactly as the drivers do.
+#[tokio::test]
+async fn queue_fake_batches_match_the_drivers() {
+    let fake = QueueFake::new();
+    let faked = fake.queue().dispatch_batch(import_batch()).await.unwrap();
+    let comparable = |b: &JobBatch| {
+        (
+            b.name.clone(),
+            b.total_jobs,
+            b.pending_jobs,
+            b.failed_jobs,
+            b.failed_job_ids.clone(),
+            b.allow_failures,
+            b.operation_id,
+            b.finished(),
+            b.cancelled(),
+        )
+    };
+    for driver in [QueueDriver::Memory, QueueDriver::Database] {
+        let h = harness(driver).await;
+        let stored = h.queue.dispatch_batch(import_batch()).await.unwrap();
+        assert_eq!(comparable(&faked), comparable(&stored), "{driver:?}");
+        let found = h.queue.find_batch(&stored.id).await.unwrap().unwrap();
+        assert_eq!(found, stored, "{driver:?}");
+    }
+
+    // A batch with no jobs finishes at once and its callbacks are queued:
+    // the fake records them as dispatched.
+    let empty = fake
+        .queue()
+        .dispatch_batch(Batch::new("empty").then(Record::new("then")))
+        .await
+        .unwrap();
+    assert!(empty.finished());
+    fake.assert_dispatched::<Record>(|job| job.label == "then");
+}
+
+#[tokio::test]
+#[should_panic(expected = "recipients.import")]
+async fn assert_nothing_batched_names_the_batches() {
+    let fake = QueueFake::new();
+    fake.queue().dispatch_batch(import_batch()).await.unwrap();
+    fake.assert_nothing_batched();
 }

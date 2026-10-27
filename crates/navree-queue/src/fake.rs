@@ -5,8 +5,9 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use navree_contracts::{BoxError, BoxFuture, Dispatcher, Job, JobEnvelope};
 
+use crate::batch::BatchRow;
 use crate::store::Store;
-use crate::{Queue, QueueOptions};
+use crate::{JobBatch, Queue, QueueOptions};
 
 /// A queue that records jobs instead of running them, for tests.
 ///
@@ -46,12 +47,162 @@ use crate::{Queue, QueueOptions};
 /// Clones share the record. Jobs dispatched in a unit of work are recorded
 /// when it commits. The fake queue never runs jobs: `work` and
 /// `run_pending` return empty stats and nothing ever fails.
+///
+/// Batches are recorded apart from single jobs ([`batches`](QueueFake::batches),
+/// [`assert_batched`](QueueFake::assert_batched)): a batch's jobs are not
+/// in [`dispatched`](QueueFake::dispatched). `find_batch` and `batches`
+/// return a recorded batch as a driver stores it when it is dispatched
+/// (every job pending), and `cancel_batch` cancels it.
 #[derive(Clone, Default)]
 pub struct QueueFake {
     recorded: Arc<Mutex<Vec<JobEnvelope>>>,
+    batches: Arc<Mutex<Vec<FakeBatch>>>,
+}
+
+/// A batch [`QueueFake`] recorded: the stored batch, its jobs and its
+/// callbacks.
+#[derive(Clone, Debug)]
+pub struct RecordedBatch {
+    /// The batch as a driver stores it when it is dispatched.
+    pub batch: JobBatch,
+    /// Its jobs, in order.
+    pub jobs: Vec<JobEnvelope>,
+    /// The `then` callback.
+    pub then: Option<JobEnvelope>,
+    /// The `catch` callback.
+    pub catch: Option<JobEnvelope>,
+    /// The `finally` callback.
+    pub finally: Option<JobEnvelope>,
+}
+
+impl RecordedBatch {
+    /// The batch's name.
+    pub fn name(&self) -> &str {
+        &self.batch.name
+    }
+
+    /// The batch's jobs of type `J`, in order.
+    ///
+    /// # Panics
+    ///
+    /// When a recorded payload of type `J` does not deserialize as `J`.
+    pub fn jobs_of<J: Job>(&self) -> Vec<J> {
+        decode_all::<J>(&self.jobs)
+    }
+
+    /// Whether the batch's `then` callback is a `J` (decoded).
+    pub fn then_of<J: Job>(&self) -> Option<J> {
+        self.then.as_ref().and_then(decode::<J>)
+    }
+
+    /// Whether the batch's `catch` callback is a `J` (decoded).
+    pub fn catch_of<J: Job>(&self) -> Option<J> {
+        self.catch.as_ref().and_then(decode::<J>)
+    }
+
+    /// Whether the batch's `finally` callback is a `J` (decoded).
+    pub fn finally_of<J: Job>(&self) -> Option<J> {
+        self.finally.as_ref().and_then(decode::<J>)
+    }
+}
+
+/// What the fake keeps of a batch.
+#[derive(Clone, Debug)]
+struct FakeBatch {
+    row: BatchRow,
+    jobs: Vec<JobEnvelope>,
+}
+
+fn decode<J: Job>(envelope: &JobEnvelope) -> Option<J> {
+    (envelope.job_type == J::NAME)
+        .then(|| serde_json::from_value(envelope.payload.clone()).ok())
+        .flatten()
+}
+
+fn decode_all<J: Job>(envelopes: &[JobEnvelope]) -> Vec<J> {
+    envelopes
+        .iter()
+        .filter(|e| e.job_type == J::NAME)
+        .map(|e| {
+            serde_json::from_value(e.payload.clone()).unwrap_or_else(|error| {
+                panic!("a recorded `{}` job does not deserialize: {error}", J::NAME)
+            })
+        })
+        .collect()
 }
 
 impl QueueFake {
+    /// Every recorded batch, in dispatch order.
+    pub fn batches(&self) -> Vec<RecordedBatch> {
+        self.batch_lock()
+            .iter()
+            .map(|fake| RecordedBatch {
+                batch: fake.row.to_batch(),
+                jobs: fake.jobs.clone(),
+                then: fake.row.callbacks.then.clone(),
+                catch: fake.row.callbacks.catch.clone(),
+                finally: fake.row.callbacks.finally.clone(),
+            })
+            .collect()
+    }
+
+    /// Asserts a batch matching `pred` was dispatched.
+    ///
+    /// # Panics
+    ///
+    /// When none was, naming the batches that were.
+    pub fn assert_batched(&self, pred: impl Fn(&RecordedBatch) -> bool) {
+        let batches = self.batches();
+        assert!(
+            batches.iter().any(pred),
+            "expected a matching batch to be dispatched; these were: {:?}",
+            batches.iter().map(RecordedBatch::name).collect::<Vec<_>>()
+        );
+    }
+
+    /// Asserts no batch was dispatched.
+    ///
+    /// # Panics
+    ///
+    /// When one was.
+    pub fn assert_nothing_batched(&self) {
+        let batches = self.batches();
+        assert!(
+            batches.is_empty(),
+            "expected no batch to be dispatched, these were: {:?}",
+            batches.iter().map(RecordedBatch::name).collect::<Vec<_>>()
+        );
+    }
+
+    /// Records a dispatched batch.
+    pub(crate) fn record_batch(&self, row: BatchRow, jobs: Vec<JobEnvelope>) {
+        self.batch_lock().push(FakeBatch { row, jobs });
+    }
+
+    pub(crate) fn find_batch(&self, id: &str) -> Option<BatchRow> {
+        self.batch_lock()
+            .iter()
+            .find(|fake| fake.row.id == id)
+            .map(|fake| fake.row.clone())
+    }
+
+    pub(crate) fn batch_rows(&self, limit: usize) -> Vec<BatchRow> {
+        let mut rows: Vec<BatchRow> = self.batch_lock().iter().map(|f| f.row.clone()).collect();
+        rows.reverse();
+        rows.truncate(limit);
+        rows
+    }
+
+    pub(crate) fn cancel_batch(&self, id: &str, now: i64) -> Option<BatchRow> {
+        let mut batches = self.batch_lock();
+        let fake = batches.iter_mut().find(|fake| fake.row.id == id)?;
+        fake.row.cancel(now);
+        Some(fake.row.clone())
+    }
+
+    fn batch_lock(&self) -> MutexGuard<'_, Vec<FakeBatch>> {
+        self.batches.lock().unwrap_or_else(PoisonError::into_inner)
+    }
     /// An empty fake.
     pub fn new() -> Self {
         Self::default()
@@ -156,9 +307,10 @@ impl QueueFake {
         );
     }
 
-    /// Forgets every recorded job.
+    /// Forgets every recorded job and batch.
     pub fn clear(&self) {
         self.lock().clear();
+        self.batch_lock().clear();
     }
 
     /// Records `envelope`.

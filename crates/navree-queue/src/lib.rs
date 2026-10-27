@@ -98,22 +98,30 @@
 //! ```
 #![forbid(unsafe_code)]
 
+mod batch;
 mod commands;
 mod error;
 mod fake;
 mod migration;
 mod module;
+mod operations;
 mod options;
 mod queue;
 mod record;
 mod store;
 mod worker;
 
+pub use batch::{Batch, JobBatch};
 pub use error::QueueError;
-pub use fake::QueueFake;
-pub use migration::{FAILED_JOBS_TABLE, JOBS_TABLE};
+pub use fake::{QueueFake, RecordedBatch};
+pub use migration::{FAILED_JOBS_TABLE, JOB_BATCHES_TABLE, JOBS_TABLE, OPERATIONS_TABLE};
 pub use module::QueueModule;
-pub use options::{QueueDriver, QueueOptions};
+pub use operations::{
+    FAILED_MESSAGE, OPERATION_EVENT, OPERATION_UPDATED_EVENT, Operation, OperationProgress,
+    OperationRecord, OperationStatus, Operations, OperationsController, STALLED_MESSAGE,
+    SweepReport,
+};
+pub use options::{OperationsOptions, QueueDriver, QueueOptions};
 pub use queue::Queue;
 pub use record::{FailedJob, RetryTarget};
 pub use worker::{STALE_RESERVATION_GRACE_SECS, WorkOptions, WorkStats};
