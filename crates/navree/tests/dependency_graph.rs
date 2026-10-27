@@ -171,26 +171,28 @@ const HIERARCHY: &[Rule] = &[
     ]),
     // L6: ecosystem libraries (ecosystem build plan §3).
     // Social sign-in: links provider accounts to navree-auth users and
-    // issues their tokens.
+    // issues their tokens. Linked accounts are navree-orm models.
     rule("navree-social", 6, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto",
         "navree-cache", "navree-events", "navree-http-client", "navree-db", "navree-audit",
-        "navree-auth",
+        "navree-auth", "navree-orm",
     ]),
     // Webhooks: signed outgoing deliveries through the queue (a job
     // dispatcher from navree-contracts) and the HTTP client, endpoints in the
-    // database, routes scoped to the request's workspace.
+    // database, routes scoped to the request's workspace. The webhook tables
+    // are navree-orm models.
     rule("navree-webhooks", 6, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto",
         "navree-events", "navree-http-client", "navree-db", "navree-queue", "navree-access",
-        "navree-workspace",
+        "navree-workspace", "navree-orm",
     ]),
     // OAuth 2.1 and OpenID Connect provider: clients, grants and personal
     // access tokens for navree-auth users, scopes mapped to navree-access
-    // permissions, workspace-limited clients.
+    // permissions, workspace-limited clients. The OAuth tables are
+    // navree-orm models.
     rule("navree-oauth", 6, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto",
-        "navree-db", "navree-access", "navree-auth", "navree-workspace",
+        "navree-db", "navree-access", "navree-auth", "navree-workspace", "navree-orm",
         // `navree_oauth::testing` drives the flows with navree-testing's TestClient.
         "navree-testing",
     ]),
