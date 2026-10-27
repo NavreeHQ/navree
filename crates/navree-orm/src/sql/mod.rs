@@ -9,10 +9,12 @@
 use std::fmt;
 
 use sea_orm::DbBackend;
-use sea_query::{Alias, Asterisk, MysqlQueryBuilder, PostgresQueryBuilder, SqliteQueryBuilder};
+use sea_query::{
+    Alias, Asterisk, ExprTrait, Func, MysqlQueryBuilder, PostgresQueryBuilder, SqliteQueryBuilder,
+};
 
 use crate::error::OrmError;
-use crate::ir::{ColumnRef, Expr, JsonSegment, Where};
+use crate::ir::{AggregateFunction, ColumnRef, Expr, JsonSegment, Where};
 use crate::value::Value;
 
 mod filter;
@@ -212,14 +214,17 @@ impl Compiler {
                 template.push(')');
                 self.custom(&template, vec![base])
             }
-            Dialect::MySql => self.custom(
-                &format!("json_unquote(json_extract({{}}, {}))", json_path_literal(path)),
-                vec![base],
-            ),
-            Dialect::Sqlite => self.custom(
-                &format!("json_extract({{}}, {})", json_path_literal(path)),
-                vec![base],
-            ),
+            Dialect::MySql => Func::cust(Alias::new("json_unquote"))
+                .arg(
+                    Func::cust(Alias::new("json_extract"))
+                        .arg(base)
+                        .arg(sea_query::Expr::cust(json_path_literal(path))),
+                )
+                .into(),
+            Dialect::Sqlite => Func::cust(Alias::new("json_extract"))
+                .arg(base)
+                .arg(sea_query::Expr::cust(json_path_literal(path)))
+                .into(),
         }
     }
 
@@ -258,34 +263,39 @@ impl Compiler {
                     .iter()
                     .map(|arg| self.expr(arg))
                     .collect::<Result<Vec<_>, _>>()?;
-                let markers = vec!["{}"; args.len()].join(", ");
-                self.custom(&format!("{name}({markers})"), args)
+                Func::cust(Alias::new(name.to_string())).args(args).into()
             }
             Expr::Aggregate {
                 function,
                 arg,
                 distinct,
             } => {
-                let name = function.sql_name();
-                match arg {
-                    None => sea_query::Expr::cust(format!("{name}(*)")),
-                    Some(arg) => {
-                        let arg = self.expr(arg)?;
-                        let distinct = if *distinct { "DISTINCT " } else { "" };
-                        self.custom(&format!("{name}({distinct}{{}})"), vec![arg])
-                    }
+                let arg = match arg {
+                    Some(arg) => self.expr(arg)?,
+                    None => sea_query::Expr::col(Asterisk),
+                };
+                match (function, distinct) {
+                    (AggregateFunction::Count, false) => Func::count(arg).into(),
+                    (AggregateFunction::Count, true) => Func::count_distinct(arg).into(),
+                    (AggregateFunction::Sum, false) => Func::sum(arg).into(),
+                    (AggregateFunction::Avg, false) => Func::avg(arg).into(),
+                    (AggregateFunction::Min, false) => Func::min(arg).into(),
+                    (AggregateFunction::Max, false) => Func::max(arg).into(),
+                    (function, true) => self.custom(
+                        &format!("{}(DISTINCT {{}})", function.sql_name()),
+                        vec![arg],
+                    ),
                 }
             }
             Expr::Arithmetic { left, op, right } => {
                 let left = self.expr(left)?;
                 let right = self.expr(right)?;
-                let op = match op {
-                    crate::ir::ArithmeticOp::Add => "+",
-                    crate::ir::ArithmeticOp::Sub => "-",
-                    crate::ir::ArithmeticOp::Mul => "*",
-                    crate::ir::ArithmeticOp::Div => "/",
-                };
-                self.custom(&format!("({{}} {op} {{}})"), vec![left, right])
+                match op {
+                    crate::ir::ArithmeticOp::Add => left.add(right),
+                    crate::ir::ArithmeticOp::Sub => left.sub(right),
+                    crate::ir::ArithmeticOp::Mul => left.mul(right),
+                    crate::ir::ArithmeticOp::Div => left.div(right),
+                }
             }
             Expr::Subquery(query) => {
                 let select = self.select(query)?;

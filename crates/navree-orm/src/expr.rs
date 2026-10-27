@@ -10,7 +10,7 @@
 //!     .select_expr(Expr::time_bucket("1 hour", Expr::col("taken_at")), "bucket")
 //!     .select_expr(Expr::first(Expr::col("celsius"), Expr::col("taken_at")), "opening")
 //!     .select_expr(Expr::last(Expr::col("celsius"), Expr::col("taken_at")), "closing")
-//!     .group_by("bucket")
+//!     .group_by(["bucket"])
 //!     .order_by("bucket");
 //! let sql = query.to_sql(Dialect::Postgres).unwrap();
 //! assert_eq!(

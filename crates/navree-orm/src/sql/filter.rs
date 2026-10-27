@@ -101,8 +101,10 @@ impl Compiler {
                 options,
             } => self.full_text(columns, query, options)?,
             Where::Raw { sql, values } => {
+                // Parenthesized: a fragment with an `OR` must not regroup
+                // the conditions around it.
                 let sql = raw_sql(sql, values.len(), self.dialect)?;
-                sea_query::Expr::cust_with_values(sql, values.iter().cloned())
+                sea_query::Expr::cust_with_values(format!("({sql})"), values.iter().cloned())
             }
             Where::Sql(condition) => return Ok(condition.clone()),
             Where::Invalid(message) => return Err(OrmError::invalid(message.clone())),
