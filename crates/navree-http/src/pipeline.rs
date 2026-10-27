@@ -273,6 +273,9 @@ pub(crate) async fn timeout(
     tokio::pin!(run);
     loop {
         tokio::select! {
+            // The request first: one that finishes in its first poll never
+            // arms the timer.
+            biased;
             response = &mut run => return response,
             () = tokio::time::sleep_until(deadline) => {
                 if let Some(route) = route_timeout.0.get() {

@@ -147,6 +147,34 @@ impl BenchController {
 #[module(controllers = [BenchController])]
 pub struct BenchModule;
 
+#[injectable]
+pub struct JsonOnly;
+
+#[controller("!/")]
+impl JsonOnly {
+    #[get("/json")]
+    #[public]
+    async fn json(&self) -> Json<Message> {
+        Json(Message {
+            message: "Hello, World!",
+        })
+    }
+}
+
+#[module(controllers = [JsonOnly])]
+pub struct JsonOnlyModule;
+
+async fn experiment(http: HttpOptions) -> (App, navree::axum::Router) {
+    let app = Navree::app()
+        .module(HttpModule::for_root(http))
+        .module(JsonOnlyModule)
+        .boot()
+        .await
+        .expect("boots");
+    let router = build_router(app.ctx()).await.expect("router");
+    (app, router)
+}
+
 /// The booted app and its router; the temporary directory holds the
 /// SQLite file and the (absent) maintenance file.
 struct Bench {
@@ -272,8 +300,32 @@ fn pipeline(c: &mut Criterion) {
     });
     group.finish();
 
+    let dir = tempfile::tempdir().unwrap();
+    let base = HttpOptions { per_ip_rate_limit: Some(1_000_000_000), maintenance_file: dir.path().join("down"), ..HttpOptions::default() };
+    let variants = [
+        ("http_only", base.clone()),
+        ("no_limit", HttpOptions { per_ip_rate_limit: None, ..base.clone() }),
+        ("no_limit_no_compression", HttpOptions { per_ip_rate_limit: None, compression: false, ..base.clone() }),
+        ("bare_options", HttpOptions { per_ip_rate_limit: None, compression: false, security_headers: false, ..base.clone() }),
+    ];
+    let mut group = c.benchmark_group("experiment");
+    group.measurement_time(Duration::from_secs(3));
+    for (name, options) in variants {
+        let (_app, r) = rt.block_on(experiment(options));
+        group.bench_function(name, |b| {
+            b.to_async(&rt).iter(|| send(r.clone(), get("/json"), StatusCode::OK));
+        });
+    }
+    group.finish();
+
     let mut group = c.benchmark_group("axum");
     group.measurement_time(Duration::from_secs(5));
+    async fn noop(request: navree::axum::extract::Request, next: navree::axum::middleware::Next) -> navree::axum::response::Response { next.run(request).await }
+    let mut layered = bare.clone();
+    for _ in 0..10 { layered = layered.layer(navree::axum::middleware::from_fn(noop)); }
+    group.bench_function("json_10_from_fn", |b| {
+        b.to_async(&rt).iter(|| send(layered.clone(), get("/json"), StatusCode::OK));
+    });
     group.bench_function("json", |b| {
         b.to_async(&rt)
             .iter(|| send(bare.clone(), get("/json"), StatusCode::OK));

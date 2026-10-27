@@ -85,6 +85,50 @@ fn generated_request_ids_are_valid_and_unique() {
 }
 
 #[test]
+fn generated_request_ids_are_uuid_v7_in_time_order_without_a_shared_lock() {
+    let ids: Vec<RequestId> = (0..1000).map(|_| RequestId::generate()).collect();
+    for id in &ids {
+        let uuid = uuid::Uuid::parse_str(id.as_str()).expect("a uuid in simple form");
+        assert_eq!(uuid.get_version_num(), 7, "{id}");
+    }
+    assert!(
+        ids.windows(2).all(|pair| pair[0].as_str() < pair[1].as_str()),
+        "one thread's ids sort in the order they were made"
+    );
+    // Threads generate on their own, and never collide.
+    let mut all: Vec<String> = std::thread::scope(|scope| {
+        let threads: Vec<_> = (0..4)
+            .map(|_| {
+                scope.spawn(|| {
+                    (0..1000)
+                        .map(|_| RequestId::generate().as_str().to_owned())
+                        .collect::<Vec<_>>()
+                })
+            })
+            .collect();
+        threads
+            .into_iter()
+            .flat_map(|thread| thread.join().expect("thread"))
+            .collect()
+    });
+    let count = all.len();
+    all.sort();
+    all.dedup();
+    assert_eq!(all.len(), count, "no duplicates across threads");
+}
+
+#[test]
+fn request_id_clones_share_the_text() {
+    let id = RequestId::generate();
+    let clone = id.clone();
+    assert_eq!(clone, id);
+    assert!(
+        std::ptr::eq(id.as_str(), clone.as_str()),
+        "a clone is a reference count, not a new string"
+    );
+}
+
+#[test]
 fn parse_or_generate_keeps_valid_ids_and_replaces_forged_ones() {
     assert_eq!(
         RequestId::parse_or_generate(Some("trace-1")).as_str(),
