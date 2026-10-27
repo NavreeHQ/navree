@@ -39,9 +39,13 @@ pub trait HasMedia {
 
     /// The model's table. When it is set and the model is registered with
     /// [`MediaModule::for_feature`](crate::MediaModule::for_feature),
-    /// deleting a row through `Repo` deletes its media in the same commit
-    /// (rows) and right after it (files). Empty by default: delete media
-    /// yourself with [`Media::delete_all`](crate::Media::delete_all).
+    /// deleting a row through the unit of work (a navree-orm record's
+    /// `delete`, `Model::destroy`, `Repo::delete`: the deletes that record
+    /// change events) deletes its media in the same commit (rows) and
+    /// right after it (files). Empty by default: delete media yourself
+    /// with [`Media::delete_all`](crate::Media::delete_all), as you do for
+    /// bulk deletes, which record no change events, and for models with a
+    /// `deleted_at` column, whose soft deletes keep their media.
     const MEDIA_TABLE: &'static str = "";
 
     /// The record's key in the `model_id` column. For automatic deletion it
