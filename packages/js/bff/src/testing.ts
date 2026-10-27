@@ -112,3 +112,41 @@ export function unsignedJwt(claims: Record<string, unknown>): string {
     btoa(JSON.stringify(value)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   return `${encode({ alg: "none", typ: "JWT" })}.${encode(claims)}.`;
 }
+
+/**
+ * The scripted API of {@link fakeNavree} on a real port of 127.0.0.1, for
+ * end-to-end tests of a running app (point `NAVREE_API_URL` at `url`).
+ */
+export async function serveFakeNavree(routes: Record<string, FakeRoute>): Promise<{
+  url: string;
+  calls: RecordedCall[];
+  close: () => Promise<void>;
+}> {
+  const { createServer } = await import("node:http");
+  const api = fakeNavree(routes);
+  const server = createServer(async (req, res) => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(chunk as Buffer);
+    const headers = new Headers();
+    for (const [name, value] of Object.entries(req.headers)) {
+      if (typeof value === "string") headers.set(name, value);
+      else if (Array.isArray(value)) headers.set(name, value.join(", "));
+    }
+    const body = chunks.length > 0 ? Buffer.concat(chunks).toString("utf8") : undefined;
+    const response = await api.fetch(`http://${req.headers.host}${req.url}`, { method: req.method, headers, body });
+    res.statusCode = response.status;
+    response.headers.forEach((value, name) => {
+      if (name !== "set-cookie") res.setHeader(name, value);
+    });
+    const setCookies = response.headers.getSetCookie();
+    if (setCookies.length > 0) res.setHeader("set-cookie", setCookies);
+    res.end(Buffer.from(await response.arrayBuffer()));
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address() as { port: number };
+  return {
+    url: `http://127.0.0.1:${address.port}`,
+    calls: api.calls,
+    close: () => new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve()))),
+  };
+}

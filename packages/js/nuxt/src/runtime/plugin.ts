@@ -11,9 +11,11 @@ export interface NavreeApp {
   auth: NavreeAuth<unknown>;
   workspace: Workspace;
   client: NavreeClient<object>;
-  /** Same-origin requests through the BFF (on the server: Nitro's local fetch with the browser's cookies). */
+  /** Same-origin requests through the BFF (on the server: in-process, with the browser's cookies). */
   fetch: (path: string, init?: RequestInit) => Promise<Response>;
 }
+
+type EventFetch = (path: string, init?: RequestInit) => Promise<Response>;
 
 export default defineNuxtPlugin({
   name: "navree",
@@ -22,10 +24,11 @@ export default defineNuxtPlugin({
     const config = useRuntimeConfig().public.navree;
     const event = import.meta.server ? useRequestEvent() : undefined;
     const origin = import.meta.server ? useRequestURL().origin : "";
+    // Nitro's event.fetch serves a path in-process and adds the browser's request headers (its cookies) under ours.
+    const eventFetch = event ? ((event as unknown as { fetch: EventFetch }).fetch as EventFetch) : undefined;
 
-    // On the server, Nitro's event.fetch calls the BFF routes in-process and forwards the browser's cookies.
-    const send = (path: string, init?: RequestInit): Promise<Response> =>
-      event ? (event as unknown as { fetch: (input: string, init?: RequestInit) => Promise<Response> }).fetch(path, init) : globalThis.fetch(path, { credentials: "same-origin", ...init });
+    const send: EventFetch = (path, init) =>
+      eventFetch ? eventFetch(path, init) : globalThis.fetch(path, { credentials: "same-origin", ...init });
 
     const auth = createNavreeAuth<unknown>({
       fetch: send,
@@ -44,7 +47,18 @@ export default defineNuxtPlugin({
       baseUrl: origin,
       workspace: () => workspace.workspace.value,
       workspaceHeader: config.workspaceHeader,
-      fetch: event ? (request) => (event as unknown as { fetch: (input: Request) => Promise<Response> }).fetch(request) : undefined,
+      // On the server, send the client's request to the BFF in-process: as a path, with its own headers and body.
+      fetch: eventFetch
+        ? async (request) => {
+            const url = new URL(request.url);
+            const method = request.method.toUpperCase();
+            return eventFetch(url.pathname + url.search, {
+              method,
+              headers: Object.fromEntries(request.headers),
+              body: method === "GET" || method === "HEAD" ? undefined : await request.arrayBuffer(),
+            });
+          }
+        : undefined,
       onUnauthorized: () => {
         if (import.meta.client) void navigateTo(`${config.loginPath}?next=${encodeURIComponent(location.pathname + location.search)}`);
       },
