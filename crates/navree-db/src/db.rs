@@ -67,8 +67,9 @@ tokio::task_local! {
     static USING_WRITER: bool;
 }
 
-/// The name of the main connection.
-pub(crate) const DEFAULT_CONNECTION: &str = "default";
+/// The name of the main connection (the `database` section itself, beside
+/// the named ones of `[database.connections.<name>]`).
+pub const DEFAULT_CONNECTION: &str = "default";
 
 /// The connections of a pool: how many are open, how many idle, and the
 /// most the pool opens ([`Db::pool_stats`]).
@@ -199,6 +200,42 @@ impl Db {
     /// (`[database.connections.<name>]`).
     pub fn name(&self) -> &str {
         &self.inner.name
+    }
+
+    /// Whether this is the default connection.
+    pub fn is_default(&self) -> bool {
+        self.name() == DEFAULT_CONNECTION
+    }
+
+    /// Connection `name` of the app this connection belongs to: this one
+    /// when `name` is its own, else that connection from the app's
+    /// [`DbConnections`](crate::DbConnections) (opened on first use).
+    ///
+    /// Fails for a name the app does not configure, and for any other name
+    /// when this `Db` belongs to no app (one made with
+    /// [`connect`](Db::connect)): connect that database yourself.
+    ///
+    /// ```no_run
+    /// # async fn demo(db: navree_db::Db) -> Result<(), sea_orm::DbErr> {
+    /// let analytics = db.connection("analytics").await?;
+    /// assert_eq!(analytics.name(), "analytics");
+    /// # Ok(()) }
+    /// ```
+    pub async fn connection(&self, name: &str) -> Result<Db, DbErr> {
+        if name == self.name() {
+            return Ok(self.clone());
+        }
+        let Some(app) = self.app() else {
+            return Err(DbErr::Custom(format!(
+                "no database connection named `{name}`: this connection (`{}`) belongs to no app that configures others",
+                self.name()
+            )));
+        };
+        let connections = app
+            .get::<crate::DbConnections>()
+            .await
+            .map_err(|error| DbErr::Custom(format!("database connection `{name}`: {error}")))?;
+        Ok(Db::clone(&*connections.get(name).await?))
     }
 
     /// How many read replicas the connection has.

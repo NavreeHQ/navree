@@ -1160,6 +1160,12 @@ pub struct QueryIr {
     pub unions: Vec<Union>,
     /// At most so many rows per group (top N per parent).
     pub group_limit: Option<GroupLimit>,
+    /// The connection the query runs on (`on_connection`), whatever its
+    /// model's or the executor's (see [`Route`](crate::Route)).
+    pub connection: Option<Cow<'static, str>>,
+    /// Reads go to the writer even where read replicas exist
+    /// (`use_write`).
+    pub use_writer: bool,
     /// Problems found while building the query; it fails with them when
     /// it runs.
     pub errors: Vec<String>,
@@ -1182,8 +1188,19 @@ impl QueryIr {
             lock: None,
             unions: Vec::new(),
             group_limit: None,
+            connection: None,
+            use_writer: false,
             errors: Vec::new(),
         }
+    }
+
+    /// Where the query asks to run: its connection (`on_connection`),
+    /// `model`'s connection, and whether reads go to the writer.
+    pub fn route(&self, model: Option<&'static str>) -> crate::Route<'_> {
+        crate::Route::new()
+            .on(self.connection.as_deref())
+            .for_model(model)
+            .writer(self.use_writer)
     }
 
     /// The first problem found while building, as an error.

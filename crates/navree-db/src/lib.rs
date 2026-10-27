@@ -97,7 +97,7 @@ mod text;
 mod uow;
 
 pub use connections::DbConnections;
-pub use db::{Db, PoolStats};
+pub use db::{DEFAULT_CONNECTION, Db, PoolStats};
 pub use http::map_db_error;
 pub use migrate::{
     FreshOptions, LoadedDump, MIGRATIONS_TABLE, MigrateOptions, MigrationError, MigrationReport,

@@ -247,7 +247,7 @@ impl<M: Model> Collection<M> {
         if keys.is_empty() {
             return Ok(Collection::new());
         }
-        let target = exec.target(Access::Read).await?;
+        let target = exec.target_routed(Access::Read, crate::query::model_route::<M>()).await?;
         let mut fresh = Builder::<M>::new()
             .without_global_scopes()
             .where_key_in(keys.clone())

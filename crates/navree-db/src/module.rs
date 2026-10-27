@@ -15,11 +15,14 @@ use sea_orm::DbErr;
 use crate::http::{map_db_error, uow_layer};
 use crate::migrate::{self, MigrationSet, commands};
 use crate::seed::run_seeders;
-use crate::{ChangeObserver, Db, DbConnections, DbOptions, Seeder};
+use crate::{ChangeObserver, DEFAULT_CONNECTION, Db, DbConnections, DbOptions, Seeder};
 
 /// The database module. Global; provides and exports [`Db`],
 /// [`DbOptions`] and [`DbConnections`] (the named connections of
-/// `[database.connections.<name>]`); contributes the unit-of-work layer
+/// `[database.connections.<name>]`), and each connection as a named `Db`
+/// (`ctx.get_named::<Db>("default")`; the named ones too when
+/// [`for_root`](DatabaseModule::for_root) gives them, since configured ones
+/// are known only at boot); contributes the unit-of-work layer
 /// ([`LayerSlot::Uow`](navree_http::LayerSlot::Uow)), the `DbErr` → error
 /// mapping and the `database` health check (a `dyn HealthCheck`
 /// multi-binding); registers the commands `migrate`, `migrate:install`,
@@ -89,6 +92,29 @@ impl Module for ConfiguredDatabaseModule {
 
 fn register(m: &mut ModuleBuilder, options: Option<DbOptions>) {
     m.global();
+    // Each connection is also a named `Db` provider: `default` always, the
+    // named ones when the options are given in code (configured ones are
+    // known only at boot; `DbConnections` reaches them).
+    let mut names = vec![DEFAULT_CONNECTION.to_owned()];
+    if let Some(options) = &options {
+        names.extend(options.connections.keys().cloned());
+    }
+    for name in names {
+        let key = ProviderKey::named::<Db>(name.clone());
+        let lookup = name.clone();
+        m.factory(
+            ProviderFactory::<Db>::new(move |r: Resolver| {
+                let name = lookup.clone();
+                async move {
+                    let connections = r.get::<DbConnections>().await?;
+                    Ok(connections.get(&name).await?)
+                }
+            })
+            .named(name)
+            .deps(vec![ProviderKey::of::<DbConnections>()]),
+        )
+        .export_key(key);
+    }
     match options {
         Some(options) => m.value(options),
         None => m.factory(

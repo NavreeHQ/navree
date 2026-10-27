@@ -444,8 +444,12 @@ impl TableBuilder {
     }
 
     /// Runs `insert` (split under the bind limit) where `exec` writes.
-    async fn run_insert<E: Executor + ?Sized>(exec: &E, insert: InsertIr) -> Result<InsertOutcome> {
-        let target = exec.target(Access::Write).await?;
+    async fn run_insert<E: Executor + ?Sized>(
+        exec: &E,
+        route: crate::Route<'_>,
+        insert: InsertIr,
+    ) -> Result<InsertOutcome> {
+        let target = exec.target_routed(Access::Write, route).await?;
         let parts = split(insert, target.dialect());
         run_inserts(&target, parts).await
     }
@@ -476,7 +480,7 @@ impl TableBuilder {
             return Ok(0);
         }
         let insert = InsertIr::new(table, rows.columns, rows.values);
-        Ok(Self::run_insert(exec, insert).await?.rows_affected)
+        Ok(Self::run_insert(exec, self.route(), insert).await?.rows_affected)
     }
 
     /// Inserts one row and returns its `id` column, read back with
@@ -509,7 +513,7 @@ impl TableBuilder {
         let rows = Rows::collect(&table, [row])?;
         let insert = InsertIr::new(table.clone(), rows.columns, rows.values)
             .returning(vec![Cow::Owned(column.to_owned())]);
-        let outcome = Self::run_insert(exec, insert).await?;
+        let outcome = Self::run_insert(exec, self.route(), insert).await?;
         returned_key(&outcome, &table, column)
     }
 
@@ -534,7 +538,7 @@ impl TableBuilder {
         }
         let insert = InsertIr::new(table, rows.columns, rows.values)
             .on_conflict(OnConflict::Ignore { target: Vec::new() });
-        Ok(Self::run_insert(exec, insert).await?.rows_affected)
+        Ok(Self::run_insert(exec, self.route(), insert).await?.rows_affected)
     }
 
     /// Inserts `rows`, skipping the ones that conflict on the unique index
@@ -575,7 +579,7 @@ impl TableBuilder {
         if rows.values.is_empty() {
             return Ok(Vec::new());
         }
-        let target = exec.target(Access::Write).await?;
+        let target = exec.target_routed(Access::Write, self.route()).await?;
         if target.dialect() == Some(Dialect::MySql) {
             return Err(OrmError::unsupported(
                 "returning the rows of an insert (MySQL has no RETURNING; use insert_or_ignore, then select the rows)",
@@ -611,7 +615,7 @@ impl TableBuilder {
         let table = self.insert_table("insert")?;
         let mut insert = InsertIr::new(table, columns.into_iter().map(Into::into).collect(), Vec::new());
         insert.select = Some(Box::new(query.into_query()));
-        Ok(Self::run_insert(exec, insert).await?.rows_affected)
+        Ok(Self::run_insert(exec, self.route(), insert).await?.rows_affected)
     }
 
     /// [`insert_using`](Self::insert_using), skipping the rows that
@@ -626,7 +630,7 @@ impl TableBuilder {
         let mut insert = InsertIr::new(table, columns.into_iter().map(Into::into).collect(), Vec::new())
             .on_conflict(OnConflict::Ignore { target: Vec::new() });
         insert.select = Some(Box::new(query.into_query()));
-        Ok(Self::run_insert(exec, insert).await?.rows_affected)
+        Ok(Self::run_insert(exec, self.route(), insert).await?.rows_affected)
     }
 
     /// Inserts `rows`; a row that conflicts on the unique index of
@@ -678,7 +682,7 @@ impl TableBuilder {
         let sets = conflict_sets(&rows.columns, &unique_by, &[], update)?;
         let insert = InsertIr::new(table, rows.columns, rows.values)
             .on_conflict(upsert_conflict(unique_by, sets));
-        Ok(Self::run_insert(exec, insert).await?.rows_affected)
+        Ok(Self::run_insert(exec, self.route(), insert).await?.rows_affected)
     }
 
     /// Updates the rows matching `attributes` with the assignments
@@ -717,7 +721,7 @@ impl TableBuilder {
             .iter()
             .fold(self, |query, attribute| query.where_(attribute.to_filter(None)));
         // Read and write through the same connection (the unit of work's).
-        let target = exec.target(Access::Write).await?;
+        let target = exec.target_routed(Access::Write, query.route()).await?;
         let exists = target.exists(query.ir()).await?;
         let values: Vec<Assignment> = values(exists).into_iter().collect();
         if exists {
@@ -782,7 +786,7 @@ impl TableBuilder {
             .into_iter()
             .map(|assignment| assignment.into_set().map_err(OrmError::invalid))
             .collect::<Result<Vec<_>>>()?;
-        let target = exec.target(Access::Write).await?;
+        let target = exec.target_routed(Access::Write, self.route()).await?;
         update_from_on(&target, self.into_ir(), sets).await
     }
 
@@ -790,7 +794,7 @@ impl TableBuilder {
     /// per database); on MySQL this commits the open transaction.
     pub async fn truncate<E: Executor + ?Sized>(self, exec: &E) -> Result<()> {
         let table = self.insert_table("truncate")?;
-        let target = exec.target(Access::Write).await?;
+        let target = exec.target_routed(Access::Write, self.route()).await?;
         truncate_table(&target, &table, false).await
     }
 
@@ -798,7 +802,7 @@ impl TableBuilder {
     /// foreign keys reference this one (`CASCADE`, PostgreSQL only).
     pub async fn truncate_cascade<E: Executor + ?Sized>(self, exec: &E) -> Result<()> {
         let table = self.insert_table("truncate")?;
-        let target = exec.target(Access::Write).await?;
+        let target = exec.target_routed(Access::Write, self.route()).await?;
         if target.dialect() != Some(Dialect::Postgres) {
             return Err(OrmError::unsupported(
                 "TRUNCATE … CASCADE",
@@ -898,10 +902,11 @@ fn model_inserts<M: Model>(models: &[M]) -> Result<Vec<InsertIr>> {
 }
 
 impl<M: Model> Builder<M> {
-    /// Runs the inserts of `models`, each handling conflicts with
-    /// `on_conflict` (given the insert's columns).
+    /// Runs the inserts of `models` where `route` asks, each handling
+    /// conflicts with `on_conflict` (given the insert's columns).
     async fn insert_models<E: Executor + ?Sized>(
         exec: &E,
+        route: crate::Route<'_>,
         models: Option<Vec<M>>,
         fill_models: bool,
         on_conflict: impl Fn(&[Cow<'static, str>]) -> Result<Option<OnConflict>>,
@@ -909,7 +914,7 @@ impl<M: Model> Builder<M> {
         let Some(models) = models.filter(|models| !models.is_empty()) else {
             return Ok(0);
         };
-        let target = exec.target(Access::Write).await?;
+        let target = exec.target_routed(Access::Write, route).await?;
         let models = if fill_models {
             fill(models, target.context().now().await)?
         } else {
@@ -934,7 +939,7 @@ impl<M: Model> Builder<M> {
         exec: &E,
         models: impl IntoIterator<Item = M>,
     ) -> Result<u64> {
-        Self::insert_models(exec, Some(models.into_iter().collect()), false, |_| Ok(None)).await
+        Self::insert_models(exec, self.route(), Some(models.into_iter().collect()), false, |_| Ok(None)).await
     }
 
     /// [`insert`](Self::insert), skipping the models that conflict with a
@@ -944,7 +949,7 @@ impl<M: Model> Builder<M> {
         exec: &E,
         models: impl IntoIterator<Item = M>,
     ) -> Result<u64> {
-        Self::insert_models(exec, Some(models.into_iter().collect()), false, |_| {
+        Self::insert_models(exec, self.route(), Some(models.into_iter().collect()), false, |_| {
             Ok(Some(OnConflict::Ignore { target: Vec::new() }))
         })
         .await
@@ -959,7 +964,7 @@ impl<M: Model> Builder<M> {
         exec: &E,
         models: impl IntoIterator<Item = M>,
     ) -> Result<Vec<M>> {
-        let target = exec.target(Access::Read).await?;
+        let target = exec.target_routed(Access::Read, self.route()).await?;
         fill(models, target.context().now().await)
     }
 
@@ -980,7 +985,7 @@ impl<M: Model> Builder<M> {
         exec: &E,
         models: impl IntoIterator<Item = M>,
     ) -> Result<u64> {
-        Self::insert_models(exec, Some(models.into_iter().collect()), true, |_| Ok(None)).await
+        Self::insert_models(exec, self.route(), Some(models.into_iter().collect()), true, |_| Ok(None)).await
     }
 
     /// [`fill_and_insert`](Self::fill_and_insert), skipping the models that
@@ -990,7 +995,7 @@ impl<M: Model> Builder<M> {
         exec: &E,
         models: impl IntoIterator<Item = M>,
     ) -> Result<u64> {
-        Self::insert_models(exec, Some(models.into_iter().collect()), true, |_| {
+        Self::insert_models(exec, self.route(), Some(models.into_iter().collect()), true, |_| {
             Ok(Some(OnConflict::Ignore { target: Vec::new() }))
         })
         .await
@@ -1004,7 +1009,7 @@ impl<M: Model> Builder<M> {
         model: M,
     ) -> Result<M::Key> {
         let meta = M::meta();
-        let target = exec.target(Access::Write).await?;
+        let target = exec.target_routed(Access::Write, self.route()).await?;
         let mut filled = fill([model], target.context().now().await)?;
         let model = filled.remove(0);
         let assigned = meta.key_kind() == KeyKind::Increments && model.key().is_empty();
@@ -1062,7 +1067,7 @@ impl<M: Model> Builder<M> {
         let update: Vec<ConflictUpdate> = update.into_iter().map(Into::into).collect();
         let mut skipped = vec![meta.key_column()];
         skipped.extend(meta.created_at());
-        Self::insert_models(exec, Some(models.into_iter().collect()), true, |columns| {
+        Self::insert_models(exec, self.route(), Some(models.into_iter().collect()), true, |columns| {
             if update.is_empty() {
                 return Ok(Some(OnConflict::Ignore {
                     target: unique_by.clone(),
@@ -1089,7 +1094,7 @@ impl<M: Model> Builder<M> {
         exec: &E,
         assignments: impl IntoIterator<Item = Assignment>,
     ) -> Result<u64> {
-        let target = exec.target(Access::Write).await?;
+        let target = exec.target_routed(Access::Write, self.route()).await?;
         let now = target.context().now().await;
         let sets = Self::sets(now, assignments)?;
         let mut ir = self.apply_global_scopes().ir;
@@ -1100,7 +1105,7 @@ impl<M: Model> Builder<M> {
     /// Empties the model's table and restarts its identity (no hooks; see
     /// [`TableBuilder::truncate`]).
     pub async fn truncate<E: Executor + ?Sized>(self, exec: &E) -> Result<()> {
-        let target = exec.target(Access::Write).await?;
+        let target = exec.target_routed(Access::Write, self.route()).await?;
         truncate_table(&target, M::meta().table(), false).await
     }
 }
@@ -1143,7 +1148,7 @@ impl<M: Model> crate::record::Record<M> {
             .into_iter()
             .map(|column| Cow::Owned(column.column_name().into_owned()))
             .collect();
-        let target = exec.target(Access::Write).await?;
+        let target = exec.target_routed(Access::Write, crate::query::model_route::<M>()).await?;
         crate::persist::save_new(
             &target,
             self,

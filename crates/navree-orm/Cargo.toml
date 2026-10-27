@@ -39,15 +39,17 @@ sea-query = { workspace = true, features = ["backend-mysql", "with-rust_decimal"
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+# The task-local connection of `using_connection`.
+tokio = { workspace = true }
 tracing = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
 insta = { workspace = true }
 navree-config = { workspace = true }
+navree-telemetry = { workspace = true }
 navree-testing = { workspace = true }
 tempfile = { workspace = true }
-tokio = { workspace = true }
 trybuild = { workspace = true }
 
 # Real-server tests: each skips with a notice unless NAVREE_TEST_POSTGRES_URL

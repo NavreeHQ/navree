@@ -120,7 +120,10 @@ pub use column::{
 };
 pub use driver::{DocumentDriver, InsertOutcome};
 pub use error::{OrmError, Result};
-pub use exec::{Access, DocumentTarget, ExecContext, Executor, RowsStream, SqlTarget, Target};
+pub use exec::{
+    Access, DocumentTarget, ExecContext, Executor, Route, RowsStream, SqlTarget, Target,
+    scoped_connection, using_connection, using_writer,
+};
 pub use raw::{Raw, affecting_statement, raw, scalar, select, select_one, statement, unprepared};
 pub use streams::{RowStream, cursor};
 pub use ir::{Expr, LockMode, VectorMetric};

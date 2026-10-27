@@ -116,6 +116,17 @@ pub enum OrmError {
         /// What went wrong.
         message: String,
     },
+    /// An operation could not run on the connection it names
+    /// (`on_connection`, `#[model(connection = "..")]`): the app configures
+    /// no such connection, or the executor is a unit of work of another
+    /// one.
+    #[error("connection `{connection}`: {message}")]
+    Connection {
+        /// The connection the operation names.
+        connection: Cow<'static, str>,
+        /// What went wrong.
+        message: String,
+    },
 }
 
 impl OrmError {

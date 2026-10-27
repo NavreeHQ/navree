@@ -144,6 +144,51 @@ async fn named_connections_connect_on_first_use() {
 }
 
 #[tokio::test]
+async fn any_connection_reaches_the_others_by_name() {
+    let main = TempDb::new();
+    let analytics = TempDb::new();
+    let mut connections = BTreeMap::new();
+    connections.insert("analytics".to_owned(), analytics.options());
+    let app = Navree::app()
+        .module(DatabaseModule::for_root(DbOptions {
+            connections,
+            ..main.options()
+        }))
+        .boot()
+        .await
+        .unwrap();
+    let db = app.ctx().get::<Db>().await.unwrap();
+    assert!(db.is_default());
+    // Named providers.
+    let named = app.ctx().get_named::<Db>("analytics").await.unwrap();
+    assert_eq!(named.name(), "analytics");
+    assert!(!named.is_default());
+    let default = app.ctx().get_named::<Db>("default").await.unwrap();
+    assert!(std::ptr::eq(default.conn(), db.conn()));
+    // From one connection to another.
+    let reached = db.connection("analytics").await.unwrap();
+    assert!(std::ptr::eq(reached.conn(), named.conn()), "the same pool");
+    let back = named.connection("default").await.unwrap();
+    assert!(std::ptr::eq(back.conn(), db.conn()));
+    assert!(std::ptr::eq(
+        db.connection("default").await.unwrap().conn(),
+        db.conn()
+    ));
+    let unknown = db.connection("reports").await.unwrap_err();
+    assert!(
+        unknown
+            .to_string()
+            .contains("no database connection named `reports`"),
+        "{unknown}"
+    );
+    // A `Db` connected by hand belongs to no app: it knows only itself.
+    let alone = Db::connect(&main.options()).await.unwrap();
+    assert!(alone.connection("default").await.is_ok());
+    let error = alone.connection("analytics").await.unwrap_err();
+    assert!(error.to_string().contains("belongs to no app"), "{error}");
+}
+
+#[tokio::test]
 async fn pool_settings_statistics_and_closing() {
     let temp = TempDb::new();
     let db = Db::connect(&DbOptions {

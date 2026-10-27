@@ -558,6 +558,32 @@ pub trait Model: Clone + Send + Sync + Serialize + 'static {
         Builder::new().where_(filter)
     }
 
+    /// The connection the model lives on (`#[model(connection = "..")]`);
+    /// `None` runs it on the executor's. Given the default `Db`, the
+    /// model's queries and records go to this connection.
+    fn connection_name() -> Option<&'static str> {
+        Self::meta().connection_name()
+    }
+
+    /// A query of the model on connection `name`, whatever the model's
+    /// (see [`Builder::on_connection`]).
+    fn on_connection(name: impl Into<std::borrow::Cow<'static, str>>) -> Builder<Self> {
+        Builder::new().on_connection(name)
+    }
+
+    /// A query of the model reading from the writer, even where read
+    /// replicas exist (see [`Builder::use_write`]).
+    ///
+    /// ```no_run
+    /// # use navree_orm::__doc_models::*;
+    /// # async fn demo(db: Db, id: Uuid) -> Result<()> {
+    /// let current = Deal::on_write_connection().find(&db, id).await?;
+    /// # Ok(()) }
+    /// ```
+    fn on_write_connection() -> Builder<Self> {
+        Builder::new().use_write()
+    }
+
     /// Every record.
     fn all<E: Executor + ?Sized>(
         exec: &E,

@@ -208,6 +208,12 @@ impl<M: Model> Builder<M> {
         }
     }
 
+    /// Where the query asks to run: the connection it names, the model's
+    /// connection, and whether its reads go to the writer.
+    pub(crate) fn route(&self) -> crate::Route<'_> {
+        self.ir.route(M::meta().connection_name())
+    }
+
     /// Records a problem found while building; the query fails with it
     /// when it runs.
     pub(crate) fn with_error(mut self, message: String) -> Self {
@@ -332,6 +338,12 @@ pub(crate) fn read_access(query: &QueryIr) -> crate::exec::Access {
     } else {
         crate::exec::Access::Read
     }
+}
+
+/// Where an operation of model `M` that has no query runs (a record's
+/// save, delete or refresh): on the model's connection.
+pub(crate) fn model_route<M: Model>() -> crate::Route<'static> {
+    crate::Route::new().for_model(M::meta().connection_name())
 }
 
 /// The model's key column, qualified by its table.
