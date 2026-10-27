@@ -44,6 +44,8 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
+# OpenAPI schemas of models and pages.
+utoipa = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]

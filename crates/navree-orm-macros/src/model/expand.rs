@@ -6,7 +6,9 @@ use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use syn::Type;
 
-use super::{Cast, Column, KeyType, Model, plain_name};
+use super::attributes::{self, MultiPart};
+use super::{Column, KeyType, Model, option_inner, plain_name};
+use crate::errors::Errors;
 
 /// The type as written, without the token spacing (`Option<DateTime<Utc>>`).
 fn type_text(ty: &Type) -> String {
@@ -21,91 +23,142 @@ fn type_text(ty: &Type) -> String {
         .replace("& ", "&")
 }
 
-/// The path of a cast type.
-fn cast_type(cast: &Cast, krate: &TokenStream) -> TokenStream {
-    match cast {
-        Cast::Json => quote!(#krate::cast::AsJson),
-        Cast::StringEnum => quote!(#krate::cast::StringEnum),
-        Cast::IntEnum => quote!(#krate::cast::IntEnum),
-        Cast::Path(path) => quote!(#path),
-    }
-}
-
 /// How one column is read, written, converted and typed.
 struct Codec {
-    /// `row -> field` (reading a row).
-    read: TokenStream,
-    /// `&self.field -> Value`.
+    /// `row -> field` (reading a row); `None` for the columns of a
+    /// multi-column field after its first (the first reads them all).
+    read: Option<TokenStream>,
+    /// Pushes `(column, Value)` onto `values` (`None`: the first column of
+    /// a multi-column field pushes them all).
+    push: Option<TokenStream>,
+    /// `&self -> Value` (`value(column)`).
     write: TokenStream,
-    /// `value -> field` (`set_value`).
+    /// `value -> self` (`set_value`).
     convert: TokenStream,
-    /// The column constant's initializer.
+    /// The column constant's type and initializer.
+    constant_type: TokenStream,
     constant: TokenStream,
 }
 
 fn codec(model: &Model, column: &Column, krate: &TokenStream) -> Codec {
+    if let Some(multi) = &column.field.multi {
+        return multi_codec(model, column, multi, krate);
+    }
     let private = quote!(#krate::__private);
     let ident = &column.ident;
     let ty = &column.ty;
     let name = &column.name;
     let table = &model.table;
-    match (&column.cast, &column.inner) {
+    let (read, write, convert, constant) = match (&column.cast, &column.inner) {
         (None, _) => {
             let read = if column.default {
                 quote!(#private::read_or_default::<Self, #ty>(row, #name)?)
             } else {
                 quote!(#private::read::<Self, #ty>(row, #name)?)
             };
-            Codec {
+            (
                 read,
-                write: quote!(#krate::Field::to_value(&self.#ident)),
-                convert: quote!(#private::convert::<Self, #ty>(column, value)?),
-                constant: quote!(#krate::Column::<Self, #ty>::field(#table, #name)),
-            }
+                quote!(#krate::Field::to_value(&self.#ident)),
+                quote!(self.#ident = #private::convert::<Self, #ty>(column, value)?;),
+                quote!(#krate::Column::<Self, #ty>::field(#table, #name)),
+            )
         }
         (Some(cast), None) => {
-            let cast = cast_type(cast, krate);
+            let cast = attributes::cast_type(model, column, cast, krate);
             let read = if column.default {
                 quote!(#private::read_cast_or_default::<Self, #cast, #ty>(row, #name)?)
             } else {
                 quote!(#private::read_cast::<Self, #cast, #ty>(row, #name)?)
             };
-            Codec {
+            (
                 read,
-                write: quote!(#private::write_cast::<Self, #cast, #ty>(#name, &self.#ident)?),
-                convert: quote!(#private::convert_cast::<Self, #cast, #ty>(column, value)?),
-                constant: quote!(#krate::Column::<Self, #ty>::with_codec(
+                quote!(#private::write_cast::<Self, #cast, #ty>(#name, &self.#ident)?),
+                quote!(self.#ident = #private::convert_cast::<Self, #cast, #ty>(column, value)?;),
+                quote!(#krate::Column::<Self, #ty>::with_codec(
                     #table,
                     #name,
                     #private::encode::<#cast, #ty>,
                     #private::decode::<#cast, #ty>,
                 )),
-            }
+            )
         }
         (Some(cast), Some(inner)) => {
-            let cast = cast_type(cast, krate);
+            let cast = attributes::cast_type(model, column, cast, krate);
             let read = if column.default {
                 quote!(#private::read_cast_option_or_default::<Self, #cast, #inner>(row, #name)?)
             } else {
                 quote!(#private::read_cast_option::<Self, #cast, #inner>(row, #name)?)
             };
-            Codec {
+            (
                 read,
-                write: quote!(#private::write_cast_option::<Self, #cast, #inner>(#name, &self.#ident)?),
-                convert: quote!(#private::convert_cast_option::<Self, #cast, #inner>(column, value)?),
-                constant: quote!(#krate::Column::<Self, #ty>::with_codec(
+                quote!(#private::write_cast_option::<Self, #cast, #inner>(#name, &self.#ident)?),
+                quote!(self.#ident = #private::convert_cast_option::<Self, #cast, #inner>(column, value)?;),
+                quote!(#krate::Column::<Self, #ty>::with_codec(
                     #table,
                     #name,
                     #private::encode_option::<#cast, #inner>,
                     #private::decode_option::<#cast, #inner>,
                 )),
-            }
+            )
         }
+    };
+    let push = quote!(values.push((#name, #write)););
+    Codec {
+        read: Some(read),
+        push: Some(push),
+        write,
+        convert,
+        constant_type: quote!(#krate::Column<Self, #ty>),
+        constant,
     }
 }
 
-/// The `Model` impl and the column constants.
-pub(crate) fn expand(model: &Model, krate: &TokenStream) -> TokenStream {
+/// One column of a field stored across several columns.
+fn multi_codec(model: &Model, column: &Column, multi: &MultiPart, krate: &TokenStream) -> Codec {
+    let private = quote!(#krate::__private);
+    let ident = &column.ident;
+    let field_name = plain_name(ident);
+    let name = &column.name;
+    let table = &model.table;
+    let cast = &multi.cast;
+    let value_ty = multi.field_inner.as_ref().unwrap_or(&multi.field_ty);
+    let names = &multi.names;
+    let index = multi.index;
+    let part_ty = &column.ty;
+    let (read_fn, values, replace) = if multi.field_inner.is_some() {
+        (
+            quote!(read_multi_row_option),
+            quote!(#private::write_multi_option::<Self, #cast, #value_ty>(#field_name, &self.#ident)?),
+            quote!(replace_multi_option),
+        )
+    } else {
+        (
+            quote!(read_multi_row),
+            quote!(#private::multi_values::<Self, #cast, #value_ty>(#field_name, &self.#ident)?),
+            quote!(replace_multi),
+        )
+    };
+    let first = index == 0;
+    Codec {
+        read: first.then(|| {
+            quote!(#private::#read_fn::<Self, #cast, #value_ty>(row, #field_name, &[#(#names),*])?)
+        }),
+        push: first.then(|| {
+            quote!(values.extend([#(#names),*].into_iter().zip(#values));)
+        }),
+        write: quote!(#values.swap_remove(#index)),
+        convert: quote! {
+            self.#ident = #private::#replace::<Self, #cast, #value_ty>(#field_name, &self.#ident, column, #index, value)?;
+        },
+        constant_type: quote!(#krate::Column<Self, #part_ty>),
+        constant: quote!(#krate::Column::<Self, #part_ty>::field(#table, #name)),
+    }
+}
+
+/// The `Model` impl, the column constants, the setters and the items
+/// beside the model.
+#[allow(clippy::too_many_lines)]
+pub(crate) fn expand(model: &Model, krate: &TokenStream) -> syn::Result<TokenStream> {
     let ident = &model.ident;
     let vis = &model.vis;
     let private = quote!(#krate::__private);
@@ -124,19 +177,26 @@ pub(crate) fn expand(model: &Model, krate: &TokenStream) -> TokenStream {
         let field = plain_name(&column.ident);
         let rust_type = type_text(&column.ty);
         let mut meta = quote!(#krate::ColumnMeta::new(#name, #field, #rust_type));
-        if column.inner.is_some() {
+        let nullable = match &column.field.multi {
+            Some(multi) => multi.field_inner.is_some() || option_inner(&column.ty).is_some(),
+            None => column.inner.is_some(),
+        };
+        if nullable {
             meta = quote!(#meta.nullable());
         }
-        if let Some(cast) = &column.cast {
-            let cast_name = match cast {
-                Cast::Json => "json".to_owned(),
-                Cast::StringEnum => "string_enum".to_owned(),
-                Cast::IntEnum => "int_enum".to_owned(),
-                Cast::Path(path) => quote!(#path).to_string().replace(' ', ""),
-            };
+        let cast_name = match (&column.field.multi, &column.cast) {
+            (Some(multi), _) => {
+                let cast = &multi.cast;
+                Some(quote!(#cast).to_string().replace(' ', ""))
+            }
+            (None, Some(cast)) => Some(attributes::cast_name(cast)),
+            (None, None) => None,
+        };
+        if let Some(cast_name) = cast_name {
             meta = quote!(#meta.cast(#cast_name));
         }
-        meta
+        let more = attributes::column_meta_calls(model, column, krate);
+        quote!(#meta #more)
     });
     let key_column = &model.columns[model.key];
     let key_name = &key_column.name;
@@ -174,24 +234,25 @@ pub(crate) fn expand(model: &Model, krate: &TokenStream) -> TokenStream {
     if let Some(per_page) = &model.per_page {
         meta = quote!(#meta.per_page(#per_page));
     }
+    let attribute_calls = attributes::meta_calls(model, krate);
+    meta = quote!(#meta #attribute_calls);
 
     // from_row.
-    let reads = model.columns.iter().zip(&codecs).map(|(column, codec)| {
-        let field = &column.ident;
-        let read = &codec.read;
-        quote!(#field: #read)
-    });
+    let reads = model
+        .columns
+        .iter()
+        .zip(&codecs)
+        .filter_map(|(column, codec)| {
+            let field = &column.ident;
+            codec.read.as_ref().map(|read| quote!(#field: #read))
+        });
     let skipped = model
         .skipped
         .iter()
         .map(|field| quote!(#field: ::core::default::Default::default()));
 
     // values / value / set_value.
-    let values = model.columns.iter().zip(&codecs).map(|(column, codec)| {
-        let name = &column.name;
-        let write = &codec.write;
-        quote!((#name, #write))
-    });
+    let pushes = codecs.iter().filter_map(|codec| codec.push.as_ref());
     let value_arms = model.columns.iter().zip(&codecs).map(|(column, codec)| {
         let name = &column.name;
         let write = &codec.write;
@@ -199,10 +260,9 @@ pub(crate) fn expand(model: &Model, krate: &TokenStream) -> TokenStream {
     });
     let set_arms = model.columns.iter().zip(&codecs).map(|(column, codec)| {
         let name = &column.name;
-        let field = &column.ident;
         let convert = &codec.convert;
         quote!(#name => {
-            self.#field = #convert;
+            #convert
             ::core::result::Result::Ok(())
         })
     });
@@ -292,14 +352,18 @@ pub(crate) fn expand(model: &Model, krate: &TokenStream) -> TokenStream {
         }
     };
 
-    // Column constants.
+    // Column constants: one per column, named after the field (after the
+    // column for the columns of a multi-column field).
     let constants = model.columns.iter().zip(&codecs).map(|(column, codec)| {
-        let constant = format_ident!(
-            "{}",
-            plain_name(&column.ident).to_shouty_snake_case(),
-            span = column.ident.span()
-        );
-        let ty = &column.ty;
+        let constant = match &column.field.multi {
+            Some(_) => attributes::part_constant(&column.name, column.ident.span()),
+            None => format_ident!(
+                "{}",
+                plain_name(&column.ident).to_shouty_snake_case(),
+                span = column.ident.span()
+            ),
+        };
+        let constant_type = &codec.constant_type;
         let init = &codec.constant;
         let doc = format!(
             "The `{}` column (`{}.{}`).",
@@ -309,11 +373,17 @@ pub(crate) fn expand(model: &Model, krate: &TokenStream) -> TokenStream {
         );
         quote! {
             #[doc = #doc]
-            #vis const #constant: #krate::Column<Self, #ty> = #init;
+            #vis const #constant: #constant_type = #init;
         }
     });
 
-    quote! {
+    let attribute_items = attributes::trait_items(model, krate);
+    let mut errors = Errors::default();
+    let setters = attributes::inherent_items(model, &mut errors);
+    errors.finish()?;
+    let module_items = attributes::module_items(model, krate);
+
+    Ok(quote! {
         #[automatically_derived]
         impl #krate::Model for #ident {
             type Key = #key_ty;
@@ -339,8 +409,11 @@ pub(crate) fn expand(model: &Model, krate: &TokenStream) -> TokenStream {
                 })
             }
 
+            #[allow(clippy::vec_init_then_push)]
             fn values(&self) -> #krate::Result<::std::vec::Vec<(&'static str, #krate::Value)>> {
-                ::core::result::Result::Ok(::std::vec![#(#values),*])
+                let mut values = ::std::vec::Vec::with_capacity(#column_count);
+                #(#pushes)*
+                ::core::result::Result::Ok(values)
             }
 
             fn value(&self, column: &str) -> #krate::Result<::core::option::Option<#krate::Value>> {
@@ -374,13 +447,19 @@ pub(crate) fn expand(model: &Model, krate: &TokenStream) -> TokenStream {
             }
 
             #global_scopes
+
+            #attribute_items
         }
 
         #[automatically_derived]
         impl #ident {
             #(#constants)*
+
+            #setters
         }
-    }
+
+        #module_items
+    })
 }
 
 #[cfg(test)]

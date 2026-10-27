@@ -1617,4 +1617,55 @@ pub mod derive_support {
     pub fn accessor_json<T: Serialize>(value: &T) -> Result<serde_json::Value, CastError> {
         serde_json::to_value(value).map_err(|error| CastError::new(error.to_string()))
     }
+
+    /// The JSON inside a stored value, if it is JSON.
+    pub fn stored_json(value: Value) -> Option<serde_json::Value> {
+        match value {
+            Value::Json(Some(json)) => Some(*json),
+            _ => None,
+        }
+    }
+
+    /// The OpenAPI schema of `T`, as JSON Schema (`#[model(schema = T)]`).
+    pub fn schema_json<T: utoipa::PartialSchema>() -> serde_json::Value {
+        serde_json::to_value(T::schema()).unwrap_or(serde_json::Value::Null)
+    }
+
+    /// A field's value, probed for being JSON (`json_attribute`): fields of
+    /// type `serde_json::Value` (or an `Option` of it) answer with their
+    /// JSON through [`JsonProbeJson`], every other field with `None`
+    /// through [`JsonProbeAny`] (the derive calls
+    /// `(&JsonProbe::<T>(&field)).json_attribute()`, which picks the first
+    /// when it applies).
+    pub struct JsonProbe<'a, T>(pub &'a T);
+
+    /// [`JsonProbe`] of a JSON field.
+    pub trait JsonProbeJson {
+        /// The field's JSON.
+        fn json_attribute(&self) -> Result<Option<serde_json::Value>, OrmError>;
+    }
+
+    impl JsonProbeJson for JsonProbe<'_, serde_json::Value> {
+        fn json_attribute(&self) -> Result<Option<serde_json::Value>, OrmError> {
+            Ok(Some(self.0.clone()))
+        }
+    }
+
+    impl JsonProbeJson for JsonProbe<'_, Option<serde_json::Value>> {
+        fn json_attribute(&self) -> Result<Option<serde_json::Value>, OrmError> {
+            Ok(Some(self.0.clone().unwrap_or(serde_json::Value::Null)))
+        }
+    }
+
+    /// [`JsonProbe`] of any other field.
+    pub trait JsonProbeAny {
+        /// `None`: the field is not JSON.
+        fn json_attribute(&self) -> Result<Option<serde_json::Value>, OrmError>;
+    }
+
+    impl<T> JsonProbeAny for &JsonProbe<'_, T> {
+        fn json_attribute(&self) -> Result<Option<serde_json::Value>, OrmError> {
+            Ok(None)
+        }
+    }
 }

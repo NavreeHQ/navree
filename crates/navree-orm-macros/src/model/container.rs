@@ -6,6 +6,7 @@ use syn::meta::ParseNestedMeta;
 use syn::punctuated::Punctuated;
 use syn::{Attribute, LitBool, LitInt, LitStr, Token};
 
+use super::attributes;
 use crate::errors::{Errors, key_name, suggestion};
 
 /// How the key gets its value (navree-orm's `KeyKind`).
@@ -57,9 +58,12 @@ pub(crate) struct Container {
     pub(crate) connection: Option<LitStr>,
     pub(crate) per_page: Option<LitInt>,
     pub(crate) global_scopes: Vec<syn::Expr>,
+    /// The attribute layer's keys.
+    pub(crate) attributes: attributes::ContainerAttrs,
 }
 
-/// The keys `#[model(...)]` takes on a struct.
+/// The keys `#[model(...)]` takes on a struct (the attribute layer's come
+/// from [`attributes::CONTAINER_KEYS`]).
 const KEYS: &[&str] = &[
     "table",
     "primary_key",
@@ -128,14 +132,17 @@ fn parse_key(container: &mut Container, meta: &ParseNestedMeta<'_>) -> syn::Resu
         syn::parenthesized!(content in meta.input);
         let scopes = Punctuated::<syn::Expr, Token![,]>::parse_terminated(&content)?;
         container.global_scopes.extend(scopes);
+    } else if attributes::parse_container_key(&mut container.attributes, meta)? {
+        // An attribute-layer key.
     } else {
         let key = key_name(path);
-        let hint = suggestion(&key, KEYS)
+        let keys: Vec<&str> = KEYS.iter().chain(attributes::CONTAINER_KEYS).copied().collect();
+        let hint = suggestion(&key, &keys)
             .map(|known| format!(" (did you mean `{known}`?)"))
             .unwrap_or_default();
         return Err(meta.error(format!(
             "unknown model attribute `{key}`{hint}; expected one of: {}",
-            KEYS.join(", ")
+            keys.join(", ")
         )));
     }
     Ok(())
