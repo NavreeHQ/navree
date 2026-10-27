@@ -95,6 +95,7 @@ impl CertificatesController {
 - Packages: `#import "@preview/x:1.0.0"` reads
   `<documents.typst.packages_dir>/preview/x/1.0.0/`; nothing downloads.
 - `datetime.today()` follows the app's `dyn Clock`.
+- A render over `documents.typst.timeout_secs` (60) is `DocumentsError::Timeout` (503).
 
 ## HTML templates (Chrome)
 

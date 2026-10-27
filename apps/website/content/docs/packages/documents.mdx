@@ -58,6 +58,7 @@ disk = "documents"                   # storage disk for save and queue (default:
 bundled_fonts = true                 # Noto Sans, Noto Sans Arabic, Noto Sans Devanagari
 font_dirs = ["resources/fonts"]      # more fonts, searched recursively
 packages_dir = "resources/typst-packages"
+timeout_secs = 60                    # per render
 
 [documents.chrome]
 path = "/usr/bin/chromium"           # default: NAVREE_BROWSER_CHROME, then the usual install paths
@@ -190,6 +191,7 @@ The render's data is the file `/data.json`:
 - **Fonts**: text falls back through Noto Sans, Noto Sans Arabic and Noto Sans Devanagari, so mixed-script text needs no font settings. Fonts under `documents.typst.font_dirs` (`.ttf`, `.otf`, `.ttc`, `.otc`) are added; `navree documents:fonts` lists the families templates can use.
 - **Packages**: `#import "@preview/name:1.0.0"` reads `<packages_dir>/preview/name/1.0.0/`. Nothing is downloaded at render time.
 - **Dates**: `datetime.today()` and the PDF's creation date come from the app's `dyn Clock`.
+- **Time limit**: a render that takes longer than `documents.typst.timeout_secs` (60) is `DocumentsError::Timeout`, a 503. The compilation finishes in the background and its result is dropped.
 
 A template error names the file, the line and the column, with the compiler's hints:
 
@@ -493,6 +495,7 @@ Every engine implements `PdfEngine` and passes the same conformance suite: Typst
 | `documents.typst.bundled_fonts` | `true` | Load the bundled Noto fonts |
 | `documents.typst.font_dirs` | `[]` | More font directories |
 | `documents.typst.packages_dir` | none | Local Typst packages, as `<namespace>/<name>/<version>` |
+| `documents.typst.timeout_secs` | `60` | Limit per Typst render |
 | `documents.chrome.path` | `NAVREE_BROWSER_CHROME`, then the usual paths | The Chrome executable |
 | `documents.chrome.endpoint` | none | A running Chrome: `ws://..` or `http://host:9222` |
 | `documents.chrome.pool_size` | `2` | Pages printing at once |
