@@ -7,19 +7,16 @@ use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use navree_contracts::AuditKind;
-use sea_orm::sea_query::Expr;
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
+use navree_orm::Model as _;
 use serde::Serialize;
 use serde_json::json;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+use crate::refresh_token::Model as RefreshToken;
 use crate::service::{PLATFORM_AUDIENCE, entry};
 use crate::two_factor::two_factor_enabled;
-use crate::{
-    AuthError, AuthService, Claims, ClientMeta, SessionClaims, TokenType, USER_SUBJECT,
-    refresh_token,
-};
+use crate::{AuthError, AuthService, Claims, ClientMeta, SessionClaims, TokenType, USER_SUBJECT};
 
 /// One of the user's sessions (a refresh-token family), as `GET
 /// /auth/sessions` lists it.
@@ -111,16 +108,17 @@ impl AuthService {
         current: Option<Uuid>,
     ) -> Result<Vec<SessionResource>, AuthError> {
         let now = self.clock.now();
-        let live = refresh_token::Entity::find()
-            .filter(refresh_token::Column::UserId.eq(user_id))
-            .filter(refresh_token::Column::RevokedAt.is_null())
-            .filter(refresh_token::Column::ExpiresAt.gt(now))
-            .order_by_desc(refresh_token::Column::CreatedAt)
-            .order_by_desc(refresh_token::Column::Id)
-            .all(&self.db.reader().await)
+        let live = RefreshToken::query()
+            .where_(RefreshToken::USER_ID.eq(user_id))
+            .where_null(RefreshToken::REVOKED_AT)
+            .where_(RefreshToken::EXPIRES_AT.gt(now))
+            .order_by_desc(RefreshToken::CREATED_AT)
+            .order_by_desc(RefreshToken::ID)
+            .get(&self.db)
             .await?;
         let mut seen = HashSet::new();
         Ok(live
+            .into_models()
             .into_iter()
             .filter(|row| seen.insert(row.family_id))
             .map(|row| SessionResource {
@@ -153,14 +151,12 @@ impl AuthService {
         let revoked = self
             .write(Some(user_id), |uow| async move {
                 let tx = uow.tx().await?;
-                let result = refresh_token::Entity::update_many()
-                    .col_expr(refresh_token::Column::RevokedAt, Expr::value(now))
-                    .filter(refresh_token::Column::FamilyId.eq(session_id))
-                    .filter(refresh_token::Column::UserId.eq(user_id))
-                    .filter(refresh_token::Column::RevokedAt.is_null())
-                    .exec(&*tx)
-                    .await?;
-                Ok(result.rows_affected)
+                Ok(RefreshToken::query()
+                    .where_(RefreshToken::FAMILY_ID.eq(session_id))
+                    .where_(RefreshToken::USER_ID.eq(user_id))
+                    .where_null(RefreshToken::REVOKED_AT)
+                    .update(&*tx, [RefreshToken::REVOKED_AT.set(now)])
+                    .await?)
             })
             .await?;
         if revoked == 0 {
@@ -216,12 +212,11 @@ impl AuthService {
             let user_id = user.id;
             self.write(Some(user_id), |uow| async move {
                 let tx = uow.tx().await?;
-                refresh_token::Entity::update_many()
-                    .col_expr(refresh_token::Column::AuthenticatedAt, Expr::value(now))
-                    .filter(refresh_token::Column::FamilyId.eq(session_id))
-                    .filter(refresh_token::Column::UserId.eq(user_id))
-                    .filter(refresh_token::Column::RevokedAt.is_null())
-                    .exec(&*tx)
+                RefreshToken::query()
+                    .where_(RefreshToken::FAMILY_ID.eq(session_id))
+                    .where_(RefreshToken::USER_ID.eq(user_id))
+                    .where_null(RefreshToken::REVOKED_AT)
+                    .update(&*tx, [RefreshToken::AUTHENTICATED_AT.set(now)])
                     .await?;
                 Ok(())
             })
