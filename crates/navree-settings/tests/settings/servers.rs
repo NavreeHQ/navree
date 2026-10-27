@@ -20,7 +20,6 @@ mod real {
     /// A database of its own on the test server.
     struct Scratch {
         admin: String,
-        name: String,
         url: String,
         drop_sql: String,
     }
@@ -40,7 +39,6 @@ mod real {
             Some(Scratch {
                 drop_sql: drop_sql(&name),
                 admin,
-                name,
                 url,
             })
         }
@@ -48,7 +46,6 @@ mod real {
         async fn drop(self) {
             let conn = Database::connect(&self.admin).await.unwrap();
             conn.execute_unprepared(&self.drop_sql).await.unwrap();
-            let _ = self.name;
         }
     }
 
