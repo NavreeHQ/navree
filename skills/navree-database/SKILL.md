@@ -212,6 +212,10 @@ url = "sqlite://storage/app.db?mode=rwc"   # or postgres://... (`postgres`), mys
 max_connections = 10
 migrate_on_boot = false                    # a new app sets true for development
 slow_query_ms = 200
+test_before_acquire = false                # true: ping every checkout (one round trip each)
+idle_timeout_secs = 600                    # 0: keep idle connections
+max_lifetime_secs = 1800                   # 0: no limit
+transaction_settings = true                # false: no navree.actor / @navree_actor per transaction
 
 [database.mysql]                           # MySQL and MariaDB only
 strict = true                              # strict SQL mode plus ONLY_FULL_GROUP_BY (default)
@@ -220,7 +224,8 @@ strict = true                              # strict SQL mode plus ONLY_FULL_GROU
 ```
 
 On MySQL the unit of work sets `@navree_actor` and `@navree_request_id`
-(cleared before commit or rollback) where PostgreSQL uses `set_config`, ids
+(cleared before commit or rollback) where PostgreSQL uses `set_config`
+(neither when `transaction_settings = false`), ids
 are `BINARY(16)`, and workspace isolation is query scoping only (no
 row-level security): every workspace query must go through `WorkspaceRepo`.
 
