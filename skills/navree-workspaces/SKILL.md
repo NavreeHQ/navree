@@ -316,6 +316,26 @@ app.acting_as(principal(Uuid::now_v7()))
     .assert_error(403, "You are not a member of this workspace.");
 ```
 
+Every workspace module gets an isolation suite: cross-workspace tests for
+each of its routes, from the route table and a model factory (skill
+`navree-module-conformity`):
+
+```rust
+use navree::workspace::testing::IsolationSuiteExt;
+
+app.isolation_suite::<DealsModule>()
+    .factory(DealFactory::default()) // binds {id}; workspace_id is set by the suite
+    .body("POST", "/api/v1/deals", json!({ "title": "Big one" }))
+    .run()
+    .await;
+```
+
+Classify every entity (`m.workspace_scoped::<E>()`,
+`m.workspace_entity::<E>()` or `m.global_entity::<E>()`) and run
+`navree check`: `workspace.entities`, `workspace.repo` and
+`workspace.tables` catch unclassified entities, unscoped queries and
+unindexed or unprotected tables.
+
 Read invitation tokens from `app.get::<Mailer>().await.array_transport().unwrap().sent()`
 (config `mail.transport = "array"`); move time with
 `override_value::<dyn Clock>(Arc::new(FixedClock::new(now)))`.

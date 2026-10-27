@@ -387,11 +387,19 @@ impl Features {
         let runtime_deps = packages
             .iter()
             .map(|package| {
+                // An optional dependency is part of the crate only when its
+                // default features turn it on (navree-workspace's
+                // `testing` is not; the facade's `testing` turns it on).
+                let by_default = default_optional_deps(package);
                 let deps = package["dependencies"]
                     .as_array()
                     .expect("dependencies")
                     .iter()
                     .filter(|dep| dep["kind"].is_null())
+                    .filter(|dep| {
+                        dep["optional"] != true
+                            || dep["name"].as_str().is_some_and(|n| by_default.contains(n))
+                    })
                     .filter_map(|dep| dep["name"].as_str())
                     .filter(|name| name.starts_with("navree-"))
                     .map(str::to_owned)
@@ -442,6 +450,63 @@ fn every_navree_dependency_is_always_on_or_behind_its_own_feature() {
         }
     }
     assert!(problems.is_empty(), "{problems:#?}");
+}
+
+/// The optional dependencies a package's `default` feature turns on
+/// (transitively): `dep:name`, `name/feature` and implicit `name` features.
+/// A weak `name?/feature` turns nothing on.
+fn default_optional_deps(package: &Value) -> BTreeSet<String> {
+    let table = package["features"].as_object();
+    let mut seen = BTreeSet::new();
+    let mut deps = BTreeSet::new();
+    let mut stack = vec!["default".to_owned()];
+    while let Some(feature) = stack.pop() {
+        if !seen.insert(feature.clone()) {
+            continue;
+        }
+        let items = table
+            .and_then(|t| t.get(&feature))
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str);
+        for item in items {
+            if let Some(dep) = item.strip_prefix("dep:") {
+                deps.insert(dep.to_owned());
+            } else if let Some((dep, _)) = item.split_once('/') {
+                if !dep.ends_with('?') {
+                    deps.insert(dep.to_owned());
+                }
+            } else {
+                // Another feature, or the implicit feature of an optional
+                // dependency of that name.
+                deps.insert(item.to_owned());
+                stack.push(item.to_owned());
+            }
+        }
+    }
+    deps
+}
+
+#[test]
+fn optional_dependencies_count_when_default_features_turn_them_on() {
+    let package = serde_json::json!({
+        "features": {
+            "default": ["testing", "postgres"],
+            "testing": ["dep:navree-testing", "navree-view?/mail"],
+            "postgres": ["navree-db/postgres"],
+            "extra": ["dep:navree-cache"],
+        }
+    });
+    let on = default_optional_deps(&package);
+    assert!(on.contains("navree-testing"));
+    assert!(on.contains("navree-db"));
+    assert!(
+        !on.contains("navree-view"),
+        "a weak feature turns nothing on"
+    );
+    assert!(!on.contains("navree-cache"));
+    assert!(default_optional_deps(&serde_json::json!({ "features": {} })).is_empty());
 }
 
 #[test]

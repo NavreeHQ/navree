@@ -16,7 +16,7 @@ use axum::response::{IntoResponse, Response};
 use chrono::Utc;
 use futures_util::{StreamExt, stream};
 use navree_contracts::Clock;
-use navree_http::{AppError, Controller, RouteDef};
+use navree_http::{ApiMeta, AppError, Controller, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use percent_encoding::percent_decode_str;
 
@@ -75,7 +75,17 @@ impl Controller for StorageController {
             )
             // The signature is the authorization.
             .public()
-            .name("storage.temporary_url"),
+            .name("storage.temporary_url")
+            .api(ApiMeta {
+                summary: Some("Download a file from a temporary URL".to_owned()),
+                description: Some(
+                    "Serves the file a signed temporary URL points at; the `expires` and `signature` query parameters are the authorization."
+                        .to_owned(),
+                ),
+                tags: vec!["Storage".to_owned()],
+                responses: vec![403, 404],
+                ..ApiMeta::default()
+            }),
             RouteDef::on(
                 Method::PUT,
                 "/{disk}/{*path}",
@@ -96,7 +106,17 @@ impl Controller for StorageController {
             .public()
             .body_limit(usize::MAX)
             .timeout(UPLOAD_TIMEOUT)
-            .name("storage.presigned_upload"),
+            .name("storage.presigned_upload")
+            .api(ApiMeta {
+                summary: Some("Upload a file to a presigned URL".to_owned()),
+                description: Some(
+                    "Stores the request body at the path a signed presigned upload URL points at; the query parameters are the authorization and carry the size limit and content type."
+                        .to_owned(),
+                ),
+                tags: vec!["Storage".to_owned()],
+                responses: vec![400, 403, 413],
+                ..ApiMeta::default()
+            }),
         ]
     }
 }

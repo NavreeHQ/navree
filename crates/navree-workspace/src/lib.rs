@@ -48,6 +48,16 @@
 //!   `/api/organizations...` ([`OrganizationController`]) and
 //!   `/api/workspaces/{workspace}/partitions` when those are on, unless
 //!   `workspace.routes` is false.
+//! - **Testing** (`testing`, feature `testing`). `TestApp::isolation_suite::<M>()`
+//!   with `testing::IsolationSuiteExt::factory` sends every route of module
+//!   `M` from one workspace against another's records: a 404, not listed,
+//!   never created there.
+//! - **Conformity.** `navree check` runs `workspace.entities` (every entity
+//!   classified with [`ModuleBuilderWorkspaceExt::workspace_entity`] or
+//!   [`global_entity`](ModuleBuilderWorkspaceExt::global_entity)),
+//!   `workspace.repo` (workspace entities reached only through
+//!   [`WorkspaceRepo`]) and `workspace.tables` (an indexed workspace
+//!   column, row-level security on PostgreSQL).
 //!
 //! ```no_run
 //! use navree_access::{AccessModule, AccessOptions};
@@ -74,11 +84,14 @@
 
 pub mod entity;
 pub mod events;
+#[cfg(feature = "testing")]
+pub mod testing;
 
 mod access;
 mod access_requests;
 mod commands;
 mod config;
+mod conformity;
 mod controller;
 mod core;
 mod current;

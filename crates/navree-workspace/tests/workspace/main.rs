@@ -4,8 +4,10 @@
 mod support;
 
 mod access;
+mod conformity;
 mod invitations;
 mod isolation;
+mod isolation_suite;
 mod org_isolation;
 mod org_routes;
 mod organizations;
