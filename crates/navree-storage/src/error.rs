@@ -1,5 +1,6 @@
-//! [`StorageError`].
+//! [`StorageError`] and [`UploadRejection`].
 
+use std::fmt;
 use std::path::PathBuf;
 
 use navree_kernel::BoxError;
@@ -51,6 +52,30 @@ pub enum StorageError {
         source: BoxError,
     },
 
+    /// An upload breaks its [`UploadRules`](crate::UploadRules): refused by
+    /// [`Disk::presigned_put`](crate::Disk::presigned_put) before any byte
+    /// is sent, or by [`Disk::accept_upload`](crate::Disk::accept_upload),
+    /// which deletes the file.
+    #[error("upload `{path}` on disk `{disk}` rejected: {rejection}")]
+    Rejected {
+        /// The disk name.
+        disk: String,
+        /// The normalised path.
+        path: String,
+        /// Which rule it breaks.
+        rejection: UploadRejection,
+    },
+
+    /// A link cannot be signed as asked (an expiry the provider does not
+    /// allow, a content type that is not a valid header value).
+    #[error("disk `{disk}` cannot sign this link: {reason}")]
+    Signing {
+        /// The disk name.
+        disk: String,
+        /// Why.
+        reason: String,
+    },
+
     /// The storage options are invalid.
     #[error("invalid storage options: {0}")]
     InvalidOptions(String),
@@ -76,4 +101,50 @@ pub enum StorageError {
         #[source]
         source: object_store::Error,
     },
+}
+
+/// Which [`UploadRules`](crate::UploadRules) rule an upload breaks.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum UploadRejection {
+    /// The file is empty.
+    Empty,
+    /// The file is larger than the rules allow.
+    TooLarge {
+        /// The largest accepted file, in bytes.
+        max_bytes: u64,
+    },
+    /// The file's type is not allowed.
+    Type {
+        /// The declared or sniffed type.
+        mime: String,
+        /// The allowed types.
+        allowed: Vec<String>,
+    },
+    /// The rules allow only some types, and no content type was declared.
+    MissingType {
+        /// The allowed types.
+        allowed: Vec<String>,
+    },
+}
+
+impl fmt::Display for UploadRejection {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Empty => f.write_str("the file should not be empty"),
+            Self::TooLarge { max_bytes } => {
+                write!(f, "the file must not be larger than {max_bytes} bytes")
+            }
+            Self::Type { mime, allowed } => write!(
+                f,
+                "the file must be of type: {} (it is {mime})",
+                allowed.join(", ")
+            ),
+            Self::MissingType { allowed } => write!(
+                f,
+                "declare the file's content type (allowed: {})",
+                allowed.join(", ")
+            ),
+        }
+    }
 }

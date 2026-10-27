@@ -7,7 +7,17 @@ use toml_edit::{DocumentMut, Item, Table};
 
 use crate::config::{DOCK_FILE, DockFile, package_name};
 use crate::error::DockError;
-use crate::service::Service;
+use crate::service::{Service, ServiceOptions};
+
+/// What `navree dock:add minio` prints: how to point a storage disk at the
+/// bucket.
+fn minio_hint(bucket: &str) -> String {
+    format!(
+        "Point a storage disk at it: `driver = \"s3\"` and `bucket = \"{bucket}\"` under \
+         `[storage.disks.<name>]` (navree's `storage-s3` feature). The s3 driver reads \
+         MinIO's address and keys from the AWS_* settings Dock passes to your app."
+    )
+}
 
 /// What [`add_service`] did.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -70,12 +80,18 @@ pub fn add_service(root: &Path, name: &str) -> Result<AddReport, DockError> {
 
     let text = document.to_string();
     // The result must still be a valid dock.toml.
-    DockFile::parse(&text, &package)?;
+    let file = DockFile::parse(&text, &package)?;
     std::fs::write(&path, &text).map_err(|e| DockError::io(&path, e))?;
 
     let mut hints = Vec::new();
     if service == Service::Postgres && !uses_postgres_feature(root) {
         hints.extend(service.add_hint().map(str::to_owned));
+    }
+    if service == Service::Minio
+        && let Ok(spec) = file.service(service.name())
+        && let ServiceOptions::Minio { bucket, .. } = &spec.options
+    {
+        hints.push(minio_hint(bucket));
     }
     Ok(AddReport {
         service,
@@ -217,6 +233,20 @@ mod tests {
         std::fs::write(empty.path().join(DOCK_FILE), "").unwrap();
         add_service(empty.path(), "nats").unwrap();
         assert_eq!(read(&empty), "[services.nats]\n");
+    }
+
+    #[test]
+    fn adding_minio_says_how_to_point_a_disk_at_its_bucket() {
+        let dir = app();
+        let report = add_service(dir.path(), "minio").unwrap();
+        assert_eq!(report.hints.len(), 1, "{:?}", report.hints);
+        let hint = &report.hints[0];
+        assert!(hint.contains("`driver = \"s3\"`"), "{hint}");
+        assert!(hint.contains("`bucket = \"crm-api\"`"), "{hint}");
+        assert!(hint.contains("storage-s3"), "{hint}");
+        // Adding it again changes nothing and says nothing.
+        let again = add_service(dir.path(), "minio").unwrap();
+        assert!(again.already_present && again.hints.is_empty());
     }
 
     #[test]

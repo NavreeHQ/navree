@@ -17,7 +17,7 @@ use crate::{Disk, StorageError};
 
 /// Bytes read before sniffing the content type (enough for every format
 /// `infer` recognises by its leading bytes).
-const SNIFF_BYTES: usize = 8 * 1024;
+pub(crate) const SNIFF_BYTES: usize = 8 * 1024;
 
 /// What [`store_upload`] accepts.
 ///
@@ -187,13 +187,13 @@ pub async fn store_upload(
 }
 
 /// The sniffed type of an upload and the extension it is stored with.
-struct Sniffed {
-    mime: String,
-    extension: String,
+pub(crate) struct Sniffed {
+    pub(crate) mime: String,
+    pub(crate) extension: String,
 }
 
 /// Sniffs the type of `head` (see [`store_upload`]).
-fn sniff(head: &[u8], original_name: Option<&str>) -> Sniffed {
+pub(crate) fn sniff(head: &[u8], original_name: Option<&str>) -> Sniffed {
     if let Some(kind) = infer::get(head) {
         return Sniffed {
             mime: kind.mime_type().to_owned(),

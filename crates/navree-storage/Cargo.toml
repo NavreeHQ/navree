@@ -1,6 +1,6 @@
 [package]
 name = "navree-storage"
-description = "Navree StorageModule: named disks on object_store, streaming, signed temporary URLs and upload checks."
+description = "Navree StorageModule: named disks on object_store (local, memory, S3, Google Cloud Storage, Azure), streaming, signed and presigned URLs, upload checks and disk sync."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,6 +9,17 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[features]
+## S3 and S3-compatible disks: AWS, MinIO, Cloudflare R2, DigitalOcean Spaces.
+s3 = ["object_store/aws-base", "__cloud"]
+## Google Cloud Storage disks.
+gcs = ["object_store/gcp-base", "__cloud"]
+## Azure Blob Storage disks.
+azure = ["object_store/azure-base", "__cloud"]
+# Shared by the cloud drivers: HTTPS on reqwest with rustls and ring (never
+# object_store's `aws`, `gcp` or `azure` features, which turn on aws-lc).
+__cloud = ["object_store/ring", "object_store/reqwest", "dep:reqwest", "dep:rustls"]
 
 [dependencies]
 axum = { workspace = true }
@@ -25,6 +36,8 @@ navree-kernel = { workspace = true }
 mime_guess = { workspace = true }
 object_store = { workspace = true }
 percent-encoding = { workspace = true }
+reqwest = { workspace = true, optional = true }
+rustls = { workspace = true, optional = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
@@ -32,7 +45,9 @@ tracing = { workspace = true }
 
 [dev-dependencies]
 http-body-util = { workspace = true }
+reqwest = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }
+wiremock = { workspace = true }

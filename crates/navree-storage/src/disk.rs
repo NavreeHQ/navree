@@ -8,12 +8,17 @@ use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use futures_util::stream::BoxStream;
 use futures_util::{Stream, StreamExt, TryStreamExt};
+use navree_contracts::HealthStatus;
+use navree_crypto::random_token;
 use navree_kernel::BoxError;
 use object_store::path::Path as StorePath;
-use object_store::{ObjectStore, ObjectStoreExt, WriteMultipart};
+use object_store::{ObjectMeta, ObjectStore, ObjectStoreExt, WriteMultipart};
+use serde::Serialize;
 
 use crate::StorageError;
+use crate::drivers::Backend;
 use crate::path::normalize;
+use crate::provider::Provider;
 use crate::signing::{Signer, encode_path};
 
 /// A stream of file contents, as returned by [`Disk::get_stream`].
@@ -22,7 +27,20 @@ pub type ByteStream = BoxStream<'static, Result<Bytes, StorageError>>;
 /// Parts uploaded concurrently by [`Disk::put_stream`].
 const STREAM_CONCURRENCY: usize = 2;
 
-/// One named file store (a local directory or memory). Cheap to clone.
+/// A file's path, size and last modification time, as returned by
+/// [`Disk::metadata`] and [`Disk::files`].
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct FileMeta {
+    /// The path on the disk (relative to its root and prefix).
+    pub path: String,
+    /// The size in bytes.
+    pub size: u64,
+    /// When the file was last written.
+    pub last_modified: DateTime<Utc>,
+}
+
+/// One named file store: a local directory, memory, or a bucket of S3,
+/// Google Cloud Storage or Azure. Cheap to clone.
 ///
 /// Paths are relative to the disk root. Every method normalises them first:
 /// `\` is a separator like `/`, and leading, trailing or repeated separators
@@ -37,10 +55,15 @@ pub struct Disk {
 
 struct DiskInner {
     name: String,
+    /// The driver name (`local`, `memory`, `s3`, `gcs`, `azure`).
+    driver: &'static str,
     store: Arc<dyn ObjectStore>,
+    /// Signs links for cloud disks; local and memory disks have none and
+    /// use the app's own routes.
+    provider: Option<Provider>,
     /// The public URL of the root, without a trailing `/`.
     public_url: Option<String>,
-    /// The base of temporary URLs, without a trailing `/` (may be empty).
+    /// The base of the app's own links, without a trailing `/` (may be empty).
     base_url: String,
     signer: Arc<Signer>,
 }
@@ -48,7 +71,8 @@ struct DiskInner {
 impl Disk {
     pub(crate) fn new(
         name: String,
-        store: Arc<dyn ObjectStore>,
+        driver: &'static str,
+        backend: Backend,
         public_url: Option<&str>,
         base_url: Option<&str>,
         signer: Arc<Signer>,
@@ -56,7 +80,9 @@ impl Disk {
         Self {
             inner: Arc::new(DiskInner {
                 name,
-                store,
+                driver,
+                store: backend.store,
+                provider: backend.provider,
                 public_url: public_url.map(|url| url.trim_end_matches('/').to_owned()),
                 base_url: base_url
                     .map(|url| url.trim_end_matches('/').to_owned())
@@ -69,6 +95,11 @@ impl Disk {
     /// The disk name.
     pub fn name(&self) -> &str {
         &self.inner.name
+    }
+
+    /// The driver: `local`, `memory`, `s3`, `gcs` or `azure`.
+    pub fn driver(&self) -> &'static str {
+        self.inner.driver
     }
 
     /// Writes `contents` to `path`, replacing any existing file. The write
@@ -186,28 +217,44 @@ impl Disk {
 
     /// The size of `path` in bytes.
     pub async fn size(&self, path: &str) -> Result<u64, StorageError> {
+        Ok(self.metadata(path).await?.size)
+    }
+
+    /// The size and last modification time of `path`.
+    pub async fn metadata(&self, path: &str) -> Result<FileMeta, StorageError> {
         let location = self.location(path)?;
         self.inner
             .store
             .head(&location)
             .await
-            .map(|meta| meta.size)
+            .map(file_meta)
             .map_err(|error| self.error(&location, error))
     }
 
     /// Every file under the directory `prefix` (recursively), sorted.
     pub async fn list(&self, prefix: &str) -> Result<Vec<String>, StorageError> {
+        Ok(self
+            .files(prefix)
+            .await?
+            .into_iter()
+            .map(|file| file.path)
+            .collect())
+    }
+
+    /// Every file under the directory `prefix` (recursively) with its size
+    /// and last modification time, sorted by path.
+    pub async fn files(&self, prefix: &str) -> Result<Vec<FileMeta>, StorageError> {
         let prefix = store_path(prefix, normalize(prefix, true)?)?;
-        let mut paths: Vec<String> = self
+        let mut files: Vec<FileMeta> = self
             .inner
             .store
             .list(Some(&prefix))
-            .map_ok(|meta| meta.location.as_ref().to_owned())
+            .map_ok(file_meta)
             .try_collect()
             .await
             .map_err(|error| self.error(&prefix, error))?;
-        paths.sort();
-        Ok(paths)
+        files.sort_by(|a, b| a.path.cmp(&b.path));
+        Ok(files)
     }
 
     /// The public URL of `path`: the disk's `public_url` followed by the
@@ -225,17 +272,29 @@ impl Disk {
         Ok(format!("{base}/{}", encode_path(&path)))
     }
 
-    /// A link that downloads `path` until `expires_at`, without a session:
-    /// `{base_url}/storage/{disk}/{path}?expires={unix}&signature={hex}`.
-    /// The signature is an HMAC-SHA-256 of `disk/path/expires`; the route
-    /// `GET /storage/{disk}/{*path}` (mounted when the app has `HttpModule`)
-    /// checks it and the expiry and streams the file.
-    pub fn temporary_url(
+    /// A link that downloads `path` until `expires_at`, without a session.
+    ///
+    /// - On an S3, Google Cloud Storage or Azure disk the provider signs it,
+    ///   and the client downloads straight from the bucket. S3 and Google
+    ///   Cloud Storage links last at most 7 days.
+    /// - On a local or memory disk it is the app's own link,
+    ///   `{base_url}/storage/{disk}/{path}?expires={unix}&signature={hex}`:
+    ///   an HMAC-SHA-256 of `disk/path/expires` that the route
+    ///   `GET /storage/{disk}/{*path}` (mounted when the app has
+    ///   `HttpModule`) checks before streaming the file.
+    pub async fn temporary_url(
         &self,
         path: &str,
         expires_at: DateTime<Utc>,
     ) -> Result<String, StorageError> {
         let path = normalize(path, false)?;
+        if let Some(provider) = &self.inner.provider {
+            let ttl = self.provider_ttl(provider, expires_at)?;
+            return provider
+                .get_url(&path, ttl)
+                .await
+                .map_err(|error| self.backend_error(error));
+        }
         let expires = expires_at.timestamp();
         let signature = self.inner.signer.sign(&self.inner.name, &path, expires);
         Ok(format!(
@@ -246,18 +305,85 @@ impl Disk {
         ))
     }
 
-    /// The signer of temporary URLs.
+    /// Readiness of this disk: writes a small file under `.navree-health/`,
+    /// reads it back and deletes it. `Down` says which step failed.
+    pub async fn check_health(&self) -> HealthStatus {
+        let path = format!(".navree-health/{}", random_token(16));
+        if let Err(error) = self.put(&path, "ok").await {
+            return HealthStatus::Down(error.to_string());
+        }
+        let read = self.get(&path).await;
+        if let Err(error) = self.delete(&path).await {
+            return HealthStatus::Down(error.to_string());
+        }
+        match read {
+            Ok(bytes) if bytes == "ok" => HealthStatus::Up,
+            Ok(_) => {
+                HealthStatus::Down("the disk returned other contents than just written".to_owned())
+            }
+            Err(error) => HealthStatus::Down(error.to_string()),
+        }
+    }
+
+    /// How long a provider-signed link to `expires_at` lasts (at least a
+    /// second), refused beyond the provider's limit.
+    pub(crate) fn provider_ttl(
+        &self,
+        provider: &Provider,
+        expires_at: DateTime<Utc>,
+    ) -> Result<std::time::Duration, StorageError> {
+        // Rounded up: a link asked for "in one hour" lasts 3600 seconds.
+        let millis = (expires_at - Utc::now()).num_milliseconds();
+        let seconds = millis.saturating_add(999).div_euclid(1000).max(1);
+        let ttl = std::time::Duration::from_secs(seconds.unsigned_abs());
+        match provider.max_ttl() {
+            Some(max) if ttl > max => Err(StorageError::Signing {
+                disk: self.inner.name.clone(),
+                reason: format!(
+                    "{} links last at most {} days",
+                    self.inner.driver,
+                    max.as_secs() / 86_400
+                ),
+            }),
+            _ => Ok(ttl),
+        }
+    }
+
+    /// The provider signing this disk's links, if it is a cloud disk.
+    pub(crate) fn provider(&self) -> Option<&Provider> {
+        self.inner.provider.as_ref()
+    }
+
+    /// The base of the app's own links (may be empty).
+    pub(crate) fn base_url(&self) -> &str {
+        &self.inner.base_url
+    }
+
+    /// The store, for crate-internal operations.
+    pub(crate) fn store(&self) -> &Arc<dyn ObjectStore> {
+        &self.inner.store
+    }
+
+    /// The signer of the app's own links.
     pub(crate) fn signer(&self) -> &Signer {
         &self.inner.signer
     }
 
     /// The store location of `path`.
-    fn location(&self, path: &str) -> Result<StorePath, StorageError> {
+    pub(crate) fn location(&self, path: &str) -> Result<StorePath, StorageError> {
         store_path(path, normalize(path, false)?)
     }
 
+    /// A backend error not tied to a path.
+    pub(crate) fn backend_error(&self, source: object_store::Error) -> StorageError {
+        StorageError::Backend {
+            disk: self.inner.name.clone(),
+            source,
+        }
+    }
+
     /// Maps a backend error on `location`.
-    fn error(&self, location: &StorePath, error: object_store::Error) -> StorageError {
+    pub(crate) fn error(&self, location: &StorePath, error: object_store::Error) -> StorageError {
         match error {
             object_store::Error::NotFound { .. } => StorageError::NotFound {
                 disk: self.inner.name.clone(),
@@ -268,6 +394,15 @@ impl Disk {
                 source,
             },
         }
+    }
+}
+
+/// A listing or `head` result as a [`FileMeta`].
+fn file_meta(meta: ObjectMeta) -> FileMeta {
+    FileMeta {
+        path: meta.location.as_ref().to_owned(),
+        size: meta.size,
+        last_modified: meta.last_modified,
     }
 }
 
@@ -290,6 +425,7 @@ impl fmt::Debug for Disk {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Disk")
             .field("name", &self.inner.name)
+            .field("driver", &self.inner.driver)
             .field("store", &self.inner.store.to_string())
             .field("public_url", &self.inner.public_url)
             .finish()
