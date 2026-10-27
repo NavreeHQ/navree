@@ -152,11 +152,15 @@ pub fn context(slug: &str, assets_url: &str, links: &Links) -> Value {
             ],
         ),
     };
-    let shell = shell(links)
+    let mut shell = shell(links)
         .assets(assets_url)
         .title(title)
         .current(links.of(slug))
         .crumbs(crumbs);
+    if slug == "dashboard" {
+        // A server toast, as after signing in and being redirected.
+        shell = shell.toast(Toast::success("Signed in").description("Welcome back, Ada."));
+    }
     json!({
         "shell": shell,
         "links": {
@@ -298,7 +302,6 @@ fn shell(links: &Links) -> Shell {
                         .hint("navree.com"),
                 ),
         )
-        .toast(Toast::success("Signed in").description("Welcome back, Ada."))
 }
 
 struct User {
