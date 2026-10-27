@@ -6,6 +6,7 @@ mod support;
 mod access;
 mod invitations;
 mod isolation;
+mod permission_check;
 mod resolution;
 mod routes;
 mod services;
