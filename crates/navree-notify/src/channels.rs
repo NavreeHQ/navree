@@ -2,7 +2,7 @@
 //! a channel's driver: the app's own (`dyn SmsDriver`, a fake) first, then
 //! the configured one.
 
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use navree_kernel::{AppContext, WeakAppContext};
 
@@ -15,14 +15,20 @@ use crate::drivers::twilio::{TwilioSms, TwilioWhatsApp};
 use crate::drivers::vonage::VonageSms;
 use crate::drivers::web_push::VapidWebPush;
 use crate::{
-    NotifyOptions, SlackDriver, SmsDriver, SmsDriverKind, TeamsDriver, WebPushDriver,
-    WhatsAppDriver, WhatsAppDriverKind,
+    Channel, NotifyError, NotifyOptions, SlackDriver, SlackOptions, SmsDriver, SmsDriverKind,
+    TeamsDriver, TeamsOptions, WebPushDriver, WhatsAppDriver, WhatsAppDriverKind,
 };
 
-/// The drivers built from the options at boot.
+/// The drivers built from the options. The SMS, WhatsApp and web push
+/// drivers are built at boot when configured; the Slack and Teams drivers,
+/// which need no configuration, on first use, so an app that never posts
+/// there builds no HTTP client for them.
 pub(crate) struct ChannelDrivers {
-    slack: Arc<dyn SlackDriver>,
-    teams: Arc<dyn TeamsDriver>,
+    app: WeakAppContext,
+    slack_options: SlackOptions,
+    teams_options: TeamsOptions,
+    slack: OnceLock<Result<Arc<dyn SlackDriver>, String>>,
+    teams: OnceLock<Result<Arc<dyn TeamsDriver>, String>>,
     sms: Option<Arc<dyn SmsDriver>>,
     whatsapp: Option<Arc<dyn WhatsAppDriver>>,
     web_push: Option<Arc<VapidWebPush>>,
@@ -31,8 +37,6 @@ pub(crate) struct ChannelDrivers {
 impl ChannelDrivers {
     /// The drivers `options` configure; connection tokens come from `app`.
     pub(crate) fn from_options(options: &NotifyOptions, app: &WeakAppContext) -> Result<Self, String> {
-        let slack = SlackApi::new(&options.slack)?.with_app(app.clone());
-        let teams = TeamsApi::new(&options.teams)?.with_app(app.clone());
         let sms: Option<Arc<dyn SmsDriver>> = match options.sms.driver {
             None => None,
             Some(SmsDriverKind::Twilio) => Some(Arc::new(TwilioSms::new(&options.twilio, &options.sms)?)),
@@ -55,26 +59,39 @@ impl ChannelDrivers {
             None
         };
         Ok(Self {
-            slack: Arc::new(slack),
-            teams: Arc::new(teams),
+            app: app.clone(),
+            slack_options: options.slack.clone(),
+            teams_options: options.teams.clone(),
+            slack: OnceLock::new(),
+            teams: OnceLock::new(),
             sms,
             whatsapp,
             web_push,
         })
     }
 
-    pub(crate) async fn slack(&self, ctx: &AppContext) -> Arc<dyn SlackDriver> {
-        match ctx.try_get::<dyn SlackDriver>().await {
-            Some(driver) => driver,
-            None => self.slack.clone(),
+    pub(crate) async fn slack(&self, ctx: &AppContext) -> Result<Arc<dyn SlackDriver>, NotifyError> {
+        if let Some(driver) = ctx.try_get::<dyn SlackDriver>().await {
+            return Ok(driver);
         }
+        let built = self.slack.get_or_init(|| {
+            SlackApi::new(&self.slack_options)
+                .map(|driver| Arc::new(driver.with_app(self.app.clone())) as Arc<dyn SlackDriver>)
+        });
+        built.clone().map_err(|reason| unavailable(Channel::Slack, reason))
     }
 
-    pub(crate) async fn teams(&self, ctx: &AppContext) -> Arc<dyn TeamsDriver> {
-        match ctx.try_get::<dyn TeamsDriver>().await {
-            Some(driver) => driver,
-            None => self.teams.clone(),
+    pub(crate) async fn teams(&self, ctx: &AppContext) -> Result<Arc<dyn TeamsDriver>, NotifyError> {
+        if let Some(driver) = ctx.try_get::<dyn TeamsDriver>().await {
+            return Ok(driver);
         }
+        let built = self.teams.get_or_init(|| {
+            TeamsApi::new(&self.teams_options)
+                .map(|driver| Arc::new(driver.with_app(self.app.clone())) as Arc<dyn TeamsDriver>)
+        });
+        built
+            .clone()
+            .map_err(|reason| unavailable(Channel::MicrosoftTeams, reason))
     }
 
     pub(crate) async fn sms(&self, ctx: &AppContext) -> Option<Arc<dyn SmsDriver>> {
@@ -106,5 +123,13 @@ impl ChannelDrivers {
         self.web_push
             .as_ref()
             .map(|driver| driver.application_server_key())
+    }
+}
+
+/// [`NotifyError::Unavailable`] for a driver that could not be built.
+fn unavailable(channel: Channel, reason: String) -> NotifyError {
+    NotifyError::Unavailable {
+        channel: Some(channel),
+        reason,
     }
 }

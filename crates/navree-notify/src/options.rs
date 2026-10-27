@@ -95,8 +95,32 @@ impl ConfigSection for NotifyOptions {
         if self.teams.app_id.is_some() && self.teams.app_password.expose().is_empty() {
             return Err("notify.teams.app_password is required with notify.teams.app_id".into());
         }
+        for (key, url) in [
+            ("notify.slack.endpoint", &self.slack.endpoint),
+            ("notify.teams.token_url", &self.teams.token_url),
+            ("notify.twilio.endpoint", &self.twilio.endpoint),
+            ("notify.vonage.endpoint", &self.vonage.endpoint),
+            ("notify.sns.endpoint", &self.sns.endpoint),
+            ("notify.meta.endpoint", &self.meta.endpoint),
+            ("notify.sms.status_callback", &self.sms.status_callback),
+            ("notify.whatsapp.status_callback", &self.whatsapp.status_callback),
+        ] {
+            if let Some(url) = url.as_deref().filter(|url| !url.trim().is_empty()) {
+                check_url(key, url)?;
+            }
+        }
         Ok(())
     }
+}
+
+/// An absolute http(s) URL, or an error naming `key`.
+fn check_url(key: &str, url: &str) -> Result<(), String> {
+    let parsed = url::Url::parse(url.trim())
+        .map_err(|error| format!("{key} is not a URL: {error}"))?;
+    if !matches!(parsed.scheme(), "http" | "https") || !parsed.has_host() {
+        return Err(format!("{key} must be an absolute http(s) URL"));
+    }
+    Ok(())
 }
 
 /// `notify.slack`: the bot token of bot routes without a connection.
@@ -496,6 +520,23 @@ mod tests {
         options.web_push.private_key = Secret::new("priv".to_owned());
         assert!(options.validate().unwrap_err().contains("subject"));
         options.web_push.subject = "mailto:ops@acme.test".to_owned();
+        assert!(options.validate().is_ok());
+    }
+
+    #[test]
+    fn endpoints_and_callbacks_must_be_http_urls() {
+        let mut options = NotifyOptions::default();
+        options.twilio.endpoint = Some("not a url".to_owned());
+        assert!(options.validate().unwrap_err().contains("notify.twilio.endpoint"));
+        options.twilio.endpoint = Some("http://127.0.0.1:9000".to_owned());
+        options.sms.status_callback = Some("ftp://x.test/cb".to_owned());
+        assert!(
+            options
+                .validate()
+                .unwrap_err()
+                .contains("notify.sms.status_callback")
+        );
+        options.sms.status_callback = Some("https://api.acme.test/api/webhooks/notify/twilio".to_owned());
         assert!(options.validate().is_ok());
     }
 
