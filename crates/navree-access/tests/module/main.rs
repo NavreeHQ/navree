@@ -9,5 +9,6 @@ mod commands;
 mod endpoints;
 mod field_checks;
 mod parity;
+mod permission_check;
 mod service;
 mod wiring;
