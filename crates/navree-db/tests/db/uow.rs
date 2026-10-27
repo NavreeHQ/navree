@@ -110,6 +110,52 @@ async fn after_commit_hooks_run_after_commit_only() {
 }
 
 #[tokio::test]
+async fn rollback_as_committed_keeps_nothing_but_runs_the_hooks() {
+    let temp = TempDb::new();
+    let db = notes_db(&temp).await;
+    let runs = Arc::new(AtomicUsize::new(0));
+    let seen = Arc::new(AtomicUsize::new(usize::MAX));
+
+    let uow = db.uow(None, None).await;
+    new_note("a")
+        .insert(&*uow.tx().await.unwrap())
+        .await
+        .unwrap();
+    let (hook_runs, hook_seen, hook_db) = (runs.clone(), seen.clone(), db.clone());
+    uow.after_commit(move || {
+        Box::pin(async move {
+            hook_runs.fetch_add(1, Ordering::SeqCst);
+            // After the rollback: the note is gone for every connection.
+            let notes = usize::try_from(count(&hook_db, "notes").await).unwrap();
+            hook_seen.store(notes, Ordering::SeqCst);
+        })
+    });
+    uow.rollback_as_committed().await.unwrap();
+    assert_eq!(runs.load(Ordering::SeqCst), 1, "the hook ran");
+    assert_eq!(seen.load(Ordering::SeqCst), 0);
+    assert_eq!(count(&db, "notes").await, 0, "nothing stays");
+    assert!(uow.is_finished().await);
+    uow.rollback_as_committed()
+        .await
+        .expect("ending a finished unit of work does nothing");
+    assert_eq!(runs.load(Ordering::SeqCst), 1);
+
+    // A transaction still held: an error, and the hooks are dropped.
+    let uow = db.uow(None, None).await;
+    let held = uow.tx().await.unwrap();
+    let hook_runs = runs.clone();
+    uow.after_commit(move || {
+        Box::pin(async move {
+            hook_runs.fetch_add(1, Ordering::SeqCst);
+        })
+    });
+    let error = uow.rollback_as_committed().await.unwrap_err();
+    assert!(error.to_string().contains("still in use"), "{error}");
+    drop(held);
+    assert_eq!(runs.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
 async fn recorded_changes_are_kept_until_commit() {
     let temp = TempDb::new();
     let db = notes_db(&temp).await;

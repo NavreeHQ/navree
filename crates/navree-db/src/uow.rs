@@ -344,6 +344,54 @@ impl Uow {
         tx.commit().await.map(|()| true)
     }
 
+    /// Ends the unit of work as a commit would, except that the transaction
+    /// rolls back: the [`ChangeObserver`]s run inside it, it rolls back,
+    /// then the after-commit hooks run. The transaction-per-test strategy:
+    /// nothing a test wrote stays, and what a commit triggers (jobs, mail,
+    /// broadcasts) still happens, so the test can assert it. Hooks run
+    /// after the rollback and see what other connections see. Fails like
+    /// [`commit`](Uow::commit) when an `Arc` from [`tx`](Uow::tx) is still
+    /// held (the transaction then rolls back when the last holder drops it,
+    /// and the hooks are dropped); an observer error is returned after the
+    /// rollback, and the hooks are dropped. Ending a finished unit of work
+    /// does nothing.
+    pub async fn rollback_as_committed(&self) -> Result<(), DbErr> {
+        let current = std::mem::replace(&mut *self.inner.tx.lock().await, TxState::Done);
+        let changes = std::mem::take(&mut *lock(&self.inner.changes));
+        let tx = match current {
+            TxState::Done => return Ok(()),
+            TxState::Open(tx) => Some(tx),
+            TxState::Idle if !changes.is_empty() => Some(Arc::new(self.begin().await?)),
+            TxState::Idle => None,
+        };
+        if let Some(tx) = tx {
+            let tx = match Arc::try_unwrap(tx) {
+                Ok(tx) => tx,
+                Err(shared) => {
+                    end_session_or_warn(&shared).await;
+                    lock(&self.inner.after_commit).clear();
+                    return Err(DbErr::Custom(
+                        "cannot end the unit of work: its transaction is still in use; drop every `Arc<DatabaseTransaction>` from `Uow::tx` first (it rolls back when the last one is dropped)"
+                            .to_owned(),
+                    ));
+                }
+            };
+            let observed = self.observe(&tx, &changes).await;
+            end_session_or_warn(&tx).await;
+            tx.rollback().await?;
+            if let Err(error) = observed {
+                lock(&self.inner.after_commit).clear();
+                return Err(error);
+            }
+        }
+        // Taken after the observers ran, so hooks they registered run too.
+        let hooks = std::mem::take(&mut *lock(&self.inner.after_commit));
+        for hook in hooks {
+            hook().await;
+        }
+        Ok(())
+    }
+
     /// Rolls back and drops recorded changes and after-commit hooks.
     /// Rolling back a finished unit of work does nothing. On MySQL the
     /// session variables are cleared first, also when the transaction is

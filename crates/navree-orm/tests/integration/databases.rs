@@ -216,6 +216,35 @@ async fn apps_boot_on_copies_and_in_memory_databases() {
     }
 }
 
+#[tokio::test]
+async fn a_transaction_per_test_keeps_nothing_but_runs_after_commit_hooks() {
+    let shared = ORM.sqlite().await.unwrap();
+    let ran = Arc::new(AtomicUsize::new(0));
+    let hook_ran = ran.clone();
+    let created = shared
+        .transaction(|uow| async move {
+            let deal = Deal::factory().create_one(&uow).await.unwrap();
+            assert_eq!(Deal::query().count(&uow).await.unwrap(), 1);
+            uow.after_commit(move || {
+                Box::pin(async move {
+                    hook_ran.fetch_add(1, Ordering::SeqCst);
+                })
+            });
+            deal.id
+        })
+        .await
+        .unwrap();
+    assert_eq!(ran.load(Ordering::SeqCst), 1, "as on a commit");
+    assert!(Deal::find(shared.db(), created).await.unwrap().is_none());
+    assert_eq!(Company::query().count(shared.db()).await.unwrap(), 0);
+    // The next test starts from the same, untouched database.
+    let left = shared
+        .transaction(|uow| async move { Deal::query().count(&uow).await.unwrap() })
+        .await
+        .unwrap();
+    assert_eq!(left, 0);
+}
+
 #[navree_orm::test(template = ORM)]
 async fn the_test_attribute_gives_a_copy_of_the_template(db: TestDb) {
     Deal::factory().count(2).create(db.db()).await.unwrap();
