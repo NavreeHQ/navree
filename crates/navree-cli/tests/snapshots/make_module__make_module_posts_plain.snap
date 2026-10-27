@@ -75,6 +75,7 @@ pub struct PostController {
 impl PostController {
     /// Lists every post, newest first.
     #[get("/")]
+    #[api(summary = "List posts", tag = "Post")]
     async fn index(&self, uow: Uow) -> Result<Json<Vec<Model>>> {
         Ok(Json(self.posts.all(&uow).await?))
     }

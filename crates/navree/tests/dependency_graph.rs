@@ -4,7 +4,9 @@
 //! allowed by [`HIERARCHY`], which encodes the "Allowed runtime dependency edges"
 //! table of `docs/design`.
 //!
-//! Two exceptions, both for dev-dependencies only:
+//! Three exceptions, all for dev-dependencies only:
+//! - A crate may dev-depend on itself, to turn on its own features in its
+//!   tests (navree-workspace's `testing`).
 //! - A dev-dependency may point at any navree crate in a lower layer (spec §3),
 //!   so tests can boot lower-layer modules (navree-notify's tests need
 //!   ViewModule for MailModule). This covers `navree-testing` (L3) for every
@@ -92,6 +94,9 @@ const HIERARCHY: &[Rule] = &[
     rule("navree-workspace", 5, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db",
         "navree-crypto", "navree-events", "navree-mail", "navree-access", "navree-telemetry",
+        // `navree_workspace::testing` (feature `testing`): isolation suites
+        // on navree-testing's TestApp.
+        "navree-testing",
     ]),
     // L6: ecosystem libraries (ecosystem build plan §3).
     // Social sign-in: links provider accounts to navree-auth users and
@@ -361,6 +366,11 @@ fn violation(edge: &Edge) -> Option<String> {
         return None;
     }
     if *kind == Kind::Dev {
+        // A crate's tests may turn on its own features (navree-workspace's
+        // `testing`) through a dev-dependency on itself.
+        if from == to {
+            return None;
+        }
         // Tests may use any navree crate in a lower layer (spec §3); this is how
         // navree-testing (L3) serves every crate in layer 4 and above.
         if to_rule.layer < from_rule.layer {
@@ -589,6 +599,17 @@ fn navree_testing_is_not_a_normal_dependency_of_layer_4() {
 #[test]
 fn navree_testing_is_not_a_dev_dependency_below_layer_4() {
     let found = violations(&[edge("navree-db", "navree-testing", Kind::Dev)]);
+    assert_eq!(found.len(), 1, "{found:?}");
+}
+
+#[test]
+fn a_crate_may_dev_depend_on_itself_only() {
+    // navree-workspace's tests turn on its own `testing` feature.
+    assert_eq!(
+        violations(&[edge("navree-workspace", "navree-workspace", Kind::Dev)]),
+        Vec::<String>::new()
+    );
+    let found = violations(&[edge("navree-workspace", "navree-workspace", Kind::Normal)]);
     assert_eq!(found.len(), 1, "{found:?}");
 }
 

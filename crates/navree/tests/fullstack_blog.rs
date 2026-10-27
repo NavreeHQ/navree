@@ -479,6 +479,24 @@ async fn check_command_validates_the_whole_app() {
         .expect("`check` passes");
 }
 
+/// `navree check`'s conformity checks: every route of the blog, the
+/// framework's own (auth, access, audit) included, is documented.
+#[tokio::test]
+async fn conformity_checks_pass_on_the_whole_app() {
+    use navree::contracts::{CONFORMITY_COMMAND, ConformityOptions, ConformityReport};
+
+    let blog = Blog::boot().await;
+    let report = ConformityReport::run(blog.app.ctx(), &ConformityOptions::new(".")).await;
+    assert!(report.is_ok(), "{report}");
+    let docs = report.check("api.docs").expect("ApiModule adds api.docs");
+    assert!(docs.outcome.checked > 10, "{report}");
+    assert!(docs.outcome.findings.is_empty(), "{report}");
+    blog.app
+        .run_command(CONFORMITY_COMMAND, &["--only", "api"])
+        .await
+        .expect("conformity:check passes");
+}
+
 /// Comments need `PostService`, but the module forgets to import
 /// `PostsModule`.
 #[injectable]

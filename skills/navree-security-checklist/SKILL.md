@@ -41,6 +41,10 @@ Go through it in order; each item says how to check.
   still load them).
 - [ ] Tests cover guest (401), user without the grant (403) and owner/role
   (2xx) for every sensitive route.
+- [ ] Workspace apps: `navree check` passes `workspace.entities`,
+  `workspace.repo` and `workspace.tables`, and every workspace module has
+  an isolation suite (`app.isolation_suite::<M>()`, skill
+  `navree-module-conformity`).
 
 ## 3. Input
 
@@ -127,7 +131,8 @@ Go through it in order; each item says how to check.
 
 ```sh
 navree routes --json        # access, throttle, guards and audit action per route
-navree check                # module graph
+navree check                # module graph, then the conformity checks
+navree gate                 # fmt, clippy, tests, check and the front end
 navree access:explain <user> <action> <Subject> [id]
 cargo test
 ```

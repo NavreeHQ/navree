@@ -56,7 +56,8 @@ cache = ["dep:navree-cache", "telemetry"]
 http-client = ["dep:navree-http-client", "telemetry"]
 ## L3
 db = ["dep:navree-db", "http"]
-testing = ["dep:navree-testing", "http"]
+## With `workspace` on too, also `navree::workspace::testing` (isolation suites).
+testing = ["dep:navree-testing", "http", "navree-workspace?/testing"]
 observe = ["dep:navree-observe", "http"]
 api = ["dep:navree-api", "http"]
 mail = ["dep:navree-mail", "view", "telemetry"]
