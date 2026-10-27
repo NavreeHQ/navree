@@ -83,6 +83,7 @@ navree-documents = { path = "crates/navree-documents", version = "0.1.0" }
 navree-sheets = { path = "crates/navree-sheets", version = "0.1.0" }
 navree-workflows = { path = "crates/navree-workflows", version = "0.1.0" }
 navree-media = { path = "crates/navree-media", version = "0.1.0" }
+navree-directory = { path = "crates/navree-directory", version = "0.1.0" }
 
 # ---------------------------------------------------------------------------
 # Runtime, async and HTTP (Tokio family)
@@ -193,6 +194,12 @@ mongodb = { version = "3.9.1", default-features = false, features = [
     "rustls-tls",
 ] }
 bson = { version = "3.1.0", features = ["chrono-0_4", "serde", "serde_json-1", "uuid-1"] }
+# LDAP and Active Directory (navree-directory's pull connector): a pure-Rust
+# client on Tokio, TLS through rustls with ring (never native-tls or aws-lc).
+ldap3 = { version = "0.12.1", default-features = false, features = ["tls-rustls-ring"] }
+# BER encoding for the LDAP fixture server of navree-directory's tests (the
+# encoder ldap3 itself uses).
+lber = "0.5.1"
 
 # ---------------------------------------------------------------------------
 # Serialization, errors, ids, time

@@ -1,0 +1,68 @@
+[package]
+name = "navree-directory"
+description = "Navree DirectoryModule: a SCIM 2.0 server and directory pull connectors (Microsoft Graph with delta queries, Google Workspace, Okta, LDAP and Active Directory) that sync normalized users and groups into your app through a DirectorySink, in runs that stage, diff and apply with dry runs, progress and events."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+# The database drivers of the gated server tests (`tests/directory/servers.rs`).
+postgres = ["navree-db/postgres"]
+mysql = ["navree-db/mysql"]
+
+[dependencies]
+axum = { workspace = true }
+bytes = { workspace = true }
+chrono = { workspace = true }
+http = { workspace = true }
+# LDAP and Active Directory, TLS through rustls with ring.
+ldap3 = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+# The LDAP bind password is sealed with the application key; SCIM tokens are
+# random and kept as SHA-256 hashes.
+navree-crypto = { workspace = true }
+navree-db = { workspace = true }
+navree-events = { workspace = true }
+navree-http = { workspace = true }
+# Microsoft Graph, Google Workspace and Okta clients come from the owner's
+# connections (scope set `directory`).
+navree-integrations = { workspace = true }
+navree-kernel = { workspace = true }
+# Connections, synced users and groups, runs and their changes are
+# navree-orm models.
+navree-orm = { workspace = true }
+# Runs as operations (progress, cancel) and their job.
+navree-queue = { workspace = true }
+# `directory:sync --due` and `directory:prune` on the scheduler.
+navree-schedule = { workspace = true }
+# Connections belong to the request's workspace or organization.
+navree-workspace = { workspace = true }
+rustls = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }
+utoipa = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+navree-access = { workspace = true }
+navree-http-client = { workspace = true }
+navree-testing = { workspace = true }
+# The LDAP fixture server encodes its answers with ldap3's BER encoder;
+# LDAPS fixtures use a certificate made by rcgen, served with tokio-rustls.
+lber = { workspace = true }
+rcgen = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
+tokio-rustls = { workspace = true }
+wiremock = { workspace = true }
