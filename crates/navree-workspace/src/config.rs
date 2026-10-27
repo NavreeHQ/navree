@@ -7,7 +7,7 @@ use navree_config::ConfigSection;
 use serde::de::{self, Deserializer, SeqAccess, Visitor};
 use serde::{Deserialize, Serialize};
 
-use crate::role::{check_permission, check_role_name};
+use crate::role::{RoleTable, check_permission, check_role_name};
 
 /// Where the workspace of a request comes from. The resolvers run in the
 /// order of [`WorkspaceConfig::resolvers`]; the first that finds an
@@ -119,6 +119,179 @@ impl Default for InvitationOptions {
     }
 }
 
+/// What a demo workspace does with writes (`workspace.demo.mode`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DemoMode {
+    /// Requests that would write (`POST`, `PUT`, `PATCH`, `DELETE`) are
+    /// refused with a 403 (code `demo_read_only`), except for
+    /// [`DemoOptions::editor_roles`] and the routes in
+    /// [`DemoOptions::allow`].
+    #[default]
+    ReadOnly,
+    /// Writes are allowed; every night at [`DemoOptions::reset_at`] the
+    /// demo seeders clear and seed the demo workspaces again
+    /// (`workspace:demo-reset`).
+    Reset,
+}
+
+impl DemoMode {
+    /// `read_only` or `reset`: the value of the `X-Navree-Demo` header.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            DemoMode::ReadOnly => "read_only",
+            DemoMode::Reset => "reset",
+        }
+    }
+}
+
+impl fmt::Display for DemoMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// Demo workspaces (`workspace.demo`): workspaces seeded from fixtures for
+/// sales and onboarding, read-only or reset every night.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[serde(default)]
+pub struct DemoOptions {
+    /// `read_only` (the default) or `reset`.
+    pub mode: DemoMode,
+    /// When the nightly reset runs in `reset` mode, as 24-hour `HH:MM`
+    /// UTC (default `03:00`). Needs `ScheduleModule` in the app.
+    pub reset_at: String,
+    /// The role signed-in users who are not members get in a demo
+    /// workspace (`viewer`, say): they enter it, and `GET /workspaces`
+    /// lists it for them. Unset (the default): demos are for their members.
+    pub guest_role: Option<String>,
+    /// Roles whose members still write to a read-only demo (the people who
+    /// curate it). A list, or a comma-separated string.
+    #[serde(deserialize_with = "list_or_csv")]
+    pub editor_roles: Vec<String>,
+    /// Routes that write but stay open in a read-only demo: a route name
+    /// (`reports.preview`) or a method and the mounted path
+    /// (`POST /api/v1/reports/preview`). A list, or a comma-separated
+    /// string.
+    #[serde(deserialize_with = "list_or_csv")]
+    pub allow: Vec<String>,
+    /// The directory [`DemoSeed::fixture`](crate::DemoSeed::fixture) reads
+    /// `<name>.json` files from (default `fixtures/demo`).
+    pub fixtures: String,
+}
+
+impl Default for DemoOptions {
+    fn default() -> Self {
+        Self {
+            mode: DemoMode::ReadOnly,
+            reset_at: "03:00".to_owned(),
+            guest_role: None,
+            editor_roles: Vec::new(),
+            allow: Vec::new(),
+            fixtures: "fixtures/demo".to_owned(),
+        }
+    }
+}
+
+impl DemoOptions {
+    /// [`reset_at`](Self::reset_at) as (hour, minute), when it is a valid
+    /// `HH:MM` time.
+    pub fn reset_time(&self) -> Option<(u32, u32)> {
+        parse_hh_mm(&self.reset_at)
+    }
+
+    /// Whether a request with `method` to the route named `name`, mounted
+    /// at `path`, may write to a demo workspace in this mode for a member
+    /// with `role`.
+    pub fn allows_write(
+        &self,
+        method: &http::Method,
+        name: Option<&str>,
+        path: Option<&str>,
+        role: &str,
+    ) -> bool {
+        if self.mode == DemoMode::Reset || is_safe(method) {
+            return true;
+        }
+        if self.editor_roles.iter().any(|editor| editor == role) {
+            return true;
+        }
+        self.allow.iter().any(|entry| match entry.trim().split_once(' ') {
+            Some((verb, route)) => {
+                verb.eq_ignore_ascii_case(method.as_str()) && Some(route.trim()) == path
+            }
+            None => Some(entry.trim()) == name,
+        })
+    }
+
+    /// The problems with the options, naming their keys; `roles` checks
+    /// the role names.
+    fn check(&self, roles: &RoleTable, errors: &mut Vec<String>) {
+        if self.reset_time().is_none() {
+            errors.push(
+                "workspace.demo.reset_at must be a 24-hour `HH:MM` time (UTC), such as `03:00`"
+                    .to_owned(),
+            );
+        }
+        if let Some(role) = &self.guest_role {
+            if role == crate::role::OWNER {
+                errors.push("workspace.demo.guest_role can't be `owner`".to_owned());
+            } else if !roles.contains(&crate::WorkspaceRole::parse(role)) {
+                errors.push(format!(
+                    "workspace.demo.guest_role: `{role}` is not a workspace role"
+                ));
+            }
+        }
+        for role in &self.editor_roles {
+            if !roles.contains(&crate::WorkspaceRole::parse(role)) {
+                errors.push(format!(
+                    "workspace.demo.editor_roles: `{role}` is not a workspace role"
+                ));
+            }
+        }
+        for entry in &self.allow {
+            let valid = match entry.trim().split_once(' ') {
+                Some((verb, path)) => {
+                    ["GET", "POST", "PUT", "PATCH", "DELETE"]
+                        .iter()
+                        .any(|m| m.eq_ignore_ascii_case(verb))
+                        && path.trim().starts_with('/')
+                }
+                None => !entry.trim().is_empty(),
+            };
+            if !valid {
+                errors.push(format!(
+                    "workspace.demo.allow: `{entry}` must be a route name or `METHOD /path`"
+                ));
+            }
+        }
+        if self.fixtures.trim().is_empty() {
+            errors.push("workspace.demo.fixtures must name a directory".to_owned());
+        }
+    }
+}
+
+/// `GET`, `HEAD`, `OPTIONS` and `TRACE` don't write.
+fn is_safe(method: &http::Method) -> bool {
+    matches!(
+        *method,
+        http::Method::GET | http::Method::HEAD | http::Method::OPTIONS | http::Method::TRACE
+    )
+}
+
+/// Parses `"HH:MM"` (hour 0–23 with one or two digits, minute 00–59).
+pub(crate) fn parse_hh_mm(time: &str) -> Option<(u32, u32)> {
+    let (hour, minute) = time.trim().split_once(':')?;
+    let number = |s: &str| {
+        (!s.is_empty() && s.len() <= 2 && s.bytes().all(|b| b.is_ascii_digit()))
+            .then(|| s.parse::<u32>().ok())
+            .flatten()
+    };
+    let hour = number(hour)?;
+    let minute = number(minute).filter(|_| minute.len() == 2)?;
+    (hour < 24 && minute < 60).then_some((hour, minute))
+}
+
 /// Options of the workspace module (configuration section `workspace`).
 ///
 /// ```toml
@@ -145,6 +318,14 @@ impl Default for InvitationOptions {
 ///
 /// [workspace.roles.billing]       # an app-defined role
 /// permissions = ["invoices.*"]
+///
+/// [workspace.demo]                # demo workspaces
+/// mode = "read_only"              # read_only | reset
+/// reset_at = "03:00"              # the nightly reset (UTC), mode = "reset"
+/// # guest_role = "viewer"         # signed-in non-members enter demos
+/// editor_roles = []               # roles that still write to read-only demos
+/// allow = []                      # route names or "METHOD /path" left writable
+/// fixtures = "fixtures/demo"      # where DemoSeed::fixture reads <name>.json
 /// ```
 ///
 /// Environment variables map as usual: `APP_WORKSPACE__HEADER` →
@@ -184,6 +365,8 @@ pub struct WorkspaceConfig {
     /// Database isolation: the URL of each workspace's database, with
     /// `{id}` standing for the workspace id (simple form, 32 hex digits).
     pub database_url: Option<String>,
+    /// Demo workspaces.
+    pub demo: DemoOptions,
 }
 
 impl Default for WorkspaceConfig {
@@ -206,6 +389,7 @@ impl Default for WorkspaceConfig {
             roles: BTreeMap::new(),
             schema_prefix: "workspace_".to_owned(),
             database_url: None,
+            demo: DemoOptions::default(),
         }
     }
 }
@@ -276,6 +460,7 @@ impl WorkspaceConfig {
                 .push("workspace.database_url must contain `{id}` (the workspace id)".to_owned()),
             _ => {}
         }
+        self.demo.check(&RoleTable::from_config(self), &mut errors);
         if errors.is_empty() {
             Ok(())
         } else {
@@ -506,6 +691,111 @@ mod tests {
     fn an_empty_users_table_means_none() {
         let config = load(ConfigSources::new().set("workspace.users_table", "")).unwrap();
         assert_eq!(config.users_table(), None);
+    }
+
+    #[test]
+    fn demo_options_default_to_read_only() {
+        let demo = load(ConfigSources::new()).unwrap().demo;
+        assert_eq!(demo.mode, DemoMode::ReadOnly);
+        assert_eq!(demo.reset_at, "03:00");
+        assert_eq!(demo.reset_time(), Some((3, 0)));
+        assert_eq!(demo.guest_role, None);
+        assert!(demo.editor_roles.is_empty());
+        assert!(demo.allow.is_empty());
+        assert_eq!(demo.fixtures, "fixtures/demo");
+        assert_eq!(DemoMode::ReadOnly.as_str(), "read_only");
+        assert_eq!(DemoMode::Reset.to_string(), "reset");
+    }
+
+    #[test]
+    fn demo_options_are_read_from_the_environment() {
+        let demo = load(ConfigSources::new().env_vars(
+            "APP_",
+            [
+                ("APP_WORKSPACE__DEMO__MODE", "reset"),
+                ("APP_WORKSPACE__DEMO__RESET_AT", "4:15"),
+                ("APP_WORKSPACE__DEMO__GUEST_ROLE", "viewer"),
+                ("APP_WORKSPACE__DEMO__EDITOR_ROLES", "owner, admin"),
+                (
+                    "APP_WORKSPACE__DEMO__ALLOW",
+                    "reports.preview,POST /api/search",
+                ),
+                ("APP_WORKSPACE__DEMO__FIXTURES", "storage/demo"),
+            ],
+        ))
+        .unwrap()
+        .demo;
+        assert_eq!(demo.mode, DemoMode::Reset);
+        assert_eq!(demo.reset_time(), Some((4, 15)));
+        assert_eq!(demo.guest_role.as_deref(), Some("viewer"));
+        assert_eq!(demo.editor_roles, ["owner", "admin"]);
+        assert_eq!(demo.allow, ["reports.preview", "POST /api/search"]);
+        assert_eq!(demo.fixtures, "storage/demo");
+    }
+
+    #[test]
+    fn read_only_demos_allow_reads_editors_and_listed_routes() {
+        use http::Method;
+        let demo = DemoOptions {
+            editor_roles: vec!["admin".into()],
+            allow: vec!["reports.preview".into(), "post /api/search".into()],
+            ..DemoOptions::default()
+        };
+        let path = Some("/api/deals");
+        for method in [Method::GET, Method::HEAD, Method::OPTIONS] {
+            assert!(demo.allows_write(&method, None, path, "member"), "{method}");
+        }
+        for method in [Method::POST, Method::PUT, Method::PATCH, Method::DELETE] {
+            assert!(!demo.allows_write(&method, Some("deals.store"), path, "member"));
+            assert!(demo.allows_write(&method, Some("deals.store"), path, "admin"));
+        }
+        assert!(demo.allows_write(&Method::POST, Some("reports.preview"), path, "member"));
+        assert!(demo.allows_write(&Method::POST, None, Some("/api/search"), "member"));
+        assert!(!demo.allows_write(&Method::PUT, None, Some("/api/search"), "member"));
+        let reset = DemoOptions {
+            mode: DemoMode::Reset,
+            ..DemoOptions::default()
+        };
+        assert!(reset.allows_write(&Method::DELETE, None, path, "viewer"));
+    }
+
+    #[test]
+    fn invalid_demo_options_name_their_keys() {
+        for (key, value) in [
+            ("workspace.demo.reset_at", json!("3am")),
+            ("workspace.demo.reset_at", json!("03:60")),
+            ("workspace.demo.guest_role", json!("owner")),
+            ("workspace.demo.guest_role", json!("auditor")),
+            ("workspace.demo.editor_roles", json!(["auditor"])),
+            ("workspace.demo.allow", json!(["PURGE /api/x"])),
+            ("workspace.demo.allow", json!(["POST api/x"])),
+            ("workspace.demo.fixtures", json!("")),
+        ] {
+            let error = load(ConfigSources::new().set(key, value.clone()))
+                .unwrap_err()
+                .to_string();
+            assert!(error.contains(key), "{key} = {value}: {error}");
+        }
+        assert!(load(ConfigSources::new().set("workspace.demo.mode", "sometimes")).is_err());
+        // An app-defined role may be the guest role or an editor role.
+        let config = load(
+            ConfigSources::new()
+                .set("workspace.roles.auditor.permissions", json!(["deals.read"]))
+                .set("workspace.demo.guest_role", "auditor")
+                .set("workspace.demo.editor_roles", json!(["auditor"])),
+        )
+        .unwrap();
+        assert_eq!(config.demo.guest_role.as_deref(), Some("auditor"));
+    }
+
+    #[test]
+    fn hh_mm_times_are_parsed() {
+        assert_eq!(parse_hh_mm("03:00"), Some((3, 0)));
+        assert_eq!(parse_hh_mm(" 23:59 "), Some((23, 59)));
+        assert_eq!(parse_hh_mm("7:05"), Some((7, 5)));
+        assert_eq!(parse_hh_mm("24:00"), None);
+        assert_eq!(parse_hh_mm("12:5"), None);
+        assert_eq!(parse_hh_mm("noon"), None);
     }
 
     #[test]

@@ -76,6 +76,10 @@ fn assert_cors(response: &crate::support::TestResponse, what: &str) {
         exposed.contains("x-request-id"),
         "{what}: exposes x-request-id"
     );
+    assert!(
+        exposed.contains("x-navree-demo"),
+        "{what}: exposes x-navree-demo"
+    );
 }
 
 /// Review Focus 4: error responses keep CORS and the request id.

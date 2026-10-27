@@ -97,7 +97,8 @@ auth = [
     "mail",
     "access",
 ]
-## Workspaces: multi-tenancy with members, roles, invitations and isolation.
+## Workspaces: multi-tenancy with members, roles, invitations, isolation and
+## demo workspaces (reset nightly through `schedule`).
 workspace = [
     "dep:navree-workspace",
     "http",
@@ -106,6 +107,7 @@ workspace = [
     "events",
     "mail",
     "access",
+    "schedule",
 ]
 ## L5 (opt-in, not in `full`)
 ## Redis: shared connections and the Redis drivers of the cache and locks,

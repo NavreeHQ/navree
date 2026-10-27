@@ -11,7 +11,7 @@ use serde::Serialize;
 use uuid::Uuid;
 
 use crate::core::Core;
-use crate::entity::{Member, Workspace, member, workspace};
+use crate::entity::{Member, Workspace, WorkspaceKind, member, workspace};
 use crate::events::{MemberAdded, OwnershipTransferred, WorkspaceCreated, WorkspaceDeleted};
 use crate::{WorkspaceError, WorkspaceRole};
 
@@ -73,15 +73,29 @@ impl Workspaces {
         Self { core }
     }
 
-    /// Creates a workspace owned by `owner`, who joins it with the `owner`
-    /// role. A taken or malformed slug is a 400 on `slug`; an empty or long
-    /// name a 400 on `name`. Under schema isolation the workspace's schema
-    /// is created and migrated in the same transaction.
+    /// Creates a (live) workspace owned by `owner`, who joins it with the
+    /// `owner` role. A taken or malformed slug is a 400 on `slug`; an empty
+    /// or long name a 400 on `name`. Under schema isolation the workspace's
+    /// schema is created and migrated in the same transaction.
+    /// [`DemoWorkspaces::create`](crate::DemoWorkspaces::create) makes demo
+    /// workspaces.
     pub async fn create(
         &self,
         uow: &Uow,
         owner: Uuid,
         input: NewWorkspace,
+    ) -> Result<Workspace, WorkspaceError> {
+        self.create_kind(uow, owner, input, WorkspaceKind::Live)
+            .await
+    }
+
+    /// [`create`](Self::create) for a workspace of `kind`.
+    pub(crate) async fn create_kind(
+        &self,
+        uow: &Uow,
+        owner: Uuid,
+        input: NewWorkspace,
+        kind: WorkspaceKind,
     ) -> Result<Workspace, WorkspaceError> {
         let name = check_name(&input.name)?;
         let tx = uow.tx().await?;
@@ -109,6 +123,7 @@ impl Workspaces {
                 name: Set(name.clone()),
                 slug: Set(slug.clone()),
                 owner_id: Set(owner),
+                kind: Set(kind.as_str().to_owned()),
                 created_at: Set(now),
                 updated_at: Set(now),
             },

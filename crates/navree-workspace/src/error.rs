@@ -7,6 +7,10 @@ use navree_http::AppError;
 use navree_kernel::BoxError;
 use sea_orm::DbErr;
 
+/// The error code of a write refused by a read-only demo workspace
+/// (`AppError::code`).
+pub const DEMO_READ_ONLY: &str = "demo_read_only";
+
 /// A workspace-module error. Returned from handlers with `?`, it becomes an
 /// error response in Navree's JSON error shape:
 ///
@@ -22,6 +26,8 @@ use sea_orm::DbErr;
 /// | `InvitationNotFound` | 404 | `Invitation not found.` |
 /// | `InvitationExpired` | 410 | `The invitation has expired.` |
 /// | `InvitationEmailMismatch` | 403 | `This invitation was sent to a different email address.` |
+/// | `DemoReadOnly` | 403, code `demo_read_only` | `Demo workspaces are read-only.` |
+/// | `NotDemo` | 409 | `This workspace is not a demo workspace.` |
 /// | `Db` | as navree-db maps it (404, 409) or 500 | |
 /// | `Other` | 500 | |
 #[derive(Debug, thiserror::Error)]
@@ -62,6 +68,13 @@ pub enum WorkspaceError {
     /// The invitation was sent to another email address.
     #[error("the invitation was sent to another email address")]
     InvitationEmailMismatch,
+    /// A write to a read-only demo workspace (`workspace.demo.mode =
+    /// "read_only"`).
+    #[error("demo workspaces are read-only")]
+    DemoReadOnly,
+    /// The workspace (a slug or an id) is not a demo workspace.
+    #[error("workspace `{0}` is not a demo workspace")]
+    NotDemo(String),
     /// A database error.
     #[error("workspace database error: {0}")]
     Db(#[from] DbErr),
@@ -115,6 +128,13 @@ pub(crate) fn map_workspace_error(error: &WorkspaceError) -> Option<AppError> {
         }
         WorkspaceError::InvitationEmailMismatch => AppError::forbidden()
             .with_detail("This invitation was sent to a different email address."),
+        WorkspaceError::DemoReadOnly => {
+            AppError::new(StatusCode::FORBIDDEN, DEMO_READ_ONLY, "Forbidden")
+                .with_detail("Demo workspaces are read-only.")
+        }
+        WorkspaceError::NotDemo(_) => {
+            AppError::conflict("This workspace is not a demo workspace.")
+        }
         WorkspaceError::Db(db) => return navree_db::map_db_error(db),
         WorkspaceError::Other(_) => return None,
     })
@@ -140,6 +160,8 @@ mod tests {
             (WorkspaceError::InvitationNotFound, 404),
             (WorkspaceError::InvitationExpired, 410),
             (WorkspaceError::InvitationEmailMismatch, 403),
+            (WorkspaceError::DemoReadOnly, 403),
+            (WorkspaceError::NotDemo("acme".into()), 409),
             (
                 WorkspaceError::Db(DbErr::RecordNotFound("workspaces x".into())),
                 404,
@@ -155,5 +177,16 @@ mod tests {
         assert_eq!(body["errors"]["slug"][0], "slug has already been taken");
         let body = WorkspaceError::NotMember.to_app_error().body();
         assert_eq!(body["message"], "You are not a member of this workspace.");
+    }
+
+    #[test]
+    fn read_only_demos_refuse_with_their_code() {
+        let error = WorkspaceError::DemoReadOnly.to_app_error();
+        assert_eq!(error.status, StatusCode::FORBIDDEN);
+        assert_eq!(error.code, "demo_read_only");
+        assert_eq!(error.body()["message"], "Demo workspaces are read-only.");
+        assert_eq!(error.body()["error"], "Forbidden");
+        let error = WorkspaceError::NotDemo("acme".into()).to_app_error();
+        assert_eq!(error.body()["message"], "This workspace is not a demo workspace.");
     }
 }

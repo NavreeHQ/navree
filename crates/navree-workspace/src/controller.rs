@@ -17,11 +17,11 @@ use uuid::Uuid;
 
 use crate::current::{CurrentWorkspace, InWorkspace};
 use crate::directory::UserSummary;
-use crate::entity::{Invitation, Member, Workspace};
+use crate::entity::{Invitation, Member, Workspace, WorkspaceKind};
 use crate::invitations::AcceptedInvitation;
 use crate::members::MemberInfo;
 use crate::workspaces::NewWorkspace;
-use crate::{Invitations, Members, WorkspaceConfig, WorkspaceRole, Workspaces};
+use crate::{DemoWorkspaces, Invitations, Members, WorkspaceConfig, WorkspaceRole, Workspaces};
 
 /// The path parameter naming the workspace (a slug or an id).
 const WORKSPACE_PARAM: &str = "workspace";
@@ -41,6 +41,11 @@ pub struct WorkspaceResource {
     pub slug: String,
     /// The owner.
     pub owner_id: Uuid,
+    /// `live` or `demo` (a demo workspace, for a front end's Live/Demo
+    /// switch).
+    #[serde(rename = "kind")]
+    #[schema(rename = "kind")]
+    pub workspace_kind: WorkspaceKind,
     /// The caller's role in the workspace.
     #[schema(value_type = String, example = "owner")]
     pub role: WorkspaceRole,
@@ -59,6 +64,7 @@ impl WorkspaceResource {
             name: workspace.name.clone(),
             slug: workspace.slug.clone(),
             owner_id: workspace.owner_id,
+            workspace_kind: workspace.kind(),
             role,
             created_at: workspace.created_at,
             updated_at: workspace.updated_at,
@@ -232,7 +238,7 @@ pub struct AcceptedInvitationResource {
 ///
 /// | Route | Permission | Answer |
 /// |---|---|---|
-/// | `GET /workspaces` | | the caller's workspaces, `{data: [..]}` |
+/// | `GET /workspaces` | | the caller's workspaces, `{data: [..]}` (with the demo workspaces when `workspace.demo.guest_role` is set) |
 /// | `POST /workspaces` `{name, slug?}` | | 201, the workspace (caller is owner) |
 /// | `GET /workspaces/{workspace}` | (member) | the workspace with the caller's role |
 /// | `PATCH /workspaces/{workspace}` `{name}` | `workspace.update` | the workspace |
@@ -248,12 +254,15 @@ pub struct AcceptedInvitationResource {
 /// | `DELETE /workspaces/{workspace}/invitations/{invitation}` | `workspace.invitations.delete` | 204 |
 ///
 /// Granting the `owner` role, or changing or removing a member who has it,
-/// also takes the `owner` role (a 403 otherwise). `POST
+/// also takes the `owner` role (a 403 otherwise). In a read-only demo
+/// workspace the routes that write answer 403 (`demo_read_only`). `POST
 /// /invitations/accept` is [`InvitationController`].
 pub struct WorkspaceController {
     workspaces: Arc<Workspaces>,
     members: Arc<Members>,
     invitations: Arc<Invitations>,
+    demos: Arc<DemoWorkspaces>,
+    guest_role: Option<WorkspaceRole>,
     enabled: bool,
 }
 
@@ -263,20 +272,55 @@ impl Injectable for WorkspaceController {
             ProviderKey::of::<Workspaces>(),
             ProviderKey::of::<Members>(),
             ProviderKey::of::<Invitations>(),
+            ProviderKey::of::<DemoWorkspaces>(),
             ProviderKey::of::<WorkspaceConfig>(),
         ]
     }
 
     fn construct(r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
         Box::pin(async move {
+            let config = r.get::<WorkspaceConfig>().await?;
             Ok(WorkspaceController {
                 workspaces: r.get::<Workspaces>().await?,
                 members: r.get::<Members>().await?,
                 invitations: r.get::<Invitations>().await?,
-                enabled: r.get::<WorkspaceConfig>().await?.routes,
+                demos: r.get::<DemoWorkspaces>().await?,
+                guest_role: config.demo.guest_role.as_deref().map(WorkspaceRole::parse),
+                enabled: config.routes,
             })
         })
     }
+}
+
+/// The caller's workspaces with their role in each, by name: their
+/// memberships, plus the demo workspaces they enter as guests when
+/// `workspace.demo.guest_role` is set.
+async fn visible_workspaces(
+    workspaces: &Workspaces,
+    demos: &DemoWorkspaces,
+    guest_role: Option<&WorkspaceRole>,
+    user: Uuid,
+) -> Result<Vec<WorkspaceResource>, AppError> {
+    let mut visible: Vec<WorkspaceResource> = workspaces
+        .for_user(user)
+        .await?
+        .into_iter()
+        .map(|membership| WorkspaceResource::new(&membership.workspace, membership.role))
+        .collect();
+    if let Some(role) = guest_role {
+        let guest_of: Vec<WorkspaceResource> = demos
+            .all()
+            .await?
+            .iter()
+            .filter(|demo| !visible.iter().any(|joined| joined.id == demo.id))
+            .map(|demo| WorkspaceResource::new(demo, role.clone()))
+            .collect();
+        if !guest_of.is_empty() {
+            visible.extend(guest_of);
+            visible.sort_by(|a, b| a.name.cmp(&b.name).then(a.id.cmp(&b.id)));
+        }
+    }
+    Ok(visible)
 }
 
 /// Granting `owner`, or touching a member who is an owner, takes the
@@ -305,18 +349,15 @@ impl Controller for WorkspaceController {
         if !self.enabled {
             return Vec::new();
         }
-        let workspaces = self.workspaces.clone();
+        let (workspaces, demos) = (self.workspaces.clone(), self.demos.clone());
+        let guest_role = self.guest_role.clone();
         let index = move |CurrentPrincipal(me): CurrentPrincipal| {
-            let workspaces = workspaces.clone();
+            let (workspaces, demos) = (workspaces.clone(), demos.clone());
+            let guest_role = guest_role.clone();
             async move {
-                let data = workspaces
-                    .for_user(me.user_id)
-                    .await?
-                    .into_iter()
-                    .map(|membership| {
-                        WorkspaceResource::new(&membership.workspace, membership.role)
-                    })
-                    .collect();
+                let data =
+                    visible_workspaces(&workspaces, &demos, guest_role.as_ref(), me.user_id)
+                        .await?;
                 Ok::<_, AppError>(Json(DataList::<WorkspaceResource> { data }))
             }
         };

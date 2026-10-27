@@ -264,6 +264,7 @@ mod tests {
             name: "Acme".into(),
             slug: "acme".into(),
             owner_id: Uuid::now_v7(),
+            kind: "live".into(),
             created_at: now,
             updated_at: now,
         };
