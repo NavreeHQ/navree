@@ -1,6 +1,8 @@
 //! `SELECT`, aggregates over a query, and `EXISTS`.
 
-use sea_query::{Alias, Asterisk, JoinType, NullOrdering, SelectStatement, UnionType};
+use sea_query::{
+    Alias, Asterisk, IntoColumnRef, JoinType, NullOrdering, SelectStatement, UnionType,
+};
 
 use super::{Compiler, Dialect, Statement, build};
 use crate::error::OrmError;
@@ -87,6 +89,36 @@ pub fn compile_exists(query: &QueryIr, dialect: Dialect) -> Result<Statement, Or
     Ok(build(&select, dialect))
 }
 
+/// Splits the trailing direction (and NULLs placement) off a raw order:
+/// `"field(stage, ?) DESC NULLS LAST"` is `field(stage, ?)`, descending,
+/// NULLs last. Without a direction the order is ascending, as in SQL.
+fn split_direction(sql: &str) -> (&str, sea_query::Order, Option<NullOrdering>) {
+    let mut body = sql.trim_end();
+    let mut nulls = None;
+    for (suffix, placement) in [(" nulls first", NullOrdering::First), (" nulls last", NullOrdering::Last)] {
+        if ends_with_ignore_case(body, suffix) {
+            body = body[..body.len() - suffix.len()].trim_end();
+            nulls = Some(placement);
+            break;
+        }
+    }
+    let mut direction = sea_query::Order::Asc;
+    for (suffix, order) in [(" desc", sea_query::Order::Desc), (" asc", sea_query::Order::Asc)] {
+        if ends_with_ignore_case(body, suffix) {
+            body = body[..body.len() - suffix.len()].trim_end();
+            direction = order;
+            break;
+        }
+    }
+    (body, direction, nulls)
+}
+
+fn ends_with_ignore_case(text: &str, suffix: &str) -> bool {
+    text.len() >= suffix.len()
+        && text.is_char_boundary(text.len() - suffix.len())
+        && text[text.len() - suffix.len()..].eq_ignore_ascii_case(suffix)
+}
+
 /// A column reference without its table (outside a subquery, the columns
 /// of `aggregate_table` are unqualified).
 fn unqualified(expr: &Expr) -> Expr {
@@ -104,11 +136,21 @@ impl Compiler {
     pub(crate) fn select(&self, query: &QueryIr) -> Result<SelectStatement, OrmError> {
         query.check()?;
         let mut select = sea_query::Query::select();
-        let table = Alias::new(query.table.name.to_string());
-        match &query.table.alias {
-            Some(alias) => select.from_as(table, Alias::new(alias.to_string())),
-            None => select.from(table),
-        };
+        match (&query.table.subquery, &query.table.alias) {
+            (Some(subquery), _) => {
+                let subquery = self.select(subquery)?;
+                select.from_subquery(subquery, Alias::new(query.table.qualifier().to_owned()));
+            }
+            (None, Some(alias)) => {
+                select.from_as(
+                    Alias::new(query.table.name.to_string()),
+                    Alias::new(alias.to_string()),
+                );
+            }
+            (None, None) => {
+                select.from(Alias::new(query.table.name.to_string()));
+            }
+        }
 
         if query.columns.is_empty() {
             if query.joins.is_empty() {
@@ -138,14 +180,12 @@ impl Compiler {
                 for expr in exprs {
                     match expr {
                         Expr::Column(column) if column.path.is_empty() => {
+                            let name = Alias::new(column.name.to_string());
                             columns.push(match &column.table {
-                                Some(table) => sea_query::ColumnRef::TableColumn(
-                                    Alias::new(table.to_string()).into(),
-                                    Alias::new(column.name.to_string()).into(),
-                                ),
-                                None => sea_query::ColumnRef::Column(
-                                    Alias::new(column.name.to_string()).into(),
-                                ),
+                                Some(table) => {
+                                    (Alias::new(table.to_string()), name).into_column_ref()
+                                }
+                                None => name.into_column_ref(),
                             });
                         }
                         other => {
@@ -157,7 +197,6 @@ impl Compiler {
                 }
                 select.distinct_on(columns);
             }
-            other => return Err(self.unsupported(format!("{other:?}"))),
         }
 
         for join in &query.joins {
@@ -167,16 +206,28 @@ impl Compiler {
                 // SQLite has RIGHT JOIN since 3.39 (the bundled library is newer).
                 JoinKind::Right => JoinType::RightJoin,
                 JoinKind::Cross => JoinType::CrossJoin,
-                other => return Err(self.unsupported(format!("{other:?} joins"))),
             };
             let condition = self.clauses(&join.on)?;
-            let table = Alias::new(join.table.name.to_string());
-            match &join.table.alias {
-                Some(alias) => {
-                    select.join_as(kind, table, Alias::new(alias.to_string()), condition);
+            match (&join.table.subquery, &join.table.alias) {
+                (Some(subquery), _) => {
+                    let subquery = self.select(subquery)?;
+                    select.join_subquery(
+                        kind,
+                        subquery,
+                        Alias::new(join.table.qualifier().to_owned()),
+                        condition,
+                    );
                 }
-                None => {
-                    select.join(kind, table, condition);
+                (None, Some(alias)) => {
+                    select.join_as(
+                        kind,
+                        Alias::new(join.table.name.to_string()),
+                        Alias::new(alias.to_string()),
+                        condition,
+                    );
+                }
+                (None, None) => {
+                    select.join(kind, Alias::new(join.table.name.to_string()), condition);
                 }
             }
         }
@@ -227,7 +278,19 @@ impl Compiler {
                     };
                     select.order_by_expr(sea_query::Expr::cust(random), sea_query::Order::Asc);
                 }
-                other => return Err(self.unsupported(format!("the order {other:?}"))),
+                Order::Raw { sql, values } => {
+                    let (body, direction, nulls) = split_direction(sql);
+                    let body = super::raw_sql(body, values.len(), self.dialect)?;
+                    let expr = sea_query::Expr::cust_with_values(body, values.iter().cloned());
+                    match nulls {
+                        Some(nulls) => {
+                            select.order_by_expr_with_nulls(expr, direction, nulls);
+                        }
+                        None => {
+                            select.order_by_expr(expr, direction);
+                        }
+                    }
+                }
             }
         }
         if let Some(limit) = query.limit {
@@ -251,7 +314,6 @@ impl Compiler {
                     Lock::Share => {
                         select.lock_shared();
                     }
-                    other => return Err(self.unsupported(format!("the lock {other:?}"))),
                 }
             }
         }

@@ -104,6 +104,13 @@ pub(crate) fn sql_get<T: TryGetable>(row: &QueryResult, column: &str) -> Result<
 }
 
 /// Whether `value` is a NULL (of any type).
+///
+/// ```
+/// use navree_orm::{Value, is_null};
+///
+/// assert!(is_null(&Value::Uuid(None)));
+/// assert!(!is_null(&Value::Bool(Some(false))));
+/// ```
 pub fn is_null(value: &Value) -> bool {
     match value {
         Value::Bool(v) => v.is_none(),
@@ -129,14 +136,107 @@ pub fn is_null(value: &Value) -> bool {
         Value::ChronoDateTimeWithTimeZone(v) => v.is_none(),
         Value::Uuid(v) => v.is_none(),
         Value::Decimal(v) => v.is_none(),
-        other => to_json(other).is_null(),
+        // Enums and the variants other cargo features add.
+        other => sea_query::value::sea_value_to_json_value(other).is_null(),
     }
 }
 
-/// `value` as JSON: numbers as numbers, text, UUIDs and date-times as
-/// strings, JSON as itself, NULL as `null`.
+/// `value` as JSON, the way the field would serialize: numbers as numbers,
+/// decimals as exact strings (`"12.50"`), UUIDs and date-times as their
+/// serde text (RFC 3339), JSON as itself, bytes as an array of numbers,
+/// NULL as `null`. Non-finite floats become `null`.
+///
+/// ```
+/// use navree_orm::{Decimal, Value, to_json};
+///
+/// assert_eq!(to_json(&Value::from(42_i64)), serde_json::json!(42));
+/// assert_eq!(to_json(&Value::Decimal(Some(Decimal::new(1250, 2)))), serde_json::json!("12.50"));
+/// assert_eq!(to_json(&Value::String(None)), serde_json::Value::Null);
+/// ```
 pub fn to_json(value: &Value) -> serde_json::Value {
-    sea_query::value::sea_value_to_json_value(value)
+    use serde_json::Value as Json;
+
+    fn serde<T: serde::Serialize>(value: &T) -> Json {
+        serde_json::to_value(value).unwrap_or(Json::Null)
+    }
+    fn float(value: f64) -> Json {
+        serde_json::Number::from_f64(value).map_or(Json::Null, Json::Number)
+    }
+
+    match value {
+        Value::Bool(v) => v.map_or(Json::Null, Json::Bool),
+        Value::TinyInt(v) => v.map_or(Json::Null, Json::from),
+        Value::SmallInt(v) => v.map_or(Json::Null, Json::from),
+        Value::Int(v) => v.map_or(Json::Null, Json::from),
+        Value::BigInt(v) => v.map_or(Json::Null, Json::from),
+        Value::TinyUnsigned(v) => v.map_or(Json::Null, Json::from),
+        Value::SmallUnsigned(v) => v.map_or(Json::Null, Json::from),
+        Value::Unsigned(v) => v.map_or(Json::Null, Json::from),
+        Value::BigUnsigned(v) => v.map_or(Json::Null, Json::from),
+        Value::Float(v) => v.map_or(Json::Null, |v| float(f64::from(v))),
+        Value::Double(v) => v.map_or(Json::Null, float),
+        Value::String(v) => v.as_ref().map_or(Json::Null, |s| Json::String(s.clone())),
+        Value::Char(v) => v.map_or(Json::Null, |c| Json::String(c.to_string())),
+        Value::Bytes(v) => v.as_ref().map_or(Json::Null, serde),
+        Value::Json(v) => v.as_deref().cloned().unwrap_or(Json::Null),
+        Value::ChronoDate(v) => v.as_ref().map_or(Json::Null, serde),
+        Value::ChronoTime(v) => v.as_ref().map_or(Json::Null, serde),
+        Value::ChronoDateTime(v) => v.as_ref().map_or(Json::Null, serde),
+        Value::ChronoDateTimeUtc(v) => v.as_ref().map_or(Json::Null, serde),
+        Value::ChronoDateTimeLocal(v) => v.as_ref().map_or(Json::Null, serde),
+        Value::ChronoDateTimeWithTimeZone(v) => v.as_ref().map_or(Json::Null, serde),
+        Value::Uuid(v) => v.map_or(Json::Null, |u| Json::String(u.to_string())),
+        Value::Decimal(v) => v.map_or(Json::Null, |d| Json::String(d.to_string())),
+        // Enums and the variants other cargo features add.
+        other => sea_query::value::sea_value_to_json_value(other),
+    }
+}
+
+/// Whether two stored values of a column hold the same thing (what dirty
+/// tracking asks): NULLs are equal whatever their type, floats within a
+/// small relative tolerance, decimals numerically (`12.5` and `12.50`),
+/// date-times by instant, JSON structurally, anything else exactly.
+///
+/// ```
+/// use navree_orm::{Decimal, Value, same_value};
+///
+/// assert!(same_value(&Value::Double(Some(0.1 + 0.2)), &Value::Double(Some(0.3))));
+/// assert!(same_value(
+///     &Value::Decimal(Some(Decimal::new(125, 1))),
+///     &Value::Decimal(Some(Decimal::new(1250, 2))),
+/// ));
+/// assert!(same_value(&Value::String(None), &Value::BigInt(None)));
+/// assert!(!same_value(&Value::from("a"), &Value::from("b")));
+/// ```
+pub fn same_value(a: &Value, b: &Value) -> bool {
+    match (is_null(a), is_null(b)) {
+        (true, true) => return true,
+        (true, false) | (false, true) => return false,
+        (false, false) => {}
+    }
+    match (a, b) {
+        (Value::Float(_) | Value::Double(_), Value::Float(_) | Value::Double(_)) => {
+            match (float(a), float(b)) {
+                (Ok(x), Ok(y)) => {
+                    x == y || (x - y).abs() <= f64::EPSILON * 4.0 * x.abs().max(y.abs()).max(1.0)
+                }
+                _ => false,
+            }
+        }
+        (Value::Decimal(Some(x)), Value::Decimal(Some(y))) => x == y,
+        (
+            Value::ChronoDateTimeUtc(_)
+            | Value::ChronoDateTimeWithTimeZone(_)
+            | Value::ChronoDateTimeLocal(_),
+            Value::ChronoDateTimeUtc(_)
+            | Value::ChronoDateTimeWithTimeZone(_)
+            | Value::ChronoDateTimeLocal(_),
+        ) => match (date_time_utc(a.clone()), date_time_utc(b.clone())) {
+            (Ok(x), Ok(y)) => x == y,
+            _ => false,
+        },
+        _ => a == b,
+    }
 }
 
 /// A short description of a value's type for error messages.
@@ -318,8 +418,12 @@ fn uuid(value: Value) -> Result<Uuid, FieldError> {
         Value::String(Some(s)) => {
             Uuid::parse_str(s.trim()).map_err(|_| FieldError::Invalid(format!("`{s}` is not a UUID")))
         }
-        Value::Bytes(Some(b)) => Uuid::from_slice(&b)
+        Value::Bytes(Some(b)) if b.len() == 16 => Uuid::from_slice(&b)
             .map_err(|_| FieldError::Invalid(format!("{} bytes are not a UUID", b.len()))),
+        Value::Bytes(Some(b)) => std::str::from_utf8(&b)
+            .ok()
+            .and_then(|text| Uuid::parse_str(text.trim()).ok())
+            .ok_or_else(|| FieldError::Invalid(format!("{} bytes are not a UUID", b.len()))),
         Value::Json(Some(json)) => match json.as_str() {
             Some(s) => Uuid::parse_str(s)
                 .map_err(|_| FieldError::Invalid(format!("`{s}` is not a UUID"))),
@@ -470,14 +574,86 @@ macro_rules! exact_field {
     };
 }
 
-/// `Field` for an integer type: exact from SQL, range-checked from values.
+/// Reads an integer column of any width (`SMALLINT`, `INTEGER`, `BIGINT`,
+/// MySQL's unsigned types) as `T`, range-checked: the column's type need
+/// not match the field's exactly (PostgreSQL's decoders are strict about
+/// widths; SQLite has a single integer type).
+fn sql_integer<T>(row: &QueryResult, column: &str, name: &str) -> Result<T, FieldError>
+where
+    T: TryGetable + TryFrom<i128>,
+{
+    let first = match sql_get::<T>(row, column) {
+        Ok(value) => return Ok(value),
+        Err(FieldError::Invalid(message)) => message,
+        Err(other) => return Err(other),
+    };
+    let wide: i128 = if let Ok(v) = sql_get::<i64>(row, column) {
+        i128::from(v)
+    } else if let Ok(v) = sql_get::<i32>(row, column) {
+        i128::from(v)
+    } else if let Ok(v) = sql_get::<i16>(row, column) {
+        i128::from(v)
+    } else if let Ok(v) = sql_get_unsigned(row, column) {
+        i128::from(v)
+    } else {
+        return Err(FieldError::Invalid(first));
+    };
+    T::try_from(wide).map_err(|_| FieldError::Invalid(format!("{wide} does not fit {name}")))
+}
+
+/// MySQL's `BIGINT UNSIGNED` (the only database with unsigned columns).
+fn sql_get_unsigned(row: &QueryResult, column: &str) -> Result<u64, FieldError> {
+    sql_get::<u64>(row, column)
+}
+
+/// Reads a floating-point, decimal or integer column as an `f64`.
+fn sql_float(row: &QueryResult, column: &str) -> Result<f64, FieldError> {
+    let first = match sql_get::<f64>(row, column) {
+        Ok(value) => return Ok(value),
+        Err(FieldError::Invalid(message)) => message,
+        Err(other) => return Err(other),
+    };
+    if let Ok(v) = sql_get::<f32>(row, column) {
+        return Ok(f64::from(v));
+    }
+    if let Ok(v) = sql_get::<Decimal>(row, column) {
+        return float(&Value::Decimal(Some(v)));
+    }
+    match sql_integer::<i64>(row, column, "f64") {
+        // Integers from the database fit an f64 closely enough for a float field.
+        #[allow(clippy::cast_precision_loss)]
+        Ok(v) => Ok(v as f64),
+        Err(_) => Err(FieldError::Invalid(first)),
+    }
+}
+
+/// `Field` for an integer type: any integer column width from SQL,
+/// range-checked from values.
 macro_rules! integer_field {
     ($ty:ty, $name:literal, $null:expr) => {
-        exact_field!($ty, $name, $null, |value: Value| {
-            let int = integer(&value)?;
-            <$ty>::try_from(int)
-                .map_err(|_| FieldError::Invalid(format!("{int} does not fit {}", $name)))
-        });
+        impl Field for $ty {
+            fn to_value(&self) -> Value {
+                Value::from(*self)
+            }
+
+            fn null() -> Value {
+                $null
+            }
+
+            fn from_sql(row: &QueryResult, column: &str) -> Result<Self, FieldError> {
+                sql_integer::<$ty>(row, column, $name)
+            }
+
+            fn from_value(value: Value) -> Result<Self, FieldError> {
+                let int = integer(&value)?;
+                <$ty>::try_from(int)
+                    .map_err(|_| FieldError::Invalid(format!("{int} does not fit {}", $name)))
+            }
+
+            fn type_name() -> Cow<'static, str> {
+                Cow::Borrowed($name)
+            }
+        }
     };
 }
 
@@ -488,17 +664,97 @@ integer_field!(i64, "i64", Value::BigInt(None));
 integer_field!(u8, "u8", Value::TinyUnsigned(None));
 integer_field!(u16, "u16", Value::SmallUnsigned(None));
 integer_field!(u32, "u32", Value::Unsigned(None));
+integer_field!(u64, "u64", Value::BigUnsigned(None));
 
 exact_field!(bool, "bool", Value::Bool(None), |value: Value| boolean(&value));
-exact_field!(f32, "f32", Value::Float(None), |value: Value| {
-    // Narrowing to the field's own precision.
-    #[allow(clippy::cast_possible_truncation)]
-    float(&value).map(|v| v as f32)
-});
-exact_field!(f64, "f64", Value::Double(None), |value: Value| float(&value));
+
+impl Field for f32 {
+    fn to_value(&self) -> Value {
+        Value::Float(Some(*self))
+    }
+
+    fn null() -> Value {
+        Value::Float(None)
+    }
+
+    fn from_sql(row: &QueryResult, column: &str) -> Result<Self, FieldError> {
+        match sql_get::<f32>(row, column) {
+            Ok(value) => Ok(value),
+            // Narrowing to the field's own precision.
+            #[allow(clippy::cast_possible_truncation)]
+            Err(FieldError::Invalid(_)) => sql_float(row, column).map(|v| v as f32),
+            Err(other) => Err(other),
+        }
+    }
+
+    fn from_value(value: Value) -> Result<Self, FieldError> {
+        // Narrowing to the field's own precision.
+        #[allow(clippy::cast_possible_truncation)]
+        float(&value).map(|v| v as f32)
+    }
+
+    fn type_name() -> Cow<'static, str> {
+        Cow::Borrowed("f32")
+    }
+}
+
+impl Field for f64 {
+    fn to_value(&self) -> Value {
+        Value::Double(Some(*self))
+    }
+
+    fn null() -> Value {
+        Value::Double(None)
+    }
+
+    fn from_sql(row: &QueryResult, column: &str) -> Result<Self, FieldError> {
+        sql_float(row, column)
+    }
+
+    fn from_value(value: Value) -> Result<Self, FieldError> {
+        float(&value)
+    }
+
+    fn type_name() -> Cow<'static, str> {
+        Cow::Borrowed("f64")
+    }
+}
 exact_field!(String, "String", Value::String(None), string);
 exact_field!(Vec<u8>, "Vec<u8>", Value::Bytes(None), bytes);
-exact_field!(Uuid, "Uuid", Value::Uuid(None), uuid);
+
+/// `Uuid`: native on PostgreSQL, 16 bytes on SQLite and MySQL; also read
+/// from text columns holding the hyphenated form (`CHAR(36)`).
+impl Field for Uuid {
+    fn to_value(&self) -> Value {
+        Value::Uuid(Some(*self))
+    }
+
+    fn null() -> Value {
+        Value::Uuid(None)
+    }
+
+    fn from_sql(row: &QueryResult, column: &str) -> Result<Self, FieldError> {
+        match sql_get::<Uuid>(row, column) {
+            Ok(value) => Ok(value),
+            Err(FieldError::Invalid(error)) => match sql_get::<String>(row, column) {
+                Ok(text) => uuid(Value::String(Some(text))),
+                Err(_) => match sql_get::<Vec<u8>>(row, column) {
+                    Ok(bytes) => uuid(Value::Bytes(Some(bytes))),
+                    Err(_) => Err(FieldError::Invalid(error)),
+                },
+            },
+            Err(other) => Err(other),
+        }
+    }
+
+    fn from_value(value: Value) -> Result<Self, FieldError> {
+        uuid(value)
+    }
+
+    fn type_name() -> Cow<'static, str> {
+        Cow::Borrowed("Uuid")
+    }
+}
 exact_field!(
     serde_json::Value,
     "serde_json::Value",
@@ -526,38 +782,6 @@ exact_field!(
     date_time_offset
 );
 
-/// `u64`: MySQL's `BIGINT UNSIGNED`; elsewhere a non-negative `BIGINT`.
-impl Field for u64 {
-    fn to_value(&self) -> Value {
-        Value::BigUnsigned(Some(*self))
-    }
-
-    fn null() -> Value {
-        Value::BigUnsigned(None)
-    }
-
-    fn from_sql(row: &QueryResult, column: &str) -> Result<Self, FieldError> {
-        match sql_get::<u64>(row, column) {
-            Ok(value) => Ok(value),
-            Err(FieldError::Invalid(_)) => {
-                let signed = sql_get::<i64>(row, column)?;
-                u64::try_from(signed)
-                    .map_err(|_| FieldError::Invalid(format!("{signed} does not fit u64")))
-            }
-            Err(other) => Err(other),
-        }
-    }
-
-    fn from_value(value: Value) -> Result<Self, FieldError> {
-        let int = integer(&value)?;
-        u64::try_from(int).map_err(|_| FieldError::Invalid(format!("{int} does not fit u64")))
-    }
-
-    fn type_name() -> Cow<'static, str> {
-        Cow::Borrowed("u64")
-    }
-}
-
 /// [`Decimal`]: exact on PostgreSQL and MySQL; on SQLite, whose `NUMERIC`
 /// columns keep numbers as integers or floats, read from those or from
 /// text.
@@ -573,10 +797,18 @@ impl Field for Decimal {
     fn from_sql(row: &QueryResult, column: &str) -> Result<Self, FieldError> {
         match sql_get::<Decimal>(row, column) {
             Ok(value) => Ok(value),
-            Err(FieldError::Invalid(error)) => match sql_get::<String>(row, column) {
-                Ok(text) => decimal(&Value::String(Some(text))),
-                Err(_) => Err(FieldError::Invalid(error)),
-            },
+            Err(FieldError::Invalid(error)) => {
+                if let Ok(text) = sql_get::<String>(row, column) {
+                    return decimal(&Value::String(Some(text)));
+                }
+                if let Ok(int) = sql_integer::<i64>(row, column, "Decimal") {
+                    return Ok(Decimal::from(int));
+                }
+                match sql_get::<f64>(row, column) {
+                    Ok(float) => decimal(&Value::Double(Some(float))),
+                    Err(_) => Err(FieldError::Invalid(error)),
+                }
+            }
             Err(other) => Err(other),
         }
     }
@@ -620,6 +852,65 @@ impl<T: Field> Field for Option<T> {
 
     fn type_name() -> Cow<'static, str> {
         Cow::Owned(format!("Option<{}>", T::type_name()))
+    }
+}
+
+/// A number a column can be incremented or decremented by
+/// ([`Record::increment`](crate::Record::increment),
+/// [`Builder::increment`](crate::Builder::increment)).
+///
+/// Implemented for every integer type, `f32`, `f64` and [`Decimal`].
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` columns cannot be incremented",
+    note = "increment integer, float or `Decimal` columns"
+)]
+pub trait Numeric: Field + Copy {
+    /// `self + other`, `None` on overflow.
+    fn checked_add(self, other: Self) -> Option<Self>;
+
+    /// `self - other`, `None` on overflow.
+    fn checked_sub(self, other: Self) -> Option<Self>;
+}
+
+macro_rules! integer_numeric {
+    ($($ty:ty),*) => {$(
+        impl Numeric for $ty {
+            fn checked_add(self, other: Self) -> Option<Self> {
+                <$ty>::checked_add(self, other)
+            }
+
+            fn checked_sub(self, other: Self) -> Option<Self> {
+                <$ty>::checked_sub(self, other)
+            }
+        }
+    )*};
+}
+
+integer_numeric!(i8, i16, i32, i64, u8, u16, u32, u64);
+
+macro_rules! float_numeric {
+    ($($ty:ty),*) => {$(
+        impl Numeric for $ty {
+            fn checked_add(self, other: Self) -> Option<Self> {
+                Some(self + other).filter(|sum| sum.is_finite())
+            }
+
+            fn checked_sub(self, other: Self) -> Option<Self> {
+                Some(self - other).filter(|difference| difference.is_finite())
+            }
+        }
+    )*};
+}
+
+float_numeric!(f32, f64);
+
+impl Numeric for Decimal {
+    fn checked_add(self, other: Self) -> Option<Self> {
+        Decimal::checked_add(self, other)
+    }
+
+    fn checked_sub(self, other: Self) -> Option<Self> {
+        Decimal::checked_sub(self, other)
     }
 }
 

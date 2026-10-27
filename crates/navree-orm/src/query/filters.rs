@@ -6,7 +6,13 @@
 //! need no trait imports. Each type gives the macro its clause list through
 //! [`HasWheres`].
 
-use crate::ir::{Boolean, Where, WhereClause};
+use std::borrow::Cow;
+
+use crate::column::{AsExpr, ColumnOf, Filter, IntoQuery};
+use crate::ir::{
+    Boolean, ColumnRef, DatePart, Expr, FullText, InValues, Operator, TableRef, Where, WhereClause,
+};
+use crate::value::Value;
 
 /// A builder with a list of where clauses (implemented by every builder).
 pub trait HasWheres {
@@ -521,6 +527,47 @@ macro_rules! filters {
             self.or_where($crate::Filter::not_exists(query))
         }
 
+        /// Adds a full-text match of `query` against `columns`: on
+        /// PostgreSQL `to_tsvector(...) @@ plainto_tsquery(...)` (English
+        /// by default), on MySQL `MATCH (...) AGAINST (...)` over a
+        /// `FULLTEXT` index. SQLite has no full-text conditions.
+        ///
+        /// ```ignore
+        /// Deal::query().where_full_text([Deal::TITLE, Deal::NOTES], "renewal pricing")
+        /// ```
+        pub fn where_full_text(
+            self,
+            columns: impl IntoIterator<Item = impl $crate::AsExpr>,
+            query: impl Into<String>,
+        ) -> Self {
+            self.where_($crate::query::filters::full_text(columns, query, $crate::ir::FullText::default()))
+        }
+
+        /// Adds a full-text match with options: the mode (`phrase`,
+        /// `websearch`, `boolean`), PostgreSQL's text search language,
+        /// MySQL's query expansion.
+        ///
+        /// ```ignore
+        /// Deal::query().where_full_text_with([Deal::TITLE], "\"net 30\" -draft", FullText::websearch())
+        /// ```
+        pub fn where_full_text_with(
+            self,
+            columns: impl IntoIterator<Item = impl $crate::AsExpr>,
+            query: impl Into<String>,
+            options: $crate::ir::FullText,
+        ) -> Self {
+            self.where_($crate::query::filters::full_text(columns, query, options))
+        }
+
+        /// Adds `OR` a full-text match.
+        pub fn or_where_full_text(
+            self,
+            columns: impl IntoIterator<Item = impl $crate::AsExpr>,
+            query: impl Into<String>,
+        ) -> Self {
+            self.or_where($crate::query::filters::full_text(columns, query, $crate::ir::FullText::default()))
+        }
+
         /// Adds raw SQL with `?` placeholders for `values` (`??` for a
         /// literal `?`). SQL databases only.
         pub fn where_raw(
@@ -720,22 +767,49 @@ pub(crate) fn json_length(column: impl AsExpr, op: impl Into<Operator>, length: 
     }
 }
 
+pub(crate) fn full_text(
+    columns: impl IntoIterator<Item = impl AsExpr>,
+    query: impl Into<String>,
+    options: FullText,
+) -> Filter {
+    let columns: Vec<Expr> = columns.into_iter().map(AsExpr::as_expr).collect();
+    if columns.is_empty() {
+        return Filter(Where::Invalid(
+            "a full-text condition needs at least one column".to_owned(),
+        ));
+    }
+    Filter(Where::FullText {
+        columns,
+        query: query.into(),
+        options,
+    })
+}
+
 /// A table name with an optional alias: `"companies"`, `"companies as
 /// c"`, `"companies c"`.
-pub(crate) fn parse_table(table: &str) -> crate::ir::TableRef {
+pub(crate) fn parse_table(table: &str) -> TableRef {
     let words: Vec<&str> = table.split_whitespace().collect();
     match words.as_slice() {
-        [name] => crate::ir::TableRef::new(Cow::Owned((*name).to_owned())),
-        [name, alias] => crate::ir::TableRef {
-            name: Cow::Owned((*name).to_owned()),
-            alias: Some(Cow::Owned((*alias).to_owned())),
-            subquery: None,
-        },
-        [name, as_, alias] if as_.eq_ignore_ascii_case("as") => crate::ir::TableRef {
-            name: Cow::Owned((*name).to_owned()),
-            alias: Some(Cow::Owned((*alias).to_owned())),
-            subquery: None,
-        },
-        _ => crate::ir::TableRef::new(Cow::Owned(table.trim().to_owned())),
+        [name] => TableRef::new(Cow::Owned((*name).to_owned())),
+        [name, alias] => TableRef::aliased((*name).to_owned(), (*alias).to_owned()),
+        [name, as_, alias] if as_.eq_ignore_ascii_case("as") => {
+            TableRef::aliased((*name).to_owned(), (*alias).to_owned())
+        }
+        _ => TableRef::new(Cow::Owned(table.trim().to_owned())),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tables_take_aliases_with_or_without_as() {
+        for text in ["companies as c", "companies AS c", "companies c"] {
+            let table = parse_table(text);
+            assert_eq!(table.name, "companies", "{text}");
+            assert_eq!(table.qualifier(), "c", "{text}");
+        }
+        assert_eq!(parse_table(" companies ").qualifier(), "companies");
     }
 }

@@ -48,6 +48,8 @@ const HIERARCHY: &[Rule] = &[
     // L0
     rule("navree-kernel", 0, &[]),
     rule("navree-macros", 0, &[]),
+    // The ORM's derive and attribute macros (re-exported by navree-orm).
+    rule("navree-orm-macros", 0, &[]),
     // Dock: local development services (`navree dock`). A tool crate with
     // no navree dependencies; the CLI uses it and the facade re-exports it
     // behind the opt-in `dock` feature.
@@ -81,6 +83,13 @@ const HIERARCHY: &[Rule] = &[
     rule("navree-schedule", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-db"]),
     rule("navree-access", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db", "navree-cache"]),
     rule("navree-notify", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http", "navree-db", "navree-mail"]),
+    // The ORM: models on navree-db's pool and unit of work. Model events go
+    // through navree-events, encrypted and hashed casts through
+    // navree-crypto (ORM brief §2).
+    rule("navree-orm", 4, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http",
+        "navree-db", "navree-events", "navree-crypto", "navree-orm-macros",
+    ]),
     // L5
     rule("navree-auth", 5, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db",
@@ -205,6 +214,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-access",
     "navree-schedule",
     "navree-notify",
+    "navree-orm",
     "navree-auth",
     "navree-workspace",
     "navree-social",

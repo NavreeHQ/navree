@@ -89,6 +89,24 @@ pub fn decode<C: Cast<T>, T>(row: &Row, column: &str) -> Result<T, FieldError> {
     C::get(stored).map_err(|error| FieldError::Invalid(error.to_string()))
 }
 
+/// Encodes a nullable field through cast `C` (`None` is a typed NULL).
+pub fn encode_option<C: Cast<T>, T>(value: &Option<T>) -> Result<Value, String> {
+    match value {
+        Some(value) => encode::<C, T>(value),
+        None => Ok(<C::Stored as Field>::null()),
+    }
+}
+
+/// Decodes a nullable field through cast `C` (NULL is `None`).
+pub fn decode_option<C: Cast<T>, T>(row: &Row, column: &str) -> Result<Option<T>, FieldError> {
+    match row.field::<Option<C::Stored>>(column)? {
+        Some(stored) => C::get(stored)
+            .map(Some)
+            .map_err(|error| FieldError::Invalid(error.to_string())),
+        None => Ok(None),
+    }
+}
+
 /// Any serde type stored as JSON (`#[model(cast = "json")]`): structs,
 /// vectors, maps, embedded documents.
 ///

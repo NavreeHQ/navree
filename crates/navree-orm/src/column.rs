@@ -24,12 +24,13 @@ pub struct Untyped;
 
 /// A column of model `M` holding values of type `T`.
 ///
-/// `#[derive(Model)]` generates one constant per column
-/// (`Deal::AMOUNT_CENTS: Column<Deal, i64>`; an `Option<T>` field gives a
-/// `Column<M, T>`). Conditions built from a column take values of its type
-/// and encode them exactly as the field is stored (casts included), so
-/// `Deal::STAGE.eq(Stage::Won)` compares with `'won'` when the stage is
-/// stored as its name.
+/// `#[derive(Model)]` generates one constant per column, typed like its
+/// field (`Deal::AMOUNT_CENTS: Column<Deal, i64>`, `Deal::CLOSED_AT:
+/// Column<Deal, Option<DateTime<Utc>>>`). Conditions built from a column
+/// take values of its type (a nullable column takes plain values too:
+/// `Deal::CLOSED_AT.gt(now)`) and encode them exactly as the field is
+/// stored (casts included), so `Deal::STAGE.eq(Stage::Won)` compares with
+/// `'won'` when the stage is stored as its name.
 ///
 /// Typed columns are qualified by their table in SQL, so they stay
 /// unambiguous in joins and subqueries. [`col`] builds an untyped column
@@ -153,6 +154,12 @@ impl<M, T> Column<M, T> {
     /// Reads this column from `row`.
     pub fn decode(&self, row: &Row) -> Result<T, FieldError> {
         (self.decode)(row, ColumnRef::parse(self.name.clone()).name.as_ref())
+    }
+
+    /// Reads result column `column` of `row` as this column's type (for a
+    /// value selected under another name).
+    pub fn decode_as(&self, row: &Row, column: &str) -> Result<T, FieldError> {
+        (self.decode)(row, column)
     }
 
     /// A path into this JSON column: `Deal::META.json("status")` is
@@ -400,6 +407,24 @@ impl<M> Column<M, String> {
     }
 }
 
+impl<M> Column<M, Option<String>> {
+    /// `column LIKE pattern`, ignoring case on every database (NULLs never
+    /// match).
+    pub fn like(&self, pattern: impl Into<String>) -> Filter {
+        Filter::like(self.expr(), pattern.into(), false, false)
+    }
+
+    /// `column NOT LIKE pattern`, ignoring case on every database.
+    pub fn not_like(&self, pattern: impl Into<String>) -> Filter {
+        Filter::like(self.expr(), pattern.into(), false, true)
+    }
+
+    /// `column LIKE pattern`, matching case on every database.
+    pub fn like_case_sensitive(&self, pattern: impl Into<String>) -> Filter {
+        Filter::like(self.expr(), pattern.into(), true, false)
+    }
+}
+
 impl<M> Column<M, Value> {
     /// `column LIKE pattern`, ignoring case on every database.
     pub fn like(&self, pattern: impl Into<String>) -> Filter {
@@ -437,6 +462,23 @@ pub fn col(name: impl Into<Cow<'static, str>>) -> Column<Untyped, Value> {
         name,
         encode: encode_field::<Value>,
         decode: decode_field::<Value>,
+        _model: PhantomData,
+    }
+}
+
+/// An untyped column whose values are read as `T`: for plucks and single
+/// values of tables without a model.
+///
+/// ```ignore
+/// let titles: Vec<String> = table("deals").pluck(&db, col_as::<String>("title")).await?;
+/// ```
+pub fn col_as<T: Field>(name: impl Into<Cow<'static, str>>) -> Column<Untyped, T> {
+    let untyped = col(name);
+    Column {
+        table: untyped.table,
+        name: untyped.name,
+        encode: encode_field::<T>,
+        decode: decode_field::<T>,
         _model: PhantomData,
     }
 }

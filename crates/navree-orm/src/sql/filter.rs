@@ -6,7 +6,9 @@ use sea_query::{BinOper, Condition, ExprTrait};
 
 use super::{Compiler, Dialect, json_path_literal, raw_sql};
 use crate::error::OrmError;
-use crate::ir::{Boolean, DatePart, Expr, InValues, Operator, Where, WhereClause};
+use crate::ir::{
+    Boolean, DatePart, Expr, FullText, FullTextMode, InValues, Operator, Where, WhereClause,
+};
 use crate::value::{Field, Value};
 
 impl Compiler {
@@ -93,13 +95,17 @@ impl Compiler {
                 condition
             }
             Where::JsonLength { column, op, length } => self.json_length(column, op, *length)?,
+            Where::FullText {
+                columns,
+                query,
+                options,
+            } => self.full_text(columns, query, options)?,
             Where::Raw { sql, values } => {
                 let sql = raw_sql(sql, values.len(), self.dialect)?;
                 sea_query::Expr::cust_with_values(sql, values.iter().cloned())
             }
             Where::Sql(condition) => return Ok(condition.clone()),
             Where::Invalid(message) => return Err(OrmError::invalid(message.clone())),
-            other => return Err(self.unsupported(format!("the condition {other:?}"))),
         };
         Ok(Condition::all().add(expr))
     }
@@ -150,7 +156,6 @@ impl Compiler {
                     "`{op}` is not a known operator (use =, <>, <, <=, >, >=, like, not like, ilike, not ilike, <=>, &, |, ^, <<, >>, regexp, not regexp)"
                 )));
             }
-            other => return Err(self.unsupported(format!("the operator {other:?}"))),
         })
     }
 
@@ -239,7 +244,6 @@ impl Compiler {
                     left.in_subquery(select)
                 }
             }
-            other => return Err(self.unsupported(format!("IN with {other:?}"))),
         })
     }
 
@@ -268,7 +272,6 @@ impl Compiler {
             (Dialect::Sqlite, DatePart::Day) => self.custom("strftime('%d', {})", vec![column]),
             (Dialect::Sqlite, DatePart::Month) => self.custom("strftime('%m', {})", vec![column]),
             (Dialect::Sqlite, DatePart::Year) => self.custom("strftime('%Y', {})", vec![column]),
-            (_, other) => return Err(self.unsupported(format!("the date part {other:?}"))),
         };
         let right = match (self.dialect, part) {
             (Dialect::Postgres, DatePart::Date) => self.custom("CAST({} AS DATE)", vec![value]),
@@ -361,7 +364,6 @@ impl Compiler {
                 )),
                 _ => value.clone(),
             },
-            _ => value.clone(),
         };
         Ok(sea_query::Expr::val(normalized))
     }
@@ -458,6 +460,96 @@ impl Compiler {
             }
         };
         self.compare_compiled(left, op, sea_query::Expr::val(length))
+    }
+}
+
+/// PostgreSQL's built-in text search configurations: a full-text
+/// language is written into the SQL, so only these are accepted.
+const POSTGRES_LANGUAGES: [&str; 29] = [
+    "simple",
+    "arabic",
+    "armenian",
+    "basque",
+    "catalan",
+    "danish",
+    "dutch",
+    "english",
+    "finnish",
+    "french",
+    "german",
+    "greek",
+    "hindi",
+    "hungarian",
+    "indonesian",
+    "irish",
+    "italian",
+    "lithuanian",
+    "nepali",
+    "norwegian",
+    "portuguese",
+    "romanian",
+    "russian",
+    "serbian",
+    "spanish",
+    "swedish",
+    "tamil",
+    "turkish",
+    "yiddish",
+];
+
+impl Compiler {
+    fn full_text(
+        &self,
+        columns: &[Expr],
+        query: &str,
+        options: &FullText,
+    ) -> Result<sea_query::Expr, OrmError> {
+        let compiled = columns
+            .iter()
+            .map(|column| self.expr(column))
+            .collect::<Result<Vec<_>, _>>()?;
+        let search = sea_query::Expr::val(Value::from(query.to_owned()));
+        match self.dialect {
+            Dialect::Postgres => {
+                let language = options
+                    .language
+                    .as_deref()
+                    .unwrap_or("english")
+                    .to_ascii_lowercase();
+                if !POSTGRES_LANGUAGES.contains(&language.as_str()) {
+                    return Err(OrmError::invalid(format!(
+                        "`{language}` is not a PostgreSQL text search language (use one of {})",
+                        POSTGRES_LANGUAGES.join(", ")
+                    )));
+                }
+                let function = match options.mode {
+                    FullTextMode::Phrase => "phraseto_tsquery",
+                    FullTextMode::Websearch | FullTextMode::Boolean => "websearch_to_tsquery",
+                    _ => "plainto_tsquery",
+                };
+                let vectors = vec![format!("to_tsvector('{language}', {{}})"); compiled.len()].join(" || ");
+                let mut exprs = compiled;
+                exprs.push(search);
+                Ok(self.custom(
+                    &format!("({vectors}) @@ {function}('{language}', {{}})"),
+                    exprs,
+                ))
+            }
+            Dialect::MySql => {
+                let mode = match options.mode {
+                    FullTextMode::Boolean | FullTextMode::Websearch => "IN BOOLEAN MODE",
+                    _ if options.expanded => "IN NATURAL LANGUAGE MODE WITH QUERY EXPANSION",
+                    _ => "IN NATURAL LANGUAGE MODE",
+                };
+                let markers = vec!["{}"; compiled.len()].join(", ");
+                let mut exprs = compiled;
+                exprs.push(search);
+                Ok(self.custom(&format!("MATCH ({markers}) AGAINST ({{}} {mode})"), exprs))
+            }
+            Dialect::Sqlite => Err(self.unsupported(
+                "a full-text condition (query an FTS5 table with where_raw instead)",
+            )),
+        }
     }
 }
 

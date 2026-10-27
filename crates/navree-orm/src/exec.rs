@@ -26,7 +26,10 @@ use chrono::{DateTime, Utc};
 use navree_contracts::Clock;
 use navree_db::{Db, Reader, Uow};
 use navree_kernel::AppContext;
-use sea_orm::{ConnectionTrait, DatabaseConnection, DatabaseTransaction, ExecResult, QueryResult};
+use sea_orm::{
+    ConnectionTrait, DatabaseConnection, DatabaseTransaction, ExecResult, QueryResult,
+    TransactionTrait,
+};
 
 use crate::driver::{DocumentDriver, InsertOutcome};
 use crate::error::OrmError;
@@ -196,6 +199,32 @@ impl Target<'_> {
         }
     }
 
+    /// A savepoint (a nested transaction) of the transaction this target
+    /// runs in; `None` outside a transaction and on document stores.
+    pub(crate) async fn begin_savepoint(&self) -> Result<Option<DatabaseTransaction>, OrmError> {
+        match self {
+            Target::Sql(sql) => match &sql.conn {
+                SqlConn::Transaction(tx) => Ok(Some(tx.begin().await?)),
+                SqlConn::TransactionRef(tx) => Ok(Some(tx.begin().await?)),
+                SqlConn::Pool(_) => Ok(None),
+            },
+            Target::Document(_) => Ok(None),
+        }
+    }
+
+    /// The same target running on `tx` (a savepoint of its transaction).
+    pub(crate) fn on_transaction<'b>(&self, tx: &'b DatabaseTransaction) -> Target<'b> {
+        match self {
+            Target::Sql(sql) => Target::Sql(SqlTarget::new(
+                SqlConn::TransactionRef(tx),
+                sql.dialect,
+                sql.uow.clone(),
+                sql.app.clone(),
+            )),
+            Target::Document(document) => Target::Document(document.clone()),
+        }
+    }
+
     /// The rows of `query`.
     pub async fn fetch(&self, query: &QueryIr) -> Result<Vec<Row>, OrmError> {
         match self {
@@ -353,7 +382,7 @@ fn same_pool(db: &Db, uow: &Uow) -> bool {
 
 impl Executor for Db {
     async fn target(&self, access: Access) -> Result<Target<'_>, OrmError> {
-        let dialect = Dialect::from_backend(self.backend());
+        let dialect = Dialect::from_backend(self.backend())?;
         let app = self.app();
         match access {
             Access::Read => {
@@ -391,7 +420,7 @@ impl Executor for Uow {
         let tx = self.tx().await?;
         Ok(Target::Sql(SqlTarget::new(
             SqlConn::Transaction(tx),
-            Dialect::from_backend(self.db().backend()),
+            Dialect::from_backend(self.db().backend())?,
             Some(self.clone()),
             self.db().app(),
         )))
@@ -402,7 +431,7 @@ impl Executor for DatabaseConnection {
     async fn target(&self, _access: Access) -> Result<Target<'_>, OrmError> {
         Ok(Target::Sql(SqlTarget::new(
             SqlConn::Pool(self),
-            Dialect::from_backend(self.get_database_backend()),
+            Dialect::from_backend(self.get_database_backend())?,
             None,
             None,
         )))
@@ -413,7 +442,7 @@ impl Executor for DatabaseTransaction {
     async fn target(&self, _access: Access) -> Result<Target<'_>, OrmError> {
         Ok(Target::Sql(SqlTarget::new(
             SqlConn::TransactionRef(self),
-            Dialect::from_backend(self.get_database_backend()),
+            Dialect::from_backend(self.get_database_backend())?,
             None,
             None,
         )))
