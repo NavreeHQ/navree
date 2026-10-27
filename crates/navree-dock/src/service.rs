@@ -8,10 +8,35 @@ use crate::error::DockError;
 /// The address every port is bound to and every setting points at.
 pub const HOST: &str = "127.0.0.1";
 
+/// The image `[services.postgres]` runs by default: PostgreSQL with the
+/// TimescaleDB extension (and pgvector), Navree's default database.
+pub const TIMESCALEDB_IMAGE: &str = "timescale/timescaledb";
+
+/// The TimescaleDB release of [`TIMESCALEDB_IMAGE`] Dock runs.
+pub const TIMESCALEDB_VERSION: &str = "2.31.0";
+
+/// The PostgreSQL major versions [`TIMESCALEDB_VERSION`]'s images exist
+/// for: what `version` may be while TimescaleDB is on.
+pub const TIMESCALEDB_POSTGRES_VERSIONS: [u32; 3] = [16, 17, 18];
+
+/// The PostgreSQL major version Dock runs when `dock.toml` sets none.
+pub const POSTGRES_VERSION: &str = "17";
+
+/// The tag of the default image: [`TIMESCALEDB_VERSION`] on
+/// [`POSTGRES_VERSION`] (a test keeps them in step).
+const DEFAULT_TIMESCALEDB_TAG: &str = "2.31.0-pg17";
+
+/// The tag of [`TIMESCALEDB_IMAGE`] for PostgreSQL `major`.
+pub(crate) fn timescaledb_tag(major: u32) -> String {
+    format!("{TIMESCALEDB_VERSION}-pg{major}")
+}
+
 /// A service Dock can run.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Service {
-    /// PostgreSQL (`postgres`, or `pgvector/pgvector` with the `vector` extension).
+    /// PostgreSQL with TimescaleDB ([`TIMESCALEDB_IMAGE`]), Navree's default
+    /// database; with `timescaledb = false`, plain PostgreSQL (`postgres`,
+    /// or `pgvector/pgvector` with the `vector` extension).
     Postgres,
     /// Redis.
     Redis,
@@ -49,10 +74,11 @@ impl Service {
     }
 
     /// The image repository and tag Dock uses when `dock.toml` sets neither
-    /// `image` nor `version`.
+    /// `image` nor `version` (for PostgreSQL, TimescaleDB on PostgreSQL
+    /// [`POSTGRES_VERSION`]).
     pub fn default_image(self) -> (&'static str, &'static str) {
         match self {
-            Service::Postgres => ("postgres", "17"),
+            Service::Postgres => (TIMESCALEDB_IMAGE, DEFAULT_TIMESCALEDB_TAG),
             Service::Redis => ("redis", "7"),
             Service::Meilisearch => ("getmeili/meilisearch", "v1.55"),
             Service::Mailpit => ("axllent/mailpit", "v1.31"),
@@ -64,7 +90,7 @@ impl Service {
     /// Its keys in `dock.toml`, besides `image`, `version`, `port` and `env`.
     pub fn keys(self) -> &'static [&'static str] {
         match self {
-            Service::Postgres => &["database", "user", "password", "extensions"],
+            Service::Postgres => &["database", "user", "password", "extensions", "timescaledb"],
             Service::Redis => &["maxmemory_mb"],
             Service::Meilisearch => &["master_key"],
             Service::Mailpit => &["smtp_port", "ui_port"],
@@ -175,6 +201,11 @@ pub enum ServiceOptions {
         password: String,
         /// Extensions created in the database.
         extensions: Vec<String>,
+        /// Whether the server runs TimescaleDB: its extension is created in
+        /// the database once it is ready (on by default; off for plain
+        /// PostgreSQL and for images of your own that are not TimescaleDB
+        /// images).
+        timescaledb: bool,
     },
     /// Redis.
     Redis {
@@ -328,12 +359,21 @@ impl ServiceSpec {
                 database,
                 user,
                 password,
+                timescaledb,
                 ..
-            } => vec![
-                ("POSTGRES_USER", user.clone()),
-                ("POSTGRES_PASSWORD", password.clone()),
-                ("POSTGRES_DB", database.clone()),
-            ],
+            } => {
+                let mut pairs = vec![
+                    ("POSTGRES_USER", user.clone()),
+                    ("POSTGRES_PASSWORD", password.clone()),
+                    ("POSTGRES_DB", database.clone()),
+                ];
+                if *timescaledb {
+                    // The TimescaleDB images' first start turns its
+                    // telemetry off (and unschedules the telemetry job).
+                    pairs.push(("TIMESCALEDB_TELEMETRY", "off".to_owned()));
+                }
+                pairs
+            }
             ServiceOptions::Redis { .. } | ServiceOptions::Nats { .. } => vec![],
             ServiceOptions::Meilisearch { master_key } => vec![
                 ("MEILI_MASTER_KEY", master_key.clone()),
@@ -358,8 +398,21 @@ impl ServiceSpec {
     }
 
     /// The container's command, when it is not the image's default.
+    ///
+    /// A [`TIMESCALEDB_IMAGE`] server starts with TimescaleDB preloaded and
+    /// its telemetry off, also on a data volume a plain PostgreSQL image
+    /// created (whose configuration does not preload it).
     pub fn command(&self) -> Option<Vec<String>> {
         let words: Vec<String> = match &self.options {
+            ServiceOptions::Postgres {
+                timescaledb: true, ..
+            } if is_timescaledb_image(&self.image) => vec![
+                "postgres".into(),
+                "-c".into(),
+                "shared_preload_libraries=timescaledb".into(),
+                "-c".into(),
+                "timescaledb.telemetry_level=off".into(),
+            ],
             // Options only: the image's entrypoint puts its server in front
             // (`redis-server`, or `valkey-server` in a Valkey image).
             ServiceOptions::Redis { maxmemory_mb } => vec![
@@ -431,7 +484,8 @@ impl ServiceSpec {
     }
 
     /// Commands run in the container once it is ready (idempotent): the
-    /// PostgreSQL extensions and the MinIO bucket.
+    /// PostgreSQL extensions (TimescaleDB's first, when it is on) and the
+    /// MinIO bucket.
     pub fn setup(&self) -> Vec<SetupStep> {
         let words = |words: &[&str]| words.iter().map(|w| (*w).to_owned()).collect();
         match &self.options {
@@ -439,9 +493,17 @@ impl ServiceSpec {
                 database,
                 user,
                 extensions,
+                timescaledb,
                 ..
-            } => extensions
-                .iter()
+            } => timescaledb
+                .then_some("timescaledb")
+                .into_iter()
+                .chain(
+                    extensions
+                        .iter()
+                        .map(String::as_str)
+                        .filter(|extension| !(*timescaledb && *extension == "timescaledb")),
+                )
                 .map(|extension| SetupStep {
                     env: vec![],
                     args: words(&[
@@ -548,6 +610,34 @@ pub(crate) fn image_tag(image: &str) -> Option<&str> {
     name.split_once(':').map(|(_, tag)| tag)
 }
 
+/// The repository of an image reference, without its tag or digest
+/// (`localhost:5000/postgres:16` gives `localhost:5000/postgres`).
+pub(crate) fn image_repository(image: &str) -> &str {
+    let image = image.split('@').next().unwrap_or(image);
+    let name_start = image.rfind('/').map_or(0, |at| at + 1);
+    match image[name_start..].find(':') {
+        Some(colon) => &image[..name_start + colon],
+        None => image,
+    }
+}
+
+/// Whether `image` is a TimescaleDB image (`timescale/timescaledb`,
+/// `timescale/timescaledb-ha`, from any registry): what turns
+/// `timescaledb` on by default for an `image` of your own.
+pub(crate) fn has_timescaledb(image: &str) -> bool {
+    image_repository(image)
+        .rsplit('/')
+        .next()
+        .is_some_and(|name| name.starts_with("timescaledb"))
+}
+
+/// Whether `image` is [`TIMESCALEDB_IMAGE`] (from any registry), whose
+/// configuration Dock knows.
+fn is_timescaledb_image(image: &str) -> bool {
+    let repository = image_repository(image);
+    repository == TIMESCALEDB_IMAGE || repository.ends_with(&format!("/{TIMESCALEDB_IMAGE}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -576,6 +666,126 @@ mod tests {
         assert_eq!(postgres_major("pgvector/pgvector:0.8.0-pg16"), Some(16));
         assert_eq!(postgres_major("postgres:latest"), None);
         assert_eq!(postgres_major("postgres"), None);
+        assert_eq!(postgres_major("timescale/timescaledb:2.31.0-pg17"), Some(17));
+        assert_eq!(postgres_major("timescale/timescaledb:latest-pg18"), Some(18));
+        assert_eq!(postgres_major("timescale/timescaledb-ha:pg16"), Some(16));
+    }
+
+    #[test]
+    fn image_repositories_and_timescaledb_images() {
+        assert_eq!(image_repository("postgres:17"), "postgres");
+        assert_eq!(image_repository("localhost:5000/postgres:16"), "localhost:5000/postgres");
+        assert_eq!(image_repository("localhost:5000/postgres"), "localhost:5000/postgres");
+        assert_eq!(image_repository("redis@sha256:abc"), "redis");
+        assert!(has_timescaledb("timescale/timescaledb:2.31.0-pg17"));
+        assert!(has_timescaledb("timescale/timescaledb-ha:pg17"));
+        assert!(has_timescaledb("ghcr.io/acme/timescaledb:17"));
+        assert!(!has_timescaledb("postgres:17"));
+        assert!(!has_timescaledb("postgis/postgis:17-3.5"));
+        assert!(is_timescaledb_image("timescale/timescaledb:2.31.0-pg17"));
+        assert!(is_timescaledb_image("docker.io/timescale/timescaledb:latest-pg17"));
+        assert!(!is_timescaledb_image("timescale/timescaledb-ha:pg17"));
+    }
+
+    #[test]
+    fn the_default_image_is_timescaledb_on_the_default_postgres_version() {
+        let major: u32 = POSTGRES_VERSION.parse().unwrap();
+        assert_eq!(DEFAULT_TIMESCALEDB_TAG, timescaledb_tag(major));
+        assert!(TIMESCALEDB_POSTGRES_VERSIONS.contains(&major));
+        assert_eq!(
+            Service::Postgres.default_image(),
+            ("timescale/timescaledb", "2.31.0-pg17")
+        );
+    }
+
+    fn postgres(dock_toml: &str) -> ServiceSpec {
+        crate::DockFile::parse(dock_toml, "crm-api")
+            .unwrap_or_else(|e| panic!("{e}"))
+            .services
+            .remove(0)
+    }
+
+    fn words(args: &[&str]) -> Vec<String> {
+        args.iter().map(|w| (*w).to_owned()).collect()
+    }
+
+    #[test]
+    fn timescaledb_is_preloaded_without_telemetry_and_created_once_ready() {
+        let spec = postgres("[services.postgres]\nextensions = [\"vector\", \"timescaledb\"]\n");
+        assert_eq!(
+            spec.container_env(),
+            [
+                ("POSTGRES_USER".to_owned(), "navree".to_owned()),
+                ("POSTGRES_PASSWORD".to_owned(), "navree".to_owned()),
+                ("POSTGRES_DB".to_owned(), "crm_api".to_owned()),
+                ("TIMESCALEDB_TELEMETRY".to_owned(), "off".to_owned()),
+            ]
+        );
+        // Also for a volume a plain PostgreSQL image created first.
+        assert_eq!(
+            spec.command(),
+            Some(words(&[
+                "postgres",
+                "-c",
+                "shared_preload_libraries=timescaledb",
+                "-c",
+                "timescaledb.telemetry_level=off",
+            ]))
+        );
+        let created: Vec<String> = spec
+            .setup()
+            .into_iter()
+            .map(|step| step.args.last().unwrap().clone())
+            .collect();
+        assert_eq!(
+            created,
+            [
+                "CREATE EXTENSION IF NOT EXISTS \"timescaledb\"",
+                "CREATE EXTENSION IF NOT EXISTS \"vector\"",
+            ],
+            "TimescaleDB first, and once"
+        );
+        assert_eq!(
+            spec.setup()[0].args,
+            words(&[
+                "psql",
+                "-v",
+                "ON_ERROR_STOP=1",
+                "-U",
+                "navree",
+                "-d",
+                "crm_api",
+                "-c",
+                "CREATE EXTENSION IF NOT EXISTS \"timescaledb\"",
+            ])
+        );
+        assert_eq!(
+            spec.readiness().to_string(),
+            "`pg_isready -h 127.0.0.1 -p 5432 -U navree -d crm_api`"
+        );
+    }
+
+    #[test]
+    fn plain_postgres_and_images_of_your_own_keep_their_configuration() {
+        let plain = postgres("[services.postgres]\ntimescaledb = false\n");
+        assert_eq!(plain.command(), None);
+        assert!(plain.setup().is_empty());
+        assert!(
+            !plain
+                .container_env()
+                .iter()
+                .any(|(name, _)| name == "TIMESCALEDB_TELEMETRY")
+        );
+        // Dock knows how the `timescale/timescaledb` images are configured,
+        // not other images: it only creates the extension in those.
+        let ha = postgres("[services.postgres]\nimage = \"timescale/timescaledb-ha:pg17\"\n");
+        assert_eq!(ha.command(), None);
+        assert_eq!(ha.setup().len(), 1);
+        let pinned = postgres(
+            "[services.postgres]\nimage = \"timescale/timescaledb\"\nversion = \"2.30.2-pg17\"\n",
+        );
+        assert_eq!(pinned.image, "timescale/timescaledb:2.30.2-pg17");
+        assert!(pinned.command().is_some());
     }
 
     #[test]

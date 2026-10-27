@@ -57,6 +57,31 @@ monitor_port = 8223
 }
 
 #[test]
+fn timescaledb_starts_preloaded_and_plain_postgres_as_its_image_does() {
+    let yaml = compose("[services.postgres]\n");
+    assert!(
+        yaml.contains(
+            "    image: \"timescale/timescaledb:2.31.0-pg17\"\n    container_name: \"crm-api-postgres\"\n"
+        ),
+        "{yaml}"
+    );
+    assert!(
+        yaml.contains("      TIMESCALEDB_TELEMETRY: \"off\"\n"),
+        "{yaml}"
+    );
+    assert!(
+        yaml.contains(
+            "    command: [\"postgres\", \"-c\", \"shared_preload_libraries=timescaledb\", \"-c\", \"timescaledb.telemetry_level=off\"]\n"
+        ),
+        "{yaml}"
+    );
+    let plain = compose("[services.postgres]\ntimescaledb = false\n");
+    assert!(plain.contains("    image: \"postgres:17\"\n"), "{plain}");
+    assert!(!plain.contains("command:"), "{plain}");
+    assert!(!plain.contains("TIMESCALEDB"), "{plain}");
+}
+
+#[test]
 fn postgres_18_mounts_its_new_data_directory() {
     let yaml = compose("[services.postgres]\nversion = \"18\"\n");
     assert!(
