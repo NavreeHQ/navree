@@ -44,6 +44,13 @@ use crate::hooks::{ModelEvent, ModelHook};
 use crate::model::{Model, PrimaryKey};
 use crate::record::Record;
 
+mod listener;
+mod observer;
+mod record;
+
+pub(crate) use listener::ClosureListener;
+pub use observer::{Observer, ObserverHook};
+
 tokio::task_local! {
     /// Set while [`without_events`] runs a future.
     static SILENCED: ();

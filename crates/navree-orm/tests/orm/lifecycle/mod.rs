@@ -2,4 +2,7 @@
 //! deletes, runtime global scopes, strict modes, pruning, broadcasting and
 //! the ORM module.
 
+mod models;
+
 mod dispatch;
+mod observers;
