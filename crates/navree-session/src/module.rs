@@ -14,8 +14,9 @@ use crate::layer::{SessionManager, clock_of, session_layer};
 use crate::{DatabaseStore, MemoryStore, SessionOptions, SessionStoreKind};
 
 /// The session module. Global; provides and exports [`SessionOptions`] and
-/// the `dyn SessionStore` its options select ([`MemoryStore`] or
-/// [`DatabaseStore`]); contributes the session and CSRF layer
+/// the `dyn SessionStore` its options select ([`MemoryStore`],
+/// [`DatabaseStore`], or for `store = "redis"` the provider named `redis`
+/// that navree-redis's `RedisModule` registers); contributes the session and CSRF layer
 /// ([`LayerSlot::Session`](navree_http::LayerSlot::Session)), the public route
 /// `GET /sanctum/csrf-cookie` and the `session` migration set (the
 /// `sessions` table, used by the database store).

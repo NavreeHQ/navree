@@ -15,8 +15,10 @@
 //! - Backends are trait objects: [`CacheStore`] (bytes with TTLs, atomic
 //!   `add` and `increment`) and [`LockStore`]. The built-in
 //!   [`MemoryStore`] (moka) and [`MemoryLockStore`] keep data in process and
-//!   follow Tokio's clock, so `tokio::time::pause` drives expiry in tests. A
-//!   database or Redis store implements the same traits.
+//!   follow Tokio's clock, so `tokio::time::pause` drives expiry in tests.
+//!   `store = "redis"` ([`CacheStoreKind::Redis`]) uses the stores
+//!   navree-redis's `RedisModule` registers under the name `redis`; any
+//!   other store implements the same traits.
 //! - [`CacheModule`] is global: `for_root(CacheOptions)` or `from_config()`
 //!   (section `cache`) provides and exports [`Cache`], [`Locks`],
 //!   `dyn CacheStore` and `dyn LockStore`, registers a `cache` health check
