@@ -16,7 +16,7 @@ description: "One notification over the mail, database, broadcast, Slack, Teams,
 | `Channel::Sms`, `Channel::WhatsApp` | A text or WhatsApp message through Twilio, Vonage, Amazon SNS or the WhatsApp Cloud API, with STOP opt-outs. |
 | `Channel::WebPush` | A push notification on each browser or phone the user subscribed. |
 
-`NotifyModule` provides the `Notifier`, which asks each notification for its channels, renders it for each one and delivers it. In the CRM, a deal's owner is told over the database, broadcast and mail channels when someone else assigns them the deal or when it is won, and every user with open tasks gets a daily reminder. This page covers those three; [notification channels](/docs/digging-deeper/notification-channels/) covers the other five, their drivers and the delivery log they write.
+`NotifyModule` provides the `Notifier`, which asks each notification for its channels, renders it for each one and delivers it. In the CRM, a deal's owner is told over the database, broadcast and mail channels when someone else assigns them the deal or when it is won, and every user with open tasks gets a daily reminder. This page covers those three; [notification channels](/docs/digging-deeper/notification-channels/) covers the other five, their drivers and the delivery log they write, and [notification preferences](/docs/digging-deeper/notification-preferences/) what recipients choose: channels per category, digests, quiet hours and send windows.
 
 ## Configuration
 
@@ -36,7 +36,7 @@ Navree::app()
 
 The notifier looks these services up when it sends, so an app without one of them still boots: only the channels that need the missing service fail, with `NotifyError::Unavailable`, and the others still deliver.
 
-The module is global, migrates the `notifications` table and the tables of the other channels (`notification_deliveries`, `notification_opt_outs`, `push_subscriptions`; migration set `notify`) and reads the `notify` section:
+The module is global, migrates the `notifications` table, the tables of the other channels (`notification_deliveries`, `notification_opt_outs`, `push_subscriptions`) and of preferences (`notification_preferences`, `notification_deferrals`; migration set `notify`) and reads the `notify` section:
 
 ```toml title="config/app.toml"
 [notify]
@@ -51,7 +51,7 @@ deliveries = true  # record Slack, Teams, SMS, WhatsApp and web push deliveries
 | `notify.routes` | `true` | Serve the signed-in user's notifications and push subscriptions under the API prefix. These routes need authentication: in an app without a `dyn Authenticator` (no `AuthModule`), set this to `false`, or the router rejects them ("requires authentication but no `dyn Authenticator` is registered"). |
 | `notify.deliveries` | `true` | Record every delivery over the Slack, Teams, SMS, WhatsApp and web push channels; see [the delivery log](/docs/digging-deeper/notification-channels/#the-delivery-log). |
 
-Those channels' drivers and credentials have tables of their own (`notify.sms`, `notify.twilio`, `notify.web_push`...), described in [notification channels](/docs/digging-deeper/notification-channels/#configuration).
+Those channels' drivers and credentials have tables of their own (`notify.sms`, `notify.twilio`, `notify.web_push`...), described in [notification channels](/docs/digging-deeper/notification-channels/#configuration); preferences, digests and held deliveries have `notify.preferences`, `notify.digest` and `notify.deferred`, described in [notification preferences](/docs/digging-deeper/notification-preferences/#configuration).
 
 As environment variables: `APP_NOTIFY__QUEUE=true`, `APP_NOTIFY__ROUTES=false`. In code, use `for_root`, and build the options with `..NotifyOptions::default()` so new fields keep compiling:
 
@@ -113,6 +113,7 @@ impl Notifiable for NotifiableUser {
 | `route_mail` | The address of the mail channel when the notification's mail names no recipient; `None` skips the mail. |
 | `broadcast_channel` | The real-time channel of the broadcast; `None` skips it. Defaults to `private-users.{id}`. |
 | `route_slack`, `route_teams`, `route_sms`, `route_whatsapp` | Where the [other channels](/docs/digging-deeper/notification-channels/#routing-a-notifiable) reach the recipient. Default `None`: skipped. |
+| `workspace_id`, `time_zone` | The recipient's workspace and zone, for [preferences](/docs/digging-deeper/notification-preferences/#the-recipients-workspace-and-clock), digests and quiet hours. Default `None`. |
 
 The `/api/notifications` routes find the signed-in user's notifications under the type `USER_NOTIFIABLE_TYPE` (`"user"`) and the user's UUID as a string, so a user must be notifiable exactly like this. Other notifiable types work for the database channel, but only in code: the routes serve users.
 
@@ -158,6 +159,9 @@ impl Notification for ContactMoved {
 | `to_broadcast` | The `data` of the broadcast. | `to_database` |
 | `to_mail` | A [`TemplateMail`](/docs/digging-deeper/mail/#template-mail). | `None`: no mail |
 | `to_slack`, `to_teams`, `to_sms`, `to_whatsapp`, `to_web_push` | The messages of the [other channels](/docs/digging-deeper/notification-channels/#rendering-for-each-channel). | `None` |
+| `send_window` | When the notification may reach people; see [send windows](/docs/digging-deeper/notification-preferences/#quiet-hours-and-send-windows). | `None`: any time |
+
+`CATEGORY`, `DIGEST` and `URGENT` (or `#[notification(category = "deals", digest = "daily")]`) decide how the recipient's [preferences](/docs/digging-deeper/notification-preferences/#categories-and-digests) apply: the category they switch channels for, whether its mail is batched, and whether it skips quiet hours.
 
 Any `to_*` method may return `None` to skip its channel for this recipient. `TYPE` is stored with every row and sent with every broadcast, so clients can tell notifications apart; keep it stable.
 
@@ -501,6 +505,9 @@ The CRM tests notifications end to end in `crm-deals/tests/deals/notifications.r
 <LinkCards>
   <LinkCard href="/docs/digging-deeper/notification-channels/" title="Notification channels">
     Slack, Teams, SMS, WhatsApp and web push, with the delivery log and opt-outs.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/notification-preferences/" title="Notification preferences">
+    Channels per category, digests, quiet hours, send windows and workspace templates.
   </LinkCard>
   <LinkCard href="/docs/digging-deeper/mail/" title="Mail">
     Templates and transports behind the mail channel.

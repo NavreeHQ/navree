@@ -121,14 +121,30 @@ impl Zones {
     /// The zone of `owner` at `level` (its zone, else its country's primary
     /// zone), or the default zone.
     pub async fn zone_of(&self, level: ZoneLevel, owner: Uuid) -> Result<Zone, BoxError> {
+        Ok(self
+            .stored_zone_of(level, owner)
+            .await?
+            .unwrap_or(self.default))
+    }
+
+    /// The zone of `owner` at `level` (its zone, else its country's primary
+    /// zone), or `None` when the owner has neither (where
+    /// [`zone_of`](Zones::zone_of) gives the default zone): for code that
+    /// falls back from one level to the next, such as a user's zone, else
+    /// their workspace's.
+    pub async fn stored_zone_of(
+        &self,
+        level: ZoneLevel,
+        owner: Uuid,
+    ) -> Result<Option<Zone>, BoxError> {
         for source in self.sources.iter().filter(|s| s.level() == level) {
             if let Some(stored) = source.zone_of(owner).await?
                 && let Some((zone, _)) = self.zone_from(level, &stored)
             {
-                return Ok(zone);
+                return Ok(Some(zone));
             }
         }
-        Ok(self.default)
+        Ok(None)
     }
 
     /// Every owner at `level` with its zone (the default zone for owners

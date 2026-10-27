@@ -50,7 +50,17 @@ async fn every_registration_is_in_the_registry() {
         .iter()
         .map(|entry| entry.definition.key)
         .collect();
-    assert_eq!(keys, ["notifications", "portal", "view-preferences"]);
+    // `notification-templates` comes with the `notify` feature, on in the
+    // tests.
+    assert_eq!(
+        keys,
+        [
+            "notification-templates",
+            "notifications",
+            "portal",
+            "view-preferences"
+        ]
+    );
     let portal = registry.get("portal").unwrap();
     assert_eq!(
         portal.definition.levels(),

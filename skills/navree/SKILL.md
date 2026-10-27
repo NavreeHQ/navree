@@ -111,6 +111,7 @@ navree list                                 # every command of the app
 | Emails, templates, notifications | `navree-mail-and-notifications` |
 | SES, Mailgun, Postmark or Resend; customers' own mail transports or domains; bounces, complaints, suppressions; the mail log; holding mail for approval; open and click tracking; SPF, DKIM and DMARC | `navree-mail-delivery` |
 | Slack or Teams messages, SMS (Twilio, Vonage, SNS), WhatsApp, browser push notifications; STOP opt-outs, delivery statuses, VAPID keys | `navree-notification-channels` |
+| Notification preference screens, turning channels off per category, daily or weekly digest mail, quiet hours, business-hours send windows, tenants restyling notification mail | `navree-notification-preferences` |
 | Uploads, downloads, disks, signed links | `navree-storage` |
 | Caching, locks, calling third-party APIs | `navree-cache-and-http-client` |
 | API docs, OpenAPI document, TypeScript clients | `navree-openapi` |

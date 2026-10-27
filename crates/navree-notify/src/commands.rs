@@ -1,10 +1,50 @@
-//! `notify:vapid`: prints a new VAPID key pair for the web push channel.
+//! `notify:vapid` prints a new VAPID key pair for the web push channel;
+//! `notify:release` sends the held deliveries that are due.
 
 use navree_crypto::webpush::VapidKey;
-use navree_kernel::CommandSpec;
+use navree_kernel::{AppContext, BoxError, CommandSpec};
+
+use crate::{Notifier, Released};
 
 /// The command name.
 pub(crate) const VAPID_COMMAND: &str = "notify:vapid";
+
+/// The release command's name.
+pub(crate) const RELEASE_COMMAND: &str = "notify:release";
+
+/// `notify:release`.
+pub(crate) fn release() -> CommandSpec {
+    CommandSpec::new(
+        RELEASE_COMMAND,
+        "Send the held notifications that are due (digests, quiet hours, send windows)",
+        run_release,
+    )
+}
+
+async fn run_release(ctx: AppContext, _args: Vec<String>) -> Result<(), BoxError> {
+    let released = ctx.get::<Notifier>().await?.release_due().await?;
+    println!("{}", release_summary(&released));
+    Ok(())
+}
+
+/// One line on what a release did.
+pub(crate) fn release_summary(released: &Released) -> String {
+    format!(
+        "released {} held notification{}, {} digest{} ({} mail{} batched); {} dropped, {} to retry",
+        released.sent,
+        plural(released.sent),
+        released.digests,
+        plural(released.digests),
+        released.batched,
+        plural(released.batched),
+        released.dropped,
+        released.failed,
+    )
+}
+
+fn plural(count: usize) -> &'static str {
+    if count == 1 { "" } else { "s" }
+}
 
 /// `notify:vapid`.
 pub(crate) fn vapid() -> CommandSpec {
@@ -40,6 +80,21 @@ pub(crate) fn vapid_settings(key: &VapidKey) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_release_summary_counts_each_outcome() {
+        let released = Released {
+            sent: 1,
+            digests: 2,
+            batched: 5,
+            dropped: 0,
+            failed: 1,
+        };
+        assert_eq!(
+            release_summary(&released),
+            "released 1 held notification, 2 digests (5 mails batched); 0 dropped, 1 to retry"
+        );
+    }
 
     #[test]
     fn the_settings_hold_both_halves_of_one_key() {

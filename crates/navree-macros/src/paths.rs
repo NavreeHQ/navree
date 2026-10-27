@@ -96,10 +96,18 @@ pub(crate) const WORKFLOWS: RuntimeCrate = RuntimeCrate {
     facade_module: "workflows",
 };
 
+/// navree-notify: `Digest` (`#[notification(digest = "daily")]`). Its own
+/// tests name it `::navree_notify` (`extern crate self`).
+pub(crate) const NOTIFY: RuntimeCrate = RuntimeCrate {
+    package: "navree-notify",
+    facade_module: "notify",
+};
+
 /// The crates named by their own name even from inside themselves (their
 /// integration tests and doctests are separate crates).
 const NAMED_FROM_INSIDE: &[(&str, &str)] = &[
     ("navree-mcp", "navree_mcp"),
+    ("navree-notify", "navree_notify"),
     ("navree-sheets", "navree_sheets"),
     ("navree-workflows", "navree_workflows"),
 ];

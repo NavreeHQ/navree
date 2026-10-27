@@ -1,6 +1,6 @@
 [package]
 name = "navree-notify"
-description = "Navree NotifyModule: notifications over mail, database, broadcast, Slack, Microsoft Teams, SMS (Twilio, Vonage, Amazon SNS), WhatsApp and web push, with read state, a delivery log, STOP opt-outs and push subscriptions."
+description = "Navree NotifyModule: notifications over mail, database, broadcast, Slack, Microsoft Teams, SMS (Twilio, Vonage, Amazon SNS), WhatsApp and web push, with read state, a delivery log, STOP opt-outs, push subscriptions, and preferences per category and channel, digests, quiet hours and send windows on the recipient's clock."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -31,12 +31,21 @@ navree-http = { workspace = true }
 # The Slack, Teams, Twilio, Vonage, SNS, WhatsApp and push service calls.
 navree-http-client = { workspace = true }
 navree-kernel = { workspace = true }
+# `#[notification]`, re-exported next to the `Notification` trait.
+navree-macros = { workspace = true }
 navree-mail = { workspace = true }
 # Stored notifications are models (`notifications::Model`), written by the
 # database channel through the ORM, like the delivery log, the opt-outs and
 # the push subscriptions.
 navree-orm = { workspace = true }
+# `notify:release` every minute on the app's scheduler.
+navree-schedule = { workspace = true }
 navree-telemetry = { workspace = true }
+# Quiet hours, send windows and digests on the recipient's clock (`Zone`,
+# `SendWindow`, the `Zones` of users and workspaces).
+navree-time = { workspace = true }
+# The digest templates, and workspace overrides rendered from text.
+navree-view = { workspace = true }
 # Numbers in E.164 (`Phone`) for the SMS and WhatsApp channels.
 navree-validation = { workspace = true, features = ["phone"] }
 sea-orm = { workspace = true }
@@ -52,8 +61,6 @@ uuid = { workspace = true }
 
 [dev-dependencies]
 navree-testing = { workspace = true }
-# Lower-layer dev-dependency (spec §3): MailModule needs ViewModule in the app.
-navree-view = { workspace = true }
 # A browser's side of web push in the tests (decrypting what was pushed).
 ring = { workspace = true }
 tokio = { workspace = true }
