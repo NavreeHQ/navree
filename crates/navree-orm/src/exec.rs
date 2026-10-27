@@ -17,6 +17,10 @@
 //! connection would wait for the request's write lock until
 //! `busy_timeout`, and joining keeps the write in the request's
 //! transaction and audit trail.
+//!
+//! A document store's executor resolves a [`DocumentTarget`]: the driver,
+//! the app, and where the change events of its writes go (navree-db's unit
+//! of work it joined, or a [`ChangeRecorder`] of the store's own).
 
 use std::fmt;
 use std::future::Future;
@@ -24,7 +28,7 @@ use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
 use navree_contracts::Clock;
-use navree_db::{Db, Reader, Uow};
+use navree_db::{ChangeEvent, Db, Reader, Uow};
 use navree_kernel::AppContext;
 use sea_orm::{
     ConnectionTrait, DatabaseConnection, DatabaseTransaction, ExecResult, QueryResult,
@@ -77,35 +81,99 @@ enum SqlConn<'a> {
     TransactionRef(&'a DatabaseTransaction),
 }
 
-/// A document store and the app it belongs to.
+/// Where the writes through a [`DocumentTarget`] record their
+/// [`ChangeEvent`]s when the target joins no navree-db unit of work: a
+/// document store's own unit of work (MongoDB's) collects them for its
+/// observers. See [`DocumentTarget::recording_changes`].
+pub trait ChangeRecorder: Send + Sync + 'static {
+    /// Records `event` (created, updated or deleted, with the stored
+    /// values).
+    fn record_change(&self, event: ChangeEvent);
+}
+
+/// A document store, the app it belongs to, and where the change events
+/// of its writes go.
 #[derive(Clone)]
 pub struct DocumentTarget {
     driver: Arc<dyn DocumentDriver>,
     app: Option<AppContext>,
+    uow: Option<Uow>,
+    changes: Option<Arc<dyn ChangeRecorder>>,
 }
 
 impl DocumentTarget {
     /// The document store `driver`, in `app` (for clocks and other app
-    /// services), if any.
+    /// services), if any. Its writes record no change events until
+    /// [`with_uow`](Self::with_uow) or
+    /// [`recording_changes`](Self::recording_changes) says where.
     pub fn new(driver: Arc<dyn DocumentDriver>, app: Option<AppContext>) -> Self {
-        DocumentTarget { driver, app }
+        DocumentTarget {
+            driver,
+            app,
+            uow: None,
+            changes: None,
+        }
+    }
+
+    /// Joins navree-db's unit of work `uow`: the writes' change events go
+    /// to it (its observers, the audit trail, see them when it commits),
+    /// and lifecycle hooks find it in their [`ExecContext`]. The writes
+    /// themselves run where the driver runs them (a MongoDB transaction
+    /// that commits after the unit of work, say).
+    pub fn with_uow(mut self, uow: Uow) -> Self {
+        self.uow = Some(uow);
+        self
+    }
+
+    /// Records the writes' change events with `recorder` (when no unit of
+    /// work is joined; a joined one takes them).
+    pub fn recording_changes(mut self, recorder: Arc<dyn ChangeRecorder>) -> Self {
+        self.changes = Some(recorder);
+        self
     }
 
     /// The driver.
     pub fn driver(&self) -> &dyn DocumentDriver {
         &*self.driver
     }
+
+    /// The app, if the store belongs to one.
+    pub fn app(&self) -> Option<&AppContext> {
+        self.app.as_ref()
+    }
+
+    /// The navree-db unit of work the target joined, if any.
+    pub fn uow(&self) -> Option<&Uow> {
+        self.uow.as_ref()
+    }
 }
 
 /// What a running operation knows about where it runs: the app (for its
-/// clock and other services), the unit of work, the dialect. Lifecycle
-/// hooks and casts receive it.
-#[derive(Clone, Default)]
+/// clock and other services), the unit of work, the dialect, the precision
+/// the database keeps in date-times. Lifecycle hooks and casts receive it.
+#[derive(Clone)]
 pub struct ExecContext {
     app: Option<AppContext>,
     uow: Option<Uow>,
     dialect: Option<Dialect>,
     driver: Option<&'static str>,
+    time_precision: u32,
+}
+
+/// The fractional-second digits SQL databases keep (and the ORM's
+/// timestamps carry): microseconds.
+const MICROSECONDS: u32 = 6;
+
+impl Default for ExecContext {
+    fn default() -> Self {
+        ExecContext {
+            app: None,
+            uow: None,
+            dialect: None,
+            driver: None,
+            time_precision: MICROSECONDS,
+        }
+    }
 }
 
 impl ExecContext {
@@ -133,9 +201,19 @@ impl ExecContext {
         }
     }
 
+    /// The fractional-second digits the database keeps in date-times: 6
+    /// (microseconds) on the SQL databases, the driver's
+    /// [`time_precision`](DocumentDriver::time_precision) on a document
+    /// store (3 on MongoDB).
+    pub fn time_precision(&self) -> u32 {
+        self.time_precision
+    }
+
     /// The current time: the app's `dyn Clock` when it registers one
     /// (tests freeze time with a fixed clock), else the system clock;
-    /// truncated to microseconds, the precision PostgreSQL and MySQL store.
+    /// truncated to the [precision](Self::time_precision) the database
+    /// keeps (microseconds on PostgreSQL, MySQL and SQLite, milliseconds on
+    /// MongoDB), so a saved record and its stored row agree.
     pub async fn now(&self) -> DateTime<Utc> {
         let now = match &self.app {
             Some(app) => match app.try_get::<dyn Clock>().await {
@@ -144,7 +222,7 @@ impl ExecContext {
             },
             None => Utc::now(),
         };
-        truncate_to_micros(now)
+        truncate_to(now, self.time_precision)
     }
 }
 
@@ -154,14 +232,17 @@ impl fmt::Debug for ExecContext {
             .field("database", &self.database())
             .field("uow", &self.uow)
             .field("app", &self.app.is_some())
+            .field("time_precision", &self.time_precision)
             .finish()
     }
 }
 
-/// `at` without its sub-microsecond part.
-pub(crate) fn truncate_to_micros(at: DateTime<Utc>) -> DateTime<Utc> {
-    let micros = at.timestamp_micros();
-    DateTime::from_timestamp_micros(micros).unwrap_or(at)
+/// `at` without the fractional-second digits after the first `digits` (at
+/// most 9, nanoseconds).
+pub(crate) fn truncate_to(at: DateTime<Utc>, digits: u32) -> DateTime<Utc> {
+    let unit = 10_u32.pow(9 - digits.min(9));
+    let nanos = at.timestamp_subsec_nanos();
+    DateTime::from_timestamp(at.timestamp(), nanos - nanos % unit).unwrap_or(at)
 }
 
 impl Target<'_> {
@@ -173,21 +254,42 @@ impl Target<'_> {
                 uow: sql.uow.clone(),
                 dialect: Some(sql.dialect),
                 driver: None,
+                time_precision: MICROSECONDS,
             },
             Target::Document(document) => ExecContext {
                 app: document.app.clone(),
-                uow: None,
+                uow: document.uow.clone(),
                 dialect: None,
                 driver: Some(document.driver.name()),
+                time_precision: document.driver.time_precision().min(9),
             },
         }
     }
 
-    /// The unit of work writes are recorded in.
+    /// The unit of work writes are recorded in: the SQL target's, or the
+    /// one a document target joined.
     pub fn uow(&self) -> Option<&Uow> {
         match self {
             Target::Sql(sql) => sql.uow.as_ref(),
-            Target::Document(_) => None,
+            Target::Document(document) => document.uow.as_ref(),
+        }
+    }
+
+    /// Records the change event of a write that ran on this target: in its
+    /// unit of work, or with a document target's [`ChangeRecorder`];
+    /// nowhere when it has neither (a write on the pool).
+    pub fn record_change(&self, event: ChangeEvent) {
+        match self {
+            Target::Sql(sql) => {
+                if let Some(uow) = &sql.uow {
+                    uow.record_change(event);
+                }
+            }
+            Target::Document(document) => match (&document.uow, &document.changes) {
+                (Some(uow), _) => uow.record_change(event),
+                (None, Some(recorder)) => recorder.record_change(event),
+                (None, None) => {}
+            },
         }
     }
 
@@ -469,8 +571,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn timestamps_keep_microseconds() {
+    fn timestamps_keep_the_precision_asked_for() {
         let at = DateTime::from_timestamp(1_700_000_000, 123_456_789).unwrap();
-        assert_eq!(truncate_to_micros(at).timestamp_subsec_nanos(), 123_456_000);
+        assert_eq!(truncate_to(at, 6).timestamp_subsec_nanos(), 123_456_000);
+        assert_eq!(truncate_to(at, 3).timestamp_subsec_nanos(), 123_000_000);
+        assert_eq!(truncate_to(at, 0).timestamp_subsec_nanos(), 0);
+        assert_eq!(truncate_to(at, 9), at);
+        assert_eq!(truncate_to(at, 12), at, "more than nanoseconds keeps all");
+        assert_eq!(ExecContext::default().time_precision(), 6);
     }
 }

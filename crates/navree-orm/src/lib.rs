@@ -117,7 +117,7 @@ pub use column::{
 };
 pub use driver::{DocumentDriver, InsertOutcome};
 pub use error::{OrmError, Result};
-pub use exec::{Access, DocumentTarget, ExecContext, Executor, SqlTarget, Target};
+pub use exec::{Access, ChangeRecorder, DocumentTarget, ExecContext, Executor, SqlTarget, Target};
 pub use ir::Expr;
 pub use model::{ColumnMeta, KeyKind, Model, ModelMeta, PrimaryKey, Timestamp};
 pub use pagination::{

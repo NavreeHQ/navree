@@ -344,6 +344,11 @@ fn tag(value: &Value) -> serde_json::Value {
         Value::ChronoDateTimeWithTimeZone(v) => text("tz", &v.map(|v| v.to_rfc3339())),
         Value::Uuid(v) => text("uuid", v),
         Value::Decimal(v) => text("dec", v),
+        // A driver's typed text (a MongoDB ObjectId): its type and text.
+        Value::Enum(sea_query::OptionEnum::Some(value)) => {
+            json!(["enum", &*value.type_name, value.value])
+        }
+        Value::Enum(sea_query::OptionEnum::None(_)) => json!(["null"]),
         other => json!(["s", crate::value::to_json(other).to_string()]),
     }
 }
@@ -394,6 +399,16 @@ fn untag(tagged: &serde_json::Value) -> Result<Value> {
         )),
         "uuid" => Value::Uuid(Some(Uuid::parse_str(text()?).map_err(|_| invalid())?)),
         "dec" => Value::Decimal(Some(text()?.parse::<Decimal>().map_err(|_| invalid())?)),
+        "enum" => {
+            let value = parts
+                .get(2)
+                .and_then(serde_json::Value::as_str)
+                .ok_or_else(invalid)?;
+            Value::Enum(sea_query::OptionEnum::Some(Box::new(sea_query::Enum {
+                type_name: text()?.into(),
+                value: value.to_owned().into(),
+            })))
+        }
         _ => return Err(invalid()),
     })
 }
@@ -651,6 +666,28 @@ mod tests {
                 .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
         );
         assert_eq!(Cursor::decode(&text).unwrap(), cursor);
+    }
+
+    /// Typed values a driver carries as enums (a MongoDB ObjectId) keep
+    /// their type through a cursor, so the next page compares like with
+    /// like.
+    #[test]
+    fn cursors_keep_enum_values() {
+        let object_id = Value::Enum(sea_query::OptionEnum::Some(Box::new(sea_query::Enum {
+            type_name: "ObjectId".into(),
+            value: "65f1c0ffee0000000000002a".into(),
+        })));
+        let cursor = Cursor {
+            towards: Towards::Next,
+            columns: vec!["_id".into(), "kind".into()],
+            values: vec![
+                object_id,
+                Value::Enum(sea_query::OptionEnum::None("ObjectId".into())),
+            ],
+        };
+        let decoded = Cursor::decode(&cursor.encode()).unwrap();
+        assert_eq!(decoded.values[0], cursor.values[0]);
+        assert!(crate::is_null(&decoded.values[1]));
     }
 
     #[test]
