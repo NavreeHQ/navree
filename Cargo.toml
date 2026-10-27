@@ -295,6 +295,8 @@ icu_decimal = "2.4.0"
 icu_datetime = { version = "2.4.0", default-features = false, features = ["compiled_data"] }
 icu_calendar = { version = "2.4.0", default-features = false }
 icu_locale_core = "2.4.0"
+# `sync`: formatters are Send + Sync, so bundles can share them.
+icu_provider = { version = "2.4.0", default-features = false, features = ["sync"] }
 fixed_decimal = "0.7.3"
 
 # ---------------------------------------------------------------------------
