@@ -122,7 +122,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L0 | `navree-kernel` | Module graph, type-keyed DI container, lifecycle, command runner |
 | L0 | `navree-macros` | `#[module]`, `#[injectable]`, `#[controller]`, `#[resolver]`, route and access attributes |
 | L0 | `navree-dock` | Dock: `dock.toml`, local PostgreSQL, Redis, Meilisearch, Mailpit, MinIO and NATS through `docker compose` or `podman compose`, the app's `.env` settings (behind `navree dock`; opt-in facade feature `dock`) |
-| L1 | `navree-contracts` | Shared traits and types: `Secret<T>`, `RequestId`, `Principal`, `AuthState`, sinks, `Broadcaster`, jobs, `Clock` |
+| L1 | `navree-contracts` | Shared traits and types: `Secret<T>`, `RequestId`, `Principal`, `AuthState`, sinks, `Broadcaster`, jobs with progress and cancellation, permission checks, `Clock` |
 | L1 | `navree-config` | Typed configuration from `.env`, TOML files and `APP_*` variables |
 | L1 | `navree-telemetry` | Typed telemetry events (requests, queries, jobs, scheduled tasks, mail, notifications, cache, outgoing HTTP, exceptions, log lines) delivered to registered sinks, `TelemetryRecorder`, W3C trace context |
 | L2 | `navree-http` | Axum integration, default Tower layers, JSON errors, controllers, rate limits, trusted proxies |
@@ -141,7 +141,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L3 | `navree-storage` | Named disks on object_store, streaming, signed temporary URLs, upload checks |
 | L4 | `navree-session` | Encrypted session cookies, memory and database stores, CSRF (optional; the CRM doesn't use it) |
 | L4 | `navree-validation` | `Valid<T>` extractors on garde, field-level messages, async unique/exists rules |
-| L4 | `navree-queue` | Database and memory job queues, workers, retries with backoff, unique and delayed jobs |
+| L4 | `navree-queue` | Database and memory job queues, workers, retries with backoff, unique and delayed jobs; job batches with callbacks; operations with progress, an SSE stream, cancel and a watchdog |
 | L4 | `navree-audit` | Audit trail of data changes, sign-ins, permission changes and denials |
 | L4 | `navree-access` | Roles, permissions and abilities (shared with front ends as CASL JSON), record checks, SQL list filters |
 | L4 | `navree-schedule` | Cron schedules, overlap prevention, single-node runs |
