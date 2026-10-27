@@ -10,6 +10,7 @@ use std::fmt;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
+mod bulk;
 pub(crate) mod clauses;
 mod fetch;
 pub(crate) mod filters;
@@ -17,6 +18,7 @@ mod join;
 mod table;
 mod write;
 
+pub use bulk::ConflictUpdate;
 pub use clauses::{HasQuery, IntoSelect};
 pub use fetch::Selectable;
 pub use filters::{HasWheres, WhereGroup};

@@ -108,15 +108,23 @@ async fn rows_of_unequal_shape_are_refused() {
         error.to_string(),
         "invalid query: row 2 of an insert into `tags` has 1 columns, the first has 2"
     );
-    let error = table("tags")
+    // A joined delete removes the rows the join selects (by row id); a
+    // grouped one cannot say which rows it means.
+    let deleted = table("tags")
         .join("companies", "companies.id", "=", "tags.id")
+        .delete(&t.db)
+        .await
+        .unwrap();
+    assert_eq!(deleted, 0);
+    let error = table("tags")
+        .group_by(["color"])
         .delete(&t.db)
         .await
         .unwrap_err();
     assert!(
         error
             .to_string()
-            .contains("a table delete takes where conditions only"),
+            .contains("a table delete cannot have groups, unions or a subquery as its table"),
         "{error}"
     );
 }

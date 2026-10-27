@@ -13,7 +13,7 @@ use chrono::{DateTime, Utc};
 
 use crate::column::{Assignment, Column};
 use crate::error::{OrmError, Result};
-use crate::exec::{Access, ExecContext, Executor, Target};
+use crate::exec::{Access, Executor, Target};
 use crate::ir::{
     ArithmeticOp, ColumnRef, DeleteIr, Distinct, Expr, InValues, QueryIr, SelectItem, TableRef,
     UpdateIr, Where, WhereClause,
@@ -79,23 +79,16 @@ impl<M: Model> Builder<M> {
     }
 
     /// `SET` items from assignments, plus the update timestamp (at `now`)
-    /// unless an assignment sets it.
-    fn sets(
-        ctx: &ExecContext,
+    /// unless an assignment sets it. An assignment to a JSON path
+    /// (`col("meta->status").set("won")`) changes that value inside the
+    /// column (see [`compile_update`](crate::sql::compile_update)).
+    pub(crate) fn sets(
         now: DateTime<Utc>,
         assignments: impl IntoIterator<Item = Assignment>,
     ) -> Result<Vec<(Cow<'static, str>, Expr)>> {
         let mut sets = Vec::new();
         for assignment in assignments {
             let (column, expr) = assignment.into_set().map_err(OrmError::invalid)?;
-            if column.contains("->") {
-                return Err(OrmError::unsupported(
-                    format!(
-                        "setting the JSON path `{column}` in a mass update (set the whole column)"
-                    ),
-                    ctx.database(),
-                ));
-            }
             sets.push((column, expr));
         }
         let meta = M::meta();
@@ -131,7 +124,7 @@ impl<M: Model> Builder<M> {
         let target = exec.target(Access::Write).await?;
         let ctx = target.context();
         let now = ctx.now().await;
-        let sets = Self::sets(&ctx, now, assignments)?;
+        let sets = Self::sets(now, assignments)?;
         let (table, wheres) = self.write_target()?;
         target
             .update(&UpdateIr {
@@ -155,7 +148,7 @@ impl<M: Model> Builder<M> {
                 let value = M::timestamp_value(deleted_at, now).ok_or_else(|| {
                     crate::model::derive_support::not_a_timestamp::<M>(deleted_at)
                 })?;
-                let sets = Self::sets(&ctx, now, [Assignment::value(deleted_at, value)])?;
+                let sets = Self::sets(now, [Assignment::value(deleted_at, value)])?;
                 let (table, wheres) = self.write_target()?;
                 target
                     .update(&UpdateIr {
@@ -265,7 +258,7 @@ impl<M: Model> Builder<M> {
         let target = exec.target(Access::Write).await?;
         let ctx = target.context();
         let now = ctx.now().await;
-        let sets = Self::sets(&ctx, now, std::iter::once(step).chain(extra))?;
+        let sets = Self::sets(now, std::iter::once(step).chain(extra))?;
         let (table, wheres) = self.write_target()?;
         target
             .update(&UpdateIr {

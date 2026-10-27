@@ -23,7 +23,9 @@ mod timescale;
 mod write;
 
 pub use select::{compile_aggregate, compile_exists, compile_select};
-pub use write::{compile_delete, compile_insert, compile_update};
+pub use write::{
+    compile_delete, compile_insert, compile_truncate, compile_update, compile_update_from,
+};
 
 /// An SQL dialect.
 ///
@@ -72,6 +74,44 @@ impl Dialect {
     pub fn supports_returning(self) -> bool {
         !matches!(self, Dialect::MySql)
     }
+
+    /// The most values one statement can bind: 65,535 on PostgreSQL and
+    /// MySQL, 32,766 on SQLite. Multi-row inserts are split to stay under
+    /// it.
+    pub fn max_bind_values(self) -> usize {
+        match self {
+            Dialect::Postgres | Dialect::MySql => 65_535,
+            Dialect::Sqlite => 32_766,
+        }
+    }
+
+    /// `name` quoted as an identifier (`"deals"`, `` `deals` ``), each part
+    /// of a schema-qualified name on its own.
+    ///
+    /// ```
+    /// use navree_orm::Dialect;
+    ///
+    /// assert_eq!(Dialect::Postgres.quote_identifier("audit.events"), r#""audit"."events""#);
+    /// assert_eq!(Dialect::MySql.quote_identifier("odd`name"), "`odd``name`");
+    /// ```
+    pub fn quote_identifier(self, name: &str) -> String {
+        quote_identifier(name, self)
+    }
+}
+
+/// `name` quoted as an identifier for `dialect`.
+pub(crate) fn quote_identifier(name: &str, dialect: Dialect) -> String {
+    let quote = match dialect {
+        Dialect::MySql => '`',
+        Dialect::Postgres | Dialect::Sqlite => '"',
+    };
+    name.split('.')
+        .map(|part| {
+            let escaped = part.replace(quote, &format!("{quote}{quote}"));
+            format!("{quote}{escaped}{quote}")
+        })
+        .collect::<Vec<_>>()
+        .join(".")
 }
 
 impl fmt::Display for Dialect {
@@ -326,6 +366,15 @@ impl Compiler {
             Expr::All { table } => match table {
                 Some(table) => sea_query::Expr::col((Alias::new(table.to_string()), Asterisk)),
                 None => sea_query::Expr::col(Asterisk),
+            },
+            Expr::Excluded { column } => match self.dialect {
+                Dialect::Postgres | Dialect::Sqlite => sea_query::Expr::col((
+                    Alias::new("excluded"),
+                    Alias::new(column.to_string()),
+                )),
+                Dialect::MySql => Func::cust(Alias::new("VALUES"))
+                    .arg(sea_query::Expr::col(Alias::new(column.to_string())))
+                    .into(),
             },
         })
     }

@@ -606,6 +606,58 @@ pub trait Model: Clone + Send + Sync + Serialize + 'static {
         }
     }
 
+    /// Inserts `models` as they are, in one statement without hooks or
+    /// change events (see [`Builder::insert`]); returns how many rows were
+    /// inserted.
+    fn insert<E: Executor + ?Sized>(
+        exec: &E,
+        models: impl IntoIterator<Item = Self>,
+    ) -> impl Future<Output = Result<u64>> + Send {
+        let models: Vec<Self> = models.into_iter().collect();
+        Self::query().insert(exec, models)
+    }
+
+    /// Inserts `models` as they are, skipping the ones that conflict with a
+    /// unique index (see [`Builder::insert_or_ignore`]).
+    fn insert_or_ignore<E: Executor + ?Sized>(
+        exec: &E,
+        models: impl IntoIterator<Item = Self>,
+    ) -> impl Future<Output = Result<u64>> + Send {
+        let models: Vec<Self> = models.into_iter().collect();
+        Self::query().insert_or_ignore(exec, models)
+    }
+
+    /// Inserts `models` with generated keys and timestamps, in one
+    /// statement without hooks (see [`Builder::fill_and_insert`]).
+    fn fill_and_insert<E: Executor + ?Sized>(
+        exec: &E,
+        models: impl IntoIterator<Item = Self>,
+    ) -> impl Future<Output = Result<u64>> + Send {
+        let models: Vec<Self> = models.into_iter().collect();
+        Self::query().fill_and_insert(exec, models)
+    }
+
+    /// Inserts `models`, updating the stored rows they conflict with on
+    /// `unique_by` (see [`Builder::upsert`]).
+    fn upsert<E, U>(
+        exec: &E,
+        models: impl IntoIterator<Item = Self>,
+        unique_by: impl IntoIterator<Item = impl crate::column::ColumnName>,
+        update: impl IntoIterator<Item = U>,
+    ) -> impl Future<Output = Result<u64>> + Send
+    where
+        E: Executor + ?Sized,
+        U: Into<crate::query::ConflictUpdate>,
+    {
+        let models: Vec<Self> = models.into_iter().collect();
+        let unique_by: Vec<String> = unique_by
+            .into_iter()
+            .map(|column| column.column_name().into_owned())
+            .collect();
+        let update: Vec<crate::query::ConflictUpdate> = update.into_iter().map(Into::into).collect();
+        Self::query().upsert(exec, models, unique_by, update)
+    }
+
     /// Deletes the records with these keys one by one (so each one's
     /// lifecycle runs); returns how many were deleted.
     fn destroy<E: Executor + ?Sized>(

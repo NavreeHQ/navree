@@ -223,6 +223,19 @@ impl Target<'_> {
         }
     }
 
+    /// A transaction for work that must happen as a whole: a savepoint of
+    /// the transaction this target runs in, or a new transaction on the
+    /// pool. `None` on document stores (each operation stands alone).
+    pub(crate) async fn begin_atomic(&self) -> Result<Option<DatabaseTransaction>, OrmError> {
+        match self {
+            Target::Sql(sql) => match &sql.conn {
+                SqlConn::Pool(conn) => Ok(Some(conn.begin().await?)),
+                SqlConn::Transaction(_) | SqlConn::TransactionRef(_) => self.begin_savepoint().await,
+            },
+            Target::Document(_) => Ok(None),
+        }
+    }
+
     /// The same target running on `tx` (a savepoint of its transaction).
     pub(crate) fn on_transaction<'b>(&self, tx: &'b DatabaseTransaction) -> Target<'b> {
         match self {
