@@ -6,11 +6,12 @@ use std::sync::Arc;
 
 use chrono::{DateTime, TimeDelta, Utc};
 use navree_contracts::{AuditEntry, AuditKind, AuditSink, Clock, SystemClock};
-use navree_db::{ChangeEvent, ChangeObserver, ChangeOp, Db, Page, PageQuery, Uow, paginate};
+use navree_db::{
+    ChangeEvent, ChangeObserver, ChangeOp, Db, Page, PageQuery, Uow, paginate, prune_time_series,
+};
 use navree_kernel::{BoxError, BoxFuture};
 use sea_orm::{
-    ActiveValue::Set, ColumnTrait, ConnectionTrait, DatabaseTransaction, DbErr, EntityTrait,
-    QueryFilter, QueryOrder,
+    ActiveValue::Set, ConnectionTrait, DatabaseTransaction, DbErr, EntityTrait, QueryOrder,
 };
 use serde_json::Value;
 use tokio::sync::{mpsc, oneshot};
@@ -18,7 +19,7 @@ use uuid::Uuid;
 
 use crate::audit_log::{self, ActiveModel};
 use crate::naming::snake_case;
-use crate::policy::{Policy, changed_fields};
+use crate::policy::{AUDIT_TABLE, Policy, changed_fields};
 use crate::{AuditFilter, AuditOptions, AuditRecord};
 
 /// How many entries may wait for the background writer.
@@ -193,13 +194,16 @@ impl AuditLog {
         self.prune_before(cutoff).await
     }
 
-    /// Deletes entries recorded before `cutoff`; returns how many.
+    /// Deletes entries recorded before `cutoff`; returns how many. On
+    /// TimescaleDB, where `audit_logs` is a hypertable, the weeks entirely
+    /// before `cutoff` go as whole chunks (see [`prune_time_series`]).
     pub async fn prune_before(&self, cutoff: DateTime<Utc>) -> Result<u64, DbErr> {
-        let result = audit_log::Entity::delete_many()
-            .filter(audit_log::Column::CreatedAt.lt(cutoff))
-            .exec(self.db.conn())
-            .await?;
-        Ok(result.rows_affected)
+        self.db
+            .transaction(|uow| async move {
+                let tx = uow.tx().await?;
+                prune_time_series(&*tx, AUDIT_TABLE, "created_at", cutoff).await
+            })
+            .await
     }
 
     /// The row for `entry`, without skipped fields, stamped now.
