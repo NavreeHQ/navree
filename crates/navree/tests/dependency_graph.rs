@@ -63,6 +63,10 @@ const HIERARCHY: &[Rule] = &[
     rule("navree-view", 2, &["navree-kernel", "navree-contracts", "navree-config"]),
     rule("navree-cache", 2, &["navree-kernel", "navree-contracts", "navree-config"]),
     rule("navree-http-client", 2, &["navree-kernel", "navree-contracts", "navree-config"]),
+    // The schema builder and migration language: below navree-db, which
+    // runs its migrations, so framework crates at L4 and up can build their
+    // tables (and hypertables) with it.
+    rule("navree-schema", 2, &["navree-kernel", "navree-contracts", "navree-config"]),
     // L3
     rule("navree-db", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-http"]),
     rule("navree-testing", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-http"]),
@@ -169,6 +173,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-view",
     "navree-cache",
     "navree-http-client",
+    "navree-schema",
     "navree-db",
     "navree-testing",
     "navree-observe",

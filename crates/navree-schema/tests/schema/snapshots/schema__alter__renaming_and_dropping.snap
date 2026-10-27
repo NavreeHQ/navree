@@ -1,0 +1,58 @@
+---
+source: crates/navree-schema/tests/schema/alter.rs
+expression: sql
+---
+-- postgres
+ALTER TABLE "deals" RENAME COLUMN "value" TO "amount";
+ALTER TABLE "deals" DROP COLUMN "legacy", DROP COLUMN "unused";
+ALTER TABLE "deals" DROP CONSTRAINT "deals_email_unique";
+DROP INDEX "deals_stage_index";
+ALTER TABLE "deals" DROP COLUMN "created_at", DROP COLUMN "updated_at";
+ALTER TABLE "deals" DROP COLUMN "deleted_at";
+DROP INDEX "deals_subject_type_subject_id_index";
+ALTER TABLE "deals" DROP COLUMN "subject_type", DROP COLUMN "subject_id";
+ALTER TABLE "deals" RENAME TO "opportunities";
+DROP TABLE "archived_deals";
+DROP TABLE IF EXISTS "old_deals";
+
+-- mysql
+ALTER TABLE `deals` RENAME COLUMN `value` TO `amount`;
+ALTER TABLE `deals` DROP `legacy`, DROP `unused`;
+ALTER TABLE `deals` DROP INDEX `deals_email_unique`;
+ALTER TABLE `deals` DROP INDEX `deals_stage_index`;
+ALTER TABLE `deals` DROP `created_at`, DROP `updated_at`;
+ALTER TABLE `deals` DROP `deleted_at`;
+ALTER TABLE `deals` DROP INDEX `deals_subject_type_subject_id_index`;
+ALTER TABLE `deals` DROP `subject_type`, DROP `subject_id`;
+RENAME TABLE `deals` TO `opportunities`;
+DROP TABLE `archived_deals`;
+DROP TABLE IF EXISTS `old_deals`;
+
+-- mariadb
+ALTER TABLE `deals` RENAME COLUMN `value` TO `amount`;
+ALTER TABLE `deals` DROP `legacy`, DROP `unused`;
+ALTER TABLE `deals` DROP INDEX `deals_email_unique`;
+ALTER TABLE `deals` DROP INDEX `deals_stage_index`;
+ALTER TABLE `deals` DROP `created_at`, DROP `updated_at`;
+ALTER TABLE `deals` DROP `deleted_at`;
+ALTER TABLE `deals` DROP INDEX `deals_subject_type_subject_id_index`;
+ALTER TABLE `deals` DROP `subject_type`, DROP `subject_id`;
+RENAME TABLE `deals` TO `opportunities`;
+DROP TABLE `archived_deals`;
+DROP TABLE IF EXISTS `old_deals`;
+
+-- sqlite
+ALTER TABLE "deals" RENAME COLUMN "value" TO "amount";
+ALTER TABLE "deals" DROP COLUMN "legacy";
+ALTER TABLE "deals" DROP COLUMN "unused";
+DROP INDEX "deals_email_unique";
+DROP INDEX "deals_stage_index";
+ALTER TABLE "deals" DROP COLUMN "created_at";
+ALTER TABLE "deals" DROP COLUMN "updated_at";
+ALTER TABLE "deals" DROP COLUMN "deleted_at";
+DROP INDEX "deals_subject_type_subject_id_index";
+ALTER TABLE "deals" DROP COLUMN "subject_type";
+ALTER TABLE "deals" DROP COLUMN "subject_id";
+ALTER TABLE "deals" RENAME TO "opportunities";
+DROP TABLE "archived_deals";
+DROP TABLE IF EXISTS "old_deals";

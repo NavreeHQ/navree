@@ -1,0 +1,9 @@
+---
+source: crates/navree-schema/tests/schema/columns.rs
+expression: sql
+---
+-- postgres 17
+-- error: PostgreSQL does not support virtual generated columns before version 18 (column `double_price`, server 17.0.0): use `stored_as`, which PostgreSQL 12 and later support
+
+-- postgres 18
+CREATE TABLE "totals" ("price" INTEGER NOT NULL, "double_price" INTEGER NOT NULL GENERATED ALWAYS AS (price * 2) VIRTUAL);

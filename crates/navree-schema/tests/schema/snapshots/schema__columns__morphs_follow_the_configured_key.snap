@@ -1,0 +1,8 @@
+---
+source: crates/navree-schema/tests/schema/columns.rs
+expression: "schema.statements().join(\";\\n\")"
+---
+CREATE TABLE "comments" ("id" UUID NOT NULL, "commentable_type" VARCHAR(255) NOT NULL, "commentable_id" UUID NOT NULL, "parent_type" VARCHAR(255) NULL, "parent_id" UUID NULL, "about_type" VARCHAR(255) NOT NULL, "about_id" UUID NOT NULL, PRIMARY KEY ("id"));
+CREATE INDEX "comments_commentable_type_commentable_id_index" ON "comments" ("commentable_type", "commentable_id");
+CREATE INDEX "comments_parent_type_parent_id_index" ON "comments" ("parent_type", "parent_id");
+CREATE INDEX "comments_about" ON "comments" ("about_type", "about_id")

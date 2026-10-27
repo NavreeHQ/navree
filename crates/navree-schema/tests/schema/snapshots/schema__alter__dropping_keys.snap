@@ -1,0 +1,23 @@
+---
+source: crates/navree-schema/tests/schema/alter.rs
+expression: sql
+---
+-- postgres
+ALTER TABLE "deals" DROP CONSTRAINT "deals_pkey";
+ALTER TABLE "deals" DROP CONSTRAINT "deals_company_id_foreign";
+ALTER TABLE "deals" DROP CONSTRAINT "deals_owner_id_foreign";
+ALTER TABLE "deals" DROP COLUMN "owner_id";
+DROP INDEX "deals_title_body_fulltext";
+ALTER INDEX "deals_title_index" RENAME TO "deals_title";
+ALTER TABLE "deals" ADD PRIMARY KEY ("id", "created_at");
+COMMENT ON TABLE "deals" IS 'pipeline deals';
+
+-- mysql
+ALTER TABLE `deals` DROP PRIMARY KEY;
+ALTER TABLE `deals` DROP FOREIGN KEY `deals_company_id_foreign`;
+ALTER TABLE `deals` DROP FOREIGN KEY `deals_owner_id_foreign`;
+ALTER TABLE `deals` DROP `owner_id`;
+ALTER TABLE `deals` DROP INDEX `deals_title_body_fulltext`;
+ALTER TABLE `deals` RENAME INDEX `deals_title_index` TO `deals_title`;
+ALTER TABLE `deals` ADD PRIMARY KEY(`id`, `created_at`);
+ALTER TABLE `deals` COMMENT = 'pipeline deals';
