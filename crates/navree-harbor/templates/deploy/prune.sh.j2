@@ -1,0 +1,18 @@
+# harbor: prune on {{ server.name }}
+cd {{ base }}
+protected=""
+for link in current blue green; do
+	if [ -L "$link" ]; then
+		protected="$protected $(basename "$(readlink "$link")")"
+	fi
+done
+count=0
+for id in $(ls -1 releases | grep -v -e '\.partial$' -e '\.tar\.gz$' | sort -r || true); do
+	count=$((count + 1))
+	if [ "$count" -le {{ keep }} ]; then
+		continue
+	fi
+	case " $protected " in *" $id "*) continue ;; esac
+	rm -rf "releases/$id"
+	echo "removed=$id"
+done

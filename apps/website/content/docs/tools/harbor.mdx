@@ -1,7 +1,6 @@
 ---
 title: "Harbor"
 description: "Provision Ubuntu servers over SSH and ship zero-downtime, health-checked releases, with rollbacks, encrypted secrets, several servers, container images and push-to-deploy."
-status: "planned"
 ---
 
 ## Introduction
@@ -17,6 +16,7 @@ Everything lives in one file, `harbor.toml`, in your repository: the servers and
 - **The CLI**: `cargo install --git https://github.com/NavreeHQ/navree navree-cli`.
 - **One or more servers running Ubuntu 22.04 or 24.04 LTS**, on x86-64 or ARM64, from any provider, with SSH access as `root` using a key. A server with 1 GB of memory runs a small app with its database; 2 GB or more is comfortable.
 - **A domain** whose DNS `A` (and `AAAA`) record points at the server that takes web traffic, so Caddy can get a certificate.
+- **An OpenSSH client** (`ssh`) on the machine you deploy from. macOS, Linux and Windows 10 or later include one. Harbor runs it for every connection, so your `~/.ssh` keys and agent work as usual.
 - **To build on macOS or Windows**, Docker or Podman: Harbor builds the Linux binary in a container. On Linux it can build natively.
 
 ## Getting started
@@ -158,11 +158,13 @@ scheduler = { command = "schedule:work" }
 
 Your app reads its settings from `APP_*` environment variables, as [configuration](/docs/getting-started/configuration/) describes. On a server, Harbor writes them to `/etc/<app>/env`, readable only by root and the app's user, from three sources, later over earlier:
 
-1. the settings Harbor knows: `APP_HTTP__ADDR` for each web instance, `APP_HTTP__TRUSTED_PROXIES` (Caddy on loopback, plus `deploy.trusted_proxies`), `APP_DATABASE__MIGRATE_ON_BOOT=false`, `APP_REALTIME__RELAY_URL` (Caddy's internal entry, so workers reach the live web instance) and `APP_LIGHTHOUSE__RELEASE` (the release id, for [Lighthouse](/docs/tools/lighthouse/#statuses));
+1. the settings Harbor knows: `APP_HTTP__TRUSTED_PROXIES` (Caddy on loopback, plus `deploy.trusted_proxies`), `APP_DATABASE__MIGRATE_ON_BOOT=false` (a deploy migrates once, itself), `APP_REALTIME__RELAY_URL` (Caddy's internal entry, so workers reach the live web instance) and `APP_LIGHTHOUSE__RELEASE` (the release id, for [Lighthouse](/docs/tools/lighthouse/#statuses));
 2. `[env]`, for settings that aren't secret;
 3. `[secrets]`, decrypted on your machine during the deploy.
 
-Releases also carry your `config/app.toml`, so settings that are the same everywhere can stay there. As on any server, an environment variable overrides the TOML file.
+Each web slot also has its own small file, `/etc/<app>/blue.env` or `green.env`, with `APP_HTTP__ADDR` (the slot's port on loopback) and the release that slot runs. Releases also carry your `config/app.toml`, so settings that are the same everywhere can stay there. As on any server, an environment variable overrides the TOML file.
+
+On a server without the `web` role, `APP_REALTIME__RELAY_URL` points at the first `web` server's internal entry over the private network (`http://<private_ip>:8079`), so give your servers a `private_ip` when workers run apart from the web servers and broadcast.
 
 ## Provisioning
 
@@ -174,24 +176,27 @@ Provisioning app-1 (203.0.113.10, Ubuntu 24.04, x86_64)
   users     navree, with 2 SSH keys
   ssh       no passwords, root by key only, host key recorded
   firewall  ufw: 22/tcp, 80/tcp, 443/tcp, 443/udp; fail2ban
-  postgres  PostgreSQL 17, database crm_api; URL saved to [secrets]
-  redis     Redis 7 on 127.0.0.1; URL saved to [secrets]
+  postgres  PostgreSQL 17, database crm_api; URL saved to [secrets] as APP_DATABASE__URL
+  redis     Redis on 127.0.0.1, 256 MB; URL saved to [secrets] as REDIS_URL
   caddy     Caddy 2, site crm.example.com
-  systemd   crm-api-web@blue, @green, crm-api-worker@1, @2, scheduler
+  systemd   crm-api-web@blue, @green, crm-api-worker@1, @2, crm-api-scheduler, crm-api-backup.timer
 Provisioned app-1 in 3m 12s. Run `navree deploy` next.
 ```
+
+Each area is one bash script, rendered from a template and sent over SSH to `bash -s` on standard input, so passwords and keys never appear on a command line. Harbor first checks the server: anything other than Ubuntu 22.04 or later, on x86-64 or ARM64, is refused before anything changes. A step that fails stops the run with its server, its area and the script's last output lines; fix the cause and run the command again. Provisioning as a user other than `root` runs each script with `sudo -n`, so that user needs password-less `sudo`.
 
 ### What a server gets
 
 | Area | What Harbor sets up |
 |---|---|
 | System | Package updates, `unattended-upgrades` for security updates, `chrony` for time, a swap file on servers with less than 4 GB of memory, the time zone set to UTC, journald capped at 1 GB. |
-| Users | A `navree` user that owns the app and runs its processes, with the keys in `ssh.authorized_keys`. Its `sudo` rights are limited to managing the app's systemd units and reloading Caddy. |
+| Users | A `navree` user that owns the app and runs its processes, with the keys in `ssh.authorized_keys`, and in the `systemd-journal` group so it can read the app's logs. Its `sudo` rights, in `/etc/sudoers.d/harbor-<app>`, are limited to starting, stopping and restarting the app's systemd units (and enabling or disabling the web slots), starting the database backup and reloading Caddy. |
 | SSH | Password logins off; `root` may log in by key only. The host key is recorded in `harbor.toml` as `host_key`, and every later connection checks it. |
-| Firewall | `ufw`, denying all incoming traffic except SSH, and on `web` servers ports 80 and 443 (TCP, and UDP for HTTP/3). On `postgres` and `redis` servers, ports 5432 and 6379 open to your other servers only. `fail2ban` watches SSH. |
-| Caddy (`web`) | The reverse proxy in front of your app, with a certificate from Let's Encrypt for `domain`, renewed automatically; HTTP redirected to HTTPS; HTTP/2 and HTTP/3; compression; WebSocket upgrades for [broadcasting](/docs/digging-deeper/broadcasting/). `/metrics` answers only the addresses in `web.metrics_allow`. |
-| PostgreSQL (`postgres`) | PostgreSQL 17 from the PostgreSQL project's apt repository, a database and a user for the app with a generated password, `scram-sha-256` authentication, connections from your servers only, and a daily `pg_dump` kept for `postgres.backup_days` (7) in `/var/backups/postgresql`. |
-| Redis (`redis`) | Redis 7, a generated password, `maxmemory` with `allkeys-lru`, listening on loopback or the private network only. |
+| Firewall | `ufw`, denying all incoming traffic except SSH, and on `web` servers ports 80 and 443 (TCP, and UDP for HTTP/3). On `postgres` and `redis` servers, ports 5432 and 6379 open to your other servers only. On a `web` server with a `private_ip`, port 8079 (the [internal entry](#the-caddy-site)) open to the private addresses of your servers that run workers or the scheduler without the `web` role. `fail2ban` watches SSH. |
+| Caddy (`web`) | Caddy 2 from Caddy's apt repository: the reverse proxy in front of your app, with a certificate from Let's Encrypt for `domain`, renewed automatically; HTTP redirected to HTTPS; HTTP/2 and HTTP/3; compression; WebSocket upgrades for [broadcasting](/docs/digging-deeper/broadcasting/). `aliases` redirect to `domain`. `/metrics` answers only the addresses in `web.metrics_allow`, and 404 to everyone else. |
+| PostgreSQL (`postgres`) | PostgreSQL 17 (`postgres.version`) from the PostgreSQL project's apt repository, a database and a user for the app with a generated password, `scram-sha-256` authentication, connections from your servers only, and a daily `pg_dump` (a systemd timer) kept for `postgres.backup_days` (7) in `/var/backups/postgresql/<app>`. |
+| Redis (`redis`) | Redis from Ubuntu's own packages (7.0 on 24.04 LTS, 6.0 on 22.04 LTS), a generated password, `maxmemory` (`redis.maxmemory_mb`, 256 MB) with `allkeys-lru`, listening on loopback, and on the private network when other servers use it. |
+| Node.js (`web`, with a [front end](#a-front-end-next-to-your-api)) | Node.js `frontend.node_version` (24) from NodeSource, and pnpm or Yarn through Corepack when the front end's lockfile asks for one. |
 | systemd | Units for the app's processes, below. |
 
 The database URL (`APP_DATABASE__URL`) and the Redis URL (`REDIS_URL`), with their generated passwords, go straight into `[secrets]`: you never see or copy them.
@@ -227,27 +232,32 @@ ReadWritePaths=/srv/crm-api/shared
 WantedBy=multi-user.target
 ```
 
-`/etc/crm-api/blue.env` sets `APP_HTTP__ADDR=127.0.0.1:8081`, and `green.env` port 8082. The worker unit, `crm-api-worker@.service`, and the scheduler unit, `crm-api-scheduler.service`, are the same with `WorkingDirectory=/srv/crm-api/current` and their own commands. Every unit has the same hardening: the app can write to `shared/` and nowhere else.
+`/etc/crm-api/blue.env` sets `APP_HTTP__ADDR=127.0.0.1:8081`, and `green.env` port 8082. The worker unit, `crm-api-worker@.service` (one instance per `processes.worker.instances`: `@1`, `@2`, ...), and the scheduler unit, `crm-api-scheduler.service`, are the same with `WorkingDirectory=/srv/crm-api/current` and their own commands; they start once the first release is live. Every unit has the same hardening: the app can write to `shared/` and nowhere else. A `postgres` server also gets `crm-api-backup.service` and its daily `crm-api-backup.timer`.
 
 ### The Caddy site
 
-```text title="/etc/caddy/Caddyfile"
+`/etc/caddy/Caddyfile` imports one site file per app from `/etc/caddy/sites/`, so several apps can share a server:
+
+```text title="/etc/caddy/sites/crm-api.caddy"
+# crm-api: written by navree harbor:provision; navree deploy points the
+# reverse_proxy lines at the live slot (blue).
 crm.example.com {
-    encode zstd gzip
+	encode zstd gzip
 
-    @metrics path /metrics
-    respond @metrics 404
+	@metrics path /metrics
+	respond @metrics 404
 
-    reverse_proxy 127.0.0.1:8081
+	reverse_proxy 127.0.0.1:8081
 }
 
 # Internal entry for workers and the scheduler, always pointing at the live slot.
-http://127.0.0.1:8079 {
-    reverse_proxy 127.0.0.1:8081
+http://:8079 {
+	bind 127.0.0.1
+	reverse_proxy 127.0.0.1:8081
 }
 ```
 
-Caddy sends `X-Forwarded-For` and `X-Forwarded-Proto`, and Harbor sets `APP_HTTP__TRUSTED_PROXIES=127.0.0.1,::1`, so your app sees each client's real address, as [behind a reverse proxy](/docs/getting-started/deployment/#behind-a-reverse-proxy) explains. A deploy rewrites the two `reverse_proxy` lines and reloads Caddy gracefully. When your app includes `GrpcModule`, Harbor proxies with `h2c://127.0.0.1:8081`, so [gRPC](/docs/microservices/grpc/) works end to end over HTTP/2.
+Caddy sends `X-Forwarded-For` and `X-Forwarded-Proto`, and Harbor sets `APP_HTTP__TRUSTED_PROXIES=127.0.0.1,::1`, so your app sees each client's real address, as [behind a reverse proxy](/docs/getting-started/deployment/#behind-a-reverse-proxy) explains. A deploy rewrites the site file for the new slot and reloads Caddy gracefully; the deploy user owns this one file, and nothing else in `/etc/caddy`. On a server with a `private_ip` and workers elsewhere, the internal entry also binds the private address. When your app's `Cargo.toml` turns on navree's `grpc` feature (or depends on `navree-grpc`), Harbor proxies with `h2c://127.0.0.1:8081`, so [gRPC](/docs/microservices/grpc/) works end to end over HTTP/2.
 
 ## Secrets
 
@@ -263,10 +273,10 @@ navree harbor:secrets unset STRIPE_SECRET
 ```
 
 - **The key never leaves your machine.** `harbor.key` is in `.gitignore`. Share it with your team through a password manager. In CI, put its contents in the `NAVREE_HARBOR_KEY` environment variable instead.
-- **Values are decrypted only during a deploy**, on the machine running it, and written over SSH to `/etc/<app>/env`. They never appear in Harbor's output or logs, and never in a release directory.
+- **Values are decrypted only during a deploy**, on the machine running it, and written over SSH to `/etc/<app>/env`, inside the script on SSH's standard input (base64-encoded), never on a command line. They never appear in Harbor's output or logs, and never in a release directory.
 - **Rotate the key** with `navree harbor:secrets rotate-key`: it re-encrypts every value under a new key and writes the new `harbor.key`.
 
-Rotating a secret itself is setting it again and deploying.
+`--stdin` drops the one trailing newline `echo` adds, and an empty value is refused. A stored value is `harbor:v1:` followed by the nonce, the ciphertext and its tag in URL-safe base64; `harbor.key` holds `base64:` and the 32-byte key, the same form as an `APP_KEY`. Rotating a secret itself is setting it again and deploying.
 
 ## Deploying
 
@@ -291,8 +301,8 @@ Released 20261026-091512-3f2a9c1 in 1m 53s.
 
 A release id is the UTC time of the deploy and the short Git commit. Step by step:
 
-1. **Build.** Harbor builds the release binary for your servers' architecture: natively when the machine running the deploy is Linux on the same architecture with a glibc no newer than the servers', otherwise in a container (`build.method`). Container builds keep Cargo's cache in a volume, so the second build is incremental.
-2. **Upload.** The binary and the directories in `deploy.include` (`config` and `resources`, when present) go to a new directory under `releases/` on every server, compressed. The directories in `deploy.shared` are links to `shared/`, so `storage/` survives releases.
+1. **Build.** Harbor builds the release binary for your servers' architecture: natively when the machine running the deploy is Linux on the same architecture with a glibc no newer than the servers', otherwise in a container (`build.method`). The container is Harbor's builder image, Ubuntu 22.04 with a stable Rust toolchain, built once on your machine (or the image in `build.image`); its glibc is no newer than the servers', so the binary runs on 22.04 and 24.04 alike. Container builds keep Cargo's registry, the toolchain and the target directory in named volumes (`navree-harbor-*`), so the second build is incremental.
+2. **Upload.** The binary, the directories in `deploy.include` (`config` and `resources`, when present) and a `.harbor-release` file naming the commit go to every server in parallel as one compressed archive over SSH, and are unpacked into a new directory under `releases/`. The directories in `deploy.shared` are links to `shared/`, so `storage/` survives releases.
 3. **Environment.** `/etc/<app>/env` is written from the [three sources](#the-environment).
 4. **Migrate.** `migrate` runs once, from the new release, on the first `web` server. If a migration fails, the deploy stops here and nothing else changes.
 5. **Start.** The idle slot (green) is pointed at the new release and started on its own port, next to the live one.
@@ -321,8 +331,8 @@ shared/
 | `--server <name>` | Deploy to one server. |
 | `--env <name>` | Use `harbor.<name>.toml`; see [environments](#environments). |
 | `--no-migrate` | Skip the migrations. |
-| `--maintenance` | Turn on [maintenance mode](/docs/digging-deeper/maintenance-mode/) before migrating and off after the switch, for migrations the running release can't work with. |
-| `--release <id>` | Deploy a release already built and uploaded, without building. |
+| `--maintenance` | Run your app's `down` on every web server before migrating and `up` after the switch ([maintenance mode](/docs/digging-deeper/maintenance-mode/)), for migrations the running release can't work with. If the deploy fails, Harbor runs `up` again. |
+| `--release <id>` | Deploy a release already uploaded (one `navree deploy:releases` lists), without building. |
 
 ### Zero downtime, and what it asks of you
 
@@ -391,7 +401,8 @@ private_ip = "10.0.0.31"
 roles = ["postgres", "redis"]
 ```
 
-- **Private network.** Servers with a `private_ip` talk to each other over it: PostgreSQL and Redis listen on it, and the firewall admits only your servers' addresses. Without one, they connect over the public addresses with TLS required.
+- **Private network.** Servers with a `private_ip` talk to each other over it: PostgreSQL and Redis listen on it, and the firewall admits only your servers' addresses. Without private addresses, PostgreSQL is reached over the public ones with TLS required (`hostssl` and `sslmode=require`), and Redis, which has no TLS here, must stay on the server that uses it: `harbor.toml` is refused when another server needs Redis and either side lacks a `private_ip`.
+- **One of each data server.** At most one server has the `postgres` role and one the `redis` role; they can be the same server.
 - **Rolling deploys.** Harbor builds once, uploads to every server in parallel and migrates once. Then it switches the web servers one at a time, each after its own health check. If one fails, Harbor switches the ones it already moved back to the previous release, so all web servers always run the same release. Workers and the scheduler restart once every web server is on the new release.
 - **A load balancer in front.** With more than one web server, put your provider's load balancer in front, forwarding ports 80 and 443 to each one. Caddy still terminates TLS. Turn on `web.proxy_protocol = true` when the balancer speaks the PROXY protocol, so Caddy, and then your app, see each client's address.
 - **SQLite or PostgreSQL.** SQLite suits one server. With several servers, use the `postgres` role and the `postgres` feature.
@@ -412,8 +423,8 @@ command = "pnpm start"
 health_check = "/"
 ```
 
-- Harbor builds it during the deploy's build step, uploads it with the binary into the release, and installs Node.js LTS on `web` servers when it provisions them.
-- It runs in its own blue and green slots (ports 3001 and 3002) with its own health check, and switches together with the API, so a page and the API it calls always come from the same release.
+- Harbor builds it during the deploy's build step (natively, or in a `node:<frontend.node_version>-bookworm` container when the binary builds in one), uploads it with the binary into the release, and installs Node.js (`frontend.node_version`, 24) on `web` servers when it provisions them. Without `build` and `command`, Harbor picks npm, pnpm or Yarn from the lockfile.
+- It runs in its own blue and green slots (`frontend.ports`, 3001 and 3002) as `crm-api-frontend@blue` and `@green`, with its own health check, and switches together with the API, so a page and the API it calls always come from the same release. Its environment has `PORT`, `HOSTNAME=127.0.0.1`, `NODE_ENV=production` and `NAVREE_API_URL`, the address of the API slot of the same release.
 - Caddy serves `domain` from the front end. The API stays on loopback, where the front end's server calls it; set `api_domain` to also serve the API publicly, for example `api.crm.example.com` for mobile clients.
 
 ## Environments
@@ -432,18 +443,21 @@ navree harbor:secrets set APP_KEY --generate --env staging
 
 | Command | What it does |
 |---|---|
-| `navree harbor:status` | Each server's roles, its processes and their state, the current release, disk and memory. |
-| `navree harbor:logs` | Your app's log lines from journald, merged across servers, newest last. `--server`, `--process web`, `--lines 200` and `--follow` narrow them down. |
-| `navree harbor:run <command> [args]` | Runs one of your app's commands on the first `web` server (or `--server`), from the current release with its environment: `navree harbor:run migrate:status`, `navree harbor:run queue:retry all`. |
-| `navree harbor:ssh [server]` | Opens a shell on a server as the `navree` user. |
-| `navree harbor:backup` | Runs the PostgreSQL backup now; `--download` also copies it to your machine. |
+| `navree harbor:status` | Each server's roles, its processes and their state, the current release, disk and memory, and whether installed updates need a reboot. |
+| `navree harbor:logs` | Your app's log lines from journald, merged across servers by time, newest last. `--server`, `--process web` (or `frontend`, `worker`, `scheduler`), `--lines 200` (100 by default, per server) and `--follow` narrow them down. |
+| `navree harbor:run <command> [args]` | Runs one of your app's commands on the first `web` server (or `--server`), from the current release with its environment, on your terminal: `navree harbor:run migrate:status`, `navree harbor:run queue:retry all`. Its exit code is `navree`'s. |
+| `navree harbor:ssh [server]` | Opens a shell on a server as the `navree` user (the first `web` server by default). |
+| `navree harbor:backup` | Runs the PostgreSQL backup now on the `postgres` server; `--download` also copies the dump to the current directory. |
 
 ```text title="navree harbor:status"
 app-1  203.0.113.10  web, worker, scheduler, postgres, redis
   release    20261026-091512-3f2a9c1 (current), 4 older
   web        green, running on 127.0.0.1:8082
+  caddy      running
   worker     2 of 2 running
   scheduler  running
+  postgres   running
+  redis      running
   system     disk 18% of 80 GB, memory 41% of 4 GB, load 0.12
 ```
 
@@ -461,7 +475,9 @@ navree build:image --platform linux/arm64
 Built crm-api:3f2a9c1 (linux/amd64) with docker.
 ```
 
-The image builds in two stages and runs on a slim Debian base:
+The tag defaults to `<app>:<short commit>` (`<app>:latest` outside Git) and the platform to your machine's architecture. `build:image` works with or without `harbor.toml`: with one, it builds `app` with `build.features` and ships `deploy.include`. In a Cargo workspace, the build context is the workspace root, so path dependencies build too.
+
+The image builds in two stages, `rust:1-bookworm` then `debian:bookworm-slim`:
 
 | | |
 |---|---|
@@ -486,7 +502,7 @@ To change the image, `navree build:image --dockerfile` writes the `Dockerfile` a
 
 ## Push to deploy with GitHub Actions
 
-`navree harbor:ci github` writes a workflow that tests and deploys every push to `main`:
+`navree harbor:ci github` writes a workflow that tests and deploys every push to `main` (`--branch <name>` for another branch; with `--env staging`, the workflow deploys that environment):
 
 ```yaml title=".github/workflows/deploy.yml"
 name: Deploy
@@ -520,7 +536,7 @@ Set it up once:
 1. Create a key pair for CI (`ssh-keygen -t ed25519 -f ci-deploy -N ""`), add `ci-deploy.pub` to `ssh.authorized_keys`, and run `navree harbor:provision` so the servers accept it.
 2. In the repository's settings, add two secrets: `NAVREE_HARBOR_KEY`, the contents of `harbor.key`, and `NAVREE_HARBOR_SSH_KEY`, the contents of `ci-deploy`.
 
-The runner verifies each server against the `host_key` in `harbor.toml`, so it needs no `known_hosts` file. The `concurrency` group makes deploys queue one after another instead of overlapping, and a failing test stops the deploy before anything is built.
+The runner verifies each server against the `host_key` in `harbor.toml`, so it needs no `known_hosts` file. The `concurrency` group makes deploys queue one after another instead of overlapping, and a failing test stops the deploy before anything is built. When `harbor.toml` sits in a package directory below the repository root, the workflow is written at the root with a `working-directory` for the deploy step. Harbor won't overwrite an existing workflow file.
 
 ## Security
 
@@ -530,6 +546,32 @@ The runner verifies each server against the `host_key` in `harbor.toml`, so it n
 - **Secrets.** Encrypted at rest in the repository, decrypted only on the deploying machine, stored on servers in a file only root and the app's user can read.
 - **The app's processes.** Run as an unprivileged user, with systemd hardening: no new privileges, a read-only system, a private `/tmp`, and write access to `shared/` alone.
 - **Updates.** Security updates install automatically. Harbor never reboots a server on its own; `navree harbor:status` says when one needs a reboot.
+
+## The library
+
+The `navree-harbor` crate does the work behind these commands, and the `navree` CLI has it built in. Tools can use it too: the facade re-exports it as `navree::harbor` with the `harbor` feature. It is opt-in, not part of `full`, since an app's runtime never needs it:
+
+```toml title="Cargo.toml"
+[dependencies]
+navree = { git = "https://github.com/NavreeHQ/navree", features = ["harbor"] }
+```
+
+```rust
+use std::path::Path;
+
+use navree::harbor::{Environment, Project, Role};
+
+fn main() -> Result<(), navree::harbor::HarborError> {
+    // ./harbor.toml, validated as `navree deploy` would.
+    let project = Project::load(Path::new("."), Environment::production())?;
+    for server in project.config.servers_with(Role::Web) {
+        println!("{} serves {}", server.name, project.config.domain.as_deref().unwrap_or(""));
+    }
+    Ok(())
+}
+```
+
+Every program Harbor runs (`ssh`, `cargo`, `git`, `docker` or `podman`) goes through an `Executor`: `SystemExecutor` starts real processes, and `FakeExecutor` records each command and answers from a script, which is how Harbor's own tests check every script it sends without a server. The release state machine runs against the `Host` trait: `SshHost` over SSH, and `FakeHost` in memory.
 
 ## Reference
 
@@ -547,16 +589,16 @@ The runner verifies each server against the `host_key` in `harbor.toml`, so it n
 | `navree deploy:rollback [--to <release>]` | Switches back to the previous release, or to one you name. |
 | `navree deploy:releases` | Lists the releases on the servers. |
 | `navree harbor:status`, `harbor:logs`, `harbor:run`, `harbor:ssh`, `harbor:backup` | See [working with your servers](#working-with-your-servers). |
-| `navree harbor:ci github` | Writes the GitHub Actions workflow. |
+| `navree harbor:ci github [--branch <name>]` | Writes the GitHub Actions workflow. |
 | `navree build:image [--tag] [--push] [--platform] [--dockerfile]` | Builds an OCI image of the app. |
 
-Every command takes `--env <name>`.
+Every command takes `--env <name>`. Harbor looks for `harbor.toml` in the current directory and then in the directories above it.
 
 ### harbor.toml keys
 
 | Key | Default | What it does |
 |---|---|---|
-| `app` | the package in the current directory | The package to build and run. |
+| `app` | the package next to `harbor.toml` | The package to build and run. |
 | `domain` | required with a `web` server | The domain Caddy serves and gets a certificate for. |
 | `aliases` | `[]` | More domains, redirected to `domain`. |
 | `api_domain` | none | With `[frontend]`, a domain that serves the API publicly. |
@@ -564,9 +606,12 @@ Every command takes `--env <name>`.
 | `frontend.build` | `npm ci && npm run build` (or the pnpm or yarn equivalent for the lockfile) | How to build it. |
 | `frontend.command` | `npm start` (or the equivalent) | How to run it. |
 | `frontend.health_check` | `/` | The path that must answer 200 before a switch. |
+| `frontend.ports` | `[3001, 3002]` | The ports of the front end's blue and green slots. |
+| `frontend.node_version` | `24` | The Node.js major version on `web` servers and in container builds. |
 | `build.method` | `auto` | `auto`, `native` or `container`. |
 | `build.features` | `[]` | Cargo features of the build. |
 | `build.target` | your servers' architecture | A Rust target triple, to override it. |
+| `build.image` | Harbor's builder image | The image container builds run in. |
 | `deploy.path` | `/srv/<app>` | Where releases live on the servers. |
 | `deploy.keep_releases` | `5` | Releases kept for rollbacks. |
 | `deploy.health_check` | `/health/ready` | The path that must answer 200 before a switch. |
@@ -575,6 +620,7 @@ Every command takes `--env <name>`.
 | `deploy.include` | `["config", "resources"]` | Directories shipped with the binary. |
 | `deploy.shared` | `["storage"]` | Directories kept across releases. |
 | `deploy.ports` | `[8081, 8082]` | The ports of the blue and green slots. |
+| `deploy.internal_port` | `8079` | The port of Caddy's internal entry, always the live slot. |
 | `deploy.trusted_proxies` | `[]` | Proxies trusted besides Caddy, such as a load balancer's network. |
 | `processes.<role>.command` | `serve`, `queue:work`, `schedule:work` | The command of the `web`, `worker` and `scheduler` processes. |
 | `processes.worker.instances` | `1` | Worker processes per `worker` server. |
@@ -585,17 +631,18 @@ Every command takes `--env <name>`.
 | `ssh.user` | `navree` | The deploy user. |
 | `ssh.provision_user` | `root` | The user `harbor:provision` connects as. |
 | `ssh.port` | `22` | The SSH port. |
-| `ssh.key` | `~/.ssh/id_ed25519` | Your private key; `NAVREE_HARBOR_SSH_KEY` replaces it. |
+| `ssh.key` | `~/.ssh/id_ed25519` when it exists, else your SSH agent | Your private key; `NAVREE_HARBOR_SSH_KEY` replaces it. |
 | `ssh.authorized_keys` | the public half of `ssh.key` | Public keys allowed to log in as the deploy user. |
 | `web.metrics_allow` | `[]` | Addresses allowed to fetch `/metrics` through Caddy. |
-| `web.proxy_protocol` | `false` | Accept the PROXY protocol from a load balancer. |
+| `web.proxy_protocol` | `false` | Accept the PROXY protocol from the addresses in `deploy.trusted_proxies`, which it needs. |
 | `postgres.version` | `17` | The PostgreSQL major version. |
 | `postgres.database` | the app's name with `_` | The database and user name. |
 | `postgres.backup_days` | `7` | Daily backups kept. |
-| `redis.version` | `7` | The Redis major version. |
 | `redis.maxmemory_mb` | `256` | Redis's memory limit. |
 | `env.<NAME>` | | A setting for every process. |
 | `secrets.<NAME>` | | An encrypted setting for every process. |
+
+Unknown keys are errors, so a typo never goes unnoticed, and every command that works with your servers checks the whole file first, listing each problem it finds. The secrets commands only need the file to parse.
 
 ### Environment variables
 

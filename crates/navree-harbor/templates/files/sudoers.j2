@@ -1,0 +1,4 @@
+# Written by navree harbor:provision: what {{ user }} may run as root for {{ app }}.
+Cmnd_Alias {{ alias }} = \
+	{{ sudo_commands | join(", \\\n\t") }}
+{{ user }} ALL=(root) NOPASSWD: {{ alias }}
