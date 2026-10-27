@@ -122,7 +122,10 @@ mod tests {
 
     fn signed(signature: &str, timestamp: i64) -> HeaderMap {
         let mut headers = HeaderMap::new();
-        headers.insert("x-slack-signature", HeaderValue::from_str(signature).unwrap());
+        headers.insert(
+            "x-slack-signature",
+            HeaderValue::from_str(signature).unwrap(),
+        );
         headers.insert(
             "x-slack-request-timestamp",
             HeaderValue::from_str(&timestamp.to_string()).unwrap(),

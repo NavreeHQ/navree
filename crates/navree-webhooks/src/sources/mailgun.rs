@@ -55,7 +55,11 @@ impl Mailgun {
             signing_key.as_bytes(),
             &[signed.timestamp.trim().as_bytes(), signed.token.as_bytes()],
         );
-        if !any_matches([signed.signature.as_str()], SignatureEncoding::Hex, &expected) {
+        if !any_matches(
+            [signed.signature.as_str()],
+            SignatureEncoding::Hex,
+            &expected,
+        ) {
             return Err(VerifyError::SignatureMismatch);
         }
         check_age(timestamp, tolerance)?;

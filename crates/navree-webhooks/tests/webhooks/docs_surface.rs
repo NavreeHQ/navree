@@ -9,9 +9,9 @@ use navree_db::Db;
 use navree_events::Event;
 use navree_http_client::HttpClient;
 use navree_webhooks::{
-    Attempt, AwsSns, CreatedEndpoint, Deliver, Delivery, DeliveryStatus, Endpoint,
-    EndpointChanges, EventType, FanOut, GitHub, GooglePubSub, GraphNotifications, Handshake, Hmac,
-    HmacAlgorithm, IncomingOptions, IncomingRequest, MAX_ATTEMPTS, Mailgun, MicrosoftGraph,
+    Attempt, AwsSns, CreatedEndpoint, Deliver, Delivery, DeliveryStatus, Endpoint, EndpointChanges,
+    EventType, FanOut, GitHub, GooglePubSub, GraphNotifications, Handshake, Hmac, HmacAlgorithm,
+    IncomingOptions, IncomingRequest, MAX_ATTEMPTS, Mailgun, MicrosoftGraph,
     ModuleBuilderWebhooksExt, NewEndpoint, Paddle, Postmark, PubSubMessage, PubSubPush,
     RETRY_SCHEDULE, SenderKeys, SignatureEncoding, Slack, SnsMessage, SourceOptions,
     StandardWebhooks, Stripe, Tolerance, Twilio, Verdict, Verified, VerifiedWebhook, VerifyError,
@@ -228,7 +228,12 @@ fn the_documented_names_exist() {
     let _ = SnsMessage::message_json::<serde_json::Value>;
     let _ = |message: &SnsMessage| message.subscribe_url.clone();
     let _ = PubSubMessage::data_json::<serde_json::Value>;
-    let _: Option<(PubSubPush, GraphNotifications, SenderKeys, IncomingRequest<'_>)> = None;
+    let _: Option<(
+        PubSubPush,
+        GraphNotifications,
+        SenderKeys,
+        IncomingRequest<'_>,
+    )> = None;
     assert_eq!(
         GooglePubSub::KEYS_URL,
         "https://www.googleapis.com/oauth2/v3/certs"

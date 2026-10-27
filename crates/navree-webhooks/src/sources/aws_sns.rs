@@ -243,10 +243,8 @@ impl SnsMessage {
     /// notification, and for `Message`, `MessageId`, `SubscribeURL`,
     /// `Timestamp`, `Token`, `TopicArn` and `Type` of a confirmation.
     pub fn string_to_sign(&self) -> String {
-        let mut fields: Vec<(&str, &str)> = vec![
-            ("Message", &self.message),
-            ("MessageId", &self.message_id),
-        ];
+        let mut fields: Vec<(&str, &str)> =
+            vec![("Message", &self.message), ("MessageId", &self.message_id)];
         if self.is_notification() {
             if let Some(subject) = &self.subject {
                 fields.push(("Subject", subject));
@@ -462,7 +460,10 @@ mod tests {
             );
             server.assert_sent(|request| {
                 request.method() == Method::GET
-                    && request.url().as_str().contains("Action=ConfirmSubscription")
+                    && request
+                        .url()
+                        .as_str()
+                        .contains("Action=ConfirmSubscription")
             });
         }
 
@@ -508,7 +509,9 @@ mod tests {
         let keys = Arc::new(SenderKeys::new(client));
         assert_eq!(
             verify(&source(), &body(&fixture("notification_v1")), &keys).await,
-            Err(VerifyError::Unavailable("the signing certificate".to_owned()))
+            Err(VerifyError::Unavailable(
+                "the signing certificate".to_owned()
+            ))
         );
 
         let (client, server) = HttpClient::fake();
@@ -560,7 +563,10 @@ mod tests {
     async fn the_type_header_must_match_the_message() {
         let (keys, _server) = fake_keys();
         let mut headers = HeaderMap::new();
-        headers.insert(AwsSns::TYPE_HEADER, "SubscriptionConfirmation".parse().unwrap());
+        headers.insert(
+            AwsSns::TYPE_HEADER,
+            "SubscriptionConfirmation".parse().unwrap(),
+        );
         let source = source();
         let message = body(&fixture("notification_v1"));
         let request = IncomingRequest::new(&source, &headers, &message)

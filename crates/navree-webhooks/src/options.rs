@@ -152,7 +152,11 @@ impl IncomingOptions {
                     ));
                 }
             }
-            if let Some(topic) = source.topics.iter().find(|topic| !topic.starts_with("arn:")) {
+            if let Some(topic) = source
+                .topics
+                .iter()
+                .find(|topic| !topic.starts_with("arn:"))
+            {
                 return Err(format!(
                     "`incoming.{name}.topics`: `{topic}` is not a topic ARN (arn:aws:sns:<region>:<account>:<topic>)"
                 ));
@@ -515,7 +519,12 @@ mod tests {
         let bad_url = parse(json!({
             "incoming": { "twilio": { "secret": "t", "url": "/hooks/twilio" } }
         }));
-        assert!(bad_url.validate().unwrap_err().contains("incoming.twilio.url"));
+        assert!(
+            bad_url
+                .validate()
+                .unwrap_err()
+                .contains("incoming.twilio.url")
+        );
         let neither = parse(json!({ "incoming": { "aws_sns": { "auto_confirm": true } } }));
         assert!(
             neither

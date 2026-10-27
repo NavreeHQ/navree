@@ -12,8 +12,8 @@ use navree_http_client::{FakeResponse, FakeServer, HttpClient};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use navree_testing::{TestApp, TestAppBuilder};
 use navree_webhooks::{
-    AwsSns, GooglePubSub, GraphNotifications, Mailgun, MicrosoftGraph, Postmark, PubSubPush,
-    Slack, SnsMessage, Twilio, VerifiedWebhook, WebhookSource, WebhooksModule,
+    AwsSns, GooglePubSub, GraphNotifications, Mailgun, MicrosoftGraph, Postmark, PubSubPush, Slack,
+    SnsMessage, Twilio, VerifiedWebhook, WebhookSource, WebhooksModule,
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -216,7 +216,12 @@ async fn sns_notifications_reach_the_handler_and_confirmations_do_not() {
         .await
         .assert_status(200);
     assert!(confirmed.text().is_empty(), "{}", confirmed.text());
-    server.assert_sent(|request| request.url().as_str().contains("Action=ConfirmSubscription"));
+    server.assert_sent(|request| {
+        request
+            .url()
+            .as_str()
+            .contains("Action=ConfirmSubscription")
+    });
 
     // A tampered message never reaches the handler.
     let tampered = String::from_utf8(sns_message("notification_v1"))
@@ -453,7 +458,10 @@ async fn slack_challenges_are_answered_and_events_verified() {
         app.client()
             .post("/api/hooks/slack")
             .header("x-slack-request-timestamp", timestamp.to_string())
-            .header("x-slack-signature", Slack::sign(SLACK_SECRET, timestamp, &bytes))
+            .header(
+                "x-slack-signature",
+                Slack::sign(SLACK_SECRET, timestamp, &bytes),
+            )
             .body(bytes)
             .send()
     };
@@ -515,7 +523,10 @@ async fn mailgun_and_postmark_events_are_verified() {
     });
     app.client()
         .post("/api/hooks/postmark")
-        .header("authorization", Postmark::authorization(POSTMARK_CREDENTIALS))
+        .header(
+            "authorization",
+            Postmark::authorization(POSTMARK_CREDENTIALS),
+        )
         .json(&bounce)
         .send()
         .await

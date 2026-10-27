@@ -215,7 +215,10 @@ pub(crate) fn parse_timestamp(raw: &str, name: &str) -> Result<DateTime<Utc>, Ve
 }
 
 /// Checks `timestamp` against `tolerance`, when there is one.
-pub(crate) fn check_age(timestamp: DateTime<Utc>, tolerance: Option<Tolerance>) -> Result<(), VerifyError> {
+pub(crate) fn check_age(
+    timestamp: DateTime<Utc>,
+    tolerance: Option<Tolerance>,
+) -> Result<(), VerifyError> {
     tolerance.map_or(Ok(()), |tolerance| tolerance.check(timestamp))
 }
 
@@ -229,7 +232,11 @@ pub(crate) fn require_secret(secret: &str) -> Result<(), VerifyError> {
 }
 
 /// String fields `id_field` and `type_field` of a JSON object body.
-pub(crate) fn body_fields(body: &[u8], id_field: &str, type_field: &str) -> (Option<String>, Option<String>) {
+pub(crate) fn body_fields(
+    body: &[u8],
+    id_field: &str,
+    type_field: &str,
+) -> (Option<String>, Option<String>) {
     let Ok(Value::Object(object)) = serde_json::from_slice::<Value>(body) else {
         return (None, None);
     };
