@@ -39,6 +39,13 @@ fn controller_reports_misuse() {
     trybuild::TestCases::new().compile_fail("tests/ui/controller/*.rs");
 }
 
+/// `#[derive(Searchable)]` checks its arguments and the struct's shape
+/// before it names any navree-search item.
+#[test]
+fn searchable_reports_misuse() {
+    trybuild::TestCases::new().compile_fail("tests/ui/searchable/*.rs");
+}
+
 #[test]
 fn flag_reports_misuse() {
     trybuild::TestCases::new().compile_fail("tests/ui/flag/*.rs");

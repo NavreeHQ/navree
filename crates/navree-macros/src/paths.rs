@@ -39,6 +39,13 @@ pub(crate) const FLAGS: RuntimeCrate = RuntimeCrate {
     facade_module: "flags",
 };
 
+/// navree-search: `Searchable`, `IndexSettings`, `Document`
+/// (`#[derive(Searchable)]`).
+pub(crate) const SEARCH: RuntimeCrate = RuntimeCrate {
+    package: "navree-search",
+    facade_module: "search",
+};
+
 /// navree-graphql: `GraphqlResolver`, async-graphql and the field runtime
 /// (`#[resolver]`).
 pub(crate) const GRAPHQL: RuntimeCrate = RuntimeCrate {

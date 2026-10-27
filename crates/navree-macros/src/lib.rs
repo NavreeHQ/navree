@@ -2,8 +2,9 @@
 //!
 //! Attribute macros for Navree applications: `#[module]`, `#[injectable]`,
 //! `#[controller]` and the route attributes, `#[flag]` (feature flags),
-//! `#[resolver]` (GraphQL root fields, for navree-graphql), and
-//! `#[grpc_service]` (gRPC services, for navree-grpc).
+//! `#[resolver]` (GraphQL root fields, for navree-graphql),
+//! `#[grpc_service]` (gRPC services, for navree-grpc) and the
+//! `Searchable` derive of navree-search.
 //!
 //! Every attribute expands into plain Rust that calls the runtime crates; the
 //! hand-written `impl Module` / `impl Injectable` is always available as the
@@ -34,6 +35,7 @@ mod path;
 mod paths;
 mod resolver;
 mod route;
+mod searchable;
 
 /// Implements `Injectable` for a struct by resolving each field from the
 /// container (constructor injection).
@@ -440,4 +442,46 @@ pub fn patch(_args: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn delete(_args: TokenStream, item: TokenStream) -> TokenStream {
     controller::outside_controller("delete", item.into()).into()
+}
+
+/// Implements `navree_search::Searchable` for the SeaORM `Entity` of the
+/// model it is derived on (re-exported as `navree::search::Searchable`).
+///
+/// ```text
+/// #[derive(DeriveEntityModel, Serialize, Searchable)]
+/// #[sea_orm(table_name = "contacts")]
+/// #[searchable(name = "Contact", soft_delete = "deleted_at")]
+/// pub struct Model {
+///     #[sea_orm(primary_key, auto_increment = false)]
+///     pub id: Uuid,
+///     #[searchable(boost = 3)]
+///     pub last_name: String,
+///     #[searchable(filter)]
+///     pub status: ContactStatus,
+///     #[searchable(sort)]
+///     pub created_at: DateTimeUtc,
+/// }
+/// ```
+///
+/// | Field attribute | Effect |
+/// |---|---|
+/// | `#[searchable]` | full-text field of weight 1 |
+/// | `#[searchable(boost = 3)]` | full-text field of weight 3 (1 to 10) |
+/// | `#[searchable(filter)]` | exact-match field for filters |
+/// | `#[searchable(sort)]` | field to sort on |
+/// | `#[searchable(embed)]` | text for the record's embedding |
+/// | `#[searchable(rename = "x")]` | the field's name in the index |
+///
+/// Model attributes: `name` and `index` (both default to the table name),
+/// `soft_delete` (a nullable column; rows where it is set are removed from
+/// the index) and `workspace` (default: the entity's `WorkspaceScoped`
+/// column, if it implements that trait). The document holds the primary
+/// key and the marked fields: text and embedded fields serialized with
+/// serde, filter and sort fields as the database holds them (the form
+/// access rules compare). A field's column is its name or its
+/// `#[sea_orm(column_name = "..")]`. The generated code names
+/// `::navree::search` (or `::navree_search`).
+#[proc_macro_derive(Searchable, attributes(searchable))]
+pub fn derive_searchable(input: TokenStream) -> TokenStream {
+    searchable::expand(input.into()).into()
 }
