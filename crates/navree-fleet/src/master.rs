@@ -628,13 +628,8 @@ impl Run {
             .states
             .iter()
             .enumerate()
-            .map(|(index, state)| SupervisorReport {
-                name: state.supervisor.name.clone(),
-                queues: state.supervisor.queues.clone(),
-                balance: state.supervisor.balance,
-                max_processes: state.supervisor.max_processes,
-                paused: state.paused,
-                processes: self
+            .map(|(index, state)| {
+                let mut processes: Vec<ProcessReport> = self
                     .procs
                     .values()
                     .filter(|p| p.supervisor == index && !p.stopping)
@@ -645,7 +640,29 @@ impl Run {
                         jobs: p.jobs,
                         started_at: p.started_at,
                     })
-                    .collect(),
+                    .collect();
+                // In queue order, oldest first.
+                let order = |queue: &str| {
+                    state
+                        .supervisor
+                        .queues
+                        .iter()
+                        .position(|q| q == queue)
+                        .unwrap_or(0)
+                };
+                processes.sort_by(|a, b| {
+                    order(&a.queue)
+                        .cmp(&order(&b.queue))
+                        .then(a.started_at.cmp(&b.started_at))
+                });
+                SupervisorReport {
+                    name: state.supervisor.name.clone(),
+                    queues: state.supervisor.queues.clone(),
+                    balance: state.supervisor.balance,
+                    max_processes: state.supervisor.max_processes,
+                    paused: state.paused,
+                    processes,
+                }
             })
             .collect();
         let all_paused = !supervisors.is_empty() && supervisors.iter().all(|s| s.paused);

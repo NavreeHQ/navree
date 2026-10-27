@@ -309,6 +309,16 @@
   async function show(quiet) {
     state.busy = true;
     try {
+      if (state.view !== "overview" && state.view !== "supervisors") {
+        // The other pages do not read the overview: fetch the status for
+        // the top bar and the failed count for the sidebar.
+        api("/overview")
+          .then((o) => {
+            setStatus(o.status);
+            document.getElementById("count-failed").textContent = o.failed_past_week ? number(o.failed_past_week) : "";
+          })
+          .catch(() => {});
+      }
       const page = await PAGES[state.view](quiet);
       if (page) {
         const content = document.getElementById("content");
@@ -402,20 +412,40 @@
     return h("span", { class: "badge " + (cls || ""), text: outcome });
   }
 
+  /** The period's buckets: how many, and how wide (milliseconds). */
+  const BUCKETS = { hour: [60, 60000], day: [96, 900000], week: [168, 3600000] };
+
+  /** One entry per bucket of the period, oldest first: the point that
+      falls in it, or null (no snapshot). */
+  function timeline(points) {
+    const [count, width] = BUCKETS[state.period];
+    const start = Date.now() - count * width;
+    const slots = new Array(count).fill(null);
+    for (const p of points) {
+      const at = new Date(p.at).getTime();
+      const index = Math.min(count - 1, Math.max(0, Math.floor((at - start) / width)));
+      slots[index] = p;
+    }
+    return slots;
+  }
+
   function plot(points, first, second) {
     const width = 300;
     const height = 96;
     const el = svg("svg", { class: "plot", viewBox: "0 0 " + width + " " + height, preserveAspectRatio: "none" });
     el.append(svg("line", { class: "axis", x1: 0, y1: height - 1, x2: width, y2: height - 1 }));
     if (!points.length) return el;
-    const values = points.map(first).concat(second ? points.map(second) : []);
-    const max = Math.max(1e-9, ...values);
-    const x = (i) => (points.length === 1 ? width / 2 : (i / (points.length - 1)) * width);
+    const slots = timeline(points);
+    const read = (get) => slots.map((p) => (p ? get(p) || 0 : 0));
+    const firsts = read(first);
+    const seconds = second ? read(second) : [];
+    const max = Math.max(1e-9, ...firsts, ...seconds);
+    const x = (i) => (i / (slots.length - 1)) * width;
     const y = (v) => height - 2 - (v / max) * (height - 8);
-    const path = (get) => points.map((p, i) => (i ? "L" : "M") + x(i).toFixed(1) + " " + y(get(p) || 0).toFixed(1)).join(" ");
-    el.append(svg("path", { class: "area", d: path(first) + " L" + x(points.length - 1) + " " + height + " L" + x(0) + " " + height + " Z" }));
-    el.append(svg("path", { class: "line", d: path(first) }));
-    if (second) el.append(svg("path", { class: "line second", d: path(second) }));
+    const path = (values) => values.map((v, i) => (i ? "L" : "M") + x(i).toFixed(1) + " " + y(v).toFixed(1)).join(" ");
+    el.append(svg("path", { class: "area", d: path(firsts) + " L" + width + " " + height + " L0 " + height + " Z" }));
+    el.append(svg("path", { class: "line", d: path(firsts) }));
+    if (second) el.append(svg("path", { class: "line second", d: path(seconds) }));
     return el;
   }
 
@@ -484,7 +514,7 @@
           ...m.supervisors.map((s) => h("div", { class: "card-body" }, [
             h("div", { class: "page-head" }, [
               h("h2", { text: s.name }),
-              h("span", { class: "muted", text: s.queues.join(", ") + " · " + s.balance + " · up to " + s.max_processes + " processes" }),
+              h("span", { class: "muted", text: s.queues.join(", ") + " · " + s.balance + " · up to " + s.max_processes + (s.max_processes === 1 ? " process" : " processes") }),
               s.paused ? h("span", { class: "badge warn", text: "paused" }) : null,
               h("div", { class: "actions" }, [
                 s.paused
@@ -630,7 +660,8 @@
               chart(s.name + " · throughput", number(total) + " jobs", points, (p) => p.throughput_per_minute),
               chart(s.name + " · runtime avg / p95", millis(p95), points, (p) => p.runtime_avg_ms, (p) => p.runtime_p95_ms),
             ];
-            if (waits) charts.push(chart(s.name + " · wait", duration(Math.max(0, ...points.map((p) => p.wait_secs || 0))), points, (p) => p.wait_secs || 0));
+            const longest = Math.max(0, ...points.map((p) => p.wait_secs || 0));
+            if (waits) charts.push(chart(s.name + " · wait", longest < 10 ? longest.toFixed(1) + " s" : duration(longest), points, (p) => p.wait_secs || 0));
             return charts;
           }))
           : h("div", { class: "card empty", text: "No snapshots yet: a running master stores one every fleet.snapshot_secs." }),
