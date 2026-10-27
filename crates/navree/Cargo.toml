@@ -99,7 +99,7 @@ session = ["dep:navree-session", "http", "crypto", "db"]
 ## With `orm` on too, also `navree::orm::validation` (`unique` and `exists`
 ## rules on models).
 validation = ["dep:navree-validation", "http", "db", "navree-orm?/validation"]
-audit = ["dep:navree-audit", "http", "db"]
+audit = ["dep:navree-audit", "http", "db", "orm"]
 queue = ["dep:navree-queue", "http", "db", "realtime", "schedule"]
 schedule = ["dep:navree-schedule", "db", "time"]
 ## With `orm` on too, models can be subjects (`#[model(subject, policy)]`,

@@ -6,6 +6,7 @@ mod data;
 mod http;
 mod impersonation;
 mod module;
+mod orm;
 mod prune;
 mod sink;
 mod skip;

@@ -102,7 +102,9 @@ const HIERARCHY: &[Rule] = &[
     // L4
     rule("navree-session", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto", "navree-db"]),
     rule("navree-validation", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db"]),
-    rule("navree-audit", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db"]),
+    // The audit trail is a navree-orm model (`AuditRecord`), written and
+    // listed through the ORM (same layer; the ORM never depends on audit).
+    rule("navree-audit", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db", "navree-orm"]),
     // Queue: operations mount routes with an SSE stream (http), authorize
     // the private channel `operations.{id}` (realtime) and schedule their
     // watchdog (schedule, same layer; schedule never depends on queue).

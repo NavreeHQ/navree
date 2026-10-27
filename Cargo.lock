@@ -4410,6 +4410,7 @@ dependencies = [
  "navree-db",
  "navree-http",
  "navree-kernel",
+ "navree-orm",
  "navree-testing",
  "sea-orm",
  "sea-orm-migration",
