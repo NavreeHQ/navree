@@ -59,10 +59,13 @@ enforce_for_verified_domains = true                     # refuse passwords for v
    `{base_url}/api/sso/saml/{slug}/acs`; OIDC redirect URI
    `{base_url}/api/sso/oidc/{slug}/callback`.
 7. Front end: `POST /api/sso/discover {email}` →
-   `{sso, connection, login_url, password_allowed}`; send the browser to
-   `login_url` (`?return_to=/path`); on `complete_url?code=...` call
-   `POST /api/sso/exchange {code}` → login JSON (`user`, tokens,
-   `return_to`). Without `complete_url` the ACS/callback answer the login
+   `{sso, connection, login_url, password_allowed}`; call `login_url`
+   (`?return_to=/path`) with `Accept: application/json` → `{url, state}`,
+   keep `state` (session storage or the BFF cookie) and send the browser to
+   `url`; on `complete_url?code=...` call
+   `POST /api/sso/exchange {code, state}` → login JSON (`user`, tokens,
+   `return_to`). With `state`, a code from another sign-in is refused
+   (login CSRF). Without `complete_url` the ACS/callback answer the login
    JSON directly.
 
 ## Rules that matter

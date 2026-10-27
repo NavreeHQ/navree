@@ -240,7 +240,7 @@ The refusal is audited as `auth.login_refused`. It comes from a navree-auth `Pas
 
 ## How sign-in works
 
-1. The sign-in page sends the browser to `GET /api/sso/{connection}/login?return_to=/deals`. Navree creates a state, keeps it in the cache for `sso.state_ttl_secs`, and redirects (302) to the identity provider: a SAML `AuthnRequest` with the HTTP-Redirect binding, or an OpenID Connect authorization request with PKCE (S256) and a nonce. With `Accept: application/json` the route answers `{"url": "..."}` instead, for a front end that redirects itself.
+1. The sign-in page sends the browser to `GET /api/sso/{connection}/login?return_to=/deals`. Navree creates a state, keeps it in the cache for `sso.state_ttl_secs`, and redirects (302) to the identity provider: a SAML `AuthnRequest` with the HTTP-Redirect binding, or an OpenID Connect authorization request with PKCE (S256) and a nonce. With `Accept: application/json` the route answers `{"url": "...", "state": "..."}` instead, for a front end that redirects itself.
 2. The person signs in at their identity provider.
 3. The identity provider posts a `SAMLResponse` and the `RelayState` to `POST /api/sso/saml/{connection}/acs`, or redirects the browser to `GET /api/sso/oidc/{connection}/callback?code=...&state=...`.
 4. Navree takes the state (it works once), checks the answer, finds, links or creates the user, provisions their membership, and finishes the sign-in.
@@ -261,8 +261,10 @@ The front end (or its [backend-for-frontend](/docs/patterns/backend-for-frontend
 POST /api/sso/exchange HTTP/1.1
 Content-Type: application/json
 
-{ "code": "QmM2yH8w0tW9pLx3vZ1nR7cK4dF6aJ2sE5uB8gT0hYi" }
+{ "code": "QmM2yH8w0tW9pLx3vZ1nR7cK4dF6aJ2sE5uB8gT0hYi", "state": "x7Kq2mVt9LpR4wZs8NcB3yHf6DjA1gEu" }
 ```
+
+`state` is the one the login route answered in its JSON form. Keep it in the browser (session storage, or the BFF's cookie) when the sign-in starts and send it with the exchange: Navree then refuses a code from any other sign-in, so nobody can sign a victim into the attacker's account by posting the attacker's response through the victim's browser. A sign-in started with the redirect form has no state the front end knows; the exchange works without one.
 
 ```json
 {
@@ -559,6 +561,7 @@ OpenID Connect connections talk to a provider over HTTP; point a connection's `i
 - Only the HTTP-Redirect binding is used for requests, and HTTP-POST for responses.
 - Directory sync (SCIM) is not part of the module: users are created and their roles updated at sign-in.
 - States, used assertion ids and one-time codes are kept in the cache: give it a shared store with several instances.
+- Only the JSON form of the login route binds a sign-in to the browser (through `state` at the exchange); IdP-initiated sign-ins can't be bound at all, which is why they are off by default.
 - Social sign-in providers (`navree-social`) are separate; a password refusal for a verified domain doesn't stop a social provider that you also offer from signing the same person in.
 
 <LinkCards>
