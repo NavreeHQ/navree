@@ -21,11 +21,14 @@ use crate::row::Row;
 /// `iter`, `first`, `last`, ...), iterates by value or by reference, and
 /// serializes as an array. Its own methods work with keys and columns:
 ///
-/// ```ignore
+/// ```no_run
+/// # use navree_orm::__doc_models::*;
+/// # async fn demo(db: Db) -> Result<()> {
 /// let deals = Deal::query().where_(Deal::STAGE.eq(Stage::Open)).get(&db).await?;
 /// let by_owner = deals.clone().group_by(|deal| deal.owner_id);
 /// let titles = deals.pluck(Deal::TITLE)?;
 /// let big = deals.filter(|deal| deal.amount_cents > 100_000);
+/// # Ok(()) }
 /// ```
 pub struct Collection<M: Model> {
     records: Vec<Record<M>>,
@@ -101,8 +104,16 @@ impl<M: Model> Collection<M> {
     /// The values of `column`, in order (decoded as the field is, casts
     /// included).
     ///
-    /// ```ignore
+    /// ```
+    /// # use navree_orm::__doc_models::*;
+    /// # fn main() -> Result<()> {
+    /// let deals = Collection::from(vec![
+    ///     Record::new(Deal { title: "Renewal".into(), ..Deal::default() }),
+    ///     Record::new(Deal { title: "Upsell".into(), ..Deal::default() }),
+    /// ]);
     /// let titles: Vec<String> = deals.pluck(Deal::TITLE)?;
+    /// assert_eq!(titles, ["Renewal", "Upsell"]);
+    /// # Ok(()) }
     /// ```
     pub fn pluck<T>(&self, column: Column<M, T>) -> Result<Vec<T>> {
         let name = column.column_ref().name.into_owned();
@@ -212,8 +223,12 @@ impl<M: Model> Collection<M> {
 
     /// A query of exactly these records (by key), e.g. for a mass update.
     ///
-    /// ```ignore
-    /// overdue.to_query().update(&uow, [Deal::STAGE.set(Stage::Lost)]).await?;
+    /// ```no_run
+    /// # use navree_orm::__doc_models::*;
+    /// # async fn demo(db: Db, uow: Uow) -> Result<()> {
+    /// let stale = Deal::query().where_(Deal::CREATED_AT.lt(Utc::now() - Duration::days(90))).get(&db).await?;
+    /// stale.to_query().update(&uow, [Deal::STAGE.set(Stage::Lost)]).await?;
+    /// # Ok(()) }
     /// ```
     pub fn to_query(&self) -> Builder<M> {
         Builder::new().where_key_in(self.model_keys())

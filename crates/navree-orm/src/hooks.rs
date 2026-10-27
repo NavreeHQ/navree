@@ -149,10 +149,43 @@ pub enum Flow {
 ///
 /// Register one for the whole app as a multi-binding:
 ///
-/// ```ignore
-/// m.multi(Factory::<dyn ModelHook<Deal>>::new(|_| async {
-///     Ok(Arc::new(DealHook) as Arc<dyn ModelHook<Deal>>)
-/// }));
+/// ```no_run
+/// # use navree_orm::__doc_models::*;
+/// use std::sync::Arc;
+///
+/// use navree_kernel::{BoxFuture, Factory, Module, ModuleBuilder};
+/// use navree_orm::hooks::{Flow, ModelEvent, ModelHook};
+/// use navree_orm::{ExecContext, Record, Result};
+///
+/// /// Refuses to save a deal without a title.
+/// struct RequireTitle;
+///
+/// impl ModelHook<Deal> for RequireTitle {
+///     fn before<'a>(
+///         &'a self,
+///         event: ModelEvent,
+///         _ctx: &'a ExecContext,
+///         deal: &'a mut Record<Deal>,
+///     ) -> BoxFuture<'a, Result<Flow>> {
+///         Box::pin(async move {
+///             Ok(if event == ModelEvent::Saving && deal.title.trim().is_empty() {
+///                 Flow::Cancel
+///             } else {
+///                 Flow::Continue
+///             })
+///         })
+///     }
+/// }
+///
+/// struct DealsModule;
+///
+/// impl Module for DealsModule {
+///     fn register(&self, m: &mut ModuleBuilder) {
+///         m.multi(Factory::<dyn ModelHook<Deal>>::new(|_| async {
+///             Ok(Arc::new(RequireTitle) as Arc<dyn ModelHook<Deal>>)
+///         }));
+///     }
+/// }
 /// ```
 pub trait ModelHook<M: Model>: Send + Sync + 'static {
     /// Runs before a cancellable step ([`ModelEvent::is_cancellable`]);

@@ -21,12 +21,15 @@ use crate::value::{Field, Numeric, Value, same_value, to_json};
 /// changes its last save made, the extra columns its query selected
 /// (aggregates, computed columns) and its loaded relations.
 ///
-/// ```ignore
+/// ```no_run
+/// # use navree_orm::__doc_models::*;
+/// # async fn demo(db: Db, uow: Uow, id: Uuid) -> Result<()> {
 /// let mut deal = Deal::find_or_fail(&db, id).await?;
 /// deal.stage = Stage::Won;                 // DerefMut to the model
 /// assert!(deal.is_dirty_on([Deal::STAGE]));
 /// deal.save(&uow).await?;                  // UPDATE deals SET stage = .., updated_at = .. WHERE id = ..
 /// assert!(deal.was_changed_on([Deal::STAGE]));
+/// # Ok(()) }
 /// ```
 ///
 /// Records serialize as their model, followed by their extra columns and
@@ -277,9 +280,12 @@ impl<M: Model> Record<M> {
     /// Extra column `name` read as `T`; `None` when the query did not
     /// select it.
     ///
-    /// ```ignore
+    /// ```no_run
+    /// # use navree_orm::__doc_models::*;
+    /// # async fn demo(db: Db) -> Result<()> {
     /// let deals = Deal::query().select_raw("amount_cents * 2 AS doubled", [] as [i64; 0]).get(&db).await?;
     /// let doubled: Option<i64> = deals[0].extra("doubled")?;
+    /// # Ok(()) }
     /// ```
     pub fn extra<T: Field>(&self, name: &str) -> Result<Option<T>> {
         match self.extras.iter().find(|(column, _)| column == name) {
@@ -333,8 +339,11 @@ impl<M: Model> Record<M> {
     /// `false` (and changes nothing) for a record that is not stored, or
     /// when a hook cancelled the save.
     ///
-    /// ```ignore
+    /// ```no_run
+    /// # use navree_orm::__doc_models::*;
+    /// # async fn demo(uow: Uow, mut deal: Record<Deal>) -> Result<()> {
     /// deal.update(&uow, |d| d.stage = Stage::Won).await?;
+    /// # Ok(()) }
     /// ```
     pub async fn update<E: Executor + ?Sized>(
         &mut self,
@@ -408,8 +417,11 @@ impl<M: Model> Record<M> {
     /// amount`, plus the update timestamp) and in the record. Returns
     /// `false` when a hook cancelled it.
     ///
-    /// ```ignore
+    /// ```no_run
+    /// # use navree_orm::__doc_models::*;
+    /// # async fn demo(db: Db, mut deal: Record<Deal>) -> Result<()> {
     /// deal.increment(&db, Deal::VIEWS, 1).await?;
+    /// # Ok(()) }
     /// ```
     pub async fn increment<E, T>(
         &mut self,

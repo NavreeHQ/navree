@@ -6,8 +6,32 @@
 //! relation for a parent's [`query`](Relation::query_for) gives an ordinary
 //! [`Builder`] of the related model, so every query method works on it:
 //!
-//! ```ignore
-//! let overdue = deal.activities().query_for(&deal).where_(Activity::DUE_AT.lt(now)).get(&db).await?;
+//! ```no_run
+//! # use navree_orm::__doc_models::*;
+//! use navree_orm::relations::Relation;
+//!
+//! /// A deal's activities.
+//! struct Activities;
+//!
+//! impl Relation<Deal> for Activities {
+//!     type Related = Activity;
+//!
+//!     fn name(&self) -> &'static str {
+//!         "activities"
+//!     }
+//!
+//!     fn query_for(&self, deal: &Record<Deal>) -> Builder<Activity> {
+//!         Activity::query().where_(Activity::DEAL_ID.eq(deal.id))
+//!     }
+//! }
+//!
+//! # async fn demo(db: Db, deal: Record<Deal>) -> Result<()> {
+//! let overdue = Activities
+//!     .query_for(&deal)
+//!     .where_(Activity::DUE_AT.lt(Utc::now()))
+//!     .get(&db)
+//!     .await?;
+//! # Ok(()) }
 //! ```
 //!
 //! Loaded relations live on the record ([`Record::relations`]), keyed by

@@ -10,12 +10,18 @@
 //! [`PageQuery`] (`?page=&per_page=`) or this module's [`CursorRequest`]
 //! (`?cursor=&limit=`); both answer malformed parameters with a 400.
 //!
-//! ```ignore
-//! async fn index(uow: Uow, page: PageQuery) -> navree::Result<Page<Record<Deal>>> {
+//! ```no_run
+//! # use navree_orm::__doc_models::*;
+//! use std::sync::Arc;
+//!
+//! use navree_db::{Db, PageQuery, Uow};
+//! use navree_orm::{CursorPage, CursorRequest, Page, Record};
+//!
+//! async fn index(uow: Uow, page: PageQuery) -> navree_http::Result<Page<Record<Deal>>> {
 //!     Ok(Deal::query().latest().paginate(&uow, page).await?)
 //! }
 //!
-//! async fn feed(db: Arc<Db>, cursor: CursorRequest) -> navree::Result<CursorPage<Record<Event>>> {
+//! async fn feed(db: Arc<Db>, cursor: CursorRequest) -> navree_http::Result<CursorPage<Record<Event>>> {
 //!     Ok(Event::query().latest().cursor_paginate(&db, cursor).await?)
 //! }
 //! ```

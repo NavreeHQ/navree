@@ -183,8 +183,11 @@ impl<M: Model> Builder<M> {
     /// The value of `column` in the first matching row; `None` when no row
     /// matches.
     ///
-    /// ```ignore
+    /// ```no_run
+    /// # use navree_orm::__doc_models::*;
+    /// # async fn demo(db: Db, id: Uuid) -> Result<()> {
     /// let title: Option<String> = Deal::query().where_key(id).value(&db, Deal::TITLE).await?;
+    /// # Ok(()) }
     /// ```
     pub async fn value<E, C>(self, exec: &E, column: C) -> Result<Option<C::Output>>
     where
@@ -207,8 +210,11 @@ impl<M: Model> Builder<M> {
 
     /// The values of `column` in every matching row, in order.
     ///
-    /// ```ignore
+    /// ```no_run
+    /// # use navree_orm::__doc_models::*;
+    /// # async fn demo(db: Db) -> Result<()> {
     /// let titles: Vec<String> = Deal::query().latest().pluck(&db, Deal::TITLE).await?;
+    /// # Ok(()) }
     /// ```
     pub async fn pluck<E, C>(self, exec: &E, column: C) -> Result<Vec<C::Output>>
     where
@@ -234,8 +240,11 @@ impl<M: Model> Builder<M> {
     /// later row with the same key replaces an earlier one, keeping its
     /// position).
     ///
-    /// ```ignore
+    /// ```no_run
+    /// # use navree_orm::__doc_models::*;
+    /// # async fn demo(db: Db) -> Result<()> {
     /// let titles: IndexMap<Uuid, String> = Deal::query().pluck_keyed(&db, Deal::TITLE, Deal::ID).await?;
+    /// # Ok(()) }
     /// ```
     pub async fn pluck_keyed<E, V, K>(
         self,
@@ -333,8 +342,11 @@ impl<M: Model> Builder<M> {
 
     /// The sum of `column` over the matching records (zero when none match).
     ///
-    /// ```ignore
+    /// ```no_run
+    /// # use navree_orm::__doc_models::*;
+    /// # async fn demo(db: Db) -> Result<()> {
     /// let pipeline: i64 = Deal::query().where_(Deal::STAGE.eq(Stage::Open)).sum(&db, Deal::AMOUNT_CENTS).await?;
+    /// # Ok(()) }
     /// ```
     pub async fn sum<T: Field + Default>(
         self,
