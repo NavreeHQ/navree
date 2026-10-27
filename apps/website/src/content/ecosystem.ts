@@ -116,7 +116,7 @@ export const ecosystem: EcosystemEntry[] = [
     crate: "navree-fleet",
     command: "navree fleet",
     href: "/docs/tools/fleet/",
-    status: "planned",
+    status: "stable",
     signature: "navree fleet",
     mount: "/_fleet",
   },

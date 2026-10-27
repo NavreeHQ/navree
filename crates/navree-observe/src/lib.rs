@@ -17,7 +17,9 @@
 //!   the `http_request_duration_seconds` histogram (labels `method`, `route`
 //!   template, `status`); any module can add its own through the `metrics`
 //!   macros. With `observe.metrics_token` set, the route requires
-//!   `Authorization: Bearer <token>` (401 otherwise).
+//!   `Authorization: Bearer <token>` (401 otherwise). Numbers read from
+//!   elsewhere at scrape time come from [`MetricsCollector`]
+//!   multi-bindings, run before each exposition.
 //!
 //! The paths are absolute (no API prefix or version), the routes are public
 //! (no authenticator needed) and the responses carry `Cache-Control: no-store`.
@@ -64,6 +66,7 @@
 //! ```
 #![forbid(unsafe_code)]
 
+mod collect;
 mod controller;
 mod export;
 mod health;
@@ -76,6 +79,7 @@ mod spans;
 pub mod testing;
 mod trace_options;
 
+pub use collect::{COLLECT_TIMEOUT, MetricsCollector};
 pub use export::SPANS_DROPPED_METRIC;
 pub use health::{CheckReport, CheckState, DEFAULT_CHECK_TIMEOUT, Health, HealthReport};
 pub use module::ObserveModule;

@@ -49,6 +49,7 @@
 //! | `search` | navree-search | `search` (opt-in) | `SearchModule`: full-text and vector search, `#[derive(Searchable)]` |
 //! | `logbook` | navree-logbook | `logbook` | `LogbookModule`: the local debugging timeline at `/_logbook`, with replay |
 //! | `micro` | navree-micro | `micro` (opt-in) | `MicroModule`, `ServiceClient`: messages and events between services over TCP, NATS (`micro-nats`), Kafka (`micro-kafka`), RabbitMQ (`micro-rabbitmq`), Redis Streams (`micro-redis`) or MQTT (`micro-mqtt`) |
+//! | `fleet` | navree-fleet | `fleet` | `FleetModule`: supervised queue workers, metrics, failed jobs, the `/_fleet` dashboard |
 //! | `dock` | navree-dock | `dock` (opt-in) | Dock's `dock.toml`, the services' settings and the Compose file |
 //! | `mcp` | navree-mcp | `mcp` (opt-in) | `McpModule`: MCP servers over streamable HTTP and stdio, with `#[mcp_server]` |
 //! | `ai` | navree-ai | `ai` (opt-in) | `AiModule`: models, structured output, streaming, agents, embeddings, vector stores |
@@ -242,6 +243,8 @@ pub mod mcp {
 // L7 (opt-in)
 #[cfg(feature = "billing")]
 pub use navree_billing as billing;
+#[cfg(feature = "fleet")]
+pub use navree_fleet as fleet;
 #[cfg(feature = "lighthouse")]
 pub use navree_lighthouse as lighthouse;
 #[cfg(feature = "logbook")]

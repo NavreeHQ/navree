@@ -107,6 +107,8 @@ pub use navree_billing::BillingModule;
 #[cfg(feature = "mcp")]
 pub use navree_mcp::{McpModule, ModuleBuilderMcpExt as _};
 
+#[cfg(feature = "fleet")]
+pub use navree_fleet::FleetModule;
 #[cfg(feature = "lighthouse")]
 pub use navree_lighthouse::{LighthouseModule, ModuleBuilderLighthouseExt as _};
 #[cfg(feature = "logbook")]

@@ -3693,6 +3693,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "memory-stats"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c73f5c649995a115e1a0220b35e4df0a1294500477f97a91d0660fb5abeb574a"
+dependencies = [
+ "libc",
+ "windows-sys 0.52.0",
+]
+
+[[package]]
 name = "metrics"
 version = "0.24.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3889,6 +3899,7 @@ dependencies = [
  "navree-dock",
  "navree-events",
  "navree-flags",
+ "navree-fleet",
  "navree-graphql",
  "navree-grpc",
  "navree-http",
@@ -4304,6 +4315,40 @@ dependencies = [
  "tokio",
  "tracing",
  "utoipa",
+ "uuid",
+]
+
+[[package]]
+name = "navree-fleet"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "http",
+ "memory-stats",
+ "metrics",
+ "navree-access",
+ "navree-config",
+ "navree-contracts",
+ "navree-db",
+ "navree-events",
+ "navree-http",
+ "navree-kernel",
+ "navree-observe",
+ "navree-queue",
+ "navree-telemetry",
+ "navree-testing",
+ "navree-view",
+ "proptest",
+ "sea-orm",
+ "sea-orm-migration",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tokio-util",
+ "tracing",
  "uuid",
 ]
 
