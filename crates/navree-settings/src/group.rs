@@ -172,6 +172,15 @@ impl SettingsDefinition {
             .collect()
     }
 
+    /// The levels, comma-separated (`global, organization, workspace`).
+    pub(crate) fn levels_list(&self) -> String {
+        self.levels()
+            .into_iter()
+            .map(ScopeKind::as_str)
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+
     /// The default values as a JSON object.
     pub fn defaults(&self) -> Result<Map<String, Value>, String> {
         (self.defaults)()
