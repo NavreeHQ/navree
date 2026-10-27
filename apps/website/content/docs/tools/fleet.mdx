@@ -295,7 +295,7 @@ Every key of the `fleet` section is optional except each supervisor's `queues`. 
 | `fleet.supervisors.<name>.max_memory_mb` | `256` | Memory before a process is recycled. |
 | `fleet.supervisors.<name>.max_time_secs` | `3600` | Lifetime before a process is recycled. |
 
-An app without a `fleet.supervisors` table gets one supervisor, `default`, working `queue.queues` (or `queue.default_queue`) with the defaults above.
+An app without a `fleet.supervisors` table gets one supervisor, `default`, working `queue.queues` (or `queue.default_queue`) with the defaults above, and enough processes for one per queue when `queue.queues` lists more than four.
 
 | Command | What it does |
 |---|---|
