@@ -53,6 +53,17 @@ async fn current_flags_resolve_for_the_user_and_the_workspace() {
         .assert_status(200)
         .assert_json_path("board", json!("v1"))
         .assert_json_path("workspace", json!(null));
+    // An unknown workspace resolves for the user alone, too.
+    world
+        .as_user(ada)
+        .get("/api/v1/deals/board")
+        .header("X-Workspace", "no-such-workspace")
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("board", json!("v1"))
+        .assert_json_path("user", json!(ada))
+        .assert_json_path("workspace", json!(null));
 }
 
 #[tokio::test]
