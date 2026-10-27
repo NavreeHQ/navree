@@ -637,6 +637,198 @@ pub async fn unit_of_work(db: Db, server: Server) {
     assert_eq!(Company::query().count(&db).await.unwrap(), 1);
 }
 
+/// Bulk writes: inserts split under the bind limit, insert-or-ignore,
+/// upserts, keys read back, JSON path updates, `UPDATE … FROM`, joined
+/// table writes, truncation and `save_or_ignore`.
+pub async fn bulk_writes(db: Db, server: Server) {
+    use navree_orm::{ConflictUpdate, OrmError};
+
+    // 22,000 rows of 3 values pass the 65,535-value bind limit: two
+    // statements, one transaction.
+    let base = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap();
+    let rows: Vec<Vec<(&str, Value)>> = (0..22_000)
+        .map(|i| {
+            vec![
+                ("taken_at", Value::from(base + Duration::seconds(i))),
+                ("sensor", Value::from("a")),
+                ("celsius", Value::from(20.0)),
+            ]
+        })
+        .collect();
+    assert_eq!(table("readings").insert(&db, rows).await.unwrap(), 22_000);
+    assert_eq!(table("readings").count(&db).await.unwrap(), 22_000);
+
+    // Keys read back: RETURNING on PostgreSQL, LAST_INSERT_ID() on MySQL.
+    let first: i64 = table("tags")
+        .insert_get_id(&db, [("name", "first"), ("color", "red")])
+        .await
+        .unwrap();
+    let second = Tag::query()
+        .fill_and_insert_get_id(
+            &db,
+            Tag {
+                name: "second".into(),
+                color: "blue".into(),
+                ..Tag::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(second, first + 1);
+
+    let inserted = table("tags")
+        .insert_or_ignore(
+            &db,
+            [
+                [("name", "first"), ("color", "green")],
+                [("name", "third"), ("color", "green")],
+            ],
+        )
+        .await
+        .unwrap();
+    assert_eq!(inserted, 1);
+    let returned = table("tags")
+        .insert_or_ignore_returning(
+            &db,
+            [[("name", "third"), ("color", "x")], [("name", "fourth"), ("color", "x")]],
+            ["name"],
+            ["name"],
+        )
+        .await;
+    match server {
+        Server::Postgres => {
+            let rows = returned.unwrap();
+            assert_eq!(rows.len(), 1);
+            assert_eq!(rows[0].get::<String>("name").unwrap(), "fourth");
+        }
+        Server::MySql => assert!(matches!(returned, Err(OrmError::Unsupported { .. }))),
+    }
+
+    // Upserts: a counter adds, a model updates every other column.
+    let ddl = match server {
+        Server::Postgres => {
+            "CREATE TABLE page_views (path TEXT PRIMARY KEY, views BIGINT NOT NULL, title TEXT NOT NULL)"
+        }
+        Server::MySql => {
+            "CREATE TABLE page_views (path VARCHAR(191) PRIMARY KEY, views BIGINT NOT NULL, title VARCHAR(255) NOT NULL)"
+        }
+    };
+    navree_orm::unprepared(&db, ddl).await.unwrap();
+    for title in ["Home", "Start"] {
+        table("page_views")
+            .upsert(
+                &db,
+                [[
+                    ("path", Value::from("/")),
+                    ("views", Value::from(1_i64)),
+                    ("title", Value::from(title)),
+                ]],
+                ["path"],
+                [
+                    ConflictUpdate::from(col("views").set_expr(
+                        Expr::col("page_views.views").add(Expr::excluded("views")),
+                    )),
+                    "title".into(),
+                ],
+            )
+            .await
+            .unwrap();
+    }
+    let page = table("page_views").first(&db).await.unwrap().unwrap();
+    assert_eq!(page.get::<i64>("views").unwrap(), 2);
+    assert_eq!(page.get::<String>("title").unwrap(), "Start");
+    Tag::upsert(
+        &db,
+        [Tag {
+            name: "first".into(),
+            color: "gold".into(),
+            ..Tag::default()
+        }],
+        [Tag::NAME],
+        [ConflictUpdate::All],
+    )
+    .await
+    .unwrap();
+    let gold = Tag::query()
+        .where_(Tag::NAME.eq("first"))
+        .first(&db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!((gold.id, gold.color.as_str()), (first, "gold"));
+
+    // save_or_ignore: one insert, then a skipped duplicate.
+    let mut duplicate = Record::new(Tag {
+        name: "first".into(),
+        color: "pink".into(),
+        ..Tag::default()
+    });
+    assert!(!duplicate.save_or_ignore(&db).await.unwrap());
+    let mut fresh = Record::new(Tag {
+        name: "fifth".into(),
+        color: "pink".into(),
+        ..Tag::default()
+    });
+    assert!(fresh.save_or_ignore(&db).await.unwrap());
+    assert!(fresh.id > 0);
+
+    // JSON paths updated in place.
+    let (acme, _globex) = seed(&db).await;
+    let deal = Deal::query()
+        .where_(Deal::COMPANY_ID.eq(acme.id))
+        .where_(Deal::STAGE.eq(Stage::Lead))
+        .first(&db)
+        .await
+        .unwrap()
+        .unwrap();
+    Deal::query()
+        .where_key(deal.id)
+        .update(
+            &db,
+            [col("meta->source").set("partner"), Deal::META.json("score").set(9)],
+        )
+        .await
+        .unwrap();
+    let meta = Deal::find_or_fail(&db, deal.id).await.unwrap().meta.clone();
+    assert_eq!(
+        meta,
+        DealMeta {
+            source: "partner".into(),
+            score: 9
+        }
+    );
+
+    // UPDATE … FROM (PostgreSQL), UPDATE … JOIN (MySQL).
+    let renamed = table("deals")
+        .join("companies", "companies.id", "=", "deals.company_id")
+        .where_(col("companies.country").eq("DE"))
+        .update_from(&db, [col("stage").set("closed_lost")])
+        .await
+        .unwrap();
+    assert_eq!(renamed, 1);
+    // A joined table write: by ctid on PostgreSQL; MySQL has no row id.
+    let joined = table("deals")
+        .join("companies", "companies.id", "=", "deals.company_id")
+        .where_(col("companies.name").eq("Acme"))
+        .update(&db, [col("probability").set(0.5)])
+        .await;
+    match server {
+        Server::Postgres => assert_eq!(joined.unwrap(), 2),
+        Server::MySql => assert!(matches!(joined, Err(OrmError::Unsupported { .. }))),
+    }
+
+    // Truncation restarts the identity.
+    table("page_views").truncate(&db).await.unwrap();
+    assert_eq!(table("page_views").count(&db).await.unwrap(), 0);
+    table("notes").insert(&db, [[("body", "a")]]).await.unwrap();
+    table("notes").truncate(&db).await.unwrap();
+    let id: i64 = table("notes")
+        .insert_get_id(&db, [("body", "b")])
+        .await
+        .unwrap();
+    assert_eq!(id, 1, "the identity restarted");
+}
+
 /// Chunks, lazy streams and cursors, on the pool and inside a unit of
 /// work, and raw cursors.
 pub async fn streams(db: Db) {
