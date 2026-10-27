@@ -10,7 +10,7 @@ import {
   toggleSort,
   toSorting,
   withPage,
-} from "./list-query";
+} from "./list-query.js";
 
 const decoded = (params: URLSearchParams) => decodeURIComponent(params.toString());
 

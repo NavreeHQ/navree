@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { NavreeError } from "./errors";
-import { direction, errorKey, isRtl, translateError } from "./i18n";
+import { NavreeError } from "./errors.js";
+import { direction, errorKey, isRtl, translateError } from "./i18n.js";
 
 const navreeError = (statusCode: number, code: string, message = "Detail from the API") =>
   NavreeError.fromResponse(new Response(null, { status: statusCode }), {

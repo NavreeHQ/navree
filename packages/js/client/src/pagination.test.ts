@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { collectAll, facetCounts, hasNextPage, isCursorPage, isPage, pageRange, pages, type Page } from "./pagination";
+import { collectAll, facetCounts, hasNextPage, isCursorPage, isPage, pageRange, pages, type Page } from "./pagination.js";
 
 const page = <T>(data: T[], current_page: number, last_page: number, per_page = 2, total = 5): Page<T> => ({
   data,

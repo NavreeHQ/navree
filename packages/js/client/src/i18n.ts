@@ -2,7 +2,7 @@
  * Locale helpers shared by the Next.js and Nuxt packages: text direction
  * for `<html dir>`, and error messages translated by error code.
  */
-import { errorMessage, isNavreeError } from "./errors";
+import { errorMessage, isNavreeError } from "./errors.js";
 
 /** Languages written right to left (ISO 639 codes). */
 export const RTL_LANGUAGES: ReadonlySet<string> = new Set([

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { errorMessage, isErrorBody, isNavreeError, NavreeError } from "./errors";
+import { errorMessage, isErrorBody, isNavreeError, NavreeError } from "./errors.js";
 
 const response = (status: number, headers: Record<string, string> = {}, statusText = "") =>
   new Response(null, { status, statusText, headers });
