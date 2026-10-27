@@ -53,7 +53,10 @@ async fn timescaledb_time_buckets() {
 
 #[tokio::test]
 async fn postgres_lifecycle() {
-    run(Server::Postgres, |db| lifecycle::scenario(db, Server::Postgres)).await;
+    run(Server::Postgres, |db| {
+        lifecycle::scenario(db, Server::Postgres)
+    })
+    .await;
 }
 
 #[tokio::test]

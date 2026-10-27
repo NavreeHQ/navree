@@ -25,8 +25,8 @@ use std::borrow::Cow;
 
 use crate::column::Assignment;
 use crate::error::{OrmError, Result};
-use crate::exec::{Access, Executor, Target};
 use crate::events::without_events;
+use crate::exec::{Access, Executor, Target};
 use crate::hooks::{Flow, Hooks, ModelEvent};
 use crate::model::Model;
 use crate::persist;
@@ -112,7 +112,11 @@ async fn force_delete<M: Model>(target: &Target<'_>, record: &mut Record<M>) -> 
     }
     let ctx = target.context();
     let hooks = Hooks::<M>::resolve(&ctx).await?;
-    if hooks.before(ModelEvent::ForceDeleting, &ctx, record).await? == Flow::Cancel {
+    if hooks
+        .before(ModelEvent::ForceDeleting, &ctx, record)
+        .await?
+        == Flow::Cancel
+    {
         return Ok(false);
     }
     record.force_deleting = true;
@@ -248,7 +252,10 @@ impl<M: SoftDeleting> Builder<M> {
     where
         M: Default,
     {
-        let mut record = self.with_trashed().first_or_create(exec, attributes, fill).await?;
+        let mut record = self
+            .with_trashed()
+            .first_or_create(exec, attributes, fill)
+            .await?;
         if record.trashed() {
             record.restore(exec).await?;
         }
@@ -267,7 +274,10 @@ impl<M: SoftDeleting> Builder<M> {
     where
         M: Default,
     {
-        let mut record = self.with_trashed().create_or_first(exec, attributes, fill).await?;
+        let mut record = self
+            .with_trashed()
+            .create_or_first(exec, attributes, fill)
+            .await?;
         if record.trashed() {
             record.restore(exec).await?;
         }

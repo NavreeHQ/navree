@@ -57,22 +57,22 @@ async fn partial(db: &Db) -> Result<i64, OrmError> {
 
 #[tokio::test]
 async fn production_apps_are_lenient_and_the_others_strict() {
-    let (production, db) = app(
-        TestApp::builder()
-            .config("env", "production")
-            .module(OrmModule::from_config()),
-    )
+    let (production, db) = app(TestApp::builder()
+        .config("env", "production")
+        .module(OrmModule::from_config()))
     .await;
-    assert_eq!(partial(&db).await.unwrap(), 0, "the default of a left-out column");
+    assert_eq!(
+        partial(&db).await.unwrap(),
+        0,
+        "the default of a left-out column"
+    );
     let runtime = production.get::<OrmRuntime>().await;
     assert_eq!(runtime.environment(), Some("production"));
     assert!(!runtime.strictness().prevents_lazy_loading());
 
-    let (development, db) = app(
-        TestApp::builder()
-            .config("app.env", "local")
-            .module(OrmModule::from_config()),
-    )
+    let (development, db) = app(TestApp::builder()
+        .config("app.env", "local")
+        .module(OrmModule::from_config()))
     .await;
     assert!(matches!(
         partial(&db).await.unwrap_err(),
@@ -85,16 +85,15 @@ async fn production_apps_are_lenient_and_the_others_strict() {
 
 #[tokio::test]
 async fn each_mode_can_be_set_on_its_own() {
-    let (_app, db) = app(
-        TestApp::builder()
-            .config("orm.strict", true)
-            .config("orm.prevent_missing_attributes", false)
-            .module(OrmModule::from_config()),
-    )
+    let (_app, db) = app(TestApp::builder()
+        .config("orm.strict", true)
+        .config("orm.prevent_missing_attributes", false)
+        .module(OrmModule::from_config()))
     .await;
     assert_eq!(partial(&db).await.unwrap(), 0);
 
-    let (_app, db) = app(TestApp::builder().module(OrmModule::for_root(OrmOptions::lenient()))).await;
+    let (_app, db) =
+        app(TestApp::builder().module(OrmModule::for_root(OrmOptions::lenient()))).await;
     assert_eq!(partial(&db).await.unwrap(), 0);
 }
 
@@ -102,12 +101,14 @@ async fn each_mode_can_be_set_on_its_own() {
 async fn handlers_on_the_module_take_over_from_errors() {
     let seen = Arc::new(Mutex::new(Vec::new()));
     let log = seen.clone();
-    let (_app, db) = app(TestApp::builder().module(
-        OrmModule::from_config().on_missing_attribute(move |violation| {
-            log.lock().unwrap().push(violation.to_string());
-            Ok(())
-        }),
-    ))
+    let (_app, db) = app(
+        TestApp::builder().module(OrmModule::from_config().on_missing_attribute(
+            move |violation| {
+                log.lock().unwrap().push(violation.to_string());
+                Ok(())
+            },
+        )),
+    )
     .await;
     assert_eq!(partial(&db).await.unwrap(), 0);
     assert_eq!(

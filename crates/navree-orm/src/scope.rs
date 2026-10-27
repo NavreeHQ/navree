@@ -260,7 +260,10 @@ mod tests {
 
     #[test]
     fn scope_names_drop_the_path_and_the_arguments() {
-        assert_eq!(short_type_name("navree_orm::scope::SoftDeletes"), "SoftDeletes");
+        assert_eq!(
+            short_type_name("navree_orm::scope::SoftDeletes"),
+            "SoftDeletes"
+        );
         assert_eq!(short_type_name("app::scopes::Owned<app::Deal>"), "Owned");
         assert_eq!(short_type_name("Plain"), "Plain");
     }

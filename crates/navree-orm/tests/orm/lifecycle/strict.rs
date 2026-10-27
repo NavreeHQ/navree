@@ -36,7 +36,10 @@ async fn a_partial_select_is_an_error_in_strict_mode() {
         .get(&t.db)
         .await
         .unwrap_err();
-    assert!(matches!(error, OrmError::MissingAttribute { .. }), "{error:?}");
+    assert!(
+        matches!(error, OrmError::MissingAttribute { .. }),
+        "{error:?}"
+    );
     assert_eq!(
         error.to_string(),
         "cannot read column `reading` of Probe as i64: the row has no such column (it has: id, name); select it, or mark the field #[model(default)]"
@@ -48,9 +51,7 @@ async fn lenient_mode_reads_the_defaults_of_left_out_columns() {
     let t = seeded().await;
     let slim = strict::scope(
         Strictness::lenient(),
-        Probe::query()
-            .select(["id", "name", "level"])
-            .get(&t.db),
+        Probe::query().select(["id", "name", "level"]).get(&t.db),
     )
     .await
     .unwrap();
@@ -86,9 +87,7 @@ async fn a_handler_decides_about_missing_attributes() {
     });
     let probes = strict::scope(
         logging,
-        Probe::query()
-            .select(["id", "name", "level"])
-            .get(&t.db),
+        Probe::query().select(["id", "name", "level"]).get(&t.db),
     )
     .await
     .unwrap();
@@ -105,9 +104,7 @@ async fn a_handler_decides_about_missing_attributes() {
         .on_missing_attribute(|violation| Err(OrmError::InvalidQuery(format!("no: {violation}"))));
     let error = strict::scope(
         refusing,
-        Probe::query()
-            .select(["id", "name", "level"])
-            .get(&t.db),
+        Probe::query().select(["id", "name", "level"]).get(&t.db),
     )
     .await
     .unwrap_err();

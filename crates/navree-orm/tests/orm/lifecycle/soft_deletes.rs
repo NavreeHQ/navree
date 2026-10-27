@@ -6,7 +6,9 @@ use std::time::Duration;
 
 use navree_kernel::{Module, ModuleBuilder};
 use navree_orm::hooks::Flow;
-use navree_orm::{ExecContext, Model, ModelLifecycle, ModuleBuilderOrmExt, Observer, Record, Result};
+use navree_orm::{
+    ExecContext, Model, ModelLifecycle, ModuleBuilderOrmExt, Observer, Record, Result,
+};
 
 use super::models::{Member, create_tables};
 use crate::models::{Company, Deal};
@@ -19,7 +21,11 @@ struct Heard(Arc<Mutex<Vec<String>>>);
 
 impl Heard {
     fn push(&self, event: &str, deal: &Record<Deal>) {
-        let force = if deal.is_force_deleting() { " force" } else { "" };
+        let force = if deal.is_force_deleting() {
+            " force"
+        } else {
+            ""
+        };
         self.0
             .lock()
             .unwrap()
@@ -109,7 +115,9 @@ impl Module for Observing {
 async fn trashing_fires_deleting_trashed_deleted() {
     let heard = Heard::default();
     let (_app, db, clock) = app(vec![Box::new(Observing(heard.clone()))]).await;
-    let mut deal = Deal::create_quietly(&*db, Deal::new("Old", 1)).await.unwrap();
+    let mut deal = Deal::create_quietly(&*db, Deal::new("Old", 1))
+        .await
+        .unwrap();
 
     clock.advance(Duration::from_secs(30));
     assert!(deal.delete(&*db).await.unwrap());
@@ -119,7 +127,9 @@ async fn trashing_fires_deleting_trashed_deleted() {
     assert_eq!(deal.deleted_at, Some(deal.updated_at));
     assert_eq!(count_rows(&db, "deals").await, 1, "the row stays");
 
-    let mut kept = Deal::create_quietly(&*db, Deal::new("no deleting", 1)).await.unwrap();
+    let mut kept = Deal::create_quietly(&*db, Deal::new("no deleting", 1))
+        .await
+        .unwrap();
     assert!(!kept.delete(&*db).await.unwrap());
     assert!(!kept.trashed());
 }
@@ -129,7 +139,9 @@ async fn force_deleting_removes_the_row_and_says_so() {
     let heard = Heard::default();
     let (_app, db, _clock) = app(vec![Box::new(Observing(heard.clone()))]).await;
 
-    let mut live = Deal::create_quietly(&*db, Deal::new("Live", 1)).await.unwrap();
+    let mut live = Deal::create_quietly(&*db, Deal::new("Live", 1))
+        .await
+        .unwrap();
     assert!(live.force_delete(&*db).await.unwrap());
     assert_eq!(
         heard.take(),
@@ -146,7 +158,9 @@ async fn force_deleting_removes_the_row_and_says_so() {
     assert_eq!(count_rows(&db, "deals").await, 0);
 
     // A trashed record is removed for good too.
-    let mut trashed = Deal::create_quietly(&*db, Deal::new("Trashed", 1)).await.unwrap();
+    let mut trashed = Deal::create_quietly(&*db, Deal::new("Trashed", 1))
+        .await
+        .unwrap();
     trashed.delete_quietly(&*db).await.unwrap();
     assert!(trashed.force_delete_quietly(&*db).await.unwrap());
     assert!(heard.take().is_empty(), "quietly");
@@ -154,7 +168,9 @@ async fn force_deleting_removes_the_row_and_says_so() {
 
     // Either cancellable step keeps the row.
     for title in ["no force deleting", "no deleting"] {
-        let mut kept = Deal::create_quietly(&*db, Deal::new(title, 1)).await.unwrap();
+        let mut kept = Deal::create_quietly(&*db, Deal::new(title, 1))
+            .await
+            .unwrap();
         assert!(!kept.force_delete(&*db).await.unwrap(), "{title}");
         assert!(kept.exists());
         assert!(!kept.is_force_deleting(), "{title}: the flag is reset");
@@ -172,7 +188,9 @@ async fn force_deleting_removes_the_row_and_says_so() {
 async fn restoring_saves_the_cleared_column_between_its_events() {
     let heard = Heard::default();
     let (_app, db, clock) = app(vec![Box::new(Observing(heard.clone()))]).await;
-    let mut deal = Deal::create_quietly(&*db, Deal::new("Back", 1)).await.unwrap();
+    let mut deal = Deal::create_quietly(&*db, Deal::new("Back", 1))
+        .await
+        .unwrap();
     deal.delete_quietly(&*db).await.unwrap();
     let trashed_at = deal.updated_at;
 
@@ -192,14 +210,19 @@ async fn restoring_saves_the_cleared_column_between_its_events() {
     assert!(!deal.trashed());
     assert!(deal.updated_at > trashed_at, "a restore is an update");
     assert!(deal.is_clean());
-    let stored = Deal::find(&*db, deal.id).await.unwrap().expect("visible again");
+    let stored = Deal::find(&*db, deal.id)
+        .await
+        .unwrap()
+        .expect("visible again");
     assert_eq!(stored.deleted_at, None);
 
     // Quietly, and cancelled.
     deal.delete_quietly(&*db).await.unwrap();
     assert!(deal.restore_quietly(&*db).await.unwrap());
     assert!(heard.take().is_empty());
-    let mut refused = Deal::create_quietly(&*db, Deal::new("no restoring", 1)).await.unwrap();
+    let mut refused = Deal::create_quietly(&*db, Deal::new("no restoring", 1))
+        .await
+        .unwrap();
     refused.delete_quietly(&*db).await.unwrap();
     assert!(!refused.restore(&*db).await.unwrap());
     assert!(refused.trashed(), "a cancelled restore changes nothing");
@@ -226,15 +249,34 @@ async fn queries_choose_between_live_and_trashed_rows() {
         ["A", "B", "C"]
     );
     assert_eq!(
-        titles(Deal::query().with_trashed_if(true).get(&t.db).await.unwrap()),
+        titles(
+            Deal::query()
+                .with_trashed_if(true)
+                .get(&t.db)
+                .await
+                .unwrap()
+        ),
         ["A", "B", "C"]
     );
     assert_eq!(
-        titles(Deal::query().with_trashed_if(false).get(&t.db).await.unwrap()),
+        titles(
+            Deal::query()
+                .with_trashed_if(false)
+                .get(&t.db)
+                .await
+                .unwrap()
+        ),
         ["A"]
     );
     assert_eq!(
-        titles(Deal::query().with_trashed().without_trashed().get(&t.db).await.unwrap()),
+        titles(
+            Deal::query()
+                .with_trashed()
+                .without_trashed()
+                .get(&t.db)
+                .await
+                .unwrap()
+        ),
         ["A"]
     );
     assert_eq!(
@@ -275,7 +317,10 @@ async fn mass_restores_touch_only_trashed_rows() {
         .unwrap();
     assert_eq!(restored, 1, "B was trashed and matches; A was not trashed");
     let a = Deal::find_or_fail(&*db, created[0].id).await.unwrap();
-    assert_eq!(a.updated_at, created[0].updated_at, "live rows are left alone");
+    assert_eq!(
+        a.updated_at, created[0].updated_at,
+        "live rows are left alone"
+    );
     let b = Deal::find_or_fail(&*db, created[1].id).await.unwrap();
     assert!(b.updated_at > created[1].updated_at);
     assert!(Deal::find(&*db, created[2].id).await.unwrap().is_none());
@@ -287,7 +332,12 @@ async fn mass_restores_touch_only_trashed_rows() {
 #[tokio::test]
 async fn mass_force_deletes_reach_trashed_rows() {
     let t = sqlite().await;
-    for (title, cents, trash) in [("A", 1, false), ("B", 1, true), ("C", 500, true), ("D", 500, false)] {
+    for (title, cents, trash) in [
+        ("A", 1, false),
+        ("B", 1, true),
+        ("C", 500, true),
+        ("D", 500, false),
+    ] {
         let mut deal = Deal::create(&t.db, Deal::new(title, cents)).await.unwrap();
         if trash {
             deal.delete(&t.db).await.unwrap();
@@ -301,14 +351,25 @@ async fn mass_force_deletes_reach_trashed_rows() {
     assert_eq!(removed, 2, "A and the trashed B");
     assert_eq!(count_rows(&t.db, "deals").await, 2);
     assert_eq!(
-        Deal::query().without_trashed().force_delete(&t.db).await.unwrap(),
+        Deal::query()
+            .without_trashed()
+            .force_delete(&t.db)
+            .await
+            .unwrap(),
         1,
         "D; C stays trashed"
     );
     assert_eq!(Deal::query().only_trashed().count(&t.db).await.unwrap(), 1);
 
     // A mass delete trashes, a mass force delete removes: no events.
-    assert_eq!(Deal::query().only_trashed().force_delete(&t.db).await.unwrap(), 1);
+    assert_eq!(
+        Deal::query()
+            .only_trashed()
+            .force_delete(&t.db)
+            .await
+            .unwrap(),
+        1
+    );
     assert_eq!(count_rows(&t.db, "deals").await, 0);
 }
 
@@ -337,10 +398,16 @@ async fn force_destroy_loads_and_removes_each_record() {
     );
     assert_eq!(count_rows(&db, "deals").await, 1);
     assert_eq!(
-        Deal::force_destroy(&*db, Vec::<uuid::Uuid>::new()).await.unwrap(),
+        Deal::force_destroy(&*db, Vec::<uuid::Uuid>::new())
+            .await
+            .unwrap(),
         0
     );
-    assert_eq!(Deal::destroy(&*db, [c.id]).await.unwrap(), 1, "destroy trashes");
+    assert_eq!(
+        Deal::destroy(&*db, [c.id]).await.unwrap(),
+        1,
+        "destroy trashes"
+    );
     assert_eq!(count_rows(&db, "deals").await, 1);
 }
 
@@ -436,11 +503,12 @@ async fn restore_or_create_and_create_or_restore_bring_records_back() {
     // Create first; the unique email finds the trashed record, restored.
     let mut again = Member::find_or_fail(&t.db, new.id).await.unwrap();
     again.delete(&t.db).await.unwrap();
-    let restored = Member::create_or_restore(&t.db, [Member::EMAIL.set("grace@example.com")], |m| {
-        m.name = "Grace".into();
-    })
-    .await
-    .unwrap();
+    let restored =
+        Member::create_or_restore(&t.db, [Member::EMAIL.set("grace@example.com")], |m| {
+            m.name = "Grace".into();
+        })
+        .await
+        .unwrap();
     assert_eq!(restored.id, new.id);
     assert!(!restored.trashed());
     let created = Member::query()

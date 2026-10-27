@@ -209,7 +209,11 @@ pub struct BroadcastModelEvent {
 impl BroadcastModelEvent {
     /// Hands the broadcast to `queue` (when there is one and the app has a
     /// job dispatcher), else to the app's broadcaster.
-    async fn deliver(self, ctx: &ExecContext, queue: Option<String>) -> std::result::Result<(), BoxError> {
+    async fn deliver(
+        self,
+        ctx: &ExecContext,
+        queue: Option<String>,
+    ) -> std::result::Result<(), BoxError> {
         let Some(app) = ctx.app() else {
             return Ok(());
         };

@@ -164,5 +164,7 @@ impl<M: Model> Builder<M> {
 
 /// The global scope of `M` named `name`, if it has one.
 pub(crate) fn find<M: Model>(name: &str) -> Option<Arc<dyn GlobalScope<M>>> {
-    scopes_of::<M>().into_iter().find(|scope| scope.name() == name)
+    scopes_of::<M>()
+        .into_iter()
+        .find(|scope| scope.name() == name)
 }

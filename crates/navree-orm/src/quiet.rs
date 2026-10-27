@@ -108,7 +108,11 @@ impl<M: Model> Record<M> {
 impl<M: Model> Builder<M> {
     /// Inserts `model` without model events and returns its record (the
     /// builder's conditions do not apply to an insert).
-    pub async fn create_quietly<E: Executor + ?Sized>(self, exec: &E, model: M) -> Result<Record<M>> {
+    pub async fn create_quietly<E: Executor + ?Sized>(
+        self,
+        exec: &E,
+        model: M,
+    ) -> Result<Record<M>> {
         without_events(M::create(exec, model)).await
     }
 }

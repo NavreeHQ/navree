@@ -96,7 +96,11 @@ pub trait Observer<M: Model>: Send + Sync + 'static {
     }
 
     /// A new record was inserted.
-    fn created(&self, record: &Record<M>, ctx: &ExecContext) -> impl Future<Output = Result<()>> + Send {
+    fn created(
+        &self,
+        record: &Record<M>,
+        ctx: &ExecContext,
+    ) -> impl Future<Output = Result<()>> + Send {
         let _ = (record, ctx);
         async { Ok(()) }
     }
@@ -112,13 +116,21 @@ pub trait Observer<M: Model>: Send + Sync + 'static {
     }
 
     /// A record was updated.
-    fn updated(&self, record: &Record<M>, ctx: &ExecContext) -> impl Future<Output = Result<()>> + Send {
+    fn updated(
+        &self,
+        record: &Record<M>,
+        ctx: &ExecContext,
+    ) -> impl Future<Output = Result<()>> + Send {
         let _ = (record, ctx);
         async { Ok(()) }
     }
 
     /// A record was inserted or updated (also a clean one).
-    fn saved(&self, record: &Record<M>, ctx: &ExecContext) -> impl Future<Output = Result<()>> + Send {
+    fn saved(
+        &self,
+        record: &Record<M>,
+        ctx: &ExecContext,
+    ) -> impl Future<Output = Result<()>> + Send {
         let _ = (record, ctx);
         async { Ok(()) }
     }
@@ -134,13 +146,21 @@ pub trait Observer<M: Model>: Send + Sync + 'static {
     }
 
     /// A record was deleted (or soft-deleted).
-    fn deleted(&self, record: &Record<M>, ctx: &ExecContext) -> impl Future<Output = Result<()>> + Send {
+    fn deleted(
+        &self,
+        record: &Record<M>,
+        ctx: &ExecContext,
+    ) -> impl Future<Output = Result<()>> + Send {
         let _ = (record, ctx);
         async { Ok(()) }
     }
 
     /// A record was soft-deleted.
-    fn trashed(&self, record: &Record<M>, ctx: &ExecContext) -> impl Future<Output = Result<()>> + Send {
+    fn trashed(
+        &self,
+        record: &Record<M>,
+        ctx: &ExecContext,
+    ) -> impl Future<Output = Result<()>> + Send {
         let _ = (record, ctx);
         async { Ok(()) }
     }
@@ -177,7 +197,11 @@ pub trait Observer<M: Model>: Send + Sync + 'static {
     }
 
     /// A soft-deleted record was restored.
-    fn restored(&self, record: &Record<M>, ctx: &ExecContext) -> impl Future<Output = Result<()>> + Send {
+    fn restored(
+        &self,
+        record: &Record<M>,
+        ctx: &ExecContext,
+    ) -> impl Future<Output = Result<()>> + Send {
         let _ = (record, ctx);
         async { Ok(()) }
     }

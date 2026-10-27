@@ -69,7 +69,10 @@ impl Observer<Company> for CompanyObserver {
 
     async fn updated(&self, company: &Record<Company>, _ctx: &ExecContext) -> Result<()> {
         let changed: Vec<&str> = company.get_changes().iter().map(|(c, _)| *c).collect();
-        let before = company.get_original().map(|c| c.name.clone()).unwrap_or_default();
+        let before = company
+            .get_original()
+            .map(|c| c.name.clone())
+            .unwrap_or_default();
         self.0.push(format!(
             "updated {} (changed {}; was {before}; name changed: {})",
             company.name,
@@ -126,7 +129,11 @@ async fn observers_hear_every_event_in_order() {
     let (_app, db, clock) = app(vec![Box::new(Observed(log.clone()))]).await;
 
     let mut acme = Company::create(&*db, company("Acme")).await.unwrap();
-    assert_eq!(acme.country.as_deref(), Some("US"), "creating changed the record");
+    assert_eq!(
+        acme.country.as_deref(),
+        Some("US"),
+        "creating changed the record"
+    );
     assert_eq!(
         log.take(),
         ["saving Acme", "creating Acme", "created Acme", "saved Acme"]
@@ -156,8 +163,15 @@ async fn observers_hear_every_event_in_order() {
     acme.employees = 3;
     acme.save(&*db).await.unwrap();
     log.take();
-    assert!(!acme.delete(&*db).await.unwrap(), "companies with people stay");
-    assert_eq!(count_rows(&db, "companies").await, 0, "acme was deleted as found");
+    assert!(
+        !acme.delete(&*db).await.unwrap(),
+        "companies with people stay"
+    );
+    assert_eq!(
+        count_rows(&db, "companies").await,
+        0,
+        "acme was deleted as found"
+    );
 }
 
 #[tokio::test]
@@ -175,7 +189,12 @@ async fn observers_hear_what_changed_after_the_commit() {
     acme.save(&uow).await.unwrap();
     assert_eq!(
         log.take(),
-        ["saving Acme Inc", "updating Acme Inc", "saving Acme Inc", "updating Acme Inc"]
+        [
+            "saving Acme Inc",
+            "updating Acme Inc",
+            "saving Acme Inc",
+            "updating Acme Inc"
+        ]
     );
     uow.commit().await.unwrap();
     assert_eq!(
@@ -216,7 +235,10 @@ async fn observers_declared_on_the_model_need_no_app() {
     );
 
     let mut empty = Record::new(Ticket::default());
-    assert!(!empty.save(&t.db).await.unwrap(), "an empty subject is refused");
+    assert!(
+        !empty.save(&t.db).await.unwrap(),
+        "an empty subject is refused"
+    );
     assert_eq!(count_rows(&t.db, "tickets").await, 1);
 }
 
@@ -263,7 +285,11 @@ async fn in_transaction_observers_write_with_the_record_or_not_at_all() {
     let uow = db.uow(None, None).await;
     Company::create(&uow, company("Dropped")).await.unwrap();
     uow.rollback().await.unwrap();
-    assert_eq!(count_rows(&db, "audit_rows").await, 1, "rolled back together");
+    assert_eq!(
+        count_rows(&db, "audit_rows").await,
+        1,
+        "rolled back together"
+    );
     assert_eq!(count_rows(&db, "companies").await, 1);
 }
 
@@ -369,7 +395,10 @@ async fn custom_events_reach_observers_and_closures_at_once() {
     .unwrap();
     ticket_log("custom 7");
 
-    assert_eq!(ticket.fire(&t.db, "escalated").await.unwrap(), Flow::Continue);
+    assert_eq!(
+        ticket.fire(&t.db, "escalated").await.unwrap(),
+        Flow::Continue
+    );
     assert_eq!(ticket_log("custom 7"), ["escalated custom 7"]);
 
     ticket.status = "frozen".into();

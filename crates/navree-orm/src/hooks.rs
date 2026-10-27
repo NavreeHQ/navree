@@ -147,7 +147,9 @@ impl ModelEvent {
     /// assert_eq!(ModelEvent::from_name("archived"), None);
     /// ```
     pub fn from_name(name: &str) -> Option<ModelEvent> {
-        ModelEvent::ALL.into_iter().find(|event| event.name() == name)
+        ModelEvent::ALL
+            .into_iter()
+            .find(|event| event.name() == name)
     }
 
     /// Whether listeners hear this event once the unit of work the write

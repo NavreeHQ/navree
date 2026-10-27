@@ -51,7 +51,10 @@ impl DocumentDriver for Capture {
         Box::pin(async { Ok(Value::BigInt(Some(0))) })
     }
 
-    fn insert<'a>(&'a self, insert: &'a InsertIr) -> BoxFuture<'a, Result<InsertOutcome, OrmError>> {
+    fn insert<'a>(
+        &'a self,
+        insert: &'a InsertIr,
+    ) -> BoxFuture<'a, Result<InsertOutcome, OrmError>> {
         Box::pin(async move { Ok(InsertOutcome::affected(insert.rows.len() as u64)) })
     }
 

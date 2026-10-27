@@ -366,7 +366,9 @@ async fn a_panicking_after_commit_listener_is_contained() {
     let (_app, db, _clock) = app(vec![Box::new(Registering)]).await;
     let uow = db.uow(None, None).await;
     Company::create(&uow, acme()).await.unwrap();
-    uow.commit().await.expect("a listener's panic does not reach the committer");
+    uow.commit()
+        .await
+        .expect("a listener's panic does not reach the committer");
     assert_eq!(count_rows(&db, "companies").await, 1);
 }
 
@@ -394,7 +396,10 @@ fn every_event_knows_when_listeners_hear_it() {
     assert_eq!(archived.name(), "archived");
     assert!(archived.is_cancellable(), "custom events run at once");
     assert!(!archived.runs_after_commit());
-    assert_eq!(ModelEvent::from_name("force_deleting"), Some(ModelEvent::ForceDeleting));
+    assert_eq!(
+        ModelEvent::from_name("force_deleting"),
+        Some(ModelEvent::ForceDeleting)
+    );
     assert_eq!(ModelEvent::from_name("archived"), None);
     assert_eq!(HookKind::default(), HookKind::Behaviour);
 }

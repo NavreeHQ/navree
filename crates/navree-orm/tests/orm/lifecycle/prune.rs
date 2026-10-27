@@ -54,7 +54,8 @@ impl Listener<ModelsPruned> for PruningListener {
         event: &'a ModelsPruned,
         _ctx: &'a AppContext,
     ) -> BoxFuture<'a, std::result::Result<(), BoxError>> {
-        self.0.push(format!("pruned {} {}", event.model, event.count));
+        self.0
+            .push(format!("pruned {} {}", event.model, event.count));
         Box::pin(async { Ok(()) })
     }
 }
@@ -150,7 +151,11 @@ async fn prunable_models_prune_old_records_one_by_one_trashed_ones_included() {
 
     let pruned = LogEntry::prune_all(&*db, 2).await.unwrap();
     assert_eq!(pruned, 5);
-    assert_eq!(count_rows(&db, "log_entries").await, 1, "the trashed one too");
+    assert_eq!(
+        count_rows(&db, "log_entries").await,
+        1,
+        "the trashed one too"
+    );
     assert_eq!(
         pruned_with_prefix("p1"),
         ["p1 old 1", "p1 old 2", "p1 old 3", "p1 old 4", "p1 old 5"],
@@ -216,7 +221,9 @@ async fn the_prune_command_prunes_every_registered_prunable_model() {
     heard.take();
 
     // Pretending counts and changes nothing.
-    app.run_command("model:prune", &["--pretend"]).await.unwrap();
+    app.run_command("model:prune", &["--pretend"])
+        .await
+        .unwrap();
     assert_eq!(count_rows(&db, "log_entries").await, 2);
     assert_eq!(count_rows(&db, "metrics").await, 1);
     assert!(heard.take().is_empty());

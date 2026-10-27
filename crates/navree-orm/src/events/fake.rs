@@ -118,7 +118,10 @@ impl ModelEventFake {
     #[track_caller]
     pub fn assert_nothing_fired(&self) {
         if !self.lock().is_empty() {
-            panic!("expected no model event, but these fired: {}", self.summary());
+            panic!(
+                "expected no model event, but these fired: {}",
+                self.summary()
+            );
         }
     }
 

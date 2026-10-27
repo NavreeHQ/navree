@@ -51,7 +51,9 @@ async fn dispatch(ctx: &ExecContext, company: &Record<Company>) -> Result<()> {
     let app = ctx.app().expect("an app");
     let dispatcher = app.get::<dyn Dispatcher>().await.expect("a dispatcher");
     dispatcher
-        .dispatch(Welcome { company: company.id })
+        .dispatch(Welcome {
+            company: company.id,
+        })
         .await
         .map_err(|error| navree_orm::OrmError::Hook {
             model: "Company".into(),

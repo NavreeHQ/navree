@@ -733,7 +733,12 @@ pub mod derive_support {
         match row.field::<T>(column) {
             Ok(value) => Ok(value),
             Err(FieldError::Missing) => missing::<M, T>(row, column, T::type_name(), default),
-            Err(error) => Err(decode_error(M::meta().name(), column, T::type_name(), &error)),
+            Err(error) => Err(decode_error(
+                M::meta().name(),
+                column,
+                T::type_name(),
+                &error,
+            )),
         }
     }
 
@@ -778,6 +783,12 @@ pub mod derive_support {
         }
     }
 
+    impl<T> Default for DefaultOf<T> {
+        fn default() -> Self {
+            DefaultOf::new()
+        }
+    }
+
     /// The default of a type that has one.
     pub trait ViaDefault {
         /// The field type.
@@ -817,7 +828,12 @@ pub mod derive_support {
         match row.field::<T>(column) {
             Ok(value) => Ok(value),
             Err(FieldError::Missing) => Ok(T::default()),
-            Err(error) => Err(decode_error(M::meta().name(), column, T::type_name(), &error)),
+            Err(error) => Err(decode_error(
+                M::meta().name(),
+                column,
+                T::type_name(),
+                &error,
+            )),
         }
     }
 
@@ -829,7 +845,9 @@ pub mod derive_support {
         default: Option<fn() -> T>,
     ) -> Result<T, OrmError> {
         match row.field::<C::Stored>(column) {
-            Ok(stored) => C::get(stored).map_err(|error| cast_error::<M>(column, error.to_string())),
+            Ok(stored) => {
+                C::get(stored).map_err(|error| cast_error::<M>(column, error.to_string()))
+            }
             Err(FieldError::Missing) => {
                 missing::<M, T>(row, column, C::Stored::type_name(), default)
             }
@@ -854,12 +872,9 @@ pub mod derive_support {
                 .map(Some)
                 .map_err(|error| cast_error::<M>(column, error.to_string())),
             Ok(None) => Ok(None),
-            Err(FieldError::Missing) => missing::<M, Option<T>>(
-                row,
-                column,
-                <Option<C::Stored>>::type_name(),
-                default,
-            ),
+            Err(FieldError::Missing) => {
+                missing::<M, Option<T>>(row, column, <Option<C::Stored>>::type_name(), default)
+            }
             Err(error) => Err(decode_error(
                 M::meta().name(),
                 column,
