@@ -4113,6 +4113,7 @@ dependencies = [
  "navree-mail",
  "navree-mcp",
  "navree-micro",
+ "navree-mongo",
  "navree-notify",
  "navree-oauth",
  "navree-observe",

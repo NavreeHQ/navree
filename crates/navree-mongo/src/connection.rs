@@ -353,6 +353,20 @@ impl Executor for MongoDb {
 /// like on the connection; transactions are started and ended by hand
 /// (prefer [`MongoDb::begin`] and [`MongoDb::transaction`], which also
 /// record change events).
+///
+/// ```no_run
+/// # use navree_mongo::{MongoDb, MongoResult};
+/// # use navree_orm::Model;
+/// # #[derive(Model, Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+/// # #[model(collection = "events", driver = "mongodb")]
+/// # struct Event { id: navree_mongo::ObjectId, kind: String }
+/// # async fn demo(mongo: MongoDb) -> MongoResult {
+/// let session = mongo.session().await?;
+/// session.start_transaction().await?;
+/// Event::create(&session, Event { kind: "signup".into(), ..Event::default() }).await?;
+/// session.commit_transaction().await?;
+/// # Ok(()) }
+/// ```
 pub struct MongoSession {
     db: MongoDb,
     state: Arc<SessionState>,

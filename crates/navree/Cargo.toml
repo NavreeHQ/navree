@@ -123,6 +123,15 @@ workspace = [
     "access",
 ]
 ## L5 (opt-in, not in `full`)
+## MongoDB: `MongoModule` (connections, pools, readiness), the ORM's
+## document driver (filters, pipelines, aggregates, ObjectId keys, sessions
+## and units of work), the schema builder and migrations on collections,
+## time-series collections (the official driver on rustls; opt-in because
+## only apps with a MongoDB server need it).
+mongo = ["dep:navree-mongo", "telemetry", "schema", "db", "orm"]
+## `mongo` by the database's name.
+mongodb = ["mongo"]
+## L5 (opt-in, not in `full`)
 ## Redis: shared connections and the Redis drivers of the cache and locks,
 ## the queue, sessions and the real-time backplane, plus shared rate limits
 ## (pure Rust, rustls with ring for rediss://; opt-in because it adds the
@@ -377,6 +386,7 @@ navree-logbook = { workspace = true, optional = true }
 navree-mail = { workspace = true, optional = true }
 navree-mcp = { workspace = true, optional = true }
 navree-micro = { workspace = true, optional = true }
+navree-mongo = { workspace = true, optional = true }
 navree-notify = { workspace = true, optional = true }
 navree-observe = { workspace = true, optional = true }
 navree-orm = { workspace = true, optional = true }
