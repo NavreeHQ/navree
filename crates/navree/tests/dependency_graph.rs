@@ -86,6 +86,12 @@ const HIERARCHY: &[Rule] = &[
     // embedded assets served by a navree-http controller. Layer 4 so that its
     // tests can boot it with navree-testing (L3).
     rule("navree-ui", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-view"]),
+    // Browser testing: a dev-dependency crate that serves an app's router
+    // (navree-http) on a real port and drives Chrome over the DevTools
+    // Protocol (ecosystem build plan §3: may use http and testing).
+    rule("navree-browser", 4, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-testing",
+    ]),
     // L5
     rule("navree-auth", 5, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db",
