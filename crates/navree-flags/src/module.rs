@@ -212,7 +212,7 @@ pub trait ModuleBuilderFlagsExt {
     fn flag<F: Flag>(&mut self) -> &mut Self;
 
     /// Registers provider `R` as the app's `dyn PlanResolver`, which
-    /// rollouts by plan read (billing registers its own).
+    /// rollouts by plan read (one per app).
     fn plan_resolver<R: PlanResolver + Injectable>(&mut self) -> &mut Self;
 }
 
