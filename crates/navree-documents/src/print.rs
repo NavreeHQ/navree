@@ -17,17 +17,17 @@ pub enum Paper {
     Letter,
     /// 8.5 × 14 in.
     Legal,
-    /// Any size, in millimetres.
+    /// Any size, in millimeters.
     Custom {
-        /// The width in millimetres.
+        /// The width in millimeters.
         width_mm: f64,
-        /// The height in millimetres.
+        /// The height in millimeters.
         height_mm: f64,
     },
 }
 
 impl Paper {
-    /// Width and height in millimetres (portrait).
+    /// Width and height in millimeters (portrait).
     pub fn size_mm(self) -> (f64, f64) {
         match self {
             Paper::A4 => (210.0, 297.0),
@@ -43,7 +43,7 @@ impl Paper {
     }
 }
 
-/// Page margins in millimetres.
+/// Page margins in millimeters.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Margins {
@@ -84,7 +84,7 @@ impl Default for Margins {
 /// [documents.chrome.print]
 /// paper = "a4"              # a4 | a3 | a5 | letter | legal
 /// landscape = false
-/// margin = { top = 10, right = 10, bottom = 10, left = 10 }  # millimetres
+/// margin = { top = 10, right = 10, bottom = 10, left = 10 }  # millimeters
 /// print_background = true
 /// prefer_css_page_size = true
 /// scale = 1.0

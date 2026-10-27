@@ -46,7 +46,7 @@ The module is global and provides `Arc<Documents>`. It needs nothing else to ren
 
 ## Configuration
 
-Every key has a default:
+Every key is optional. The values below show each key's form; [the reference](#reference) lists the defaults:
 
 ```toml title="config/app.toml"
 [documents]
@@ -72,7 +72,7 @@ args = []                            # more command-line flags
 [documents.chrome.print]
 paper = "a4"                         # a4 | a3 | a5 | letter | legal
 landscape = false
-margin = { top = 10, right = 10, bottom = 10, left = 10 }  # millimetres
+margin = { top = 10, right = 10, bottom = 10, left = 10 }  # millimeters
 print_background = true
 prefer_css_page_size = true          # a CSS @page { size } rule wins over `paper`
 scale = 1.0
@@ -233,7 +233,7 @@ The document loads from a private origin, `https://documents.navree.invalid/<pat
 
 ### Pages, headers and footers
 
-`PrintOptions` set the paper, orientation, margins, scale and backgrounds. The render's own (`Render::print`) win over `documents.chrome.print`, and a CSS `@page { size }` rule wins over the paper while `prefer_css_page_size` is on:
+`PrintOptions` set the paper, orientation, margins, scale and backgrounds. A render's own settings (`Render::print`) win over `documents.chrome.print`, and a CSS `@page { size }` rule wins over the paper while `prefer_css_page_size` is on:
 
 ```rust
 use navree::documents::{Margins, PrintOptions, Render};
@@ -302,8 +302,8 @@ let paid = both
 ```
 
 - **`Pdf::merge`** joins documents page by page; each page keeps its size and contents. Outlines and forms are dropped.
-- **`stamp`** writes text over the pages `Pages` selects (`All`, `First`, `Last`, `Only(vec![2, 3])`). `Stamp::text` is a grey, 25% opaque, 72-point diagonal watermark across the middle; `.at(..)` moves it to an edge or a corner as 12-point upright text. A stamp is set in Helvetica Bold, so its text must be Latin-1.
-- **`overlay`** draws the first page of another PDF over the selected pages, scaled to fit and centred. For a seal, a signature or a stamp in another script, render it with Typst and overlay it:
+- **`stamp`** writes text over the pages `Pages` selects (`All`, `First`, `Last`, `Only(vec![2, 3])`). `Stamp::text` is a gray, 25% opaque, 72-point diagonal watermark across the middle; `.at(..)` moves it to an edge or a corner as 12-point upright text. A stamp is set in Helvetica Bold, so its text must be Latin-1.
+- **`overlay`** draws the first page of another PDF over the selected pages, scaled to fit and centered. For a seal, a signature or a stamp in another script, render it with Typst and overlay it:
 
 ```rust
 let seal = documents

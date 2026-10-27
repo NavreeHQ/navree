@@ -685,7 +685,7 @@ fn assemble(mut chunks: Vec<Chunk>) -> String {
 /// glyph map both to the letter), appended to it otherwise.
 fn attach_marks(line: Vec<Chunk>) -> Vec<Chunk> {
     let is_mark = |c: &Chunk| (c.x1 - c.x0) < 0.05 * c.size.max(1.0);
-    // A glyph centred inside another glyph with the same text is the same
+    // A glyph centered inside another glyph with the same text is the same
     // character drawn twice (a letter's dots, or fake bold): keep the wider.
     let mut duplicate = vec![false; line.len()];
     for (i, a) in line.iter().enumerate() {

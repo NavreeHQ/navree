@@ -215,7 +215,7 @@ impl Pdf {
 
     /// The document with the first page of `overlay` drawn over the pages
     /// `pages` selects. An overlay of another size is scaled to fit and
-    /// centred.
+    /// centered.
     pub fn overlay(&self, overlay: &Pdf, pages: Pages) -> Result<Pdf, DocumentsError> {
         let mut document = self.load()?;
         flatten_inherited(&mut document)?;
