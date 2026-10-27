@@ -13,7 +13,8 @@ use navree_contracts::{Clock, FixedClock};
 use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Navree, Resolver};
 use navree_storage::{
-    Disk, DiskConfig, PresignedUpload, Storage, StorageModule, StoredFile, UploadRules,
+    Disk, DiskConfig, PresignedUpload, Storage, StorageModule, StoredFile, UploadRejection,
+    UploadRules,
 };
 use serde_json::json;
 
@@ -203,20 +204,35 @@ async fn links_use_the_base_url_and_serialize_as_json() {
     assert_eq!(value["headers"], json!({ "content-type": "text/csv" }));
     assert!(value["expires_at"].is_string());
 
-    // A non-positive lifetime or a malformed type cannot be signed.
+    // A non-positive lifetime cannot be signed.
     let disk = storage.default_disk();
-    for result in [
-        disk.presigned_put("a.csv", Duration::zero(), &rules)
-            .content_type("text/csv")
-            .await,
-        disk.presigned_put("a.csv", Duration::minutes(1), &rules)
-            .content_type("text/csv\r\nx-injected: 1")
-            .await,
-    ] {
-        assert!(
-            matches!(result, Err(navree_storage::StorageError::Signing { .. })),
-            "{result:?}"
-        );
+    let result = disk
+        .presigned_put("a.csv", Duration::zero(), &rules)
+        .content_type("text/csv")
+        .await;
+    assert!(
+        matches!(result, Err(navree_storage::StorageError::Signing { .. })),
+        "{result:?}"
+    );
+    // A malformed type, as a client may declare it, is a rejected upload
+    // (a 400 in a handler), whatever the rules allow.
+    for rules in [rules.clone(), UploadRules::new(10, Vec::<String>::new())] {
+        for declared in ["text/csv\r\nx-injected: 1", "csv", "text/", "ïmage/png"] {
+            let result = disk
+                .presigned_put("a.csv", Duration::minutes(1), &rules)
+                .content_type(declared)
+                .await;
+            assert!(
+                matches!(
+                    &result,
+                    Err(navree_storage::StorageError::Rejected {
+                        rejection: UploadRejection::InvalidType,
+                        ..
+                    })
+                ),
+                "{declared:?}: {result:?}"
+            );
+        }
     }
 }
 
@@ -264,6 +280,21 @@ impl Controller for UploadsController {
                 },
             )
             .public(),
+            RouteDef::on(Method::POST, "/presign-type/{declared}", {
+                let disk = self.disk.clone();
+                move |Path(declared): Path<String>| {
+                    let disk = disk.clone();
+                    async move {
+                        let rules = rules();
+                        let upload = disk
+                            .presigned_put("x.png", Duration::minutes(1), &rules)
+                            .content_type(declared)
+                            .await?;
+                        Ok::<_, AppError>(Json(upload))
+                    }
+                }
+            })
+            .public(),
             RouteDef::on(
                 Method::POST,
                 "/accept/{*path}",
@@ -310,6 +341,11 @@ async fn rejections_map_to_400_and_413_in_handlers() {
     );
     let body = app.send(post("/presign/0")).await.error(400);
     assert_eq!(body["message"], "The file should not be empty.");
+    let body = app.send(post("/presign-type/png")).await.error(400);
+    assert_eq!(
+        body["message"],
+        "The declared content type is not a valid `type/subtype`."
+    );
 
     let disk = app.app.ctx().get::<Disk>().await.unwrap();
     disk.put("up/fake.png", "<svg/>").await.unwrap();

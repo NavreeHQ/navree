@@ -1,15 +1,19 @@
 ---
 title: "File storage"
-description: "Named disks on object_store: putting, reading and streaming files, upload checks and signed temporary URLs."
+description: "Named disks on object_store (local, memory, S3, Google Cloud Storage, Azure): streaming, upload checks, signed links, direct browser uploads and disk sync."
 ---
 
-<Badge feature="storage" /> `navree-storage` gives your app named **disks**: places to keep files, each with its own root. You write and read files by path on a disk, stream large files without loading them into memory, accept uploads with a size limit and a content check, and hand out links that expire. It is built on [object_store](https://docs.rs/object_store), the storage layer of Apache Arrow.
+<Badge feature="storage" /> `navree-storage` gives your app named **disks**: places to keep files, each with its own root. You write and read files by path on a disk, stream large files without loading them into memory, accept uploads with a size limit and a content check, let browsers upload straight to a bucket, hand out links that expire, and copy a disk's files to another. It is built on [object_store](https://docs.rs/object_store), the storage layer of Apache Arrow.
 
-<Callout type="note" title="Drivers">
+A disk uses one of five drivers. Your code is the same on all of them:
 
-Disks use one of two drivers: `local` (a directory on the server) and `memory` (process memory, for tests and scratch data). Object storage drivers for S3, Google Cloud Storage and Azure are on the [roadmap](/docs/prologue/roadmap/#more-drivers); `DiskConfig` is non-exhaustive, so they arrive without breaking your code.
-
-</Callout>
+| Driver | Where files live | Facade feature |
+|---|---|---|
+| `local` | A directory on the server | `storage` |
+| `memory` | Process memory, for tests and scratch data | `storage` |
+| `s3` | An S3 bucket: AWS, or an S3-compatible store such as MinIO, Cloudflare R2 or DigitalOcean Spaces | `storage-s3` (in `full`) |
+| `gcs` | A Google Cloud Storage bucket | `storage-gcs` (opt-in) |
+| `azure` | An Azure Blob Storage container | `storage-azure` (opt-in) |
 
 ## Configuration
 
@@ -31,7 +35,7 @@ Disks are described in the `storage` section. Each disk has a `driver`; local di
 ```toml title="config/app.toml"
 [storage]
 default = "local"
-base_url = "https://api.example.com"   # optional: makes temporary URLs absolute
+base_url = "https://api.example.com"   # optional: makes the app's own links absolute
 
 [storage.disks.local]
 driver = "local"
@@ -49,18 +53,18 @@ driver = "memory"
 | Key | Default | What it does |
 |---|---|---|
 | `storage.default` | `local` | The disk injected as `Disk` and returned by `Storage::default_disk()`. It must exist. |
-| `storage.disks.<name>.driver` | | `local` or `memory`. |
+| `storage.disks.<name>.driver` | | `local`, `memory`, `s3`, `gcs` or `azure`. |
 | `storage.disks.<name>.root` | | The directory of a local disk. It is created at boot if missing. |
-| `storage.disks.<name>.public_url` | none | Where a local disk's root is publicly served (a CDN or a static file server), for `Disk::url`. |
-| `storage.base_url` | none | An absolute `http(s)` URL put in front of temporary URLs. Without it they are path-only (`/storage/...`). |
+| `storage.disks.<name>.public_url` | none | Where the disk's files are publicly served (a CDN, a static file server, a public bucket), for `Disk::url`. |
+| `storage.base_url` | none | An absolute `http(s)` URL put in front of the links the app serves itself (temporary URLs and direct uploads of local and memory disks). Without it they are path-only (`/storage/...`). |
 
-Defining `storage.disks` replaces the default `local` disk, so list every disk you need. Disk names use letters, digits, `-` and `_`. Invalid options (a missing default disk, an empty root, a relative `base_url`) fail the boot with a message naming the key. Like every section, these keys can come from the environment: `APP_STORAGE__BASE_URL=https://api.example.com`.
+Defining `storage.disks` replaces the default `local` disk, so list every disk you need. Disk names use letters, digits, `-` and `_`. Invalid options (a missing default disk, an empty root, a relative `base_url`, an `s3` disk without a `bucket`) fail the boot with a message naming the disk and the key. Like every section, these keys can come from the environment: `APP_STORAGE__BASE_URL=https://api.example.com`.
 
 You can also configure the module in code with `StorageModule::for_root`. Build `StorageOptions` from its default so you keep the `local` disk:
 
 ```rust title="src/app.rs"
 use navree::prelude::*;
-use navree::storage::{DiskConfig, StorageOptions};
+use navree::storage::{DiskConfig, S3Config, StorageOptions};
 
 pub fn app(sources: ConfigSources) -> AppBuilder {
     let mut storage = StorageOptions::default(); // one `local` disk at storage/app
@@ -71,6 +75,10 @@ pub fn app(sources: ConfigSources) -> AppBuilder {
             public_url: Some("https://cdn.example.com/avatars".into()),
         },
     );
+    storage.disks.insert(
+        "documents".into(),
+        S3Config::new("acme-documents").region("eu-west-1").into(),
+    );
 
     Navree::app()
         .module(ConfigModule::for_root(sources))
@@ -80,6 +88,126 @@ pub fn app(sources: ConfigSources) -> AppBuilder {
 ```
 
 `StorageModule` is global: every module can inject what it provides without importing it.
+
+## Cloud disks
+
+The `s3`, `gcs` and `azure` drivers keep files in a bucket. They speak HTTPS through reqwest and rustls with ring, so they need no system library. They make no request at boot: a wrong key or a missing bucket shows up in the [health check](#health-check) and on the first read or write (a key file that can't be read fails the boot). A driver whose facade feature is off fails the boot with a message naming the feature to turn on.
+
+The AWS, Google and Azure variables these drivers fall back to are read from the process environment, not from `.env`. Settings of the disk itself (`storage.disks.<name>.*`) come from every configuration source, `.env` and `APP_STORAGE__DISKS__<NAME>__<KEY>` variables included.
+
+### S3 and S3-compatible stores
+
+<Badge feature="storage-s3" /> An `s3` disk needs a `bucket`. Everything else can come from the standard AWS environment, so on AWS the region and an IAM role are often all it takes:
+
+<Tabs>
+<Tab label="AWS">
+
+```toml title="config/app.toml"
+[storage.disks.documents]
+driver = "s3"
+bucket = "acme-documents"
+region = "eu-west-1"
+```
+
+With no keys in the disk, credentials come from `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` (and `AWS_SESSION_TOKEN`), a web identity (`AWS_WEB_IDENTITY_TOKEN_FILE` with `AWS_ROLE_ARN`, as on EKS), the container credentials of ECS, or the instance metadata service.
+
+</Tab>
+<Tab label="MinIO">
+
+```toml title="config/app.toml"
+[storage.disks.documents]
+driver = "s3"
+bucket = "crm-uploads"
+```
+
+[Dock](/docs/tools/dock/)'s `minio` service creates the bucket, and `navree dev` and the commands the CLI runs pass your app `AWS_ENDPOINT_URL`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_REGION`, which the disk reads from the process environment. With `cargo run`, load them first: `eval "$(navree dock env --export)"`. Against another MinIO server, set `endpoint = "http://127.0.0.1:9000"`, `access_key` and `secret_key`.
+
+</Tab>
+<Tab label="Cloudflare R2">
+
+```toml title="config/app.toml"
+[storage.disks.documents]
+driver = "s3"
+bucket = "acme-documents"
+endpoint = "https://<account-id>.r2.cloudflarestorage.com"
+region = "auto"
+access_key = "..."   # an R2 API token's access key id
+```
+
+Put the secret in the environment rather than in the file: `APP_STORAGE__DISKS__DOCUMENTS__SECRET_KEY`.
+
+</Tab>
+<Tab label="DigitalOcean Spaces">
+
+```toml title="config/app.toml"
+[storage.disks.documents]
+driver = "s3"
+bucket = "acme-documents"
+endpoint = "https://nyc3.digitaloceanspaces.com"
+region = "us-east-1"
+path_style = false   # https://acme-documents.nyc3.digitaloceanspaces.com
+access_key = "..."
+```
+
+Put the secret in the environment: `APP_STORAGE__DISKS__DOCUMENTS__SECRET_KEY`.
+
+</Tab>
+</Tabs>
+
+| Key | Default | What it does |
+|---|---|---|
+| `bucket` | | The bucket. Required. |
+| `region` | `AWS_REGION`, then `AWS_DEFAULT_REGION`, then `us-east-1` | The region requests are signed for (`auto` for R2). |
+| `endpoint` | `AWS_ENDPOINT_URL_S3`, then `AWS_ENDPOINT_URL`, then AWS | The URL of an S3-compatible store. An `http://` endpoint allows plain HTTP. |
+| `access_key`, `secret_key` | the AWS environment | Static credentials. Set both or neither; with both set, no credential is read from the environment. |
+| `session_token` | none | The session token of temporary credentials. |
+| `path_style` | `true` with an `endpoint`, `false` on AWS | Address the bucket in the path (`https://host/bucket/key`) instead of the host name (`https://bucket.host/key`). |
+| `prefix` | none | Keep every file of the disk under this key prefix (see [prefixes](#prefixes-and-public-urls)). |
+| `public_url` | none | Where the bucket is publicly served, for `Disk::url`. |
+
+`secret_key` and `session_token` are `Secret` values: they never appear in `Debug` output or logs.
+
+### Google Cloud Storage
+
+<Badge feature="storage-gcs" /> A `gcs` disk needs a `bucket`. Turn on the facade's `storage-gcs` feature:
+
+```toml title="Cargo.toml"
+navree = { git = "https://github.com/NavreeHQ/navree", features = ["storage-gcs"] }
+```
+
+```toml title="config/app.toml"
+[storage.disks.media]
+driver = "gcs"
+bucket = "acme-media"
+service_account_path = "/run/secrets/gcs.json"   # optional
+```
+
+Credentials come from `service_account_path` (a key file) or `service_account_key` (its JSON contents), else from `GOOGLE_SERVICE_ACCOUNT_KEY`, `GOOGLE_SERVICE_ACCOUNT` or `GOOGLE_APPLICATION_CREDENTIALS`, else from the metadata server (workload identity on GKE and Cloud Run). Signed links need a service account key, or the metadata server's account with the `iam.serviceAccounts.signBlob` permission. `endpoint` points the disk at an emulator; `prefix` and `public_url` work as for S3.
+
+### Azure Blob Storage
+
+<Badge feature="storage-azure" /> An `azure` disk needs a `container` (`bucket` is accepted as another name). Turn on the facade's `storage-azure` feature:
+
+```toml title="config/app.toml"
+[storage.disks.archive]
+driver = "azure"
+account = "acmestorage"
+container = "archive"
+```
+
+The account key comes from `access_key` or `AZURE_STORAGE_ACCOUNT_KEY`; without one, the disk uses a service principal (`AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`), workload identity or the managed identity. `account` defaults to `AZURE_STORAGE_ACCOUNT_NAME`. For Azurite, set `endpoint = "http://127.0.0.1:10000/devstoreaccount1"`. Signed links are service SAS URLs, which need the account key.
+
+### Prefixes and public URLs
+
+A `prefix` keeps every file of a cloud disk under one key prefix, so several disks, apps or environments can share a bucket. Paths stay relative to the prefix: with `prefix = "production"`, `disk.put("logo.png", ...)` writes the key `production/logo.png`, and `disk.list("")` returns `["logo.png"]`. Signed links include the prefix.
+
+```toml title="config/app.toml"
+[storage.disks.public]
+driver = "s3"
+bucket = "acme-assets"
+prefix = "production/public"
+public_url = "https://assets.example.com"   # a CDN in front of the prefix
+```
 
 ## Getting a disk
 
@@ -105,6 +233,7 @@ impl ReportService {
         self.disk.put(&path, csv).await?;
         self.disk
             .temporary_url(&path, Utc::now() + Duration::minutes(30))
+            .await
     }
 }
 
@@ -112,7 +241,7 @@ impl ReportService {
 pub struct ReportsModule;
 ```
 
-`Storage::disk(name)` returns `Err(StorageError::UnknownDisk)` for a name that isn't configured, and `Storage::disk_names()` lists the configured ones. A `Disk` is cheap to clone.
+`Storage::disk(name)` returns `Err(StorageError::UnknownDisk)` for a name that isn't configured, and `Storage::disk_names()` lists the configured ones. A `Disk` is cheap to clone; `disk.name()` and `disk.driver()` say which one it is.
 
 ## Storing and reading files
 
@@ -131,20 +260,24 @@ if self.disk.exists("reports/draft.csv").await? {
     self.disk.delete("reports/draft.csv").await?;
 }
 
+// Size and last modification time.
+let meta = self.disk.metadata("reports/2026-q3.csv").await?; // FileMeta { path, size, last_modified }
+
 // Every file under a directory, recursively, sorted.
 let files: Vec<String> = self.disk.list("reports").await?; // ["reports/2026-q3.csv", ...]
+let detailed = self.disk.files("reports").await?;          // Vec<FileMeta>
 ```
 
 - `put` replaces an existing file, and the write is atomic: readers see the old file or the new one, never half of it.
 - `delete` succeeds when the file doesn't exist.
 - `list("")` lists the whole disk.
-- `get` and `size` fail with `StorageError::NotFound` for a missing file.
+- `get`, `size` and `metadata` fail with `StorageError::NotFound` for a missing file.
 
-There is no `copy`, `move` or "last modified" helper yet; read and write the file instead.
+There is no `copy` or `move` helper; stream the file to its new path (below), or [sync](#syncing-disks) a whole directory.
 
 ### Errors in handlers
 
-A `StorageError` that reaches a handler's `?` turns into a response: a missing file is a `404`, an invalid path a `400` with the message `Invalid file path.`, and anything else a `500` (logged, never shown). See [Errors](/docs/basics/errors/) for the response format.
+A `StorageError` that reaches a handler's `?` turns into a response: a missing file is a `404`, an invalid path a `400` with the message `Invalid file path.`, an upload that breaks its rules a `400` or `413` (see [direct uploads](#direct-uploads)), and anything else a `500` (logged, never shown). See [Errors](/docs/basics/errors/) for the response format.
 
 ## Streaming large files
 
@@ -159,7 +292,7 @@ pub async fn archive(&self, quarter: &str) -> Result<u64, StorageError> {
 }
 ```
 
-`put_stream` uploads the file in parts and only makes it visible when the stream ends successfully. If the source stream fails, nothing is stored and the error is `StorageError::Stream`.
+`put_stream` uploads the file in parts (a multipart upload on cloud disks) and only makes it visible when the stream ends successfully. If the source stream fails, the upload is aborted, nothing is stored and the error is `StorageError::Stream`.
 
 To send a stored file in a response, wrap the stream in an Axum body:
 
@@ -175,11 +308,11 @@ async fn show(&self, Path(path): Path<String>) -> Result<Response> {
 }
 ```
 
-Set the `Content-Type` yourself when you serve files this way; the [temporary URL route](#temporary-urls) does it for you.
+Set the `Content-Type` yourself when you serve files this way; the [temporary URL route](#temporary-urls) does it for you. For a cloud disk, a temporary URL also takes the download off your app.
 
 ## File uploads
 
-`store_upload` streams one multipart file field to a disk, checking it as it goes. Take Axum's `Multipart` extractor (it must be the last argument), get the field, and pass it with `UploadRules`:
+`store_upload` streams one multipart file field through your app to a disk, checking it as it goes. Take Axum's `Multipart` extractor (it must be the last argument), get the field, and pass it with `UploadRules`:
 
 ```rust title="src/modules/avatars/controller.rs"
 use navree::axum::extract::Multipart;
@@ -240,20 +373,162 @@ The file is stored under the directory you pass (`users`) with a random 40-chara
 
 <Callout type="warning" title="Raise the body limit for large uploads">
 
-Every request body is limited by `http.body_limit_bytes` (2 MiB by default) before your handler runs. `#[controller]` routes have no attribute to change it per route yet: raise `http.body_limit_bytes` for the whole app, or register the route with a hand-written controller and `RouteDef::body_limit(bytes)`. Keep `UploadRules::max_bytes` at or below the limit that applies.
+Every request body is limited by `http.body_limit_bytes` (2 MiB by default) before your handler runs. `#[controller]` routes have no attribute to change it per route yet: raise `http.body_limit_bytes` for the whole app, or register the route with a hand-written controller and `RouteDef::body_limit(bytes)`. Keep `UploadRules::max_bytes` at or below the limit that applies. For large files, prefer [direct uploads](#direct-uploads): the file never goes through your app.
 
 </Callout>
 
+## Direct uploads
+
+A direct upload sends the file from the browser straight to the bucket: your app only signs a link, so large files cost it no bandwidth, memory or request time. It takes three requests:
+
+1. The browser tells your app the file's type and size. Your app checks them against `UploadRules` and answers with a signed link from `Disk::presigned_put`.
+2. The browser sends the file to that link.
+3. The browser tells your app the upload is done. Your app checks the file with `Disk::accept_upload` before using it.
+
+```rust title="src/modules/documents/uploads.rs"
+use chrono::Duration;
+use navree::http::CurrentPrincipal;
+use navree::prelude::*;
+use navree::storage::{PresignedUpload, Storage, StoredFile, UploadRules, upload_path};
+use serde::Deserialize;
+
+/// What the browser says about the file it is about to send.
+#[derive(Debug, Deserialize)]
+pub struct NewUpload {
+    content_type: String,
+    size: u64,
+}
+
+/// The path the browser uploaded to.
+#[derive(Debug, Deserialize)]
+pub struct FinishedUpload {
+    path: String,
+}
+
+/// Documents: PDFs and images up to 20 MiB.
+fn document_rules() -> UploadRules {
+    UploadRules::new(20 * 1024 * 1024, ["application/pdf", "image/*"])
+}
+
+#[injectable]
+pub struct DocumentUploadController {
+    storage: Arc<Storage>,
+}
+
+#[controller("/documents/uploads", version = "1")]
+impl DocumentUploadController {
+    /// Signs a link the browser uploads one file to.
+    #[post("/")]
+    #[authenticated]
+    async fn start(
+        &self,
+        CurrentPrincipal(me): CurrentPrincipal,
+        Json(file): Json<NewUpload>,
+    ) -> Result<Json<PresignedUpload>> {
+        let disk = self.storage.disk("documents")?;
+        let dir = format!("incoming/{}", me.user_id);
+        let path = upload_path(&dir, &file.content_type);
+        let rules = document_rules();
+        let upload = disk
+            .presigned_put(&path, Duration::minutes(15), &rules)
+            .content_type(file.content_type)
+            .size(file.size)
+            .await?;
+        Ok(Json(upload))
+    }
+
+    /// Checks the file the browser uploaded.
+    #[post("/complete")]
+    #[authenticated]
+    async fn complete(
+        &self,
+        CurrentPrincipal(me): CurrentPrincipal,
+        Json(done): Json<FinishedUpload>,
+    ) -> Result<Json<StoredFile>> {
+        // Only the caller's own uploads.
+        if !done.path.starts_with(&format!("incoming/{}/", me.user_id)) {
+            return Err(AppError::forbidden());
+        }
+        let disk = self.storage.disk("documents")?;
+        let file = disk.accept_upload(&done.path, &document_rules()).await?;
+        Ok(Json(file))
+    }
+}
+```
+
+`upload_path(dir, content_type)` picks a fresh name the way `store_upload` does: `<dir>/<40 random characters>.<extension>`, with the extension of the type. Putting the user's id in the directory lets `complete` refuse a path someone else was given; for stricter tracking, store each signed path with its owner in your database.
+
+`presigned_put` returns a `PresignedUpload`, which serializes to what the browser needs:
+
+```json title="200 OK"
+{
+  "disk": "documents",
+  "path": "incoming/0199c1d2-6f7e-7a31-b5d4-2f0c8e9a1b23/3fQx...k9Ta.png",
+  "method": "PUT",
+  "url": "https://acme-documents.s3.eu-west-1.amazonaws.com/incoming/0199c1d2-6f7e-7a31-b5d4-2f0c8e9a1b23/3fQx...k9Ta.png?X-Amz-Algorithm=AWS4-HMAC-SHA256&...",
+  "headers": { "content-type": "image/png" },
+  "expires_at": "2026-10-27T10:15:00Z"
+}
+```
+
+The browser sends the file as the body of a `method` request to `url`, with every header of `headers`:
+
+```ts title="src/lib/upload.ts"
+export async function uploadDocument(file: File, token: string) {
+  const api = (path: string, body: unknown) =>
+    fetch(path, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      body: JSON.stringify(body),
+    });
+
+  const upload = await (await api("/api/v1/documents/uploads", { content_type: file.type, size: file.size })).json();
+  const sent = await fetch(upload.url, { method: upload.method, headers: upload.headers, body: file });
+  if (!sent.ok) throw new Error(`upload failed: ${sent.status}`);
+  return (await api("/api/v1/documents/uploads/complete", { path: upload.path })).json();
+}
+```
+
+### What each disk enforces
+
+`presigned_put` checks what the client declares before it signs anything: a type the rules don't allow, a missing type when the rules list some, a malformed type, an empty file or a size over `max_bytes` fail with `StorageError::Rejected`. Then the link itself binds what the provider can enforce:
+
+| Disk | The link is | It refuses an upload |
+|---|---|---|
+| `s3` | A SigV4 presigned `PUT` signed by the provider | with another `Content-Type`, or after it expires (at most 7 days). S3 cannot bind a size to a presigned `PUT`. |
+| `gcs` | A V4 signed `PUT` | with another `Content-Type`, outside `x-goog-content-length-range` (up to `max_bytes`, or exactly the declared size), or after it expires (at most 7 days). |
+| `azure` | A service SAS for one blob | after it expires. The client also sends `x-ms-blob-type: BlockBlob`, listed in `headers`. |
+| `local`, `memory` | The app's own route, `PUT /storage/{disk}/{*path}`, signed with HMAC-SHA-256 | with another `Content-Type`, over `max_bytes` or of another size than declared (checked while streaming), or after it expires. |
+
+No provider can see what a file contains, and only some check its size, so `accept_upload` is the step that makes a file trusted. It reads the file's size and its first 8 KiB, sniffs the type the same way `store_upload` does, and returns a `StoredFile` (with `original_name: null`). A file that breaks the rules is deleted, and the error is `StorageError::Rejected`:
+
+| Problem | Response through `?` |
+|---|---|
+| A type the rules don't allow (declared or sniffed) | `400` `The file must be of type: application/pdf, image/* (it is text/html).` |
+| No declared type while the rules list types | `400` `Declare the file's content type (allowed: application/pdf, image/*).` |
+| A malformed declared type | `400` ``The declared content type is not a valid `type/subtype`.`` |
+| An empty file | `400` `The file should not be empty.` |
+| A file over `max_bytes` | `413` `The file must not be larger than 20971520 bytes.` |
+| `accept_upload` on a path with no file | `404` |
+
+<Callout type="warning" title="Allow your front end in the bucket's CORS rules">
+
+A browser uploads to another origin than your app's, so the bucket must allow it: a CORS rule with your front end's origin, the `PUT` method, and the headers the link lists (`content-type`, and `x-goog-content-length-range` on Google Cloud Storage or `x-ms-blob-type` on Azure). Navree doesn't change your bucket's settings.
+
+</Callout>
+
+On local and memory disks the link points at your app, `PUT /storage/{disk}/{*path}?expires=...&type=...&max=...&size=...&signature=...`. The route is public (the signature is the authorisation), streams the body to the disk with no body limit other than the signed one, allows an hour per upload, and answers `200` when the file is stored. It answers `403` `Invalid signature.` for a forged or altered link, `403` `The link has expired.` after `expires_at`, `403` when the `Content-Type` differs, `413` over `max_bytes` and `400` for another size than declared; nothing is stored in those cases. Without `storage.base_url` the link is path-only, which a browser sends to the page's own origin: set `storage.base_url` when your API runs on another origin.
+
 ## Public URLs
 
-A local disk served by a CDN or a static file server gets a `public_url`. `Disk::url` joins it with the percent-encoded path:
+A disk whose files are served by a CDN, a static file server or a public bucket gets a `public_url`. `Disk::url` joins it with the percent-encoded path:
 
 ```rust
 let avatars = self.storage.disk("avatars")?;
 let url = avatars.url("users/a b.png")?; // https://cdn.example.com/avatars/users/a%20b.png
 ```
 
-A disk without a `public_url` (memory disks always) fails with `StorageError::NoPublicUrl`. Navree doesn't serve the disk's root itself: point your web server or CDN at it.
+A disk without a `public_url` (memory disks always) fails with `StorageError::NoPublicUrl`. Navree doesn't serve a local disk's root itself, and doesn't make a bucket public: point your web server or CDN at it.
 
 ## Temporary URLs
 
@@ -262,8 +537,18 @@ A disk without a `public_url` (memory disks always) fails with `StorageError::No
 ```rust
 use chrono::{Duration, Utc};
 
-let link = self.disk.temporary_url("reports/2026-q3.csv", Utc::now() + Duration::minutes(30))?;
-// /storage/local/reports/2026-q3.csv?expires=1793004277&signature=5c0f...e21a
+let link = self
+    .disk
+    .temporary_url("reports/2026-q3.csv", Utc::now() + Duration::minutes(30))
+    .await?;
+```
+
+On a cloud disk the link is signed with the provider's scheme and the browser downloads straight from the bucket: a SigV4 presigned `GET` on S3, a V4 signed URL on Google Cloud Storage, a read-only service SAS on Azure. Your app signs it without contacting the bucket. S3 and Google Cloud Storage links last at most 7 days; asking for longer fails with `StorageError::Signing`.
+
+On a local or memory disk the link is your app's own:
+
+```text
+/storage/local/reports/2026-q3.csv?expires=1793004277&signature=5c0f...e21a
 ```
 
 The signature is an HMAC-SHA-256 of the disk, the path and the expiry time. With `storage.base_url` set, the link is absolute (`https://api.example.com/storage/...`).
@@ -277,19 +562,55 @@ The signature is an HMAC-SHA-256 of the disk, the path and the expiry time. With
 
 <Callout type="warning" title="Set APP_KEY so links survive restarts">
 
-The signing key is derived from the app key (`app.key` / `APP_KEY`). Without one, Navree logs a warning and uses a random key per process: every link stops working when the app restarts, and links made by one instance fail on another. A malformed `app.key` fails the boot. See [Encryption and hashing](/docs/security/encryption-and-hashing/).
+The signing key of the app's own links (downloads and direct uploads of local and memory disks) is derived from the app key (`app.key` / `APP_KEY`). Without one, Navree logs a warning and uses a random key per process: every link stops working when the app restarts, and links made by one instance fail on another. A malformed `app.key` fails the boot. See [Encryption and hashing](/docs/security/encryption-and-hashing/).
 
 </Callout>
 
 Anyone holding a link can download the file until it expires, so keep expiry times short and don't log the links.
 
+## Syncing disks
+
+`storage:sync` copies the files one disk lacks from another: to move uploads from a local disk to S3, seed a staging bucket from production, or restore a backup. Name the source, then the target:
+
+```sh
+cargo run -- storage:sync local documents --dry-run   # show what would change
+cargo run -- storage:sync local documents             # copy
+```
+
+```text
+Syncing `local` to `documents` (dry run: nothing is changed)
+  copy     incoming/0199c1d2-6f7e-7a31-b5d4-2f0c8e9a1b23/3fQx...k9Ta.png
+  copy     reports/2026-q3.csv
+2 to copy (48234 bytes), 0 to delete, 17 unchanged.
+```
+
+A file is copied when the target doesn't have it, or has it with another size. Files are compared by path and size, so a file changed in place without changing size is not copied again. Each file is streamed, four at a time. The options:
+
+| Option | What it does |
+|---|---|
+| `--prefix <dir>` | Only files under this directory. |
+| `--delete` | Also delete the target's files that the source doesn't have. |
+| `--dry-run` | List what would change, and change nothing. |
+
+A file that fails is reported and the sync goes on; the command then exits with an error naming how many failed. The [health check](#health-check)'s probe files are never synced. In code, `Storage::sync` does the same and returns a `SyncReport` (`copied`, `deleted`, `unchanged`, `bytes`, `failed`):
+
+```rust
+use navree::storage::SyncOptions;
+
+let report = self
+    .storage
+    .sync("local", "documents", &SyncOptions { prefix: "incoming".into(), ..SyncOptions::default() })
+    .await?;
+tracing::info!(copied = report.copied.len(), bytes = report.bytes, "documents synced");
+```
+
 ## Health check
 
-`StorageModule` registers a `storage` readiness check. On every disk it writes, reads back and deletes a small probe file under `.navree-health/`, and reports the disk as down if any step fails. It shows up in `GET /health/ready`; see [Health and metrics](/docs/digging-deeper/health-and-metrics/).
+`StorageModule` registers a `storage` readiness check. On every disk it writes, reads back and deletes a small probe file under `.navree-health/`, and reports the disk as down if any step fails. The disks are probed at the same time, each within 1.5 seconds, so a slow bucket is named instead of holding up the report: ``disk `documents`: timed out after 1500 ms``. It shows up in `GET /health/ready`; see [Health and metrics](/docs/digging-deeper/health-and-metrics/). The probe writes to every disk, so the app's credentials need write access to each bucket it uses.
 
 ## Testing
 
-Use a memory disk in tests: nothing touches the file system and every app starts empty.
+Use a memory disk in tests: nothing touches the file system or the network, and every app starts empty.
 
 ```rust title="src/modules/reports/tests/mod.rs"
 use navree::prelude::*;
@@ -299,6 +620,7 @@ use navree::testing::TestApp;
 #[tokio::test]
 async fn publishing_a_report_stores_it() {
     let app = TestApp::builder()
+        .config("app.key", navree::crypto::generate_key())
         .module(StorageModule::for_root(StorageOptions {
             default: "memory".into(),
             disks: [("memory".to_owned(), DiskConfig::Memory)].into(),
@@ -313,11 +635,14 @@ async fn publishing_a_report_stores_it() {
     assert!(link.starts_with("/storage/memory/reports/2026-q3.csv?expires="));
     let disk = app.get::<Storage>().await.default_disk();
     assert_eq!(disk.get("reports/2026-q3.csv").await.unwrap(), "a,b\n");
+    app.client().get(&link).send().await.assert_status(200);
     app.shutdown().await.unwrap();
 }
 ```
 
-To test uploads, send a `multipart/form-data` body with [`TestClient`](/docs/testing/http-tests/) (`.header("content-type", "multipart/form-data; boundary=...")` and `.body(...)`). Outside an app, `Storage::new(&options, signing_key)` builds the disks directly.
+A memory disk signs direct uploads to the app's own route, so a test can run the whole flow: call your `start` route, `PUT` the body to the returned `url` with `app.client().put(&upload.url)` and its `headers`, then call `complete`. To test multipart uploads, send a `multipart/form-data` body with [`TestClient`](/docs/testing/http-tests/) (`.header("content-type", "multipart/form-data; boundary=...")` and `.body(...)`). Outside an app, `Storage::new(&options, signing_key)` builds the disks directly.
+
+To try an `s3` disk against a real store on your machine, run MinIO with [Dock](/docs/tools/dock/): `navree dock:add minio`, then `navree dock up`.
 
 ## Related
 
@@ -327,6 +652,9 @@ To test uploads, send a `multipart/form-data` body with [`TestClient`](/docs/tes
   </LinkCard>
   <LinkCard href="/docs/digging-deeper/health-and-metrics/" title="Health and metrics">
     The readiness report the storage check feeds.
+  </LinkCard>
+  <LinkCard href="/docs/tools/dock/" title="Dock">
+    MinIO and the other local services, with the settings your app reads.
   </LinkCard>
   <LinkCard href="/docs/getting-started/configuration/" title="Configuration">
     Sections, `.env` and `APP_*` variables.

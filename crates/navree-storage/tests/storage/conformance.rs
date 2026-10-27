@@ -109,7 +109,7 @@ type Case = fn(&Subject) -> futures_util::future::BoxFuture<'_, ()>;
 
 /// Runs every case on `subject`.
 pub async fn run(subject: &Subject) {
-    let cases: [(&str, Case); 12] = [
+    let cases: [(&str, Case); 13] = [
         ("put_get_delete", |s| Box::pin(put_get_delete(s))),
         ("streams", |s| Box::pin(streams(s))),
         ("failed_stream_leaves_nothing", |s| {
@@ -127,6 +127,9 @@ pub async fn run(subject: &Subject) {
         }),
         ("presigned_put_binds_the_content_type", |s| {
             Box::pin(presigned_put_binds_the_content_type(s))
+        }),
+        ("presigned_put_binds_the_declared_size", |s| {
+            Box::pin(presigned_put_binds_the_declared_size(s))
         }),
         ("accept_upload_rejects_and_deletes", |s| {
             Box::pin(accept_upload_rejects_and_deletes(s))
@@ -424,6 +427,50 @@ async fn presigned_put_uploads(subject: &Subject) {
         rejection(signed(None, Some(10)).await),
         UploadRejection::MissingType { .. }
     ));
+}
+
+/// A link signed for a declared size refuses a body of another size, and
+/// stores nothing. S3 cannot bind a size to a presigned `PUT` (object
+/// store's signer refuses to sign `Content-Length`): there,
+/// `accept_upload` checks the size against the rules afterwards.
+async fn presigned_put_binds_the_declared_size(subject: &Subject) {
+    let disk = &subject.disk;
+    if disk.driver() == "s3" {
+        return;
+    }
+    let rules = UploadRules::new(64 * 1024, ["image/png"]);
+    let upload = disk
+        .presigned_put("sized.png", Duration::minutes(10), &rules)
+        .content_type("image/png")
+        .size(100)
+        .await
+        .unwrap();
+    for len in [150, 50] {
+        let reply = subject
+            .http
+            .send("PUT", &upload.url, &upload.headers, png(len))
+            .await;
+        assert!(
+            (400..500).contains(&reply.status),
+            "{}: {len} bytes for 100: {reply:?}",
+            disk.driver()
+        );
+        assert!(
+            !disk.exists("sized.png").await.unwrap(),
+            "{}: {len} bytes for 100",
+            disk.driver()
+        );
+    }
+    let reply = subject
+        .http
+        .send("PUT", &upload.url, &upload.headers, png(100))
+        .await;
+    assert!(
+        (200..300).contains(&reply.status),
+        "{}: {reply:?}",
+        disk.driver()
+    );
+    assert_eq!(disk.size("sized.png").await.unwrap(), 100);
 }
 
 async fn presigned_put_binds_the_content_type(subject: &Subject) {

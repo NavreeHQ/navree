@@ -138,7 +138,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L3 | `navree-api` | OpenAPI 3.1 from route metadata, docs UI, API resources |
 | L3 | `navree-mail` | Mailables from templates; SMTP, log, array and failover transports; queued sending |
 | L3 | `navree-realtime` | Pusher-protocol WebSocket server (public, private, presence channels) and a signed relay for other processes |
-| L3 | `navree-storage` | Named disks on object_store, streaming, signed temporary URLs, upload checks |
+| L3 | `navree-storage` | Named disks on object_store (local, memory, S3 and S3-compatible stores, Google Cloud Storage, Azure; facade features `storage-s3`, in `full`, and opt-in `storage-gcs`, `storage-azure`), streaming, provider-signed temporary URLs, direct browser uploads, upload checks, `storage:sync` |
 | L4 | `navree-session` | Encrypted session cookies, memory and database stores, CSRF (optional; the CRM doesn't use it) |
 | L4 | `navree-validation` | `Valid<T>` extractors on garde, field-level messages, async unique/exists rules |
 | L4 | `navree-queue` | Database and memory job queues, workers, retries with backoff, unique and delayed jobs |
