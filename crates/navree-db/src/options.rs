@@ -76,6 +76,12 @@ pub struct DbOptions {
     /// request sees its own writes while replicas catch up (default
     /// `true`).
     pub sticky: bool,
+    /// A direct connection to the same database that bypasses a
+    /// transaction-mode pooler (PgBouncer, RDS Proxy) in front of `url`:
+    /// migrations run on it, and [`Db::direct`](crate::Db::direct) hands
+    /// it out for session-level work (advisory locks, `LISTEN`, prepared
+    /// statements that outlive a transaction). Opened on first use.
+    pub direct_url: Option<String>,
     /// The most pooled connections.
     pub max_connections: u32,
     /// The fewest pooled connections kept open.
@@ -115,6 +121,7 @@ impl Default for DbOptions {
             url: "sqlite://storage/app.db?mode=rwc".to_owned(),
             read_urls: Vec::new(),
             sticky: true,
+            direct_url: None,
             max_connections: 10,
             min_connections: 0,
             connect_timeout_secs: 8,
@@ -600,9 +607,18 @@ impl DbOptions {
         DbOptions {
             url: url.into(),
             read_urls: Vec::new(),
+            direct_url: None,
             connections: BTreeMap::new(),
             ..self.clone()
         }
+    }
+
+    /// The options of the direct connection (`direct_url`), if there is
+    /// one: this database's settings at that URL.
+    pub fn direct(&self) -> Option<DbOptions> {
+        self.direct_url
+            .as_ref()
+            .map(|url| self.for_database(url.clone()))
     }
 }
 
@@ -622,6 +638,14 @@ impl ConfigSection for DbOptions {
         }
         if self.read_urls.iter().any(|url| url.trim().is_empty()) {
             problems.push("read_urls must not contain an empty URL".to_owned());
+        }
+        if let Some(direct) = &self.direct_url
+            && driver_family(direct) != driver_family(&self.url)
+        {
+            problems.push(
+                "direct_url must name the same kind of database as url (it reaches the same database without the pooler)"
+                    .to_owned(),
+            );
         }
         problems.extend(self.mysql.problems());
         problems.extend(self.postgres.problems());
@@ -661,6 +685,7 @@ impl fmt::Debug for DbOptions {
             .field("url", &self.redacted_url())
             .field("read_urls", &replicas)
             .field("sticky", &self.sticky)
+            .field("direct_url", &self.direct_url.as_deref().map(redact_url))
             .field("max_connections", &self.max_connections)
             .field("min_connections", &self.min_connections)
             .field("connect_timeout_secs", &self.connect_timeout_secs)
@@ -695,6 +720,16 @@ pub(crate) fn scheme(url: &str) -> Option<Cow<'_, str>> {
         Cow::Owned(scheme.to_ascii_lowercase())
     } else {
         Cow::Borrowed(scheme)
+    })
+}
+
+/// The driver `url`'s scheme selects: `postgres` and `postgresql` alike,
+/// `mysql` and `mariadb` alike.
+fn driver_family(url: &str) -> Option<String> {
+    scheme(url).map(|scheme| match scheme.as_ref() {
+        "postgresql" => "postgres".to_owned(),
+        "mariadb" => "mysql".to_owned(),
+        other => other.to_owned(),
     })
 }
 

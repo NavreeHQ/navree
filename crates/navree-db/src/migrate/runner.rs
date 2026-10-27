@@ -89,10 +89,14 @@ pub(crate) async fn schema_options(app: &AppContext) -> Result<SchemaOptions, Bo
 }
 
 impl Runner {
-    /// The runner of `app`'s migrations on its [`Db`].
+    /// The runner of `app`'s migrations on its [`Db`]'s direct connection
+    /// (the `Db` itself without `direct_url`).
     pub(crate) async fn of(app: &AppContext) -> Result<Runner, BoxError> {
-        let db = (*app.get::<Db>().await?).clone();
-        let url = app.try_get::<DbOptions>().await.map(|o| o.url.clone());
+        let db = app.get::<Db>().await?.direct().await?;
+        let url = app
+            .try_get::<DbOptions>()
+            .await
+            .map(|o| o.direct_url.clone().unwrap_or_else(|| o.url.clone()));
         Ok(Runner::new(
             db,
             sets_of(app),

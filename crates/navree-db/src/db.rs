@@ -61,9 +61,18 @@ struct DbInner {
     /// The statement listeners and hooks, shared with the pools' timing
     /// callbacks.
     watchers: Arc<Watchers>,
+    /// The direct connection (`direct_url`), if configured.
+    direct: Option<Arc<Direct>>,
     /// The app whose `dyn ChangeObserver` multi-bindings see every commit.
     app: Option<WeakAppContext>,
     observers: OnceCell<Vec<Arc<dyn ChangeObserver>>>,
+}
+
+/// The direct connection of `direct_url`, opened on first use.
+struct Direct {
+    options: DbOptions,
+    telemetry: Telemetry,
+    db: OnceCell<Db>,
 }
 
 tokio::task_local! {
@@ -137,20 +146,80 @@ impl Db {
         options
             .validate()
             .map_err(|problems| DbErr::Custom(format!("invalid database options: {problems}")))?;
-        let name: Arc<str> = Arc::from(name);
-        let watchers = Arc::new(Watchers::new(name.clone()));
+        let watchers = Arc::new(Watchers::new(Arc::from(name)));
+        Self::connect_watched(options, telemetry, watchers).await
+    }
+
+    /// Opens the pools of `options` (writer, replicas), reporting to
+    /// `watchers`.
+    async fn connect_watched(
+        options: &DbOptions,
+        telemetry: Telemetry,
+        watchers: Arc<Watchers>,
+    ) -> Result<Db, DbErr> {
         let conn = open_pool(&options.url, options, telemetry.clone(), &watchers).await?;
         let mut replicas = Vec::with_capacity(options.read_urls.len());
         for url in &options.read_urls {
             replicas.push(open_pool(url, options, telemetry.clone(), &watchers).await?);
         }
+        let direct = options.direct().map(|options| {
+            Arc::new(Direct {
+                options,
+                telemetry,
+                db: OnceCell::new(),
+            })
+        });
         Ok(Self::build(
             Arc::new(conn),
             Arc::new(replicas),
             options.sticky,
             watchers,
+            direct,
             None,
         ))
+    }
+
+    /// The direct connection to this database (`direct_url`), which
+    /// bypasses a transaction-mode pooler in front of `url`: for
+    /// session-level work such as advisory locks, `LISTEN` and migrations
+    /// (which run on it). Opened on first use and shared from then on; its
+    /// statements reach this connection's listeners. Without `direct_url`
+    /// it is this connection.
+    ///
+    /// ```no_run
+    /// # async fn demo(db: navree_db::Db) -> Result<(), sea_orm::DbErr> {
+    /// use sea_orm::ConnectionTrait;
+    ///
+    /// let direct = db.direct().await?;
+    /// direct.conn().execute_unprepared("LISTEN deals").await?;
+    /// # Ok(()) }
+    /// ```
+    pub async fn direct(&self) -> Result<Db, DbErr> {
+        let Some(direct) = &self.inner.direct else {
+            return Ok(self.clone());
+        };
+        let db = direct
+            .db
+            .get_or_try_init(|| async {
+                let db = Self::connect_watched(
+                    &direct.options,
+                    direct.telemetry.clone(),
+                    self.inner.watchers.clone(),
+                )
+                .await?;
+                Ok::<_, DbErr>(match &self.inner.app {
+                    Some(app) => db.with_app(app.clone()),
+                    None => db,
+                })
+            })
+            .await?;
+        Ok(db.clone())
+    }
+
+    /// Whether this connection has a direct connection of its own
+    /// (`direct_url`).
+    pub fn has_direct(&self) -> bool {
+        self.inner.direct.is_some()
     }
 
     /// Wraps an existing SeaORM connection (no replicas, no change
@@ -164,6 +233,7 @@ impl Db {
             true,
             Arc::new(Watchers::new(Arc::from(DEFAULT_CONNECTION))),
             None,
+            None,
         )
     }
 
@@ -175,6 +245,7 @@ impl Db {
             self.inner.replicas.clone(),
             self.inner.sticky,
             self.inner.watchers.clone(),
+            self.inner.direct.clone(),
             Some(app),
         )
     }
@@ -184,6 +255,7 @@ impl Db {
         replicas: Arc<Vec<DatabaseConnection>>,
         sticky: bool,
         watchers: Arc<Watchers>,
+        direct: Option<Arc<Direct>>,
         app: Option<WeakAppContext>,
     ) -> Db {
         Self {
@@ -194,6 +266,7 @@ impl Db {
                 sticky,
                 name: watchers.name().clone(),
                 watchers,
+                direct,
                 app,
                 observers: OnceCell::new(),
             }),
@@ -368,6 +441,9 @@ impl Db {
         self.inner.conn.close_by_ref().await?;
         for replica in self.inner.replicas.iter() {
             replica.close_by_ref().await?;
+        }
+        if let Some(direct) = self.inner.direct.as_ref().and_then(|direct| direct.db.get()) {
+            Box::pin(direct.close()).await?;
         }
         Ok(())
     }
