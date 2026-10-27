@@ -3,10 +3,12 @@
 //! through `search_path`.
 //!
 //! Opt-in: build with `--features postgres` and set
-//! `NAVREE_TEST_POSTGRES_URL` to a superuser URL of a throwaway server, for
+//! `NAVREE_TEST_POSTGRES_URL` (or start the test servers, which write
+//! `target/test-databases.env`) to a superuser URL of a throwaway server, for
 //! example `postgres://postgres:postgres@127.0.0.1:55432/postgres`. Each
 //! test creates its own database and a non-superuser login role (superusers
-//! bypass row-level security), and drops both at the end.
+//! bypass row-level security), and drops both at the end. ORM models run
+//! here too: row-level security and schemas cover their queries.
 #![cfg(feature = "postgres")]
 
 use std::sync::Arc;
@@ -198,10 +200,8 @@ struct Scratch {
 
 impl Scratch {
     async fn new() -> Option<Scratch> {
-        let Ok(admin) = std::env::var("NAVREE_TEST_POSTGRES_URL") else {
-            eprintln!("NAVREE_TEST_POSTGRES_URL is not set: skipping the PostgreSQL test");
-            return None;
-        };
+        // The variable, or `target/test-databases.env`.
+        let admin = navree_orm::testing::database::TestServer::Postgres.url()?;
         let name = format!("navree_ws_{}", Uuid::now_v7().simple());
         let conn = Database::connect(&admin).await.unwrap();
         conn.execute_unprepared(&format!(
@@ -946,6 +946,175 @@ async fn isolation_suites_pass_under_schema_isolation() {
     uow.rollback().await.unwrap();
     assert!(!owners.is_empty());
     assert!(owners.iter().all(|w| *w == b), "{owners:?} in {b}");
+
+    app.shutdown().await.unwrap();
+    scratch.drop().await;
+}
+
+/// `items` as ORM models: one without the ORM's workspace scope, so only
+/// row-level security (or the schema) keeps workspaces apart, and one with
+/// it.
+mod orm_items {
+    use navree_orm::Model;
+    use serde::Serialize;
+    use uuid::Uuid;
+
+    #[derive(Model, Clone, Debug, Default, Serialize)]
+    #[model(table = "items", key_type = "manual")]
+    pub struct PlainItem {
+        pub id: Uuid,
+        pub workspace_id: Uuid,
+        pub title: String,
+    }
+
+    #[derive(Model, Clone, Debug, Default, Serialize)]
+    #[model(table = "items", workspace)]
+    pub struct ScopedItem {
+        pub id: Uuid,
+        pub workspace_id: Uuid,
+        pub title: String,
+    }
+}
+
+/// A unit of work, inside workspace `id` when given.
+async fn uow_in(app: &TestApp, id: Option<Uuid>) -> navree_db::Uow {
+    let uow = app.get::<navree_db::Db>().await.uow(None, None).await;
+    if let Some(id) = id {
+        app.get::<Workspaces>().await.enter(&uow, id).await.unwrap();
+    }
+    uow
+}
+
+/// ORM queries inside a workspace transaction: row-level security
+/// (`navree.workspace`) filters them even without the ORM's own scope, and
+/// refuses writes into another workspace.
+#[tokio::test]
+async fn row_level_security_covers_orm_queries() {
+    use navree_orm::Model;
+    use orm_items::{PlainItem, ScopedItem};
+
+    let Some(scratch) = Scratch::new().await else {
+        return;
+    };
+    let app = app(&scratch, "row", RowItemsModule).await;
+    let ada = Uuid::now_v7();
+    let acme = create(&app, ada, "Acme").await;
+    let globex = create(&app, ada, "Globex").await;
+
+    let uow = uow_in(&app, Some(acme.id)).await;
+    let created = PlainItem::create(
+        &uow,
+        PlainItem {
+            id: Uuid::now_v7(),
+            workspace_id: acme.id,
+            title: "Acme item".into(),
+        },
+    )
+    .await
+    .unwrap();
+    ScopedItem::create(
+        &uow,
+        ScopedItem {
+            title: "Filled by the ORM".into(),
+            ..ScopedItem::default()
+        },
+    )
+    .await
+    .unwrap();
+    uow.commit().await.unwrap();
+
+    let uow = uow_in(&app, Some(acme.id)).await;
+    assert_eq!(PlainItem::query().count(&uow).await.unwrap(), 2);
+    assert_eq!(ScopedItem::query().count(&uow).await.unwrap(), 2);
+    uow.rollback().await.unwrap();
+
+    // Another workspace: the policy hides the rows from every ORM read.
+    let uow = uow_in(&app, Some(globex.id)).await;
+    assert_eq!(PlainItem::query().count(&uow).await.unwrap(), 0);
+    assert!(PlainItem::find(&uow, created.id).await.unwrap().is_none());
+    assert_eq!(
+        ScopedItem::query()
+            .without_workspace_scope()
+            .count(&uow)
+            .await
+            .unwrap(),
+        0,
+        "without the ORM's scope, still nothing: the policy's"
+    );
+    // ... and refuses an ORM write into Acme.
+    let smuggled = PlainItem::create(
+        &uow,
+        PlainItem {
+            id: Uuid::now_v7(),
+            workspace_id: acme.id,
+            title: "Smuggled".into(),
+        },
+    )
+    .await;
+    assert!(smuggled.is_err(), "{smuggled:?}");
+    uow.rollback().await.unwrap();
+
+    // Outside any workspace nothing is visible.
+    let uow = uow_in(&app, None).await;
+    assert_eq!(PlainItem::query().count(&uow).await.unwrap(), 0);
+    uow.rollback().await.unwrap();
+
+    app.shutdown().await.unwrap();
+    scratch.drop().await;
+}
+
+/// Under schema isolation ORM queries in a workspace transaction read the
+/// workspace's schema (its `search_path`).
+#[tokio::test]
+async fn orm_queries_follow_the_workspace_schema() {
+    use navree_orm::Model;
+    use orm_items::PlainItem;
+
+    let Some(scratch) = Scratch::new().await else {
+        return;
+    };
+    let app = app(&scratch, "schema", SchemaItemsModule).await;
+    let ada = Uuid::now_v7();
+    let acme = create(&app, ada, "Acme").await;
+    let globex = create(&app, ada, "Globex").await;
+
+    let uow = uow_in(&app, Some(acme.id)).await;
+    PlainItem::create(
+        &uow,
+        PlainItem {
+            id: Uuid::now_v7(),
+            workspace_id: acme.id,
+            title: "In Acme's schema".into(),
+        },
+    )
+    .await
+    .unwrap();
+    uow.commit().await.unwrap();
+
+    for (workspace, expected) in [(acme.id, 1), (globex.id, 0)] {
+        let uow = uow_in(&app, Some(workspace)).await;
+        assert_eq!(PlainItem::query().count(&uow).await.unwrap(), expected);
+        uow.rollback().await.unwrap();
+    }
+    // The row is in Acme's schema (read inside Acme: the table's policy
+    // hides rows outside a workspace).
+    let uow = uow_in(&app, Some(acme.id)).await;
+    let rows = uow
+        .tx()
+        .await
+        .unwrap()
+        .query_one_raw(Statement::from_string(
+            DbBackend::Postgres,
+            format!(
+                "SELECT count(*)::bigint AS n FROM workspace_{}.items",
+                acme.id.simple()
+            ),
+        ))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(rows.try_get::<i64>("", "n").unwrap(), 1);
+    uow.rollback().await.unwrap();
 
     app.shutdown().await.unwrap();
     scratch.drop().await;
