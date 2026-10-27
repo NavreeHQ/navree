@@ -74,6 +74,7 @@ mod array;
 mod api;
 mod delivery;
 mod dkim;
+mod domains;
 mod error;
 mod job;
 mod mailable;
@@ -93,6 +94,10 @@ pub use api::resend::{ResendConfig, ResendTransport};
 pub use api::ses::{SesConfig, SesTransport};
 pub use array::ArrayTransport;
 pub use dkim::{DEFAULT_SIGNED_HEADERS, DkimAlgorithm, DkimConfig, DkimSigner};
+pub use domains::{
+    CheckStatus, DkimCheck, DnsResolver, DomainExpectations, DomainReport, RecordCheck,
+    SendingDomains, StaticResolver, SystemResolver,
+};
 pub use error::MailError;
 pub use job::SendMailJob;
 pub use mailable::{Held, Mailable, TemplateMail};
