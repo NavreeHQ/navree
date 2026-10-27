@@ -261,6 +261,16 @@ guest_role = "viewer"
 
 A signed-in user who is not a member then enters any demo workspace with that role (`CurrentWorkspace::is_guest()` is true, and `member()` describes a membership that is stored nowhere), and `GET /api/workspaces` lists the demos for them with that role. Live workspaces still answer 403 to non-members. `owner` can't be the guest role, and a read-only demo refuses a guest's writes as it refuses a member's.
 
+Guests use your routes with the guest role's permissions. Of the module's own routes they get `GET /api/workspaces/{workspace}` only: the members, the invitations and the workspace's settings answer 403 `Only members of this workspace can do this.`, whatever the role grants. To decide exactly what guests may do in your modules, define a role for them:
+
+```toml title="config/app.toml"
+[workspace.roles.demo_guest]
+permissions = ["companies.read", "deals.read"]
+
+[workspace.demo]
+guest_role = "demo_guest"
+```
+
 ## The Live/Demo switch
 
 Every response about a demo workspace carries `X-Navree-Demo`, with the mode as its value; responses about live workspaces, and responses that name no workspace, don't have it:

@@ -269,7 +269,7 @@ m.migrations(..).workspace_scoped::<Company>().demo_seeder::<CrmDemo>();
 mode = "read_only"          # default: POST/PUT/PATCH/DELETE -> 403 "Demo workspaces are read-only." (code demo_read_only)
 # mode = "reset"            # writes allowed; workspace:demo-reset clears (reverse order) + seeds nightly
 reset_at = "03:00"          # UTC; needs ScheduleModule + `schedule:work`
-# guest_role = "viewer"     # signed-in non-members enter demos (CurrentWorkspace::is_guest())
+# guest_role = "demo_guest" # signed-in non-members enter demos (CurrentWorkspace::is_guest()); only GET /api/workspaces/{demo} of the module's routes
 editor_roles = []           # roles that still write to read-only demos
 allow = []                  # route names or "METHOD /full/path" still writable
 ```
