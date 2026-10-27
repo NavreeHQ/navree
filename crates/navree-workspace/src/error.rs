@@ -22,6 +22,20 @@ use sea_orm::DbErr;
 /// | `InvitationNotFound` | 404 | `Invitation not found.` |
 /// | `InvitationExpired` | 410 | `The invitation has expired.` |
 /// | `InvitationEmailMismatch` | 403 | `This invitation was sent to a different email address.` |
+/// | `NoOrganization` | 400 | `The request names no organization.` |
+/// | `OrganizationNotFound` | 404 | `Organization not found.` |
+/// | `NotOrganizationMember` | 403 | `You are not a member of this organization.` |
+/// | `AlreadyOrganizationMember` | 409 | `The user is already a member of this organization.` |
+/// | `OrganizationOwnerRequired` | 409 | `The organization owner can't be removed, demoted or limited; transfer ownership first.` |
+/// | `AlreadyAttached` | 409 | `The workspace belongs to another organization.` |
+/// | `NotAttached` | 404 | `The workspace is not part of this organization.` |
+/// | `AccessRequestNotFound` | 404 | `Access request not found.` |
+/// | `AccessRequestPending` | 409 | `An access request is already pending.` |
+/// | `AccessRequestDecided` | 409 | `The access request has already been decided.` |
+/// | `NoPartition` | 400 | `The request names no partition.` |
+/// | `PartitionNotFound` | 404 | `Partition not found.` |
+/// | `PartitionForbidden` | 403 | `You don't have access to this partition.` |
+/// | `FeatureDisabled` | 500 | (the setting to turn on, in the log) |
 /// | `Db` | as navree-db maps it (404, 409) or 500 | |
 /// | `Other` | 500 | |
 #[derive(Debug, thiserror::Error)]
@@ -62,6 +76,49 @@ pub enum WorkspaceError {
     /// The invitation was sent to another email address.
     #[error("the invitation was sent to another email address")]
     InvitationEmailMismatch,
+    /// The request names no organization (no resolver found one).
+    #[error("the request names no organization")]
+    NoOrganization,
+    /// No organization with this slug or id.
+    #[error("organization `{0}` does not exist")]
+    OrganizationNotFound(String),
+    /// The user is not a member of the organization.
+    #[error("the user is not a member of the organization")]
+    NotOrganizationMember,
+    /// The user is already a member of the organization.
+    #[error("the user is already a member of the organization")]
+    AlreadyOrganizationMember,
+    /// The change would remove, demote or limit the organization's owner.
+    #[error("the organization owner can't be removed, demoted or limited")]
+    OrganizationOwnerRequired,
+    /// The workspace is attached to another organization.
+    #[error("the workspace belongs to another organization")]
+    AlreadyAttached,
+    /// The workspace is not attached to this organization.
+    #[error("the workspace is not part of this organization")]
+    NotAttached,
+    /// No access request with this id in the organization.
+    #[error("no such access request")]
+    AccessRequestNotFound,
+    /// The user has a pending access request already.
+    #[error("an access request is already pending")]
+    AccessRequestPending,
+    /// The access request was approved or declined already.
+    #[error("the access request has already been decided")]
+    AccessRequestDecided,
+    /// The request names no partition (no resolver found one).
+    #[error("the request names no partition")]
+    NoPartition,
+    /// No partition with this slug or id in the workspace.
+    #[error("partition `{0}` does not exist")]
+    PartitionNotFound(String),
+    /// The member may not see this partition.
+    #[error("the member may not see this partition")]
+    PartitionForbidden,
+    /// A service of a feature that is off was called; the value is the
+    /// setting that turns it on (`workspace.organizations.enabled`).
+    #[error("{0} is false: turn it on to use this")]
+    FeatureDisabled(&'static str),
     /// A database error.
     #[error("workspace database error: {0}")]
     Db(#[from] DbErr),
@@ -115,8 +172,45 @@ pub(crate) fn map_workspace_error(error: &WorkspaceError) -> Option<AppError> {
         }
         WorkspaceError::InvitationEmailMismatch => AppError::forbidden()
             .with_detail("This invitation was sent to a different email address."),
+        WorkspaceError::NoOrganization => {
+            AppError::bad_request("The request names no organization.")
+        }
+        WorkspaceError::OrganizationNotFound(_) => {
+            AppError::not_found().with_detail("Organization not found.")
+        }
+        WorkspaceError::NotOrganizationMember => {
+            AppError::forbidden().with_detail("You are not a member of this organization.")
+        }
+        WorkspaceError::AlreadyOrganizationMember => {
+            AppError::conflict("The user is already a member of this organization.")
+        }
+        WorkspaceError::OrganizationOwnerRequired => AppError::conflict(
+            "The organization owner can't be removed, demoted or limited; transfer ownership first.",
+        ),
+        WorkspaceError::AlreadyAttached => {
+            AppError::conflict("The workspace belongs to another organization.")
+        }
+        WorkspaceError::NotAttached => {
+            AppError::not_found().with_detail("The workspace is not part of this organization.")
+        }
+        WorkspaceError::AccessRequestNotFound => {
+            AppError::not_found().with_detail("Access request not found.")
+        }
+        WorkspaceError::AccessRequestPending => {
+            AppError::conflict("An access request is already pending.")
+        }
+        WorkspaceError::AccessRequestDecided => {
+            AppError::conflict("The access request has already been decided.")
+        }
+        WorkspaceError::NoPartition => AppError::bad_request("The request names no partition."),
+        WorkspaceError::PartitionNotFound(_) => {
+            AppError::not_found().with_detail("Partition not found.")
+        }
+        WorkspaceError::PartitionForbidden => {
+            AppError::forbidden().with_detail("You don't have access to this partition.")
+        }
         WorkspaceError::Db(db) => return navree_db::map_db_error(db),
-        WorkspaceError::Other(_) => return None,
+        WorkspaceError::FeatureDisabled(_) | WorkspaceError::Other(_) => return None,
     })
 }
 
@@ -140,6 +234,23 @@ mod tests {
             (WorkspaceError::InvitationNotFound, 404),
             (WorkspaceError::InvitationExpired, 410),
             (WorkspaceError::InvitationEmailMismatch, 403),
+            (WorkspaceError::NoOrganization, 400),
+            (WorkspaceError::OrganizationNotFound("acme".into()), 404),
+            (WorkspaceError::NotOrganizationMember, 403),
+            (WorkspaceError::AlreadyOrganizationMember, 409),
+            (WorkspaceError::OrganizationOwnerRequired, 409),
+            (WorkspaceError::AlreadyAttached, 409),
+            (WorkspaceError::NotAttached, 404),
+            (WorkspaceError::AccessRequestNotFound, 404),
+            (WorkspaceError::AccessRequestPending, 409),
+            (WorkspaceError::AccessRequestDecided, 409),
+            (WorkspaceError::NoPartition, 400),
+            (WorkspaceError::PartitionNotFound("eu".into()), 404),
+            (WorkspaceError::PartitionForbidden, 403),
+            (
+                WorkspaceError::FeatureDisabled("workspace.organizations.enabled"),
+                500,
+            ),
             (
                 WorkspaceError::Db(DbErr::RecordNotFound("workspaces x".into())),
                 404,

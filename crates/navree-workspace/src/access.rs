@@ -12,7 +12,9 @@ use navree_contracts::Principal;
 use navree_kernel::AppContext;
 use uuid::Uuid;
 
-use crate::entity::{invitation, member, workspace};
+use crate::entity::{
+    access_request, invitation, member, organization, organization_member, partition, workspace,
+};
 use crate::{RoleTable, WorkspaceError, WorkspaceRole};
 
 /// The permission prefixes of the module's own subjects, for apps without
@@ -28,10 +30,36 @@ fn own_subjects() -> BTreeMap<String, String> {
             invitation::Entity::PERMISSION_PREFIX,
             invitation::Entity::SUBJECT,
         ),
+        (
+            organization::Entity::PERMISSION_PREFIX,
+            organization::Entity::SUBJECT,
+        ),
+        (
+            organization_member::Entity::PERMISSION_PREFIX,
+            organization_member::Entity::SUBJECT,
+        ),
+        (
+            access_request::Entity::PERMISSION_PREFIX,
+            access_request::Entity::SUBJECT,
+        ),
+        (
+            partition::Entity::PERMISSION_PREFIX,
+            partition::Entity::SUBJECT,
+        ),
     ]
     .into_iter()
     .map(|(prefix, subject)| (prefix.to_owned(), subject.to_owned()))
     .collect()
+}
+
+/// Where scoped access applies: a workspace (with the organization it
+/// belongs to, if any) or an organization.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct AccessScope {
+    /// The workspace (`AbilityCtx::team_id`).
+    pub(crate) workspace: Option<Uuid>,
+    /// The organization (`AbilityCtx::organization_id`).
+    pub(crate) organization: Option<Uuid>,
 }
 
 /// The access of `principal` inside `workspace`, where they have `role`:
@@ -39,7 +67,8 @@ fn own_subjects() -> BTreeMap<String, String> {
 /// - the abilities function of `AccessOptions` (or navree-access's default,
 ///   the permissions alone) runs with an [`AbilityCtx`] whose user has the
 ///   single role `role`, whose permissions are the role's (built-in plus
-///   `workspace.roles`), and whose `team_id` is the workspace;
+///   `workspace.roles`), whose `team_id` is the workspace and whose
+///   `organization_id` is the workspace's organization;
 /// - a global super-admin (`AccessOptions::super_admin_role`) keeps
 ///   `can manage all`;
 /// - a token's abilities still narrow the result.
@@ -47,8 +76,31 @@ pub(crate) async fn workspace_access(
     ctx: &AppContext,
     principal: &Principal,
     workspace: Uuid,
+    organization: Option<Uuid>,
     role: &WorkspaceRole,
     roles: &RoleTable,
+) -> Result<Arc<PrincipalAccess>, WorkspaceError> {
+    scoped_access(
+        ctx,
+        principal,
+        AccessScope {
+            workspace: Some(workspace),
+            organization,
+        },
+        role.as_str(),
+        roles.permissions(role).to_vec(),
+    )
+    .await
+}
+
+/// The access of `principal` in scope `scope` with the single role `role`
+/// and its `permissions` (see [`workspace_access`]).
+pub(crate) async fn scoped_access(
+    ctx: &AppContext,
+    principal: &Principal,
+    scope: AccessScope,
+    role: &str,
+    mut permissions: Vec<String>,
 ) -> Result<Arc<PrincipalAccess>, WorkspaceError> {
     let options = ctx
         .try_get::<AccessOptions>()
@@ -70,16 +122,16 @@ pub(crate) async fn workspace_access(
         }
         None => (0, false),
     };
-    let mut permissions = roles.permissions(role).to_vec();
     permissions.sort();
     permissions.dedup();
     let ability_ctx = AbilityCtx {
         user: Some(AccessUser {
             id: principal.user_id,
-            roles: vec![role.as_str().to_owned()],
+            roles: vec![role.to_owned()],
         }),
         permissions: permissions.clone(),
-        team_id: Some(workspace),
+        team_id: scope.workspace,
+        organization_id: scope.organization,
         permission_subjects: subjects.clone(),
     };
     let mut rules = Rules::new();
@@ -95,7 +147,7 @@ pub(crate) async fn workspace_access(
     }
     Ok(Arc::new(PrincipalAccess {
         user: Some(principal.user_id),
-        roles: vec![role.as_str().to_owned()],
+        roles: vec![role.to_owned()],
         permissions,
         version,
         super_admin,
@@ -148,6 +200,22 @@ mod tests {
         assert_eq!(
             permission_target("deals.read", &subjects),
             ("read", "deals")
+        );
+        assert_eq!(
+            permission_target("organization.attach", &subjects),
+            ("attach", "Organization")
+        );
+        assert_eq!(
+            permission_target("organization.members.update", &subjects),
+            ("update", "OrganizationMember")
+        );
+        assert_eq!(
+            permission_target("organization.access_requests.*", &subjects),
+            ("manage", "AccessRequest")
+        );
+        assert_eq!(
+            permission_target("workspace.partitions.create", &subjects),
+            ("create", "WorkspacePartition")
         );
     }
 }

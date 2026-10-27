@@ -18,15 +18,21 @@ use serde::Serialize;
 
 use crate::commands::commands;
 use crate::controller::{InvitationController, WorkspaceController};
+use crate::org_controller::OrganizationController;
 use crate::core::Core;
 use crate::current::{ScopedSubject, TenantCell};
 use crate::directory::{TableUserDirectory, UserDirectory};
-use crate::entity::{invitation, member, workspace};
+use crate::entity::{
+    access_request, invitation, member, organization, organization_member, partition, workspace,
+};
 use crate::error::map_workspace_error;
 use crate::isolation::{IsolationDriver, WorkspaceScoped};
 use crate::migration::migrations;
 use crate::tenant::{WorkspaceDatabases, WorkspaceMigrationSet};
-use crate::{Invitations, Isolation, Members, WorkspaceConfig, WorkspaceError, Workspaces};
+use crate::{
+    AccessRequests, Invitations, Isolation, Members, OrgMembers, Organizations, Partitions,
+    WorkspaceConfig, WorkspaceError, Workspaces,
+};
 
 /// Multi-tenancy at the workspace level.
 ///
@@ -137,6 +143,10 @@ fn register(m: &mut ModuleBuilder, config: Option<WorkspaceConfig>) {
             AccessModule::for_feature::<workspace::Entity>(),
             AccessModule::for_feature::<member::Entity>(),
             AccessModule::for_feature::<invitation::Entity>(),
+            AccessModule::for_feature::<organization::Entity>(),
+            AccessModule::for_feature::<organization_member::Entity>(),
+            AccessModule::for_feature::<access_request::Entity>(),
+            AccessModule::for_feature::<partition::Entity>(),
         ))
         .factory(
             Factory::<dyn UserDirectory>::new(|r: Resolver| async move {
@@ -238,8 +248,43 @@ fn register(m: &mut ModuleBuilder, config: Option<WorkspaceConfig>) {
             .deps(vec![ProviderKey::of::<Core>(), ProviderKey::of::<Members>()]),
         )
         .exports::<Invitations>()
+        .factory(
+            Factory::<Organizations>::new(|r: Resolver| async move {
+                Ok(Arc::new(Organizations::new(r.get::<Core>().await?)))
+            })
+            .deps(vec![ProviderKey::of::<Core>()]),
+        )
+        .exports::<Organizations>()
+        .factory(
+            Factory::<OrgMembers>::new(|r: Resolver| async move {
+                Ok(Arc::new(OrgMembers::new(r.get::<Core>().await?)))
+            })
+            .deps(vec![ProviderKey::of::<Core>()]),
+        )
+        .exports::<OrgMembers>()
+        .factory(
+            Factory::<AccessRequests>::new(|r: Resolver| async move {
+                Ok(Arc::new(AccessRequests::new(
+                    r.get::<Core>().await?,
+                    r.get::<OrgMembers>().await?,
+                )))
+            })
+            .deps(vec![
+                ProviderKey::of::<Core>(),
+                ProviderKey::of::<OrgMembers>(),
+            ]),
+        )
+        .exports::<AccessRequests>()
+        .factory(
+            Factory::<Partitions>::new(|r: Resolver| async move {
+                Ok(Arc::new(Partitions::new(r.get::<Core>().await?)))
+            })
+            .deps(vec![ProviderKey::of::<Core>()]),
+        )
+        .exports::<Partitions>()
         .controller::<WorkspaceController>()
         .controller::<InvitationController>()
+        .controller::<OrganizationController>()
         .migrations(migrations())
         .http_layer(tenant_layer())
         .map_error::<WorkspaceError>(map_workspace_error);
