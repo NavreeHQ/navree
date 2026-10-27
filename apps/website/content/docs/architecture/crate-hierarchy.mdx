@@ -14,7 +14,7 @@ This keeps the framework honest: the kernel knows nothing about HTTP, HTTP knows
 ```text
 L9+ apps/crm-api (Navree app)                    apps/crm-web (Next.js 16)
 L8  navree (facade: re-exports + prelude)        navree-cli (binary `navree`; no runtime navree deps, uses navree-dock)
-L7  navree-billing  navree-search  navree-lighthouse  navree-logbook  navree-helm  navree-workflows  navree-media (packages built on other packages)
+L7  navree-billing  navree-search  navree-lighthouse  navree-logbook  navree-helm  navree-workflows  navree-media  navree-directory (packages built on other packages)
 L6  navree-social  navree-sso  navree-webhooks  navree-integrations  navree-sheets  navree-flags  navree-mcp  navree-ai  navree-i18n  navree-documents (ecosystem libraries)
 L5  navree-auth  navree-workspace  navree-redis  navree-mongo
 L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify  navree-ui  navree-orm
@@ -79,6 +79,7 @@ L0  navree-kernel                                navree-macros, navree-i18n-macr
 | L7 | `navree-helm` | [Helm](/docs/tools/helm/): the admin panel at `/admin` generated from your entities, checked against your access rules |
 | L7 | `navree-workflows` | [Workflows](/docs/packages/workflows/): durable workflows in code, with steps replayed on resume, timers, event waits and versions; and [automations](/docs/packages/automations/) people build from your triggers, conditions and actions |
 | L7 | `navree-media` | [Media](/docs/packages/media/): files attached to models in collections, image conversions and responsive variants, remote downloads through the SSRF guard, zip archives, text extraction, video through FFmpeg |
+| L7 | `navree-directory` | [Directory sync](/docs/packages/directory-sync/): a SCIM 2.0 server and pull connectors for Microsoft Graph, Google Workspace, Okta, LDAP and Active Directory, synced into your model through a sink, with dry runs and a deactivation limit |
 | L8 | `navree` | The facade: re-exports every module crate and the macros |
 | L8 | `navree-cli` | The `navree` binary: `navree new`, `navree make:*`, `navree dev`, `navree dock` |
 
@@ -126,6 +127,7 @@ L0  navree-kernel                                navree-macros, navree-i18n-macr
 | `navree-helm` | kernel, contracts, config, http, view, cache, crypto, db, storage, queue, validation, audit, access, auth, workspace |
 | `navree-workflows` | kernel, contracts, config, macros, http, events, db, schedule, workspace |
 | `navree-media` | kernel, contracts, config, http, http-client, db, orm, storage, queue |
+| `navree-directory` | kernel, contracts, config, http, crypto, events, db, orm, queue, schedule, workspace, integrations |
 | `navree` | Every runtime crate and the macros |
 | `navree-cli` | `navree-dock` only (for `navree dock`): everything else it knows about the framework is in the code it generates |
 
