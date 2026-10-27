@@ -5,14 +5,33 @@
 //!
 //! | Attribute | Cast | Field type | Stored as |
 //! |---|---|---|---|
-//! | `cast = "json"` | [`AsJson`] | any `Serialize + DeserializeOwned` type (structs, `Vec`, maps) | JSON |
+//! | `cast = "json"` | [`AsJson`] | any `Serialize + DeserializeOwned` type (structs, `Vec`, maps, sets of enums) | JSON |
 //! | `cast = "string_enum"` | [`StringEnum`] | a unit enum, by its serde name | text |
 //! | `cast = "int_enum"` | [`IntEnum`] | `Copy + Into<i64> + TryFrom<i64>` (a `#[repr]` enum) | an integer |
+//! | `cast = "decimal(2)"` | [`DecimalScale`] | `Decimal`, rounded half away from zero to the scale | a decimal |
+//! | `cast = "datetime_format(\"%d/%m/%Y %H:%M\")"` | [`DateTimeFormat`] | `DateTime<Utc>`, `DateTime<FixedOffset>`, `NaiveDateTime`, `NaiveDate`, `NaiveTime` | text in that format |
+//! | `cast = "unix_timestamp"` / `"unix_timestamp_ms"` | [`UnixTimestamp`] / [`UnixTimestampMs`] | `DateTime<Utc>` | integer seconds / milliseconds |
+//! | `cast = "encrypted"` | [`Encrypted`] | `String`, `Vec<u8>` | an encrypted payload (navree-crypto) |
+//! | `cast = "encrypted_json"` | [`EncryptedJson`] | any `Serialize + DeserializeOwned` type | encrypted JSON |
+//! | `cast = "hashed"` | [`Hashed`] | `String` | an Argon2id hash (navree-crypto) |
+//! | `cast = "binary_uuid"` / `"binary_ulid"` | [`BinaryUuid`] / [`BinaryUlid`] | `Uuid` / [`Ulid`](crate::Ulid) | 16 bytes |
+//! | `cast = "vector"` | [`Vector`] | `Vec<f32>` | a vector (pgvector, MySQL 9, MariaDB 11.7) |
+//! | `cast` (no value) | `<T as` [`Castable`]`>::Cast` | a type that picks its own cast | the cast's |
 //! | `cast = path::To::Cast` | yours | `T` where the cast is `Cast<T>` | `Cast::Stored` |
+//! | `cast(path::To::Cast, 2, Eur)` | `path::To::Cast<2, Eur>` | a cast with arguments | the cast's |
+//! | `inbound = path::To::Cast` | [`Inbound`] | a [`Field`] transformed on write only ([`InboundCast`]) | itself |
+//! | `cast = path, columns(a: A, b: B)` | yours ([`MultiColumnCast`]) | one field over several columns | each column |
 //!
 //! A cast on an `Option<T>` field casts the inner value; NULL stays `None`.
 //! Typed columns of cast fields encode condition values with the cast, so
 //! `Deal::STAGE.eq(Stage::Won)` compares with the stored `'won'`.
+//!
+//! Casts are static: `get` and `set` take no `self`. Casts that need an app
+//! service (the encrypter, the hasher) set [`Cast::CONTEXT`] and read it in
+//! [`Cast::get_with`] / [`Cast::set_with`] from the [`CastContext`] the ORM
+//! resolves from the executor's app (see [`CastContext`]); work that must
+//! be asynchronous (hashing a password off the async threads) happens in
+//! [`Cast::prepare`], before a record is written.
 //!
 //! ```
 //! use navree_orm::cast::{Cast, CastError};
@@ -38,11 +57,19 @@
 
 use std::fmt;
 
+use navree_kernel::BoxFuture;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
+pub use crate::attributes::CastContext;
+pub use crate::attributes::casts::{
+    BinaryUlid, BinaryUuid, Castable, DateTimeFormat, DateTimeFormatSpec, DecimalScale, Encrypted,
+    EncryptedJson, EncryptedValue, FormattedDateTime, Hashed, Inbound, InboundCast,
+    MultiColumnCast, StoredColumns, StoredVector, UnixTimestamp, UnixTimestampMs, Vector,
+    is_password_hash,
+};
 use crate::row::Row;
-use crate::value::{Field, FieldError, Value};
+use crate::value::{Field, FieldError, FieldKind, Value, same_value};
 
 /// Why a cast failed.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -63,10 +90,40 @@ impl fmt::Display for CastError {
 
 impl std::error::Error for CastError {}
 
+impl From<FieldError> for CastError {
+    fn from(error: FieldError) -> Self {
+        CastError::new(error.to_string())
+    }
+}
+
 /// Converts fields of type `T` to and from their stored form.
+///
+/// `get` and `set` are all a cast must write. The other methods have
+/// defaults and refine how the ORM treats the field:
+///
+/// | Method | Used for | Default |
+/// |---|---|---|
+/// | [`CONTEXT`](Cast::CONTEXT), [`get_with`](Cast::get_with), [`set_with`](Cast::set_with) | casts that need an app service | `get` / `set`, no context |
+/// | [`eq_stored`](Cast::eq_stored), [`same`](Cast::same) | dirty tracking | stored values compared like other columns |
+/// | [`from_json`](Cast::from_json) | mass assignment (`fill`) of untyped input | the input is the stored form |
+/// | [`serialize`](Cast::serialize) | the value in serialized records | the field's own `Serialize` |
+/// | [`increment`](Cast::increment), [`decrement`](Cast::decrement) | `Record::increment_cast` | unsupported |
+/// | [`prepare`](Cast::prepare) | asynchronous work before a write (hashing) | nothing |
+/// | [`is_stale`](Cast::is_stale) | rewriting stored values that are outdated (old encryption keys) | never |
 pub trait Cast<T>: 'static {
     /// The stored form (a [`Field`]: text, an integer, JSON, ...).
     type Stored: Field;
+
+    /// Whether the cast reads services from a [`CastContext`] (the
+    /// encrypter, the hasher, the dialect, ...). When a model has such a
+    /// cast, the ORM resolves the context from the executor's app before
+    /// it reads or writes the model's records.
+    const CONTEXT: bool = false;
+
+    /// What the field's values are in serialized records (for OpenAPI
+    /// schemas and date-time formatting); [`FieldKind::Any`] unless the
+    /// cast says.
+    const KIND: FieldKind = FieldKind::Any;
 
     /// The stored form to the field (reading from the database).
     fn get(stored: Self::Stored) -> Result<T, CastError>;
@@ -74,33 +131,138 @@ pub trait Cast<T>: 'static {
     /// The field to its stored form (writing to the database, comparing in
     /// conditions).
     fn set(value: &T) -> Result<Self::Stored, CastError>;
+
+    /// [`get`](Cast::get) with the services of `context`; what the ORM
+    /// calls. Casts that need a service implement this one, and `get` as
+    /// `Self::get_with(stored, &CastContext::current())`.
+    fn get_with(stored: Self::Stored, context: &CastContext) -> Result<T, CastError> {
+        let _ = context;
+        Self::get(stored)
+    }
+
+    /// [`set`](Cast::set) with the services of `context`; what the ORM
+    /// calls.
+    fn set_with(value: &T, context: &CastContext) -> Result<Self::Stored, CastError> {
+        let _ = context;
+        Self::set(value)
+    }
+
+    /// The NULL a nullable field's `None` is stored as. Defaults to the
+    /// stored type's NULL; casts whose column type differs between
+    /// databases give the NULL of `context`'s dialect (PostgreSQL checks a
+    /// NULL's type against the column's).
+    fn null_with(context: &CastContext) -> Value {
+        let _ = context;
+        <Self::Stored as Field>::null()
+    }
+
+    /// Whether two stored values hold the same thing (dirty tracking).
+    /// Defaults to the column comparison: NULLs equal, floats within a
+    /// small tolerance, decimals numerically, date-times by instant, JSON
+    /// structurally.
+    fn eq_stored(a: &Self::Stored, b: &Self::Stored) -> bool {
+        same_value(&a.to_value(), &b.to_value())
+    }
+
+    /// Whether two field values would be stored as the same thing (dirty
+    /// tracking compares a record's field with its original this way).
+    /// Defaults to encoding both and comparing them with
+    /// [`eq_stored`](Cast::eq_stored); a value that cannot be encoded
+    /// counts as different. Casts whose stored form is not deterministic
+    /// (encryption, hashing) compare the field values instead.
+    fn same(a: &T, b: &T, context: &CastContext) -> bool {
+        match (Self::set_with(a, context), Self::set_with(b, context)) {
+            (Ok(a), Ok(b)) => Self::eq_stored(&a, &b),
+            _ => false,
+        }
+    }
+
+    /// The field from untyped input (a JSON value given to `fill`, a
+    /// request body). Defaults to reading the input as the stored form, so
+    /// a JSON cast takes JSON and a string enum takes its name; casts whose
+    /// stored form is not what users send (encrypted, hashed, binary ids,
+    /// timestamps) take the plain value instead.
+    fn from_json(input: serde_json::Value, context: &CastContext) -> Result<T, CastError> {
+        let stored = Self::Stored::from_json(input)?;
+        Self::get_with(stored, context)
+    }
+
+    /// The value in serialized records, when the cast decides it; `None`
+    /// (the default) keeps what the field's own `Serialize` writes.
+    fn serialize(value: &T) -> Option<Result<serde_json::Value, CastError>> {
+        let _ = value;
+        None
+    }
+
+    /// `value + amount`, for increments through the cast
+    /// ([`Record::increment_cast`](crate::Record::increment_cast)); the
+    /// database adds `amount`'s stored form. Unsupported by default.
+    fn increment(value: &T, amount: &T) -> Result<T, CastError> {
+        let _ = (value, amount);
+        Err(CastError::new(
+            "this cast does not support increments: implement Cast::increment and Cast::decrement",
+        ))
+    }
+
+    /// `value - amount`, for decrements through the cast. Unsupported by
+    /// default.
+    fn decrement(value: &T, amount: &T) -> Result<T, CastError> {
+        let _ = (value, amount);
+        Err(CastError::new(
+            "this cast does not support decrements: implement Cast::increment and Cast::decrement",
+        ))
+    }
+
+    /// Asynchronous work on the field before the record is written (after
+    /// the `saving`, `creating` and `updating` hooks): the hashed cast
+    /// hashes a plain value here, off the async threads. Nothing by
+    /// default.
+    fn prepare<'a>(
+        value: &'a mut T,
+        context: &'a CastContext,
+    ) -> BoxFuture<'a, Result<(), CastError>> {
+        let _ = (value, context);
+        Box::pin(std::future::ready(Ok(())))
+    }
+
+    /// Whether the stored value of `column` in `row` should be rewritten
+    /// even though the field did not change: the encrypted casts report
+    /// payloads encrypted with a previous key, so the next save re-encrypts
+    /// them with the current one. Never by default.
+    fn is_stale(row: &Row, column: &str, context: &CastContext) -> bool {
+        let _ = (row, column, context);
+        false
+    }
 }
 
-/// Encodes a field through cast `C` (the encoder of a typed column).
+/// Encodes a field through cast `C` (the encoder of a typed column), with
+/// the current [`CastContext`].
 pub fn encode<C: Cast<T>, T>(value: &T) -> Result<Value, String> {
-    C::set(value)
+    CastContext::with_current(|context| C::set_with(value, context))
         .map(|stored| stored.to_value())
         .map_err(|error| error.to_string())
 }
 
-/// Decodes a field through cast `C` (the decoder of a typed column).
+/// Decodes a field through cast `C` (the decoder of a typed column), with
+/// the current [`CastContext`].
 pub fn decode<C: Cast<T>, T>(row: &Row, column: &str) -> Result<T, FieldError> {
     let stored = row.field::<C::Stored>(column)?;
-    C::get(stored).map_err(|error| FieldError::Invalid(error.to_string()))
+    CastContext::with_current(|context| C::get_with(stored, context))
+        .map_err(|error| FieldError::Invalid(error.to_string()))
 }
 
 /// Encodes a nullable field through cast `C` (`None` is a typed NULL).
 pub fn encode_option<C: Cast<T>, T>(value: &Option<T>) -> Result<Value, String> {
     match value {
         Some(value) => encode::<C, T>(value),
-        None => Ok(<C::Stored as Field>::null()),
+        None => Ok(CastContext::with_current(C::null_with)),
     }
 }
 
 /// Decodes a nullable field through cast `C` (NULL is `None`).
 pub fn decode_option<C: Cast<T>, T>(row: &Row, column: &str) -> Result<Option<T>, FieldError> {
     match row.field::<Option<C::Stored>>(column)? {
-        Some(stored) => C::get(stored)
+        Some(stored) => CastContext::with_current(|context| C::get_with(stored, context))
             .map(Some)
             .map_err(|error| FieldError::Invalid(error.to_string())),
         None => Ok(None),
@@ -129,6 +291,8 @@ pub struct AsJson;
 
 impl<T: Serialize + DeserializeOwned> Cast<T> for AsJson {
     type Stored = serde_json::Value;
+
+    const KIND: FieldKind = FieldKind::Json;
 
     fn get(stored: serde_json::Value) -> Result<T, CastError> {
         serde_json::from_value(stored)
@@ -166,6 +330,8 @@ pub struct StringEnum;
 
 impl<T: Serialize + DeserializeOwned> Cast<T> for StringEnum {
     type Stored = String;
+
+    const KIND: FieldKind = FieldKind::Text;
 
     fn get(stored: String) -> Result<T, CastError> {
         serde_json::from_value(serde_json::Value::String(stored.clone())).map_err(|_| {

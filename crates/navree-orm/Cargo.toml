@@ -12,13 +12,16 @@ workspace = true
 
 [features]
 default = []
-## Run on PostgreSQL / TimescaleDB (navree-db's `postgres` driver).
-postgres = ["navree-db/postgres"]
+## Run on PostgreSQL / TimescaleDB (navree-db's `postgres` driver), with
+## pgvector's `vector` type for `cast = "vector"` fields.
+postgres = ["navree-db/postgres", "sea-orm/postgres-vector"]
 ## Run on MySQL / MariaDB (SeaORM's MySQL driver). SQL for every dialect is
 ## generated without any feature.
 mysql = ["sea-orm/sqlx-mysql"]
 
 [dependencies]
+# PHC-string parsing for hashed attributes (hashing itself is navree-crypto's).
+argon2 = { workspace = true }
 axum = { workspace = true }
 base64 = { workspace = true }
 chrono = { workspace = true }
@@ -26,8 +29,10 @@ futures = { workspace = true }
 heck = { workspace = true }
 http = { workspace = true }
 indexmap = { workspace = true }
+navree-api = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
+navree-crypto = { workspace = true }
 navree-db = { workspace = true }
 navree-events = { workspace = true }
 navree-http = { workspace = true }
@@ -40,16 +45,19 @@ sea-query = { workspace = true, features = ["backend-mysql", "with-rust_decimal"
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
-# Task-local scopes: quiet writes, suspended touching, scoped morph maps and
-# lazy-loading rules.
+# Task-local scopes: quiet writes, suspended touching, scoped morph maps,
+# lazy-loading rules, cast services and guard suspension.
 tokio = { workspace = true }
 tracing = { workspace = true }
+# `url::Url` fields (serialized as their text).
+url = { workspace = true, features = ["serde"] }
+# OpenAPI schemas of models and pages.
+utoipa = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
 futures = { workspace = true }
 insta = { workspace = true }
-navree-config = { workspace = true }
 navree-testing = { workspace = true }
 tempfile = { workspace = true }
 trybuild = { workspace = true }

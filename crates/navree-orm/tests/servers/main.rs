@@ -5,6 +5,7 @@
 //!
 //! `cargo test -p navree-orm --features postgres,mysql --test servers`
 
+mod attributes;
 mod lifecycle;
 mod models;
 mod relations;
@@ -12,6 +13,32 @@ mod scenarios;
 mod support;
 
 use support::{Server, run};
+
+#[tokio::test]
+async fn postgres_attribute_casts() {
+    run(Server::Postgres, |db| {
+        attributes::casts(db, Server::Postgres)
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn postgres_vectors() {
+    run(Server::Postgres, |db| {
+        attributes::vectors(db, Server::Postgres)
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn mysql_attribute_casts() {
+    run(Server::MySql, |db| attributes::casts(db, Server::MySql)).await;
+}
+
+#[tokio::test]
+async fn mysql_vectors() {
+    run(Server::MySql, |db| attributes::vectors(db, Server::MySql)).await;
+}
 
 #[tokio::test]
 async fn postgres_records_round_trip() {

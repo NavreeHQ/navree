@@ -48,6 +48,52 @@ impl fmt::Display for FieldError {
 
 impl std::error::Error for FieldError {}
 
+/// What a field's values are, as JSON and OpenAPI see them: the shape
+/// serialized records write and schemas describe. A nullable field has the
+/// kind of its inner type.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum FieldKind {
+    /// `true` / `false`.
+    Bool,
+    /// An integer of `bits` bits.
+    Integer {
+        /// 8, 16, 32 or 64.
+        bits: u8,
+        /// Whether it can be negative.
+        signed: bool,
+    },
+    /// A floating-point number of `bits` bits (32 or 64).
+    Float {
+        /// 32 or 64.
+        bits: u8,
+    },
+    /// An exact decimal, written as a string (`"12.50"`).
+    Decimal,
+    /// Text.
+    Text,
+    /// Bytes, written as an array of numbers.
+    Bytes,
+    /// A UUID, written as its hyphenated text.
+    Uuid,
+    /// A ULID, written as its 26-character text.
+    Ulid,
+    /// A date, `YYYY-MM-DD`.
+    Date,
+    /// A time of day, `HH:MM:SS`.
+    Time,
+    /// A date-time, written in RFC 3339.
+    DateTime,
+    /// Any JSON value.
+    Json,
+    /// A URL, written as text.
+    Url,
+    /// A vector of numbers.
+    Vector,
+    /// Anything else (no known shape).
+    Any,
+}
+
 /// A Rust type a model field (or a column read with
 /// [`Row::get`](crate::Row::get)) can have.
 ///
@@ -69,6 +115,10 @@ impl std::error::Error for FieldError {}
 /// assert_eq!(<Option<i64>>::from_value(Value::BigInt(None)).unwrap(), None);
 /// ```
 pub trait Field: Sized + Send + Sync + 'static {
+    /// What the values are as JSON (for serialization and OpenAPI
+    /// schemas); [`FieldKind::Any`] unless the type says.
+    const KIND: FieldKind = FieldKind::Any;
+
     /// The column value of `self`.
     fn to_value(&self) -> Value;
 
@@ -83,8 +133,50 @@ pub trait Field: Sized + Send + Sync + 'static {
     /// aggregate, an assignment.
     fn from_value(value: Value) -> Result<Self, FieldError>;
 
+    /// Converts untyped JSON input (mass assignment with `fill`, a request
+    /// body) as leniently as [`from_value`](Field::from_value): numbers and
+    /// numeric strings for numbers, RFC 3339 and database text for
+    /// date-times, the text form of UUIDs. `null` is `None` for an
+    /// `Option`, an error otherwise. JSON fields take the JSON as it is,
+    /// decimals read a number's exact text, bytes an array of numbers.
+    ///
+    /// ```
+    /// use navree_orm::{Decimal, Field};
+    /// use serde_json::json;
+    ///
+    /// assert_eq!(i32::from_json(json!(7)).unwrap(), 7);
+    /// assert_eq!(Decimal::from_json(json!(12.10)).unwrap().to_string(), "12.1");
+    /// assert_eq!(Decimal::from_json(json!("12.10")).unwrap().to_string(), "12.10");
+    /// assert_eq!(<Option<String>>::from_json(json!(null)).unwrap(), None);
+    /// assert_eq!(serde_json::Value::from_json(json!("text")).unwrap(), json!("text"));
+    /// assert!(bool::from_json(json!("maybe")).is_err());
+    /// ```
+    fn from_json(json: serde_json::Value) -> Result<Self, FieldError> {
+        Self::from_value(json_to_value(json))
+    }
+
     /// The type's name in error messages, e.g. `i64` or `Option<String>`.
     fn type_name() -> Cow<'static, str>;
+}
+
+/// JSON input as the [`Value`] it most naturally is: `null` a NULL,
+/// booleans and strings themselves, integers `BIGINT` (or `BIGINT
+/// UNSIGNED` above `i64`), other numbers `DOUBLE`, arrays and objects JSON.
+pub(crate) fn json_to_value(json: serde_json::Value) -> Value {
+    use serde_json::Value as Json;
+
+    match json {
+        Json::Null => Value::Json(None),
+        Json::Bool(b) => Value::Bool(Some(b)),
+        Json::Number(n) => match (n.as_i64(), n.as_u64(), n.as_f64()) {
+            (Some(i), _, _) => Value::BigInt(Some(i)),
+            (None, Some(u), _) => Value::BigUnsigned(Some(u)),
+            (None, None, Some(f)) => Value::Double(Some(f)),
+            (None, None, None) => Value::String(Some(n.to_string())),
+        },
+        Json::String(s) => Value::String(Some(s)),
+        other => Value::Json(Some(Box::new(other))),
+    }
 }
 
 /// Reads `T` from `column` with SeaORM's decoder, telling a NULL, a missing
@@ -486,6 +578,8 @@ fn date_time_utc(value: Value) -> Result<DateTime<Utc>, FieldError> {
             .map(|v| v.with_timezone(&Utc))
             .or_else(|| parse_naive_date_time(&s).map(|v| Utc.from_utc_datetime(&v)))
             .ok_or_else(|| FieldError::Invalid(format!("`{s}` is not a date-time"))),
+        // A boolean is never a moment in time.
+        Value::Bool(_) => Err(mismatch(&value, "a date-time")),
         other => match integer(&other) {
             // Unix seconds (timestamps stored as integers).
             Ok(seconds) => i64::try_from(seconds)
@@ -553,8 +647,10 @@ fn naive_time(value: Value) -> Result<NaiveTime, FieldError> {
 /// `Field` for a type SeaORM decodes exactly, with a lenient conversion
 /// from values.
 macro_rules! exact_field {
-    ($ty:ty, $name:literal, $null:expr, $from_value:expr) => {
+    ($ty:ty, $name:literal, $kind:expr, $null:expr, $from_value:expr) => {
         impl Field for $ty {
+            const KIND: FieldKind = $kind;
+
             fn to_value(&self) -> Value {
                 Value::from(self.clone())
             }
@@ -657,8 +753,13 @@ fn sql_float(row: &QueryResult, column: &str) -> Result<f64, FieldError> {
 /// `Field` for an integer type: any integer column width from SQL,
 /// range-checked from values.
 macro_rules! integer_field {
-    ($ty:ty, $name:literal, $null:expr) => {
+    ($ty:ty, $name:literal, $bits:literal, $signed:literal, $null:expr) => {
         impl Field for $ty {
+            const KIND: FieldKind = FieldKind::Integer {
+                bits: $bits,
+                signed: $signed,
+            };
+
             fn to_value(&self) -> Value {
                 Value::from(*self)
             }
@@ -684,20 +785,26 @@ macro_rules! integer_field {
     };
 }
 
-integer_field!(i8, "i8", Value::TinyInt(None));
-integer_field!(i16, "i16", Value::SmallInt(None));
-integer_field!(i32, "i32", Value::Int(None));
-integer_field!(i64, "i64", Value::BigInt(None));
-integer_field!(u8, "u8", Value::TinyUnsigned(None));
-integer_field!(u16, "u16", Value::SmallUnsigned(None));
-integer_field!(u32, "u32", Value::Unsigned(None));
-integer_field!(u64, "u64", Value::BigUnsigned(None));
+integer_field!(i8, "i8", 8, true, Value::TinyInt(None));
+integer_field!(i16, "i16", 16, true, Value::SmallInt(None));
+integer_field!(i32, "i32", 32, true, Value::Int(None));
+integer_field!(i64, "i64", 64, true, Value::BigInt(None));
+integer_field!(u8, "u8", 8, false, Value::TinyUnsigned(None));
+integer_field!(u16, "u16", 16, false, Value::SmallUnsigned(None));
+integer_field!(u32, "u32", 32, false, Value::Unsigned(None));
+integer_field!(u64, "u64", 64, false, Value::BigUnsigned(None));
 
-exact_field!(bool, "bool", Value::Bool(None), |value: Value| boolean(
-    &value
-));
+exact_field!(
+    bool,
+    "bool",
+    FieldKind::Bool,
+    Value::Bool(None),
+    |value: Value| boolean(&value)
+);
 
 impl Field for f32 {
+    const KIND: FieldKind = FieldKind::Float { bits: 32 };
+
     fn to_value(&self) -> Value {
         Value::Float(Some(*self))
     }
@@ -728,6 +835,8 @@ impl Field for f32 {
 }
 
 impl Field for f64 {
+    const KIND: FieldKind = FieldKind::Float { bits: 64 };
+
     fn to_value(&self) -> Value {
         Value::Double(Some(*self))
     }
@@ -748,12 +857,62 @@ impl Field for f64 {
         Cow::Borrowed("f64")
     }
 }
-exact_field!(String, "String", Value::String(None), string);
-exact_field!(Vec<u8>, "Vec<u8>", Value::Bytes(None), bytes);
+exact_field!(
+    String,
+    "String",
+    FieldKind::Text,
+    Value::String(None),
+    string
+);
+
+/// Bytes: JSON input is an array of numbers (what serde writes for a
+/// `Vec<u8>`) or a string (its UTF-8 bytes).
+impl Field for Vec<u8> {
+    const KIND: FieldKind = FieldKind::Bytes;
+
+    fn to_value(&self) -> Value {
+        Value::from(self.clone())
+    }
+
+    fn null() -> Value {
+        Value::Bytes(None)
+    }
+
+    fn from_sql(row: &QueryResult, column: &str) -> Result<Self, FieldError> {
+        sql_get::<Vec<u8>>(row, column)
+    }
+
+    fn from_value(value: Value) -> Result<Self, FieldError> {
+        bytes(value)
+    }
+
+    fn from_json(json: serde_json::Value) -> Result<Self, FieldError> {
+        match json {
+            serde_json::Value::Array(items) => items
+                .iter()
+                .map(|item| {
+                    item.as_u64()
+                        .and_then(|n| u8::try_from(n).ok())
+                        .ok_or_else(|| {
+                            FieldError::Invalid(format!("{item} is not a byte (0 to 255)"))
+                        })
+                })
+                .collect(),
+            serde_json::Value::Null => Err(FieldError::Null),
+            other => bytes(json_to_value(other)),
+        }
+    }
+
+    fn type_name() -> Cow<'static, str> {
+        Cow::Borrowed("Vec<u8>")
+    }
+}
 
 /// `Uuid`: native on PostgreSQL, 16 bytes on SQLite and MySQL; also read
 /// from text columns holding the hyphenated form (`CHAR(36)`).
 impl Field for Uuid {
+    const KIND: FieldKind = FieldKind::Uuid;
+
     fn to_value(&self) -> Value {
         Value::Uuid(Some(*self))
     }
@@ -787,8 +946,10 @@ impl Field for Uuid {
 /// `Field` for a type read exactly by the driver, or parsed from text when
 /// the column holds text.
 macro_rules! parsed_field {
-    ($ty:ty, $name:literal, $null:expr, $parse:expr) => {
+    ($ty:ty, $name:literal, $kind:expr, $null:expr, $parse:expr) => {
         impl Field for $ty {
+            const KIND: FieldKind = $kind;
+
             fn to_value(&self) -> Value {
                 Value::from(self.clone())
             }
@@ -812,29 +973,68 @@ macro_rules! parsed_field {
     };
 }
 
+/// JSON: read exactly from JSON columns, parsed from text columns; JSON
+/// input is taken as it is (`null` included).
+impl Field for serde_json::Value {
+    const KIND: FieldKind = FieldKind::Json;
+
+    fn to_value(&self) -> Value {
+        Value::from(self.clone())
+    }
+
+    fn null() -> Value {
+        Value::Json(None)
+    }
+
+    fn from_sql(row: &QueryResult, column: &str) -> Result<Self, FieldError> {
+        sql_or_text::<serde_json::Value>(row, column, json)
+    }
+
+    fn from_value(value: Value) -> Result<Self, FieldError> {
+        json(value)
+    }
+
+    fn from_json(json: serde_json::Value) -> Result<Self, FieldError> {
+        Ok(json)
+    }
+
+    fn type_name() -> Cow<'static, str> {
+        Cow::Borrowed("serde_json::Value")
+    }
+}
+
 parsed_field!(
-    serde_json::Value,
-    "serde_json::Value",
-    Value::Json(None),
-    json
+    NaiveDate,
+    "NaiveDate",
+    FieldKind::Date,
+    Value::ChronoDate(None),
+    naive_date
 );
-parsed_field!(NaiveDate, "NaiveDate", Value::ChronoDate(None), naive_date);
-parsed_field!(NaiveTime, "NaiveTime", Value::ChronoTime(None), naive_time);
+parsed_field!(
+    NaiveTime,
+    "NaiveTime",
+    FieldKind::Time,
+    Value::ChronoTime(None),
+    naive_time
+);
 parsed_field!(
     NaiveDateTime,
     "NaiveDateTime",
+    FieldKind::DateTime,
     Value::ChronoDateTime(None),
     naive_date_time
 );
 parsed_field!(
     DateTime<Utc>,
     "DateTime<Utc>",
+    FieldKind::DateTime,
     Value::ChronoDateTimeUtc(None),
     date_time_utc
 );
 parsed_field!(
     DateTime<FixedOffset>,
     "DateTime<FixedOffset>",
+    FieldKind::DateTime,
     Value::ChronoDateTimeWithTimeZone(None),
     date_time_offset
 );
@@ -843,6 +1043,8 @@ parsed_field!(
 /// columns keep numbers as integers or floats, read from those or from
 /// text.
 impl Field for Decimal {
+    const KIND: FieldKind = FieldKind::Decimal;
+
     fn to_value(&self) -> Value {
         Value::Decimal(Some(*self))
     }
@@ -874,12 +1076,23 @@ impl Field for Decimal {
         decimal(&value)
     }
 
+    /// A JSON number is read from its exact text (`12.10` stays `12.1`, not
+    /// the nearest binary float).
+    fn from_json(json: serde_json::Value) -> Result<Self, FieldError> {
+        match json {
+            serde_json::Value::Number(number) => decimal(&Value::String(Some(number.to_string()))),
+            other => decimal(&json_to_value(other)),
+        }
+    }
+
     fn type_name() -> Cow<'static, str> {
         Cow::Borrowed("Decimal")
     }
 }
 
 impl<T: Field> Field for Option<T> {
+    const KIND: FieldKind = T::KIND;
+
     fn to_value(&self) -> Value {
         match self {
             Some(value) => value.to_value(),
@@ -904,6 +1117,14 @@ impl<T: Field> Field for Option<T> {
             Ok(None)
         } else {
             T::from_value(value).map(Some)
+        }
+    }
+
+    fn from_json(json: serde_json::Value) -> Result<Self, FieldError> {
+        if json.is_null() {
+            Ok(None)
+        } else {
+            T::from_json(json).map(Some)
         }
     }
 

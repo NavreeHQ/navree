@@ -141,7 +141,7 @@ fn discarded_attributes_are_errors_unless_tolerated() {
     let error = strict::current().check(violation.clone()).unwrap_err();
     assert_eq!(
         error.to_string(),
-        "cannot fill `reading` of Probe: not fillable (add it to its fillable list, or use force_fill)"
+        "cannot mass-assign `reading` on Probe: not fillable; add it to #[model(fillable(..))], or use force_fill"
     );
     assert!(Strictness::lenient().check(violation).is_ok());
     let record = Record::new(Probe {

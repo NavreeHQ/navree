@@ -1,0 +1,23 @@
+error: columns(..) stores a field across several columns: name at least two (`name: Type`)
+  --> tests/ui/model_attributes_columns.rs:13:34
+   |
+13 |     #[model(cast = MoneyColumns, columns(cents: i64))]
+   |                                  ^^^^^^^
+
+error: columns(..) needs the cast that splits the field: add cast = path::To::Cast (a `MultiColumnCast`)
+  --> tests/ui/model_attributes_columns.rs:20:13
+   |
+20 |     #[model(columns(cents: i64, currency: String))]
+   |             ^^^^^^^
+
+error: a field stored across several columns needs the path of a type implementing `MultiColumnCast`: cast = path::To::Cast
+  --> tests/ui/model_attributes_columns.rs:27:20
+   |
+27 |     #[model(cast = "json", columns(cents: i64, currency: String))]
+   |                    ^^^^^^
+
+error: a field takes `cast` or `inbound`, not both
+  --> tests/ui/model_attributes_columns.rs:34:20
+   |
+34 |     #[model(cast = "json", inbound = Slug)]
+   |                    ^^^^^^

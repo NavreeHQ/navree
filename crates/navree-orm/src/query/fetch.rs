@@ -6,6 +6,7 @@ use std::hash::Hash;
 
 use indexmap::IndexMap;
 
+use crate::attributes::in_model_scope;
 use crate::collection::Collection;
 use crate::column::{Column, IntoExpr};
 use crate::error::{OrmError, Result};
@@ -95,24 +96,36 @@ impl<M: Model> Builder<M> {
     pub(crate) async fn fetch(self, target: &Target<'_>) -> Result<Collection<M>> {
         let mut query = self.with_pending_default_counts();
         let eager = query.take_eager();
+        let extra_casts = query.extra_casts.clone();
         let ir = query.into_ir();
         let rows = target.fetch(&ir).await?;
-        let mut records = Vec::new();
-        if !rows.is_empty() {
-            let ctx = target.context();
-            let strictness = ctx.strictness().await;
-            records = crate::strict::sync_scope(strictness, || {
-                rows.iter()
-                    .map(Record::<M>::from_row)
-                    .collect::<Result<Vec<_>>>()
-            })?;
-            let hooks = Hooks::<M>::resolve(&ctx).await?;
-            if !hooks.is_empty() {
-                for record in &mut records {
-                    hooks.after(ModelEvent::Retrieved, &ctx, record).await?;
+        let ctx = target.context();
+        // Rows decode inside the model's cast context (the app's encrypter,
+        // ...) with the app's strict modes, and so do the `Retrieved` hooks
+        // that may read the records.
+        let mut records = in_model_scope::<M, _, _>(&ctx, async {
+            let mut records = Vec::new();
+            if !rows.is_empty() {
+                let strictness = ctx.strictness().await;
+                records = crate::strict::sync_scope(strictness, || {
+                    rows.iter()
+                        .map(|row| {
+                            let mut record = Record::<M>::from_row(row)?;
+                            extra_casts.apply(&mut record)?;
+                            Ok(record)
+                        })
+                        .collect::<Result<Vec<_>>>()
+                })?;
+                let hooks = Hooks::<M>::resolve(&ctx).await?;
+                if !hooks.is_empty() {
+                    for record in &mut records {
+                        hooks.after(ModelEvent::Retrieved, &ctx, record).await?;
+                    }
                 }
             }
-        }
+            Ok(records)
+        })
+        .await?;
         crate::relations::eager::after_fetch(target, &mut records, &eager).await?;
         Ok(Collection::from(records))
     }

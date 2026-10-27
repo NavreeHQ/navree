@@ -22,6 +22,7 @@ pub use filters::{HasWheres, WhereGroup};
 pub use join::JoinClause;
 pub use table::{TableBuilder, table};
 
+use crate::attributes::extras::ExtraCasts;
 use crate::column::{Filter, IntoQuery};
 use crate::error::Result;
 use crate::ir::{ColumnRef, Expr, InValues, QueryIr, SelectItem, Where, WhereClause};
@@ -61,6 +62,8 @@ pub struct Builder<M: Model> {
     /// The relations the query loads into its records (and its depth in
     /// existence subqueries); see [`crate::relations`].
     pub(crate) eager: crate::relations::eager::EagerState,
+    /// Query-time casts of extra columns (`with_casts`).
+    pub(crate) extra_casts: ExtraCasts,
     _model: PhantomData<fn() -> M>,
 }
 
@@ -72,6 +75,7 @@ impl<M: Model> Builder<M> {
             scopes: ScopeChoices::default(),
             scopes_applied: false,
             eager: crate::relations::eager::EagerState::default(),
+            extra_casts: ExtraCasts::default(),
             _model: PhantomData,
         }
     }
@@ -298,6 +302,7 @@ impl<M: Model> Clone for Builder<M> {
             scopes: self.scopes.clone(),
             scopes_applied: self.scopes_applied,
             eager: self.eager.clone(),
+            extra_casts: self.extra_casts.clone(),
             _model: PhantomData,
         }
     }

@@ -36,28 +36,34 @@ Principles:
 | Crate | Layer | Role |
 |---|---|---|
 | `navree-orm` | L4 | Models, records, collections, the builders, the IR, SQL per dialect, execution on `Db`/`Uow`, casts, scopes, hooks, pagination, the relation and document-driver seams |
-| `navree-orm-macros` | L0 | `#[derive(Model)]`, `#[scopes]` and `#[relations]` (proc macros; no runtime navree dependencies) |
+| `navree-orm-macros` | L0 | `#[derive(Model)]`, `#[scopes]`, `#[relations]` and `#[accessors]`/`#[accessor]` (proc macros; no runtime navree dependencies) |
 | `navree-orm-mongodb` | L5 | MongoDB: implements `DocumentDriver` (mongodb track) |
 | `navree-schema` | L3/L4 | Migrations and the schema builder (own design; the ORM does not depend on it) |
 
 `navree-orm` depends on navree-kernel, navree-contracts, navree-http,
 navree-db and navree-orm-macros. Its HIERARCHY row
 (`crates/navree/tests/dependency_graph.rs`) also allows navree-config,
-navree-telemetry, navree-events and navree-crypto, for the lifecycle and
-attributes tracks. It re-exports the macros, so `use navree_orm::Model;`
-imports the trait and the derive at once.
+navree-telemetry, navree-events, navree-crypto and navree-api, for the
+lifecycle and attributes tracks. The attribute layer uses navree-crypto
+(encrypted and hashed casts), navree-config (the configuration casts can
+read) and navree-api (records as API resources), plus utoipa (OpenAPI
+schemas of models), argon2 (recognising Argon2 hashes without hashing),
+url (`Url` fields) and tokio (task-local scopes). It re-exports the
+macros, so `use navree_orm::Model;` imports the trait and the derive at
+once.
 
-The facade turns it on with the `orm` feature (in `full`): `navree::orm` is
-the whole crate; `navree::prelude` brings `Model` (trait and derive),
-`Record`, `Collection` and `Builder`; `navree_orm::prelude` has every name
-an app writes. The facade test treats navree-orm-macros as a companion
-proc-macro crate of navree-orm (`COMPANION_MACROS` in
-`crates/navree/tests/facade.rs`).
+The facade turns it on with the `orm` feature (in `full`; it turns on
+`db`, `http`, `crypto` and `api` too): `navree::orm` is the whole crate;
+`navree::prelude` brings `Model` (trait and derive), `Record`,
+`Collection`, `Builder`, `#[accessors]`, `attrs!` and `Attributes`;
+`navree_orm::prelude` has every name an app writes. The facade test
+treats navree-orm-macros as a companion proc-macro crate of navree-orm
+(`COMPANION_MACROS` in `crates/navree/tests/facade.rs`).
 
-Features of navree-orm: `postgres` (navree-db's PostgreSQL driver),
-`mysql` (SeaORM's MySQL driver; once navree-db has its own `mysql` feature,
-this one forwards to it). SQL for every dialect is generated without any
-feature.
+Features of navree-orm: `postgres` (navree-db's PostgreSQL driver, and
+SeaORM's pgvector values for `cast = "vector"`), `mysql` (SeaORM's MySQL
+driver; once navree-db has its own `mysql` feature, this one forwards to
+it). SQL for every dialect is generated without any feature.
 
 ### Paths in generated code
 
@@ -96,7 +102,21 @@ src/
   broadcast.rs      Broadcasts, BroadcastHook, BroadcastModelEvent (job `orm.broadcast`), without_broadcasting
   collection.rs     Collection<M>
   pagination.rs     PageRequest, SimplePage, CursorPage, CursorRequest (extractor), Builder::{paginate, simple_paginate, cursor_paginate}
-  cast.rs           Cast, CastError, AsJson, StringEnum, IntEnum, encode/decode helpers
+  cast.rs           Cast, CastError, AsJson, StringEnum, IntEnum, encode/decode helpers; re-exports the built-in casts
+  attributes/       the attribute layer (section 11, orm-attributes)
+    mod.rs          re-exports
+    context.rs      CastContext: the services casts use (encrypter, hasher, clock, config, dialect), resolved per operation; scopes
+    fill.rs         Attributes, attrs!, fill / force_fill / fill_only / set_attribute / set_json_path, guards, unguarded, DiscardPolicy
+    casts/          decimal, datetime (formats, unix timestamps), encrypted, hashed, binary ids, inbound, castable, multi-column, url, vector
+    accessors.rs    Accessor (what #[accessors] generates), NoAccessors
+    arith.rs        Record::increment_cast / decrement_cast
+    extras.rs       ExtraCast, Builder::with_casts (query-time casts of extra columns)
+    state.rs        RecordState: per-record hidden / visible / appends overrides, stale columns
+    serialize.rs    the record serializer; Record::to_json / to_value / only / except
+    visibility.rs   Condition; make_visible / make_hidden / append / set_* / merge_* on records and collections
+    resource.rs     Resource, HasResource, API resources and field masks of records and collections
+    schema.rs       ModelSchema, ToSchema for records and pages, page schemas
+    model_ref.rs    ModelRef, ModelRefs (records in queued jobs)
   scope.rs          GlobalScope, Scoped, SoftDeletes, scope grouping
   expr.rs           Expr constructors: col, val, raw, func, aggregates, arithmetic, subquery, time_bucket, first, last
   relations/        relationships (section 11, orm-relations): definitions, relation queries,
@@ -161,6 +181,16 @@ Field attributes: `column = "name"`, `cast = "json" | "string_enum" |
 not a built-in is an error), `default` (a row without the column reads as
 the field's default), `skip` (not a column; `Default` when read).
 
+The attribute layer adds container keys (`fillable(..)`, `guarded(..)`,
+`unguarded`, `hidden(..)`, `visible(..)`, `appends(..)`, `encrypter =
+"name"`, `serialize_dates_with = path`, `resource = Type`), field keys
+(`hidden`, `fillable`, `guarded`, `set_with = path`, `schema = Type`,
+`inbound = path`, `columns(a: A, b: B)`) and built-in casts (`"decimal(N)"`,
+`"datetime_format(\"..\")"`, `"unix_timestamp"`, `"unix_timestamp_ms"`,
+`"encrypted"`, `"encrypted_json"`, `"hashed"`, `"binary_uuid"`,
+`"binary_ulid"`, `"vector"`, `cast` alone, `cast(path, args..)`); section
+11 (orm-attributes) describes them.
+
 The derive generates:
 
 - `impl Model`: `type Key`, `meta()` (a `&'static ModelMeta` built in a
@@ -179,6 +209,16 @@ The derive generates:
   Option<i64>>`. A nullable column takes plain values in conditions
   (`Deal::COMPANY_ID.eq(7)`) and `None` (`IS NULL`), and plucks as
   `Option`s. Constants of cast fields encode and decode through the cast.
+  A field stored across columns (`columns(..)`) has one constant per
+  column.
+- For the attribute layer: the `Model` methods `set_attribute` and
+  `set_attribute_parts` (typed assignment from JSON through the cast and
+  the mutator), `changed_columns` (dirty columns, compared through each
+  cast), `json_attribute`, `accessors`, `prepare_for_write`,
+  `serialized_overrides`, `stale_columns` and `increment_cast`; the
+  attribute metadata on `ModelMeta`/`ColumnMeta`; a `set_<field>` setter
+  for each field with a mutator; `HasResource` for `resource = Type`; and
+  a compile-time check that each `appends(..)` name is an accessor.
 
 Errors are compile errors with spans and fixes (unknown keys suggest the
 closest one; missing key and timestamp fields, `Option` keys, casts on
@@ -236,6 +276,7 @@ everything a `Value` is built from for untyped columns.
 | `changes`, `previous` | what the last save changed: new and old values |
 | `extras` | selected columns that are not model columns (`select_raw`, `select_sub`, `with_count` results, pivot columns) |
 | `relations` | loaded relations (section 11, relations) |
+| `attributes` | per-record `hidden`/`visible`/`appends` overrides and the columns whose stored form is stale (section 11, attributes) |
 
 Instance API: `new` (also `From<M>`), `model`, `model_mut`, `key`,
 `save`, `update(exec, |m| ..)`, `delete`, `refresh`,
@@ -244,28 +285,49 @@ Instance API: `new` (also `From<M>`), `model`, `model_mut`, `key`,
 `get_dirty`, `get_changes`, `get_previous`, `get_original`,
 `get_original_value`, `sync_original[_on]`, `discard_changes`, `exists`,
 `was_recently_created`, `trashed`, `is`/`is_not`, `extras`, `extra::<T>`,
-`set_extra`, `relations[_mut]`, `into_inner`.
+`set_extra`, `relations[_mut]`, `into_inner`. The attribute layer adds
+mass assignment (`fill`, `force_fill`, `fill_only`, `set_attribute`,
+`set_json_path`, `update_attributes`), `increment_cast[_with]` /
+`decrement_cast[_with]`, serialization (`to_json`, `to_json_pretty`,
+`to_value`, `only`, `except`), visibility (`make_visible[_if]`,
+`make_hidden[_if]`, `set_hidden`, `merge_hidden`, `set_visible`,
+`merge_visible`, `append`, `set_appends`, `merge_appends`,
+`without_appends`, `has_appended`, `hidden`, `visible`, `appends`), API
+resources (`to_resource`, `resource`, `to_resource_json[_as]`,
+`to_value_masked`, `field_names`) and `to_ref`.
 
 Dirty tracking compares stored values (`same_value`): NULLs regardless of
 type, floats within a relative tolerance, decimals numerically, date-times
-by instant, JSON structurally. A new record is dirty in every column.
+by instant, JSON structurally. A cast can compare in its own terms
+(`Cast::eq_stored` on stored values, `Cast::same` on field values:
+encrypted fields compare their plain values, since every encryption
+differs), and a column whose stored form is stale (`Cast::is_stale`: a
+payload under an old key) is dirty until saved. A new record is dirty in
+every column.
 
-Records serialize as their model, then the extras, then the loaded
-relations (`Serialize for Record<M>`; the attributes track routes it through
-its serializer).
+Records serialize through `attributes::serialize` (`Serialize for
+Record<M>`): the model's own serde output (keys, renames, skips), cast
+outputs, one date-time format, the extras, the appended accessors, then
+the loaded relations, filtered by `visible` and `hidden` (section 11,
+attributes).
 
 ### Persistence flows (`persist.rs`)
 
 Insert: `saving` → `creating` (both cancellable) → generate an empty key →
-fill empty `created_at`/`updated_at` → `INSERT` → read a database-assigned
-key back → `exists`, `recently_created` → `created` change event →
-`created` → `saved` → sync the original.
+fill empty `created_at`/`updated_at` → prepare the casts (`Cast::prepare`:
+hash plain passwords, round and normalise values, so the record holds what
+is stored) → `INSERT` → read a database-assigned key back → `exists`,
+`recently_created` → `created` change event → `created` → `saved` → sync
+the original.
 
 Update (dirty records only): `saving` → `updating` → `updated_at` unless the
-caller changed it → `UPDATE` of the dirty columns by the original key →
-sync the changes → `updated` change event (old and new values of the
-changed columns) → `updated` → `saved` → sync. A clean record runs `saving`
-and `saved` and writes nothing.
+caller changed it → prepare the casts → `UPDATE` of the dirty columns by
+the original key → sync the changes → `updated` change event (old and new
+values of the changed columns) → `updated` → `saved` → sync. A clean
+record runs `saving` and `saved` and writes nothing.
+
+Every flow, and every query's decoding, runs inside the model's cast
+context (`attributes::in_model_scope`) when its casts need services.
 
 Delete: `deleting` (cancellable) → `DELETE`; a soft-deleting model sets the
 deleted-at (and updated-at) column instead, unless the record is being
@@ -514,8 +576,9 @@ requested type.
 | `NotPersisted`, `MissingKey` | an operation needing a stored record; an empty manual key | 500 |
 | `Hook { model, message }`, `Driver { driver, message }` | a hook or a document driver failed | 500 |
 | `MissingAttribute { model, column, expected, selected }` | a row lacks a model column (strict mode, or a field without a default) | 500 |
-| `MassAssignment { model, columns }` | filling columns that are not fillable (strict mode) | 500 |
+| `MassAssignment { model, columns, totally_guarded }` | `fill` on a model that declares neither `fillable` nor `guarded`, or keys it may not set when discarding them is refused (`DiscardPolicy::Fail`, or the strict mode `prevent_discarding_attributes`) | 500 |
 | `LazyLoading { model, relation }` | a relation loaded one record at a time (strict mode) | 500 |
+| `Serialize { model, column, message }` | a record did not serialize (the column, accessor or relation is named when known) | 500 |
 
 `is_not_found()` and `is_unique_violation()` classify. Messages name the
 model, the column and the operation; no SQL or values reach clients
@@ -524,10 +587,18 @@ model, the column and the operation; no SQL or values reach clients
 ## 9. Casts, collections, pagination
 
 `Cast<T>`: `type Stored: Field`, `get(Stored) -> Result<T, CastError>`,
-`set(&T) -> Result<Stored, CastError>`; static and synchronous. Built-in:
+`set(&T) -> Result<Stored, CastError>`; static and synchronous. Provided
+items refine how the ORM treats the field: `CONTEXT` with
+`get_with`/`set_with`/`null_with` (casts that read services from the
+`CastContext`), `KIND` (what serialized values are, for schemas and date
+formats), `eq_stored` and `same` (dirty tracking), `from_json` (mass
+assignment), `serialize` (serialized records), `increment`/`decrement`,
+`prepare` (asynchronous work before a write) and `is_stale`. Built-in:
 `"json"` (`AsJson`, any serde type), `"string_enum"` (`StringEnum`),
-`"int_enum"` (`IntEnum`: `Copy + Into<i64> + TryFrom<i64>`). A cast on an
-`Option<T>` field casts the inner value.
+`"int_enum"` (`IntEnum`: `Copy + Into<i64> + TryFrom<i64>`), and the
+attribute layer's casts (section 11). A cast on an `Option<T>` field casts
+the inner value. `Field` also says what a type is in JSON (`Field::KIND`, a
+`FieldKind`) and reads untyped input (`Field::from_json`).
 
 `Collection<M>` dereferences to `[Record<M>]` (and is built from and
 iterates as records: `From<Vec<_>>`, `FromIterator`, `Extend`,
@@ -557,7 +628,11 @@ extractor (400 for a malformed cursor or limit).
   timestamps with a fixed clock, hooks from an app, the unit of work
   (events, rollback, joining, after-commit), casts, HTTP (404 shape, page
   shapes, extractors, request transactions), `TableBuilder`, and the
-  document-driver reference. `tests/orm/lifecycle/` covers the lifecycle
+  document-driver reference. `tests/orm/attributes/` covers the attribute
+  layer: mass assignment (`fill.rs`), casts (`casts.rs`), encryption and
+  hashing (`secrets.rs`), serialization (`serialize.rs`), API resources
+  and OpenAPI schemas (`resources.rs`) and model references (`refs.rs`).
+  `tests/orm/lifecycle/` covers the lifecycle
   (dispatch timing, observers and listeners, typed events, custom events,
   quiet writes, soft deletes, runtime scopes, strict modes with
   `strict::scope`, pruning and `model:prune`, broadcasting, the event fake,
@@ -568,12 +643,16 @@ extractor (400 for a malformed cursor or limit).
 - `tests/sql/`: SQL snapshots per dialect (insta), each showing the
   PostgreSQL, MySQL and SQLite statement and values or the error
   (`tests/sql/lifecycle.rs` captures mass restores and force deletes
-  through a recording document driver).
+  through a recording document driver; `attributes.rs`: the stored form
+  of cast fields in conditions, vectors per database, with and without
+  the `postgres` feature).
 - `tests/servers/`: PostgreSQL with TimescaleDB and MySQL, gated by
   `NAVREE_TEST_POSTGRES_URL` / `NAVREE_TEST_MYSQL_URL` (`cargo test -p
   navree-orm --features postgres,mysql --test servers`; a test skips with
   a notice when its variable is unset); each test runs in a schema or
-  database of its own, dropped afterwards.
+  database of its own, dropped afterwards. `attributes.rs` runs every cast
+  against the servers' native column types, and vectors where the server
+  has a vector type (pgvector, MySQL 9; skipped with a notice otherwise).
 - `tests/compile_fail.rs` with `tests/ui/`: the macros' error messages.
 - Doctests on the public items: none is `ignore`d. Examples that need a
   database are `no_run` (compiled) over the hidden `__doc_models` models
@@ -748,23 +827,142 @@ Seams left for other tracks:
 
 ### orm-attributes
 
-- Owns `src/attributes/` (`fill.rs`: `fill`, `force_fill`, `fillable`,
-  `guarded` through `Model::set_value`; `casts.rs`: encrypted, encrypted
-  JSON, hashed, integer timestamps, arrays and maps, inbound-only casts;
-  `accessors.rs`; `serialize.rs`: `hidden`, `visible`, `appends`,
-  `to_json`, API resources, OpenAPI schemas).
-- Casts are static and synchronous (`Cast<T>`), and run inside `from_row`
-  and `values`, which have no executor. Services a cast needs (the
-  `Encrypter`, the `Hasher`) are installed once at boot by `OrmModule`
-  (from navree-crypto's providers) and read by the casts; a missing
-  service is a `Cast` error naming the module to add.
-- Serialization: `Serialize for Record<M>` (`record.rs`) routes through
-  `attributes::serialize`; the metadata (`hidden`, `visible`, `appends`)
-  goes on `ModelMeta` as const builder methods (`model.rs`), written by
-  the derive.
-- Macro attributes: `fillable`, `guarded`, `hidden`, `visible`, `appends`,
-  field casts `"encrypted" | "hashed" | ...`, accessor/mutator
-  declarations, in `navree-orm-macros/src/model/attributes.rs`.
+Shipped. Owns `src/attributes/` (layout in section 2),
+`navree-orm-macros/src/model/attributes.rs` (the derive's attribute keys,
+listed in its `CONTAINER_KEYS` and `FIELD_KEYS`) and
+`navree-orm-macros/src/accessors.rs`. The metadata goes on `ModelMeta` and
+`ColumnMeta` as const builder methods (`model.rs`), written by the derive.
+
+**Mass assignment** (`fill.rs`). `Attributes` are JSON values keyed by
+column name or JSON path (`"meta->status"`), in order: `attrs!`, a JSON
+object, a request body (it deserializes) or any serializable struct.
+`fill` sets what the model allows: `fillable(..)` lists the fillable
+columns; without it `guarded(..)` lists the guarded ones and every other
+column is fillable; a model that declares neither is totally guarded
+(`fill` fails with `MassAssignment`, `force_fill` works). Field flags
+(`#[model(fillable)]`, `#[model(guarded)]`) add to the lists;
+`#[model(unguarded)]` turns guarding off for a model, `unguarded(fut)` for
+a task. Only real columns are set: unknown keys and JSON paths into
+columns that are not JSON never reach the model. Values convert like
+untyped input (`Field::from_json`), through the cast (`Cast::from_json`:
+an encrypted field takes the plain value) and the mutator; a field stored
+across columns is assigned once from all its parts (`set_attribute_parts`).
+`fill` checks every key before it changes anything. Keys it may not set
+are dropped, reported or refused, first match wins: the task's
+`DiscardPolicy` (`with_discard_policy`), the task's strict modes
+(`strict::scope`), the process's `DiscardPolicy` (`set_discard_policy`),
+the strict modes of the app that booted last with `OrmModule`
+(`prevent_discarding_attributes`, `on_discarded_attributes`), else they
+are dropped. Also `force_fill`, `fill_only`, `set_attribute`, `set_json_path`,
+`update_attributes`, and `create_from` / `force_create` on models and
+builders.
+
+**Casts** (`casts/`, re-exported from `cast`):
+
+| Attribute | Field type | Stored as | Notes |
+|---|---|---|---|
+| `"decimal(N)"` | `Decimal` | a decimal | rounded half away from zero to N places (N ≤ 28) when written |
+| `"datetime_format(\"..\")"` | `DateTime<Utc>`/`<FixedOffset>`, `NaiveDateTime`, `NaiveDate`, `NaiveTime` | text | the format is checked at compile time; serialized in the same format |
+| `"unix_timestamp"`, `"unix_timestamp_ms"` | `DateTime<Utc>`, `NaiveDateTime` | an integer | the record holds the stored precision after a save |
+| `"encrypted"`, `"encrypted_json"` | `String`/`Vec<u8>`, any serde type | navree-crypto payload `v1.<kid>.<nonce>.<ct>` | compared by plain value; a payload under a previous key is stale and rewritten at the next save; `#[model(encrypter = "name")]` picks a named encrypter |
+| `"hashed"` | `String` | an Argon2id PHC string | hashed in `prepare` (navree-crypto's `Hasher`, off the async threads); an Argon2 hash is kept; other algorithms' hashes and malformed Argon2 strings are refused |
+| `"binary_uuid"`, `"binary_ulid"` | `Uuid`, `Ulid` | 16 bytes | ULIDs big-endian, so bytes sort by time |
+| `"vector"` | `Vec<f32>` | pgvector (with the `postgres` feature; its text form without), little-endian `f32` bytes on MySQL 9, MariaDB and SQLite | non-finite values refused |
+| (none) | `url::Url` | text | a `Field` |
+| `cast` | a `Castable` type | its cast's | the type names its cast |
+| `cast(path, args..)` | the cast's | the cast's | arguments become const generics: `cast(Scaled, 100)` is `Scaled<100>` |
+| `inbound = path` | a `Field` | itself | `InboundCast`: transformed on write only; the record holds the transformed value after a save |
+| `cast = path, columns(a: A, b: B)` | any | each column | `MultiColumnCast` over `StoredColumns` tuples of 2 to 8 columns, one typed constant per column |
+
+**The cast context** (`context.rs`). Casts run inside `from_row` and
+`values`, which are synchronous and take no executor. A cast that needs a
+service sets `Cast::CONTEXT`; for a model with such casts, every query,
+save, delete, refresh and increment first resolves a `CastContext` from the
+executor's app (`CastContext::for_model`: the `Encrypter`, the named one
+for `encrypter = "name"`, the `Hasher`, the `dyn Clock`, the `Config`, and
+the dialect) and runs decoding and encoding inside its task-local scope
+(`in_model_scope`). `CastContext::scope` / `sync_scope` set one explicitly
+(winning over the app's services, so tests pin keys); `set_default`
+installs a process-wide fallback. A missing service is a `Cast` error
+saying what to register. Asynchronous work (hashing) is `Cast::prepare`,
+which the persistence flows run before they take the values (section 4).
+A record keeps the context it was read or saved under (`RecordState`), so
+its dirty checks, fills and serialization outside any scope use the same
+services; `create_from` / `force_create` resolve it before they fill.
+Conditions are encoded where they are built, before any operation runs,
+so a condition on a cast that reads services is built inside an explicit
+scope (or under the process default).
+
+**Accessors and mutators.** `#[accessors] impl Deal { #[accessor] fn
+label(&self) -> String { .. } }` generates an inherent
+`Deal::__NAVREE_ACCESSORS` table (name, a getter returning JSON, the Rust
+type, an optional `#[accessor(schema = Type)]`); the derive reads it by
+inherent-constant precedence over the `NoAccessors` fallback, so a model
+without accessors needs nothing, and a const assertion makes each
+`appends(..)` name that is not an accessor a compile error at the name.
+`#[model(set_with = path)]` names a mutator `fn(&mut M, T)`, which `fill`,
+`set_attribute` and the generated `set_<field>` setter call.
+
+**Serialization** (`serialize.rs`, `visibility.rs`). A record serializes as
+the model's own serde output (keys, renames, skips, `serialize_with`), each
+cast's `serialize` output where it has one, date-times in one format (RFC
+3339 UTC with microseconds, or `serialize_dates_with = path`), the extras,
+the appended accessors, then the loaded relations, each applying its own
+visibility; `visible(..)` keeps only the names listed, `hidden(..)` leaves
+names out. Names are fields or columns (matched to serde's keys) or output
+keys. The model's lists come from the derive; a record overrides them
+(`RecordState`: `make_visible`, `make_hidden`, `append`, `set_*`,
+`merge_*`, `without_appends`, with conditional forms), a collection for
+all its records, and `only` / `except` per call. Failures are
+`OrmError::Serialize` naming the field. A record with nothing to rewrite
+(no casts, date-times, extras, relations, visibility or appends)
+serializes straight through its model's `Serialize`.
+
+**API resources and OpenAPI** (`resource.rs`, `schema.rs`). `Resource<M>`
+(a navree-api `ApiResource` built `from_record`) is the shape a front end
+receives; `#[model(resource = Type)]` makes one the model's own
+(`HasResource`, `Record::resource`); a record is also a resource of its own
+(`to_resource_json`: its JSON plus `"__type"`), and `to_value_masked`
+applies navree-api field masks. `Record<M>` implements utoipa's `ToSchema`
+(named after the model) from `ModelSchema<M>`: one property per serialized
+field under its serde key, typed from `FieldKind` (or the cast's `KIND`, or
+`#[model(schema = Type)]`), `Option`s nullable, `skip_serializing_if`
+fields not required, hidden fields left out, accessors included.
+`SimplePage` and `CursorPage` of any `ToSchema` type have schemas, and
+`page_schema` / `simple_page_schema` / `cursor_page_schema` give
+navree-http `SchemaFn`s for the page shapes.
+
+**Query-time casts** (`extras.rs`): `Builder::with_casts([("total",
+ExtraCast::Decimal(Some(2)))])` converts extra columns (`select_raw`,
+aggregates) as they are read; extras serialize in the model's date format.
+
+**Model references** (`model_ref.rs`): `ModelRef<M>` / `ModelRefs<M>`
+serialize records' identities (model name, key, loaded relation names,
+connection) into queued jobs; `restore` reads the records again through
+the writer without global scopes, failing with `ModelNotFound` when one is
+gone (`restore_or_skip` gives `None`; `ModelRefs::restore` keeps the order
+and leaves out records deleted since).
+
+Seams for the other tracks:
+
+- orm-lifecycle: `fill` answers discarded keys with
+  `Strictness::check(Violation::DiscardedAttributes)` when no
+  `DiscardPolicy` is set for the task or the process (a `strict::scope`
+  outranks the process's policy); a quiet `force_create` is
+  `without_events` around `Model::force_create`.
+- orm-relations: `ModelRef::relations()` names the relations to load again
+  after `restore` (which returns the record without them); serialized
+  relations already apply each related record's visibility and appends.
+- orm-factories: states and overrides can be `Attributes` applied with
+  `force_fill`.
+
+Compile errors (pinned by `tests/ui/model_attributes_*.rs`): unknown
+names in the lists (with suggestions), `unguarded` with lists, a column
+both fillable and guarded, missing or too large decimal scales, invalid
+date-time formats, unknown casts, `columns(..)` without a cast or with
+fewer than two columns, `cast` with `inbound`, accessor signatures,
+setters that would shadow record methods, and `appends(..)` names that are
+not accessors.
 
 ### orm-streams
 
