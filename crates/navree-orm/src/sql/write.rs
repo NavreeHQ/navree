@@ -393,7 +393,8 @@ impl Compiler {
         let column = sea_query::Expr::col(Alias::new(name.to_owned()));
         match self.dialect {
             Dialect::Postgres => {
-                let mut target = self.custom("COALESCE({}::jsonb, jsonb_build_object())", vec![column]);
+                let mut target =
+                    self.custom("COALESCE({}::jsonb, jsonb_build_object())", vec![column]);
                 for (path, value) in paths {
                     let value = match value {
                         Expr::Value(value) => {
@@ -403,7 +404,11 @@ impl Compiler {
                     };
                     target = self.custom(
                         "jsonb_set({}, {}, {})",
-                        vec![target, sea_query::Expr::cust(postgres_path_array(path)), value],
+                        vec![
+                            target,
+                            sea_query::Expr::cust(postgres_path_array(path)),
+                            value,
+                        ],
                     );
                 }
                 Ok(target)
@@ -419,7 +424,9 @@ impl Compiler {
                     exprs.push(match value {
                         Expr::Value(value) => self.custom(
                             wrap,
-                            vec![sea_query::Expr::val(Value::from(to_json(value).to_string()))],
+                            vec![sea_query::Expr::val(Value::from(
+                                to_json(value).to_string(),
+                            ))],
                         ),
                         other => self.expr(other)?,
                     });

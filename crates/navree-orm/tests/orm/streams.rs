@@ -50,11 +50,7 @@ async fn chunks_visit_every_record_in_key_order() {
     assert!(completed);
     assert_eq!(
         *pages.lock().unwrap(),
-        [
-            vec!["C1", "C2", "C3"],
-            vec!["C4", "C5", "C6"],
-            vec!["C7"]
-        ]
+        [vec!["C1", "C2", "C3"], vec!["C4", "C5", "C6"], vec!["C7"]]
     );
 }
 
@@ -269,7 +265,12 @@ async fn chunk_by_id_honours_offset_on_the_first_page_and_the_limit() {
 #[tokio::test]
 async fn chunk_by_column_pages_by_another_unique_column() {
     let t = sqlite().await;
-    for (name, color) in [("delta", "d"), ("alpha", "a"), ("charlie", "c"), ("bravo", "b")] {
+    for (name, color) in [
+        ("delta", "d"),
+        ("alpha", "a"),
+        ("charlie", "c"),
+        ("bravo", "b"),
+    ] {
         Tag::create(
             &t.db,
             Tag {
@@ -461,7 +462,10 @@ async fn cursors_stream_records_of_one_query() {
         names.push(company.name.clone());
     }
     assert_eq!(names, ["C4", "C3", "C2"]);
-    assert!(cursor.next().await.is_none(), "a finished cursor stays finished");
+    assert!(
+        cursor.next().await.is_none(),
+        "a finished cursor stays finished"
+    );
 }
 
 #[tokio::test]
@@ -520,7 +524,11 @@ async fn raw_cursors_bind_their_values() {
         .try_collect::<Vec<_>>()
         .await
         .unwrap_err();
-    assert!(error.to_string().contains("1 placeholder(s) but 2 value(s)"));
+    assert!(
+        error
+            .to_string()
+            .contains("1 placeholder(s) but 2 value(s)")
+    );
 }
 
 #[tokio::test]
@@ -742,11 +750,7 @@ async fn retrieved_hooks_run_for_every_streamed_record() {
     assert_eq!(*seen.lock().unwrap(), ["C1"], "one row read, one hook run");
     drop(cursor);
     seen.lock().unwrap().clear();
-    let _: Vec<_> = Company::query()
-        .lazy(&*db, 2)
-        .try_collect()
-        .await
-        .unwrap();
+    let _: Vec<_> = Company::query().lazy(&*db, 2).try_collect().await.unwrap();
     assert_eq!(*seen.lock().unwrap(), ["C1", "C2", "C3"]);
 }
 

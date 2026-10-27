@@ -12,10 +12,10 @@ use navree_kernel::{
 use navree_telemetry::Telemetry;
 use sea_orm::DbErr;
 
+use crate::events::publish;
 use crate::http::{map_db_error, uow_layer};
 use crate::migrate::{self, MigrationSet, commands};
 use crate::seed::run_seeders;
-use crate::events::publish;
 use crate::{
     ChangeObserver, ClientCommand, ConnectionEstablished, DEFAULT_CONNECTION, Db, DbConnections,
     DbOptions, Seeder,
@@ -344,7 +344,9 @@ async fn monitor_command(ctx: AppContext, args: Vec<String>) -> Result<(), BoxEr
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--databases" => {
-                let list = args.next().ok_or("--databases takes a list: --databases a,b")?;
+                let list = args
+                    .next()
+                    .ok_or("--databases takes a list: --databases a,b")?;
                 databases.extend(
                     list.split(',')
                         .map(str::trim)
@@ -391,9 +393,11 @@ async fn client_command(ctx: AppContext, args: Vec<String>) -> Result<(), BoxErr
     let options = if connection == DEFAULT_CONNECTION {
         DbOptions::clone(&options)
     } else {
-        options.connections.get(&connection).cloned().ok_or_else(|| {
-            format!("no database connection named `{connection}`")
-        })?
+        options
+            .connections
+            .get(&connection)
+            .cloned()
+            .ok_or_else(|| format!("no database connection named `{connection}`"))?
     };
     let url = match options.read_urls.first() {
         Some(replica) if read => replica,

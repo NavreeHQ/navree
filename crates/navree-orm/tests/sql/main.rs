@@ -540,10 +540,9 @@ fn operators_written_by_hand() {
         "glob",
         Expr::val("Re*")
     ))));
-    insta::assert_snapshot!(rows(table("deals").select_expr(
-        Expr::col("title").binary("||", Expr::val("!")),
-        "loud"
-    )));
+    insta::assert_snapshot!(rows(
+        table("deals").select_expr(Expr::col("title").binary("||", Expr::val("!")), "loud")
+    ));
     insta::assert_snapshot!(rows(table("deals").select_expr(
         Expr::col("meta").binary("#-", Expr::raw("'{owner,email}'", [] as [i64; 0])),
         "meta"
@@ -603,14 +602,12 @@ fn sources_aliases_derived_tables_and_table_functions() {
     insta::assert_snapshot!(rows(
         table("deals").from_as("d").where_(col("d.stage").eq("won"))
     ));
-    insta::assert_snapshot!(rows(table("ignored").from_raw(
-        "generate_series(?, ?) AS n",
-        [1, 10]
-    )));
-    insta::assert_snapshot!(rows(table("ignored").from_function(
-        Expr::func("json_each", [Expr::val("[1,2]")]),
-        "item"
-    )));
+    insta::assert_snapshot!(rows(
+        table("ignored").from_raw("generate_series(?, ?) AS n", [1, 10])
+    ));
+    insta::assert_snapshot!(rows(
+        table("ignored").from_function(Expr::func("json_each", [Expr::val("[1,2]")]), "item")
+    ));
     insta::assert_snapshot!(rows(table("ignored").from_raw("SELECT 1", [] as [i64; 0])));
     // A model's rows from a derived table named like its table.
     insta::assert_snapshot!(query(
@@ -664,9 +661,7 @@ fn sub_joins_and_lateral_joins() {
 #[test]
 fn limits_per_group() {
     insta::assert_snapshot!(query(
-        Deal::query()
-            .latest()
-            .group_limit(2, Deal::COMPANY_ID)
+        Deal::query().latest().group_limit(2, Deal::COMPANY_ID)
     ));
     insta::assert_snapshot!(rows(
         table("activities")
@@ -713,13 +708,13 @@ fn unions_with_orders_and_limits() {
 fn lock_modes_and_waits() {
     use navree_orm::LockMode;
     let locked = |q: Builder<Company>| query(q.where_key(1_i64));
-    insta::assert_snapshot!(locked(Company::query().lock(LockMode::NoKeyUpdate).skip_locked()));
+    insta::assert_snapshot!(locked(
+        Company::query().lock(LockMode::NoKeyUpdate).skip_locked()
+    ));
     insta::assert_snapshot!(locked(Company::query().shared_lock().no_wait()));
     insta::assert_snapshot!(locked(Company::query().lock(LockMode::KeyShare)));
     // `skip_locked` alone locks for update; a later mode keeps the wait.
-    insta::assert_snapshot!(locked(
-        Company::query().skip_locked().lock(LockMode::Share)
-    ));
+    insta::assert_snapshot!(locked(Company::query().skip_locked().lock(LockMode::Share)));
 }
 
 #[test]
@@ -802,7 +797,10 @@ fn json_path_updates() {
     let update = UpdateIr {
         table: TableRef::new("deals"),
         sets: vec![
-            (Cow::Borrowed("meta->status"), IrExpr::Value(Value::from("won"))),
+            (
+                Cow::Borrowed("meta->status"),
+                IrExpr::Value(Value::from("won")),
+            ),
             (
                 Cow::Borrowed("meta->owner->name"),
                 IrExpr::Value(Value::from("ada")),
@@ -811,7 +809,10 @@ fn json_path_updates() {
                 Cow::Borrowed("meta->tags[0]"),
                 IrExpr::Value(Value::from(serde_json::json!({"k": true}))),
             ),
-            (Cow::Borrowed("title"), IrExpr::Value(Value::from("Renewal"))),
+            (
+                Cow::Borrowed("title"),
+                IrExpr::Value(Value::from("Renewal")),
+            ),
         ],
         wheres: vec![WhereClause::and(Deal::ID.eq(Uuid::nil()).into_where())],
     };
@@ -820,7 +821,10 @@ fn json_path_updates() {
         table: TableRef::new("deals"),
         sets: vec![
             (Cow::Borrowed("meta"), IrExpr::Value(Value::from("{}"))),
-            (Cow::Borrowed("meta->status"), IrExpr::Value(Value::from("won"))),
+            (
+                Cow::Borrowed("meta->status"),
+                IrExpr::Value(Value::from("won")),
+            ),
         ],
         wheres: vec![],
     };
@@ -922,7 +926,9 @@ fn statement_timeouts() {
     writeln!(
         out,
         "count of a limited query: {}",
-        compile_aggregate(&limited, &count, Dialect::MySql).unwrap().sql
+        compile_aggregate(&limited, &count, Dialect::MySql)
+            .unwrap()
+            .sql
     )
     .unwrap();
     writeln!(
@@ -935,7 +941,9 @@ fn statement_timeouts() {
     writeln!(
         out,
         "union: {}",
-        compile_select(&union.into_ir(), Dialect::MySql).unwrap().sql
+        compile_select(&union.into_ir(), Dialect::MySql)
+            .unwrap()
+            .sql
     )
     .unwrap();
     insta::assert_snapshot!(out);

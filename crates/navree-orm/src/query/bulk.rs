@@ -214,7 +214,9 @@ fn split(mut insert: InsertIr, dialect: Option<Dialect>) -> Vec<InsertIr> {
         return vec![insert];
     };
     let reserved: usize = match &insert.on_conflict {
-        Some(OnConflict::Update { sets, .. }) => sets.iter().map(|(_, expr)| bound_values(expr)).sum(),
+        Some(OnConflict::Update { sets, .. }) => {
+            sets.iter().map(|(_, expr)| bound_values(expr)).sum()
+        }
         _ => 0,
     };
     let per_row = insert
@@ -326,7 +328,10 @@ fn conflict_sets(
 
 /// The insert handling conflicts on `unique_by` with `sets` (skipping the
 /// conflicting rows when there is nothing to set).
-fn upsert_conflict(unique_by: Vec<Cow<'static, str>>, sets: Vec<(Cow<'static, str>, Expr)>) -> OnConflict {
+fn upsert_conflict(
+    unique_by: Vec<Cow<'static, str>>,
+    sets: Vec<(Cow<'static, str>, Expr)>,
+) -> OnConflict {
     if sets.is_empty() {
         OnConflict::Ignore { target: unique_by }
     } else {
@@ -467,7 +472,11 @@ impl TableBuilder {
     ///     .await?;
     /// # Ok(()) }
     /// ```
-    pub async fn insert<E, R, C, V>(self, exec: &E, rows: impl IntoIterator<Item = R>) -> Result<u64>
+    pub async fn insert<E, R, C, V>(
+        self,
+        exec: &E,
+        rows: impl IntoIterator<Item = R>,
+    ) -> Result<u64>
     where
         E: Executor + ?Sized,
         R: IntoIterator<Item = (C, V)>,
@@ -480,7 +489,9 @@ impl TableBuilder {
             return Ok(0);
         }
         let insert = InsertIr::new(table, rows.columns, rows.values);
-        Ok(Self::run_insert(exec, self.route(), insert).await?.rows_affected)
+        Ok(Self::run_insert(exec, self.route(), insert)
+            .await?
+            .rows_affected)
     }
 
     /// Inserts one row and returns its `id` column, read back with
@@ -538,7 +549,9 @@ impl TableBuilder {
         }
         let insert = InsertIr::new(table, rows.columns, rows.values)
             .on_conflict(OnConflict::Ignore { target: Vec::new() });
-        Ok(Self::run_insert(exec, self.route(), insert).await?.rows_affected)
+        Ok(Self::run_insert(exec, self.route(), insert)
+            .await?
+            .rows_affected)
     }
 
     /// Inserts `rows`, skipping the ones that conflict on the unique index
@@ -613,9 +626,15 @@ impl TableBuilder {
         query: impl IntoQuery,
     ) -> Result<u64> {
         let table = self.insert_table("insert")?;
-        let mut insert = InsertIr::new(table, columns.into_iter().map(Into::into).collect(), Vec::new());
+        let mut insert = InsertIr::new(
+            table,
+            columns.into_iter().map(Into::into).collect(),
+            Vec::new(),
+        );
         insert.select = Some(Box::new(query.into_query()));
-        Ok(Self::run_insert(exec, self.route(), insert).await?.rows_affected)
+        Ok(Self::run_insert(exec, self.route(), insert)
+            .await?
+            .rows_affected)
     }
 
     /// [`insert_using`](Self::insert_using), skipping the rows that
@@ -627,10 +646,16 @@ impl TableBuilder {
         query: impl IntoQuery,
     ) -> Result<u64> {
         let table = self.insert_table("insert")?;
-        let mut insert = InsertIr::new(table, columns.into_iter().map(Into::into).collect(), Vec::new())
-            .on_conflict(OnConflict::Ignore { target: Vec::new() });
+        let mut insert = InsertIr::new(
+            table,
+            columns.into_iter().map(Into::into).collect(),
+            Vec::new(),
+        )
+        .on_conflict(OnConflict::Ignore { target: Vec::new() });
         insert.select = Some(Box::new(query.into_query()));
-        Ok(Self::run_insert(exec, self.route(), insert).await?.rows_affected)
+        Ok(Self::run_insert(exec, self.route(), insert)
+            .await?
+            .rows_affected)
     }
 
     /// Inserts `rows`; a row that conflicts on the unique index of
@@ -682,7 +707,9 @@ impl TableBuilder {
         let sets = conflict_sets(&rows.columns, &unique_by, &[], update)?;
         let insert = InsertIr::new(table, rows.columns, rows.values)
             .on_conflict(upsert_conflict(unique_by, sets));
-        Ok(Self::run_insert(exec, self.route(), insert).await?.rows_affected)
+        Ok(Self::run_insert(exec, self.route(), insert)
+            .await?
+            .rows_affected)
     }
 
     /// Updates the rows matching `attributes` with the assignments
@@ -717,9 +744,9 @@ impl TableBuilder {
     {
         let table = self.insert_table("insert")?;
         let attributes: Vec<Assignment> = attributes.into_iter().collect();
-        let query = attributes
-            .iter()
-            .fold(self, |query, attribute| query.where_(attribute.to_filter(None)));
+        let query = attributes.iter().fold(self, |query, attribute| {
+            query.where_(attribute.to_filter(None))
+        });
         // Read and write through the same connection (the unit of work's).
         let target = exec.target_routed(Access::Write, query.route()).await?;
         let exists = target.exists(query.ir()).await?;
@@ -821,13 +848,23 @@ async fn update_from_on(
 ) -> Result<u64> {
     query.check()?;
     let sql = sql_only(target, "update_from")?;
-    if query.limit.is_some() || query.offset.is_some() || !query.groups.is_empty() || !query.unions.is_empty() {
+    if query.limit.is_some()
+        || query.offset.is_some()
+        || !query.groups.is_empty()
+        || !query.unions.is_empty()
+    {
         return Err(OrmError::invalid(format!(
             "update_from on `{}` takes joins and conditions only (no limit, offset, groups or unions)",
             query.table.qualifier()
         )));
     }
-    let statement = compile_update_from(&query.table, &sets, &query.joins, &query.wheres, sql.dialect())?;
+    let statement = compile_update_from(
+        &query.table,
+        &sets,
+        &query.joins,
+        &query.wheres,
+        sql.dialect(),
+    )?;
     Ok(sql.execute(&statement).await?.rows_affected())
 }
 
@@ -892,7 +929,10 @@ fn model_inserts<M: Model>(models: &[M]) -> Result<Vec<InsertIr>> {
         } else {
             &mut with_key
         };
-        group.get_or_insert_with(|| (columns, Vec::new())).1.push(row);
+        group
+            .get_or_insert_with(|| (columns, Vec::new()))
+            .1
+            .push(row);
     }
     Ok([without_key, with_key]
         .into_iter()
@@ -939,7 +979,14 @@ impl<M: Model> Builder<M> {
         exec: &E,
         models: impl IntoIterator<Item = M>,
     ) -> Result<u64> {
-        Self::insert_models(exec, self.route(), Some(models.into_iter().collect()), false, |_| Ok(None)).await
+        Self::insert_models(
+            exec,
+            self.route(),
+            Some(models.into_iter().collect()),
+            false,
+            |_| Ok(None),
+        )
+        .await
     }
 
     /// [`insert`](Self::insert), skipping the models that conflict with a
@@ -949,9 +996,13 @@ impl<M: Model> Builder<M> {
         exec: &E,
         models: impl IntoIterator<Item = M>,
     ) -> Result<u64> {
-        Self::insert_models(exec, self.route(), Some(models.into_iter().collect()), false, |_| {
-            Ok(Some(OnConflict::Ignore { target: Vec::new() }))
-        })
+        Self::insert_models(
+            exec,
+            self.route(),
+            Some(models.into_iter().collect()),
+            false,
+            |_| Ok(Some(OnConflict::Ignore { target: Vec::new() })),
+        )
         .await
     }
 
@@ -985,7 +1036,14 @@ impl<M: Model> Builder<M> {
         exec: &E,
         models: impl IntoIterator<Item = M>,
     ) -> Result<u64> {
-        Self::insert_models(exec, self.route(), Some(models.into_iter().collect()), true, |_| Ok(None)).await
+        Self::insert_models(
+            exec,
+            self.route(),
+            Some(models.into_iter().collect()),
+            true,
+            |_| Ok(None),
+        )
+        .await
     }
 
     /// [`fill_and_insert`](Self::fill_and_insert), skipping the models that
@@ -995,9 +1053,13 @@ impl<M: Model> Builder<M> {
         exec: &E,
         models: impl IntoIterator<Item = M>,
     ) -> Result<u64> {
-        Self::insert_models(exec, self.route(), Some(models.into_iter().collect()), true, |_| {
-            Ok(Some(OnConflict::Ignore { target: Vec::new() }))
-        })
+        Self::insert_models(
+            exec,
+            self.route(),
+            Some(models.into_iter().collect()),
+            true,
+            |_| Ok(Some(OnConflict::Ignore { target: Vec::new() })),
+        )
         .await
     }
 
@@ -1067,21 +1129,27 @@ impl<M: Model> Builder<M> {
         let update: Vec<ConflictUpdate> = update.into_iter().map(Into::into).collect();
         let mut skipped = vec![meta.key_column()];
         skipped.extend(meta.created_at());
-        Self::insert_models(exec, self.route(), Some(models.into_iter().collect()), true, |columns| {
-            if update.is_empty() {
-                return Ok(Some(OnConflict::Ignore {
-                    target: unique_by.clone(),
-                }));
-            }
-            let mut sets = conflict_sets(columns, &unique_by, &skipped, update.clone())?;
-            if let Some(updated_at) = meta.updated_at()
-                && !sets.iter().any(|(column, _)| column == updated_at)
-                && columns.iter().any(|column| column == updated_at)
-            {
-                sets.push((Cow::Borrowed(updated_at), Expr::excluded(updated_at)));
-            }
-            Ok(Some(upsert_conflict(unique_by.clone(), sets)))
-        })
+        Self::insert_models(
+            exec,
+            self.route(),
+            Some(models.into_iter().collect()),
+            true,
+            |columns| {
+                if update.is_empty() {
+                    return Ok(Some(OnConflict::Ignore {
+                        target: unique_by.clone(),
+                    }));
+                }
+                let mut sets = conflict_sets(columns, &unique_by, &skipped, update.clone())?;
+                if let Some(updated_at) = meta.updated_at()
+                    && !sets.iter().any(|(column, _)| column == updated_at)
+                    && columns.iter().any(|column| column == updated_at)
+                {
+                    sets.push((Cow::Borrowed(updated_at), Expr::excluded(updated_at)));
+                }
+                Ok(Some(upsert_conflict(unique_by.clone(), sets)))
+            },
+        )
         .await
     }
 
@@ -1148,7 +1216,9 @@ impl<M: Model> crate::record::Record<M> {
             .into_iter()
             .map(|column| Cow::Owned(column.column_name().into_owned()))
             .collect();
-        let target = exec.target_routed(Access::Write, crate::query::model_route::<M>()).await?;
+        let target = exec
+            .target_routed(Access::Write, crate::query::model_route::<M>())
+            .await?;
         crate::persist::save_new(
             &target,
             self,
@@ -1180,7 +1250,10 @@ mod tests {
         assert_eq!(parts.len(), 2, "32,766 / 4 = 8,191 rows per statement");
         assert_eq!(parts[0].rows.len(), 8_191);
         assert_eq!(parts[1].rows.len(), 1_809);
-        assert_eq!(split(insert_of(10_000, 4), Some(Dialect::Postgres)).len(), 1);
+        assert_eq!(
+            split(insert_of(10_000, 4), Some(Dialect::Postgres)).len(),
+            1
+        );
         assert_eq!(split(insert_of(10_000, 4), None).len(), 1);
         let defaults = split(insert_of(3, 0), Some(Dialect::Postgres));
         assert_eq!(defaults.len(), 3, "DEFAULT VALUES inserts one row each");
@@ -1188,7 +1261,11 @@ mod tests {
 
     #[test]
     fn conflict_updates_resolve_against_the_columns() {
-        let columns = vec![Cow::Borrowed("id"), Cow::Borrowed("name"), Cow::Borrowed("color")];
+        let columns = vec![
+            Cow::Borrowed("id"),
+            Cow::Borrowed("name"),
+            Cow::Borrowed("color"),
+        ];
         let sets = conflict_sets(
             &columns,
             &[Cow::Borrowed("name")],

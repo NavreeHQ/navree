@@ -44,7 +44,11 @@ async fn query_logs_capture_the_statements_of_a_scope() {
     })
     .await;
     assert_eq!(inner_count, 1);
-    assert_eq!(queries.len(), 2, "the outer capture sees the inner one's statements");
+    assert_eq!(
+        queries.len(),
+        2,
+        "the outer capture sees the inner one's statements"
+    );
     assert_eq!(queries[0].sql, INSERT);
     assert_eq!(queries[0].values, [sea_orm::Value::from("ada")]);
     assert_eq!(
@@ -82,7 +86,11 @@ async fn listeners_and_hooks_see_statements_and_transactions() {
 
     db.conn().execute_raw(insert("ada")).await.unwrap();
     // Every handle on the pool shares the listeners.
-    db.clone().conn().execute_raw(insert("grace")).await.unwrap();
+    db.clone()
+        .conn()
+        .execute_raw(insert("grace"))
+        .await
+        .unwrap();
     db.transaction(|uow| async move {
         uow.tx().await?.execute_raw(insert("edsger")).await?;
         Ok(())
@@ -150,7 +158,12 @@ async fn units_of_work_count_their_statements() {
     }
     uow.allow_duration_handlers_again();
     uow.scope(async {
-        uow.tx().await.unwrap().execute_raw(insert("d")).await.unwrap();
+        uow.tx()
+            .await
+            .unwrap()
+            .execute_raw(insert("d"))
+            .await
+            .unwrap();
     })
     .await;
     assert_eq!(slow.lock().unwrap().len(), 2, "allowed again");
@@ -174,7 +187,9 @@ async fn a_finished_unit_of_work_logs_its_statements_and_repeats() {
     uow.scope(async {
         let tx = uow.tx().await.unwrap();
         for n in 0..10 {
-            tx.execute_raw(insert(&format!("person {n}"))).await.unwrap();
+            tx.execute_raw(insert(&format!("person {n}")))
+                .await
+                .unwrap();
         }
     })
     .await;

@@ -665,14 +665,25 @@ pub async fn json_patterns_and_vectors(db: Db, server: Server) {
         deals(Deal::query().where_json_contains_key("tags[-1]")).await,
         ["Pricing upgrade", "Renewal for Acme", "Small change"]
     );
-    assert_eq!(deals(Deal::query().where_(Deal::META.has_key("source"))).await.len(), 4);
-    assert!(deals(Deal::query().where_json_contains_key("meta->owner")).await.is_empty());
+    assert_eq!(
+        deals(Deal::query().where_(Deal::META.has_key("source")))
+            .await
+            .len(),
+        4
+    );
+    assert!(
+        deals(Deal::query().where_json_contains_key("meta->owner"))
+            .await
+            .is_empty()
+    );
     assert_eq!(
         deals(Deal::query().where_(Deal::TITLE.regex("^P[a-z]+ (deal|upgrade)$"))).await,
         ["Platform deal", "Pricing upgrade"]
     );
     assert!(
-        deals(Deal::query().where_(Deal::TITLE.regex("^pricing"))).await.is_empty(),
+        deals(Deal::query().where_(Deal::TITLE.regex("^pricing")))
+            .await
+            .is_empty(),
         "case matters"
     );
     assert_eq!(
@@ -694,12 +705,7 @@ pub async fn json_patterns_and_vectors(db: Db, server: Server) {
     );
     if server == Server::Postgres {
         assert_eq!(
-            deals(Deal::query().where_(Filter::op_raw(
-                Deal::TAGS,
-                "?",
-                Expr::val("q1")
-            )))
-            .await,
+            deals(Deal::query().where_(Filter::op_raw(Deal::TAGS, "?", Expr::val("q1")))).await,
             ["Pricing upgrade", "Small change"]
         );
         let stripped: Vec<Value> = Deal::query()
@@ -707,7 +713,10 @@ pub async fn json_patterns_and_vectors(db: Db, server: Server) {
             .pluck(&db, Expr::col("meta").binary("-", Expr::val("score")))
             .await
             .unwrap();
-        assert_eq!(navree_orm::to_json(&stripped[0]), serde_json::json!({"source": "web"}));
+        assert_eq!(
+            navree_orm::to_json(&stripped[0]),
+            serde_json::json!({"source": "web"})
+        );
 
         let has_vector: Option<i64> = navree_orm::scalar(
             &db,
@@ -725,7 +734,11 @@ pub async fn json_patterns_and_vectors(db: Db, server: Server) {
             )
             .await
             .unwrap();
-            for (title, embedding) in [("north", "[0,1,0]"), ("north-east", "[0.7,0.7,0]"), ("south", "[0,-1,0]")] {
+            for (title, embedding) in [
+                ("north", "[0,1,0]"),
+                ("north-east", "[0.7,0.7,0]"),
+                ("south", "[0,-1,0]"),
+            ] {
                 navree_orm::statement(
                     &db,
                     navree_orm::raw(
@@ -944,7 +957,10 @@ pub async fn bulk_writes(db: Db, server: Server) {
     let returned = table("tags")
         .insert_or_ignore_returning(
             &db,
-            [[("name", "third"), ("color", "x")], [("name", "fourth"), ("color", "x")]],
+            [
+                [("name", "third"), ("color", "x")],
+                [("name", "fourth"), ("color", "x")],
+            ],
             ["name"],
             ["name"],
         )
@@ -979,9 +995,10 @@ pub async fn bulk_writes(db: Db, server: Server) {
                 ]],
                 ["path"],
                 [
-                    ConflictUpdate::from(col("views").set_expr(
-                        Expr::col("page_views.views").add(Expr::excluded("views")),
-                    )),
+                    ConflictUpdate::from(
+                        col("views")
+                            .set_expr(Expr::col("page_views.views").add(Expr::excluded("views"))),
+                    ),
                     "title".into(),
                 ],
             )
@@ -1039,7 +1056,10 @@ pub async fn bulk_writes(db: Db, server: Server) {
         .where_key(deal.id)
         .update(
             &db,
-            [col("meta->source").set("partner"), Deal::META.json("score").set(9)],
+            [
+                col("meta->source").set("partner"),
+                Deal::META.json("score").set(9),
+            ],
         )
         .await
         .unwrap();
@@ -1160,7 +1180,10 @@ pub async fn streams(db: Db) {
         let mut cursor = Company::query().order_by(Company::EMPLOYEES).cursor(&uow);
         assert_eq!(cursor.try_next().await.unwrap().unwrap().name, "C1");
         let busy = Company::query().count(&uow).await.unwrap_err();
-        assert!(busy.to_string().contains("busy streaming a cursor"), "{busy}");
+        assert!(
+            busy.to_string().contains("busy streaming a cursor"),
+            "{busy}"
+        );
         let rest: Vec<String> = cursor
             .map_ok(|c| c.name.clone())
             .try_collect()

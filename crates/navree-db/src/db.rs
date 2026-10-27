@@ -442,7 +442,12 @@ impl Db {
         for replica in self.inner.replicas.iter() {
             replica.close_by_ref().await?;
         }
-        if let Some(direct) = self.inner.direct.as_ref().and_then(|direct| direct.db.get()) {
+        if let Some(direct) = self
+            .inner
+            .direct
+            .as_ref()
+            .and_then(|direct| direct.db.get())
+        {
             Box::pin(direct.close()).await?;
         }
         Ok(())
@@ -464,7 +469,10 @@ impl Db {
             }
             _ => return Ok(None),
         };
-        let row = self.conn().query_one_raw(Statement::from_string(self.backend(), sql)).await?;
+        let row = self
+            .conn()
+            .query_one_raw(Statement::from_string(self.backend(), sql))
+            .await?;
         let count = match row {
             Some(row) => row
                 .try_get_by_index::<i64>(0)
@@ -501,7 +509,11 @@ impl Db {
         if self.backend() != DbBackend::MySql {
             return Ok(false);
         }
-        Ok(self.server_version().await?.to_ascii_lowercase().contains("mariadb"))
+        Ok(self
+            .server_version()
+            .await?
+            .to_ascii_lowercase()
+            .contains("mariadb"))
     }
 
     /// Whether the database has the TimescaleDB extension installed.
@@ -566,7 +578,8 @@ impl Db {
     /// writer ([`Db::using_writer`]) or, with `sticky`, its unit of work
     /// has written ([`Uow::has_modified_records`]).
     pub async fn reader(&self) -> Reader<'_> {
-        let current = Uow::current().filter(|uow| Arc::ptr_eq(&uow.db().inner.conn, &self.inner.conn));
+        let current =
+            Uow::current().filter(|uow| Arc::ptr_eq(&uow.db().inner.conn, &self.inner.conn));
         if let Some(uow) = &current
             && let Some(tx) = uow.open_tx().await
         {

@@ -101,10 +101,17 @@ async fn large_inserts_split_under_the_bind_limit_and_stay_whole() {
         .await
         .unwrap_err();
     assert!(error.is_unique_violation(), "{error}");
-    assert_eq!(count_rows(&t.db, "readings").await, 0, "the first part rolled back");
+    assert_eq!(
+        count_rows(&t.db, "readings").await,
+        0,
+        "the first part rolled back"
+    );
 
     assert_eq!(
-        table("readings").insert(&t.db, rows(10_000, false)).await.unwrap(),
+        table("readings")
+            .insert(&t.db, rows(10_000, false))
+            .await
+            .unwrap(),
         10_000
     );
     assert_eq!(count_rows(&t.db, "readings").await, 10_000);
@@ -154,7 +161,10 @@ async fn insert_or_ignore_skips_rows_that_conflict() {
 
     // Only uniqueness conflicts are skipped: other errors still fail.
     let error = table("tags")
-        .insert_or_ignore(&t.db, [[("name", Value::String(None)), ("color", Value::from("x"))]])
+        .insert_or_ignore(
+            &t.db,
+            [[("name", Value::String(None)), ("color", Value::from("x"))]],
+        )
         .await
         .unwrap_err();
     assert!(matches!(error, OrmError::Db(_)), "{error}");
@@ -181,7 +191,12 @@ async fn insert_or_ignore_skips_rows_that_conflict() {
     assert_eq!(Some(created[0].get::<i64>("id").unwrap()), stored);
 
     let error = table("tags")
-        .insert_or_ignore_returning(&t.db, [[("name", "x"), ("color", "y")]], Vec::<&str>::new(), ["name"])
+        .insert_or_ignore_returning(
+            &t.db,
+            [[("name", "x"), ("color", "y")]],
+            Vec::<&str>::new(),
+            ["name"],
+        )
         .await
         .unwrap_err();
     assert_eq!(
@@ -205,13 +220,19 @@ async fn inserts_from_queries_copy_rows() {
         .insert_using(
             &t.db,
             ["name", "color"],
-            table("tags").select(["name", "color"]).where_(col("color").ne("red")),
+            table("tags")
+                .select(["name", "color"])
+                .where_(col("color").ne("red")),
         )
         .await
         .unwrap();
     assert_eq!(copied, 1);
     let again = table("palette")
-        .insert_or_ignore_using(&t.db, ["name", "color"], table("tags").select(["name", "color"]))
+        .insert_or_ignore_using(
+            &t.db,
+            ["name", "color"],
+            table("tags").select(["name", "color"]),
+        )
         .await
         .unwrap();
     assert_eq!(again, 1, "vip exists, risk is new");
@@ -255,7 +276,11 @@ async fn table_upserts_insert_or_update_by_unique_columns() {
         )
         .await
         .unwrap();
-    let rows = table("page_views").order_by("path").get(&t.db).await.unwrap();
+    let rows = table("page_views")
+        .order_by("path")
+        .get(&t.db)
+        .await
+        .unwrap();
     let pages: Vec<(String, i64, String)> = rows
         .iter()
         .map(|row| {
@@ -276,7 +301,12 @@ async fn table_upserts_insert_or_update_by_unique_columns() {
 
     // Nothing to update: conflicting rows are skipped.
     let skipped = table("page_views")
-        .upsert(&t.db, [visit("/", "Again")], ["path"], Vec::<ConflictUpdate>::new())
+        .upsert(
+            &t.db,
+            [visit("/", "Again")],
+            ["path"],
+            Vec::<ConflictUpdate>::new(),
+        )
         .await
         .unwrap();
     assert_eq!(skipped, 0);
@@ -360,7 +390,13 @@ async fn updates_and_deletes_through_joins_and_limits() {
     let renamed = table("deals")
         .join("companies", "companies.id", "=", "deals.company_id")
         .where_(col("companies.name").eq("Acme"))
-        .update_from(&t.db, [col("title").set_expr(Expr::raw("companies.name || ': ' || deals.title", Vec::<Value>::new()))])
+        .update_from(
+            &t.db,
+            [col("title").set_expr(Expr::raw(
+                "companies.name || ': ' || deals.title",
+                Vec::<Value>::new(),
+            ))],
+        )
         .await
         .unwrap();
     assert_eq!(renamed, 2);

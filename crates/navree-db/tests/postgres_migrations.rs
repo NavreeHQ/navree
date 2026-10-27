@@ -329,10 +329,7 @@ async fn session_settings_apply_to_every_connection() {
         return;
     };
     let admin = Database::connect(&scratch.url).await.unwrap();
-    admin
-        .execute_unprepared("CREATE SCHEMA app")
-        .await
-        .unwrap();
+    admin.execute_unprepared("CREATE SCHEMA app").await.unwrap();
     admin.close().await.unwrap();
     let db = Db::connect(&DbOptions {
         url: scratch.url.clone(),
@@ -390,7 +387,12 @@ async fn session_settings_apply_to_every_connection() {
         .unwrap();
     assert_eq!(schema, "app");
     assert!(db.open_connections().await.unwrap().unwrap() >= 1);
-    assert!(db.server_version().await.unwrap().starts_with(char::is_numeric));
+    assert!(
+        db.server_version()
+            .await
+            .unwrap()
+            .starts_with(char::is_numeric)
+    );
     assert_eq!(db.database_name().await.unwrap(), scratch.name);
     db.close().await.unwrap();
     scratch.drop().await;

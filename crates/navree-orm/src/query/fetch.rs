@@ -120,7 +120,9 @@ impl<M: Model> Builder<M> {
 
     /// The query's records.
     pub async fn get<E: Executor + ?Sized>(self, exec: &E) -> Result<Collection<M>> {
-        let target = exec.target_routed(crate::query::read_access(&self.ir), self.route()).await?;
+        let target = exec
+            .target_routed(crate::query::read_access(&self.ir), self.route())
+            .await?;
         self.fetch(&target).await
     }
 
@@ -195,7 +197,9 @@ impl<M: Model> Builder<M> {
         E: Executor + ?Sized,
         C: Selectable,
     {
-        let target = exec.target_routed(crate::query::read_access(&self.ir), self.route()).await?;
+        let target = exec
+            .target_routed(crate::query::read_access(&self.ir), self.route())
+            .await?;
         let item = SelectItem {
             expr: column.selected(),
             alias: Some(Cow::Borrowed(VALUE)),
@@ -222,7 +226,9 @@ impl<M: Model> Builder<M> {
         E: Executor + ?Sized,
         C: Selectable,
     {
-        let target = exec.target_routed(crate::query::read_access(&self.ir), self.route()).await?;
+        let target = exec
+            .target_routed(crate::query::read_access(&self.ir), self.route())
+            .await?;
         let item = SelectItem {
             expr: column.selected(),
             alias: Some(Cow::Borrowed(VALUE)),
@@ -259,7 +265,9 @@ impl<M: Model> Builder<M> {
         K: Selectable,
         K::Output: Hash + Eq,
     {
-        let target = exec.target_routed(crate::query::read_access(&self.ir), self.route()).await?;
+        let target = exec
+            .target_routed(crate::query::read_access(&self.ir), self.route())
+            .await?;
         let items = vec![
             SelectItem {
                 expr: column.selected(),

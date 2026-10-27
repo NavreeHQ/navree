@@ -624,7 +624,11 @@ macro_rules! filters {
             vector: &[f32],
             max_distance: f64,
         ) -> Self {
-            self.where_($crate::query::filters::vector_within(column, vector, max_distance))
+            self.where_($crate::query::filters::vector_within(
+                column,
+                vector,
+                max_distance,
+            ))
         }
 
         /// Adds `OR` the vector column is within cosine distance
@@ -635,7 +639,11 @@ macro_rules! filters {
             vector: &[f32],
             max_distance: f64,
         ) -> Self {
-            self.or_where($crate::query::filters::vector_within(column, vector, max_distance))
+            self.or_where($crate::query::filters::vector_within(
+                column,
+                vector,
+                max_distance,
+            ))
         }
 
         /// Adds a comparison of the length of the JSON array at the column

@@ -680,7 +680,8 @@ pub trait Model: Clone + Send + Sync + Serialize + 'static {
             .into_iter()
             .map(|column| column.column_name().into_owned())
             .collect();
-        let update: Vec<crate::query::ConflictUpdate> = update.into_iter().map(Into::into).collect();
+        let update: Vec<crate::query::ConflictUpdate> =
+            update.into_iter().map(Into::into).collect();
         Self::query().upsert(exec, models, unique_by, update)
     }
 

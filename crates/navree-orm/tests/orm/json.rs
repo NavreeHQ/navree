@@ -42,11 +42,19 @@ async fn json_arrays_overlap_and_keys_exist() {
     let t = sqlite().await;
     seed(&t.db).await;
     assert_eq!(
-        titles(&t.db, Deal::query().where_json_overlaps(Deal::TAGS, ["q1", "q2"])).await,
+        titles(
+            &t.db,
+            Deal::query().where_json_overlaps(Deal::TAGS, ["q1", "q2"])
+        )
+        .await,
         ["a", "b"]
     );
     assert_eq!(
-        titles(&t.db, Deal::query().where_json_doesnt_overlap(Deal::TAGS, "vip")).await,
+        titles(
+            &t.db,
+            Deal::query().where_json_doesnt_overlap(Deal::TAGS, "vip")
+        )
+        .await,
         ["b", "c"]
     );
     assert_eq!(
@@ -93,7 +101,11 @@ async fn json_arrays_overlap_and_keys_exist() {
 #[tokio::test]
 async fn hand_written_operators_and_null_safe_inequality() {
     let t = sqlite().await;
-    for (name, country) in [("Acme", Some("US")), ("Globex", None), ("Initech", Some("DE"))] {
+    for (name, country) in [
+        ("Acme", Some("US")),
+        ("Globex", None),
+        ("Initech", Some("DE")),
+    ] {
         Company::create(
             &t.db,
             Company {
@@ -129,7 +141,12 @@ async fn hand_written_operators_and_null_safe_inequality() {
         .get(&t.db)
         .await
         .unwrap_err();
-    assert!(error.to_string().contains("is not an operator SQLite conditions take"), "{error}");
+    assert!(
+        error
+            .to_string()
+            .contains("is not an operator SQLite conditions take"),
+        "{error}"
+    );
     // Without a registered `regexp` function SQLite cannot run it.
     let error = Company::query()
         .where_(Company::NAME.regex("^A"))

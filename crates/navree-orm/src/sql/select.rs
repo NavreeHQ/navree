@@ -48,7 +48,9 @@ pub fn compile_select(query: &QueryIr, dialect: Dialect) -> Result<Statement, Or
         // MySQL 8 takes NOWAIT and SKIP LOCKED after `FOR SHARE` only.
         const LEGACY: &str = " LOCK IN SHARE MODE";
         if let Some(at) = statement.sql.rfind(LEGACY) {
-            statement.sql.replace_range(at..at + LEGACY.len(), " FOR SHARE");
+            statement
+                .sql
+                .replace_range(at..at + LEGACY.len(), " FOR SHARE");
         }
     }
     timeout_hint(statement, query, dialect)
@@ -76,9 +78,10 @@ fn timeout_hint(
         ));
     }
     let millis = timeout_millis(timeout);
-    statement
-        .sql
-        .insert_str(SELECT.len(), &format!("/*+ MAX_EXECUTION_TIME({millis}) */ "));
+    statement.sql.insert_str(
+        SELECT.len(),
+        &format!("/*+ MAX_EXECUTION_TIME({millis}) */ "),
+    );
     Ok(statement)
 }
 
@@ -336,7 +339,11 @@ impl Compiler {
     /// A query with a per-group limit: the query with `ROW_NUMBER() OVER
     /// (PARTITION BY column ORDER BY <its orders>)` in a derived table, and
     /// the rows ranked within the limit (after the offset) of each group.
-    fn group_limited(&self, query: &QueryIr, group: &GroupLimit) -> Result<SelectStatement, OrmError> {
+    fn group_limited(
+        &self,
+        query: &QueryIr,
+        group: &GroupLimit,
+    ) -> Result<SelectStatement, OrmError> {
         use sea_query::ExprTrait as _;
 
         query.check()?;
@@ -557,4 +564,3 @@ impl Compiler {
         Ok(select)
     }
 }
-

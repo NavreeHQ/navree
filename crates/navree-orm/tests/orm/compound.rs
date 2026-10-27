@@ -27,7 +27,11 @@ async fn seed(db: &navree_db::Db) {
                 db,
                 Deal {
                     company_id: Some(company.id),
-                    stage: if n == 0 { Stage::ClosedWon } else { Stage::Lead },
+                    stage: if n == 0 {
+                        Stage::ClosedWon
+                    } else {
+                        Stage::Lead
+                    },
                     ..Deal::new(&format!("{name}{n}"), amount)
                 },
             )
@@ -68,7 +72,11 @@ async fn unions_sort_and_cut_as_a_whole() {
             .union_all(Company::query().where_(Company::NAME.eq("A")))
     };
     assert_eq!(union().count(&t.db).await.unwrap(), 3);
-    let page = union().order_by(Company::NAME).paginate(&t.db, (2, 2)).await.unwrap();
+    let page = union()
+        .order_by(Company::NAME)
+        .paginate(&t.db, (2, 2))
+        .await
+        .unwrap();
     assert_eq!(page.meta.total, 3);
     assert_eq!(page.data.len(), 1);
     assert!(union().exists(&t.db).await.unwrap());
@@ -98,11 +106,7 @@ async fn models_read_from_derived_tables() {
                 .union(Deal::query().where_(Deal::AMOUNT_CENTS.gte(700))),
         )
         .order_by(Deal::AMOUNT_CENTS);
-    let titles: Vec<String> = big_or_won
-        .clone()
-        .pluck(&t.db, Deal::TITLE)
-        .await
-        .unwrap();
+    let titles: Vec<String> = big_or_won.clone().pluck(&t.db, Deal::TITLE).await.unwrap();
     assert_eq!(titles, ["A0", "B0", "C0", "E0", "E1"]);
     // A write through a derived table narrows by key: only those rows.
     let changed = big_or_won
@@ -133,7 +137,10 @@ async fn limits_per_group_keep_the_top_rows_of_each() {
     let mut titles: Vec<String> = top.map(|deal| deal.title.clone());
     titles.sort();
     assert_eq!(titles, ["A0", "B0", "B1", "C1", "C2", "E0", "E1"]);
-    assert!(top.iter().all(|deal| deal.extras().is_empty()), "no rank column");
+    assert!(
+        top.iter().all(|deal| deal.extras().is_empty()),
+        "no rank column"
+    );
     // An offset skips per group; the rank orders the rows.
     let second: Vec<String> = Deal::query()
         .order_by_desc(Deal::AMOUNT_CENTS)
@@ -184,7 +191,12 @@ async fn joins_to_subqueries_and_table_functions() {
         ]
     );
     let pairs = table("companies")
-        .cross_join_sub(table("deals").select(["title"]).where_(col("amount_cents").eq(100)), "first")
+        .cross_join_sub(
+            table("deals")
+                .select(["title"])
+                .where_(col("amount_cents").eq(100)),
+            "first",
+        )
         .count(&t.db)
         .await
         .unwrap();
@@ -198,7 +210,10 @@ async fn joins_to_subqueries_and_table_functions() {
         .unwrap();
     assert_eq!(numbers, [1, 2, 3]);
     let error = Company::query()
-        .join_lateral(Deal::query().where_column(Deal::COMPANY_ID, "=", Company::ID), "d")
+        .join_lateral(
+            Deal::query().where_column(Deal::COMPANY_ID, "=", Company::ID),
+            "d",
+        )
         .get(&t.db)
         .await
         .unwrap_err();

@@ -53,5 +53,8 @@ async fn locking_reads_join_the_unit_of_work() {
     let mut new = Record::new(Company::default());
     let error = new.refresh_for_update(&t.db).await.unwrap_err();
     assert!(matches!(error, OrmError::NotPersisted { .. }), "{error}");
-    assert_eq!(error.to_string(), "cannot lock a Company that has not been saved");
+    assert_eq!(
+        error.to_string(),
+        "cannot lock a Company that has not been saved"
+    );
 }

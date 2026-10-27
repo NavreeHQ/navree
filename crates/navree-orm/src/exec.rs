@@ -41,8 +41,8 @@ use navree_contracts::Clock;
 use navree_db::{DEFAULT_CONNECTION, Db, Reader, Uow};
 use navree_kernel::AppContext;
 use sea_orm::{
-    ConnectionTrait, DatabaseConnection, DatabaseTransaction, ExecResult, QueryResult,
-    StreamTrait, TransactionTrait,
+    ConnectionTrait, DatabaseConnection, DatabaseTransaction, ExecResult, QueryResult, StreamTrait,
+    TransactionTrait,
 };
 
 use crate::driver::{DocumentDriver, InsertOutcome};
@@ -389,7 +389,9 @@ impl Target<'_> {
                     sql.announce_transaction();
                     Ok(Some(conn.begin().await?))
                 }
-                SqlConn::Transaction(_) | SqlConn::TransactionRef(_) => self.begin_savepoint().await,
+                SqlConn::Transaction(_) | SqlConn::TransactionRef(_) => {
+                    self.begin_savepoint().await
+                }
             },
             Target::Document(_) => Ok(None),
         }
@@ -755,7 +757,10 @@ impl<'a> SqlTarget<'a> {
             return self.read(read).await;
         };
         match self.dialect {
-            Dialect::MySql => self.read(read).await.map_err(|error| error.timed_out(timeout)),
+            Dialect::MySql => self
+                .read(read)
+                .await
+                .map_err(|error| error.timed_out(timeout)),
             Dialect::Postgres => self.postgres_timed(read, timeout).await,
             Dialect::Sqlite => Err(OrmError::unsupported("a statement timeout", "SQLite")),
         }
@@ -884,7 +889,9 @@ impl SqlConn<'_> {
         match self {
             SqlConn::Pool(_) | SqlConn::Owned(_) => None,
             SqlConn::Transaction(tx) => Some(Arc::as_ptr(tx) as usize),
-            SqlConn::TransactionRef(tx) => Some(std::ptr::from_ref::<DatabaseTransaction>(tx) as usize),
+            SqlConn::TransactionRef(tx) => {
+                Some(std::ptr::from_ref::<DatabaseTransaction>(tx) as usize)
+            }
         }
     }
 }
@@ -973,7 +980,11 @@ impl Executor for Db {
         self.target_routed(access, Route::new()).await
     }
 
-    async fn target_routed(&self, access: Access, route: Route<'_>) -> Result<Target<'_>, OrmError> {
+    async fn target_routed(
+        &self,
+        access: Access,
+        route: Route<'_>,
+    ) -> Result<Target<'_>, OrmError> {
         let scoped = if route.connection.is_none() && self.is_default() {
             scoped_connection()
         } else {
@@ -1018,7 +1029,11 @@ impl Executor for Uow {
         ))
     }
 
-    async fn target_routed(&self, access: Access, route: Route<'_>) -> Result<Target<'_>, OrmError> {
+    async fn target_routed(
+        &self,
+        access: Access,
+        route: Route<'_>,
+    ) -> Result<Target<'_>, OrmError> {
         let own = self.db().name();
         if let Some(name) = route.connection_for(own) {
             return Err(connection_error(

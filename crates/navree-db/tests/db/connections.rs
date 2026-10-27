@@ -59,7 +59,11 @@ async fn replicas_serve_reads_outside_transactions() {
     let (db, _writer, _replica) = replicated(true).await;
     assert_eq!(db.replicas(), 1);
     assert_eq!(read_place(&db.reader().await).await, "replica");
-    assert_eq!(read_place(db.conn()).await, "writer", "writes go to the writer");
+    assert_eq!(
+        read_place(db.conn()).await,
+        "writer",
+        "writes go to the writer"
+    );
     // The writer on demand.
     let forced = Db::using_writer(async { read_place(&db.reader().await).await }).await;
     assert_eq!(forced, "writer");
@@ -132,7 +136,10 @@ async fn named_connections_connect_on_first_use() {
     ));
     let named = registry.get("analytics").await.unwrap();
     assert_eq!(named.name(), "analytics");
-    assert!(Arc::ptr_eq(&named, &registry.get("analytics").await.unwrap()), "one pool");
+    assert!(
+        Arc::ptr_eq(&named, &registry.get("analytics").await.unwrap()),
+        "one pool"
+    );
     place(&named, named.conn(), "analytics").await;
     assert_eq!(read_place(named.conn()).await, "analytics");
     assert!(named.app().is_some(), "named connections belong to the app");
@@ -299,7 +306,10 @@ async fn connections_announce_themselves_and_the_monitor_reports_them() {
         .run_command("db", vec!["--both".into()])
         .await
         .unwrap_err();
-    assert!(flag.to_string().contains("unknown argument `--both`"), "{flag}");
+    assert!(
+        flag.to_string().contains("unknown argument `--both`"),
+        "{flag}"
+    );
 }
 
 /// Owns the `users` table.
@@ -348,9 +358,14 @@ async fn migrations_and_session_work_use_the_direct_connection() {
     );
     assert_eq!(session.name(), "default");
     let direct_tables = crate::fixtures::tables(&session).await;
-    assert!(direct_tables.contains(&"users".to_owned()), "{direct_tables:?}");
     assert!(
-        !crate::fixtures::tables(&db).await.contains(&"users".to_owned()),
+        direct_tables.contains(&"users".to_owned()),
+        "{direct_tables:?}"
+    );
+    assert!(
+        !crate::fixtures::tables(&db)
+            .await
+            .contains(&"users".to_owned()),
         "migrations bypass the pooled URL"
     );
     assert!(
@@ -369,12 +384,18 @@ async fn migrations_and_session_work_use_the_direct_connection() {
     read_count(&session).await;
     assert!(heard.load(std::sync::atomic::Ordering::SeqCst) >= 1);
     db.close().await.unwrap();
-    assert!(session.conn().ping().await.is_err(), "closed with the connection");
+    assert!(
+        session.conn().ping().await.is_err(),
+        "closed with the connection"
+    );
 
     // Without `direct_url`, the direct connection is the connection.
     let plain = Db::connect(&pooled.options()).await.unwrap();
     assert!(!plain.has_direct());
-    assert!(std::ptr::eq(plain.direct().await.unwrap().conn(), plain.conn()));
+    assert!(std::ptr::eq(
+        plain.direct().await.unwrap().conn(),
+        plain.conn()
+    ));
     // It must reach the same kind of database.
     let mismatched = Db::connect(&DbOptions {
         direct_url: Some("postgres://app@db/app".into()),
@@ -419,7 +440,11 @@ async fn pool_settings_statistics_and_closing() {
     assert_eq!(stats.max, 3);
     assert!(stats.size >= 1 && stats.size <= 3, "{stats:?}");
     assert!(stats.idle <= stats.size as usize, "{stats:?}");
-    assert_eq!(db.open_connections().await.unwrap(), None, "SQLite has no server");
+    assert_eq!(
+        db.open_connections().await.unwrap(),
+        None,
+        "SQLite has no server"
+    );
     db.close().await.unwrap();
     assert!(db.conn().execute_unprepared("SELECT 1").await.is_err());
 }
@@ -524,7 +549,10 @@ fn options_validate_replicas_connections_and_sqlite_settings() {
         "sqlite.journal_mode: `diary` is not one of delete, truncate, persist, memory, wal, off",
         "sqlite.pragmas: `cache size; DROP` is not a pragma name",
     ] {
-        assert!(problems.contains(expected), "{problems}\n  missing: {expected}");
+        assert!(
+            problems.contains(expected),
+            "{problems}\n  missing: {expected}"
+        );
     }
 }
 
@@ -548,5 +576,8 @@ fn read_urls_come_as_a_list_or_a_comma_separated_string() {
     assert!(!format!("{options:?}").contains("secret"));
     let tenant = options.for_database("postgres://u:secret@main/tenant_1");
     assert_eq!(tenant.url, "postgres://u:secret@main/tenant_1");
-    assert!(tenant.read_urls.is_empty(), "replicas belong to the main database");
+    assert!(
+        tenant.read_urls.is_empty(),
+        "replicas belong to the main database"
+    );
 }
