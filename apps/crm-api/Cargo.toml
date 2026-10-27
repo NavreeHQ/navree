@@ -30,4 +30,6 @@ uuid = { workspace = true }
 
 [dev-dependencies]
 crm-testkit = { path = "crates/crm-testkit" }
+# Browser journeys through crm-web (tests/browser.rs).
+navree-browser = { workspace = true }
 tokio = { workspace = true }

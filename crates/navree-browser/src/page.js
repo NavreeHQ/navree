@@ -243,6 +243,30 @@
     return { wait: "covered", by: describe(hit) };
   }
 
+  // A point inside `el` to press for a drag: its center, else a point near
+  // a corner, avoiding links and images inside it (a press there starts the
+  // browser's own drag of the link) unless `el` itself is draggable.
+  function grabPoint(el) {
+    const r = el.getBoundingClientRect();
+    const inset = Math.min(12, r.width / 4, r.height / 4);
+    const points = [
+      [r.left + r.width / 2, r.top + r.height / 2],
+      [r.left + inset, r.bottom - inset],
+      [r.left + inset, r.top + inset],
+      [r.right - inset, r.bottom - inset],
+      [r.right - inset, r.top + inset],
+    ];
+    const native = el.draggable || el.closest("a[href], img");
+    for (const [x, y] of points) {
+      if (x < 0 || y < 0 || x > innerWidth || y > innerHeight) continue;
+      const hit = document.elementFromPoint(x, y);
+      if (!hit || !(hit === el || el.contains(hit))) continue;
+      if (!native && hit.closest("a[href], img, [draggable=true]") && hit.closest("a[href], img, [draggable=true]") !== el) continue;
+      return [x, y];
+    }
+    return null;
+  }
+
   function checkState(el) {
     if (el.tagName === "INPUT" && (el.type === "checkbox" || el.type === "radio")) {
       return { checked: el.checked, radio: el.type === "radio" };
@@ -412,21 +436,24 @@
       const start = await hitPoint(from.el);
       if (!start.ok) return { ...start, which: "from" };
       let r = to.el.getBoundingClientRect();
-      let x = r.left + r.width / 2;
-      let y = r.top + r.height / 2;
-      if (x < 0 || y < 0 || x > innerWidth || y > innerHeight) {
+      if (r.left + r.width / 2 < 0 || r.top + r.height / 2 < 0 || r.left + r.width / 2 > innerWidth || r.top + r.height / 2 > innerHeight) {
         to.el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "instant" });
         await settle();
         r = to.el.getBoundingClientRect();
-        x = r.left + r.width / 2;
-        y = r.top + r.height / 2;
-        const s = from.el.getBoundingClientRect();
-        const sx = s.left + s.width / 2;
-        const sy = s.top + s.height / 2;
-        if (sx < 0 || sy < 0 || sx > innerWidth || sy > innerHeight) return { wait: "apart", which: "to" };
-        return { ok: true, from: [sx, sy], to: [x, y] };
       }
-      return { ok: true, from: [start.x, start.y], to: [x, y] };
+      const s = from.el.getBoundingClientRect();
+      const center = [s.left + s.width / 2, s.top + s.height / 2];
+      if (center[0] < 0 || center[1] < 0 || center[0] > innerWidth || center[1] > innerHeight) {
+        return { wait: "apart", which: "to" };
+      }
+      const grab = grabPoint(from.el) || center;
+      // The middle of the target's visible part.
+      const left = Math.max(r.left, 0);
+      const top = Math.max(r.top, 0);
+      const right = Math.min(r.right, innerWidth);
+      const bottom = Math.min(r.bottom, innerHeight);
+      if (right <= left || bottom <= top) return { wait: "offscreen", which: "to" };
+      return { ok: true, from: grab, to: [(left + right) / 2, (top + bottom) / 2] };
     }),
 
     scrollTo: guard(async (a) => {

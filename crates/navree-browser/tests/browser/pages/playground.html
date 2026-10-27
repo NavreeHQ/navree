@@ -73,6 +73,9 @@
         <div class="card" data-testid="card" id="alpha">Alpha renewal <button type="button">Edit</button></div>
         <div class="card" data-testid="card">Beta launch <button type="button">Edit</button></div>
         <div class="card" data-testid="card" hidden>Hidden card</div>
+        <div class="card" data-testid="linked-card" style="padding: 4px 8px 28px">
+          <a href="/second" style="display: block; padding: 12px 0">Linked deal</a>
+        </div>
       </div>
       <div class="zone" data-stage="won" data-testid="column">
         <div class="card" data-testid="card">Gamma renewal <button type="button">Edit</button></div>
@@ -179,7 +182,7 @@
       // pointer after a few pixels and lands in the column under it.
       let dragging = null;
       document.addEventListener("pointerdown", (e) => {
-        const card = e.target.closest("[data-testid=card]");
+        const card = e.target.closest("[data-testid=card], [data-testid=linked-card]");
         if (card) dragging = { card, x: e.clientX, y: e.clientY, active: false };
       });
       document.addEventListener("pointermove", (e) => {

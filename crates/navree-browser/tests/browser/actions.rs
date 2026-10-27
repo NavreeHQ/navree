@@ -185,6 +185,17 @@ async fn drag_moves_cards_with_pointer_events_and_native_drag_and_drop() {
 }
 
 #[tokio::test]
+async fn drag_grabs_a_card_beside_its_link() {
+    let (browser, site) = browser_or_skip!("drag_grabs_a_card_beside_its_link");
+    let page = browser.visit(site.url("/playground")).await.unwrap();
+    // Pressing on the link would start the browser's own drag of the URL.
+    page.drag("@linked-card", "[data-stage=won]").await.unwrap();
+    page.assert_see_in("@toast", "Dropped in won").await.unwrap();
+    page.assert_see_in("[data-stage=won]", "Linked deal").await.unwrap();
+    page.assert_path_is("/playground").await.unwrap();
+}
+
+#[tokio::test]
 async fn scroll_to_brings_an_element_into_view() {
     let (browser, site) = browser_or_skip!("scroll_to_brings_an_element_into_view");
     let page = browser.visit(site.url("/playground")).await.unwrap();
