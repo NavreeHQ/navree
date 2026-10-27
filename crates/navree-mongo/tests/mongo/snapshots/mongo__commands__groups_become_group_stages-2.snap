@@ -1,0 +1,10 @@
+---
+source: crates/navree-mongo/tests/mongo/commands.rs
+expression: "show(&table(\"readings\").select([\"sensor\"]).select_time_bucket(\"15 minutes\",\n\"taken_at\",\n\"bucket\").select_first(\"celsius\", \"taken_at\",\n\"opening\").select_last(\"celsius\", \"taken_at\",\n\"closing\").select_expr(Expr::max(Expr::col(\"celsius\")),\n\"high\").group_by([\"sensor\", \"bucket\"]).order_by(\"bucket\"))"
+---
+db.readings.aggregate([
+  {"$group": {"_id": {"g0": "$sensor", "g1": {"$toDate": {"$subtract": [{"$toLong": "$taken_at"}, {"$mod": [{"$add": [{"$mod": [{"$subtract": [{"$toLong": "$taken_at"}, 946857600000]}, 900000]}, 900000]}, 900000]}]}}}, "__navree_a0": {"$top": {"sortBy": {"taken_at": 1}, "output": "$celsius"}}, "__navree_a1": {"$bottom": {"sortBy": {"taken_at": 1}, "output": "$celsius"}}, "__navree_a2": {"$max": "$celsius"}}},
+  {"$set": {"sensor": "$_id.g0", "bucket": "$_id.g1", "opening": "$__navree_a0", "closing": "$__navree_a1", "high": "$__navree_a2"}},
+  {"$sort": {"bucket": 1}},
+  {"$project": {"sensor": 1, "bucket": 1, "opening": 1, "closing": 1, "high": 1, "_id": 0}}
+])

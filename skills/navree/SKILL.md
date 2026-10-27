@@ -100,9 +100,12 @@ navree list                                 # every command of the app
 | Background jobs, workers, retries, batches, progress operations, cron schedules | `navree-queues-and-scheduling` |
 | Events and listeners, live updates over WebSockets, private channels | `navree-events-and-broadcasting` |
 | Emails, templates, notifications | `navree-mail-and-notifications` |
+| SES, Mailgun, Postmark or Resend; customers' own mail transports or domains; bounces, complaints, suppressions; the mail log; holding mail for approval; open and click tracking; SPF, DKIM and DMARC | `navree-mail-delivery` |
 | Uploads, downloads, disks, signed links | `navree-storage` |
 | Caching, locks, calling third-party APIs | `navree-cache-and-http-client` |
 | API docs, OpenAPI document, TypeScript clients | `navree-openapi` |
+| A Next.js web front end: sign-in through a BFF, server components, list screens, real time, the dark theme | `navree-frontend-next` |
+| A Nuxt or Vue web front end on the `@navree/nuxt` module | `navree-frontend-nuxt` |
 | Settings, environment variables, APP_KEY, config sections | `navree-config` |
 | Writing or fixing tests, fakes | `navree-testing` |
 | Any `navree make:*` generator, console commands | `navree-cli-generators` |
@@ -110,7 +113,7 @@ navree list                                 # every command of the app
 | Security review before a release | `navree-security-checklist` |
 | Signing a JWT another service verifies, verifying a token against a provider's JWKS, publishing a JWKS, loading a `.p8` or PEM key | `navree-jose` |
 | Finishing or reviewing a module: `navree check`, cross-workspace isolation suites, `navree gate` before a push | `navree-module-conformity` |
-| Multi-tenancy, workspaces, members and invitations | `navree-workspaces` |
+| Multi-tenancy, workspaces, members, invitations and demo workspaces | `navree-workspaces` |
 | Time zones of users and workspaces, reports by local day, messages in working hours, holidays, schedules at local time | `navree-time-zones` |
 | Paid plans, subscriptions, trials, usage billing, invoices, Stripe or Paddle webhooks | `navree-billing` |
 | Production errors and slow requests: issues, reporting handled errors, alerts, the `/_lighthouse` dashboard, reading issues from a script or agent | `navree-lighthouse` |
@@ -118,8 +121,10 @@ navree list                                 # every command of the app
 | Local PostgreSQL, Redis, Meilisearch, Mailpit, MinIO or NATS for development and CI (`dock.toml`, `navree dock`) | `navree-dock` |
 | Provisioning Ubuntu servers and zero-downtime deploys, rollbacks, deploy secrets, container images, push-to-deploy (`harbor.toml`, `navree deploy`) | `navree-harbor` |
 | Sign in with Google, GitHub, Apple, Microsoft or an OpenID Connect provider | `navree-social` |
+| A customer's company identity provider (Okta, Entra ID, Google Workspace, AD FS) per organization or workspace: SAML or OpenID Connect, verified domains, forcing SSO, provisioning members | `navree-sso` |
 | Sending webhooks to customers' URLs, receiving Stripe, GitHub, Paddle or other signed webhooks | `navree-webhooks` |
 | Feature flags: hiding a feature until it is released, gradual rollouts, a kill switch, flags for the front end | `navree-flags` |
+| Settings an app, organization, workspace or user can change, inherited down that chain; showing where a value comes from; settings screens and resets | `navree-settings` |
 | Search box, command palette, indexes, Meilisearch/Typesense/Tantivy, vector search | `navree-search` |
 | Receiving requests, queries, jobs, mail or log lines in your own code; tracing with OpenTelemetry; trace ids; asserting on events or spans in tests | `navree-telemetry` |
 | A GraphQL API: resolvers, dataloaders, subscriptions | `navree-graphql` |
@@ -133,6 +138,7 @@ navree list                                 # every command of the app
 | Connecting a coding agent to the app (`navree mcp`, Navigator's routes, module graph, schema, read-only SQL, logs and docs tools), installing the skills (`navree skills:install`) | `navree-navigator` |
 | Testing a user journey in a real browser: sign-in forms, the front end and its BFF, drag and drop, phone layouts, failure screenshots | `navree-browser-testing` |
 | Measuring or lowering per-request cost: the pipeline benchmarks, pool and transaction settings, hot-path habits | `navree-performance` |
+| PDF or Word documents: certificates, invoices, reports, exports; Arabic or other right-to-left documents; merging or stamping PDFs | `navree-documents` |
 
 ## Common mistakes
 

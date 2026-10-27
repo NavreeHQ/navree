@@ -1,329 +1,192 @@
 ---
 name: navree-frontend-next
-description: "Build a Next.js front end on a Navree API: the backend-for-frontend pattern (route handlers that keep Navree's access token and rotating refresh token in httpOnly cookies), a typed client generated from the app's OpenAPI document, single-flight token refresh, two-factor sign-in, the Origin check that stops CSRF, CASL abilities from `GET /api/me/abilities`, real time over the Pusher protocol with pusher-js, MSW mocks, tests, and Navree's app UI (navree.com's dark tokens in the shadcn sidebar-07 shell). Use when creating or changing a web app that talks to a Navree API, wiring sign-in, refresh or sign-out, calling the API from React, subscribing to private channels in the browser, or building an app's shell and theme in Navree's app UI. The reference app is apps/crm-web."
+description: "Build a Next.js front end on a Navree API with the @navree packages: `@navree/next` (route handlers that keep Navree's access and rotating refresh tokens in httpOnly cookies, `auth()` and `client()` in server components, the proxy that guards pages and refreshes tokens, `DataTable` and `useListQuery`, `useOperation`, workspaces, `AbilityProvider`/`<Can>`, `RealtimeProvider`/`useChannel`), `@navree/client` (the typed client generated with `navree openapi:client`, `NavreeError` with error codes, list queries, query keys) and `@navree/theme` (navree.com's dark theme for Tailwind 4 and shadcn/ui). Use when creating or changing a web app that talks to a Navree API in React or Next.js, wiring sign-in, refresh, two-factor or sign-out, calling the API from server or client components, building list screens with filters, sorting and paging, subscribing to private channels, following an operation's progress, translating API errors, or theming an app like navree.com."
 ---
 
 # A Next.js front end on a Navree API
 
-The browser never holds a token. A Next.js server sits between the browser
-and Navree as a **backend-for-frontend (BFF)**: route handlers under
-`src/app/api` and `src/app/broadcasting` keep Navree's JWT access token and
-rotating refresh token in httpOnly cookies and forward each call with
-`Authorization: Bearer`. The browser calls only its own origin. The one
-exception is the real-time socket, which connects straight to Navree's
-Pusher-protocol server; private channels are authorized through the BFF.
+The browser never holds a token. The Next.js server is a
+**backend-for-frontend (BFF)**: `@navree/next` mounts it as route handlers
+that keep Navree's JWT access token and rotating refresh token in httpOnly
+cookies and forward each call with `Authorization: Bearer`. The browser
+calls only its own origin; the real-time socket goes straight to Navree,
+with private channels authorized through the BFF.
 
 ```
-browser ── same-origin /api/*, /broadcasting/auth ──▶ Next.js BFF ── Bearer ──▶ Navree API
-   └────────────── ws://api-host/app/{key} (pusher-js) ───────────────────────▶ Navree real time
+browser ── same-origin /api/*, /broadcasting/auth ──▶ Next.js (@navree/next) ── Bearer ──▶ Navree API
+   └────────────── ws://api-host/app/{key} (pusher-js) ─────────────────────────────────────▶ Navree real time
 ```
 
-`apps/crm-web` (the Navree CRM) is the reference: copy from it. Everything
-below is what it does, with file paths. Architecture background:
-`/docs/patterns/backend-for-frontend/`.
+Docs: `/docs/frontend/nextjs/`, `/docs/frontend/typed-client/`,
+`/docs/frontend/auth-and-bff/`, `/docs/frontend/data-tables/`,
+`/docs/frontend/theming/`, `/docs/frontend/localization/`. The packages'
+sources and tests are in `packages/js/` (`client`, `bff`, `next`, `theme`);
+`packages/js/next/test/fixture` is a minimal working app.
 
 ## Steps
 
-1. **Create the app.** Next.js (App Router, TypeScript, Tailwind CSS v4),
-   then add the runtime pieces:
-   `pnpm add openapi-fetch @tanstack/react-query @casl/ability @casl/react pusher-js zod react-hook-form @hookform/resolvers sonner cmdk radix-ui lucide-react cn class-variance-authority`
-   and for development
-   `pnpm add -D openapi-typescript msw vitest jsdom @testing-library/react @playwright/test`.
-2. **Export the API contract.** From the Navree app:
-   `navree openapi:export web/openapi.json` (or `cargo run -- openapi:export
-   ../web/openapi.json`; the CRM uses
-   `cargo run -p crm-api -- openapi:export ../crm-web/openapi.json`). Add
-   `"gen:api": "openapi-typescript ./openapi.json -o src/lib/api/schema.d.ts"`
-   and run `pnpm gen:api` whenever the API changes.
-3. **Add the BFF.** Copy `src/lib/bff/bff.ts` (framework-free, unit-tested)
-   and `src/lib/bff/http-errors.ts`; create the instance in
-   `src/lib/bff/server.ts`; add the route handlers (next section).
-4. **Add the API client.** `src/lib/api/client.ts` (openapi-fetch,
-   same-origin, hooks for 401 and 403), `errors.ts` (Navree's error body as
-   `ApiError`), `form-errors.ts` (400 `errors` onto form fields) and
-   `types.ts` (friendly aliases over the generated schema).
-5. **Load the user and their abilities** after sign-in:
-   `GET /api/auth/me`, then `GET /api/me/abilities` into one app-wide CASL
-   ability; render nothing behind sign-in until both are applied.
-6. **Add real time** with the pusher-js wrapper (`src/lib/realtime/`), and
-   list the web origin in the API's `realtime.allowed_origins`.
-7. **Theme it** with the navree.com tokens and fonts (section "The theme").
-8. **Test it**: Vitest for the BFF and the client, MSW for an in-browser
-   mock API, Playwright against the real API.
+1. **Install** `@navree/next`, `@navree/client`, `@navree/theme` (from the
+   repository's `packages/js`: `pnpm install && pnpm build` there, then
+   `link:` dependencies), plus `@casl/ability @casl/react` for abilities,
+   `pusher-js` for real time, `@tanstack/react-query` for data fetching.
+2. **Generate the schema:** `navree openapi:client` (writes
+   `web/src/lib/api/openapi.json` and `schema.d.ts`; `--out DIR`,
+   `--input FILE`). Re-run after changing routes or types.
+3. **Create the app's Navree** and mount it:
 
-## The BFF
+   ```ts
+   // src/lib/navree.ts
+   import { createNavree } from "@navree/next/server";
+   export const navree = createNavree(); // NAVREE_API_URL etc. read at the first request
 
-### Route handlers
+   // src/app/api/[...path]/route.ts
+   import { navree } from "@/lib/navree";
+   export const dynamic = "force-dynamic";
+   export const { GET, POST, PUT, PATCH, DELETE, HEAD } = navree.handlers;
 
-| File | Calls | Purpose |
-|---|---|---|
-| `src/app/api/auth/login/route.ts` | `bff.login` | Signs in at Navree, sets the cookies, returns only `{user}` (or `{two_factor_required, expires_in}`) |
-| `src/app/api/auth/2fa/verify/route.ts` | `bff.verifyTwoFactor` | Completes a two-factor sign-in with `{code}` or `{recovery_code}` |
-| `src/app/api/auth/logout/route.ts` | `bff.logout` | Revokes the refresh token at Navree, clears the cookies |
-| `src/app/api/auth/refresh/route.ts` | `bff.refreshSession` | Explicit refresh (the proxy also refreshes on its own) |
-| `src/app/api/[...path]/route.ts` | `bff.proxy` | Every other `/api/*` call, all methods |
-| `src/app/broadcasting/auth/route.ts` | `bff.proxy(request, "/broadcasting/auth")` | Signs private-channel subscriptions |
+   // src/app/broadcasting/auth/route.ts
+   export const dynamic = "force-dynamic";
+   export const { POST } = navree.handlers;
 
-```ts
-// src/lib/bff/server.ts
-import { createBff } from "./bff";
+   // src/proxy.ts (middleware.ts with `export const middleware` before Next.js 16)
+   export const proxy = navree.proxy({ loginPath: "/login", publicPaths: ["/", "/docs/*"] });
+   export const config = { matcher: ["/((?!_next/|favicon.ico).*)"] };
+   ```
 
-export const bff = createBff({
-  apiUrl: process.env.NAVREE_API_URL ?? "http://127.0.0.1:8080",
-  secureCookies:
-    process.env.NAVREE_COOKIE_SECURE !== undefined
-      ? process.env.NAVREE_COOKIE_SECURE === "1"
-      : process.env.NODE_ENV === "production",
-  allowedOrigins: process.env.APP_ORIGINS?.split(",").map((o) => o.trim()).filter(Boolean),
-  trustedProxyHops: Number.parseInt(process.env.NAVREE_TRUSTED_PROXY_HOPS ?? "0", 10) || 0,
+4. **The browser's client** (cookie mode):
+
+   ```ts
+   // src/lib/api/client.ts
+   import { createNavreeClient, type ListQuery, type WithQuery } from "@navree/client";
+   import { readWorkspaceCookie } from "@navree/next";
+   import type { paths as Generated } from "./schema";
+
+   export type paths = WithQuery<Generated, { "/api/v1/deals": ListQuery }>;
+   export const api = createNavreeClient<paths>({
+     workspace: () => readWorkspaceCookie(),
+     onUnauthorized: () => window.location.assign(`/login?next=${encodeURIComponent(location.pathname + location.search)}`),
+   });
+   ```
+
+5. **Server components:** `const session = await navree.auth<User>()`
+   (`{user, accessToken, workspace}` or `null`; cached per request, never
+   refreshes) and `const api = await navree.client<paths>()` (bearer mode
+   to the API with the session's token and workspace).
+6. **Providers:** `AbilityProvider rules={rules}` (`@navree/next/abilities`;
+   load rules with `fetchAbilities({ fetch: api.raw })` from
+   `@navree/client/abilities`), `RealtimeProvider server={…}
+   options={{ authorize: api.raw }}` (`@navree/next/realtime`),
+   `WorkspaceProvider initial={session.workspace} onChange={…}`.
+7. **Theme:** `@import "tailwindcss"; @import "@navree/theme/theme.css";`
+   plus fonts (`next/font/local` from the @fontsource files, see
+   `/docs/frontend/theming/#fonts`) and `@source
+   "../../node_modules/@navree/next/dist";`; `<html className="dark">`.
+8. **Test:** Vitest with `@navree/bff/testing` (`fakeNavree`,
+   `browserRequest`, `readSetCookies`, `tokenPair`, `unsignedJwt`),
+   `createMemoryRealtime()` for channels, `@testing-library/react` for
+   components; `serveFakeNavree(routes)` for end-to-end runs of a built app.
+
+## What the BFF guarantees (don't re-implement it)
+
+- Cookies `navree_at` (Max-Age = `expires_in`), `navree_rt` (30 days),
+  `HttpOnly; SameSite=Lax; Path=/`, `Secure` in production; the two-factor
+  challenge in `navree_2fa` on `Path=/api/auth/2fa`. Token pairs in auth
+  responses are moved into cookies and stripped from bodies.
+- Refresh once on a 401 (or up front when only the refresh cookie is left),
+  **single-flight per refresh token** (Navree revokes the family on reuse);
+  a failed refresh clears both cookies.
+- Non-GET requests from another origin: `403 invalid_origin` (CSRF).
+- `X-Workspace` forwarded, else the `navree_workspace` cookie; `Last-Event-ID`
+  forwarded; bodies stream (CSV, SSE); the browser's `X-Forwarded-For` never
+  reaches the API (`NAVREE_TRUSTED_PROXY_HOPS` behind proxies).
+- Its own errors: `401 session_expired`, `401 two_factor_expired`,
+  `403 invalid_origin`, `502 api_unreachable`, `502 unexpected_response`.
+
+Sign-in: POST `{email, password}` to `/api/auth/login` with `api.raw`
+(the BFF answers `{user}` or `{two_factor_required, expires_in}`), then
+`/api/auth/2fa/verify` with `{code}` or `{recovery_code}`;
+`/api/auth/logout` (`{all: true}` for every session).
+
+## List screens
+
+```tsx
+"use client";
+const { query, setQuery, setFilter, setSearch } = useListQuery({ per_page: 25 });
+const { data, isPending } = useQuery({
+  queryKey: deals.list(query), // deals = queryKeys("deals")
+  queryFn: () => unwrap(api.GET("/api/v1/deals", { params: { query } })),
+  placeholderData: (previous) => previous,
 });
+<DataTable<Deal> columns={columns} data={data?.data} meta={data?.meta} query={query}
+  onQueryChange={setQuery} loading={isPending} getRowId={(d) => d.id} onRowClick={open} />;
 ```
 
-```ts
-// src/app/api/[...path]/route.ts
-import { bff } from "@/lib/bff/server";
+- Columns are TanStack `ColumnDef`s; `meta: { sortField, align, className }
+  satisfies NavreeColumnMeta`. Only columns with `sortField` sort.
+- `useListQuery` needs a `<Suspense>` boundary (it reads `useSearchParams`).
+- Filters: `setFilter("stage", "won")`, `setFilter("created_at", { gte, lt })`,
+  `undefined` removes; every change goes back to page 1.
+- `labels` translate the table (`range(from, to, total)` formats numbers).
 
-function handle(request: Request): Promise<Response> {
-  return bff.proxy(request, new URL(request.url).pathname);
-}
+## Other pieces
 
-export const dynamic = "force-dynamic";
-export { handle as DELETE, handle as GET, handle as HEAD, handle as PATCH, handle as POST, handle as PUT };
-```
-
-### What the BFF guarantees
-
-- **Cookies.** `navree_at` (access token, `Max-Age` = `expires_in`) and
-  `navree_rt` (refresh token, 30 days), both `HttpOnly; SameSite=Lax;
-  Path=/`, `Secure` in production. The two-factor challenge lives in
-  `navree_2fa` on `Path=/api/auth/2fa` only. Token pairs in any
-  `/api/auth/*` response (a password change, for example) replace the
-  cookies and are stripped from the body.
-- **Refresh.** On a 401, or when only the refresh cookie is left, the proxy
-  refreshes once and retries. Refresh is **single-flight per refresh
-  token**: Navree rotates refresh tokens and revokes the whole family when
-  one is reused, so parallel requests must share one refresh. A finished
-  refresh is remembered for 30 s for requests still carrying the old cookie.
-  A failed refresh clears both cookies and the browser goes to `/login`.
-- **CSRF.** Every non-GET request whose `Origin` is not the app's own host
-  (or listed in `APP_ORIGINS`) gets `403 {"message": "Invalid origin"}`
-  before anything reaches Navree.
-- **Pass-through.** Status, body, `content-type` (CSV exports included),
-  `content-disposition`, `x-request-id`, `retry-after` and `x-ratelimit-*`
-  come back unchanged; authenticated responses use `cache: "no-store"`.
-- **Client address.** The browser's own `X-Forwarded-For` and `X-Real-IP`
-  never reach Navree. Behind N trusted reverse proxies set
-  `NAVREE_TRUSTED_PROXY_HOPS=N`; the BFF then sends the address the
-  outermost proxy saw. List the BFF's address in the API's
-  `APP_HTTP__TRUSTED_PROXIES` so Navree's login throttle and per-IP rate
-  limit apply per browser.
-
-### The browser side of sign-in
-
-```ts
-// src/lib/api/client.ts (abridged)
-const client = createClient<paths>({ baseUrl: "", credentials: "same-origin", fetch: fetchApi });
-export const api = Object.assign(client, {
-  // Same hooks for non-JSON calls: CSV export, channel authorization.
-  rawFetch: (input: string, init?: RequestInit) => fetchApi(new Request(input, { credentials: "same-origin", ...init })),
-});
-// fetchApi: on 401 → apiEvents.onUnauthorized (router.replace("/login?next=…")); on 403 → a toast.
-```
-
-- Read data with TanStack Query and `unwrap(api.GET("/api/v1/deals", { params: { query } }))`;
-  `unwrap` throws an `ApiError` built from Navree's error body
-  (`{statusCode, message, error, code, errors?}`). Branch on `error.code`
-  (`invalid_two_factor_code`), never on the English `message`, and map codes
-  to the text people see in one catalogue (`CODE_MESSAGES` in
-  `src/lib/api/errors.ts`), the place translations plug in.
-- Show 400 validation errors next to fields with
-  `applyFieldErrors(error, form.setError, ["email", "password"])`.
-- Don't retry 4xx in queries (`retry: (n, e) => !(isApiError(e) && e.status < 500) && n < 2`).
-- Only same-site paths are valid `?next=` destinations after sign-in.
-
-### Abilities
-
-```ts
-// src/lib/casl/ability.ts
-export function createAppAbility(rules: readonly CaslRule[] = []): AppAbility {
-  return createMongoAbility<AppAbility>(rules as RawRuleOf<AppAbility>[], {
-    detectSubjectType: (o) => (typeof o === "string" ? o : o.__type) as ExtractSubjectType<AppSubjects>,
-  });
-}
-```
-
-Every API resource carries a constant `__type` (`"Deal"`), so records work
-as CASL subjects as they come from JSON: `<Can I="update" this={deal}>`,
-`ability.can("move", deal)`. Hide what the rules deny; the API still enforces
-every rule (403), so the UI is a convenience, never the check.
-
-## Real time
-
-Navree's `RealtimeModule` speaks the Pusher protocol, so pusher-js connects
-to it directly. The CRM wraps pusher-js in a small typed client
-(`src/lib/realtime/pusher.ts`, tested in `pusher.test.ts`):
-
-```ts
-import Pusher from "pusher-js";
-
-const pusher = new Pusher(env.pusherKey, {
-  cluster: "mt1", // required by pusher-js, unused when wsHost is set
-  wsHost: env.wsHost,
-  wsPort: env.wsPort,
-  wssPort: env.wsPort,
-  forceTLS: false,
-  enabledTransports: ["ws", "wss"],
-  disableStats: true,
-  channelAuthorization: {
-    // POST /broadcasting/auth through the BFF, which adds the bearer token.
-    customHandler: ({ socketId, channelName }, callback) => {
-      api
-        .rawFetch("/broadcasting/auth", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Accept: "application/json" },
-          body: JSON.stringify({ socket_id: socketId, channel_name: channelName }),
-        })
-        .then(async (r) => {
-          if (!r.ok) throw new Error(`Channel authorization failed (${r.status})`);
-          callback(null, await r.json());
-        })
-        .catch((e: unknown) => callback(e instanceof Error ? e : new Error(String(e)), null));
-    },
-  },
-});
-
-pusher.subscribe("private-crm.deals").bind("deal.updated", ({ deal }) => {
-  void queryClient.invalidateQueries({ queryKey: ["deals"] });
-});
-```
-
-- The wrapper exposes `listen(channel, event, callback)`, `leave(channel)`
-  and `disconnect()`, adds the `private-` prefix, subscribes once per
-  channel and reports `unavailable`/`failed` once. In mock mode the same
-  interface is served by a window event bus (`mock-bus.ts`).
-- Treat real time as optional: on an update, **invalidate queries** rather
-  than patching caches by hand; queries still refetch on focus when the
-  socket is down.
-- The API must allow the web origin: `realtime.allowed_origins` in
-  `config/app.toml` (the WebSocket checks `Origin`), and the browser needs
-  `NEXT_PUBLIC_WS_HOST`, `NEXT_PUBLIC_WS_PORT` and `NEXT_PUBLIC_PUSHER_KEY`
-  (the API's `realtime.key`).
+- **Errors:** `unwrap` throws `NavreeError` (`status`, `code`, `errors`,
+  `fieldError(f)`, `is(...codes)`, `requestId`). Branch on the code
+  (`error.is("invalid_two_factor_code")`), never on the English `message`.
+  Toasts: `errorMessage(e)`
+  (English) or `translateError(e, t)` with next-intl (`errors.<code>` keys,
+  then `errors.unknown`). Forms: `applyFieldErrors(error, form.setError,
+  ["email"])`. Don't retry 4xx in queries.
+- **Operations:** `const { operation, finished, error, cancel } =
+  useOperation(id)` follows `/api/operations/{id}/events` through the BFF.
+- **Real time:** `useChannel("crm.deals", "deal.updated", handler)` (bare
+  names are private; `null` channel listens to nothing). Invalidate queries
+  on events instead of patching caches. List the web origin in the API's
+  `realtime.allowed_origins`.
+- **Locales:** `<html {...localeAttributes(locale)}>` sets `lang` and `dir`;
+  use logical classes (`ps-*`, `text-start`, `rtl:`).
 
 ## Configuration
 
-| Variable | Where | Default | Meaning |
-|---|---|---|---|
-| `NAVREE_API_URL` | server, request time | `http://127.0.0.1:8080` | Where the BFF forwards |
-| `NAVREE_COOKIE_SECURE` | server | on in production | `0` to serve a production build over plain http |
-| `APP_ORIGINS` | server | none | Extra origins allowed to send non-GET requests (proxy rewrites Host) |
-| `NAVREE_TRUSTED_PROXY_HOPS` | server | `0` | Reverse proxies that append the client to `X-Forwarded-For` |
-| `NEXT_PUBLIC_API_MOCKS` | build | `0` | `1` serves the API from MSW in the browser |
-| `NEXT_PUBLIC_REALTIME` | build | `1` | `0` turns the socket off |
-| `NEXT_PUBLIC_PUSHER_KEY` | build | `navree-crm-key` | The API's `realtime.key` |
-| `NEXT_PUBLIC_WS_HOST` / `NEXT_PUBLIC_WS_PORT` | build | `127.0.0.1` / `8080` | The API's WebSocket listener |
+| Variable | Default | Meaning |
+|---|---|---|
+| `NAVREE_API_URL` | `http://127.0.0.1:8080` | Where the BFF forwards |
+| `NAVREE_COOKIE_SECURE` | on in production | `0` for a production build over plain http |
+| `APP_ORIGINS` | none | Extra origins allowed to send non-GET requests |
+| `NAVREE_TRUSTED_PROXY_HOPS` | `0` | Proxies that append the client to `X-Forwarded-For` |
+| `NAVREE_WORKSPACE_HEADER` | `X-Workspace` | The API's `workspace.header` |
 
-## The theme
+## Theme rules
 
-The CRM is an application, so it follows section 9 of
-`apps/website/DESIGN.md` (**App UI**): navree.com's tokens, laid out as a
-calm, dense, sharp product. Sections 1 to 8 (pills, glows, display type,
-eyebrows) are for marketing pages only.
-
-- **Tokens.** Copy the `@theme` block of `apps/website/src/app/globals.css`:
-  `ink-0..3` (`#040605`, `#0a0e0c`, `#111714`, `#16201b`), `line`
-  (`#1c2420`), `line-2` (`#2a3530`), `fg` (`#e9efeb`), `fg-1..3`,
-  `accent` (`#3dff8f`), `accent-ink` (`#03130a`), `amber` (`#ffbf5e`,
-  warnings only), `danger` (`#ff6b6b`) and `--ease-out-quint`. Map shadcn's
-  semantic variables onto them (`background`=ink-0, `card`/`popover`=ink-1,
-  `muted`/`secondary`=ink-2, `primary`/`ring`=accent, `border`=line,
-  `input`=line-2, `sidebar`=ink-1, `sidebar-accent`=ink-2) and put `dark` on
-  `<html>` with `@custom-variant dark (&:where(.dark, .dark *))`.
-- **Green is for three things**: the primary action (`Button` default, flat,
-  no glow), focus rings, and positive data (won amounts, completed tasks,
-  success toasts). Navigation, selection and hover use the ink steps:
-  `hover:bg-ink-2`, current item or selected option `bg-ink-3`. `accent` is
-  Navree green, not shadcn's grey hover surface: after `shadcn add`, replace
-  `focus:bg-accent`/`hover:bg-accent` with `bg-ink-3`/`bg-ink-2`, and fix the
-  generated `import { cn } from "cn"` to `@/lib/utils`.
-- **Corners**: 4px on controls (buttons, inputs, selects, menu items, badges,
-  tabs, avatars), 6px on surfaces (cards, panels, popovers, dialogs, sheets,
-  toasts). Pin the radius scale in `globals.css` so the CLI's classes land
-  inside the rule: `--radius-sm/md/lg: 4px`, `--radius-xl` and up `6px`; write
-  `rounded-md` on a control and `rounded-xl` on a surface. No pills, no
-  circles (avatars are 4px squares), no glows or dark drop shadows except
-  `shadow-float` under popovers and dialogs; `rounded-full` only for status
-  dots.
-- **The shell** is the shadcn/ui `Sidebar` (`pnpm dlx shadcn@latest add
-  sidebar breadcrumb collapsible`) in the `sidebar-07` layout:
-  `SidebarProvider` (state persisted in the `sidebar_state` cookie, read in
-  the `(app)` layout and passed as `defaultOpen`), `Sidebar
-  collapsible="icon"` with a workspace switcher header (a 32px 4px-radius
-  tile with the mark, name and context, `chevrons-up-down`), groups with a
-  12px fg-3 sentence-case label and 32px items (16px lucide icons at stroke
-  1.75, 14px fg-2 text), sub-items on a 1px `line` guide, the user menu in
-  the footer, a `SidebarRail`. Ctrl/Cmd+B toggles; phones get the sheet. No
-  letter tiles in place of icons, no left bar, no green on the current page.
-- **The top bar** is 48px (`--header-h: 3rem`): `SidebarTrigger`, a vertical
-  `Separator`, the breadcrumb (group, screen, record name), then search
-  (Ctrl/Cmd K opens a `cmdk` command menu: jump to screens, create records,
-  search through the API), notifications and the screen's actions. Screens
-  hand their actions to the top bar through a portal slot (`PageActions` in
-  `src/components/app-shell/shell-slots.tsx`): in the top bar from `md` up,
-  in the page header on phones, mounted once either way.
-- **Density and type**: 14px body, 13px secondary text and tables, table
-  rows 40px with 12px cell padding and 12px fg-3 sentence-case headings, 24px
-  page padding, page titles 24px semibold. Fonts are self-hosted with
-  `next/font/local` from `@fontsource-variable/mona-sans` (page titles and big
-  figures, `wdth` 112), `@fontsource-variable/geist` (UI) and
-  `@fontsource/monaspace-neon` (ids, small counts). No runtime font requests.
-- **`cn` knows the type scale.** `src/lib/utils.ts` builds `cn` with
-  `createCn` from `cn/config` and adds `title`, `figure`, `eyebrow` and
-  `display-*` to the font-size group; without it `cn("text-figure", "text-fg")`
-  drops the size.
-- **Accessibility and layout.** WCAG AA on every ink (fg-3 is the faintest
-  text), a visible green focus outline, `aria-label` on icon buttons, a skip
-  link, keyboard drag and drop on the board, and no horizontal page scroll
-  at 390 px: tables hide secondary columns below `sm`/`md`/`lg`, figure grids
-  go 2×2, toolbars wrap.
-
-## Testing
-
-- **BFF:** unit tests with plain `Request`s and an injected `fetch`
-  (`src/lib/bff/bff.test.ts`): cookies set and cleared, refresh once and
-  single-flight, Origin rejection, token stripping, two-factor.
-- **Client and UI:** Vitest with jsdom (`src/lib/api/client.test.ts`,
-  `src/app/login/login-screen.test.tsx`), the pusher-js wrapper with a fake
-  `Pusher` class.
-- **Mock API:** MSW handlers mirror the API's semantics, including the BFF's
-  (`src/mocks/`); `pnpm dev:mock` runs the whole app without a backend.
-- **End to end:** Playwright. `pnpm e2e` runs against the mock API;
-  `E2E_REAL_API=1 pnpm e2e` starts the real API on a fresh seeded database
-  and a production build; `E2E_BASE_URL=http://localhost:3000 E2E_REAL_API=1 pnpm e2e`
-  uses servers you started. Run the browser in the API's time zone (UTC).
+Dark only (`class="dark"`). Green (`accent`, `#3dff8f`) for the primary
+action, focus rings and positive data only; navigation, selection and hover
+use the ink steps (`hover:bg-ink-2`, current `bg-ink-3`). 4px corners on
+controls (`rounded-md`), 6px on surfaces (`rounded-xl`); no pills, no glows
+except `shadow-float`. After `shadcn add`, replace `hover:bg-accent` and
+`focus:bg-accent` with `hover:bg-ink-2`/`bg-ink-3`. Full rules:
+`apps/website/DESIGN.md` section 9.
 
 ## Checks
 
 ```bash
 pnpm lint && pnpm typecheck && pnpm test && pnpm build
-pnpm e2e                         # mock API
-E2E_REAL_API=1 pnpm e2e          # real API
-pnpm screenshots http://localhost:3000   # every screen at 1440 and 390 px into ./screenshots
+cd packages/js && pnpm check && pnpm smoke   # the packages themselves
 ```
 
 ## Common mistakes
 
-- Putting a token in `localStorage` or a non-httpOnly cookie, or calling
-  Navree from the browser: everything goes through the BFF.
-- Refreshing in parallel. Two requests spending the same refresh token make
-  Navree revoke the session; keep the refresh single-flight.
-- Forgetting the Origin check on a new non-GET route handler: route every
-  call through `bff.proxy` (or `bff.originAllowed`).
-- Forwarding the browser's `X-Forwarded-For` to Navree: the throttle would
-  trust a header the browser wrote.
-- Naming channels with the prefix twice: the wrapper adds `private-`, so
-  listen on `crm.deals`, not `private-crm.deals`.
-- A web origin missing from `realtime.allowed_origins`: the socket is
-  refused and the page silently falls back to refetching.
-- Using `bg-accent` as a hover color, green for navigation or selection, raw
-  hex values in components, pills, glows, or a second green element
-  competing with the primary action.
+- Copying the BFF into the app instead of `createNavree()`, or creating a
+  new `createNavree()`/`createBff()` per request (the refresh map must be
+  shared).
+- Calling `auth()` and expecting a refresh: the proxy refreshes; a page
+  without the proxy in front of it sees an expired token as `null`.
+- Forgetting `export const dynamic = "force-dynamic"` on route handlers.
+- Putting a token in `localStorage` or a readable cookie, or calling Navree
+  from the browser directly.
+- Importing `@navree/next/abilities` or `/realtime` without installing
+  `@casl/react` or `pusher-js`.
+- `useListQuery` without a `<Suspense>` boundary; columns without
+  `meta.sortField` expected to sort.
+- Listening on a public channel by its bare name: bare names are private;
+  use `publicChannel("name")`.
+- Using `bg-accent` as a hover color, or green for navigation.

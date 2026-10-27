@@ -16,8 +16,8 @@ use crate::passkeys::controller::PasskeyController;
 use crate::service::clock_of;
 use crate::session_controller::SessionController;
 use crate::{
-    AuthError, AuthOptions, AuthService, JwtService, JwtStrategy, Strategy, StrategyAuthenticator,
-    TwoFactorPolicy, UserResourceExtension, migration,
+    AuthError, AuthOptions, AuthService, JwtService, JwtStrategy, PasswordSignInPolicy, Strategy,
+    StrategyAuthenticator, TwoFactorPolicy, UserResourceExtension, migration,
 };
 
 /// The purpose the JWT signing key is derived for from the application key.
@@ -232,6 +232,8 @@ pub trait ModuleBuilderAuthExt {
     /// Registers `E` as a `dyn UserResourceExtension` multi-binding.
     fn user_resource_extension<E: UserResourceExtension + Injectable>(&mut self) -> &mut Self;
 
+    /// Registers `P` as a `dyn PasswordSignInPolicy` multi-binding.
+    fn password_sign_in_policy<P: PasswordSignInPolicy + Injectable>(&mut self) -> &mut Self;
     /// Registers `P` as a `dyn TwoFactorPolicy` multi-binding: users it
     /// requires two-factor authentication of must set it up first.
     fn two_factor_policy<P: TwoFactorPolicy + Injectable>(&mut self) -> &mut Self;
@@ -253,6 +255,15 @@ impl ModuleBuilderAuthExt for ModuleBuilder {
                 Ok(Arc::new(E::construct(r).await?) as Arc<dyn UserResourceExtension>)
             })
             .deps(E::dependencies()),
+        )
+    }
+
+    fn password_sign_in_policy<P: PasswordSignInPolicy + Injectable>(&mut self) -> &mut Self {
+        self.multi(
+            Factory::<dyn PasswordSignInPolicy>::new(|r: Resolver| async move {
+                Ok(Arc::new(P::construct(r).await?) as Arc<dyn PasswordSignInPolicy>)
+            })
+            .deps(P::dependencies()),
         )
     }
 

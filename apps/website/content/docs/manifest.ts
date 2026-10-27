@@ -97,6 +97,7 @@ export const sections: DocsSection[] = [
       "sessions",
       "passwordless",
       "impersonation",
+      "single-sign-on",
       "authorization",
       "encryption-and-hashing",
       "signatures-and-keys",
@@ -115,6 +116,7 @@ export const sections: DocsSection[] = [
       "isolation",
       "organizations",
       "partitions",
+      "demo-workspaces",
     ],
   },
   {
@@ -146,6 +148,7 @@ export const sections: DocsSection[] = [
       "scheduling",
       "time-zones", // Owner: time-zones
       "mail",
+      "mail-delivery",
       "notifications",
       // Owner: F
       "storage",
@@ -156,6 +159,21 @@ export const sections: DocsSection[] = [
       "health-and-metrics",
       "cli",
       "maintenance-mode",
+    ],
+  },
+  {
+    // Owner: frontend
+    slug: "frontend",
+    title: "Front end",
+    pages: [
+      "introduction",
+      "typed-client",
+      "auth-and-bff",
+      "nextjs",
+      "nuxt",
+      "data-tables",
+      "theming",
+      "localization",
     ],
   },
   {
@@ -187,9 +205,11 @@ export const sections: DocsSection[] = [
       "search",
       "billing",
       "feature-flags",
+      "settings",
       "oauth-server",
       "social-sign-in",
       "webhooks",
+      "documents",
       "localization",
       "browser-testing",
     ],

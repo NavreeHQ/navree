@@ -1,6 +1,6 @@
 ---
 name: navree-workspaces
-description: "Multi-tenancy with navree-workspace: `WorkspaceModule` and the `workspace` config section, `CurrentWorkspace` and the `InWorkspace` guard (header, subdomain, path prefix or JWT claim), workspace roles (`owner`, `admin`, `member`, `viewer`, app-defined) feeding navree-access, `WorkspaceRepo` and `WorkspaceScoped`, row isolation with PostgreSQL row-level security (`RlsPolicy`), schema and database isolation (`workspace_migrations`, `WorkspaceUow`, `WorkspaceDatabases`), invitations, events and the `/api/workspaces` routes; organizations above workspaces (`workspace.organizations`, `Organizations`, `OrgMembers`, `OrgRole`, `WorkspaceSelector`, `CurrentOrganization`, `InOrganization`, `OrgRepo`, access requests, `/api/organizations`) and partitions inside them (`workspace.partitions`, `Partitions`, `PartitionScoped`, `PartitionScope`, `CurrentPartition`, `PartitionRepo`, `X-Partition`). Use when building a SaaS or team feature, adding data that belongs to a workspace (team, organization, tenant), grouping workspaces under a company or partner, splitting a workspace's data by domain or region, checking permissions per workspace or organization, inviting users, or debugging a 400/403/404 from a workspace or organization route or data leaking between workspaces or partitions."
+description: "Multi-tenancy with navree-workspace: `WorkspaceModule` and the `workspace` config section, `CurrentWorkspace` and the `InWorkspace` guard (header, subdomain, path prefix or JWT claim), workspace roles (`owner`, `admin`, `member`, `viewer`, app-defined) feeding navree-access, `WorkspaceRepo` and `WorkspaceScoped`, row isolation with PostgreSQL row-level security (`RlsPolicy`), schema and database isolation (`workspace_migrations`, `WorkspaceUow`, `WorkspaceDatabases`), invitations, events and the `/api/workspaces` routes; organizations above workspaces (`workspace.organizations`, `Organizations`, `OrgMembers`, `OrgRole`, `WorkspaceSelector`, `CurrentOrganization`, `InOrganization`, `OrgRepo`, access requests, `/api/organizations`) and partitions inside them (`workspace.partitions`, `Partitions`, `PartitionScoped`, `PartitionScope`, `CurrentPartition`, `PartitionRepo`, `X-Partition`); demo workspaces (`DemoSeeder`, fixtures, `workspace.demo` read-only or nightly reset, `X-Navree-Demo`). Use when building a SaaS or team feature, adding data that belongs to a workspace (team, organization, tenant), grouping workspaces under a company or partner, splitting a workspace's data by domain or region, checking permissions per workspace or organization, inviting users, seeding a demo or sales workspace, or debugging a 400/403/404 from a workspace or organization route or data leaking between workspaces or partitions."
 ---
 
 # Workspaces
@@ -300,6 +300,68 @@ PartitionRepo::<Contact>::insert(&uow, ws.id(), partition.id(), am).await?;
   `GET|PUT .../members/{user}/partitions {partitions: "all" | [ids]}`.
 - `partitions.delete` keeps rows' `partition_id`: move or delete them first.
 
+## Steps: give the app a demo workspace
+
+A demo is a workspace with `kind = "demo"` (`Workspace::kind()`,
+`is_demo()`), filled by each module's `DemoSeeder` from JSON fixtures.
+
+1. One seeder per module with demo data (`navree::workspace::{DemoSeed,
+   DemoSeeder}`), registered next to its migrations:
+
+```rust
+#[injectable]
+pub struct CrmDemo;
+
+impl DemoSeeder for CrmDemo {
+    fn name(&self) -> &'static str { "crm" }                       // unique
+    fn tables(&self) -> &'static [&'static str] { &["companies"] } // children first; cleared on reset
+    fn seed<'a>(&'a self, demo: &'a DemoSeed) -> BoxFuture<'a, Result<(), BoxError>> {
+        Box::pin(async move {
+            let companies: Vec<CompanyFixture> = demo.fixture("crm/companies")?; // fixtures/demo/crm/companies.json
+            for c in companies {
+                WorkspaceRepo::<Company>::insert(demo.uow(), demo.id(), company::ActiveModel {
+                    id: Set(Uuid::now_v7()), name: Set(c.name), ..Default::default()
+                }).await?;
+            }
+            Ok(())
+        })
+    }
+    // Override `clear` for another workspace column: `demo.clear::<Company>().await?`.
+}
+
+// in the module's wire():
+m.migrations(..).workspace_scoped::<Company>().demo_seeder::<CrmDemo>();
+```
+
+2. Fixtures: `workspace.demo.fixtures` (default `fixtures/demo`), JSON; a
+   string that is exactly `{{ now }}`, `{{ now - 2d }}` (m/h/d/w),
+   `{{ today }}` or `{{ today + 1w }}` (d/w) becomes a time/date relative to
+   `demo.now()` (the app's `dyn Clock`). `demo.parse_fixture(include_str!(..))`
+   for embedded JSON.
+3. Create: `navree workspace:demo-create "Acme demo" --owner <id|email> [--slug demo]`
+   or `demos.create(&uow, owner, NewWorkspace::named("Acme demo"))`
+   (`DemoWorkspaces`; seeds in `uow`, which stays entered in the demo; under
+   database isolation seeds the tenant DB and commits it).
+4. Pick the mode:
+
+```toml
+[workspace.demo]
+mode = "read_only"          # default: POST/PUT/PATCH/DELETE -> 403 "Demo workspaces are read-only." (code demo_read_only)
+# mode = "reset"            # writes allowed; workspace:demo-reset clears (reverse order) + seeds nightly
+reset_at = "03:00"          # UTC; needs ScheduleModule + `schedule:work`
+# guest_role = "demo_guest" # signed-in non-members enter demos (CurrentWorkspace::is_guest()); only GET /api/workspaces/{demo} of the module's routes
+editor_roles = []           # roles that still write to read-only demos
+allow = []                  # route names or "METHOD /full/path" still writable
+```
+
+Responses about a demo carry `X-Navree-Demo: read_only|reset`
+(`DEMO_HEADER`, CORS-exposed); `GET /api/workspaces` items have `kind`
+(`live`/`demo`) for a Live/Demo switch. `CurrentWorkspace::is_demo()`,
+`demo_mode()`. `demos.reset(id)` (409 `NotDemo` for live), `reset_all()`,
+`all()`, `seeders()`. Event `workspace.demo_seeded {workspace_id, slug,
+seeders, reset}`. Test the nightly reset with a `FixedClock` at `reset_at`
+plus `app.get::<Scheduler>().await.tick(at)`.
+
 ## Testing template
 
 ```rust
@@ -372,9 +434,14 @@ Read invitation tokens from `app.get::<Mailer>().await.array_transport().unwrap(
   `WorkspaceCreated` listener). SQLite files are created on first use.
 - Events (`workspace.created`, `.member_added`, `.member_role_changed`,
   `.member_removed`, `.ownership_transferred`, `.invitation_sent`,
-  `.invitation_accepted`, `.deleted`) fire only after commit.
+  `.invitation_accepted`, `.deleted`, `.demo_seeded`) fire only after commit.
+- A read-only demo refuses writes on every route that resolves the
+  workspace, the module's own `/api/workspaces/{demo}/...` included; seed or
+  curate it with seeders, `editor_roles` or `allow`, never by turning the
+  mode off. A demo seeder that writes outside `demo.uow()` (or forgets
+  `tables()`/`clear`) leaves rows a reset doesn't remove.
 
 Docs: `/docs/workspaces/introduction/`, `/docs/workspaces/resolution/`,
 `/docs/workspaces/members-and-roles/`, `/docs/workspaces/invitations/`,
 `/docs/workspaces/isolation/`, `/docs/workspaces/organizations/`,
-`/docs/workspaces/partitions/`.
+`/docs/workspaces/partitions/`, `/docs/workspaces/demo-workspaces/`.

@@ -1,0 +1,9 @@
+---
+source: crates/navree-mongo/tests/mongo/commands.rs
+expression: "show(&table(\"deals\").select([\"title\"]).select_expr(Expr::col(\"amount\").mul(Expr::val(2)),\n\"doubled\").order_by_desc(\"doubled\"))"
+---
+db.deals.aggregate([
+  {"$set": {"doubled": {"$multiply": ["$amount", 2]}}},
+  {"$sort": {"doubled": -1}},
+  {"$project": {"title": 1, "doubled": 1, "_id": 0}}
+])

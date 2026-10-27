@@ -4,8 +4,8 @@
 //! `#[controller]` and the route attributes, `#[flag]` (feature flags),
 //! `#[resolver]` (GraphQL root fields, for navree-graphql),
 //! `#[grpc_service]` (gRPC services, for navree-grpc), the
-//! `Searchable` derive of navree-search and `#[agent]` (navree-ai's agents
-//! and their tools).
+//! `Searchable` derive of navree-search, the `Settings` derive of
+//! navree-settings and `#[agent]` (navree-ai's agents and their tools).
 //!
 //! Every attribute expands into plain Rust that calls the runtime crates; the
 //! hand-written `impl Module` / `impl Injectable` is always available as the
@@ -40,6 +40,7 @@ mod paths;
 mod resolver;
 mod route;
 mod searchable;
+mod settings;
 
 /// Implements `navree_micro::MessageHandlers` for an impl block whose
 /// methods answer message and event patterns.
@@ -556,6 +557,38 @@ pub fn delete(_args: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_derive(Searchable, attributes(searchable))]
 pub fn derive_searchable(input: TokenStream) -> TokenStream {
     searchable::expand(input.into()).into()
+}
+
+/// Implements `navree_settings::SettingsGroup` for a struct whose fields
+/// are settings: typed settings stored per scope and inherited down the
+/// chain global, organization, workspace, user.
+///
+/// ```text
+/// /// What the member portal shows.
+/// #[derive(Settings, Serialize, Deserialize, Validate, Default)]
+/// #[settings(key = "portal", scopes(global, organization, workspace))]
+/// pub struct PortalSettings {
+///     #[garde(skip)]
+///     pub show_leaderboard: bool,
+///     #[garde(length(max = 500))]
+///     pub welcome_text: String,
+/// }
+/// ```
+///
+/// | Argument | Default | Meaning |
+/// |---|---|---|
+/// | `key = ".."` | the type name without `Settings`, in kebab case (`portal`) | The stored key and the routes' path segment |
+/// | `scopes(..)` | `global, organization, workspace` | The levels the settings may be stored at: `global`, `organization`, `workspace`, `user` |
+/// | `permission = ".."` | per level (`settings.manage`, `organization.update`, `workspace.update`) | The permission a write needs |
+/// | `read_permission = ".."` | none | The permission a read through the routes needs |
+///
+/// The doc comment becomes the description. A struct without named
+/// fields, generics, an unknown or duplicate argument, an unknown level or
+/// an invalid key is a compile error. The generated code names
+/// `::navree::settings` (or `::navree_settings`).
+#[proc_macro_derive(Settings, attributes(settings))]
+pub fn derive_settings(input: TokenStream) -> TokenStream {
+    settings::expand(input.into()).into()
 }
 
 /// Implements `navree_mcp::McpServer` for an inherent impl block whose

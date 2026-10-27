@@ -16,7 +16,7 @@ import { sections } from "../content/docs/manifest.ts";
 
 const COMPONENTS = new Set(["Badge", "Callout", "CodeGroup", "Diagram", "FileTree", "LinkCard", "LinkCards", "Step", "Steps", "Tab", "Tabs"]);
 const LANGUAGES = new Set([
-  "rust", "toml", "shellscript", "typescript", "tsx", "json", "sql", "http", "html", "jinja", "yaml", "dotenv",
+  "rust", "toml", "shellscript", "typescript", "tsx", "json", "sql", "http", "html", "css", "jinja", "yaml", "dotenv",
   "sh", "bash", "shell", "zsh", "console", "ts", "js", "javascript", "env", "text", "txt", "plaintext", "diff",
 ]);
 

@@ -9,7 +9,7 @@ use navree_graphql::{Context, ContextExt, GraphqlModule, ModuleBuilderGraphqlExt
 use navree_kernel::ModuleBuilder;
 use navree_macros::{injectable, module, resolver};
 use navree_testing::{TestApp, principal};
-use navree_workspace::{NewWorkspace, WorkspaceModule, Workspaces};
+use navree_workspace::{DemoWorkspaces, NewWorkspace, WorkspaceModule, Workspaces};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -30,6 +30,13 @@ impl IdentityResolver {
     async fn workspace_name(&self, ctx: &Context<'_>) -> Result<String> {
         let workspace = ctx.workspace().await?;
         Ok(workspace.workspace().name.clone())
+    }
+
+    /// A mutation inside the current workspace (writes nothing).
+    #[mutation]
+    async fn touch_workspace(&self, ctx: &Context<'_>) -> Result<String> {
+        let workspace = ctx.workspace().await?;
+        Ok(workspace.workspace().slug.clone())
     }
 }
 
@@ -130,5 +137,41 @@ async fn workspace_comes_from_the_request_and_checks_the_membership() {
         .send()
         .await
         .assert_json_path("errors.0.extensions.code", json!("BAD_REQUEST"));
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn read_only_demos_answer_queries_and_refuse_mutations() {
+    let app = app().await;
+    let ada = user(&app, "Ada", "ada@navree.test").await;
+    let db = app.get::<Db>().await;
+    let uow = db.uow(None, None).await;
+    let demo = app
+        .get::<DemoWorkspaces>()
+        .await
+        .create(&uow, ada, NewWorkspace::named("Acme demo"))
+        .await
+        .unwrap();
+    uow.commit().await.unwrap();
+    let client = app.acting_as(principal(ada));
+
+    // A query is a POST that reads.
+    let read = client
+        .post("/graphql")
+        .header("x-workspace", demo.slug.as_str())
+        .json(&json!({ "query": "{ workspaceName }" }))
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("data.workspaceName", json!("Acme demo"));
+    assert_eq!(read.header("x-navree-demo"), Some("read_only"));
+    client
+        .post("/graphql")
+        .header("x-workspace", demo.slug.as_str())
+        .json(&json!({ "query": "mutation { touchWorkspace }" }))
+        .send()
+        .await
+        .assert_json_path("errors.0.extensions.code", json!("FORBIDDEN"))
+        .assert_json_path("errors.0.message", json!("Demo workspaces are read-only."));
     app.shutdown().await.unwrap();
 }

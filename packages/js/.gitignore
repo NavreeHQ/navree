@@ -1,0 +1,8 @@
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+.nuxt/
+.output/
+.next/
+next-env.d.ts

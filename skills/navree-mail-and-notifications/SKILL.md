@@ -1,6 +1,6 @@
 ---
 name: navree-mail-and-notifications
-description: "Sends email and notifications from a Navree app: mail transports (SMTP, log, array, failover), MiniJinja mail templates, `TemplateMail`, `Mailable` and queued mail, and notifications over the database, mail and broadcast channels with `/api/notifications`. Use when sending an email, adding or editing a mail template, configuring SMTP, notifying users in-app, by mail or live, or asserting on sent mail in tests."
+description: "Sends email and notifications from a Navree app: mail transports (SMTP, SES, Mailgun, Postmark, Resend, log, array, failover), MiniJinja mail templates with CSS inlined and a generated text body, `TemplateMail`, `Mailable` and queued mail, and notifications over the database, mail and broadcast channels with `/api/notifications`. Use when sending an email, adding or editing a mail template, configuring SMTP, notifying users in-app, by mail or live, or asserting on sent mail in tests."
 ---
 
 # Mail and notifications
@@ -92,7 +92,7 @@ impl Mailable for WeeklyReport {
 ```toml
 [mail]
 from = "My App <hello@example.com>"
-transport = "log"        # log | array | smtps://user:pass@host | { type = "failover", transports = [..] }
+transport = "log"        # log | array | smtps://user:pass@host | ses://.. | mailgun://.. | postmark://.. | resend://.. | { type = "failover", transports = [..] }
 # queue = "mail"         # the queue Mailer::queue uses
 ```
 
@@ -107,6 +107,14 @@ Point it at a local catcher (Mailpit) with `smtp://localhost:1025`.
 `queue` renders and validates at once (template and address errors return
 immediately), then dispatches `mail.send`; with no queue in the app it
 sends at once and logs a warning.
+
+The mailer inlines `<style>` rules (`mail.render.inline_css`), generates the
+text body of HTML-only mail (`mail.render.text_from_html`) and sets
+`lang`/`dir` from `Message::locale` (or a `locale` in a `TemplateMail`
+context). `Message` also takes `header(name, value)` and
+`metadata(key, value)` (provider tags). For email APIs, named transports
+(`mailer.via`), tenant transports, the delivery log, suppressions, holding
+mail and tracking, see `navree-mail-delivery`.
 
 ## Notifications
 

@@ -1,0 +1,9 @@
+---
+source: crates/navree-mongo/tests/mongo/commands.rs
+expression: "format!(\"{sum:#}\")"
+---
+db.deals.aggregate([
+  {"$match": {"stage": "won", "deleted_at": null}},
+  {"$group": {"_id": null, "aggregate": {"$sum": "$amount"}}},
+  {"$project": {"_id": 0, "aggregate": "$aggregate"}}
+])

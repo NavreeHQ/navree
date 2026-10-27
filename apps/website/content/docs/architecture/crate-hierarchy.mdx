@@ -15,7 +15,7 @@ This keeps the framework honest: the kernel knows nothing about HTTP, HTTP knows
 L9+ apps/crm-api (Navree app)                    apps/crm-web (Next.js 16)
 L8  navree (facade: re-exports + prelude)        navree-cli (binary `navree`; no runtime navree deps, uses navree-dock)
 L7  navree-billing  navree-search  navree-lighthouse  navree-logbook  navree-helm (packages built on other packages)
-L6  navree-social  navree-webhooks  navree-flags  navree-mcp  navree-ai  navree-i18n (ecosystem libraries)
+L6  navree-social  navree-sso  navree-webhooks  navree-flags  navree-mcp  navree-ai  navree-i18n  navree-documents (ecosystem libraries)
 L5  navree-auth  navree-workspace  navree-redis
 L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify  navree-ui
 L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage  navree-time
@@ -44,7 +44,7 @@ L0  navree-kernel                                navree-macros, navree-i18n-macr
 | L3 | `navree-testing` | `TestApp`, an in-process `TestClient`, fakes |
 | L3 | `navree-observe` | Health checks, readiness, Prometheus metrics |
 | L3 | `navree-api` | OpenAPI 3.1 from route metadata, docs UI, API resources |
-| L3 | `navree-mail` | Mailables from templates; SMTP, log, array and failover transports; queued sending |
+| L3 | `navree-mail` | Mailables from templates with CSS inlined; SMTP (DKIM-signed), SES, Mailgun, Postmark, Resend, log, array and failover transports; queued sending; tenant transports, a delivery log fed by provider webhooks, suppressions, hold for approval, open and click tracking, SPF/DKIM/DMARC checks |
 | L3 | `navree-realtime` | Pusher-protocol WebSocket server and a signed relay for other processes |
 | L3 | `navree-storage` | Named disks on object_store, streaming, signed temporary URLs, upload checks |
 | L3 | `navree-time` | [Time zones](/docs/digging-deeper/time-zones/): the request's zone, local days, send windows, holidays, local-time SQL |
@@ -57,14 +57,16 @@ L0  navree-kernel                                navree-macros, navree-i18n-macr
 | L4 | `navree-notify` | Notifications over mail, database and broadcast, with read state |
 | L4 | `navree-ui` | The UI kit of the server-rendered tools: the app shell, components as MiniJinja macros, embedded CSS, JS and fonts |
 | L5 | `navree-auth` | JWT access tokens, rotating refresh tokens, strategies, accounts, 2FA |
-| L5 | `navree-workspace` | [Workspaces](/docs/workspaces/introduction/): members, roles, invitations, row, schema or database isolation |
+| L5 | `navree-workspace` | [Workspaces](/docs/workspaces/introduction/): members, roles, invitations, row, schema or database isolation, [demo workspaces](/docs/workspaces/demo-workspaces/) |
 | L5 | `navree-redis` | [Redis](/docs/digging-deeper/redis/): shared connections and the Redis drivers of the cache, locks, queue, sessions and real-time backplane, shared rate limits |
 | L6 | `navree-social` | [Social sign-in](/docs/packages/social-sign-in/): providers, linked accounts, Navree tokens |
+| L6 | `navree-sso` | [Single sign-on](/docs/security/single-sign-on/): SAML 2.0 and OpenID Connect connections per organization or workspace, verified domains, just-in-time provisioning |
 | L6 | `navree-webhooks` | [Webhooks](/docs/packages/webhooks/): signed outgoing deliveries with retries and a delivery log, verified incoming webhooks |
 | L6 | `navree-flags` | [Feature flags](/docs/packages/feature-flags/): flags as types, per user, workspace, plan or percentage |
 | L6 | `navree-mcp` | [MCP servers](/docs/ai/mcp-servers/): tools, resources and prompts over streamable HTTP and stdio |
 | L6 | `navree-ai` | The [AI SDK](/docs/ai/ai-sdk/): models from six providers with failover and budgets, agents with tools, embeddings and vector stores |
 | L6 | `navree-i18n` | [Localization](/docs/packages/localization/): Fluent files, `t!`, the request's locale, ICU4X formatting, translated validation messages, templates and notifications |
+| L6 | `navree-documents` | [Documents](/docs/packages/documents/): PDF from Typst or HTML templates, DOCX, merge and stamps, queued renders |
 | L7 | `navree-search` | [Search](/docs/packages/search/): full-text and vector search over entities, synced through the queue |
 | L7 | `navree-billing` | [Billing](/docs/packages/billing/) for users or workspaces with Stripe or Paddle: plans, trials, seats, metered usage, invoices, the portal, verified webhooks |
 | L7 | `navree-lighthouse` | [Lighthouse](/docs/tools/lighthouse/): application monitoring inside the app, issues, traces, alerts and the `/_lighthouse` dashboard |
@@ -85,7 +87,7 @@ L0  navree-kernel                                navree-macros, navree-i18n-macr
 | `navree-http`, `navree-log`, `navree-crypto`, `navree-events`, `navree-view`, `navree-cache`, `navree-http-client`, `navree-schema` | kernel, contracts, config |
 | `navree-db` | kernel, contracts, config, http, schema |
 | `navree-testing`, `navree-observe`, `navree-api` | kernel, contracts, config, http |
-| `navree-mail` | kernel, contracts, config, view |
+| `navree-mail` | kernel, contracts, config, telemetry, view, http, crypto, events, http-client, db (a same-layer edge: the delivery tables) |
 | `navree-realtime`, `navree-storage` | kernel, contracts, config, http, crypto |
 | `navree-time` | kernel, contracts, config, http |
 | `navree-session` | kernel, contracts, config, http, crypto, db |
@@ -96,13 +98,15 @@ L0  navree-kernel                                navree-macros, navree-i18n-macr
 | `navree-notify` | kernel, contracts, config, http, db, mail |
 | `navree-ui` | kernel, contracts, config, http, view |
 | `navree-auth` | kernel, contracts, config, http, db, crypto, session, validation, cache, mail, access |
-| `navree-workspace` | kernel, contracts, config, http, db, crypto, events, mail, access, time |
+| `navree-workspace` | kernel, contracts, config, telemetry, http, db, crypto, events, mail, access, time, schedule |
 | `navree-redis` | kernel, contracts, config, http, cache, db, queue, session, realtime |
 | `navree-social` | kernel, contracts, config, http, crypto, cache, events, http-client, db, audit, auth |
+| `navree-sso` | kernel, contracts, config, http, crypto, cache, events, http-client, db, auth, workspace |
 | `navree-webhooks` | kernel, contracts, config, http, crypto, events, http-client, db, queue, access, workspace |
 | `navree-flags` | kernel, contracts, config, http, cache, db, events, audit, access, auth, workspace |
 | `navree-mcp` | kernel, contracts, config, http, cache, db, testing, validation, access, auth |
 | `navree-search` | kernel, contracts, config, macros, http, http-client, db, queue, access, workspace |
+| `navree-documents` | kernel, contracts, config, http, view, storage, db and queue (with its `operations` feature) |
 | `navree-billing` | kernel, contracts, config, http, cache, events, http-client, db, queue, schedule, access, auth, workspace |
 | `navree-ai` | kernel, contracts, config, macros, http, http-client, cache, db, storage, validation, access, auth |
 | `navree-i18n` | kernel, contracts, config, http, view, db, validation, notify, workspace, i18n-macros |

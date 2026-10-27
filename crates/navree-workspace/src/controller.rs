@@ -17,14 +17,14 @@ use uuid::Uuid;
 
 use crate::current::{CurrentWorkspace, InWorkspace};
 use crate::directory::UserSummary;
-use crate::entity::{Invitation, Member, Partition, Workspace};
+use crate::entity::{Invitation, Member, Partition, Workspace, WorkspaceKind};
 use crate::invitations::AcceptedInvitation;
 use crate::members::MemberInfo;
 use crate::org_current::PartitionScope;
 use crate::workspaces::{NewWorkspace, check_time_zone};
 use crate::{
-    Invitations, Members, NewPartition, PartitionSelector, Partitions, Selector, WorkspaceConfig,
-    WorkspaceRole, Workspaces,
+    DemoWorkspaces, Invitations, Members, NewPartition, PartitionSelector, Partitions, Selector,
+    WorkspaceConfig, WorkspaceRole, Workspaces,
 };
 
 /// The path parameter naming the workspace (a slug or an id).
@@ -47,6 +47,11 @@ pub struct WorkspaceResource {
     pub owner_id: Uuid,
     /// The organization the workspace is attached to, if any.
     pub organization_id: Option<Uuid>,
+    /// `live` or `demo` (a demo workspace, for a front end's Live/Demo
+    /// switch).
+    #[serde(rename = "kind")]
+    #[schema(rename = "kind")]
+    pub workspace_kind: WorkspaceKind,
     /// The caller's role in the workspace.
     #[schema(value_type = String, example = "owner")]
     pub role: WorkspaceRole,
@@ -70,6 +75,7 @@ impl WorkspaceResource {
             slug: workspace.slug.clone(),
             owner_id: workspace.owner_id,
             organization_id: workspace.organization_id,
+            workspace_kind: workspace.kind(),
             role,
             timezone: workspace.timezone.clone(),
             country: workspace.country.clone(),
@@ -363,7 +369,7 @@ pub struct AcceptedInvitationResource {
 ///
 /// | Route | Permission | Answer |
 /// |---|---|---|
-/// | `GET /workspaces` | | the caller's workspaces, `{data: [..]}` |
+/// | `GET /workspaces` | | the caller's workspaces, `{data: [..]}` (with the demo workspaces when `workspace.demo.guest_role` is set) |
 /// | `POST /workspaces` `{name, slug?, timezone?, country?}` | | 201, the workspace (caller is owner) |
 /// | `GET /workspaces/{workspace}` | (member) | the workspace with the caller's role |
 /// | `PATCH /workspaces/{workspace}` `{name}` | `workspace.update` | the workspace |
@@ -380,8 +386,11 @@ pub struct AcceptedInvitationResource {
 /// | `DELETE /workspaces/{workspace}/invitations/{invitation}` | `workspace.invitations.delete` | 204 |
 ///
 /// Granting the `owner` role, or changing or removing a member who has it,
-/// also takes the `owner` role (a 403 otherwise). `POST
-/// /invitations/accept` is [`InvitationController`].
+/// also takes the `owner` role (a 403 otherwise). In a read-only demo
+/// workspace the routes that write answer 403 (`demo_read_only`); a demo's
+/// guests (`workspace.demo.guest_role`) get `GET /workspaces/{workspace}`
+/// and a 403 from the others. `POST /invitations/accept` is
+/// [`InvitationController`].
 ///
 /// With `workspace.partitions.enabled`, the partition routes join them:
 ///
@@ -402,6 +411,8 @@ pub struct WorkspaceController {
     members: Arc<Members>,
     invitations: Arc<Invitations>,
     partitions: Arc<Partitions>,
+    demos: Arc<DemoWorkspaces>,
+    guest_role: Option<WorkspaceRole>,
     enabled: bool,
     partitions_enabled: bool,
 }
@@ -413,6 +424,7 @@ impl Injectable for WorkspaceController {
             ProviderKey::of::<Members>(),
             ProviderKey::of::<Invitations>(),
             ProviderKey::of::<Partitions>(),
+            ProviderKey::of::<DemoWorkspaces>(),
             ProviderKey::of::<WorkspaceConfig>(),
         ]
     }
@@ -425,11 +437,44 @@ impl Injectable for WorkspaceController {
                 members: r.get::<Members>().await?,
                 invitations: r.get::<Invitations>().await?,
                 partitions: r.get::<Partitions>().await?,
+                demos: r.get::<DemoWorkspaces>().await?,
+                guest_role: config.demo.guest_role.as_deref().map(WorkspaceRole::parse),
                 enabled: config.routes,
                 partitions_enabled: config.routes && config.partitions.enabled,
             })
         })
     }
+}
+
+/// The caller's workspaces with their role in each, by name: their
+/// memberships, plus the demo workspaces they enter as guests when
+/// `workspace.demo.guest_role` is set.
+async fn visible_workspaces(
+    workspaces: &Workspaces,
+    demos: &DemoWorkspaces,
+    guest_role: Option<&WorkspaceRole>,
+    user: Uuid,
+) -> Result<Vec<WorkspaceResource>, AppError> {
+    let mut visible: Vec<WorkspaceResource> = workspaces
+        .for_user(user)
+        .await?
+        .into_iter()
+        .map(|membership| WorkspaceResource::new(&membership.workspace, membership.role))
+        .collect();
+    if let Some(role) = guest_role {
+        let guest_of: Vec<WorkspaceResource> = demos
+            .all()
+            .await?
+            .iter()
+            .filter(|demo| !visible.iter().any(|joined| joined.id == demo.id))
+            .map(|demo| WorkspaceResource::new(demo, role.clone()))
+            .collect();
+        if !guest_of.is_empty() {
+            visible.extend(guest_of);
+            visible.sort_by(|a, b| a.name.cmp(&b.name).then(a.id.cmp(&b.id)));
+        }
+    }
+    Ok(visible)
 }
 
 /// Granting `owner`, or touching a member who is an owner, takes the
@@ -458,18 +503,14 @@ impl Controller for WorkspaceController {
         if !self.enabled {
             return Vec::new();
         }
-        let workspaces = self.workspaces.clone();
+        let (workspaces, demos) = (self.workspaces.clone(), self.demos.clone());
+        let guest_role = self.guest_role.clone();
         let index = move |CurrentPrincipal(me): CurrentPrincipal| {
-            let workspaces = workspaces.clone();
+            let (workspaces, demos) = (workspaces.clone(), demos.clone());
+            let guest_role = guest_role.clone();
             async move {
-                let data = workspaces
-                    .for_user(me.user_id)
-                    .await?
-                    .into_iter()
-                    .map(|membership| {
-                        WorkspaceResource::new(&membership.workspace, membership.role)
-                    })
-                    .collect();
+                let data = visible_workspaces(&workspaces, &demos, guest_role.as_ref(), me.user_id)
+                    .await?;
                 Ok::<_, AppError>(Json(DataList::<WorkspaceResource> { data }))
             }
         };
@@ -657,6 +698,8 @@ impl Controller for WorkspaceController {
                 }
             };
         let guard = || InWorkspace::from_path(WORKSPACE_PARAM);
+        // Everything but `show` is for members: a demo's guests see the workspace only.
+        let members_only = || InWorkspace::members_from_path(WORKSPACE_PARAM);
         let mut routes = vec![
             RouteDef::on(Method::GET, "/", index)
                 .authenticated()
@@ -686,7 +729,7 @@ impl Controller for WorkspaceController {
                 )),
             RouteDef::on(Method::PATCH, "/{workspace}", rename)
                 .permissions(&["workspace.update"])
-                .guard(guard())
+                .guard(members_only())
                 .name("workspaces.update")
                 .api(api(
                     "Rename a workspace",
@@ -696,7 +739,7 @@ impl Controller for WorkspaceController {
                 )),
             RouteDef::on(Method::PUT, "/{workspace}/time-zone", set_time_zone)
                 .permissions(&["workspace.update"])
-                .guard(guard())
+                .guard(members_only())
                 .name("workspaces.time_zone")
                 .api(api(
                     "Set a workspace's time zone and country",
@@ -706,7 +749,7 @@ impl Controller for WorkspaceController {
                 )),
             RouteDef::on(Method::DELETE, "/{workspace}", destroy)
                 .permissions(&["workspace.delete"])
-                .guard(guard())
+                .guard(members_only())
                 .name("workspaces.destroy")
                 .api(ApiMeta {
                     success_status: 204,
@@ -714,7 +757,7 @@ impl Controller for WorkspaceController {
                 }),
             RouteDef::on(Method::POST, "/{workspace}/transfer", transfer)
                 .permissions(&["workspace.transfer"])
-                .guard(guard())
+                .guard(members_only())
                 .name("workspaces.transfer")
                 .api(api(
                     "Transfer a workspace to another member",
@@ -724,7 +767,7 @@ impl Controller for WorkspaceController {
                 )),
             RouteDef::on(Method::POST, "/{workspace}/leave", leave)
                 .authenticated()
-                .guard(guard())
+                .guard(members_only())
                 .name("workspaces.leave")
                 .api(ApiMeta {
                     success_status: 204,
@@ -732,7 +775,7 @@ impl Controller for WorkspaceController {
                 }),
             RouteDef::on(Method::GET, "/{workspace}/members", list_members)
                 .permissions(&["workspace.members.read"])
-                .guard(guard())
+                .guard(members_only())
                 .name("workspaces.members.index")
                 .api(api(
                     "List a workspace's members",
@@ -742,7 +785,7 @@ impl Controller for WorkspaceController {
                 )),
             RouteDef::on(Method::POST, "/{workspace}/members", add_member)
                 .permissions(&["workspace.members.create"])
-                .guard(guard())
+                .guard(members_only())
                 .name("workspaces.members.store")
                 .api(ApiMeta {
                     success_status: 201,
@@ -755,7 +798,7 @@ impl Controller for WorkspaceController {
                 }),
             RouteDef::on(Method::PATCH, "/{workspace}/members/{user}", change_role)
                 .permissions(&["workspace.members.update"])
-                .guard(guard())
+                .guard(members_only())
                 .name("workspaces.members.update")
                 .api(api(
                     "Change a member's role",
@@ -765,7 +808,7 @@ impl Controller for WorkspaceController {
                 )),
             RouteDef::on(Method::DELETE, "/{workspace}/members/{user}", remove_member)
                 .permissions(&["workspace.members.delete"])
-                .guard(guard())
+                .guard(members_only())
                 .name("workspaces.members.destroy")
                 .api(ApiMeta {
                     success_status: 204,
@@ -773,7 +816,7 @@ impl Controller for WorkspaceController {
                 }),
             RouteDef::on(Method::GET, "/{workspace}/invitations", list_invitations)
                 .permissions(&["workspace.invitations.read"])
-                .guard(guard())
+                .guard(members_only())
                 .name("workspaces.invitations.index")
                 .api(api(
                     "List pending invitations",
@@ -783,7 +826,7 @@ impl Controller for WorkspaceController {
                 )),
             RouteDef::on(Method::POST, "/{workspace}/invitations", invite)
                 .permissions(&["workspace.invitations.create"])
-                .guard(guard())
+                .guard(members_only())
                 .name("workspaces.invitations.store")
                 .api(ApiMeta {
                     success_status: 201,
@@ -800,7 +843,7 @@ impl Controller for WorkspaceController {
                 revoke,
             )
             .permissions(&["workspace.invitations.delete"])
-            .guard(guard())
+            .guard(members_only())
             .name("workspaces.invitations.destroy")
             .api(ApiMeta {
                 success_status: 204,
@@ -914,7 +957,8 @@ impl WorkspaceController {
                 }))
             }
         };
-        let guard = || InWorkspace::from_path(WORKSPACE_PARAM);
+        // A demo's guests see the workspace only, not its partitions.
+        let guard = || InWorkspace::members_from_path(WORKSPACE_PARAM);
         vec![
             RouteDef::on(Method::GET, "/{workspace}/partitions", index)
                 .permissions(&["workspace.partitions.read"])

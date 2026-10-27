@@ -1,0 +1,10 @@
+---
+source: crates/navree-mongo/tests/mongo/commands.rs
+expression: "show(&Company::query().where_exists(Deal::query().where_column(Deal::COMPANY_ID,\n\"=\", Company::ID).where_(Deal::STAGE.eq(Stage::Won)),))"
+---
+db.companies.aggregate([
+  {"$lookup": {"from": "deals", "localField": "_id", "foreignField": "company_id", "pipeline": [{"$match": {"stage": "won", "deleted_at": null}}, {"$limit": 1}, {"$project": {"_id": 1}}], "as": "__navree_exists0"}},
+  {"$match": {"__navree_exists0.0": {"$exists": true}}},
+  {"$unset": ["__navree_exists0"]},
+  {"$project": {"_id": 1, "name": 1, "country": 1, "employees": 1, "created_at": 1, "updated_at": 1}}
+])

@@ -3,6 +3,7 @@
 use std::future::Future;
 use std::sync::Arc;
 
+use async_graphql::parser::types::OperationType;
 use async_graphql::{Context, Error};
 use axum::extract::FromRequestParts;
 use futures_util::FutureExt;
@@ -12,7 +13,7 @@ use navree_contracts::Principal;
 use navree_db::Uow;
 use navree_http::AppError;
 use navree_kernel::AppContext;
-use navree_workspace::CurrentWorkspace;
+use navree_workspace::{CurrentWorkspace, DemoIntent};
 use sea_orm::EntityTrait;
 
 use crate::__private::FIELD;
@@ -161,7 +162,12 @@ impl ContextExt for Context<'_> {
     }
 
     async fn workspace(&self) -> Result<CurrentWorkspace, Error> {
-        Ok(operation(self)?.workspace().await?)
+        // Queries and subscriptions read a demo workspace; mutations write.
+        let intent = match self.query_env.operation.node.ty {
+            OperationType::Mutation => DemoIntent::Write,
+            OperationType::Query | OperationType::Subscription => DemoIntent::Read,
+        };
+        Ok(operation(self)?.workspace(intent).await?)
     }
 
     fn loader<L: Send + Sync + 'static>(&self) -> &RequestLoader<L> {

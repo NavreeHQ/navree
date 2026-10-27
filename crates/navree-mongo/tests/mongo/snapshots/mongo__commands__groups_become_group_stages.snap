@@ -1,0 +1,11 @@
+---
+source: crates/navree-mongo/tests/mongo/commands.rs
+expression: "show(&table(\"deals\").select([\"stage\"]).select_expr(Expr::count_all(),\n\"deals\").select_expr(Expr::sum(Expr::col(\"amount\")),\n\"total\").select_expr(Expr::avg(Expr::col(\"amount\")),\n\"average\").group_by([\"stage\"]).having(Expr::count_all().gt(1)).order_by_desc(\"total\"))"
+---
+db.deals.aggregate([
+  {"$group": {"_id": {"g0": "$stage"}, "__navree_a0": {"$sum": 1}, "__navree_a1": {"$sum": "$amount"}, "__navree_a2": {"$avg": "$amount"}}},
+  {"$set": {"stage": "$_id.g0", "deals": "$__navree_a0", "total": "$__navree_a1", "average": "$__navree_a2"}},
+  {"$match": {"$expr": {"$gt": [{"$ifNull": ["$__navree_a0", null]}, 1]}}},
+  {"$sort": {"total": -1}},
+  {"$project": {"stage": 1, "deals": 1, "total": 1, "average": 1, "_id": 0}}
+])

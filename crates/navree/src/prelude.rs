@@ -106,6 +106,8 @@ pub use navree_auth::{AuthModule, AuthService, CurrentUser, ModuleBuilderAuthExt
 #[cfg(feature = "ai")]
 pub use navree_ai::{AiModule, ModuleBuilderAiExt as _};
 
+#[cfg(feature = "mongo")]
+pub use navree_mongo::{ModuleBuilderMongoExt as _, MongoDb, MongoModule};
 #[cfg(feature = "redis")]
 pub use navree_redis::RedisModule;
 
@@ -118,6 +120,9 @@ pub use navree_i18n::{I18nModule, Locale};
 
 #[cfg(feature = "grpc")]
 pub use navree_grpc::{GrpcModule, ModuleBuilderGrpcExt as _};
+
+#[cfg(feature = "documents")]
+pub use navree_documents::{DocumentsModule, ModuleBuilderDocumentsExt as _};
 
 #[cfg(feature = "billing")]
 pub use navree_billing::BillingModule;
@@ -142,8 +147,14 @@ pub use navree_workspace::{
 #[cfg(feature = "webhooks")]
 pub use navree_webhooks::{ModuleBuilderWebhooksExt as _, WebhooksModule};
 
+#[cfg(feature = "settings")]
+pub use navree_settings::{ModuleBuilderSettingsExt as _, Setting, SettingsModule};
+
 #[cfg(feature = "social")]
 pub use navree_social::SocialModule;
+
+#[cfg(feature = "sso")]
+pub use navree_sso::SsoModule;
 
 #[cfg(feature = "micro")]
 pub use crate::message_handlers;

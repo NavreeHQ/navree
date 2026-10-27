@@ -49,11 +49,13 @@ mod test;
 /// ```
 ///
 /// Container attributes: `table = "..."` (default: the snake_case plural of
-/// the struct's name), `primary_key = "..."` (default `id`), `key_type =
-/// "int" | "uuid" | "uuid_v7" | "uuid_v4" | "ulid" | "manual"` (default: by
-/// the key's type), `timestamps` or `timestamps(created_at = "...",
-/// updated_at = false)`, `soft_deletes` or `soft_deletes = "..."`,
-/// `connection = "..."`, `per_page = N`, `global_scopes(Scope, ...)`.
+/// the struct's name; `collection = "..."` says the same for a document
+/// store), `primary_key = "..."` (default `id`), `key_type = "int" |
+/// "uuid" | "uuid_v7" | "uuid_v4" | "ulid" | "object_id" | "manual"`
+/// (default: by the key's type), `timestamps` or `timestamps(created_at =
+/// "...", updated_at = false)`, `soft_deletes` or `soft_deletes = "..."`,
+/// `connection = "..."`, `driver = "..."` (the document driver the model is
+/// stored with), `per_page = N`, `global_scopes(Scope, ...)`.
 /// Relation attributes: `touches = ["company"]` (relations whose records
 /// are touched when a record is saved or deleted), `morph_name = "deal"`
 /// (stored in polymorphic type columns; default: the snake_case name),
@@ -75,6 +77,21 @@ mod test;
 /// `permission_prefix = "..."` (default: the table) and `policy =
 /// DealPolicy` (a `navree_access::Policy` attached to the model; implies
 /// `subject`).
+///
+/// A model with `driver = "mongodb"` keeps its key in the document's `_id`:
+/// unless `primary_key` says otherwise, the key column is `_id`, and a field
+/// `id` without a `column` of its own is stored there.
+///
+/// ```ignore
+/// #[derive(Model, Clone, Debug, Default, serde::Serialize)]
+/// #[model(collection = "events", driver = "mongodb", timestamps)]
+/// pub struct Event {
+///     pub id: ObjectId,                  // stored as `_id`; generated when all zeros
+///     pub kind: String,
+///     pub created_at: DateTime<Utc>,
+///     pub updated_at: DateTime<Utc>,
+/// }
+/// ```
 ///
 /// Field attributes: `column = "..."`, `cast = "json" | "string_enum" |
 /// "int_enum" | "decimal(N)" | "datetime_format(\"..\")" |

@@ -44,7 +44,7 @@ Install the CLI from the Git repository, and let new apps depend on the reposito
 
 ### Workspaces
 
-- **`navree-workspace`**: multi-tenancy at the workspace level, on in the default features. `WorkspaceModule`, the `CurrentWorkspace` extractor, the `Workspaces`, `Members` and `Invitations` services, the `Owner`, `Admin`, `Member` and `Viewer` roles plus your own, workspace-scoped permissions for `navree-access`, resolution from a header, a subdomain, a path prefix or a token claim, a time zone and country per workspace, and isolation by row, schema or database. See [Workspaces](/docs/workspaces/introduction/).
+- **`navree-workspace`**: multi-tenancy at the workspace level, on in the default features. `WorkspaceModule`, the `CurrentWorkspace` extractor, the `Workspaces`, `Members` and `Invitations` services, the `Owner`, `Admin`, `Member` and `Viewer` roles plus your own, workspace-scoped permissions for `navree-access`, resolution from a header, a subdomain, a path prefix or a token claim, a time zone and country per workspace, isolation by row, schema or database, and demo workspaces seeded from fixtures, read-only or reset every night, with an `X-Navree-Demo` header for a Live/Demo switch. See [Workspaces](/docs/workspaces/introduction/) and [Demo workspaces](/docs/workspaces/demo-workspaces/).
 
 ### Background work
 
@@ -55,7 +55,7 @@ Install the CLI from the Git repository, and let new apps depend on the reposito
 
 ### Communication
 
-- **`navree-mail`**: mailables rendered from templates, with SMTP, log, array and failover transports, and queued sending.
+- **`navree-mail`**: mailables rendered from templates, with CSS inlined and a text body generated; SMTP (DKIM-signed), SES, Mailgun, Postmark, Resend, log, array and failover transports; queued sending. For products that send for their customers: transports per sending domain, workspace and organization, a delivery log fed by provider webhooks, automatic suppressions, mail held for approval, open and click tracking, and SPF, DKIM and DMARC checks.
 - **`navree-notify`**: notifications over mail, the database and broadcasts, with read state.
 - **`navree-realtime`**: an in-process WebSocket server that speaks the Pusher protocol, so pusher-js and any Pusher client connects, with public, private and presence channels and a signed relay that lets workers broadcast through the serving process.
 - **`navree-view`**: MiniJinja templates for mail and other text.
@@ -91,10 +91,12 @@ Install the CLI from the Git repository, and let new apps depend on the reposito
 - **[gRPC](/docs/microservices/grpc/)** (`navree-grpc`) and **[GraphQL](/docs/microservices/graphql/)** (`navree-graphql`): gRPC, gRPC-Web and Connect services on tonic, and GraphQL on async-graphql with dataloaders and subscriptions, both sharing your modules, guards and access rules.
 - **[OAuth server](/docs/packages/oauth-server/)** (`navree-oauth`): OAuth 2.1 and OpenID Connect for third-party apps, with PKCE, client credentials, device codes, scopes and consent, and personal access tokens.
 - **[Social sign-in](/docs/packages/social-sign-in/)** (`navree-social`): sign-in with Google, GitHub, Apple, Microsoft, GitLab, Slack, LinkedIn, Discord, X and any OpenID Connect provider, linked to Navree users and ending with normal Navree tokens.
+- **[Single sign-on](/docs/security/single-sign-on/)** (`navree-sso`): SAML 2.0 and OpenID Connect sign-in per organization or workspace, verified email domains that route sign-in and can refuse passwords, and just-in-time provisioning with group to role mapping. SAML signatures are verified in Rust (exclusive canonicalization, RSA-SHA256 and ECDSA on `ring`; SHA-1 refused), with `SsoFake` for tests.
 - **[Billing](/docs/packages/billing/)** (`navree-billing`): subscriptions, trials, usage metering and invoices with Stripe or Paddle, for users or workspaces.
 - **[Redis](/docs/digging-deeper/redis/)** (`navree-redis`, feature `redis`): one set of reconnecting Redis connections for the app, and Redis drivers so every process shares the cache and locks, the queue, sessions, named rate limits and WebSocket broadcasts and presence (`cache.store`, `queue.driver`, `session.store` and `realtime.backplane` set to `redis`).
 - **[Feature flags](/docs/packages/feature-flags/)** (`navree-flags`): roll features out per user, workspace or percentage, stored in your database.
 - **[Webhooks](/docs/packages/webhooks/)** (`navree-webhooks`): signed outgoing webhooks with queue-backed retries and a delivery log, and verified incoming ones from Stripe, GitHub, Paddle, AWS SNS, Google Pub/Sub, Microsoft Graph, Twilio, Slack, Mailgun, Postmark and Standard Webhooks senders, with their handshakes answered.
+- **[Documents](/docs/packages/documents/)** (`navree-documents`): PDF from Typst templates compiled in process (with bundled Noto fonts for Arabic and Devanagari) or HTML templates printed by headless Chrome, DOCX, merge, stamps and overlays, and queued renders to a storage disk, behind an operation your users follow when you want one.
 - **[Localization](/docs/packages/localization/)** (`navree-i18n`): Fluent translations, plurals, locale negotiation and translated validation messages.
 - **[Browser testing](/docs/packages/browser-testing/)** (`navree-browser`): drive a real browser from your tests over the Chrome DevTools Protocol.
 - **[Starter kits](/docs/getting-started/starter-kits/)**: `navree new <name> --kit saas`, `--kit api` or `--kit micro`. The SaaS kit has a Next.js and shadcn/ui front end with sign-in, workspaces, billing, settings and admin.

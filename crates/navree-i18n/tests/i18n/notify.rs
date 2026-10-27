@@ -81,7 +81,7 @@ async fn notifications_render_in_the_recipients_saved_locale() {
             .module(MailModule::for_root(MailOptions {
                 from: "Navree <noreply@navree.test>".to_owned(),
                 transport: TransportConfig::Array,
-                queue: None,
+                ..MailOptions::default()
             }))
             .module(NotifyModule::for_root(NotifyOptions {
                 routes: false,

@@ -219,6 +219,11 @@ async fn workspaces_are_attached_and_detached() {
     );
     let attached = world.workspaces().await.find(uk.id).await.unwrap().unwrap();
     assert_eq!(attached.organization_id, Some(acme.id));
+    // Mail sent for the workspace uses its organization's transport too.
+    assert_eq!(
+        navree_mail::MailScope::from(&attached),
+        navree_mail::MailScope::workspace(uk.id).with_organization(acme.id)
+    );
 
     // Detaching drops the grants that named the workspace.
     world

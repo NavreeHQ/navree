@@ -24,13 +24,16 @@ use tokio::sync::OnceCell;
 use uuid::Uuid;
 
 use crate::access::{permission_target, subjects_of, workspace_access};
-use crate::entity::{Member, Workspace};
+use crate::demo::DemoIntent;
+use crate::entity::{Member, Workspace, member};
 use crate::isolation::{WorkspaceRepo, WorkspaceScoped};
+use crate::org_role::SCOPE_ALL;
 use crate::resolve;
 use crate::tenant::WorkspaceDatabases;
 use crate::workspaces::{Admission, GrantedBy};
 use crate::{
-    Isolation, ResolverKind, RoleTable, WorkspaceConfig, WorkspaceError, WorkspaceRole, Workspaces,
+    DemoMode, Isolation, ResolverKind, RoleTable, WorkspaceConfig, WorkspaceError, WorkspaceRole,
+    Workspaces,
 };
 
 /// The workspace of the current request, resolved, loaded and checked:
@@ -69,6 +72,8 @@ struct Resolved {
     subjects: Arc<std::collections::BTreeMap<String, String>>,
     isolation: Isolation,
     resolver: Option<ResolverKind>,
+    demo: Option<DemoMode>,
+    guest: bool,
 }
 
 impl CurrentWorkspace {
@@ -80,6 +85,14 @@ impl CurrentWorkspace {
     /// The workspace.
     pub fn workspace(&self) -> &Workspace {
         &self.0.workspace
+    }
+
+    /// The scope to send this workspace's mail with
+    /// (`mailer.for_scope(&workspace.mail_scope())`): the workspace and its
+    /// organization, so their transports, suppressions and delivery log
+    /// apply.
+    pub fn mail_scope(&self) -> navree_mail::MailScope {
+        navree_mail::MailScope::from(&self.0.workspace)
     }
 
     /// The signed-in user's membership. For a user who enters through an
@@ -165,6 +178,25 @@ impl CurrentWorkspace {
     /// parameter did, through [`InWorkspace::from_path`]).
     pub fn resolver(&self) -> Option<ResolverKind> {
         self.0.resolver
+    }
+
+    /// Whether the workspace is a demo workspace.
+    pub fn is_demo(&self) -> bool {
+        self.0.demo.is_some()
+    }
+
+    /// `workspace.demo.mode` when the workspace is a demo workspace
+    /// (`None` for a live one).
+    pub fn demo_mode(&self) -> Option<DemoMode> {
+        self.0.demo
+    }
+
+    /// Whether the user entered as a guest (a demo workspace with
+    /// `workspace.demo.guest_role`): not a member, with the guest role.
+    /// [`member`](Self::member) then describes the guest membership; it has
+    /// the nil id and is stored nowhere.
+    pub fn is_guest(&self) -> bool {
+        self.0.guest
     }
 }
 
@@ -252,16 +284,39 @@ async fn resolve_request(parts: &mut Parts, source: &Source) -> Result<CurrentWo
             .with_code("token_workspace_mismatch")
             .with_detail("This token is limited to another workspace."));
     }
-    let Admission {
-        member,
-        role,
-        granted_by,
-    } = workspaces
+    // A member or an organization grant; else, in a demo workspace with
+    // `workspace.demo.guest_role`, a guest.
+    let (
+        Admission {
+            member,
+            role,
+            granted_by,
+        },
+        guest,
+    ) = match workspaces
         .admission(&workspace, principal.user_id)
         .await
         .map_err(app_error)?
-        .ok_or(WorkspaceError::NotMember)
-        .map_err(app_error)?;
+    {
+        Some(admission) => (admission, false),
+        None => guest_member(&config, &workspace, principal.user_id)
+            .map(|member| {
+                (
+                    Admission {
+                        role: member.role(),
+                        member,
+                        granted_by: GrantedBy::Membership,
+                    },
+                    true,
+                )
+            })
+            .ok_or(WorkspaceError::NotMember)
+            .map_err(app_error)?,
+    };
+    let demo = workspace.is_demo().then_some(config.demo.mode);
+    if let Some(mode) = demo {
+        check_demo_write(parts, &config, mode, &role)?;
+    }
     let roles = RoleTable::from_config(&config);
     let access = workspace_access(
         &ctx,
@@ -290,6 +345,8 @@ async fn resolve_request(parts: &mut Parts, source: &Source) -> Result<CurrentWo
         subjects: subjects_of(&ctx).await,
         isolation: config.isolation,
         resolver,
+        demo,
+        guest,
     }));
     parts.extensions.insert(current.clone());
     // The request's telemetry (`RequestHandled.workspace_id`, and the
@@ -319,6 +376,69 @@ pub(crate) fn app_error(error: WorkspaceError) -> AppError {
 /// partition extractors).
 pub(crate) async fn current_workspace(parts: &mut Parts) -> Result<CurrentWorkspace, AppError> {
     resolve_request(parts, &Source::Configured).await
+}
+
+/// The guest membership of `user` in `workspace`: a demo workspace with
+/// `workspace.demo.guest_role` set. Stored nowhere (the nil id).
+fn guest_member(config: &WorkspaceConfig, workspace: &Workspace, user: Uuid) -> Option<Member> {
+    let role = config
+        .demo
+        .guest_role
+        .as_ref()
+        .filter(|_| workspace.is_demo())?;
+    Some(member::Model {
+        id: Uuid::nil(),
+        workspace_id: workspace.id,
+        user_id: user,
+        role: role.clone(),
+        partition_scope: SCOPE_ALL.to_owned(),
+        created_at: workspace.created_at,
+        updated_at: workspace.created_at,
+    })
+}
+
+/// For a request to a demo workspace: marks the response for the
+/// `X-Navree-Demo` header, and refuses a write to a read-only demo (403,
+/// code `demo_read_only`) unless the role edits demos or the route is
+/// allowed.
+fn check_demo_write(
+    parts: &Parts,
+    config: &WorkspaceConfig,
+    mode: DemoMode,
+    role: &WorkspaceRole,
+) -> Result<(), AppError> {
+    if let Some(cell) = parts.extensions.get::<TenantCell>() {
+        cell.mark_demo(mode);
+    }
+    if !writes(&parts.method, parts.extensions.get::<DemoIntent>().copied()) {
+        return Ok(());
+    }
+    let meta = parts.extensions.get::<Arc<RouteMeta>>();
+    let name = meta.and_then(|meta| meta.name.as_deref());
+    let path = meta
+        .map(|meta| meta.full_path.as_str())
+        .filter(|path| !path.is_empty());
+    if config
+        .demo
+        .allows_write(&parts.method, name, path, role.as_str())
+    {
+        Ok(())
+    } else {
+        Err(app_error(WorkspaceError::DemoReadOnly))
+    }
+}
+
+/// Whether a request writes: as its [`DemoIntent`] says, else unless its
+/// method is `GET`, `HEAD`, `OPTIONS` or `TRACE`.
+fn writes(method: &http::Method, intent: Option<DemoIntent>) -> bool {
+    match intent {
+        Some(DemoIntent::Read) => false,
+        Some(DemoIntent::Write) => true,
+        None => !matches!(
+            *method,
+            http::Method::GET | http::Method::HEAD | http::Method::OPTIONS | http::Method::TRACE
+        ),
+    }
 }
 
 /// The value of path parameter `name`, if the route has it.
@@ -352,6 +472,8 @@ pub(crate) async fn path_param(parts: &mut Parts, name: &str) -> Result<Option<S
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct InWorkspace {
     source: Source,
+    /// Refuses guests of a demo workspace (`workspace.demo.guest_role`).
+    members_only: bool,
 }
 
 impl InWorkspace {
@@ -359,6 +481,7 @@ impl InWorkspace {
     pub fn guard() -> Arc<dyn Guard> {
         Arc::new(InWorkspace {
             source: Source::Configured,
+            members_only: false,
         })
     }
 
@@ -368,6 +491,17 @@ impl InWorkspace {
     pub fn from_path(param: &'static str) -> Arc<dyn Guard> {
         Arc::new(InWorkspace {
             source: Source::PathParam(param),
+            members_only: false,
+        })
+    }
+
+    /// [`from_path`](Self::from_path) that also refuses a demo workspace's
+    /// guests (403): the module's routes about members, invitations and
+    /// the workspace's settings.
+    pub(crate) fn members_from_path(param: &'static str) -> Arc<dyn Guard> {
+        Arc::new(InWorkspace {
+            source: Source::PathParam(param),
+            members_only: true,
         })
     }
 }
@@ -376,6 +510,11 @@ impl Guard for InWorkspace {
     fn check<'a>(&'a self, parts: &'a mut Parts) -> BoxFuture<'a, Result<(), AppError>> {
         Box::pin(async move {
             let current = resolve_request(parts, &self.source).await?;
+            if self.members_only && current.is_guest() {
+                return Err(AppError::forbidden()
+                    .with_code("not_a_member")
+                    .with_detail("Only members of this workspace can do this."));
+            }
             check_scoped_record(parts, &current).await
         })
     }
@@ -533,10 +672,24 @@ impl<S: Send + Sync> FromRequestParts<S> for WorkspaceUow {
     }
 }
 
-/// The per-request cell of the workspace database's unit of work (database
-/// isolation), inserted by the module's layer.
+/// The per-request state the module's layer reads once the response is
+/// ready: the workspace database's unit of work (database isolation) and
+/// whether the request's workspace is a demo (the `X-Navree-Demo` header).
 #[derive(Clone, Default)]
-pub(crate) struct TenantCell(pub(crate) Arc<OnceCell<Uow>>);
+pub(crate) struct TenantCell(pub(crate) Arc<TenantState>);
+
+#[derive(Default)]
+pub(crate) struct TenantState {
+    pub(crate) uow: OnceCell<Uow>,
+    pub(crate) demo: std::sync::OnceLock<DemoMode>,
+}
+
+impl TenantCell {
+    /// Marks the request as one to a demo workspace in `mode`.
+    pub(crate) fn mark_demo(&self, mode: DemoMode) {
+        let _ = self.0.demo.set(mode);
+    }
+}
 
 async fn tenant_uow(parts: &Parts, current: &CurrentWorkspace) -> Result<Uow, AppError> {
     let cell = parts
@@ -563,6 +716,7 @@ async fn tenant_uow(parts: &Parts, current: &CurrentWorkspace) -> Result<Uow, Ap
     let workspace = current.id();
     let uow = cell
         .0
+        .uow
         .get_or_try_init(|| async move {
             let databases = ctx
                 .get::<WorkspaceDatabases>()
@@ -582,6 +736,19 @@ async fn tenant_uow(parts: &Parts, current: &CurrentWorkspace) -> Result<Uow, Ap
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn requests_write_by_method_unless_they_declare_their_intent() {
+        use http::Method;
+        for method in [Method::GET, Method::HEAD, Method::OPTIONS, Method::TRACE] {
+            assert!(!writes(&method, None), "{method}");
+            assert!(writes(&method, Some(DemoIntent::Write)), "{method}");
+        }
+        for method in [Method::POST, Method::PUT, Method::PATCH, Method::DELETE] {
+            assert!(writes(&method, None), "{method}");
+            assert!(!writes(&method, Some(DemoIntent::Read)), "{method}");
+        }
+    }
 
     #[test]
     fn keys_take_the_column_type() {

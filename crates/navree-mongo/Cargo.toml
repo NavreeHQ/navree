@@ -1,0 +1,43 @@
+[package]
+name = "navree-mongo"
+description = "Navree on MongoDB: MongoModule (connections, pools, health), the ORM's document driver (filters, pipelines, aggregates, ObjectId keys, sessions and transactions), the schema builder on collections (validators, indexes, time-series collections) and migrations."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+bson = { workspace = true }
+chrono = { workspace = true }
+futures-util = { workspace = true }
+mongodb = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-db = { workspace = true }
+navree-kernel = { workspace = true }
+navree-orm = { workspace = true }
+navree-schema = { workspace = true }
+navree-telemetry = { workspace = true }
+rust_decimal = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true }
+navree-testing = { workspace = true }
+
+# The suite: the generated commands (filters, pipelines, writes, schema
+# operations) are checked without a server; the rest runs against
+# NAVREE_TEST_MONGODB_URL (a replica set, so transactions work) and passes
+# with a notice when it is unset.
+[[test]]
+name = "mongo"
+path = "tests/mongo/main.rs"

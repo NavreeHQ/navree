@@ -1,5 +1,7 @@
 //! [`Message`]: a rendered email.
 
+use std::collections::BTreeMap;
+
 use lettre::message::Mailbox;
 use serde::{Deserialize, Serialize};
 
@@ -18,7 +20,10 @@ use crate::MailError;
 ///     .cc("team@example.com")
 ///     .subject("Your invoice")
 ///     .html("<p>Thanks!</p>")
-///     .text("Thanks!");
+///     .text("Thanks!")
+///     .header("X-Campaign", "spring")
+///     .metadata("invoice", "42")
+///     .locale("en");
 /// assert_eq!(message.to, ["Ada <ada@example.com>"]);
 /// assert_eq!(message.from, None); // the Mailer fills in its default sender
 /// ```
@@ -44,7 +49,39 @@ pub struct Message {
     pub html: Option<String>,
     /// The plain-text body.
     pub text: Option<String>,
+    /// Extra headers (`List-Unsubscribe`, `X-Campaign`, ...). The headers a
+    /// transport writes itself (`From`, `To`, `Subject`, `Content-Type`,
+    /// ...) are refused.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub headers: BTreeMap<String, String>,
+    /// Key-value pairs for the provider: SES message tags, Mailgun
+    /// variables, Postmark metadata, Resend tags. Not sent over SMTP.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub metadata: BTreeMap<String, String>,
+    /// The recipient's locale (`en`, `ar-EG`): the HTML body gets `lang`
+    /// and, for right-to-left scripts, `dir="rtl"`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub locale: Option<String>,
+    /// Set by [`hold`](Message::hold): the message waits in the outbox for
+    /// an admin to release or discard it, with this reason.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hold: Option<String>,
 }
+
+/// Headers a message may not set itself: the transports write them.
+const RESERVED_HEADERS: &[&str] = &[
+    "bcc",
+    "cc",
+    "content-transfer-encoding",
+    "content-type",
+    "dkim-signature",
+    "from",
+    "mime-version",
+    "reply-to",
+    "sender",
+    "subject",
+    "to",
+];
 
 impl Message {
     /// An empty message.
@@ -100,10 +137,54 @@ impl Message {
         self
     }
 
+    /// Adds (or replaces) a header.
+    pub fn header(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
+        self.headers.insert(name.into(), value.into());
+        self
+    }
+
+    /// Adds (or replaces) a provider metadata pair.
+    pub fn metadata(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.metadata.insert(key.into(), value.into());
+        self
+    }
+
+    /// Sets the recipient's locale.
+    pub fn locale(mut self, locale: impl Into<String>) -> Self {
+        self.locale = Some(locale.into());
+        self
+    }
+
+    /// Holds the message for approval: instead of sending it, the
+    /// [`Mailer`](crate::Mailer) stores it in the outbox, where an admin
+    /// releases or discards it (needs `mail.delivery.enabled`).
+    pub fn hold(mut self, reason: impl Into<String>) -> Self {
+        self.hold = Some(reason.into());
+        self
+    }
+
+    /// Every recipient: `to`, then `cc`, then `bcc`.
+    pub fn recipients(&self) -> impl Iterator<Item = &str> {
+        self.to
+            .iter()
+            .chain(&self.cc)
+            .chain(&self.bcc)
+            .map(String::as_str)
+    }
+
+    /// The domain of the sender's address, in lower case (`acme.test` for
+    /// `Acme <hello@acme.test>`), if the sender parses.
+    pub fn sender_domain(&self) -> Option<String> {
+        let mailbox = self.from.as_deref()?.parse::<Mailbox>().ok()?;
+        Some(mailbox.email.domain().to_ascii_lowercase())
+    }
+
     /// Checks that the message can be delivered: it has a sender and at
-    /// least one recipient, every address parses, and the subject holds no
-    /// line break. The [`Mailer`](crate::Mailer) runs this (after filling in
-    /// the default sender) before handing the message to a transport.
+    /// least one recipient, every address parses, the subject and header
+    /// values hold no line break, header names are valid and none is a
+    /// header the transports write. The [`Mailer`](crate::Mailer) runs
+    /// this (after filling in the default sender) before handing the
+    /// message to a transport.
     pub fn validate(&self) -> Result<(), MailError> {
         match &self.from {
             Some(from) => drop(mailbox("from", from)?),
@@ -123,8 +204,31 @@ impl Message {
         if self.subject.contains(['\r', '\n']) {
             return Err(MailError::InvalidHeader { field: "subject" });
         }
+        for (name, value) in &self.headers {
+            check_header(name, value)?;
+        }
         Ok(())
     }
+}
+
+/// Checks one extra header.
+fn check_header(name: &str, value: &str) -> Result<(), MailError> {
+    let invalid = |reason: &'static str| MailError::Header {
+        name: name.to_owned(),
+        reason,
+    };
+    if name.is_empty() || !name.bytes().all(|b| b.is_ascii_graphic() && b != b':') {
+        return Err(invalid(
+            "a header name is printable ASCII without `:` or spaces",
+        ));
+    }
+    if RESERVED_HEADERS.contains(&name.to_ascii_lowercase().as_str()) {
+        return Err(invalid("the transport writes this header"));
+    }
+    if value.contains(['\r', '\n']) {
+        return Err(invalid("a header value must not contain line breaks"));
+    }
+    Ok(())
 }
 
 /// Parses `address`, the value of field `field`, as a mailbox.
@@ -136,4 +240,14 @@ pub(crate) fn mailbox(field: &'static str, address: &str) -> Result<Mailbox, Mai
             address: address.to_owned(),
             reason: error.to_string(),
         })
+}
+
+/// The bare address of `address` (`ada@example.com` for `Ada
+/// <ada@example.com>`), lower-cased; `address` itself, trimmed and
+/// lower-cased, when it does not parse.
+pub(crate) fn bare_address(address: &str) -> String {
+    match address.parse::<Mailbox>() {
+        Ok(mailbox) => mailbox.email.to_string().to_ascii_lowercase(),
+        Err(_) => address.trim().to_ascii_lowercase(),
+    }
 }

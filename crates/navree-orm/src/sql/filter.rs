@@ -158,6 +158,12 @@ impl Compiler {
                 sea_query::Expr::cust_with_values(sql, values.iter().cloned())
             }
             Where::Sql(condition) => return Ok(condition.clone()),
+            Where::Native(native) => {
+                return Err(OrmError::unsupported(
+                    format!("a {} filter", native.driver()),
+                    self.dialect.name(),
+                ));
+            }
             Where::Invalid(message) => return Err(OrmError::invalid(message.clone())),
         };
         Ok(Condition::all().add(expr))

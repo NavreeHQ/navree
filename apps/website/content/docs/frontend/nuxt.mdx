@@ -1,0 +1,225 @@
+---
+title: "Nuxt"
+description: "`@navree/nuxt`: a Nuxt module with the backend-for-frontend as Nitro routes, a session gate, and auto-imported composables for sign-in, workspaces, the typed client, list queries, operations, real time and abilities."
+---
+
+`@navree/nuxt` puts a Nuxt app on a Navree API with one line in `nuxt.config.ts`. Nitro serves the [backend-for-frontend](/docs/frontend/auth-and-bff/) at `/api/**` and `/broadcasting/auth`, a session gate keeps pages behind sign-in and refreshes expired tokens before a page renders, and the composables and `<NavreeDataTable>` are auto-imported. It works with server-side rendering on and off.
+
+## Setting up
+
+<Steps>
+<Step title="Install the packages">
+
+`@navree/nuxt`, `@navree/client` and `@navree/theme` (see [installing](/docs/frontend/introduction/#installing)). For abilities add `@casl/ability` and `@casl/vue`; for real time, `pusher-js`.
+
+</Step>
+<Step title="Add the module">
+
+```ts title="web/nuxt.config.ts"
+export default defineNuxtConfig({
+  modules: ["@navree/nuxt"],
+  css: ["~/assets/css/main.css"],
+  navree: {
+    apiUrl: "http://127.0.0.1:8080",
+    sessionGate: { loginPath: "/login", publicPaths: ["/", "/pricing"] },
+    realtime: { key: "app-key", wsHost: "127.0.0.1", wsPort: 8080 },
+    abilities: true,
+  },
+});
+```
+
+</Step>
+<Step title="Generate the client's schema">
+
+```sh
+navree openapi:client --out web/app/lib/api
+```
+
+</Step>
+</Steps>
+
+## Options
+
+| Option | Default | Meaning |
+|---|---|---|
+| `apiUrl` | `http://127.0.0.1:8080` | The API. `NAVREE_API_URL` or `NUXT_NAVREE_API_URL` override it at runtime. |
+| `apiPrefix` | `/api` | The prefix the BFF serves and forwards; `false` mounts nothing (mount the handlers yourself). |
+| `broadcasting` | `true` | `POST /broadcasting/auth` for private channels. |
+| `mounts` | `[]` | More prefixes to forward with the session's token, such as `/admin` for a server-rendered tool. |
+| `sessionGate` | `{ loginPath: "/login" }` | Pages behind sign-in (`loginPath`, `publicPaths`, `passThrough`), or `false` for none. |
+| `workspaceHeader` | `X-Workspace` | The API's `workspace.header`. |
+| `realtime` | `false` | `{ key, wsHost, wsPort, forceTLS? }`: connect pusher-js to the API's real-time server. |
+| `abilities` | `false` | One app-wide CASL ability, loaded after sign-in. |
+
+The settings land in runtime config (`runtimeConfig.navree` on the server, `runtimeConfig.public.navree` in the app), so `NUXT_NAVREE_*` variables override them without a rebuild, and settings you put there yourself win over the module's. The BFF also reads `NAVREE_COOKIE_SECURE`, `APP_ORIGINS` and `NAVREE_TRUSTED_PROXY_HOPS` (see [the BFF's options](/docs/frontend/auth-and-bff/#options)), the same names the Next.js package uses.
+
+## What the module adds
+
+| Kind | Added |
+|---|---|
+| Nitro routes | `/api/**`, `POST /broadcasting/auth`, `<mount>/**` for each of `mounts`: the BFF's catch-all handler |
+| Nitro middleware | The session gate, unless `sessionGate: false` |
+| Nitro auto-imports | `getNavreeSession(event)`, `useNavreeBff(event)` |
+| App plugins | `navree` (sign-in state, workspace, typed client), `navree-realtime` (client only, with `realtime`), `navree-abilities` (with `abilities`) |
+| Auto-imports | `useNavree`, `useNavreeAuth`, `useWorkspace`, `useNavreeClient`, `useOperation`, `useListQuery`, `applyFieldErrors`; `useChannel` and `useRealtimeState` with `realtime`; `useAbility` with `abilities` |
+| Components | `<NavreeDataTable>`, `<NavreePagination>`; `<Can>` with `abilities` |
+
+## The session gate
+
+For every page request (a `GET` or `HEAD` that accepts `text/html`), the gate:
+
+- sends a browser without a session to `loginPath?next=<path and query>` (302);
+- refreshes an expired access token first, for the browser (`Set-Cookie`) and for the rest of the request (the rewritten `Cookie` header that server-side rendering reads);
+- clears an expired session and sends it to sign-in.
+
+`/api/`, `/broadcasting/`, `/_nuxt/`, `/__nuxt` and `/_ipx/` pass untouched, and so do files with an extension, `loginPath` and the `publicPaths` (exact paths, or prefixes ending in `/*`).
+
+## Composables
+
+### Sign-in
+
+```html title="web/app/pages/login.vue"
+<script setup lang="ts">
+const auth = useNavreeAuth<User>();
+const route = useRoute();
+const step = ref<"password" | "code">("password");
+
+async function submit(values: { email: string; password: string }) {
+  const result = await auth.signIn(values);
+  if (result.twoFactor) step.value = "code";
+  else await navigateTo((route.query.next as string) || "/");
+}
+
+async function verify(code: string) {
+  await auth.verifyTwoFactor({ code });
+  await navigateTo((route.query.next as string) || "/");
+}
+</script>
+```
+
+| Member | What it does |
+|---|---|
+| `user`, `status`, `signedIn` | The signed-in user; `unknown`, `signed-in`, `signed-out` or `two-factor`; a computed boolean. |
+| `load()` | `GET /api/auth/me`: the user, or `null` when signed out. |
+| `signIn(credentials)` | `{twoFactor: false, user}`, or `{twoFactor: true, expiresIn}` for a two-factor account. Throws `NavreeError` (`invalid_credentials`, `too_many_login_attempts`). |
+| `verifyTwoFactor({code})` or `({recovery_code})` | Completes a two-factor sign-in. |
+| `signOut({all?})` | Revokes the session (`all: true`: every session of the user) and goes to `loginPath`. |
+
+During server-side rendering the composables call the BFF through Nitro's `event.fetch`, which forwards the browser's cookies, so `await useNavreeAuth().load()` in a page's `setup` works on the server and in the browser.
+
+### The typed client and the workspace
+
+```ts
+import type { paths } from "~/lib/api/schema";
+
+const api = useNavreeClient<paths>();
+const { data } = await useAsyncData("deals", () => unwrap(api.GET("/api/v1/deals", { params: { query: { per_page: 25 } } })));
+
+const { workspace, setWorkspace } = useWorkspace();
+setWorkspace("globex"); // writes the navree_workspace cookie, then refreshes the page's data
+```
+
+`useNavreeClient()` is the [typed client](/docs/frontend/typed-client/) in cookie mode with the workspace from the `navree_workspace` cookie; on a 401 it sends the browser to `loginPath?next=…`. On the server it calls the BFF in-process.
+
+### Server routes
+
+```ts title="web/server/api/me/summary.get.ts"
+export default defineEventHandler(async (event) => {
+  const session = await getNavreeSession<User>(event);
+  if (!session) throw createError({ statusCode: 401 });
+  const response = await useNavreeBff(event).api("/api/v1/dashboard", { accessToken: session.accessToken, workspace: session.workspace });
+  return response.json();
+});
+```
+
+### Lists, operations and forms
+
+`useListQuery()` keeps a list's filters, sort, search and page in the route's query string, and `<NavreeDataTable>` renders one page of it: see [data tables](/docs/frontend/data-tables/). `useOperation(id)` follows an operation's event stream:
+
+```html
+<script setup lang="ts">
+const props = defineProps<{ id: string | null }>();
+const { operation, finished, cancel } = useOperation(() => props.id);
+</script>
+
+<template>
+  <progress :value="operation?.progress?.percent ?? 0" max="100" />
+  <button v-if="!finished" @click="cancel()">Cancel</button>
+</template>
+```
+
+`applyFieldErrors(error, setFieldError, { fields, onOther })` puts a 400's field errors on vee-validate's fields and hands the rest to `onOther`.
+
+### Real time
+
+With `realtime` set, one pusher-js connection opens when the app mounts in the browser; private channels are signed through the BFF.
+
+```ts
+const queryClient = useQueryClient();
+useChannel("crm.deals", "deal.updated", () => queryClient.invalidateQueries({ queryKey: deals.all }));
+useChannel(() => (user.value ? `users.${user.value.id}` : null), "notification.created", (n) => toast(n.data.title));
+const state = useRealtimeState();
+```
+
+The channel can be a ref or a getter; the listener moves when it changes and stops when the component unmounts. List the web origin in the API's `realtime.allowed_origins`.
+
+### Abilities
+
+With `abilities: true`, the module installs one CASL ability (`@casl/vue`) and loads the user's rules from `GET /api/me/abilities` after sign-in and after every workspace switch; signed out, every rule is dropped.
+
+```html
+<script setup lang="ts">
+const ability = useAbility();
+</script>
+
+<template>
+  <Can I="update" :this="deal"><EditButton /></Can>
+  <button v-if="ability.can('move', deal)">Move</button>
+</template>
+```
+
+## Without the module
+
+The pieces are plain Vue and h3, for a Vue app with another server, or to mount routes yourself:
+
+- `@navree/nuxt/vue`: `createNavreeAuth`, `createWorkspace`, `useOperation`, `useListQuery`, `NavreeDataTable`, `useDataTable`, `applyFieldErrors`.
+- `@navree/nuxt/realtime`: `createRealtimeController`, `installRealtime`, `useChannel`, `useRealtimeState`.
+- `@navree/nuxt/abilities`: `installAbilities`, `useAbility`, `Can`.
+- `@navree/nuxt/server`: `createBffHandler(source)`, `createSessionGate(source, options)`, `bffResolver(settings)`, `getNavreeSession(event, bff)`.
+
+## Moving an existing app onto the module
+
+The reference CRM's Nuxt front end, `apps/crm-nuxt`, has these pieces as its own files. With the module:
+
+| `apps/crm-nuxt` today | With the module |
+|---|---|
+| `server/lib/bff.ts`, `http-errors.ts`, `instance.ts` | The module's BFF (`navree.apiUrl`, `NAVREE_API_URL`) |
+| `server/api/[...path].ts`, `server/api/auth/*.post.ts`, `server/routes/broadcasting/auth.post.ts` | The module's routes |
+| `server/middleware/session-gate.ts` | `navree.sessionGate` |
+| `app/lib/api/client.ts`, `errors.ts` | `useNavreeClient<paths>()`, `NavreeError`, `unwrap` |
+| `app/lib/api/form-errors.ts` | `applyFieldErrors` |
+| `app/lib/casl/ability.ts`, `app/plugins/03.casl.ts` | `navree.abilities: true`, `useAbility`, `<Can>` |
+| `app/lib/realtime/*`, `app/composables/useRealtime.ts` | `navree.realtime`, `useChannel` (the app's handlers stay) |
+| `app/composables/useUrlState.ts`, `PaginationBar.vue`, `SortableHead.vue` | `useListQuery`, `<NavreeDataTable>`, `<NavreePagination>` |
+| The tokens and `@font-face` rules in `app/assets/css/main.css` | `@navree/theme/theme.css` and `fonts.css` |
+
+The cookie names, routes and error shape are the same as the app's own, so the move can go one piece at a time. The CRM-specific parts (its types, screens, mock API and query hooks) stay in the app. Nuxt's dev port and the API URL keep their current settings.
+
+## Testing
+
+`@navree/nuxt/server`'s handlers are h3 handlers, so a test mounts them on an h3 app and calls it with web requests:
+
+```ts
+import { createBff } from "@navree/bff";
+import { browserRequest, fakeNavree } from "@navree/bff/testing";
+import { createBffHandler } from "@navree/nuxt/server";
+import { createApp, createRouter, toWebHandler } from "h3";
+
+const bff = createBff({ apiUrl: "http://api.test", fetch: fakeNavree({}).fetch });
+const router = createRouter().use("/api/**", createBffHandler(() => bff));
+const web = toWebHandler(createApp().use(router));
+const response = await web(browserRequest("http://app.test", "/api/v1/deals", { method: "POST", origin: "https://evil.example", body: {} }));
+expect(response.status).toBe(403);
+```
+
+The composables mount in `@vue/test-utils` with a memory router. The package's `pnpm smoke` builds a small Nuxt app on the module and checks the gate, server rendering and the BFF routes of the running server.

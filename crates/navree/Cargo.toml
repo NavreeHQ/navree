@@ -13,8 +13,8 @@ workspace = true
 [features]
 default = ["full"]
 ## Every module crate, except the opt-in ones (`social`, `oauth`, `flags`,
-## `graphql`, `grpc`, `billing`, `search`, `mcp`, `ai`, `redis`, `micro`,
-## `i18n`, `dock`, `navigator`, `browser`).
+## `graphql`, `grpc`, `documents`, `billing`, `search`, `mcp`, `ai`, `redis`,
+## `micro`, `i18n`, `dock`, `navigator`, `browser`).
 full = [
     "access",
     "api",
@@ -40,6 +40,8 @@ full = [
     "schedule",
     "schema",
     "session",
+    "settings",
+    "sso",
     "storage",
     "storage-s3",
     "telemetry",
@@ -81,7 +83,10 @@ testing = [
 ]
 observe = ["dep:navree-observe", "http"]
 api = ["dep:navree-api", "http"]
-mail = ["dep:navree-mail", "view", "telemetry"]
+## Mail: mailables, SMTP and the SES, Mailgun, Postmark and Resend APIs,
+## tenant transports, a delivery log with provider events, suppressions,
+## hold for approval, tracking, DKIM signing and sending-domain checks.
+mail = ["dep:navree-mail", "view", "telemetry", "http", "crypto", "events", "http-client", "db"]
 realtime = ["dep:navree-realtime", "http", "crypto"]
 storage = ["dep:navree-storage", "http", "crypto"]
 ## S3 and S3-compatible disks (AWS, MinIO, Cloudflare R2, DigitalOcean
@@ -101,8 +106,18 @@ session = ["dep:navree-session", "http", "crypto", "db"]
 validation = ["dep:navree-validation", "http", "db", "navree-orm?/validation"]
 ## The audit trail; its entries are ORM models (`orm`).
 audit = ["dep:navree-audit", "http", "db", "orm"]
-## Job queues; failed jobs are ORM models (`orm`).
-queue = ["dep:navree-queue", "http", "db", "realtime", "schedule", "orm"]
+## Job queues; failed jobs are ORM models (`orm`). With `documents` on too,
+## queued renders can run behind an operation (navree-documents'
+## `operations` feature).
+queue = [
+    "dep:navree-queue",
+    "http",
+    "db",
+    "realtime",
+    "schedule",
+    "orm",
+    "navree-documents?/operations",
+]
 schedule = ["dep:navree-schedule", "db", "time"]
 ## With `orm` on too, models can be subjects (`#[model(subject, policy)]`,
 ## `accessible` queries, `Authorized<Model, A>`).
@@ -139,7 +154,8 @@ auth = [
     "http-client",
     "orm",
 ]
-## Workspaces: multi-tenancy with members, roles, invitations and isolation.
+## Workspaces: multi-tenancy with members, roles, invitations, isolation and
+## demo workspaces (reset nightly through `schedule`).
 workspace = [
     "dep:navree-workspace",
     "http",
@@ -149,8 +165,18 @@ workspace = [
     "mail",
     "access",
     "time",
+    "schedule",
     "orm",
 ]
+## L5 (opt-in, not in `full`)
+## MongoDB: `MongoModule` (connections, pools, readiness), the ORM's
+## document driver (filters, pipelines, aggregates, ObjectId keys, sessions
+## and units of work), the schema builder and migrations on collections,
+## time-series collections (the official driver on rustls; opt-in because
+## only apps with a MongoDB server need it).
+mongo = ["dep:navree-mongo", "telemetry", "schema", "db", "orm"]
+## `mongo` by the database's name.
+mongodb = ["mongo"]
 ## L5 (opt-in, not in `full`)
 ## Redis: shared connections and the Redis drivers of the cache and locks,
 ## the queue, sessions and the real-time backplane, plus shared rate limits
@@ -158,6 +184,22 @@ workspace = [
 ## redis client and its Lua scripts are only needed with a Redis server).
 redis = ["dep:navree-redis", "cache", "queue", "session", "realtime"]
 ## L6
+## Settings: typed settings stored per scope (global, organization,
+## workspace, user), inherited down the chain, with the source of every
+## value (light: no new dependencies; in `full`).
+settings = [
+    "dep:navree-settings",
+    "http",
+    "cache",
+    "db",
+    "events",
+    "validation",
+    "audit",
+    "access",
+    "workspace",
+    # With `helm` on too, the panel's Settings screens.
+    "navree-helm?/settings",
+]
 ## Webhooks: signed outgoing deliveries with retries and a delivery log,
 ## verified incoming webhooks (pure Rust; in `full`).
 webhooks = [
@@ -169,6 +211,20 @@ webhooks = [
     "db",
     "workspace",
     "orm",
+]
+## Single sign-on: SAML 2.0 and OpenID Connect connections per organization
+## or workspace, verified email domains, just-in-time provisioning (pure
+## Rust, XML signatures on ring; in `full`).
+sso = [
+    "dep:navree-sso",
+    "http",
+    "crypto",
+    "cache",
+    "events",
+    "http-client",
+    "db",
+    "auth",
+    "workspace",
 ]
 ## L6 (opt-in, not in `full`)
 ## Social sign-in: Google, GitHub, Apple, Microsoft, GitLab, Slack, LinkedIn,
@@ -240,6 +296,11 @@ ai = [
     "access",
     "auth",
 ]
+## L6 (opt-in: not in `full`; the embedded Typst compiler and the bundled
+## fonts add to the build)
+## Documents: PDF from Typst or HTML templates (Typst in process, headless
+## Chrome), DOCX, merge and stamps, queued renders.
+documents = ["dep:navree-documents", "http", "view", "storage"]
 ## L7 (opt-in, not in `full`)
 ## Search: full-text and vector search over entities (postgres,
 ## meilisearch, typesense and memory engines).
@@ -423,6 +484,7 @@ navree-cache = { workspace = true, optional = true }
 navree-crypto = { workspace = true, optional = true }
 navree-db = { workspace = true, optional = true }
 navree-dock = { workspace = true, optional = true }
+navree-documents = { workspace = true, optional = true }
 navree-navigator = { workspace = true, optional = true }
 navree-events = { workspace = true, optional = true }
 navree-graphql = { workspace = true, optional = true }
@@ -437,6 +499,7 @@ navree-logbook = { workspace = true, optional = true }
 navree-mail = { workspace = true, optional = true }
 navree-mcp = { workspace = true, optional = true }
 navree-micro = { workspace = true, optional = true }
+navree-mongo = { workspace = true, optional = true }
 navree-notify = { workspace = true, optional = true }
 navree-observe = { workspace = true, optional = true }
 navree-orm = { workspace = true, optional = true }
@@ -446,7 +509,9 @@ navree-realtime = { workspace = true, optional = true }
 navree-schedule = { workspace = true, optional = true }
 navree-schema = { workspace = true, optional = true }
 navree-session = { workspace = true, optional = true }
+navree-settings = { workspace = true, optional = true }
 navree-social = { workspace = true, optional = true }
+navree-sso = { workspace = true, optional = true }
 navree-storage = { workspace = true, optional = true }
 navree-telemetry = { workspace = true, optional = true }
 navree-testing = { workspace = true, optional = true }
@@ -500,6 +565,12 @@ required-features = ["grpc"]
 [[test]]
 name = "redis"
 required-features = ["redis"]
+
+# The documents docs examples through the facade
+# (`cargo test -p navree --features documents --test documents`).
+[[test]]
+name = "documents"
+required-features = ["documents"]
 
 # The request-pipeline micro-benchmarks: `/json` through the whole router,
 # a pool read, a validated insert and a unit of work on SQLite

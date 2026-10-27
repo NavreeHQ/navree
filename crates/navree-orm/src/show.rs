@@ -114,6 +114,7 @@ fn key_type(kind: KeyKind) -> &'static str {
         KeyKind::UuidV7 => "uuid_v7",
         KeyKind::UuidV4 => "uuid_v4",
         KeyKind::Ulid => "ulid",
+        KeyKind::ObjectId => "object_id",
         KeyKind::Manual => "manual",
     }
 }
