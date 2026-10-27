@@ -48,13 +48,20 @@ impl Module for ProjectsModule {
 #[tokio::test]
 async fn registered_models_are_described() {
     let (app, _db, _clock) = app(vec![Box::new(DealsModule), Box::new(ProjectsModule)]).await;
-    let names: Vec<&str> = registered_models(app.ctx()).iter().map(|model| model.name()).collect();
+    let names: Vec<&str> = registered_models(app.ctx())
+        .iter()
+        .map(|model| model.name())
+        .collect();
     assert_eq!(names, ["Deal", "Ticket", "Project"]);
 
     let deal = describe_model(app.ctx(), "deal").await.unwrap();
     assert_eq!((deal.model, deal.route_key), ("Deal", "slug"));
     assert_eq!(deal.app_hooks.len(), 1);
-    assert!(deal.app_hooks[0].ends_with("LogDeals"), "{:?}", deal.app_hooks);
+    assert!(
+        deal.app_hooks[0].ends_with("LogDeals"),
+        "{:?}",
+        deal.app_hooks
+    );
     assert!(deal.render().contains("hooks registered by the app"));
 
     let ticket = describe_model(app.ctx(), "tickets").await.unwrap();
@@ -65,7 +72,10 @@ async fn registered_models_are_described() {
     let project = describe_model(app.ctx(), "Project").await.unwrap();
     assert_eq!(project.workspace, Some("workspace_id"));
     assert!(
-        project.global_scopes.iter().any(|s| s.ends_with("WorkspaceScope")),
+        project
+            .global_scopes
+            .iter()
+            .any(|s| s.ends_with("WorkspaceScope")),
         "{:?}",
         project.global_scopes
     );
@@ -75,7 +85,10 @@ async fn registered_models_are_described() {
         project.hooks
     );
 
-    let error = describe_model(app.ctx(), "Nope").await.unwrap_err().to_string();
+    let error = describe_model(app.ctx(), "Nope")
+        .await
+        .unwrap_err()
+        .to_string();
     assert!(
         error.contains("the registered models are Deal, Ticket, Project"),
         "{error}"
@@ -98,7 +111,10 @@ async fn the_command_lists_and_shows_models() {
     let unknown = app.run_command("model:show", &["Nope"]).await.unwrap_err();
     assert!(unknown.to_string().contains("no model `Nope`"), "{unknown}");
     let flag = app.run_command("model:show", &["--wat"]).await.unwrap_err();
-    assert!(flag.to_string().contains("unknown option `--wat`"), "{flag}");
+    assert!(
+        flag.to_string().contains("unknown option `--wat`"),
+        "{flag}"
+    );
     let two = app
         .run_command("model:show", &["Deal", "Ticket"])
         .await

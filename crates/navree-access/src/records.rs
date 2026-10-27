@@ -30,7 +30,8 @@ pub trait SubjectRecords: Subject + Send + Sync + 'static {
     /// The record whose id (a route's path parameter) is `id`, read in
     /// `uow`'s transaction (locked `FOR UPDATE` where the database supports
     /// it); `None` when there is none or `id` cannot name one.
-    fn load<'a>(uow: &'a Uow, id: &'a str) -> BoxFuture<'a, Result<Option<Self::Record>, BoxError>>;
+    fn load<'a>(uow: &'a Uow, id: &'a str)
+    -> BoxFuture<'a, Result<Option<Self::Record>, BoxError>>;
 
     /// The record as ability conditions see it: one member per column,
     /// UUIDs as hyphenated strings, timestamps as RFC 3339 UTC strings with
@@ -53,10 +54,19 @@ where
 {
     type Record = E::Model;
 
-    fn load<'a>(uow: &'a Uow, id: &'a str) -> BoxFuture<'a, Result<Option<Self::Record>, BoxError>> {
+    fn load<'a>(
+        uow: &'a Uow,
+        id: &'a str,
+    ) -> BoxFuture<'a, Result<Option<Self::Record>, BoxError>> {
         Box::pin(async move {
             let loaded = EntityLoader::<E>::new().load(uow, id).await?;
-            Ok(loaded.and_then(|record| record.model.downcast::<E::Model>().ok().map(|model| (*model).clone())))
+            Ok(loaded.and_then(|record| {
+                record
+                    .model
+                    .downcast::<E::Model>()
+                    .ok()
+                    .map(|model| (*model).clone())
+            }))
         })
     }
 
@@ -106,7 +116,9 @@ impl PolicyRegistration {
 
 impl std::fmt::Debug for PolicyRegistration {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("PolicyRegistration").field(&self.name).finish()
+        f.debug_tuple("PolicyRegistration")
+            .field(&self.name)
+            .finish()
     }
 }
 
@@ -120,11 +132,15 @@ impl<S> RecordsLoader<S> {
 }
 
 impl<S: SubjectRecords> SubjectLoader for RecordsLoader<S> {
-    fn load<'a>(&'a self, uow: &'a Uow, id: &'a str) -> BoxFuture<'a, Result<Option<LoadedRecord>, DbErr>> {
+    fn load<'a>(
+        &'a self,
+        uow: &'a Uow,
+        id: &'a str,
+    ) -> BoxFuture<'a, Result<Option<LoadedRecord>, DbErr>> {
         Box::pin(async move {
-            let record = S::load(uow, id)
-                .await
-                .map_err(|error| DbErr::Custom(format!("cannot load {} `{id}`: {error}", S::SUBJECT)))?;
+            let record = S::load(uow, id).await.map_err(|error| {
+                DbErr::Custom(format!("cannot load {} `{id}`: {error}", S::SUBJECT))
+            })?;
             Ok(record.map(|record| LoadedRecord {
                 json: S::record_json(&record),
                 model: Arc::new(record),

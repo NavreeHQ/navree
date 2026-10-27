@@ -148,7 +148,10 @@ impl SeedOptions {
 
 /// Runs the registered seeders (all of them, or the roots, when `names` is
 /// empty, else the named ones), in order; returns the names that ran.
-pub async fn run_seeders(ctx: &AppContext, names: &[String]) -> Result<Vec<&'static str>, BoxError> {
+pub async fn run_seeders(
+    ctx: &AppContext,
+    names: &[String],
+) -> Result<Vec<&'static str>, BoxError> {
     run_seeders_with(ctx, &SeedOptions::new().names(names.iter().cloned())).await
 }
 
@@ -176,9 +179,10 @@ pub async fn run_seeders_with(
         .into());
     }
     let db = match &options.database {
-        Some(name) => ctx.get_named::<Db>(name).await.map_err(|error| {
-            format!("no database connection named `{name}` to seed: {error}")
-        })?,
+        Some(name) => ctx
+            .get_named::<Db>(name)
+            .await
+            .map_err(|error| format!("no database connection named `{name}` to seed: {error}"))?,
         None => ctx.get::<Db>().await?,
     };
     let roots = seeders.iter().any(|s| s.is_root());
@@ -209,7 +213,12 @@ pub async fn run_seeders_with(
 
 /// Runs `seeder` in `run`: logs it (unless `silent`), without model events
 /// when it asks, and records that it ran.
-async fn run_one(ctx: &AppContext, run: &SeedRun, seeder: &dyn Seeder, silent: bool) -> Result<(), BoxError> {
+async fn run_one(
+    ctx: &AppContext,
+    run: &SeedRun,
+    seeder: &dyn Seeder,
+    silent: bool,
+) -> Result<(), BoxError> {
     if silent {
         tracing::debug!(target: "navree_db::seed", seeder = seeder.name(), "seeding");
     } else {

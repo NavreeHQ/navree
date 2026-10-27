@@ -76,7 +76,10 @@ pub(crate) async fn insert_models<M: Model>(
             .map(|(column, value)| (column, Expr::Value(value)))
             .collect();
         if index == 0 {
-            columns = row.iter().map(|(column, _)| Cow::Borrowed(*column)).collect();
+            columns = row
+                .iter()
+                .map(|(column, _)| Cow::Borrowed(*column))
+                .collect();
         }
         rows.push(row.into_iter().map(|(_, value)| value).collect());
     }

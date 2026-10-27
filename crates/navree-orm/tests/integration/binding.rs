@@ -56,9 +56,11 @@ impl Controller for Routes {
 
     fn routes(self: Arc<Self>) -> Vec<RouteDef> {
         vec![
-            RouteDef::on(Method::GET, "/deals/{deal}", |Bound(deal, _): Bound<Deal>| async move {
-                Json(json!({ "title": deal.title }))
-            })
+            RouteDef::on(
+                Method::GET,
+                "/deals/{deal}",
+                |Bound(deal, _): Bound<Deal>| async move { Json(json!({ "title": deal.title })) },
+            )
             .public(),
             RouteDef::on(
                 Method::GET,
@@ -68,21 +70,29 @@ impl Controller for Routes {
                 },
             )
             .public(),
-            RouteDef::on(Method::GET, "/companies/{id}", |company: Bound<Company>| async move {
-                Json(json!({ "name": company.name }))
-            })
+            RouteDef::on(
+                Method::GET,
+                "/companies/{id}",
+                |company: Bound<Company>| async move { Json(json!({ "name": company.name })) },
+            )
             .public(),
-            RouteDef::on(Method::GET, "/notes/{note}", |note: Bound<Note>| async move {
-                Json(json!({ "body": note.body }))
-            })
+            RouteDef::on(
+                Method::GET,
+                "/notes/{note}",
+                |note: Bound<Note>| async move { Json(json!({ "body": note.body })) },
+            )
             .public(),
-            RouteDef::on(Method::GET, "/by-key/{key}", |deal: Bound<Deal, ByKey>| async move {
-                Json(json!({ "title": deal.title }))
-            })
+            RouteDef::on(
+                Method::GET,
+                "/by-key/{key}",
+                |deal: Bound<Deal, ByKey>| async move { Json(json!({ "title": deal.title })) },
+            )
             .public(),
-            RouteDef::on(Method::GET, "/titles/{title}", |deal: Bound<Deal, ByTitle>| async move {
-                Json(json!({ "slug": deal.slug }))
-            })
+            RouteDef::on(
+                Method::GET,
+                "/titles/{title}",
+                |deal: Bound<Deal, ByTitle>| async move { Json(json!({ "slug": deal.slug })) },
+            )
             .public(),
             RouteDef::on(
                 Method::GET,
@@ -101,9 +111,13 @@ impl Controller for Routes {
                 },
             )
             .public(),
-            RouteDef::on(Method::GET, "/oops/{a}/{b}", |deal: Bound<Deal>| async move {
-                Ok::<_, AppError>(Json(json!({ "title": deal.title })))
-            })
+            RouteDef::on(
+                Method::GET,
+                "/oops/{a}/{b}",
+                |deal: Bound<Deal>| async move {
+                    Ok::<_, AppError>(Json(json!({ "title": deal.title })))
+                },
+            )
             .public(),
         ]
     }
@@ -141,7 +155,11 @@ async fn records_bind_by_their_route_key() {
         .assert_error(404, "Not Found");
 
     // Without a route key: the key, read as the key's type.
-    let company = Company::factory().set(Company::NAME, "Acme").create_one(&*db).await.unwrap();
+    let company = Company::factory()
+        .set(Company::NAME, "Acme")
+        .create_one(&*db)
+        .await
+        .unwrap();
     assert_eq!(Company::route_key_name(), "id");
     app.client()
         .get(&format!("/api/companies/{}", company.id))
@@ -204,7 +222,11 @@ async fn routes_choose_their_own_bindings() {
 #[tokio::test]
 async fn soft_deleted_records_bind_only_on_routes_that_opt_in() {
     let (app, db, _clock) = app(vec![Box::new(RoutesModule)]).await;
-    let mut deal = Deal::factory().set(Deal::SLUG, "gone").create_one(&*db).await.unwrap();
+    let mut deal = Deal::factory()
+        .set(Deal::SLUG, "gone")
+        .create_one(&*db)
+        .await
+        .unwrap();
     deal.delete(&*db).await.unwrap();
     app.client()
         .get("/api/deals/gone")
@@ -222,8 +244,16 @@ async fn soft_deleted_records_bind_only_on_routes_that_opt_in() {
 #[tokio::test]
 async fn children_bind_under_their_parent_only() {
     let (app, db, _clock) = app(vec![Box::new(RoutesModule)]).await;
-    let acme = Company::factory().set(Company::NAME, "Acme").create_one(&*db).await.unwrap();
-    let globex = Company::factory().set(Company::NAME, "Globex").create_one(&*db).await.unwrap();
+    let acme = Company::factory()
+        .set(Company::NAME, "Acme")
+        .create_one(&*db)
+        .await
+        .unwrap();
+    let globex = Company::factory()
+        .set(Company::NAME, "Globex")
+        .create_one(&*db)
+        .await
+        .unwrap();
     Deal::factory()
         .for_record(&acme, Deal::COMPANY_ID)
         .set(Deal::SLUG, "acme-deal")

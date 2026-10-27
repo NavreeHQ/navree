@@ -307,7 +307,11 @@ impl Faker {
         match self.below(3) {
             0 => format!("{} {}", self.last_name(), self.pick(COMPANY_SUFFIXES)),
             1 => format!("{} & {}", self.last_name(), self.last_name()),
-            _ => format!("{} {}", capitalize(self.pick(WORDS)), self.pick(COMPANY_SUFFIXES)),
+            _ => format!(
+                "{} {}",
+                capitalize(self.pick(WORDS)),
+                self.pick(COMPANY_SUFFIXES)
+            ),
         }
     }
 
@@ -636,31 +640,65 @@ const WORDS: &[&str] = &[
     "bright", "cascade", "cedar", "cinder", "clear", "cobalt", "comet", "coral", "crest",
     "crystal", "delta", "drift", "dune", "echo", "ember", "falcon", "fern", "field", "flint",
     "forge", "frost", "garnet", "glade", "glow", "granite", "grove", "harbor", "hazel", "horizon",
-    "iris", "island", "ivory", "jade", "juniper", "kestrel", "lagoon", "lantern", "linen",
-    "lumen", "maple", "meadow", "mesa", "mint", "nimbus", "north", "nova", "oak", "ocean", "onyx",
-    "orbit", "orchid", "pebble", "pine", "pioneer", "prism", "quartz", "quill", "raven", "reef",
-    "ridge", "river", "rowan", "sable", "sage", "signal", "silver", "slate", "solar", "spark",
-    "spruce", "stone", "summit", "swift", "thistle", "tide", "timber", "topaz", "trail", "vale",
-    "velvet", "vertex", "violet", "willow", "wind", "zephyr",
+    "iris", "island", "ivory", "jade", "juniper", "kestrel", "lagoon", "lantern", "linen", "lumen",
+    "maple", "meadow", "mesa", "mint", "nimbus", "north", "nova", "oak", "ocean", "onyx", "orbit",
+    "orchid", "pebble", "pine", "pioneer", "prism", "quartz", "quill", "raven", "reef", "ridge",
+    "river", "rowan", "sable", "sage", "signal", "silver", "slate", "solar", "spark", "spruce",
+    "stone", "summit", "swift", "thistle", "tide", "timber", "topaz", "trail", "vale", "velvet",
+    "vertex", "violet", "willow", "wind", "zephyr",
 ];
 
 const COMPANY_SUFFIXES: &[&str] = &[
-    "Labs", "Group", "Partners", "Systems", "Works", "Studio", "Holdings", "Collective", "Co.",
-    "Industries", "Ventures", "Analytics",
+    "Labs",
+    "Group",
+    "Partners",
+    "Systems",
+    "Works",
+    "Studio",
+    "Holdings",
+    "Collective",
+    "Co.",
+    "Industries",
+    "Ventures",
+    "Analytics",
 ];
 
 const BUZZ_ADJECTIVES: &[&str] = &[
-    "adaptive", "seamless", "scalable", "intuitive", "secure", "proactive", "robust", "unified",
-    "realtime", "streamlined", "resilient", "open",
+    "adaptive",
+    "seamless",
+    "scalable",
+    "intuitive",
+    "secure",
+    "proactive",
+    "robust",
+    "unified",
+    "realtime",
+    "streamlined",
+    "resilient",
+    "open",
 ];
 
 const BUZZ_NOUNS: &[&str] = &[
-    "platform", "workflow", "pipeline", "dashboard", "framework", "network", "toolkit", "service",
-    "experience", "ecosystem",
+    "platform",
+    "workflow",
+    "pipeline",
+    "dashboard",
+    "framework",
+    "network",
+    "toolkit",
+    "service",
+    "experience",
+    "ecosystem",
 ];
 
 const JOB_LEVELS: &[&str] = &[
-    "Junior", "Senior", "Lead", "Principal", "Head of", "Staff", "Chief",
+    "Junior",
+    "Senior",
+    "Lead",
+    "Principal",
+    "Head of",
+    "Staff",
+    "Chief",
 ];
 
 const JOB_ROLES: &[&str] = &[
@@ -679,15 +717,57 @@ const JOB_ROLES: &[&str] = &[
 const SAFE_DOMAINS: &[&str] = &["example.com", "example.org", "example.net"];
 
 const STREET_KINDS: &[&str] = &[
-    "Street", "Avenue", "Lane", "Road", "Way", "Boulevard", "Court", "Place",
+    "Street",
+    "Avenue",
+    "Lane",
+    "Road",
+    "Way",
+    "Boulevard",
+    "Court",
+    "Place",
 ];
 
 const CITIES: &[&str] = &[
-    "Amsterdam", "Auckland", "Bangalore", "Barcelona", "Berlin", "Bogota", "Boston", "Brisbane",
-    "Buenos Aires", "Cairo", "Cape Town", "Chicago", "Copenhagen", "Dublin", "Edinburgh",
-    "Helsinki", "Istanbul", "Jakarta", "Kyoto", "Lagos", "Lisbon", "London", "Lyon", "Madrid",
-    "Melbourne", "Mexico City", "Montreal", "Mumbai", "Nairobi", "Oslo", "Paris", "Prague",
-    "Seoul", "Singapore", "Stockholm", "Taipei", "Tokyo", "Toronto", "Vienna", "Zurich",
+    "Amsterdam",
+    "Auckland",
+    "Bangalore",
+    "Barcelona",
+    "Berlin",
+    "Bogota",
+    "Boston",
+    "Brisbane",
+    "Buenos Aires",
+    "Cairo",
+    "Cape Town",
+    "Chicago",
+    "Copenhagen",
+    "Dublin",
+    "Edinburgh",
+    "Helsinki",
+    "Istanbul",
+    "Jakarta",
+    "Kyoto",
+    "Lagos",
+    "Lisbon",
+    "London",
+    "Lyon",
+    "Madrid",
+    "Melbourne",
+    "Mexico City",
+    "Montreal",
+    "Mumbai",
+    "Nairobi",
+    "Oslo",
+    "Paris",
+    "Prague",
+    "Seoul",
+    "Singapore",
+    "Stockholm",
+    "Taipei",
+    "Tokyo",
+    "Toronto",
+    "Vienna",
+    "Zurich",
 ];
 
 const COUNTRIES: &[(&str, &str)] = &[
@@ -772,9 +852,17 @@ mod tests {
             let float: f64 = fake.number(1.5..=2.5);
             assert!((1.5..=2.5).contains(&float));
         }
-        assert!(seen.iter().all(|s| *s), "every value of a small range comes up");
+        assert!(
+            seen.iter().all(|s| *s),
+            "every value of a small range comes up"
+        );
+        // A reversed range on purpose: it is read low to high.
+        #[allow(clippy::reversed_empty_ranges)]
         let reversed: i32 = fake.number(10..=1);
-        assert!((1..=10).contains(&reversed), "a reversed range is read low to high");
+        assert!(
+            (1..=10).contains(&reversed),
+            "a reversed range is read low to high"
+        );
         let single: i32 = fake.number(7..=7);
         assert_eq!(single, 7);
     }
@@ -827,7 +915,11 @@ mod tests {
         for _ in 0..100 {
             let at = fake.date_time_between(start, end);
             assert!(at >= start && at <= end);
-            assert_eq!(at.timestamp_subsec_nanos() % 1_000, 0, "microsecond precision");
+            assert_eq!(
+                at.timestamp_subsec_nanos() % 1_000,
+                0,
+                "microsecond precision"
+            );
         }
         let day = fake.date_between(
             NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),

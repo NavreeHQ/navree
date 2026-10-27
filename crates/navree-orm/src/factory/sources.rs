@@ -239,7 +239,10 @@ impl<F: ModelFactory> ResolveParent for Factory<F> {
             factory.recycle.extend(recycle);
             let created = factory.create_on(target).await?;
             let record = created.into_vec().into_iter().next().ok_or_else(|| {
-                OrmError::factory(F::Model::meta().name(), "the parent factory created no record")
+                OrmError::factory(
+                    F::Model::meta().name(),
+                    "the parent factory created no record",
+                )
             })?;
             column_value(&record, column).map(Some)
         })
@@ -332,7 +335,10 @@ impl<F: ModelFactory> LazyFactory<F> {
                 factory.recycle.extend(recycle);
                 let created = factory.create_on(target).await?;
                 created.into_vec().into_iter().next().ok_or_else(|| {
-                    OrmError::factory(F::Model::meta().name(), "the lazy factory created no record")
+                    OrmError::factory(
+                        F::Model::meta().name(),
+                        "the lazy factory created no record",
+                    )
                 })
             })
             .await

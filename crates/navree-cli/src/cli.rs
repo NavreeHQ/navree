@@ -520,7 +520,10 @@ mod tests {
         );
         assert_eq!(companions(&["--all"]), Companions::all());
         assert_eq!(companions(&["-a", "--seeder"]), Companions::all());
-        assert_eq!(companions(&["--pivot", "--all"]), Companions::all_for_pivot());
+        assert_eq!(
+            companions(&["--pivot", "--all"]),
+            Companions::all_for_pivot()
+        );
         assert_eq!(
             companions(&["-pm"]),
             Companions {

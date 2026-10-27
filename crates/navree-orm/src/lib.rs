@@ -136,6 +136,7 @@ pub use error::{OrmError, Result};
 pub use exec::{Access, DocumentTarget, ExecContext, Executor, SqlTarget, Target};
 pub use ir::Expr;
 pub use model::{ColumnMeta, KeyKind, Model, ModelMeta, PrimaryKey, Timestamp};
+pub use module::{ModuleBuilderOrmExt, OrmModule, RegisteredModel, registered_models};
 pub use pagination::{
     CursorPage, CursorRequest, Page, PageMeta, PageQuery, PageRequest, SimplePage, SimplePageMeta,
 };
@@ -145,7 +146,6 @@ pub use query::{
 };
 pub use record::Record;
 pub use row::Row;
-pub use module::{ModuleBuilderOrmExt, OrmModule, RegisteredModel, registered_models};
 pub use scope::{GlobalScope, Scoped, SoftDeletes};
 pub use sql::{Dialect, Statement};
 pub use ulid::{Ulid, UlidError};

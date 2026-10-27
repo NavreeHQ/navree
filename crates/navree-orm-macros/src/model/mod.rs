@@ -277,7 +277,9 @@ fn analyse(input: &DeriveInput) -> syn::Result<Model> {
         }
     }
     if let Some(route_key) = &attrs.route_key
-        && !columns.iter().any(|column| column.name == route_key.value())
+        && !columns
+            .iter()
+            .any(|column| column.name == route_key.value())
     {
         errors.push(syn::Error::new(
             route_key.span(),
@@ -310,20 +312,21 @@ fn analyse(input: &DeriveInput) -> syn::Result<Model> {
         .map_or_else(|| naming::table_name(&ident.to_string()), LitStr::value);
     // A policy makes the model a subject; the subject's name defaults to
     // the model's and its permission prefix to the table.
-    let subject = if attrs.subject.is_some() || attrs.policy.is_some() || attrs.permission_prefix.is_some() {
-        let name = attrs
-            .subject
-            .clone()
-            .flatten()
-            .map_or_else(|| ident.to_string(), |name| name.value());
-        let prefix = attrs
-            .permission_prefix
-            .as_ref()
-            .map_or_else(|| table.clone(), LitStr::value);
-        Some((name, prefix))
-    } else {
-        None
-    };
+    let subject =
+        if attrs.subject.is_some() || attrs.policy.is_some() || attrs.permission_prefix.is_some() {
+            let name = attrs
+                .subject
+                .clone()
+                .flatten()
+                .map_or_else(|| ident.to_string(), |name| name.value());
+            let prefix = attrs
+                .permission_prefix
+                .as_ref()
+                .map_or_else(|| table.clone(), LitStr::value);
+            Some((name, prefix))
+        } else {
+            None
+        };
     Ok(Model {
         ident,
         vis: input.vis.clone(),

@@ -201,11 +201,14 @@ pub async fn assert_database_missing<E: Executor + ?Sized>(
 /// # Panics
 ///
 /// When it has another number, or cannot be read.
-pub async fn assert_database_count<E: Executor + ?Sized>(exec: &E, table_name: &str, expected: u64) {
-    let count = table(table_name)
-        .count(exec)
-        .await
-        .unwrap_or_else(|error| panic!("assert_database_count: cannot count `{table_name}`: {error}"));
+pub async fn assert_database_count<E: Executor + ?Sized>(
+    exec: &E,
+    table_name: &str,
+    expected: u64,
+) {
+    let count = table(table_name).count(exec).await.unwrap_or_else(|error| {
+        panic!("assert_database_count: cannot count `{table_name}`: {error}")
+    });
     assert!(
         count == expected,
         "assert_database_count: `{table_name}` has {count} row(s), expected {expected}"
@@ -218,10 +221,9 @@ pub async fn assert_database_count<E: Executor + ?Sized>(exec: &E, table_name: &
 ///
 /// When it has some, or cannot be read.
 pub async fn assert_database_empty<E: Executor + ?Sized>(exec: &E, table_name: &str) {
-    let count = table(table_name)
-        .count(exec)
-        .await
-        .unwrap_or_else(|error| panic!("assert_database_empty: cannot count `{table_name}`: {error}"));
+    let count = table(table_name).count(exec).await.unwrap_or_else(|error| {
+        panic!("assert_database_empty: cannot count `{table_name}`: {error}")
+    });
     assert!(
         count == 0,
         "assert_database_empty: `{table_name}` has {count} row(s), expected none"
@@ -241,7 +243,12 @@ pub async fn assert_model_exists<E: Executor + ?Sized, M: Model>(exec: &E, recor
         .where_key(key.clone())
         .exists(exec)
         .await
-        .unwrap_or_else(|error| panic!("assert_model_exists: cannot read `{}`: {error}", M::meta().table()));
+        .unwrap_or_else(|error| {
+            panic!(
+                "assert_model_exists: cannot read `{}`: {error}",
+                M::meta().table()
+            )
+        });
     assert!(
         exists,
         "assert_model_exists: {} {} is not in `{}`",
@@ -264,15 +271,28 @@ pub async fn assert_model_missing<E: Executor + ?Sized, M: Model>(exec: &E, reco
         .where_key(key.clone())
         .exists(exec)
         .await
-        .unwrap_or_else(|error| panic!("assert_model_missing: cannot read `{}`: {error}", M::meta().table()));
-    let trashed = if exists { " (soft-deleted rows stay: assert_soft_deleted checks those)" } else { "" };
+        .unwrap_or_else(|error| {
+            panic!(
+                "assert_model_missing: cannot read `{}`: {error}",
+                M::meta().table()
+            )
+        });
+    let trashed = if exists {
+        " (soft-deleted rows stay: assert_soft_deleted checks those)"
+    } else {
+        ""
+    };
     assert!(
         !exists,
         "assert_model_missing: {} {} is still in `{}`{}",
         M::meta().name(),
         key.to_key_string(),
         M::meta().table(),
-        if M::meta().soft_deletes_enabled() { trashed } else { "" }
+        if M::meta().soft_deletes_enabled() {
+            trashed
+        } else {
+            ""
+        }
     );
 }
 
@@ -290,7 +310,10 @@ pub async fn assert_soft_deleted<E: Executor + ?Sized, M: Model>(exec: &E, recor
     match state {
         Some(true) => {}
         Some(false) => panic!("assert_soft_deleted: {name} {key} is not soft-deleted"),
-        None => panic!("assert_soft_deleted: {name} {key} is not in `{}` at all", M::meta().table()),
+        None => panic!(
+            "assert_soft_deleted: {name} {key} is not in `{}` at all",
+            M::meta().table()
+        ),
     }
 }
 
@@ -422,7 +445,7 @@ impl Found {
                     .iter()
                     .map(|row| (matching_columns(row, expected), row))
                     .collect();
-                scored.sort_by(|a, b| b.0.cmp(&a.0));
+                scored.sort_by_key(|(score, _)| std::cmp::Reverse(*score));
                 report.push_str("the closest:\n");
                 for (score, row) in scored.into_iter().take(CLOSEST_ROWS) {
                     let differs: Vec<String> = expected
@@ -454,8 +477,13 @@ impl Found {
 }
 
 /// The rows of `table_name` matching `conditions`.
-async fn matching_rows<E: Executor + ?Sized>(exec: &E, table_name: &str, conditions: &Conditions) -> Found {
-    let fail = |error: crate::OrmError| -> ! { panic!("cannot read `{table_name}` to check it: {error}") };
+async fn matching_rows<E: Executor + ?Sized>(
+    exec: &E,
+    table_name: &str,
+    conditions: &Conditions,
+) -> Found {
+    let fail =
+        |error: crate::OrmError| -> ! { panic!("cannot read `{table_name}` to check it: {error}") };
     match &conditions.0 {
         Inner::Values(expected) => {
             let rows = table(table_name)
@@ -548,7 +576,9 @@ enum Kind {
 /// `row`'s `column` read as `kind`.
 fn decode_as(row: &Row, column: &str, kind: Kind) -> Option<Value> {
     fn get<T: Field>(row: &Row, column: &str) -> Option<Value> {
-        row.get::<Option<T>>(column).ok().map(|value| value.to_value())
+        row.get::<Option<T>>(column)
+            .ok()
+            .map(|value| value.to_value())
     }
     match kind {
         Kind::Bool => get::<bool>(row, column),
@@ -667,13 +697,20 @@ mod tests {
             ("count", Value::Int(Some(3))),
             ("price", Value::String(Some("12.50".into()))),
             ("meta", Value::String(Some(r#"{"b": 2, "a": 1}"#.into()))),
-            ("at", Value::String(Some("2026-10-27T09:30:00+00:00".into()))),
+            (
+                "at",
+                Value::String(Some("2026-10-27T09:30:00+00:00".into())),
+            ),
             ("note", Value::String(None)),
         ]);
         assert!(column_matches(&stored, "active", &Value::from(true)));
         assert!(!column_matches(&stored, "active", &Value::from(false)));
         assert!(column_matches(&stored, "count", &Value::from(3_i64)));
-        assert!(column_matches(&stored, "price", &Value::from(Decimal::new(125, 1))));
+        assert!(column_matches(
+            &stored,
+            "price",
+            &Value::from(Decimal::new(125, 1))
+        ));
         assert!(column_matches(
             &stored,
             "meta",

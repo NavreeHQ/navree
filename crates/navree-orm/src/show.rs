@@ -122,8 +122,10 @@ impl ModelDescription {
     /// hooks the app registers for it.
     pub fn of<M: Model>(app_hooks: Vec<&'static str>) -> Self {
         let meta = M::meta();
-        let mut global_scopes: Vec<&'static str> =
-            M::global_scopes().iter().map(|scope| scope.name()).collect();
+        let mut global_scopes: Vec<&'static str> = M::global_scopes()
+            .iter()
+            .map(|scope| scope.name())
+            .collect();
         if meta.soft_deletes_enabled() {
             global_scopes.push(std::any::type_name::<SoftDeletes>());
         }
@@ -186,13 +188,20 @@ impl ModelDescription {
             ("timestamps", timestamps),
             ("soft deletes", or_none(self.deleted_at)),
             ("workspace", or_none(self.workspace)),
-            ("connection", self.connection.unwrap_or("default").to_owned()),
+            (
+                "connection",
+                self.connection.unwrap_or("default").to_owned(),
+            ),
             ("per page", self.per_page.to_string()),
             ("factory", or_none(self.factory)),
             ("subject", or_none(self.subject)),
             ("policy", or_none(self.policy)),
         ];
-        table(&mut out, None, settings.iter().map(|(k, v)| [(*k).to_owned(), v.clone()]));
+        table(
+            &mut out,
+            None,
+            settings.iter().map(|(k, v)| [(*k).to_owned(), v.clone()]),
+        );
 
         let columns = self.columns.iter().map(|column| {
             let mut notes = Vec::new();
@@ -202,7 +211,11 @@ impl ModelDescription {
             if let Some(cast) = column.cast {
                 notes.push(format!("cast {cast}"));
             }
-            [column.name.to_owned(), column.rust_type.to_owned(), notes.join(", ")]
+            [
+                column.name.to_owned(),
+                column.rust_type.to_owned(),
+                notes.join(", "),
+            ]
         });
         table(&mut out, Some("columns"), columns);
 
@@ -214,11 +227,19 @@ impl ModelDescription {
                     format!("via {}", relationship.via),
                 ]
             });
-            table(&mut out, Some("relationships (declared by the factory)"), relationships);
+            table(
+                &mut out,
+                Some("relationships (declared by the factory)"),
+                relationships,
+            );
         }
         let list = |out: &mut String, title: &str, items: &[&'static str]| {
             if !items.is_empty() {
-                table(out, Some(title), items.iter().map(|item| [(*item).to_owned()]));
+                table(
+                    out,
+                    Some(title),
+                    items.iter().map(|item| [(*item).to_owned()]),
+                );
             }
         };
         list(&mut out, "global scopes", &self.global_scopes);
@@ -353,8 +374,15 @@ mod tests {
             (Some("created_at"), Some("updated_at"), Some("deleted_at"))
         );
         let stage = deal.columns.iter().find(|c| c.name == "stage").unwrap();
-        assert_eq!((stage.rust_type, stage.cast), ("Stage", Some("string_enum")));
-        let company_id = deal.columns.iter().find(|c| c.name == "company_id").unwrap();
+        assert_eq!(
+            (stage.rust_type, stage.cast),
+            ("Stage", Some("string_enum"))
+        );
+        let company_id = deal
+            .columns
+            .iter()
+            .find(|c| c.name == "company_id")
+            .unwrap();
         assert!(company_id.nullable);
         assert_eq!(deal.global_scopes, ["navree_orm::scope::SoftDeletes"]);
         assert_eq!(deal.app_hooks, ["app::LogDeals"]);
@@ -397,7 +425,10 @@ mod tests {
             text.contains("  tags        belongs_to_many Tag  via deal_tag\n"),
             "{text}"
         );
-        assert!(text.contains("\nglobal scopes\n  navree_orm::scope::SoftDeletes\n"), "{text}");
+        assert!(
+            text.contains("\nglobal scopes\n  navree_orm::scope::SoftDeletes\n"),
+            "{text}"
+        );
         assert!(!text.contains("hooks"), "{text}");
     }
 }

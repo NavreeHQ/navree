@@ -140,9 +140,14 @@ async fn orm_store(
 
 async fn orm_index(uow: WorkspaceUow) -> Result<Json<Value>, AppError> {
     use navree_orm::Model;
-    let notes = orm_note::OrmNote::query().latest_by(orm_note::OrmNote::ID).get(&*uow).await?;
+    let notes = orm_note::OrmNote::query()
+        .latest_by(orm_note::OrmNote::ID)
+        .get(&*uow)
+        .await?;
     let bodies: Vec<&str> = notes.iter().map(|note| note.body.as_str()).collect();
-    Ok(Json(json!({ "data": bodies, "count": orm_note::OrmNote::query().count(&*uow).await? })))
+    Ok(Json(
+        json!({ "data": bodies, "count": orm_note::OrmNote::query().count(&*uow).await? }),
+    ))
 }
 
 impl Controller for NotesController {

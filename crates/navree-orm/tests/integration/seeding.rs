@@ -106,7 +106,11 @@ async fn seeders_run_from_tests_with_or_without_model_events() {
     let (app, db, _clock) = app(vec![Box::new(Seeding(created.clone()))]).await;
 
     app.seed::<TagsSeeder>().await.unwrap();
-    assert_eq!(created.0.load(Ordering::SeqCst), 3, "the app's hooks saw them");
+    assert_eq!(
+        created.0.load(Ordering::SeqCst),
+        3,
+        "the app's hooks saw them"
+    );
     app.seed::<QuietTagsSeeder>().await.unwrap();
     assert_eq!(created.0.load(Ordering::SeqCst), 3, "no model events");
     assert_database_count(&*db, "tags", 8).await;

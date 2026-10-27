@@ -18,8 +18,14 @@ fn make_one_builds_an_unsaved_record_from_the_definition() {
     assert!(!company.exists());
     assert!(!company.name.is_empty());
     assert!((1..=500).contains(&company.employees));
-    assert_eq!(company.id, 0, "the database assigns the key when it is saved");
-    assert!(company.created_at == chrono::DateTime::<Utc>::UNIX_EPOCH, "timestamps wait for the save");
+    assert_eq!(
+        company.id, 0,
+        "the database assigns the key when it is saved"
+    );
+    assert!(
+        company.created_at == chrono::DateTime::<Utc>::UNIX_EPOCH,
+        "timestamps wait for the save"
+    );
 }
 
 #[test]
@@ -95,7 +101,10 @@ fn sequences_cycle_through_their_states() {
 #[test]
 fn for_each_sequence_makes_one_record_per_state() {
     let deals = Deal::factory()
-        .for_each_sequence(Sequence::column(Deal::TITLE, ["Pilot", "Renewal", "Upsell"]))
+        .for_each_sequence(Sequence::column(
+            Deal::TITLE,
+            ["Pilot", "Renewal", "Upsell"],
+        ))
         .make()
         .unwrap();
     let titles: Vec<&str> = deals.iter().map(|d| d.title.as_str()).collect();
@@ -166,13 +175,19 @@ fn raw_gives_the_generated_values_without_empty_keys_and_timestamps() {
         .raw_one()
         .unwrap();
     let columns: Vec<&str> = raw.iter().map(|(column, _)| *column).collect();
-    assert_eq!(columns, ["name", "country", "employees", "verified", "profile"]);
+    assert_eq!(
+        columns,
+        ["name", "country", "employees", "verified", "profile"]
+    );
     assert_eq!(raw.get("name"), Some(&Value::from("Acme")));
     assert_eq!(raw.to_json()["name"], "Acme");
     assert_eq!(serde_json::to_value(&raw).unwrap()["name"], "Acme");
 
     let trashed = Company::factory().trashed().raw_one().unwrap();
-    assert!(trashed.get("deleted_at").is_some(), "a set timestamp is kept");
+    assert!(
+        trashed.get("deleted_at").is_some(),
+        "a set timestamp is kept"
+    );
     let many = Company::factory().count(3).raw().unwrap();
     assert_eq!(many.len(), 3);
 }
@@ -227,7 +242,10 @@ impl ModelFactory for ShoutingTagFactory {
 fn configure_gives_every_builder_its_defaults() {
     let tag = Factory::<ShoutingTagFactory>::new().make_one().unwrap();
     assert!(tag.name.ends_with('!'));
-    assert_eq!(tag.name.trim_end_matches('!'), tag.name.trim_end_matches('!').to_uppercase());
+    assert_eq!(
+        tag.name.trim_end_matches('!'),
+        tag.name.trim_end_matches('!').to_uppercase()
+    );
     let quiet = Factory::<ShoutingTagFactory>::new()
         .without_after_making()
         .make_one()
@@ -245,7 +263,10 @@ fn trashed_sets_the_soft_delete_column() {
     let recent = Company::factory().trashed().make_one().unwrap();
     let deleted = recent.deleted_at.expect("deleted");
     let age = Utc::now() - deleted;
-    assert!(age > Duration::hours(23) && age < Duration::hours(25), "a day ago: {age}");
+    assert!(
+        age > Duration::hours(23) && age < Duration::hours(25),
+        "a day ago: {age}"
+    );
 }
 
 #[test]
@@ -270,7 +291,10 @@ fn make_uses_stored_and_recycled_parents_and_leaves_factory_parents_empty() {
     let orphan = Deal::factory().make_one().unwrap();
     assert_eq!(orphan.company_id, None);
     // A stored record is known.
-    let owned = Deal::factory().for_(&acme, Deal::COMPANY_ID).make_one().unwrap();
+    let owned = Deal::factory()
+        .for_(&acme, Deal::COMPANY_ID)
+        .make_one()
+        .unwrap();
     assert_eq!(owned.company_id, Some(7));
     // A recycled record replaces the definition's parent factory.
     let recycled = Deal::factory().recycle(&acme).count(3).make().unwrap();

@@ -38,6 +38,8 @@ impl Policy for TicketPolicy {
             return;
         };
         rules.can(READ, "Ticket");
-        rules.can(UPDATE, "Ticket").when(field("owner_id").eq(user.id));
+        rules
+            .can(UPDATE, "Ticket")
+            .when(field("owner_id").eq(user.id));
     }
 }

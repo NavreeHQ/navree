@@ -405,7 +405,10 @@ impl<F: ModelFactory> Factory<F> {
     /// Records take every combination of one state from each of
     /// `sequences` in turn (see [`Sequence::cross_join`]); with no count
     /// set, one record per combination.
-    pub fn cross_join_sequence(self, sequences: impl IntoIterator<Item = Sequence<F::Model>>) -> Self {
+    pub fn cross_join_sequence(
+        self,
+        sequences: impl IntoIterator<Item = Sequence<F::Model>>,
+    ) -> Self {
         let joined = Sequence::cross_join(sequences);
         let count = joined.len();
         let factory = self.sequence(joined);
@@ -466,7 +469,10 @@ impl<F: ModelFactory> Factory<F> {
 
     /// Runs `hook` on each record once it is made (by `make` and by
     /// `create`, before saving).
-    pub fn after_making(mut self, hook: impl Fn(&mut Record<F::Model>) + Send + Sync + 'static) -> Self {
+    pub fn after_making(
+        mut self,
+        hook: impl Fn(&mut Record<F::Model>) + Send + Sync + 'static,
+    ) -> Self {
         self.after_making.push(Arc::new(hook));
         self
     }
@@ -521,13 +527,19 @@ impl<F: ModelFactory> Factory<F> {
     ///
     /// The parent's columns are set before the states, so a state can
     /// still change them.
-    pub fn for_<S: ParentSource>(self, parent: S, link: impl Into<BelongsTo<F::Model, S::Parent>>) -> Self {
+    pub fn for_<S: ParentSource>(
+        self,
+        parent: S,
+        link: impl Into<BelongsTo<F::Model, S::Parent>>,
+    ) -> Self {
         let link = link.into();
         let link = match link.named {
-            Some(name) => match Relationships::<F::Model>::of::<F>().belongs_to_link::<S::Parent>(name) {
-                Ok(link) => link,
-                Err(error) => return self.with_error(problem(error)),
-            },
+            Some(name) => {
+                match Relationships::<F::Model>::of::<F>().belongs_to_link::<S::Parent>(name) {
+                    Ok(link) => link,
+                    Err(error) => return self.with_error(problem(error)),
+                }
+            }
             None => link,
         };
         let mut factory = self;
@@ -541,26 +553,37 @@ impl<F: ModelFactory> Factory<F> {
     }
 
     /// [`for_`](Factory::for_) with a stored record.
-    pub fn for_record<P: Model>(self, parent: &Record<P>, link: impl Into<BelongsTo<F::Model, P>>) -> Self {
+    pub fn for_record<P: Model>(
+        self,
+        parent: &Record<P>,
+        link: impl Into<BelongsTo<F::Model, P>>,
+    ) -> Self {
         self.for_(parent, link)
     }
 
     /// Creates `children` for each record once it is stored, pointing at it
     /// through `link`: the child's foreign key column, a [`HasMany`], or
     /// the name of a relationship the factory declares.
-    pub fn has<CF: ModelFactory>(self, children: Factory<CF>, link: impl Into<HasMany<F::Model, CF::Model>>) -> Self {
+    pub fn has<CF: ModelFactory>(
+        self,
+        children: Factory<CF>,
+        link: impl Into<HasMany<F::Model, CF::Model>>,
+    ) -> Self {
         let link = link.into();
         let link = match link.named {
-            Some(name) => match Relationships::<F::Model>::of::<F>().has_many_link::<CF::Model>(name) {
-                Ok(link) => link,
-                Err(error) => return self.with_error(problem(error)),
-            },
+            Some(name) => {
+                match Relationships::<F::Model>::of::<F>().has_many_link::<CF::Model>(name) {
+                    Ok(link) => link,
+                    Err(error) => return self.with_error(problem(error)),
+                }
+            }
             None => link,
         };
         let mut factory = self;
-        factory
-            .children
-            .push(Arc::new(HasChildren { factory: children, link }));
+        factory.children.push(Arc::new(HasChildren {
+            factory: children,
+            link,
+        }));
         factory
     }
 
@@ -670,9 +693,11 @@ impl<F: ModelFactory> Factory<F> {
 
     /// One record, without storing it.
     pub fn make_one(self) -> Result<Record<F::Model>> {
-        self.count(1).make()?.into_vec().pop().ok_or_else(|| {
-            OrmError::factory(F::Model::meta().name(), "the factory made no record")
-        })
+        self.count(1)
+            .make()?
+            .into_vec()
+            .pop()
+            .ok_or_else(|| OrmError::factory(F::Model::meta().name(), "the factory made no record"))
     }
 
     /// `count` records, without storing them.
@@ -712,9 +737,10 @@ impl<F: ModelFactory> Factory<F> {
 
     /// The values of one record (see [`raw`](Factory::raw)).
     pub fn raw_one(self) -> Result<Attributes> {
-        self.count(1).raw()?.pop().ok_or_else(|| {
-            OrmError::factory(F::Model::meta().name(), "the factory made no record")
-        })
+        self.count(1)
+            .raw()?
+            .pop()
+            .ok_or_else(|| OrmError::factory(F::Model::meta().name(), "the factory made no record"))
     }
 
     // ---------------------------------------------------------------------
@@ -739,13 +765,22 @@ impl<F: ModelFactory> Factory<F> {
 
     /// One record, created.
     pub async fn create_one<E: Executor + ?Sized>(self, exec: &E) -> Result<Record<F::Model>> {
-        self.count(1).create(exec).await?.into_vec().pop().ok_or_else(|| {
-            OrmError::factory(F::Model::meta().name(), "the factory created no record")
-        })
+        self.count(1)
+            .create(exec)
+            .await?
+            .into_vec()
+            .pop()
+            .ok_or_else(|| {
+                OrmError::factory(F::Model::meta().name(), "the factory created no record")
+            })
     }
 
     /// `count` records, created.
-    pub async fn create_many<E: Executor + ?Sized>(self, exec: &E, count: usize) -> Result<Collection<F::Model>> {
+    pub async fn create_many<E: Executor + ?Sized>(
+        self,
+        exec: &E,
+        count: usize,
+    ) -> Result<Collection<F::Model>> {
         self.count(count).create(exec).await
     }
 
@@ -753,12 +788,18 @@ impl<F: ModelFactory> Factory<F> {
     /// hooks (observers) do not run; the model's own behaviour (generated
     /// keys, timestamps, workspace) and the change events of the audit log
     /// still do.
-    pub async fn create_quietly<E: Executor + ?Sized>(self, exec: &E) -> Result<Collection<F::Model>> {
+    pub async fn create_quietly<E: Executor + ?Sized>(
+        self,
+        exec: &E,
+    ) -> Result<Collection<F::Model>> {
         self::quiet::scope(self.create(exec)).await
     }
 
     /// One record, created quietly.
-    pub async fn create_one_quietly<E: Executor + ?Sized>(self, exec: &E) -> Result<Record<F::Model>> {
+    pub async fn create_one_quietly<E: Executor + ?Sized>(
+        self,
+        exec: &E,
+    ) -> Result<Record<F::Model>> {
         self::quiet::scope(self.create_one(exec)).await
     }
 
@@ -797,7 +838,12 @@ impl<F: ModelFactory> Factory<F> {
             models.push(Record::new(model));
         }
         self.run_after_making(&mut models);
-        bulk::insert_models(&target, models.into_iter().map(Record::into_inner).collect(), now).await
+        bulk::insert_models(
+            &target,
+            models.into_iter().map(Record::into_inner).collect(),
+            now,
+        )
+        .await
     }
 
     /// [`create`](Factory::create) on a resolved target.
@@ -821,7 +867,11 @@ impl<F: ModelFactory> Factory<F> {
                 .ok_or_else(|| {
                     OrmError::factory(
                         F::Model::meta().name(),
-                        format!("no {} record to point `{}` at", link.source.model_name(), link.foreign_key),
+                        format!(
+                            "no {} record to point `{}` at",
+                            link.source.model_name(),
+                            link.foreign_key
+                        ),
                     )
                 })?;
             parent_values.extend(link.assignments(value));
@@ -835,7 +885,7 @@ impl<F: ModelFactory> Factory<F> {
                 if !parent.is_open(&model)? {
                     continue;
                 }
-                let excluded = self.excluded_parents.iter().any(|column| *column == parent.column);
+                let excluded = self.excluded_parents.contains(&parent.column);
                 let pick = faker.next_u64();
                 let value = parent
                     .source
@@ -875,7 +925,10 @@ impl<F: ModelFactory> Factory<F> {
 
     fn push_state(
         mut self,
-        state: impl Fn(&mut F::Model, &mut FactoryContext<'_, F::Model>) -> Result<()> + Send + Sync + 'static,
+        state: impl Fn(&mut F::Model, &mut FactoryContext<'_, F::Model>) -> Result<()>
+        + Send
+        + Sync
+        + 'static,
     ) -> Self {
         self.states.push(Arc::new(state));
         self
@@ -920,7 +973,10 @@ impl<F: ModelFactory> Factory<F> {
         let mut values = Vec::new();
         for link in &self.parents {
             let pick = faker.next_u64();
-            if let Some(value) = link.source.known(link.owner_key.as_deref(), &self.recycle, pick)? {
+            if let Some(value) =
+                link.source
+                    .known(link.owner_key.as_deref(), &self.recycle, pick)?
+            {
                 values.extend(link.assignments(value));
             }
         }

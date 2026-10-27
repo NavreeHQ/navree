@@ -180,10 +180,7 @@ impl<M: Model> ModelRule<M> {
     /// Any other change to the rule's query, applied last
     /// (`|query| query.without_workspace_scope()` for a value unique
     /// across every workspace).
-    pub fn query(
-        mut self,
-        f: impl Fn(Builder<M>) -> Builder<M> + Send + Sync + 'static,
-    ) -> Self {
+    pub fn query(mut self, f: impl Fn(Builder<M>) -> Builder<M> + Send + Sync + 'static) -> Self {
         self.query = Some(Arc::new(f));
         self
     }
@@ -195,7 +192,8 @@ impl<M: Model> From<ModelRule<M>> for AsyncRule {
         let field = rule.field.clone();
         let kind = rule.kind;
         let ignore_path_param = rule.ignore_path_param.clone();
-        let mut async_rule = AsyncRule::check(field, kind.rule(), ModelCheck(rule)).skipped_when(null);
+        let mut async_rule =
+            AsyncRule::check(field, kind.rule(), ModelCheck(rule)).skipped_when(null);
         if let Some(name) = ignore_path_param {
             async_rule = async_rule.ignore_path_param(name);
         }
@@ -309,8 +307,14 @@ mod tests {
     fn null_values_skip_the_rule() {
         let rule: AsyncRule = exists(Company::ID, None::<i64>).into();
         assert_eq!((rule.field(), rule.rule()), ("id", "exists"));
-        assert!(ModelCheck(exists(Company::ID, None::<i64>)).query(None).is_none());
-        let rule: AsyncRule = unique(Deal::SLUG, "acme".to_owned()).field("slug_text").into();
+        assert!(
+            ModelCheck(exists(Company::ID, None::<i64>))
+                .query(None)
+                .is_none()
+        );
+        let rule: AsyncRule = unique(Deal::SLUG, "acme".to_owned())
+            .field("slug_text")
+            .into();
         assert_eq!((rule.field(), rule.rule()), ("slug_text", "unique"));
     }
 }

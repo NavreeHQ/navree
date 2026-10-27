@@ -229,7 +229,10 @@ fn every_companion_refers_to_the_others() {
         report.hints
     );
     assert!(
-        report.hints.iter().any(|h| h.contains("navree db:seed deal")),
+        report
+            .hints
+            .iter()
+            .any(|h| h.contains("navree db:seed deal")),
         "{:?}",
         report.hints
     );
@@ -310,12 +313,15 @@ fn a_factory_for_an_existing_model_says_how_to_link_it() {
     );
     assert_eq!(report.hints.len(), 1, "{:?}", report.hints);
     assert!(
-        report.hints[0]
-            .contains("factory = super::super::factories::vip_deal::VipDealFactory"),
+        report.hints[0].contains("factory = super::super::factories::vip_deal::VipDealFactory"),
         "{:?}",
         report.hints
     );
-    assert!(report.hints[0].contains("models/deal.rs"), "{:?}", report.hints);
+    assert!(
+        report.hints[0].contains("models/deal.rs"),
+        "{:?}",
+        report.hints
+    );
 }
 
 #[test]
@@ -394,7 +400,10 @@ fn a_seeder_is_registered_for_db_seed() {
         "{module}"
     );
     assert!(
-        report.hints.iter().any(|h| h.contains("navree db:seed demo_data")),
+        report
+            .hints
+            .iter()
+            .any(|h| h.contains("navree db:seed demo_data")),
         "{:?}",
         report.hints
     );
@@ -474,7 +483,11 @@ fn a_pivot_model_holds_the_two_keys() {
 
     for (pivot, companions, problem) in [
         ("deal", Companions::all_for_pivot(), "one word each"),
-        ("line_item_tag", Companions::all_for_pivot(), "one word each"),
+        (
+            "line_item_tag",
+            Companions::all_for_pivot(),
+            "one word each",
+        ),
         (
             "deal_note",
             Companions {

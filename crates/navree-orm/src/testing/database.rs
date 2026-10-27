@@ -501,9 +501,9 @@ impl Template {
     }
 
     async fn run_build(&self, template: &TestDb) -> Result<(), BoxError> {
-        (self.build)(template)
-            .await
-            .map_err(|error| format!("building the `{}` template failed: {error}", self.name).into())
+        (self.build)(template).await.map_err(|error| {
+            format!("building the `{}` template failed: {error}", self.name).into()
+        })
     }
 }
 
@@ -584,14 +584,18 @@ pub async fn truncate_tables(db: &Db, except: &[&str]) -> Result<(), BoxError> {
     let tx = db.conn().begin().await?;
     match kind {
         DatabaseKind::Sqlite => {
-            tx.execute_unprepared("PRAGMA defer_foreign_keys = ON").await?;
+            tx.execute_unprepared("PRAGMA defer_foreign_keys = ON")
+                .await?;
             for table in &tables {
                 tx.execute_unprepared(&format!("DELETE FROM {}", kind.quote(table)))
                     .await?;
             }
-            let sequences =
-                strings(&tx, "SELECT name FROM sqlite_master WHERE name = 'sqlite_sequence'", "name")
-                    .await?;
+            let sequences = strings(
+                &tx,
+                "SELECT name FROM sqlite_master WHERE name = 'sqlite_sequence'",
+                "name",
+            )
+            .await?;
             if !sequences.is_empty() {
                 let names: Vec<String> = tables
                     .iter()
@@ -647,7 +651,13 @@ async fn connect(url: &str) -> Result<Db, BoxError> {
         ..DbOptions::default()
     })
     .await
-    .map_err(|error| format!("cannot connect to the test database {}: {error}", redact(url)).into())
+    .map_err(|error| {
+        format!(
+            "cannot connect to the test database {}: {error}",
+            redact(url)
+        )
+        .into()
+    })
 }
 
 /// Closes `db`'s pool (every clone of it).
@@ -692,7 +702,10 @@ fn is_stale(name: &str, prefix: &str) -> bool {
     let Some(rest) = name.strip_prefix(prefix) else {
         return false;
     };
-    let Some(seconds) = rest.split(['_', '-', '.']).next().and_then(|s| s.parse::<u64>().ok())
+    let Some(seconds) = rest
+        .split(['_', '-', '.'])
+        .next()
+        .and_then(|s| s.parse::<u64>().ok())
     else {
         return false;
     };
@@ -783,7 +796,12 @@ async fn build_server_template(
     kind: DatabaseKind,
 ) -> Result<String, BoxError> {
     let admin = admin_db(server).await?;
-    drop_stale(&admin, kind, &format!("{TEMPLATE_PREFIX}{}_", template.slug())).await;
+    drop_stale(
+        &admin,
+        kind,
+        &format!("{TEMPLATE_PREFIX}{}_", template.slug()),
+    )
+    .await;
     drop_stale(&admin, kind, TEST_PREFIX).await;
     let name = unique_name(&format!("{TEMPLATE_PREFIX}{}_", template.slug()));
     create_database(&admin, kind, &name, None).await?;
@@ -896,7 +914,13 @@ async fn admin_db(server: &str) -> Result<Db, BoxError> {
         ..DbOptions::default()
     })
     .await
-    .map_err(|error| format!("cannot connect to the test server {}: {error}", redact(server)).into())
+    .map_err(|error| {
+        format!(
+            "cannot connect to the test server {}: {error}",
+            redact(server)
+        )
+        .into()
+    })
 }
 
 /// `CREATE DATABASE name` (from `template` on PostgreSQL).
@@ -937,7 +961,9 @@ async fn create_database(
 async fn drop_database(server: &str, name: &str, kind: DatabaseKind) -> Result<(), BoxError> {
     let admin = admin_db(server).await?;
     let sql = match kind {
-        DatabaseKind::Postgres => format!("DROP DATABASE IF EXISTS {} WITH (FORCE)", kind.quote(name)),
+        DatabaseKind::Postgres => {
+            format!("DROP DATABASE IF EXISTS {} WITH (FORCE)", kind.quote(name))
+        }
         _ => format!("DROP DATABASE IF EXISTS {}", kind.quote(name)),
     };
     let outcome = admin.conn().execute_unprepared(&sql).await;
@@ -1039,7 +1065,10 @@ mod tests {
         assert!(!is_stale(&name, TEST_PREFIX));
         let old = format!("{TEST_PREFIX}{}_x", now_secs() - STALE_AFTER.as_secs() - 60);
         assert!(is_stale(&old, TEST_PREFIX));
-        assert!(!is_stale("navree_test", TEST_PREFIX), "the shared database stays");
+        assert!(
+            !is_stale("navree_test", TEST_PREFIX),
+            "the shared database stays"
+        );
         assert!(!is_stale("other_123_x", TEST_PREFIX));
     }
 
