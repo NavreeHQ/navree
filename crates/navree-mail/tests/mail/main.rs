@@ -2,10 +2,12 @@
 //! queued sending and the `MailModule`.
 
 mod api;
+mod commands;
 mod delivery;
 mod dkim;
 mod domains;
 mod harness;
+mod ingest;
 mod log;
 mod mailer;
 mod message;
