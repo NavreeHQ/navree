@@ -12,7 +12,7 @@ use navree_i18n::{I18nModule, Locale, t};
 use navree_kernel::{Module, ModuleBuilder};
 use navree_macros::{controller, injectable, module};
 use navree_testing::{TestApp, TestAppBuilder, TestClient, principal};
-use navree_validation::{Valid, ValidationModule};
+use navree_validation::{Country, Valid, ValidationModule, rules};
 use navree_workspace::{NewWorkspace, Workspace, WorkspaceModule, Workspaces};
 use sea_orm::sea_query::{ColumnDef, Query, Table};
 use sea_orm::{ConnectionTrait, DbErr};
@@ -35,6 +35,14 @@ pub struct NewContact {
     #[garde(email)]
     #[serde(default)]
     pub email: Option<String>,
+    /// An international type: its message key is `country`.
+    #[garde(skip)]
+    #[serde(default)]
+    pub country: Option<Country>,
+    /// An international rule: its message key is `unicode_name`.
+    #[garde(inner(custom(rules::unicode_name)))]
+    #[serde(default)]
+    pub company: Option<String>,
 }
 
 /// Routes that translate.
