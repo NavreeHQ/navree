@@ -215,3 +215,31 @@ async fn apps_boot_on_copies_and_in_memory_databases() {
             .assert_json_path("title", json!("In memory"));
     }
 }
+
+#[navree_orm::test(template = ORM)]
+async fn the_test_attribute_gives_a_copy_of_the_template(db: TestDb) {
+    Deal::factory().count(2).create(db.db()).await.unwrap();
+    assert_eq!(Deal::query().count(db.db()).await.unwrap(), 2);
+}
+
+#[navree_orm::test(database = "memory")]
+async fn the_test_attribute_gives_in_memory_databases(
+    db: TestDb,
+) -> Result<(), navree_kernel::BoxError> {
+    create_tables(db.db()).await;
+    Company::factory().create_one(db.db()).await?;
+    assert_eq!(Company::query().count(db.db()).await?, 1);
+    Ok(())
+}
+
+#[navree_orm::test]
+async fn the_test_attribute_runs_tests_without_a_database() {
+    let empty = TestDb::sqlite().await.unwrap();
+    assert_eq!(count(empty.db(), "sqlite_master").await, 0);
+}
+
+#[navree_orm::test]
+#[should_panic(expected = "kept attributes")]
+async fn the_test_attribute_keeps_other_attributes() {
+    panic!("kept attributes");
+}
