@@ -22,7 +22,9 @@ last_error or read_logs when a request fails. search_docs and read_doc read the 
 version in Cargo.lock. Every tool is read-only.";
 
 /// Added to [`INSTRUCTIONS`] when the app includes Lighthouse.
-pub const LIGHTHOUSE_INSTRUCTIONS: &str = " The app includes Lighthouse: lighthouse_list_issues and lighthouse_get_issue show what failed (exceptions with their request and backtrace), and lighthouse_slow_routes, lighthouse_slow_queries and lighthouse_failed_jobs show what is slow or failing.";
+pub const LIGHTHOUSE_INSTRUCTIONS: &str = " The app includes Lighthouse: lighthouse_list_issues and \
+lighthouse_get_issue show what failed (exceptions with their request and backtrace), and \
+lighthouse_slow_routes, lighthouse_slow_queries and lighthouse_failed_jobs show what is slow or failing.";
 
 /// The MCP handler around a [`Navigator`].
 #[derive(Clone, Debug)]
