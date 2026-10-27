@@ -377,6 +377,8 @@ With `mcp.auth = "oauth"`, the metadata routes are `mcp.metadata` and `mcp.metad
 
 The first `initialize` call creates a session; its id comes back in the `Mcp-Session-Id` header, and the client sends it with every later request. A session belongs to the user who opened it: another user sending its id gets a 404. With `CacheModule`, sessions live in the app's cache, so any process behind your load balancer can serve the next request; without it, in the process. Requests go through the whole HTTP stack: request ids, the per-IP rate limit, the app's CORS settings, logs and metrics, plus the `Origin` check against `mcp.allowed_origins`.
 
+Sessions are how protocol `2025-11-25` and earlier work. Clients on the stateless protocol, `2026-07-28`, skip the handshake: they ask `server/discover` for the server's versions and capabilities, send no session id, and put the protocol version, client info and capabilities in every request's `_meta` (a request without its protocol version gets a 400 with `-32602`). Each request is authenticated and checked on its own, and resource updates and list changes reach them on a `subscriptions/listen` stream instead of `GET /mcp`. The endpoint serves both protocols; you configure nothing.
+
 ### stdio
 
 The `mcp:serve` command serves the same tools over standard input and output, for clients that start a local process:
@@ -498,13 +500,13 @@ async fn reps_log_activity_but_cannot_move_others_deals() {
 |---|---|
 | `McpTestClient::new(client)` | Wraps a `TestClient`; its `acting_as` principal, cookies or guest status carry over. Requests carry no `Origin` header. |
 | `.bearer(token)` | Sends `Authorization: Bearer <token>` with every request. |
-| `.path(path)`, `.protocol_version(version)` | Another `mcp.path`; another protocol version for the handshake. |
-| `.initialize()` | Performs the handshake and keeps the session id (`session_id()`, `server_info()`). |
+| `.path(path)`, `.protocol_version(version)` | Another `mcp.path`; another protocol version (default `2025-11-25`). `"2026-07-28"` speaks the stateless protocol (`is_stateless()`). |
+| `.initialize()` | Performs the handshake and keeps the session id (`session_id()`, `server_info()`). On the stateless protocol, asks `server/discover` instead and keeps no session. |
 | `list_tools()`, `list_resources()`, `list_resource_templates()`, `list_prompts()` | What this user sees. |
 | `call_tool(name, args)` | A `ToolResult`: `assert_ok()`, `assert_error(status, message)`, `assert_json_path(path, value)`, `json::<T>()`, `text()`, `structured()`. `call_tool_with_progress` asks for progress notifications. |
 | `read_resource(uri)` | A `ResourceResult`, with the same assertions plus `text()`, `blob()` and `mime_type()`. |
 | `get_prompt(name, args)` | A `PromptResult`: `messages()`, `text(index)`, `description()`, `assert_ok()`, `assert_error(..)`. |
-| `subscribe(uri)`, `listen()` | Subscribes to a resource; opens the `GET` stream (`NotificationStream::next(wait)`). |
+| `subscribe(uri)`, `listen()` | Subscribes to a resource; opens the `GET` stream, or on the stateless protocol a `subscriptions/listen` stream for the subscribed resources and every list (`NotificationStream::next(wait)`). |
 | `notifications()` | Notifications the server sent this session on request streams. |
 | `request(method, params)`, `close()` | Any JSON-RPC request; ends the session. |
 

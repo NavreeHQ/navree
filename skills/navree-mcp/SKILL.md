@@ -264,6 +264,11 @@ Also: `list_resources()`, `list_resource_templates()`, `list_prompts()`,
   `/.well-known/oauth-protected-resource` and `...-resource/mcp`.
 - A session belongs to the user who opened it (another user: 404). Without
   `CacheModule`, sessions live in one process.
+- The endpoint also speaks the stateless protocol `2026-07-28`: no
+  `initialize` (clients ask `server/discover`), no session id, the protocol
+  version in every request's `_meta` (missing: 400, `-32602`), and
+  notifications on a `subscriptions/listen` stream. Test it with
+  `McpTestClient::new(client).protocol_version("2026-07-28")`.
 - Never log arguments yourself in tools; Navree's `mcp call` line leaves
   them out on purpose.
 - Errors: 5xx details go to the log; the client reads
