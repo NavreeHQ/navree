@@ -96,6 +96,39 @@ async fn units_of_work_commit_together_or_not_at_all() {
 }
 
 #[tokio::test]
+async fn sessions_run_models_and_transactions_by_hand() {
+    let Some(t) = TestMongo::connect("sessions_run_models_and_transactions_by_hand").await else {
+        return;
+    };
+    let mongo = &t.db;
+    let session = mongo.session().await.unwrap();
+    assert!(session.db().same_as(mongo));
+    // Outside a transaction a session's writes land at once.
+    Company::create(&session, company("Acme")).await.unwrap();
+    assert_eq!(Company::query().count(mongo).await.unwrap(), 1);
+
+    session.start_transaction().await.unwrap();
+    assert!(session.in_transaction());
+    Company::create(&session, company("Globex")).await.unwrap();
+    assert_eq!(Company::query().count(&session).await.unwrap(), 2, "it reads its own writes");
+    assert_eq!(Company::query().count(mongo).await.unwrap(), 1);
+    session.abort_transaction().await.unwrap();
+    assert!(!session.in_transaction());
+    assert_eq!(Company::query().count(mongo).await.unwrap(), 1);
+
+    session.start_transaction().await.unwrap();
+    Company::create(&session, company("Initech")).await.unwrap();
+    session.commit_transaction().await.unwrap();
+    let names: Vec<String> = Company::query()
+        .order_by(Company::NAME)
+        .pluck(mongo, Company::NAME)
+        .await
+        .unwrap();
+    assert_eq!(names, ["Acme", "Initech"]);
+    t.cleanup().await;
+}
+
+#[tokio::test]
 async fn the_connection_runs_in_the_current_unit_of_work() {
     let Some(t) = TestMongo::connect("the_connection_runs_in_the_current_unit_of_work").await else {
         return;

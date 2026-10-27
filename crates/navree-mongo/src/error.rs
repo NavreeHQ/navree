@@ -198,7 +198,12 @@ pub(crate) fn error_codes(error: &mongodb::error::Error) -> Vec<i32> {
 pub(crate) fn is_duplicate_key(error: &mongodb::error::Error) -> bool {
     error_codes(error)
         .iter()
-        .any(|code| DUPLICATE_KEY_CODES.contains(code))
+        .any(|code| is_duplicate_code(*code))
+}
+
+/// Whether a server error code reports a duplicate key.
+pub(crate) fn is_duplicate_code(code: i32) -> bool {
+    DUPLICATE_KEY_CODES.contains(&code)
 }
 
 /// Whether `error` says the deployment cannot run transactions: a

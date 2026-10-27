@@ -117,6 +117,7 @@ impl MongoUow {
         let mut session = db.client().start_session().await?;
         session.start_transaction().await?;
         let state = SessionState::new(session);
+        state.transaction.store(true, Ordering::Relaxed);
         let uow = MongoUow {
             inner: Arc::new(Inner {
                 db: db.clone(),
