@@ -39,6 +39,7 @@ full = [
     "schedule",
     "schema",
     "session",
+    "settings",
     "storage",
     "storage-s3",
     "telemetry",
@@ -129,6 +130,20 @@ workspace = [
 ## redis client and its Lua scripts are only needed with a Redis server).
 redis = ["dep:navree-redis", "cache", "queue", "session", "realtime"]
 ## L6
+## Settings: typed settings stored per scope (global, organization,
+## workspace, user), inherited down the chain, with the source of every
+## value (light: no new dependencies; in `full`).
+settings = [
+    "dep:navree-settings",
+    "http",
+    "cache",
+    "db",
+    "events",
+    "validation",
+    "audit",
+    "access",
+    "workspace",
+]
 ## Webhooks: signed outgoing deliveries with retries and a delivery log,
 ## verified incoming webhooks (pure Rust; in `full`).
 webhooks = [
@@ -388,6 +403,7 @@ navree-realtime = { workspace = true, optional = true }
 navree-schedule = { workspace = true, optional = true }
 navree-schema = { workspace = true, optional = true }
 navree-session = { workspace = true, optional = true }
+navree-settings = { workspace = true, optional = true }
 navree-social = { workspace = true, optional = true }
 navree-storage = { workspace = true, optional = true }
 navree-telemetry = { workspace = true, optional = true }
