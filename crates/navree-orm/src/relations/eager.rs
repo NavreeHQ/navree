@@ -15,6 +15,7 @@ use crate::ir::{ColumnRef, Expr, SelectItem};
 use crate::model::Model;
 use crate::query::Builder;
 use crate::record::Record;
+use crate::relations::access::AccessConstraint;
 use crate::relations::core::RelationCore;
 use crate::relations::morph::MorphWith;
 use crate::relations::path::{ConstrainPath, ParsedPath, RelationPath};
@@ -65,6 +66,20 @@ impl Constraint {
         self.closure
             .downcast_ref::<FilterConstraint>()
             .map(|constraint| &constraint.0)
+    }
+
+    /// A constraint keeping the related records `access` lets a viewer
+    /// read (`with_accessible`).
+    pub(crate) fn new_access(access: AccessConstraint) -> Self {
+        Constraint {
+            closure: Arc::new(access),
+            takes: "an access filter",
+        }
+    }
+
+    /// The access filter of an access constraint.
+    pub(crate) fn access(&self) -> Option<&AccessConstraint> {
+        self.closure.downcast_ref::<AccessConstraint>()
     }
 }
 
@@ -412,6 +427,9 @@ where
         if let Some(filter) = constraint.filter() {
             let query = std::mem::take(&mut relation.core_mut().query);
             relation.core_mut().query = query.where_(filter.clone());
+        } else if let Some(access) = constraint.access() {
+            let query = std::mem::take(&mut relation.core_mut().query);
+            relation.core_mut().query = access.apply(query)?;
         } else if let Some(apply) = constraint.closure.downcast_ref::<ConstraintFn<Rel>>() {
             relation = (apply.0)(relation);
         } else if let Some(apply) = constraint
