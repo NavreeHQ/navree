@@ -9,13 +9,15 @@ use navree::crypto::CryptoModule;
 use navree::db::DatabaseModule;
 use navree::events::EventsModule;
 use navree::http::HttpModule;
-use navree::kernel::{AppBuilder, Navree};
+use navree::kernel::{AppBuilder, Module, ModuleBuilder, Navree};
 use navree::lighthouse::LighthouseModule;
 use navree::log::LoggerModule;
 use navree::logbook::LogbookModule;
 use navree::mail::MailModule;
 use navree::observe::ObserveModule;
+use navree::orm::OrmModule;
 use navree::queue::QueueModule;
+use navree::schedule::{ModuleBuilderScheduleExt, ScheduleModule};
 use navree::validation::ValidationModule;
 use navree::view::ViewModule;
 
@@ -36,6 +38,12 @@ pub fn app(sources: ConfigSources) -> AppBuilder {
         .module(ViewModule::from_config())
         .module(MailModule::from_config())
         .module(QueueModule::from_config())
+        // The scheduler (`navree schedule:work` runs it) and the ORM (the
+        // `[orm]` options, strict outside production, and `model:prune`,
+        // which `Housekeeping` runs daily).
+        .module(ScheduleModule::for_root())
+        .module(OrmModule::from_config())
+        .module(Housekeeping)
         .module(ValidationModule::from_config())
         // Identity and access: JWT bearer tokens (`/api/auth/*`), roles,
         // permissions and abilities (`GET /api/me/abilities`).
@@ -55,4 +63,18 @@ pub fn app(sources: ConfigSources) -> AppBuilder {
         // Feature modules (`navree make:module` adds new ones above the marker).
         .module(modules::users::UsersModule)
     // navree:modules
+}
+
+/// Daily housekeeping on the scheduler: prune the models marked
+/// `#[model(prunable)]` or `#[model(mass_prunable)]` (`navree model:prune`).
+struct Housekeeping;
+
+impl Module for Housekeeping {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.schedule(|s| {
+            s.command("model:prune", &[])
+                .daily_at("03:00")
+                .without_overlapping();
+        });
+    }
 }
