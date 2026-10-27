@@ -5162,6 +5162,39 @@ dependencies = [
 ]
 
 [[package]]
+name = "navree-settings"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "garde",
+ "http",
+ "navree-access",
+ "navree-api",
+ "navree-audit",
+ "navree-cache",
+ "navree-config",
+ "navree-contracts",
+ "navree-db",
+ "navree-events",
+ "navree-http",
+ "navree-kernel",
+ "navree-macros",
+ "navree-testing",
+ "navree-validation",
+ "navree-workspace",
+ "sea-orm",
+ "sea-orm-migration",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "utoipa",
+ "uuid",
+]
+
+[[package]]
 name = "navree-social"
 version = "0.1.0"
 dependencies = [
