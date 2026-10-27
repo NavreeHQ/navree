@@ -1,0 +1,55 @@
+[package]
+name = "navree-orm"
+description = "Navree ORM: active-record models, a typed query builder, records with dirty tracking, collections and pagination on PostgreSQL/TimescaleDB, MySQL and SQLite, with a document-driver interface."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = []
+## Run on PostgreSQL / TimescaleDB (navree-db's `postgres` driver).
+postgres = ["navree-db/postgres"]
+## Run on MySQL / MariaDB (SeaORM's MySQL driver). SQL for every dialect is
+## generated without any feature.
+mysql = ["sea-orm/sqlx-mysql"]
+
+[dependencies]
+axum = { workspace = true }
+base64 = { workspace = true }
+chrono = { workspace = true }
+http = { workspace = true }
+indexmap = { workspace = true }
+navree-contracts = { workspace = true }
+navree-db = { workspace = true }
+navree-http = { workspace = true }
+navree-kernel = { workspace = true }
+navree-orm-macros = { workspace = true }
+rust_decimal = { workspace = true }
+sea-orm = { workspace = true, features = ["with-rust_decimal"] }
+sea-query = { workspace = true, features = ["backend-mysql", "with-rust_decimal"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+futures = { workspace = true }
+insta = { workspace = true }
+navree-config = { workspace = true }
+navree-testing = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+trybuild = { workspace = true }
+
+# Real-server tests: each skips with a notice unless NAVREE_TEST_POSTGRES_URL
+# (a TimescaleDB server) or NAVREE_TEST_MYSQL_URL is set:
+# `cargo test -p navree-orm --features postgres,mysql --test servers`.
+[[test]]
+name = "servers"
+required-features = ["postgres", "mysql"]

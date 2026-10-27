@@ -36,6 +36,7 @@
 //! | `schedule` | navree-schedule | `schedule` | `ScheduleModule`: tasks on cron schedules |
 //! | `notify` | navree-notify | `notify` | `NotifyModule`: database, mail and broadcast notifications |
 //! | `ui` | navree-ui | `ui` | `UiModule`: the app shell and components for server-rendered tools, embedded assets |
+//! | `orm` | navree-orm | `orm` | `#[derive(Model)]` models, the query builder, records, collections, pagination |
 //! | `auth` | navree-auth | `auth` | `AuthModule`: JWT access and refresh tokens, users |
 //! | `workspace` | navree-workspace | `workspace` | `WorkspaceModule`: workspaces, members, roles, invitations, isolation, organizations, partitions |
 //! | `redis` | navree-redis | `redis` (opt-in) | `RedisModule`: shared Redis connections; Redis cache, locks, queue, sessions, rate limits and real-time backplane |
@@ -183,6 +184,8 @@ pub use navree_access as access;
 pub use navree_audit as audit;
 #[cfg(feature = "notify")]
 pub use navree_notify as notify;
+#[cfg(feature = "orm")]
+pub use navree_orm as orm;
 #[cfg(feature = "queue")]
 pub use navree_queue as queue;
 #[cfg(feature = "schedule")]

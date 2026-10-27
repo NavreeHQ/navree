@@ -1,0 +1,409 @@
+//! The document-driver interface: models run unchanged on a document store.
+//! A small in-memory store implements `DocumentDriver` (the way the
+//! MongoDB driver does, with filters, sort, projection, skip and limit)
+//! and an `Executor` hands it out.
+
+use std::cmp::Ordering;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+
+use navree_kernel::BoxFuture;
+use navree_orm::ir::{
+    Aggregate, AggregateFunction, Boolean, DeleteIr, Direction, Expr, InValues, InsertIr, Operator,
+    Order, QueryIr, UpdateIr, Where, WhereClause,
+};
+use navree_orm::{
+    Access, DocumentDriver, DocumentTarget, Executor, InsertOutcome, Model, OrmError, Row, Target,
+    Value, same_value, to_json,
+};
+
+use crate::models::Company;
+
+type Document = Vec<(String, Value)>;
+
+/// Collections of documents in memory.
+#[derive(Default)]
+struct Memory {
+    collections: Mutex<HashMap<String, Vec<Document>>>,
+    next_id: Mutex<i64>,
+}
+
+fn field<'a>(document: &'a Document, name: &str) -> Option<&'a Value> {
+    document
+        .iter()
+        .find(|(key, _)| key == name)
+        .map(|(_, value)| value)
+}
+
+fn column_name(expr: &Expr) -> Result<&str, OrmError> {
+    match expr {
+        Expr::Column(column) if column.path.is_empty() => Ok(&column.name),
+        other => Err(OrmError::Driver {
+            driver: "memory".into(),
+            message: format!("cannot evaluate {other:?}"),
+        }),
+    }
+}
+
+fn value_of(expr: &Expr) -> Result<&Value, OrmError> {
+    match expr {
+        Expr::Value(value) => Ok(value),
+        other => Err(OrmError::Driver {
+            driver: "memory".into(),
+            message: format!("cannot evaluate {other:?}"),
+        }),
+    }
+}
+
+/// Orders two values by their JSON form (numbers numerically, text
+/// lexically).
+fn order(a: &Value, b: &Value) -> Ordering {
+    match (to_json(a), to_json(b)) {
+        (serde_json::Value::Number(x), serde_json::Value::Number(y)) => x
+            .as_f64()
+            .partial_cmp(&y.as_f64())
+            .unwrap_or(Ordering::Equal),
+        (x, y) => x.to_string().cmp(&y.to_string()),
+    }
+}
+
+fn matches(document: &Document, clauses: &[WhereClause]) -> Result<bool, OrmError> {
+    // SQL precedence: AND binds tighter than OR.
+    let mut any = false;
+    let mut all = true;
+    for (i, clause) in clauses.iter().enumerate() {
+        if i > 0 && clause.boolean == Boolean::Or {
+            any |= all;
+            all = true;
+        }
+        let mut hit = matches_one(document, &clause.filter)?;
+        if clause.negated {
+            hit = !hit;
+        }
+        all &= hit;
+    }
+    Ok(any || all)
+}
+
+fn matches_one(document: &Document, filter: &Where) -> Result<bool, OrmError> {
+    Ok(match filter {
+        Where::Compare { left, op, right } => {
+            let actual = field(document, column_name(left)?)
+                .cloned()
+                .unwrap_or(Value::String(None));
+            let wanted = value_of(right)?;
+            match op {
+                Operator::Eq => same_value(&actual, wanted),
+                Operator::Ne => !same_value(&actual, wanted),
+                Operator::Gt => order(&actual, wanted) == Ordering::Greater,
+                Operator::Gte => order(&actual, wanted) != Ordering::Less,
+                Operator::Lt => order(&actual, wanted) == Ordering::Less,
+                Operator::Lte => order(&actual, wanted) != Ordering::Greater,
+                other => {
+                    return Err(OrmError::Unsupported {
+                        feature: format!("{other:?}").into(),
+                        driver: "memory".into(),
+                    });
+                }
+            }
+        }
+        Where::Null { expr, not } => {
+            let null = field(document, column_name(expr)?).is_none_or(navree_orm::is_null);
+            null != *not
+        }
+        Where::In {
+            expr,
+            values: InValues::List(list),
+            not,
+        } => {
+            let actual = field(document, column_name(expr)?)
+                .cloned()
+                .unwrap_or(Value::String(None));
+            let found = list
+                .iter()
+                .map(value_of)
+                .collect::<Result<Vec<_>, _>>()?
+                .into_iter()
+                .any(|value| same_value(&actual, value));
+            found != *not
+        }
+        Where::Group(clauses) => matches(document, clauses)?,
+        other => {
+            return Err(OrmError::Unsupported {
+                feature: format!("{other:?}").into(),
+                driver: "memory".into(),
+            });
+        }
+    })
+}
+
+impl Memory {
+    fn matching(
+        &self,
+        collection: &str,
+        wheres: &[WhereClause],
+    ) -> Result<Vec<Document>, OrmError> {
+        let collections = self.collections.lock().unwrap();
+        let mut found = Vec::new();
+        for document in collections.get(collection).into_iter().flatten() {
+            if matches(document, wheres)? {
+                found.push(document.clone());
+            }
+        }
+        Ok(found)
+    }
+}
+
+impl DocumentDriver for Memory {
+    fn name(&self) -> &'static str {
+        "memory"
+    }
+
+    fn find<'a>(&'a self, query: &'a QueryIr) -> BoxFuture<'a, Result<Vec<Row>, OrmError>> {
+        Box::pin(async move {
+            let mut documents = self.matching(&query.table.name, &query.wheres)?;
+            for item in query.orders.iter().rev() {
+                if let Order::By {
+                    expr, direction, ..
+                } = item
+                {
+                    let name = column_name(expr)?.to_owned();
+                    documents.sort_by(|a, b| {
+                        let ordering = match (field(a, &name), field(b, &name)) {
+                            (Some(x), Some(y)) => order(x, y),
+                            _ => Ordering::Equal,
+                        };
+                        if *direction == Direction::Desc {
+                            ordering.reverse()
+                        } else {
+                            ordering
+                        }
+                    });
+                }
+            }
+            let skip = usize::try_from(query.offset.unwrap_or(0)).unwrap_or(usize::MAX);
+            let take = query.limit.map_or(usize::MAX, |limit| {
+                usize::try_from(limit).unwrap_or(usize::MAX)
+            });
+            // (field read, name returned): a projection honours aliases.
+            let projected: Vec<(String, String)> = query
+                .columns
+                .iter()
+                .map(|item| {
+                    let source = column_name(&item.expr)?.to_owned();
+                    let output = item
+                        .alias
+                        .as_deref()
+                        .map_or_else(|| source.clone(), str::to_owned);
+                    Ok((source, output))
+                })
+                .collect::<Result<_, OrmError>>()?;
+            Ok(documents
+                .into_iter()
+                .skip(skip)
+                .take(take)
+                .map(|document| {
+                    let document = if projected.is_empty() {
+                        document
+                    } else {
+                        projected
+                            .iter()
+                            .map(|(source, output)| {
+                                (
+                                    output.clone(),
+                                    field(&document, source)
+                                        .cloned()
+                                        .unwrap_or(Value::String(None)),
+                                )
+                            })
+                            .collect()
+                    };
+                    Row::from_values(document)
+                })
+                .collect())
+        })
+    }
+
+    fn aggregate<'a>(
+        &'a self,
+        query: &'a QueryIr,
+        aggregate: &'a Aggregate,
+    ) -> BoxFuture<'a, Result<Value, OrmError>> {
+        Box::pin(async move {
+            match aggregate.function {
+                AggregateFunction::Count => {
+                    let count = self.matching(&query.table.name, &query.wheres)?.len();
+                    Ok(Value::BigInt(Some(
+                        i64::try_from(count).unwrap_or(i64::MAX),
+                    )))
+                }
+                other => Err(OrmError::Unsupported {
+                    feature: format!("{other:?}").into(),
+                    driver: "memory".into(),
+                }),
+            }
+        })
+    }
+
+    fn insert<'a>(
+        &'a self,
+        insert: &'a InsertIr,
+    ) -> BoxFuture<'a, Result<InsertOutcome, OrmError>> {
+        Box::pin(async move {
+            let mut returned = Vec::new();
+            let mut collections = self.collections.lock().unwrap();
+            let collection = collections.entry(insert.table.to_string()).or_default();
+            for row in &insert.rows {
+                let mut document: Document = insert
+                    .columns
+                    .iter()
+                    .zip(row)
+                    .map(|(column, value)| Ok((column.to_string(), value_of(value)?.clone())))
+                    .collect::<Result<_, OrmError>>()?;
+                // The store assigns the keys it is asked to return.
+                for column in &insert.returning {
+                    let mut next = self.next_id.lock().unwrap();
+                    *next += 1;
+                    document.push((column.to_string(), Value::BigInt(Some(*next))));
+                    returned.push(Row::from_values(vec![(
+                        column.to_string(),
+                        Value::BigInt(Some(*next)),
+                    )]));
+                }
+                collection.push(document);
+            }
+            Ok(InsertOutcome {
+                rows_affected: insert.rows.len() as u64,
+                returned,
+                last_insert_id: None,
+            })
+        })
+    }
+
+    fn update<'a>(&'a self, update: &'a UpdateIr) -> BoxFuture<'a, Result<u64, OrmError>> {
+        Box::pin(async move {
+            let mut collections = self.collections.lock().unwrap();
+            let mut changed = 0;
+            for document in collections
+                .entry(update.table.name.to_string())
+                .or_default()
+            {
+                if matches(document, &update.wheres)? {
+                    for (column, value) in &update.sets {
+                        let value = value_of(value)?.clone();
+                        match document.iter_mut().find(|(name, _)| name == column) {
+                            Some(slot) => slot.1 = value,
+                            None => document.push((column.to_string(), value)),
+                        }
+                    }
+                    changed += 1;
+                }
+            }
+            Ok(changed)
+        })
+    }
+
+    fn delete<'a>(&'a self, delete: &'a DeleteIr) -> BoxFuture<'a, Result<u64, OrmError>> {
+        Box::pin(async move {
+            let mut collections = self.collections.lock().unwrap();
+            let collection = collections
+                .entry(delete.table.name.to_string())
+                .or_default();
+            let before = collection.len();
+            let mut kept = Vec::with_capacity(before);
+            for document in collection.drain(..) {
+                if !matches(&document, &delete.wheres)? {
+                    kept.push(document);
+                }
+            }
+            *collection = kept;
+            Ok((before - collection.len()) as u64)
+        })
+    }
+}
+
+/// The executor of the in-memory store.
+struct MemoryStore(Arc<Memory>);
+
+impl Executor for MemoryStore {
+    async fn target(&self, _access: Access) -> Result<Target<'_>, OrmError> {
+        Ok(Target::Document(DocumentTarget::new(self.0.clone(), None)))
+    }
+}
+
+#[tokio::test]
+async fn models_run_on_a_document_store() {
+    let store = MemoryStore(Arc::new(Memory::default()));
+    let mut acme = Company::create(
+        &store,
+        Company {
+            name: "Acme".into(),
+            employees: 5,
+            ..Company::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(acme.id, 1, "the store assigned the key");
+    for (name, employees) in [("Globex", 50), ("Initech", 15)] {
+        Company::create(
+            &store,
+            Company {
+                name: name.into(),
+                employees,
+                ..Company::default()
+            },
+        )
+        .await
+        .unwrap();
+    }
+
+    let big = Company::query()
+        .where_(Company::EMPLOYEES.gte(15))
+        .order_by_desc(Company::EMPLOYEES)
+        .get(&store)
+        .await
+        .unwrap();
+    assert_eq!(big.map(|c| c.name.clone()), ["Globex", "Initech"]);
+    assert_eq!(
+        Company::find_or_fail(&store, acme.id).await.unwrap().name,
+        "Acme"
+    );
+    assert_eq!(Company::query().count(&store).await.unwrap(), 3);
+    let page = Company::query()
+        .order_by(Company::NAME)
+        .paginate(&store, (2, 2))
+        .await
+        .unwrap();
+    assert_eq!(
+        (page.meta.total, page.data[0].name.as_str()),
+        (3, "Initech")
+    );
+
+    acme.employees = 6;
+    acme.save(&store).await.unwrap();
+    assert_eq!(
+        Company::find_or_fail(&store, acme.id)
+            .await
+            .unwrap()
+            .employees,
+        6
+    );
+    assert!(acme.delete(&store).await.unwrap());
+    assert_eq!(Company::query().count(&store).await.unwrap(), 2);
+    let names: Vec<String> = Company::query()
+        .order_by(Company::NAME)
+        .pluck(&store, Company::NAME)
+        .await
+        .unwrap();
+    assert_eq!(names, ["Globex", "Initech"]);
+
+    // What the store cannot express is refused, not guessed.
+    let error = Company::query()
+        .where_raw("1 = 1", Vec::<Value>::new())
+        .get(&store)
+        .await
+        .unwrap_err();
+    assert!(matches!(error, OrmError::Unsupported { .. }), "{error:?}");
+    assert!(Company::meta().name() == "Company");
+}

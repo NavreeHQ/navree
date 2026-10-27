@@ -1,0 +1,7 @@
+---
+source: crates/navree-orm/tests/sql/main.rs
+expression: "per_dialect(|d| compile_insert(&empty, d))"
+---
+PostgreSQL: INSERT INTO "counters" VALUES (DEFAULT)
+MySQL: INSERT INTO `counters` VALUES ()
+SQLite: INSERT INTO "counters" DEFAULT VALUES

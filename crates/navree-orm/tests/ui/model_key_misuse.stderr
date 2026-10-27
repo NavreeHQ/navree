@@ -1,0 +1,11 @@
+error: the key field cannot be an `Option`: an unset key is `0`, the nil UUID or ULID, or an empty string
+ --> tests/ui/model_key_misuse.rs:5:5
+  |
+5 |     id: Option<i64>,
+  |     ^^
+
+error: the key field cannot have a cast: use an integer, `Uuid`, `Ulid` or `String` field
+  --> tests/ui/model_key_misuse.rs:11:5
+   |
+11 |     id: Vec<u8>,
+   |     ^^

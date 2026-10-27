@@ -27,6 +27,31 @@ async fn from_config_reads_the_database_section() {
 }
 
 #[tokio::test]
+async fn the_module_db_knows_its_app_and_a_standalone_db_does_not() {
+    let temp = TempDb::new();
+    let app = Navree::app()
+        .module(DatabaseModule::for_root(temp.options()))
+        .boot()
+        .await
+        .expect("boots");
+    let db = app.ctx().get::<Db>().await.unwrap();
+    let owner = db.app().expect("the module's Db knows its app");
+    assert!(owner.get::<Db>().await.is_ok());
+
+    let standalone = Db::connect(&temp.options()).await.unwrap();
+    assert!(standalone.app().is_none());
+
+    let uow = db.uow(None, None).await;
+    assert!(
+        uow.db().app().is_some(),
+        "a unit of work reaches the app too"
+    );
+    drop(owner);
+    drop(app);
+    assert!(db.app().is_none(), "no app once it is dropped");
+}
+
+#[tokio::test]
 async fn slow_query_threshold_falls_back_to_the_log_section() {
     let temp = TempDb::new();
     let app = Navree::app()

@@ -1,0 +1,7 @@
+---
+source: crates/navree-orm/tests/sql/main.rs
+expression: "query(Company::query().shared_lock())"
+---
+PostgreSQL: SELECT "companies"."id", "companies"."name", "companies"."country" FROM "companies" FOR SHARE
+MySQL: SELECT `companies`.`id`, `companies`.`name`, `companies`.`country` FROM `companies` LOCK IN SHARE MODE
+SQLite: SELECT "companies"."id", "companies"."name", "companies"."country" FROM "companies"
