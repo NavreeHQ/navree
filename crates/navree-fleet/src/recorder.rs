@@ -4,7 +4,7 @@
 
 use std::collections::VecDeque;
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use navree_queue::AttemptOutcome;
 use navree_telemetry::{EventKind, Interest, TelemetryEvent, TelemetryRecord, TelemetrySink};
@@ -16,17 +16,31 @@ use crate::record::CompletedJob;
 pub(crate) const RECORDER_CAPACITY: usize = 10_000;
 
 /// Collects every job attempt that finishes in this process, from the
-/// queue's telemetry events. A worker drains it into its reports.
+/// queue's telemetry events, once a Fleet worker runs in the process
+/// ([`arm`](JobRecorder::arm)); a worker drains it into its reports. In
+/// other processes (the web server, a plain `queue:work`) it keeps
+/// nothing.
 #[derive(Debug, Default)]
 pub struct JobRecorder {
     buffer: Mutex<VecDeque<CompletedJob>>,
     dropped: AtomicU64,
+    armed: AtomicBool,
 }
 
 impl JobRecorder {
     /// An empty recorder.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Starts recording (a Fleet worker runs in this process).
+    pub fn arm(&self) {
+        self.armed.store(true, Ordering::SeqCst);
+    }
+
+    /// Whether it records.
+    pub fn is_armed(&self) -> bool {
+        self.armed.load(Ordering::SeqCst)
     }
 
     /// Takes every recorded attempt, oldest first.
@@ -62,6 +76,9 @@ impl TelemetrySink for JobRecorder {
     }
 
     fn record(&self, record: &TelemetryRecord) {
+        if !self.is_armed() {
+            return;
+        }
         let job = match &record.event {
             TelemetryEvent::JobProcessed(e) => CompletedJob {
                 job_id: e.job_id.clone(),
@@ -88,5 +105,68 @@ impl TelemetrySink for JobRecorder {
             _ => return,
         };
         self.push(job);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use chrono::Utc;
+    use navree_telemetry::{EventContext, JobFailed, JobProcessed};
+
+    use super::*;
+
+    fn record(event: TelemetryEvent) -> TelemetryRecord {
+        TelemetryRecord {
+            at: Utc::now(),
+            context: EventContext::default(),
+            event,
+        }
+    }
+
+    fn processed() -> TelemetryEvent {
+        TelemetryEvent::JobProcessed(JobProcessed {
+            queue: "mail".into(),
+            job_type: "mail.send".into(),
+            job_id: "j1".into(),
+            attempt: 1,
+            duration: Duration::from_millis(42),
+        })
+    }
+
+    #[test]
+    fn it_records_only_once_armed() {
+        let recorder = JobRecorder::new();
+        recorder.record(&record(processed()));
+        assert!(recorder.drain().is_empty());
+        recorder.arm();
+        recorder.record(&record(processed()));
+        recorder.record(&record(TelemetryEvent::JobFailed(JobFailed {
+            queue: "mail".into(),
+            job_type: "mail.send".into(),
+            job_id: "j2".into(),
+            attempt: 2,
+            duration: Duration::from_millis(7),
+            error: "boom".into(),
+            will_retry: true,
+        })));
+        let jobs = recorder.drain();
+        assert_eq!(jobs.len(), 2);
+        assert_eq!(jobs[0].outcome, AttemptOutcome::Succeeded);
+        assert_eq!(jobs[0].runtime_ms, 42);
+        assert_eq!(jobs[1].outcome, AttemptOutcome::Released);
+        assert!(recorder.drain().is_empty());
+    }
+
+    #[test]
+    fn a_full_buffer_drops_the_oldest() {
+        let recorder = JobRecorder::new();
+        recorder.arm();
+        for _ in 0..RECORDER_CAPACITY + 3 {
+            recorder.record(&record(processed()));
+        }
+        assert_eq!(recorder.dropped(), 3);
+        assert_eq!(recorder.drain().len(), RECORDER_CAPACITY);
     }
 }

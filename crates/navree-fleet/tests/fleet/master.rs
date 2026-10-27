@@ -514,3 +514,41 @@ async fn long_waits_raise_one_event_per_cooldown_across_masters() {
     one.stop().await;
     two.stop().await;
 }
+
+#[tokio::test]
+async fn database_errors_are_survived_and_the_workers_keep_running() {
+    let h = Harness::new(builder().config("fleet.snapshot_secs", 1)).await;
+    let master = Running::start(&h).await;
+    eventually("a worker", || async { master.spawner.running().len() == 1 }).await;
+    let db = h.app.get::<navree_db::Db>().await;
+    for table in ["fleet_state", "fleet_metrics", "fleet_jobs"] {
+        sea_orm::ConnectionTrait::execute_raw(
+            db.conn(),
+            sea_orm::Statement::from_string(db.backend(), format!("DROP TABLE {table}")),
+        )
+        .await
+        .unwrap();
+    }
+    master.spawner.report(
+        0,
+        WorkerReport::Jobs {
+            jobs: vec![CompletedJob {
+                job_id: "j".into(),
+                queue: "default".into(),
+                job_type: "test.record".into(),
+                attempt: 1,
+                outcome: AttemptOutcome::Succeeded,
+                runtime_ms: 5,
+                finished_at: h.fleet.now(),
+            }],
+        },
+    );
+    // Every tick fails to read the state, store jobs or snapshot; the
+    // master logs it and goes on.
+    tokio::time::sleep(Duration::from_millis(1500)).await;
+    assert!(!master.task.is_finished());
+    assert_eq!(master.spawner.running().len(), 1);
+    assert_eq!(master.spawner.commands(0), []);
+    let summary = master.stop().await;
+    assert_eq!(summary.jobs, 1);
+}
