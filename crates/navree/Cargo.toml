@@ -437,7 +437,7 @@ helm = [
 postgres = ["db", "navree-db/postgres"]
 ## MySQL and MariaDB driver for navree-db (`mysql://` and `mariadb://` URLs).
 mysql = ["db", "navree-db/mysql"]
-## navree-validation's `Phone`: E.164 phone numbers (the phonenumber crate).
+## navree-validation's `Phone`: E.164 phone numbers (the rlibphonenumber crate).
 ## Pure Rust; in `full`.
 validation-phone = ["validation", "navree-validation/phone"]
 ## navree-validation's `SafeHtml`: rich text sanitized by the app's
