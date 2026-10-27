@@ -1,0 +1,105 @@
+# AGENTS.md
+
+Instructions for coding agents working on {{ title }}, a Navree microservice
+from the `{{ kit }}` starter kit: a Rust service that answers messages and
+handles events over a broker (NATS), with modules wired by dependency
+injection. Read this file before changing code.
+
+## Layout
+
+```text
+Cargo.toml                         the workspace; its default member is the service
+config/app.toml                    settings shared by every environment (committed)
+.env                               this machine's secrets and Dock's settings (never committed)
+dock.toml                          local services: `navree dock up` (PostgreSQL, NATS)
+harbor.toml                        servers and deploys: `navree deploy`
+crates/{{ contracts_package }}/    the messages and events, shared with the services that call this one
+crates/{{ package }}/src/main.rs   runs the service: `serve` by default, or any other command
+crates/{{ package }}/src/app.rs    the root: the framework modules, MicroModule, the feature modules
+crates/{{ package }}/src/modules/  feature modules: invoices
+crates/{{ package }}/tests/        tests that boot the service on MicroFake, without a broker
+```
+
+## Commands
+
+Run them at the workspace root (`cargo run` runs the service there):
+
+```sh
+navree dock up                                          # PostgreSQL and NATS in containers
+navree dev                                              # handlers on NATS, health on :8080, rebuild on save
+cargo test --workspace                                  # every test; no broker needed
+cargo clippy --workspace --all-targets -- -D warnings   # must pass
+cargo fmt                                               # must leave nothing to change
+navree check                                            # validate the module graph without booting
+navree micro:patterns                                   # every message and event pattern with its access rule
+navree micro:send invoices.get '{"id":"..."}'           # send a message and print the reply
+navree micro:failed                                     # dead-lettered events (`micro:retry <id|all>`)
+navree migrate                                          # run pending migrations
+```
+
+`cargo fmt` formats the workspace's crates; `--all` would also format path
+dependencies. The generators (`navree make:module`, `make:migration`, ...) work on one
+package: run them in `crates/{{ package }}`.
+
+## Messages and events
+
+- **The contract comes first.** A new message or event starts as a type in
+  `crates/{{ contracts_package }}`: the payload (`Serialize`, `Deserialize`,
+  `garde::Validate`), the reply type, and a pattern constant
+  (`invoices.get`) or an `impl Event` whose `NAME` is the pattern
+  (`deal.won`). Services that call this one depend on the crate, so a
+  changed payload is a compile error on both sides.
+- **Handlers** are methods of an `#[injectable]` struct with a
+  `#[message_handlers]` impl block, registered in the module's `wire` with
+  `m.message_handlers::<T>()`. Copy `src/modules/invoices/handlers.rs`:
+  `#[message_pattern("x.y")]` answers `ServiceClient::send`,
+  `#[event_pattern("x.y")]` handles what `ServiceClient::emit` publishes.
+- **Deny by default.** A message pattern declares who may call it:
+  `#[public]`, `#[authenticated]`, `#[roles(..)]`, `#[permissions(..)]` or
+  `#[can(Action, Subject, from = "id")]`. The caller's bearer token travels
+  with the message and is verified with `auth.jwt.secret`, the same in
+  every service. Event patterns take no access declaration.
+- **Input.** Take `Valid(Payload(input)): Valid<Payload<T>>`; an invalid
+  message is a 400 reply, an invalid event goes straight to the dead
+  letters.
+- **Unit of work.** Take `uow: Uow` and pass `&uow` to services; it commits
+  when the handler returns `Ok`. Events emitted with `ServiceClient::emit`
+  inside it are published after the commit (the outbox), never for work
+  that rolled back.
+- **Idempotency.** An event can arrive more than once (the inbox skips a
+  repeated message id, not a repeated fact): make handlers safe to run
+  again, as `draft_for_deal` is with its one-invoice-per-deal rule.
+- **Errors.** Handlers return `Result<T>` (`AppError`): the caller gets the
+  same `{ "statusCode", "message", "error", "code" }` error as over HTTP.
+
+## Conventions
+
+- **Database.** SeaORM entities with UUID v7 ids; writes take the unit of
+  work first and go through `Repo` (audited). Migrations belong to their
+  module's `MigrationSet`; never edit one that has run anywhere, add a new
+  one.
+- **Configuration.** `config/app.toml` holds shared settings; secrets go in
+  `.env` or the environment (`APP_AUTH__JWT__SECRET`). Another broker:
+  change `micro.transport` and the `micro-*` feature in
+  `crates/{{ package }}/Cargo.toml` together; the handlers don't change.
+- **Tests.** Every change comes with tests. `tests/support/mod.rs` boots
+  the service with the committed `config/app.toml` on a fresh SQLite
+  database and `MicroFake`'s in-memory transport: send messages with
+  `micro.client().send(..)`, deliver events with `micro.client().emit(..)`,
+  and assert on what the service emitted with `micro.assert_emitted(..)`.
+
+## Before you finish
+
+Run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`
+and `cargo test --workspace`, and fix everything they report.
+
+## Documentation and skills
+
+- Docs: https://navree.com/docs/ (microservices:
+  https://navree.com/docs/microservices/introduction/; the kit:
+  https://navree.com/docs/getting-started/starter-kits/; for models:
+  https://navree.com/llms.txt).
+- Agent skills, one per common task: `navree skills:install` copies the
+  skills of this Navree version into `.claude/skills/` and
+  `.agents/skills/` (or use `npx skills add NavreeHQ/navree`).
+  Start with the `navree` and `navree-microservices` skills.

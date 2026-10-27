@@ -1,0 +1,23 @@
+[package]
+name = "{{ package }}"
+description = "The {{ package }} service: answers its messages and handles its events over NATS."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+{{ contracts_package }}.workspace = true
+chrono.workspace = true
+garde.workspace = true
+# The default modules (`full`), MicroModule with NATS, and PostgreSQL.
+# Another broker: swap `micro-nats` for `micro-kafka`, `micro-rabbitmq`,
+# `micro-redis` or `micro-mqtt`, and set `micro.transport` to match.
+navree = { workspace = true, features = [{{ navree_features }}] }
+sea-orm.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true

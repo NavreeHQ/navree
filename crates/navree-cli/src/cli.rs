@@ -5,6 +5,7 @@ use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand};
 
+pub use crate::kits::Kit;
 use crate::make::MakeKind;
 pub use crate::new_app::Ui;
 
@@ -142,12 +143,18 @@ impl Command {
     }
 }
 
-/// `navree new <name> [--ui next|none] [--navree-path <path>]`.
+/// `navree new <name> [--kit saas|api|micro] [--ui next|none] [--navree-path <path>]`.
 #[derive(Debug, Args)]
 pub struct NewArgs {
     /// The app (package) name: lower-case letters, digits, `-` and `_`.
     pub name: String,
-    /// The front end to create next to the API.
+    /// A starter kit: `saas` (API and Next.js front end), `api` (the API
+    /// alone) or `micro` (a microservice); default: the minimal app.
+    #[arg(long, value_enum, value_name = "KIT")]
+    pub kit: Option<Kit>,
+    /// The front end to create next to the API. With a kit, only `saas`
+    /// has one, and it is Next.js (`--kit saas --ui next` is the same as
+    /// `--kit saas`).
     #[arg(long, value_enum, default_value_t = Ui::None)]
     pub ui: Ui,
     /// A local navree checkout (the repository or its crates/navree) to depend
@@ -387,6 +394,35 @@ mod tests {
             panic!("expected new");
         };
         assert_eq!(args.ui, Ui::None);
+        assert_eq!(args.kit, None);
+    }
+
+    #[test]
+    fn new_with_a_kit() {
+        for (flag, kit) in [
+            ("saas", Kit::Saas),
+            ("api", Kit::Api),
+            ("micro", Kit::Micro),
+        ] {
+            let Command::New(args) = parse(&["new", "acme", "--kit", flag]) else {
+                panic!("expected new");
+            };
+            assert_eq!(args.kit, Some(kit));
+        }
+        let Command::New(args) = parse(&["new", "acme", "--kit=saas", "--navree-path", ".."])
+        else {
+            panic!("expected new");
+        };
+        assert_eq!(args.kit, Some(Kit::Saas));
+        assert!(args.navree_path.is_some());
+        // The SaaS kit's front end is Next.js; `create_app` refuses a
+        // front end for the other kits.
+        let Command::New(args) = parse(&["new", "acme", "--kit", "saas", "--ui", "next"]) else {
+            panic!("expected new");
+        };
+        assert_eq!((args.kit, args.ui), (Some(Kit::Saas), Ui::Next));
+        let error = Cli::try_parse_from(["navree", "new", "acme", "--kit", "crm"]).unwrap_err();
+        assert_eq!(error.kind(), clap::error::ErrorKind::InvalidValue);
     }
 
     #[test]

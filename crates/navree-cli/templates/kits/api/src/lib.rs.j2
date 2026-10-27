@@ -1,0 +1,15 @@
+//! {{ title }}: a multi-tenant Navree app from the `{{ kit }}` starter kit.
+//!
+//! [`app`] assembles the root module: [`platform`] (the framework modules,
+//! configured once) and the kit's feature modules in `src/modules/`.
+//! `src/main.rs` runs it and the tests in `tests/` boot it.
+
+pub mod abilities;
+pub mod modules;
+pub mod seed;
+
+mod app;
+mod platform;
+
+pub use app::app;
+pub use platform::platform;

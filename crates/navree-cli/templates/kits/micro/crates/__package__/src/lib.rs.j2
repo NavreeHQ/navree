@@ -1,0 +1,13 @@
+//! {{ title }}: a Navree microservice from the `{{ kit }}` starter kit.
+//!
+//! [`app`] assembles the root module: the framework modules the service
+//! needs, [`MicroModule`](navree::micro::MicroModule) on the transport in
+//! `config/app.toml`, and the feature modules in `src/modules/`.
+//! `src/main.rs` runs it and the tests in `tests/` boot it with
+//! `MicroFake`'s in-memory transport.
+
+pub mod modules;
+
+mod app;
+
+pub use app::app;

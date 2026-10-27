@@ -11,6 +11,7 @@
 //! | Command | What it does |
 //! |---|---|
 //! | `navree new <name> [--ui next\|none] [--navree-path <path>]` | A new app ([`new_app`]) |
+//! | `navree new <name> --kit saas\|api\|micro` | A new app from a starter kit ([`kits`]) |
 //! | `navree make:module <name> [--crud] [--path src/modules]` | A feature module, wired into the app ([`make::make_module`]) |
 //! | `navree make:<kind> <module> <name>` | A controller, service, entity, migration, job, event, listener, mail, notification, policy, command, test or MCP server in a module ([`make::make_item`]) |
 //! | `navree make:resource <module> <Entity> [--path src/modules]` | A Helm admin-panel resource for an entity, registered with its module ([`resource::make_resource`]) |
@@ -45,6 +46,7 @@ pub mod dock;
 pub mod edit;
 pub mod forward;
 pub mod gate;
+pub mod kits;
 pub mod make;
 pub mod names;
 pub mod new_app;

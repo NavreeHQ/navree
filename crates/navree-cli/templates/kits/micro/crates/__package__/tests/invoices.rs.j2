@@ -1,0 +1,152 @@
+//! The invoices handlers, called through `MicroFake`'s in-memory transport:
+//! the same pipeline as over NATS (authentication, validation, the unit of
+//! work, the outbox), without a broker.
+
+mod support;
+
+use navree::auth::JwtService;
+use navree::events::Event;
+use navree::micro::MicroFake;
+use navree::testing::principal;
+use support::boot;
+use uuid::Uuid;
+
+use {{ contracts_crate }}::{DealWon, GET_INVOICE, GetInvoice};
+use {{ contracts_crate }}::{Invoice, InvoiceDrafted, InvoiceStatus};
+
+fn deal_won(deal_id: Uuid) -> DealWon {
+    DealWon {
+        deal_id,
+        amount_cents: 129_900,
+        currency: "eur".into(),
+    }
+}
+
+/// Delivers `deal.won` for `deal_id` and returns the id of the invoice
+/// drafted for it.
+async fn win(micro: &MicroFake, deal_id: Uuid) -> Uuid {
+    micro
+        .client()
+        .emit(DealWon::NAME, &deal_won(deal_id))
+        .await
+        .expect("the event is delivered");
+    micro
+        .emitted::<InvoiceDrafted>(InvoiceDrafted::NAME)
+        .into_iter()
+        .find(|drafted| drafted.deal_id == deal_id)
+        .expect("invoice.drafted is published")
+        .invoice_id
+}
+
+#[tokio::test]
+async fn a_won_deal_gets_one_draft_invoice() {
+    let micro = MicroFake::new();
+    let (app, _guard) = boot(&micro).await;
+    let deal = Uuid::now_v7();
+
+    let invoice_id = win(&micro, deal).await;
+    // The event was published after the invoice committed, keyed by deal.
+    micro.assert_emitted(InvoiceDrafted::NAME, |drafted: &InvoiceDrafted| {
+        drafted.deal_id == deal && drafted.amount_cents == 129_900 && drafted.currency == "EUR"
+    });
+    let event = &micro.emitted_envelopes(InvoiceDrafted::NAME)[0];
+    assert_eq!(event.key(), Some(deal.to_string().as_str()));
+
+    // The same deal won again (a new message, not a redelivery) changes
+    // nothing: one invoice per deal.
+    assert_eq!(win(&micro, deal).await, invoice_id);
+    micro.assert_emitted_times(InvoiceDrafted::NAME, 1);
+    assert!(micro.dead_letters().is_empty());
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn a_signed_in_caller_reads_an_invoice() {
+    let micro = MicroFake::new();
+    let (app, _guard) = boot(&micro).await;
+    let deal = Uuid::now_v7();
+    let id = win(&micro, deal).await;
+
+    let invoice: Invoice = micro
+        .client()
+        .acting_as(principal(Uuid::now_v7()))
+        .send(GET_INVOICE, &GetInvoice { id })
+        .await
+        .expect("the invoice");
+    assert_eq!(invoice.id, id);
+    assert_eq!(invoice.deal_id, deal);
+    assert_eq!(invoice.amount_cents, 129_900);
+    assert_eq!(invoice.currency, "EUR");
+    assert_eq!(invoice.status, InvoiceStatus::Draft);
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn forwarded_tokens_are_verified() {
+    let micro = MicroFake::new();
+    let (app, _guard) = boot(&micro).await;
+    let id = win(&micro, Uuid::now_v7()).await;
+
+    // A token signed with this deployment's key, as the calling service
+    // forwards it.
+    let token = app
+        .get::<JwtService>()
+        .await
+        .sign_access(Uuid::now_v7())
+        .expect("a token");
+    let invoice: Invoice = micro
+        .client()
+        .send(GET_INVOICE, &GetInvoice { id })
+        .bearer(token)
+        .await
+        .expect("the invoice");
+    assert_eq!(invoice.id, id);
+
+    // No credentials, or a token nobody here signed: 401.
+    micro
+        .client()
+        .request(GET_INVOICE, &GetInvoice { id })
+        .await
+        .assert_status(401);
+    let forged = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.c2lnbmF0dXJl";
+    let refused = micro
+        .client()
+        .send::<_, Invoice>(GET_INVOICE, &GetInvoice { id })
+        .bearer(forged)
+        .await;
+    assert!(refused.is_err(), "{refused:?}");
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn an_unknown_invoice_is_a_404() {
+    let micro = MicroFake::new();
+    let (app, _guard) = boot(&micro).await;
+    micro
+        .client()
+        .acting_as(principal(Uuid::now_v7()))
+        .request(GET_INVOICE, &GetInvoice { id: Uuid::now_v7() })
+        .await
+        .assert_status(404);
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn an_invalid_event_is_dead_lettered() {
+    let micro = MicroFake::new();
+    let (app, _guard) = boot(&micro).await;
+    micro
+        .client()
+        .emit(
+            DealWon::NAME,
+            &DealWon {
+                currency: "euros".into(),
+                ..deal_won(Uuid::now_v7())
+            },
+        )
+        .await
+        .expect("the event is delivered");
+    assert_eq!(micro.dead_letters().len(), 1);
+    micro.assert_emitted_times(InvoiceDrafted::NAME, 0);
+    app.shutdown().await.unwrap();
+}

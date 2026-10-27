@@ -1,0 +1,41 @@
+//! Booting the whole service for a test, on a fresh database and
+//! `MicroFake`'s in-memory transport: no broker, no PostgreSQL.
+
+#![allow(dead_code)]
+
+use std::sync::Arc;
+
+use navree::config::ConfigSources;
+use navree::crypto::generate_key;
+use navree::micro::{MicroFake, MicroOptions};
+use navree::testing::{TempDirGuard, TestApp, temp_sqlite_url};
+
+/// The committed `config/app.toml` (at the workspace root), with hermetic
+/// overrides: no `.env`, a fresh SQLite database, no metrics.
+pub fn sources() -> (ConfigSources, TempDirGuard) {
+    let (url, guard) = temp_sqlite_url();
+    let sources = ConfigSources::new()
+        .file(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../config/app.toml"
+        ))
+        .set("app.key", generate_key())
+        .set("database.url", url)
+        .set("database.migrate_on_boot", true)
+        .set("observe.metrics", false);
+    (sources, guard)
+}
+
+/// The booted service, with `micro` in place of the configured broker:
+/// `micro.client()` sends into its handlers, and `micro` records what it
+/// sends and emits.
+pub async fn boot(micro: &MicroFake) -> (TestApp, TempDirGuard) {
+    let (sources, guard) = sources();
+    let options = Arc::new(MicroOptions {
+        service: "{{ package }}".into(),
+        ..MicroOptions::from(micro.transport())
+    });
+    let builder = {{ crate_name }}::app(sources).override_value(options);
+    let app = TestApp::from_builder(builder).await;
+    (app, guard)
+}
