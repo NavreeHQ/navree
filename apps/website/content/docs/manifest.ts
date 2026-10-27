@@ -183,6 +183,7 @@ export const sections: DocsSection[] = [
       "search",
       "billing",
       "feature-flags",
+      "settings",
       "oauth-server",
       "social-sign-in",
       "webhooks",

@@ -63,7 +63,7 @@ open source and free, documented on the
   Navigator (the MCP server for your coding agent).
 - **Packages:** search, the AI SDK, MCP servers, microservices, gRPC,
   GraphQL, an OAuth 2.1 server, social sign-in, billing, feature flags,
-  webhooks, localization and browser testing.
+  settings with inheritance, webhooks, localization and browser testing.
 - **Starter kits:** `navree new <name> --kit saas|api|micro`.
 - **Agent skills** for every common task, in [`skills/`](skills/).
 
@@ -109,7 +109,7 @@ each test run.
 L9+ apps/crm-api (Navree app)                   apps/crm-web (Next.js 16)
 L8  navree (facade: re-exports + prelude)       navree-cli (binary `navree`; no runtime navree deps, uses navree-dock and navree-harbor)
 L7  navree-billing  navree-search  navree-lighthouse  navree-logbook  navree-fleet  navree-helm (packages built on other packages)
-L6  navree-social  navree-webhooks  navree-oauth  navree-flags  navree-graphql  navree-grpc  navree-mcp  navree-ai  navree-micro (ecosystem libraries)
+L6  navree-social  navree-webhooks  navree-oauth  navree-flags  navree-settings  navree-graphql  navree-grpc  navree-mcp  navree-ai  navree-micro (ecosystem libraries)
 L5  navree-auth  navree-workspace  navree-redis
 L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify  navree-ui  navree-orm
 L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage
@@ -159,6 +159,7 @@ L0  navree-kernel                                navree-macros  navree-orm-macro
 | L6 | `navree-webhooks` | Webhooks: signed outgoing deliveries with queue-backed retries and a delivery log, verified incoming webhooks (Stripe, GitHub, Paddle, Standard Webhooks) |
 | L6 | `navree-oauth` | OAuth 2.1 and OpenID Connect provider: PKCE, client credentials, device and refresh grants, scopes mapped to permissions, personal access tokens (facade feature `oauth`, opt-in) |
 | L6 | `navree-flags` | Feature flags: `#[flag]` types, checks per user, workspace, plan or percentage with stable hashing, a kill switch, `#[requires_flag]` routes, database storage with a cache (facade feature `flags`, opt-in) |
+| L6 | `navree-settings` | Typed settings: `#[derive(Settings)]` types stored per global, organization, workspace or user level and inherited field by field, with the source of every value; validated, audited and cached writes, `GET`/`PATCH /api/settings/{key}`, the `Setting<T>` extractor, `settings:*` commands, a Helm screen and `SettingsFake` (facade feature `settings`, in `full`) |
 | L6 | `navree-graphql` | GraphQL on async-graphql: `#[resolver]` fields in modules with route-style access, per-request dataloaders, subscriptions over WebSockets, GraphiQL, `graphql:schema` (facade feature `graphql`, opt-in) |
 | L6 | `navree-grpc` | gRPC on tonic: `#[grpc_service]` services in modules with DI, guards, access rules and the unit of work; gRPC-Web, Connect, health, reflection, named client channels (facade feature `grpc`, opt-in) |
 | L6 | `navree-mcp` | MCP servers: `#[mcp_server]` tools, resources and prompts over streamable HTTP at `/mcp` and stdio (`mcp:serve`), behind the app's authenticators and per-tool access checks (opt-in facade feature `mcp`) |

@@ -103,6 +103,28 @@ impl Controller for HelmController {
                 .name("helm.delete"),
             ),
             view(RouteDef::on(Method::GET, at("/pages/{page}"), ui::custom_page).name("helm.page")),
+            // The Settings screens (feature `settings`).
+            #[cfg(feature = "settings")]
+            view(RouteDef::on(Method::GET, at("/settings"), ui::settings::index).name("helm.settings")),
+            #[cfg(feature = "settings")]
+            view(
+                RouteDef::on(Method::GET, at("/settings/{key}"), ui::settings::show)
+                    .name("helm.settings.show"),
+            ),
+            #[cfg(feature = "settings")]
+            view(
+                RouteDef::on(Method::POST, at("/settings/{key}"), ui::settings::save)
+                    .name("helm.settings.save"),
+            ),
+            #[cfg(feature = "settings")]
+            view(
+                RouteDef::on(
+                    Method::POST,
+                    at("/settings/{key}/inherit"),
+                    ui::settings::inherit,
+                )
+                .name("helm.settings.inherit"),
+            ),
             // The JSON API.
             view(
                 RouteDef::on(Method::GET, at("/api/resources"), api::index)
