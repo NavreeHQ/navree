@@ -377,6 +377,59 @@ pub async fn validate_in<T: Validate<Context = ()>>(
     }
 }
 
+/// Deserializes `input` into `T` and runs its garde rules: the checks
+/// [`Valid<Json<T>>`](Valid) runs on a request body, for JSON that arrives
+/// some other way (MCP tool arguments, agent tool calls, queued payloads).
+///
+/// Failures are the same 400 errors, with field errors at their serde path
+/// (`"title should not be empty"`) and garde messages, from the app's
+/// [`Messages`] when `ctx` has them (the defaults otherwise).
+///
+/// ```
+/// use garde::Validate;
+/// use navree_validation::validate_value;
+/// use serde::Deserialize;
+/// use serde_json::json;
+///
+/// #[derive(Deserialize, Validate)]
+/// struct LogCall {
+///     #[garde(length(min = 1, max = 200))]
+///     subject: String,
+/// }
+///
+/// # tokio_test(async {
+/// let call: LogCall = validate_value(json!({ "subject": "Budget approved" }), None).await.unwrap();
+/// assert_eq!(call.subject, "Budget approved");
+///
+/// let error = validate_value::<LogCall>(json!({ "subject": "" }), None).await.err().unwrap();
+/// assert_eq!(error.status, 400);
+/// assert!(error.body()["errors"]["subject"].is_array());
+/// # });
+/// # fn tokio_test(f: impl std::future::Future<Output = ()>) {
+/// #     tokio::runtime::Builder::new_current_thread().build().unwrap().block_on(f)
+/// # }
+/// ```
+pub async fn validate_value<T>(input: Value, ctx: Option<&AppContext>) -> Result<T, AppError>
+where
+    T: DeserializeOwned + Validate<Context = ()>,
+{
+    let value = match serde_path_to_error::deserialize::<_, T>(&input) {
+        Ok(value) => value,
+        Err(error) => {
+            let failure = failure::from_serde(error.path(), &error.inner().to_string());
+            return Err(Invalid::new(vec![failure], Some(input), "body")
+                .reject(ctx)
+                .await);
+        }
+    };
+    if let Err(failures) = check(&value) {
+        return Err(Invalid::new(failures, Some(input), "body")
+            .reject(ctx)
+            .await);
+    }
+    Ok(value)
+}
+
 /// Runs the garde rules of `value`.
 pub(crate) fn check<T: Validate<Context = ()>>(value: &T) -> Result<(), Vec<Failure>> {
     failure::scope(|| value.validate_with(&())).map_err(failure::from_report)

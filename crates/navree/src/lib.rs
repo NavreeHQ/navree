@@ -42,9 +42,10 @@
 //! | `grpc` | navree-grpc | `grpc` (opt-in) | `GrpcModule`: tonic services with gRPC-Web, Connect, health and reflection |
 //! | `billing` | navree-billing | `billing` (opt-in) | `BillingModule`: subscriptions, trials, usage, invoices with Stripe or Paddle |
 //! | `dock` | navree-dock | `dock` (opt-in) | Dock's `dock.toml`, the services' settings and the Compose file |
+//! | `mcp` | navree-mcp | `mcp` (opt-in) | `McpModule`: MCP servers over streamable HTTP and stdio, with `#[mcp_server]` |
 //!
 //! `full` (the default) turns on every module except the opt-in ones
-//! (`social`, `oauth`, `flags`, `graphql`, `grpc`, `billing`, `dock`, `otel`). A feature also turns on the features of the crates its crate
+//! (`social`, `oauth`, `flags`, `graphql`, `grpc`, `billing`, `mcp`, `dock`, `otel`). A feature also turns on the features of the crates its crate
 //! builds on (`auth` turns on `access`, `db`, `http`, ...). The `postgres` feature adds
 //! navree-db's PostgreSQL driver, and the opt-in `otel` feature adds
 //! navree-observe's OTLP span exporter. `axum` is re-exported with `http`. `dock`
@@ -202,6 +203,15 @@ pub mod flags {
     pub use navree_flags::*;
     /// `#[flag]`: a feature flag as a unit struct (see navree-macros).
     pub use navree_macros::flag;
+}
+
+// L6 (ecosystem)
+/// MCP servers: navree-mcp, plus the `#[mcp_server]` attribute and the
+/// `#[mcp_tool]`, `#[mcp_resource]` and `#[mcp_prompt]` markers it consumes.
+#[cfg(feature = "mcp")]
+pub mod mcp {
+    pub use navree_macros::{mcp_prompt, mcp_resource, mcp_server, mcp_tool};
+    pub use navree_mcp::*;
 }
 
 // L7

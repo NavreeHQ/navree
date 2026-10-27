@@ -380,10 +380,33 @@ impl ErrorMapper {
         }
     }
 
-    /// Applies the first matching mapper to `error`'s source chain (what the
-    /// pipeline does to every 500 before rendering it; other protocols, such
-    /// as navree-grpc, map their errors the same way). `None` when no mapper
-    /// matches.
+    /// Applies the first matching mapper to `error`'s source chain; `None`
+    /// when no mapper matches. The HTTP pipeline does this for every 500
+    /// with a source; other protocols (navree-grpc) and code that reports
+    /// errors outside a response (MCP tool results, for example) collect the
+    /// app's mappers with `ctx.contributions::<ErrorMapper>()` and call it
+    /// too.
+    ///
+    /// ```
+    /// use http::StatusCode;
+    /// use navree_http::{AppError, ErrorMapper};
+    ///
+    /// #[derive(Debug)]
+    /// struct Missing;
+    ///
+    /// impl std::fmt::Display for Missing {
+    ///     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    ///         f.write_str("missing")
+    ///     }
+    /// }
+    ///
+    /// impl std::error::Error for Missing {}
+    ///
+    /// let mappers = [ErrorMapper::new(|_: &Missing| Some(AppError::not_found()))];
+    /// let mapped = ErrorMapper::apply(&mappers, &AppError::internal(Missing)).unwrap();
+    /// assert_eq!(mapped.status, StatusCode::NOT_FOUND);
+    /// assert!(ErrorMapper::apply(&mappers, &AppError::internal("other")).is_none());
+    /// ```
     pub fn apply(mappers: &[ErrorMapper], error: &AppError) -> Option<AppError> {
         error
             .source

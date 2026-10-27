@@ -1,18 +1,17 @@
 ---
 title: "MCP servers"
 description: "Expose your app's tools, resources and prompts to Claude, ChatGPT, Cursor and any MCP client, over streamable HTTP or stdio, with Navree auth or OAuth and per-tool permissions."
-status: "planned"
 ---
 
 ## Introduction
 
 <Badge feature="mcp" /> The [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) is how AI clients reach outside themselves. With an MCP server in your app, a sales rep can ask Claude "Log a call with Dana on the Acme deal: she approved the budget" and the call lands in your CRM, written by your own service, checked by your own access rules and recorded in your audit log.
 
-`navree-mcp` turns methods on your services into an MCP server:
+`navree-mcp` turns methods on your services into an MCP server. It is built on the official Rust MCP SDK ([rmcp](https://docs.rs/rmcp)), behind Navree's own macros:
 
 ```rust
 #[mcp_server]
-impl CrmMcp {
+impl DealsMcp {
     /// Lists the deals the user can see, newest first.
     #[mcp_tool(read_only)]
     #[can(Read, Deal)]
@@ -40,14 +39,15 @@ This page is about the MCP server your **product** offers its users. [Navigator]
 
 ## Installation
 
-Turn on the `mcp` feature:
+Turn on the `mcp` feature. It is opt-in: `full` (the default) doesn't include it, so name it next to the defaults. Tool and prompt arguments derive utoipa's `ToSchema`, so add utoipa too:
 
 ```toml title="Cargo.toml"
 [dependencies]
 navree = { git = "https://github.com/NavreeHQ/navree", features = ["mcp"] }
+utoipa = { version = "6", features = ["chrono", "uuid"] }
 ```
 
-Add `McpModule` after the HTTP and auth modules:
+Add `McpModule` to the app, next to the HTTP and auth modules:
 
 ```rust title="src/app.rs"
 use navree::prelude::*;
@@ -66,7 +66,7 @@ pub fn app(sources: ConfigSources) -> AppBuilder {
 }
 ```
 
-`McpModule` needs `HttpModule` for the HTTP transport and an authenticator, usually [`AuthModule`](/docs/security/authentication/), because the endpoint is never public as a whole. Per-tool checks with `#[can]`, `#[permissions]` and `#[roles]` use [`AccessModule`](/docs/security/authorization/), like routes do.
+`McpModule` needs `HttpModule` for the HTTP transport and an authenticator, usually [`AuthModule`](/docs/security/authentication/), because the endpoint is never public as a whole. Items that declare roles, permissions or abilities need [`AccessModule`](/docs/security/authorization/), like routes do: without it the boot fails, naming the first such item. Tools that write need `DatabaseModule`, because each call runs in its own unit of work. With `CacheModule`, sessions are kept in the cache.
 
 ## Configuration
 
@@ -84,38 +84,39 @@ auth = "bearer"
 | Key | Default | Meaning |
 |---|---|---|
 | `mcp.path` | `/mcp` | Where the HTTP transport is served. Absolute: no API prefix, no version. |
-| `mcp.name` | the package name | The server name clients show. |
+| `mcp.name` | `app.name`, else the executable's name | The server name clients show. |
 | `mcp.title` | `mcp.name` | A display title. |
-| `mcp.version` | the package version | The server version clients see. |
+| `mcp.version` | `app.version`, else `0.0.0` | The server version clients see. |
 | `mcp.instructions` | none | Text the client gives the model about your server: what it is for and how its data is shaped. |
 | `mcp.auth` | `bearer` | `bearer` or `oauth`. See [authentication](#authentication). |
-| `mcp.allowed_origins` | `[]` | Browser origins allowed to call the endpoint. Requests with any other `Origin` header get a 403. |
+| `mcp.allowed_origins` | `[]` | Browser origins allowed to call the endpoint. Requests with any other `Origin` header get a 403; requests without one (MCP clients aren't browsers) pass. A list, or a comma-separated string. |
 | `mcp.session_ttl_secs` | `3600` | How long an idle session lives. |
-| `mcp.max_request_bytes` | `1048576` | The largest JSON-RPC message accepted. |
+| `mcp.max_request_bytes` | `1048576` | The largest JSON-RPC message accepted; a larger one gets a 413. |
+| `mcp.oauth.resource` | `app.url` + `mcp.path` | With `auth = "oauth"`: the resource identifier clients request tokens for. |
+| `mcp.oauth.authorization_servers` | `[app.url]` | With `auth = "oauth"`: the issuers that grant tokens for it. |
+| `mcp.oauth.scopes` | the names of `oauth.scopes`, else `[]` | With `auth = "oauth"`: the scopes listed as `scopes_supported`. By default, the scopes of your app's [OAuth server](/docs/packages/oauth-server/). |
 
-From the environment: `APP_MCP__AUTH=oauth`, `APP_MCP__ALLOWED_ORIGINS=https://crm.example.com`. In code, `McpModule::for_root(McpOptions { name: "navree-crm".into(), ..McpOptions::default() })`.
+Invalid values fail the boot, naming the key. From the environment: `APP_MCP__AUTH=oauth`, `APP_MCP__ALLOWED_ORIGINS=https://crm.example.com,https://admin.example.com`. In code, `McpModule::for_root(McpOptions { name: Some("navree-crm".into()), ..McpOptions::default() })`. The resolved settings are the `McpSettings` provider.
 
 ## Defining a server
 
 An MCP server is an `#[injectable]` struct whose `impl` block is marked `#[mcp_server]`. Its methods marked `#[mcp_tool]`, `#[mcp_resource]` and `#[mcp_prompt]` become what the server offers, the way `#[controller]` turns methods into routes:
 
 ```rust title="crates/crm-deals/src/mcp.rs"
-use crm_activities::{ActivityResource, ActivityService, CreateActivity};
-use crm_core::{Activity, Deal, Move, SubjectType};
+use crm_core::{Deal, Move};
 use navree::mcp::{McpContext, PromptMessage, mcp_server};
 use navree::prelude::*;
 
 use crate::{DealBoard, DealFilter, DealResource, DealService, MoveDeal};
 
-/// The CRM's MCP server: deals and their activity.
+/// The deals part of the CRM's MCP server.
 #[injectable]
-pub struct CrmMcp {
+pub struct DealsMcp {
     deals: Arc<DealService>,
-    activities: Arc<ActivityService>,
 }
 
 #[mcp_server]
-impl CrmMcp {
+impl DealsMcp {
     /// Lists the deals the user can see, newest first, optionally only one stage
     /// or the user's own. Returns at most 25.
     #[mcp_tool(read_only)]
@@ -129,27 +130,6 @@ impl CrmMcp {
         };
         let page = PageQuery { per_page: 25, ..PageQuery::default() };
         Ok(self.deals.list(cx.uow(), cx.accessible::<Deal, Read>(), filter, page).await?.data)
-    }
-
-    /// Logs a call, email, meeting or note on a deal, or adds a task with a due date.
-    #[mcp_tool]
-    #[can(Create, Activity)]
-    async fn log_activity(&self, cx: &McpContext, args: LogActivity) -> Result<ActivityResource> {
-        self.activities
-            .create(
-                cx.uow(),
-                cx.access(),
-                CreateActivity {
-                    kind: args.kind,
-                    subject: args.subject,
-                    body: args.body,
-                    due_at: args.due_at,
-                    subject_type: SubjectType::Deal,
-                    subject_id: args.deal_id,
-                    assignee_id: None,
-                },
-            )
-            .await
     }
 
     /// Moves a deal to another stage. Moving to `lost` needs a reason.
@@ -171,27 +151,62 @@ impl CrmMcp {
 }
 ```
 
-Register it in its module. Servers registered by several modules merge into the app's one endpoint, so each feature module contributes its own tools:
+Register it in its module. Servers registered by several modules merge into the app's one endpoint, so each feature module contributes its own tools. The activities module adds `log_activity` the same way:
 
 ```rust title="crates/crm-deals/src/lib.rs"
 impl DealsModule {
     fn wire(&self, m: &mut ModuleBuilder) {
         // ...
-        m.mcp_server::<CrmMcp>();
+        m.mcp_server::<DealsMcp>();
     }
 }
 ```
 
-Two tools, resources or prompts with the same name fail the boot, naming both modules. `navree make:mcp deals crm` generates a server with one tool and registers it at the module's `// navree:wire` marker.
+```rust title="crates/crm-activities/src/mcp.rs"
+/// The activities part of the CRM's MCP server.
+#[injectable]
+pub struct ActivitiesMcp {
+    activities: Arc<ActivityService>,
+}
+
+#[mcp_server]
+impl ActivitiesMcp {
+    /// Logs a call, email, meeting or note on a deal, or adds a task with a due date.
+    #[mcp_tool]
+    #[can(Create, Activity)]
+    async fn log_activity(&self, cx: &McpContext, args: LogActivity) -> Result<ActivityResource> {
+        self.activities
+            .create(
+                cx.uow(),
+                cx.access(),
+                CreateActivity {
+                    kind: args.kind,
+                    subject: args.subject,
+                    body: args.body,
+                    due_at: args.due_at,
+                    subject_type: SubjectType::Deal,
+                    subject_id: args.deal_id,
+                    assignee_id: None,
+                },
+            )
+            .await
+    }
+}
+```
+
+`m.mcp_server::<S>()` registers `S` as a provider of the module (its `Arc<T>` fields are injected) and offers its items. Two tools, resources or prompts with the same name fail the boot, naming both modules. An access attribute on the `impl` block applies to every item that has none of its own.
+
+`navree make:mcp deals crm` generates `mcp/crm.rs` in the deals module, a `CrmMcp` server with one tool (`crm_echo`), and registers it at the module's `// navree:wire` marker. It then prints what it leaves to you: the `mcp` feature, utoipa and `McpModule`.
 
 ## Tools
 
-A tool method takes `&self`, the `&McpContext` and one arguments value, and returns a `Result` of anything that serializes.
+A tool method takes `&self`, optionally the `&McpContext`, at most one arguments value and, with a `from` check, the record it loaded, and returns a `Result` of anything that serializes.
 
 - **Description.** The method's doc comment is the tool's description, which is how the model decides to call it. Say what it does, what it returns and its limits.
-- **Name.** The method name (`list_deals`). Set another with `#[mcp_tool(name = "deals_list")]`, and a display name with `title = "List deals"`.
-- **Arguments** are one struct deriving `Deserialize`, `ToSchema` and `garde::Validate`, like a [validated request body](/docs/basics/validation/). The tool's input schema comes from `ToSchema`, with field doc comments as descriptions. Invalid arguments never reach your method: the client gets the field messages as the tool's error.
-- **Results** are sent as structured content (the JSON of your value) and as text, for clients that read only text.
+- **Name.** The method name (`list_deals`). Set another with `#[mcp_tool(name = "deals_list")]`, and a display name with `title = "List deals"`. A name is 1 to 128 letters, digits, `_`, `-` or `.`; anything else doesn't compile.
+- **Arguments** are one struct deriving `Deserialize`, `ToSchema` and `garde::Validate`, like a [validated request body](/docs/basics/validation/). The tool's input schema comes from `ToSchema`, with field doc comments as descriptions; a tool without arguments has an empty object schema. Invalid arguments never reach your method: the client gets a tool error with the field messages (a 400 body).
+- **Records.** `#[can(Update, Deal, from = "deal_id")]` loads the record whose id is the `deal_id` argument and checks the action on it before the method runs, as `from = "id"` does on a route; the method takes it as an `Authorized<Deal, Update>` parameter. A missing id is a 400, a record that doesn't exist a 404 and a refusal a 403, all in the tool result. Inside a method, `cx.authorize::<E, A>(id)` does the same for any id, as `move_deal` does above.
+- **Results.** A value that serializes to a JSON object is sent as structured content and as its JSON text. A `String` is sent as plain text. Any other value (a list, a number) is sent as JSON text, with structured content `{"result": <value>}`, since MCP's structured content is always an object.
 
 ```rust title="crates/crm-deals/src/mcp.rs"
 #[derive(Debug, Deserialize, ToSchema, Validate)]
@@ -222,21 +237,21 @@ MCP clients use hints to decide what to confirm with the user. Set them on the a
 | `#[mcp_tool(idempotent)]` | `idempotentHint: true` | Calling it twice with the same arguments does no more than once. |
 | `#[mcp_tool(open_world)]` | `openWorldHint: true` | Reaches outside your app, such as sending mail. |
 
-A tool without `read_only` is treated as a write by clients. Hints describe the tool to the client; they don't replace access checks.
+Every tool sends all four hints, `false` unless set. A tool without `read_only` is treated as a write by clients. Hints describe the tool to the client; they don't replace access checks.
 
 ### Errors
 
-A tool that returns `Err` answers with a tool result marked `isError`, whose text is Navree's error body, so the model can read it and recover:
+A tool that returns `Err` answers with a tool result marked `isError`, whose text (and structured content) is Navree's error body, so the model can read it and recover:
 
 ```json title="Tool result"
 {"statusCode": 403, "message": "Forbidden", "error": "Forbidden"}
 ```
 
-Server errors (5xx) read `"Internal server error"`; their details go to the log with the request id. Protocol problems, such as an unknown tool name or a malformed message, are JSON-RPC errors.
+The app's error mappers apply, as they do on a response. Server errors (5xx) read `"Internal server error"`; their details go to the log with the request id. Protocol problems are JSON-RPC errors: an unknown tool (or one the user may not see) is `-32602` `Unknown tool: <name>`, and a malformed message is refused by the SDK. Failed resource reads and prompts are JSON-RPC errors too, with Navree's error body as `data`: a 404 is `-32002` (resource not found), a 400 is `-32602` (invalid params) and anything else `-32603`.
 
 ### Long-running tools
 
-`cx.progress(done, total, message)` sends progress notifications when the client asked for them, and the call keeps the HTTP response open as an SSE stream until it finishes. Anything longer than a minute belongs in a [queued job](/docs/digging-deeper/queues/): start it, return its id, and offer a tool or resource that reports its status.
+`cx.progress(done, total, message)` (`f64`, `Option<f64>`, text) sends a progress notification when the client asked for them with a progress token, and does nothing otherwise (`cx.wants_progress()` tells you which). Over HTTP, the first notification turns the response into an SSE stream that carries the notifications and then the result. Anything longer than a minute belongs in a [queued job](/docs/digging-deeper/queues/): start it, return its id, and offer a tool or resource that reports its status.
 
 ## Resources
 
@@ -244,7 +259,7 @@ A resource is data a client can read by URI, show to the user and attach to a co
 
 ```rust title="crates/crm-deals/src/mcp.rs"
 #[mcp_server]
-impl CrmMcp {
+impl DealsMcp {
     // ...
 
     /// A deal with its company, contact, owner, stage and amount.
@@ -263,9 +278,11 @@ impl CrmMcp {
 }
 ```
 
-- Fixed URIs (`crm://pipeline`) are listed in `resources/list`. Templates (`crm://deals/{id}`) are listed in `resources/templates/list`, and clients fill them in.
-- A method returns anything that serializes (sent as JSON, with the declared `mime`), a `String` (sent as text), or `ResourceContents::blob(bytes, mime)` for binary data such as a PDF from [storage](/docs/digging-deeper/storage/).
-- Clients can subscribe to a resource. Call `McpNotifier::resource_updated("crm://deals/0199…")` from any service, for example next to the deal's real-time broadcast, and subscribed sessions are told to read it again.
+- Fixed URIs (`crm://pipeline`) are listed in `resources/list`. Templates (`crm://deals/{id}`) are listed in `resources/templates/list`, and clients fill them in. A URI without a scheme doesn't compile, and neither does a `from` that names no URI variable.
+- A template's other variables reach the method as parameters with the same name, of any `FromStr` type (`slug: String`, `n: u32`); a value that doesn't parse is a 404.
+- A method returns anything that serializes (sent as JSON, with the declared `mime`, `application/json` by default), a `String` (sent as text, `text/plain` by default), or `ResourceContents` (or a `Vec` of them): `ResourceContents::blob(bytes, mime)` for binary data such as a PDF from [storage](/docs/digging-deeper/storage/), `ResourceContents::text(text, mime)` and `ResourceContents::json(&value)` (which returns a `Result`).
+- The resource's name is the method name; set `name = ".."` and `title = ".."` on the attribute.
+- Clients can subscribe to a resource they may read. Inject `Arc<McpNotifier>` into any service and call `notifier.resource_updated("crm://deals/0199…").await`, for example next to the deal's real-time broadcast: subscribed sessions are told to read it again. It returns the number of sessions told.
 
 ## Prompts
 
@@ -282,7 +299,7 @@ pub struct FollowUpArgs {
 }
 
 #[mcp_server]
-impl CrmMcp {
+impl DealsMcp {
     // ...
 
     /// Drafts a follow-up email to a deal's main contact from its recent activity.
@@ -303,7 +320,9 @@ impl CrmMcp {
 }
 ```
 
-`PromptMessage::user(text)`, `PromptMessage::assistant(text)` and `PromptMessage::resource(uri)` build the messages; a resource message embeds the resource's current contents.
+- The arguments struct's fields become the prompt's arguments, with their doc comments and whether they're required. Clients send every argument as a string; they're converted to the field types (numbers, booleans, ...) and validated before the method runs.
+- `PromptMessage::user(text)`, `PromptMessage::assistant(text)` and `PromptMessage::resource(uri)` build the messages. A resource message embeds the resource's current contents, read with the user's access: a resource they can't read fails the prompt.
+- A prompt may also return one `PromptMessage` or a `String` (one user message).
 
 ## Authentication
 
@@ -311,50 +330,52 @@ The endpoint authenticates every request; there is no anonymous MCP session. A t
 
 ### Bearer tokens
 
-With `mcp.auth = "bearer"` (the default), clients send `Authorization: Bearer <token>`, and the token goes through your app's authenticators like any API request: a navree-auth access token, or a personal access token from the [OAuth server](/docs/packages/oauth-server/). A request without a valid token gets a 401 with a `WWW-Authenticate` header that points at the server's metadata.
+With `mcp.auth = "bearer"` (the default), clients send `Authorization: Bearer <token>`, and the token goes through your app's authenticators like any API request: a navree-auth access token, or a personal access token from the [OAuth server](/docs/packages/oauth-server/). A request without a valid token gets a 401 with `WWW-Authenticate: Bearer` (an authenticator's own challenge, such as `error="invalid_token"`, is kept).
 
-Personal access tokens suit MCP well: they are long-lived, revocable, and limited to the abilities you give them. A user creates one in your app's settings, limited to `deals.read` and `activities.create`, and pastes it into their client:
+Personal access tokens suit MCP well: they are long-lived, revocable, and limited to the scopes you give them. A user creates one in your app's settings, limited to scopes such as `deals:read` and `activities:write` (which grant the permissions `deals.read` and `activities.create`), and pastes it into their client:
 
 ```sh
-claude mcp add --transport http crm https://crm.example.com/mcp --header "Authorization: Bearer navree_pat_7Kq2..."
+claude mcp add --transport http crm https://crm.example.com/mcp --header "Authorization: Bearer nvp_7Kq2..."
 ```
 
 ### OAuth
 
-With `mcp.auth = "oauth"`, MCP clients sign users in themselves, the way the MCP authorization spec describes. Your app is both the resource server and, through [`OAuthServerModule`](/docs/packages/oauth-server/), the authorization server:
+With `mcp.auth = "oauth"`, MCP clients sign users in themselves, the way the MCP authorization spec describes. `McpModule` is the resource server: it serves the protected resource metadata (RFC 9728) and points clients at it. The authorization server is your app's [`OAuthServerModule`](/docs/packages/oauth-server/) by default, or any issuer you list in `mcp.oauth.authorization_servers`:
 
-1. The client calls `/mcp` without a token and gets a 401 naming `/.well-known/oauth-protected-resource`.
-2. It reads that document, then your authorization server's metadata, and registers itself (dynamic client registration, when `oauth.dynamic_registration` is on).
-3. It sends the user to your sign-in and consent screen with PKCE. The user approves the scopes the client asked for.
-4. It calls `/mcp` with the access token it received.
+1. The client calls `/mcp` without a token and gets a 401 with `WWW-Authenticate: Bearer resource_metadata="https://crm.example.com/.well-known/oauth-protected-resource/mcp"`.
+2. It reads that document (also served at `/.well-known/oauth-protected-resource`): the `resource`, its `authorization_servers`, `bearer_methods_supported`, the `resource_name` (`mcp.title`) and `scopes_supported` (`mcp.oauth.scopes`, by default the OAuth server's scopes such as `deals:read`). Then it reads the authorization server's metadata and registers itself (dynamic client registration, when `oauth.dynamic_registration` is on).
+3. It sends the user to the sign-in and consent screen with PKCE. The user approves the scopes the client asked for.
+4. It calls `/mcp` with the access token it received, which your app's authenticators check like any other bearer token.
 
-The token's scopes become its abilities. A client granted `deals.read` sees `list_deals` and the deal resources, and not `log_activity`, even when the user could log activities in the app. Users see and revoke connected clients in your app, like any other OAuth client.
+OAuth mode needs the `app.url` setting (or `mcp.oauth.resource` and `mcp.oauth.authorization_servers`); without it the boot fails. A token is limited to its scopes' permissions, OAuth access tokens and personal access tokens alike: a client granted only `deals:read` sees `list_deals` and the deal resources, and not `log_activity`, even when the user could log activities in the app. Users see and revoke connected clients in your app, like any other OAuth client.
 
 ## Per-tool permissions
 
-Every tool, resource and prompt declares who may use it, with the same attributes as a route: `#[public]`, `#[authenticated]`, `#[roles(..)]`, `#[permissions(..)]` or `#[can(..)]`. One without a declaration doesn't compile, the same rule that keeps a route from being exposed by accident ([routes deny until you allow them](/docs/basics/access-control/#routes-without-a-declaration)).
+Every tool, resource and prompt declares who may use it, with the same attributes as a route: `#[public]`, `#[authenticated]`, `#[roles(..)]`, `#[permissions(..)]` or `#[can(..)]`, on the method or on the `impl` block. One without a declaration doesn't compile, the same rule that keeps a route from being exposed by accident ([routes deny until you allow them](/docs/basics/access-control/#routes-without-a-declaration)).
 
-- **Lists are filtered.** `tools/list`, `resources/list` and `prompts/list` return only what the session's user, and its token's abilities, allow. A client never shows a tool its user can't use.
-- **Calls are checked.** Calling a hidden tool is answered as an unknown tool. Record-level checks (`from = "id"`, `cx.authorize`) run on every call, and a refusal is a 403 or 404 in the tool result.
-- **Lists change with access.** When a user's roles change, open sessions receive `notifications/tools/list_changed` and fetch the list again.
+- **Lists are filtered.** `tools/list`, `resources/list`, `resources/templates/list` and `prompts/list` return only what the session's user, and its token's abilities, allow. A client never shows a tool its user can't use.
+- **Calls are checked.** Calling a hidden tool is answered as an unknown tool, and reading a hidden resource as a resource that doesn't exist. Record-level checks (`from = "id"`, `cx.authorize`) run on every call, and a refusal is a 403 or 404 in the tool result. A refusal is logged at `navree::security` and, with an audit sink, recorded as `access.denied`.
+- **Lists change with access.** When a user's roles or permissions change, the session is sent `notifications/tools/list_changed` (and the resource and prompt equivalents) with its next request, and the client fetches the lists again. To tell every open session at once, for example after you deploy new tools behind a flag, call `McpNotifier::tools_changed()` (or `resources_changed()`, `prompts_changed()`).
 
-What runs inside a tool is your service code, so the rest of your security model applies as it is: list filters through `cx.accessible`, writes in the call's own unit of work (committed when the tool returns `Ok`), audit entries with the user as the actor, and jobs and events queued only on commit.
+What runs inside a tool is your service code, so the rest of your security model applies as it is: list filters through `cx.accessible`, writes in the call's own unit of work (committed when the tool returns `Ok`, rolled back on `Err`), audit entries with the user as the actor, and jobs and events queued only on commit.
 
-`McpContext` has the same helpers as an agent's [`AgentRun`](/docs/ai/agents-and-tools/#the-run): `user()`, `user_id()`, `access()`, `ability()`, `accessible::<E, A>()`, `authorize::<E, A>(id)`, `uow()` and `now()`, plus `session_id()`, `client()` (the client's name and version) and `progress(..)`.
+`McpContext` has the same helpers as an agent's [`AgentRun`](/docs/ai/agents-and-tools/#the-run): `user()` (loaded through `AuthService`), `user_id()`, `access()`, `ability()`, `accessible::<E, A>()`, `authorize::<E, A>(id)`, `uow()` and `now()`, plus `principal()`, `session_id()`, `client()` (the client's name and version), `request_id()`, `app()`, `wants_progress()` and `progress(..)`.
 
 ## Transports
 
 ### Streamable HTTP
 
-The HTTP transport is mounted at `mcp.path` on your app's own server:
+The HTTP transport is mounted at `mcp.path` on your app's own server, as three authenticated routes:
 
-| Request | Does |
-|---|---|
-| `POST /mcp` | Sends a JSON-RPC message. The answer is JSON, or an SSE stream when the server has progress or notifications to send first. |
-| `GET /mcp` | Opens an SSE stream for messages the server starts, such as resource updates. |
-| `DELETE /mcp` | Ends the session. |
+| Request | Route name | Does |
+|---|---|---|
+| `POST /mcp` | `mcp.message` | Sends a JSON-RPC message. The answer is JSON, or an SSE stream when the server has progress or notifications to send first. |
+| `GET /mcp` | `mcp.stream` | Opens an SSE stream for messages the server starts, such as resource updates and list changes. |
+| `DELETE /mcp` | `mcp.close` | Ends the session. |
 
-The first `initialize` call creates a session; its id comes back in the `Mcp-Session-Id` header, and the client sends it with every later request. Sessions live in the app's cache, so any process behind your load balancer can serve the next request. Requests go through the whole HTTP stack: request ids, the per-IP rate limit, CORS against `mcp.allowed_origins`, logs and metrics.
+With `mcp.auth = "oauth"`, the metadata routes are `mcp.metadata` and `mcp.metadata.endpoint`. All of them appear in the [OpenAPI document](/docs/digging-deeper/openapi/) under the tag `MCP`, with their names as operation ids.
+
+The first `initialize` call creates a session; its id comes back in the `Mcp-Session-Id` header, and the client sends it with every later request. A session belongs to the user who opened it: another user sending its id gets a 404. With `CacheModule`, sessions live in the app's cache, so any process behind your load balancer can serve the next request; without it, in the process. Requests go through the whole HTTP stack: request ids, the per-IP rate limit, the app's CORS settings, logs and metrics, plus the `Origin` check against `mcp.allowed_origins`.
 
 ### stdio
 
@@ -364,7 +385,7 @@ The `mcp:serve` command serves the same tools over standard input and output, fo
 ./target/release/crm-api mcp:serve --user ada@example.com
 ```
 
-It reads JSON-RPC messages on stdin, writes them on stdout and logs to stderr. There is no token: the process acts as the user named by `--user`, with that user's roles and permissions, so give it to people who already have shell access to a machine that can reach the database. A client configures it as a command:
+It reads JSON-RPC messages on stdin, writes them on stdout and logs to stderr (`LoggerModule` writes there while a command owns stdout). There is no token: the process acts as the user named by `--user`, an email address (which needs `AuthModule`) or a user id, with that user's roles and permissions. Give it to people who already have shell access to a machine that can reach the database. A client configures it as a command:
 
 ```json title="Client configuration"
 {
@@ -376,6 +397,8 @@ It reads JSON-RPC messages on stdin, writes them on stdout and logs to stderr. T
   }
 }
 ```
+
+`navree::mcp::serve_stdio(ctx, user, reader, writer)` runs the same server on any pair of streams, for tests and custom launchers.
 
 ## Connecting clients
 
@@ -427,11 +450,11 @@ The [MCP Inspector](https://github.com/modelcontextprotocol/inspector) (`npx @mo
 
 ## Observability
 
-Each call writes a log line at target `navree::mcp` with the method (`tools/call`, `resources/read`), the tool or URI, `user_id`, the client's name, `duration_ms`, `outcome` and the request id; arguments and results are never logged. `/metrics` gets `mcp_requests_total` (labels `method`, `name`, `outcome`) and `mcp_request_duration_seconds`. Writes made by tools are in the [audit log](/docs/security/audit-log/) like any other, with the user as the actor.
+Each `tools/call`, `resources/read` and `prompts/get` writes one log line, `mcp call`, at target `navree::mcp` with the `method`, the tool, resource or prompt `name`, `user_id`, the `client` name, `duration_ms`, `outcome` (`ok`, `error`, or `unknown` for a name the user can't see) and the `request_id`; arguments and results are never logged. The metrics `mcp_requests_total` (labels `method`, `name`, `outcome`) and `mcp_request_duration_seconds` (labels `method`, `name`) go to `/metrics` with [ObserveModule](/docs/digging-deeper/health-and-metrics/); unknown names are labelled `unknown`, so clients can't grow the label set. Writes made by tools are in the [audit log](/docs/security/audit-log/) like any other, with the user as the actor.
 
 ## Testing
 
-`McpTestClient` speaks the protocol to your test app in process. Build it from any `TestClient`, so it acts as whoever that client acts as:
+`McpTestClient` speaks the protocol to your test app in process, through its whole HTTP pipeline. Build it from any `TestClient`, so it acts as whoever that client acts as, and give it a bearer token when the client carries one per request:
 
 ```rust title="apps/crm-api/tests/mcp.rs"
 use crm_testkit::{Role, TestCrm};
@@ -445,7 +468,10 @@ async fn reps_log_activity_but_cannot_move_others_deals() {
     let deal = create_deal(&owner, "Acme renewal").await; // POSTs a company and a deal
 
     let rep = crm.login_as(Role::Rep2).await;
-    let mcp = McpTestClient::new(rep.inner().clone()).initialize().await;
+    let mcp = McpTestClient::new(rep.inner().clone())
+        .bearer(rep.access_token())
+        .initialize()
+        .await;
 
     let tools = mcp.list_tools().await;
     assert!(tools.iter().any(|tool| tool.name == "log_activity"));
@@ -470,13 +496,17 @@ async fn reps_log_activity_but_cannot_move_others_deals() {
 
 | Method | |
 |---|---|
-| `McpTestClient::new(client)` | Wraps a `TestClient`; its user, bearer token or guest status carry over. |
-| `.initialize()` | Performs the handshake and keeps the session id. |
+| `McpTestClient::new(client)` | Wraps a `TestClient`; its `acting_as` principal, cookies or guest status carry over. Requests carry no `Origin` header. |
+| `.bearer(token)` | Sends `Authorization: Bearer <token>` with every request. |
+| `.path(path)`, `.protocol_version(version)` | Another `mcp.path`; another protocol version for the handshake. |
+| `.initialize()` | Performs the handshake and keeps the session id (`session_id()`, `server_info()`). |
 | `list_tools()`, `list_resources()`, `list_resource_templates()`, `list_prompts()` | What this user sees. |
-| `call_tool(name, args)` | A `ToolResult`: `assert_ok()`, `assert_error(status, message)`, `assert_json_path(path, value)`, `json::<T>()`. |
-| `read_resource(uri)` | The contents, with the same assertions. |
-| `get_prompt(name, args)` | The prompt's messages. |
-| `notifications()` | Notifications the server sent this session. |
+| `call_tool(name, args)` | A `ToolResult`: `assert_ok()`, `assert_error(status, message)`, `assert_json_path(path, value)`, `json::<T>()`, `text()`, `structured()`. `call_tool_with_progress` asks for progress notifications. |
+| `read_resource(uri)` | A `ResourceResult`, with the same assertions plus `text()`, `blob()` and `mime_type()`. |
+| `get_prompt(name, args)` | A `PromptResult`: `messages()`, `text(index)`, `description()`, `assert_ok()`, `assert_error(..)`. |
+| `subscribe(uri)`, `listen()` | Subscribes to a resource; opens the `GET` stream (`NotificationStream::next(wait)`). |
+| `notifications()` | Notifications the server sent this session on request streams. |
+| `request(method, params)`, `close()` | Any JSON-RPC request; ends the session. |
 
 Test the access rules of each tool the way you test routes: one user who may, one who may not, and the list each of them sees.
 
@@ -484,18 +514,20 @@ Test the access rules of each tool the way you test routes: one user who may, on
 
 | Name | |
 |---|---|
-| `McpModule` | `from_config()` (section `mcp`), `for_root(McpOptions)`. |
-| `#[mcp_server]` | On the `impl` block of an injectable; collects its tools, resources and prompts. |
+| `McpModule` | `from_config()` (section `mcp`), `for_root(McpOptions)`. Provides `McpSettings`, `McpRegistry` and `McpNotifier`. |
+| `#[mcp_server]` | On the `impl` block of an injectable; collects its tools, resources and prompts. Import it from `navree::mcp`. |
 | `#[mcp_tool]` | A tool. Options: `name`, `title`, `read_only`, `destructive`, `idempotent`, `open_world`. |
 | `#[mcp_resource(uri)]` | A resource or resource template. Options: `name`, `title`, `mime`. |
 | `#[mcp_prompt]` | A prompt. Options: `name`, `title`. |
-| `McpContext` | The caller: user, access, unit of work, session, progress. |
-| `PromptMessage`, `ResourceContents` | Prompt messages; binary or text resource contents. |
-| `McpNotifier` | `resource_updated(uri)`, `tools_changed()`. |
-| `m.mcp_server::<S>()` | Registers a server in a module. |
-| `mcp:serve --user <email>` | The stdio transport. |
+| `McpContext` | The caller: user, access, unit of work, session, client, progress. |
+| `PromptMessage`, `ResourceContents` | Prompt messages; text, JSON or binary resource contents. |
+| `McpNotifier` | `resource_updated(uri)`, `tools_changed()`, `resources_changed()`, `prompts_changed()`. |
+| `m.mcp_server::<S>()` | Registers a server in a module (`ModuleBuilderMcpExt`). |
+| `McpServer`, `McpItem`, `ToolDef`, `ResourceDef`, `PromptDef` | What `#[mcp_server]` generates, for servers written by hand. |
+| `mcp:serve --user <email or id>` | The stdio transport (`serve_stdio` in code). |
 | `navree make:mcp <module> <name>` | Generates a server. |
 | `navree::mcp::testing::McpTestClient` | The test client. |
+| `navree::mcp::rmcp` | The MCP SDK, for protocol types such as `rmcp::model::Tool`. |
 
 <LinkCards>
   <LinkCard href="/docs/ai/agents-and-tools/" title="Agents and tools">

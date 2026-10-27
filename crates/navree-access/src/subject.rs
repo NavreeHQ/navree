@@ -84,7 +84,14 @@ pub(crate) trait SubjectLoader: Send + Sync + 'static {
     ) -> BoxFuture<'a, Result<Option<LoadedRecord>, DbErr>>;
 }
 
-struct EntityLoader<E>(PhantomData<fn() -> E>);
+/// Loads records of entity `E` by primary key.
+pub(crate) struct EntityLoader<E>(PhantomData<fn() -> E>);
+
+impl<E> EntityLoader<E> {
+    pub(crate) fn new() -> Self {
+        Self(PhantomData)
+    }
+}
 
 impl<E> SubjectLoader for EntityLoader<E>
 where

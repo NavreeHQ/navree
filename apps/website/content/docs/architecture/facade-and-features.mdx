@@ -87,6 +87,7 @@ Every module crate is re-exported whole, as a module of the facade. `navree::db:
 | `navree::graphql` | navree-graphql | `graphql` (opt-in) | `GraphqlModule`: [GraphQL](/docs/microservices/graphql/) with `#[resolver]` (in `navree::graphql`), dataloaders and subscriptions |
 | `navree::grpc` | navree-grpc, plus `#[grpc_service]` | `grpc` (opt-in) | `GrpcModule`: [gRPC](/docs/microservices/grpc/) services with gRPC-Web, Connect, health and reflection |
 | `navree::billing` | navree-billing | `billing` (opt-in) | `BillingModule`: [subscriptions, trials, usage and invoices](/docs/packages/billing/) with Stripe or Paddle |
+| `navree::mcp` | navree-mcp | `mcp` (opt-in) | `McpModule`: [MCP servers](/docs/ai/mcp-servers/) with `#[mcp_server]`, `#[mcp_tool]`, `#[mcp_resource]` and `#[mcp_prompt]`, and `navree::mcp::testing::McpTestClient` |
 
 The facade's root also has:
 
@@ -109,6 +110,7 @@ The facade's root also has:
 | Database | `DatabaseModule`, `Uow`, `Repo`, `Page`, `PageQuery`, `MigrationSet`, `ModelFactory` |
 | Validation | `Valid`, `ValidAsync`, `ValidationModule` |
 | Authentication | `AuthModule`, `AuthService`, `CurrentUser` |
+| MCP (with `mcp`) | `McpModule` (and `m.mcp_server::<S>()`) |
 | Access | `AccessModule`, `AccessOptions`, `Abilities`, `AbilityCtx`, `Accessible`, `Authorized`, `Rules`, `Subject`, `ActionMarker`, `field`, the action markers `Read`, `Create`, `Update`, `Delete`, `Manage` and the constants `READ`, `CREATE`, `UPDATE`, `DELETE`, `MANAGE`, `ALL` |
 | Other modules | `LoggerModule`, `CryptoModule`, `EventsModule`, `ViewModule`, `CacheModule`, `HttpClientModule`, `ApiModule`, `MailModule`, `ObserveModule`, `RealtimeModule`, `StorageModule`, `SessionModule`, `QueueModule`, `AuditModule`, `ScheduleModule`, `NotifyModule`, `WorkspaceModule`, `WebhooksModule` |
 | OAuth (with `oauth`) | `OAuthServerModule`, `OAuthToken` |
@@ -127,7 +129,7 @@ Three details to know:
 
 ## Cargo features
 
-The facade has one feature per module crate, named after it (`http-client` for `navree::http_client`). The default feature, `full`, turns on all of them except the opt-in ecosystem libraries and packages (`social`, `oauth`, `flags`, `graphql`, `grpc`, `billing`), which you list by name: `features = ["flags"]`. To build only what you use, turn the defaults off and list the modules:
+The facade has one feature per module crate, named after it (`http-client` for `navree::http_client`). The default feature, `full`, turns on all of them except the opt-in ecosystem libraries and packages (`social`, `oauth`, `flags`, `graphql`, `grpc`, `billing`, `mcp`), which you list by name: `features = ["flags"]`. To build only what you use, turn the defaults off and list the modules:
 
 ```toml title="Cargo.toml"
 [dependencies]
@@ -154,6 +156,7 @@ navree = { git = "https://github.com/NavreeHQ/navree", default-features = false,
 | `flags` | `http`, `cache`, `db`, `events`, `audit`, `workspace`, `auth` |
 | `graphql` (opt-in, not in `full`) | `http`, `events`, `db`, `validation`, `access`, `auth`, `workspace` |
 | `billing` (opt-in, not in `full`) | `http`, `events`, `http-client`, `db`, `schedule`, `auth`, `workspace` |
+| `mcp` (opt-in, not in `full`) | `http`, `cache`, `db`, `testing`, `validation`, `access`, `auth` |
 | `postgres` | `db`, and navree-db's PostgreSQL driver |
 
 SQLite is always available with `db`. The `postgres` feature adds the PostgreSQL driver. Navree's [performance](/performance/) harness runs it on PostgreSQL 17 and the test suite runs on SQLite; [the database pages](/docs/database/getting-started/#postgresql) list which PostgreSQL-only paths to try in staging first.
@@ -174,7 +177,7 @@ Turning a feature off removes the module's crate from the build, along with its 
 2. Otherwise it names the individual crates: `::navree_kernel`, `::navree_http`, `::navree_access`.
 3. If neither is there, the attribute fails to compile with: ``this attribute needs the `navree` crate (or `navree-kernel`) in the [dependencies] of your Cargo.toml``.
 
-`#[controller]` needs navree-http, `#[can]` with marker types such as `#[can(Update, Deal)]` needs navree-access, and `#[flag]` and `#[requires_flag]` need navree-flags (`::navree::flags`); with the facade, that means the `http`, `access` and `flags` features.
+`#[controller]` needs navree-http, `#[can]` with marker types such as `#[can(Update, Deal)]` needs navree-access, and `#[flag]` and `#[requires_flag]` need navree-flags (`::navree::flags`); with the facade, that means the `http`, `access` and `flags` features. `#[mcp_server]` names `::navree::mcp` (or `::navree_mcp`), so it needs the `mcp` feature; import it from `navree::mcp`.
 
 ## Using a crate on its own
 

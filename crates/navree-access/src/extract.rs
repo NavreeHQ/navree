@@ -9,6 +9,7 @@ use std::sync::Arc;
 use axum::extract::FromRequestParts;
 use http::request::Parts;
 use navree_contracts::AuthState;
+use navree_db::Uow;
 use navree_http::AppError;
 use navree_kernel::AppContext;
 use sea_orm::{EntityTrait, QueryFilter, Select};
@@ -18,7 +19,7 @@ use serde_json::Value;
 use crate::authorizer::AuthorizedRecord;
 use crate::engine::{Ability, ActionMarker, Subject};
 use crate::factory::{AbilityFactory, PrincipalAccess};
-use crate::subject::EntityColumns;
+use crate::subject::{EntityColumns, EntityLoader, SubjectLoader};
 
 /// The current principal's access, computed once per request (by the route
 /// authorizer or the first extractor that needs it) and kept in the request
@@ -116,6 +117,51 @@ pub struct Authorized<E: EntityTrait, A> {
     record: Arc<Value>,
     ability: Arc<Ability>,
     _action: PhantomData<fn() -> A>,
+}
+
+impl<E: EntityTrait, A> Authorized<E, A> {
+    pub(crate) fn from_parts(
+        model: Arc<E::Model>,
+        record: Arc<Value>,
+        ability: Arc<Ability>,
+    ) -> Self {
+        Self {
+            model,
+            record,
+            ability,
+            _action: PhantomData,
+        }
+    }
+}
+
+impl<E, A> Authorized<E, A>
+where
+    E: EntityTrait + Subject,
+    E::Model: Send + Sync + 'static,
+    A: ActionMarker,
+{
+    /// Loads the record of `E` whose primary key is `id` in `uow` (`FOR
+    /// UPDATE` where supported) and checks `A` on it with `ability`, outside
+    /// an HTTP request (MCP tools, agent tools, jobs). A 404 when there is no
+    /// such record (or `id` cannot be a key), a 403 when `ability` does not
+    /// allow `A` on it. `E` needs no
+    /// [`AccessModule::for_feature`](crate::AccessModule::for_feature)
+    /// registration.
+    pub async fn load(uow: &Uow, ability: Arc<Ability>, id: &str) -> Result<Self, AppError> {
+        let record = EntityLoader::<E>::new()
+            .load(uow, id)
+            .await
+            .map_err(AppError::internal)?
+            .ok_or_else(AppError::not_found)?;
+        if !ability.can(A::NAME, E::SUBJECT, Some(&record.json)) {
+            return Err(AppError::forbidden());
+        }
+        let model = record
+            .model
+            .downcast::<E::Model>()
+            .map_err(|_| AppError::internal("the loaded record is not the entity's model"))?;
+        Ok(Self::from_parts(model, Arc::new(record.json), ability))
+    }
 }
 
 impl<E, A> Authorized<E, A>
@@ -222,12 +268,7 @@ where
             return Err(missing());
         }
         let model = record.model.downcast::<E::Model>().map_err(|_| missing())?;
-        Ok(Self {
-            model,
-            record: record.json,
-            ability: record.ability,
-            _action: PhantomData,
-        })
+        Ok(Self::from_parts(model, record.json, record.ability))
     }
 }
 
