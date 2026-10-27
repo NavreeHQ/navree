@@ -105,7 +105,7 @@ pub fn find_executable(stdout: &str, preferred: Option<&str>) -> Option<PathBuf>
 }
 
 /// The command name of a Node package manager (`npm.cmd` on Windows).
-fn node_program(name: &str) -> String {
+pub(crate) fn node_program(name: &str) -> String {
     if cfg!(windows) {
         format!("{name}.cmd")
     } else {
@@ -120,14 +120,22 @@ pub fn web_invocation(root: &Path) -> Option<Invocation> {
     if !web.join("package.json").is_file() {
         return None;
     }
-    let manager = if web.join("pnpm-lock.yaml").is_file() {
+    Some(Invocation::new(
+        node_program(package_manager(&web)),
+        ["run", "dev"],
+    ))
+}
+
+/// The package manager of the front end in `web`, chosen by its lockfile:
+/// `pnpm`, `yarn` or `npm`.
+pub(crate) fn package_manager(web: &Path) -> &'static str {
+    if web.join("pnpm-lock.yaml").is_file() {
         "pnpm"
     } else if web.join("yarn.lock").is_file() {
         "yarn"
     } else {
         "npm"
-    };
-    Some(Invocation::new(node_program(manager), ["run", "dev"]))
+    }
 }
 
 /// A child process killed when dropped.

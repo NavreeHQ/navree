@@ -22,6 +22,9 @@
 //!   name ([`ApiError::SchemaConflict`]) or a reference to a schema nothing
 //!   registered ([`ApiError::MissingSchemas`]; register generic type
 //!   arguments with [`ModuleBuilderApiExt::api_schema`]).
+//! - `navree check` runs the conformity check `api.docs`: every route is
+//!   documented with `#[api]` (or allowed by `api.undocumented`). With
+//!   `api.require_docs = true`, an undocumented route stops the boot.
 //! - [`ApiResource`], [`resource_json`] and [`mask_fields`] shape JSON
 //!   resources for front ends that check permissions with CASL: every
 //!   resource carries its subject type in `__type`, and fields the user may
@@ -46,6 +49,7 @@
 //! ```
 #![forbid(unsafe_code)]
 
+mod conformity;
 mod docs;
 mod document;
 mod ext;

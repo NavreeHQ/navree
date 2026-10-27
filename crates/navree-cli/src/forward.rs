@@ -66,6 +66,40 @@ impl fmt::Display for Invocation {
     }
 }
 
+/// Runs invocations. `navree check` and `navree gate` go through it, so
+/// their tests can script the programs' results.
+pub trait Runner {
+    /// Runs `invocation` in `dir` with the terminal's output; whether it
+    /// exited successfully.
+    fn run(&mut self, invocation: &Invocation, dir: &Path) -> std::io::Result<bool>;
+
+    /// Runs `invocation` in `dir` capturing its standard output (standard
+    /// error still reaches the terminal); whether it succeeded, and the
+    /// output.
+    fn capture(&mut self, invocation: &Invocation, dir: &Path) -> std::io::Result<(bool, String)>;
+}
+
+/// The [`Runner`] that starts real processes.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct ProcessRunner;
+
+impl Runner for ProcessRunner {
+    fn run(&mut self, invocation: &Invocation, dir: &Path) -> std::io::Result<bool> {
+        Ok(invocation.run(dir)?.success())
+    }
+
+    fn capture(&mut self, invocation: &Invocation, dir: &Path) -> std::io::Result<(bool, String)> {
+        let output = invocation
+            .command(dir)
+            .stderr(std::process::Stdio::inherit())
+            .output()?;
+        Ok((
+            output.status.success(),
+            String::from_utf8_lossy(&output.stdout).into_owned(),
+        ))
+    }
+}
+
 /// The invocation running runtime command `command` with `args` in the app
 /// binary: `cargo run --quiet -- <command> <args>`.
 pub fn forward(command: &str, args: &[String]) -> Invocation {

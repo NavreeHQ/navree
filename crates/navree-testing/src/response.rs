@@ -107,6 +107,11 @@ impl TestResponse {
         self.json()
     }
 
+    /// The body as a JSON value, or `null` when it is not JSON.
+    pub(crate) fn json_value_or_null(&self) -> Value {
+        serde_json::from_slice(&self.body).unwrap_or(Value::Null)
+    }
+
     /// Asserts the status code.
     ///
     /// # Panics

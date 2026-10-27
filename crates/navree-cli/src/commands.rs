@@ -6,11 +6,13 @@ use std::time::Duration;
 
 use anyhow::Context;
 
+use crate::check::{CheckOptions, run_check};
 use crate::cli::{Cli, Command};
 use crate::clock::Timestamp;
 use crate::dev::{self, DevOptions};
 use crate::dock;
-use crate::forward::forward;
+use crate::forward::{ProcessRunner, forward};
+use crate::gate::{GateOptions, default_lock_path, run_gate};
 use crate::make::{MakeOptions, MakeReport, make_item, make_module};
 use crate::names::{AppName, Name};
 use crate::new_app::{NavreeSource, NewApp, create_app};
@@ -49,6 +51,30 @@ pub fn execute(cli: Cli, cwd: &Path) -> anyhow::Result<ExitCode> {
                 },
             )?;
             Ok(ExitCode::SUCCESS)
+        }
+        Command::Check(args) => {
+            let root = app_root(cwd)?;
+            let options = CheckOptions {
+                graph: args.graph,
+                json: args.json,
+                only: args.only.clone(),
+                env: dock::app_env(&root)?,
+            };
+            let passed = run_check(&root, &options, &mut ProcessRunner, &mut std::io::stdout())?;
+            Ok(exit_code(passed))
+        }
+        Command::Gate(args) => {
+            let root = app_root(cwd)?;
+            let options = GateOptions {
+                only: args.only.clone(),
+                skip: args.skip.clone(),
+                keep_going: args.keep_going,
+                lock: (!args.no_lock).then(default_lock_path),
+                web: args.web.clone(),
+                env: dock::app_env(&root)?,
+            };
+            let report = run_gate(&root, &options, &mut ProcessRunner, &mut std::io::stdout())?;
+            Ok(exit_code(report.passed()))
         }
         Command::Dock(command) => dock::run(command, &app_root(cwd)?),
         Command::DockAdd(args) => dock::add(&args.service, &app_root(cwd)?, &mut std::io::stdout()),
@@ -98,6 +124,15 @@ pub fn execute(cli: Cli, cwd: &Path) -> anyhow::Result<ExitCode> {
             finish(&root, &report);
             Ok(ExitCode::SUCCESS)
         }
+    }
+}
+
+/// Success or failure as an exit code.
+fn exit_code(passed: bool) -> ExitCode {
+    if passed {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
     }
 }
 
