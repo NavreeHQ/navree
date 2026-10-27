@@ -1735,7 +1735,6 @@ dependencies = [
  "crm-testkit",
  "garde",
  "navree",
- "sea-orm",
  "serde",
  "serde_json",
  "tokio",
