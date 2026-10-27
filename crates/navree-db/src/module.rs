@@ -13,7 +13,7 @@ use navree_telemetry::Telemetry;
 use sea_orm::DbErr;
 
 use crate::http::{map_db_error, uow_layer};
-use crate::migrate::{self, MigrationSet, Migrator};
+use crate::migrate::{self, MigrationSet, commands};
 use crate::seed::run_seeders;
 use crate::{ChangeObserver, Db, DbOptions, Seeder};
 
@@ -21,10 +21,11 @@ use crate::{ChangeObserver, Db, DbOptions, Seeder};
 /// [`DbOptions`]; contributes the unit-of-work layer
 /// ([`LayerSlot::Uow`](navree_http::LayerSlot::Uow)), the `DbErr` → error
 /// mapping and the `database` health check (a `dyn HealthCheck`
-/// multi-binding); registers the commands `migrate`, `migrate:rollback`,
-/// `migrate:fresh [--seed]`, `migrate:status` and `db:seed`; closes the
-/// pool at shutdown. With `migrate_on_boot`, pending migrations run while
-/// [`Db`] is constructed, before any provider that depends on it.
+/// multi-binding); registers the commands `migrate`, `migrate:install`,
+/// `migrate:rollback`, `migrate:reset`, `migrate:refresh`, `migrate:fresh`,
+/// `migrate:status`, `schema:dump` and `db:seed`; closes the pool at
+/// shutdown. With `migrate_on_boot`, pending migrations run while [`Db`] is
+/// constructed, before any provider that depends on it.
 ///
 /// ```no_run
 /// use navree_db::{DatabaseModule, DbOptions};
@@ -106,7 +107,7 @@ fn register(m: &mut ModuleBuilder, options: Option<DbOptions>) {
                     .await?
                     .with_app(r.app().downgrade());
                 if options.migrate_on_boot {
-                    migrate::run_up(&db, &migrate::sets_of(&r.app())).await?;
+                    migrate::migrate_on_boot(&db, &r.app(), &options.url).await?;
                 }
                 Ok(Arc::new(db))
             })
@@ -130,23 +131,43 @@ fn register(m: &mut ModuleBuilder, options: Option<DbOptions>) {
         .map_error::<DbErr>(map_db_error)
         .command(CommandSpec::new(
             "migrate",
-            "Run every pending migration",
-            migrate_command,
+            "Run every pending migration ([--pretend] [--step] [--seed] [--schema-path <path>])",
+            commands::migrate,
+        ))
+        .command(CommandSpec::new(
+            "migrate:install",
+            "Create the migrations table",
+            commands::install,
         ))
         .command(CommandSpec::new(
             "migrate:rollback",
-            "Roll back the last batch of migrations",
-            rollback_command,
+            "Roll back the last batch ([--step <n> | --batch <n>] [--pretend] [--force])",
+            commands::rollback,
+        ))
+        .command(CommandSpec::new(
+            "migrate:reset",
+            "Roll back every migration ([--pretend] [--force])",
+            commands::reset,
+        ))
+        .command(CommandSpec::new(
+            "migrate:refresh",
+            "Roll back every migration (or --step <n>), then migrate ([--seed] [--force])",
+            commands::refresh,
         ))
         .command(CommandSpec::new(
             "migrate:fresh",
-            "Drop every table and run every migration ([--seed])",
-            fresh_command,
+            "Drop every table and run every migration ([--seed] [--drop-views] [--drop-types] [--force])",
+            commands::fresh,
         ))
         .command(CommandSpec::new(
             "migrate:status",
-            "Show which migrations have run",
-            status_command,
+            "Show which migrations have run ([--pending])",
+            commands::status,
+        ))
+        .command(CommandSpec::new(
+            "schema:dump",
+            "Write the schema and the migrations table to database/schema/<driver>-schema.sql ([--path <path>])",
+            commands::dump,
         ))
         .command(CommandSpec::new(
             "db:seed",
@@ -235,46 +256,9 @@ fn print_list(verb: &str, items: &[String], empty: &str) {
     }
 }
 
-async fn migrate_command(ctx: AppContext, _args: Vec<String>) -> Result<(), BoxError> {
-    let applied = Migrator::up(&ctx).await?;
-    print_list("Migrated", &applied, "Nothing to migrate.");
-    Ok(())
-}
-
-async fn rollback_command(ctx: AppContext, _args: Vec<String>) -> Result<(), BoxError> {
-    let reverted = Migrator::rollback(&ctx).await?;
-    print_list("Rolled back", &reverted, "Nothing to roll back.");
-    Ok(())
-}
-
-async fn fresh_command(ctx: AppContext, args: Vec<String>) -> Result<(), BoxError> {
-    let applied = Migrator::fresh(&ctx).await?;
-    println!("Dropped all tables.");
-    print_list("Migrated", &applied, "Nothing to migrate.");
-    if args.iter().any(|a| a == "--seed") {
-        seed_command(ctx, Vec::new()).await?;
-    }
-    Ok(())
-}
-
 async fn seed_command(ctx: AppContext, args: Vec<String>) -> Result<(), BoxError> {
     let ran = run_seeders(&ctx, &args).await?;
     let ran: Vec<String> = ran.into_iter().map(str::to_owned).collect();
     print_list("Seeded", &ran, "No seeders are registered.");
-    Ok(())
-}
-
-async fn status_command(ctx: AppContext, _args: Vec<String>) -> Result<(), BoxError> {
-    let status = Migrator::status(&ctx).await?;
-    if status.is_empty() {
-        println!("No migrations are registered.");
-        return Ok(());
-    }
-    println!("{:<7} {:<8} Migration", "Batch", "Status");
-    for entry in status {
-        let batch = entry.batch.map(|b| b.to_string()).unwrap_or_default();
-        let state = if entry.applied { "Ran" } else { "Pending" };
-        println!("{batch:<7} {state:<8} {}/{}", entry.module, entry.name);
-    }
     Ok(())
 }

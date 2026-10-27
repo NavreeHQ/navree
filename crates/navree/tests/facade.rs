@@ -40,6 +40,10 @@ fn every_module_crate_is_reexported_whole() {
         navree::http_client::HttpClientModule,
         HttpClientModule,
     >());
+    assert!(same::<
+        navree::schema::Blueprint,
+        navree::db::navree_schema::Blueprint,
+    >());
     // L3
     assert!(same::<navree::db::DatabaseModule, DatabaseModule>());
     assert!(same::<navree::testing::TestApp, navree::testing::TestApp>());
@@ -228,6 +232,69 @@ fn module_builder_extensions_come_with_the_prelude() {
         .validate()
         .expect("the graph is valid");
     assert!(report.modules.iter().any(|m| m.name == "Wired"));
+}
+
+/// A migration file as `navree make:migration` writes it: the schema
+/// builder through `navree::schema`, registered with `migration!`.
+mod m20261027_120000_create_events_table {
+    use navree::schema::prelude::*;
+
+    pub struct Migration;
+
+    impl navree::schema::Migration for Migration {
+        async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+            schema
+                .create_hypertable("events", "occurred_at", |t| {
+                    t.uuid_primary();
+                    t.string("kind");
+                    t.timestamp_tz("occurred_at");
+                })
+                .await
+        }
+
+        async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+            schema.drop_if_exists("events").await
+        }
+    }
+}
+
+#[tokio::test]
+async fn schema_migrations_run_through_the_facade() {
+    struct Events;
+
+    impl Module for Events {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.migrations(
+                MigrationSet::new("events").migration(navree::schema::migration!(
+                    m20261027_120000_create_events_table
+                )),
+            );
+        }
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let url = format!("sqlite://{}?mode=rwc", dir.path().join("app.db").display());
+    let app = Navree::app()
+        .module(DatabaseModule::for_root(navree::db::DbOptions {
+            url,
+            ..Default::default()
+        }))
+        .module(Events)
+        .boot()
+        .await
+        .unwrap();
+    let report = navree::db::Migrator::run(app.ctx(), &navree::db::MigrateOptions::default())
+        .await
+        .unwrap();
+    assert_eq!(
+        report.labels(),
+        ["events/m20261027_120000_create_events_table"]
+    );
+    assert!(
+        report.migrations[0].notices[1].starts_with("SQLite does not support TimescaleDB"),
+        "{:?}",
+        report.migrations[0].notices
+    );
 }
 
 /// Runs `cargo metadata --no-deps` on the workspace.

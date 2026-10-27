@@ -246,10 +246,14 @@ Commands:
   routes              List every route with its access declaration ([--json])
   down                Put the app into maintenance mode ([--retry SECS] [--message TEXT])
   up                  Bring the app out of maintenance mode
-  migrate             Run every pending migration
-  migrate:rollback    Roll back the last batch of migrations
-  migrate:fresh       Drop every table and run every migration ([--seed])
-  migrate:status      Show which migrations have run
+  migrate             Run every pending migration ([--pretend] [--step] [--seed] [--schema-path <path>])
+  migrate:install     Create the migrations table
+  migrate:rollback    Roll back the last batch ([--step <n> | --batch <n>] [--pretend] [--force])
+  migrate:reset       Roll back every migration ([--pretend] [--force])
+  migrate:refresh     Roll back every migration (or --step <n>), then migrate ([--seed] [--force])
+  migrate:fresh       Drop every table and run every migration ([--seed] [--drop-views] [--drop-types] [--force])
+  migrate:status      Show which migrations have run ([--pending])
+  schema:dump         Write the schema and the migrations table to database/schema/<driver>-schema.sql ([--path <path>])
   db:seed             Run the seeders ([name...] to run only some)
   cache:clear         Remove every entry from the cache store
   queue:work          Run queued jobs until shutdown ([--queue a,b] [--once] [--stop-when-empty] [--max-jobs N])
@@ -291,8 +295,8 @@ Each module registers its own commands, so `list` shows only those of the module
 | `routes [--json]` | `HttpModule` | `navree routes` prints every route with its name, access rule and module. |
 | `down [--retry SECS] [--message TEXT]`, `up` | `HttpModule` | See [Maintenance mode](/docs/digging-deeper/maintenance-mode/). |
 | `key:generate` | `CryptoModule` | Prints a new `base64:...` key for `APP_KEY`. See [Encryption and hashing](/docs/security/encryption-and-hashing/). |
-| `migrate`, `migrate:rollback`, `migrate:status` | `DatabaseModule` | See [Migrations](/docs/database/migrations/). |
-| `migrate:fresh [--seed]` | `DatabaseModule` | Drops every table, then migrates (and seeds). |
+| `migrate`, `migrate:install`, `migrate:rollback`, `migrate:reset`, `migrate:refresh`, `migrate:status`, `schema:dump` | `DatabaseModule` | See [Migrations](/docs/database/migrations/). |
+| `migrate:fresh [--seed] [--drop-views] [--drop-types]` | `DatabaseModule` | Drops every table, then migrates (and seeds). |
 | `db:seed [name...]` | `DatabaseModule` | Runs every seeder, or only the named ones. See [Seeding](/docs/database/seeding-and-factories/). |
 | `cache:clear` | `CacheModule` | See [Cache](/docs/digging-deeper/cache/). |
 | `queue:work [--queue a,b] [--once] [--stop-when-empty] [--max-jobs N]` | `QueueModule` | See [Queues](/docs/digging-deeper/queues/). |

@@ -1,0 +1,8 @@
+---
+source: crates/navree-schema/tests/schema/timescale.rs
+assertion_line: 75
+expression: sql
+---
+-- timescaledb 2.11
+CREATE TABLE "readings" ("sensor_id" BIGINT NOT NULL, "taken_at" TIMESTAMP WITH TIME ZONE NOT NULL, "value" DOUBLE PRECISION NOT NULL);
+SELECT create_hypertable('readings', 'taken_at', partitioning_column => 'sensor_id', number_partitions => 8, chunk_time_interval => INTERVAL '12 hours', create_default_indexes => FALSE);

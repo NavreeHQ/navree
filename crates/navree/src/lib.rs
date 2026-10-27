@@ -18,6 +18,7 @@
 //! | `view` | navree-view | `view` | `ViewModule`: minijinja templates |
 //! | `cache` | navree-cache | `cache` | `CacheModule`: cache stores and locks |
 //! | `http_client` | navree-http-client | `http-client` | `HttpClientModule`: outgoing HTTP with fakes |
+//! | `schema` | navree-schema | `schema` | `Schema`, `Blueprint`, `Migration`: the schema builder, TimescaleDB hypertables, schema dumps |
 //! | `db` | navree-db | `db` | `DatabaseModule`: SeaORM, unit of work, migrations, pagination |
 //! | `testing` | navree-testing | `testing` | `TestApp`, `TestClient`: in-process HTTP tests |
 //! | `observe` | navree-observe | `observe` | `ObserveModule`: health checks and metrics |
@@ -154,6 +155,8 @@ pub use navree_http as http;
 pub use navree_http_client as http_client;
 #[cfg(feature = "log")]
 pub use navree_log as log;
+#[cfg(feature = "schema")]
+pub use navree_schema as schema;
 #[cfg(feature = "view")]
 pub use navree_view as view;
 

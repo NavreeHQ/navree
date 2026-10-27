@@ -1,0 +1,38 @@
+---
+source: crates/navree-schema/tests/schema/timescale.rs
+assertion_line: 54
+expression: sql
+---
+-- timescaledb
+CREATE TABLE "events" ("id" UUID NOT NULL, "workspace_id" UUID NOT NULL, "occurred_at" TIMESTAMP WITH TIME ZONE NOT NULL, "amount" INTEGER NOT NULL DEFAULT 0, PRIMARY KEY ("id", "occurred_at", "workspace_id"));
+SELECT create_hypertable('events', by_range('occurred_at', INTERVAL '1 day'));
+SELECT add_dimension('events', by_hash('workspace_id', 4));
+CREATE INDEX "events_workspace_id_occurred_at_index" ON "events" ("workspace_id", "occurred_at");
+ALTER TABLE "events" SET (timescaledb.compress, timescaledb.compress_segmentby = 'workspace_id', timescaledb.compress_orderby = 'occurred_at DESC');
+SELECT add_compression_policy('events', INTERVAL '7 days');
+SELECT add_retention_policy('events', INTERVAL '90 days');
+SELECT add_reorder_policy('events', 'events_workspace_id_occurred_at_index');
+
+-- postgres
+CREATE TABLE "events" ("id" UUID NOT NULL, "workspace_id" UUID NOT NULL, "occurred_at" TIMESTAMP WITH TIME ZONE NOT NULL, "amount" INTEGER NOT NULL DEFAULT 0, PRIMARY KEY ("id", "occurred_at", "workspace_id"));
+CREATE INDEX "events_workspace_id_occurred_at_index" ON "events" ("workspace_id", "occurred_at");
+CREATE INDEX "events_occurred_at_index" ON "events" ("occurred_at" DESC);
+-- notice: TimescaleDB is not installed in this PostgreSQL database: `events` is a regular table with an index on `occurred_at`; its compression, retention (90 days) and reorder policies are skipped
+
+-- mysql
+CREATE TABLE `events` (`id` CHAR(36) NOT NULL, `workspace_id` CHAR(36) NOT NULL, `occurred_at` TIMESTAMP(6) NOT NULL, `amount` INT NOT NULL DEFAULT 0, PRIMARY KEY (`id`, `occurred_at`, `workspace_id`)) DEFAULT CHARACTER SET utf8mb4;
+ALTER TABLE `events` ADD INDEX `events_workspace_id_occurred_at_index`(`workspace_id`, `occurred_at`);
+ALTER TABLE `events` ADD INDEX `events_occurred_at_index`(`occurred_at` DESC);
+-- notice: MySQL does not support TimescaleDB: `events` is a regular table with an index on `occurred_at`; its compression, retention (90 days) and reorder policies are skipped
+
+-- mariadb
+CREATE TABLE `events` (`id` UUID NOT NULL, `workspace_id` UUID NOT NULL, `occurred_at` TIMESTAMP(6) NOT NULL, `amount` INT NOT NULL DEFAULT 0, PRIMARY KEY (`id`, `occurred_at`, `workspace_id`)) DEFAULT CHARACTER SET utf8mb4;
+ALTER TABLE `events` ADD INDEX `events_workspace_id_occurred_at_index`(`workspace_id`, `occurred_at`);
+ALTER TABLE `events` ADD INDEX `events_occurred_at_index`(`occurred_at` DESC);
+-- notice: MariaDB does not support TimescaleDB: `events` is a regular table with an index on `occurred_at`; its compression, retention (90 days) and reorder policies are skipped
+
+-- sqlite
+CREATE TABLE "events" ("id" VARCHAR NOT NULL, "workspace_id" VARCHAR NOT NULL, "occurred_at" DATETIME NOT NULL, "amount" INTEGER NOT NULL DEFAULT 0, PRIMARY KEY ("id", "occurred_at", "workspace_id"));
+CREATE INDEX "events_workspace_id_occurred_at_index" ON "events" ("workspace_id", "occurred_at");
+CREATE INDEX "events_occurred_at_index" ON "events" ("occurred_at" DESC);
+-- notice: SQLite does not support TimescaleDB: `events` is a regular table with an index on `occurred_at`; its compression, retention (90 days) and reorder policies are skipped

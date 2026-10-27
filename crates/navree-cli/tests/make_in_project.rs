@@ -197,7 +197,14 @@ fn make_migration_adds_it_to_the_module_set() {
     assert!(report.hints.is_empty(), "{:?}", report.hints);
     let file = "m20261025_143140_create_avatars_table";
     let migration = read(&root, &format!("src/modules/users/migrations/{file}.rs"));
-    assert!(migration.contains(".table(Avatars::Table)"), "{migration}");
+    assert!(
+        migration.contains(".create(\"avatars\", |t| {"),
+        "{migration}"
+    );
+    assert!(
+        migration.contains("schema.drop_if_exists(\"avatars\").await"),
+        "{migration}"
+    );
     let set = read(&root, "src/modules/users/migrations/mod.rs");
     assert!(
         set.contains(&format!(
@@ -207,10 +214,36 @@ fn make_migration_adds_it_to_the_module_set() {
     );
     assert!(
         set.contains(&format!(
-            "        .migration(m20261025_143005_create_user_profiles_table::Migration)\n        .migration({file}::Migration)\n"
+            "        .migration(migration!(m20261025_143005_create_user_profiles_table))\n        .migration(migration!({file}))\n"
         )),
         "{set}"
     );
+}
+
+#[test]
+fn make_migration_guesses_the_table_from_the_name() {
+    let (_dir, root) = project();
+    for (migration, expected) in [
+        (
+            "add_avatar_to_user_profiles",
+            ".table(\"user_profiles\", |t| {",
+        ),
+        ("backfill_timezones", "let _ = schema;"),
+    ] {
+        make_item(
+            &root,
+            "src/modules",
+            MakeKind::Migration,
+            &name("users"),
+            &name(migration),
+            &MakeOptions::default(),
+            Timestamp::from_unix(1_792_938_700),
+        )
+        .unwrap();
+        let file = format!("src/modules/users/migrations/m20261025_143140_{migration}.rs");
+        let source = read(&root, &file);
+        assert!(source.contains(expected), "{source}");
+    }
 }
 
 #[test]

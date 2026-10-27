@@ -1,0 +1,24 @@
+---
+source: crates/navree-schema/tests/schema/create.rs
+expression: sql
+---
+-- postgres
+CREATE TABLE "line_items" ("id" UUID NOT NULL, "order_id" UUID NOT NULL, "product_id" UUID NULL, "currency" VARCHAR(3) NOT NULL, PRIMARY KEY ("id"));
+ALTER TABLE "line_items" ADD CONSTRAINT "line_items_order_id_foreign" FOREIGN KEY ("order_id") REFERENCES "orders" ("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "line_items" ADD CONSTRAINT "line_items_product_id_foreign" FOREIGN KEY ("product_id") REFERENCES "catalog"."products" ("id") ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "line_items" ADD CONSTRAINT "line_items_currency" FOREIGN KEY ("currency") REFERENCES "currencies" ("code") ON DELETE RESTRICT ON UPDATE NO ACTION NOT VALID;
+
+-- mysql
+CREATE TABLE `line_items` (`id` CHAR(36) NOT NULL, `order_id` CHAR(36) NOT NULL, `product_id` CHAR(36) NULL, `currency` VARCHAR(3) NOT NULL, PRIMARY KEY (`id`)) DEFAULT CHARACTER SET utf8mb4;
+ALTER TABLE `line_items` ADD CONSTRAINT `line_items_order_id_foreign` FOREIGN KEY (`order_id`) REFERENCES `orders` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `line_items` ADD CONSTRAINT `line_items_product_id_foreign` FOREIGN KEY (`product_id`) REFERENCES `catalog`.`products` (`id`) ON DELETE SET NULL;
+ALTER TABLE `line_items` ADD CONSTRAINT `line_items_currency` FOREIGN KEY (`currency`) REFERENCES `currencies` (`code`) ON DELETE RESTRICT ON UPDATE NO ACTION;
+
+-- mariadb
+CREATE TABLE `line_items` (`id` UUID NOT NULL, `order_id` UUID NOT NULL, `product_id` UUID NULL, `currency` VARCHAR(3) NOT NULL, PRIMARY KEY (`id`)) DEFAULT CHARACTER SET utf8mb4;
+ALTER TABLE `line_items` ADD CONSTRAINT `line_items_order_id_foreign` FOREIGN KEY (`order_id`) REFERENCES `orders` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `line_items` ADD CONSTRAINT `line_items_product_id_foreign` FOREIGN KEY (`product_id`) REFERENCES `catalog`.`products` (`id`) ON DELETE SET NULL;
+ALTER TABLE `line_items` ADD CONSTRAINT `line_items_currency` FOREIGN KEY (`currency`) REFERENCES `currencies` (`code`) ON DELETE RESTRICT ON UPDATE NO ACTION;
+
+-- sqlite
+CREATE TABLE "line_items" ("id" VARCHAR NOT NULL, "order_id" VARCHAR NOT NULL, "product_id" VARCHAR, "currency" VARCHAR NOT NULL, FOREIGN KEY ("order_id") REFERENCES "orders" ("id") ON DELETE CASCADE ON UPDATE CASCADE, FOREIGN KEY ("product_id") REFERENCES "catalog"."products" ("id") ON DELETE SET NULL, FOREIGN KEY ("currency") REFERENCES "currencies" ("code") ON DELETE RESTRICT, PRIMARY KEY ("id"));

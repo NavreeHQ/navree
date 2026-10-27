@@ -1,0 +1,194 @@
+---
+title: "TimescaleDB"
+description: "Time-series tables in migrations: which tables to make hypertables, keys and ids, chunk sizes, compression, retention, reorder policies, continuous aggregates, and how the same migration runs on PostgreSQL, MySQL and SQLite."
+---
+
+TimescaleDB is Navree's default database: PostgreSQL with an extension for time-series data. Its central idea is the **hypertable**, a table PostgreSQL stores as many chunks, each holding one span of time. Queries over a recent window read only the chunks they need, old chunks can be compressed to a fraction of their size or dropped whole, and continuous aggregates keep rollups (events per day, revenue per hour) up to date incrementally. To your queries a hypertable is an ordinary table.
+
+You decide in your migrations which tables become hypertables, with the [schema builder](/docs/database/schema-builder/). The same migration runs on plain PostgreSQL, MySQL, MariaDB and SQLite, which get a regular table with the right indexes and a notice.
+
+## Which tables to convert
+
+Make a table a hypertable when it is:
+
+- **append-mostly**: rows are inserted and rarely updated or deleted one by one;
+- **keyed by time**: every row has a timestamp, and queries ask for a time range (the last hour, this month);
+- **large, or growing without end**: millions of rows, most of them old.
+
+Good candidates: request and application logs, events and analytics, the audit trail, metrics and readings, notification and webhook delivery history, job runs. Keep as regular tables the records your app updates in place and points foreign keys at: users, workspaces, companies, deals, orders, settings. A hypertable is a poor fit for a table referenced by other tables' foreign keys, or one whose rows change state for months.
+
+## Creating hypertables
+
+`create_hypertable` creates a table partitioned by a time column:
+
+```rust title="src/modules/analytics/migrations/m20261027_090000_create_events_table.rs"
+use navree::schema::prelude::*;
+
+pub struct Migration;
+
+impl navree::schema::Migration for Migration {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema
+            .create_hypertable("events", "occurred_at", |t| {
+                t.uuid_primary();
+                t.foreign_uuid("workspace_id").index();
+                t.string("kind");
+                t.jsonb("payload");
+                t.timestamp_tz("occurred_at");
+
+                let events = t.hypertable("occurred_at");
+                events.chunk_interval("1 day").retain_for("90 days");
+                events
+                    .compress()
+                    .segment_by(["workspace_id"])
+                    .order_by("occurred_at DESC")
+                    .after("7 days");
+            })
+            .await
+    }
+
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop_if_exists("events").await
+    }
+}
+```
+
+Inside the closure, `t.hypertable("occurred_at")` returns the hypertable to configure. You can also declare it inside an ordinary `create`; `schema.create(..., |t| { ...; t.hypertable("occurred_at"); })` does the same as `create_hypertable`. On TimescaleDB this runs:
+
+```sql
+CREATE TABLE "events" (... , PRIMARY KEY ("id", "occurred_at"));
+SELECT create_hypertable('events', by_range('occurred_at', INTERVAL '1 day'));
+CREATE INDEX "events_workspace_id_index" ON "events" ("workspace_id");
+ALTER TABLE "events" SET (timescaledb.compress, timescaledb.compress_segmentby = 'workspace_id', timescaledb.compress_orderby = 'occurred_at DESC');
+SELECT add_compression_policy('events', INTERVAL '7 days');
+SELECT add_retention_policy('events', INTERVAL '90 days');
+```
+
+The time column may be a `timestamp_tz` (the usual choice), a `timestamp`, a `date`, or an integer (milliseconds since the epoch, a sequence). An integer time column takes integer chunk intervals (`chunk_interval("86400000")`); a temporal one takes intervals such as `"1 day"`, `"12 hours"` or `"2 weeks"`. A mismatch, a missing time column or an interval that doesn't parse fails before any SQL runs.
+
+### Converting an existing table
+
+An existing table becomes a hypertable with `convert_to_hypertable`:
+
+```rust
+let mut audit = Hypertable::on("created_at");
+audit
+    .chunk_interval("1 week")
+    .migrate_data()
+    .retain_for("365 days");
+audit.compress().segment_by(["workspace_id"]).after("30 days");
+schema.convert_to_hypertable("audit_logs", &audit).await?;
+```
+
+A short description can be passed as it is built: `schema.convert_to_hypertable("audit_logs", Hypertable::on("created_at").migrate_data())`. A table that has rows needs `.migrate_data()`, which moves them into chunks and locks the table while it runs; without it, the conversion stops and says so.
+
+## Keys and ids
+
+TimescaleDB enforces uniqueness inside each chunk, so **every primary key and unique index of a hypertable must include its time column** (and its partition column, [below](#space-partitioning)).
+
+- A primary key that lacks them is widened: `uuid_primary()` on `events` becomes `PRIMARY KEY (id, occurred_at)`, and the migration reports it. The key is widened on every database, so a migration gives the same keys on SQLite in your tests as on TimescaleDB in production. (SQLite keeps an `id()` auto-increment key alone, as it must, and says so.) With `.keys(KeyStrategy::Reject)` on the hypertable, or `schema.hypertable_keys = "reject"` for every hypertable, the migration fails instead and tells you the key to declare.
+- A unique index that lacks them can't be widened without changing what it means, so it is an error on every database: add the time column to it, or drop it.
+- Converting an existing table rebuilds its primary key the same way, unless other tables' foreign keys point at it; then the conversion stops and names them.
+
+Use **time-ordered ids** for time-series tables: UUID v7 (what Navree generates for `Uuid` keys) or ULID (`ulid_primary()`). Their leading bits are a timestamp, so new rows land at the end of the index, ids sort by creation time, and a lookup by `id` alone still uses the `(id, occurred_at)` key. Two ways to key a time-series table:
+
+| | Declares | Fits |
+|---|---|---|
+| A time-ordered id | `t.uuid_primary()` (widened to `(id, occurred_at)`) | rows you fetch or link by id: events, audit entries, deliveries |
+| A natural key | `t.primary(["device_id", "taken_at"])` | readings with one value per source and instant |
+
+## Chunks and partitions
+
+TimescaleDB's default chunk spans 7 days. Size chunks so the indexes of the most recent chunk fit in about a quarter of the server's memory: a table receiving millions of rows a day wants `chunk_interval("1 day")` or less, a quiet one can keep the default. `schema.set_chunk_interval("events", "6 hours")` changes it for chunks created from then on.
+
+### Space partitioning
+
+`partition_by("workspace_id", 4)` also splits each time span into 4 partitions by hashing a column. It helps when the data is spread over several disks, and rarely on a single server. A partitioned hypertable's keys must include the partition column too, and the builder widens them to `(id, occurred_at, workspace_id)`.
+
+## Compression
+
+```rust
+events
+    .compress()
+    .segment_by(["workspace_id"])
+    .order_by("occurred_at DESC")
+    .after("7 days");
+```
+
+Compression (TimescaleDB's columnstore) stores old chunks by column, often at a tenth of their size. `segment_by` lists the columns your queries filter on: rows are grouped by them, so a query for one workspace reads one segment. Pick columns with many rows per value (a workspace, a device), not unique ones. `order_by` orders rows inside a segment, usually the time column descending. `after` adds a policy that compresses chunks once they are that old; leave the recent chunks, which still receive writes, uncompressed. On an existing hypertable use `schema.compress("events", &compression)`, `add_compression_policy` and `remove_compression_policy`.
+
+## Retention
+
+`retain_for("90 days")` adds a policy that drops chunks older than 90 days, whole, without the cost of a `DELETE`. On an existing hypertable use `schema.add_retention_policy("events", "90 days")` and `remove_retention_policy`.
+
+## Reorder policies
+
+`reorder_by("events_workspace_id_occurred_at_index")` rewrites each chunk in the order of that index once it stops receiving writes, so range queries on that index read neighbouring rows. Declare the index in the same migration. On an existing hypertable: `add_reorder_policy` and `remove_reorder_policy`.
+
+## Continuous aggregates
+
+A continuous aggregate is a materialized view over a hypertable that TimescaleDB keeps up to date by refreshing only the time ranges that changed:
+
+```rust
+schema
+    .create_continuous_aggregate(
+        ContinuousAggregate::over("events_daily", "events")
+            .time_bucket("1 day", "occurred_at", "day")
+            .group_by("workspace_id")
+            .aggregate("count(*)", "total")
+            .aggregate("count(DISTINCT kind)", "kinds")
+            .where_raw("kind <> 'heartbeat'")
+            .refresh(
+                RefreshPolicy::every("1 hour")
+                    .start_offset("3 days")
+                    .end_offset("1 hour"),
+            ),
+    )
+    .await?;
+```
+
+The refresh policy refreshes the window from `start_offset` ago to `end_offset` ago every `every`; leave the most recent span (`end_offset`) to be computed when read. `.materialized_only(false)` makes queries add the newest raw rows to the materialized ones. You can also give the query as SQL, `ContinuousAggregate::new("events_daily", "SELECT time_bucket(...) ...")`; SQL that calls `time_bucket` only runs where TimescaleDB is installed, and elsewhere the migration stops and suggests the described form.
+
+`drop_continuous_aggregate`, `add_continuous_aggregate_policy`, `remove_continuous_aggregate_policy` and `refresh_continuous_aggregate` manage them later. TimescaleDB refuses to refresh inside a transaction, so a migration that refreshes returns `false` from `within_transaction`.
+
+## One migration, every database
+
+A migration that declares a hypertable runs everywhere:
+
+| Database | Gets |
+|---|---|
+| TimescaleDB | A hypertable with its dimensions and policies; continuous aggregates. |
+| PostgreSQL without TimescaleDB | A regular table with an index on `(occurred_at DESC)` (and `(partition, occurred_at DESC)`), unless one already starts with them; continuous aggregates as plain views bucketing with `date_bin`. |
+| MySQL and MariaDB | The same indexes; views bucketing with epoch arithmetic. |
+| SQLite | The same indexes; views bucketing with `strftime`. |
+
+Each fallback reports a notice naming what it skipped:
+
+```text
+notice: SQLite does not support TimescaleDB: `events` is a regular table with an index on `occurred_at`; its compression and retention (90 days) policies are skipped
+```
+
+So your tests run the production migrations on SQLite, and a plain PostgreSQL server works too, without the time-series features. A view bucket is computed when read; the buckets line up with TimescaleDB's (`time_bucket` counts from Monday 2000-01-03), so the same query gives the same buckets everywhere.
+
+### The extension
+
+| `schema.timescaledb` | Behaviour |
+|---|---|
+| `"auto"` (default) | Uses TimescaleDB when the database has it. When the extension is available but not installed (the server preloads it and the database user is a superuser), the first hypertable runs `CREATE EXTENSION IF NOT EXISTS timescaledb`, unless `schema.create_extensions = false`. Otherwise it falls back. |
+| `"require"` | Fails a hypertable migration on a PostgreSQL database without TimescaleDB, so production can't silently run without it. Other databases still fall back. |
+| `"off"` | Never uses TimescaleDB; hypertables are regular tables everywhere. |
+
+Set `require` in production's environment (`APP_SCHEMA__TIMESCALEDB=require`) and keep `auto` for development and tests.
+
+## Dumps
+
+`navree schema:dump` writes hypertables, their dimensions, compression settings, policies and continuous aggregates into the [schema dump](/docs/database/migrations/#schema-dumps) through TimescaleDB's functions, so a database loaded from the dump is a TimescaleDB database with the same hypertables.
+
+<LinkCards>
+  <LinkCard href="/docs/database/migrations/" title="Migrations">
+    Writing, ordering, running and dumping migrations.
+  </LinkCard>
+  <LinkCard href="/docs/database/schema-builder/" title="Schema builder">
+    Every column type, modifier, index and foreign key.
+  </LinkCard>
+</LinkCards>

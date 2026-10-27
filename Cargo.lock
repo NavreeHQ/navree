@@ -3931,6 +3931,7 @@ dependencies = [
  "navree-realtime",
  "navree-redis",
  "navree-schedule",
+ "navree-schema",
  "navree-search",
  "navree-session",
  "navree-social",
@@ -4258,6 +4259,7 @@ dependencies = [
  "navree-contracts",
  "navree-http",
  "navree-kernel",
+ "navree-schema",
  "navree-telemetry",
  "sea-orm",
  "sea-orm-migration",
@@ -5027,6 +5029,22 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "navree-schema"
+version = "0.1.0"
+dependencies = [
+ "insta",
+ "navree-config",
+ "sea-orm",
+ "sea-orm-migration",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
  "tracing",
 ]
 

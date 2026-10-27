@@ -13,9 +13,9 @@ workspace = true
 [features]
 default = []
 ## PostgreSQL driver (code paths exist; tests run on SQLite).
-postgres = ["sea-orm/sqlx-postgres", "sea-orm-migration/sqlx-postgres"]
+postgres = ["sea-orm/sqlx-postgres", "sea-orm-migration/sqlx-postgres", "navree-schema/postgres"]
 ## MySQL and MariaDB driver (`mysql://` and `mariadb://` URLs).
-mysql = ["sea-orm/sqlx-mysql", "sea-orm-migration/sqlx-mysql"]
+mysql = ["sea-orm/sqlx-mysql", "sea-orm-migration/sqlx-mysql", "navree-schema/mysql"]
 
 [dependencies]
 axum = { workspace = true }
@@ -26,8 +26,11 @@ navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
+navree-schema = { workspace = true }
 navree-telemetry = { workspace = true }
-sea-orm = { workspace = true }
+# `mock`: `migrate --pretend` keeps the statements of SeaORM migrations on a
+# connection that runs nothing.
+sea-orm = { workspace = true, features = ["mock"] }
 sea-orm-migration = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
