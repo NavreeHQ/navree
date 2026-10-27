@@ -28,6 +28,7 @@ Start with **`navree`**. It explains what a Navree app is, how one is laid out, 
 | `navree-access-control` | Roles, permissions, ability rules, record checks with `Authorized` and per-user list filters with `Accessible` |
 | `navree-workspaces` | Workspaces, members, roles and invitations, `CurrentWorkspace` and isolation by row, schema or database |
 | `navree-time-zones` | Zones with `CurrentZone`, local days and report windows with `DayRange`, `SendWindow` and holidays, `AT TIME ZONE` SQL, `in_zone` and `per_workspace_local` schedules, `ZonesFake` |
+| `navree-sso` | Single sign-on per organization or workspace with SAML 2.0 or OpenID Connect: connections, identity provider setup, verified domains and password enforcement, just-in-time provisioning with role mapping, and `SsoFake` in tests |
 | `navree-webhooks` | Signed outgoing webhooks from events, endpoints, retries and the delivery log, and incoming webhooks verified with `VerifiedWebhook` (Stripe, GitHub, Paddle, Standard Webhooks, AWS SNS, Google Pub/Sub, Microsoft Graph, Twilio, Slack, Mailgun, Postmark) |
 | `navree-flags` | Feature flags as types with `#[flag]`, checks with `CurrentFlags`, `Flags` and `#[requires_flag]`, overrides, percentage and plan rollouts, the kill switch, and `FlagsFake` in tests |
 | `navree-search` | `#[derive(Searchable)]`, search engines, syncing through the queue, queries with access and workspaces, vector search |

@@ -73,6 +73,7 @@ fn every_module_crate_is_reexported_whole() {
         Setting<FacadeSettings>,
     >());
     assert!(same::<navree::settings::Settings, navree::settings::Settings>());
+    assert!(same::<navree::sso::SsoModule, SsoModule>());
     // L7
     assert!(same::<navree::lighthouse::LighthouseModule, LighthouseModule>());
     assert!(same::<

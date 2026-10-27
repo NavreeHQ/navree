@@ -97,6 +97,7 @@ export const sections: DocsSection[] = [
       "sessions",
       "passwordless",
       "impersonation",
+      "single-sign-on",
       "authorization",
       "encryption-and-hashing",
       "signatures-and-keys",

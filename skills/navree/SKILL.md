@@ -119,6 +119,7 @@ navree list                                 # every command of the app
 | Local PostgreSQL, Redis, Meilisearch, Mailpit, MinIO or NATS for development and CI (`dock.toml`, `navree dock`) | `navree-dock` |
 | Provisioning Ubuntu servers and zero-downtime deploys, rollbacks, deploy secrets, container images, push-to-deploy (`harbor.toml`, `navree deploy`) | `navree-harbor` |
 | Sign in with Google, GitHub, Apple, Microsoft or an OpenID Connect provider | `navree-social` |
+| A customer's company identity provider (Okta, Entra ID, Google Workspace, AD FS) per organization or workspace: SAML or OpenID Connect, verified domains, forcing SSO, provisioning members | `navree-sso` |
 | Sending webhooks to customers' URLs, receiving Stripe, GitHub, Paddle or other signed webhooks | `navree-webhooks` |
 | Feature flags: hiding a feature until it is released, gradual rollouts, a kill switch, flags for the front end | `navree-flags` |
 | Settings an app, organization, workspace or user can change, inherited down that chain; showing where a value comes from; settings screens and resets | `navree-settings` |

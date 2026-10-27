@@ -15,7 +15,7 @@ This keeps the framework honest: the kernel knows nothing about HTTP, HTTP knows
 L9+ apps/crm-api (Navree app)                    apps/crm-web (Next.js 16)
 L8  navree (facade: re-exports + prelude)        navree-cli (binary `navree`; no runtime navree deps, uses navree-dock)
 L7  navree-billing  navree-search  navree-lighthouse  navree-logbook  navree-helm (packages built on other packages)
-L6  navree-social  navree-webhooks  navree-flags  navree-mcp  navree-ai  navree-i18n (ecosystem libraries)
+L6  navree-social  navree-sso  navree-webhooks  navree-flags  navree-mcp  navree-ai  navree-i18n (ecosystem libraries)
 L5  navree-auth  navree-workspace  navree-redis
 L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify  navree-ui
 L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage  navree-time
@@ -60,6 +60,7 @@ L0  navree-kernel                                navree-macros, navree-i18n-macr
 | L5 | `navree-workspace` | [Workspaces](/docs/workspaces/introduction/): members, roles, invitations, row, schema or database isolation |
 | L5 | `navree-redis` | [Redis](/docs/digging-deeper/redis/): shared connections and the Redis drivers of the cache, locks, queue, sessions and real-time backplane, shared rate limits |
 | L6 | `navree-social` | [Social sign-in](/docs/packages/social-sign-in/): providers, linked accounts, Navree tokens |
+| L6 | `navree-sso` | [Single sign-on](/docs/security/single-sign-on/): SAML 2.0 and OpenID Connect connections per organization or workspace, verified domains, just-in-time provisioning |
 | L6 | `navree-webhooks` | [Webhooks](/docs/packages/webhooks/): signed outgoing deliveries with retries and a delivery log, verified incoming webhooks |
 | L6 | `navree-flags` | [Feature flags](/docs/packages/feature-flags/): flags as types, per user, workspace, plan or percentage |
 | L6 | `navree-mcp` | [MCP servers](/docs/ai/mcp-servers/): tools, resources and prompts over streamable HTTP and stdio |
@@ -99,6 +100,7 @@ L0  navree-kernel                                navree-macros, navree-i18n-macr
 | `navree-workspace` | kernel, contracts, config, http, db, crypto, events, mail, access, time |
 | `navree-redis` | kernel, contracts, config, http, cache, db, queue, session, realtime |
 | `navree-social` | kernel, contracts, config, http, crypto, cache, events, http-client, db, audit, auth |
+| `navree-sso` | kernel, contracts, config, http, crypto, cache, events, http-client, db, auth, workspace |
 | `navree-webhooks` | kernel, contracts, config, http, crypto, events, http-client, db, queue, access, workspace |
 | `navree-flags` | kernel, contracts, config, http, cache, db, events, audit, access, auth, workspace |
 | `navree-mcp` | kernel, contracts, config, http, cache, db, testing, validation, access, auth |
