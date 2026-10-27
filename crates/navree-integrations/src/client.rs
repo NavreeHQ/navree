@@ -572,3 +572,36 @@ impl Deref for SlackClient {
         &self.0
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    fn sorted(mut pairs: Vec<(String, String)>) -> Vec<(String, String)> {
+        pairs.sort();
+        pairs
+    }
+
+    #[test]
+    fn maps_structs_and_lists_of_pairs_become_pairs() {
+        let pair = |a: &str, b: &str| (a.to_owned(), b.to_owned());
+        assert_eq!(
+            sorted(pairs(
+                json!({ "limit": 10, "archived": false, "skip": null, "ids": ["a", "b"] })
+            )),
+            vec![
+                pair("archived", "false"),
+                pair("ids", "a"),
+                pair("ids", "b"),
+                pair("limit", "10"),
+            ]
+        );
+        assert_eq!(
+            pairs(json!([["pageToken", "p2"], ["customer", "my_customer"]])),
+            vec![pair("pageToken", "p2"), pair("customer", "my_customer")]
+        );
+        assert!(pairs(json!("scalar")).is_empty());
+    }
+}

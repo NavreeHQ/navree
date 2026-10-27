@@ -429,7 +429,7 @@ Every answer carries its `code` in the [error body](/docs/basics/errors/#error-c
 `Integrations::fake()` returns an `Integrations` whose providers are an `IntegrationsFake`. States are still sealed and checked, credentials still encrypted and stored and service-account keys still sign their assertions; only the provider's side is replaced, and the typed clients send through a fake HTTP client you stub:
 
 ```rust title="tests/integrations.rs"
-use http::Method;
+use navree::axum::http::Method;
 use navree::http_client::FakeResponse;
 use navree::integrations::{ConnectCallback, ConnectOptions, Integrations, MicrosoftGraph, Owner};
 use navree::prelude::*;
