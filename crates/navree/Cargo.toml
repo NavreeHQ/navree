@@ -168,6 +168,7 @@ webhooks = [
     "http-client",
     "db",
     "workspace",
+    "orm",
 ]
 ## L6 (opt-in, not in `full`)
 ## Social sign-in: Google, GitHub, Apple, Microsoft, GitLab, Slack, LinkedIn,
@@ -181,6 +182,7 @@ social = [
     "http-client",
     "db",
     "auth",
+    "orm",
 ]
 ## L6 (opt-in, not in `full`)
 ## OAuth 2.1 authorization server and OpenID Connect provider.
@@ -193,6 +195,7 @@ oauth = [
     "http",
     "testing",
     "workspace",
+    "orm",
 ]
 ## L6 (ecosystem libraries, opt-in: not part of `full`)
 ## Feature flags: `#[flag]`, `Flags`, `CurrentFlags`, `#[requires_flag]`.

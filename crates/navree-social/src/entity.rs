@@ -1,4 +1,7 @@
-//! The social module's table as a SeaORM entity.
+//! The social module's table: a navree-orm model
+//! (`social_account::Model::query()`, typed columns such as
+//! `social_account::Model::PROVIDER`), and a SeaORM entity for code built
+//! on SeaORM's query API.
 //!
 //! `social_accounts(id, user_id → users ON DELETE CASCADE, provider,
 //! provider_user_id, email, name, avatar_url, nickname, access_token,
@@ -15,8 +18,9 @@ pub mod social_account {
     use serde::Serialize;
 
     /// A linked provider account.
-    #[derive(Clone, PartialEq, Eq, DeriveEntityModel, Serialize)]
+    #[derive(Clone, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
     #[sea_orm(table_name = "social_accounts")]
+    #[model(table = "social_accounts")]
     pub struct Model {
         /// The id (UUID v7).
         #[sea_orm(primary_key, auto_increment = false)]

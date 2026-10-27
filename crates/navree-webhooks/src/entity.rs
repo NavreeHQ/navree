@@ -1,5 +1,7 @@
-//! The webhooks module's tables as SeaORM entities (migration set
-//! `webhooks`).
+//! The webhooks module's tables (migration set `webhooks`): navree-orm
+//! models (`endpoint::Model::query()`, typed columns such as
+//! `delivery::Model::EVENT_TYPE`), and SeaORM entities for code built on
+//! SeaORM's query API.
 //!
 //! - `webhook_endpoints(id, workspace_id, url, description, events JSON,
 //!   headers JSON, secret, previous_secret, previous_secret_expires_at,
@@ -30,8 +32,9 @@ pub mod endpoint {
     use serde::Serialize;
 
     /// An endpoint.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
     #[sea_orm(table_name = "webhook_endpoints")]
+    #[model(table = "webhook_endpoints")]
     pub struct Model {
         /// The id (UUID v7).
         #[sea_orm(primary_key, auto_increment = false)]
@@ -95,8 +98,9 @@ pub mod delivery {
     use serde::Serialize;
 
     /// A delivery.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
     #[sea_orm(table_name = "webhook_deliveries")]
+    #[model(table = "webhook_deliveries")]
     pub struct Model {
         /// The id (UUID v7).
         #[sea_orm(primary_key, auto_increment = false)]
@@ -169,8 +173,9 @@ pub mod attempt {
     use serde::Serialize;
 
     /// An attempt.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
     #[sea_orm(table_name = "webhook_attempts")]
+    #[model(table = "webhook_attempts")]
     pub struct Model {
         /// The id (UUID v7).
         #[sea_orm(primary_key, auto_increment = false)]
@@ -240,8 +245,9 @@ pub mod receipt {
     use serde::Serialize;
 
     /// A receipt.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
     #[sea_orm(table_name = "webhook_receipts")]
+    #[model(table = "webhook_receipts")]
     pub struct Model {
         /// The id (UUID v7).
         #[sea_orm(primary_key, auto_increment = false)]
