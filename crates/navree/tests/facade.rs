@@ -399,7 +399,10 @@ fn optional_dependencies_count_when_default_features_turn_them_on() {
     let on = default_optional_deps(&package);
     assert!(on.contains("navree-testing"));
     assert!(on.contains("navree-db"));
-    assert!(!on.contains("navree-view"), "a weak feature turns nothing on");
+    assert!(
+        !on.contains("navree-view"),
+        "a weak feature turns nothing on"
+    );
     assert!(!on.contains("navree-cache"));
     assert!(default_optional_deps(&serde_json::json!({ "features": {} })).is_empty());
 }
