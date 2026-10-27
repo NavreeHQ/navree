@@ -4788,6 +4788,7 @@ dependencies = [
  "navree-telemetry",
  "navree-testing",
  "navree-view",
+ "percent-encoding",
  "sea-orm",
  "sea-orm-migration",
  "serde",

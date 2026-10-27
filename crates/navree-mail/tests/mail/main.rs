@@ -1,6 +1,8 @@
 //! Integration tests for navree-mail: messages, transports, the `Mailer`,
 //! queued sending and the `MailModule`.
 
+mod api;
+mod dkim;
 mod log;
 mod mailer;
 mod message;
