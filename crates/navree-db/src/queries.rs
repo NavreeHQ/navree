@@ -139,12 +139,16 @@ type StatementHook = Arc<dyn Fn(&str) + Send + Sync>;
 /// A hook of [`Db::before_starting_transaction`](crate::Db::before_starting_transaction).
 type TransactionHook = Arc<dyn Fn() + Send + Sync>;
 
+/// What [`Db::when_querying_for_longer_than`](crate::Db::when_querying_for_longer_than)
+/// calls: the unit of work and its total query time.
+type SlowWorkHandler = Arc<dyn Fn(&Uow, Duration) + Send + Sync>;
+
 /// A handler of [`Db::when_querying_for_longer_than`](crate::Db::when_querying_for_longer_than).
 #[derive(Clone)]
 struct DurationHandler {
     id: usize,
     threshold: Duration,
-    handler: Arc<dyn Fn(&Uow, Duration) + Send + Sync>,
+    handler: SlowWorkHandler,
 }
 
 /// The listeners and hooks of one connection (its writer and replicas),
@@ -185,11 +189,7 @@ impl Watchers {
         write(&self.before_transaction).push(hook);
     }
 
-    pub(crate) fn add_duration_handler(
-        &self,
-        threshold: Duration,
-        handler: Arc<dyn Fn(&Uow, Duration) + Send + Sync>,
-    ) {
+    pub(crate) fn add_duration_handler(&self, threshold: Duration, handler: SlowWorkHandler) {
         let mut handlers = write(&self.duration_handlers);
         let id = handlers.len();
         handlers.push(DurationHandler {
