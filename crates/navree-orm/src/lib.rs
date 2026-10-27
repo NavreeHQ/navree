@@ -121,7 +121,7 @@ pub use error::{OrmError, Result};
 pub use exec::{Access, DocumentTarget, ExecContext, Executor, SqlTarget, Target};
 pub use ir::Expr;
 pub use model::{
-    ColumnMeta, DateSerializer, KeyKind, Model, ModelMeta, PrimaryKey, SchemaJson, Timestamp,
+    ColumnMeta, DateSerializer, KeyKind, Model, ModelMeta, PartialSchemaFn, PrimaryKey, Timestamp,
 };
 pub use pagination::{
     CursorPage, CursorRequest, Page, PageMeta, PageQuery, PageRequest, SimplePage, SimplePageMeta,
@@ -153,6 +153,7 @@ pub mod __private {
     pub use navree_kernel::BoxFuture;
     pub use serde_json;
     pub use std::sync::Arc;
+    pub use utoipa;
 }
 
 /// The models the documentation examples use, so every example compiles.

@@ -7,5 +7,6 @@ mod support;
 
 mod casts;
 mod fill;
+mod resources;
 mod secrets;
 mod serialize;

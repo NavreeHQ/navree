@@ -37,7 +37,7 @@
 use std::fmt;
 
 use crate::cast::CastError;
-use crate::model::SchemaJson;
+use crate::model::PartialSchemaFn;
 
 /// A computed value of model `M`: its name, how to read it as JSON, and
 /// its Rust type (for OpenAPI schemas). `#[accessors]` writes these.
@@ -45,7 +45,7 @@ pub struct Accessor<M> {
     name: &'static str,
     get: fn(&M) -> Result<serde_json::Value, CastError>,
     rust_type: &'static str,
-    schema: Option<SchemaJson>,
+    schema: Option<PartialSchemaFn>,
 }
 
 impl<M> Accessor<M> {
@@ -65,7 +65,7 @@ impl<M> Accessor<M> {
     }
 
     /// The accessor's OpenAPI schema (`#[accessor(schema = Type)]`).
-    pub const fn with_schema(self, schema: SchemaJson) -> Self {
+    pub const fn with_schema(self, schema: PartialSchemaFn) -> Self {
         Accessor {
             schema: Some(schema),
             ..self
@@ -83,7 +83,7 @@ impl<M> Accessor<M> {
     }
 
     /// The accessor's OpenAPI schema override, if any.
-    pub const fn schema_override(&self) -> Option<SchemaJson> {
+    pub const fn schema_override(&self) -> Option<PartialSchemaFn> {
         self.schema
     }
 

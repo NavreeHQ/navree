@@ -246,9 +246,9 @@ impl<T: Timestamp> Timestamp for Option<T> {
     }
 }
 
-/// The OpenAPI schema of a column or appended value, as JSON Schema
-/// (`#[model(schema = Type)]` gives `Type`'s).
-pub type SchemaJson = fn() -> serde_json::Value;
+/// The OpenAPI schema of a column or appended value
+/// (`#[model(schema = Type)]` gives `Type`'s `PartialSchema::schema`).
+pub type PartialSchemaFn = fn() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema>;
 
 /// One column of a model, as `#[derive(Model)]` describes it.
 #[derive(Clone, Copy, Debug)]
@@ -261,8 +261,9 @@ pub struct ColumnMeta {
     serialized: Option<&'static str>,
     kind: FieldKind,
     serde_custom: bool,
+    serde_optional: bool,
     mutator: bool,
-    schema: Option<SchemaJson>,
+    schema: Option<PartialSchemaFn>,
 }
 
 impl ColumnMeta {
@@ -278,6 +279,7 @@ impl ColumnMeta {
             serialized: Some(field),
             kind: FieldKind::Any,
             serde_custom: false,
+            serde_optional: false,
             mutator: false,
             schema: None,
         }
@@ -324,6 +326,14 @@ impl ColumnMeta {
         }
     }
 
+    /// Serde may leave the field out (`skip_serializing_if`).
+    pub const fn serde_optional(self) -> Self {
+        ColumnMeta {
+            serde_optional: true,
+            ..self
+        }
+    }
+
     /// The field has a mutator (`#[model(set_with = ..)]`).
     pub const fn mutator(self) -> Self {
         ColumnMeta {
@@ -333,7 +343,7 @@ impl ColumnMeta {
     }
 
     /// The column's OpenAPI schema (`#[model(schema = Type)]`).
-    pub const fn schema(self, schema: SchemaJson) -> Self {
+    pub const fn schema(self, schema: PartialSchemaFn) -> Self {
         ColumnMeta {
             schema: Some(schema),
             ..self
@@ -393,13 +403,18 @@ impl ColumnMeta {
         self.serde_custom
     }
 
+    /// Whether serde may leave the field out of serialized records.
+    pub const fn is_serde_optional(&self) -> bool {
+        self.serde_optional
+    }
+
     /// Whether the field has a mutator (`#[model(set_with = ..)]`).
     pub const fn has_mutator(&self) -> bool {
         self.mutator
     }
 
     /// The column's OpenAPI schema override, if any.
-    pub const fn schema_override(&self) -> Option<SchemaJson> {
+    pub const fn schema_override(&self) -> Option<PartialSchemaFn> {
         self.schema
     }
 }
@@ -419,6 +434,7 @@ impl PartialEq for ColumnMeta {
             && self.serialized == other.serialized
             && self.kind == other.kind
             && self.serde_custom == other.serde_custom
+            && self.serde_optional == other.serde_optional
             && self.mutator == other.mutator
             && same_schema
     }
@@ -1662,11 +1678,6 @@ pub mod derive_support {
             Value::Json(Some(json)) => Some(*json),
             _ => None,
         }
-    }
-
-    /// The OpenAPI schema of `T`, as JSON Schema (`#[model(schema = T)]`).
-    pub fn schema_json<T: utoipa::PartialSchema>() -> serde_json::Value {
-        serde_json::to_value(T::schema()).unwrap_or(serde_json::Value::Null)
     }
 
     /// A field's value, probed for being JSON (`json_attribute`): fields of

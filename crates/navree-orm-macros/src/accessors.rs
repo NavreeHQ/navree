@@ -194,7 +194,7 @@ pub(crate) fn expand(args: TokenStream, item: TokenStream) -> syn::Result<TokenS
             )
         };
         if let Some(schema) = &args.schema {
-            entry = quote!(#entry.with_schema(#krate::__private::schema_json::<#schema>));
+            entry = quote!(#entry.with_schema(<#schema as #krate::__private::utoipa::PartialSchema>::schema));
         }
         entries.push(entry);
     }

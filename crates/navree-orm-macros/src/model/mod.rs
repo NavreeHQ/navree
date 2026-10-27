@@ -247,6 +247,7 @@ fn analyse(input: &DeriveInput) -> syn::Result<Model> {
         let info = attributes::FieldInfo {
             serialized: attributes::serialized_key(&field_ident, &serde_container, &serde_field),
             serde_custom: serde_field_custom(&serde_field),
+            serde_optional: serde_field.is_optional(),
             set_with: layer.set_with.clone(),
             schema: layer.schema.clone(),
             multi: None,
