@@ -1,0 +1,11 @@
+error: column `title` is already the column of field `name`
+ --> tests/ui/model_field_conflicts.rs:8:5
+  |
+8 |     title: String,
+  |     ^^^^^
+
+error: a skipped field is not a column: drop `column`, `cast` and `default`
+ --> tests/ui/model_field_conflicts.rs:9:13
+  |
+9 |     #[model(skip, column = "x")]
+  |             ^^^^

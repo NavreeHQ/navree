@@ -83,7 +83,13 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro_attribute]
 pub fn scopes(args: TokenStream, item: TokenStream) -> TokenStream {
-    scopes::expand(args.into(), item.into())
-        .unwrap_or_else(syn::Error::into_compile_error)
+    let item: proc_macro2::TokenStream = item.into();
+    scopes::expand(args.into(), item.clone())
+        .unwrap_or_else(|error| {
+            // The impl block stays, so the errors are the only ones.
+            let mut out = error.into_compile_error();
+            out.extend(scopes::without_markers(item));
+            out
+        })
         .into()
 }

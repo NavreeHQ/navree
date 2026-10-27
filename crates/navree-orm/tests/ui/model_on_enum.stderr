@@ -1,0 +1,5 @@
+error: #[derive(Model)] needs a struct with named fields
+ --> tests/ui/model_on_enum.rs:4:6
+  |
+4 | enum Stage {
+  |      ^^^^^

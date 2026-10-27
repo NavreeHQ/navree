@@ -175,6 +175,10 @@ fn analyse(input: &DeriveInput) -> syn::Result<Model> {
         });
     }
 
+    // Malformed attributes first: the checks below would only cascade.
+    errors.finish()?;
+    let mut errors = Errors::default();
+
     let key_name = attrs
         .primary_key
         .as_ref()
@@ -212,9 +216,7 @@ fn analyse(input: &DeriveInput) -> syn::Result<Model> {
         match columns.iter().find(|candidate| &candidate.name == name) {
             None => errors.push(syn::Error::new(
                 span,
-                format!(
-                    "{what} needs a `{name}` field (or {option})"
-                ),
+                format!("{what} needs a field for the `{name}` column (or {option})"),
             )),
             Some(found) if found.cast.is_some() => errors.push(syn::Error::new(
                 found.ident.span(),

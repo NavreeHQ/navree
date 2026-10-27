@@ -71,6 +71,20 @@ impl VisitMut for ReplaceSelf<'_> {
     }
 }
 
+/// The impl block without its `#[scope]` markers (what stays of it when
+/// `#[scopes]` reports an error); nothing when it is not an impl block.
+pub(crate) fn without_markers(item: TokenStream) -> TokenStream {
+    let Ok(mut block) = syn::parse2::<ItemImpl>(item) else {
+        return TokenStream::new();
+    };
+    for item in &mut block.items {
+        if let ImplItem::Fn(function) = item {
+            function.attrs.retain(|attr| !attr.path().is_ident("scope"));
+        }
+    }
+    quote!(#block)
+}
+
 /// Expands `#[scopes]` on an impl block.
 pub(crate) fn expand(args: TokenStream, item: TokenStream) -> syn::Result<TokenStream> {
     let mut options = Args::default();

@@ -1,0 +1,17 @@
+error: #[model(timestamps)] needs a field for the `created_at` column (or name the column with timestamps(created_at = "..."), or turn it off with created_at = false)
+ --> tests/ui/model_timestamp_columns.rs:4:9
+  |
+4 | #[model(timestamps, soft_deletes)]
+  |         ^^^^^^^^^^
+
+error: the soft-delete column `deleted_at` must be nullable: make the field an `Option<DateTime<Utc>>` (NULL means not deleted)
+ --> tests/ui/model_timestamp_columns.rs:8:5
+  |
+8 |     deleted_at: chrono::DateTime<chrono::Utc>,
+  |     ^^^^^^^^^^
+
+error: name the column ("...") or turn it off with false
+  --> tests/ui/model_timestamp_columns.rs:12:33
+   |
+12 | #[model(timestamps(created_at = true, updated_at = false))]
+   |                                 ^^^^

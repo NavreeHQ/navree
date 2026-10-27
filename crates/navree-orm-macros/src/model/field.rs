@@ -57,14 +57,26 @@ fn parse_key(field: &mut FieldAttrs, meta: &ParseNestedMeta<'_>) -> syn::Result<
                 "json" => Cast::Json,
                 "string_enum" => Cast::StringEnum,
                 "int_enum" => Cast::IntEnum,
-                other => Cast::Path(syn::parse_str::<syn::Path>(other).map_err(|_| {
-                    syn::Error::new(
-                        text.span(),
-                        format!(
-                            "unknown cast `{other}`: use \"json\", \"string_enum\", \"int_enum\" or the path of a type implementing `Cast`"
-                        ),
-                    )
-                })?),
+                other => {
+                    let unknown = || {
+                        syn::Error::new(
+                            text.span(),
+                            format!(
+                                "unknown cast `{other}`: use \"json\", \"string_enum\", \"int_enum\" or the path of a type implementing `Cast`"
+                            ),
+                        )
+                    };
+                    let path = syn::parse_str::<syn::Path>(other).map_err(|_| unknown())?;
+                    // A cast is a type: its name starts with a capital
+                    // letter; a lowercase word is a misspelled built-in.
+                    let is_type = path.segments.last().is_some_and(|segment| {
+                        segment.ident.to_string().starts_with(|c: char| c.is_ascii_uppercase())
+                    });
+                    if !is_type {
+                        return Err(unknown());
+                    }
+                    Cast::Path(path)
+                }
             };
             (cast, text.span())
         } else {
