@@ -362,7 +362,10 @@ async fn organizations_store_checked_zones_and_countries() {
 
     // Well-formed names that are not zones or countries are refused too.
     for (input, field) in [
-        (NewOrganization::named("X").timezone("Mars/Base"), "timezone"),
+        (
+            NewOrganization::named("X").timezone("Mars/Base"),
+            "timezone",
+        ),
         (NewOrganization::named("X").country("XX"), "country"),
     ] {
         let organizations = organizations.clone();

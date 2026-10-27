@@ -256,12 +256,15 @@ fn workspaces() -> Workspaces {
     }
 }
 
+/// A run's owner and zone name.
+type Run = (Option<Uuid>, String);
+
 /// Records the owner and zone of every run.
 #[derive(Clone, Default)]
-struct Seen(Arc<Mutex<Vec<(Option<Uuid>, String)>>>);
+struct Seen(Arc<Mutex<Vec<Run>>>);
 
 impl Seen {
-    fn all(&self) -> Vec<(Option<Uuid>, String)> {
+    fn all(&self) -> Vec<Run> {
         self.0.lock().unwrap().clone()
     }
 }

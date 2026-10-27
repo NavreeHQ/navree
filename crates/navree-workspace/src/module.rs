@@ -35,8 +35,8 @@ use crate::org_controller::OrganizationController;
 use crate::permission_check::WorkspacePermissionCheck;
 use crate::tenant::{WorkspaceDatabases, WorkspaceMigrationSet};
 use crate::{
-    AccessRequests, Invitations, Isolation, Members, OrgMembers, Organizations, Partitions,
-    OrganizationZones, WorkspaceConfig, WorkspaceError, WorkspaceZones, Workspaces,
+    AccessRequests, Invitations, Isolation, Members, OrgMembers, OrganizationZones, Organizations,
+    Partitions, WorkspaceConfig, WorkspaceError, WorkspaceZones, Workspaces,
 };
 
 /// Multi-tenancy at the workspace level.
