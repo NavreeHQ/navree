@@ -7108,6 +7108,7 @@ dependencies = [
  "navree-kernel",
  "navree-mail",
  "navree-orm",
+ "navree-schedule",
  "navree-telemetry",
  "navree-testing",
  "navree-time",
