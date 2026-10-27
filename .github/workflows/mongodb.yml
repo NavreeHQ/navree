@@ -1,6 +1,8 @@
 # navree-mongo's suite against a real server: MongoDB 8.0 as a single-node
 # replica set (transactions need one), on pushes to main and pull requests
-# that touch the MongoDB crate or what it builds on.
+# that touch the MongoDB crate or what it builds on (navree-testing included,
+# for the dev-dependency). The workspace sets no compiler wrapper, so nothing
+# here needs sccache.
 name: MongoDB
 
 on:
@@ -12,6 +14,12 @@ on:
       - "crates/navree-orm-macros/**"
       - "crates/navree-schema/**"
       - "crates/navree-db/**"
+      - "crates/navree-config/**"
+      - "crates/navree-contracts/**"
+      - "crates/navree-kernel/**"
+      - "crates/navree-telemetry/**"
+      - "crates/navree-testing/**"
+      - "Cargo.toml"
       - "Cargo.lock"
       - ".github/workflows/mongodb.yml"
   pull_request:
@@ -21,6 +29,12 @@ on:
       - "crates/navree-orm-macros/**"
       - "crates/navree-schema/**"
       - "crates/navree-db/**"
+      - "crates/navree-config/**"
+      - "crates/navree-contracts/**"
+      - "crates/navree-kernel/**"
+      - "crates/navree-telemetry/**"
+      - "crates/navree-testing/**"
+      - "Cargo.toml"
       - "Cargo.lock"
       - ".github/workflows/mongodb.yml"
   workflow_dispatch:
