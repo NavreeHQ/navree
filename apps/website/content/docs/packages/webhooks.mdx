@@ -36,7 +36,7 @@ Navree::app()
     // ...
 ```
 
-The module contributes the migration set `webhooks`, which creates `webhook_endpoints`, `webhook_deliveries`, `webhook_attempts` and `webhook_receipts`.
+The module contributes the migration set `webhooks`, which creates `webhook_endpoints`, `webhook_deliveries`, `webhook_attempts` and `webhook_receipts`. The delivery log is time series: on [TimescaleDB](/docs/database/timescaledb/#navrees-own-tables), `webhook_deliveries` and `webhook_attempts` are hypertables on `created_at`, a day per chunk. A hypertable's key includes its time column, so attempts reference their endpoint rather than their delivery: deleting an endpoint deletes its deliveries and attempts, and `webhooks:prune` deletes a delivery's attempts with it.
 
 Endpoint secrets are encrypted at rest with your app key when the app includes `CryptoModule` and `APP_KEY` is set. Without a key they are stored as they are, and the module logs a warning the first time it stores one.
 

@@ -17,7 +17,7 @@ Navree::app()
     .module(AuditModule::from_config()) // section `audit`
 ```
 
-`AuditModule` is global and needs `DatabaseModule`; the app refuses to boot without it. It contributes the migration set `audit`, which creates `audit_logs` with indexes on the subject, the actor and the time. The table has no foreign key to `users`, so auditing works without `navree-auth`, and entries outlive the users they mention.
+`AuditModule` is global and needs `DatabaseModule`; the app refuses to boot without it. It contributes the migration set `audit`, which creates `audit_logs` with indexes on the subject, the actor and the time. The table has no foreign key to `users`, so auditing works without `navree-auth`, and entries outlive the users they mention. On [TimescaleDB](/docs/database/timescaledb/#navrees-own-tables), Navree's default database, the set then makes `audit_logs` a hypertable on `created_at`, a week per chunk; elsewhere it stays a regular table.
 
 The module also mounts `GET /api/audit`, which requires the permission `audit.read`. Checking a permission needs the [access module](/docs/security/authorization/); in an app without it, turn the route off with `audit.routes = false`, or the app refuses to boot.
 
@@ -341,7 +341,7 @@ Add your own with `audit.skip_fields`:
 
 ## Retention and pruning
 
-`audit:prune` deletes entries older than `audit.retention_days` (365 days by default); `--days N` overrides it for one run:
+`audit:prune` deletes entries older than `audit.retention_days` (365 days by default); `--days N` overrides it for one run. On TimescaleDB it drops the weeks entirely before the cutoff as whole chunks, so pruning a large trail takes no row-by-row delete:
 
 ```sh
 navree audit:prune
