@@ -43,7 +43,8 @@ thiserror = { workspace = true }
 # Task-local scopes (cast services, guard suspension).
 tokio = { workspace = true }
 tracing = { workspace = true }
-url = { workspace = true }
+# `url::Url` fields (serialized as their text).
+url = { workspace = true, features = ["serde"] }
 # OpenAPI schemas of models and pages.
 utoipa = { workspace = true }
 uuid = { workspace = true }

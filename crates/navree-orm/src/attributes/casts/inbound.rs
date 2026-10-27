@@ -3,6 +3,8 @@
 
 use std::marker::PhantomData;
 
+use navree_kernel::BoxFuture;
+
 use crate::attributes::CastContext;
 use crate::cast::{Cast, CastError};
 use crate::value::{Field, FieldKind};
@@ -13,10 +15,9 @@ use crate::value::{Field, FieldKind};
 /// as itself.
 ///
 /// The transformation runs every time the field is encoded (saves, dirty
-/// checks, conditions), on the value the record holds, and a reloaded
-/// record holds the stored, transformed value: make it idempotent
-/// (transforming a transformed value changes nothing), as a slug or a
-/// lower-cased email is.
+/// checks, conditions), and the record holds the transformed value once it
+/// is saved (or reloaded): make it idempotent (transforming a transformed
+/// value changes nothing), as a slug or a lower-cased email is.
 ///
 /// ```
 /// use navree_orm::cast::{Cast, CastError, Inbound, InboundCast};
@@ -75,5 +76,12 @@ impl<C: InboundCast<T>, T: Field> Cast<T> for Inbound<C> {
     fn from_json(input: serde_json::Value, context: &CastContext) -> Result<T, CastError> {
         let _ = context;
         T::from_json(input).map_err(CastError::from)
+    }
+
+    /// The record holds the transformed value once it is saved, as the
+    /// database does.
+    fn prepare<'a>(value: &'a mut T, context: &'a CastContext) -> BoxFuture<'a, Result<(), CastError>> {
+        let result = C::set_with(value, context).map(|stored| *value = stored);
+        Box::pin(std::future::ready(result))
     }
 }

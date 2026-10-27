@@ -849,6 +849,18 @@ pub trait Model: Clone + Send + Sync + Serialize + 'static {
         self.set_value(column, crate::value::json_to_value(input))
     }
 
+    /// Sets several columns of field `field` (a field stored across several
+    /// columns) from untyped input at once, so the field is checked whole
+    /// rather than one column at a time.
+    #[doc(hidden)]
+    fn set_attribute_parts(&mut self, field: &str, inputs: Vec<(String, serde_json::Value)>) -> Result<()> {
+        let _ = field;
+        for (column, input) in inputs {
+            self.set_attribute(&column, input)?;
+        }
+        Ok(())
+    }
+
     /// The columns whose values differ between `self` and `original`
     /// (dirty tracking), compared as stored: floats within a small
     /// tolerance, decimals numerically, date-times by instant, JSON
@@ -1573,6 +1585,32 @@ pub mod derive_support {
             decode_error(M::meta().name(), column, C::Stored::type_name(index), &error)
         })?;
         read_multi::<M, C, T>(field, stored).map(Some)
+    }
+
+    /// A multi-column field from its stored column values.
+    pub fn multi_from_values<M: Model, C: MultiColumnCast<T>, T>(
+        field: &str,
+        columns: &[&str],
+        values: Vec<Value>,
+    ) -> Result<T, OrmError> {
+        let stored = C::Stored::from_values(values).map_err(|(index, error)| {
+            let column = columns.get(index).copied().unwrap_or(field);
+            decode_error(M::meta().name(), column, C::Stored::type_name(index), &error)
+        })?;
+        read_multi::<M, C, T>(field, stored)
+    }
+
+    /// A nullable multi-column field from its stored column values: `None`
+    /// when every one is NULL.
+    pub fn multi_from_values_option<M: Model, C: MultiColumnCast<T>, T>(
+        field: &str,
+        columns: &[&str],
+        values: Vec<Value>,
+    ) -> Result<Option<T>, OrmError> {
+        if values.iter().all(crate::value::is_null) {
+            return Ok(None);
+        }
+        multi_from_values::<M, C, T>(field, columns, values).map(Some)
     }
 
     /// The stored columns of a multi-column field that differ between `a`
