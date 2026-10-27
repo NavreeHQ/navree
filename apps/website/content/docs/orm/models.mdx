@@ -138,6 +138,8 @@ pub struct ApiToken {
 
 Navree's own tables use UUID v7 keys. A generated key is known before the `INSERT`, doesn't reveal how many records there are, and lets [cursor pagination](/docs/orm/pagination-and-streaming/#cursor-pagination) page by key.
 
+A `Uuid` field is stored as a native `UUID` on PostgreSQL and as its 16 bytes on MySQL, MariaDB and SQLite. On MySQL its column must be a 16-byte binary, not the schema builder's `uuid` column, which is `CHAR(36)` there; use the same binary on MariaDB ([UUID columns on MySQL](/docs/database/columns/#uuid-columns-on-mysql)).
+
 ## Timestamps
 
 With `timestamps`, the ORM sets `created_at` and `updated_at` on insert when they are empty, and `updated_at` on every update that changes something, unless you changed it yourself. Times come from the app's `dyn Clock`, so a test that [fixes the clock](/docs/testing/fakes/#the-clock) sees fixed timestamps, and are cut to microseconds so the stored and in-memory values agree on every database.

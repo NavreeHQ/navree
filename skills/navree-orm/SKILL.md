@@ -284,14 +284,16 @@ navree model:prune           # deletes what prunable models select
 
 ## Common mistakes
 
-- Forgetting `#[derive(Default)]`, or a `#[relations]` block on a model whose
-  relations are used by name: `with("company")` finds nothing.
+- A typo in a relation name (`with("compnay")`) fails only when the query
+  runs: pass the method (`with(Deal::company)`) and the compiler checks it.
+  A model has one `#[relations]` block and derives `Default`.
 - `use navree::prelude::*;` alone for `#[relations]` or `#[scopes]`: they
   come from `navree::orm::prelude`.
 - Calling a scope without importing its trait (`DealScopes`).
-- `&db` in a handler for writes the request must roll back: it joins the
-  request's unit of work only while one is open; pass `&uow` and it always
-  does.
+- Passing `db.conn()` (a SeaORM connection) in a request: its writes skip
+  the unit of work, so they neither roll back with the request nor reach
+  the audit log. Pass `&uow`, or `&db`, which joins the request's unit of
+  work.
 - Lazy loads in a loop (N+1): eager load with `with`.
 - `latest()` on a model without `timestamps`: use `latest_by(column)`.
 - Mass updates and deletes (`query.update`, `query.delete`, bulk inserts)
