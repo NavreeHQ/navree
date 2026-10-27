@@ -68,7 +68,20 @@ pub async fn build_router(ctx: &AppContext) -> Result<Router, BoxError> {
         router = mount(router, route, &shared)?;
     }
     router = router.fallback(|| async { AppError::not_found() });
-    router = apply_slots(ctx, router, authenticator)?;
+    // Without `Session`-slot layers nothing comes between the fixed layers
+    // and authentication, so it runs as their last stage: one middleware
+    // fewer on every request.
+    let session_layers = ctx
+        .contributions::<GlobalLayer>()
+        .iter()
+        .any(|c| c.value.slot == LayerSlot::Session);
+    let authentication = if session_layers {
+        router = apply_slots(ctx, router, Some(authenticator))?;
+        None
+    } else {
+        router = apply_slots(ctx, router, None)?;
+        Some(pipeline::Authentication(authenticator))
+    };
 
     // Fixed layers, innermost first (`Router::layer` wraps like an onion).
     // The fixed layers between two Tower layers run as the stages of one
@@ -91,6 +104,7 @@ pub async fn build_router(ctx: &AppContext) -> Result<Router, BoxError> {
                 limiter: RateLimiter::<IpAddr>::new(limit, Duration::from_secs(60)),
                 audit: shared.audit.clone(),
             }),
+            authentication,
         }),
         ..Stages::default()
     };
@@ -603,11 +617,13 @@ async fn route_pipeline(
 type SlotEntry<'a> = (LayerSlot, usize, Option<(&'a GlobalLayer, &'static str)>);
 
 /// Applies the contributed [`GlobalLayer`]s by slot, with navree's
-/// authentication layer first in the `AuthContext` slot.
+/// authentication layer first in the `AuthContext` slot when `authenticate`
+/// is given (holding the registered authenticator, if any); otherwise the
+/// fixed stages authenticate.
 fn apply_slots(
     ctx: &AppContext,
     mut router: Router,
-    authenticator: Option<Arc<dyn Authenticator>>,
+    authenticate: Option<Option<Arc<dyn Authenticator>>>,
 ) -> Result<Router, BoxError> {
     let contributed = ctx.contributions::<GlobalLayer>();
     let mut layers: Vec<SlotEntry<'_>> = contributed
@@ -616,13 +632,16 @@ fn apply_slots(
         .filter(|(_, c)| c.value.slot != LayerSlot::Edge)
         .map(|(i, c)| (c.value.slot, i + 1, Some((&*c.value, c.module.name))))
         .collect();
-    layers.push((LayerSlot::AuthContext, 0, None));
+    if authenticate.is_some() {
+        layers.push((LayerSlot::AuthContext, 0, None));
+    }
     layers.sort_by_key(|(slot, order, _)| (*slot, *order));
+    let authenticator = authenticate.flatten();
     for (_, _, layer) in layers.into_iter().rev() {
         router = match layer {
             None => router.layer(from_fn_with_state(
                 authenticator.clone(),
-                pipeline::authenticate,
+                pipeline::authenticate_layer,
             )),
             Some((layer, module)) => (layer.apply)(ctx, router).map_err(|error| {
                 format!(
