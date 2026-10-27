@@ -204,8 +204,15 @@ struct Thing {
 fn prelude_brings_the_orm() {
     assert!(same::<Collection<Thing>, navree::orm::Collection<Thing>>());
     assert!(same::<Builder<Thing>, navree::orm::Builder<Thing>>());
+    assert!(same::<OrmModule, navree::orm::OrmModule>());
     assert_eq!(<Thing as navree::orm::Model>::meta().table(), "things");
     assert_eq!(Thing::NAME.name(), "name");
+    // The lifecycle's model methods and the module registrations resolve
+    // with the prelude alone.
+    assert!(Thing::global_scope_names().is_empty());
+    let _register = |m: &mut ModuleBuilder| {
+        m.model::<Thing>();
+    };
 }
 
 /// A subject and an action declared by an app, with the prelude only.

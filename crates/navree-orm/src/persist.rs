@@ -12,8 +12,9 @@
 //! sync the original. A clean record still runs `saving` and `saved`.
 //!
 //! Delete: `deleting` → `DELETE` (soft-deleting models: `UPDATE` of the
-//! deleted-at and updated-at columns) → `deleted` change event → `deleted`
-//! (and `trashed` for a soft delete).
+//! deleted-at and updated-at columns, unless the record is being force
+//! deleted) → `deleted` change event → (`trashed` for a soft delete) →
+//! `deleted`.
 
 use std::borrow::Cow;
 
@@ -238,7 +239,9 @@ async fn update<M: Model>(
     Ok(true)
 }
 
-/// Deletes `record` (soft-deletes it when the model soft-deletes).
+/// Deletes `record`: soft-deletes it when the model soft-deletes (firing
+/// `deleting`, `trashed`, `deleted`), removes the row otherwise or while
+/// the record is being force deleted (`deleting`, `deleted`).
 pub(crate) async fn delete<M: Model>(target: &Target<'_>, record: &mut Record<M>) -> Result<bool> {
     if !record.exists {
         return Ok(false);
@@ -255,7 +258,7 @@ pub(crate) async fn delete<M: Model>(target: &Target<'_>, record: &mut Record<M>
         None => record.model.values()?,
     };
 
-    match meta.deleted_at() {
+    match meta.deleted_at().filter(|_| !record.force_deleting) {
         Some(deleted_at) => {
             let now = ctx.now().await;
             record.model.touch_timestamp(deleted_at, now)?;
@@ -286,8 +289,8 @@ pub(crate) async fn delete<M: Model>(target: &Target<'_>, record: &mut Record<M>
                 Some(json_object(&before)),
                 None,
             );
-            hooks.after(ModelEvent::Deleted, &ctx, record).await?;
             hooks.after(ModelEvent::Trashed, &ctx, record).await?;
+            hooks.after(ModelEvent::Deleted, &ctx, record).await?;
         }
         None => {
             let delete = DeleteIr {
@@ -377,68 +380,92 @@ pub(crate) async fn touch<M: Model>(
     save(target, record).await
 }
 
-/// `column = column ± amount` on the stored record, plus `extra` columns
-/// and the update timestamp.
+/// `column = column ± amount` for each of `steps` on the stored record (in
+/// one statement), plus `extra` columns and the update timestamp.
 pub(crate) async fn increment<M: Model, T: Numeric>(
     target: &Target<'_>,
     record: &mut Record<M>,
-    column: &Column<M, T>,
-    amount: T,
+    steps: Vec<(Column<M, T>, T)>,
     decrement: bool,
     extra: Vec<Assignment>,
 ) -> Result<bool> {
+    let action = if decrement { "decrement" } else { "increment" };
     if !record.exists {
-        return Err(Record::<M>::not_persisted(if decrement {
-            "decrement"
-        } else {
-            "increment"
-        }));
+        return Err(Record::<M>::not_persisted(action));
     }
     let meta = M::meta();
-    let name = column.column_ref().name.into_owned();
-    let current = record
-        .model
-        .value(&name)?
-        .ok_or_else(|| crate::model::derive_support::unknown_column::<M>(&name))?;
-    let next = if is_null(&current) {
-        current
-    } else {
-        let current = T::from_value(current).map_err(|error| {
-            crate::row::decode_error(meta.name(), &name, T::type_name(), &error)
-        })?;
-        let next = if decrement {
-            current.checked_sub(amount)
-        } else {
-            current.checked_add(amount)
-        };
-        next.ok_or_else(|| {
-            OrmError::invalid(format!(
-                "{} `{name}` would overflow {}",
-                if decrement {
-                    "decrementing"
-                } else {
-                    "incrementing"
-                },
-                T::type_name()
-            ))
-        })?
-        .to_value()
-    };
-    record.model.set_value(&name, next)?;
-
-    let mut sets: Vec<(Cow<'static, str>, Expr)> = vec![(
-        Cow::Owned(name.clone()),
-        Expr::Arithmetic {
-            left: Box::new(Expr::Column(ColumnRef::new(None::<&str>, name.clone()))),
-            op: if decrement {
-                ArithmeticOp::Sub
+    let names: Vec<String> = steps
+        .iter()
+        .map(|(column, _)| column.column_ref().name.into_owned())
+        .collect();
+    if names.is_empty() {
+        return Err(OrmError::invalid(format!(
+            "{action} needs at least one column of {}",
+            meta.name()
+        )));
+    }
+    if let Some(twice) = names
+        .iter()
+        .enumerate()
+        .find_map(|(at, name)| names[..at].contains(name).then_some(name))
+    {
+        return Err(OrmError::invalid(format!(
+            "{} `{twice}` of {} is listed twice: each column steps once per statement",
+            if decrement {
+                "decrementing"
             } else {
-                ArithmeticOp::Add
+                "incrementing"
             },
-            right: Box::new(Expr::Value(amount.to_value())),
-        },
-    )];
-    let mut written = vec![name.clone()];
+            meta.name()
+        )));
+    }
+
+    let mut sets: Vec<(Cow<'static, str>, Expr)> = Vec::with_capacity(steps.len());
+    let mut written = Vec::with_capacity(steps.len());
+    for ((_, amount), name) in steps.into_iter().zip(names) {
+        let current = record
+            .model
+            .value(&name)?
+            .ok_or_else(|| crate::model::derive_support::unknown_column::<M>(&name))?;
+        let next = if is_null(&current) {
+            current
+        } else {
+            let current = T::from_value(current).map_err(|error| {
+                crate::row::decode_error(meta.name(), &name, T::type_name(), &error)
+            })?;
+            let next = if decrement {
+                current.checked_sub(amount)
+            } else {
+                current.checked_add(amount)
+            };
+            next.ok_or_else(|| {
+                OrmError::invalid(format!(
+                    "{} `{name}` would overflow {}",
+                    if decrement {
+                        "decrementing"
+                    } else {
+                        "incrementing"
+                    },
+                    T::type_name()
+                ))
+            })?
+            .to_value()
+        };
+        record.model.set_value(&name, next)?;
+        sets.push((
+            Cow::Owned(name.clone()),
+            Expr::Arithmetic {
+                left: Box::new(Expr::Column(ColumnRef::new(None::<&str>, name.clone()))),
+                op: if decrement {
+                    ArithmeticOp::Sub
+                } else {
+                    ArithmeticOp::Add
+                },
+                right: Box::new(Expr::Value(amount.to_value())),
+            },
+        ));
+        written.push(name);
+    }
     for assignment in extra {
         let (extra_column, value) = assignment.into_set().map_err(OrmError::invalid)?;
         if let Expr::Value(value) = &value {

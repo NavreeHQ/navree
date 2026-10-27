@@ -1,0 +1,74 @@
+error[E0599]: the method `restore` exists for struct `Record<Company>`, but its trait bounds were not satisfied
+  --> tests/ui/model_lifecycle_traits.rs:24:21
+   |
+19 | struct Company {
+   | -------------- doesn't satisfy `Company: SoftDeleting`
+...
+24 |     let _ = company.restore(&db).await;
+   |                     ^^^^^^^ method cannot be called on `Record<Company>` due to unsatisfied trait bounds
+   |
+   = note: the following trait bounds were not satisfied:
+           `Company: SoftDeleting`
+note: the trait `SoftDeleting` must be implemented
+  --> src/soft_deletes.rs
+   |
+   | pub trait SoftDeleting: Model {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0599]: the method `only_trashed` exists for struct `navree_orm::Builder<Company>`, but its trait bounds were not satisfied
+  --> tests/ui/model_lifecycle_traits.rs:25:30
+   |
+19 | struct Company {
+   | -------------- doesn't satisfy `Company: SoftDeleting`
+...
+25 |     let _ = Company::query().only_trashed();
+   |                              ^^^^^^^^^^^^
+   |
+   = note: the following trait bounds were not satisfied:
+           `Company: SoftDeleting`
+note: the trait `SoftDeleting` must be implemented
+  --> src/soft_deletes.rs
+   |
+   | pub trait SoftDeleting: Model {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0277]: `Log` is marked prunable but does not implement `Prunable`
+ --> tests/ui/model_lifecycle_traits.rs:6:8
+  |
+6 | struct Log {
+  |        ^^^ unsatisfied trait bound
+  |
+help: the trait `Prunable` is not implemented for `Log`
+ --> tests/ui/model_lifecycle_traits.rs:6:1
+  |
+6 | struct Log {
+  | ^^^^^^^^^^
+  = note: add `impl navree_orm::prune::Prunable for Log { fn prunable(query: Builder<Self>) -> Builder<Self> { .. } }`
+note: required by a bound in `Pruning::each`
+ --> src/prune.rs
+  |
+  |     pub const fn each<M: Prunable>() -> Self {
+  |                          ^^^^^^^^ required by this bound in `Pruning::each`
+
+error[E0277]: `Room` is marked `broadcasts` but does not implement `Broadcasts`
+  --> tests/ui/model_lifecycle_traits.rs:11:10
+   |
+11 | #[derive(Model, Clone, serde::Serialize)]
+   |          ^^^^^ unsatisfied trait bound
+   |
+help: the trait `Broadcasts` is not implemented for `Room`
+  --> tests/ui/model_lifecycle_traits.rs:13:1
+   |
+13 | struct Room {
+   | ^^^^^^^^^^^
+   = note: add `impl navree_orm::broadcast::Broadcasts for Room {}` (every method has a default)
+help: the trait `ModelHook<M>` is conditionally implemented for `BroadcastHook<M>`
+  --> src/broadcast.rs
+   |
+   | impl<M: Broadcasts> ModelHook<M> for BroadcastHook<M> {
+   | ^^^^^^^^----------^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |         |
+   |         unsatisfied requirement introduced here: `Room: Broadcasts`
+   = note: required for `BroadcastHook<Room>` to implement `ModelHook<Room>`
+   = note: required for the cast from `Arc<BroadcastHook<Room>>` to `Arc<(dyn ModelHook<Room> + 'static)>`
+   = note: this error originates in the derive macro `Model` (in Nightly builds, run with -Z macro-backtrace for more info)

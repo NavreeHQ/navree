@@ -1,0 +1,10 @@
+---
+source: crates/navree-orm/tests/sql/lifecycle.rs
+expression: "query(Deal::query().only_trashed().where_(Deal::TITLE.eq(\"a\")).or_where(Deal::TITLE.eq(\"b\")))"
+---
+PostgreSQL: SELECT "deals"."id", "deals"."company_id", "deals"."title", "deals"."amount_cents", "deals"."stage", "deals"."tags", "deals"."closed_at", "deals"."created_at", "deals"."updated_at", "deals"."deleted_at" FROM "deals" WHERE ("deals"."title" = $1 OR "deals"."title" = $2) AND "deals"."deleted_at" IS NOT NULL
+  values: [String(Some("a")), String(Some("b"))]
+MySQL: SELECT `deals`.`id`, `deals`.`company_id`, `deals`.`title`, `deals`.`amount_cents`, `deals`.`stage`, `deals`.`tags`, `deals`.`closed_at`, `deals`.`created_at`, `deals`.`updated_at`, `deals`.`deleted_at` FROM `deals` WHERE (`deals`.`title` = ? OR `deals`.`title` = ?) AND `deals`.`deleted_at` IS NOT NULL
+  values: [String(Some("a")), String(Some("b"))]
+SQLite: SELECT "deals"."id", "deals"."company_id", "deals"."title", "deals"."amount_cents", "deals"."stage", "deals"."tags", "deals"."closed_at", "deals"."created_at", "deals"."updated_at", "deals"."deleted_at" FROM "deals" WHERE ("deals"."title" = ? OR "deals"."title" = ?) AND "deals"."deleted_at" IS NOT NULL
+  values: [String(Some("a")), String(Some("b"))]

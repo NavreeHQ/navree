@@ -3,7 +3,8 @@
 //! It brings the macros, the kernel types a module needs, the module types
 //! an app root imports, the extractors and responses handlers use, the
 //! access markers, the ORM's `Model` (trait and derive), `Record`,
-//! `Collection` and `Builder`, and every `ModuleBuilder` extension trait
+//! `Collection`, `Builder` and `OrmModule` (with the model-level lifecycle
+//! methods of `ModelLifecycle`), and every `ModuleBuilder` extension trait
 //! (imported as `_`, so `m.migrations(..)`, `m.controller::<C>()`,
 //! `m.job::<J>()`, `m.templates(..)`, `m.resource::<R>()` and friends
 //! resolve without naming the traits). `navree::orm::prelude` has the rest
@@ -84,7 +85,9 @@ pub use navree_audit::AuditModule;
 #[cfg(feature = "notify")]
 pub use navree_notify::NotifyModule;
 #[cfg(feature = "orm")]
-pub use navree_orm::{Builder, Collection, Model, Record};
+pub use navree_orm::{
+    Builder, Collection, Model, ModelLifecycle as _, ModuleBuilderOrmExt as _, OrmModule, Record,
+};
 #[cfg(feature = "queue")]
 pub use navree_queue::{Batch, Operation, Operations, QueueModule};
 #[cfg(feature = "schedule")]

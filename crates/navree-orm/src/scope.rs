@@ -5,11 +5,15 @@
 //!   `impl` block turns its `#[scope]` functions into builder methods
 //!   (`Deal::query().open().owned_by(me)`) through a generated trait.
 //! - **Global scopes** implement [`GlobalScope`] and are declared on the
-//!   model (`#[model(global_scopes(ActiveOnly))]`). They apply when a query
-//!   runs, unless removed with `without_global_scope::<S>()` or
-//!   `without_global_scopes()`.
-//! - Soft-deleting models get [`SoftDeletes`], which hides deleted rows
-//!   until `with_trashed()` removes it.
+//!   model (`#[model(global_scopes(ActiveOnly))]`) or registered by a module
+//!   at boot (`m.global_scope::<Deal>("active", |q| ..)`, see
+//!   [`ModuleBuilderOrmExt`](crate::ModuleBuilderOrmExt)). They apply when a
+//!   query runs, unless removed with `without_global_scope::<S>()`,
+//!   `without_global_scope_named("active")`, `without_global_scopes()` or
+//!   `without_global_scopes_except([..])`.
+//! - Soft-deleting models get [`SoftDeletes`], which hides deleted rows;
+//!   `with_trashed()`, `without_trashed()` and `only_trashed()` choose
+//!   otherwise.
 //!
 //! A scope never changes the meaning of the conditions around it: when the
 //! conditions it adds (or those before it) contain an `OR`, they are
@@ -17,6 +21,7 @@
 //! `(a OR b) AND c`.
 
 use std::any::TypeId;
+use std::borrow::Cow;
 
 use crate::ir::{Boolean, QueryIr, Where, WhereClause};
 use crate::model::Model;
@@ -44,6 +49,19 @@ pub trait GlobalScope<M: Model>: Send + Sync + 'static {
     fn scope_id(&self) -> TypeId {
         TypeId::of::<Self>()
     }
+
+    /// The scope's name, for `without_global_scope_named(..)`,
+    /// `without_global_scopes_except(..)` and inspection: the type's name
+    /// without its path (`NotArchived`) unless the scope says otherwise.
+    fn name(&self) -> Cow<'static, str> {
+        Cow::Borrowed(short_type_name(std::any::type_name::<Self>()))
+    }
+}
+
+/// `path::to::Name<Args>` → `Name`.
+pub(crate) fn short_type_name(full: &'static str) -> &'static str {
+    let without_args = full.split('<').next().unwrap_or(full);
+    without_args.rsplit("::").next().unwrap_or(without_args)
 }
 
 /// The built-in global scope of soft-deleting models: rows whose
@@ -114,16 +132,47 @@ impl<M: Model> Scoped<M> for Builder<M> {
     }
 }
 
-/// Which global scopes a builder has removed.
+/// What a query does with the model's global scopes: the ones it leaves
+/// out, and how it treats soft-deleted rows.
 #[derive(Clone, Debug, Default)]
-pub(crate) struct RemovedScopes {
+pub(crate) struct ScopeChoices {
+    /// `without_global_scopes()`.
     pub(crate) all: bool,
+    /// `without_global_scope::<S>()`.
     pub(crate) ids: Vec<TypeId>,
+    /// `without_global_scope_named(..)`.
+    pub(crate) names: Vec<Cow<'static, str>>,
+    /// `without_global_scopes_except(..)`: only these stay.
+    pub(crate) keep: Option<Vec<Cow<'static, str>>>,
+    /// `with_trashed()`, `without_trashed()`, `only_trashed()`.
+    pub(crate) trashed: Trashed,
 }
 
-impl RemovedScopes {
-    pub(crate) fn contains(&self, id: TypeId) -> bool {
-        self.all || self.ids.contains(&id)
+/// How a query of a soft-deleting model treats trashed rows.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum Trashed {
+    /// The [`SoftDeletes`] scope hides them (unless it is removed).
+    #[default]
+    Hidden,
+    /// `with_trashed()`: they are included.
+    Included,
+    /// `without_trashed()`: they are left out, whatever else is removed.
+    Excluded,
+    /// `only_trashed()`: only they are included.
+    Only,
+}
+
+impl ScopeChoices {
+    /// Whether the query leaves `scope` out.
+    pub(crate) fn removes<M: Model>(&self, scope: &dyn GlobalScope<M>) -> bool {
+        if scope.scope_id() == TypeId::of::<SoftDeletes>() && self.trashed != Trashed::Hidden {
+            return true;
+        }
+        if self.all || self.ids.contains(&scope.scope_id()) {
+            return true;
+        }
+        let name = scope.name();
+        self.names.contains(&name) || self.keep.as_ref().is_some_and(|keep| !keep.contains(&name))
     }
 }
 
@@ -207,6 +256,16 @@ mod tests {
         ir.wheres.push(clause(Boolean::Or, "d"));
         group_scope_wheres(&mut ir, 2);
         assert_eq!(shape(&ir.wheres), "And:a And:b And(And:c Or:d)");
+    }
+
+    #[test]
+    fn scope_names_drop_the_path_and_the_arguments() {
+        assert_eq!(
+            short_type_name("navree_orm::scope::SoftDeletes"),
+            "SoftDeletes"
+        );
+        assert_eq!(short_type_name("app::scopes::Owned<app::Deal>"), "Owned");
+        assert_eq!(short_type_name("Plain"), "Plain");
     }
 
     #[test]

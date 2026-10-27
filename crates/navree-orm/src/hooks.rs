@@ -54,6 +54,26 @@ use crate::model::Model;
 use crate::record::Record;
 
 /// A step in a record's life.
+///
+/// The `-ing` events ([`is_cancellable`](ModelEvent::is_cancellable)) run
+/// before the database is touched, inside the operation's transaction, and
+/// can cancel it. The others announce what happened; listeners hear the
+/// write events among them
+/// ([`runs_after_commit`](ModelEvent::runs_after_commit)) once the unit of
+/// work commits (see [`HookKind`]).
+///
+/// | Event | Fired by | Cancellable |
+/// |---|---|---|
+/// | `Retrieved` | every record a query reads | no |
+/// | `Saving`, `Saved` | `save` (also of a clean record), `create`, `update`, `touch`, `restore` | `Saving` |
+/// | `Creating`, `Created` | inserting a new record | `Creating` |
+/// | `Updating`, `Updated` | updating a changed record, `increment`, `decrement` | `Updating` |
+/// | `Deleting`, `Deleted` | `delete`, `force_delete`, `destroy` | `Deleting` |
+/// | `Trashed` | a soft delete | no |
+/// | `ForceDeleting`, `ForceDeleted` | `force_delete` of a soft-deleting model | `ForceDeleting` |
+/// | `Restoring`, `Restored` | `restore` | `Restoring` |
+/// | `Replicating` | `replicate_on` | no |
+/// | `Custom(name)` | [`Record::fire`](crate::Record::fire) | yes |
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum ModelEvent {
@@ -87,12 +107,70 @@ pub enum ModelEvent {
     Restoring,
     /// A soft-deleted record was restored.
     Restored,
-    /// A copy of a record was made with `replicate`.
+    /// A copy of a record was made with
+    /// [`replicate_on`](crate::Record::replicate_on); listeners may change
+    /// the copy.
     Replicating,
+    /// An event of the application's own, fired with
+    /// [`Record::fire`](crate::Record::fire) (`"archived"`, `"published"`).
+    /// Custom events run at once, wherever the record is, and listeners may
+    /// cancel them.
+    Custom(&'static str),
 }
 
 impl ModelEvent {
-    /// The event's name: `retrieved`, `creating`, `force_deleted`, ...
+    /// Every built-in event, in the order a record meets them.
+    pub const ALL: [ModelEvent; 15] = [
+        ModelEvent::Retrieved,
+        ModelEvent::Saving,
+        ModelEvent::Creating,
+        ModelEvent::Created,
+        ModelEvent::Updating,
+        ModelEvent::Updated,
+        ModelEvent::Saved,
+        ModelEvent::Deleting,
+        ModelEvent::Deleted,
+        ModelEvent::Trashed,
+        ModelEvent::ForceDeleting,
+        ModelEvent::ForceDeleted,
+        ModelEvent::Restoring,
+        ModelEvent::Restored,
+        ModelEvent::Replicating,
+    ];
+
+    /// The built-in event named `name`; `None` for any other name.
+    ///
+    /// ```
+    /// use navree_orm::hooks::ModelEvent;
+    ///
+    /// assert_eq!(ModelEvent::from_name("trashed"), Some(ModelEvent::Trashed));
+    /// assert_eq!(ModelEvent::from_name("archived"), None);
+    /// ```
+    pub fn from_name(name: &str) -> Option<ModelEvent> {
+        ModelEvent::ALL
+            .into_iter()
+            .find(|event| event.name() == name)
+    }
+
+    /// Whether listeners hear this event once the unit of work the write
+    /// ran in commits: the events that announce a write (`created`,
+    /// `updated`, `saved`, `deleted`, `trashed`, `force_deleted`,
+    /// `restored`). Outside a unit of work they hear it at once.
+    pub fn runs_after_commit(self) -> bool {
+        matches!(
+            self,
+            ModelEvent::Created
+                | ModelEvent::Updated
+                | ModelEvent::Saved
+                | ModelEvent::Deleted
+                | ModelEvent::Trashed
+                | ModelEvent::ForceDeleted
+                | ModelEvent::Restored
+        )
+    }
+
+    /// The event's name: `retrieved`, `creating`, `force_deleted`, ... (a
+    /// custom event's own name).
     pub fn name(self) -> &'static str {
         match self {
             ModelEvent::Retrieved => "retrieved",
@@ -110,11 +188,14 @@ impl ModelEvent {
             ModelEvent::Restoring => "restoring",
             ModelEvent::Restored => "restored",
             ModelEvent::Replicating => "replicating",
+            ModelEvent::Custom(name) => name,
         }
     }
 
-    /// Whether a hook can cancel the operation at this step (the `-ing`
-    /// events that run before the database is touched).
+    /// Whether a hook can cancel the operation at this step: the `-ing`
+    /// events that run before the database is touched, and custom events.
+    /// Hooks hear these through [`ModelHook::before`], the others through
+    /// [`ModelHook::after`].
     pub fn is_cancellable(self) -> bool {
         matches!(
             self,
@@ -124,6 +205,7 @@ impl ModelEvent {
                 | ModelEvent::Deleting
                 | ModelEvent::ForceDeleting
                 | ModelEvent::Restoring
+                | ModelEvent::Custom(_)
         )
     }
 }
@@ -142,6 +224,45 @@ pub enum Flow {
     Continue,
     /// Stop: the operation returns `false` and changes nothing.
     Cancel,
+}
+
+/// `()` goes ahead, so listeners of events that cannot be cancelled return
+/// `Ok(())`.
+impl From<()> for Flow {
+    fn from((): ()) -> Flow {
+        Flow::Continue
+    }
+}
+
+/// What kind of hook a [`ModelHook`] is, which decides when it hears an
+/// event and whether quiet operations silence it.
+///
+/// | Kind | `-ing` events | "-ed" write events in a unit of work | quiet operations, [`without_events`](crate::without_events) |
+/// |---|---|---|---|
+/// | `Behaviour` | at once | at once, in the transaction | still run |
+/// | `TransactionalListener` | at once | at once, in the transaction | silenced |
+/// | `Listener` | at once | after the commit, on a snapshot of the record | silenced |
+///
+/// Behaviours are part of what a model does (touching parents, filling a
+/// workspace column): they run whatever happens. Listeners react to events
+/// (observers, closure listeners, typed application events, broadcasts):
+/// they hear about writes once those are durable, and never about writes
+/// that were rolled back. Outside a unit of work every hook runs at once.
+///
+/// A failing `-ing` hook stops the operation with its error; a listener
+/// failing after the commit is logged and reported to the app's telemetry,
+/// and never undoes the commit.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum HookKind {
+    /// Part of the model's behaviour: runs at once, also when events are
+    /// silenced.
+    #[default]
+    Behaviour,
+    /// A listener that writes inside the transaction (related rows that
+    /// commit or roll back with the record): hears every event at once.
+    TransactionalListener,
+    /// A listener: hears "-ed" write events after the unit of work commits.
+    Listener,
 }
 
 /// Receives model `M`'s lifecycle events. Both methods have no-op defaults;
@@ -202,7 +323,8 @@ pub trait ModelHook<M: Model>: Send + Sync + 'static {
 
     /// Runs after a step that happened (`Retrieved`, `Created`, `Saved`,
     /// ...). An error fails the operation (inside a unit of work, which
-    /// then rolls back).
+    /// then rolls back), except for a [`HookKind::Listener`] that hears the
+    /// event after the commit: its error is logged and reported.
     fn after<'a>(
         &'a self,
         event: ModelEvent,
@@ -212,18 +334,35 @@ pub trait ModelHook<M: Model>: Send + Sync + 'static {
         let _ = (event, ctx, record);
         Box::pin(async { Ok(()) })
     }
+
+    /// What kind of hook this is: when it hears "-ed" events inside a unit
+    /// of work and whether quiet operations silence it (see [`HookKind`]).
+    /// A hook implemented directly is a [`HookKind::Behaviour`]: it runs at
+    /// once, every time.
+    fn kind(&self) -> HookKind {
+        HookKind::Behaviour
+    }
 }
 
 /// The hooks of model `M` for one operation: the model's own, then the
 /// app's. Resolved once per operation (a query's records share them).
+///
+/// Every hook runs with the operation's unit of work as the task's current
+/// one ([`Uow::current`](navree_db::Uow::current)), so jobs and events it
+/// dispatches join that unit of work. A [`HookKind::Listener`] hears "-ed"
+/// write events after the commit ([`ModelEvent::runs_after_commit`]).
 pub(crate) struct Hooks<M: Model> {
     hooks: Vec<Arc<dyn ModelHook<M>>>,
 }
 
 impl<M: Model> Hooks<M> {
-    /// The hooks that apply in `ctx`.
+    /// The hooks that apply in `ctx`: the model's own and the app's;
+    /// behaviours only inside [`without_events`](crate::without_events);
+    /// behaviours and a recorder when the app has a
+    /// [`ModelEventFake`](crate::events::ModelEventFake).
     pub(crate) async fn resolve(ctx: &ExecContext) -> Result<Self> {
         let mut hooks = M::hooks();
+        let mut fake = None;
         if let Some(app) = ctx.app() {
             let registered = app.get_all::<dyn ModelHook<M>>().await.map_err(|error| {
                 crate::error::OrmError::Hook {
@@ -232,6 +371,13 @@ impl<M: Model> Hooks<M> {
                 }
             })?;
             hooks.extend(registered);
+            fake = app.try_get::<crate::events::ModelEventFake>().await;
+        }
+        if crate::events::events_are_silenced() {
+            hooks.retain(|hook| hook.kind() == HookKind::Behaviour);
+        } else if let Some(fake) = fake {
+            hooks.retain(|hook| hook.kind() == HookKind::Behaviour);
+            hooks.push(Arc::new(crate::events::FakeListener(fake)));
         }
         Ok(Hooks { hooks })
     }
@@ -249,22 +395,40 @@ impl<M: Model> Hooks<M> {
         record: &mut Record<M>,
     ) -> Result<Flow> {
         for hook in &self.hooks {
-            if hook.before(event, ctx, record).await? == Flow::Cancel {
+            let flow = crate::events::in_unit_of_work(ctx, hook.before(event, ctx, record)).await?;
+            if flow == Flow::Cancel {
                 return Ok(Flow::Cancel);
             }
         }
         Ok(Flow::Continue)
     }
 
-    /// Runs the `after` hooks for `event`.
+    /// Runs the `after` hooks for `event`: at once, except listeners of a
+    /// write event inside a unit of work, which hear it after the commit
+    /// (on a snapshot of the record as it is now).
     pub(crate) async fn after(
         &self,
         event: ModelEvent,
         ctx: &ExecContext,
         record: &mut Record<M>,
     ) -> Result<()> {
+        let after_commit = if event.runs_after_commit() {
+            ctx.uow()
+        } else {
+            None
+        };
+        let mut deferred = Vec::new();
         for hook in &self.hooks {
-            hook.after(event, ctx, record).await?;
+            if after_commit.is_some() && hook.kind() == HookKind::Listener {
+                deferred.push(hook.clone());
+                continue;
+            }
+            crate::events::in_unit_of_work(ctx, hook.after(event, ctx, record)).await?;
+        }
+        if let Some(uow) = after_commit
+            && !deferred.is_empty()
+        {
+            crate::events::after_commit(uow, deferred, event, ctx.clone(), record.clone());
         }
         Ok(())
     }
@@ -276,38 +440,30 @@ mod tests {
 
     #[test]
     fn the_ing_events_are_the_cancellable_ones() {
-        let cancellable: Vec<&str> = [
-            ModelEvent::Retrieved,
-            ModelEvent::Creating,
-            ModelEvent::Created,
-            ModelEvent::Updating,
-            ModelEvent::Updated,
-            ModelEvent::Saving,
-            ModelEvent::Saved,
-            ModelEvent::Deleting,
-            ModelEvent::Deleted,
-            ModelEvent::Trashed,
-            ModelEvent::ForceDeleting,
-            ModelEvent::ForceDeleted,
-            ModelEvent::Restoring,
-            ModelEvent::Restored,
-            ModelEvent::Replicating,
-        ]
-        .into_iter()
-        .filter(|event| event.is_cancellable())
-        .map(ModelEvent::name)
-        .collect();
+        let cancellable: Vec<&str> = ModelEvent::ALL
+            .into_iter()
+            .filter(|event| event.is_cancellable())
+            .map(ModelEvent::name)
+            .collect();
         assert_eq!(
             cancellable,
             [
+                "saving",
                 "creating",
                 "updating",
-                "saving",
                 "deleting",
                 "force_deleting",
                 "restoring"
             ]
         );
         assert_eq!(ModelEvent::ForceDeleted.to_string(), "force_deleted");
+    }
+
+    #[test]
+    fn every_built_in_event_is_found_by_its_name() {
+        for event in ModelEvent::ALL {
+            assert_eq!(ModelEvent::from_name(event.name()), Some(event));
+        }
+        assert_eq!(Flow::from(()), Flow::Continue);
     }
 }
