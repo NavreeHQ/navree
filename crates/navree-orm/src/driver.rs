@@ -49,6 +49,7 @@
 //! }
 //! ```
 
+use futures::stream::{BoxStream, StreamExt};
 use navree_kernel::BoxFuture;
 
 use crate::error::OrmError;
@@ -63,6 +64,21 @@ pub trait DocumentDriver: Send + Sync + 'static {
 
     /// The documents matching `query`.
     fn find<'a>(&'a self, query: &'a QueryIr) -> BoxFuture<'a, Result<Vec<Row>, OrmError>>;
+
+    /// The documents matching `query` one by one, for
+    /// [`cursor`](crate::Builder::cursor). By default the result of
+    /// [`find`](DocumentDriver::find) handed out one by one; a driver with
+    /// native cursors overrides it so memory stays constant however many
+    /// documents match.
+    fn stream<'a>(
+        &'a self,
+        query: &'a QueryIr,
+    ) -> BoxFuture<'a, Result<BoxStream<'a, Result<Row, OrmError>>, OrmError>> {
+        Box::pin(async move {
+            let rows = self.find(query).await?;
+            Ok(futures::stream::iter(rows.into_iter().map(Ok)).boxed())
+        })
+    }
 
     /// An aggregate over the documents matching `query` (`count` gives an
     /// integer; the others NULL when nothing matches).

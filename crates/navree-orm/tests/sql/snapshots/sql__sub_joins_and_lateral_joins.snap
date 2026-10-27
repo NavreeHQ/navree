@@ -1,0 +1,7 @@
+---
+source: crates/navree-orm/tests/sql/main.rs
+expression: "query(Company::query().right_join_sub(best(), \"best\", \"best.company_id\", \"=\",\nCompany::ID))"
+---
+PostgreSQL: SELECT "companies"."id", "companies"."name", "companies"."country" FROM "companies" RIGHT JOIN (SELECT "deals"."company_id", MAX("deals"."amount_cents") AS "top" FROM "deals" WHERE "deals"."deleted_at" IS NULL GROUP BY "deals"."company_id") AS "best" ON "best"."company_id" = "companies"."id"
+MySQL: SELECT `companies`.`id`, `companies`.`name`, `companies`.`country` FROM `companies` RIGHT JOIN (SELECT `deals`.`company_id`, MAX(`deals`.`amount_cents`) AS `top` FROM `deals` WHERE `deals`.`deleted_at` IS NULL GROUP BY `deals`.`company_id`) AS `best` ON `best`.`company_id` = `companies`.`id`
+SQLite: SELECT "companies"."id", "companies"."name", "companies"."country" FROM "companies" RIGHT JOIN (SELECT "deals"."company_id", MAX("deals"."amount_cents") AS "top" FROM "deals" WHERE "deals"."deleted_at" IS NULL GROUP BY "deals"."company_id") AS "best" ON "best"."company_id" = "companies"."id"

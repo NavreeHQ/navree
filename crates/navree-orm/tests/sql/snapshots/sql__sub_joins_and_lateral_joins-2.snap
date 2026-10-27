@@ -1,0 +1,7 @@
+---
+source: crates/navree-orm/tests/sql/main.rs
+expression: "query(Company::query().cross_join_sub(table(\"regions\").select([\"code\"]), \"r\"))"
+---
+PostgreSQL: SELECT "companies"."id", "companies"."name", "companies"."country" FROM "companies" CROSS JOIN (SELECT "code" FROM "regions") AS "r"
+MySQL: SELECT `companies`.`id`, `companies`.`name`, `companies`.`country` FROM `companies` CROSS JOIN (SELECT `code` FROM `regions`) AS `r`
+SQLite: SELECT "companies"."id", "companies"."name", "companies"."country" FROM "companies" CROSS JOIN (SELECT "code" FROM "regions") AS "r"

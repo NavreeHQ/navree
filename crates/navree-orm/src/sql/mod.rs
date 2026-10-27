@@ -14,7 +14,9 @@ use sea_query::{
 };
 
 use crate::error::OrmError;
-use crate::ir::{AggregateFunction, ColumnRef, Direction, Expr, JsonSegment, Nulls, Order, Where};
+use crate::ir::{
+    AggregateFunction, ColumnRef, Direction, Expr, JsonSegment, Nulls, Order, VectorMetric, Where,
+};
 use crate::value::Value;
 
 mod filter;
@@ -22,8 +24,11 @@ mod select;
 mod timescale;
 mod write;
 
+pub(crate) use select::timeout_millis;
 pub use select::{compile_aggregate, compile_exists, compile_select};
-pub use write::{compile_delete, compile_insert, compile_update};
+pub use write::{
+    compile_delete, compile_insert, compile_truncate, compile_update, compile_update_from,
+};
 
 /// An SQL dialect.
 ///
@@ -72,6 +77,44 @@ impl Dialect {
     pub fn supports_returning(self) -> bool {
         !matches!(self, Dialect::MySql)
     }
+
+    /// The most values one statement can bind: 65,535 on PostgreSQL and
+    /// MySQL, 32,766 on SQLite. Multi-row inserts are split to stay under
+    /// it.
+    pub fn max_bind_values(self) -> usize {
+        match self {
+            Dialect::Postgres | Dialect::MySql => 65_535,
+            Dialect::Sqlite => 32_766,
+        }
+    }
+
+    /// `name` quoted as an identifier (`"deals"`, `` `deals` ``), each part
+    /// of a schema-qualified name on its own.
+    ///
+    /// ```
+    /// use navree_orm::Dialect;
+    ///
+    /// assert_eq!(Dialect::Postgres.quote_identifier("audit.events"), r#""audit"."events""#);
+    /// assert_eq!(Dialect::MySql.quote_identifier("odd`name"), "`odd``name`");
+    /// ```
+    pub fn quote_identifier(self, name: &str) -> String {
+        quote_identifier(name, self)
+    }
+}
+
+/// `name` quoted as an identifier for `dialect`.
+pub(crate) fn quote_identifier(name: &str, dialect: Dialect) -> String {
+    let quote = match dialect {
+        Dialect::MySql => '`',
+        Dialect::Postgres | Dialect::Sqlite => '"',
+    };
+    name.split('.')
+        .map(|part| {
+            let escaped = part.replace(quote, &format!("{quote}{quote}"));
+            format!("{quote}{escaped}{quote}")
+        })
+        .collect::<Vec<_>>()
+        .join(".")
 }
 
 impl fmt::Display for Dialect {
@@ -226,12 +269,12 @@ impl Compiler {
                 .arg(
                     Func::cust(Alias::new("json_extract"))
                         .arg(base)
-                        .arg(sea_query::Expr::cust(json_path_literal(path))),
+                        .arg(sea_query::Expr::cust(self.json_path(path))),
                 )
                 .into(),
             Dialect::Sqlite => Func::cust(Alias::new("json_extract"))
                 .arg(base)
-                .arg(sea_query::Expr::cust(json_path_literal(path)))
+                .arg(sea_query::Expr::cust(self.json_path(path)))
                 .into(),
         }
     }
@@ -334,6 +377,108 @@ impl Compiler {
                 sea_query::Expr::exists(self.select(&query)?)
             }
             Expr::RowNumber { partition, order } => self.row_number(partition, order)?,
+            Expr::VectorDistance {
+                expr,
+                vector,
+                metric,
+            } => self.vector_distance(expr, vector, *metric)?,
+            Expr::Binary { left, op, right } => {
+                let allowed = value_operators(self.dialect);
+                let normalized = op
+                    .split_whitespace()
+                    .collect::<Vec<_>>()
+                    .join(" ")
+                    .to_ascii_uppercase();
+                let Some(known) = allowed.iter().find(|known| **known == normalized) else {
+                    return Err(OrmError::invalid(format!(
+                        "`{op}` is not an operator {} expressions take (they take: {})",
+                        self.dialect.name(),
+                        allowed.join(", ")
+                    )));
+                };
+                let (left, right) = (self.expr(left)?, self.expr(right)?);
+                self.custom(&format!("({{}} {known} {{}})"), vec![left, right])
+            }
+            Expr::Excluded { column } => match self.dialect {
+                Dialect::Postgres | Dialect::Sqlite => {
+                    sea_query::Expr::col((Alias::new("excluded"), Alias::new(column.to_string())))
+                }
+                Dialect::MySql => Func::cust(Alias::new("VALUES"))
+                    .arg(sea_query::Expr::col(Alias::new(column.to_string())))
+                    .into(),
+            },
+        })
+    }
+}
+
+/// The operators a hand-written expression ([`Expr::Binary`]) may use on
+/// each database: arithmetic, bit operations, concatenation, and the JSON,
+/// array and vector operators that compute values.
+fn value_operators(dialect: Dialect) -> &'static [&'static str] {
+    match dialect {
+        Dialect::Postgres => &[
+            "+", "-", "*", "/", "%", "^", "||", "#-", "->", "->>", "#>", "#>>", "<->", "<=>",
+            "<#>", "<+>", "&", "|", "#", "<<", ">>",
+        ],
+        Dialect::MySql => &[
+            "+", "-", "*", "/", "%", "DIV", "MOD", "&", "|", "^", "<<", ">>", "->", "->>",
+        ],
+        Dialect::Sqlite => &[
+            "+", "-", "*", "/", "%", "||", "&", "|", "<<", ">>", "->", "->>",
+        ],
+    }
+}
+
+impl Compiler {
+    /// The distance between the vector `expr` and `vector`.
+    fn vector_distance(
+        &self,
+        expr: &Expr,
+        vector: &[f32],
+        metric: VectorMetric,
+    ) -> Result<sea_query::Expr, OrmError> {
+        if vector.is_empty() || vector.iter().any(|x| !x.is_finite()) {
+            return Err(OrmError::invalid(
+                "a vector to compare with must hold at least one number, and only finite ones",
+            ));
+        }
+        let text = format!(
+            "[{}]",
+            vector
+                .iter()
+                .map(f32::to_string)
+                .collect::<Vec<_>>()
+                .join(",")
+        );
+        let column = self.expr(expr)?;
+        let literal = sea_query::Expr::val(Value::from(text));
+        Ok(match (self.dialect, metric) {
+            (Dialect::Postgres, metric) => {
+                let op = match metric {
+                    VectorMetric::Euclidean => "<->",
+                    VectorMetric::InnerProduct => "<#>",
+                    _ => "<=>",
+                };
+                self.custom(
+                    &format!("({{}} {op} CAST({{}} AS vector))"),
+                    vec![column, literal],
+                )
+            }
+            (Dialect::MySql, VectorMetric::Cosine | VectorMetric::Euclidean) => {
+                let function = if metric == VectorMetric::Euclidean {
+                    "VEC_DISTANCE_EUCLIDEAN"
+                } else {
+                    "VEC_DISTANCE_COSINE"
+                };
+                self.custom(
+                    &format!("{function}({{}}, VEC_FromText({{}}))"),
+                    vec![column, literal],
+                )
+            }
+            (Dialect::MySql, _) => {
+                return Err(self.unsupported("the inner-product vector distance"));
+            }
+            (Dialect::Sqlite, _) => return Err(self.unsupported("a vector distance")),
         })
     }
 
@@ -448,9 +593,18 @@ fn postgres_path_segment(segment: &JsonSegment) -> String {
     }
 }
 
+impl Compiler {
+    /// The SQL string literal of a JSON path for this dialect (MySQL and
+    /// SQLite): `'$."key"[0]'`.
+    pub(crate) fn json_path(&self, path: &[JsonSegment]) -> String {
+        json_path_literal(path, self.dialect)
+    }
+}
+
 /// The SQL string literal of a JSON path for MySQL and SQLite:
-/// `'$."key"[0]'`.
-pub(crate) fn json_path_literal(path: &[JsonSegment]) -> String {
+/// `'$."key"[0]'`. An index from the end (negative) is `[last]`,
+/// `[last-1]`, ... on MySQL and `[#-1]`, `[#-2]`, ... on SQLite.
+pub(crate) fn json_path_literal(path: &[JsonSegment], dialect: Dialect) -> String {
     let mut text = String::from("$");
     for segment in path {
         match segment {
@@ -458,6 +612,14 @@ pub(crate) fn json_path_literal(path: &[JsonSegment]) -> String {
                 text.push_str(".\"");
                 text.push_str(&key.replace('\\', "\\\\").replace('"', "\\\""));
                 text.push('"');
+            }
+            JsonSegment::Index(index) if *index < 0 => {
+                let back = index.unsigned_abs();
+                match dialect {
+                    Dialect::MySql if back == 1 => text.push_str("[last]"),
+                    Dialect::MySql => text.push_str(&format!("[last-{}]", back - 1)),
+                    _ => text.push_str(&format!("[#-{back}]")),
+                }
             }
             JsonSegment::Index(index) => {
                 text.push('[');
@@ -576,7 +738,19 @@ mod tests {
             JsonSegment::Index(2),
             JsonSegment::Key("it's \"x\"".into()),
         ];
-        assert_eq!(json_path_literal(&path), r#"'$."a"[2]."it''s \"x\""'"#);
+        assert_eq!(
+            json_path_literal(&path, Dialect::MySql),
+            r#"'$."a"[2]."it''s \"x\""'"#
+        );
+        let from_end = [JsonSegment::Index(-1), JsonSegment::Index(-3)];
+        assert_eq!(
+            json_path_literal(&from_end, Dialect::MySql),
+            "'$[last][last-2]'"
+        );
+        assert_eq!(
+            json_path_literal(&from_end, Dialect::Sqlite),
+            "'$[#-1][#-3]'"
+        );
         assert_eq!(
             postgres_path_segment(&JsonSegment::Key("o'k".into())),
             "'o''k'"

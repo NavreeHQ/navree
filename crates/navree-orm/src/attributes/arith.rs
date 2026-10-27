@@ -87,7 +87,9 @@ impl<M: Model> Record<M> {
         T: Send + Sync,
     {
         let extra: Vec<Assignment> = extra.into_iter().collect();
-        let target = exec.target(Access::Write).await?;
+        let target = exec
+            .target_routed(Access::Write, crate::query::model_route::<M>())
+            .await?;
         persist::increment_cast(&target, self, &column, &amount, false, extra).await
     }
 
@@ -121,7 +123,9 @@ impl<M: Model> Record<M> {
         T: Send + Sync,
     {
         let extra: Vec<Assignment> = extra.into_iter().collect();
-        let target = exec.target(Access::Write).await?;
+        let target = exec
+            .target_routed(Access::Write, crate::query::model_route::<M>())
+            .await?;
         persist::increment_cast(&target, self, &column, &amount, true, extra).await
     }
 }

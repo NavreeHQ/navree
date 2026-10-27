@@ -879,3 +879,18 @@ async fn time_buckets_run_on_sqlite() {
         "first(value, time) (a TimescaleDB aggregate) is not supported on SQLite"
     );
 }
+
+#[tokio::test]
+async fn statement_timeouts_are_not_supported_on_sqlite() {
+    let t = seeded().await;
+    let timed = || Company::query().timeout(std::time::Duration::from_secs(1));
+    let error = timed().get(&t.db).await.unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "a statement timeout is not supported on SQLite"
+    );
+    assert!(timed().count(&t.db).await.is_err());
+    assert!(timed().exists(&t.db).await.is_err());
+    // Without a timeout nothing changes.
+    assert_eq!(Company::query().count(&t.db).await.unwrap(), 4);
+}

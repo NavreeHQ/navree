@@ -13,7 +13,23 @@
 //!   it, see [`MySqlOptions`]). It registers the `database` health check
 //!   and the commands `migrate`, `migrate:install`, `migrate:rollback`,
 //!   `migrate:reset`, `migrate:refresh`, `migrate:fresh`, `migrate:status`,
-//!   `schema:dump` and `db:seed`.
+//!   `schema:dump`, `db:seed`, `db:monitor` and `db`.
+//! - Connections: read replicas (`read_urls`, with `sticky` reads after a
+//!   unit of work writes and [`Db::using_writer`]), named connections
+//!   (`[database.connections.<name>]`, opened on first use through
+//!   [`DbConnections`] and [`Db::connection`]), a direct connection past a
+//!   transaction-mode pooler (`direct_url`, [`Db::direct`]; migrations run
+//!   on it), PostgreSQL session settings ([`PostgresOptions`]) and SQLite
+//!   pragmas ([`SqliteOptions`]). [`Db::pool_stats`],
+//!   [`Db::open_connections`] and the server facts report; the
+//!   [`ConnectionEstablished`] and [`DatabaseBusy`] events go through the
+//!   app's `dyn EventSink`.
+//! - Watching statements: [`QueryLog::capture`] returns what a future ran,
+//!   [`Db::on_query`] listens to every statement,
+//!   [`Db::before_executing`] and [`Db::before_starting_transaction`] run
+//!   hooks, [`Db::when_querying_for_longer_than`] reacts to slow units of
+//!   work, and every unit of work counts its statements
+//!   ([`Uow::query_stats`]).
 //! - [`Uow`] is the unit of work: one per HTTP request (opened by the
 //!   module's [`LayerSlot::Uow`](navree_http::LayerSlot::Uow) layer, taken as
 //!   an extractor), job run or command ([`Db::uow`]). Its transaction opens
@@ -87,13 +103,17 @@
 //! ```
 #![forbid(unsafe_code)]
 
+mod client;
+mod connections;
 mod db;
+mod events;
 mod http;
 mod migrate;
 mod module;
 mod mysql;
 mod options;
 mod paginate;
+mod queries;
 mod reader;
 mod repo;
 mod seed;
@@ -101,18 +121,22 @@ mod text;
 mod time_series;
 mod uow;
 
-pub use db::Db;
+pub use client::ClientCommand;
+pub use connections::DbConnections;
+pub use db::{DEFAULT_CONNECTION, Db, PoolStats};
+pub use events::{ConnectionEstablished, DatabaseBusy, DatabaseStatus};
 pub use http::map_db_error;
 pub use migrate::{
     FreshOptions, LoadedDump, MIGRATIONS_TABLE, MigrateOptions, MigrationError, MigrationReport,
     MigrationRun, MigrationSet, MigrationStatus, Migrator, Refreshed, RollbackOptions,
 };
 pub use module::{DatabaseModule, ModuleBuilderDbExt};
-pub use options::{DbOptions, IsolationLevel, MySqlOptions};
+pub use options::{DbOptions, IsolationLevel, MySqlOptions, PostgresOptions, SqliteOptions};
 pub use paginate::{
     CursorPage, CursorQuery, DEFAULT_PER_PAGE, MAX_PER_PAGE, Page, PageMeta, PageQuery,
     cursor_paginate, cursor_paginate_desc, paginate,
 };
+pub use queries::{LoggedQuery, QueryLog, QueryStats, RepeatedQuery};
 pub use reader::Reader;
 pub use repo::Repo;
 pub use seed::{Factory, Seeder, create, create_many, run_seeders};

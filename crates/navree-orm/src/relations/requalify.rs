@@ -90,10 +90,13 @@ impl Renamer<'_> {
                     self.expr(arg);
                 }
             }
-            Expr::Arithmetic { left, right, .. } => {
+            Expr::Arithmetic { left, right, .. } | Expr::Binary { left, right, .. } => {
                 self.expr(left);
                 self.expr(right);
             }
+            Expr::VectorDistance { expr, .. } => self.expr(expr),
+            // The inserted row's value: no table to move.
+            Expr::Excluded { .. } => {}
             Expr::Subquery(query) | Expr::Exists(query) => self.nested(query),
             Expr::TimeBucket { expr, origin, .. } => {
                 self.expr(expr);
@@ -164,7 +167,11 @@ impl Renamer<'_> {
             }
             Where::Exists { query, .. } => self.nested(query),
             Where::Group(clauses) => self.clauses(clauses),
-            Where::JsonContains { column, .. } | Where::JsonLength { column, .. } => {
+            Where::JsonContains { column, .. }
+            | Where::JsonContainedBy { column, .. }
+            | Where::JsonOverlaps { column, .. }
+            | Where::JsonContainsKey { column, .. }
+            | Where::JsonLength { column, .. } => {
                 self.column(column);
             }
             Where::FullText { columns, .. } => {

@@ -5,11 +5,13 @@ mod support;
 
 mod change_events;
 mod connect;
+mod connections;
 mod http;
 mod migrations;
 mod module;
 mod mysql_sql;
 mod paginate;
+mod queries;
 mod repo;
 mod schema_migrations;
 mod seed;

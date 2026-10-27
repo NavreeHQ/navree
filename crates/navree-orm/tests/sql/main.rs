@@ -9,8 +9,8 @@ use std::fmt::Write as _;
 
 use chrono::{DateTime, NaiveDate, NaiveTime, TimeZone, Utc};
 use navree_orm::ir::{
-    ColumnRef, DeleteIr, Direction, Expr as IrExpr, FullText, InsertIr, Operator, TableRef,
-    UpdateIr, WhereClause,
+    ColumnRef, DeleteIr, Direction, Expr as IrExpr, FullText, InsertIr, OnConflict, Operator,
+    TableRef, UpdateIr, WhereClause,
 };
 use navree_orm::sql::{compile_delete, compile_insert, compile_update};
 use navree_orm::{Builder, Dialect, Expr, Filter, Model, Statement, Value, col, table};
@@ -452,10 +452,10 @@ fn aggregates_count_what_the_query_returns() {
 
 #[test]
 fn writes() {
-    let insert = InsertIr {
-        table: Cow::Borrowed("companies"),
-        columns: vec![Cow::Borrowed("name"), Cow::Borrowed("country")],
-        rows: vec![
+    let insert = InsertIr::new(
+        "companies",
+        vec![Cow::Borrowed("name"), Cow::Borrowed("country")],
+        vec![
             vec![
                 IrExpr::Value(Value::from("Acme")),
                 IrExpr::Value(Value::String(None)),
@@ -465,15 +465,10 @@ fn writes() {
                 IrExpr::Value(Value::from("DE")),
             ],
         ],
-        returning: vec![Cow::Borrowed("id")],
-    };
+    )
+    .returning(vec![Cow::Borrowed("id")]);
     insta::assert_snapshot!(per_dialect(|d| compile_insert(&insert, d)));
-    let empty = InsertIr {
-        table: Cow::Borrowed("counters"),
-        columns: Vec::new(),
-        rows: Vec::new(),
-        returning: Vec::new(),
-    };
+    let empty = InsertIr::new("counters", Vec::new(), Vec::new());
     insta::assert_snapshot!(per_dialect(|d| compile_insert(&empty, d)));
     let update = UpdateIr {
         table: TableRef::new("deals"),
@@ -495,7 +490,465 @@ fn writes() {
 }
 
 #[test]
+fn json_overlaps_keys_and_containment() {
+    insta::assert_snapshot!(query(
+        Deal::query()
+            .where_json_overlaps(Deal::TAGS, ["vip", "q1"])
+            .or_where_json_doesnt_overlap("meta->labels", "spam")
+    ));
+    insta::assert_snapshot!(query(
+        Deal::query()
+            .where_json_contains_key("meta->owner->email")
+            .where_json_doesnt_contain_key("meta->tags[2]")
+            .or_where_json_contains_key("meta->tags[-1]")
+    ));
+    insta::assert_snapshot!(query(
+        Deal::query()
+            .where_(Deal::TAGS.contained_by(["vip", "q1", "q2"]))
+            .where_(col("meta").has_key("owner"))
+            .where_(Deal::TAGS.overlaps("vip"))
+    ));
+    insta::assert_snapshot!(query(Deal::query().where_json_contains_key(Deal::TAGS)));
+}
+
+#[test]
+fn pattern_and_null_safe_operators() {
+    insta::assert_snapshot!(query(
+        Deal::query()
+            .where_(Deal::TITLE.ilike("%renewal%"))
+            .where_(Deal::TITLE.regex("^[A-Z]"))
+            .where_(Deal::TITLE.not_regex("draft$"))
+            .where_(Deal::TITLE.regex_case_insensitive("^acme"))
+            .where_(Deal::TITLE.not_regex_case_insensitive("test"))
+            .where_(Company::COUNTRY.is_distinct_from("US"))
+    ));
+    insta::assert_snapshot!(query(
+        Deal::query().where_(Deal::TITLE.similar_to("(Renewal|Upsell)%"))
+    ));
+}
+
+#[test]
+fn operators_written_by_hand() {
+    insta::assert_snapshot!(query(Deal::query().where_(Filter::op_raw(
+        Deal::TAGS,
+        "@>",
+        Expr::raw("?::jsonb", ["[\"vip\"]"])
+    ))));
+    insta::assert_snapshot!(query(Deal::query().where_(Filter::op_raw(
+        Deal::TITLE,
+        "sounds like",
+        Expr::val("renewal")
+    ))));
+    insta::assert_snapshot!(query(Deal::query().where_(Filter::op_raw(
+        Deal::TITLE,
+        "glob",
+        Expr::val("Re*")
+    ))));
+    insta::assert_snapshot!(rows(
+        table("deals").select_expr(Expr::col("title").binary("||", Expr::val("!")), "loud")
+    ));
+    insta::assert_snapshot!(rows(table("deals").select_expr(
+        Expr::col("meta").binary("#-", Expr::raw("'{owner,email}'", [] as [i64; 0])),
+        "meta"
+    )));
+}
+
+#[test]
+fn full_text_modes_and_vectors() {
+    insta::assert_snapshot!(query(Deal::query().where_full_text_with(
+        [Deal::TITLE],
+        "fat & (rat | cat)",
+        FullText::raw()
+    )));
+    insta::assert_snapshot!(rows(table("documents").where_full_text_with(
+        ["search_vector"],
+        "renewal pricing",
+        FullText::english().websearch_mode().vectors()
+    )));
+    insta::assert_snapshot!(query(
+        Deal::query()
+            .where_(Deal::STAGE.eq(Stage::Won))
+            .or_where_full_text_with([Deal::TITLE], "pricing", FullText::phrase())
+    ));
+}
+
+#[test]
+fn vector_similarity() {
+    let embedding = [0.25_f32, -1.5, 3.0];
+    insta::assert_snapshot!(rows(
+        table("documents")
+            .select(["id"])
+            .select_vector_distance("embedding", &embedding, "distance")
+            .where_vector_similar_to("embedding", &embedding, 0.75)
+            .limit(5)
+    ));
+    insta::assert_snapshot!(rows(
+        table("documents")
+            .where_vector_distance_less_than("embedding", &embedding, 0.4)
+            .order_by_vector_distance("embedding", &embedding)
+    ));
+    insta::assert_snapshot!(rows(table("documents").select_expr(
+        Expr::vector_distance_by(
+            Expr::col("embedding"),
+            &embedding,
+            navree_orm::VectorMetric::Euclidean
+        ),
+        "l2"
+    )));
+    insta::assert_snapshot!(rows(table("documents").select_expr(
+        Expr::vector_distance(Expr::col("embedding"), &[f32::NAN]),
+        "bad"
+    )));
+}
+
+#[test]
+fn sources_aliases_derived_tables_and_table_functions() {
+    insta::assert_snapshot!(rows(
+        table("deals").from_as("d").where_(col("d.stage").eq("won"))
+    ));
+    insta::assert_snapshot!(rows(
+        table("ignored").from_raw("generate_series(?, ?) AS n", [1, 10])
+    ));
+    insta::assert_snapshot!(rows(
+        table("ignored").from_function(Expr::func("json_each", [Expr::val("[1,2]")]), "item")
+    ));
+    insta::assert_snapshot!(rows(table("ignored").from_raw("SELECT 1", [] as [i64; 0])));
+    // A model's rows from a derived table named like its table.
+    insta::assert_snapshot!(query(
+        Deal::query()
+            .from_sub(
+                Deal::query()
+                    .where_(Deal::STAGE.eq(Stage::Won))
+                    .union_all(Deal::query().where_(Deal::AMOUNT_CENTS.gt(100)))
+            )
+            .order_by(Deal::TITLE)
+    ));
+}
+
+#[test]
+fn sub_joins_and_lateral_joins() {
+    let best = || {
+        Deal::query()
+            .select([Deal::COMPANY_ID])
+            .select_expr(Expr::max(Deal::AMOUNT_CENTS), "top")
+            .group_by([Deal::COMPANY_ID])
+    };
+    insta::assert_snapshot!(query(Company::query().right_join_sub(
+        best(),
+        "best",
+        "best.company_id",
+        "=",
+        Company::ID
+    )));
+    insta::assert_snapshot!(query(
+        Company::query().cross_join_sub(table("regions").select(["code"]), "r")
+    ));
+    let latest = || {
+        Deal::query()
+            .select([Deal::TITLE.expr()])
+            .where_column(Deal::COMPANY_ID, "=", Company::ID)
+            .order_by_desc(Deal::CREATED_AT)
+            .limit(2)
+    };
+    insta::assert_snapshot!(query(
+        Company::query()
+            .join_lateral(latest(), "latest")
+            .add_select(["latest.title"])
+    ));
+    insta::assert_snapshot!(query(
+        Company::query()
+            .left_join_lateral(latest(), "latest")
+            .add_select(["latest.title"])
+    ));
+}
+
+#[test]
+fn limits_per_group() {
+    insta::assert_snapshot!(query(
+        Deal::query().latest().group_limit(2, Deal::COMPANY_ID)
+    ));
+    insta::assert_snapshot!(rows(
+        table("activities")
+            .select(["id", "deal_id"])
+            .order_by_desc("due_at")
+            .skip(1)
+            .take(50)
+            .group_limit(3, "deal_id")
+    ));
+    use navree_orm::ir::{Aggregate, AggregateFunction};
+    use navree_orm::sql::compile_aggregate;
+    let count = Aggregate {
+        function: AggregateFunction::Count,
+        arg: None,
+        distinct: false,
+    };
+    let limited = Deal::query().latest().group_limit(2, Deal::COMPANY_ID);
+    insta::assert_snapshot!(per_dialect(|d| compile_aggregate(
+        &limited.clone().into_ir(),
+        &count,
+        d
+    )));
+}
+
+#[test]
+fn unions_with_orders_and_limits() {
+    // The orders and limit of a query with unions sort and cut the union;
+    // a part with its own order or limit is a derived table on SQLite.
+    insta::assert_snapshot!(query(
+        Company::query()
+            .where_(Company::COUNTRY.eq("DE"))
+            .union(
+                Company::query()
+                    .where_(Company::COUNTRY.eq("US"))
+                    .order_by(Company::NAME)
+                    .limit(5)
+            )
+            .order_by_desc(Company::NAME)
+            .limit(10)
+    ));
+}
+
+#[test]
+fn lock_modes_and_waits() {
+    use navree_orm::LockMode;
+    let locked = |q: Builder<Company>| query(q.where_key(1_i64));
+    insta::assert_snapshot!(locked(
+        Company::query().lock(LockMode::NoKeyUpdate).skip_locked()
+    ));
+    insta::assert_snapshot!(locked(Company::query().shared_lock().no_wait()));
+    insta::assert_snapshot!(locked(Company::query().lock(LockMode::KeyShare)));
+    // `skip_locked` alone locks for update; a later mode keeps the wait.
+    insta::assert_snapshot!(locked(Company::query().skip_locked().lock(LockMode::Share)));
+}
+
+#[test]
+fn inserts_that_skip_or_update_conflicts() {
+    let base = || {
+        InsertIr::new(
+            "tags",
+            vec![Cow::Borrowed("name"), Cow::Borrowed("color")],
+            vec![vec![
+                IrExpr::Value(Value::from("vip")),
+                IrExpr::Value(Value::from("gold")),
+            ]],
+        )
+    };
+    insta::assert_snapshot!(per_dialect(|d| compile_insert(
+        &base().on_conflict(OnConflict::Ignore { target: vec![] }),
+        d
+    )));
+    insta::assert_snapshot!(per_dialect(|d| compile_insert(
+        &base()
+            .returning(vec![Cow::Borrowed("id")])
+            .on_conflict(OnConflict::Ignore {
+                target: vec![Cow::Borrowed("name")]
+            }),
+        d
+    )));
+    insta::assert_snapshot!(per_dialect(|d| compile_insert(
+        &base().on_conflict(OnConflict::Update {
+            target: vec![Cow::Borrowed("name")],
+            sets: vec![
+                (Cow::Borrowed("color"), Expr::excluded("color")),
+                (
+                    Cow::Borrowed("hits"),
+                    Expr::col("tags.hits").add(Expr::excluded("hits"))
+                ),
+                (Cow::Borrowed("note"), Expr::val("merged")),
+            ],
+        }),
+        d
+    )));
+    // PostgreSQL and SQLite need the conflict target of an update.
+    insta::assert_snapshot!(per_dialect(|d| compile_insert(
+        &base().on_conflict(OnConflict::Update {
+            target: vec![],
+            sets: vec![(Cow::Borrowed("color"), Expr::excluded("color"))],
+        }),
+        d
+    )));
+}
+
+#[test]
+fn inserts_from_queries() {
+    let mut archive = InsertIr::new(
+        "archived_deals",
+        vec![Cow::Borrowed("id"), Cow::Borrowed("title")],
+        Vec::new(),
+    );
+    archive.select = Some(Box::new(
+        table("deals")
+            .select(["id", "title"])
+            .where_(col("stage").eq("lost"))
+            .into_ir(),
+    ));
+    insta::assert_snapshot!(per_dialect(|d| compile_insert(&archive, d)));
+    let mut ignore = InsertIr::new(
+        "archived_deals",
+        vec![Cow::Borrowed("id"), Cow::Borrowed("title")],
+        Vec::new(),
+    )
+    .on_conflict(OnConflict::Ignore { target: vec![] });
+    ignore.select = Some(Box::new(table("deals").select(["id", "title"]).into_ir()));
+    insta::assert_snapshot!(per_dialect(|d| compile_insert(&ignore, d)));
+    let mut mismatch = InsertIr::new("archived_deals", vec![Cow::Borrowed("id")], Vec::new());
+    mismatch.select = Some(Box::new(table("deals").select(["id", "title"]).into_ir()));
+    insta::assert_snapshot!(per_dialect(|d| compile_insert(&mismatch, d)));
+}
+
+#[test]
+fn json_path_updates() {
+    let update = UpdateIr {
+        table: TableRef::new("deals"),
+        sets: vec![
+            (
+                Cow::Borrowed("meta->status"),
+                IrExpr::Value(Value::from("won")),
+            ),
+            (
+                Cow::Borrowed("meta->owner->name"),
+                IrExpr::Value(Value::from("ada")),
+            ),
+            (
+                Cow::Borrowed("meta->tags[0]"),
+                IrExpr::Value(Value::from(serde_json::json!({"k": true}))),
+            ),
+            (
+                Cow::Borrowed("title"),
+                IrExpr::Value(Value::from("Renewal")),
+            ),
+        ],
+        wheres: vec![WhereClause::and(Deal::ID.eq(Uuid::nil()).into_where())],
+    };
+    insta::assert_snapshot!(per_dialect(|d| compile_update(&update, d)));
+    let twice = UpdateIr {
+        table: TableRef::new("deals"),
+        sets: vec![
+            (Cow::Borrowed("meta"), IrExpr::Value(Value::from("{}"))),
+            (
+                Cow::Borrowed("meta->status"),
+                IrExpr::Value(Value::from("won")),
+            ),
+        ],
+        wheres: vec![],
+    };
+    insta::assert_snapshot!(per_dialect(|d| compile_update(&twice, d)));
+}
+
+#[test]
+fn table_writes_with_joins_orders_and_limits() {
+    insta::assert_snapshot!(per_dialect(|d| table("deals as d")
+        .join("companies", "companies.id", "=", "d.company_id")
+        .where_(col("companies.active").eq(false))
+        .to_update_sql(d, [col("stage").set("lost")])));
+    insta::assert_snapshot!(per_dialect(|d| table("sessions")
+        .where_(col("user_id").eq(7))
+        .order_by("last_seen_at")
+        .limit(100)
+        .to_delete_sql(d)));
+    insta::assert_snapshot!(per_dialect(|d| table("sessions")
+        .where_(col("user_id").eq(7))
+        .to_delete_sql(d)));
+    insta::assert_snapshot!(per_dialect(|d| table("deals")
+        .group_by(["stage"])
+        .to_update_sql(d, [col("stage").set("x")])));
+}
+
+#[test]
+fn updates_from_joined_tables() {
+    use navree_orm::sql::compile_update_from;
+    let query = table("deals")
+        .join("companies as c", "c.id", "=", "deals.company_id")
+        .where_(col("c.active").eq(false))
+        .into_ir();
+    let sets = vec![(Cow::Borrowed("stage"), IrExpr::Value(Value::from("lost")))];
+    insta::assert_snapshot!(per_dialect(|d| compile_update_from(
+        &query.table,
+        &sets,
+        &query.joins,
+        &query.wheres,
+        d
+    )));
+    let left = table("deals")
+        .left_join("companies", "companies.id", "=", "deals.company_id")
+        .into_ir();
+    insta::assert_snapshot!(per_dialect(|d| compile_update_from(
+        &left.table,
+        &sets,
+        &left.joins,
+        &left.wheres,
+        d
+    )));
+}
+
+#[test]
+fn truncation() {
+    use navree_orm::sql::compile_truncate;
+    let mut out = String::new();
+    for dialect in DIALECTS {
+        for statement in compile_truncate("deals", false, dialect) {
+            writeln!(out, "{dialect}: {statement}").unwrap();
+        }
+    }
+    for statement in compile_truncate("audit.events", true, Dialect::Postgres) {
+        writeln!(out, "cascade: {statement}").unwrap();
+    }
+    insta::assert_snapshot!(out);
+}
+
+#[test]
 fn operators_parse_from_their_spellings() {
     assert_eq!(Operator::from("not ilike"), Operator::NotILike);
     assert_eq!(Operator::from("is not distinct from"), Operator::NullSafeEq);
+}
+
+#[test]
+fn statement_timeouts() {
+    use std::time::Duration;
+
+    use navree_orm::ir::{Aggregate, AggregateFunction};
+    use navree_orm::sql::{compile_aggregate, compile_exists, compile_select};
+
+    let timed = Company::query()
+        .where_(Company::COUNTRY.eq("NZ"))
+        .timeout(Duration::from_micros(1_500_100));
+    let mut out = per_dialect(|d| timed.to_sql(d));
+    let ir = timed.clone().into_ir();
+    let count = Aggregate {
+        function: AggregateFunction::Count,
+        arg: None,
+        distinct: false,
+    };
+    writeln!(
+        out,
+        "count: {}",
+        compile_aggregate(&ir, &count, Dialect::MySql).unwrap().sql
+    )
+    .unwrap();
+    let mut limited = ir.clone();
+    limited.limit = Some(5);
+    writeln!(
+        out,
+        "count of a limited query: {}",
+        compile_aggregate(&limited, &count, Dialect::MySql)
+            .unwrap()
+            .sql
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "exists: {}",
+        compile_exists(&ir, Dialect::MySql).unwrap().sql
+    )
+    .unwrap();
+    let union = timed.clone().union(Company::query());
+    writeln!(
+        out,
+        "union: {}",
+        compile_select(&union.into_ir(), Dialect::MySql)
+            .unwrap()
+            .sql
+    )
+    .unwrap();
+    insta::assert_snapshot!(out);
 }

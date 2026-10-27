@@ -60,7 +60,9 @@ impl<M: Model> Record<M> {
     /// # Ok(()) }
     /// ```
     pub async fn force_delete<E: Executor + ?Sized>(&mut self, exec: &E) -> Result<bool> {
-        let target = exec.target(Access::Write).await?;
+        let target = exec
+            .target_routed(Access::Write, crate::query::model_route::<M>())
+            .await?;
         force_delete(&target, self).await
     }
 
@@ -92,7 +94,9 @@ impl<M: SoftDeleting> Record<M> {
     /// # Ok(()) }
     /// ```
     pub async fn restore<E: Executor + ?Sized>(&mut self, exec: &E) -> Result<bool> {
-        let target = exec.target(Access::Write).await?;
+        let target = exec
+            .target_routed(Access::Write, crate::query::model_route::<M>())
+            .await?;
         restore(&target, self).await
     }
 

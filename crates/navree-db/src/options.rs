@@ -2,6 +2,7 @@
 //! [`MySqlOptions`] (and its [`IsolationLevel`]) for MySQL and MariaDB.
 
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 use std::fmt;
 use std::str::FromStr;
 
@@ -15,6 +16,8 @@ use serde::{Deserialize, Deserializer};
 /// [database]
 /// url = "postgres://navree:navree@127.0.0.1:5432/my_app"   # TimescaleDB (the default) or PostgreSQL;
 ///                                                          # mysql://, mariadb:// or sqlite://storage/app.db?mode=rwc
+/// read_urls = []           # read replicas: reads outside transactions go to them in turn
+/// sticky = true            # after a unit of work writes, its task reads from the writer
 /// max_connections = 10
 /// min_connections = 0
 /// connect_timeout_secs = 8
@@ -25,6 +28,12 @@ use serde::{Deserialize, Deserializer};
 /// slow_query_ms = 200      # statements slower than this at warn level; 0 turns it off
 /// migrate_on_boot = false  # run pending migrations when the app boots
 /// transaction_settings = true  # navree.actor and navree.request_id in every unit of work
+///
+/// [database.connections.analytics]   # a named connection (DbConnections), same keys
+/// url = "postgres://reports@warehouse/analytics"
+///
+/// [database.postgres]      # PostgreSQL only (see PostgresOptions)
+/// [database.sqlite]        # SQLite only (see SqliteOptions)
 ///
 /// [database.mysql]         # MySQL and MariaDB only
 /// strict = true            # every connection runs in strict SQL mode
@@ -66,6 +75,21 @@ pub struct DbOptions {
     /// `mysql://...`, `mariadb://...` or `sqlite://path?mode=rwc`); default
     /// `sqlite://storage/app.db?mode=rwc`.
     pub url: String,
+    /// Read replicas of the database at `url`: reads outside a
+    /// transaction go to them in turn, writes and transactions to `url`.
+    /// From the environment, a comma-separated list.
+    #[serde(deserialize_with = "list_from_list_or_string")]
+    pub read_urls: Vec<String>,
+    /// After a unit of work wrote, its task reads from the writer, so a
+    /// request sees its own writes while replicas catch up (default
+    /// `true`).
+    pub sticky: bool,
+    /// A direct connection to the same database that bypasses a
+    /// transaction-mode pooler (PgBouncer, RDS Proxy) in front of `url`:
+    /// migrations run on it, and [`Db::direct`](crate::Db::direct) hands
+    /// it out for session-level work (advisory locks, `LISTEN`, prepared
+    /// statements that outlive a transaction). Opened on first use.
+    pub direct_url: Option<String>,
     /// The most pooled connections.
     pub max_connections: u32,
     /// The fewest pooled connections kept open.
@@ -100,12 +124,25 @@ pub struct DbOptions {
     /// MySQL and MariaDB settings (`database.mysql`); other databases
     /// ignore them.
     pub mysql: MySqlOptions,
+    /// PostgreSQL settings (`database.postgres`); other databases ignore
+    /// them.
+    pub postgres: PostgresOptions,
+    /// SQLite settings (`database.sqlite`); other databases ignore them.
+    pub sqlite: SqliteOptions,
+    /// Further databases by name (`[database.connections.analytics]`), each
+    /// with options of its own, connected on first use through
+    /// [`DbConnections`](crate::DbConnections). Named connections cannot
+    /// have connections of their own.
+    pub connections: BTreeMap<String, DbOptions>,
 }
 
 impl Default for DbOptions {
     fn default() -> Self {
         Self {
             url: "sqlite://storage/app.db?mode=rwc".to_owned(),
+            read_urls: Vec::new(),
+            sticky: true,
+            direct_url: None,
             max_connections: 10,
             min_connections: 0,
             connect_timeout_secs: 8,
@@ -117,8 +154,221 @@ impl Default for DbOptions {
             migrate_on_boot: false,
             transaction_settings: true,
             mysql: MySqlOptions::default(),
+            postgres: PostgresOptions::default(),
+            sqlite: SqliteOptions::default(),
+            connections: BTreeMap::new(),
         }
     }
+}
+
+/// The PostgreSQL settings of [`DbOptions`]: the `database.postgres`
+/// section. They shape the session of every connection the pool opens.
+///
+/// ```toml
+/// [database.postgres]
+/// search_path = ["app", "public"]
+/// timezone = "UTC"
+/// application_name = "crm-api"
+/// synchronous_commit = "on"
+/// isolation_level = "read_committed"
+/// ssl_mode = "prefer"
+/// ```
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
+#[serde(default)]
+pub struct PostgresOptions {
+    /// The schemas unqualified names resolve in, in order (`search_path`).
+    /// From the environment, a comma-separated list.
+    #[serde(deserialize_with = "list_from_list_or_string")]
+    pub search_path: Vec<String>,
+    /// The session's time zone (`TimeZone`), e.g. `UTC` or
+    /// `Europe/Berlin`.
+    pub timezone: Option<String>,
+    /// The name the server shows for these connections
+    /// (`application_name`, in `pg_stat_activity`).
+    pub application_name: Option<String>,
+    /// `synchronous_commit`: `on`, `off`, `local`, `remote_write` or
+    /// `remote_apply`.
+    pub synchronous_commit: Option<String>,
+    /// The isolation level transactions start with
+    /// (`default_transaction_isolation`).
+    pub isolation_level: Option<IsolationLevel>,
+    /// TLS: `disable`, `allow`, `prefer` (the default), `require`,
+    /// `verify-ca` or `verify-full`; overrides the URL's `sslmode`.
+    pub ssl_mode: Option<String>,
+}
+
+impl PostgresOptions {
+    /// The session settings as `name = value` pairs (connection options).
+    pub fn settings(&self) -> Vec<(&'static str, String)> {
+        let mut settings = Vec::new();
+        if !self.search_path.is_empty() {
+            settings.push(("search_path", self.search_path.join(",")));
+        }
+        if let Some(timezone) = &self.timezone {
+            settings.push(("TimeZone", timezone.clone()));
+        }
+        if let Some(mode) = &self.synchronous_commit {
+            settings.push(("synchronous_commit", mode.clone()));
+        }
+        if let Some(level) = self.isolation_level {
+            settings.push((
+                "default_transaction_isolation",
+                level.as_sql().to_ascii_lowercase(),
+            ));
+        }
+        settings
+    }
+
+    fn problems(&self) -> Vec<String> {
+        let mut problems = Vec::new();
+        for schema in &self.search_path {
+            if !is_name(schema) {
+                problems.push(format!(
+                    "postgres.search_path: `{schema}` is not a schema name"
+                ));
+            }
+        }
+        if let Some(timezone) = &self.timezone
+            && (timezone.is_empty()
+                || !timezone
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || "_/+-:".contains(c)))
+        {
+            problems.push(format!(
+                "postgres.timezone: `{timezone}` is not a time zone name"
+            ));
+        }
+        if let Some(name) = &self.application_name
+            && (name.len() > 63
+                || name
+                    .chars()
+                    .any(|c| c.is_control() || c == '\'' || c == '\\'))
+        {
+            problems.push(
+                "postgres.application_name must be at most 63 printable characters without quotes"
+                    .to_owned(),
+            );
+        }
+        const COMMIT: [&str; 5] = ["on", "off", "local", "remote_write", "remote_apply"];
+        if let Some(mode) = &self.synchronous_commit
+            && !COMMIT.contains(&mode.as_str())
+        {
+            problems.push(format!(
+                "postgres.synchronous_commit: `{mode}` is not one of {}",
+                COMMIT.join(", ")
+            ));
+        }
+        const SSL: [&str; 6] = [
+            "disable",
+            "allow",
+            "prefer",
+            "require",
+            "verify-ca",
+            "verify-full",
+        ];
+        if let Some(mode) = &self.ssl_mode
+            && !SSL.contains(&mode.as_str())
+        {
+            problems.push(format!(
+                "postgres.ssl_mode: `{mode}` is not one of {}",
+                SSL.join(", ")
+            ));
+        }
+        problems
+    }
+}
+
+/// The SQLite settings of [`DbOptions`]: the `database.sqlite` section,
+/// applied to every connection the pool opens.
+///
+/// ```toml
+/// [database.sqlite]
+/// journal_mode = "wal"        # delete, truncate, persist, memory, wal, off
+/// busy_timeout_ms = 5000      # how long a connection waits for a lock
+/// foreign_keys = true
+/// synchronous = "normal"      # off, normal, full, extra
+/// pragmas = { cache_size = "-20000", temp_store = "memory" }
+/// ```
+///
+/// In-memory databases are URLs (`sqlite::memory:` for one connection,
+/// `sqlite:file:name?mode=memory&cache=shared` for a shared one); `mode=rwc`
+/// creates the file (and navree-db its directory).
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[serde(default)]
+pub struct SqliteOptions {
+    /// The journal mode (default `wal`).
+    pub journal_mode: String,
+    /// How long a connection waits for a lock, in milliseconds (default
+    /// 5000).
+    pub busy_timeout_ms: u64,
+    /// Whether foreign keys are enforced (default `true`).
+    pub foreign_keys: bool,
+    /// `PRAGMA synchronous`; SQLite's own default when unset.
+    pub synchronous: Option<String>,
+    /// Further pragmas run on every connection, by name.
+    pub pragmas: BTreeMap<String, String>,
+}
+
+impl Default for SqliteOptions {
+    fn default() -> Self {
+        Self {
+            journal_mode: "wal".to_owned(),
+            busy_timeout_ms: 5000,
+            foreign_keys: true,
+            synchronous: None,
+            pragmas: BTreeMap::new(),
+        }
+    }
+}
+
+/// SQLite's journal modes.
+const JOURNAL_MODES: [&str; 6] = ["delete", "truncate", "persist", "memory", "wal", "off"];
+/// SQLite's synchronous settings.
+const SYNCHRONOUS: [&str; 4] = ["off", "normal", "full", "extra"];
+
+impl SqliteOptions {
+    fn problems(&self) -> Vec<String> {
+        let mut problems = Vec::new();
+        if !JOURNAL_MODES.contains(&self.journal_mode.to_ascii_lowercase().as_str()) {
+            problems.push(format!(
+                "sqlite.journal_mode: `{}` is not one of {}",
+                self.journal_mode,
+                JOURNAL_MODES.join(", ")
+            ));
+        }
+        if let Some(synchronous) = &self.synchronous
+            && !SYNCHRONOUS.contains(&synchronous.to_ascii_lowercase().as_str())
+        {
+            problems.push(format!(
+                "sqlite.synchronous: `{synchronous}` is not one of {}",
+                SYNCHRONOUS.join(", ")
+            ));
+        }
+        for (name, value) in &self.pragmas {
+            if !is_name(name) {
+                problems.push(format!("sqlite.pragmas: `{name}` is not a pragma name"));
+            }
+            if value.is_empty()
+                || !value
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || "_-.".contains(c))
+            {
+                problems.push(format!(
+                    "sqlite.pragmas: `{value}` (for {name}) is not a pragma value (letters, digits, `_`, `-`, `.`)"
+                ));
+            }
+        }
+        problems
+    }
+}
+
+/// Whether `name` is an SQL name: a letter or `_`, then letters, digits and
+/// underscores.
+fn is_name(name: &str) -> bool {
+    name.chars()
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
 /// The MySQL and MariaDB settings of [`DbOptions`]: the `database.mysql`
@@ -244,6 +494,33 @@ where
     ))
 }
 
+/// A list given as a list (`["a", "b"]`) or as a comma-separated string
+/// (`"a,b"`, the form an environment variable takes); entries are trimmed
+/// and empty ones dropped.
+fn list_from_list_or_string<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum List {
+        Items(Vec<String>),
+        Text(String),
+    }
+
+    let items = match Option::<List>::deserialize(deserializer)? {
+        None => return Ok(Vec::new()),
+        Some(List::Items(items)) => items,
+        Some(List::Text(text)) => text
+            .split(',')
+            .map(str::trim)
+            .filter(|item| !item.is_empty())
+            .map(str::to_owned)
+            .collect(),
+    };
+    Ok(items)
+}
+
 /// A transaction isolation level: what one transaction sees of others'
 /// writes (`database.mysql.isolation_level`).
 ///
@@ -345,6 +622,42 @@ impl DbOptions {
     pub fn redacted_url(&self) -> String {
         redact_url(&self.url)
     }
+
+    /// The same settings for another database at `url` (a workspace's own
+    /// database, say): pool, logging and session settings carry over;
+    /// read replicas and named connections belong to this database and do
+    /// not.
+    ///
+    /// ```
+    /// use navree_db::DbOptions;
+    ///
+    /// let main = DbOptions {
+    ///     url: "postgres://app@db/main".into(),
+    ///     read_urls: vec!["postgres://app@replica/main".into()],
+    ///     max_connections: 20,
+    ///     ..DbOptions::default()
+    /// };
+    /// let tenant = main.for_database("postgres://app@db/tenant_7");
+    /// assert_eq!(tenant.max_connections, 20);
+    /// assert!(tenant.read_urls.is_empty());
+    /// ```
+    pub fn for_database(&self, url: impl Into<String>) -> DbOptions {
+        DbOptions {
+            url: url.into(),
+            read_urls: Vec::new(),
+            direct_url: None,
+            connections: BTreeMap::new(),
+            ..self.clone()
+        }
+    }
+
+    /// The options of the direct connection (`direct_url`), if there is
+    /// one: this database's settings at that URL.
+    pub fn direct(&self) -> Option<DbOptions> {
+        self.direct_url
+            .as_ref()
+            .map(|url| self.for_database(url.clone()))
+    }
 }
 
 impl ConfigSection for DbOptions {
@@ -361,7 +674,38 @@ impl ConfigSection for DbOptions {
         if self.min_connections > self.max_connections {
             problems.push("min_connections must not exceed max_connections".to_owned());
         }
+        if self.read_urls.iter().any(|url| url.trim().is_empty()) {
+            problems.push("read_urls must not contain an empty URL".to_owned());
+        }
+        if let Some(direct) = &self.direct_url
+            && driver_family(direct) != driver_family(&self.url)
+        {
+            problems.push(
+                "direct_url must name the same kind of database as url (it reaches the same database without the pooler)"
+                    .to_owned(),
+            );
+        }
         problems.extend(self.mysql.problems());
+        problems.extend(self.postgres.problems());
+        problems.extend(self.sqlite.problems());
+        for (name, connection) in &self.connections {
+            if !is_name(name) {
+                problems.push(format!(
+                    "connections: `{name}` is not a connection name (letters, digits and underscores)"
+                ));
+            }
+            if name == "default" {
+                problems.push(
+                    "connections: `default` is the main connection's name; pick another".to_owned(),
+                );
+            }
+            if !connection.connections.is_empty() {
+                problems.push(format!("connections.{name}: connections cannot be nested"));
+            }
+            if let Err(nested) = connection.validate() {
+                problems.push(format!("connections.{name}: {nested}"));
+            }
+        }
         if problems.is_empty() {
             Ok(())
         } else {
@@ -372,8 +716,12 @@ impl ConfigSection for DbOptions {
 
 impl fmt::Debug for DbOptions {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let replicas: Vec<String> = self.read_urls.iter().map(|url| redact_url(url)).collect();
         f.debug_struct("DbOptions")
             .field("url", &self.redacted_url())
+            .field("read_urls", &replicas)
+            .field("sticky", &self.sticky)
+            .field("direct_url", &self.direct_url.as_deref().map(redact_url))
             .field("max_connections", &self.max_connections)
             .field("min_connections", &self.min_connections)
             .field("connect_timeout_secs", &self.connect_timeout_secs)
@@ -385,6 +733,9 @@ impl fmt::Debug for DbOptions {
             .field("migrate_on_boot", &self.migrate_on_boot)
             .field("transaction_settings", &self.transaction_settings)
             .field("mysql", &self.mysql)
+            .field("postgres", &self.postgres)
+            .field("sqlite", &self.sqlite)
+            .field("connections", &self.connections)
             .finish()
     }
 }
@@ -407,6 +758,16 @@ pub(crate) fn scheme(url: &str) -> Option<Cow<'_, str>> {
         Cow::Owned(scheme.to_ascii_lowercase())
     } else {
         Cow::Borrowed(scheme)
+    })
+}
+
+/// The driver `url`'s scheme selects: `postgres` and `postgresql` alike,
+/// `mysql` and `mariadb` alike.
+fn driver_family(url: &str) -> Option<String> {
+    scheme(url).map(|scheme| match scheme.as_ref() {
+        "postgresql" => "postgres".to_owned(),
+        "mariadb" => "mysql".to_owned(),
+        other => other.to_owned(),
     })
 }
 

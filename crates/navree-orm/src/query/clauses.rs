@@ -121,6 +121,57 @@ pub(crate) fn aliased(expr: Expr, alias: impl Into<Cow<'static, str>>) -> Select
     }
 }
 
+/// Splits a raw table function, `name(arguments) [AS] alias`, into its
+/// name, its argument list and its alias (the name when there is none).
+pub(crate) fn parse_table_function(sql: &str) -> Result<(String, String, String), String> {
+    let invalid = || {
+        format!(
+            "from_raw takes a table function, `name(arguments) [AS] alias`, not `{sql}` (use from_sub for a subquery)"
+        )
+    };
+    let text = sql.trim();
+    let open = text.find('(').ok_or_else(invalid)?;
+    let name = text[..open].trim();
+    if !crate::sql::is_identifier(name) {
+        return Err(invalid());
+    }
+    // The matching `)`, outside quoted text.
+    let mut depth = 0_usize;
+    let mut quote: Option<char> = None;
+    let mut close = None;
+    for (at, c) in text[open..].char_indices() {
+        match quote {
+            Some(q) if c == q => quote = None,
+            Some(_) => {}
+            None => match c {
+                '\'' | '"' | '`' => quote = Some(c),
+                '(' => depth += 1,
+                ')' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        close = Some(open + at);
+                        break;
+                    }
+                }
+                _ => {}
+            },
+        }
+    }
+    let close = close.ok_or_else(invalid)?;
+    let arguments = text[open + 1..close].to_owned();
+    let rest: Vec<&str> = text[close + 1..].split_whitespace().collect();
+    let alias = match rest.as_slice() {
+        [] => name,
+        [alias] => alias,
+        [as_, alias] if as_.eq_ignore_ascii_case("as") => alias,
+        _ => return Err(invalid()),
+    };
+    if !crate::sql::is_identifier(alias) || alias.contains('.') {
+        return Err(invalid());
+    }
+    Ok((name.to_owned(), arguments, alias.to_owned()))
+}
+
 /// A subquery as a select item.
 pub(crate) fn subquery_item(
     query: impl IntoQuery,
@@ -429,6 +480,157 @@ macro_rules! clauses {
             })
         }
 
+        /// `RIGHT JOIN (subquery) AS alias ON first op second`.
+        pub fn right_join_sub(
+            self,
+            query: impl $crate::IntoQuery,
+            alias: impl Into<std::borrow::Cow<'static, str>>,
+            first: impl $crate::IntoExpr,
+            op: impl Into<$crate::ir::Operator>,
+            second: impl $crate::IntoExpr,
+        ) -> Self {
+            let table = $crate::ir::TableRef::subquery($crate::IntoQuery::into_query(query), alias);
+            self.push_join($crate::ir::JoinKind::Right, table, |join| {
+                join.on(first, op, second)
+            })
+        }
+
+        /// `CROSS JOIN (subquery) AS alias`: every row with every row of the
+        /// subquery.
+        pub fn cross_join_sub(
+            self,
+            query: impl $crate::IntoQuery,
+            alias: impl Into<std::borrow::Cow<'static, str>>,
+        ) -> Self {
+            let table = $crate::ir::TableRef::subquery($crate::IntoQuery::into_query(query), alias);
+            self.push_join($crate::ir::JoinKind::Cross, table, |join| join)
+        }
+
+        /// `INNER JOIN LATERAL (subquery) AS alias ON true`: the subquery
+        /// runs for each row and may use its columns (a correlated
+        /// subquery returning rows). Rows for which it returns nothing are
+        /// left out. PostgreSQL and MySQL 8.0.14+; `Unsupported` on SQLite.
+        ///
+        /// ```
+        /// # use navree_orm::__doc_models::*;
+        /// // Each company with its three biggest deals.
+        /// let top = Deal::query()
+        ///     .select([Deal::TITLE.expr(), Deal::AMOUNT_CENTS.expr()])
+        ///     .where_column(Deal::COMPANY_ID, "=", Company::ID)
+        ///     .order_by_desc(Deal::AMOUNT_CENTS)
+        ///     .limit(3);
+        /// let rows = Company::query().join_lateral(top, "top_deals").add_select(["top_deals.title"]);
+        /// assert!(rows.to_sql(Dialect::Postgres)?.sql.contains(r#"INNER JOIN LATERAL (SELECT "deals"."title""#));
+        /// # Ok::<(), navree_orm::OrmError>(())
+        /// ```
+        pub fn join_lateral(
+            self,
+            query: impl $crate::IntoQuery,
+            alias: impl Into<std::borrow::Cow<'static, str>>,
+        ) -> Self {
+            let table = $crate::ir::TableRef::subquery($crate::IntoQuery::into_query(query), alias);
+            self.push_join($crate::ir::JoinKind::Lateral, table, |join| join)
+        }
+
+        /// `LEFT JOIN LATERAL (subquery) AS alias ON true`: like
+        /// [`join_lateral`](Self::join_lateral), keeping the rows for which
+        /// the subquery returns nothing (its columns are NULL).
+        pub fn left_join_lateral(
+            self,
+            query: impl $crate::IntoQuery,
+            alias: impl Into<std::borrow::Cow<'static, str>>,
+        ) -> Self {
+            let table = $crate::ir::TableRef::subquery($crate::IntoQuery::into_query(query), alias);
+            self.push_join($crate::ir::JoinKind::LeftLateral, table, |join| join)
+        }
+
+        /// At most `limit` rows per value of `column` (top N per group), in
+        /// the query's order: `ROW_NUMBER() OVER (PARTITION BY column ORDER
+        /// BY ..)` in a derived table (PostgreSQL, MySQL 8, MariaDB 10.2+,
+        /// SQLite 3.25+). An offset skips rows per group; a limit caps the
+        /// whole result. Rows come back by their rank within their group.
+        ///
+        /// ```no_run
+        /// # use navree_orm::__doc_models::*;
+        /// # async fn demo(db: Db) -> Result<()> {
+        /// // The two latest activities of every deal, in one query.
+        /// let recent = Activity::query().latest().group_limit(2, Activity::DEAL_ID).get(&db).await?;
+        /// # Ok(()) }
+        /// ```
+        pub fn group_limit(mut self, limit: u64, column: impl $crate::IntoExpr) -> Self {
+            $crate::query::clauses::HasQuery::query_mut(&mut self).group_limit =
+                Some($crate::ir::GroupLimit {
+                    limit,
+                    column: $crate::IntoExpr::into_expr(column),
+                });
+            self
+        }
+
+        /// Keeps the rows whose vector column (an embedding) has cosine
+        /// similarity `min_similarity` or more with `vector` (distance at
+        /// most `1 - min_similarity`), most similar first. pgvector on
+        /// PostgreSQL, MariaDB's vector functions; unsupported on SQLite.
+        ///
+        /// ```
+        /// # use navree_orm::__doc_models::*;
+        /// # let embedding = vec![0.1_f32, 0.7, 0.2];
+        /// let similar = Deal::query().where_vector_similar_to("embedding", &embedding, 0.8).limit(5);
+        /// assert!(similar.to_sql(Dialect::Postgres)?.sql.ends_with(
+        ///     r#"WHERE (("embedding" <=> CAST($1 AS vector))) <= $2 ORDER BY ("embedding" <=> CAST($3 AS vector)) ASC LIMIT $4"#
+        /// ));
+        /// # Ok::<(), navree_orm::OrmError>(())
+        /// ```
+        pub fn where_vector_similar_to(
+            self,
+            column: impl $crate::IntoExpr,
+            vector: &[f32],
+            min_similarity: f64,
+        ) -> Self {
+            let column = $crate::IntoExpr::into_expr(column);
+            self.where_vector_distance_less_than(column.clone(), vector, 1.0 - min_similarity)
+                .order_by_vector_distance(column, vector)
+        }
+
+        /// `OR` the vector column has cosine similarity `min_similarity` or
+        /// more with `vector`, most similar first.
+        pub fn or_where_vector_similar_to(
+            self,
+            column: impl $crate::IntoExpr,
+            vector: &[f32],
+            min_similarity: f64,
+        ) -> Self {
+            let column = $crate::IntoExpr::into_expr(column);
+            self.or_where_vector_distance_less_than(column.clone(), vector, 1.0 - min_similarity)
+                .order_by_vector_distance(column, vector)
+        }
+
+        /// Adds the cosine distance between the vector column and `vector`
+        /// to the select list as `alias`.
+        pub fn select_vector_distance(
+            self,
+            column: impl $crate::IntoExpr,
+            vector: &[f32],
+            alias: impl Into<std::borrow::Cow<'static, str>>,
+        ) -> Self {
+            self.select_expr(
+                $crate::Expr::vector_distance($crate::IntoExpr::into_expr(column), vector),
+                alias,
+            )
+        }
+
+        /// Orders by the cosine distance between the vector column and
+        /// `vector`, nearest first.
+        pub fn order_by_vector_distance(
+            self,
+            column: impl $crate::IntoExpr,
+            vector: &[f32],
+        ) -> Self {
+            self.order($crate::ir::Order::asc($crate::Expr::vector_distance(
+                $crate::IntoExpr::into_expr(column),
+                vector,
+            )))
+        }
+
         /// `INNER JOIN (subquery) AS alias ON ...` with the conditions built
         /// in `on`.
         pub fn join_sub_on(
@@ -641,17 +843,120 @@ macro_rules! clauses {
 
         /// Locks the selected rows for update until the transaction ends
         /// (`FOR UPDATE`; SQLite serialises write transactions instead).
-        pub fn lock_for_update(mut self) -> Self {
-            $crate::query::clauses::HasQuery::query_mut(&mut self).lock =
-                Some($crate::ir::Lock::Update);
-            self
+        /// Run it in a unit of work: a locking read through `&Db` joins
+        /// the task's unit of work (beginning its transaction), since a
+        /// lock outside a transaction ends with the statement.
+        ///
+        /// ```no_run
+        /// # use navree_orm::__doc_models::*;
+        /// # async fn demo(uow: Uow, id: Uuid) -> Result<()> {
+        /// let mut deal = Deal::query().where_key(id).lock_for_update().first_or_fail(&uow).await?;
+        /// deal.views += 1;
+        /// deal.save(&uow).await?; // nobody changed the row in between
+        /// # Ok(()) }
+        /// ```
+        pub fn lock_for_update(self) -> Self {
+            self.lock($crate::ir::LockMode::Update)
         }
 
         /// Locks the selected rows against changes until the transaction
         /// ends (`FOR SHARE`, `LOCK IN SHARE MODE` on MySQL).
-        pub fn shared_lock(mut self) -> Self {
-            $crate::query::clauses::HasQuery::query_mut(&mut self).lock =
-                Some($crate::ir::Lock::Share);
+        pub fn shared_lock(self) -> Self {
+            self.lock($crate::ir::LockMode::Share)
+        }
+
+        /// Locks the selected rows in `mode` until the transaction ends
+        /// (see [`Lock`](crate::ir::Lock) for each database's clause).
+        pub fn lock(mut self, mode: $crate::ir::LockMode) -> Self {
+            let query = $crate::query::clauses::HasQuery::query_mut(&mut self);
+            let wait = query.lock.map(|lock| lock.wait).unwrap_or_default();
+            query.lock = Some($crate::ir::Lock { mode, wait });
+            self
+        }
+
+        /// Leaves out the rows another transaction has locked instead of
+        /// waiting for them (`SKIP LOCKED`; PostgreSQL and MySQL 8). Locks
+        /// for update when no lock is set yet.
+        ///
+        /// ```
+        /// # use navree_orm::__doc_models::*;
+        /// // Each worker claims ten events nobody else is working on.
+        /// let claim = Event::query().oldest().limit(10).lock_for_update().skip_locked();
+        /// assert_eq!(
+        ///     claim.to_sql(Dialect::Postgres)?.sql,
+        ///     r#"SELECT "events"."id", "events"."name", "events"."created_at", "events"."updated_at" FROM "events" ORDER BY "events"."created_at" ASC LIMIT $1 FOR UPDATE SKIP LOCKED"#
+        /// );
+        /// # Ok::<(), navree_orm::OrmError>(())
+        /// ```
+        pub fn skip_locked(self) -> Self {
+            self.lock_wait($crate::ir::LockWait::SkipLocked)
+        }
+
+        /// Fails at once with the database's lock error when another
+        /// transaction holds one of the rows (`NOWAIT`; PostgreSQL and
+        /// MySQL 8). Locks for update when no lock is set yet.
+        pub fn no_wait(self) -> Self {
+            self.lock_wait($crate::ir::LockWait::NoWait)
+        }
+
+        fn lock_wait(mut self, wait: $crate::ir::LockWait) -> Self {
+            let query = $crate::query::clauses::HasQuery::query_mut(&mut self);
+            let mode = query
+                .lock
+                .map_or($crate::ir::LockMode::Update, |lock| lock.mode);
+            query.lock = Some($crate::ir::Lock { mode, wait });
+            self
+        }
+
+        /// Runs the query on connection `name` (a named connection of
+        /// `[database.connections.<name>]`, or `default`), whatever the
+        /// model's: given a [`Db`](navree_db::Db), the query goes to that
+        /// connection; a unit of work of another connection refuses it.
+        ///
+        /// ```no_run
+        /// # use navree_orm::__doc_models::*;
+        /// # async fn demo(db: Db) -> Result<()> {
+        /// let archived = Deal::query().on_connection("archive").count(&db).await?;
+        /// # Ok(()) }
+        /// ```
+        pub fn on_connection(mut self, name: impl Into<std::borrow::Cow<'static, str>>) -> Self {
+            $crate::query::clauses::HasQuery::query_mut(&mut self).connection = Some(name.into());
+            self
+        }
+
+        /// Reads from the writer even where read replicas exist: for a
+        /// read that must see a write made outside the task's unit of work
+        /// (reads in a unit of work that wrote use the writer anyway).
+        ///
+        /// ```no_run
+        /// # use navree_orm::__doc_models::*;
+        /// # async fn demo(db: Db, id: Uuid) -> Result<()> {
+        /// let fresh = Deal::query().use_write().find(&db, id).await?;
+        /// # Ok(()) }
+        /// ```
+        pub fn use_write(mut self) -> Self {
+            $crate::query::clauses::HasQuery::query_mut(&mut self).use_writer = true;
+            self
+        }
+
+        /// Stops the query's reads once they run longer than `timeout`,
+        /// failing with [`OrmError::Timeout`](crate::OrmError::Timeout):
+        /// MySQL's `MAX_EXECUTION_TIME` hint on the `SELECT` (MariaDB
+        /// ignores it), PostgreSQL's `SET LOCAL statement_timeout` in a
+        /// transaction (or savepoint) of its own around the statement. Not
+        /// on SQLite (`Unsupported`), nor on PostgreSQL cursors. Rounded
+        /// up to whole milliseconds.
+        ///
+        /// ```
+        /// # use navree_orm::__doc_models::*;
+        /// use std::time::Duration;
+        ///
+        /// let report = Deal::query().select([Deal::STAGE]).timeout(Duration::from_secs(2));
+        /// assert!(report.to_sql(Dialect::MySql)?.sql.starts_with("SELECT /*+ MAX_EXECUTION_TIME(2000) */ `deals`.`stage`"));
+        /// # Ok::<(), navree_orm::OrmError>(())
+        /// ```
+        pub fn timeout(mut self, timeout: std::time::Duration) -> Self {
+            $crate::query::clauses::HasQuery::query_mut(&mut self).timeout = Some(timeout);
             self
         }
     };

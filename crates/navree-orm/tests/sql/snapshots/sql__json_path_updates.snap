@@ -1,0 +1,10 @@
+---
+source: crates/navree-orm/tests/sql/main.rs
+expression: "per_dialect(|d| compile_update(&update, d))"
+---
+PostgreSQL: UPDATE "deals" SET "meta" = jsonb_set(jsonb_set(jsonb_set(COALESCE("meta"::jsonb, jsonb_build_object()), '{"status"}', $1), '{"owner","name"}', $2), '{"tags",0}', $3), "title" = $4 WHERE "deals"."id" = $5
+  values: [Json(Some(String("won"))), Json(Some(String("ada"))), Json(Some(Object {"k": Bool(true)})), String(Some("Renewal")), Uuid(Some(00000000-0000-0000-0000-000000000000))]
+MySQL: UPDATE `deals` SET `meta` = json_set(COALESCE(`meta`, JSON_OBJECT()), '$."status"', CAST(? AS JSON), '$."owner"."name"', CAST(? AS JSON), '$."tags"[0]', CAST(? AS JSON)), `title` = ? WHERE `deals`.`id` = ?
+  values: [String(Some("\"won\"")), String(Some("\"ada\"")), String(Some("{\"k\":true}")), String(Some("Renewal")), Uuid(Some(00000000-0000-0000-0000-000000000000))]
+SQLite: UPDATE "deals" SET "meta" = json_set(ifnull("meta", json_object()), '$."status"', json(?), '$."owner"."name"', json(?), '$."tags"[0]', json(?)), "title" = ? WHERE "deals"."id" = ?
+  values: [String(Some("\"won\"")), String(Some("\"ada\"")), String(Some("{\"k\":true}")), String(Some("Renewal")), Uuid(Some(00000000-0000-0000-0000-000000000000))]

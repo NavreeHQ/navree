@@ -72,12 +72,23 @@ impl ColumnRef {
         let text = text.into();
         let (head, path) = match text.split_once("->") {
             Some((head, rest)) => (head.to_owned(), parse_json_path(rest)),
+            None if text.trim_end().ends_with(']') && text.contains('[') => {
+                // `tags[1]`: an index into the column itself.
+                (text.to_string(), Vec::new())
+            }
             None => {
                 return Self::parse_head(text);
             }
         };
+        let (head, mut indexes) = match head.find('[') {
+            Some(at) if head.trim_end().ends_with(']') => {
+                (head[..at].to_owned(), parse_json_path(&head[at..]))
+            }
+            _ => (head, Vec::new()),
+        };
         let mut column = Self::parse_head(Cow::Owned(head));
-        column.path = path;
+        indexes.extend(path);
+        column.path = indexes;
         column
     }
 
@@ -241,6 +252,52 @@ pub enum Expr {
         /// The order within each partition.
         order: Vec<Order>,
     },
+    /// In an upsert's update ([`OnConflict::Update`]): the value column
+    /// `column` would have been inserted with (`excluded.column` on
+    /// PostgreSQL and SQLite, `VALUES(column)` on MySQL).
+    Excluded {
+        /// The column.
+        column: Cow<'static, str>,
+    },
+    /// `left op right` with an operator written by hand (`||`, `-`, `#-`,
+    /// `->`, ...), checked against the dialect's list of value operators
+    /// when the query compiles. SQL drivers only.
+    Binary {
+        /// The left operand.
+        left: Box<Expr>,
+        /// The operator.
+        op: Cow<'static, str>,
+        /// The right operand.
+        right: Box<Expr>,
+    },
+    /// The distance between the vector in `expr` (an embedding column) and
+    /// `vector`: pgvector's `<=>` (cosine), `<->` (Euclidean) or `<#>`
+    /// (negative inner product) on PostgreSQL, MariaDB's
+    /// `VEC_DISTANCE_COSINE` / `VEC_DISTANCE_EUCLIDEAN` on MySQL;
+    /// unsupported on SQLite.
+    VectorDistance {
+        /// The vector column or expression.
+        expr: Box<Expr>,
+        /// The vector compared with.
+        vector: Vec<f32>,
+        /// How distance is measured.
+        metric: VectorMetric,
+    },
+}
+
+/// How a vector distance is measured.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum VectorMetric {
+    /// Cosine distance, `1 - cosine similarity` (0 for the same direction,
+    /// 2 for opposite ones): the usual measure for text embeddings.
+    #[default]
+    Cosine,
+    /// Euclidean (L2) distance.
+    Euclidean,
+    /// The negative inner product (PostgreSQL only): smaller is more
+    /// similar, for normalized embeddings like cosine but faster.
+    InnerProduct,
 }
 
 /// An aggregate function.
@@ -339,12 +396,25 @@ pub enum Operator {
     ShiftLeft,
     /// `>>`.
     ShiftRight,
-    /// Regular-expression match (`~` on PostgreSQL, `REGEXP` elsewhere).
+    /// Regular-expression match, case-sensitive (`~` on PostgreSQL,
+    /// `REGEXP_LIKE(.., 'c')` on MySQL, `REGEXP` on SQLite).
     Regexp,
-    /// Regular-expression mismatch.
+    /// Regular-expression mismatch, case-sensitive.
     NotRegexp,
+    /// Regular-expression match ignoring case (`~*` on PostgreSQL,
+    /// `REGEXP_LIKE(.., 'i')` on MySQL, `REGEXP` with `(?i)` on SQLite).
+    RegexpIgnoreCase,
+    /// Regular-expression mismatch ignoring case.
+    NotRegexpIgnoreCase,
+    /// Null-safe inequality (`IS DISTINCT FROM`, `NOT <=>`, `IS NOT`): true
+    /// when exactly one side is NULL.
+    NullSafeNe,
     /// A PostgreSQL operator written as is (`~*`, `@>`, `?|`, ...).
     Postgres(&'static str),
+    /// An operator written by hand ([`Filter::op_raw`](crate::Filter::op_raw)),
+    /// checked against the dialect's list of condition operators when the
+    /// query compiles.
+    Raw(String),
     /// An operator that is not recognised; the query fails when it runs.
     Invalid(String),
 }
@@ -385,6 +455,7 @@ impl From<&str> for Operator {
             "ilike" => Operator::ILike,
             "not ilike" => Operator::NotILike,
             "<=>" | "is not distinct from" => Operator::NullSafeEq,
+            "is distinct from" => Operator::NullSafeNe,
             "&" => Operator::BitAnd,
             "|" => Operator::BitOr,
             "^" => Operator::BitXor,
@@ -548,6 +619,35 @@ pub enum Where {
         /// Does not contain.
         not: bool,
     },
+    /// The JSON at the column (or path) is contained in `value`: every
+    /// element (or key and value) it has, `value` has too (`<@` on
+    /// PostgreSQL, `json_contains(value, column)` on MySQL).
+    JsonContainedBy {
+        /// The column and path.
+        column: ColumnRef,
+        /// The value it must fit in.
+        value: serde_json::Value,
+        /// Is not contained.
+        not: bool,
+    },
+    /// The JSON array at the column (or path) shares an element with
+    /// `value` (an array; a scalar stands for a one-element array).
+    JsonOverlaps {
+        /// The column and path.
+        column: ColumnRef,
+        /// The elements looked for.
+        value: serde_json::Value,
+        /// Shares none.
+        not: bool,
+    },
+    /// The JSON column has the object key (or array index) its path ends
+    /// with: `meta->owner` has `owner`, `meta->tags[2]` a third tag.
+    JsonContainsKey {
+        /// The column, with the path whose last step is looked for.
+        column: ColumnRef,
+        /// Does not have it.
+        not: bool,
+    },
     /// The length of the JSON array at the column (or path), compared.
     JsonLength {
         /// The column and path.
@@ -599,6 +699,9 @@ pub enum FullTextMode {
     /// MySQL's boolean mode (`+word -word "phrase"`); websearch syntax on
     /// PostgreSQL.
     Boolean,
+    /// The text search query syntax itself (`to_tsquery`: `'fat & (rat |
+    /// cat)'`); boolean mode on MySQL. The text must be a valid query.
+    Raw,
 }
 
 /// The options of a full-text condition
@@ -620,9 +723,53 @@ pub struct FullText {
     pub language: Option<String>,
     /// MySQL's `WITH QUERY EXPANSION` (natural language mode).
     pub expanded: bool,
+    /// PostgreSQL: the columns hold `tsvector`s already (a generated
+    /// column, indexed), so they are matched as they are instead of
+    /// through `to_tsvector`.
+    pub vectors: bool,
 }
 
 impl FullText {
+    /// Words in English (the default language), in any order.
+    pub fn english() -> Self {
+        FullText::default().language("english")
+    }
+
+    /// PostgreSQL's text search syntax (`to_tsquery`), boolean mode on
+    /// MySQL.
+    pub fn raw() -> Self {
+        FullText {
+            mode: FullTextMode::Raw,
+            ..FullText::default()
+        }
+    }
+
+    /// The same options matching `tsvector` columns as they are
+    /// (PostgreSQL).
+    ///
+    /// ```
+    /// use navree_orm::ir::FullText;
+    ///
+    /// let options = FullText::english().websearch_mode().vectors();
+    /// assert!(options.vectors);
+    /// ```
+    pub fn vectors(mut self) -> Self {
+        self.vectors = true;
+        self
+    }
+
+    /// The same options in search-engine syntax (`websearch_to_tsquery`).
+    pub fn websearch_mode(mut self) -> Self {
+        self.mode = FullTextMode::Websearch;
+        self
+    }
+
+    /// The same options matching the words as a phrase.
+    pub fn phrase_mode(mut self) -> Self {
+        self.mode = FullTextMode::Phrase;
+        self
+    }
+
     /// The words as a phrase.
     pub fn phrase() -> Self {
         FullText {
@@ -670,16 +817,20 @@ pub enum InValues {
     Subquery(Box<QueryIr>),
 }
 
-/// A table, optionally aliased, or a subquery used as a table (`FROM
-/// (SELECT ...) AS alias`, `JOIN (SELECT ...) AS alias`).
+/// A table, optionally aliased, a subquery used as a table (`FROM
+/// (SELECT ...) AS alias`, `JOIN (SELECT ...) AS alias`), or the rows of a
+/// set-returning function (`FROM generate_series(1, 10) AS n`).
 #[derive(Clone, Debug)]
 pub struct TableRef {
-    /// The table name (for a subquery, its alias).
+    /// The table name (for a subquery or a function, its alias).
     pub name: Cow<'static, str>,
     /// The alias.
     pub alias: Option<Cow<'static, str>>,
     /// The subquery the rows come from, when the table is a subquery.
     pub subquery: Option<Box<QueryIr>>,
+    /// The function call (an [`Expr::Function`]) the rows come from, when
+    /// the table is a set-returning function. SQL drivers only.
+    pub function: Option<Box<Expr>>,
 }
 
 impl TableRef {
@@ -689,6 +840,7 @@ impl TableRef {
             name: name.into(),
             alias: None,
             subquery: None,
+            function: None,
         }
     }
 
@@ -701,6 +853,7 @@ impl TableRef {
             name: name.into(),
             alias: Some(alias.into()),
             subquery: None,
+            function: None,
         }
     }
 
@@ -711,6 +864,19 @@ impl TableRef {
             name: alias.clone(),
             alias: Some(alias),
             subquery: Some(Box::new(query)),
+            function: None,
+        }
+    }
+
+    /// The rows the set-returning function call `call` (an
+    /// [`Expr::Function`]) returns, named `alias`.
+    pub fn function(call: Expr, alias: impl Into<Cow<'static, str>>) -> Self {
+        let alias = alias.into();
+        TableRef {
+            name: alias.clone(),
+            alias: Some(alias),
+            subquery: None,
+            function: Some(Box::new(call)),
         }
     }
 
@@ -755,6 +921,25 @@ pub enum JoinKind {
     Right,
     /// `CROSS JOIN`.
     Cross,
+    /// `INNER JOIN LATERAL (subquery) AS alias ON true`: the subquery
+    /// runs once per row and may use its columns (PostgreSQL, MySQL
+    /// 8.0.14+).
+    Lateral,
+    /// `LEFT JOIN LATERAL (subquery) AS alias ON true`.
+    LeftLateral,
+}
+
+/// At most [`limit`](GroupLimit::limit) rows per value of
+/// [`column`](GroupLimit::column) (top N per group), in the query's order:
+/// `ROW_NUMBER() OVER (PARTITION BY column ORDER BY ..)` in a derived
+/// table. The query's offset skips rows per group; its limit caps the whole
+/// result.
+#[derive(Clone, Debug)]
+pub struct GroupLimit {
+    /// The most rows per group.
+    pub limit: u64,
+    /// The column (or expression) whose values form the groups.
+    pub column: Expr,
 }
 
 /// A join.
@@ -875,14 +1060,68 @@ impl Order {
     }
 }
 
-/// A row lock.
+/// A row lock on the rows a query reads, held until its transaction ends:
+/// a [`LockMode`] and what to do about rows another transaction holds
+/// ([`LockWait`]).
+///
+/// | | PostgreSQL | MySQL | SQLite |
+/// |---|---|---|---|
+/// | [`Update`](LockMode::Update) | `FOR UPDATE` | `FOR UPDATE` | none |
+/// | [`NoKeyUpdate`](LockMode::NoKeyUpdate) | `FOR NO KEY UPDATE` | `FOR UPDATE` | none |
+/// | [`Share`](LockMode::Share) | `FOR SHARE` | `LOCK IN SHARE MODE` (`FOR SHARE` with `NOWAIT` or `SKIP LOCKED`) | none |
+/// | [`KeyShare`](LockMode::KeyShare) | `FOR KEY SHARE` | as `Share` | none |
+///
+/// SQLite has no row locks: its write transactions are serialised
+/// (navree-db begins them `IMMEDIATE`), so the clause is dropped there.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct Lock {
+    /// What the lock keeps other transactions from doing.
+    pub mode: LockMode,
+    /// What happens to rows another transaction has locked.
+    pub wait: LockWait,
+}
+
+impl Lock {
+    /// A lock of `mode` that waits for rows other transactions hold.
+    pub const fn new(mode: LockMode) -> Self {
+        Lock {
+            mode,
+            wait: LockWait::Wait,
+        }
+    }
+}
+
+/// What a row lock keeps other transactions from doing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
-pub enum Lock {
-    /// `FOR UPDATE`.
+pub enum LockMode {
+    /// Changing or locking the rows (`FOR UPDATE`): read them, then update
+    /// them in the same transaction.
     Update,
-    /// `FOR SHARE` (`LOCK IN SHARE MODE` on MySQL).
+    /// Like [`Update`](LockMode::Update), without blocking `KeyShare`
+    /// locks (foreign keys pointing at the rows); for updates that leave
+    /// the key alone (`FOR NO KEY UPDATE`, PostgreSQL; `FOR UPDATE`
+    /// elsewhere).
+    NoKeyUpdate,
+    /// Changing the rows; other shared locks are allowed (`FOR SHARE`).
     Share,
+    /// Deleting the rows or changing their key (`FOR KEY SHARE`,
+    /// PostgreSQL; a shared lock elsewhere).
+    KeyShare,
+}
+
+/// What a locking read does with rows another transaction has locked.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum LockWait {
+    /// Wait until they are released (the database's lock timeout applies).
+    #[default]
+    Wait,
+    /// Fail at once (`NOWAIT`) with the database's lock error.
+    NoWait,
+    /// Leave them out of the result (`SKIP LOCKED`): workers claiming jobs
+    /// or outbox entries never wait for each other.
+    SkipLocked,
 }
 
 /// A `UNION`.
@@ -932,6 +1171,16 @@ pub struct QueryIr {
     pub lock: Option<Lock>,
     /// `UNION`s.
     pub unions: Vec<Union>,
+    /// At most so many rows per group (top N per parent).
+    pub group_limit: Option<GroupLimit>,
+    /// The connection the query runs on (`on_connection`), whatever its
+    /// model's or the executor's (see [`Route`](crate::Route)).
+    pub connection: Option<Cow<'static, str>>,
+    /// Reads go to the writer even where read replicas exist
+    /// (`use_write`).
+    pub use_writer: bool,
+    /// The longest the database may run the query's reads (`timeout`).
+    pub timeout: Option<std::time::Duration>,
     /// Problems found while building the query; it fails with them when
     /// it runs.
     pub errors: Vec<String>,
@@ -953,8 +1202,21 @@ impl QueryIr {
             offset: None,
             lock: None,
             unions: Vec::new(),
+            group_limit: None,
+            connection: None,
+            use_writer: false,
+            timeout: None,
             errors: Vec::new(),
         }
+    }
+
+    /// Where the query asks to run: its connection (`on_connection`),
+    /// `model`'s connection, and whether reads go to the writer.
+    pub fn route(&self, model: Option<&'static str>) -> crate::Route<'_> {
+        crate::Route::new()
+            .on(self.connection.as_deref())
+            .for_model(model)
+            .writer(self.use_writer)
     }
 
     /// The first problem found while building, as an error.
@@ -966,17 +1228,86 @@ impl QueryIr {
     }
 }
 
-/// An `INSERT` of one or more rows.
+/// An `INSERT` of one or more rows, or of the rows of a query.
 #[derive(Clone, Debug)]
 pub struct InsertIr {
     /// The table.
     pub table: Cow<'static, str>,
     /// The columns, in the order of each row's values.
     pub columns: Vec<Cow<'static, str>>,
-    /// The rows.
+    /// The rows (empty when [`select`](InsertIr::select) provides them).
     pub rows: Vec<Vec<Expr>>,
     /// Columns to read back from the inserted rows (generated keys).
     pub returning: Vec<Cow<'static, str>>,
+    /// A query whose rows are inserted (`INSERT … SELECT`) instead of
+    /// [`rows`](InsertIr::rows); it selects one value per column.
+    pub select: Option<Box<QueryIr>>,
+    /// What happens to a row that conflicts with a unique index; `None`
+    /// fails the statement.
+    pub on_conflict: Option<OnConflict>,
+}
+
+impl InsertIr {
+    /// An insert of `rows` (each with one value per column) into `table`,
+    /// returning nothing and failing on conflicts.
+    pub fn new(
+        table: impl Into<Cow<'static, str>>,
+        columns: Vec<Cow<'static, str>>,
+        rows: Vec<Vec<Expr>>,
+    ) -> Self {
+        InsertIr {
+            table: table.into(),
+            columns,
+            rows,
+            returning: Vec::new(),
+            select: None,
+            on_conflict: None,
+        }
+    }
+
+    /// The same insert, reading `columns` back from the inserted rows.
+    pub fn returning(mut self, columns: Vec<Cow<'static, str>>) -> Self {
+        self.returning = columns;
+        self
+    }
+
+    /// The same insert, handling conflicting rows with `on_conflict`.
+    pub fn on_conflict(mut self, on_conflict: OnConflict) -> Self {
+        self.on_conflict = Some(on_conflict);
+        self
+    }
+}
+
+/// What an insert does with a row that conflicts with a unique index
+/// (an "upsert" when it updates).
+///
+/// | | PostgreSQL, SQLite | MySQL |
+/// |---|---|---|
+/// | [`Ignore`](OnConflict::Ignore) | `ON CONFLICT [(target)] DO NOTHING` | `INSERT IGNORE` |
+/// | [`Update`](OnConflict::Update) | `ON CONFLICT (target) DO UPDATE SET ..` | `ON DUPLICATE KEY UPDATE ..` |
+///
+/// PostgreSQL and SQLite only skip or update rows that conflict on a
+/// unique index (a target names its columns); MySQL looks at every unique
+/// index, and its `INSERT IGNORE` also turns other errors (a value that
+/// does not fit its column) into warnings.
+#[derive(Clone, Debug)]
+#[non_exhaustive]
+pub enum OnConflict {
+    /// Skip the conflicting rows.
+    Ignore {
+        /// The unique columns whose conflicts are skipped; empty for any
+        /// unique index.
+        target: Vec<Cow<'static, str>>,
+    },
+    /// Update the existing row instead.
+    Update {
+        /// The unique columns the conflict is on (required on PostgreSQL
+        /// and SQLite; MySQL uses every unique index).
+        target: Vec<Cow<'static, str>>,
+        /// `SET column = expr` on the existing row; [`Expr::Excluded`] is
+        /// the value the row would have been inserted with.
+        sets: Vec<(Cow<'static, str>, Expr)>,
+    },
 }
 
 /// An `UPDATE`.
@@ -1021,6 +1352,17 @@ mod tests {
                 JsonSegment::Index(0),
                 JsonSegment::Key("b".into())
             ]
+        );
+        let indexed = ColumnRef::parse("deals.tags[1]");
+        assert_eq!(
+            (indexed.table.as_deref(), indexed.name.as_ref()),
+            (Some("deals"), "tags")
+        );
+        assert_eq!(indexed.path, [JsonSegment::Index(1)]);
+        let nested = ColumnRef::parse("tags[-1]->name");
+        assert_eq!(
+            nested.path,
+            [JsonSegment::Index(-1), JsonSegment::Key("name".into())]
         );
         assert_eq!(column.to_string(), "meta->a->0->b");
         assert_eq!(column.without_path().to_string(), "meta");
