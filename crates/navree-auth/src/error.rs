@@ -309,6 +309,14 @@ impl AuthError {
     }
 }
 
+/// The module's ORM operations fail as database errors
+/// ([`AuthError::Db`]), like its SeaORM ones.
+impl From<navree_orm::OrmError> for AuthError {
+    fn from(error: navree_orm::OrmError) -> Self {
+        AuthError::Db(error.into())
+    }
+}
+
 /// 401 with `code`, `message` and an RFC 6750 `WWW-Authenticate` challenge.
 fn bearer_challenge(code: &str, message: &str) -> AppError {
     AppError::unauthenticated()

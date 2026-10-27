@@ -33,8 +33,7 @@ use std::fmt;
 use chrono::{DateTime, Utc};
 use navree_contracts::AuditKind;
 use navree_crypto::{random_token, sha256_hex};
-use sea_orm::sea_query::Expr;
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, Set};
+use navree_orm::{Model as _, Record};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use utoipa::ToSchema;
@@ -47,9 +46,7 @@ use self::webauthn::{
 };
 use crate::service::entry;
 use crate::two_factor::two_factor_enabled;
-use crate::{
-    AuthError, AuthService, ClientMeta, LoginOutcome, Passkey, USER_SUBJECT, User, passkey,
-};
+use crate::{AuthError, AuthService, ClientMeta, LoginOutcome, Passkey, USER_SUBJECT, User};
 
 /// Random characters in a ceremony challenge (about 285 bits).
 const CHALLENGE_LEN: usize = 48;
@@ -213,7 +210,8 @@ impl AuthService {
         self.write(Some(user_id), |uow| async move {
             let passkey = {
                 let tx = uow.tx().await?;
-                row.insert(&*tx).await?
+                Passkey::insert(&*tx, [row.clone()]).await?;
+                row
             };
             self.audit_after_commit(
                 &uow,
@@ -231,7 +229,7 @@ impl AuthService {
         user: &User,
         name: Option<&str>,
         credential: &Value,
-    ) -> Result<passkey::ActiveModel, AuthError> {
+    ) -> Result<Passkey, AuthError> {
         let options = self.passkey_options()?;
         let credential: CredentialJson = serde_json::from_value(credential.clone())
             .map_err(|_| refused("malformed credential"))?;
@@ -260,11 +258,10 @@ impl AuthService {
             return Err(refused("no attested credential"));
         };
         let credential_hash = sha256_hex(&credential_id);
-        let taken = passkey::Entity::find()
-            .filter(passkey::Column::CredentialHash.eq(credential_hash.as_str()))
-            .one(&self.db.reader().await)
-            .await?
-            .is_some();
+        let taken = Passkey::query()
+            .where_(Passkey::CREDENTIAL_HASH.eq(credential_hash.as_str()))
+            .exists(&self.db)
+            .await?;
         if taken {
             return Err(refused("the credential is already registered"));
         }
@@ -283,28 +280,29 @@ impl AuthService {
             .cloned()
             .collect::<Vec<_>>()
             .join(",");
-        Ok(passkey::ActiveModel {
-            id: Set(Uuid::now_v7()),
-            user_id: Set(user.id),
-            credential_id: Set(base64_url(&credential_id)),
-            credential_hash: Set(credential_hash),
-            public_key: Set(base64_url(&key.bytes)),
-            algorithm: Set(key.algorithm),
-            sign_count: Set(i64::from(auth_data.sign_count)),
-            transports: Set((!transports.is_empty()).then_some(transports)),
-            name: Set(name),
-            created_at: Set(now),
-            last_used_at: Set(None),
+        Ok(Passkey {
+            id: Uuid::now_v7(),
+            user_id: user.id,
+            credential_id: base64_url(&credential_id),
+            credential_hash,
+            public_key: base64_url(&key.bytes),
+            algorithm: key.algorithm,
+            sign_count: i64::from(auth_data.sign_count),
+            transports: (!transports.is_empty()).then_some(transports),
+            name,
+            created_at: now,
+            last_used_at: None,
         })
     }
 
     /// The passkeys of `user_id`, oldest first.
     pub async fn passkeys(&self, user_id: Uuid) -> Result<Vec<Passkey>, AuthError> {
-        Ok(passkey::Entity::find()
-            .filter(passkey::Column::UserId.eq(user_id))
-            .order_by_asc(passkey::Column::CreatedAt)
-            .all(&self.db.reader().await)
-            .await?)
+        Ok(Passkey::query()
+            .where_(Passkey::USER_ID.eq(user_id))
+            .order_by(Passkey::CREATED_AT)
+            .get(&self.db)
+            .await?
+            .into_models())
     }
 
     /// Removes passkey `id` of `user_id` (`DELETE /auth/passkeys/{id}`);
@@ -319,12 +317,11 @@ impl AuthService {
         let deleted = self
             .write(Some(user_id), |uow| async move {
                 let tx = uow.tx().await?;
-                let result = passkey::Entity::delete_many()
-                    .filter(passkey::Column::Id.eq(id))
-                    .filter(passkey::Column::UserId.eq(user_id))
-                    .exec(&*tx)
-                    .await?;
-                Ok(result.rows_affected)
+                Ok(Passkey::query()
+                    .where_key(id)
+                    .where_(Passkey::USER_ID.eq(user_id))
+                    .delete(&*tx)
+                    .await?)
             })
             .await?;
         if deleted == 0 {
@@ -528,10 +525,11 @@ impl AuthService {
         let credential: CredentialJson = serde_json::from_value(credential.clone())
             .map_err(|_| refused("malformed credential"))?;
         let raw_id = b64url(&credential.id).ok_or_else(|| refused("malformed credential id"))?;
-        let stored = passkey::Entity::find()
-            .filter(passkey::Column::CredentialHash.eq(sha256_hex(&raw_id)))
-            .one(&self.db.reader().await)
+        let stored = Passkey::query()
+            .where_(Passkey::CREDENTIAL_HASH.eq(sha256_hex(&raw_id)))
+            .first(&self.db)
             .await?
+            .map(Record::into_inner)
             .ok_or_else(|| refused("unknown credential"))?;
         let client_json = b64url(&credential.response.client_data_json)
             .ok_or_else(|| refused("malformed client data"))?;
@@ -579,14 +577,18 @@ impl AuthService {
         let claimed = self
             .write(Some(stored.user_id), |uow| async move {
                 let tx = uow.tx().await?;
-                let result = passkey::Entity::update_many()
-                    .col_expr(passkey::Column::SignCount, Expr::value(counter))
-                    .col_expr(passkey::Column::LastUsedAt, Expr::value(now))
-                    .filter(passkey::Column::Id.eq(id))
-                    .filter(passkey::Column::SignCount.eq(previous))
-                    .exec(&*tx)
+                let claimed = Passkey::query()
+                    .where_key(id)
+                    .where_(Passkey::SIGN_COUNT.eq(previous))
+                    .update(
+                        &*tx,
+                        [
+                            Passkey::SIGN_COUNT.set(counter),
+                            Passkey::LAST_USED_AT.set(now),
+                        ],
+                    )
                     .await?;
-                Ok(result.rows_affected == 1)
+                Ok(claimed == 1)
             })
             .await?;
         if !claimed {
