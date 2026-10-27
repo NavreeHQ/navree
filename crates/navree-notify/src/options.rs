@@ -1,8 +1,15 @@
 //! [`NotifyOptions`]: configuration section `notify`.
 
+use std::fmt;
+use std::str::FromStr;
+
+use chrono::{NaiveTime, Weekday};
 use navree_config::ConfigSection;
 use navree_contracts::Secret;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, de};
+
+use crate::Channel;
+use crate::timing::{parse_hh_mm, parse_weekday};
 
 /// How [`NotifyModule`](crate::NotifyModule) sends notifications
 /// (configuration section `notify`, e.g. `APP_NOTIFY__QUEUE=true`).
@@ -46,6 +53,12 @@ pub struct NotifyOptions {
     pub sns: SnsOptions,
     /// WhatsApp Cloud API credentials, for `whatsapp.driver = "meta"`.
     pub meta: MetaOptions,
+    /// What people and workspaces choose to receive.
+    pub preferences: PreferenceOptions,
+    /// The digest mail of batched notifications.
+    pub digest: DigestOptions,
+    /// Deliveries held for quiet hours, send windows and digests.
+    pub deferred: DeferredOptions,
 }
 
 impl Default for NotifyOptions {
@@ -63,7 +76,172 @@ impl Default for NotifyOptions {
             vonage: VonageOptions::default(),
             sns: SnsOptions::default(),
             meta: MetaOptions::default(),
+            preferences: PreferenceOptions::default(),
+            digest: DigestOptions::default(),
+            deferred: DeferredOptions::default(),
         }
+    }
+}
+
+/// `notify.preferences`: the channels people switch per category.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PreferenceOptions {
+    /// Apply the stored preferences when sending (with `DatabaseModule`).
+    /// Default: `true`.
+    pub enabled: bool,
+    /// The channels people may switch, in the order the preference routes
+    /// list them: a list, or a comma-separated string from an environment
+    /// variable. Default: every channel but `broadcast`, which follows the
+    /// `database` choice (the real-time event of an in-app notification).
+    #[serde(deserialize_with = "list_or_csv")]
+    pub channels: Vec<Channel>,
+    /// Categories that cannot be turned off (`security`): their
+    /// notifications go out over every channel they name, and a change
+    /// that turns one of their channels off is refused. Default: none.
+    #[serde(deserialize_with = "list_or_csv")]
+    pub required: Vec<String>,
+    /// The permission that changes a workspace's defaults
+    /// (`PATCH /api/notifications/preferences/workspace`), checked in the
+    /// request's workspace. Default: `workspace.update`.
+    pub workspace_permission: String,
+}
+
+impl Default for PreferenceOptions {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            channels: Channel::ALL
+                .into_iter()
+                .filter(|channel| *channel != Channel::Broadcast)
+                .collect(),
+            required: Vec::new(),
+            workspace_permission: "workspace.update".to_owned(),
+        }
+    }
+}
+
+impl PreferenceOptions {
+    /// Whether `category` cannot be turned off.
+    pub fn is_required(&self, category: &str) -> bool {
+        self.required.iter().any(|required| required == category)
+    }
+}
+
+/// `notify.digest`: when digests go out and how they look.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DigestOptions {
+    /// The local time daily and weekly digests go out, `HH:MM` on the
+    /// recipient's clock. Default: `09:00`.
+    pub at: String,
+    /// The day weekly digests go out (`monday` to `sunday`). Default:
+    /// `monday`.
+    pub weekly_on: String,
+    /// The digest mail's subject, a template with `count` and `digest`
+    /// (`daily`). Default: `Your notifications`.
+    pub subject: String,
+    /// The digest mail's template (`{template}.html` and `.txt`), with
+    /// `items`, `count`, `digest` and `style`. Default: `notify/digest`,
+    /// built in; a file of that name replaces it.
+    pub template: String,
+}
+
+impl Default for DigestOptions {
+    fn default() -> Self {
+        Self {
+            at: "09:00".to_owned(),
+            weekly_on: "monday".to_owned(),
+            subject: "Your notifications".to_owned(),
+            template: "notify/digest".to_owned(),
+        }
+    }
+}
+
+impl DigestOptions {
+    /// [`at`](DigestOptions::at), parsed (09:00 when invalid; the options
+    /// refuse to load with such a value).
+    pub fn time(&self) -> NaiveTime {
+        parse_hh_mm(&self.at).unwrap_or_else(|_| NaiveTime::from_hms_opt(9, 0, 0).unwrap_or_default())
+    }
+
+    /// [`weekly_on`](DigestOptions::weekly_on), parsed (Monday when
+    /// invalid).
+    pub fn weekday(&self) -> Weekday {
+        parse_weekday(&self.weekly_on).unwrap_or(Weekday::Mon)
+    }
+}
+
+/// `notify.deferred`: deliveries held for quiet hours, send windows and
+/// digests, released by `notify:release`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DeferredOptions {
+    /// The channels quiet hours and send windows hold. Default: `mail`,
+    /// `slack`, `teams`, `sms`, `whatsapp` and `web_push` (the database
+    /// and broadcast channels show in the app at once).
+    #[serde(deserialize_with = "list_or_csv")]
+    pub channels: Vec<Channel>,
+    /// How many held deliveries one `notify:release` run releases at most.
+    /// Default: 500.
+    pub batch: u64,
+    /// Attempts before a held delivery that keeps failing is dropped
+    /// (logged). Default: 5.
+    pub max_attempts: u32,
+    /// Seconds before a release that failed is tried again. Default: 300.
+    pub retry_secs: u64,
+    /// Run `notify:release` every minute on `ScheduleModule`'s scheduler.
+    /// Default: `true`.
+    pub schedule: bool,
+}
+
+impl Default for DeferredOptions {
+    fn default() -> Self {
+        Self {
+            channels: vec![
+                Channel::Mail,
+                Channel::Slack,
+                Channel::MicrosoftTeams,
+                Channel::Sms,
+                Channel::WhatsApp,
+                Channel::WebPush,
+            ],
+            batch: 500,
+            max_attempts: 5,
+            retry_secs: 300,
+            schedule: true,
+        }
+    }
+}
+
+impl DeferredOptions {
+    /// Whether quiet hours and send windows hold `channel`.
+    pub fn holds(&self, channel: Channel) -> bool {
+        self.channels.contains(&channel)
+    }
+}
+
+/// A list, or one comma-separated string (an environment variable).
+fn list_or_csv<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de> + FromStr,
+    T::Err: fmt::Display,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum ListOrCsv<T> {
+        List(Vec<T>),
+        Csv(String),
+    }
+    match ListOrCsv::<T>::deserialize(deserializer)? {
+        ListOrCsv::List(items) => Ok(items),
+        ListOrCsv::Csv(text) => text
+            .split(',')
+            .map(str::trim)
+            .filter(|item| !item.is_empty())
+            .map(|item| item.parse::<T>().map_err(de::Error::custom))
+            .collect(),
     }
 }
 
@@ -71,6 +249,24 @@ impl ConfigSection for NotifyOptions {
     const KEY: &'static str = "notify";
 
     fn validate(&self) -> Result<(), String> {
+        parse_hh_mm(&self.digest.at).map_err(|error| format!("notify.digest.at: {error}"))?;
+        parse_weekday(&self.digest.weekly_on)
+            .map_err(|error| format!("notify.digest.weekly_on: {error}"))?;
+        if self.digest.template.trim().is_empty() {
+            return Err("notify.digest.template must name a template".into());
+        }
+        if self.deferred.batch == 0 {
+            return Err("notify.deferred.batch must be at least 1".into());
+        }
+        if self.deferred.max_attempts == 0 {
+            return Err("notify.deferred.max_attempts must be at least 1".into());
+        }
+        if self.preferences.channels.contains(&Channel::Broadcast) {
+            return Err(
+                "notify.preferences.channels cannot list `broadcast`: it follows `database`"
+                    .into(),
+            );
+        }
         if let Some(driver) = self.sms.driver {
             match driver {
                 SmsDriverKind::Twilio => self.twilio.check("sms")?,

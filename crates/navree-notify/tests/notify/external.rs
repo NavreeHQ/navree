@@ -201,6 +201,8 @@ async fn a_refused_message_fails_its_channel_only_and_is_recorded() {
         notifiable_type: "user".to_owned(),
         notifiable_id: slack.notifiable_id.clone(),
         created_at: slack.created_at,
+        category: Some("alert".to_owned()),
+        workspace_id: None,
         delivery: Delivery::Slack {
             route: SlackRoute::channel("C0123456789"),
             message: navree_notify::SlackMessage::new("hi"),

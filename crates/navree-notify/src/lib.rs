@@ -140,11 +140,14 @@
 #![forbid(unsafe_code)]
 
 mod callbacks;
+mod catalog;
 mod channel;
 mod channels;
 mod commands;
 mod controller;
+mod deferred;
 mod deliveries;
+mod digest;
 mod drivers;
 mod error;
 mod fake;
@@ -158,19 +161,27 @@ pub mod notifications;
 mod notifier;
 mod opt_outs;
 mod options;
+mod overrides;
+mod preferences;
 mod push;
 mod recipient;
 mod schema;
 mod store;
 mod stored;
+mod timing;
 mod tokens;
 
 pub use callbacks::{
     ChannelCallback, InboundMessage, Keyword, OPT_IN_KEYWORDS, OPT_OUT_KEYWORDS, StatusUpdate,
     keyword,
 };
+pub use catalog::{
+    ModuleBuilderNotifyExt, NotificationCatalog, NotificationCategory, NotificationKind,
+};
 pub use channel::Channel;
+pub use deferred::{DeferralReason, NotificationDeferral, Released};
 pub use deliveries::{DeliveryLog, DeliveryStatus, Ingested, NotificationDelivery};
+pub use digest::{DIGEST_TYPE, DigestItem};
 pub use drivers::log::{LogSms, LogWhatsApp};
 pub use drivers::meta::MetaWhatsApp;
 pub use drivers::slack::SlackApi;
@@ -191,7 +202,8 @@ pub use messages::{
     WhatsAppMessage, WhatsAppTemplate,
 };
 pub use migration::{
-    DELIVERIES_TABLE, NOTIFICATIONS_TABLE, OPT_OUTS_TABLE, PUSH_SUBSCRIPTIONS_TABLE,
+    DEFERRALS_TABLE, DELIVERIES_TABLE, NOTIFICATIONS_TABLE, OPT_OUTS_TABLE, PREFERENCES_TABLE,
+    PUSH_SUBSCRIPTIONS_TABLE,
 };
 pub use module::NotifyModule;
 pub use notifiable::Notifiable;
@@ -199,12 +211,19 @@ pub use notification::Notification;
 pub use notifier::{NOTIFICATION_CREATED, Notifier};
 pub use opt_outs::{NotificationOptOut, OptOutSource, OptOuts};
 pub use options::{
-    MetaOptions, NotifyOptions, SlackOptions, SmsDriverKind, SmsOptions, SnsOptions, TeamsOptions,
-    TwilioOptions, VonageOptions, WebPushOptions, WhatsAppDriverKind, WhatsAppOptions,
+    DeferredOptions, DigestOptions, MetaOptions, NotifyOptions, PreferenceOptions, SlackOptions,
+    SmsDriverKind, SmsOptions, SnsOptions, TeamsOptions, TwilioOptions, VonageOptions,
+    WebPushOptions, WhatsAppDriverKind, WhatsAppOptions,
+};
+pub use overrides::{MailOverride, NotificationOverrides, TemplateOverrides};
+pub use preferences::{
+    CategoryPreferences, MAX_CATEGORY_LEN, NotificationPreference, NotificationPreferences,
+    PreferenceOwner, Preferences, ResolvedPreferences, WORKSPACE_OWNER_TYPE, check_category,
 };
 pub use push::{NewPushSubscription, PushKeys, PushSubscription, PushSubscriptions};
 pub use recipient::RecipientScope;
 pub use stored::DatabaseNotification;
+pub use timing::{Digest, QuietHours};
 pub use tokens::ConnectionTokens;
 
 /// The notifiable type of users: the `/api/notifications` endpoints serve

@@ -36,7 +36,14 @@ navree-mail = { workspace = true }
 # database channel through the ORM, like the delivery log, the opt-outs and
 # the push subscriptions.
 navree-orm = { workspace = true }
+# `notify:release` every minute on the app's scheduler.
+navree-schedule = { workspace = true }
 navree-telemetry = { workspace = true }
+# Quiet hours, send windows and digests on the recipient's clock (`Zone`,
+# `SendWindow`, the `Zones` of users and workspaces).
+navree-time = { workspace = true }
+# The digest templates, and workspace overrides rendered from text.
+navree-view = { workspace = true }
 # Numbers in E.164 (`Phone`) for the SMS and WhatsApp channels.
 navree-validation = { workspace = true, features = ["phone"] }
 sea-orm = { workspace = true }
@@ -52,8 +59,6 @@ uuid = { workspace = true }
 
 [dev-dependencies]
 navree-testing = { workspace = true }
-# Lower-layer dev-dependency (spec §3): MailModule needs ViewModule in the app.
-navree-view = { workspace = true }
 # A browser's side of web push in the tests (decrypting what was pushed).
 ring = { workspace = true }
 tokio = { workspace = true }

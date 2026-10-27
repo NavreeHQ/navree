@@ -85,6 +85,11 @@ fn the_configuration_keys_have_their_documented_defaults() {
         vonage,
         sns,
         meta,
+        // `docs/digging-deeper/notification-preferences`
+        // (`tests/preferences_surface.rs`).
+        preferences: _,
+        digest: _,
+        deferred: _,
     } = NotifyOptions::default();
     assert!(!queue && routes && deliveries);
 

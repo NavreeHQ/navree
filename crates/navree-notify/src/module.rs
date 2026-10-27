@@ -1,21 +1,29 @@
 //! [`NotifyModule`].
 
+use std::marker::PhantomData;
 use std::sync::Arc;
 
 use navree_config::{Config, ConfigSection};
 use navree_contracts::ModuleBuilderJobsExt;
 use navree_db::ModuleBuilderDbExt;
 use navree_http::ModuleBuilderHttpExt;
-use navree_kernel::{BoxError, Factory, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver};
+use navree_kernel::{
+    AppContext, BoxError, Factory, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver,
+};
+use navree_schedule::ModuleBuilderScheduleExt;
 use navree_telemetry::Telemetry;
 use navree_validation::Country;
+use navree_view::ModuleBuilderViewExt;
 
+use crate::catalog::NotificationRegistration;
 use crate::channels::ChannelDrivers;
 use crate::controller::NotificationsController;
+use crate::digest::DIGEST_TEMPLATES;
 use crate::notifier::Parts;
 use crate::{
-    DeliveryLog, Notifier, NotifyOptions, OptOuts, PushSubscriptions, SendNotificationJob,
-    commands, migration,
+    DeliveryLog, ModuleBuilderNotifyExt, Notification, NotificationCatalog,
+    NotificationPreferences, Notifier, NotifyOptions, OptOuts, PushSubscriptions, Released,
+    SendNotificationJob, commands, migration,
 };
 
 /// The global notification module: provides and exports [`Notifier`],
@@ -54,6 +62,28 @@ impl NotifyModule {
         ConfiguredNotifyModule {
             source: Source::Config,
         }
+    }
+
+    /// Registers notification type `N` (import it in the module that owns
+    /// the notification): its category is listed by
+    /// `GET /api/notifications/preferences` and accepted by its `PATCH`.
+    /// The same as `m.notification::<N>()`
+    /// ([`ModuleBuilderNotifyExt`](crate::ModuleBuilderNotifyExt)).
+    pub fn for_feature<N: Notification>() -> impl Module {
+        NotificationFeature::<N>(PhantomData)
+    }
+}
+
+/// `NotifyModule::for_feature::<N>()`.
+struct NotificationFeature<N>(PhantomData<fn() -> N>);
+
+impl<N: Notification> Module for NotificationFeature<N> {
+    fn id(&self) -> ModuleId {
+        ModuleId::of::<NotificationFeature<N>>()
+    }
+
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.notification::<N>();
     }
 }
 
@@ -151,6 +181,28 @@ fn register(m: &mut ModuleBuilder, source: Source) {
             Ok(Arc::new(PushSubscriptions::new(r.app().downgrade())))
         }))
         .exports::<PushSubscriptions>()
+        .factory(Factory::<NotificationCatalog>::new(|r| async move {
+            let registrations = r.app().contributions::<NotificationRegistration>();
+            let catalog = NotificationCatalog::new(
+                registrations
+                    .into_iter()
+                    .map(|contributed| contributed.value.0),
+            )
+            .map_err(|message| format!("notify: {message}"))?;
+            Ok(Arc::new(catalog))
+        }))
+        .exports::<NotificationCatalog>()
+        .factory(
+            Factory::<NotificationPreferences>::new(|r| async move {
+                let options = r.get::<NotifyOptions>().await?;
+                Ok(Arc::new(NotificationPreferences::new(
+                    r.app().downgrade(),
+                    options.preferences.clone(),
+                )))
+            })
+            .deps(options_key()),
+        )
+        .exports::<NotificationPreferences>()
         .factory(
             Factory::<Notifier>::new(|r| async move {
                 let options = r.get::<NotifyOptions>().await?;
@@ -163,6 +215,7 @@ fn register(m: &mut ModuleBuilder, source: Source) {
                     log: r.get::<DeliveryLog>().await?,
                     opt_outs: r.get::<OptOuts>().await?,
                     push: r.get::<PushSubscriptions>().await?,
+                    preferences: r.get::<NotificationPreferences>().await?,
                     app,
                 };
                 Ok(Arc::new(Notifier::new(
@@ -175,13 +228,43 @@ fn register(m: &mut ModuleBuilder, source: Source) {
                 ProviderKey::of::<DeliveryLog>(),
                 ProviderKey::of::<OptOuts>(),
                 ProviderKey::of::<PushSubscriptions>(),
+                ProviderKey::of::<NotificationPreferences>(),
             ]),
         )
         .exports::<Notifier>()
         .job::<SendNotificationJob>()
         .migrations(migration::migrations())
         .controller::<NotificationsController>()
-        .command(commands::vapid());
+        .command(commands::vapid())
+        .command(commands::release())
+        // The built-in digest templates (a file of the same name wins).
+        .templates(&DIGEST_TEMPLATES)
+        // `notify:release` every minute; it only runs where the app runs
+        // ScheduleModule's scheduler, and returns at once with
+        // `notify.deferred.schedule = false`.
+        .schedule(|s| {
+            s.task(commands::RELEASE_COMMAND, release_on_schedule)
+                .every_minute()
+                .without_overlapping();
+        });
+}
+
+/// The scheduled `notify:release`: skipped with
+/// `notify.deferred.schedule = false`.
+async fn release_on_schedule(ctx: AppContext) -> Result<(), BoxError> {
+    let notifier = ctx.get::<Notifier>().await?;
+    if !notifier.options().deferred.schedule {
+        return Ok(());
+    }
+    let released = notifier.release_due().await?;
+    if released != Released::default() {
+        tracing::info!(
+            target: "navree::notify",
+            "{}",
+            commands::release_summary(&released)
+        );
+    }
+    Ok(())
 }
 
 /// `notify.sms.default_region` (validated with the options).
