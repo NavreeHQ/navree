@@ -152,23 +152,35 @@ impl CacheStore for RedisCacheStore {
 
     fn increment<'a>(&'a self, key: &'a str, by: i64) -> BoxFuture<'a, Result<i64, CacheError>> {
         Box::pin(async move {
-            self.manager()
-                .incr(self.redis_key(key), by)
+            let error: redis::RedisError =
+                match self.manager().incr(self.redis_key(key), by).await {
+                    Ok(value) => return Ok(value),
+                    Err(error) => error,
+                };
+            let message = error.to_string();
+            if message.contains("overflow") {
+                return Err(CacheError::Overflow {
+                    key: key.to_owned(),
+                });
+            }
+            if !message.contains("not an integer") {
+                return Err(self.fail(error));
+            }
+            // "not an integer or out of range": servers word an overflow
+            // differently, so look at the value.
+            let stored: Option<String> = self
+                .manager()
+                .get(self.redis_key(key))
                 .await
-                .map_err(|error: redis::RedisError| {
-                    let message = error.to_string();
-                    if message.contains("overflow") {
-                        CacheError::Overflow {
-                            key: key.to_owned(),
-                        }
-                    } else if message.contains("not an integer") {
-                        CacheError::NotAnInteger {
-                            key: key.to_owned(),
-                        }
-                    } else {
-                        self.fail(error)
-                    }
-                })
+                .map_err(|e| self.fail(e))?;
+            Err(match stored.and_then(|value| value.trim().parse::<i64>().ok()) {
+                Some(_) => CacheError::Overflow {
+                    key: key.to_owned(),
+                },
+                None => CacheError::NotAnInteger {
+                    key: key.to_owned(),
+                },
+            })
         })
     }
 }
