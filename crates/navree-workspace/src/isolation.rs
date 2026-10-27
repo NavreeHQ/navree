@@ -32,7 +32,7 @@ pub trait WorkspaceScoped: EntityTrait {
 }
 
 /// The workspace column of `E`.
-fn workspace_column<E: WorkspaceScoped>() -> Result<E::Column, DbErr> {
+pub(crate) fn workspace_column<E: WorkspaceScoped>() -> Result<E::Column, DbErr> {
     E::Column::from_str(E::WORKSPACE_COLUMN).map_err(|_| {
         DbErr::Custom(format!(
             "`{}` has no column `{}`: set WorkspaceScoped::WORKSPACE_COLUMN",
@@ -162,7 +162,7 @@ impl<E> fmt::Debug for WorkspaceRepo<E> {
     }
 }
 
-fn by_id<E: EntityTrait>(id: Value) -> Result<Select<E>, DbErr> {
+pub(crate) fn by_id<E: EntityTrait>(id: Value) -> Result<Select<E>, DbErr> {
     let mut columns = E::PrimaryKey::iter();
     match (columns.next(), columns.next()) {
         (Some(pk), None) => Ok(E::find().filter(pk.into_column().eq(id))),
@@ -173,7 +173,7 @@ fn by_id<E: EntityTrait>(id: Value) -> Result<Select<E>, DbErr> {
     }
 }
 
-fn not_found<E: EntityTrait>() -> DbErr {
+pub(crate) fn not_found<E: EntityTrait>() -> DbErr {
     DbErr::RecordNotFound(format!("{} (in this workspace)", E::default().table_name()))
 }
 
@@ -196,10 +196,33 @@ fn not_found<E: EntityTrait>() -> DbErr {
 /// across workspaces runs as a role with `BYPASSRLS`. Run the SQL in a
 /// migration (`manager.get_connection().execute_unprepared(&sql)`) on
 /// PostgreSQL only.
+///
+/// Two options widen and narrow it:
+///
+/// - [`organizations`](RlsPolicy::organizations): a second policy, for
+///   `SELECT` only, makes the rows of every workspace of the organization
+///   in `navree.organization` (set by
+///   [`CurrentOrganization`](crate::CurrentOrganization)) readable, so
+///   organization dashboards read through [`OrgRepo`](crate::OrgRepo).
+///   Inserts, updates and deletes still need `navree.workspace`.
+/// - [`partitioned`](RlsPolicy::partitioned): while `navree.partition` is
+///   set (by [`CurrentPartition`](crate::CurrentPartition) and
+///   [`PartitionScope`](crate::PartitionScope) when the request names a
+///   partition), only that partition's rows are visible and writable.
+///
+/// ```
+/// use navree_workspace::RlsPolicy;
+///
+/// let sql = RlsPolicy::new("contacts").organizations().partitioned().create_sql();
+/// assert!(sql.contains("current_setting('navree.organization', true)"));
+/// assert!(sql.contains("\"partition_id\" = NULLIF(current_setting('navree.partition', true), '')::uuid"));
+/// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RlsPolicy {
     table: String,
     column: String,
+    organizations: bool,
+    partition_column: Option<String>,
 }
 
 impl RlsPolicy {
@@ -208,6 +231,8 @@ impl RlsPolicy {
         Self {
             table: table.to_owned(),
             column: "workspace_id".to_owned(),
+            organizations: false,
+            partition_column: None,
         }
     }
 
@@ -217,36 +242,95 @@ impl RlsPolicy {
         self
     }
 
+    /// Also lets organization requests read (`SELECT` only) the rows of
+    /// their organization's workspaces (`navree.organization`).
+    pub fn organizations(mut self) -> Self {
+        self.organizations = true;
+        self
+    }
+
+    /// Limits rows to the request's partition (`navree.partition`, on the
+    /// `partition_id` column) whenever one is set.
+    pub fn partitioned(self) -> Self {
+        self.partition_column("partition_id")
+    }
+
+    /// [`partitioned`](RlsPolicy::partitioned) on `column`.
+    pub fn partition_column(mut self, column: &str) -> Self {
+        self.partition_column = Some(column.to_owned());
+        self
+    }
+
     /// The policy name: `<table>_workspace_isolation`.
     pub fn name(&self) -> String {
         format!("{}_workspace_isolation", self.table)
     }
 
-    /// Enables and forces row-level security on the table and creates the
-    /// policy.
-    pub fn create_sql(&self) -> String {
-        let table = quote(&self.table);
-        let check = format!(
-            "{} = NULLIF(current_setting('navree.workspace', true), '')::uuid",
-            quote(&self.column)
-        );
-        format!(
-            "ALTER TABLE {table} ENABLE ROW LEVEL SECURITY;\n\
-             ALTER TABLE {table} FORCE ROW LEVEL SECURITY;\n\
-             CREATE POLICY {name} ON {table}\n    USING ({check})\n    WITH CHECK ({check});",
-            name = quote(&self.name()),
-        )
+    /// The name of the read-only policy that
+    /// [`organizations`](RlsPolicy::organizations) adds:
+    /// `<table>_organization_read`.
+    pub fn organization_name(&self) -> String {
+        format!("{}_organization_read", self.table)
     }
 
-    /// Drops the policy and turns row-level security off again.
+    /// Enables and forces row-level security on the table and creates the
+    /// policy: `<table>_workspace_isolation` for every command and, with
+    /// [`organizations`](RlsPolicy::organizations), `<table>_organization_read`
+    /// for `SELECT` only, so an organization request reads its workspaces'
+    /// rows but can't update or delete them.
+    pub fn create_sql(&self) -> String {
+        let table = quote(&self.table);
+        let column = quote(&self.column);
+        let partition = self.partition_column.as_ref().map(|partition| {
+            format!(
+                "(NULLIF(current_setting('navree.partition', true), '') IS NULL OR {} = NULLIF(current_setting('navree.partition', true), '')::uuid)",
+                quote(partition)
+            )
+        });
+        let narrowed = |condition: String| match &partition {
+            Some(partition) => format!("({condition}) AND {partition}"),
+            None => condition,
+        };
+        let workspace = narrowed(format!(
+            "{column} = NULLIF(current_setting('navree.workspace', true), '')::uuid"
+        ));
+        let mut sql = format!(
+            "ALTER TABLE {table} ENABLE ROW LEVEL SECURITY;\n\
+             ALTER TABLE {table} FORCE ROW LEVEL SECURITY;\n\
+             CREATE POLICY {name} ON {table}\n    USING ({workspace})\n    WITH CHECK ({workspace});",
+            name = quote(&self.name()),
+        );
+        if self.organizations {
+            let organization = narrowed(format!(
+                "{column} IN (SELECT \"id\" FROM \"workspaces\" WHERE \"organization_id\" = NULLIF(current_setting('navree.organization', true), '')::uuid)"
+            ));
+            sql.push_str(&format!(
+                "\nCREATE POLICY {name} ON {table} FOR SELECT\n    USING ({organization});",
+                name = quote(&self.organization_name()),
+            ));
+        }
+        sql
+    }
+
+    /// Drops the policy (both, with
+    /// [`organizations`](RlsPolicy::organizations)) and turns row-level
+    /// security off again.
     pub fn drop_sql(&self) -> String {
         let table = quote(&self.table);
-        format!(
+        let mut sql = String::new();
+        if self.organizations {
+            sql.push_str(&format!(
+                "DROP POLICY IF EXISTS {name} ON {table};\n",
+                name = quote(&self.organization_name()),
+            ));
+        }
+        sql.push_str(&format!(
             "DROP POLICY IF EXISTS {name} ON {table};\n\
              ALTER TABLE {table} NO FORCE ROW LEVEL SECURITY;\n\
              ALTER TABLE {table} DISABLE ROW LEVEL SECURITY;",
             name = quote(&self.name()),
-        )
+        ));
+        sql
     }
 }
 
@@ -310,6 +394,29 @@ impl IsolationDriver {
             values,
         ))
         .await?;
+        Ok(())
+    }
+
+    /// Sets the transaction-local setting `name` to `value` on `uow` (a
+    /// unit of work on the app's database) when it runs on PostgreSQL.
+    /// Begins the transaction. Nothing on other databases.
+    pub(crate) async fn apply_setting(
+        &self,
+        uow: &Uow,
+        name: &'static str,
+        value: Uuid,
+    ) -> Result<(), WorkspaceError> {
+        if uow.db().backend() != DbBackend::Postgres {
+            return Ok(());
+        }
+        uow.tx()
+            .await?
+            .execute_raw(Statement::from_sql_and_values(
+                DbBackend::Postgres,
+                "SELECT set_config($1, $2, true)",
+                [name.into(), value.to_string().into()],
+            ))
+            .await?;
         Ok(())
     }
 
@@ -457,6 +564,58 @@ mod tests {
             "DROP POLICY IF EXISTS \"we\"\"ird_workspace_isolation\" ON \"we\"\"ird\";\n\
              ALTER TABLE \"we\"\"ird\" NO FORCE ROW LEVEL SECURITY;\n\
              ALTER TABLE \"we\"\"ird\" DISABLE ROW LEVEL SECURITY;"
+        );
+    }
+
+    #[test]
+    fn organization_and_partition_options_extend_the_policy() {
+        let workspace =
+            "\"workspace_id\" = NULLIF(current_setting('navree.workspace', true), '')::uuid";
+        let organization = "\"workspace_id\" IN (SELECT \"id\" FROM \"workspaces\" WHERE \"organization_id\" = NULLIF(current_setting('navree.organization', true), '')::uuid)";
+        let partition = "(NULLIF(current_setting('navree.partition', true), '') IS NULL OR \"partition_id\" = NULLIF(current_setting('navree.partition', true), '')::uuid)";
+
+        // Organizations read through a second, SELECT-only policy: the
+        // workspace policy alone decides inserts, updates and deletes.
+        let orgs = RlsPolicy::new("deals").organizations();
+        assert_eq!(
+            orgs.create_sql(),
+            format!(
+                "ALTER TABLE \"deals\" ENABLE ROW LEVEL SECURITY;\n\
+                 ALTER TABLE \"deals\" FORCE ROW LEVEL SECURITY;\n\
+                 CREATE POLICY \"deals_workspace_isolation\" ON \"deals\"\n    \
+                 USING ({workspace})\n    \
+                 WITH CHECK ({workspace});\n\
+                 CREATE POLICY \"deals_organization_read\" ON \"deals\" FOR SELECT\n    \
+                 USING ({organization});"
+            )
+        );
+        assert_eq!(orgs.organization_name(), "deals_organization_read");
+        assert_eq!(
+            orgs.drop_sql(),
+            "DROP POLICY IF EXISTS \"deals_organization_read\" ON \"deals\";\n\
+             DROP POLICY IF EXISTS \"deals_workspace_isolation\" ON \"deals\";\n\
+             ALTER TABLE \"deals\" NO FORCE ROW LEVEL SECURITY;\n\
+             ALTER TABLE \"deals\" DISABLE ROW LEVEL SECURITY;"
+        );
+
+        let parts = RlsPolicy::new("deals").partitioned().create_sql();
+        assert!(parts.contains(&format!("USING (({workspace}) AND {partition})")));
+        assert!(parts.contains(&format!("WITH CHECK (({workspace}) AND {partition});")));
+        assert!(!parts.contains("FOR SELECT"));
+
+        // Both: the partition narrows each policy.
+        let both = RlsPolicy::new("deals")
+            .organizations()
+            .partition_column("domain_id")
+            .create_sql();
+        let domain = partition.replace("\"partition_id\"", "\"domain_id\"");
+        assert!(both.contains(&format!("USING (({workspace}) AND {domain})")));
+        assert!(both.contains(&format!(
+            "FOR SELECT\n    USING (({organization}) AND {domain});"
+        )));
+        assert_eq!(
+            RlsPolicy::new("deals").partitioned().name(),
+            "deals_workspace_isolation"
         );
     }
 }

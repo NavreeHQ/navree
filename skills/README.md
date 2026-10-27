@@ -39,7 +39,7 @@ conventions, and says which skill to load for each task.
 | [`navree-deployment`](navree-deployment/SKILL.md) | Release builds, processes, systemd, proxies and health checks |
 | [`navree-security-checklist`](navree-security-checklist/SKILL.md) | What to check before shipping |
 | [`navree-jose`](navree-jose/SKILL.md) | Sign and verify JWTs that cross the app boundary, load `.p8` and PEM keys, publish a JWKS |
-| [`navree-workspaces`](navree-workspaces/SKILL.md) | Multi-tenancy at the workspace level |
+| [`navree-workspaces`](navree-workspaces/SKILL.md) | Multi-tenancy at the workspace level, with organizations above and partitions inside |
 | [`navree-billing`](navree-billing/SKILL.md) | Subscriptions, trials, seats, metered usage, invoices and webhooks with Stripe or Paddle |
 | [`navree-lighthouse`](navree-lighthouse/SKILL.md) | Application monitoring: issues, alerts, the `/_lighthouse` dashboard and its JSON API |
 | [`navree-dock`](navree-dock/SKILL.md) | Run PostgreSQL, Redis, Meilisearch, Mailpit, MinIO and NATS locally and in CI with `navree dock` |

@@ -114,8 +114,9 @@ pub use navree_logbook::LogbookModule;
 
 #[cfg(feature = "workspace")]
 pub use navree_workspace::{
-    CurrentWorkspace, InWorkspace, ModuleBuilderWorkspaceExt as _, WorkspaceModule, WorkspaceRepo,
-    WorkspaceScoped, WorkspaceUow,
+    CurrentOrganization, CurrentPartition, CurrentWorkspace, InOrganization, InWorkspace,
+    ModuleBuilderWorkspaceExt as _, OrgRepo, PartitionRepo, PartitionScope, PartitionScoped,
+    WorkspaceModule, WorkspaceRepo, WorkspaceScoped, WorkspaceUow,
 };
 
 #[cfg(feature = "webhooks")]

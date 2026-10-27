@@ -3,7 +3,7 @@ title: "Data isolation"
 description: "Keep each workspace's data apart by row, by schema or by database."
 ---
 
-Every workspace's data must stay its own: a query in Acme never returns Globex's deals, and a request can't write into another workspace. Navree offers three strategies, chosen with `workspace.isolation`. The workspace tables themselves (`workspaces`, `workspace_members`, `workspace_invitations`) always live in the app's main database; the strategy decides where your workspace-owned data lives.
+Every workspace's data must stay its own: a query in Acme never returns Globex's deals, and a request can't write into another workspace. Navree offers three strategies, chosen with `workspace.isolation`. The workspace tables themselves (`workspaces`, `workspace_members`, `workspace_invitations`, and the [organization](/docs/workspaces/organizations/) and [partition](/docs/workspaces/partitions/) tables) always live in the app's main database; the strategy decides where your workspace-owned data lives.
 
 | Strategy | Where data lives | Enforced by | Databases |
 |---|---|---|---|
@@ -153,6 +153,30 @@ SQLite and MySQL have no row-level security, and `Workspaces::enter` sets nothin
 
 On SQLite, `enter` and the request do nothing to the transaction: `WorkspaceRepo` and the route record checks are the scope.
 
+### Organizations and partitions
+
+Two more settings widen and narrow the policy when [organizations](/docs/workspaces/organizations/) or [partitions](/docs/workspaces/partitions/) are on:
+
+| Setting | Set by | Policy option | Effect |
+|---|---|---|---|
+| `navree.organization` | `CurrentOrganization`, `InOrganization`, `Organizations::enter` | `.organizations()` | Reads also see the rows of every workspace attached to the organization |
+| `navree.partition` | `CurrentPartition` and `PartitionScope` when the request names a partition, `Partitions::enter` | `.partitioned()` | While it is set, only that partition's rows are visible and writable |
+
+```rust
+let sql = RlsPolicy::new("contacts").organizations().partitioned().create_sql();
+```
+
+`.organizations()` adds a second policy, for `SELECT` only:
+
+```sql
+CREATE POLICY "contacts_organization_read" ON "contacts" FOR SELECT
+    USING ("workspace_id" IN (SELECT "id" FROM "workspaces" WHERE "organization_id" = NULLIF(current_setting('navree.organization', true), '')::uuid));
+```
+
+PostgreSQL combines the two policies with `OR` for reads, and only the workspace policy applies to inserts, updates and deletes: an organization request reads across its workspaces, and changes rows only in a workspace it has also resolved. The read policy covers the whole organization; a member limited to some of its workspaces is narrowed by `OrgRepo` with `CurrentOrganization::workspace_ids()`. With `.partitioned()` as well, the partition condition narrows both policies. `drop_sql()` drops both.
+
+In code, `OrgRepo::<E>` reads across workspaces and `PartitionRepo::<E>` narrows `WorkspaceRepo` to partitions, on every database.
+
 ### Migrations
 
 Row isolation uses ordinary migrations (`m.migrations(..)`): one set of tables for every workspace.
@@ -292,5 +316,8 @@ Row-level security and schema isolation need PostgreSQL; run those tests against
   </LinkCard>
   <LinkCard href="/docs/patterns/multi-tenancy/" title="Multi-tenant SaaS">
     The architecture around workspaces.
+  </LinkCard>
+  <LinkCard href="/docs/workspaces/partitions/" title="Partitions">
+    Slices of a workspace's data, scoped per member.
   </LinkCard>
 </LinkCards>

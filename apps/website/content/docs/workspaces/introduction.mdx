@@ -43,12 +43,12 @@ Users are identified by the id of the request's principal, so the module works w
 
 ## The tables
 
-The migration set `workspace` runs after `auth` and creates three tables:
+The migration set `workspace` runs after `auth` and creates three tables, plus the tables of [organizations](/docs/workspaces/organizations/) and [partitions](/docs/workspaces/partitions/), which stay empty until you turn those on:
 
 | Table | Columns |
 |---|---|
-| `workspaces` | `id`, `name`, `slug` (unique), `owner_id`, `created_at`, `updated_at` |
-| `workspace_members` | `id`, `workspace_id` (cascades on delete), `user_id`, `role`, `created_at`, `updated_at`; one row per workspace and user |
+| `workspaces` | `id`, `name`, `slug` (unique), `owner_id`, `organization_id`, `created_at`, `updated_at` |
+| `workspace_members` | `id`, `workspace_id` (cascades on delete), `user_id`, `role`, `partition_scope`, `created_at`, `updated_at`; one row per workspace and user |
 | `workspace_invitations` | `id`, `workspace_id` (cascades on delete), `email`, `role`, `token_hash` (unique), `invited_by`, `expires_at`, `accepted_at`, `accepted_by`, `created_at` |
 
 User ids are not foreign keys. Invitation tokens are stored as SHA-256 digests. Tables of your own that reference `workspaces` run after the set: `MigrationSet::new("deals").after(["workspace"])`.
@@ -179,13 +179,19 @@ require_matching_email = true
 
 [workspace.roles.member]
 permissions = ["deals.*"]
+
+[workspace.organizations]           # organizations above workspaces
+enabled = false
+
+[workspace.partitions]              # partitions inside workspaces
+enabled = false
 ```
 
 Environment variables follow the usual mapping (`APP_WORKSPACE__HEADER=X-Team`). Lists also accept a comma-separated string: `APP_WORKSPACE__RESOLVERS=subdomain,header`. Invalid values fail the boot and name the key.
 
 ## The services
 
-`WorkspaceModule` exports three services. Writes take the unit of work to run in (the request's `Uow`, or one from `Db::uow` in jobs and commands), go through `Repo` so the [audit trail](/docs/security/audit-log/) records them, and emit their events once the unit of work commits.
+`WorkspaceModule` exports three services, and four more for [organizations](/docs/workspaces/organizations/) (`Organizations`, `OrgMembers`, `AccessRequests`) and [partitions](/docs/workspaces/partitions/) (`Partitions`). Writes take the unit of work to run in (the request's `Uow`, or one from `Db::uow` in jobs and commands), go through `Repo` so the [audit trail](/docs/security/audit-log/) records them, and emit their events once the unit of work commits.
 
 | Service | Methods |
 |---|---|
@@ -232,6 +238,7 @@ A workspace comes back as:
   "name": "Acme Inc.",
   "slug": "acme-inc",
   "owner_id": "0199f3c2-1a2b-7c3d-8e4f-5a6b7c8d9e0f",
+  "organization_id": null,
   "role": "owner",
   "created_at": "2026-10-26T09:00:00Z",
   "updated_at": "2026-10-26T09:00:00Z"
@@ -372,5 +379,11 @@ Each test gets its own SQLite file, so workspaces never leak between tests.
   </LinkCard>
   <LinkCard href="/docs/workspaces/isolation/" title="Data isolation">
     One table, one schema or one database per workspace.
+  </LinkCard>
+  <LinkCard href="/docs/workspaces/organizations/" title="Organizations">
+    Group workspaces; members reach all or some of them.
+  </LinkCard>
+  <LinkCard href="/docs/workspaces/partitions/" title="Partitions">
+    Named slices of a workspace's data.
   </LinkCard>
 </LinkCards>

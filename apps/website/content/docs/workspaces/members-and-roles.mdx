@@ -42,6 +42,9 @@ The module's own subjects use the prefixes below, which the built-in routes chec
 | `Workspace` | `workspace` | `workspace.update`, `workspace.delete`, `workspace.transfer` |
 | `WorkspaceMember` | `workspace.members` | `workspace.members.read`, `.create`, `.update`, `.delete` |
 | `WorkspaceInvitation` | `workspace.invitations` | `workspace.invitations.read`, `.create`, `.delete` |
+| `WorkspacePartition` | `workspace.partitions` | `workspace.partitions.read`, `.create`, `.update`, `.delete` ([partitions](/docs/workspaces/partitions/) on) |
+
+With partitions on, `admin` also gets `workspace.partitions.*`, and `member` and `viewer` get `workspace.partitions.read`.
 
 ## Your own roles
 
@@ -63,6 +66,7 @@ Inside a workspace request, navree-access builds the member's abilities from you
 | `user` | The signed-in user, whose `roles` holds one entry: their workspace role |
 | `permissions` | The role's permissions (built-in plus `workspace.roles`) |
 | `team_id` | `Some(workspace id)` |
+| `organization_id` | The workspace's [organization](/docs/workspaces/organizations/), if it is attached to one |
 | `permission_subjects` | Every registered subject's prefix |
 
 So `ctx.grant_permissions(rules)` grants the role's permissions, `ctx.has_role("admin")` asks about the workspace role, and `ctx.team_id` tells a rule which workspace it is in:
@@ -135,6 +139,25 @@ ws.authorize("deals.export")?;            // 403 unless the role holds it
 if ws.can("approve", "Deal") { /* ... */ }
 if ws.role() == &WorkspaceRole::Owner { /* ... */ }
 ```
+
+## Roles through an organization
+
+With [organizations](/docs/workspaces/organizations/) on, a user can also enter a workspace as a member of the organization it is attached to. Their organization role maps to a workspace role, and that role is what the workspace sees:
+
+| Organization role | Workspace role (default) |
+|---|---|
+| `owner` | `owner` |
+| `admin` | `admin` |
+| `member` | `member` |
+| `viewer` | `viewer` |
+| An app-defined role | The one its `workspace_role` setting names, else the workspace role of the same name |
+
+```toml title="config/app.toml"
+[workspace.organizations.roles.member]
+workspace_role = "viewer"   # organization members read in their workspaces
+```
+
+Everything on this page then applies to the mapped role: the abilities context's `user.roles` holds it, route checks evaluate it and `ws.role()` returns it. A membership of the workspace wins over the organization's role, so an organization viewer who is also an `admin` member of one workspace is an admin there. `ws.granted_by()` tells you which applied, and organization members don't appear in the workspace's member list.
 
 ## Managing members
 
@@ -271,5 +294,8 @@ client
   </LinkCard>
   <LinkCard href="/docs/workspaces/invitations/" title="Invitations">
     Bring people in by email.
+  </LinkCard>
+  <LinkCard href="/docs/workspaces/organizations/" title="Organizations">
+    Organization roles that reach many workspaces.
   </LinkCard>
 </LinkCards>

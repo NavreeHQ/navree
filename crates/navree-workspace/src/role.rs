@@ -142,6 +142,19 @@ impl RoleTable {
             (role.as_str().to_owned(), permissions)
         })
         .collect();
+        if config.partitions.enabled {
+            // Partitions are workspace data: admins manage them, everyone
+            // reads them.
+            for (role, permission) in [
+                (ADMIN, "workspace.partitions.*"),
+                (MEMBER, "workspace.partitions.read"),
+                (VIEWER, "workspace.partitions.read"),
+            ] {
+                if let Some(permissions) = roles.get_mut(role) {
+                    permissions.insert(permission.to_owned());
+                }
+            }
+        }
         for (name, options) in &config.roles {
             roles
                 .entry(name.clone())
@@ -267,6 +280,28 @@ mod tests {
             table.names().collect::<Vec<_>>(),
             ["admin", "billing", "member", "owner", "viewer"]
         );
+    }
+
+    #[test]
+    fn partitions_add_their_permissions_when_enabled() {
+        let mut config = WorkspaceConfig::default();
+        let off = RoleTable::from_config(&config);
+        assert!(
+            !off.permissions(&WorkspaceRole::Admin)
+                .iter()
+                .any(|p| p.starts_with("workspace.partitions"))
+        );
+        config.partitions.enabled = true;
+        let on = RoleTable::from_config(&config);
+        assert!(
+            on.permissions(&WorkspaceRole::Admin)
+                .contains(&"workspace.partitions.*".to_owned())
+        );
+        assert!(
+            on.permissions(&WorkspaceRole::Viewer)
+                .contains(&"workspace.partitions.read".to_owned())
+        );
+        assert_eq!(on.permissions(&WorkspaceRole::Owner), ["all.*"]);
     }
 
     #[test]
