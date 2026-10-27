@@ -3,8 +3,7 @@
 
 use std::str::FromStr;
 
-use navree_access::Authorized;
-use sea_orm::EntityTrait;
+use navree_access::{Authorized, SubjectRecords};
 use serde::Serialize;
 
 pub use navree_access::{ActionMarker, Subject};
@@ -104,8 +103,7 @@ pub trait FromRecord: Sized {
 
 impl<E, A> FromRecord for Authorized<E, A>
 where
-    E: EntityTrait + Subject,
-    E::Model: Sync,
+    E: SubjectRecords,
     A: ActionMarker,
 {
     fn from_record(call: &Call) -> Result<Self, AppError> {

@@ -4,7 +4,9 @@ use std::fmt;
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
-use navree_access::{Ability, Accessible, ActionMarker, Authorized, PrincipalAccess, Subject};
+use navree_access::{
+    Ability, Accessible, ActionMarker, Authorized, PrincipalAccess, Subject, SubjectRecords,
+};
 use navree_auth::{AuthService, User};
 use navree_contracts::{Clock, Principal};
 use navree_db::Uow;
@@ -12,7 +14,6 @@ use navree_http::AppError;
 use navree_kernel::AppContext;
 use rmcp::model::{ProgressNotificationParam, ProgressToken};
 use rmcp::{Peer, RoleServer};
-use sea_orm::EntityTrait;
 use uuid::Uuid;
 
 /// The client that called: its name and version from the `initialize`
@@ -131,22 +132,23 @@ impl McpContext {
         &self.inner.access.ability
     }
 
-    /// A list filter: the rows of `E` the user may do `A` on.
+    /// A list filter: the records of `E` the user may do `A` on (a SeaORM
+    /// entity's `apply(select)`, an ORM model's `apply(query)`).
     pub fn accessible<E, A>(&self) -> Accessible<E, A>
     where
-        E: EntityTrait + Subject,
+        E: Subject,
         A: ActionMarker,
     {
         Accessible::new(self.inner.access.ability.clone())
     }
 
-    /// Loads record `id` of `E` in the call's unit of work and checks `A` on
+    /// Loads record `id` of `E` (a SeaORM entity, an ORM model or any other
+    /// subject with records) in the call's unit of work and checks `A` on
     /// it: the record, or a 404 (no such record) or 403 (not allowed). The
     /// tool's equivalent of `#[can(A, E, from = "id")]`.
     pub async fn authorize<E, A>(&self, id: impl fmt::Display) -> Result<Authorized<E, A>, AppError>
     where
-        E: EntityTrait + Subject,
-        E::Model: Send + Sync + 'static,
+        E: SubjectRecords,
         A: ActionMarker,
     {
         Authorized::load(
