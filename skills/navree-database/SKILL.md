@@ -167,28 +167,34 @@ mail and notifications already wait for the commit.
 ```rust
 // src/modules/posts/migrations/mod.rs
 use navree::db::MigrationSet;
+use navree::schema::migration;
 
 mod m20261026_090000_create_posts_table;
 
 pub fn migrations() -> MigrationSet {
     MigrationSet::new("posts")          // stable, unique name; recorded in navree_migrations
         .after(["auth"])                // run after these sets (foreign keys to users)
-        .migration(m20261026_090000_create_posts_table::Migration)
+        .migration(migration!(m20261026_090000_create_posts_table))
 }
 // registered in the module's wire: m.migrations(migrations::migrations());
 ```
 
-A migration is a SeaORM `MigrationTrait` with `up` and `down`, written with
-the schema builder (portable across SQLite and PostgreSQL); see
-`references/migrations.md` for a create-table, an add-column, indexes,
-foreign keys and the commands. Never edit a migration that has run
+A migration implements `navree::schema::Migration` (`async fn up` and
+`down` taking `&Schema`) and is written with the schema builder
+(`schema.create("posts", |t| { t.uuid_primary(); ... })`), which writes the
+right SQL for PostgreSQL/TimescaleDB, MySQL and SQLite; see
+`references/migrations.md` for a create-table, an alteration, indexes,
+foreign keys and the commands, and `references/timescaledb.md` for
+time-series tables (hypertables). Never edit a migration that has run
 anywhere: add a new one.
 
 ```sh
-navree migrate             # pending migrations, as one batch
-navree migrate:status
-navree migrate:rollback    # the last batch (APP_DATABASE__MIGRATE_ON_BOOT=false first)
+navree migrate               # pending migrations, as one batch (--step, --pretend, --seed)
+navree migrate:status        # --pending
+navree migrate:rollback      # the last batch; --step N, --batch N (APP_DATABASE__MIGRATE_ON_BOOT=false first)
+navree migrate:refresh       # reset + migrate; checks every down
 navree migrate:fresh --seed  # drops EVERY table; development only
+navree schema:dump           # database/schema/<driver>-schema.sql, loaded into empty databases
 ```
 
 ## Seeders, factories and pagination
@@ -233,5 +239,7 @@ anywhere (`DatabaseModule` is global).
 - https://navree.com/docs/database/entities-and-repositories/
 - https://navree.com/docs/database/unit-of-work/
 - https://navree.com/docs/database/migrations/
+- https://navree.com/docs/database/schema-builder/
+- https://navree.com/docs/database/timescaledb/
 - https://navree.com/docs/database/seeding-and-factories/
 - https://navree.com/docs/database/pagination/
