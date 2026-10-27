@@ -203,6 +203,17 @@ const HIERARCHY: &[Rule] = &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http",
         "navree-events", "navree-db", "navree-testing", "navree-validation",
     ]),
+    // Single sign-on: SAML 2.0 and OpenID Connect connections owned by an
+    // organization or a workspace (navree-workspace), signing in navree-auth
+    // users; XML signatures and ID tokens are verified with navree-crypto's
+    // `jose` (ring), IdP metadata, key sets and DNS checks go through
+    // navree-http-client, and states, replays and one-time codes live in
+    // navree-cache.
+    rule("navree-sso", 6, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto",
+        "navree-cache", "navree-events", "navree-http-client", "navree-db", "navree-auth",
+        "navree-workspace",
+    ]),
     // L7: packages built on other packages.
     // Search: full-text and vector search over entities. The server engines
     // talk HTTP through navree-http-client; the `Searchable` derive lives in
@@ -332,6 +343,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-lighthouse",
     "navree-logbook",
     "navree-micro",
+    "navree-sso",
     "navree-fleet",
     "navree-helm",
 ];

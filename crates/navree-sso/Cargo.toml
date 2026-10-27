@@ -1,0 +1,56 @@
+[package]
+name = "navree-sso"
+description = "Navree SsoModule: SAML 2.0 and OpenID Connect single sign-on per organization or workspace, verified email domains and just-in-time provisioning."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+axum = { workspace = true }
+base64 = { workspace = true }
+chrono = { workspace = true }
+# SAML's HTTP-Redirect binding deflates the request (miniz_oxide, pure Rust).
+flate2 = { workspace = true }
+form_urlencoded = { workspace = true }
+http = { workspace = true }
+navree-auth = { workspace = true }
+navree-cache = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+# `jose`: XML signatures (RSA-SHA256/384/512, ECDSA) and ID tokens are
+# verified on `ring`; X.509 certificates are read for their public keys.
+navree-crypto = { workspace = true }
+navree-db = { workspace = true }
+navree-events = { workspace = true }
+navree-http = { workspace = true }
+navree-http-client = { workspace = true }
+navree-kernel = { workspace = true }
+navree-workspace = { workspace = true }
+quick-xml = { workspace = true }
+sea-orm = { workspace = true }
+sea-orm-migration = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+subtle = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }
+utoipa = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+navree-access = { workspace = true }
+navree-api = { workspace = true }
+navree-testing = { workspace = true }
+# Checks the canonical form against real signed samples that still use SHA-1
+# digests (which the verifier itself refuses).
+sha1 = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
+wiremock = { workspace = true }
