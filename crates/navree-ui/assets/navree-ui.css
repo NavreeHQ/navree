@@ -834,6 +834,31 @@ body.ui {
   .ui-overlay {
     display: none;
   }
+
+  /* The sidebar's column, drawn the full height of the page (the sticky
+     sidebar covers one screen; this rail continues it below). */
+  .ui-shell {
+    position: relative;
+  }
+
+  .ui-shell::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: var(--ui-sidebar-w);
+    border-right: 1px solid var(--ui-line);
+    background: var(--ui-ink-1);
+    pointer-events: none;
+    transition: width 200ms var(--ui-ease);
+  }
+
+  .ui-shell[data-sidebar="collapsed"]::before {
+    width: var(--ui-sidebar-w-icon);
+  }
+
+  .ui-shell.ui-no-transition::before {
+    transition: none;
+  }
 }
 
 /* ------------------------------------------------------------------------ */
@@ -1691,6 +1716,17 @@ th[aria-sort="descending"] .ui-sort .ui-icon {
   margin: 0 0.25rem;
 }
 
+/* Centered over the page, not the window, beside the sidebar. */
+@media (min-width: 768px) {
+  .ui-shell[data-sidebar="expanded"] .ui-selection-bar {
+    left: calc(50% + var(--ui-sidebar-w) / 2);
+  }
+
+  .ui-shell[data-sidebar="collapsed"] .ui-selection-bar {
+    left: calc(50% + var(--ui-sidebar-w-icon) / 2);
+  }
+}
+
 @keyframes ui-bar-in {
   from {
     opacity: 0;
@@ -1821,6 +1857,27 @@ th[aria-sort="descending"] .ui-sort .ui-icon {
 .ui-skeleton--box {
   width: 1rem;
   height: 1rem;
+}
+
+/* In a table, placeholders take a share of their column, so a loading
+   table is as wide as its header and never scrolls sideways. */
+.ui-table .ui-skeleton--w-lg {
+  width: 80%;
+  max-width: 12rem;
+}
+
+.ui-table .ui-skeleton--w-md {
+  width: 64%;
+  max-width: 8rem;
+}
+
+.ui-table .ui-skeleton--w-sm {
+  width: 48%;
+  max-width: 5rem;
+}
+
+.ui-table .ui-col-num .ui-skeleton {
+  margin-left: auto;
 }
 
 @keyframes ui-pulse {

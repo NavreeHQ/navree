@@ -609,6 +609,8 @@
     const rows = $$("[data-ui-select-row]", table);
     const bar = table.id ? doc.querySelector(`[data-ui-selection-bar="${table.id}"]`) : null;
     const count = bar && $("[data-ui-selection-count]", bar);
+    // The bar floats over the page only while its table is on screen.
+    let inView = true;
     const sync = () => {
       const checked = rows.filter((row) => row.checked).length;
       for (const row of rows) {
@@ -619,9 +621,15 @@
         all.checked = checked > 0 && checked === rows.length;
         all.indeterminate = checked > 0 && checked < rows.length;
       }
-      if (bar) bar.hidden = checked === 0;
+      if (bar) bar.hidden = checked === 0 || !inView;
       if (count) count.textContent = `${checked} selected`;
     };
+    if (bar && "IntersectionObserver" in window) {
+      new IntersectionObserver((entries) => {
+        inView = entries[entries.length - 1].isIntersecting;
+        sync();
+      }).observe(table.closest(".ui-table-wrap") || table);
+    }
     if (all) {
       all.addEventListener("change", () => {
         for (const row of rows) row.checked = all.checked;
