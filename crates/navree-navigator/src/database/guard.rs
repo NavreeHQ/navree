@@ -280,9 +280,7 @@ fn leading_keywords(statement: &Statement) -> String {
         .take(2)
         .collect();
     let first = words.first().copied().unwrap_or("this statement");
-    let two_word = [
-        "CREATE", "DROP", "ALTER", "INSERT", "DELETE", "START",
-    ];
+    let two_word = ["CREATE", "DROP", "ALTER", "INSERT", "DELETE", "START"];
     if words.len() == 2 && two_word.contains(&first.to_ascii_uppercase().as_str()) {
         format!("{} {}", first, words[1]).to_ascii_uppercase()
     } else {
@@ -310,7 +308,10 @@ mod tests {
             checked.sql,
             "SELECT stage, count(*) AS deals FROM deals GROUP BY stage"
         );
-        assert_eq!(lite("SELECT 1 -- trailing comment").unwrap().sql, "SELECT 1");
+        assert_eq!(
+            lite("SELECT 1 -- trailing comment").unwrap().sql,
+            "SELECT 1"
+        );
         assert_eq!(
             pg("WITH open AS (SELECT * FROM deals WHERE stage <> 'won') SELECT count(*) FROM open")
                 .unwrap()
@@ -382,7 +383,10 @@ mod tests {
             "VACUUM",
         ] {
             assert!(
-                matches!(pg(sql), Err(Refusal::NotReadOnly { .. }) | Err(Refusal::Parse { .. })),
+                matches!(
+                    pg(sql),
+                    Err(Refusal::NotReadOnly { .. }) | Err(Refusal::Parse { .. })
+                ),
                 "{sql}: {:?}",
                 pg(sql)
             );
@@ -424,7 +428,10 @@ mod tests {
         );
         let refused =
             pg("WITH moved AS (UPDATE deals SET stage = 'won' RETURNING id) SELECT * FROM moved");
-        assert!(matches!(refused, Err(Refusal::Nested { .. })), "{refused:?}");
+        assert!(
+            matches!(refused, Err(Refusal::Nested { .. })),
+            "{refused:?}"
+        );
     }
 
     #[test]
@@ -458,7 +465,10 @@ mod tests {
         for (sql, name) in [
             ("SELECT pg_sleep(10)", "pg_sleep"),
             ("SELECT pg_terminate_backend(42)", "pg_terminate_backend"),
-            ("SELECT pg_catalog.pg_read_file('/etc/passwd')", "pg_read_file"),
+            (
+                "SELECT pg_catalog.pg_read_file('/etc/passwd')",
+                "pg_read_file",
+            ),
             ("SELECT pg_advisory_lock(1)", "pg_advisory_lock"),
             ("SELECT set_config('x', 'y', false)", "set_config"),
             ("SELECT lo_import('/etc/passwd')", "lo_import"),

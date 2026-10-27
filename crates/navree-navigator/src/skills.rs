@@ -41,7 +41,10 @@ pub fn skills() -> Vec<Skill> {
         skills.insert(
             folder.to_owned(),
             Skill {
-                name: front.get("name").cloned().unwrap_or_else(|| folder.to_owned()),
+                name: front
+                    .get("name")
+                    .cloned()
+                    .unwrap_or_else(|| folder.to_owned()),
                 description: front.get("description").cloned().unwrap_or_default(),
             },
         );
@@ -121,7 +124,8 @@ pub fn install_files<'a>(
             let kind = entry.file_type()?;
             if kind.is_symlink() {
                 // Remove the link, never what it points at.
-                std::fs::remove_file(entry.path()).or_else(|_| std::fs::remove_dir(entry.path()))?;
+                std::fs::remove_file(entry.path())
+                    .or_else(|_| std::fs::remove_dir(entry.path()))?;
             } else if kind.is_dir() {
                 std::fs::remove_dir_all(entry.path())?;
             } else {
@@ -135,7 +139,9 @@ pub fn install_files<'a>(
             let Some((folder, _)) = path.split_once('/') else {
                 continue;
             };
-            if !is_navree_skill(folder) || path.split('/').any(|part| part == ".." || part.is_empty()) {
+            if !is_navree_skill(folder)
+                || path.split('/').any(|part| part == ".." || part.is_empty())
+            {
                 continue;
             }
             let file = target.join(path);
@@ -155,9 +161,18 @@ mod tests {
     use super::*;
 
     const FILES: &[(&str, &[u8])] = &[
-        ("navree/SKILL.md", b"---\nname: navree\ndescription: The index.\n---\n# Navree\n"),
-        ("navree-database/SKILL.md", b"---\nname: navree-database\ndescription: Entities.\n---\n"),
-        ("navree-database/references/migrations.md", b"# Migrations\n"),
+        (
+            "navree/SKILL.md",
+            b"---\nname: navree\ndescription: The index.\n---\n# Navree\n",
+        ),
+        (
+            "navree-database/SKILL.md",
+            b"---\nname: navree-database\ndescription: Entities.\n---\n",
+        ),
+        (
+            "navree-database/references/migrations.md",
+            b"# Migrations\n",
+        ),
     ];
 
     fn read(path: PathBuf) -> String {
@@ -167,7 +182,10 @@ mod tests {
     #[test]
     fn every_embedded_skill_is_named_after_its_folder() {
         let skills = skills();
-        assert!(skills.iter().any(|s| s.name == "navree"), "the umbrella skill");
+        assert!(
+            skills.iter().any(|s| s.name == "navree"),
+            "the umbrella skill"
+        );
         assert!(skills.iter().any(|s| s.name == "navree-navigator"));
         for (path, contents) in files() {
             let Some((folder, "SKILL.md")) = path.split_once('/') else {
@@ -175,7 +193,11 @@ mod tests {
             };
             let text = String::from_utf8(contents.to_vec()).expect("UTF-8");
             let front = front_matter(&text).unwrap_or_else(|| panic!("{path}: no front-matter"));
-            assert_eq!(front.get("name").map(String::as_str), Some(folder), "{path}");
+            assert_eq!(
+                front.get("name").map(String::as_str),
+                Some(folder),
+                "{path}"
+            );
             assert!(
                 front.get("description").is_some_and(|d| d.len() > 40),
                 "{path}: a description says when to use the skill"
@@ -224,7 +246,10 @@ mod tests {
         assert_eq!(report.removed, ["navree-old"]);
         assert_eq!(read(skills.join("crm-pipeline-stages/SKILL.md")), "mine");
         assert!(!skills.join("navree-old").exists());
-        assert!(!skills.join("navree/STALE.md").exists(), "navree is replaced whole");
+        assert!(
+            !skills.join("navree/STALE.md").exists(),
+            "navree is replaced whole"
+        );
         assert!(skills.join("navree-notes.txt").exists());
     }
 }

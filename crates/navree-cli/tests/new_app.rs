@@ -130,6 +130,8 @@ fn agents_md_describes_the_conventions_and_claude_md_imports_it() {
         // where the docs and skills are
         "https://navree.com/docs/",
         "npx skills add NavreeHQ/navree",
+        "navree skills:install",
+        "navree mcp",
     ] {
         assert!(agents.contains(expected), "AGENTS.md lacks `{expected}`");
     }

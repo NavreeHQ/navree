@@ -91,7 +91,11 @@ impl Runner for ProcessRunner {
                 let _ = child.wait();
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::TimedOut,
-                    format!("{} did not finish within {} s", call.program.display(), timeout.as_secs()),
+                    format!(
+                        "{} did not finish within {} s",
+                        call.program.display(),
+                        timeout.as_secs()
+                    ),
                 ));
             }
             std::thread::sleep(Duration::from_millis(25));
@@ -288,9 +292,11 @@ impl AppProbe {
             dir: self.project.root.clone(),
             env: Vec::new(),
         };
-        self.runner
-            .run(&call, timeout)
-            .map_err(|e| AppError::Cargo(format!("cannot run cargo (is it installed and on PATH?): {e}")))
+        self.runner.run(&call, timeout).map_err(|e| {
+            AppError::Cargo(format!(
+                "cannot run cargo (is it installed and on PATH?): {e}"
+            ))
+        })
     }
 
     fn manifest(&self) -> String {
@@ -305,7 +311,14 @@ impl AppProbe {
         }
         let manifest = self.manifest();
         let output = self.cargo(
-            &["metadata", "--no-deps", "--format-version", "1", "--manifest-path", &manifest],
+            &[
+                "metadata",
+                "--no-deps",
+                "--format-version",
+                "1",
+                "--manifest-path",
+                &manifest,
+            ],
             RUN_TIMEOUT,
         )?;
         if !output.success {
@@ -322,13 +335,20 @@ impl AppProbe {
             .flatten()
             .find(|p| p["name"] == self.project.package.as_str())
             .ok_or_else(|| {
-                AppError::Cargo(format!("cargo metadata doesn't list the package {}", self.project.package))
+                AppError::Cargo(format!(
+                    "cargo metadata doesn't list the package {}",
+                    self.project.package
+                ))
             })?;
         let bins: Vec<&str> = package["targets"]
             .as_array()
             .into_iter()
             .flatten()
-            .filter(|t| t["kind"].as_array().is_some_and(|k| k.iter().any(|k| k == "bin")))
+            .filter(|t| {
+                t["kind"]
+                    .as_array()
+                    .is_some_and(|k| k.iter().any(|k| k == "bin"))
+            })
             .filter_map(|t| t["name"].as_str())
             .collect();
         let name = bins
@@ -401,18 +421,28 @@ impl AppProbe {
             return Ok(value.clone());
         }
         let mut env = self.env.clone();
-        env.extend(PROBE_ENV.iter().map(|(k, v)| ((*k).to_owned(), (*v).to_owned())));
+        env.extend(
+            PROBE_ENV
+                .iter()
+                .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
+        );
         let call = ProcessCall {
             program: binary.clone(),
             args: args.iter().map(|a| (*a).to_owned()).collect(),
             dir: self.project.root.clone(),
             env,
         };
-        let command = format!("{} {key}", self.binary_target().map(|t| t.name).unwrap_or_default());
-        let output = self.runner.run(&call, RUN_TIMEOUT).map_err(|e| AppError::Run {
-            command: command.clone(),
-            output: e.to_string(),
-        })?;
+        let command = format!(
+            "{} {key}",
+            self.binary_target().map(|t| t.name).unwrap_or_default()
+        );
+        let output = self
+            .runner
+            .run(&call, RUN_TIMEOUT)
+            .map_err(|e| AppError::Run {
+                command: command.clone(),
+                output: e.to_string(),
+            })?;
         if !output.success {
             let printed = if output.stderr.trim().is_empty() {
                 output.stdout.trim()
@@ -426,7 +456,10 @@ impl AppProbe {
         }
         let value = find_json(&output.stdout, expect).ok_or_else(|| AppError::Output {
             command: command.clone(),
-            message: format!("got:\n{}", output.stdout.chars().take(2000).collect::<String>()),
+            message: format!(
+                "got:\n{}",
+                output.stdout.chars().take(2000).collect::<String>()
+            ),
         })?;
         if let Some(stamp) = stamp {
             self.answers
@@ -439,7 +472,9 @@ impl AppProbe {
 
     /// `introspect --json`: the module graph, providers and commands.
     pub fn introspect(&self) -> Result<Value, AppError> {
-        self.ask(&["introspect", "--json"], |v| v.get("modules").is_some_and(Value::is_array))
+        self.ask(&["introspect", "--json"], |v| {
+            v.get("modules").is_some_and(Value::is_array)
+        })
     }
 
     /// `routes --json`: the route table (the app boots without serving).
@@ -500,7 +535,11 @@ fn parse_build(output: &ProcessOutput, bin: &str) -> Result<Option<PathBuf>, App
         return Ok(executable);
     }
     let first_error = first_error.unwrap_or_else(|| {
-        let lines: Vec<&str> = output.stderr.lines().filter(|l| !l.trim().is_empty()).collect();
+        let lines: Vec<&str> = output
+            .stderr
+            .lines()
+            .filter(|l| !l.trim().is_empty())
+            .collect();
         lines[lines.len().saturating_sub(20)..].join("\n")
     });
     Err(AppError::BuildFailed { first_error })
@@ -514,7 +553,8 @@ fn find_json(stdout: &str, expect: fn(&Value) -> bool) -> Option<Value> {
         let trimmed = line.trim_start();
         if trimmed.starts_with('{') || trimmed.starts_with('[') {
             let start = offset + (line.len() - trimmed.len());
-            let mut values = serde_json::Deserializer::from_str(&stdout[start..]).into_iter::<Value>();
+            let mut values =
+                serde_json::Deserializer::from_str(&stdout[start..]).into_iter::<Value>();
             if let Some(Ok(value)) = values.next()
                 && expect(&value)
             {
@@ -586,7 +626,12 @@ mod tests {
                 &["introspect", "--json"],
                 ok("2026-10-27T09:00:00Z  INFO boot noise\n{\"navree\":\"0.1.0\",\"modules\":[]}\n"),
             );
-        let probe = AppProbe::new(project(dir.path()), runner.clone(), false, vec![("APP_X".into(), "1".into())]);
+        let probe = AppProbe::new(
+            project(dir.path()),
+            runner.clone(),
+            false,
+            vec![("APP_X".into(), "1".into())],
+        );
         let answer = probe.introspect().unwrap();
         assert_eq!(answer["navree"], "0.1.0");
         let again = probe.introspect().unwrap();
@@ -597,11 +642,26 @@ mod tests {
         assert_eq!(runs.len(), 1, "the unchanged binary is not asked twice");
         assert_eq!(runs[0].dir, dir.path());
         assert!(runs[0].env.contains(&("APP_X".to_owned(), "1".to_owned())));
-        assert!(runs[0].env.contains(&("APP_DATABASE__MIGRATE_ON_BOOT".to_owned(), "false".to_owned())));
-        let build = calls.iter().find(|c| c.args.first().map(String::as_str) == Some("build")).unwrap();
-        assert!(build.args.ends_with(&["--bin".to_owned(), "crm".to_owned()]), "{:?}", build.args);
+        assert!(runs[0].env.contains(&(
+            "APP_DATABASE__MIGRATE_ON_BOOT".to_owned(),
+            "false".to_owned()
+        )));
+        let build = calls
+            .iter()
+            .find(|c| c.args.first().map(String::as_str) == Some("build"))
+            .unwrap();
+        assert!(
+            build
+                .args
+                .ends_with(&["--bin".to_owned(), "crm".to_owned()]),
+            "{:?}",
+            build.args
+        );
         assert_eq!(
-            calls.iter().filter(|c| c.args.first().map(String::as_str) == Some("metadata")).count(),
+            calls
+                .iter()
+                .filter(|c| c.args.first().map(String::as_str) == Some("metadata"))
+                .count(),
             1,
             "cargo metadata runs once"
         );
@@ -621,13 +681,23 @@ mod tests {
         .join("\n");
         runner
             .on("cargo", &["metadata"], ok(&metadata(dir.path())))
-            .on("cargo", &["build"], ProcessOutput { success: false, stdout: messages, stderr: String::new() });
+            .on(
+                "cargo",
+                &["build"],
+                ProcessOutput {
+                    success: false,
+                    stdout: messages,
+                    stderr: String::new(),
+                },
+            );
         let probe = AppProbe::new(project(dir.path()), runner, false, Vec::new());
         let error = probe.routes().unwrap_err();
         assert_eq!(
             error,
             AppError::BuildFailed {
-                first_error: "error[E0425]: cannot find value `deal` in this scope\n --> src/deals.rs:4:5".to_owned()
+                first_error:
+                    "error[E0425]: cannot find value `deal` in this scope\n --> src/deals.rs:4:5"
+                        .to_owned()
             }
         );
         assert!(error.to_string().starts_with("The app doesn't build."));
@@ -639,12 +709,25 @@ mod tests {
         let runner = FakeRunner::new();
         runner.on("cargo", &["metadata"], ok(&metadata(dir.path())));
         let probe = AppProbe::new(project(dir.path()), runner.clone(), true, Vec::new());
-        let expected = dir.path().join("debug").join(format!("crm{}", std::env::consts::EXE_SUFFIX));
-        assert_eq!(probe.binary(), Err(AppError::NotBuilt { path: expected.clone() }));
+        let expected = dir
+            .path()
+            .join("debug")
+            .join(format!("crm{}", std::env::consts::EXE_SUFFIX));
+        assert_eq!(
+            probe.binary(),
+            Err(AppError::NotBuilt {
+                path: expected.clone()
+            })
+        );
         std::fs::create_dir_all(expected.parent().unwrap()).unwrap();
         std::fs::write(&expected, "binary").unwrap();
         assert_eq!(probe.binary(), Ok(expected));
-        assert!(runner.calls().iter().all(|c| c.args.first().map(String::as_str) != Some("build")));
+        assert!(
+            runner
+                .calls()
+                .iter()
+                .all(|c| c.args.first().map(String::as_str) != Some("build"))
+        );
     }
 
     #[test]
@@ -667,12 +750,16 @@ mod tests {
             );
         let probe = AppProbe::new(project(dir.path()), runner, false, Vec::new());
         let error = probe.routes().unwrap_err();
-        assert!(matches!(&error, AppError::Run { output, .. } if output.contains("cannot connect")), "{error}");
+        assert!(
+            matches!(&error, AppError::Run { output, .. } if output.contains("cannot connect")),
+            "{error}"
+        );
     }
 
     #[test]
     fn json_is_found_among_log_lines() {
-        let printed = "{\"timestamp\":\"x\",\"level\":\"INFO\"}\n[\n  {\"method\": \"GET\"}\n]\nlater\n";
+        let printed =
+            "{\"timestamp\":\"x\",\"level\":\"INFO\"}\n[\n  {\"method\": \"GET\"}\n]\nlater\n";
         assert_eq!(
             find_json(printed, Value::is_array),
             Some(serde_json::json!([{"method": "GET"}]))
@@ -690,6 +777,8 @@ mod tests {
             ok(&serde_json::json!({"packages": [{"name": "crm", "targets": [{"name": "crm", "kind": ["lib"]}]}]}).to_string()),
         );
         let probe = AppProbe::new(project(dir.path()), runner, false, Vec::new());
-        assert!(matches!(probe.binary_target(), Err(AppError::Cargo(m)) if m.contains("no binary")));
+        assert!(
+            matches!(probe.binary_target(), Err(AppError::Cargo(m)) if m.contains("no binary"))
+        );
     }
 }

@@ -12,9 +12,10 @@ const B: f64 = 0.75;
 
 /// Words too common to rank by.
 const STOP_WORDS: &[&str] = &[
-    "a", "an", "and", "are", "as", "at", "be", "by", "can", "do", "does", "for", "from", "how", "i",
-    "if", "in", "into", "is", "it", "its", "my", "of", "on", "or", "so", "that", "the", "their",
-    "then", "this", "to", "what", "when", "where", "which", "who", "why", "with", "you", "your",
+    "a", "an", "and", "are", "as", "at", "be", "by", "can", "do", "does", "for", "from", "how",
+    "i", "if", "in", "into", "is", "it", "its", "my", "of", "on", "or", "so", "that", "the",
+    "their", "then", "this", "to", "what", "when", "where", "which", "who", "why", "with", "you",
+    "your",
 ];
 
 /// One section in the index.
@@ -254,7 +255,10 @@ mod tests {
                     "Validation",
                     &[
                         ("Introduction", "Validate request bodies with garde DTOs."),
-                        ("Unique rules", "Use `AsyncRule::unique` to check the database."),
+                        (
+                            "Unique rules",
+                            "Use `AsyncRule::unique` to check the database.",
+                        ),
                     ],
                 ),
                 page(
@@ -262,17 +266,27 @@ mod tests {
                     "Migrations",
                     &[
                         ("Introduction", "Migrations change the schema."),
-                        ("Running migrations", "Run `navree migrate` to apply pending migrations."),
+                        (
+                            "Running migrations",
+                            "Run `navree migrate` to apply pending migrations.",
+                        ),
                     ],
                 ),
-                page("queues/jobs", "Queues", &[("Workers", "Run `navree queue:work`.")]),
+                page(
+                    "queues/jobs",
+                    "Queues",
+                    &[("Workers", "Run `navree queue:work`.")],
+                ),
             ],
         }
     }
 
     #[test]
     fn tokens_are_lower_case_words_with_snake_case_parts() {
-        assert_eq!(tokenize("The list_routes Tools!"), ["list", "route", "list_route", "tool"]);
+        assert_eq!(
+            tokenize("The list_routes Tools!"),
+            ["list", "route", "list_route", "tool"]
+        );
         assert_eq!(tokenize("class"), ["class"]);
     }
 
@@ -287,7 +301,11 @@ mod tests {
             hits[0].url,
             "https://navree.com/docs/database/migrations/#running-migrations"
         );
-        assert!(hits[0].excerpt.contains("navree migrate"), "{}", hits[0].excerpt);
+        assert!(
+            hits[0].excerpt.contains("navree migrate"),
+            "{}",
+            hits[0].excerpt
+        );
 
         let hits = index.search(&bundle, "unique validation", 5);
         assert_eq!(hits[0].slug, "basics/validation");
@@ -300,7 +318,12 @@ mod tests {
         let bundle = bundle();
         let index = SearchIndex::new(&bundle);
         let hits = index.search(&bundle, "migrations", 10);
-        assert_eq!(hits.iter().filter(|h| h.slug == "database/migrations").count(), 2);
+        assert_eq!(
+            hits.iter()
+                .filter(|h| h.slug == "database/migrations")
+                .count(),
+            2
+        );
         assert_eq!(index.search(&bundle, "migrations", 1).len(), 1);
     }
 }

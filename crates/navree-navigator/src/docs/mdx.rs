@@ -131,7 +131,10 @@ fn to_markdown(body: &str) -> String {
             continue;
         }
         if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
-            let marker: String = trimmed.chars().take_while(|c| *c == '`' || *c == '~').collect();
+            let marker: String = trimmed
+                .chars()
+                .take_while(|c| *c == '`' || *c == '~')
+                .collect();
             fence = Some(marker);
             let prefix = if quote_depth > 0 { "> " } else { "" };
             out.push(format!("{prefix}{}", strip_code_title(line)));
@@ -195,7 +198,11 @@ fn to_markdown(body: &str) -> String {
         }
         if quote_depth > 0 {
             let trimmed = converted.trim();
-            out.push(if trimmed.is_empty() { ">".to_owned() } else { format!("> {trimmed}") });
+            out.push(if trimmed.is_empty() {
+                ">".to_owned()
+            } else {
+                format!("> {trimmed}")
+            });
         } else {
             out.push(converted);
         }
@@ -355,7 +362,10 @@ Nothing is written. <Badge>dev</Badge> only.
     fn front_matter_and_sections() {
         let page = page_from_mdx("ai/navigator", PAGE);
         assert_eq!(page.title, "Navigator");
-        assert_eq!(page.description, "`navree mcp`: the MCP server for your coding agent.");
+        assert_eq!(
+            page.description,
+            "`navree mcp`: the MCP server for your coding agent."
+        );
         assert!(page.planned);
         let headings: Vec<&str> = page.sections.iter().map(|s| s.heading.as_str()).collect();
         assert_eq!(headings, ["Introduction", "The tools"]);
@@ -367,15 +377,24 @@ Nothing is written. <Badge>dev</Badge> only.
         let page = page_from_mdx("ai/navigator", PAGE);
         let intro = &page.sections[0].markdown;
         assert!(!intro.contains("import"), "{intro}");
-        assert!(intro.contains("(https://navree.com/docs/ai/agent-skills/)"), "{intro}");
+        assert!(
+            intro.contains("(https://navree.com/docs/ai/agent-skills/)"),
+            "{intro}"
+        );
         assert!(intro.contains("**Claude Code**"), "{intro}");
-        assert!(intro.contains("```sh\nclaude mcp add navree -- navree mcp\n```"), "{intro}");
+        assert!(
+            intro.contains("```sh\nclaude mcp add navree -- navree mcp\n```"),
+            "{intro}"
+        );
         assert!(intro.contains("> **Tip: Read-only**"), "{intro}");
         assert!(intro.contains("> Nothing is written. dev only."), "{intro}");
         assert!(!intro.contains("<Tab"), "{intro}");
         let tools = &page.sections[1].markdown;
         assert!(!tools.contains("Diagram"), "{tools}");
-        assert!(tools.contains("```text\n  navree/\n    SKILL.md\n```"), "{tools}");
+        assert!(
+            tools.contains("```text\n  navree/\n    SKILL.md\n```"),
+            "{tools}"
+        );
         assert!(
             tools.contains("- [Navigator](https://navree.com/docs/ai/navigator/): The MCP server."),
             "{tools}"
@@ -396,7 +415,13 @@ Nothing is written. <Badge>dev</Badge> only.
 
     #[test]
     fn slugs_follow_the_site() {
-        assert_eq!(slugify("search_docs and read_doc"), "search_docs-and-read_doc");
-        assert_eq!(slugify("What `leaves` your machine?"), "what-leaves-your-machine");
+        assert_eq!(
+            slugify("search_docs and read_doc"),
+            "search_docs-and-read_doc"
+        );
+        assert_eq!(
+            slugify("What `leaves` your machine?"),
+            "what-leaves-your-machine"
+        );
     }
 }

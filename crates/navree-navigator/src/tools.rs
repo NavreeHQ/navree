@@ -332,7 +332,11 @@ impl Navigator {
     }
 
     /// Navigator with another process runner and docs settings (tests).
-    pub fn with(options: NavigatorOptions, runner: Arc<dyn Runner>, docs: DocsSettings) -> Navigator {
+    pub fn with(
+        options: NavigatorOptions,
+        runner: Arc<dyn Runner>,
+        docs: DocsSettings,
+    ) -> Navigator {
         let project = Project::find(&options.path).map_err(|e: NotAnApp| e.to_string());
         let probe = project.as_ref().ok().map(|project| {
             Arc::new(AppProbe::new(
@@ -382,7 +386,11 @@ impl Navigator {
             "read_doc" => self.read_doc(parse(args)?).await,
             other => Err(ToolError::new(format!(
                 "unknown tool `{other}`; the tools are {}",
-                tools().iter().map(|t| t.name).collect::<Vec<_>>().join(", ")
+                tools()
+                    .iter()
+                    .map(|t| t.name)
+                    .collect::<Vec<_>>()
+                    .join(", ")
             ))),
         }
     }
@@ -392,7 +400,10 @@ impl Navigator {
         &self,
         f: impl FnOnce(&AppProbe) -> Result<T, AppError> + Send + 'static,
     ) -> Result<T, ToolError> {
-        let probe = self.probe.clone().ok_or_else(|| ToolError::new(self.project().unwrap_err().0))?;
+        let probe = self
+            .probe
+            .clone()
+            .ok_or_else(|| ToolError::new(self.project().unwrap_err().0))?;
         tokio::task::spawn_blocking(move || f(&probe))
             .await
             .map_err(|e| ToolError::new(format!("the app probe stopped: {e}")))?
@@ -407,8 +418,15 @@ impl Navigator {
 
     fn database(&self) -> Result<Target, ToolError> {
         let project = self.project()?;
-        let url = self.config()?.get_string("database.url").unwrap_or_default();
-        Ok(Target::new(&url, &project.root, self.options.allow_remote_database)?)
+        let url = self
+            .config()?
+            .get_string("database.url")
+            .unwrap_or_default();
+        Ok(Target::new(
+            &url,
+            &project.root,
+            self.options.allow_remote_database,
+        )?)
     }
 
     async fn app_info(&self) -> Result<ToolOutput, ToolError> {
@@ -419,7 +437,11 @@ impl Navigator {
             .as_ref()
             .and_then(|c| c.get_string("database.url"))
             .filter(|url| !url.trim().is_empty());
-        let rust = self.probe(|probe| Ok(probe.rustc_version())).await.ok().flatten();
+        let rust = self
+            .probe(|probe| Ok(probe.rustc_version()))
+            .await
+            .ok()
+            .flatten();
         let modules = match self.probe(|probe| probe.introspect()).await {
             Ok(graph) => json!(module_names(&graph)),
             Err(error) => json!({ "error": error.0 }),
@@ -443,13 +465,15 @@ impl Navigator {
     async fn list_routes(&self, args: RouteArgs) -> Result<ToolOutput, ToolError> {
         let routes = self.probe(|probe| probe.routes()).await?;
         let wanted = |route: &Value| {
-            args.path
-                .as_deref()
-                .is_none_or(|p| route["path"].as_str().is_some_and(|path| path.starts_with(p)))
-                && args.method.as_deref().is_none_or(|m| {
-                    route["method"].as_str().is_some_and(|method| method.eq_ignore_ascii_case(m))
-                })
-                && args.module.as_deref().is_none_or(|m| route["module"] == m)
+            args.path.as_deref().is_none_or(|p| {
+                route["path"]
+                    .as_str()
+                    .is_some_and(|path| path.starts_with(p))
+            }) && args.method.as_deref().is_none_or(|m| {
+                route["method"]
+                    .as_str()
+                    .is_some_and(|method| method.eq_ignore_ascii_case(m))
+            }) && args.module.as_deref().is_none_or(|m| route["module"] == m)
         };
         let list: Vec<Value> = routes
             .as_array()
@@ -516,19 +540,25 @@ impl Navigator {
                 target.redacted_url()
             )));
         }
-        let applied: Vec<String> = schema.applied_migrations.iter().map(|m| m.label()).collect();
+        let applied: Vec<String> = schema
+            .applied_migrations
+            .iter()
+            .map(|m| m.label())
+            .collect();
         let pending = match self.probe(|probe| probe.migration_status()).await {
-            Ok(status) => json!(status
-                .as_array()
-                .into_iter()
-                .flatten()
-                .filter(|m| m["applied"] == false)
-                .map(|m| format!(
-                    "{}/{}",
-                    m["module"].as_str().unwrap_or_default(),
-                    m["name"].as_str().unwrap_or_default()
-                ))
-                .collect::<Vec<_>>()),
+            Ok(status) => json!(
+                status
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter(|m| m["applied"] == false)
+                    .map(|m| format!(
+                        "{}/{}",
+                        m["module"].as_str().unwrap_or_default(),
+                        m["name"].as_str().unwrap_or_default()
+                    ))
+                    .collect::<Vec<_>>()
+            ),
             Err(error) => json!({ "unknown": error.0.lines().next().unwrap_or_default() }),
         };
         let mut answer = serde_json::to_value(&schema).unwrap_or_default();
@@ -543,7 +573,9 @@ impl Navigator {
     async fn query_database(&self, args: SqlArgs) -> Result<ToolOutput, ToolError> {
         let target = self.database()?;
         let result = database::query_database(&target, &args.sql).await?;
-        Ok(ToolOutput::Json(serde_json::to_value(result).unwrap_or_default()))
+        Ok(ToolOutput::Json(
+            serde_json::to_value(result).unwrap_or_default(),
+        ))
     }
 
     fn log_files(&self) -> Result<Vec<PathBuf>, ToolError> {
@@ -563,13 +595,17 @@ impl Navigator {
     fn read_logs(&self, filter: LogFilter) -> Result<ToolOutput, ToolError> {
         let files = self.log_files()?;
         let lines = logs::read_logs(&files, &filter).map_err(ToolError::new)?;
-        Ok(ToolOutput::Json(json!({ "file": files[0], "lines": lines })))
+        Ok(ToolOutput::Json(
+            json!({ "file": files[0], "lines": lines }),
+        ))
     }
 
     fn last_error(&self) -> Result<ToolOutput, ToolError> {
         let files = self.log_files()?;
         match logs::last_error(&files) {
-            Some(last) => Ok(ToolOutput::Json(serde_json::to_value(last).unwrap_or_default())),
+            Some(last) => Ok(ToolOutput::Json(
+                serde_json::to_value(last).unwrap_or_default(),
+            )),
             None => Ok(ToolOutput::Json(json!({
                 "error": null,
                 "message": "No error lines in the recent log.",
@@ -629,7 +665,11 @@ impl Navigator {
             return Err(ToolError::new(if similar.is_empty() {
                 format!("no docs page `{}`; use search_docs to find one", args.slug)
             } else {
-                format!("no docs page `{}`; did you mean {}?", args.slug, similar.join(", "))
+                format!(
+                    "no docs page `{}`; did you mean {}?",
+                    args.slug,
+                    similar.join(", ")
+                )
             }));
         };
         let markdown = page.markdown(args.section.as_deref()).ok_or_else(|| {

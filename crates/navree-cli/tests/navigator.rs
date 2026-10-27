@@ -6,11 +6,11 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::str::FromStr;
 
+use rmcp::RoleClient;
 use rmcp::ServiceExt;
 use rmcp::model::CallToolRequestParams;
 use rmcp::service::RunningService;
 use rmcp::transport::{ConfigureCommandExt, TokioChildProcess};
-use rmcp::RoleClient;
 use serde_json::{Value, json};
 use sqlx::sqlite::SqliteConnectOptions;
 use sqlx::{ConnectOptions, Executor};
@@ -43,7 +43,11 @@ fn fixture_app() -> tempfile::TempDir {
         .unwrap()
         .replace("{navree}", &facade.display().to_string().replace('\\', "/"));
     std::fs::write(dir.path().join("Cargo.toml"), manifest).unwrap();
-    std::fs::copy(workspace().join("Cargo.lock"), dir.path().join("Cargo.lock")).unwrap();
+    std::fs::copy(
+        workspace().join("Cargo.lock"),
+        dir.path().join("Cargo.lock"),
+    )
+    .unwrap();
     dir
 }
 
@@ -67,7 +71,11 @@ async fn create_database(app: &Path) {
 
 /// `navree mcp <args>` as a child process, connected.
 async fn navigator(app: &Path, extra: &[&str]) -> RunningService<RoleClient, ()> {
-    let mut args = vec!["mcp".to_owned(), "--path".to_owned(), app.display().to_string()];
+    let mut args = vec![
+        "mcp".to_owned(),
+        "--path".to_owned(),
+        app.display().to_string(),
+    ];
     args.extend(extra.iter().map(|a| (*a).to_owned()));
     let home = app.join(".navree-home");
     let transport = TokioChildProcess::new(
@@ -84,7 +92,10 @@ async fn call(client: &RunningService<RoleClient, ()>, tool: &str, args: Value) 
     if let Value::Object(map) = args {
         params = params.with_arguments(map);
     }
-    let result = client.call_tool(params).await.expect("the call is answered");
+    let result = client
+        .call_tool(params)
+        .await
+        .expect("the call is answered");
     let text = result.content[0].as_text().expect("text").text.clone();
     (result.is_error == Some(true), text)
 }
@@ -96,7 +107,10 @@ async fn navree_mcp_serves_the_tools_over_stdio() {
     let client = navigator(app.path(), &["--no-build", "--docs-offline"]).await;
 
     let info = client.peer_info().expect("server info");
-    assert_eq!(info.server_info.as_ref().map(|s| s.name.as_str()), Some("navree"));
+    assert_eq!(
+        info.server_info.as_ref().map(|s| s.name.as_str()),
+        Some("navree")
+    );
     let tools = client.list_all_tools().await.unwrap();
     assert_eq!(tools.len(), 12);
 
@@ -106,12 +120,25 @@ async fn navree_mcp_serves_the_tools_over_stdio() {
     assert_eq!(config["app"]["name"], "navigator-app");
     assert_eq!(config["mail"]["password"], "[redacted]");
 
-    let (error, text) = call(&client, "query_database", json!({"sql": "SELECT id, title, api_token FROM notes ORDER BY id"})).await;
+    let (error, text) = call(
+        &client,
+        "query_database",
+        json!({"sql": "SELECT id, title, api_token FROM notes ORDER BY id"}),
+    )
+    .await;
     assert!(!error, "{text}");
     let rows: Value = serde_json::from_str(&text).unwrap();
-    assert_eq!(rows["rows"], json!([[1, "first", "[redacted]"], [2, "second", "[redacted]"]]));
+    assert_eq!(
+        rows["rows"],
+        json!([[1, "first", "[redacted]"], [2, "second", "[redacted]"]])
+    );
 
-    let (error, text) = call(&client, "query_database", json!({"sql": "DELETE FROM notes"})).await;
+    let (error, text) = call(
+        &client,
+        "query_database",
+        json!({"sql": "DELETE FROM notes"}),
+    )
+    .await;
     assert!(error && text.contains("not read-only"), "{text}");
 
     let (error, text) = call(&client, "last_error", json!({})).await;
@@ -120,7 +147,12 @@ async fn navree_mcp_serves_the_tools_over_stdio() {
     assert_eq!(last["request_id"], "0199c4b1-aaaa");
     assert_eq!(last["request"]["status"], 500);
 
-    let (error, text) = call(&client, "search_docs", json!({"query": "agent skills install"})).await;
+    let (error, text) = call(
+        &client,
+        "search_docs",
+        json!({"query": "agent skills install"}),
+    )
+    .await;
     assert!(!error, "{text}");
     assert!(text.contains("ai/agent-skills"), "{text}");
 
@@ -145,7 +177,11 @@ fn skills_install_writes_every_skill_into_both_folders() {
             .unwrap()
     };
     let output = run();
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
         stdout.contains("Navree skills into .claude/skills and .agents/skills"),
@@ -158,7 +194,10 @@ fn skills_install_writes_every_skill_into_both_folders() {
             assert!(text.starts_with("---\nname: "), "{}", file.display());
         }
     }
-    assert_eq!(std::fs::read_to_string(skills.join("crm-pipeline-stages/SKILL.md")).unwrap(), "ours");
+    assert_eq!(
+        std::fs::read_to_string(skills.join("crm-pipeline-stages/SKILL.md")).unwrap(),
+        "ours"
+    );
     // Again: the same files, nothing removed.
     let again = run();
     assert!(again.status.success());
@@ -186,16 +225,29 @@ async fn navree_mcp_asks_a_built_app() {
     let (error, text) = call(&client, "module_graph", json!({"module": "NotesModule"})).await;
     assert!(!error, "{text}");
     let notes: Value = serde_json::from_str(&text).unwrap();
-    assert!(notes["providers"].to_string().contains("NotesController"), "{notes}");
+    assert!(
+        notes["providers"].to_string().contains("NotesController"),
+        "{notes}"
+    );
 
     let (error, text) = call(&client, "list_commands", json!({})).await;
     assert!(!error, "{text}");
-    assert!(text.contains("notes:prune") && text.contains("migrate:status"), "{text}");
+    assert!(
+        text.contains("notes:prune") && text.contains("migrate:status"),
+        "{text}"
+    );
 
     let (error, text) = call(&client, "app_info", json!({})).await;
     assert!(!error, "{text}");
     let info: Value = serde_json::from_str(&text).unwrap();
-    assert!(info["modules"].as_array().unwrap().iter().any(|m| m == "NotesModule"), "{info}");
+    assert!(
+        info["modules"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|m| m == "NotesModule"),
+        "{info}"
+    );
 
     client.cancel().await.unwrap();
 }

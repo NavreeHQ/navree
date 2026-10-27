@@ -56,7 +56,12 @@ async fn a_select_returns_columns_and_rows() {
 async fn at_most_100_rows_come_back() {
     let fixture = Fixture::new(APP_TOML);
     crm_db(&fixture).await;
-    let answer = call(&fixture.navigator(), "query_database", json!({"sql": "SELECT id FROM deals"})).await;
+    let answer = call(
+        &fixture.navigator(),
+        "query_database",
+        json!({"sql": "SELECT id FROM deals"}),
+    )
+    .await;
     assert_eq!(answer["rows"].as_array().unwrap().len(), 100);
     assert_eq!(answer["truncated"], true);
 
@@ -67,16 +72,31 @@ async fn at_most_100_rows_come_back() {
     )
     .await;
     assert_eq!(none["rows"], json!([]));
-    assert_eq!(none["columns"], json!(["id", "title"]), "columns of an empty result");
+    assert_eq!(
+        none["columns"],
+        json!(["id", "title"]),
+        "columns of an empty result"
+    );
 }
 
 #[tokio::test]
 async fn secret_looking_columns_are_masked() {
     let fixture = Fixture::new(APP_TOML);
     crm_db(&fixture).await;
-    let answer = call(&fixture.navigator(), "query_database", json!({"sql": "SELECT * FROM users"})).await;
-    assert_eq!(answer["columns"], json!(["id", "email", "password_hash", "remember_token"]));
-    assert_eq!(answer["rows"][0], json!([1, "ada@example.com", "[redacted]", "[redacted]"]));
+    let answer = call(
+        &fixture.navigator(),
+        "query_database",
+        json!({"sql": "SELECT * FROM users"}),
+    )
+    .await;
+    assert_eq!(
+        answer["columns"],
+        json!(["id", "email", "password_hash", "remember_token"])
+    );
+    assert_eq!(
+        answer["rows"][0],
+        json!([1, "ada@example.com", "[redacted]", "[redacted]"])
+    );
 }
 
 #[tokio::test]
@@ -100,20 +120,31 @@ async fn writes_and_tricks_are_refused_before_they_are_sent() {
     for (sql, expected) in [
         ("DELETE FROM deals", "DELETE FROM is not read-only"),
         ("UPDATE deals SET stage = 'won'", "UPDATE is not read-only"),
-        ("INSERT INTO deals (title) VALUES ('x')", "INSERT INTO is not read-only"),
+        (
+            "INSERT INTO deals (title) VALUES ('x')",
+            "INSERT INTO is not read-only",
+        ),
         ("DROP TABLE deals", "DROP TABLE is not read-only"),
         ("PRAGMA query_only = 0", "PRAGMA is not read-only"),
         ("PRAGMA query_only = OFF", "could not be parsed"),
         ("ATTACH DATABASE 'x.db' AS x", "is not read-only"),
         ("SELECT 1; DELETE FROM deals", "one statement at a time"),
-        ("SELECT load_extension('evil')", "load_extension() is not allowed"),
+        (
+            "SELECT load_extension('evil')",
+            "load_extension() is not allowed",
+        ),
         ("   ", "no SQL statement"),
     ] {
         let message = refused(&navigator, "query_database", json!({ "sql": sql })).await;
         assert!(message.starts_with("refused: "), "{sql}: {message}");
         assert!(message.contains(expected), "{sql}: {message}");
     }
-    let count = call(&navigator, "query_database", json!({"sql": "SELECT count(*) FROM deals"})).await;
+    let count = call(
+        &navigator,
+        "query_database",
+        json!({"sql": "SELECT count(*) FROM deals"}),
+    )
+    .await;
     assert_eq!(count["rows"], json!([[150]]), "nothing changed");
 }
 
@@ -134,8 +165,14 @@ async fn a_long_statement_is_cancelled_after_5_seconds() {
 
 #[tokio::test]
 async fn remote_databases_are_refused_without_the_flag() {
-    let fixture = Fixture::new("[database]\nurl = \"postgres://app:hunter2@db.staging.example.com/crm\"\n");
-    let message = refused(&fixture.navigator(), "query_database", json!({"sql": "SELECT 1"})).await;
+    let fixture =
+        Fixture::new("[database]\nurl = \"postgres://app:hunter2@db.staging.example.com/crm\"\n");
+    let message = refused(
+        &fixture.navigator(),
+        "query_database",
+        json!({"sql": "SELECT 1"}),
+    )
+    .await;
     assert!(message.contains("db.staging.example.com"), "{message}");
     assert!(message.contains("--allow-remote-database"), "{message}");
     assert!(!message.contains("hunter2"), "{message}");
@@ -146,7 +183,12 @@ async fn remote_databases_are_refused_without_the_flag() {
 #[tokio::test]
 async fn a_missing_sqlite_file_is_never_created() {
     let fixture = Fixture::new(APP_TOML);
-    let message = refused(&fixture.navigator(), "query_database", json!({"sql": "SELECT 1"})).await;
+    let message = refused(
+        &fixture.navigator(),
+        "query_database",
+        json!({"sql": "SELECT 1"}),
+    )
+    .await;
     assert!(message.contains("doesn't exist yet"), "{message}");
     assert!(!fixture.root().join("storage/app.db").exists());
 }
@@ -187,7 +229,12 @@ async fn the_schema_has_tables_columns_indexes_and_foreign_keys() {
         })
     );
 
-    let deals = call(&fixture.navigator(), "describe_schema", json!({"table": "deals"})).await;
+    let deals = call(
+        &fixture.navigator(),
+        "describe_schema",
+        json!({"table": "deals"}),
+    )
+    .await;
     let table = &deals["tables"][0];
     assert_eq!(deals["tables"].as_array().unwrap().len(), 1);
     assert_eq!(
@@ -200,8 +247,12 @@ async fn the_schema_has_tables_columns_indexes_and_foreign_keys() {
     );
     assert_eq!(table["columns"][3]["nullable"], true);
     let indexes = table["indexes"].as_array().unwrap();
-    assert!(indexes.contains(&json!({"name": "deals_stage", "columns": ["stage"], "unique": false})));
-    assert!(indexes.contains(&json!({"name": "deals_title", "columns": ["title"], "unique": true})));
+    assert!(
+        indexes.contains(&json!({"name": "deals_stage", "columns": ["stage"], "unique": false}))
+    );
+    assert!(
+        indexes.contains(&json!({"name": "deals_title", "columns": ["title"], "unique": true}))
+    );
     assert_eq!(
         table["foreign_keys"],
         json!([{
@@ -213,7 +264,12 @@ async fn the_schema_has_tables_columns_indexes_and_foreign_keys() {
         }])
     );
 
-    let message = refused(&fixture.navigator(), "describe_schema", json!({"table": "nope"})).await;
+    let message = refused(
+        &fixture.navigator(),
+        "describe_schema",
+        json!({"table": "nope"}),
+    )
+    .await;
     assert!(message.contains("no table named nope"), "{message}");
 }
 
@@ -222,6 +278,13 @@ async fn pending_migrations_are_unknown_when_the_app_cannot_answer() {
     let fixture = Fixture::new(APP_TOML);
     crm_db(&fixture).await;
     let answer = call(&fixture.navigator(), "describe_schema", json!({})).await;
-    assert_eq!(answer["migrations"]["applied"], json!(["crm/m20261026_000001_create_deals"]));
-    assert!(answer["migrations"]["pending"]["unknown"].is_string(), "{}", answer["migrations"]);
+    assert_eq!(
+        answer["migrations"]["applied"],
+        json!(["crm/m20261026_000001_create_deals"])
+    );
+    assert!(
+        answer["migrations"]["pending"]["unknown"].is_string(),
+        "{}",
+        answer["migrations"]
+    );
 }

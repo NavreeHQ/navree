@@ -79,7 +79,7 @@ Install the CLI from the Git repository, and let new apps depend on the reposito
 - **[Helm](/docs/tools/helm/)** (`navree-helm`): an admin panel at `/admin` generated from your entities, with fields, filters, actions and metrics per resource (`navree make:resource`). It respects your access rules.
 - **[Harbor](/docs/tools/harbor/)**: server provisioning and zero-downtime deployments from the CLI (`navree harbor:provision`, `navree deploy`, `navree deploy:rollback`), configured in `harbor.toml`, with health-checked atomic releases, encrypted secrets, several servers and roles, container images and push-to-deploy from GitHub Actions.
 - **[Dock](/docs/tools/dock/)**: local services for development. `navree dock up` starts PostgreSQL, Redis, Meilisearch, Mailpit, MinIO and NATS in Docker or Podman, configured in `dock.toml`.
-- **[Navigator](/docs/ai/navigator/)**: the MCP server for your coding agent (`navree mcp`). It lists routes, the module graph and providers, entity schemas, recent logs and the last error, runs read-only SQL and searches the docs for your version.
+- **[Navigator](/docs/ai/navigator/)**: the MCP server for your coding agent (`navree mcp`). It lists routes, the module graph and providers, the database schema, recent logs and the last error, runs read-only SQL and searches the docs for your version.
 
 ### Packages
 

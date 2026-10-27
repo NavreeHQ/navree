@@ -121,6 +121,11 @@ Run `cargo fmt`, `cargo clippy --all-targets -- -D warnings` and
   and every page as Markdown at `https://navree.com/docs/<section>/<page>.md`).
 - Agent skills, one per common task (modules, routing, validation, the
   database, auth, access control, queues, tests and more):
-  `npx skills add NavreeHQ/navree`, or copy the `skills/` directory of
-  https://github.com/NavreeHQ/navree into `.claude/skills/` or
-  `.agents/skills/`. Start with the `navree` skill.
+  `navree skills:install` copies the skills of this Navree version into
+  `.claude/skills/` and `.agents/skills/` (or use
+  `npx skills add NavreeHQ/navree`). Start with the `navree` skill.
+- Navigator (`navree mcp`, an MCP server over stdio) shows the running
+  app: routes, the module graph and providers, the database schema,
+  read-only SQL, the log file and the last error, the configuration, and
+  the docs of this Navree version. Check routes, providers and the schema
+  with it before changing them.

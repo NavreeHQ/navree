@@ -180,7 +180,8 @@ impl Target {
 
     /// Opens a SQLite connection: never creates the file, `query_only` on.
     async fn sqlite(&self) -> Result<SqliteConnection, DatabaseError> {
-        let options = SqliteConnectOptions::from_str(&self.url).map_err(|e| self.connect_error(e))?;
+        let options =
+            SqliteConnectOptions::from_str(&self.url).map_err(|e| self.connect_error(e))?;
         let file = options.get_filename().to_path_buf();
         let memory = file.as_os_str() == ":memory:" || self.url.contains(":memory:");
         let options = if memory {
@@ -350,7 +351,10 @@ pub async fn query_database(target: &Target, sql: &str) -> Result<QueryResult, D
 
 /// The tables (or the one named `table`) with their columns, indexes and
 /// foreign keys, plus the rows of `navree_migrations`.
-pub async fn describe_schema(target: &Target, table: Option<&str>) -> Result<Schema, DatabaseError> {
+pub async fn describe_schema(
+    target: &Target,
+    table: Option<&str>,
+) -> Result<Schema, DatabaseError> {
     match target.driver {
         Driver::Sqlite => {
             let mut conn = target.sqlite().await?;
@@ -378,10 +382,19 @@ mod tests {
 
     #[test]
     fn drivers_come_from_the_scheme() {
-        assert_eq!(Driver::of("sqlite://storage/app.db?mode=rwc").unwrap(), Driver::Sqlite);
+        assert_eq!(
+            Driver::of("sqlite://storage/app.db?mode=rwc").unwrap(),
+            Driver::Sqlite
+        );
         assert_eq!(Driver::of("sqlite::memory:").unwrap(), Driver::Sqlite);
-        assert_eq!(Driver::of("postgres://localhost/crm").unwrap(), Driver::Postgres);
-        assert_eq!(Driver::of("postgresql://localhost/crm").unwrap(), Driver::Postgres);
+        assert_eq!(
+            Driver::of("postgres://localhost/crm").unwrap(),
+            Driver::Postgres
+        );
+        assert_eq!(
+            Driver::of("postgresql://localhost/crm").unwrap(),
+            Driver::Postgres
+        );
         assert!(matches!(
             Driver::of("mysql://localhost/crm"),
             Err(DatabaseError::Unsupported { scheme }) if scheme == "mysql"
@@ -407,18 +420,32 @@ mod tests {
     #[test]
     fn remote_databases_are_refused() {
         for (url, host) in [
-            ("postgres://app:secret@db.staging.example.com:5432/crm", "db.staging.example.com"),
+            (
+                "postgres://app:secret@db.staging.example.com:5432/crm",
+                "db.staging.example.com",
+            ),
             ("postgres://app@10.0.0.5/crm", "10.0.0.5"),
-            ("postgres://app@localhost,db.example.com/crm", "db.example.com"),
-            ("postgres://app@localhost/crm?host=db.example.com", "db.example.com"),
-            ("postgres://app@localhost/crm?hostaddr=192.168.1.4", "192.168.1.4"),
+            (
+                "postgres://app@localhost,db.example.com/crm",
+                "db.example.com",
+            ),
+            (
+                "postgres://app@localhost/crm?host=db.example.com",
+                "db.example.com",
+            ),
+            (
+                "postgres://app@localhost/crm?hostaddr=192.168.1.4",
+                "192.168.1.4",
+            ),
         ] {
             match check_local(url) {
                 Err(DatabaseError::Remote { host: found }) => assert_eq!(found, host, "{url}"),
                 other => panic!("{url}: {other:?}"),
             }
         }
-        let message = check_local("postgres://a@db.example.com/x").unwrap_err().to_string();
+        let message = check_local("postgres://a@db.example.com/x")
+            .unwrap_err()
+            .to_string();
         assert!(message.contains("--allow-remote-database"), "{message}");
     }
 
@@ -427,7 +454,10 @@ mod tests {
         let root = Path::new(".");
         assert!(Target::new("postgres://a@db.example.com/x", root, false).is_err());
         assert!(Target::new("postgres://a@db.example.com/x", root, true).is_ok());
-        assert!(matches!(Target::new("  ", root, true), Err(DatabaseError::NotConfigured)));
+        assert!(matches!(
+            Target::new("  ", root, true),
+            Err(DatabaseError::NotConfigured)
+        ));
     }
 
     #[test]
@@ -436,7 +466,13 @@ mod tests {
             redact_url("postgres://navree:s3cret@127.0.0.1:5432/crm"),
             "postgres://navree:***@127.0.0.1:5432/crm"
         );
-        assert_eq!(redact_url("postgres://localhost/crm"), "postgres://localhost/crm");
-        assert_eq!(redact_url("sqlite://storage/app.db"), "sqlite://storage/app.db");
+        assert_eq!(
+            redact_url("postgres://localhost/crm"),
+            "postgres://localhost/crm"
+        );
+        assert_eq!(
+            redact_url("sqlite://storage/app.db"),
+            "sqlite://storage/app.db"
+        );
     }
 }

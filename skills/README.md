@@ -49,6 +49,7 @@ conventions, and says which skill to load for each task.
 | [`navree-telemetry`](navree-telemetry/SKILL.md) | Telemetry events and sinks, OpenTelemetry tracing and OTLP export, trace context, `TelemetryRecorder` and `SpanRecorder` in tests |
 | [`navree-graphql`](navree-graphql/SKILL.md) | GraphQL resolvers, dataloaders and subscriptions (feature `graphql`) |
 | [`navree-grpc`](navree-grpc/SKILL.md) | gRPC, gRPC-Web and Connect services in modules, gRPC clients, and their tests |
+| [`navree-navigator`](navree-navigator/SKILL.md) | Connect a coding agent to Navigator (`navree mcp`), use its tools, install the skills |
 
 ## Installing
 
@@ -60,9 +61,10 @@ Pick one:
   `.claude/skills/` (Claude Code) or `.agents/skills/` (other agents). Copy
   only the ones you need if you like, but keep `navree`: it indexes the
   rest.
-- **With the navree CLI:** `navree skills:install` (part of Navigator,
-  Navree's MCP server for coding agents) copies them into the current
-  project.
+- **With the navree CLI:** `navree skills:install` copies the skills of
+  the CLI's Navree version into the current project's `.claude/skills/`
+  and `.agents/skills/` (`--path <dir>` names another project), replacing
+  the `navree` and `navree-*` folders and leaving other skills alone.
 
 Apps created with `navree new` also get an `AGENTS.md` with the project's
 conventions (and a `CLAUDE.md` that imports it), so an agent knows the

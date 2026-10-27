@@ -118,6 +118,7 @@ navree list                                 # every command of the app
 | Receiving requests, queries, jobs, mail or log lines in your own code; tracing with OpenTelemetry; trace ids; asserting on events or spans in tests | `navree-telemetry` |
 | A GraphQL API: resolvers, dataloaders, subscriptions | `navree-graphql` |
 | A gRPC API (tonic services, `.proto` files, gRPC-Web, Connect), calling another gRPC service | `navree-grpc` |
+| Connecting a coding agent to the app (`navree mcp`, Navigator's routes, module graph, schema, read-only SQL, logs and docs tools), installing the skills (`navree skills:install`) | `navree-navigator` |
 
 ## Common mistakes
 

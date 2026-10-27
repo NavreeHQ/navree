@@ -13,7 +13,8 @@ use super::{CheckedStatement, DatabaseError, ROW_LIMIT, STATEMENT_TIMEOUT, State
 
 /// Fragments (matched case-insensitively) that mark a column as secret: its
 /// values come back as `"[redacted]"`.
-pub const MASKED_COLUMN_PARTS: [&str; 5] = ["password", "secret", "token", "api_key", "private_key"];
+pub const MASKED_COLUMN_PARTS: [&str; 5] =
+    ["password", "secret", "token", "api_key", "private_key"];
 
 /// What masked values are replaced with.
 const MASKED: &str = "[redacted]";
@@ -157,7 +158,10 @@ fn column_names<C: Column>(columns: &[C]) -> Vec<String> {
 /// The column names of a query that returned no rows.
 async fn describe_columns_sqlite(conn: &mut SqliteConnection, sql: &str) -> Vec<String> {
     use sqlx::SqlSafeStr;
-    match conn.prepare(AssertSqlSafe(sql.to_owned()).into_sql_str()).await {
+    match conn
+        .prepare(AssertSqlSafe(sql.to_owned()).into_sql_str())
+        .await
+    {
         Ok(statement) => column_names(sqlx::Statement::columns(&statement)),
         Err(_) => Vec::new(),
     }
@@ -300,7 +304,9 @@ mod tests {
 
     #[test]
     fn rows_past_the_limit_are_dropped_and_flagged() {
-        let rows = (0..=ROW_LIMIT as i64).map(|i| vec![Value::from(i)]).collect();
+        let rows = (0..=ROW_LIMIT as i64)
+            .map(|i| vec![Value::from(i)])
+            .collect();
         let result = QueryResult::new(vec!["n".into()], rows, Instant::now());
         assert_eq!(result.rows.len(), ROW_LIMIT);
         assert!(result.truncated);
@@ -319,7 +325,10 @@ mod tests {
         );
         assert_eq!(pg_text_value("FLOAT8", "NaN"), Value::from("NaN"));
         assert_eq!(pg_text_value("BOOL", "t"), Value::Bool(true));
-        assert_eq!(pg_text_value("JSONB", r#"{"a": 1}"#), serde_json::json!({"a": 1}));
+        assert_eq!(
+            pg_text_value("JSONB", r#"{"a": 1}"#),
+            serde_json::json!({"a": 1})
+        );
         assert_eq!(
             pg_text_value("TIMESTAMPTZ", "2026-10-27 09:00:00+00"),
             Value::from("2026-10-27 09:00:00+00")

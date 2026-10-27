@@ -3,10 +3,10 @@
 use std::sync::Arc;
 
 use navree_navigator::{ServeError, serve};
+use rmcp::RoleClient;
 use rmcp::ServiceExt;
 use rmcp::model::CallToolRequestParams;
 use rmcp::service::RunningService;
-use rmcp::RoleClient;
 use serde_json::json;
 
 use crate::support::Fixture;
@@ -40,7 +40,12 @@ async fn the_server_lists_twelve_read_only_tools() {
         info.server_info.as_ref().map(|s| s.name.as_str()),
         Some("navree")
     );
-    assert!(info.instructions.as_deref().unwrap_or_default().contains("app_info"));
+    assert!(
+        info.instructions
+            .as_deref()
+            .unwrap_or_default()
+            .contains("app_info")
+    );
 
     let tools = client.list_all_tools().await.unwrap();
     let names: Vec<&str> = tools.iter().map(|t| t.name.as_ref()).collect();
@@ -69,7 +74,10 @@ async fn the_server_lists_twelve_read_only_tools() {
     }
 
     client.cancel().await.unwrap();
-    server.await.unwrap().expect("the server ends with the client");
+    server
+        .await
+        .unwrap()
+        .expect("the server ends with the client");
 }
 
 #[tokio::test]
@@ -82,18 +90,29 @@ async fn tools_answer_with_text_and_structured_content() {
         .await
         .unwrap();
     assert_eq!(config.is_error, Some(false));
-    let structured = config.structured_content.expect("an object answer is structured");
+    let structured = config
+        .structured_content
+        .expect("an object answer is structured");
     assert_eq!(structured["app"]["name"], "crm");
     assert_eq!(structured["mail"]["password"], "[redacted]");
     let text = config.content[0].as_text().expect("text").text.clone();
     assert!(text.contains("\"name\": \"crm\""), "{text}");
 
     let doc = client
-        .call_tool(CallToolRequestParams::new("read_doc").with_arguments(args(json!({"slug": "ai/agent-skills"}))))
+        .call_tool(
+            CallToolRequestParams::new("read_doc")
+                .with_arguments(args(json!({"slug": "ai/agent-skills"}))),
+        )
         .await
         .unwrap();
     assert_eq!(doc.is_error, Some(false));
-    assert!(doc.content[0].as_text().unwrap().text.starts_with("# Agent skills"));
+    assert!(
+        doc.content[0]
+            .as_text()
+            .unwrap()
+            .text
+            .starts_with("# Agent skills")
+    );
 
     let refused = client
         .call_tool(
@@ -102,7 +121,11 @@ async fn tools_answer_with_text_and_structured_content() {
         )
         .await
         .unwrap();
-    assert_eq!(refused.is_error, Some(true), "a failed tool is a tool error");
+    assert_eq!(
+        refused.is_error,
+        Some(true),
+        "a failed tool is a tool error"
+    );
 
     let unknown = client
         .call_tool(CallToolRequestParams::new("drop_database"))
