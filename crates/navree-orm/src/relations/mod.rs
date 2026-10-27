@@ -76,6 +76,7 @@
 
 use crate::model::Model;
 
+pub(crate) mod access;
 pub(crate) mod aggregates;
 mod any;
 mod belongs_to;
@@ -98,6 +99,7 @@ mod store;
 mod through;
 pub(crate) mod touch;
 
+pub use access::AccessFilter;
 pub use any::AnyRecord;
 pub use belongs_to::BelongsTo;
 pub use belongs_to_many::{BelongsToMany, MorphToMany, joining_table};

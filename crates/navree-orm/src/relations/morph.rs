@@ -22,6 +22,7 @@ use crate::query::filters::HasWheres;
 use crate::record::Record;
 use crate::relations::any::AnyRecord;
 use crate::relations::core::{column_value, qualified};
+use crate::relations::access::AccessConstraint;
 use crate::relations::eager::{Constraint, ConstraintFn, EagerNode, EagerTree};
 use crate::relations::existence::{ExistsRequest, ExistsSelect, Refine, build_subquery, columns_equal};
 use crate::relations::keys::{RelationKey, distinct_keys, in_keys, in_keys_on, key_of};
@@ -230,6 +231,8 @@ pub struct MorphLoad<'a> {
     pub(crate) children: &'a EagerTree,
     /// Conditions that apply to every type.
     pub(crate) conditions: &'a [Filter],
+    /// Access filters, asked for each type's condition.
+    pub(crate) access: &'a [AccessConstraint],
     /// Soft-deleted records.
     pub(crate) trashed: Trashed,
 }
@@ -357,6 +360,9 @@ impl<M: Model> MorphTarget for MorphTargetOf<M> {
             }
             for condition in request.conditions {
                 query = query.where_(condition.clone());
+            }
+            for access in request.access {
+                query = access.apply(query)?;
             }
             query.eager.tree.merge(request.children);
             let query = query.where_(Filter::from(in_keys_on(
@@ -770,9 +776,14 @@ impl<P: Model> MorphTo<P> {
     ) -> Result<()> {
         let mut relation = self.clone();
         let mut conditions: Vec<Filter> = Vec::new();
+        let mut access: Vec<AccessConstraint> = Vec::new();
         for constraint in &node.constraints {
             if let Some(filter) = constraint.filter() {
                 conditions.push(filter.clone());
+                continue;
+            }
+            if let Some(constraint) = constraint.access() {
+                access.push(constraint.clone());
                 continue;
             }
             match constraint.closure.downcast_ref::<ConstraintFn<MorphTo<P>>>() {
@@ -823,6 +834,7 @@ impl<P: Model> MorphTo<P> {
                         loads: with.for_type(morph_target.type_id()),
                         children: &node.children,
                         conditions: &conditions,
+                        access: &access,
                         trashed: relation.trashed,
                     },
                 )
@@ -1046,6 +1058,7 @@ impl<P: Model> ErasedRelation<P> for MorphTo<P> {
                         loads: None,
                         children: &EagerTree::default(),
                         conditions: &[],
+                        access: &[],
                         trashed: Trashed::With,
                     },
                 )

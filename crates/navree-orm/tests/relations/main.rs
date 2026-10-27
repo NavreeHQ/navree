@@ -6,6 +6,7 @@ mod fixtures;
 mod models;
 mod support;
 
+mod access;
 mod aggregates;
 mod definitions;
 mod eager;
