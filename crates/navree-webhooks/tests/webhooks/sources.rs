@@ -232,7 +232,8 @@ async fn sns_notifications_reach_the_handler_and_confirmations_do_not() {
         .body(tampered)
         .send()
         .await
-        .assert_error(400, "Invalid webhook signature");
+        .assert_error(400, "Invalid webhook signature")
+        .assert_error_code(400, "invalid_webhook_signature");
 }
 
 #[tokio::test]
