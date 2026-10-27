@@ -225,7 +225,10 @@ async fn a_redis_store_uses_the_providers_named_redis() {
         .unwrap();
     assert!(held.is_some());
     assert!(
-        !locks.acquire("crm:lock:job", "someone", MINUTE).await.unwrap(),
+        !locks
+            .acquire("crm:lock:job", "someone", MINUTE)
+            .await
+            .unwrap(),
         "the named lock store holds the lock"
     );
 }

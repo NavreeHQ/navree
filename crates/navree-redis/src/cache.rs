@@ -138,7 +138,10 @@ impl CacheStore for RedisCacheStore {
     ) -> BoxFuture<'a, Result<bool, CacheError>> {
         Box::pin(async move {
             let mut command = redis::cmd("SET");
-            command.arg(self.redis_key(key)).arg(value.as_ref()).arg("NX");
+            command
+                .arg(self.redis_key(key))
+                .arg(value.as_ref())
+                .arg("NX");
             if let Some(ttl) = ttl {
                 command.arg("PX").arg(millis(ttl));
             }
@@ -152,11 +155,11 @@ impl CacheStore for RedisCacheStore {
 
     fn increment<'a>(&'a self, key: &'a str, by: i64) -> BoxFuture<'a, Result<i64, CacheError>> {
         Box::pin(async move {
-            let error: redis::RedisError =
-                match self.manager().incr(self.redis_key(key), by).await {
-                    Ok(value) => return Ok(value),
-                    Err(error) => error,
-                };
+            let error: redis::RedisError = match self.manager().incr(self.redis_key(key), by).await
+            {
+                Ok(value) => return Ok(value),
+                Err(error) => error,
+            };
             let message = error.to_string();
             if message.contains("overflow") {
                 return Err(CacheError::Overflow {
@@ -173,14 +176,16 @@ impl CacheStore for RedisCacheStore {
                 .get(self.redis_key(key))
                 .await
                 .map_err(|e| self.fail(e))?;
-            Err(match stored.and_then(|value| value.trim().parse::<i64>().ok()) {
-                Some(_) => CacheError::Overflow {
-                    key: key.to_owned(),
+            Err(
+                match stored.and_then(|value| value.trim().parse::<i64>().ok()) {
+                    Some(_) => CacheError::Overflow {
+                        key: key.to_owned(),
+                    },
+                    None => CacheError::NotAnInteger {
+                        key: key.to_owned(),
+                    },
                 },
-                None => CacheError::NotAnInteger {
-                    key: key.to_owned(),
-                },
-            })
+            )
         })
     }
 }

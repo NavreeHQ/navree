@@ -254,7 +254,7 @@ impl Realtime {
                     _ = beats.tick() => {
                         let Some(hub) = hub.upgrade() else { break };
                         ticks = ticks.wrapping_add(1);
-                        hub.heartbeat(ticks % RESYNC_EVERY == 0);
+                        hub.heartbeat(ticks.is_multiple_of(RESYNC_EVERY));
                     }
                 }
             }

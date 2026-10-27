@@ -200,7 +200,12 @@ mod tests {
         let options = config(sources).typed::<QueueOptions>().expect("valid");
         assert_eq!(options.driver, QueueDriver::Redis);
         assert_eq!(
-            [QueueDriver::Database, QueueDriver::Memory, QueueDriver::Redis].map(QueueDriver::as_str),
+            [
+                QueueDriver::Database,
+                QueueDriver::Memory,
+                QueueDriver::Redis
+            ]
+            .map(QueueDriver::as_str),
             ["database", "memory", "redis"]
         );
         let sources = ConfigSources::new().env_vars("APP_", [("APP_QUEUE__DRIVER", "carrier")]);

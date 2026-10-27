@@ -22,8 +22,8 @@ async fn records_are_saved_loaded_and_deleted() {
         return;
     };
     let clock = Arc::new(FixedClock::new("2026-10-27T09:00:00Z".parse().unwrap()));
-    let store = RedisSessionStore::new(t.redis.connection().clone(), &t.prefix)
-        .with_clock(clock.clone());
+    let store =
+        RedisSessionStore::new(t.redis.connection().clone(), &t.prefix).with_clock(clock.clone());
 
     store.save("s1", record(&clock, 120)).await.unwrap();
     let loaded = store.load("s1").await.unwrap().expect("saved");

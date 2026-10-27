@@ -307,7 +307,10 @@ mod tests {
             "{text}"
         );
         assert_eq!(Envelope::decode(&bytes), Some(envelope));
-        assert_eq!(Envelope::decode(b"{\"v\":2,\"node\":\"n\",\"type\":\"hello\"}"), None);
+        assert_eq!(
+            Envelope::decode(b"{\"v\":2,\"node\":\"n\",\"type\":\"hello\"}"),
+            None
+        );
         assert_eq!(Envelope::decode(b"not json"), None);
         assert_eq!(
             Envelope::decode(b"{\"v\":1,\"node\":\"n\",\"type\":\"goodbye\"}").map(|e| e.message),
@@ -365,7 +368,10 @@ mod tests {
         presence.seen("n2", start + Duration::from_secs(15));
 
         let now = start + NODE_TIMEOUT;
-        assert_eq!(presence.expire(now, NODE_TIMEOUT), vec![removed("a", "ada")]);
+        assert_eq!(
+            presence.expire(now, NODE_TIMEOUT),
+            vec![removed("a", "ada")]
+        );
         assert_eq!(presence.nodes(), 1);
         assert!(presence.has("a", "bob"));
         assert_eq!(presence.forget("n2"), vec![removed("a", "bob")]);

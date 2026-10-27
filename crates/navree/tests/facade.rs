@@ -432,6 +432,17 @@ fn opt_in_libraries_are_reexported_whole() {
         navree::social::Social::fake();
 }
 
+/// `navree::redis` is navree-redis re-exported whole, and the `redis`
+/// feature puts `RedisModule` in the prelude
+/// (`cargo test -p navree --features redis --test facade`).
+#[cfg(feature = "redis")]
+#[test]
+fn redis_is_reexported_with_its_feature() {
+    assert!(same::<navree::redis::RedisModule, RedisModule>());
+    assert_eq!(navree::redis::DRIVER, "redis");
+    assert_eq!(navree::redis::RedisOptions::default().prefix, "navree:");
+}
+
 /// `navree::flags` is navree-flags re-exported whole, and the `flags`
 /// feature puts its module and extractor in the prelude
 /// (`cargo test -p navree --features flags`).

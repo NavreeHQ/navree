@@ -142,9 +142,9 @@ fn url_problem(url: &str) -> Option<&'static str> {
     }
     match url.trim().into_connection_info() {
         Ok(_) => None,
-        Err(_) => Some(
-            "is not a Redis URL (redis://host:port/db, rediss:// for TLS, or unix:///path)",
-        ),
+        Err(_) => {
+            Some("is not a Redis URL (redis://host:port/db, rediss:// for TLS, or unix:///path)")
+        }
     }
 }
 
@@ -215,9 +215,15 @@ mod tests {
                 .env_vars(
                     "APP_",
                     [
-                        ("APP_REDIS__URL", "rediss://default:s3cret@cache.internal:6380/2"),
+                        (
+                            "APP_REDIS__URL",
+                            "rediss://default:s3cret@cache.internal:6380/2",
+                        ),
                         ("APP_REDIS__RESPONSE_TIMEOUT_MS", "250"),
-                        ("APP_REDIS__CONNECTIONS__QUEUE__URL", "redis://10.0.0.7:6379"),
+                        (
+                            "APP_REDIS__CONNECTIONS__QUEUE__URL",
+                            "redis://10.0.0.7:6379",
+                        ),
                     ],
                 ),
         )
@@ -227,16 +233,28 @@ mod tests {
         assert_eq!(options.connections["queue"].url, "redis://10.0.0.7:6379");
         let debug = format!("{options:?}");
         assert!(!debug.contains("s3cret"), "{debug}");
-        assert!(debug.contains("rediss://default:***@cache.internal:6380/2"), "{debug}");
+        assert!(
+            debug.contains("rediss://default:***@cache.internal:6380/2"),
+            "{debug}"
+        );
     }
 
     #[test]
     fn invalid_options_name_the_key_and_never_the_url() {
         for (section, expected) in [
             (json!({ "url": "" }), "redis.url must not be empty"),
-            (json!({ "url": "http://:pw@x" }), "redis.url is not a Redis URL"),
-            (json!({ "connect_timeout_ms": 0 }), "redis.connect_timeout_ms"),
-            (json!({ "response_timeout_ms": 0 }), "redis.response_timeout_ms"),
+            (
+                json!({ "url": "http://:pw@x" }),
+                "redis.url is not a Redis URL",
+            ),
+            (
+                json!({ "connect_timeout_ms": 0 }),
+                "redis.connect_timeout_ms",
+            ),
+            (
+                json!({ "response_timeout_ms": 0 }),
+                "redis.response_timeout_ms",
+            ),
             (
                 json!({ "connections": { "default": { "url": "redis://x" } } }),
                 "`default` is the connection of redis.url",
@@ -267,7 +285,10 @@ mod tests {
         assert_eq!(redact_url("redis://:pw@host"), "redis://:***@host");
         assert_eq!(redact_url("rediss://token@host"), "rediss://***@host");
         assert_eq!(redact_url("redis://host:6379"), "redis://host:6379");
-        assert_eq!(redact_url("unix:///tmp/redis.sock"), "unix:///tmp/redis.sock");
+        assert_eq!(
+            redact_url("unix:///tmp/redis.sock"),
+            "unix:///tmp/redis.sock"
+        );
         assert_eq!(redact_url("not a url"), "not a url");
     }
 }

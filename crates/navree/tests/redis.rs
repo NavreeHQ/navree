@@ -34,11 +34,17 @@ fn app(sources: ConfigSources) -> AppBuilder {
 #[tokio::test]
 async fn the_installation_example_selects_the_redis_drivers() {
     let sources = ConfigSources::new()
-        .set("redis", json!({ "url": UNREACHABLE, "connect_timeout_ms": 200 }))
+        .set(
+            "redis",
+            json!({ "url": UNREACHABLE, "connect_timeout_ms": 200 }),
+        )
         .set("cache", json!({ "store": "redis" }))
         .set("queue", json!({ "driver": "redis" }))
         .set("database", json!({ "url": "sqlite::memory:" }));
-    let app = app(sources).boot().await.expect("boots while Redis is down");
+    let app = app(sources)
+        .boot()
+        .await
+        .expect("boots while Redis is down");
     let queue = app.ctx().get::<Queue>().await.unwrap();
     assert!(format!("{queue:?}").contains("Redis"), "{queue:?}");
     let options = app.ctx().get::<CacheOptions>().await.unwrap();
@@ -110,7 +116,11 @@ impl ExportsController {
     #[post("/")]
     async fn create(&self, CurrentUser(user): CurrentUser) -> Result<Json<Value>> {
         let key = format!("exports:{}", user.id);
-        match self.limiter.hit(&key, 10, Duration::from_secs(3600)).await? {
+        match self
+            .limiter
+            .hit(&key, 10, Duration::from_secs(3600))
+            .await?
+        {
             RateLimit::Allowed { remaining } => {
                 Ok(Json(json!({ "queued": true, "remaining": remaining })))
             }
@@ -156,7 +166,10 @@ async fn preferences_round_trip() {
     };
     let user = Uuid::now_v7();
     preferences.save(user, "board").await.unwrap();
-    assert_eq!(preferences.load(user).await.unwrap().as_deref(), Some("board"));
+    assert_eq!(
+        preferences.load(user).await.unwrap().as_deref(),
+        Some("board")
+    );
 }
 
 /// The broadcasting page's backplane test.

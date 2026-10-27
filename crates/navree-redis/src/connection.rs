@@ -150,7 +150,8 @@ struct Inner {
 impl RedisConnection {
     /// The connection `name` to `url`, with the timeouts of `options`.
     fn open(name: &str, url: &str, options: &RedisOptions) -> Result<Self, RedisError> {
-        let client = Client::open(url.trim()).map_err(|source| RedisError::command(name, source))?;
+        let client =
+            Client::open(url.trim()).map_err(|source| RedisError::command(name, source))?;
         let config = ConnectionManagerConfig::new()
             .set_connection_timeout(Some(options.connect_timeout()))
             .set_response_timeout(Some(options.response_timeout()))
@@ -203,15 +204,18 @@ impl RedisConnection {
 
     /// A new pub/sub connection.
     pub async fn pubsub(&self) -> Result<PubSub, RedisError> {
-        tokio::time::timeout(self.inner.connect_timeout, self.inner.client.get_async_pubsub())
-            .await
-            .map_err(|_| {
-                self.error(redis::RedisError::from(std::io::Error::new(
-                    std::io::ErrorKind::TimedOut,
-                    "timed out connecting for pub/sub",
-                )))
-            })?
-            .map_err(|source| self.error(source))
+        tokio::time::timeout(
+            self.inner.connect_timeout,
+            self.inner.client.get_async_pubsub(),
+        )
+        .await
+        .map_err(|_| {
+            self.error(redis::RedisError::from(std::io::Error::new(
+                std::io::ErrorKind::TimedOut,
+                "timed out connecting for pub/sub",
+            )))
+        })?
+        .map_err(|source| self.error(source))
     }
 
     /// `PING`: whether the server answers, within the connect and response
@@ -276,7 +280,10 @@ mod tests {
         assert_eq!(redis.connection_for("queue").name(), "queue");
         assert_eq!(redis.connection_for("cache").name(), "default");
         assert_eq!(
-            redis.connections().map(RedisConnection::name).collect::<Vec<_>>(),
+            redis
+                .connections()
+                .map(RedisConnection::name)
+                .collect::<Vec<_>>(),
             ["default", "queue"]
         );
         let error = redis.named("cache").unwrap_err().to_string();
@@ -284,7 +291,10 @@ mod tests {
         assert_eq!(redis.prefix(), "crm:");
         assert_eq!(redis.key("greeting"), "crm:greeting");
         let debug = format!("{redis:?}");
-        assert!(!debug.contains("secret") && debug.contains("***"), "{debug}");
+        assert!(
+            !debug.contains("secret") && debug.contains("***"),
+            "{debug}"
+        );
     }
 
     #[tokio::test]
@@ -292,7 +302,10 @@ mod tests {
         let redis = Redis::new(&options()).unwrap();
         let error = redis.connection().ping().await.unwrap_err();
         let message = error.to_string();
-        assert!(message.starts_with("Redis connection `default`"), "{message}");
+        assert!(
+            message.starts_with("Redis connection `default`"),
+            "{message}"
+        );
         assert!(!message.contains("secret"), "{message}");
         assert!(redis.connection().pubsub().await.is_err());
         assert!(redis.connection().dedicated().await.is_err());

@@ -51,7 +51,10 @@ async fn jobs_are_reserved_in_order_once_due() {
         return;
     };
     let store = store(&t);
-    store.insert(job("0001", "default", NOW + 5_000)).await.unwrap();
+    store
+        .insert(job("0001", "default", NOW + 5_000))
+        .await
+        .unwrap();
     store.insert(job("0002", "default", NOW)).await.unwrap();
     store.insert(job("0003", "default", NOW)).await.unwrap();
     store.insert(job("0004", "other", NOW)).await.unwrap();
@@ -71,9 +74,17 @@ async fn jobs_are_reserved_in_order_once_due() {
         store.reserve("default", "w3", NOW).await.unwrap().is_none(),
         "0001 is not due yet"
     );
-    let delayed = store.reserve("default", "w3", NOW + 5_000).await.unwrap().unwrap();
+    let delayed = store
+        .reserve("default", "w3", NOW + 5_000)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(delayed.id, "0001");
-    assert_eq!(store.pending_count("default").await.unwrap(), 3, "reserved still count");
+    assert_eq!(
+        store.pending_count("default").await.unwrap(),
+        3,
+        "reserved still count"
+    );
 
     store.complete(&first).await.unwrap();
     assert_eq!(store.pending_count("default").await.unwrap(), 2);
@@ -88,10 +99,20 @@ async fn release_and_fail_need_the_reservation() {
     let store = store(&t);
     store.insert(job("0001", "default", NOW)).await.unwrap();
     let reserved = store.reserve("default", "w1", NOW).await.unwrap().unwrap();
-    assert!(!store.release(&reserved, "w2", NOW).await.unwrap(), "w2 does not hold it");
+    assert!(
+        !store.release(&reserved, "w2", NOW).await.unwrap(),
+        "w2 does not hold it"
+    );
     assert!(store.release(&reserved, "w1", NOW + 1_000).await.unwrap());
-    assert!(store.reserve("default", "w1", NOW).await.unwrap().is_none(), "backoff");
-    let again = store.reserve("default", "w2", NOW + 1_000).await.unwrap().unwrap();
+    assert!(
+        store.reserve("default", "w1", NOW).await.unwrap().is_none(),
+        "backoff"
+    );
+    let again = store
+        .reserve("default", "w2", NOW + 1_000)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(again.attempts, 2);
 
     assert!(!store.fail(&again, "w1", "boom", NOW + 2_000).await.unwrap());
@@ -99,7 +120,14 @@ async fn release_and_fail_need_the_reservation() {
     assert_eq!(store.pending_count("default").await.unwrap(), 0);
     let failed = store.failed().await.unwrap();
     assert_eq!(failed.len(), 1);
-    assert_eq!((failed[0].id.as_str(), failed[0].error.as_str(), failed[0].attempts), ("0001", "boom", 2));
+    assert_eq!(
+        (
+            failed[0].id.as_str(),
+            failed[0].error.as_str(),
+            failed[0].attempts
+        ),
+        ("0001", "boom", 2)
+    );
     assert_eq!(failed[0].failed_at.timestamp_millis(), NOW + 2_000);
     t.cleanup().await;
 }
@@ -113,10 +141,23 @@ async fn stale_reservations_are_taken_over() {
     store.insert(job("0001", "default", NOW)).await.unwrap();
     let crashed = store.reserve("default", "w1", NOW).await.unwrap().unwrap();
     let stale_at = NOW + (10 + i64::try_from(STALE_RESERVATION_GRACE_SECS).unwrap()) * 1000;
-    assert!(store.reserve("default", "w2", stale_at - 1).await.unwrap().is_none());
-    let taken = store.reserve("default", "w2", stale_at).await.unwrap().unwrap();
+    assert!(
+        store
+            .reserve("default", "w2", stale_at - 1)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    let taken = store
+        .reserve("default", "w2", stale_at)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!((taken.id.as_str(), taken.attempts), ("0001", 2));
-    assert!(!store.release(&crashed, "w1", stale_at).await.unwrap(), "w1 lost it");
+    assert!(
+        !store.release(&crashed, "w1", stale_at).await.unwrap(),
+        "w1 lost it"
+    );
     store.complete(&taken).await.unwrap();
     assert!(t.keys().await.is_empty(), "{:?}", t.keys().await);
 }
@@ -134,20 +175,40 @@ async fn unique_jobs_are_deduplicated_while_pending() {
         ..job(id, "default", created_at)
     };
     assert_eq!(store.insert(unique("0001", NOW)).await.unwrap(), "0001");
-    assert_eq!(store.insert(unique("0002", NOW + 1_000)).await.unwrap(), "0001");
+    assert_eq!(
+        store.insert(unique("0002", NOW + 1_000)).await.unwrap(),
+        "0001"
+    );
     assert_eq!(store.pending_count("default").await.unwrap(), 1);
     // Outside the window the old job loses its key; both are queued.
-    assert_eq!(store.insert(unique("0003", NOW + 60_000)).await.unwrap(), "0003");
+    assert_eq!(
+        store.insert(unique("0003", NOW + 60_000)).await.unwrap(),
+        "0003"
+    );
     assert_eq!(store.pending_count("default").await.unwrap(), 2);
-    assert_eq!(store.insert(unique("0004", NOW + 60_001)).await.unwrap(), "0003");
+    assert_eq!(
+        store.insert(unique("0004", NOW + 60_001)).await.unwrap(),
+        "0003"
+    );
 
     // Once it finishes, the key is free again.
-    let first = store.reserve("default", "w", NOW + 60_001).await.unwrap().unwrap();
+    let first = store
+        .reserve("default", "w", NOW + 60_001)
+        .await
+        .unwrap()
+        .unwrap();
     store.complete(&first).await.unwrap();
-    let second = store.reserve("default", "w", NOW + 60_001).await.unwrap().unwrap();
+    let second = store
+        .reserve("default", "w", NOW + 60_001)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(second.id, "0003");
     store.complete(&second).await.unwrap();
-    assert_eq!(store.insert(unique("0005", NOW + 60_002)).await.unwrap(), "0005");
+    assert_eq!(
+        store.insert(unique("0005", NOW + 60_002)).await.unwrap(),
+        "0005"
+    );
     t.cleanup().await;
 }
 
@@ -163,13 +224,39 @@ async fn failed_jobs_are_retried_and_flushed() {
         assert_eq!(reserved.id, id);
         store.fail(&reserved, "w", "boom", at).await.unwrap();
     }
-    let ids: Vec<String> = store.failed().await.unwrap().into_iter().map(|f| f.id).collect();
+    let ids: Vec<String> = store
+        .failed()
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|f| f.id)
+        .collect();
     assert_eq!(ids, ["0002", "0001"], "newest first");
 
-    assert_eq!(store.retry(&RetryTarget::Id("0001".to_owned()), NOW + 10).await.unwrap(), 1);
-    assert_eq!(store.retry(&RetryTarget::Id("nope".to_owned()), NOW + 10).await.unwrap(), 0);
-    let retried = store.reserve("default", "w", NOW + 10).await.unwrap().unwrap();
-    assert_eq!((retried.id.as_str(), retried.attempts), ("0001", 1), "attempts start over");
+    assert_eq!(
+        store
+            .retry(&RetryTarget::Id("0001".to_owned()), NOW + 10)
+            .await
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        store
+            .retry(&RetryTarget::Id("nope".to_owned()), NOW + 10)
+            .await
+            .unwrap(),
+        0
+    );
+    let retried = store
+        .reserve("default", "w", NOW + 10)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        (retried.id.as_str(), retried.attempts),
+        ("0001", 1),
+        "attempts start over"
+    );
 
     assert_eq!(store.flush_failed().await.unwrap(), 1);
     assert!(store.failed().await.unwrap().is_empty());
@@ -184,14 +271,21 @@ async fn concurrent_workers_never_reserve_the_same_job() {
     };
     let store = Arc::new(store(&t));
     for i in 0..50 {
-        store.insert(job(&format!("{i:04}"), "default", NOW)).await.unwrap();
+        store
+            .insert(job(&format!("{i:04}"), "default", NOW))
+            .await
+            .unwrap();
     }
     let workers: Vec<_> = (0..8)
         .map(|w| {
             let store = store.clone();
             tokio::spawn(async move {
                 let mut taken = Vec::new();
-                while let Some(job) = store.reserve("default", &format!("w{w}"), NOW).await.unwrap() {
+                while let Some(job) = store
+                    .reserve("default", &format!("w{w}"), NOW)
+                    .await
+                    .unwrap()
+                {
                     taken.push(job.id);
                 }
                 taken
@@ -220,7 +314,13 @@ impl Job for Record {
     const NAME: &'static str = "test.record";
 
     async fn handle(self, ctx: JobContext) -> Result<(), BoxError> {
-        ctx.app.get::<Runs>().await?.0.lock().unwrap().push(self.label);
+        ctx.app
+            .get::<Runs>()
+            .await?
+            .0
+            .lock()
+            .unwrap()
+            .push(self.label);
         Ok(())
     }
 }
@@ -254,9 +354,19 @@ async fn jobs_dispatched_in_one_process_run_in_another() {
     };
     let (web, worker) = (boot().await.unwrap(), boot().await.unwrap());
     let dispatcher = web.ctx().get::<Queue>().await.unwrap();
-    dispatcher.dispatch(Record { label: "now".into() }).await.unwrap();
     dispatcher
-        .later(Record { label: "later".into() }, Duration::from_secs(30))
+        .dispatch(Record {
+            label: "now".into(),
+        })
+        .await
+        .unwrap();
+    dispatcher
+        .later(
+            Record {
+                label: "later".into(),
+            },
+            Duration::from_secs(30),
+        )
         .await
         .unwrap();
 
