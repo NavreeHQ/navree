@@ -4,8 +4,10 @@ use std::fmt;
 use std::future::Future;
 use std::sync::Arc;
 
-use navree_contracts::{Dispatcher, Job, JobContext, JobRegistration};
+use navree_contracts::{Dispatcher, Job, JobContext, JobRegistration, ZoneLevel};
 use navree_kernel::{AppContext, BoxError, BoxFuture, ModuleBuilder};
+
+use crate::LocalRun;
 
 /// The closure behind a function or job task: the app and the run id
 /// (`<task>@<tick>`, used as the job id when a job runs inline).
@@ -60,12 +62,27 @@ impl Schedule {
     /// [`JobRegistration`], so queue workers can run it without a separate
     /// `m.job::<J>()` (registering it twice is harmless).
     pub fn job<J: Job + Clone>(&mut self, job: J) -> &mut TaskBuilder {
+        self.job_with(move |_run: &LocalRun| job.clone())
+    }
+
+    /// Schedules job `J`, built for each run by `f` from the run's
+    /// [`LocalRun`] (its owner and zone), so a task that runs
+    /// [per workspace](TaskBuilder::per_workspace_local) dispatches one job
+    /// per workspace: `s.job_with(|run| Digest { workspace_id: run.owner })`.
+    /// Otherwise like [`job`](Schedule::job).
+    pub fn job_with<J, F>(&mut self, f: F) -> &mut TaskBuilder
+    where
+        J: Job,
+        F: Fn(&LocalRun) -> J + Send + Sync + 'static,
+    {
         if !self.jobs.iter().any(|j| j.name == J::NAME) {
             self.jobs.push(JobRegistration::of::<J>());
         }
+        let build = Arc::new(f);
         let run: TaskFn = Arc::new(move |app: AppContext, run_id: String| {
-            let job = job.clone();
+            let job = LocalRun::current().map(|run| build(&run));
             Box::pin(async move {
+                let job = job.ok_or("a scheduled job was built outside its scheduled run")?;
                 match app.try_get::<dyn Dispatcher>().await {
                     Some(dispatcher) => {
                         let id = dispatcher.dispatch(job).await?;
@@ -127,6 +144,7 @@ impl Schedule {
             invalid: None,
             without_overlapping: false,
             on_one_server: false,
+            zone: ZoneChoice::Utc,
         });
         let last = self.tasks.len() - 1;
         &mut self.tasks[last]
@@ -141,8 +159,25 @@ impl fmt::Debug for Schedule {
 
 const EVERY_MINUTE: &str = "* * * * *";
 
-/// One scheduled task: when it runs and how. Times are UTC; ticks have
-/// minute granularity. Without a frequency a task runs every minute.
+/// Which clock a task's frequency is read on.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum ZoneChoice {
+    /// UTC (the default).
+    Utc,
+    /// A named zone, checked at boot.
+    Named(String),
+    /// The app's default zone (`time.default_zone`), UTC without TimeModule.
+    Default,
+    /// Each owner's own zone at this level (a run per owner).
+    PerOwner(ZoneLevel),
+}
+
+/// One scheduled task: when it runs and how. Times are UTC unless
+/// [`in_zone`](TaskBuilder::in_zone),
+/// [`in_default_zone`](TaskBuilder::in_default_zone) or
+/// [`per_workspace_local`](TaskBuilder::per_workspace_local) say otherwise;
+/// ticks have minute granularity. Without a frequency a task runs every
+/// minute.
 ///
 /// Every task runs at most once per tick across all schedulers sharing the
 /// database (the tick is claimed with `INSERT … ON CONFLICT DO NOTHING` on
@@ -156,6 +191,7 @@ pub struct TaskBuilder {
     pub(crate) invalid: Option<String>,
     pub(crate) without_overlapping: bool,
     pub(crate) on_one_server: bool,
+    pub(crate) zone: ZoneChoice,
 }
 
 impl TaskBuilder {
@@ -230,6 +266,54 @@ impl TaskBuilder {
         self
     }
 
+    /// Reads the frequency on `zone`'s clock (an IANA name; legacy aliases
+    /// are accepted): `daily_at("09:00").in_zone("Asia/Kolkata")` runs at
+    /// 09:00 in Kolkata. An unknown zone fails the boot.
+    ///
+    /// Across DST changes a local time that is skipped runs at the first
+    /// minute after the gap, and one that happens twice runs once (the
+    /// first time).
+    pub fn in_zone(&mut self, zone: &str) -> &mut Self {
+        self.zone = ZoneChoice::Named(zone.to_owned());
+        self
+    }
+
+    /// Reads the frequency on the app's default zone (`time.default_zone`
+    /// of navree-time's `TimeModule`; UTC without it).
+    pub fn in_default_zone(&mut self) -> &mut Self {
+        self.zone = ZoneChoice::Default;
+        self
+    }
+
+    /// Runs once per workspace, when the workspace's own clock reaches the
+    /// frequency: `daily_at("09:00").per_workspace_local()` runs at 09:00
+    /// in each workspace's zone (its zone, else its country's, else the
+    /// app's default). Workspaces come from navree-time's `Zones`, so the
+    /// app needs `TimeModule` (the boot fails without it) and a
+    /// workspace-level zone source (navree-workspace registers one).
+    ///
+    /// Each workspace's run is claimed on its own, as
+    /// `<task>@<workspace id>` in `schedule_runs`, so the task name may be
+    /// at most 154 bytes. Inside the run, [`LocalRun::current`] names the
+    /// workspace; jobs built with [`Schedule::job_with`] receive it.
+    pub fn per_workspace_local(&mut self) -> &mut Self {
+        self.per_local(ZoneLevel::Workspace)
+    }
+
+    /// Runs once per user, at each user's local time (users come from a
+    /// user-level zone source). See
+    /// [`per_workspace_local`](TaskBuilder::per_workspace_local).
+    pub fn per_user_local(&mut self) -> &mut Self {
+        self.per_local(ZoneLevel::User)
+    }
+
+    /// Runs once per owner at `level`, at each owner's local time. See
+    /// [`per_workspace_local`](TaskBuilder::per_workspace_local).
+    pub fn per_local(&mut self, level: ZoneLevel) -> &mut Self {
+        self.zone = ZoneChoice::PerOwner(level);
+        self
+    }
+
     /// Renames the task (the name keys `schedule_runs` and must be unique).
     pub fn name(&mut self, name: impl Into<String>) -> &mut Self {
         self.name = name.into();
@@ -255,6 +339,7 @@ impl fmt::Debug for TaskBuilder {
             .field("expr", &self.expr)
             .field("without_overlapping", &self.without_overlapping)
             .field("on_one_server", &self.on_one_server)
+            .field("zone", &self.zone)
             .finish()
     }
 }

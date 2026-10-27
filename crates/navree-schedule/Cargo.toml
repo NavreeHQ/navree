@@ -19,12 +19,14 @@ navree-contracts = { workspace = true }
 navree-db = { workspace = true }
 navree-kernel = { workspace = true }
 navree-telemetry = { workspace = true }
+navree-time = { workspace = true }
 sea-orm = { workspace = true }
 sea-orm-migration = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
+uuid = { workspace = true }
 
 [dev-dependencies]
 navree-testing = { workspace = true }
