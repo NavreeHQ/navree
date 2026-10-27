@@ -10,7 +10,9 @@ use crate::policy::AUDIT_TABLE;
 
 /// The migrations of `AuditModule` (module name `audit`).
 pub(crate) fn migrations() -> MigrationSet {
-    MigrationSet::new("audit").migration(CreateAuditLogs)
+    MigrationSet::new("audit")
+        .migration(CreateAuditLogs)
+        .migration(AddImpersonatorId)
 }
 
 /// Creates `audit_logs` with indexes on (subject_type, subject_id),
@@ -72,6 +74,57 @@ impl MigrationTrait for CreateAuditLogs {
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
             .drop_table(Table::drop().table(AUDIT_TABLE).to_owned())
+            .await
+    }
+}
+
+/// Adds `impersonator_id` (who was impersonating the actor) with an index.
+struct AddImpersonatorId;
+
+impl MigrationName for AddImpersonatorId {
+    fn name(&self) -> &str {
+        "m20261027_000001_add_impersonator_id_to_audit_logs"
+    }
+}
+
+#[async_trait]
+impl MigrationTrait for AddImpersonatorId {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(AUDIT_TABLE)
+                    .add_column(ColumnDef::new("impersonator_id").uuid().null())
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .create_index(
+                Index::create()
+                    .name("idx_audit_logs_impersonator_id")
+                    .table(AUDIT_TABLE)
+                    .col("impersonator_id")
+                    .to_owned(),
+            )
+            .await
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_index(
+                Index::drop()
+                    .name("idx_audit_logs_impersonator_id")
+                    .table(AUDIT_TABLE)
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(AUDIT_TABLE)
+                    .drop_column("impersonator_id")
+                    .to_owned(),
+            )
             .await
     }
 }

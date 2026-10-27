@@ -12,14 +12,15 @@ pub(crate) fn audit_page_schema() -> (String, Value) {
         "type": "object",
         "description": "One audit trail entry.",
         "required": [
-            "id", "kind", "action", "actor_id", "subject_type", "subject_id", "old_values",
-            "new_values", "request_id", "ip", "user_agent", "metadata", "created_at"
+            "id", "kind", "action", "actor_id", "impersonator_id", "subject_type", "subject_id",
+            "old_values", "new_values", "request_id", "ip", "user_agent", "metadata", "created_at"
         ],
         "properties": {
             "id": {"type": "string", "format": "uuid"},
             "kind": {"type": "string", "enum": ["data", "auth", "access", "security", "custom"]},
             "action": {"type": "string", "examples": ["deal.updated"]},
             "actor_id": {"type": ["string", "null"], "format": "uuid"},
+            "impersonator_id": {"type": ["string", "null"], "format": "uuid"},
             "subject_type": nullable_string,
             "subject_id": nullable_string,
             "old_values": nullable_object,
@@ -84,6 +85,7 @@ mod tests {
             kind: "data".into(),
             action: "deal.created".into(),
             actor_id: None,
+            impersonator_id: None,
             subject_type: None,
             subject_id: None,
             old_values: None,

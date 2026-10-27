@@ -124,10 +124,11 @@ const HIERARCHY: &[Rule] = &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-testing",
     ]),
     // L5
+    // Token exchange fetches trusted issuers' key sets with navree-http-client.
     rule("navree-auth", 5, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db",
         "navree-crypto", "navree-session", "navree-validation", "navree-cache", "navree-mail",
-        "navree-access",
+        "navree-access", "navree-http-client",
     ]),
     // Workspaces: user ids come from the request's `Principal`, so the
     // module needs no navree-auth (a sibling at L5).

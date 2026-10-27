@@ -1,6 +1,6 @@
 ---
 title: "Account flows"
-description: "Registration, password reset, email verification, profile and password changes, and TOTP two-factor authentication with recovery codes."
+description: "Registration, password reset, email verification, profile and password changes, and TOTP two-factor authentication with recovery codes and a policy that requires it."
 ---
 
 Besides signing in, an app needs the flows around an account: creating one, resetting a forgotten password, verifying an email address, changing the address or the password, and protecting the account with a second factor. `navree-auth` ships all of them as routes under `/api/auth` and as methods on `AuthService`, and records each step in the [audit log](/docs/security/audit-log/). This page assumes `AuthModule` is set up as described in [Authentication](/docs/security/authentication/).
@@ -387,11 +387,94 @@ The answer is `204 No Content`. The secret and the recovery codes are deleted, i
 
 <Callout type="warning" title="What needs the password again">
 
-Changing the email address, changing the password and turning two-factor authentication off all ask for the password. Starting a setup (`2fa/enable`), confirming it and replacing the recovery codes (`2fa/recovery-codes`) need only a valid access token. Someone holding a stolen access token could therefore turn two-factor authentication on with their own app, or take a fresh set of recovery codes. Keep access tokens short-lived and out of the browser.
+Changing the email address, changing the password and turning two-factor authentication off all ask for the password. Starting a setup (`2fa/enable`), confirming it and replacing the recovery codes (`2fa/recovery-codes`) need only a valid access token. Someone holding a stolen access token could therefore turn two-factor authentication on with their own app, or take a fresh set of recovery codes. Keep access tokens short-lived and out of the browser, and put [`#[recent_auth]`](/docs/security/sessions/#requiring-a-recent-sign-in) on routes of your own that need the same care.
 
 </Callout>
 
-There are no SMS or email codes, and no passkeys: TOTP is the only second factor. There is also no route for an admin to turn off another user's two-factor authentication.
+In an [impersonation](/docs/security/impersonation/) session, `2fa/enable`, `2fa/confirm`, `2fa/disable` and `2fa/recovery-codes` answer `403 Not allowed while impersonating a user`, as do the profile and password changes.
+
+TOTP is the only second factor at sign-in. [Passkeys](/docs/security/passwordless/#passkeys) that verify the user count as two factors on their own, and [magic links and emailed codes](/docs/security/passwordless/) still ask for the TOTP code afterwards. There is no route for an admin to turn off another user's two-factor authentication.
+
+### Requiring two-factor authentication
+
+Some accounts must have a second factor: administrators, or every member of a customer that asks for it. Name the roles in `auth.two_factor.required_for`:
+
+```toml title="config/app.toml"
+[auth.two_factor]
+required_for = ["admin", "support"]   # navree-access roles
+```
+
+A user who holds one of these roles and hasn't turned two-factor authentication on can still sign in, but the session is limited to setting it up. The sign-in answer says so:
+
+```json
+{
+  "access_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
+  "expires_in": 900,
+  "refresh_token": "01a17b6d-d101-70d8-acae-37a74feaa4bf.YWP7DMg3LhmzNDIto4oUF2Z4BhLYGkQ69WvVowxrn8DQMuSq",
+  "token_type": "Bearer",
+  "two_factor_setup_required": true,
+  "user": {"__type": "User", "email": "ada@example.com", "...": "..."}
+}
+```
+
+The access token is of type `two_factor_setup`. It reaches `POST /api/auth/2fa/enable`, `POST /api/auth/2fa/confirm`, `GET /api/auth/me`, `POST /api/auth/logout` and `POST /api/auth/refresh`; every other route answers 403 with the code `two_factor_required`:
+
+```json
+{"statusCode": 403, "message": "Two-factor authentication required", "error": "Forbidden"}
+```
+
+The front end walks the user through [Turning it on](#turning-it-on) with that token, then calls `POST /api/auth/refresh`: once two-factor authentication is on, the refreshed access token is a full one.
+
+The rule is checked when a session starts and at every refresh, so a user who is given an admin role must set it up within one access-token lifetime (15 minutes). [Impersonation](/docs/security/impersonation/) sessions are not limited. `required_for` needs `AccessModule` in the app, which knows the users' roles.
+
+#### Workspaces and other rules
+
+For rules of your own, such as a workspace setting "members must use two-factor authentication", implement `TwoFactorPolicy` and register it with `two_factor_policy` (from `ModuleBuilderAuthExt`, in the prelude). A user any policy or role requires it of gets the limited session:
+
+```rust title="src/modules/security/policy.rs"
+use navree::auth::{TwoFactorPolicy, User};
+use navree::db::Db;
+use navree::prelude::*;
+use navree::{BoxError, BoxFuture};
+use sea_orm::{ConnectionTrait, Statement};
+
+/// Members of a workspace with `require_two_factor` must use two-factor
+/// authentication.
+#[injectable]
+pub struct WorkspaceTwoFactorPolicy {
+    db: Arc<Db>,
+}
+
+impl TwoFactorPolicy for WorkspaceTwoFactorPolicy {
+    fn requires_two_factor<'a>(&'a self, user: &'a User) -> BoxFuture<'a, Result<bool, BoxError>> {
+        Box::pin(async move {
+            let conn = self.db.conn();
+            let row = conn
+                .query_one_raw(Statement::from_sql_and_values(
+                    conn.get_database_backend(),
+                    "SELECT 1 FROM workspace_members m \
+                     JOIN workspace_security s ON s.workspace_id = m.workspace_id \
+                     WHERE m.user_id = $1 AND s.require_two_factor",
+                    [user.id.into()],
+                ))
+                .await?;
+            Ok(row.is_some())
+        })
+    }
+}
+
+pub struct SecurityModule;
+
+impl Module for SecurityModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.two_factor_policy::<WorkspaceTwoFactorPolicy>();
+    }
+}
+```
+
+`workspace_security` stands for a table of your own. Policies run in module dependency order, when a session starts and at every refresh; keep them to one query. With no roles in `required_for` and no policy registered, nothing is checked and no user is loaded at refresh. `AuthService::two_factor_required(&user)` evaluates the same rules from your own code.
+
+Platform administrators always need two-factor authentication, whatever these rules say: see [Platform administrators](/docs/security/authentication/#platform-administrators).
 
 ## Using the flows from code
 
@@ -412,6 +495,7 @@ Every route calls a method of `AuthService`, which you can call from your own co
 | `regenerate_recovery_codes(user_id, &meta)` | `POST /auth/2fa/recovery-codes` |
 | `attempt_login(email, password, &meta)` | `POST /auth/login`; returns a `LoginOutcome` |
 | `verify_two_factor(challenge, proof, &meta)` | `POST /auth/2fa/verify`; `proof` is `TwoFactorProof::Code(..)` or `TwoFactorProof::RecoveryCode(..)` |
+| `two_factor_required(&user)` | Whether `auth.two_factor.required_for` or a `TwoFactorPolicy` requires two-factor authentication of the user |
 
 `meta` is the `ClientMeta` of the request (an extractor), or `ClientMeta::default()` outside one. `navree::auth::two_factor_enabled(&user)` tells whether an account has confirmed two-factor authentication.
 
@@ -484,11 +568,11 @@ The subjects ("Reset your password", "Verify your email address") are fixed, and
 | `auth.two_factor_confirmed` | `auth` | Two-factor authentication was turned on |
 | `auth.two_factor_disabled` | `auth` | It was turned off |
 | `auth.two_factor_recovery_codes_regenerated` | `auth` | New recovery codes were issued |
-| `auth.two_factor_challenge` | `auth` | A correct password started a two-factor sign-in |
-| `auth.two_factor_failed` | `security` | A wrong code; `metadata.method` is `totp` or `recovery_code` |
+| `auth.two_factor_challenge` | `auth` | A correct password (or a magic link, an emailed code, a presence-only passkey) started a two-factor sign-in |
+| `auth.two_factor_failed` | `security` | A wrong code; `metadata.method` is `totp` or `recovery_code` (and `metadata.flow` when it was a [confirmation](/docs/security/sessions/#confirming-the-password-or-a-code)) |
 | `auth.two_factor_recovery_code_used` | `security` | A recovery code was used to sign in |
 | `auth.login` | `auth` | A sign-in finished; `metadata.two_factor` says how, after a second factor |
-| `auth.throttled` | `security` | A throttle refused an attempt; `metadata.flow` is `login`, `password_confirmation`, `two_factor` or `two_factor_confirmation` |
+| `auth.throttled` | `security` | A throttle refused an attempt; `metadata.flow` is `login`, `password_confirmation`, `two_factor`, `two_factor_confirmation`, `confirmation`, `otp` or `platform_login` |
 
 Entries for changes are written once the unit of work commits, so a rolled-back change leaves no entry. Failures are written straight away. Changes to the `users` row also appear as `data` entries (`user.created`, `user.updated`). The password hash and the two-factor columns are never serialized, so those entries never contain them: a change to the password alone records only the new `updated_at`.
 
@@ -517,6 +601,7 @@ issuer = "Navree"               # shown in authenticator apps
 challenge_ttl_secs = 300        # the login challenge token lives 5 minutes
 recovery_codes = 8
 max_attempts_per_minute = 5     # wrong codes per user, then 429; 0 = off
+required_for = []               # roles that must use two-factor authentication
 ```
 
 | Key | Default | |
@@ -534,6 +619,7 @@ max_attempts_per_minute = 5     # wrong codes per user, then 429; 0 = off
 | `auth.two_factor.challenge_ttl_secs` | `300` | Lifetime of the login challenge; at least 1 |
 | `auth.two_factor.recovery_codes` | `8` | How many recovery codes are issued, 1 to 32 |
 | `auth.two_factor.max_attempts_per_minute` | `5` | Wrong codes per user per minute before a 429; `0` turns it off |
+| `auth.two_factor.required_for` | `[]` | Roles whose holders must [use two-factor authentication](#requiring-two-factor-authentication); needs `AccessModule` |
 
 The rest of the `auth` section is on [Authentication](/docs/security/authentication/#configuration).
 

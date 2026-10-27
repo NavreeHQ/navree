@@ -1,0 +1,260 @@
+---
+title: "Impersonation"
+description: "Let support staff sign in as a user, with a required reason, guards on risky routes and the impersonator on every audit entry."
+---
+
+Support often needs to see what a user sees. Impersonation lets an administrator sign in as another user without their password: the requests run as that user, while the token, the request and every audit entry also name the administrator. Risky routes refuse impersonation sessions, and each session ends after an hour. This page assumes `AuthModule` is set up as described in [Authentication](/docs/security/authentication/), with `AccessModule` for the permission check ([Authorization](/docs/security/authorization/)).
+
+## Turning it on
+
+Impersonation is off by default. Turn it on and grant the permission `users.impersonate` to the roles that may use it:
+
+```toml title="config/app.toml"
+[auth.impersonation]
+enabled = true
+ttl_secs = 3600                  # sessions end after an hour, refreshed or not
+permission = "users.impersonate" # what POST /auth/impersonate/{user} requires
+```
+
+```rust title="src/seed.rs"
+use navree::access::AccessService;
+
+access.create_role(&uow, "support", None).await?;
+access.grant(&uow, "support", "users.impersonate").await?;
+access.assign_role(&uow, agent.id, "support").await?;
+```
+
+With `enabled = false` the routes aren't mounted, and `AuthService::impersonate` answers `AuthError::Disabled`. The route checks its permission through the app's route authorizer, so the app needs `AccessModule`.
+
+## Starting a session
+
+`POST /api/auth/impersonate/{user}` with a reason signs the caller in as the user:
+
+```http
+POST /api/auth/impersonate/01a17b6d-d0ef-77f7-8097-11dbb4b1f95b HTTP/1.1
+Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+Content-Type: application/json
+
+{"reason": "Ticket #4521: the export button does nothing"}
+```
+
+```json
+{
+  "access_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
+  "expires_in": 900,
+  "impersonator_id": "01a17b6d-c8f2-7aa1-9c3e-0d8f6f1b2a77",
+  "refresh_token": "01a17b6d-d101-70d8-acae-37a74feaa4bf.YWP7DMg3LhmzNDIto4oUF2Z4BhLYGkQ69WvVowxrn8DQMuSq",
+  "token_type": "Bearer",
+  "user": {
+    "__type": "User",
+    "created_at": "2026-10-27T03:35:56.852768Z",
+    "email": "ada@example.com",
+    "email_verified_at": "2026-10-27T03:35:56.852768Z",
+    "id": "01a17b6d-d0ef-77f7-8097-11dbb4b1f95b",
+    "name": "Ada Lovelace"
+  }
+}
+```
+
+The tokens belong to a new session of the user. Keep the administrator's own tokens aside and use these until the session ends.
+
+| Problem | Response |
+|---|---|
+| The caller lacks `users.impersonate` | `403 Forbidden` |
+| No reason, or a blank one; more than 500 characters | 400 field error on `reason` |
+| The caller is impersonating already | `403 Not allowed while impersonating a user` |
+| The caller's own id | `403 This user cannot be impersonated: yourself` |
+| A [platform administrator](/docs/security/authentication/#platform-administrators) | `403 This user cannot be impersonated: a platform administrator` |
+| A user who holds the impersonation permission | `403 This user cannot be impersonated: a user who may impersonate others` |
+| An unknown user | `404 Not Found` |
+
+The last rule stops support agents from impersonating each other, or an administrator above them, to borrow their rights.
+
+## What the session looks like
+
+The access token carries an `act` claim (RFC 8693) with the administrator's id, and no `auth_time`:
+
+```json
+{
+  "sub": "01a17b6d-d0ef-77f7-8097-11dbb4b1f95b",
+  "typ": "access",
+  "sid": "01a17b6d-d101-70d8-acae-37a74feaa4bf",
+  "act": {"sub": "01a17b6d-c8f2-7aa1-9c3e-0d8f6f1b2a77"}
+}
+```
+
+Requests made with it are the user's: `CurrentUser` is the user, route authorization uses the user's roles, and data is scoped as theirs. The JWT strategy also puts a `navree::contracts::Impersonator` in the request, which three things pick up:
+
+- **`Actor`**, an extractor naming both people, for handlers and for a "You are impersonating Ada" banner.
+- **The unit of work**, which carries the impersonator (`Uow::impersonator()`).
+- **The audit trail**, which records the impersonator on every entry of the request (below).
+
+```rust
+use navree::auth::Actor;
+use navree::prelude::*;
+use serde_json::{Value, json};
+
+#[injectable]
+pub struct BannerController;
+
+#[controller("/banner")]
+impl BannerController {
+    /// `GET /api/banner`: tells the front end to show the impersonation bar.
+    #[get("/")]
+    #[authenticated]
+    async fn show(&self, actor: Actor) -> Json<Value> {
+        Json(json!({
+            "impersonating": actor.is_impersonating(),
+            "user_id": actor.user_id,
+            "real_user_id": actor.real_user_id(),
+        }))
+    }
+}
+```
+
+`Actor { user_id, impersonator_id }` answers 401 for guests. `real_user_id()` is the person at the keyboard: the impersonator while impersonating, the user otherwise.
+
+Refreshing keeps the impersonator and the session's end: an impersonation session lasts `auth.impersonation.ttl_secs` (an hour) from its start, however often it is refreshed. The user sees it in their [session list](/docs/security/sessions/#listing-sessions), with `impersonator_id` set, and can end it.
+
+## Guarding risky routes
+
+An administrator acting as a user shouldn't change the user's password, email address or second factor. Put `#[not_while_impersonating]` on routes like these:
+
+```rust title="src/modules/billing/controller.rs"
+use navree::prelude::*;
+
+#[injectable]
+pub struct PaymentMethodController;
+
+#[controller("/payment-methods", version = "1")]
+#[authenticated]
+#[not_while_impersonating]
+impl PaymentMethodController {
+    #[post("/")]
+    async fn create(&self) -> &'static str {
+        "added"
+    }
+
+    #[delete("/{id}")]
+    async fn destroy(&self, Path(id): Path<u64>) -> String {
+        format!("removed {id}")
+    }
+}
+```
+
+An impersonation session gets a 403 with the code `impersonation_forbidden`:
+
+```json
+{"statusCode": 403, "message": "Not allowed while impersonating a user", "error": "Forbidden"}
+```
+
+On the impl block it applies to every route. It is a guard, not an access declaration, and it needs the `auth` feature of the `navree` facade. For hand-written routes, add `.guard(navree::auth::not_while_impersonating())`.
+
+The auth module's own account-security routes carry it already:
+
+- `PATCH /api/auth/me` and `PATCH /api/auth/me/password`;
+- every `/api/auth/2fa/*` route except `verify`;
+- `POST /api/auth/confirm` and `DELETE /api/auth/sessions/{id}`;
+- `POST /api/auth/impersonate/{user}`, so sessions don't nest;
+- the passkey registration and removal routes.
+
+`#[recent_auth]` routes refuse impersonation sessions too, because an impersonation session never signed in ([Sessions and step-up](/docs/security/sessions/#requiring-a-recent-sign-in)). Reading stays possible: `GET /api/auth/me` and every route without these guards work as for the user.
+
+## Ending the session
+
+```http
+DELETE /api/auth/impersonate HTTP/1.1
+Authorization: Bearer <the impersonation access token>
+```
+
+The answer is `204 No Content`, and the session's refresh tokens stop working. Its access token works until it expires, so the client drops it and switches back to the administrator's own tokens. A token that isn't an impersonation token gets `400 Not impersonating a user`.
+
+## The audit trail
+
+Every audit entry written while impersonating names both people. `actor_id` is the user, as for their own requests, and `impersonator_id` is the administrator:
+
+```json
+{
+  "kind": "data",
+  "action": "deal.updated",
+  "actor_id": "01a17b6d-d0ef-77f7-8097-11dbb4b1f95b",
+  "impersonator_id": "01a17b6d-c8f2-7aa1-9c3e-0d8f6f1b2a77",
+  "subject_type": "Deal",
+  "subject_id": "01a17b6e-0a13-7cc4-9f63-36e0b0d0f3a1"
+}
+```
+
+- **Data changes** get it from the request's unit of work.
+- **Entries recorded during the request**, through `AuditLog::record` or the `AuditSink`, get it from the task's current unit of work; `record_in` takes it from the unit of work it is given.
+- **The auth module's own entries** carry it too: `auth.refresh`, `auth.logout` and the rest.
+
+`GET /api/audit?impersonator_id=<id>` lists everything an administrator did as other users. See [Audit log](/docs/security/audit-log/#the-record-shape).
+
+The sessions themselves are recorded as security events:
+
+| Action | Kind | Actor | Subject | Metadata |
+|---|---|---|---|---|
+| `auth.impersonation_started` | `security` | The administrator | The user | `reason`, `session_id` |
+| `auth.impersonation_ended` | `security` | The administrator | The user | `session_id` |
+
+## In code
+
+| `AuthService` method | What it does |
+|---|---|
+| `impersonate(impersonator_id, impersonator_claims, target_id, reason, &meta)` | Starts a session as `target_id`: the user and a `TokenPair` |
+| `stop_impersonating(&claims, &meta)` | Ends the impersonation session of `claims` |
+
+`impersonator_claims` is the caller's `AccessClaims`, when there is one: an impersonation session can't start another. The route checks the permission; the method checks everything else in the table above.
+
+## Testing
+
+Give a test user the permission, start a session over HTTP and use its token:
+
+```rust
+use navree::access::{AccessModule, AccessOptions};
+use serde_json::json;
+
+let app = builder()
+    .config("auth.impersonation.enabled", true)
+    .module(AccessModule::for_root(AccessOptions::default()))
+    .build()
+    .await;
+// ... sign in `agent`, give it a role with `users.impersonate`, create `ada`.
+let response = app
+    .client()
+    .post(&format!("/api/auth/impersonate/{}", ada.id))
+    .bearer(&agent_access)
+    .json(&json!({ "reason": "test" }))
+    .send()
+    .await
+    .assert_status(200)
+    .assert_json_path("impersonator_id", json!(agent.id));
+let access = response.json_value()["access_token"].as_str().unwrap().to_owned();
+app.client()
+    .patch("/api/auth/me/password")
+    .bearer(&access)
+    .json(&json!({ "current_password": "x", "password": "another password" }))
+    .send()
+    .await
+    .assert_error(403, "Not allowed while impersonating a user");
+```
+
+`builder` stands for your test setup ([Authentication](/docs/security/authentication/#testing)).
+
+## Limits
+
+- **The front end keeps the administrator's tokens.** Ending an impersonation session doesn't return the administrator's own tokens.
+- **One session at a time.** An impersonation session can't impersonate further.
+- **Guards are opt-in for your routes.** Only routes with `#[not_while_impersonating]` (or `#[recent_auth]`) refuse impersonation sessions; review your own risky routes.
+
+<LinkCards>
+  <LinkCard href="/docs/security/audit-log/" title="Audit log">
+    Filter the trail by `impersonator_id`.
+  </LinkCard>
+  <LinkCard href="/docs/security/sessions/" title="Sessions and step-up">
+    Session lists, ending sessions and `#[recent_auth]`.
+  </LinkCard>
+  <LinkCard href="/docs/security/authorization/" title="Authorization">
+    Roles and the `users.impersonate` permission.
+  </LinkCard>
+</LinkCards>

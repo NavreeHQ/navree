@@ -1,6 +1,6 @@
 ---
 name: navree-auth
-description: "Authentication with navree-auth: `AuthModule`, the `/api/auth/*` routes, JWT access tokens and rotating refresh tokens, `CurrentUser`, `AuthService`, account flows (registration, password reset, email verification, profile and password changes), TOTP two-factor, custom strategies such as API keys, the login throttle and tests with real tokens. Use when adding sign-in or sign-up, reading the signed-in user, configuring tokens or the signing key, building password reset or two-factor, adding API keys, or testing authenticated requests."
+description: "Authentication with navree-auth: `AuthModule`, the `/api/auth/*` routes, JWT access tokens and rotating refresh tokens, `CurrentUser`, `AuthService`, account flows (registration, password reset, email verification, profile and password changes), TOTP two-factor and a policy requiring it, sessions and step-up (`#[recent_auth]`), impersonation (`#[not_while_impersonating]`, `Actor`), magic links, emailed codes, passkeys, platform administrators, trusted token exchange, custom strategies such as API keys, the login throttle and tests with real tokens. Use when adding sign-in or sign-up, reading the signed-in user, configuring tokens or the signing key, building password reset, two-factor or passwordless sign-in, listing or ending sessions, guarding sensitive routes, letting support impersonate users, adding API keys, or testing authenticated requests."
 ---
 
 # Authentication
@@ -30,9 +30,9 @@ Navree::app()
 Set `APP_KEY` (`navree key:generate`): the JWT key is derived from it unless
 `auth.jwt.secret` (at least 32 bytes) is set. Without either, tokens are
 signed with a random key per process and every restart signs everyone out.
-The migration set `auth` creates `users`, `refresh_tokens` and
-`password_reset_tokens`; your sets that reference `users` use
-`.after(["auth"])`.
+The migration set `auth` creates `users`, `refresh_tokens`,
+`password_reset_tokens`, `login_tokens` and `passkeys`; your sets that
+reference `users` use `.after(["auth"])`.
 
 ## Routes (under `/api/auth`)
 
@@ -46,8 +46,39 @@ The migration set `auth` creates `users`, `refresh_tokens` and
 | `POST /forgot-password`, `POST /reset-password` | public | password reset |
 | `POST /email/verification`, `GET /email/verify/{id}/{hash}` | signed in / signed link | email verification |
 | `POST /2fa/enable`, `/2fa/confirm`, `/2fa/verify`, `/2fa/disable`, `/2fa/recovery-codes` | mixed | TOTP two-factor |
+| `GET /sessions`, `DELETE /sessions/{id}`, `POST /confirm` `{password}` or `{code}` | signed in | sessions; step-up confirmation |
+| `POST /impersonate/{user}` `{reason}`, `DELETE /impersonate` | `users.impersonate` / signed in | impersonation (`auth.impersonation.enabled`) |
+| `POST /magic-link`, `/magic-link/verify`, `/otp`, `/otp/verify` | public | passwordless (`auth.magic_link.enabled`, `auth.otp.enabled`) |
+| `/passkeys/register/options`, `/passkeys/register`, `/passkeys/login/options`, `/passkeys/login`, `GET /passkeys`, `DELETE /passkeys/{id}` | mixed | passkeys (`auth.passkeys.enabled`) |
+| `POST /platform/login`, `/platform/2fa/verify` | public | platform administrators (`auth.platform.enabled`) |
+| `POST /exchange` `{token}` | public | trusted issuers' JWTs (`auth.trusted_issuers.<name>`) |
 
-Details of the account flows: `references/account-flows.md`.
+Details of the account flows: `references/account-flows.md`. Sessions,
+step-up, impersonation, passwordless, platform and token exchange:
+`references/sessions-and-sign-in.md`.
+
+## Sensitive routes: step-up and impersonation guards
+
+```rust
+#[controller("/account", version = "1")]
+#[authenticated]
+impl AccountController {
+    #[delete("/")]
+    #[recent_auth(minutes = 10)]   // 403 reauthentication_required unless signed in or confirmed in 10 min
+    #[not_while_impersonating]     // 403 impersonation_forbidden in an impersonation session
+    async fn destroy(&self, CurrentUser(user): CurrentUser) -> Json<String> {
+        Json(format!("Deleting {}", user.email))
+    }
+}
+```
+
+Both are guards (the route still needs an access declaration) and may sit on
+the impl block. On a 403 `reauthentication_required` the client posts the
+password (or a TOTP code) to `POST /api/auth/confirm`, swaps in the returned
+access token and retries. Hand-written routes: `.guard(recent_auth(dur))`,
+`.guard(not_while_impersonating())`, `.guard(platform_session())`.
+Extractors: `AccessClaims` (the token's `sid`, `auth_time`, impersonator),
+`Actor` (user and impersonator), `PlatformAdmin(user)`.
 
 ## Read the signed-in user
 
@@ -95,7 +126,21 @@ auth.revoke_all_refresh_tokens(user.id).await?;
 ```
 
 Also: `attempt_login`, `issue_tokens`, `refresh`, `logout`, `find_user`,
-`update_password`, `present(&user)` and the account-flow methods.
+`update_password`, `present(&user)`, the account-flow methods, and
+`sessions`, `revoke_session`, `confirm`, `impersonate`, `stop_impersonating`,
+`two_factor_required`, `send_magic_link`, `login_with_magic_link`,
+`send_login_code`, `login_with_code`, the passkey methods,
+`is_platform_admin`, `platform_login` and `exchange_token`.
+
+## Require two-factor authentication
+
+`auth.two_factor.required_for = ["admin"]` (needs `AccessModule`), or a
+`TwoFactorPolicy` registered with `m.two_factor_policy::<P>()` (workspace or
+organization rules). Users it applies to without 2FA get
+`two_factor_setup_required: true` and a token that reaches only the setup
+routes (`2fa/enable`, `2fa/confirm`, `GET /me`, `logout`, `refresh`);
+everything else is 403 `two_factor_required`. After confirming, the client
+refreshes for a full token.
 
 ## API keys and other credentials: a strategy
 
@@ -230,9 +275,17 @@ needs a real `users` row). To test sign-in itself, post to
 - Adding `SessionModule`'s authenticator next to `AuthModule`: an app has one
   `dyn Authenticator`.
 - Unverified emails aren't blocked: check `user.email_verified_at` where it matters.
+- Writing a "danger zone" route without `#[recent_auth]` or
+  `#[not_while_impersonating]`: impersonation sessions and old tokens pass
+  plain `#[authenticated]`.
+- Turning on impersonation without `AccessModule`: its route requires the
+  permission `users.impersonate`.
 
 ## Docs
 
 - https://navree.com/docs/security/authentication/
 - https://navree.com/docs/security/account-flows/
+- https://navree.com/docs/security/sessions/
+- https://navree.com/docs/security/passwordless/
+- https://navree.com/docs/security/impersonation/
 - https://navree.com/docs/security/encryption-and-hashing/

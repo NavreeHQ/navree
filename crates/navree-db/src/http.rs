@@ -10,7 +10,7 @@ use std::task::{Context, Poll};
 use axum::extract::{FromRequestParts, Request};
 use axum::response::{IntoResponse, Response};
 use http::request::Parts;
-use navree_contracts::{AuthState, RequestId};
+use navree_contracts::{AuthState, Impersonator, RequestId};
 use navree_http::{AppError, GlobalLayer, LayerSlot};
 use navree_kernel::{AppContext, BoxFuture};
 use navree_telemetry::TelemetryContext;
@@ -37,13 +37,14 @@ impl<S: Send + Sync> FromRequestParts<S> for Uow {
 }
 
 /// The [`LayerSlot::Uow`] layer: a lazy [`Uow`] per request with the actor
-/// (from `AuthState`) and the request id. The rest of the pipeline runs
-/// with the unit of work as [`Uow::current`], in the task that polls the
-/// request (no task per request). If the request is dropped before it
-/// finishes (the client disconnected, or the global timeout fired), what
-/// is left of it moves to a task on the app's tracker, so it still
-/// completes (and commits). Commits when the status is below 400, rolls
-/// back otherwise; a failed commit becomes an error response.
+/// (from `AuthState`), the impersonator (from `Impersonator`) and the
+/// request id. The rest of the pipeline runs with the unit of work as
+/// [`Uow::current`], in the task that polls the request (no task per
+/// request). If the request is dropped before it finishes (the client
+/// disconnected, or the global timeout fired), what is left of it moves to
+/// a task on the app's tracker, so it still completes (and commits).
+/// Commits when the status is below 400, rolls back otherwise; a failed
+/// commit becomes an error response.
 pub(crate) fn uow_layer() -> GlobalLayer {
     GlobalLayer::new(LayerSlot::Uow, "uow", |_ctx, router| {
         Ok(router.layer(UowLayer {
@@ -135,7 +136,16 @@ where
         .extensions()
         .get::<RequestId>()
         .map(|id| id.as_str().to_owned());
-    let uow = db.uow(actor, request_id).await;
+    let impersonator = request
+        .extensions()
+        .get::<Impersonator>()
+        .map(|impersonator| impersonator.0);
+    let uow = match (actor, impersonator) {
+        (Some(actor), Some(impersonator)) => {
+            db.impersonated_uow(actor, impersonator, request_id).await
+        }
+        _ => db.uow(actor, request_id).await,
+    };
     request.extensions_mut().insert(uow.clone());
     let response = uow
         .scope(async move {

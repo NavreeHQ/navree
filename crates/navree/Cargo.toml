@@ -112,6 +112,7 @@ auth = [
     "cache",
     "mail",
     "access",
+    "http-client",
 ]
 ## Workspaces: multi-tenancy with members, roles, invitations and isolation.
 workspace = [

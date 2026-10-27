@@ -4,6 +4,7 @@ mod support;
 
 mod data;
 mod http;
+mod impersonation;
 mod module;
 mod prune;
 mod sink;

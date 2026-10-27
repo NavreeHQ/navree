@@ -199,6 +199,16 @@ Navree's modules give each refusal its own code, so a login form can say "wrong 
 | auth | `invalid_reset_token` | 400 | `Invalid or expired password reset token` |
 | auth | `invalid_verification_link` | 403 | `Invalid verification link` |
 | auth | `user_not_found` | 404 | `Not Found` |
+| auth | `two_factor_required` | 403 | `Two-factor authentication required`: two-factor authentication must be [set up first](/docs/security/account-flows/#requiring-two-factor-authentication) |
+| auth | `reauthentication_required` | 403 | `Please confirm your identity to continue` ([`#[recent_auth]`](/docs/security/sessions/#requiring-a-recent-sign-in)) |
+| auth | `impersonation_forbidden` | 403 | `Not allowed while impersonating a user` |
+| auth | `cannot_impersonate` | 403 | `This user cannot be impersonated: yourself` |
+| auth | `not_impersonating` | 400 | `Not impersonating a user` |
+| auth | `session_not_found` | 404 | `Not Found` |
+| auth | `passkey_not_found` | 404 | `Not Found` |
+| auth | `invalid_login_token` | 401 | `Invalid or expired sign-in code` |
+| auth | `invalid_passkey` | 401 | `Invalid passkey` |
+| auth | `platform_session_required` | 403 | `A platform session is required` |
 | workspace | `workspace_required` | 400 | `The request names no workspace.` |
 | workspace | `workspace_not_found` | 404 | `Workspace not found.` |
 | workspace | `not_a_member` | 403 | `You are not a member of this workspace.` |

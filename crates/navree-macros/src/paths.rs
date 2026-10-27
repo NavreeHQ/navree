@@ -46,6 +46,13 @@ pub(crate) const SEARCH: RuntimeCrate = RuntimeCrate {
     facade_module: "search",
 };
 
+/// navree-auth: the guards of `#[not_while_impersonating]` and
+/// `#[recent_auth(minutes = 10)]`.
+pub(crate) const AUTH: RuntimeCrate = RuntimeCrate {
+    package: "navree-auth",
+    facade_module: "auth",
+};
+
 /// navree-graphql: `GraphqlResolver`, async-graphql and the field runtime
 /// (`#[resolver]`).
 pub(crate) const GRAPHQL: RuntimeCrate = RuntimeCrate {

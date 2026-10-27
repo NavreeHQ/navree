@@ -10,7 +10,7 @@ use axum::body::Body;
 use axum::extract::Path;
 use http::{Method, Request, StatusCode};
 use http_body_util::BodyExt;
-use navree_contracts::{AuthVia, Principal};
+use navree_contracts::{AuthVia, Impersonator, Principal};
 use navree_db::{
     ChangeEvent, ChangeObserver, DatabaseModule, Db, MigrationSet, ModuleBuilderDbExt, Repo, Uow,
 };
@@ -205,6 +205,7 @@ impl Controller for NotesController {
             RouteDef::on(Method::GET, "/whoami", |uow: Uow| async move {
                 Json(json!({
                     "actor": uow.actor(),
+                    "impersonator": uow.impersonator(),
                     "request_id": uow.request_id(),
                 }))
             })
@@ -225,7 +226,8 @@ impl Module for NotesModule {
     }
 }
 
-/// Authenticates `x-user-id: <uuid>`.
+/// Authenticates `x-user-id: <uuid>`; `x-impersonator-id: <uuid>` marks
+/// an impersonation session.
 struct HeaderAuthenticator;
 
 impl Authenticator for HeaderAuthenticator {
@@ -234,6 +236,14 @@ impl Authenticator for HeaderAuthenticator {
         parts: &'a mut http::request::Parts,
     ) -> BoxFuture<'a, Result<Option<Principal>, AppError>> {
         Box::pin(async move {
+            if let Some(impersonator) = parts
+                .headers
+                .get("x-impersonator-id")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|v| Uuid::parse_str(v).ok())
+            {
+                parts.extensions.insert(Impersonator(impersonator));
+            }
             Ok(parts
                 .headers
                 .get("x-user-id")
@@ -473,7 +483,49 @@ async fn uow_gets_actor_and_request_id_from_the_pipeline() {
     let body: Value =
         serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes()).unwrap();
     assert_eq!(body["actor"], user.to_string());
+    assert_eq!(body["impersonator"], Value::Null);
     assert_eq!(body["request_id"], "req-42");
+}
+
+#[tokio::test]
+async fn uow_carries_the_impersonator_of_the_request() {
+    let s = setup().await;
+    let (user, admin) = (Uuid::now_v7(), Uuid::now_v7());
+    let (status, body) = send(
+        &s.router,
+        Request::get("/api/notes/whoami")
+            .header("x-user-id", user.to_string())
+            .header("x-impersonator-id", admin.to_string())
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["actor"], user.to_string());
+    assert_eq!(body["impersonator"], admin.to_string());
+
+    // An impersonator without a principal is ignored.
+    let (_, body) = send(
+        &s.router,
+        Request::get("/api/notes/whoami")
+            .header("x-impersonator-id", admin.to_string())
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(body["actor"], Value::Null);
+    assert_eq!(body["impersonator"], Value::Null);
+}
+
+#[tokio::test]
+async fn impersonated_units_of_work_name_both_users() {
+    let s = setup().await;
+    let (user, admin) = (Uuid::now_v7(), Uuid::now_v7());
+    let uow = s.db.impersonated_uow(user, admin, None).await;
+    assert_eq!(uow.actor(), Some(user));
+    assert_eq!(uow.impersonator(), Some(admin));
+    assert!(format!("{uow:?}").contains(&admin.to_string()));
+    assert_eq!(s.db.uow(Some(user), None).await.impersonator(), None);
 }
 
 #[tokio::test]
