@@ -43,6 +43,16 @@ async fn postgres_unit_of_work() {
 }
 
 #[tokio::test]
+async fn postgres_streams() {
+    run(Server::Postgres, scenarios::streams).await;
+}
+
+#[tokio::test]
+async fn mysql_streams() {
+    run(Server::MySql, scenarios::streams).await;
+}
+
+#[tokio::test]
 async fn timescaledb_time_buckets() {
     run(Server::Postgres, |db| {
         scenarios::time_buckets(db, Server::Postgres)
