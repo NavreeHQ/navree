@@ -221,7 +221,7 @@ base64 = "0.23.1"
 hex = "0.4.3"
 # XML for single sign-on (navree-sso): SAML messages and metadata, read into
 # its own tree for exclusive canonicalization and signature checks.
-quick-xml = "0.41.0"
+quick-xml = "0.42.0"
 # Insertion-ordered maps: navree-orm's `key_by`, `group_by` and keyed plucks.
 indexmap = { version = "2.14.2", features = ["serde"] }
 
