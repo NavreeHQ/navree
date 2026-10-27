@@ -56,6 +56,7 @@ navree-flags = { path = "crates/navree-flags", version = "0.1.0" }
 navree-graphql = { path = "crates/navree-graphql", version = "0.1.0" }
 navree-billing = { path = "crates/navree-billing", version = "0.1.0" }
 navree-grpc = { path = "crates/navree-grpc", version = "0.1.0" }
+navree-documents = { path = "crates/navree-documents", version = "0.1.0" }
 
 # ---------------------------------------------------------------------------
 # Runtime, async and HTTP (Tokio family)
@@ -268,6 +269,13 @@ csv = "1.4.0"
 async-graphql = { version = "7.2.1", default-features = false, features = ["chrono", "dataloader", "uuid"] }
 # Line diffs for `graphql:schema --check` (the version insta already uses).
 similar = "2.7.0"
+# Documents (navree-documents): the Typst compiler and its PDF exporter, a
+# DOCX writer, and PDF editing (merge, stamp, text extraction). Pure Rust.
+typst = "0.15.1"
+typst-pdf = "0.15.1"
+typst-layout = "0.15.1"
+docx-rs = { version = "0.4.22", default-features = false }
+lopdf = { version = "0.46.0", default-features = false }
 
 # ---------------------------------------------------------------------------
 # Tooling: proc macros and CLI
