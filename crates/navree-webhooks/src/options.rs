@@ -227,9 +227,10 @@ impl<'de> Deserialize<'de> for IncomingOptions {
 /// The built-in sources read more keys: `url` ([`Twilio`](crate::Twilio),
 /// [`GooglePubSub`](crate::GooglePubSub)), `topics` and `auto_confirm`
 /// ([`AwsSns`](crate::AwsSns)), `audience` and `service_account`
-/// ([`GooglePubSub`](crate::GooglePubSub)).
+/// ([`GooglePubSub`](crate::GooglePubSub)), `verify_token`
+/// ([`Meta`](crate::Meta)).
 ///
-/// `Debug` never shows the secret.
+/// `Debug` never shows the secret or the verify token.
 #[derive(Clone, PartialEq, Eq, Deserialize)]
 #[serde(default)]
 pub struct SourceOptions {
@@ -282,6 +283,11 @@ pub struct SourceOptions {
     /// push subscription authenticates as. Required: any Google account can
     /// mint a token for any audience.
     pub service_account: Option<String>,
+    /// [`Meta`](crate::Meta): the verify token of the subscription
+    /// handshake (`hub.verify_token`), chosen when the webhook is set up in
+    /// the app dashboard. Without it the handshake is refused. Never shown
+    /// in `Debug`.
+    pub verify_token: Option<String>,
 }
 
 impl Default for SourceOptions {
@@ -302,6 +308,7 @@ impl Default for SourceOptions {
             auto_confirm: true,
             audience: None,
             service_account: None,
+            verify_token: None,
         }
     }
 }
@@ -340,6 +347,10 @@ impl fmt::Debug for SourceOptions {
             .field("auto_confirm", &self.auto_confirm)
             .field("audience", &self.audience)
             .field("service_account", &self.service_account)
+            .field(
+                "verify_token",
+                &self.verify_token.as_ref().map(|_| "[redacted]"),
+            )
             .finish()
     }
 }

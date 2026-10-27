@@ -1,19 +1,35 @@
 //! # navree-notify
 //!
-//! `NotifyModule`: notifications delivered over mail, database and broadcast
-//! channels, with read state.
+//! `NotifyModule`: notifications delivered over mail, database, broadcast,
+//! Slack, Microsoft Teams, SMS, WhatsApp and web push channels, with read
+//! state, a delivery log and opt-outs.
 //!
 //! - A [`Notification`] lists its [`Channel`]s per recipient
 //!   ([`via`](Notification::via)) and renders itself for each one:
 //!   [`to_mail`](Notification::to_mail) (a navree-mail
 //!   [`TemplateMail`](navree_mail::TemplateMail)),
-//!   [`to_database`](Notification::to_database) (the stored `data`) and
-//!   [`to_broadcast`](Notification::to_broadcast). A [`Notifiable`] (usually
-//!   a user) names the owner of stored notifications and routes mail and
-//!   broadcasts.
+//!   [`to_database`](Notification::to_database) (the stored `data`),
+//!   [`to_broadcast`](Notification::to_broadcast),
+//!   [`to_slack`](Notification::to_slack), [`to_teams`](Notification::to_teams),
+//!   [`to_sms`](Notification::to_sms), [`to_whatsapp`](Notification::to_whatsapp)
+//!   and [`to_web_push`](Notification::to_web_push). A [`Notifiable`]
+//!   (usually a user) names the owner of stored notifications and routes
+//!   each channel (`route_mail`, `route_slack`, `route_sms`...).
 //! - [`NotifyModule`] is global: it provides and exports [`Notifier`]
-//!   ([`NotifyOptions`], section `notify`), registers job `notify.send`
-//!   ([`SendNotificationJob`]) and migrates table `notifications`.
+//!   ([`NotifyOptions`], section `notify`), [`DeliveryLog`], [`OptOuts`] and
+//!   [`PushSubscriptions`], registers job `notify.send`
+//!   ([`SendNotificationJob`]) and command `notify:vapid`, and migrates
+//!   `notifications`, `notification_deliveries`, `notification_opt_outs`
+//!   and `push_subscriptions`.
+//! - The Slack, Teams, SMS, WhatsApp and web push channels send through a
+//!   driver per channel ([`SlackDriver`], [`TeamsDriver`], [`SmsDriver`],
+//!   [`WhatsAppDriver`], [`WebPushDriver`]): the app's own (a fake such as
+//!   [`SmsFake`]), else the one `notify.<channel>` configures
+//!   ([`SlackApi`], [`TeamsApi`], [`TwilioSms`], [`VonageSms`], [`SnsSms`],
+//!   [`TwilioWhatsApp`], [`MetaWhatsApp`], [`VapidWebPush`]). Numbers are
+//!   read as E.164; opted-out numbers are skipped; each attempt is a
+//!   [`NotificationDelivery`] row, moved forward by provider callbacks
+//!   ([`ChannelCallback`], [`DeliveryLog::ingest`]).
 //! - [`Notifier::send`] renders now and delivers now, or, with
 //!   [`NotifyOptions::queue`], dispatches one `notify.send` job per channel
 //!   through the app's `dyn Dispatcher`. [`Notifier::send_now`] never
@@ -33,7 +49,9 @@
 //!   [`USER_NOTIFIABLE_TYPE`]): `GET /api/notifications?unread=` (a page,
 //!   newest first), `GET /api/notifications/unread-count` (`{count}`),
 //!   `POST /api/notifications/{id}/read` and
-//!   `POST /api/notifications/read-all` (204). The same read state is
+//!   `POST /api/notifications/read-all` (204), and the push subscriptions:
+//!   `GET /api/notifications/push-key`, `POST` and `DELETE
+//!   /api/notifications/push-subscriptions`. The same read state is
 //!   available in code: [`Notifier::notifications`],
 //!   [`Notifier::unread_count`], [`Notifier::mark_as_read`] and
 //!   [`Notifier::mark_all_as_read`].
@@ -121,32 +139,73 @@
 //! ```
 #![forbid(unsafe_code)]
 
+mod callbacks;
 mod channel;
+mod channels;
+mod commands;
 mod controller;
+mod deliveries;
+mod drivers;
 mod error;
+mod fake;
 mod job;
+mod messages;
 mod migration;
 mod module;
 mod notifiable;
 mod notification;
 pub mod notifications;
 mod notifier;
+mod opt_outs;
 mod options;
+mod push;
 mod recipient;
 mod schema;
+mod store;
 mod stored;
+mod tokens;
 
+pub use callbacks::{
+    ChannelCallback, InboundMessage, Keyword, OPT_IN_KEYWORDS, OPT_OUT_KEYWORDS, StatusUpdate,
+    keyword,
+};
 pub use channel::Channel;
+pub use deliveries::{DeliveryLog, DeliveryStatus, Ingested, NotificationDelivery};
+pub use drivers::log::{LogSms, LogWhatsApp};
+pub use drivers::meta::MetaWhatsApp;
+pub use drivers::slack::SlackApi;
+pub use drivers::sns::SnsSms;
+pub use drivers::teams::TeamsApi;
+pub use drivers::twilio::{TwilioSms, TwilioWhatsApp};
+pub use drivers::vonage::VonageSms;
+pub use drivers::web_push::VapidWebPush;
+pub use drivers::{
+    ChannelError, PushTarget, SentMessage, SlackDriver, SmsDriver, TeamsDriver, WebPushDriver,
+    WhatsAppDriver,
+};
 pub use error::NotifyError;
+pub use fake::{FAKE_PROVIDER, Sent, SlackFake, SmsFake, TeamsFake, WebPushFake, WhatsAppFake};
 pub use job::{Delivery, SendNotificationJob};
-pub use migration::NOTIFICATIONS_TABLE;
+pub use messages::{
+    SlackMessage, SlackRoute, SmsMessage, TeamsMessage, TeamsRoute, Urgency, WebPushMessage,
+    WhatsAppMessage, WhatsAppTemplate,
+};
+pub use migration::{
+    DELIVERIES_TABLE, NOTIFICATIONS_TABLE, OPT_OUTS_TABLE, PUSH_SUBSCRIPTIONS_TABLE,
+};
 pub use module::NotifyModule;
 pub use notifiable::Notifiable;
 pub use notification::Notification;
 pub use notifier::{NOTIFICATION_CREATED, Notifier};
-pub use options::NotifyOptions;
+pub use opt_outs::{NotificationOptOut, OptOutSource, OptOuts};
+pub use options::{
+    MetaOptions, NotifyOptions, SlackOptions, SmsDriverKind, SmsOptions, SnsOptions, TeamsOptions,
+    TwilioOptions, VonageOptions, WebPushOptions, WhatsAppDriverKind, WhatsAppOptions,
+};
+pub use push::{NewPushSubscription, PushKeys, PushSubscription, PushSubscriptions};
 pub use recipient::RecipientScope;
 pub use stored::DatabaseNotification;
+pub use tokens::ConnectionTokens;
 
 /// The notifiable type of users: the `/api/notifications` endpoints serve
 /// the signed-in user's notifications stored under this type.

@@ -370,6 +370,20 @@ pub async fn unhealthy_by_provider(db: &Db) -> Result<Vec<(String, u64)>, OrmErr
 
 Its `credentials` and `access_token` columns hold ciphertexts; they are hidden from serialized records and from `Debug`. Read the table freely, and change connections through `Integrations`, which encrypts the credentials, emits the events and writes the audit entries. `ConnectionInfo` is the view to return from your own routes.
 
+### Notification bot routes
+
+With [notifications](/docs/digging-deeper/notification-channels/) in the app too (the `notify` feature; `integrations` and `notify` are both in `full`), `IntegrationsModule` registers notifications' `dyn ConnectionTokens` (`IntegrationTokens`). A Slack or Teams route that names a connection then sends with that connection's token, from `token(id)`:
+
+```rust
+use navree::notify::{SlackRoute, TeamsRoute};
+
+// The workspace's Slack install posts with its own bot token.
+SlackRoute::channel("C0123456789").connection(slack_connection.id);
+// A bot registered in the customer's tenant: a `microsoft` connection whose
+// scope set asks for https://api.botframework.com/.default.
+TeamsRoute::conversation(service_url, conversation_id).connection(teams_connection.id);
+```
+
 ## Health checks
 
 A connection stops working without telling you: an admin removes your app from their tenant, a key is rotated, a service account is deleted. `integrations:check` finds out before your users do. For each connection it asks the provider for a new token (OAuth, app-only and service-account connections) and gets the provider's health probe (`health_url`, or Slack's `auth.test`). Then:

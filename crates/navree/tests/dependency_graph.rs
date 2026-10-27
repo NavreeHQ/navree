@@ -125,8 +125,18 @@ const HIERARCHY: &[Rule] = &[
     rule("navree-schedule", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-db", "navree-time"]),
     rule("navree-access", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db", "navree-cache"]),
     // Stored notifications are navree-orm models, written by the database
-    // channel through the ORM (same layer; the ORM never depends on notify).
-    rule("navree-notify", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http", "navree-db", "navree-mail", "navree-orm"]),
+    // channel through the ORM (same layer; the ORM never depends on notify),
+    // like the delivery log, opt-outs and push subscriptions of the
+    // Slack, Teams, SMS, WhatsApp and web push channels. Their providers are
+    // called through navree-http-client, web push is encrypted and VAPID
+    // signed with navree-crypto, and numbers are read as E.164 with
+    // navree-validation's `Phone` (same layer; validation never depends on
+    // notify).
+    rule("navree-notify", 4, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http",
+        "navree-db", "navree-mail", "navree-orm", "navree-crypto", "navree-http-client",
+        "navree-validation",
+    ]),
     // The UI kit of the server-rendered tools: templates through navree-view,
     // embedded assets served by a navree-http controller. Layer 4 so that its
     // tests can boot it with navree-testing (L3).
@@ -201,11 +211,13 @@ const HIERARCHY: &[Rule] = &[
     // Webhooks: signed outgoing deliveries through the queue (a job
     // dispatcher from navree-contracts) and the HTTP client, endpoints in the
     // database, routes scoped to the request's workspace. The webhook tables
-    // are navree-orm models.
+    // are navree-orm models. With its `notify` feature it verifies the
+    // provider callbacks of navree-notify's channels and applies them to
+    // the notification delivery log.
     rule("navree-webhooks", 6, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto",
         "navree-events", "navree-http-client", "navree-db", "navree-queue", "navree-access",
-        "navree-workspace", "navree-orm",
+        "navree-workspace", "navree-orm", "navree-notify",
     ]),
     // Integrations: workspace and organization connections to third-party
     // APIs. Credentials encrypted with navree-crypto (service-account JWTs
@@ -213,11 +225,12 @@ const HIERARCHY: &[Rule] = &[
     // provider calls through navree-http-client, connections in navree-db,
     // owners from navree-workspace, `integrations:check` on navree-schedule
     // and `ConnectionUnhealthy` on navree-events. The connections table is a
-    // navree-orm model.
+    // navree-orm model. With its `notify` feature, connections give the
+    // tokens of navree-notify's Slack and Teams bot routes.
     rule("navree-integrations", 6, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto",
         "navree-cache", "navree-events", "navree-http-client", "navree-db", "navree-schedule",
-        "navree-workspace", "navree-orm",
+        "navree-workspace", "navree-orm", "navree-notify",
     ]),
     // OAuth 2.1 and OpenID Connect provider: clients, grants and personal
     // access tokens for navree-auth users, scopes mapped to navree-access

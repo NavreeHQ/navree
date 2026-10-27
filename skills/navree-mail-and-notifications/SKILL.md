@@ -218,6 +218,8 @@ dispatch with `QueueFake` (`SendMailJob`). Count database notifications with
 - Calling `mailer.send` inside a request for slow SMTP: use `queue`.
 - Expecting `.env` to change `mail.transport` when `config/app.toml` sets it.
 - Notification routes in an app without `AuthModule`: set `notify.routes = false`.
+- Slack, Teams, SMS, WhatsApp and web push channels: see
+  `navree-notification-channels`.
 - Putting reset links or secrets in queued mail without thinking: the
   rendered message sits in the `jobs` table until sent.
 

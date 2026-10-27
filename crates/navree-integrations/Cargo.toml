@@ -14,6 +14,9 @@ workspace = true
 # The database drivers of the gated server tests (`tests/integrations/servers.rs`).
 postgres = ["navree-db/postgres"]
 mysql = ["navree-db/mysql"]
+## Connections as the tokens of navree-notify's Slack and Teams bot routes
+## (`IntegrationTokens`, registered as `dyn ConnectionTokens`).
+notify = ["dep:navree-notify"]
 
 [dependencies]
 axum = { workspace = true }
@@ -34,6 +37,8 @@ navree-events = { workspace = true }
 navree-http = { workspace = true }
 navree-http-client = { workspace = true }
 navree-kernel = { workspace = true }
+# Feature `notify`: `IntegrationTokens` is navree-notify's `dyn ConnectionTokens`.
+navree-notify = { workspace = true, optional = true }
 # `integration_connections` is a navree-orm model.
 navree-orm = { workspace = true }
 # `integrations:check` on the scheduler.
@@ -53,6 +58,8 @@ uuid = { workspace = true }
 [dev-dependencies]
 navree-access = { workspace = true }
 navree-api = { workspace = true }
+# The `notify` feature's tests (`tests/integrations/notify.rs`).
+navree-integrations = { workspace = true, features = ["notify"] }
 navree-testing = { workspace = true }
 # The mock providers verify service-account JWTs with `ring` directly, apart
 # from the code under test.

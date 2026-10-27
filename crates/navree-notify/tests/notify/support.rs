@@ -12,8 +12,12 @@ use navree_db::{DatabaseModule, Db};
 use navree_kernel::{Module, ModuleBuilder};
 use navree_mail::{MailModule, MailOptions, Mailer, Message, TemplateMail, TransportConfig};
 use navree_notify::{
-    Channel, Notifiable, Notification, NotifyModule, NotifyOptions, notifications,
+    Channel, Notifiable, Notification, NotificationDelivery, NotifyModule, NotifyOptions,
+    SlackDriver, SlackFake, SlackMessage, SlackRoute, SmsDriver, SmsFake, SmsMessage, TeamsDriver,
+    TeamsFake, TeamsMessage, TeamsRoute, WebPushDriver, WebPushFake, WebPushMessage,
+    WhatsAppDriver, WhatsAppFake, WhatsAppMessage, notifications,
 };
+use navree_orm::Model as _;
 use navree_testing::{TestApp, TestAppBuilder};
 use navree_view::{ModuleBuilderViewExt, ViewModule, ViewOptions};
 use sea_orm::{EntityTrait, QueryOrder};
@@ -237,4 +241,185 @@ pub async fn run_job(app: &TestApp, envelope: &JobEnvelope) -> Result<(), BoxErr
         },
     )
     .await
+}
+
+/// A recipient with an address on every external channel.
+#[derive(Clone, Debug)]
+pub struct Member {
+    pub id: Uuid,
+    pub phone: Option<String>,
+    pub whatsapp: Option<String>,
+    pub slack: Option<SlackRoute>,
+    pub teams: Option<TeamsRoute>,
+}
+
+impl Member {
+    /// A member with a US phone (written nationally), a UK WhatsApp
+    /// number, a Slack channel and a Teams conversation.
+    pub fn new() -> Self {
+        Self {
+            id: Uuid::now_v7(),
+            phone: Some("(415) 555-0100".to_owned()),
+            whatsapp: Some("+44 7400 123456".to_owned()),
+            slack: Some(SlackRoute::channel("C0123456789")),
+            teams: Some(TeamsRoute::conversation(
+                "https://smba.trafficmanager.net/emea/",
+                "a:1Xyz",
+            )),
+        }
+    }
+
+    /// A member with no external addresses.
+    pub fn unreachable() -> Self {
+        Self {
+            phone: None,
+            whatsapp: None,
+            slack: None,
+            teams: None,
+            ..Self::new()
+        }
+    }
+}
+
+impl Notifiable for Member {
+    fn notifiable_type(&self) -> &'static str {
+        "user"
+    }
+
+    fn notifiable_id(&self) -> String {
+        self.id.to_string()
+    }
+
+    fn route_mail(&self) -> Option<String> {
+        None
+    }
+
+    fn route_slack(&self) -> Option<SlackRoute> {
+        self.slack.clone()
+    }
+
+    fn route_teams(&self) -> Option<TeamsRoute> {
+        self.teams.clone()
+    }
+
+    fn route_sms(&self) -> Option<String> {
+        self.phone.clone()
+    }
+
+    fn route_whatsapp(&self) -> Option<String> {
+        self.whatsapp.clone()
+    }
+}
+
+/// The E.164 form of [`Member::new`]'s phone.
+pub const MEMBER_PHONE: &str = "+14155550100";
+
+/// The E.164 form of [`Member::new`]'s WhatsApp number.
+pub const MEMBER_WHATSAPP: &str = "+447400123456";
+
+/// A notification over the channels it names, with one text for all.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct Alert {
+    pub channels: Vec<Channel>,
+    pub text: String,
+    /// Overrides the notifiable's number.
+    pub sms_to: Option<String>,
+    /// Overrides the notifiable's Slack route.
+    pub slack_to: Option<SlackRoute>,
+}
+
+impl Alert {
+    pub fn via(channels: &[Channel], text: &str) -> Self {
+        Self {
+            channels: channels.to_vec(),
+            text: text.to_owned(),
+            ..Self::default()
+        }
+    }
+}
+
+impl Notification for Alert {
+    const TYPE: &'static str = "alert";
+
+    fn via(&self, _notifiable: &dyn Notifiable) -> Vec<Channel> {
+        self.channels.clone()
+    }
+
+    fn to_slack(&self, _notifiable: &dyn Notifiable) -> Option<SlackMessage> {
+        let message = SlackMessage::new(&self.text);
+        Some(match &self.slack_to {
+            Some(route) => message.to(route.clone()),
+            None => message,
+        })
+    }
+
+    fn to_teams(&self, _notifiable: &dyn Notifiable) -> Option<TeamsMessage> {
+        Some(TeamsMessage::new(&self.text))
+    }
+
+    fn to_sms(&self, _notifiable: &dyn Notifiable) -> Option<SmsMessage> {
+        let message = SmsMessage::new(&self.text);
+        Some(match &self.sms_to {
+            Some(to) => message.to(to),
+            None => message,
+        })
+    }
+
+    fn to_whatsapp(&self, _notifiable: &dyn Notifiable) -> Option<WhatsAppMessage> {
+        Some(WhatsAppMessage::text(&self.text))
+    }
+
+    fn to_web_push(&self, _notifiable: &dyn Notifiable) -> Option<WebPushMessage> {
+        Some(WebPushMessage::new(&self.text).url("/alerts"))
+    }
+}
+
+/// A fake for every external channel.
+#[derive(Clone, Debug, Default)]
+pub struct Fakes {
+    pub slack: SlackFake,
+    pub teams: TeamsFake,
+    pub sms: SmsFake,
+    pub whatsapp: WhatsAppFake,
+    pub web_push: WebPushFake,
+}
+
+impl Fakes {
+    /// `builder` with every fake installed.
+    pub fn install(&self, builder: TestAppBuilder) -> TestAppBuilder {
+        builder
+            .override_value::<dyn SlackDriver>(self.slack.driver())
+            .override_value::<dyn TeamsDriver>(self.teams.driver())
+            .override_value::<dyn SmsDriver>(self.sms.driver())
+            .override_value::<dyn WhatsAppDriver>(self.whatsapp.driver())
+            .override_value::<dyn WebPushDriver>(self.web_push.driver())
+    }
+}
+
+/// The options of the channel tests: numbers without a country code are
+/// read in the US.
+pub fn channel_options() -> NotifyOptions {
+    let mut options = NotifyOptions::default();
+    options.sms.default_region = Some("US".to_owned());
+    options
+}
+
+/// A test app with every channel faked, booted.
+pub async fn channel_app() -> (TestApp, Fakes) {
+    let fakes = Fakes::default();
+    let app = fakes.install(builder(channel_options())).build().await;
+    (app, fakes)
+}
+
+/// Every delivery recorded, oldest first.
+pub async fn deliveries(app: &TestApp) -> Vec<NotificationDelivery> {
+    let db = app.get::<Db>().await;
+    NotificationDelivery::query()
+        .oldest_by(NotificationDelivery::CREATED_AT)
+        .get(&*db)
+        .await
+        .expect("read deliveries")
+        .into_iter()
+        .map(navree_orm::Record::into_inner)
+        .collect()
 }
