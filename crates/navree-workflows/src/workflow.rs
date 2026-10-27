@@ -9,7 +9,6 @@ use navree_kernel::{BoxError, BoxFuture};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::{WorkflowCtx, WorkflowsError};
@@ -138,8 +137,6 @@ pub struct WorkflowDefinition {
     pub(crate) type_id: TypeId,
     /// Runs it.
     pub(crate) run: RunFn,
-    /// The input's JSON Schema, when registered with one.
-    pub input_schema: Option<Value>,
 }
 
 impl WorkflowDefinition {
@@ -153,15 +150,6 @@ impl WorkflowDefinition {
             type_name: type_name::<W>(),
             type_id: TypeId::of::<W>(),
             run: run_erased::<W>,
-            input_schema: None,
-        }
-    }
-
-    /// The definition of workflow `W`, with its input's JSON Schema.
-    pub fn with_schema<W: Workflow + ToSchema>() -> Self {
-        Self {
-            input_schema: Some(crate::schema::json_schema::<W>()),
-            ..Self::of::<W>()
         }
     }
 

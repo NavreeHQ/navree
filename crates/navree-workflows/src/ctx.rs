@@ -472,6 +472,16 @@ impl WorkflowCtx {
         now
     }
 
+    /// The engine running this execution.
+    pub(crate) fn engine(&self) -> Arc<Engine> {
+        self.inner.engine.clone()
+    }
+
+    /// The execution's lease, as last renewed.
+    pub(crate) fn lease(&self) -> Lease {
+        *self.inner.lease.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
     /// The suspension, once the execution stopped.
     pub(crate) fn suspension(&self) -> Option<Suspension> {
         self.state().suspension.clone()

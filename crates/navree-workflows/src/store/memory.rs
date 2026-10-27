@@ -9,7 +9,7 @@ use navree_kernel::BoxFuture;
 use serde_json::Value;
 use uuid::Uuid;
 
-use super::{Lease, Release, StoreResult, WorkflowStore};
+use super::{DueQuery, Lease, Release, StoreResult, WorkflowStore};
 use crate::{RunQuery, RunStatus, StepKind, StepStatus, WorkflowRun, WorkflowStep};
 
 /// Runs and steps in process memory (`workflows.store = "memory"`): lost on
@@ -129,6 +129,16 @@ impl WorkflowStore for MemoryWorkflowStore {
         Box::pin(async move { Ok(runs) })
     }
 
+    fn count_runs<'a>(&'a self, query: &'a RunQuery) -> BoxFuture<'a, StoreResult<u64>> {
+        let count = self
+            .lock()
+            .values()
+            .filter(|entry| query.matches(&entry.run))
+            .count();
+        let count = u64::try_from(count).unwrap_or(u64::MAX);
+        Box::pin(async move { Ok(count) })
+    }
+
     fn steps(&self, run_id: Uuid) -> BoxFuture<'_, StoreResult<Vec<WorkflowStep>>> {
         let steps = self
             .lock()
@@ -153,12 +163,11 @@ impl WorkflowStore for MemoryWorkflowStore {
             if !ready {
                 return None;
             }
-            let before = entry.run.clone();
             entry.run.status = RunStatus::Running;
             entry.run.updated_at = lease.now;
             entry.lease = Some((lease.token, lease.until));
             entry.wake_requested = false;
-            Some(before)
+            Some(entry.run.clone())
         });
         drop(state);
         Box::pin(async move { Ok(claimed) })
@@ -174,6 +183,7 @@ impl WorkflowStore for MemoryWorkflowStore {
             Some(entry) if Self::holds(entry, lease) => {
                 entry.lease = Some((lease.token, lease.until));
                 match entry.steps.iter_mut().find(|s| s.key == step.key) {
+                    Some(existing) if existing.status == StepStatus::Completed => {}
                     Some(existing) => {
                         let position = existing.position;
                         let created_at = existing.created_at;
@@ -236,35 +246,39 @@ impl WorkflowStore for MemoryWorkflowStore {
         Box::pin(async move { Ok(status) })
     }
 
-    fn due(
-        &self,
-        now: DateTime<Utc>,
-        stale_before: DateTime<Utc>,
-        limit: u64,
-    ) -> BoxFuture<'_, StoreResult<Vec<Uuid>>> {
-        let mut due: Vec<(DateTime<Utc>, Uuid)> = self
-            .lock()
+    fn due(&self, query: DueQuery) -> BoxFuture<'_, StoreResult<Vec<Uuid>>> {
+        let mut state = self.lock();
+        let mut due: Vec<(DateTime<Utc>, Uuid)> = state
             .values()
             .filter_map(|entry| {
                 let run = &entry.run;
                 match run.status {
-                    RunStatus::Sleeping | RunStatus::Waiting => {
-                        run.wake_at.filter(|at| *at <= now).map(|at| (at, run.id))
-                    }
+                    RunStatus::Sleeping | RunStatus::Waiting => run
+                        .wake_at
+                        .filter(|at| *at <= query.wake_before)
+                        .map(|at| (at, run.id)),
                     RunStatus::Running => entry
                         .lease
-                        .filter(|(_, until)| *until < now)
+                        .filter(|(_, until)| *until < query.now)
                         .map(|(_, until)| (until, run.id)),
-                    RunStatus::Pending => {
-                        (run.updated_at <= stale_before).then_some((run.updated_at, run.id))
-                    }
+                    RunStatus::Pending => (run.updated_at <= query.stale_before)
+                        .then_some((run.updated_at, run.id)),
                     _ => None,
                 }
             })
             .collect();
         due.sort();
-        let limit = usize::try_from(limit).unwrap_or(usize::MAX);
-        let ids = due.into_iter().take(limit).map(|(_, id)| id).collect();
+        let limit = usize::try_from(query.limit).unwrap_or(usize::MAX);
+        due.truncate(limit);
+        let ids: Vec<Uuid> = due.into_iter().map(|(_, id)| id).collect();
+        for id in &ids {
+            if let Some(entry) = state.get_mut(id)
+                && entry.run.status == RunStatus::Pending
+            {
+                entry.run.updated_at = query.now;
+            }
+        }
+        drop(state);
         Box::pin(async move { Ok(ids) })
     }
 
@@ -289,7 +303,7 @@ impl WorkflowStore for MemoryWorkflowStore {
         uow: Option<&'a Uow>,
         run_id: Uuid,
         key: &'a str,
-        payload: &'a Value,
+        output: &'a Value,
         now: DateTime<Utc>,
     ) -> BoxFuture<'a, StoreResult<bool>> {
         let open = self.lock().get(&run_id).is_some_and(|entry| {
@@ -301,7 +315,7 @@ impl WorkflowStore for MemoryWorkflowStore {
         });
         if open {
             let key = key.to_owned();
-            let payload = payload.clone();
+            let payload = output.clone();
             self.write(uow, move |store| {
                 let mut state = store.lock();
                 let Some(entry) = state.get_mut(&run_id) else {
