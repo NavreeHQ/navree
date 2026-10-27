@@ -71,7 +71,9 @@
 #![forbid(unsafe_code)]
 
 mod array;
+mod api;
 mod delivery;
+mod dkim;
 mod error;
 mod job;
 mod mailable;
@@ -83,8 +85,14 @@ pub mod render;
 mod report;
 mod smtp;
 mod transport;
+mod transport_config;
 
+pub use api::mailgun::{MailgunConfig, MailgunRegion, MailgunTransport};
+pub use api::postmark::{PostmarkConfig, PostmarkTransport};
+pub use api::resend::{ResendConfig, ResendTransport};
+pub use api::ses::{SesConfig, SesTransport};
 pub use array::ArrayTransport;
+pub use dkim::{DEFAULT_SIGNED_HEADERS, DkimAlgorithm, DkimConfig, DkimSigner};
 pub use error::MailError;
 pub use job::SendMailJob;
 pub use mailable::{Held, Mailable, TemplateMail};
@@ -93,8 +101,9 @@ pub use message::Message;
 pub use module::MailModule;
 pub use options::{
     DeliveryOptions, MailOptions, MailgunWebhookOptions, PostmarkWebhookOptions,
-    ResendWebhookOptions, SesWebhookOptions, TrackingOptions, TransportConfig, WebhookOptions,
+    ResendWebhookOptions, SesWebhookOptions, TrackingOptions, WebhookOptions,
 };
+pub use transport_config::TransportConfig;
 pub use render::RenderOptions;
 pub use report::{DeliveryStatus, MailScope, SendReport, TransportTier};
 pub use smtp::{SmtpTls, SmtpTransport};
