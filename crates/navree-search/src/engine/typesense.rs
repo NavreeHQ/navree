@@ -568,9 +568,7 @@ impl SearchEngine for TypesenseEngine {
     fn filters_exactly(&self, filter: &Filter) -> bool {
         every_comparison(filter, &|f| match f {
             Filter::Null(_) | Filter::NotNull(_) | Filter::NotIn { .. } | Filter::Not(_) => false,
-            Filter::Cmp {
-                op: CmpOp::Ne, ..
-            } => false,
+            Filter::Cmp { op: CmpOp::Ne, .. } => false,
             Filter::Cmp {
                 op: CmpOp::Eq,
                 value,

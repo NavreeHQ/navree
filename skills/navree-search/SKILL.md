@@ -228,7 +228,10 @@ search.assert_indexed::<Contact>(ada.id).await;
   totals count records the user can't read (they are dropped from the page).
   Rules on date and time columns always work that way (the index keeps
   milliseconds); rules on boolean, number, string, UUID and enum columns
-  filter in the engine exactly.
+  filter in the engine exactly, except shapes an engine can't run
+  (`SearchEngine::filters_exactly`): ranges on text on Meilisearch and
+  Typesense, `!=` / `not_in` / null tests on Typesense, float equality in
+  Qdrant. Those also go to the rows.
 - The access parity property test
   (`crates/navree-search/tests/search/access_parity.rs`) must stay green
   on every engine after a change to filters or the derive.

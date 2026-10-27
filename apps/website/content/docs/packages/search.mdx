@@ -441,6 +441,8 @@ An empty query text matches every document, so a filtered empty query is a fast 
 
 `accessible(scope)` takes the `Accessible<E, Read>` extractor from [authorization](/docs/security/authorization/). Navree turns the user's ability conditions into engine filters when they only use filterable fields on boolean, number, string, UUID or enum columns (the usual `owner_id = me` rule becomes `filter("owner_id", me)`), with the same rule order and the same comparisons as SQL lists, so pages stay full and totals stay exact. Other conditions are applied when the rows are loaded, with the same SQL filter as `Accessible` lists: conditions on fields the index doesn't hold, and on date and time columns, which the index keeps in milliseconds while the database compares finer. Records the user can't read are then dropped from the page, and its total can still count them. Mark the columns your rules use as `filter` to keep totals exact.
 
+A rule the engine can't evaluate exactly takes the same path to the rows: on Meilisearch, a range on a text column (it compares numbers only); on Typesense, `!=`, `not_in` and null tests (it doesn't index missing values) and ranges on text; with Qdrant behind `similar` or `hybrid`, equality on a float. The PostgreSQL, Tantivy and memory engines run every translated rule themselves.
+
 ### Hits and highlights
 
 `hits` returns each record with its score and the matched text, marked up for the search box:
@@ -601,7 +603,7 @@ async fn finds_contacts_by_a_misspelled_name() {
 - For vector search, set `search.vectors.store = "memory"` and register a fake `Embeddings` with `override_value(Arc::new(fake) as Arc<dyn Embeddings>)`.
 - To test a hand-written `document()`, build a `SearchContext::new(tx, app.ctx().clone(), None)` around a transaction.
 
-Every engine implements the `SearchEngine` trait, which you can implement for an engine of your own and plug in with `Engine::custom(Arc::new(engine))`.
+Every engine implements the `SearchEngine` trait, which you can implement for an engine of your own and plug in with `Engine::custom(Arc::new(engine))`. Override its `filters_exactly(filter)` to return `false` for filter shapes your engine doesn't evaluate as the SQL filter does; access rules of those shapes are then applied to the loaded rows.
 
 ## Reference
 
