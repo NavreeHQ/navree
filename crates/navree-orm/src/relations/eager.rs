@@ -371,17 +371,23 @@ pub(crate) async fn after_fetch<M: Model>(
     load_tree(target, records, tree).await
 }
 
-/// Loads every relation of `tree` into `records`.
+/// Loads every relation of `tree` into `records`. The names of the first
+/// level are checked even when there are no records (a misspelled
+/// relation fails whatever the data); deeper names when their level loads.
 pub(crate) async fn load_tree<M: Model>(
     target: &Target<'_>,
     records: &mut [Record<M>],
     tree: &EagerTree,
 ) -> Result<()> {
+    let relations = tree
+        .nodes
+        .iter()
+        .map(|node| registry::find::<M>(&node.name))
+        .collect::<Result<Vec<_>>>()?;
     if records.is_empty() {
         return Ok(());
     }
-    for node in &tree.nodes {
-        let relation = registry::find::<M>(&node.name)?;
+    for (relation, node) in relations.iter().zip(&tree.nodes) {
         relation.inner.eager_load(target, records, node).await?;
     }
     Ok(())

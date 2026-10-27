@@ -740,9 +740,10 @@ pub trait Model: Clone + Send + Sync + Serialize + 'static {
         Builder::new().with_model_defaults()
     }
 
-    /// A query of the model with one condition.
+    /// A query of the model with one condition (and the model's default
+    /// eager loads and relation counts, as [`query`](Model::query)).
     fn where_(filter: impl Into<Filter>) -> Builder<Self> {
-        Builder::new().where_(filter)
+        Self::query().where_(filter)
     }
 
     /// Every record.
