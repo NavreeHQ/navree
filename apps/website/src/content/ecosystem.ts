@@ -334,6 +334,21 @@ export const ecosystem: EcosystemEntry[] = [
     signature: "graph.get(\"/users\").send().await?",
   },
   {
+    slug: "directory-sync",
+    name: "Directory sync",
+    kind: "library",
+    category: "capabilities",
+    tagline: "Each customer's people, kept in step with their directory",
+    summary:
+      "Provision people from Microsoft Entra ID and Okta over SCIM 2.0, or pull them from Microsoft Graph, Google Workspace, Okta, LDAP and Active Directory. One normalized directory, mapped into your model by a sink, in runs with dry runs, a deactivation limit and progress.",
+    features: ["SCIM 2.0 server with filters and PATCH", "Microsoft Graph delta queries", "Google Workspace and Okta", "LDAP and Active Directory over TLS", "Dry runs and a deactivation limit", "DirectorySink and DirectoryFake"],
+    crate: "navree-directory",
+    command: "cargo add --git https://github.com/NavreeHQ/navree navree --features directory",
+    href: "/docs/packages/directory-sync/",
+    status: "stable",
+    signature: "impl DirectorySink for RecipientSink",
+  },
+  {
     slug: "documents",
     name: "Documents",
     kind: "library",

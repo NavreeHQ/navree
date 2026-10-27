@@ -423,6 +423,19 @@ const HIERARCHY: &[Rule] = &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-macros", "navree-http",
         "navree-events", "navree-db", "navree-schedule", "navree-workspace",
     ]),
+    // Directory sync: a SCIM 2.0 server (navree-http routes) and pull
+    // connectors whose Microsoft Graph, Google Workspace and Okta clients
+    // come from navree-integrations' connections (LDAP through ldap3, its
+    // bind password sealed with navree-crypto); synced users and groups are
+    // navree-orm models in navree-db, runs are navree-queue operations
+    // with progress, `directory:sync --due` runs on navree-schedule, owners
+    // are navree-workspace workspaces and organizations, and the user
+    // events go out through navree-events.
+    rule("navree-directory", 7, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto",
+        "navree-events", "navree-db", "navree-orm", "navree-queue", "navree-schedule",
+        "navree-workspace", "navree-integrations",
+    ]),
     // L8: entry points.
     rule("navree", 8, RUNTIME_CRATES),
     // The CLI uses no runtime crate; navree-dock runs `navree dock`,
@@ -519,6 +532,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-i18n-macros",
     "navree-documents",
     "navree-workflows",
+    "navree-directory",
 ];
 
 /// Cargo dependency kind of an edge.

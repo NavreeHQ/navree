@@ -63,6 +63,7 @@
 //! | `fleet` | navree-fleet | `fleet` | `FleetModule`: supervised queue workers, metrics, failed jobs, the `/_fleet` dashboard |
 //! | `helm` | navree-helm | `helm` | `HelmModule`: the admin panel generated from your entities |
 //! | `workflows` | navree-workflows (plus `#[workflow]`, `#[trigger]`, `#[condition]`, `#[action]`) | `workflows` | `WorkflowsModule`: durable workflows (steps replayed on resume, timers, event waits, versions) and end-user automations |
+//! | `directory` | navree-directory | `directory` | `DirectoryModule`: a SCIM 2.0 server and pull connectors (Microsoft Graph, Google Workspace, Okta, LDAP and Active Directory) syncing users and groups into your model |
 //! | `dock` | navree-dock | `dock` (opt-in) | Dock's `dock.toml`, the services' settings and the Compose file |
 //! | `browser` | navree-browser | `browser` (opt-in) | Browser testing: `Browser`, `Page`, `TestServer`, `FrontEnd` over the Chrome DevTools Protocol |
 //! | `mcp` | navree-mcp | `mcp` (opt-in) | `McpModule`: MCP servers over streamable HTTP and stdio, with `#[mcp_server]` |
@@ -303,6 +304,11 @@ pub use navree_media as media;
 /// (`use navree::workflows::{WorkflowCtx, workflow};`).
 #[cfg(feature = "workflows")]
 pub use navree_workflows as workflows;
+
+/// Directory sync (the `directory` feature): navree-directory re-exported
+/// whole (`use navree::directory::{DirectorySink, DirectoryUser};`).
+#[cfg(feature = "directory")]
+pub use navree_directory as directory;
 
 // L7 (opt-in)
 #[cfg(feature = "billing")]
