@@ -35,6 +35,7 @@ async fn temporary_url_valid_then_expired() {
             "reports/q1 final.pdf",
             clock.now() + chrono::Duration::seconds(60),
         )
+        .await
         .unwrap();
 
     let ok = app.get(&url).await;
@@ -69,7 +70,7 @@ async fn tampered_or_unsigned_urls_are_forbidden() {
     disk.put("a.txt", "secret a").await.unwrap();
     disk.put("b.txt", "secret b").await.unwrap();
     let expires_at = clock.now() + chrono::Duration::seconds(60);
-    let url = disk.temporary_url("a.txt", expires_at).unwrap();
+    let url = disk.temporary_url("a.txt", expires_at).await.unwrap();
     assert_eq!(app.get(&url).await.text(), "secret a");
 
     let later = (expires_at + chrono::Duration::days(1)).timestamp();
@@ -103,6 +104,7 @@ async fn signed_url_for_missing_file_is_not_found() {
         .disk("local")
         .unwrap()
         .temporary_url("gone.txt", expires_at)
+        .await
         .unwrap();
     app.get(&url).await.error(404);
 
@@ -130,7 +132,7 @@ async fn active_content_is_served_as_an_attachment() {
         .await
         .unwrap();
     let html = app
-        .get(&disk.temporary_url("page.html", expires_at).unwrap())
+        .get(&disk.temporary_url("page.html", expires_at).await.unwrap())
         .await;
     assert_eq!(html.status, 200);
     assert_eq!(html.header("content-type"), Some("text/html"));
@@ -138,14 +140,19 @@ async fn active_content_is_served_as_an_attachment() {
 
     disk.put("logo.png", "png").await.unwrap();
     let png = app
-        .get(&disk.temporary_url("logo.png", expires_at).unwrap())
+        .get(&disk.temporary_url("logo.png", expires_at).await.unwrap())
         .await;
     assert_eq!(png.header("content-type"), Some("image/png"));
     assert_eq!(png.header("content-disposition"), None);
 
     disk.put("data.unknownext", "?").await.unwrap();
     let unknown = app
-        .get(&disk.temporary_url("data.unknownext", expires_at).unwrap())
+        .get(
+            &disk
+                .temporary_url("data.unknownext", expires_at)
+                .await
+                .unwrap(),
+        )
         .await;
     assert_eq!(
         unknown.header("content-type"),

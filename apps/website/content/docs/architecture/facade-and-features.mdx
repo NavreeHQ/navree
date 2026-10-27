@@ -70,7 +70,7 @@ Every module crate is re-exported whole, as a module of the facade. `navree::db:
 | `navree::api` | navree-api | `api` | `ApiModule`: OpenAPI document and docs UI |
 | `navree::mail` | navree-mail | `mail` | `MailModule`: mailables, transports, queued mail |
 | `navree::realtime` | navree-realtime | `realtime` | `RealtimeModule`: Pusher-protocol broadcasting |
-| `navree::storage` | navree-storage | `storage` | `StorageModule`: disks and uploads |
+| `navree::storage` | navree-storage | `storage` | `StorageModule`: [disks](/docs/digging-deeper/storage/), signed links, direct uploads, disk sync |
 | `navree::session` | navree-session | `session` | `SessionModule`: cookie sessions and CSRF |
 | `navree::validation` | navree-validation | `validation` | `Valid` extractors on garde |
 | `navree::queue` | navree-queue | `queue` | `QueueModule`: database and memory job queues |
@@ -141,7 +141,7 @@ Three details to know:
 
 ## Cargo features
 
-The facade has one feature per module crate, named after it (`http-client` for `navree::http_client`). The default feature, `full`, turns on all of them except the opt-in ecosystem libraries and packages (`social`, `oauth`, `flags`, `graphql`, `grpc`, `billing`, `search`, `mcp`, `ai`, `redis`, and `micro` with its transports), which you list by name: `features = ["flags"]`. To build only what you use, turn the defaults off and list the modules:
+The facade has one feature per module crate, named after it (`http-client` for `navree::http_client`). The default feature, `full`, turns on all of them except the opt-in ecosystem libraries and packages (`social`, `oauth`, `flags`, `graphql`, `grpc`, `billing`, `search`, `mcp`, `ai`, `redis`, and `micro` with its transports), which you list by name: `features = ["flags"]`. It includes the S3 storage driver (`storage-s3`); the Google Cloud Storage and Azure drivers are opt-in (`storage-gcs`, `storage-azure`). To build only what you use, turn the defaults off and list the modules:
 
 ```toml title="Cargo.toml"
 [dependencies]
@@ -180,10 +180,12 @@ navree = { git = "https://github.com/NavreeHQ/navree", default-features = false,
 | `postgres` | `db`, and navree-db's PostgreSQL driver |
 | `validation-phone` | `validation`, and navree-validation's `Phone` (E.164 numbers, on the phonenumber crate) |
 | `validation-html` | `validation`, and navree-validation's `SafeHtml` (rich text sanitized with ammonia) |
+| `storage-s3` (in `full`) | `storage`, and navree-storage's S3 driver (AWS, MinIO, Cloudflare R2, DigitalOcean Spaces) |
+| `storage-gcs`, `storage-azure` (opt-in) | `storage`, and navree-storage's Google Cloud Storage or Azure Blob Storage driver |
 
 `validation-phone` and `validation-html` are part of `full`. They add the [international types](/docs/basics/validation/#international-input) that need a dependency of their own; names, digits, countries and locales come with `validation` alone.
 
-SQLite is always available with `db`. The `postgres` feature adds the PostgreSQL driver. Navree's [performance](/performance/) harness runs it on PostgreSQL 17 and the test suite runs on SQLite; [the database pages](/docs/database/getting-started/#postgresql) list which PostgreSQL-only paths to try in staging first.
+SQLite is always available with `db`. The `postgres` feature adds the PostgreSQL driver. The `storage-*` features add [object storage drivers](/docs/digging-deeper/storage/#cloud-disks); they talk HTTPS through rustls with ring, so they need no system library. Navree's [performance](/performance/) harness runs it on PostgreSQL 17 and the test suite runs on SQLite; [the database pages](/docs/database/getting-started/#postgresql) list which PostgreSQL-only paths to try in staging first.
 
 Tests in `crates/navree/tests/facade.rs` keep this table true: every module crate sits behind a feature named after it, each module feature turns on exactly the features of the crates its crate depends on (no fewer, no more), and `full` is the default and covers every module except the opt-in ones (`social`, `oauth`, `flags`, `graphql`, `grpc`, `billing`, `search`, `mcp`, `ai`, `redis`, `micro`), which you list yourself: `features = ["billing"]`.
 

@@ -46,8 +46,8 @@ fn url_joins_the_public_url_and_the_encoded_path() {
     }
 }
 
-#[test]
-fn temporary_url_is_signed_and_points_at_the_storage_route() {
+#[tokio::test]
+async fn temporary_url_is_signed_and_points_at_the_storage_route() {
     let root = tempfile::tempdir().unwrap();
     let storage = with_public_disk(root.path(), None);
     let expires = Utc.with_ymd_and_hms(2030, 1, 2, 3, 4, 5).unwrap();
@@ -55,6 +55,7 @@ fn temporary_url_is_signed_and_points_at_the_storage_route() {
 
     let url = disk
         .temporary_url("/reports/q1 final.pdf", expires)
+        .await
         .unwrap();
     let (path, query) = url.split_once('?').unwrap();
     assert_eq!(path, "/storage/memory/reports/q1%20final.pdf");
@@ -66,43 +67,52 @@ fn temporary_url_is_signed_and_points_at_the_storage_route() {
 
     // Deterministic for the same input; different for another path, expiry or disk.
     assert_eq!(
-        disk.temporary_url("reports/q1 final.pdf", expires).unwrap(),
+        disk.temporary_url("reports/q1 final.pdf", expires)
+            .await
+            .unwrap(),
         url
     );
-    assert_ne!(disk.temporary_url("reports/q2.pdf", expires).unwrap(), url);
+    assert_ne!(
+        disk.temporary_url("reports/q2.pdf", expires).await.unwrap(),
+        url
+    );
     let later = expires + chrono::Duration::seconds(1);
     assert!(
         !disk
             .temporary_url("reports/q1 final.pdf", later)
+            .await
             .unwrap()
             .ends_with(signature)
     );
     let local = storage
         .disk("local")
         .unwrap()
-        .temporary_url("reports/q1 final.pdf", expires);
+        .temporary_url("reports/q1 final.pdf", expires)
+        .await;
     assert!(!local.unwrap().ends_with(signature));
     // Another key signs differently.
     let other = Storage::new(&options(root.path()), b"another key").unwrap();
     let other = other
         .disk("memory")
         .unwrap()
-        .temporary_url("reports/q1 final.pdf", expires);
+        .temporary_url("reports/q1 final.pdf", expires)
+        .await;
     assert!(!other.unwrap().ends_with(signature));
 
     assert!(matches!(
-        disk.temporary_url("../x", expires),
+        disk.temporary_url("../x", expires).await,
         Err(StorageError::InvalidPath { .. })
     ));
 }
 
-#[test]
-fn temporary_url_uses_the_base_url() {
+#[tokio::test]
+async fn temporary_url_uses_the_base_url() {
     let root = tempfile::tempdir().unwrap();
     let storage = with_public_disk(root.path(), Some("https://api.example.com/"));
     let url = storage
         .default_disk()
         .temporary_url("a.txt", Utc::now())
+        .await
         .unwrap();
     assert!(
         url.starts_with("https://api.example.com/storage/local/a.txt?expires="),

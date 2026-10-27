@@ -117,3 +117,29 @@ impl TestResponse {
         body
     }
 }
+
+/// The URL of a test service from `NAVREE_TEST_<SERVICE>_URL` (`variable`).
+/// When it is missing, `test` prints `SKIPPED <test>: set <variable>` and
+/// gets `None`, unless `NAVREE_TEST_REQUIRE_SERVICES=1`, which turns a
+/// missing service into a failure.
+pub fn service_url(variable: &str, test: &str) -> Option<String> {
+    match std::env::var(variable) {
+        Ok(url) if !url.trim().is_empty() => Some(url),
+        _ if std::env::var("NAVREE_TEST_REQUIRE_SERVICES").as_deref() == Ok("1") => {
+            panic!("{test}: set {variable} (NAVREE_TEST_REQUIRE_SERVICES=1)")
+        }
+        _ => {
+            println!("SKIPPED {test}: set {variable}");
+            None
+        }
+    }
+}
+
+/// One disk called `name` as the default disk of an app with `HttpModule`.
+pub fn single_disk(name: &str, config: DiskConfig) -> StorageOptions {
+    StorageOptions {
+        default: name.to_owned(),
+        disks: BTreeMap::from([(name.to_owned(), config)]),
+        ..StorageOptions::default()
+    }
+}
