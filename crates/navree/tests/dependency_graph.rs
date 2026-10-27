@@ -203,6 +203,14 @@ const HIERARCHY: &[Rule] = &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http",
         "navree-events", "navree-db", "navree-testing", "navree-validation",
     ]),
+    // Documents: PDF from Typst templates (an embedded compiler) or HTML
+    // templates (navree-view, printed by headless Chrome), DOCX, and PDF
+    // merge and stamp. Queued renders go through the job dispatcher of
+    // navree-contracts and land on a storage disk.
+    rule("navree-documents", 6, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-view",
+        "navree-storage",
+    ]),
     // L7: packages built on other packages.
     // Search: full-text and vector search over entities. The server engines
     // talk HTTP through navree-http-client; the `Searchable` derive lives in
@@ -333,6 +341,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-micro",
     "navree-fleet",
     "navree-helm",
+    "navree-documents",
 ];
 
 /// Cargo dependency kind of an edge.

@@ -129,6 +129,7 @@ navree list                                 # every command of the app
 | Seeing what a request, job or scheduled task did (`/_logbook`), finding N+1 queries, counting queries in a test, replaying a request | `navree-logbook` |
 | Messages and events between services (NATS, Kafka, RabbitMQ, Redis Streams, MQTT, TCP), splitting a module into a service, `MicroFake` tests | `navree-microservices` |
 | An admin panel or back office: list, edit and act on records at `/admin` (`make:resource`, Helm) | `navree-helm` |
+| PDF or Word documents: certificates, invoices, reports, exports; Arabic or other right-to-left documents; merging or stamping PDFs | `navree-documents` |
 
 ## Common mistakes
 
