@@ -1,6 +1,6 @@
 ---
 title: "Backend for frontend"
-description: "A web front end that never sees a token: a backend-for-frontend holds the JWTs in httpOnly cookies, rotates them and calls the Navree API on the browser's behalf."
+description: "A web front end that never sees a token: a backend-for-frontend, in Next.js or Nuxt, holds the JWTs in httpOnly cookies, rotates them and calls the Navree API on the browser's behalf."
 ---
 
 ## Introduction
@@ -11,17 +11,31 @@ The API doesn't change. It stays a plain bearer-token API that mobile apps, part
 
 <Diagram name="backend-for-frontend" />
 
-The reference CRM's front end, `apps/crm-web`, is a Next.js app with a BFF in `src/lib/bff/`. `navree new --ui next` generates a smaller version of it, and the [SaaS starter kit](/docs/getting-started/starter-kits/) ships the full one. The code on this page comes from the CRM.
+The reference CRM has two front ends, each with a BFF that keeps the same contract: `apps/crm-web`, a Next.js app with its BFF in `src/lib/bff/`, and `apps/crm-nuxt`, a Nuxt app with its BFF in `server/lib/bff.ts`. `navree new --ui next` generates a smaller version of the Next.js one, and the [SaaS starter kit](/docs/getting-started/starter-kits/) ships the full one for either framework. The code on this page comes from the CRM; where the two differ, it shows both.
 
 ## The shape
 
 | Party | Holds | Talks to |
 |---|---|---|
 | Browser | Cookies it can't read, the user resource, the access rules (`GET /api/me/abilities`) | The BFF, same origin; the WebSocket server for real time |
-| BFF (the Next.js server) | The access token, the refresh token, a pending two-factor challenge | The Navree API, with `Authorization: Bearer` |
+| BFF (the Next.js or Nuxt server) | The access token, the refresh token, a pending two-factor challenge | The Navree API, with `Authorization: Bearer` |
 | Navree API | Users, refresh-token families, everything else | Nobody: it answers |
 
-The browser calls same-origin paths: `/api/auth/login`, `/api/v1/deals`, `/broadcasting/auth`. Route handlers in the Next.js app forward them to the API at `NAVREE_API_URL` with the same path, so the browser's API client and the API's OpenAPI document agree on every path.
+The browser calls same-origin paths: `/api/auth/login`, `/api/v1/deals`, `/broadcasting/auth`. Route handlers in the Next.js app, or server routes in the Nuxt app, forward them to the API at `NAVREE_API_URL` with the same path, so the browser's API client and the API's OpenAPI document agree on every path.
+
+## One BFF, two frameworks
+
+The BFF itself is framework-free TypeScript: `createBff` takes the API's URL and a few options and returns functions that take a web `Request` and return a `Response`. Next.js route handlers already speak `Request` and `Response`; in Nuxt, Nitro's `toWebRequest(event)` turns an event into one and a handler may return a `Response`. So each framework adds only a thin layer: one instance of the BFF and a one-line route per path. The auth routes cover sign-in, the two-factor step, refresh and sign-out; the catch-all forwards every other `/api/*` call.
+
+| | Next.js (`apps/crm-web`) | Nuxt (`apps/crm-nuxt`) |
+|---|---|---|
+| The BFF | `src/lib/bff/bff.ts` | `server/lib/bff.ts` |
+| Its instance | `src/lib/bff/server.ts`, created when the module loads | `server/lib/instance.ts`, `useBff()`, created on first use from the runtime config |
+| Auth routes | Route handlers in `src/app/api/auth/` | Server routes in `server/api/auth/` (`login.post.ts`, `2fa/verify.post.ts`, `refresh.post.ts`, `logout.post.ts`) |
+| Catch-all | `src/app/api/[...path]/route.ts` | `server/api/[...path].ts` |
+| Channels | `src/app/broadcasting/auth/route.ts` | `server/routes/broadcasting/auth.post.ts` |
+
+Either instance holds the single-flight refresh map (below), so it is shared by every request the server handles. The Nuxt app also has a server middleware, `server/middleware/session-gate.ts`, that sends a page request with neither token cookie to `/login?next=...` before the app loads; whether a cookie is still valid stays the API's call.
 
 ## Signing in
 
@@ -57,7 +71,9 @@ async function login(request: Request): Promise<Response> {
 }
 ```
 
-A failed login passes Navree's answer through unchanged (a 401 "Invalid credentials", or a 429 from the login throttle), so the form shows the API's message. The route handler that calls it is three lines:
+A failed login passes Navree's answer through unchanged (a 401 "Invalid credentials", or a 429 from the login throttle), so the form shows the API's message. The route that calls it is a few lines in either framework:
+
+<CodeGroup>
 
 ```ts title="apps/crm-web/src/app/api/auth/login/route.ts"
 import { bff } from "@/lib/bff/server";
@@ -69,6 +85,15 @@ export function POST(request: Request): Promise<Response> {
 
 export const dynamic = "force-dynamic";
 ```
+
+```ts title="apps/crm-nuxt/server/api/auth/login.post.ts"
+import { useBff } from "../../lib/instance";
+
+/** Signs in at Navree, keeps the tokens in httpOnly cookies, returns `{user}` (or a two-factor challenge). */
+export default defineEventHandler((event) => useBff().login(toWebRequest(event)));
+```
+
+</CodeGroup>
 
 The BFF sets three cookies, all `HttpOnly; SameSite=Lax`, and `Secure` in production:
 
@@ -82,7 +107,9 @@ Accounts with two-factor authentication get a challenge instead of tokens. The c
 
 ## Forwarding requests
 
-Every other `/api/*` request goes through one catch-all route handler:
+Every other `/api/*` request goes through one catch-all route. In Nuxt a file without a method suffix answers every method:
+
+<CodeGroup>
 
 ```ts title="apps/crm-web/src/app/api/[...path]/route.ts"
 import { bff } from "@/lib/bff/server";
@@ -95,6 +122,22 @@ function handle(request: Request): Promise<Response> {
 export const dynamic = "force-dynamic";
 export { handle as DELETE, handle as GET, handle as HEAD, handle as PATCH, handle as POST, handle as PUT };
 ```
+
+```ts title="apps/crm-nuxt/server/api/[...path].ts"
+import { useBff } from "../lib/instance";
+
+/**
+ * Every `/api/*` call from the browser goes to Navree with the bearer token
+ * from the httpOnly cookie (refreshed once on a 401). Mutations must come from
+ * this app's own origin.
+ */
+export default defineEventHandler((event) => {
+  const request = toWebRequest(event);
+  return useBff().proxy(request, new URL(request.url).pathname);
+});
+```
+
+</CodeGroup>
 
 `proxy` sends the request to the same path on the API with:
 
@@ -225,6 +268,8 @@ async fn the_login_throttle_is_per_browser_behind_the_bff() {
 
 The WebSocket goes straight from the browser to Navree's WebSocket server: it carries no token, only a socket id. Private channels need authorization, and that request needs the user's credentials, so it goes through the BFF like any other call:
 
+<CodeGroup>
+
 ```ts title="apps/crm-web/src/app/broadcasting/auth/route.ts"
 import { bff } from "@/lib/bff/server";
 
@@ -236,11 +281,22 @@ export function POST(request: Request): Promise<Response> {
 export const dynamic = "force-dynamic";
 ```
 
+```ts title="apps/crm-nuxt/server/routes/broadcasting/auth.post.ts"
+import { useBff } from "../../lib/instance";
+
+/** Private-channel authorization for pusher-js: forwarded to Navree with the bearer token. */
+export default defineEventHandler((event) => useBff().proxy(toWebRequest(event), "/broadcasting/auth"));
+```
+
+</CodeGroup>
+
+The Nuxt route lives under `server/routes/` rather than `server/api/`, so it answers at `/broadcasting/auth` with no `/api` prefix, the same path as in the Next.js app.
+
 The browser's pusher-js client uses a custom authorizer that posts `{socket_id, channel_name}` to that same-origin route. Navree checks the channel against the user's access rules and signs the subscription. List the web app's origin in `realtime.allowed_origins` so the WebSocket handshake is accepted. If the socket can't connect, the CRM keeps working with refetch-on-focus. See [Broadcasting](/docs/digging-deeper/broadcasting/).
 
 ## Calling the API from the browser
 
-The browser's API client is generated from the API's OpenAPI document and points at the BFF, so it needs no token handling at all: same-origin credentials, `Accept: application/json`, and hooks for 401 and 403.
+The browser's API client is generated from the API's OpenAPI document and points at the BFF, so it needs no token handling at all: same-origin credentials, `Accept: application/json`, and hooks for 401 and 403. Both front ends use openapi-fetch with types from openapi-typescript; the Nuxt app's client is `app/lib/api/client.ts`.
 
 ```ts title="apps/crm-web/src/lib/api/client.ts"
 const client = createClient<paths>({
@@ -255,7 +311,7 @@ Because the BFF keeps the API's paths, `client.GET("/api/v1/deals/board")` is ch
 
 ## Configuration
 
-The BFF reads its settings from the environment at request time, so they change without a rebuild:
+The BFF reads its settings from the environment when the server runs, not when it is built, so they change without a rebuild. The Nuxt app reads the same names when its BFF is first used (`NUXT_NAVREE_API_URL` and `NUXT_COOKIE_SECURE` work too):
 
 | Variable | Default | What it does |
 |---|---|---|
@@ -266,6 +322,8 @@ The BFF reads its settings from the environment at request time, so they change 
 | `NEXT_PUBLIC_WS_HOST`, `NEXT_PUBLIC_WS_PORT` | `127.0.0.1`, `8080` | The WebSocket server the browser connects to. |
 | `NEXT_PUBLIC_PUSHER_KEY` | `navree-crm-key` | The app key, `realtime.key` on the API. |
 | `NEXT_PUBLIC_REALTIME` | on | `0` turns real time off. |
+
+The Nuxt app takes the browser settings as public runtime config, so they too change without a rebuild: `NUXT_PUBLIC_WS_HOST`, `NUXT_PUBLIC_WS_PORT`, `NUXT_PUBLIC_PUSHER_KEY` and `NUXT_PUBLIC_REALTIME`. In the CRM its `NAVREE_API_URL` and `NUXT_PUBLIC_WS_PORT` default to port 8092, where `pnpm api` runs a copy of the API for that app.
 
 On the API, nothing is BFF-specific beyond `http.trusted_proxies` and `realtime.allowed_origins`. Two settings are worth a look:
 
@@ -304,19 +362,21 @@ it("shares one refresh between concurrent requests (refresh tokens rotate; reuse
 
 The same suite covers the origin check, login and logout, two-factor sign-in, tokens stripped from responses and the client-address rules. On top of that:
 
+- `apps/crm-nuxt` runs the same kind of suite against its own BFF (`tests/unit/bff.test.ts`), and `tests/unit/nitro-handlers.test.ts` drives the real Nitro route handlers and the session gate, mounted on an h3 app the way Nitro mounts them: login keeps both tokens in httpOnly cookies, an expired session refreshes once and rotates both cookies, a cross-origin mutation gets a 403.
 - `apps/crm-api/tests/bff.rs` checks the API's side: per-browser throttling and rate limits behind a trusted BFF.
-- `E2E_REAL_API=1 pnpm e2e` in `apps/crm-web` runs the Playwright specs against the real API and a production build of the web app, end to end.
+- `E2E_REAL_API=1 pnpm e2e` in `apps/crm-web`, and `pnpm e2e` in `apps/crm-nuxt`, run the Playwright specs against the real API and a production build of the front end, end to end. The Nuxt app's `bff.spec.ts` checks the CSRF refusal, the refresh-cookie rotation and that signing out revokes the refresh token at the API.
 
 ## Starting your own
 
 `navree new` generates the pattern for you:
 
 ```sh
-navree new acme --ui next    # the API plus web/, a Next.js app with a BFF
-navree new acme --kit saas   # the full SaaS kit: BFF, sign-in, workspaces, billing, settings, admin
+navree new acme --ui next                # the API plus web/, a Next.js app with a BFF
+navree new acme --kit saas --ui next     # the full SaaS kit on Next.js: BFF, sign-in, workspaces, billing, settings, admin
+navree new acme --kit saas --ui nuxt     # the same kit on Nuxt, with the BFF in Nitro server routes
 ```
 
-`--ui next` writes `web/lib/bff.ts` with sign-in, sign-out, forwarding, a refresh on 401 and the origin check, and `navree dev` starts both servers. The [SaaS starter kit](/docs/getting-started/starter-kits/) builds on the CRM's complete BFF.
+`--ui next` writes `web/lib/bff.ts` with sign-in, sign-out, forwarding, a refresh on 401 and the origin check, and `navree dev` starts both servers. The [SaaS starter kit](/docs/getting-started/starter-kits/) builds on the CRM's complete BFF, in either framework. To see both running, see the [CRM showcase](/showcase/crm/).
 
 <LinkCards>
   <LinkCard href="/docs/security/authentication/" title="Authentication">
@@ -326,7 +386,7 @@ navree new acme --kit saas   # the full SaaS kit: BFF, sign-in, workspaces, bill
     The SaaS kit ships this BFF with a complete front end.
   </LinkCard>
   <LinkCard href="/docs/example-app/crm-tour/" title="A tour of the CRM">
-    The reference API and its Next.js front end.
+    The reference API and its Next.js and Nuxt front ends.
   </LinkCard>
   <LinkCard href="/docs/patterns/api-first/" title="API-first">
     The contract the BFF and every other client build against.
