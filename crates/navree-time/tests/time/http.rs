@@ -43,7 +43,10 @@ impl Controller for ProbeController {
                 "/report",
                 |zone: CurrentZone, Query(range): Query<DayRange>| async move {
                     let (from, to) = range.utc_bounds(&zone);
-                    WithZone::new(&zone, json!({"from": from, "to": to, "days": range.day_count()}))
+                    WithZone::new(
+                        &zone,
+                        json!({"from": from, "to": to, "days": range.day_count()}),
+                    )
                 },
             )
             .public(),
@@ -52,7 +55,9 @@ impl Controller for ProbeController {
             })
             .public(),
             RouteDef::on(Method::GET, "/today", |zone: CurrentZone| async move {
-                Ok::<_, AppError>(Json(json!({"today": zone.today(), "now": zone.now().to_rfc3339()})))
+                Ok::<_, AppError>(Json(
+                    json!({"today": zone.today(), "now": zone.now().to_rfc3339()}),
+                ))
             })
             .public(),
         ]
@@ -221,7 +226,10 @@ async fn a_bad_range_is_a_bad_request() {
 async fn non_object_data_is_wrapped() {
     let f = fixture().await;
     let body = get(&f.app, "/api/probe/list", None, &[]).await.body;
-    assert_eq!(body, json!({"data": [1, 2, 3], "timeZone": "Europe/London"}));
+    assert_eq!(
+        body,
+        json!({"data": [1, 2, 3], "timeZone": "Europe/London"})
+    );
 }
 
 #[tokio::test]

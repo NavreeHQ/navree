@@ -138,9 +138,7 @@ pub(crate) fn zone_list(country: Option<&str>, search: Option<&str>) -> Result<V
         Some(country) => {
             let zones = Zone::in_country(country);
             if zones.is_empty() {
-                return Err(
-                    "country must be a valid ISO 3166-1 alpha-2 country code".to_owned(),
-                );
+                return Err("country must be a valid ISO 3166-1 alpha-2 country code".to_owned());
             }
             zones
         }

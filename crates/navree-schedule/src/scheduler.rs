@@ -187,11 +187,15 @@ impl Scheduler {
                     .map_err(|error| invalid(error.to_string()))?;
                 let zone = match &def.zone {
                     ZoneChoice::Utc => TaskZone::Utc,
-                    ZoneChoice::Named(name) => TaskZone::Fixed(Zone::parse(name).map_err(
-                        |error| invalid(format!("{error}: use an IANA name such as Europe/Paris")),
-                    )?),
+                    ZoneChoice::Named(name) => {
+                        TaskZone::Fixed(Zone::parse(name).map_err(|error| {
+                            invalid(format!("{error}: use an IANA name such as Europe/Paris"))
+                        })?)
+                    }
                     ZoneChoice::Default => TaskZone::Fixed(
-                        zones.as_ref().map_or(Zone::UTC, |zones| zones.default_zone()),
+                        zones
+                            .as_ref()
+                            .map_or(Zone::UTC, |zones| zones.default_zone()),
                     ),
                     ZoneChoice::PerOwner(level) => {
                         if zones.is_none() {
@@ -470,11 +474,12 @@ impl Scheduler {
         if let Some(trace) = self.policy.start(None, None) {
             context = context.with_trace(trace);
         }
-        let run = run.local.clone().scope(
-            context
-                .clone()
-                .scope(execute(task.clone(), app.clone(), name.clone(), tick)),
-        );
+        let run = run.local.clone().scope(context.clone().scope(execute(
+            task.clone(),
+            app.clone(),
+            name.clone(),
+            tick,
+        )));
         let handle = app.tracker().spawn(async move {
             // Released when the run ends, even if this tick is dropped meanwhile.
             let _overlap_guard = overlap_guard;

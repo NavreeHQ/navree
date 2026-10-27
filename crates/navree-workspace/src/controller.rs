@@ -367,12 +367,7 @@ impl Controller for WorkspaceController {
                     .await?;
                 if timezone.is_some() || country.is_some() {
                     created = workspaces
-                        .set_time_zone(
-                            &uow,
-                            created.id,
-                            timezone.as_deref(),
-                            country.as_deref(),
-                        )
+                        .set_time_zone(&uow, created.id, timezone.as_deref(), country.as_deref())
                         .await?;
                 }
                 let location = format!("{}/{}", uri.path().trim_end_matches('/'), created.slug);

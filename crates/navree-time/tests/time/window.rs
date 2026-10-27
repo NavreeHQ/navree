@@ -142,7 +142,13 @@ fn working_days_follow_the_country() {
     let window = SendWindow::working_days_in("SA").between("09:00", "17:00");
     assert_eq!(
         window.days(),
-        [Weekday::Mon, Weekday::Tue, Weekday::Wed, Weekday::Thu, Weekday::Sun]
+        [
+            Weekday::Mon,
+            Weekday::Tue,
+            Weekday::Wed,
+            Weekday::Thu,
+            Weekday::Sun
+        ]
     );
     // Thursday 29 October 2026, 18:00 in Riyadh: next is Sunday 1 November.
     assert_eq!(
@@ -156,7 +162,10 @@ fn windows_are_built_from_days_and_times() {
     let saturdays = SendWindow::on(&[Weekday::Sat]).between("10:00", "12:00");
     assert_eq!(saturdays.days(), [Weekday::Sat]);
     assert_eq!(saturdays.start().to_string(), "10:00:00");
-    assert_eq!(saturdays.end().map(|t| t.to_string()), Some("12:00:00".to_owned()));
+    assert_eq!(
+        saturdays.end().map(|t| t.to_string()),
+        Some("12:00:00".to_owned())
+    );
     let all_day = SendWindow::always();
     assert_eq!(all_day.days().len(), 7);
     assert_eq!(all_day.end(), None, "open until midnight");
@@ -167,7 +176,13 @@ fn windows_are_built_from_days_and_times() {
 
 #[test]
 fn malformed_or_backwards_times_are_refused() {
-    for (start, end) in [("9am", "17:00"), ("09:00", "25:00"), ("17:00", "09:00"), ("09:00", "09:00"), ("24:00", "24:00")] {
+    for (start, end) in [
+        ("9am", "17:00"),
+        ("09:00", "25:00"),
+        ("17:00", "09:00"),
+        ("09:00", "09:00"),
+        ("24:00", "24:00"),
+    ] {
         assert!(
             SendWindow::weekdays().try_between(start, end).is_err(),
             "{start}-{end}"

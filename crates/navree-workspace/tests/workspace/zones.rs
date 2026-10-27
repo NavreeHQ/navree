@@ -236,9 +236,18 @@ async fn the_request_workspace_gives_the_zone() {
         "Asia/Dubai"
     );
     // Not a member, no workspace named, a guest: the default zone.
-    assert_eq!(zone(world.as_user(eve), Some("acme")).await["zone"], "Europe/London");
-    assert_eq!(zone(world.as_user(ada), None).await["zone"], "Europe/London");
-    assert_eq!(zone(world.app.client(), Some("acme")).await["zone"], "Europe/London");
+    assert_eq!(
+        zone(world.as_user(eve), Some("acme")).await["zone"],
+        "Europe/London"
+    );
+    assert_eq!(
+        zone(world.as_user(ada), None).await["zone"],
+        "Europe/London"
+    );
+    assert_eq!(
+        zone(world.app.client(), Some("acme")).await["zone"],
+        "Europe/London"
+    );
 }
 
 #[tokio::test]

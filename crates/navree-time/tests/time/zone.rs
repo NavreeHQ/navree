@@ -7,7 +7,13 @@ use crate::support::{local, utc, zone};
 
 #[test]
 fn canonical_names_parse_as_they_are() {
-    for name in ["Europe/Paris", "Asia/Kolkata", "America/New_York", "UTC", "Etc/GMT+5"] {
+    for name in [
+        "Europe/Paris",
+        "Asia/Kolkata",
+        "America/New_York",
+        "UTC",
+        "Etc/GMT+5",
+    ] {
         assert_eq!(zone(name).name(), name);
     }
 }
@@ -52,7 +58,12 @@ fn legacy_aliases_become_names_every_postgres_accepts() {
 fn country_zones_keep_their_own_names() {
     // zone.tab locations whose data is shared with another zone stay as
     // they are: every PostgreSQL knows them.
-    for name in ["Europe/Oslo", "Africa/Accra", "Asia/Muscat", "Europe/Amsterdam"] {
+    for name in [
+        "Europe/Oslo",
+        "Africa/Accra",
+        "Asia/Muscat",
+        "Europe/Amsterdam",
+    ] {
         assert_eq!(zone(name).name(), name);
     }
 }
@@ -154,11 +165,17 @@ fn zones_serialize_as_their_name_and_deserialize_normalized() {
 #[test]
 fn display_parse_default_and_ordering() {
     assert_eq!(zone("Europe/Paris").to_string(), "Europe/Paris");
-    assert_eq!("asia/calcutta".parse::<Zone>().unwrap().name(), "Asia/Kolkata");
+    assert_eq!(
+        "asia/calcutta".parse::<Zone>().unwrap().name(),
+        "Asia/Kolkata"
+    );
     assert_eq!(Zone::default(), Zone::UTC);
     assert_eq!(Zone::UTC.name(), "UTC");
     assert!(zone("Africa/Abidjan") < zone("Europe/Paris"));
-    assert_eq!(format!("{:?}", zone("Europe/Paris")), r#"Zone("Europe/Paris")"#);
+    assert_eq!(
+        format!("{:?}", zone("Europe/Paris")),
+        r#"Zone("Europe/Paris")"#
+    );
 }
 
 #[test]
