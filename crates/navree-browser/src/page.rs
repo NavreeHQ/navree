@@ -876,7 +876,10 @@ impl Scope {
             tokio::time::sleep(Duration::from_millis(16)).await;
         }
         self.mouse("mouseMoved", bx, by, 1).await?;
-        tokio::time::sleep(Duration::from_millis(50)).await;
+        self.mouse("mouseMoved", bx, by + 2.0, 1).await?;
+        // Hover over the target for a moment, as a person would.
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        self.mouse("mouseMoved", bx, by, 1).await?;
         let intercepted = self.core.log().drag.take();
         if let Some(data) = intercepted {
             return self.native_drop(data, end, end).await;
