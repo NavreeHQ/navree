@@ -260,16 +260,20 @@ async fn preference_flow(scratch: &Scratch) {
                 .config("database.url", scratch.url.as_str())
                 .config("database.migrate_on_boot", true)
                 .module(DatabaseModule)
-                .module(navree_view::ViewModule::for_root(navree_view::ViewOptions {
-                    dirs: vec![],
-                    reload: false,
-                }))
+                .module(navree_view::ViewModule::for_root(
+                    navree_view::ViewOptions {
+                        dirs: vec![],
+                        reload: false,
+                    },
+                ))
                 .module(support::MailTemplates)
-                .module(navree_mail::MailModule::for_root(navree_mail::MailOptions {
-                    from: "Navree <noreply@navree.test>".to_owned(),
-                    transport: navree_mail::TransportConfig::Array,
-                    ..navree_mail::MailOptions::default()
-                }))
+                .module(navree_mail::MailModule::for_root(
+                    navree_mail::MailOptions {
+                        from: "Navree <noreply@navree.test>".to_owned(),
+                        transport: navree_mail::TransportConfig::Array,
+                        ..navree_mail::MailOptions::default()
+                    },
+                ))
                 .module(NotifyModule::for_root(NotifyOptions {
                     routes: false,
                     ..support::channel_options()
@@ -297,17 +301,26 @@ async fn preference_flow(scratch: &Scratch) {
         .await
         .unwrap();
     preferences
-        .update(&PreferenceOwner::workspace(acme), &json!({"channels": {"slack": false}}))
+        .update(
+            &PreferenceOwner::workspace(acme),
+            &json!({"channels": {"slack": false}}),
+        )
         .await
         .unwrap();
-    assert_eq!(NotificationPreference::query().count(&*db).await.unwrap(), 2);
+    assert_eq!(
+        NotificationPreference::query().count(&*db).await.unwrap(),
+        2
+    );
     let resolved = preferences.resolve(&kolkata, Some(acme)).await.unwrap();
     assert_eq!(resolved.own, own);
     assert!(!resolved.allows("deals", Channel::Slack));
     assert!(!resolved.allows("deals", Channel::WhatsApp));
 
     // 01:30 in Kolkata: the digest mail waits for 09:00, the text for 07:00.
-    notifier.send(&kolkata, DealUpdate::new("Acme")).await.unwrap();
+    notifier
+        .send(&kolkata, DealUpdate::new("Acme"))
+        .await
+        .unwrap();
     notifier
         .send(&kolkata, Mention { by: "Ada".into() })
         .await

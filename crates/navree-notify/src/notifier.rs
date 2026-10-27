@@ -823,7 +823,7 @@ fn dedup(channels: &mut Vec<Channel>) {
 async fn send_mail(
     mailer: &Mailer,
     workspace: Option<Uuid>,
-    mail: &(impl Mailable + Sync),
+    mail: &impl Mailable,
 ) -> Result<(), navree_mail::MailError> {
     match workspace {
         Some(workspace) => {

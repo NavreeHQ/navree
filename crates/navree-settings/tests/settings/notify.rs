@@ -194,7 +194,10 @@ async fn a_workspace_inherits_its_organizations_style_and_overrides_its_own_mail
     for mail in &sent[1..] {
         assert_eq!(mail.subject, "Deal won: Initech");
         assert_eq!(mail.html.as_deref(), Some("<p>Initech was won.</p>"));
-        assert_eq!(mail.text.as_deref(), Some("Initech was won.\nSent by Navree"));
+        assert_eq!(
+            mail.text.as_deref(),
+            Some("Initech was won.\nSent by Navree")
+        );
     }
 }
 

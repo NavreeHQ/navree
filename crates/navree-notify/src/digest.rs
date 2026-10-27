@@ -178,7 +178,10 @@ mod tests {
             .iter()
             .map(|(name, source)| ((*name).to_owned(), (*source).to_owned()))
             .collect();
-        templates.push(("mail/deal-won.txt".to_owned(), "{{ title }} was won.".to_owned()));
+        templates.push((
+            "mail/deal-won.txt".to_owned(),
+            "{{ title }} was won.".to_owned(),
+        ));
         Views::from_templates(templates).unwrap()
     }
 
@@ -216,9 +219,15 @@ mod tests {
         let text = message.text.unwrap();
         assert!(text.starts_with("2 notifications"), "{text}");
         assert!(text.contains("- Deal won: Acme\n  Acme was won."), "{text}");
-        assert!(text.contains("- Deal won: Globex\n  Globex was won."), "{text}");
+        assert!(
+            text.contains("- Deal won: Globex\n  Globex was won."),
+            "{text}"
+        );
         let html = message.html.unwrap();
-        assert!(html.contains("<h2 style=\"font-size: 15px; margin: 0 0 4px\">Deal won: Acme</h2>"), "{html}");
+        assert!(
+            html.contains("<h2 style=\"font-size: 15px; margin: 0 0 4px\">Deal won: Acme</h2>"),
+            "{html}"
+        );
     }
 
     #[test]
@@ -229,8 +238,12 @@ mod tests {
             ..DigestOptions::default()
         };
         let mut overrides = NotificationOverrides::default();
-        overrides.style.insert("footer".to_owned(), json!("Acme Corp, Pune"));
-        overrides.style.insert("brand_color".to_owned(), json!("#0F766E"));
+        overrides
+            .style
+            .insert("footer".to_owned(), json!("Acme Corp, Pune"));
+        overrides
+            .style
+            .insert("brand_color".to_owned(), json!("#0F766E"));
         let to = ["ada@example.com".to_owned()];
         let message = DigestMail {
             to: &to,

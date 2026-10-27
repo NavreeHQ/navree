@@ -76,8 +76,9 @@ impl NotificationCatalog {
                 }
                 continue;
             }
-            crate::preferences::check_category(kind.category)
-                .map_err(|error| format!("notification type `{}`: {error}", kind.notification_type))?;
+            crate::preferences::check_category(kind.category).map_err(|error| {
+                format!("notification type `{}`: {error}", kind.notification_type)
+            })?;
             by_type.insert(kind.notification_type, kind);
         }
         Ok(Self {
@@ -155,7 +156,11 @@ impl ModuleBuilderNotifyExt for ModuleBuilder {
 mod tests {
     use super::*;
 
-    fn kind(notification_type: &'static str, category: &'static str, digest: Digest) -> NotificationKind {
+    fn kind(
+        notification_type: &'static str,
+        category: &'static str,
+        digest: Digest,
+    ) -> NotificationKind {
         NotificationKind {
             notification_type,
             category,

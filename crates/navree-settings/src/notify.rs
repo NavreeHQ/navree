@@ -171,8 +171,8 @@ impl TemplateOverrides for SettingsTemplateOverrides {
 /// An `https` URL (or `http` on localhost).
 fn https_url<T: AsRef<str> + ?Sized>(value: &T, _ctx: &()) -> garde::Result {
     let value = value.as_ref();
-    let parsed = url::Url::parse(value.trim())
-        .map_err(|_| garde::Error::new("must be an https URL"))?;
+    let parsed =
+        url::Url::parse(value.trim()).map_err(|_| garde::Error::new("must be an https URL"))?;
     let local = matches!(parsed.host_str(), Some("localhost" | "127.0.0.1"));
     if parsed.scheme() == "https" || (parsed.scheme() == "http" && local) {
         Ok(())

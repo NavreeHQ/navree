@@ -219,8 +219,10 @@ fn register(m: &mut ModuleBuilder, options: Option<SettingsOptions>) {
         .factory(
             Factory::<dyn navree_notify::TemplateOverrides>::new(|r: Resolver| async move {
                 let settings = r.get::<Settings>().await?;
-                Ok(Arc::new(crate::notify::SettingsTemplateOverrides::new(settings))
-                    as Arc<dyn navree_notify::TemplateOverrides>)
+                Ok(
+                    Arc::new(crate::notify::SettingsTemplateOverrides::new(settings))
+                        as Arc<dyn navree_notify::TemplateOverrides>,
+                )
             })
             .deps(vec![ProviderKey::of::<Settings>()]),
         )

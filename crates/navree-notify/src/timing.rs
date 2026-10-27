@@ -305,14 +305,17 @@ mod tests {
     fn daily_digests_go_out_at_the_next_local_nine() {
         let kolkata = zone("Asia/Kolkata");
         // 08:00 in Kolkata: today 09:00 there.
-        let next = Digest::Daily.next_at(at("2026-10-29T02:30:00Z"), &kolkata, nine(), Weekday::Mon);
+        let next =
+            Digest::Daily.next_at(at("2026-10-29T02:30:00Z"), &kolkata, nine(), Weekday::Mon);
         assert_eq!(next, Some(at("2026-10-29T03:30:00Z")));
         // 09:00 exactly: tomorrow.
-        let next = Digest::Daily.next_at(at("2026-10-29T03:30:00Z"), &kolkata, nine(), Weekday::Mon);
+        let next =
+            Digest::Daily.next_at(at("2026-10-29T03:30:00Z"), &kolkata, nine(), Weekday::Mon);
         assert_eq!(next, Some(at("2026-10-30T03:30:00Z")));
         // The same instant is still yesterday evening in New York.
         let new_york = zone("America/New_York");
-        let next = Digest::Daily.next_at(at("2026-10-29T02:30:00Z"), &new_york, nine(), Weekday::Mon);
+        let next =
+            Digest::Daily.next_at(at("2026-10-29T02:30:00Z"), &new_york, nine(), Weekday::Mon);
         assert_eq!(next, Some(at("2026-10-29T13:00:00Z")));
         assert_eq!(
             Digest::Off.next_at(at("2026-10-29T02:30:00Z"), &kolkata, nine(), Weekday::Mon),
@@ -334,7 +337,8 @@ mod tests {
     fn hourly_digests_go_out_at_the_next_local_hour() {
         let kolkata = zone("Asia/Kolkata");
         // 10:15 in Kolkata (+05:30): 11:00 there, 05:30 UTC.
-        let next = Digest::Hourly.next_at(at("2026-10-29T04:45:00Z"), &kolkata, nine(), Weekday::Mon);
+        let next =
+            Digest::Hourly.next_at(at("2026-10-29T04:45:00Z"), &kolkata, nine(), Weekday::Mon);
         assert_eq!(next, Some(at("2026-10-29T05:30:00Z")));
         let utc = Zone::UTC;
         let next = Digest::Hourly.next_at(at("2026-10-29T04:00:00Z"), &utc, nine(), Weekday::Mon);
@@ -406,7 +410,10 @@ mod tests {
             serde_json::json!({"start": "22:00", "end": "7"}),
             serde_json::json!({"start": "22:00", "end": "07:00", "days": []}),
         ] {
-            assert!(serde_json::from_value::<QuietHours>(bad.clone()).is_err(), "{bad}");
+            assert!(
+                serde_json::from_value::<QuietHours>(bad.clone()).is_err(),
+                "{bad}"
+            );
         }
         assert_eq!(parse_weekday("monday"), Ok(Weekday::Mon));
         assert_eq!(parse_weekday("Fri"), Ok(Weekday::Fri));
@@ -419,10 +426,20 @@ mod tests {
         let window = SendWindow::weekdays().between("09:00", "17:00");
         let quiet = QuietHours::new("08:00", "10:00").unwrap();
         // Thursday 06:00: the window opens at 09:00, quiet until 10:00.
-        let open = next_open(at("2026-10-29T06:00:00Z"), &utc, Some(&window), Some(&quiet));
+        let open = next_open(
+            at("2026-10-29T06:00:00Z"),
+            &utc,
+            Some(&window),
+            Some(&quiet),
+        );
         assert_eq!(open, at("2026-10-29T10:00:00Z"));
         // Friday 18:00: Monday 09:00, then quiet until 10:00.
-        let open = next_open(at("2026-10-30T18:00:00Z"), &utc, Some(&window), Some(&quiet));
+        let open = next_open(
+            at("2026-10-30T18:00:00Z"),
+            &utc,
+            Some(&window),
+            Some(&quiet),
+        );
         assert_eq!(open, at("2026-11-02T10:00:00Z"));
         // Open now.
         let now = at("2026-10-29T11:00:00Z");

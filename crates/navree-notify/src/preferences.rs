@@ -413,9 +413,7 @@ impl NotificationPreferences {
             .first(e)
             .await)
         .map_err(DbErr::from)?;
-        Ok(row
-            .map(|row| row.into_inner().read())
-            .unwrap_or_default())
+        Ok(row.map(|row| row.into_inner().read()).unwrap_or_default())
     }
 
     /// Applies `patch` to `owner`'s preferences as a JSON merge patch
@@ -533,8 +531,9 @@ impl NotificationPreferences {
             id: Uuid::now_v7(),
             owner_type: owner.owner_type.clone(),
             owner_id: owner.owner_id.clone(),
-            preferences: serde_json::to_value(preferences)
-                .map_err(|error| NotifyError::InvalidPreferences(field_error("preferences", &error.to_string())))?,
+            preferences: serde_json::to_value(preferences).map_err(|error| {
+                NotifyError::InvalidPreferences(field_error("preferences", &error.to_string()))
+            })?,
             created_at: now,
             updated_at: now,
         };
@@ -672,11 +671,19 @@ mod tests {
         );
         // Removing a category's last choice drops the category.
         let merged = merged
-            .merged(&json!({"categories": {"deals": {"channels": {"mail": null}}}}), &options(), &none)
+            .merged(
+                &json!({"categories": {"deals": {"channels": {"mail": null}}}}),
+                &options(),
+                &none,
+            )
             .unwrap();
         assert!(!merged.categories.contains_key("deals"));
         let emptied = merged
-            .merged(&json!({"channels": null, "categories": null}), &options(), &none)
+            .merged(
+                &json!({"channels": null, "categories": null}),
+                &options(),
+                &none,
+            )
             .unwrap();
         assert!(emptied.is_empty());
     }
@@ -686,21 +693,38 @@ mod tests {
         let none = BTreeSet::new();
         let current = Preferences::default();
         let errors = current
-            .merged(&json!({"categories": {"security": {"channels": {"mail": false}}}}), &options(), &none)
+            .merged(
+                &json!({"categories": {"security": {"channels": {"mail": false}}}}),
+                &options(),
+                &none,
+            )
             .unwrap_err();
         assert_eq!(
             errors["categories.security.channels.mail"],
             ["security notifications cannot be turned off"]
         );
         // Turning a required category's channel on is fine.
-        assert!(current
-            .merged(&json!({"categories": {"security": {"channels": {"mail": true}}}}), &options(), &none)
-            .is_ok());
+        assert!(
+            current
+                .merged(
+                    &json!({"categories": {"security": {"channels": {"mail": true}}}}),
+                    &options(),
+                    &none
+                )
+                .is_ok()
+        );
 
         let errors = current
-            .merged(&json!({"channels": {"broadcast": false}}), &options(), &none)
+            .merged(
+                &json!({"channels": {"broadcast": false}}),
+                &options(),
+                &none,
+            )
             .unwrap_err();
-        assert_eq!(errors["channels.broadcast"], ["the broadcast channel cannot be switched"]);
+        assert_eq!(
+            errors["channels.broadcast"],
+            ["the broadcast channel cannot be switched"]
+        );
 
         let errors = current
             .merged(&json!({"channels": {"pigeon": false}}), &options(), &none)
@@ -713,20 +737,35 @@ mod tests {
         assert!(errors.contains_key("preferences"), "{errors:?}");
 
         let errors = current
-            .merged(&json!({"quiet_hours": {"start": "25:00", "end": "07:00"}}), &options(), &none)
+            .merged(
+                &json!({"quiet_hours": {"start": "25:00", "end": "07:00"}}),
+                &options(),
+                &none,
+            )
             .unwrap_err();
         assert!(errors["preferences"][0].contains("25:00"), "{errors:?}");
 
         let errors = current
-            .merged(&json!({"categories": {"bad name": {"digest": "daily"}}}), &options(), &none)
+            .merged(
+                &json!({"categories": {"bad name": {"digest": "daily"}}}),
+                &options(),
+                &none,
+            )
             .unwrap_err();
         assert!(errors.contains_key("categories.bad name"), "{errors:?}");
 
         let known = BTreeSet::from(["deals".to_owned()]);
         let errors = current
-            .merged(&json!({"categories": {"billing": {"digest": "daily"}}}), &options(), &known)
+            .merged(
+                &json!({"categories": {"billing": {"digest": "daily"}}}),
+                &options(),
+                &known,
+            )
             .unwrap_err();
-        assert_eq!(errors["categories.billing"], ["`billing` is not a notification category"]);
+        assert_eq!(
+            errors["categories.billing"],
+            ["`billing` is not a notification category"]
+        );
 
         let errors = current.merged(&json!([1]), &options(), &none).unwrap_err();
         assert!(errors.contains_key("preferences"));

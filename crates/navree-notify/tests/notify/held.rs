@@ -6,9 +6,7 @@ use std::time::Duration;
 
 use chrono::TimeDelta;
 use navree_contracts::{Dispatcher, ZoneLevel, ZoneOwner};
-use navree_notify::{
-    Channel, DeferralReason, Delivery, Digest, Notifier, NotifyOptions, Released,
-};
+use navree_notify::{Channel, DeferralReason, Delivery, Digest, Notifier, NotifyOptions, Released};
 use navree_time::{TimeModule, TimeOptions, ZonesFake};
 use serde_json::json;
 use uuid::Uuid;
@@ -28,9 +26,18 @@ async fn daily_digests_batch_mail_at_nine_on_each_recipients_clock() {
     let kolkata = Person::in_zone(Some("Asia/Kolkata"));
     let new_york = Person::in_zone(Some("America/New_York"));
 
-    notifier.send(&kolkata, DealUpdate::new("Acme")).await.unwrap();
-    notifier.send(&kolkata, DealUpdate::new("Globex")).await.unwrap();
-    notifier.send(&new_york, DealUpdate::new("Initech")).await.unwrap();
+    notifier
+        .send(&kolkata, DealUpdate::new("Acme"))
+        .await
+        .unwrap();
+    notifier
+        .send(&kolkata, DealUpdate::new("Globex"))
+        .await
+        .unwrap();
+    notifier
+        .send(&new_york, DealUpdate::new("Initech"))
+        .await
+        .unwrap();
 
     // The database row and the text message go out at once; the mail waits.
     assert_eq!(support::rows(&app).await.len(), 3);
@@ -62,11 +69,14 @@ async fn daily_digests_batch_mail_at_nine_on_each_recipients_clock() {
     );
     let mail = support::sent_mail(&app).await;
     assert_eq!(mail.len(), 1);
-    assert_eq!(mail[0].to, [kolkata.email.clone()]);
+    assert_eq!(mail[0].to, [kolkata.email.as_str()]);
     assert_eq!(mail[0].subject, "Your notifications");
     let text = mail[0].text.as_deref().unwrap();
     assert!(text.starts_with("2 notifications"), "{text}");
-    assert!(text.contains("- Deal update: Acme\n  Acme was won."), "{text}");
+    assert!(
+        text.contains("- Deal update: Acme\n  Acme was won."),
+        "{text}"
+    );
     assert!(text.contains("- Deal update: Globex"), "{text}");
 
     clock.set(at("2026-10-29T13:00:00Z"));
@@ -76,7 +86,10 @@ async fn daily_digests_batch_mail_at_nine_on_each_recipients_clock() {
         subjects(&app).await,
         ["Your notifications", "Your notifications"]
     );
-    assert_eq!(support::sent_mail(&app).await[1].to, [new_york.email.clone()]);
+    assert_eq!(
+        support::sent_mail(&app).await[1].to,
+        [new_york.email.as_str()]
+    );
     assert!(held(&app).await.is_empty());
 }
 
@@ -94,24 +107,39 @@ async fn a_persons_digest_choice_beats_the_notifications() {
     )
     .await;
 
-    notifier.send(&weekly, DealUpdate::new("Acme")).await.unwrap();
-    notifier.send(&instant, DealUpdate::new("Acme")).await.unwrap();
+    notifier
+        .send(&weekly, DealUpdate::new("Acme"))
+        .await
+        .unwrap();
+    notifier
+        .send(&instant, DealUpdate::new("Acme"))
+        .await
+        .unwrap();
     // A mention has no digest of its own; the weekly person's applies.
-    notifier.send(&weekly, Mention { by: "Ada".into() }).await.unwrap();
+    notifier
+        .send(&weekly, Mention { by: "Ada".into() })
+        .await
+        .unwrap();
 
     assert_eq!(subjects(&app).await, ["Deal update: Acme"]);
     let rows = held(&app).await;
     assert_eq!(rows.len(), 2);
     // Monday 2 November, 09:00 UTC.
-    assert!(rows.iter().all(|row| row.release_at == at("2026-11-02T09:00:00Z")
-        && row.digest.as_deref() == Some("weekly")));
+    assert!(
+        rows.iter()
+            .all(|row| row.release_at == at("2026-11-02T09:00:00Z")
+                && row.digest.as_deref() == Some("weekly"))
+    );
 
     clock.set(at("2026-11-02T09:00:00Z"));
     let released = notifier.release_due().await.unwrap();
     assert_eq!((released.digests, released.batched), (1, 2));
     let mail = support::sent_mail(&app).await;
     let text = mail[1].text.as_deref().unwrap();
-    assert!(text.contains("Deal update: Acme") && text.contains("Ada mentioned you"), "{text}");
+    assert!(
+        text.contains("Deal update: Acme") && text.contains("Ada mentioned you"),
+        "{text}"
+    );
 }
 
 #[tokio::test]
@@ -130,8 +158,14 @@ async fn quiet_hours_hold_what_interrupts_until_they_end_on_the_recipients_clock
         .await;
     }
 
-    notifier.send(&tokyo, Mention { by: "Ada".into() }).await.unwrap();
-    notifier.send(&london, Mention { by: "Ada".into() }).await.unwrap();
+    notifier
+        .send(&tokyo, Mention { by: "Ada".into() })
+        .await
+        .unwrap();
+    notifier
+        .send(&london, Mention { by: "Ada".into() })
+        .await
+        .unwrap();
 
     // The in-app notification shows at once for both.
     assert_eq!(support::rows(&app).await.len(), 2);
@@ -142,8 +176,11 @@ async fn quiet_hours_hold_what_interrupts_until_they_end_on_the_recipients_clock
     assert!(fakes.sms.sent_to("+819012345678").is_empty());
     let rows = held(&app).await;
     assert_eq!(rows.len(), 2);
-    assert!(rows.iter().all(|row| row.release_at == at("2026-10-28T22:00:00Z")
-        && row.deferral_reason() == Some(DeferralReason::QuietHours)));
+    assert!(
+        rows.iter()
+            .all(|row| row.release_at == at("2026-10-28T22:00:00Z")
+                && row.deferral_reason() == Some(DeferralReason::QuietHours))
+    );
     let mut channels: Vec<&str> = rows.iter().map(|row| row.channel.as_str()).collect();
     channels.sort_unstable();
     assert_eq!(channels, ["mail", "sms"]);
@@ -154,7 +191,10 @@ async fn quiet_hours_hold_what_interrupts_until_they_end_on_the_recipients_clock
     let released = notifier.release_due().await.unwrap();
     assert_eq!(released.sent, 2);
     assert_eq!(fakes.sms.sent_to("+819012345678").len(), 1);
-    assert_eq!(subjects(&app).await, ["Ada mentioned you", "Ada mentioned you"]);
+    assert_eq!(
+        subjects(&app).await,
+        ["Ada mentioned you", "Ada mentioned you"]
+    );
     assert!(held(&app).await.is_empty());
 }
 
@@ -170,7 +210,9 @@ async fn the_workspaces_quiet_hours_apply_unless_a_person_sets_their_own() {
     )
     .await;
     let member = Person::in_zone(Some("UTC")).of(acme);
-    let night_owl = Person::in_zone(Some("UTC")).of(acme).phone("+44 7400 123456");
+    let night_owl = Person::in_zone(Some("UTC"))
+        .of(acme)
+        .phone("+44 7400 123456");
     // An empty period of one's own: no quiet hours.
     prefer(
         &app,
@@ -179,14 +221,23 @@ async fn the_workspaces_quiet_hours_apply_unless_a_person_sets_their_own() {
     )
     .await;
 
-    notifier.send(&member, Mention { by: "Ada".into() }).await.unwrap();
-    notifier.send(&night_owl, Mention { by: "Ada".into() }).await.unwrap();
+    notifier
+        .send(&member, Mention { by: "Ada".into() })
+        .await
+        .unwrap();
+    notifier
+        .send(&night_owl, Mention { by: "Ada".into() })
+        .await
+        .unwrap();
 
     assert!(fakes.sms.sent_to("+14155550100").is_empty());
     assert_eq!(fakes.sms.sent_to("+447400123456").len(), 1);
     let rows = held(&app).await;
     assert_eq!(rows.len(), 2);
-    assert!(rows.iter().all(|row| row.release_at == at("2026-10-29T06:00:00Z")));
+    assert!(
+        rows.iter()
+            .all(|row| row.release_at == at("2026-10-29T06:00:00Z"))
+    );
 }
 
 #[tokio::test]
@@ -202,7 +253,12 @@ async fn urgent_notifications_ignore_quiet_hours_and_digests() {
     .await;
 
     notifier
-        .send(&tokyo, SignInCode { code: "481516".into() })
+        .send(
+            &tokyo,
+            SignInCode {
+                code: "481516".into(),
+            },
+        )
         .await
         .unwrap();
 
@@ -222,7 +278,12 @@ async fn send_windows_wait_for_the_next_slot_in_each_zone() {
     let london = Person::in_zone(Some("Europe/London")).phone("+44 7400 123456");
     for person in [&kolkata, &los_angeles, &london] {
         notifier
-            .send(person, TrainingDue { course: "Phishing 101".into() })
+            .send(
+                person,
+                TrainingDue {
+                    course: "Phishing 101".into(),
+                },
+            )
             .await
             .unwrap();
     }
@@ -232,9 +293,10 @@ async fn send_windows_wait_for_the_next_slot_in_each_zone() {
     assert_eq!(subjects(&app).await, ["Training due: Phishing 101"]);
     let rows = held(&app).await;
     assert_eq!(rows.len(), 4);
-    assert!(rows
-        .iter()
-        .all(|row| row.deferral_reason() == Some(DeferralReason::SendWindow)));
+    assert!(
+        rows.iter()
+            .all(|row| row.deferral_reason() == Some(DeferralReason::SendWindow))
+    );
     // Monday 09:00 in Kolkata (03:30 UTC), then in London (09:00 UTC).
     assert_eq!(rows[0].release_at, at("2026-11-02T03:30:00Z"));
     assert_eq!(rows[1].release_at, at("2026-11-02T03:30:00Z"));
@@ -257,8 +319,7 @@ async fn the_zone_comes_from_time_module_when_the_person_has_none() {
     let bob = Person::in_zone(None).of(acme);
     let carol = Person::in_zone(None);
     let users = ZonesFake::new(ZoneLevel::User).owner(ZoneOwner::new(ada.id).zone("Asia/Kolkata"));
-    let workspaces =
-        ZonesFake::new(ZoneLevel::Workspace).owner(ZoneOwner::new(acme).country("AE"));
+    let workspaces = ZonesFake::new(ZoneLevel::Workspace).owner(ZoneOwner::new(acme).country("AE"));
     let app = builder
         .module(TimeModule::for_root(TimeOptions {
             default_zone: "America/New_York".to_owned(),
@@ -270,7 +331,10 @@ async fn the_zone_comes_from_time_module_when_the_person_has_none() {
         .await;
     let notifier = app.get::<Notifier>().await;
     for person in [&ada, &bob, &carol] {
-        notifier.send(person, DealUpdate::new("Acme")).await.unwrap();
+        notifier
+            .send(person, DealUpdate::new("Acme"))
+            .await
+            .unwrap();
     }
     let rows = held(&app).await;
     let release = |person: &Person| {
@@ -329,7 +393,10 @@ async fn releases_are_queued_with_notify_queue() {
     let notifier = app.get::<Notifier>().await;
     let ada = Person::in_zone(Some("UTC"));
     notifier.send(&ada, DealUpdate::new("Acme")).await.unwrap();
-    notifier.send(&ada, DealUpdate::new("Globex")).await.unwrap();
+    notifier
+        .send(&ada, DealUpdate::new("Globex"))
+        .await
+        .unwrap();
     // The database and SMS channels were queued; the mail is held.
     let queued_now = dispatcher.jobs().len();
     assert_eq!(queued_now, 4);
@@ -347,7 +414,7 @@ async fn releases_are_queued_with_notify_queue() {
     match &job.delivery {
         Delivery::Digest { digest, to, items } => {
             assert_eq!(*digest, Digest::Daily);
-            assert_eq!(to, &[ada.email.clone()]);
+            assert_eq!(to, std::slice::from_ref(&ada.email));
             assert_eq!(items.len(), 2);
         }
         other => panic!("not a digest: {other:?}"),
@@ -381,7 +448,10 @@ async fn a_failed_release_is_tried_again_then_dropped() {
         json!({"quiet_hours": {"start": "22:00", "end": "07:00"}, "channels": {"mail": false}}),
     )
     .await;
-    notifier.send(&tokyo, Mention { by: "Ada".into() }).await.unwrap();
+    notifier
+        .send(&tokyo, Mention { by: "Ada".into() })
+        .await
+        .unwrap();
     assert_eq!(held(&app).await.len(), 1);
 
     fakes.sms.refuse("carrier down");
@@ -459,17 +529,23 @@ async fn the_release_command_runs_and_the_schedule_is_registered() {
 #[tokio::test]
 async fn without_a_database_nothing_is_held() {
     let app = navree_testing::TestApp::builder()
-        .module(navree_view::ViewModule::for_root(navree_view::ViewOptions {
-            dirs: vec![],
-            reload: false,
-        }))
+        .module(navree_view::ViewModule::for_root(
+            navree_view::ViewOptions {
+                dirs: vec![],
+                reload: false,
+            },
+        ))
         .module(support::MailTemplates)
-        .module(navree_mail::MailModule::for_root(navree_mail::MailOptions {
-            from: "Navree <noreply@navree.test>".to_owned(),
-            transport: navree_mail::TransportConfig::Array,
-            ..navree_mail::MailOptions::default()
-        }))
-        .module(navree_notify::NotifyModule::for_root(NotifyOptions::default()))
+        .module(navree_mail::MailModule::for_root(
+            navree_mail::MailOptions {
+                from: "Navree <noreply@navree.test>".to_owned(),
+                transport: navree_mail::TransportConfig::Array,
+                ..navree_mail::MailOptions::default()
+            },
+        ))
+        .module(navree_notify::NotifyModule::for_root(
+            NotifyOptions::default(),
+        ))
         .build()
         .await;
     let notifier = app.get::<Notifier>().await;

@@ -276,12 +276,21 @@ mod tests {
                 }
             },
         );
-        assert!(out.contains("const TYPE : & 'static str = \"sign_in_code\""), "{out}");
-        assert!(out.contains("const CATEGORY : & 'static str = \"security\""), "{out}");
+        assert!(
+            out.contains("const TYPE : & 'static str = \"sign_in_code\""),
+            "{out}"
+        );
+        assert!(
+            out.contains("const CATEGORY : & 'static str = \"security\""),
+            "{out}"
+        );
         assert!(out.contains("const URGENT : bool = true"), "{out}");
         assert!(!out.contains("DIGEST"), "{out}");
         // No arguments: the impl as it is.
-        assert_eq!(expand_with_facade(quote!(), deal_won()), deal_won().to_string());
+        assert_eq!(
+            expand_with_facade(quote!(), deal_won()),
+            deal_won().to_string()
+        );
         // An urgent notification may say `digest = "off"`.
         let out = expand_with_facade(quote!(digest = "off", urgent), deal_won());
         assert!(out.contains("Digest :: Off"), "{out}");
@@ -317,21 +326,13 @@ mod tests {
                 deal_won(),
                 "invalid category `big deals`",
             ),
-            (
-                quote!(type = "x"),
-                deal_won(),
-                "`TYPE` is set twice",
-            ),
+            (quote!(type = "x"), deal_won(), "`TYPE` is set twice"),
             (
                 quote!(digest = "daily", urgent),
                 deal_won(),
                 "never batched",
             ),
-            (
-                quote!(urgent = true),
-                deal_won(),
-                "`urgent` takes no value",
-            ),
+            (quote!(urgent = true), deal_won(), "`urgent` takes no value"),
             (
                 quote!(category = "a", category = "b"),
                 deal_won(),
@@ -339,7 +340,10 @@ mod tests {
             ),
         ] {
             let out = expand_with_facade(args, item);
-            assert!(out.starts_with("error:") && out.contains(message), "{message}: {out}");
+            assert!(
+                out.starts_with("error:") && out.contains(message),
+                "{message}: {out}"
+            );
         }
     }
 }
