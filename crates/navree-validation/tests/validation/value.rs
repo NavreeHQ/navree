@@ -63,7 +63,7 @@ async fn serde_failures_name_the_field() {
 async fn the_apps_messages_apply() {
     let options = ValidationOptions {
         messages: BTreeMap::from([("email".to_owned(), "Bad :attribute!".to_owned())]),
-        attributes: BTreeMap::new(),
+        ..ValidationOptions::default()
     };
     let app = TestApp::builder()
         .module(ValidationModule::with_options(options))

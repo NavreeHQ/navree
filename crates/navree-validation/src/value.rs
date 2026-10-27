@@ -7,7 +7,7 @@ use garde::Validate;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
-use crate::extract::check;
+use crate::extract::{check, from_json};
 use crate::failure;
 use crate::{Messages, ValidationErrors};
 
@@ -19,7 +19,10 @@ const ROOT: &str = "input";
 /// failures exactly as [`Valid<Json<T>>`](crate::Valid) does (`"subject
 /// should not be empty"`, `"kind must be one of the following values: note,
 /// call"`), rendered with `messages`. Failures about the input as a whole
-/// are reported under the field `input`.
+/// are reported under the field `input`. Values that read the
+/// [`InputContext`](crate::InputContext) (a `Phone` written without a
+/// country code) get the defaults, unless the call runs in an
+/// [`InputContext::scope`](crate::InputContext::scope).
 ///
 /// ```
 /// use garde::Validate;
@@ -51,10 +54,9 @@ pub fn validate_json<T>(input: &Value, messages: &Messages) -> Result<T, Validat
 where
     T: DeserializeOwned + Validate<Context = ()>,
 {
-    let value = match serde_path_to_error::deserialize::<_, T>(input) {
+    let value = match from_json::<T>(input) {
         Ok(value) => value,
-        Err(error) => {
-            let failure = failure::from_serde(error.path(), &error.inner().to_string());
+        Err(failure) => {
             return Err(failure::render(&[failure], messages, Some(input), ROOT));
         }
     };

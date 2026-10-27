@@ -51,6 +51,11 @@ Go through it in order; each item says how to check.
   table/column names are constants, never input.
 - [ ] Mass assignment: DTOs list only fields clients may set (no `owner_id`,
   `role`, `published` unless intended).
+- [ ] Rich text that is stored and rendered as HTML is a `SafeHtml` field
+  (feature `validation-html`), never a `String`: grep the DTOs for fields
+  named `body`, `content`, `description`, `notes` and `html`. A custom
+  `validation.html` policy allows no `img` or `iframe` unless the app means
+  to load images from any server.
 
 ## 4. Authentication and tokens
 
