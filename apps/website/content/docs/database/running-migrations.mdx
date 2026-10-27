@@ -22,7 +22,7 @@ Migrations run through commands that `DatabaseModule` registers on your app. The
 | `migrate:install` | Creates the migrations table. |
 | `schema:dump` | Writes the schema to `database/schema/<driver>-schema.sql` ([squashing migrations](/docs/database/squashing-migrations/)). |
 
-Options take a value after a space or an `=` (`--step 3`, `--batch=2`). An unknown option, a missing value, or `--step` with `--batch`, stops the command with a message listing what it takes.
+Options take a value after a space or an `=` (`--step 3`, `--batch=2`). An unknown option, a missing value, or `--step` together with `--batch` stops the command before it changes anything, with a message saying what is wrong; for an unknown option, it lists the options the command takes.
 
 ## Migrating
 
