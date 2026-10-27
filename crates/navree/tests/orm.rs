@@ -84,3 +84,96 @@ async fn models_work_through_the_facade() {
         "Ada"
     );
 }
+
+/// A customer with people, related through the facade's `#[relations]`.
+#[derive(Model, Clone, Debug, Default, Serialize)]
+struct Customer {
+    id: i64,
+    name: String,
+}
+
+#[navree::orm::relations]
+impl Customer {
+    fn people(&self) -> navree::orm::relations::HasMany<Customer, Person> {
+        self.has_many(Person::CUSTOMER_ID)
+    }
+}
+
+#[derive(Model, Clone, Debug, Default, Serialize)]
+struct Person {
+    id: i64,
+    customer_id: Option<i64>,
+    name: String,
+}
+
+#[navree::orm::relations]
+impl Person {
+    fn customer(&self) -> navree::orm::relations::BelongsTo<Person, Customer> {
+        self.belongs_to(Person::CUSTOMER_ID)
+    }
+}
+
+#[tokio::test]
+async fn relations_work_through_the_facade() {
+    let dir = tempfile::tempdir().unwrap();
+    let url = format!(
+        "sqlite://{}?mode=rwc",
+        dir.path().join("relations.db").display()
+    );
+    let db = Db::connect(&DbOptions {
+        url,
+        ..DbOptions::default()
+    })
+    .await
+    .unwrap();
+    for statement in [
+        "CREATE TABLE customers (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL)",
+        "CREATE TABLE people (id INTEGER PRIMARY KEY AUTOINCREMENT, customer_id INTEGER NULL, name TEXT NOT NULL)",
+    ] {
+        db.conn().execute_unprepared(statement).await.unwrap();
+    }
+    let acme = Customer::create(
+        &db,
+        Customer {
+            name: "Acme".into(),
+            ..Customer::default()
+        },
+    )
+    .await
+    .unwrap();
+    for name in ["Ada", "Grace"] {
+        acme.people()
+            .create(
+                &db,
+                Person {
+                    name: name.into(),
+                    ..Person::default()
+                },
+            )
+            .await
+            .unwrap();
+    }
+    let customers = Customer::query()
+        .with("people")
+        .has("people")
+        .get(&db)
+        .await
+        .unwrap();
+    assert_eq!(customers[0].loaded(Customer::people).unwrap().len(), 2);
+    let people = Person::query()
+        .with(Person::customer)
+        .where_relation("customer", col("name").eq("Acme"))
+        .get(&db)
+        .await
+        .unwrap();
+    assert_eq!(people.len(), 2);
+    assert_eq!(
+        people[0]
+            .loaded(Person::customer)
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .name,
+        "Acme"
+    );
+}
