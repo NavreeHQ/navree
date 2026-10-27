@@ -191,7 +191,7 @@ Navree's own modules use the same hooks, which shows what each is for:
 </Step>
 <Step title="Units of work complete">
 
-With `DatabaseModule`, the rest of each request runs in a task on the app's tracker, so a request whose client went away still commits or rolls back.
+With `DatabaseModule`, a request whose client went away finishes in a task on the app's tracker, so it still commits or rolls back.
 
 </Step>
 <Step title="The app shuts down">

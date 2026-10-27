@@ -95,7 +95,7 @@ navree list                                 # every command of the app
 | Request DTOs, validation rules, `unique`/`exists`, custom messages | `navree-validation` |
 | Return a status or error, map an error type, headers, downloads, API resources | `navree-errors-and-responses` |
 | Tables, entities, queries, `Repo`, transactions, migrations, seeders, factories, pagination | `navree-database` |
-| Sign-in, tokens, current user, password reset, email verification, two-factor, API keys | `navree-auth` |
+| Sign-in, tokens, current user, password reset, email verification, two-factor, sessions, step-up, impersonation, magic links, passkeys, platform admins, token exchange, API keys | `navree-auth` |
 | Roles, permissions, ability rules, record checks, per-user list filters | `navree-access-control` |
 | Background jobs, workers, retries, batches, progress operations, cron schedules | `navree-queues-and-scheduling` |
 | Events and listeners, live updates over WebSockets, private channels | `navree-events-and-broadcasting` |
@@ -130,6 +130,9 @@ navree list                                 # every command of the app
 | Seeing what a request, job or scheduled task did (`/_logbook`), finding N+1 queries, counting queries in a test, replaying a request | `navree-logbook` |
 | Messages and events between services (NATS, Kafka, RabbitMQ, Redis Streams, MQTT, TCP), splitting a module into a service, `MicroFake` tests | `navree-microservices` |
 | An admin panel or back office: list, edit and act on records at `/admin` (`make:resource`, Helm) | `navree-helm` |
+| Connecting a coding agent to the app (`navree mcp`, Navigator's routes, module graph, schema, read-only SQL, logs and docs tools), installing the skills (`navree skills:install`) | `navree-navigator` |
+| Testing a user journey in a real browser: sign-in forms, the front end and its BFF, drag and drop, phone layouts, failure screenshots | `navree-browser-testing` |
+| Measuring or lowering per-request cost: the pipeline benchmarks, pool and transaction settings, hot-path habits | `navree-performance` |
 
 ## Common mistakes
 

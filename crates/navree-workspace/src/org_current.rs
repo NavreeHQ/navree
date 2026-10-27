@@ -237,7 +237,9 @@ async fn resolve_organization(
         ));
     }
     if parts.extensions.get::<PinnedWorkspace>().is_some() {
-        return Err(AppError::forbidden().with_detail("This token is limited to a workspace."));
+        return Err(AppError::forbidden()
+            .with_code("token_limited_to_workspace")
+            .with_detail("This token is limited to a workspace."));
     }
     let (resolver, identifier) = match source {
         OrgSource::Configured => Lookup::organization(&config.organizations)

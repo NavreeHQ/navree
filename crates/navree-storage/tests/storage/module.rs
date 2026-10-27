@@ -249,6 +249,7 @@ async fn storage_errors_map_to_http_statuses() {
     app.get("/files/missing.txt").await.error(404);
     let body = app.get("/files/a%5C..%5C..%5Csecret.txt").await.error(400);
     assert_eq!(body["message"], "Invalid file path.");
+    assert_eq!(body["code"], "invalid_file_path");
 }
 
 #[tokio::test]

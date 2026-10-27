@@ -63,6 +63,40 @@ impl Module for AppModule {
     }
 }
 
+/// A module adding a function and replacing the built-in `money` filter.
+struct ShoutModule;
+
+impl Module for ShoutModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.templates(&[("mail/shout.txt", "{{ shout(name) }} {{ 5|money('EUR') }}")])
+            .view_environment(|env| {
+                env.add_function("shout", |name: &str| format!("{}!", name.to_uppercase()));
+                env.add_filter("money", |cents: i64, currency: &str| {
+                    format!("{cents} {currency}")
+                });
+            });
+    }
+}
+
+#[tokio::test]
+async fn modules_add_functions_and_filters_to_the_environment() {
+    let app = Navree::app()
+        .module(ViewModule::for_root(options(&[])))
+        .module(ShoutModule)
+        .boot()
+        .await
+        .expect("boot");
+
+    assert_eq!(
+        views(&app)
+            .await
+            .render("mail/shout", json!({ "name": "Ada" }))
+            .expect("render"),
+        "ADA! 5 EUR"
+    );
+    app.shutdown().await.expect("shutdown");
+}
+
 async fn views(app: &App) -> Arc<Views> {
     app.ctx().get::<Views>().await.expect("Views")
 }

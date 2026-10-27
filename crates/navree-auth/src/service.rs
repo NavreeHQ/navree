@@ -24,13 +24,18 @@ use tokio::sync::OnceCell;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+use crate::policy::Policies;
 use crate::throttle::{Attempt, LoginThrottle};
 use crate::token::RefreshSecret;
 use crate::two_factor::{LoginOutcome, two_factor_enabled};
 use crate::{
-    AuthError, AuthOptions, JwtService, PasswordSignInPolicy, User, UserResource,
+    AuthError, AuthOptions, JwtService, PasswordSignInPolicy, SessionClaims, TokenType, User,
+    UserResource,
     UserResourceExtension, refresh_token, user,
 };
+
+/// The `audience` of platform sessions in `refresh_tokens`.
+pub(crate) const PLATFORM_AUDIENCE: &str = "platform";
 
 /// The longest user agent stored with a refresh token.
 const MAX_USER_AGENT: usize = 512;
@@ -71,7 +76,10 @@ pub struct ClientMeta {
 
 /// An access token and a refresh token, as returned by the login, register
 /// and refresh routes:
-/// `{"access_token", "refresh_token", "token_type": "Bearer", "expires_in"}`.
+/// `{"access_token", "refresh_token", "token_type": "Bearer", "expires_in"}`,
+/// plus `"two_factor_setup_required": true` when the user must set up
+/// two-factor authentication before the session reaches anything but the
+/// setup routes.
 #[derive(Clone, Serialize, ToSchema)]
 pub struct TokenPair {
     /// The JWT access token (`Authorization: Bearer <access_token>`).
@@ -83,6 +91,11 @@ pub struct TokenPair {
     pub token_type: &'static str,
     /// The access token's lifetime in seconds.
     pub expires_in: u64,
+    /// Whether the access token is limited to setting up two-factor
+    /// authentication (`POST /auth/2fa/enable`, `POST /auth/2fa/confirm`,
+    /// then `POST /auth/refresh` for a full token). Omitted when false.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub two_factor_setup_required: bool,
 }
 
 impl TokenPair {
@@ -92,7 +105,57 @@ impl TokenPair {
             refresh_token,
             token_type: "Bearer",
             expires_in: access_ttl.as_secs(),
+            two_factor_setup_required: false,
         }
+    }
+}
+
+/// What kind of session [`AuthService::open_session`] starts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SessionKind {
+    /// The user signed in to the app.
+    App,
+    /// `impersonator` acts as the user.
+    Impersonation {
+        /// The impersonating user.
+        impersonator: Uuid,
+    },
+    /// A platform administrator signed in to the platform audience.
+    Platform,
+}
+
+/// The session columns of a refresh-token family, kept by every token of
+/// the family.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct SessionState {
+    pub(crate) family_id: Uuid,
+    /// When the family's refresh tokens stop working: sliding for app
+    /// sessions, fixed for impersonation and platform sessions.
+    pub(crate) expires_at: DateTime<Utc>,
+    pub(crate) authenticated_at: Option<DateTime<Utc>>,
+    pub(crate) impersonator: Option<Uuid>,
+    pub(crate) audience: Option<String>,
+}
+
+impl SessionState {
+    fn of(row: &refresh_token::Model) -> Self {
+        Self {
+            family_id: row.family_id,
+            expires_at: row.expires_at,
+            authenticated_at: row.authenticated_at,
+            impersonator: row.impersonator_id,
+            audience: row.audience.clone(),
+        }
+    }
+
+    pub(crate) fn is_platform(&self) -> bool {
+        self.audience.as_deref() == Some(PLATFORM_AUDIENCE)
+    }
+
+    /// Whether refreshing keeps the family's expiry (impersonation and
+    /// platform sessions) instead of extending it.
+    fn has_fixed_expiry(&self) -> bool {
+        self.impersonator.is_some() || self.is_platform()
     }
 }
 
@@ -136,11 +199,14 @@ pub struct AuthService {
     pub(crate) cache: Cache,
     pub(crate) throttle: LoginThrottle,
     pub(crate) two_factor_throttle: LoginThrottle,
+    pub(crate) platform_throttle: LoginThrottle,
     pub(crate) clock: Arc<dyn Clock>,
     pub(crate) app: WeakAppContext,
     dummy_hash: OnceCell<String>,
     extensions: OnceCell<Vec<Arc<dyn UserResourceExtension>>>,
     password_policies: OnceCell<Vec<Arc<dyn PasswordSignInPolicy>>>,
+    pub(crate) policies: Policies,
+    pub(crate) exchange: crate::exchange::KeyCache,
 }
 
 impl Injectable for AuthService {
@@ -179,6 +245,11 @@ impl Injectable for AuthService {
                 options.two_factor.max_attempts_per_minute,
                 clock.clone(),
             );
+            let platform_throttle = LoginThrottle::new(
+                cache.clone(),
+                options.platform.login_throttle_per_minute,
+                clock.clone(),
+            );
             Ok(AuthService {
                 db,
                 hasher,
@@ -188,11 +259,14 @@ impl Injectable for AuthService {
                 cache,
                 throttle,
                 two_factor_throttle,
+                platform_throttle,
                 clock,
                 app: app.downgrade(),
                 dummy_hash: OnceCell::new(),
                 extensions: OnceCell::new(),
                 password_policies: OnceCell::new(),
+                policies: Policies::default(),
+                exchange: crate::exchange::KeyCache::default(),
             })
         })
     }
@@ -353,21 +427,118 @@ impl AuthService {
     }
 
     /// A new login session for `user`: an access token and the first
-    /// refresh token of a new family.
+    /// refresh token of a new family (a session, listed by
+    /// [`sessions`](AuthService::sessions)). The access token carries the
+    /// session id (`sid`) and the sign-in time (`auth_time`). When the user
+    /// must set up two-factor authentication first
+    /// ([`two_factor_required`](AuthService::two_factor_required) without
+    /// it enabled), the access token is limited to the setup routes and
+    /// the pair says so (`two_factor_setup_required`).
     pub async fn issue_tokens(
         &self,
         user: &User,
         meta: ClientMeta,
     ) -> Result<TokenPair, AuthError> {
+        Ok(self.open_session(user, meta, SessionKind::App).await?.0)
+    }
+
+    /// Starts a session of `kind` for `user` and signs its first pair; the
+    /// session id.
+    pub(crate) async fn open_session(
+        &self,
+        user: &User,
+        meta: ClientMeta,
+        kind: SessionKind,
+    ) -> Result<(TokenPair, Uuid), AuthError> {
+        let now = self.clock.now();
+        let session = match kind {
+            SessionKind::App => SessionState {
+                family_id: Uuid::now_v7(),
+                expires_at: after_secs(now, self.options.jwt.refresh_ttl_secs),
+                authenticated_at: Some(now),
+                impersonator: None,
+                audience: None,
+            },
+            SessionKind::Impersonation { impersonator } => SessionState {
+                family_id: Uuid::now_v7(),
+                expires_at: after_secs(now, self.options.impersonation.ttl_secs),
+                authenticated_at: None,
+                impersonator: Some(impersonator),
+                audience: None,
+            },
+            SessionKind::Platform => SessionState {
+                family_id: Uuid::now_v7(),
+                expires_at: after_secs(now, self.options.platform.session_ttl_secs),
+                authenticated_at: Some(now),
+                impersonator: None,
+                audience: Some(PLATFORM_AUDIENCE.to_owned()),
+            },
+        };
         let secret = RefreshSecret::generate();
-        let row = self.refresh_row(&secret, user.id, Uuid::now_v7(), &meta);
+        let row = self.refresh_row(&secret, user.id, &session, &meta);
         self.write(Some(user.id), |uow| async move {
             let tx = uow.tx().await?;
             row.insert(&*tx).await?;
             Ok(())
         })
         .await?;
-        self.pair(user.id, &secret)
+        let pair = self
+            .session_pair(user.id, Some(user), &session, &secret)
+            .await?;
+        Ok((pair, session.family_id))
+    }
+
+    /// The access token type and lifetime of `session` for `user_id`
+    /// (`user` when already loaded), and whether it is limited to the
+    /// two-factor setup.
+    pub(crate) async fn session_token(
+        &self,
+        user_id: Uuid,
+        user: Option<&User>,
+        session: &SessionState,
+    ) -> Result<(TokenType, Duration), AuthError> {
+        if session.is_platform() {
+            return Ok((
+                TokenType::Platform,
+                Duration::from_secs(self.options.platform.access_ttl_secs),
+            ));
+        }
+        let access_ttl = self.jwt.access_ttl();
+        if session.impersonator.is_some() || !self.policies.active(&self.options, &self.app).await {
+            return Ok((TokenType::Access, access_ttl));
+        }
+        let loaded;
+        let user = match user {
+            Some(user) => user,
+            None => {
+                loaded = self
+                    .find_user(user_id)
+                    .await?
+                    .ok_or(AuthError::InvalidRefreshToken)?;
+                &loaded
+            }
+        };
+        if !two_factor_enabled(user) && self.two_factor_required(user).await? {
+            return Ok((TokenType::TwoFactorSetup, access_ttl));
+        }
+        Ok((TokenType::Access, access_ttl))
+    }
+
+    /// The access token of `session` for `user_id` and its refresh token.
+    async fn session_pair(
+        &self,
+        user_id: Uuid,
+        user: Option<&User>,
+        session: &SessionState,
+        refresh: &RefreshSecret,
+    ) -> Result<TokenPair, AuthError> {
+        let (typ, ttl) = self.session_token(user_id, user, session).await?;
+        let access = self
+            .jwt
+            .sign_session(user_id, typ, ttl, session_claims(session))?;
+        let mut pair = TokenPair::new(access, refresh.plain().to_owned(), ttl);
+        pair.two_factor_setup_required = typ == TokenType::TwoFactorSetup;
+        Ok(pair)
     }
 
     /// Exchanges a refresh token for a new pair (rotation): the presented
@@ -395,14 +566,25 @@ impl AuthService {
             .await?
         };
         match rotation {
-            Rotation::Rotated { user_id, family_id } => {
-                let pair = self.pair(user_id, &next)?;
-                self.audit(
-                    entry(AuditKind::Auth, "auth.refresh", &meta)
-                        .actor(user_id)
-                        .metadata(json!({ "family_id": family_id })),
-                )
-                .await;
+            Rotation::Rotated { user_id, session } => {
+                if session.is_platform() && !self.is_platform_admin(user_id).await? {
+                    // No longer a platform administrator: end the session.
+                    let family_id = session.family_id;
+                    self.own(None, meta.request_id.clone(), |uow| async move {
+                        let tx = uow.tx().await?;
+                        revoke_family(&*tx, family_id, now).await
+                    })
+                    .await?;
+                    return Err(AuthError::InvalidRefreshToken);
+                }
+                let pair = self.session_pair(user_id, None, &session, &next).await?;
+                let mut refreshed = entry(AuditKind::Auth, "auth.refresh", &meta)
+                    .actor(user_id)
+                    .metadata(json!({ "family_id": session.family_id }));
+                if let Some(impersonator) = session.impersonator {
+                    refreshed = refreshed.impersonator(impersonator);
+                }
+                self.audit(refreshed).await;
                 Ok(pair)
             }
             Rotation::Reused { user_id, family_id } => {
@@ -553,7 +735,7 @@ impl AuthService {
 
     /// `Ok(Ok(user))` for valid credentials, `Ok(Err(known user id))` for
     /// invalid ones.
-    async fn check_credentials(
+    pub(crate) async fn check_credentials(
         &self,
         email: &str,
         password: &str,
@@ -698,6 +880,10 @@ impl AuthService {
         if row.expires_at <= now {
             return Ok(Rotation::Invalid);
         }
+        let mut session = SessionState::of(&row);
+        if !session.has_fixed_expiry() {
+            session.expires_at = after_secs(now, self.options.jwt.refresh_ttl_secs);
+        }
         // Claim the token; a concurrent refresh that got there first
         // makes this one a reuse.
         let claimed = refresh_token::Entity::update_many()
@@ -711,12 +897,12 @@ impl AuthService {
             revoke_family(&*tx, row.family_id, now).await?;
             return Ok(reused);
         }
-        self.refresh_row(next, row.user_id, row.family_id, meta)
+        self.refresh_row(next, row.user_id, &session, meta)
             .insert(&*tx)
             .await?;
         Ok(Rotation::Rotated {
             user_id: row.user_id,
-            family_id: row.family_id,
+            session,
         })
     }
 
@@ -724,35 +910,24 @@ impl AuthService {
         &self,
         secret: &RefreshSecret,
         user_id: Uuid,
-        family_id: Uuid,
+        session: &SessionState,
         meta: &ClientMeta,
     ) -> refresh_token::ActiveModel {
-        let now = self.clock.now();
-        let ttl = TimeDelta::seconds(
-            i64::try_from(self.options.jwt.refresh_ttl_secs).unwrap_or(i64::MAX),
-        );
         refresh_token::ActiveModel {
             id: Set(secret.id()),
             user_id: Set(user_id),
-            family_id: Set(family_id),
+            family_id: Set(session.family_id),
             token_hash: Set(secret.hash().to_owned()),
-            expires_at: Set(now
-                .checked_add_signed(ttl)
-                .unwrap_or(DateTime::<Utc>::MAX_UTC)),
+            expires_at: Set(session.expires_at),
             revoked_at: Set(None),
             replaced_by: Set(None),
             ip: Set(meta.ip.clone()),
             user_agent: Set(meta.user_agent.as_deref().map(truncate_user_agent)),
-            created_at: Set(now),
+            created_at: Set(self.clock.now()),
+            authenticated_at: Set(session.authenticated_at),
+            impersonator_id: Set(session.impersonator),
+            audience: Set(session.audience.clone()),
         }
-    }
-
-    fn pair(&self, user_id: Uuid, refresh: &RefreshSecret) -> Result<TokenPair, AuthError> {
-        Ok(TokenPair::new(
-            self.jwt.sign_access(user_id)?,
-            refresh.plain().to_owned(),
-            self.jwt.access_ttl(),
-        ))
     }
 
     pub(crate) fn check_password(&self, password: &str) -> Result<(), AuthError> {
@@ -784,7 +959,7 @@ impl AuthService {
 
     /// Runs `f` in a new unit of work: commits when it succeeds, rolls back
     /// otherwise.
-    async fn own<T, F, Fut>(
+    pub(crate) async fn own<T, F, Fut>(
         &self,
         actor: Option<Uuid>,
         request_id: Option<String>,
@@ -905,12 +1080,39 @@ impl fmt::Debug for AuthService {
 
 /// What a refresh found.
 enum Rotation {
-    Rotated { user_id: Uuid, family_id: Uuid },
-    Reused { user_id: Uuid, family_id: Uuid },
+    Rotated {
+        user_id: Uuid,
+        session: SessionState,
+    },
+    Reused {
+        user_id: Uuid,
+        family_id: Uuid,
+    },
     Invalid,
 }
 
-pub(crate) async fn record(sink: Arc<dyn AuditSink>, entry: AuditEntry) {
+/// The `sid`, `auth_time` and `act` claims of `session`.
+pub(crate) fn session_claims(session: &SessionState) -> SessionClaims {
+    SessionClaims {
+        session_id: Some(session.family_id),
+        auth_time: session.authenticated_at.map(|at| at.timestamp()),
+        impersonator: session.impersonator,
+    }
+}
+
+/// `at` plus `secs` seconds (saturating).
+pub(crate) fn after_secs(at: DateTime<Utc>, secs: u64) -> DateTime<Utc> {
+    let secs = i64::try_from(secs).unwrap_or(i64::MAX);
+    at.checked_add_signed(TimeDelta::try_seconds(secs).unwrap_or(TimeDelta::MAX))
+        .unwrap_or(DateTime::<Utc>::MAX_UTC)
+}
+
+/// Records `entry`, adding the impersonator of the task's unit of work
+/// when the entry has none.
+pub(crate) async fn record(sink: Arc<dyn AuditSink>, mut entry: AuditEntry) {
+    if entry.impersonator_id.is_none() {
+        entry.impersonator_id = Uow::current().and_then(|uow| uow.impersonator());
+    }
     let action = entry.action.clone();
     if let Err(error) = sink.record(entry).await {
         tracing::warn!(target: "navree::audit", %error, action, "could not write an auth audit entry");
@@ -936,7 +1138,7 @@ fn same_hash(row: &refresh_token::Model, presented: &RefreshSecret) -> bool {
     constant_time_eq(row.token_hash.as_bytes(), presented.hash().as_bytes())
 }
 
-async fn revoke_family<C: ConnectionTrait>(
+pub(crate) async fn revoke_family<C: ConnectionTrait>(
     conn: &C,
     family_id: Uuid,
     now: DateTime<Utc>,

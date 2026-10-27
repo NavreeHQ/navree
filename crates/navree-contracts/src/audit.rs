@@ -38,6 +38,10 @@ pub struct AuditEntry {
     pub action: String,
     /// The acting user, if any.
     pub actor_id: Option<Uuid>,
+    /// The user impersonating the actor when the entry was written, if
+    /// any (see [`Impersonator`](crate::Impersonator)).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub impersonator_id: Option<Uuid>,
     /// The affected record type, e.g. `deal`.
     pub subject_type: Option<String>,
     /// The affected record id.
@@ -63,6 +67,7 @@ impl AuditEntry {
             kind,
             action: action.into(),
             actor_id: None,
+            impersonator_id: None,
             subject_type: None,
             subject_id: None,
             old_values: None,
@@ -77,6 +82,12 @@ impl AuditEntry {
     /// Sets the acting user.
     pub fn actor(mut self, actor_id: Uuid) -> Self {
         self.actor_id = Some(actor_id);
+        self
+    }
+
+    /// Sets the user impersonating the actor.
+    pub fn impersonator(mut self, impersonator_id: Uuid) -> Self {
+        self.impersonator_id = Some(impersonator_id);
         self
     }
 
@@ -125,5 +136,25 @@ impl AuditEntry {
     pub fn metadata(mut self, metadata: Value) -> Self {
         self.metadata = metadata;
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_impersonator_is_optional_on_the_wire() {
+        let plain = AuditEntry::new(AuditKind::Auth, "auth.login");
+        let value = serde_json::to_value(&plain).unwrap();
+        assert!(value.get("impersonator_id").is_none());
+        let parsed: AuditEntry = serde_json::from_value(value).unwrap();
+        assert_eq!(parsed.impersonator_id, None);
+
+        let admin = Uuid::nil();
+        let entry = AuditEntry::new(AuditKind::Data, "deal.updated").impersonator(admin);
+        assert_eq!(entry.impersonator_id, Some(admin));
+        let value = serde_json::to_value(&entry).unwrap();
+        assert_eq!(value["impersonator_id"], serde_json::json!(admin));
     }
 }

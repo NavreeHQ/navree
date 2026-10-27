@@ -355,15 +355,30 @@ struct Features {
 }
 
 /// Features left out of `full` on purpose: development tools an app's
-/// runtime never needs (`dock`, `harbor`), and ecosystem libraries and
-/// packages an app turns on by name (`features = ["social"]`,
+/// runtime never needs (`dock`, `harbor`, `navigator`), and ecosystem
+/// libraries and packages an app turns on by name (`features = ["social"]`,
 /// `features = ["oauth"]`, `features = ["flags"]`, `features = ["graphql"]`,
 /// `features = ["grpc"]`, `features = ["billing"]`, `features = ["search"]`,
 /// `features = ["mcp"]`, `features = ["ai"]`, `features = ["redis"]`,
-/// `features = ["micro"]`).
+/// `features = ["micro"]`, `features = ["i18n"]`), and test-only crates
+/// (`features = ["browser"]` in `[dev-dependencies]`).
 const OPT_IN: &[&str] = &[
-    "dock", "harbor", "social", "oauth", "flags", "graphql", "grpc", "billing", "search", "mcp",
-    "ai", "redis", "micro",
+    "dock",
+    "harbor",
+    "navigator",
+    "social",
+    "oauth",
+    "flags",
+    "graphql",
+    "grpc",
+    "billing",
+    "search",
+    "mcp",
+    "ai",
+    "redis",
+    "micro",
+    "i18n",
+    "browser",
 ];
 
 /// Always compiled into the facade (not behind a feature).
@@ -377,7 +392,10 @@ const ALWAYS: [&str; 4] = [
 /// Proc-macro crates that a module crate re-exports, as (macro crate,
 /// module crate): they come with the module crate's feature (`orm` brings
 /// navree-orm-macros through navree-orm), so the facade does not name them.
-const COMPANION_MACROS: [(&str, &str); 1] = [("navree-orm-macros", "navree-orm")];
+const COMPANION_MACROS: [(&str, &str); 2] = [
+    ("navree-orm-macros", "navree-orm"),
+    ("navree-i18n-macros", "navree-i18n"),
+];
 
 impl Features {
     fn read() -> Features {
@@ -709,6 +727,17 @@ fn harbor_is_reexported_with_its_feature() {
     >());
 }
 
+/// `navree::browser` is navree-browser, with the opt-in `browser` feature
+/// (`cargo test -p navree --features browser --test facade`).
+#[cfg(feature = "browser")]
+#[test]
+fn browser_is_reexported_with_its_feature() {
+    let target = navree::browser::Target::from("@deal-card").nth(1);
+    assert_eq!(target.to_string(), r#""@deal-card" nth 1"#);
+    assert_eq!(navree::browser::Viewport::phone().width(), 390);
+    let _launch = navree::browser::Browser::builder().window(1440, 900);
+}
+
 /// The opt-in ecosystem libraries are re-exported whole too.
 #[cfg(feature = "social")]
 #[test]
@@ -737,6 +766,18 @@ fn redis_is_reexported_with_its_feature() {
 fn flags_is_reexported_with_its_feature() {
     assert!(same::<navree::flags::FlagsModule, FlagsModule>());
     assert!(same::<navree::flags::CurrentFlags, CurrentFlags>());
+}
+
+/// `navree::i18n` is navree-i18n re-exported whole, and the `i18n` feature
+/// puts `I18nModule` and `Locale` in the prelude
+/// (`cargo test -p navree --features i18n`).
+#[cfg(feature = "i18n")]
+#[test]
+fn i18n_is_reexported_with_its_feature() {
+    assert!(same::<navree::i18n::I18nModule, I18nModule>());
+    assert!(same::<navree::i18n::Locale, Locale>());
+    let args = navree::i18n::args!(count = 1);
+    assert_eq!(args.len(), 1);
 }
 
 /// SQLite is built in; every other database driver is a feature of its own,

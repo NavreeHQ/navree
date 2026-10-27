@@ -215,19 +215,7 @@ impl Controller for AuthController {
                     .attempt_login(&input.email, &input.password, &meta)
                     .await
                     .map_err(AuthError::into_app_error)?;
-                match outcome {
-                    LoginOutcome::Authenticated { user, tokens } => {
-                        signed_in(&service, &user, tokens, StatusCode::OK).await
-                    }
-                    LoginOutcome::TwoFactorRequired {
-                        challenge_token, ..
-                    } => Ok(Json(LoginResult::TwoFactor(TwoFactorChallenge {
-                        two_factor_required: true,
-                        challenge_token,
-                        expires_in: service.options().two_factor.challenge_ttl_secs,
-                    }))
-                    .into_response()),
-                }
+                login_response(&service, outcome).await
             }
         };
         routes.push(
@@ -316,9 +304,30 @@ impl Controller for AuthController {
     }
 }
 
+/// The response to a sign-in: the user and tokens, or a
+/// [`TwoFactorChallenge`].
+pub(crate) async fn login_response(
+    service: &AuthService,
+    outcome: LoginOutcome,
+) -> Result<Response, AppError> {
+    match outcome {
+        LoginOutcome::Authenticated { user, tokens } => {
+            signed_in(service, &user, tokens, StatusCode::OK).await
+        }
+        LoginOutcome::TwoFactorRequired {
+            challenge_token, ..
+        } => Ok(Json(LoginResult::TwoFactor(TwoFactorChallenge {
+            two_factor_required: true,
+            challenge_token,
+            expires_in: service.options().two_factor.challenge_ttl_secs,
+        }))
+        .into_response()),
+    }
+}
+
 /// A JSON body validated like `Valid<Json<T>>`, or `T::default()` when the
 /// request has no `Content-Type` (no body).
-struct OptionalBody<T>(T);
+pub(crate) struct OptionalBody<T>(pub(crate) T);
 
 impl<T, S> FromRequest<S> for OptionalBody<T>
 where

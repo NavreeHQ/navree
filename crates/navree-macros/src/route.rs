@@ -37,6 +37,8 @@ enum Kind {
     Name,
     Api,
     RequiresFlag,
+    NotWhileImpersonating,
+    RecentAuth,
 }
 
 impl Kind {
@@ -74,6 +76,8 @@ impl Kind {
             "name" => Kind::Name,
             "api" => Kind::Api,
             "requires_flag" => Kind::RequiresFlag,
+            "not_while_impersonating" => Kind::NotWhileImpersonating,
+            "recent_auth" => Kind::RecentAuth,
             _ => return None,
         })
     }
@@ -90,6 +94,8 @@ impl Kind {
                 | Kind::Can
                 | Kind::Guard
                 | Kind::Throttle
+                | Kind::NotWhileImpersonating
+                | Kind::RecentAuth
         )
     }
 
@@ -334,6 +340,42 @@ impl RequiresFlag {
     }
 }
 
+/// `#[recent_auth(minutes = 10)]`: the longest time since the user last
+/// authenticated, in seconds.
+fn recent_auth_secs(attr: &Attribute) -> syn::Result<u64> {
+    let at = At::of(attr);
+    let expected = || at.error("expected #[recent_auth(minutes = 10)]");
+    if !matches!(attr.meta, Meta::List(_)) {
+        return Err(expected());
+    }
+    attr.parse_args_with(|input: ParseStream| {
+        let key: Ident = input.parse().map_err(|_| expected())?;
+        if key != "minutes" {
+            return Err(syn::Error::new(
+                key.span(),
+                format!("unknown #[recent_auth] key `{key}`: expected `minutes = 10`"),
+            ));
+        }
+        input.parse::<Token![=]>().map_err(|_| expected())?;
+        let value: LitInt = input.parse().map_err(|_| expected())?;
+        let minutes = match value.base10_parse::<u64>() {
+            Ok(minutes @ 1..=10_080) => minutes,
+            _ => {
+                return Err(syn::Error::new(
+                    value.span(),
+                    "#[recent_auth] takes between 1 and 10080 minutes (a week)",
+                ));
+            }
+        };
+        input.parse::<Option<Token![,]>>()?;
+        if input.is_empty() {
+            Ok(minutes * 60)
+        } else {
+            Err(expected())
+        }
+    })
+}
+
 /// A duration literal (`"500ms"`, `"5s"`, `"1m"`, `"1h"`) in milliseconds;
 /// the error points at the literal.
 pub(crate) fn duration_millis(value: &LitStr) -> syn::Result<u64> {
@@ -483,6 +525,10 @@ pub(crate) struct RouteAttrs {
     pub(crate) api: Option<Api>,
     /// `#[requires_flag(F)]`.
     pub(crate) requires_flag: Option<RequiresFlag>,
+    /// `#[not_while_impersonating]`.
+    pub(crate) not_while_impersonating: Option<At>,
+    /// `#[recent_auth(minutes = N)]`: seconds, and where it was written.
+    pub(crate) recent_auth: Option<(u64, At)>,
     /// The first helper attribute (not a route attribute), for "only
     /// applies to routes" errors.
     pub(crate) first_helper: Option<(String, At)>,
@@ -500,8 +546,8 @@ pub(crate) enum Site<'a> {
 }
 
 /// What may sit on the impl block, for error messages.
-const IMPL_ATTRIBUTES: &str =
-    "#[public], #[authenticated], #[roles], #[permissions], #[can], #[guard] and #[throttle]";
+const IMPL_ATTRIBUTES: &str = "#[public], #[authenticated], #[roles], #[permissions], #[can], \
+     #[guard], #[throttle], #[not_while_impersonating] and #[recent_auth]";
 
 impl RouteAttrs {
     /// Removes our attributes from `attrs` and parses them. Other attributes
@@ -572,6 +618,8 @@ impl RouteAttrs {
             }
             Kind::Api => self.api = Some(Api::parse_args(attr)?),
             Kind::RequiresFlag => self.requires_flag = Some(RequiresFlag::parse_args(attr)?),
+            Kind::NotWhileImpersonating => self.not_while_impersonating = Some(flag(attr)?),
+            Kind::RecentAuth => self.recent_auth = Some((recent_auth_secs(attr)?, at)),
             Kind::Throttle => self.throttle = Some(Throttle::parse_args(attr)?),
             Kind::Timeout => {
                 let value: LitStr = attr
@@ -662,6 +710,20 @@ impl RouteAttrs {
         }
         self.guards.splice(0..0, shared.guards.iter().cloned());
         self.throttle = self.throttle.or(shared.throttle);
+        if self.not_while_impersonating.is_none() {
+            self.not_while_impersonating
+                .clone_from(&shared.not_while_impersonating);
+        }
+        if self.recent_auth.is_none() {
+            self.recent_auth.clone_from(&shared.recent_auth);
+        }
+    }
+
+    /// The first attribute that needs navree-auth.
+    pub(crate) fn auth_attribute(&self) -> Option<&At> {
+        self.not_while_impersonating
+            .as_ref()
+            .or(self.recent_auth.as_ref().map(|(_, at)| at))
     }
 }
 

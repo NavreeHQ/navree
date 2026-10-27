@@ -9,6 +9,7 @@ use navree_contracts::ModuleBuilderJobsExt;
 use navree_db::ModuleBuilderDbExt;
 use navree_events::{Listener, ModuleBuilderEventsExt};
 use navree_http::ModuleBuilderHttpExt;
+use navree_http_client::{HttpClient, HttpClientOptions};
 use navree_kernel::{
     AppContext, BoxError, BoxFuture, Factory, Injectable, KernelError, Module, ModuleBuilder,
     ModuleId, ProviderKey, Resolver,
@@ -21,7 +22,7 @@ use crate::error::map_webhooks_error;
 use crate::event::{FanOutListener, WebhookTypeRegistration};
 use crate::jobs::{Deliver, FanOut};
 use crate::migration::migrations;
-use crate::{WebhookEvent, Webhooks, WebhooksError, WebhooksOptions};
+use crate::{SenderKeys, WebhookEvent, Webhooks, WebhooksError, WebhooksOptions};
 
 /// Webhooks: signed outgoing deliveries and verified incoming requests.
 ///
@@ -147,6 +148,16 @@ fn register(m: &mut ModuleBuilder, options: Option<WebhooksOptions>) {
             .deps(vec![ProviderKey::of::<WebhooksOptions>()]),
         )
         .exports::<Webhooks>()
+        // Built on first use: only sources that verify with the sender's
+        // keys (AwsSns, GooglePubSub) resolve it.
+        .factory(Factory::<SenderKeys>::new(|r: Resolver| async move {
+            let client = match r.app().try_get::<HttpClient>().await {
+                Some(client) => (*client).clone(),
+                None => HttpClient::new(HttpClientOptions::default())?,
+            };
+            Ok(Arc::new(SenderKeys::new(client)))
+        }))
+        .exports::<SenderKeys>()
         .job::<FanOut>()
         .job::<Deliver>()
         .controller::<WebhooksController>()

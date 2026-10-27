@@ -88,7 +88,7 @@ The outermost layer sets up what every other layer relies on:
 - **The app.** The `AppContext` and a fresh `RequestScope` go into the request extensions, so extractors can resolve providers and `Scoped<T>` gets one instance per request.
 - **A tracing span** named `request`, with the method, the path and the request id; the user id is added once the request is authenticated. Every log line written during the request carries these fields.
 
-On the way out, this layer writes one log line per request (target `navree::request`, message `request completed`) with the method, the route template, the status, the latency in milliseconds, the request id, the user id and the IP. It also records the `http_requests_total` counter and the `http_request_duration_seconds` histogram, labelled by method, route and status, which [`ObserveModule`](/docs/digging-deeper/health-and-metrics/) exports to Prometheus.
+On the way out, this layer writes one log line per request (target `navree::request`, message `request completed`) with the method, the route template, the status, the latency in milliseconds, the request id, the user id and the IP. It also records the `http_requests_total` counter and the `http_request_duration_seconds` histogram, labelled by method, route and status, whenever a `metrics` recorder is installed: [`ObserveModule`](/docs/digging-deeper/health-and-metrics/) installs one and exports them to Prometheus. Without a recorder the labels aren't built at all.
 
 ### CORS, panics and timeouts
 
@@ -123,7 +123,7 @@ The three slots hold the layers that modules contribute, in this order:
 
 1. **`Session`.** With `SessionModule`, the session layer loads the session from its cookie and enforces CSRF, before authentication runs. Most API apps, the CRM included, don't use sessions, and this slot stays empty. See [sessions and CSRF](/docs/basics/sessions-and-csrf/).
 2. **`AuthContext`.** Navree's authentication layer runs first in this slot. It calls the app's `dyn Authenticator` (with `AuthModule`, the JWT strategy reads `Authorization: Bearer`) and stores the result in the request as an `AuthState`: a `Principal` or a guest. A guest isn't an error here; routes decide later whether they need a user. But credentials that are present and invalid, such as an expired token, are rejected right here with the authenticator's 401, even on public routes and unknown paths. Other `AuthContext` layers run after it and can read the `AuthState`. See [authentication](/docs/security/authentication/).
-3. **`Uow`.** With `DatabaseModule`, a unit of work is opened for the request, lazily, with the authenticated user as the actor and the request id. The rest of the request runs as a task on the app's tracker, so it finishes and commits even if the client disconnects. On the way back, the unit of work commits when the status is below 400 and rolls back otherwise. See [the unit of work](/docs/database/unit-of-work/).
+3. **`Uow`.** With `DatabaseModule`, a unit of work is opened for the request, lazily, with the authenticated user as the actor and the request id. If the request is dropped before it finishes (the client disconnected, or it timed out), the rest of it moves to a task on the app's tracker, so it still finishes and commits. On the way back, the unit of work commits when the status is below 400 and rolls back otherwise. See [the unit of work](/docs/database/unit-of-work/).
 
 ### Routing
 

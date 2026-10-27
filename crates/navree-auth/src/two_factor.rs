@@ -185,26 +185,8 @@ impl AuthService {
         if user.two_factor_secret.is_none() {
             return Err(AuthError::TwoFactorNotEnabled);
         }
-        let key = throttle_key(user.id);
-        // Counted before the code is checked (parallel guesses included);
-        // a correct code gives the slot back.
-        self.throttle_attempt(
-            &self.two_factor_throttle,
-            &key,
-            meta,
-            Some(user.id),
-            json!({ "flow": "two_factor_confirmation" }),
-        )
-        .await?;
-        if !self.check_totp(&user, code).await? {
-            return Err(AuthError::Invalid {
-                field: "code",
-                message: "code is invalid".to_owned(),
-            });
-        }
-        if let Err(error) = self.two_factor_throttle.release(&key).await {
-            tracing::warn!(target: "navree::auth", %error, "could not release a two-factor attempt");
-        }
+        self.check_two_factor_code(&user, code, "code", meta, "two_factor_confirmation")
+            .await?;
         let (codes, stored) = self.new_recovery_codes()?;
         let now = self.clock.now();
         let audit = self.two_factor_entry("auth.two_factor_confirmed", &user, meta);
@@ -316,9 +298,32 @@ impl AuthService {
         proof: TwoFactorProof,
         meta: &ClientMeta,
     ) -> Result<(User, TokenPair), AuthError> {
-        let claims = self
-            .jwt
-            .verify(challenge_token, TokenType::TwoFactorChallenge)?;
+        let user = self
+            .verify_challenge(challenge_token, TokenType::TwoFactorChallenge, &proof, meta)
+            .await?;
+        let tokens = self.issue_tokens(&user, meta.clone()).await?;
+        self.audit(
+            entry(AuditKind::Auth, "auth.login", meta)
+                .actor(user.id)
+                .metadata(json!({ "two_factor": proof.method() })),
+        )
+        .await;
+        Ok((user, tokens))
+    }
+
+    // -- internals ----------------------------------------------------------
+
+    /// Checks a challenge token of type `typ` (accepted once) and `proof`
+    /// for its user; see [`verify_two_factor`](AuthService::verify_two_factor).
+    /// Audits a used recovery code.
+    pub(crate) async fn verify_challenge(
+        &self,
+        challenge_token: &str,
+        typ: TokenType,
+        proof: &TwoFactorProof,
+        meta: &ClientMeta,
+    ) -> Result<User, AuthError> {
+        let claims = self.jwt.verify(challenge_token, typ)?;
         let key = throttle_key(claims.sub);
         // Counted before the code is checked, so parallel guesses cannot
         // get past the limit (all that guards the 6-digit code space).
@@ -339,7 +344,7 @@ impl AuthService {
         if self.cache.has(&used).await? {
             return Err(AuthError::InvalidToken);
         }
-        let valid = match &proof {
+        let valid = match proof {
             TwoFactorProof::Code(code) => self.check_totp(&user, code).await?,
             TwoFactorProof::RecoveryCode(code) => self.use_recovery_code(&user, code).await?,
         };
@@ -372,7 +377,6 @@ impl AuthService {
         if let Err(error) = self.two_factor_throttle.clear(&key).await {
             tracing::warn!(target: "navree::auth", %error, "could not reset the two-factor throttle");
         }
-        let tokens = self.issue_tokens(&user, meta.clone()).await?;
         if matches!(proof, TwoFactorProof::RecoveryCode(_)) {
             self.audit(
                 entry(
@@ -384,16 +388,51 @@ impl AuthService {
             )
             .await;
         }
-        self.audit(
-            entry(AuditKind::Auth, "auth.login", meta)
-                .actor(user.id)
-                .metadata(json!({ "two_factor": proof.method() })),
-        )
-        .await;
-        Ok((user, tokens))
+        Ok(user)
     }
 
-    // -- internals ----------------------------------------------------------
+    /// Checks a TOTP `code` of `user` against the two-factor throttle
+    /// (counted before the check, a correct code gives the slot back): a
+    /// field error on `field` when wrong, audited as
+    /// `auth.two_factor_failed` with `flow`.
+    pub(crate) async fn check_two_factor_code(
+        &self,
+        user: &User,
+        code: &str,
+        field: &'static str,
+        meta: &ClientMeta,
+        flow: &str,
+    ) -> Result<(), AuthError> {
+        let key = throttle_key(user.id);
+        // Counted before the code is checked (parallel guesses included);
+        // a correct code gives the slot back.
+        self.throttle_attempt(
+            &self.two_factor_throttle,
+            &key,
+            meta,
+            Some(user.id),
+            json!({ "flow": flow }),
+        )
+        .await?;
+        if !self.check_totp(user, code).await? {
+            if flow != "two_factor_confirmation" {
+                self.audit(
+                    entry(AuditKind::Security, "auth.two_factor_failed", meta)
+                        .actor(user.id)
+                        .metadata(json!({ "method": "totp", "flow": flow })),
+                )
+                .await;
+            }
+            return Err(AuthError::Invalid {
+                field,
+                message: format!("{field} is invalid"),
+            });
+        }
+        if let Err(error) = self.two_factor_throttle.release(&key).await {
+            tracing::warn!(target: "navree::auth", %error, "could not release a two-factor attempt");
+        }
+        Ok(())
+    }
 
     /// The challenge token of a two-factor login for `user`.
     pub(crate) fn sign_challenge(&self, user: &User) -> Result<String, AuthError> {

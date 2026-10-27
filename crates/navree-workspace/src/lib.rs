@@ -155,6 +155,7 @@ pub use org_members::{OrgMemberInfo, OrgMembers};
 pub use org_role::{OrgRole, OrgRoleTable, PartitionSelector, Selector, WorkspaceSelector};
 pub use organizations::{NewOrganization, OrgMembership, OrganizationChanges, Organizations};
 pub use partitions::{NewPartition, Partitions};
+pub use resolve::requested_workspace;
 pub use role::{ADMIN, MEMBER, OWNER, RoleTable, VIEWER, WorkspaceRole};
 pub use scoped::{OrgRepo, PartitionRepo, PartitionScoped};
 pub use tenant::WorkspaceDatabases;

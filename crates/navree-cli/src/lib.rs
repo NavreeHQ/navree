@@ -1,10 +1,12 @@
 //! # navree-cli
 //!
 //! The library behind the `navree` command-line tool: it creates apps,
-//! generates code, runs the dev loop, the app's local services and deploys.
-//! Its only navree dependencies are two tool crates, navree-dock (local
-//! services) and navree-harbor (servers and deploys): everything it knows
-//! about the framework's runtime is in the code it generates.
+//! generates code, runs the dev loop, the app's local services and deploys,
+//! and serves Navigator to coding agents. Its only navree dependencies are
+//! three tool crates, navree-dock (local services), navree-harbor (servers
+//! and deploys) and navree-navigator (`navree mcp`, `navree skills:install`):
+//! everything it knows about the framework's runtime is in the code it
+//! generates.
 //!
 //! | Command | What it does |
 //! |---|---|
@@ -18,6 +20,9 @@
 //! | `navree dock up\|down\|status\|logs\|env\|shell` | The app's local services from `dock.toml`, in Docker or Podman ([`dock`]) |
 //! | `navree dock:add <service>`, `navree dock:remove <service>` | Edit `dock.toml` ([`dock`]) |
 //! | `navree harbor:*`, `deploy`, `deploy:rollback`, `deploy:releases`, `build:image` | Servers and deployments with Harbor (`navree_harbor::cli`) |
+//! | `navree mcp [--path <dir>] [--no-build] [--allow-remote-database] [--docs-offline]` | Navigator, the MCP server for coding agents, on stdio (navree-navigator) |
+//! | `navree skills:install [--path <dir>]` | The Navree agent skills into `.claude/skills/` and `.agents/skills/` |
+//! | `navree browser:install [--version <version>] [--force]` | Download Chrome for Testing into Navree's cache for navree-browser ([`browser`]) |
 //! | `navree <anything else> [args...]` | `cargo run --quiet -- <command> [args...]` in the app ([`forward`]) |
 //!
 //! When the app has a `dock.toml`, `navree dev` and forwarded commands pass
@@ -30,6 +35,7 @@
 //! edited safely becomes a printed hint.
 #![forbid(unsafe_code)]
 
+pub mod browser;
 pub mod check;
 pub mod cli;
 pub mod clock;

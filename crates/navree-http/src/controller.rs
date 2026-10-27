@@ -72,10 +72,10 @@ impl ControllerRegistration {
 
 /// Where a [`GlobalLayer`] sits in the request pipeline, outermost first:
 /// the edge, then the session layer, then authentication context, then the
-/// unit of work. Every slot but [`Edge`](LayerSlot::Edge) runs after the
-/// fixed layers (request id, tracing, CORS, panic catcher, timeout, security
-/// headers, compression, maintenance mode, per-IP rate limit, body limit)
-/// and before routing.
+/// unit of work, then the request context. Every slot but
+/// [`Edge`](LayerSlot::Edge) runs after the fixed layers (request id,
+/// tracing, CORS, panic catcher, timeout, security headers, compression,
+/// maintenance mode, per-IP rate limit, body limit) and before routing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum LayerSlot {
     /// Around the whole app, before every fixed layer: for protocols that
@@ -90,6 +90,11 @@ pub enum LayerSlot {
     AuthContext,
     /// The unit of work (navree-db).
     Uow,
+    /// Request context for handlers, innermost (navree-i18n's locale). The
+    /// unit-of-work layer runs the rest of the request in a task of its
+    /// own, so a layer that sets a Tokio task-local for handlers belongs
+    /// here, inside it.
+    Context,
 }
 
 /// The function that wraps the app router in a [`GlobalLayer`].

@@ -4,12 +4,20 @@
 use std::fmt;
 use std::sync::Arc;
 
+use http::Method;
 use http::header::AUTHORIZATION;
 use http::request::Parts;
-use navree_contracts::{AuthVia, BoxFuture, Principal};
+use navree_contracts::{AuthVia, BoxFuture, Impersonator, Principal};
 use navree_http::{AppError, Authenticator};
 
-use crate::{AuthError, JwtService, TokenType};
+use crate::{AccessClaims, AuthError, JwtService, TokenType};
+
+/// The token types the JWT strategy accepts as credentials.
+const BEARER_TYPES: [TokenType; 3] = [
+    TokenType::Access,
+    TokenType::TwoFactorSetup,
+    TokenType::Platform,
+];
 
 /// One way of authenticating a request (a strategy). Register
 /// strategies as `dyn Strategy` multi-bindings (`m.multi(Factory::<dyn
@@ -37,21 +45,48 @@ pub trait Strategy: Send + Sync + 'static {
 
 /// The built-in strategy (`"jwt"`): `Authorization: Bearer <access token>`
 /// verified by [`JwtService`] gives a [`Principal`] authenticated
-/// [`AuthVia::Token`] with no token restrictions. No `Authorization`
-/// header, another scheme, or a bearer value that is not shaped like a JWT
-/// (`<header>.<payload>.<signature>`, e.g. an opaque API token or
-/// navree-observe's metrics scrape token) is not its business. A JWT that is
-/// forged, of another type, for another issuer or expired is a 401
-/// (`"Invalid token"` / `"Token expired"`) with a `WWW-Authenticate:
-/// Bearer` challenge, on every route.
+/// [`AuthVia::Token`] with no token restrictions, and stores the token's
+/// [`AccessClaims`] in the request (plus navree-contracts' `Impersonator`
+/// for an impersonation token, which the unit of work and the audit trail
+/// pick up). No `Authorization` header, another scheme, or a bearer value
+/// that is not shaped like a JWT (`<header>.<payload>.<signature>`, e.g. an
+/// opaque API token or navree-observe's metrics scrape token) is not its
+/// business. A JWT that is forged, of another type, for another issuer or
+/// expired is a 401 (`"Invalid token"` / `"Token expired"`) with a
+/// `WWW-Authenticate: Bearer` challenge, on every route.
+///
+/// Access tokens of type [`TokenType::TwoFactorSetup`] (a user who must
+/// set up two-factor authentication first) authenticate only the setup
+/// routes given to [`with_setup_routes`](JwtStrategy::with_setup_routes);
+/// anywhere else they are 403 `two_factor_required`.
 pub struct JwtStrategy {
     jwt: Arc<JwtService>,
+    setup_routes: Arc<[(Method, String)]>,
 }
 
 impl JwtStrategy {
     /// The strategy verifying with `jwt`.
     pub fn new(jwt: Arc<JwtService>) -> Self {
-        Self { jwt }
+        Self {
+            jwt,
+            setup_routes: Arc::from(Vec::new()),
+        }
+    }
+
+    /// The routes (method and full path) a two-factor setup token reaches.
+    /// The auth module passes its own: `POST {prefix}/2fa/enable`, `POST
+    /// {prefix}/2fa/confirm`, `GET {prefix}/me`, `POST {prefix}/logout`
+    /// and `POST {prefix}/refresh`.
+    pub fn with_setup_routes(mut self, routes: impl IntoIterator<Item = (Method, String)>) -> Self {
+        self.setup_routes = routes.into_iter().collect();
+        self
+    }
+
+    fn is_setup_route(&self, parts: &Parts) -> bool {
+        let path = parts.uri.path().trim_end_matches('/');
+        self.setup_routes
+            .iter()
+            .any(|(method, route)| *method == parts.method && route == path)
     }
 }
 
@@ -70,22 +105,34 @@ impl Strategy for JwtStrategy {
         &'a self,
         parts: &'a mut Parts,
     ) -> BoxFuture<'a, Result<Option<Principal>, AppError>> {
-        let result = match bearer_token(parts) {
-            None => Ok(None),
-            Some(token) => self
-                .jwt
-                .verify(token, TokenType::Access)
-                .map(|claims| {
-                    Some(Principal {
-                        user_id: claims.sub,
-                        via: AuthVia::Token,
-                        token_abilities: None,
-                        session_id: None,
-                    })
-                })
-                .map_err(AuthError::into_app_error),
-        };
+        let result = self.principal(parts);
         Box::pin(async move { result })
+    }
+}
+
+impl JwtStrategy {
+    fn principal(&self, parts: &mut Parts) -> Result<Option<Principal>, AppError> {
+        let Some(token) = bearer_token(parts) else {
+            return Ok(None);
+        };
+        let claims = self
+            .jwt
+            .verify_any(token, &BEARER_TYPES)
+            .map_err(AuthError::into_app_error)?;
+        if claims.typ == TokenType::TwoFactorSetup && !self.is_setup_route(parts) {
+            return Err(AuthError::TwoFactorSetupRequired.into_app_error());
+        }
+        if let Some(act) = claims.act {
+            parts.extensions.insert(Impersonator(act.sub));
+        }
+        let user_id = claims.sub;
+        parts.extensions.insert(AccessClaims(claims));
+        Ok(Some(Principal {
+            user_id,
+            via: AuthVia::Token,
+            token_abilities: None,
+            session_id: None,
+        }))
     }
 }
 
@@ -204,6 +251,95 @@ mod tests {
             request = request.header(AUTHORIZATION, value);
         }
         request.body(()).unwrap().into_parts().0
+    }
+
+    #[tokio::test]
+    async fn the_claims_and_the_impersonator_reach_the_request() {
+        let jwt = jwt();
+        let strategy = JwtStrategy::new(jwt.clone());
+        let (user, admin, session) = (Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7());
+        let token = jwt
+            .sign_session(
+                user,
+                TokenType::Access,
+                Duration::from_secs(60),
+                crate::SessionClaims {
+                    session_id: Some(session),
+                    auth_time: None,
+                    impersonator: Some(admin),
+                },
+            )
+            .unwrap();
+        let mut parts = parts(Some(&format!("Bearer {token}")));
+        let principal = strategy.authenticate(&mut parts).await.unwrap().unwrap();
+        assert_eq!(principal.user_id, user);
+        assert_eq!(
+            parts.extensions.get::<Impersonator>(),
+            Some(&Impersonator(admin))
+        );
+        let claims = parts.extensions.get::<AccessClaims>().unwrap();
+        assert_eq!(claims.session_id(), Some(session));
+
+        let plain = jwt.sign_access(user).unwrap();
+        let mut parts = self::parts(Some(&format!("Bearer {plain}")));
+        strategy.authenticate(&mut parts).await.unwrap().unwrap();
+        assert!(parts.extensions.get::<Impersonator>().is_none());
+
+        let platform = jwt
+            .sign(user, TokenType::Platform, Duration::from_secs(60))
+            .unwrap();
+        let mut parts = self::parts(Some(&format!("Bearer {platform}")));
+        strategy.authenticate(&mut parts).await.unwrap().unwrap();
+        assert!(
+            parts
+                .extensions
+                .get::<AccessClaims>()
+                .unwrap()
+                .is_platform()
+        );
+    }
+
+    #[tokio::test]
+    async fn setup_tokens_reach_only_the_setup_routes() {
+        let jwt = jwt();
+        let strategy = JwtStrategy::new(jwt.clone()).with_setup_routes([
+            (Method::POST, "/api/auth/2fa/enable".to_owned()),
+            (Method::GET, "/api/auth/me".to_owned()),
+        ]);
+        let token = jwt
+            .sign(
+                Uuid::now_v7(),
+                TokenType::TwoFactorSetup,
+                Duration::from_secs(60),
+            )
+            .unwrap();
+        let request = |method: Method, path: &str| {
+            let mut parts = Request::builder()
+                .method(method)
+                .uri(path)
+                .header(AUTHORIZATION, format!("Bearer {token}"))
+                .body(())
+                .unwrap()
+                .into_parts()
+                .0;
+            let strategy = &strategy;
+            async move { strategy.authenticate(&mut parts).await }
+        };
+        assert!(request(Method::POST, "/api/auth/2fa/enable").await.is_ok());
+        assert!(request(Method::GET, "/api/auth/me/").await.is_ok());
+        for (method, path) in [
+            (Method::GET, "/api/deals"),
+            (Method::PATCH, "/api/auth/me"),
+            (Method::POST, "/api/auth/2fa/disable"),
+        ] {
+            let error = request(method, path).await.unwrap_err();
+            assert_eq!(error.status.as_u16(), 403, "{path}");
+            assert_eq!(error.code, "two_factor_required", "{path}");
+        }
+        // Without setup routes, nowhere.
+        let bare = JwtStrategy::new(jwt.clone());
+        let mut parts = parts(Some(&format!("Bearer {token}")));
+        assert!(bare.authenticate(&mut parts).await.is_err());
     }
 
     #[tokio::test]
