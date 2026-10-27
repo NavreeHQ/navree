@@ -39,19 +39,25 @@ impl Resource for UserAdmin {
         vec![
             Field::text("name").required().max_length(100).sortable(),
             Field::email("email").required().sortable(),
-            Field::datetime("email_verified_at").label("Verified").readonly(),
+            Field::datetime("email_verified_at")
+                .label("Verified")
+                .readonly(),
             Field::datetime("created_at").readonly().sortable(),
         ]
     }
 
     fn filters(&self) -> Vec<Filter<user::Entity>> {
-        vec![Filter::boolean("unverified", "Unverified only", |select, on| {
-            if on {
-                select.filter(user::Column::EmailVerifiedAt.is_null())
-            } else {
-                select
-            }
-        })]
+        vec![Filter::boolean(
+            "unverified",
+            "Unverified only",
+            |select, on| {
+                if on {
+                    select.filter(user::Column::EmailVerifiedAt.is_null())
+                } else {
+                    select
+                }
+            },
+        )]
     }
 
     fn metrics(&self) -> Vec<Metric<user::Entity>> {
@@ -176,7 +182,9 @@ impl Resource for SubscriptionAdmin {
                 .sortable(),
             Field::number("quantity").label("Seats").readonly(),
             Field::datetime("trial_ends_at").readonly(),
-            Field::datetime("current_period_end").label("Renews").readonly(),
+            Field::datetime("current_period_end")
+                .label("Renews")
+                .readonly(),
             Field::datetime("ends_at").readonly(),
             Field::text("provider").readonly().hide_on_index(),
             Field::datetime("created_at").readonly().sortable(),

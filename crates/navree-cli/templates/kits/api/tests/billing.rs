@@ -31,12 +31,16 @@ async fn owners_check_out_a_plan_and_start_its_trial() {
     assert_eq!(plans, ["pro", "starter"]);
 
     // Checkout: the fake provider's URL, completed as if the customer paid.
-    let checkout = in_workspace(app.client().post("/api/billing/checkout"), &token, &team.slug)
-        .json(&json!({ "plan": "pro", "interval": "monthly" }))
-        .send()
-        .await
-        .assert_status(200)
-        .json_value();
+    let checkout = in_workspace(
+        app.client().post("/api/billing/checkout"),
+        &token,
+        &team.slug,
+    )
+    .json(&json!({ "plan": "pro", "interval": "monthly" }))
+    .send()
+    .await
+    .assert_status(200)
+    .json_value();
     let url = checkout["url"].as_str().expect("a checkout URL");
     let id = url
         .strip_prefix("https://checkout.fake.test/c/")
@@ -60,10 +64,14 @@ async fn owners_check_out_a_plan_and_start_its_trial() {
         .assert_json_path("subscription.status", json!("trialing"))
         .assert_json_path("subscription.on_trial", json!(true))
         .assert_json_path("subscription.quantity", json!(1));
-    in_workspace(app.client().get("/api/billing/invoices"), &token, &team.slug)
-        .send()
-        .await
-        .assert_status(200);
+    in_workspace(
+        app.client().get("/api/billing/invoices"),
+        &token,
+        &team.slug,
+    )
+    .send()
+    .await
+    .assert_status(200);
 }
 
 #[tokio::test]
@@ -72,12 +80,16 @@ async fn seats_follow_the_member_count() {
     let owner = user(&app, "Olivia Owner", "olivia@example.com").await;
     let team = workspace(&app, &owner, "Acme").await;
     let token = sign_in(&app, "olivia@example.com").await;
-    let checkout = in_workspace(app.client().post("/api/billing/checkout"), &token, &team.slug)
-        .json(&json!({ "plan": "starter" }))
-        .send()
-        .await
-        .assert_status(200)
-        .json_value();
+    let checkout = in_workspace(
+        app.client().post("/api/billing/checkout"),
+        &token,
+        &team.slug,
+    )
+    .json(&json!({ "plan": "starter" }))
+    .send()
+    .await
+    .assert_status(200)
+    .json_value();
     let id = checkout["url"]
         .as_str()
         .and_then(|url| url.rsplit('/').next())
@@ -96,7 +108,11 @@ async fn seats_follow_the_member_count() {
     let grace = user(&app, "Grace Hopper", "grace@example.com").await;
     add_member(&app, &team, &grace, WorkspaceRole::Member).await;
     // The seat count is updated by a queued listener.
-    app.get::<Queue>().await.run_pending().await.expect("the jobs run");
+    app.get::<Queue>()
+        .await
+        .run_pending()
+        .await
+        .expect("the jobs run");
 
     in_workspace(app.client().get("/api/billing"), &token, &team.slug)
         .send()

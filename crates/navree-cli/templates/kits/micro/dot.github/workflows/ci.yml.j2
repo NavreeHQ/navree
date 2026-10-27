@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    services:
+      # The same service dock.toml starts locally. The tests need no broker:
+      # they run on MicroFake's in-memory transport.
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: navree
+          POSTGRES_PASSWORD: navree
+          POSTGRES_DB: {{ crate_name }}
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U navree"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_DATABASE__URL: postgres://navree:navree@127.0.0.1:5432/{{ crate_name }}
+      APP_KEY: base64:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=
+      # Commands boot without NATS.
+      APP_MICRO__TRANSPORT: memory
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Module graph
+        run: cargo run --quiet -- check
+      - name: Migrations on PostgreSQL
+        run: cargo run --quiet -- migrate
+      - name: Message and event patterns
+        run: cargo run --quiet -- micro:patterns
+      - run: cargo test --workspace

@@ -123,6 +123,9 @@ relay_url = "auto"
 
 [api]
 title = "{{ title }} API"
+# The admin panel is pages and its own API, not part of the app's contract:
+# `navree check` doesn't ask its routes for #[api] docs.
+undocumented = ["/admin*"]
 
 [helm]
 title = "{{ title }} admin"

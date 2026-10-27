@@ -93,6 +93,22 @@ impl NavreeSource {
             ),
         }
     }
+
+    /// The right-hand side of `navree = ...` with the default features
+    /// off, for `[workspace.dependencies]`: each member turns on what it
+    /// uses (`{ path = "..", default-features = false }`).
+    pub fn dependency_without_default_features(&self) -> String {
+        match self {
+            NavreeSource::Path(path) => format!(
+                "{{ path = {}, default-features = false }}",
+                path_value(path)
+            ),
+            NavreeSource::Version(version) => format!(
+                "{{ version = {}, default-features = false }}",
+                toml_string(version)
+            ),
+        }
+    }
 }
 
 /// A local path as a TOML string, with `/` separators.

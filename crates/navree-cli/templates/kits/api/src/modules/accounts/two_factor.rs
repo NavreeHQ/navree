@@ -1,8 +1,8 @@
 //! `two_factor_enabled` on the user resource.
 
 use navree::auth::{User, UserResourceExtension};
-use navree::{BoxFuture, injectable};
 use navree::kernel::BoxError;
+use navree::{BoxFuture, injectable};
 use serde_json::{Map, Value};
 
 /// Adds `two_factor_enabled` to the user resource (`GET /api/auth/me`, the

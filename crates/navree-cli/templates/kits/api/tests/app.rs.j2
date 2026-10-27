@@ -4,6 +4,7 @@ mod support;
 
 use serde_json::json;
 use support::{boot, in_workspace, sign_in_with, sources};
+
 use {{ crate_name }}::seed::{DEMO_MEMBER, DEMO_OWNER, DEMO_PASSWORD, DEMO_WORKSPACE};
 
 #[test]
@@ -56,9 +57,13 @@ async fn the_openapi_document_describes_every_route() {
 #[tokio::test]
 async fn the_demo_seeder_creates_the_demo_workspace() {
     let (app, _guard) = boot().await;
-    app.run_command("db:seed", &["demo"]).await.expect("db:seed");
+    app.run_command("db:seed", &["demo"])
+        .await
+        .expect("db:seed");
     // Seeding twice changes nothing.
-    app.run_command("db:seed", &["demo"]).await.expect("db:seed");
+    app.run_command("db:seed", &["demo"])
+        .await
+        .expect("db:seed");
 
     let owner = sign_in_with(&app, DEMO_OWNER, DEMO_PASSWORD).await;
     app.client()

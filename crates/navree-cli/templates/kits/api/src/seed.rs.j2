@@ -100,9 +100,7 @@ pub async fn seed_demo(ctx: &AppContext) -> Result<Workspace, BoxError> {
         let members = ctx.get::<Members>().await?;
         let id = workspace.id;
         in_uow(&db, |uow| async move {
-            members
-                .add(&uow, id, member, WorkspaceRole::Member)
-                .await?;
+            members.add(&uow, id, member, WorkspaceRole::Member).await?;
             Ok(())
         })
         .await?;
@@ -121,9 +119,21 @@ pub async fn seed_demo(ctx: &AppContext) -> Result<Workspace, BoxError> {
         }
         let now = chrono::Utc::now();
         for (name, description, status) in [
-            ("Website relaunch", "New pages, new pricing, one launch date.", "active"),
-            ("Mobile app", "Sign-in, projects and notifications on the phone.", "active"),
-            ("Onboarding emails", "Five emails over a customer's first two weeks.", "archived"),
+            (
+                "Website relaunch",
+                "New pages, new pricing, one launch date.",
+                "active",
+            ),
+            (
+                "Mobile app",
+                "Sign-in, projects and notifications on the phone.",
+                "active",
+            ),
+            (
+                "Onboarding emails",
+                "Five emails over a customer's first two weeks.",
+                "archived",
+            ),
         ] {
             WorkspaceRepo::<Project>::insert(
                 &uow,

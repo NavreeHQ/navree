@@ -1,0 +1,16 @@
+[package]
+name = "{{ contracts_package }}"
+description = "The messages and events of the {{ package }} service, shared with the services that call it."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+chrono.workspace = true
+garde.workspace = true
+# Only the `Event` trait: a client that depends on this crate gets no more
+# of navree than that.
+navree = { workspace = true, features = ["events"] }
+serde.workspace = true
+uuid.workspace = true
