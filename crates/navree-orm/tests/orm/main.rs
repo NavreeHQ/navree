@@ -14,6 +14,7 @@ mod crud;
 mod derive;
 mod dirty;
 mod documents;
+mod entities;
 mod find_or_create;
 mod hooks;
 mod http;

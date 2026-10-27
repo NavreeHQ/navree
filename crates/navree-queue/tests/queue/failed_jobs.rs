@@ -69,7 +69,7 @@ async fn failed_jobs_are_orm_models() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn failed_jobs_stored_by_hand_are_retried_and_forgotten_by_the_queue() {
+async fn failed_jobs_stored_by_hand_are_listed_and_retried_by_the_queue() {
     let h = harness(QueueDriver::Database).await;
     let db = h.app.get::<Db>().await;
     let stored = FailedJob {
