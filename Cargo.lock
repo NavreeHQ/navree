@@ -3458,6 +3458,7 @@ dependencies = [
  "navree-grpc",
  "navree-http",
  "navree-http-client",
+ "navree-i18n",
  "navree-kernel",
  "navree-lighthouse",
  "navree-log",

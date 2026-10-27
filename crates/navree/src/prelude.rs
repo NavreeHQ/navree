@@ -93,6 +93,8 @@ pub use navree_ai::{AiModule, ModuleBuilderAiExt as _};
 pub use navree_flags::{CurrentFlags, FlagsModule, ModuleBuilderFlagsExt as _};
 #[cfg(feature = "graphql")]
 pub use navree_graphql::{GraphqlModule, ModuleBuilderGraphqlExt as _};
+#[cfg(feature = "i18n")]
+pub use navree_i18n::{I18nModule, Locale};
 
 #[cfg(feature = "grpc")]
 pub use navree_grpc::{GrpcModule, ModuleBuilderGrpcExt as _};

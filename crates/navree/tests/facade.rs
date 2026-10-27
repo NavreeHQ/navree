@@ -253,9 +253,10 @@ struct Features {
 /// turns on by name (`features = ["social"]`, `features = ["oauth"]`,
 /// `features = ["flags"]`, `features = ["graphql"]`, `features = ["grpc"]`,
 /// `features = ["billing"]`, `features = ["search"]`, `features = ["mcp"]`,
-/// `features = ["ai"]`).
+/// `features = ["ai"]`, `features = ["i18n"]`).
 const OPT_IN: &[&str] = &[
     "dock", "social", "oauth", "flags", "graphql", "grpc", "billing", "search", "mcp", "ai",
+    "i18n",
 ];
 
 /// Always compiled into the facade (not behind a feature).
@@ -365,7 +366,9 @@ fn module_features_turn_on_the_features_of_their_navree_dependencies() {
     for (krate, feature) in &features.feature_of {
         let enabled = features.closure(feature);
         for dep in &features.runtime_deps[krate] {
-            if ALWAYS.contains(&dep.as_str()) {
+            // A crate's own proc-macro companion (navree-i18n-macros) comes
+            // with it.
+            if ALWAYS.contains(&dep.as_str()) || *dep == format!("{krate}-macros") {
                 continue;
             }
             match features.feature_of.get(dep) {
@@ -456,6 +459,18 @@ fn opt_in_libraries_are_reexported_whole() {
 fn flags_is_reexported_with_its_feature() {
     assert!(same::<navree::flags::FlagsModule, FlagsModule>());
     assert!(same::<navree::flags::CurrentFlags, CurrentFlags>());
+}
+
+/// `navree::i18n` is navree-i18n re-exported whole, and the `i18n` feature
+/// puts `I18nModule` and `Locale` in the prelude
+/// (`cargo test -p navree --features i18n`).
+#[cfg(feature = "i18n")]
+#[test]
+fn i18n_is_reexported_with_its_feature() {
+    assert!(same::<navree::i18n::I18nModule, I18nModule>());
+    assert!(same::<navree::i18n::Locale, Locale>());
+    let args = navree::i18n::args!(count = 1);
+    assert_eq!(args.len(), 1);
 }
 
 /// SQLite is built in; every other database driver is a feature of its own,
