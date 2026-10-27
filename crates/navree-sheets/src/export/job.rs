@@ -61,7 +61,12 @@ impl Job for QueuedExport {
             })
         });
         let locale = self.locale.clone();
-        let outcome = in_locale(&app, locale.as_deref(), exports.write_queued(&self, progress)).await;
+        let outcome = in_locale(
+            &app,
+            locale.as_deref(),
+            exports.write_queued(&self, progress),
+        )
+        .await;
         match outcome {
             Ok(result) => {
                 operations.complete(self.operation_id, &result).await?;

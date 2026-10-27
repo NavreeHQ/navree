@@ -219,7 +219,12 @@ impl Import for ContactsImport {
             .collect::<Result<_, _>>()?)
     }
 
-    async fn insert(&self, _ctx: &ImportContext, uow: &Uow, row: ContactRow) -> Result<(), BoxError> {
+    async fn insert(
+        &self,
+        _ctx: &ImportContext,
+        uow: &Uow,
+        row: ContactRow,
+    ) -> Result<(), BoxError> {
         if row.name == "Robot" {
             return Err(RowRejected::new("Robots cannot be contacts").into());
         }
@@ -236,7 +241,12 @@ impl Import for ContactsImport {
         Ok(())
     }
 
-    async fn update(&self, _ctx: &ImportContext, uow: &Uow, row: ContactRow) -> Result<(), BoxError> {
+    async fn update(
+        &self,
+        _ctx: &ImportContext,
+        uow: &Uow,
+        row: ContactRow,
+    ) -> Result<(), BoxError> {
         let tx = uow.tx().await?;
         tx.execute_raw(stmt(
             tx.get_database_backend(),
@@ -304,7 +314,11 @@ impl Export for ContactsExport {
         }
     }
 
-    async fn count(&self, ctx: &ExportContext, filter: &ContactFilter) -> Result<Option<u64>, BoxError> {
+    async fn count(
+        &self,
+        ctx: &ExportContext,
+        filter: &ContactFilter,
+    ) -> Result<Option<u64>, BoxError> {
         let db = ctx.app.get::<Db>().await?;
         let (clause, values) = filter_sql(filter);
         let row = db
@@ -400,7 +414,12 @@ pub async fn run_queue(app: &TestApp) {
 }
 
 pub async fn operation(app: &TestApp, id: Uuid) -> OperationRecord {
-    app.get::<Operations>().await.find(id).await.unwrap().unwrap()
+    app.get::<Operations>()
+        .await
+        .find(id)
+        .await
+        .unwrap()
+        .unwrap()
 }
 
 pub async fn file_on_disk(app: &TestApp, disk: &str, path: &str) -> Vec<u8> {

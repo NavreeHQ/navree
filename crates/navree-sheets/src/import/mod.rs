@@ -225,9 +225,7 @@ pub trait Import: Send + Sync + 'static {
         row: Self::Row,
     ) -> impl Future<Output = Result<(), BoxError>> + Send {
         let _ = (ctx, uow, row);
-        async {
-            Err(RowRejected::new("Existing records cannot be updated by this import").into())
-        }
+        async { Err(RowRejected::new("Existing records cannot be updated by this import").into()) }
     }
 
     /// Runs once an import of this kind has been applied, with its final

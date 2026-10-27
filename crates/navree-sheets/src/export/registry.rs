@@ -130,7 +130,9 @@ pub(crate) fn from_json<P: DeserializeOwned>(params: Value) -> Result<P, SheetsE
             {
                 return Ok(parsed);
             }
-            Err(SheetsError::Invalid(format!("invalid export parameters: {error}")))
+            Err(SheetsError::Invalid(format!(
+                "invalid export parameters: {error}"
+            )))
         }
     }
 }
@@ -238,7 +240,10 @@ mod tests {
             }
         );
         let error = from_json::<Filter>(serde_json::json!({ "limit": "x" })).unwrap_err();
-        assert!(error.to_string().starts_with("invalid export parameters"), "{error}");
+        assert!(
+            error.to_string().starts_with("invalid export parameters"),
+            "{error}"
+        );
     }
 
     #[test]

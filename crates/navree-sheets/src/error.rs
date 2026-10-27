@@ -2,7 +2,6 @@
 
 use std::collections::BTreeMap;
 
-use http::StatusCode;
 use navree_contracts::BoxError;
 use navree_http::AppError;
 
@@ -119,11 +118,10 @@ impl SheetsError {
             SheetsError::FileTooLarge { limit } => {
                 AppError::payload_too_large(usize::try_from(*limit).unwrap_or(usize::MAX))
             }
-            SheetsError::TooManyRows { limit } => AppError::new(
-                StatusCode::BAD_REQUEST,
-                "too_many_rows",
-                format!("The file has more than {limit} rows."),
-            ),
+            SheetsError::TooManyRows { limit } => {
+                AppError::bad_request(format!("The file has more than {limit} rows."))
+                    .with_code("too_many_rows")
+            }
             SheetsError::NotReady(message) => {
                 AppError::conflict(message.clone()).with_code("import_not_ready")
             }
@@ -183,5 +181,22 @@ mod tests {
             assert_eq!(app.status.as_u16(), status, "{error}");
             assert_eq!(app.code, code, "{error}");
         }
+    }
+
+    #[test]
+    fn refusals_say_what_went_wrong_in_the_message() {
+        let app = SheetsError::TooManyRows { limit: 5 }.to_app_error();
+        assert_eq!(app.title, "Bad Request");
+        assert_eq!(
+            app.detail.as_deref(),
+            Some("The file has more than 5 rows.")
+        );
+        let app = SheetsError::Duplicates { count: 2 }.to_app_error();
+        assert_eq!(
+            app.detail.as_deref(),
+            Some(
+                "2 rows are duplicates. Fix them, or apply with duplicates set to skip or update."
+            )
+        );
     }
 }

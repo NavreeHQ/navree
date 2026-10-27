@@ -14,7 +14,9 @@ use sea_orm::{ConnectionTrait, Database, DbBackend};
 use serde_json::json;
 use uuid::Uuid;
 
-use crate::support::{self, ADMIN, contact, csv_lines, id_of, principal, run_queue, seed, stored_contacts, upload};
+use crate::support::{
+    self, ADMIN, contact, csv_lines, id_of, principal, run_queue, seed, stored_contacts, upload,
+};
 
 /// A database of its own on the test server.
 struct Scratch {
@@ -89,10 +91,17 @@ async fn flow(scratch: &Scratch) {
         mohammed@example.com,محمد,41\n\
         noura@example.com,نورة القحطاني,28\n";
     let (bytes, _, _) = WINDOWS_1256.encode(text);
-    let uploaded = upload(&admin, "عملاء.csv", &bytes, &[]).await.assert_status(202).json_value();
+    let uploaded = upload(&admin, "عملاء.csv", &bytes, &[])
+        .await
+        .assert_status(202)
+        .json_value();
     let id = id_of(&uploaded);
     run_queue(&app).await;
-    let record = admin.get(&format!("/api/imports/{id}")).send().await.json_value();
+    let record = admin
+        .get(&format!("/api/imports/{id}"))
+        .send()
+        .await
+        .json_value();
     assert_eq!(record["status"], "staged", "{record}");
     assert_eq!(record["encoding"], "windows-1256");
     assert_eq!(record["counts"]["valid"], 2);
@@ -104,7 +113,10 @@ async fn flow(scratch: &Scratch) {
         .send()
         .await
         .json_value();
-    assert_eq!(page["meta"], json!({ "current_page": 2, "per_page": 2, "total": 5, "last_page": 3 }));
+    assert_eq!(
+        page["meta"],
+        json!({ "current_page": 2, "per_page": 2, "total": 5, "last_page": 3 })
+    );
     assert_eq!(page["data"][0]["row"], 4);
 
     admin
@@ -114,12 +126,19 @@ async fn flow(scratch: &Scratch) {
         .await
         .assert_status(202);
     run_queue(&app).await;
-    let record = admin.get(&format!("/api/imports/{id}")).send().await.json_value();
+    let record = admin
+        .get(&format!("/api/imports/{id}"))
+        .send()
+        .await
+        .json_value();
     assert_eq!(record["status"], "completed", "{record}");
     assert_eq!(record["counts"]["created"], 2);
     assert_eq!(record["counts"]["updated"], 1);
     let contacts = stored_contacts(&app).await;
-    assert_eq!(contacts[0], contact("ada@example.com", "آدا لوفليس", Some(36), false));
+    assert_eq!(
+        contacts[0],
+        contact("ada@example.com", "آدا لوفليس", Some(36), false)
+    );
     assert_eq!(contacts.len(), 3);
     let errors = admin
         .get(&format!("/api/imports/{id}/errors"))

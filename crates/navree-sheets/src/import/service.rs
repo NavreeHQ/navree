@@ -207,7 +207,10 @@ impl Imports {
         self.registry.all().map(|r| r.name).collect()
     }
 
-    pub(crate) fn registration(&self, importer: &str) -> Result<&ImporterRegistration, SheetsError> {
+    pub(crate) fn registration(
+        &self,
+        importer: &str,
+    ) -> Result<&ImporterRegistration, SheetsError> {
         self.registry.get(importer)
     }
 
@@ -257,15 +260,17 @@ impl Imports {
     }
 
     async fn db(app: &AppContext) -> Result<Arc<Db>, SheetsError> {
-        app.try_get::<Db>()
-            .await
-            .ok_or(SheetsError::Missing("imports need DatabaseModule in the app"))
+        app.try_get::<Db>().await.ok_or(SheetsError::Missing(
+            "imports need DatabaseModule in the app",
+        ))
     }
 
     async fn operations(app: &AppContext) -> Result<Arc<Operations>, SheetsError> {
-        app.try_get::<Operations>().await.ok_or(SheetsError::Missing(
-            "imports need QueueModule (and DatabaseModule) in the app",
-        ))
+        app.try_get::<Operations>()
+            .await
+            .ok_or(SheetsError::Missing(
+                "imports need QueueModule (and DatabaseModule) in the app",
+            ))
     }
 
     /// The current unit of work's transaction when there is an unfinished
@@ -349,14 +354,16 @@ impl Imports {
         operations: &Operations,
         record: &ImportRecord,
     ) -> Result<Uuid, SheetsError> {
-        let operation = self
-            .operation(record)
-            .note("Waiting to read the file");
+        let operation = self.operation(record).note("Waiting to read the file");
         let operation = operations.start(uow, operation).await?;
         operations
-            .dispatch(uow, &operation, StageImport {
-                import_id: record.id,
-            })
+            .dispatch(
+                uow,
+                &operation,
+                StageImport {
+                    import_id: record.id,
+                },
+            )
             .await?;
         Ok(operation.id)
     }
@@ -387,7 +394,9 @@ impl Imports {
         limit: u64,
     ) -> Result<Vec<ImportRecord>, SheetsError> {
         let conn = self.conn().await?;
-        Ok(on_conn!(conn, |c| store::imports_of(c, owner, workspace, limit))?)
+        Ok(on_conn!(conn, |c| store::imports_of(
+            c, owner, workspace, limit
+        ))?)
     }
 
     /// A page of the import's staged rows, by row number: every row, or
@@ -431,7 +440,10 @@ impl Imports {
     ) -> Result<ImportRecord, SheetsError> {
         let app = self.app()?;
         let mut record = self.find(id).await?;
-        if !matches!(record.status, ImportStatus::NeedsMapping | ImportStatus::Staged) {
+        if !matches!(
+            record.status,
+            ImportStatus::NeedsMapping | ImportStatus::Staged
+        ) {
             return Err(SheetsError::NotReady(format!(
                 "The import is {}; a mapping can be chosen once the file has been read.",
                 record.status
@@ -475,10 +487,14 @@ impl Imports {
                 ));
             }
             ImportStatus::Applying => {
-                return Err(SheetsError::NotReady("The import is already being applied.".into()));
+                return Err(SheetsError::NotReady(
+                    "The import is already being applied.".into(),
+                ));
             }
             ImportStatus::Completed => {
-                return Err(SheetsError::NotReady("The import has already been applied.".into()));
+                return Err(SheetsError::NotReady(
+                    "The import has already been applied.".into(),
+                ));
             }
             other => {
                 return Err(SheetsError::NotReady(format!(
@@ -634,9 +650,13 @@ impl Imports {
         let app = self.app()?;
         let db = Self::db(&app).await?;
         if let Some(record) = store::find_import(db.conn(), id).await?
-            && matches!(record.status, ImportStatus::Uploaded | ImportStatus::Staging)
+            && matches!(
+                record.status,
+                ImportStatus::Uploaded | ImportStatus::Staging
+            )
         {
-            self.fail(&app, db.conn(), record, message.to_owned()).await?;
+            self.fail(&app, db.conn(), record, message.to_owned())
+                .await?;
         }
         Ok(())
     }
@@ -650,7 +670,10 @@ impl Imports {
         let Some(mut record) = store::find_import(conn, id).await? else {
             return Ok(());
         };
-        if !matches!(record.status, ImportStatus::Uploaded | ImportStatus::Staging) {
+        if !matches!(
+            record.status,
+            ImportStatus::Uploaded | ImportStatus::Staging
+        ) {
             return Ok(());
         }
         let operations = Self::operations(&app).await?;
@@ -743,7 +766,10 @@ impl Imports {
                 let fields: Vec<(String, Cell)> = positions
                     .iter()
                     .map(|(field, index)| {
-                        (field.clone(), row.cells.get(*index).cloned().unwrap_or_default())
+                        (
+                            field.clone(),
+                            row.cells.get(*index).cloned().unwrap_or_default(),
+                        )
                     })
                     .collect();
                 let cells: BTreeMap<String, Value> = fields
@@ -1077,7 +1103,10 @@ impl Imports {
                 .map(|row| {
                     let mut line = vec![Cell::Int(support::to_i64(row.row))];
                     line.extend(fields.iter().map(|(field, _)| {
-                        row.cells.get(field).map(Cell::from_json).unwrap_or_default()
+                        row.cells
+                            .get(field)
+                            .map(Cell::from_json)
+                            .unwrap_or_default()
                     }));
                     let mut messages: Vec<String> =
                         row.errors.values().flatten().cloned().collect();
@@ -1126,7 +1155,9 @@ fn extension(filename: &str) -> String {
     filename
         .rsplit_once('.')
         .map(|(_, ext)| ext.to_ascii_lowercase())
-        .filter(|ext| !ext.is_empty() && ext.len() <= 8 && ext.chars().all(|c| c.is_ascii_alphanumeric()))
+        .filter(|ext| {
+            !ext.is_empty() && ext.len() <= 8 && ext.chars().all(|c| c.is_ascii_alphanumeric())
+        })
         .unwrap_or_else(|| "bin".to_owned())
 }
 
@@ -1136,7 +1167,10 @@ mod tests {
 
     #[test]
     fn client_file_names_lose_their_directories() {
-        assert_eq!(display_name("C:\\Users\\ada\\recipients.csv"), "recipients.csv");
+        assert_eq!(
+            display_name("C:\\Users\\ada\\recipients.csv"),
+            "recipients.csv"
+        );
         assert_eq!(display_name("../../etc/passwd"), "passwd");
         assert_eq!(display_name("  "), "upload");
         assert_eq!(display_name("a\u{0}b.csv"), "ab.csv");

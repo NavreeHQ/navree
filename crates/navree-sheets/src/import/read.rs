@@ -133,7 +133,11 @@ fn read_text(bytes: &[u8], tab: bool, options: &ReadOptions<'_>) -> Result<Table
             "The file is not a text file (it contains NUL bytes).".into(),
         ));
     }
-    let delimiter = if tab { b'\t' } else { sniff_delimiter(&decoded.text) };
+    let delimiter = if tab {
+        b'\t'
+    } else {
+        sniff_delimiter(&decoded.text)
+    };
     let mut reader = csv::ReaderBuilder::new()
         .has_headers(false)
         .flexible(true)
@@ -154,10 +158,7 @@ fn read_text(bytes: &[u8], tab: bool, options: &ReadOptions<'_>) -> Result<Table
             .map_or(previous + 1, |position| position.line())
             .max(previous + 1);
         previous = number;
-        records.push((
-            number,
-            record.iter().map(text_cell).collect::<Vec<_>>(),
-        ));
+        records.push((number, record.iter().map(text_cell).collect::<Vec<_>>()));
     }
     let mut table = tabulate(records, options.max_rows)?;
     table.kind = FileKind::Csv;
@@ -194,7 +195,10 @@ fn sniff_delimiter(text: &str) -> u8 {
     }
     counts
         .iter()
-        .fold((b',', 0), |best, &(d, n)| if n > best.1 { (d, n) } else { best })
+        .fold(
+            (b',', 0),
+            |best, &(d, n)| if n > best.1 { (d, n) } else { best },
+        )
         .0
 }
 
@@ -291,7 +295,10 @@ fn tabulate(records: Vec<(u64, Vec<Cell>)>, max_rows: u64) -> Result<Table, Shee
 /// Header texts: trailing empty headers dropped, blank ones named
 /// `Column N`, repeats suffixed ` (2)`, ` (3)`.
 fn headers_of(cells: &[Cell]) -> Vec<String> {
-    let last = cells.iter().rposition(|cell| !cell.is_empty()).map_or(0, |i| i + 1);
+    let last = cells
+        .iter()
+        .rposition(|cell| !cell.is_empty())
+        .map_or(0, |i| i + 1);
     let mut headers: Vec<String> = Vec::with_capacity(last);
     for (index, cell) in cells[..last].iter().enumerate() {
         let text = cell.to_text().trim().to_owned();
@@ -341,7 +348,10 @@ mod tests {
         assert_eq!(numbers, [3, 5, 6]);
         assert_eq!(text(&table.rows[0].cells), ["Ada", "ada@example.com"]);
         assert_eq!(text(&table.rows[1].cells), ["Alan", "alan@example.com"]);
-        assert_eq!(table.rows[2].cells, [Cell::Text("Grace".into()), Cell::Empty]);
+        assert_eq!(
+            table.rows[2].cells,
+            [Cell::Text("Grace".into()), Cell::Empty]
+        );
     }
 
     #[test]
@@ -376,7 +386,10 @@ mod tests {
     #[test]
     fn headers_are_named_and_kept_apart() {
         let table = read_table(b"Email,,Email,Email\n1,2,3,4\n", "x.csv", &options()).unwrap();
-        assert_eq!(table.headers, ["Email", "Column 2", "Email (2)", "Email (3)"]);
+        assert_eq!(
+            table.headers,
+            ["Email", "Column 2", "Email (2)", "Email (3)"]
+        );
     }
 
     #[test]
@@ -416,7 +429,12 @@ mod tests {
         let file = crate::write_xlsx(
             "People",
             &[],
-            &["Name".into(), "Age".into(), "Joined".into(), "Active".into()],
+            &[
+                "Name".into(),
+                "Age".into(),
+                "Joined".into(),
+                "Active".into(),
+            ],
             &[vec![
                 Cell::Text("Ada".into()),
                 Cell::Int(36),

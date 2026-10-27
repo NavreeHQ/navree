@@ -231,7 +231,10 @@ pub(crate) async fn stale_imports<C: ConnectionTrait>(
         .query_all_raw(statement(
             conn.get_database_backend(),
             &sql,
-            vec![millis(before).into(), ImportStatus::Applying.as_str().into()],
+            vec![
+                millis(before).into(),
+                ImportStatus::Applying.as_str().into(),
+            ],
         ))
         .await?;
     rows.iter().map(record).collect()
@@ -333,9 +336,7 @@ pub(crate) async fn rows_page<C: ConnectionTrait>(
     );
     values.push(to_i64(limit).into());
     values.push(to_i64(offset).into());
-    let rows = conn
-        .query_all_raw(statement(backend, &sql, values))
-        .await?;
+    let rows = conn.query_all_raw(statement(backend, &sql, values)).await?;
     let records = rows
         .iter()
         .map(|row| {
@@ -397,7 +398,10 @@ pub(crate) async fn row_ranges<C: ConnectionTrait>(
         .await?;
     let numbers: Vec<u64> = rows
         .iter()
-        .map(|row| row.try_get::<i64>("", "row_no").map(|n| u64::try_from(n).unwrap_or(0)))
+        .map(|row| {
+            row.try_get::<i64>("", "row_no")
+                .map(|n| u64::try_from(n).unwrap_or(0))
+        })
         .collect::<Result<_, _>>()?;
     let size = usize::try_from(size.max(1)).unwrap_or(usize::MAX);
     Ok(numbers
@@ -568,4 +572,3 @@ pub(crate) async fn save_mapping<C: ConnectionTrait>(
     .await?;
     Ok(())
 }
-

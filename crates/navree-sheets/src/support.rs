@@ -83,12 +83,9 @@ impl HeaderTranslator for I18nHeaders {
 
 /// The disk named `name` (`""`: the default disk).
 pub(crate) async fn disk(app: &AppContext, name: &str) -> Result<Disk, SheetsError> {
-    let storage = app
-        .try_get::<Storage>()
-        .await
-        .ok_or(SheetsError::Missing(
-            "files need StorageModule in the app (navree-storage)",
-        ))?;
+    let storage = app.try_get::<Storage>().await.ok_or(SheetsError::Missing(
+        "files need StorageModule in the app (navree-storage)",
+    ))?;
     if name.trim().is_empty() {
         Ok(storage.default_disk())
     } else {
@@ -135,7 +132,11 @@ mod tests {
 
     #[test]
     fn placeholders_are_numbered_on_postgres() {
-        let stmt = statement(DbBackend::Postgres, "a = ? AND b = ?", vec![1.into(), 2.into()]);
+        let stmt = statement(
+            DbBackend::Postgres,
+            "a = ? AND b = ?",
+            vec![1.into(), 2.into()],
+        );
         assert_eq!(stmt.sql, "a = $1 AND b = $2");
         let stmt = statement(DbBackend::Sqlite, "a = ?", vec![1.into()]);
         assert_eq!(stmt.sql, "a = ?");

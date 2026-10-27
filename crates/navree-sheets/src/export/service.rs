@@ -16,9 +16,7 @@ use serde_json::Value;
 use super::job::QueuedExport;
 use super::registry::{ExportRegistration, ExportRegistry, Source};
 use super::run::{Limits, Paging, Progress, csv_stream, xlsx_file};
-use super::{
-    Export, ExportColumnInfo, ExportContext, ExportInfo, ExportRequest, ExportResult,
-};
+use super::{Export, ExportColumnInfo, ExportContext, ExportInfo, ExportRequest, ExportResult};
 use crate::download::{csv_download, csv_stream_download, with_extension, xlsx_download};
 use crate::headers::resolve_headers;
 use crate::support::{self, current_locale};
@@ -195,7 +193,12 @@ impl Exports {
         }
     }
 
-    fn context(&self, app: AppContext, request: &ExportRequest, locale: Option<String>) -> ExportContext {
+    fn context(
+        &self,
+        app: AppContext,
+        request: &ExportRequest,
+        locale: Option<String>,
+    ) -> ExportContext {
         ExportContext {
             app,
             user_id: request.user_id,
@@ -291,9 +294,12 @@ impl Exports {
     ) -> Result<OperationRecord, SheetsError> {
         let app = self.app()?;
         self.registry.get(name)?;
-        let operations = app.try_get::<Operations>().await.ok_or(SheetsError::Missing(
-            "queued exports need QueueModule and DatabaseModule in the app",
-        ))?;
+        let operations = app
+            .try_get::<Operations>()
+            .await
+            .ok_or(SheetsError::Missing(
+                "queued exports need QueueModule and DatabaseModule in the app",
+            ))?;
         let mut operation =
             Operation::new(format!("export.{name}")).note("Waiting to start the export");
         if let Some(user) = request.user_id {
@@ -365,7 +371,10 @@ impl Exports {
         let bytes = match job.format {
             SheetFormat::Csv => {
                 let encoder = Arc::new(CsvEncoder::new(self.options.csv.clone())?);
-                match disk.put_stream(&path, csv_stream(paging, encoder, headers)).await {
+                match disk
+                    .put_stream(&path, csv_stream(paging, encoder, headers))
+                    .await
+                {
                     Ok(bytes) => bytes,
                     Err(error) => {
                         let _ = disk.delete(&path).await;

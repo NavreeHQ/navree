@@ -22,8 +22,17 @@ use crate::support::{
 };
 
 /// Uploads, runs the staging job and returns the import as the API shows it.
-async fn staged(app: &TestApp, client: &TestClient, name: &str, bytes: &[u8], extra: &[(&str, &str)]) -> Value {
-    let uploaded = upload(client, name, bytes, extra).await.assert_status(202).json_value();
+async fn staged(
+    app: &TestApp,
+    client: &TestClient,
+    name: &str,
+    bytes: &[u8],
+    extra: &[(&str, &str)],
+) -> Value {
+    let uploaded = upload(client, name, bytes, extra)
+        .await
+        .assert_status(202)
+        .json_value();
     run_queue(app).await;
     show(client, id_of(&uploaded)).await
 }
@@ -60,7 +69,10 @@ async fn an_upload_is_staged_previewed_and_applied() {
     let app = support::app().await;
     let admin = app.acting_as(principal(ADMIN));
     let file = b"Email,Name,Age,VIP\nada@example.com,Ada Lovelace,36,yes\nnot-an-email,Bob,x,no\nalan@example.com,Alan Turing,,0\n";
-    let uploaded = upload(&admin, "contacts.csv", file, &[]).await.assert_status(202).json_value();
+    let uploaded = upload(&admin, "contacts.csv", file, &[])
+        .await
+        .assert_status(202)
+        .json_value();
     assert_eq!(uploaded["status"], "uploaded");
     assert_eq!(uploaded["importer"], "contacts");
     assert_eq!(uploaded["filename"], "contacts.csv");
@@ -160,7 +172,11 @@ async fn windows_1256_arabic_files_are_detected_and_read() {
     assert_eq!(record["counts"]["valid"], 3);
     let record = apply(&app, &admin, id_of(&record), "skip").await;
     assert_eq!(record["counts"]["created"], 3);
-    let names: Vec<String> = stored_contacts(&app).await.into_iter().map(|c| c.name).collect();
+    let names: Vec<String> = stored_contacts(&app)
+        .await
+        .into_iter()
+        .map(|c| c.name)
+        .collect();
     assert_eq!(names, ["فاطمة الزهراء", "محمد عبد الله", "نورة القحطاني"]);
 }
 
@@ -176,7 +192,11 @@ async fn utf16_tab_separated_files_are_read() {
     assert_eq!(record["encoding"], "UTF-16LE", "{record}");
     assert_eq!(record["counts"]["valid"], 2);
     apply(&app, &admin, id_of(&record), "skip").await;
-    let names: Vec<String> = stored_contacts(&app).await.into_iter().map(|c| c.name).collect();
+    let names: Vec<String> = stored_contacts(&app)
+        .await
+        .into_iter()
+        .map(|c| c.name)
+        .collect();
     assert_eq!(names, ["Renée Côté", "山田 由紀"]);
 }
 
@@ -185,7 +205,14 @@ async fn a_given_encoding_wins_over_detection() {
     let app = support::app().await;
     let admin = app.acting_as(principal(ADMIN));
     let (bytes, _, _) = WINDOWS_1252.encode("Email;Name\nrenee@example.fr;Renée\n");
-    let record = staged(&app, &admin, "x.csv", &bytes, &[("encoding", "windows-1252")]).await;
+    let record = staged(
+        &app,
+        &admin,
+        "x.csv",
+        &bytes,
+        &[("encoding", "windows-1252")],
+    )
+    .await;
     assert_eq!(record["encoding"], "windows-1252");
     let rows = admin
         .get(&format!("/api/imports/{}/rows", id_of(&record)))
@@ -270,7 +297,10 @@ async fn unmatched_columns_wait_for_a_mapping_that_can_be_saved() {
             "email should not be empty"
         ])
     );
-    assert_eq!(invalid["errors"]["nickname"], json!(["nickname is not a column of this import"]));
+    assert_eq!(
+        invalid["errors"]["nickname"],
+        json!(["nickname is not a column of this import"])
+    );
 
     let remapped = admin
         .put(&format!("/api/imports/{id}/mapping"))
@@ -287,9 +317,19 @@ async fn unmatched_columns_wait_for_a_mapping_that_can_be_saved() {
 
     // A later file with the same columns, in another order and case,
     // reuses the saved mapping.
-    let later = staged(&app, &admin, "export.csv", b"FULL NAME;mail\nGrace;grace@example.com\n", &[]).await;
+    let later = staged(
+        &app,
+        &admin,
+        "export.csv",
+        b"FULL NAME;mail\nGrace;grace@example.com\n",
+        &[],
+    )
+    .await;
     assert_eq!(later["status"], "staged", "{later}");
-    assert_eq!(later["mapping"], json!({ "email": "mail", "name": "FULL NAME" }));
+    assert_eq!(
+        later["mapping"],
+        json!({ "email": "mail", "name": "FULL NAME" })
+    );
 }
 
 #[tokio::test]
@@ -316,7 +356,8 @@ async fn duplicates_are_updated_skipped_or_refused() {
     let app = support::app().await;
     seed(&app, &[("ada@example.com", "Ada", Some(30), false)]).await;
     let admin = app.acting_as(principal(ADMIN));
-    let file = b"Email,Name\nADA@example.com,Ada Byron\nbob@example.com,Bob\nbob@example.com,Bobby\n";
+    let file =
+        b"Email,Name\nADA@example.com,Ada Byron\nbob@example.com,Bob\nbob@example.com,Bobby\n";
     let record = staged(&app, &admin, "c.csv", file, &[]).await;
     assert_eq!(record["counts"]["valid"], 1, "{record}");
     assert_eq!(record["counts"]["duplicate"], 1);
@@ -328,7 +369,10 @@ async fn duplicates_are_updated_skipped_or_refused() {
         .await
         .json_value();
     assert_eq!(repeated["data"][0]["row"], 4);
-    assert_eq!(repeated["data"][0]["errors"], json!({ "row": ["Repeats row 3"] }));
+    assert_eq!(
+        repeated["data"][0]["errors"],
+        json!({ "row": ["Repeats row 3"] })
+    );
 
     admin
         .post(&format!("/api/imports/{id}/apply"))
@@ -383,12 +427,21 @@ async fn rows_the_import_refuses_are_reported() {
     assert_eq!(record["counts"]["created"], 1, "{record}");
     assert_eq!(record["counts"]["failed"], 2);
     let failed = admin
-        .get(&format!("/api/imports/{}/rows?status=failed", id_of(&record)))
+        .get(&format!(
+            "/api/imports/{}/rows?status=failed",
+            id_of(&record)
+        ))
         .send()
         .await
         .json_value();
-    assert_eq!(failed["data"][0]["errors"], json!({ "row": ["Robots cannot be contacts"] }));
-    assert_eq!(failed["data"][1]["errors"], json!({ "row": ["This row could not be saved"] }));
+    assert_eq!(
+        failed["data"][0]["errors"],
+        json!({ "row": ["Robots cannot be contacts"] })
+    );
+    assert_eq!(
+        failed["data"][1]["errors"],
+        json!({ "row": ["This row could not be saved"] })
+    );
     // A failed row rolled back alone.
     assert_eq!(stored_contacts(&app).await.len(), 1);
 }
@@ -445,7 +498,8 @@ async fn uploads_are_refused_with_a_reason() {
     upload(&admin, "c.csv", b"  \n", &[])
         .await
         .assert_error_code(400, "unsupported_file");
-    let (content_type, body) = support::multipart(&[("importer", "deals")], Some(("c.csv", b"a\n1\n")));
+    let (content_type, body) =
+        support::multipart(&[("importer", "deals")], Some(("c.csv", b"a\n1\n")));
     admin
         .post("/api/imports")
         .header("content-type", content_type)
@@ -472,7 +526,9 @@ async fn uploads_are_refused_with_a_reason() {
     upload(&app.acting_as(principal(OTHER)), "c.csv", b"a\n1\n", &[])
         .await
         .assert_status(403);
-    upload(&app.client(), "c.csv", b"a\n1\n", &[]).await.assert_status(401);
+    upload(&app.client(), "c.csv", b"a\n1\n", &[])
+        .await
+        .assert_status(401);
 }
 
 #[tokio::test]
@@ -482,17 +538,38 @@ async fn files_that_cannot_be_read_fail_the_import() {
         .build()
         .await;
     let admin = app.acting_as(principal(ADMIN));
-    let record = staged(&app, &admin, "c.csv", b"Email,Name\na@x.io,A\nb@x.io,B\nc@x.io,C\n", &[]).await;
+    let record = staged(
+        &app,
+        &admin,
+        "c.csv",
+        b"Email,Name\na@x.io,A\nb@x.io,B\nc@x.io,C\n",
+        &[],
+    )
+    .await;
     assert_eq!(record["status"], "failed");
     assert_eq!(record["error"], "The file has more than 2 rows.");
-    let op = operation(&app, Uuid::parse_str(record["operation_id"].as_str().unwrap()).unwrap()).await;
+    let op = operation(
+        &app,
+        Uuid::parse_str(record["operation_id"].as_str().unwrap()).unwrap(),
+    )
+    .await;
     assert_eq!(op.status, OperationStatus::Failed);
     assert_eq!(op.error.as_deref(), Some("The file has more than 2 rows."));
 
-    let record = staged(&app, &admin, "book.xlsx", b"PK\x03\x04 not really a workbook", &[]).await;
+    let record = staged(
+        &app,
+        &admin,
+        "book.xlsx",
+        b"PK\x03\x04 not really a workbook",
+        &[],
+    )
+    .await;
     assert_eq!(record["status"], "failed");
     assert!(
-        record["error"].as_str().unwrap().starts_with("The workbook cannot be read"),
+        record["error"]
+            .as_str()
+            .unwrap()
+            .starts_with("The workbook cannot be read"),
         "{record}"
     );
 }
@@ -503,17 +580,42 @@ async fn imports_are_listed_shown_to_permitted_users_and_deleted() {
     let admin = app.acting_as(principal(ADMIN));
     let record = staged(&app, &admin, "c.csv", b"Email,Name\na@x.io,A\n", &[]).await;
     let id = id_of(&record);
-    let list = admin.get("/api/imports").send().await.assert_status(200).json_value();
+    let list = admin
+        .get("/api/imports")
+        .send()
+        .await
+        .assert_status(200)
+        .json_value();
     assert_eq!(list["data"][0]["id"], id.to_string());
     let other = app.acting_as(principal(OTHER));
-    other.get(&format!("/api/imports/{id}")).send().await.assert_status(404);
-    other.get("/api/imports").send().await.assert_json_path("data", json!([]));
-    admin.get("/api/imports/not-a-uuid").send().await.assert_status(404);
+    other
+        .get(&format!("/api/imports/{id}"))
+        .send()
+        .await
+        .assert_status(404);
+    other
+        .get("/api/imports")
+        .send()
+        .await
+        .assert_json_path("data", json!([]));
+    admin
+        .get("/api/imports/not-a-uuid")
+        .send()
+        .await
+        .assert_status(404);
 
     let stored = import(&app, id).await;
     assert!(!stored.has_error_file);
-    admin.delete(&format!("/api/imports/{id}")).send().await.assert_status(204);
-    admin.get(&format!("/api/imports/{id}")).send().await.assert_status(404);
+    admin
+        .delete(&format!("/api/imports/{id}"))
+        .send()
+        .await
+        .assert_status(204);
+    admin
+        .get(&format!("/api/imports/{id}"))
+        .send()
+        .await
+        .assert_status(404);
     let imports = app.get::<Imports>().await;
     assert!(matches!(imports.find(id).await, Err(SheetsError::NotFound)));
 }
@@ -545,7 +647,12 @@ async fn importers_and_templates_are_listed() {
         .send()
         .await
         .assert_status(200);
-    assert!(template.header("content-disposition").unwrap().contains("contacts-template.csv"));
+    assert!(
+        template
+            .header("content-disposition")
+            .unwrap()
+            .contains("contacts-template.csv")
+    );
     assert_eq!(csv_lines(template.bytes()), ["Email,Name,Age,Vip"]);
     let xlsx = admin
         .get("/api/imports/templates/contacts?format=xlsx")
@@ -564,7 +671,14 @@ async fn importers_and_templates_are_listed() {
 async fn cancelling_apply_puts_the_import_back_to_staged() {
     let app = support::app().await;
     let admin = app.acting_as(principal(ADMIN));
-    let record = staged(&app, &admin, "c.csv", b"Email,Name\na@x.io,A\nb@x.io,B\n", &[]).await;
+    let record = staged(
+        &app,
+        &admin,
+        "c.csv",
+        b"Email,Name\na@x.io,A\nb@x.io,B\n",
+        &[],
+    )
+    .await;
     let id = id_of(&record);
     let applying = admin
         .post(&format!("/api/imports/{id}/apply"))
@@ -612,14 +726,23 @@ async fn imports_run_from_code() {
     let staged = imports.find(record.id).await.unwrap();
     assert_eq!(staged.status, ImportStatus::Staged);
     let page = imports
-        .rows(record.id, &RowQuery { status: Some(RowStatus::Valid), ..RowQuery::default() })
+        .rows(
+            record.id,
+            &RowQuery {
+                status: Some(RowStatus::Valid),
+                ..RowQuery::default()
+            },
+        )
         .await
         .unwrap();
     assert_eq!(page.data.len(), 1);
     assert_eq!(page.meta.last_page, 1);
 
     let uow = db.uow(Some(ADMIN), None).await;
-    imports.apply(&uow, record.id, DuplicateMode::Skip).await.unwrap();
+    imports
+        .apply(&uow, record.id, DuplicateMode::Skip)
+        .await
+        .unwrap();
     uow.commit().await.unwrap();
     run_queue(&app).await;
     let done = imports.find(record.id).await.unwrap();
@@ -627,10 +750,18 @@ async fn imports_run_from_code() {
     assert_eq!(done.counts.created, 1);
 
     let uow = db.uow(None, None).await;
-    let again = imports.apply(&uow, record.id, DuplicateMode::Skip).await.unwrap_err();
+    let again = imports
+        .apply(&uow, record.id, DuplicateMode::Skip)
+        .await
+        .unwrap_err();
     assert!(matches!(again, SheetsError::NotReady(_)), "{again}");
     let missing = imports
-        .upload(&uow, "deals", Upload::new("c.csv", "a\n1\n"), UploadOptions::default())
+        .upload(
+            &uow,
+            "deals",
+            Upload::new("c.csv", "a\n1\n"),
+            UploadOptions::default(),
+        )
         .await
         .unwrap_err();
     assert!(matches!(missing, SheetsError::UnknownImporter(_)));

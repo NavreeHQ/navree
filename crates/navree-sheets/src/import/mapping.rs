@@ -95,7 +95,9 @@ pub(crate) fn automatic(columns: &[ImportColumn], headers: &[String]) -> Mapping
         });
         if let Some(index) = found {
             used.insert(headers[index].clone());
-            mapping.0.insert(column.field.to_string(), headers[index].clone());
+            mapping
+                .0
+                .insert(column.field.to_string(), headers[index].clone());
         }
     }
     mapping
@@ -129,17 +131,15 @@ pub(crate) fn check(
             continue;
         }
         if !headers.iter().any(|h| h == header) {
-            errors
-                .entry(field.to_owned())
-                .or_default()
-                .push(format!("{field} is mapped to `{header}`, which is not a column of the file"));
+            errors.entry(field.to_owned()).or_default().push(format!(
+                "{field} is mapped to `{header}`, which is not a column of the file"
+            ));
             continue;
         }
         if let Some(other) = seen.insert(header, field) {
-            errors
-                .entry(field.to_owned())
-                .or_default()
-                .push(format!("{field} reads `{header}`, which {other} already reads"));
+            errors.entry(field.to_owned()).or_default().push(format!(
+                "{field} reads `{header}`, which {other} already reads"
+            ));
         }
     }
     // A required field mapped to a header the file lacks is unmapped too.
@@ -154,7 +154,11 @@ pub(crate) fn check(
                 .push(format!("{} should not be empty", column.field));
         }
     }
-    if errors.is_empty() { Ok(()) } else { Err(errors) }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
 }
 
 /// The fingerprint of a header row: saved mappings are found by it, so a
@@ -234,7 +238,10 @@ mod tests {
             errors["first_name"],
             ["first_name reads `Org`, which company already reads"]
         );
-        assert_eq!(errors["nickname"], ["nickname is not a column of this import"]);
+        assert_eq!(
+            errors["nickname"],
+            ["nickname is not a column of this import"]
+        );
     }
 
     #[test]

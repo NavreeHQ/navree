@@ -167,7 +167,9 @@ fn classify(message: &str) -> Rule {
         "no possible date and time matching input",
         "input is not enough for unique date and time",
     ];
-    if message.contains("UUID parsing failed") || message.starts_with("invalid character: expected an optional prefix of `urn:uuid:`") {
+    if message.contains("UUID parsing failed")
+        || message.starts_with("invalid character: expected an optional prefix of `urn:uuid:`")
+    {
         Rule::Uuid
     } else if DATE_ERRORS.iter().any(|e| message.contains(e)) {
         Rule::Date
@@ -179,7 +181,10 @@ fn classify(message: &str) -> Rule {
 /// The rule for "expected ...".
 fn expected_rule(expected: &str) -> Rule {
     let expected = expected.to_ascii_lowercase();
-    if expected.contains("integer") || expected.starts_with("u8") || expected.starts_with("i") && expected.len() <= 4 {
+    if expected.contains("integer")
+        || expected.starts_with("u8")
+        || expected.starts_with("i") && expected.len() <= 4
+    {
         Rule::Integer
     } else if expected.contains("float") || expected.contains("number") {
         Rule::Number
@@ -199,14 +204,20 @@ fn expected_rule(expected: &str) -> Rule {
 /// `#[serde(default)]` its default, and anything else "should not be
 /// empty".
 pub(crate) fn read_row<R: DeserializeOwned>(fields: Vec<(String, Cell)>) -> Result<R, ReadError> {
-    let fields = fields.into_iter().filter(|(_, cell)| !cell.is_empty()).collect();
+    let fields = fields
+        .into_iter()
+        .filter(|(_, cell)| !cell.is_empty())
+        .collect();
     R::deserialize(RowDeserializer { fields })
 }
 
 /// Reads `fields` into `R` and runs its garde rules; the errors are keyed by
 /// field, in the app's validation wording.
 #[cfg(test)]
-pub(crate) fn check_row<R>(fields: Vec<(String, Cell)>, messages: &Messages) -> Result<R, ValidationErrors>
+pub(crate) fn check_row<R>(
+    fields: Vec<(String, Cell)>,
+    messages: &Messages,
+) -> Result<R, ValidationErrors>
 where
     R: DeserializeOwned + Validate<Context = ()>,
 {
@@ -249,7 +260,10 @@ struct RowAccess {
 impl<'de> MapAccess<'de> for RowAccess {
     type Error = ReadError;
 
-    fn next_key_seed<K: DeserializeSeed<'de>>(&mut self, seed: K) -> Result<Option<K::Value>, ReadError> {
+    fn next_key_seed<K: DeserializeSeed<'de>>(
+        &mut self,
+        seed: K,
+    ) -> Result<Option<K::Value>, ReadError> {
         match self.fields.next() {
             Some((field, cell)) => {
                 let key = seed.deserialize(StringDeserializer::<ReadError>::new(field.clone()))?;
@@ -265,12 +279,13 @@ impl<'de> MapAccess<'de> for RowAccess {
             .current
             .take()
             .ok_or_else(|| ReadError::rule(Rule::Invalid))?;
-        seed.deserialize(CellDeserializer(cell)).map_err(|mut error| {
-            if error.field.is_none() {
-                error.field = Some(field);
-            }
-            error
-        })
+        seed.deserialize(CellDeserializer(cell))
+            .map_err(|mut error| {
+                if error.field.is_none() {
+                    error.field = Some(field);
+                }
+                error
+            })
     }
 }
 
@@ -472,7 +487,11 @@ impl<'de> de::Deserializer<'de> for CellDeserializer {
         visitor.visit_seq(SeqDeserializer::new(items.into_iter()))
     }
 
-    fn deserialize_tuple<V: Visitor<'de>>(self, _len: usize, visitor: V) -> Result<V::Value, ReadError> {
+    fn deserialize_tuple<V: Visitor<'de>>(
+        self,
+        _len: usize,
+        visitor: V,
+    ) -> Result<V::Value, ReadError> {
         self.deserialize_seq(visitor)
     }
 
@@ -585,7 +604,10 @@ mod tests {
             ("age", text("٣٦")),
             ("score", text("3,5")),
             ("active", text("Yes")),
-            ("joined", Cell::Date(NaiveDate::from_ymd_opt(2026, 1, 2).unwrap())),
+            (
+                "joined",
+                Cell::Date(NaiveDate::from_ymd_opt(2026, 1, 2).unwrap()),
+            ),
             ("status", text("Customer")),
             ("tags", text("vip; new |  ")),
             ("id", Cell::Empty),

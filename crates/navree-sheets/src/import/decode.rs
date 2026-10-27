@@ -29,9 +29,8 @@ pub(crate) struct Decoded {
 ///    Big5, KOI8 and the others browsers know).
 pub(crate) fn decode(bytes: &[u8], label: Option<&str>) -> Result<Decoded, SheetsError> {
     if let Some(label) = label.map(str::trim).filter(|l| !l.is_empty()) {
-        let encoding = Encoding::for_label(label.as_bytes()).ok_or_else(|| {
-            SheetsError::Invalid(format!("unknown encoding `{label}`"))
-        })?;
+        let encoding = Encoding::for_label(label.as_bytes())
+            .ok_or_else(|| SheetsError::Invalid(format!("unknown encoding `{label}`")))?;
         let (text, lossy) = encoding.decode_with_bom_removal(bytes);
         return Ok(finish(text.into_owned(), encoding, lossy));
     }

@@ -29,7 +29,11 @@ impl Job for StageImport {
 
     async fn handle(self, ctx: JobContext) -> Result<(), BoxError> {
         let imports = ctx.app.get::<Imports>().await?;
-        let locale = imports.find(self.import_id).await.ok().and_then(|r| r.locale);
+        let locale = imports
+            .find(self.import_id)
+            .await
+            .ok()
+            .and_then(|r| r.locale);
         let app = ctx.app.clone();
         let outcome = in_locale(&app, locale.as_deref(), imports.stage(self.import_id, &ctx)).await;
         if let Err(error) = &outcome {
@@ -72,7 +76,11 @@ impl Job for ApplyImportChunk {
 
     async fn handle(self, ctx: JobContext) -> Result<(), BoxError> {
         let imports = ctx.app.get::<Imports>().await?;
-        let locale = imports.find(self.import_id).await.ok().and_then(|r| r.locale);
+        let locale = imports
+            .find(self.import_id)
+            .await
+            .ok()
+            .and_then(|r| r.locale);
         let app = ctx.app.clone();
         in_locale(
             &app,

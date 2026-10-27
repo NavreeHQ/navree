@@ -30,7 +30,9 @@ impl Module for Headers {
     }
 }
 
-async fn seeded(configure: impl FnOnce(navree_testing::TestAppBuilder) -> navree_testing::TestAppBuilder) -> TestApp {
+async fn seeded(
+    configure: impl FnOnce(navree_testing::TestAppBuilder) -> navree_testing::TestAppBuilder,
+) -> TestApp {
     let app = configure(support::builder().module(Headers)).build().await;
     seed(
         &app,
@@ -70,19 +72,30 @@ async fn the_index_lists_the_exports_a_user_may_run() {
         .await
         .assert_status(200)
         .assert_json_path("data", json!([]));
-    app.client().get("/api/exports").send().await.assert_status(401);
+    app.client()
+        .get("/api/exports")
+        .send()
+        .await
+        .assert_status(401);
 }
 
 #[tokio::test]
 async fn a_csv_export_streams_every_page_with_its_parameters() {
     let app = seeded(|b| b.config("sheets.exports.page_size", 2)).await;
     let admin = app.acting_as(principal(ADMIN));
-    let response = admin.get("/api/exports/contacts").send().await.assert_status(200);
+    let response = admin
+        .get("/api/exports/contacts")
+        .send()
+        .await
+        .assert_status(200);
     assert_eq!(
         response.header("content-disposition"),
         Some("attachment; filename=\"contacts.csv\"; filename*=UTF-8''contacts.csv")
     );
-    assert_eq!(response.header("content-type"), Some("text/csv; charset=utf-8"));
+    assert_eq!(
+        response.header("content-type"),
+        Some("text/csv; charset=utf-8")
+    );
     assert!(response.bytes().starts_with(b"\xEF\xBB\xBF"));
     assert_eq!(
         csv_lines(response.bytes()),
@@ -99,7 +112,12 @@ async fn a_csv_export_streams_every_page_with_its_parameters() {
         .send()
         .await
         .assert_status(200);
-    assert!(response.header("content-disposition").unwrap().contains("vip-contacts.csv"));
+    assert!(
+        response
+            .header("content-disposition")
+            .unwrap()
+            .contains("vip-contacts.csv")
+    );
     assert_eq!(csv_lines(response.bytes()).len(), 3);
 }
 
@@ -112,7 +130,12 @@ async fn an_xlsx_export_is_built_page_by_page() {
         .send()
         .await
         .assert_status(200);
-    assert!(response.header("content-disposition").unwrap().contains("contacts.xlsx"));
+    assert!(
+        response
+            .header("content-disposition")
+            .unwrap()
+            .contains("contacts.xlsx")
+    );
     let mut workbook = open_workbook_auto_from_rs(Cursor::new(response.bytes().to_vec())).unwrap();
     assert_eq!(workbook.sheet_names(), ["Contacts"]);
     let range = workbook.worksheet_range_at(0).unwrap().unwrap();
@@ -188,13 +211,26 @@ async fn a_queued_export_writes_a_file_and_finishes_with_a_signed_link() {
     assert_eq!(result.rows, 2);
     assert_eq!(result.disk, "files");
     assert!(result.path.starts_with("exports/"), "{}", result.path);
-    assert!(result.path.ends_with("/vip-contacts.xlsx"), "{}", result.path);
+    assert!(
+        result.path.ends_with("/vip-contacts.xlsx"),
+        "{}",
+        result.path
+    );
     let file = file_on_disk(&app, "files", &result.path).await;
     assert_eq!(file.len() as u64, result.bytes);
-    assert!(result.url.starts_with("/storage/files/exports/"), "{}", result.url);
+    assert!(
+        result.url.starts_with("/storage/files/exports/"),
+        "{}",
+        result.url
+    );
 
     // The signed link downloads the file, without signing in.
-    let fetched = app.client().get(&result.url).send().await.assert_status(200);
+    let fetched = app
+        .client()
+        .get(&result.url)
+        .send()
+        .await
+        .assert_status(200);
     assert_eq!(fetched.bytes().to_vec(), file);
 }
 
@@ -212,7 +248,10 @@ async fn a_queued_export_over_the_limit_fails_its_operation() {
     run_queue(&app).await;
     let done = operation(&app, id_of(&pending)).await;
     assert_eq!(done.status, OperationStatus::Failed);
-    assert_eq!(done.error.as_deref(), Some("The export has more than 1 rows."));
+    assert_eq!(
+        done.error.as_deref(),
+        Some("The export has more than 1 rows.")
+    );
 }
 
 /// Every contact's email, for every signed-in user, without a count.
@@ -282,7 +321,10 @@ async fn an_export_without_a_count_is_stopped_at_the_limit() {
     run_queue(&app).await;
     let done = operation(&app, id_of(&pending)).await;
     assert_eq!(done.status, OperationStatus::Failed);
-    assert_eq!(done.error.as_deref(), Some("The export has more than 2 rows."));
+    assert_eq!(
+        done.error.as_deref(),
+        Some("The export has more than 2 rows.")
+    );
 
     // Downloaded at once, the stream stops after the rows that fit.
     let (_, body) = app
@@ -304,7 +346,10 @@ async fn exports_run_from_code() {
     assert_eq!(exports.names(), ["contacts"]);
 
     let download = exports
-        .download::<ContactsExport>(ContactFilter { vip: Some(false) }, ExportRequest::new(SheetFormat::Csv))
+        .download::<ContactsExport>(
+            ContactFilter { vip: Some(false) },
+            ExportRequest::new(SheetFormat::Csv),
+        )
         .await
         .unwrap();
     assert_eq!(download.filename(), "contacts.csv");
