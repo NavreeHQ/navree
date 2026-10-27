@@ -223,7 +223,7 @@ queryClient.invalidateQueries({ queryKey: deals.all }); // ["deals"]: lists, rec
 
 ## Operations
 
-Long work a user starts (an import, an export, a bulk change) is an [operation](/docs/digging-deeper/batches-and-operations/#operations) the user follows. `followOperation` reads its server-sent event stream with `fetch`, so it works through the BFF and with bearer tokens, and returns the finished operation:
+Long work a user starts (an import, an export, a bulk change) is an operation the user follows: the queue module serves it at `GET /api/operations/{id}`, `DELETE /api/operations/{id}` and `GET /api/operations/{id}/events`. `followOperation` reads its server-sent event stream with `fetch`, so it works through the BFF and with bearer tokens, and returns the finished operation:
 
 ```ts
 import { cancelOperation, followOperation } from "@navree/client";

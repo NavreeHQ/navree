@@ -144,6 +144,21 @@ export const sections: DocsSection[] = [
     ],
   },
   {
+    // Owner: frontend
+    slug: "frontend",
+    title: "Front end",
+    pages: [
+      "introduction",
+      "typed-client",
+      "auth-and-bff",
+      "nextjs",
+      "nuxt",
+      "data-tables",
+      "theming",
+      "localization",
+    ],
+  },
+  {
     // Owner: micro
     slug: "microservices",
     title: "Microservices",

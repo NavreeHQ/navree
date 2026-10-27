@@ -78,7 +78,7 @@ For every page request (a `GET` or `HEAD` that accepts `text/html`), the gate:
 
 ### Sign-in
 
-```vue title="web/app/pages/login.vue"
+```html title="web/app/pages/login.vue"
 <script setup lang="ts">
 const auth = useNavreeAuth<User>();
 const route = useRoute();
@@ -136,7 +136,7 @@ export default defineEventHandler(async (event) => {
 
 `useListQuery()` keeps a list's filters, sort, search and page in the route's query string, and `<NavreeDataTable>` renders one page of it: see [data tables](/docs/frontend/data-tables/). `useOperation(id)` follows an operation's event stream:
 
-```vue
+```html
 <script setup lang="ts">
 const props = defineProps<{ id: string | null }>();
 const { operation, finished, cancel } = useOperation(() => props.id);
@@ -167,7 +167,7 @@ The channel can be a ref or a getter; the listener moves when it changes and sto
 
 With `abilities: true`, the module installs one CASL ability (`@casl/vue`) and loads the user's rules from `GET /api/me/abilities` after sign-in and after every workspace switch; signed out, every rule is dropped.
 
-```vue
+```html
 <script setup lang="ts">
 const ability = useAbility();
 </script>

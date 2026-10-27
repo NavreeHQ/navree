@@ -134,6 +134,7 @@ build time with Shiki.
 | SQL | `sql` |
 | HTTP | `http` |
 | HTML and templates | `html`, `jinja` |
+| CSS | `css` |
 | YAML and `.env` | `yaml`, `env` |
 | Anything else | `text` |
 
