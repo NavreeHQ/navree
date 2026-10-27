@@ -42,6 +42,7 @@ const docs: Record<string, string> = {
   "navree-billing": "/docs/packages/billing/",
   "navree-mcp": "/docs/ai/mcp-servers/",
   "navree-logbook": "/docs/tools/logbook/",
+  "navree-helm": "/docs/tools/helm/",
   navree: "/docs/architecture/facade-and-features/",
   "navree-cli": "/docs/digging-deeper/cli/",
 };

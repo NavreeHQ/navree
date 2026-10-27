@@ -1,7 +1,6 @@
 ---
 title: "Helm"
 description: "An admin panel generated from your entities, with fields, filters, search, actions and metrics checked against the access rules your API already enforces."
-status: "planned"
 ---
 
 ## Introduction
@@ -13,6 +12,8 @@ Helm works with what your app already has:
 - **Your entities.** A resource wraps a SeaORM entity. There is no second schema to keep in sync.
 - **Your access rules.** Every screen, row, field and action is checked against your [abilities](/docs/security/authorization/), the same rules your API enforces. A sales rep who may only edit their own deals sees exactly that in Helm.
 - **Your unit of work.** Every change runs in a transaction with the signed-in user as the actor, so your observers run and the [audit log](/docs/security/audit-log/) records who changed what.
+
+The screens are rendered on the server from templates, with a small stylesheet and script embedded in the crate: there is nothing to build and no front-end toolchain. They work without the script, which only adds conveniences such as confirmations, local times, searchable pickers, the command menu and the collapsible sidebar.
 
 ## Installation
 
@@ -32,7 +33,7 @@ pub fn app(sources: ConfigSources) -> AppBuilder {
 }
 ```
 
-`HelmModule` is global and needs `DatabaseModule`, `AuthModule` (sign-in), `AccessModule` (every check) and `CryptoModule` (the session cookie). It has no tables of its own.
+`HelmModule` is global and needs `DatabaseModule`, `AuthModule` (sign-in), `AccessModule` (every check) and `CryptoModule` (the session cookie). It has no tables of its own. `HelmModule::for_root(HelmOptions { .. })` takes the [options](#configuration) in code instead.
 
 Helm registers the subject `Helm` with the permission prefix `helm`. The `view` ability on it lets a user into the panel; what they can do inside depends on their abilities on each resource. Grant it to the roles that should have a panel:
 
@@ -58,18 +59,19 @@ navree make:resource deals Deal
   updated  src/modules/deals/mod.rs
 ```
 
-The generator reads the entity's columns and writes a field for each one, then registers the resource in the module's `wire` method at the `// navree:wire` marker:
+The generator reads the entity's columns (from `entities/deal.rs`, or the module's `entity.rs`) and writes a field for each one: text, numbers, money when there is a `currency` column, dates, booleans, read-only timestamps, and a comment suggesting `Field::belongs_to` for each foreign key. It then declares the `resources` module and registers the resource in the module's `wire` method, at the `// navree:wire` marker:
 
 ```rust title="src/modules/deals/mod.rs"
 impl DealsModule {
     fn wire(&self, m: &mut ModuleBuilder) {
-        m.resource::<DealResource>();
+        m.migrations(migrations::migrations());
+        navree::helm::ModuleBuilderHelmExt::resource::<resources::deal::DealResource>(m);
         // navree:wire
     }
 }
 ```
 
-`m.resource::<R>()` registers `R` as a provider and adds it to the panel; the prelude brings it into scope. Reload `/admin`: **Deals** is in the menu, with a list, filters and search, a detail page, and create and edit forms.
+`m.resource::<R>()` registers `R` as a provider of the module and adds it to the panel. The prelude brings it into scope, so in code you write by hand it is `m.resource::<DealResource>()`. When the entity doesn't implement `Subject` yet, the generator prints how to add it. Reload `/admin`: **Deals** is in the menu, with a list, filters and search, a detail page, and create and edit forms.
 
 ## Resources
 
@@ -117,7 +119,7 @@ impl Resource for DealResource {
         ]
     }
 
-    fn filters(&self) -> Vec<Filter> {
+    fn filters(&self) -> Vec<Filter<deal::Entity>> {
         vec![
             Filter::select("stage").options(Stage::ALL.iter().map(|s| (s.as_str(), s.label()))),
             Filter::belongs_to::<UserResource>("owner_id").label("Owner"),
@@ -161,45 +163,52 @@ impl Resource for DealResource {
 
 | Item | What it does |
 |---|---|
-| `type Entity` | The SeaORM entity. It must implement `Subject`, which it already does if your routes check it with `#[can]`. |
+| `type Entity` | The SeaORM entity. It must implement `Subject`, which it already does if your routes check it with `#[can]`. `m.resource::<R>()` registers it with navree-access (like `AccessModule::for_feature`), so permissions such as `deals.read` map to it. |
 | `LABEL`, `SINGULAR` | The plural and singular names on screen. `SINGULAR` defaults to `LABEL`. |
 | `GROUP` | The menu group. Resources without one go under **Resources**. |
-| `ICON` | A [Lucide](https://lucide.dev/icons/) icon name for the menu. |
+| `ICON` | A [Lucide](https://lucide.dev/icons/) icon name for the menu, such as `handshake`, `users`, `building-2`, `receipt` or `package`. Helm embeds about 140 common Lucide icons (no external requests); any other name shows a folder icon and logs a warning at boot. Custom front ends get the name from the [metadata API](#the-json-api). |
 | `TITLE` | The column that names a record: in headings, breadcrumbs and relationship fields. Defaults to `id`. |
 | `SEARCH` | The columns the search box matches, case-insensitively. |
-| `SLUG` | The resource's path segment, `/admin/resources/deals`. Defaults to the table name. |
-| `PER_PAGE` | Rows per page on the list. Defaults to `helm.per_page` (25). |
+| `SLUG` | The resource's path segment, `/admin/resources/deals`. Defaults to the table name, with `-` for `_`. |
+| `PER_PAGE` | Rows per page on the list (at most 100). `0`, the default, uses `helm.per_page` (25). |
+| `DEFAULT_SORT` | The list's order, such as `"-amount_cents"`. Defaults to newest first. See [sorting](#search-sorting-and-filters). |
+| `ORDER` | The position in the menu within the group (lower first). |
 | `fields`, `filters`, `actions`, `metrics` | What the screens show. Only `fields` is required. |
 | `query` | The base query every screen starts from. See [scoping the query](#scoping-the-query). |
+| `create`, `update`, `delete` | How records are saved. See [saving through your services](#saving-through-your-services). |
+
+Helm checks every resource when the app boots, so a mistake fails the boot with a message that names the resource: a field or `TITLE` that isn't a column, an invalid `pattern`, a relationship to a resource that isn't registered, an action without `.handle(..)`, a trend without a period, or two resources with the same slug.
 
 ### The screens
 
 - **List.** A table of the fields shown on the index, with a search box, the filters in a side panel, sortable column headers and pagination. Tick rows to run an action on them. The resource's metrics sit above the table as cards.
-- **Detail.** Every field shown on the detail page, a header with the record's title, buttons for edit, delete and the actions, and below it a panel for each `has_many` relationship.
-- **Create and edit.** A form with every editable field: a text input, a number input with the currency beside it, a select, a searchable picker for a related record, a date picker. Validation errors appear under their fields.
+- **Detail.** Every field shown on the detail page, a header with the record's title, buttons for edit, delete and the actions, and below it a panel for each `has_many` relationship, with its own actions.
+- **Create and edit.** A form with every editable field: a text input, a number input with the currency beside it, a select, a picker for a related record (searchable when the script runs), a date or date-time picker. Validation errors appear under their fields.
 - **Dashboard.** The panel's home page, `/admin`, shows the metrics marked `.on_dashboard()` from every resource the user may read.
+
+Destructive buttons and actions that ask a question show a confirmation first: a dialog when the script runs, otherwise a confirmation page.
 
 ## Fields
 
-Each field names a column of the entity, except `computed` and `has_many`.
+Each field names a column of the entity, except `computed`, `has_many` and `view`.
 
 | Field | Shows | In forms |
 |---|---|---|
 | `Field::id()` | The primary key | Never editable |
 | `Field::text(column)` | The text | A text input |
 | `Field::textarea(column)` | The first line on the list, everything on the detail page | A text area |
-| `Field::markdown(column)` | Rendered Markdown | A Markdown editor with preview |
+| `Field::markdown(column)` | Rendered Markdown on the detail page, without raw HTML | A text area with a preview |
 | `Field::number(column)` | The number | A number input |
-| `Field::money(column, currency_column)` | An amount in minor units with its currency, as `$12,500.00` | A decimal input; stored in minor units |
+| `Field::money(column, currency_column)` | An amount in minor units with its currency, as `$12,500.00` (`USD` when the record has none) | A decimal input; stored in minor units |
 | `Field::boolean(column)` | A check mark | A switch |
 | `Field::select(column)` | The option's label, or a badge with `.badge()` | A select of `.options(..)` |
-| `Field::date(column)`, `Field::datetime(column)` | The date, in the user's time zone for a date-time | A date or date-time picker |
+| `Field::date(column)`, `Field::datetime(column)` | The date; a date-time in the viewer's time zone | A date or date-time picker (in the viewer's time zone; stored in UTC) |
 | `Field::email(column)`, `Field::url(column)` | A link | A text input, validated |
-| `Field::file(column, disk)` | A download link, or a preview for images | An upload to that [storage disk](/docs/digging-deeper/storage/) |
-| `Field::belongs_to::<R>(column)` | The related record's title, linked to its page | A searchable picker of the records of `R` the user may read |
+| `Field::file(column, disk)` | A download link, or a preview for images | An upload to that [storage disk](/docs/digging-deeper/storage/) (needs `StorageModule`); the column holds the file's path, and a refused file (its type or size) shows its error under the field |
+| `Field::belongs_to::<R>(column)` | The related record's title, linked to its page | A picker of the records of `R` the user may read |
 | `Field::has_many::<R>(foreign_key)` | A panel on the detail page listing the related records, with their own actions | Not in forms |
 | `Field::computed(name, f)` | The value `f(&model)` returns | Not in forms |
-| `Field::view(name, template)` | A [template](/docs/digging-deeper/views/) rendered with the record | Not in forms |
+| `Field::view(name, template)` | A [template](/docs/digging-deeper/views/) rendered with `record` (the record's columns) and `field` (needs `ViewModule`) | Not in forms |
 
 Modifiers chain after the constructor:
 
@@ -208,12 +217,14 @@ Modifiers chain after the constructor:
 | `.label("Amount")` | The label. Defaults to the column name in sentence case. |
 | `.help("Shown under the input")` | Help text in forms. |
 | `.sortable()` | Lets the list sort by this column. |
-| `.readonly()` | Shown but never editable. |
+| `.readonly()` | Shown but never editable (and left out of create forms). |
 | `.hide_on_index()`, `.hide_on_detail()`, `.hide_on_forms()`, `.only_on_forms()` | Where the field appears. |
-| `.required()`, `.min(n)`, `.max(n)`, `.min_length(n)`, `.max_length(n)`, `.pattern(regex)` | Validation in forms, with the same messages as [validation](/docs/basics/validation/) (`title should not be empty`). |
-| `.default(value)` | The value a create form starts with. |
+| `.required()`, `.min(n)`, `.max(n)`, `.min_length(n)`, `.max_length(n)`, `.pattern(regex)` | Validation in forms, with the same messages as [validation](/docs/basics/validation/) (`title should not be empty`). For money, `min` and `max` are in minor units. |
+| `.default(value)` | The value a create form starts with, and the value saved when a create leaves the field out. |
+| `.options(pairs)`, `.badge()` | The `(value, label)` pairs of a select, and showing the label as a badge. |
+| `.accept(["image/*"])`, `.max_size(bytes)` | The types a file field accepts (sniffed from the content) and its size limit (10 MiB by default). |
 
-On the company resource, a `has_many` field lists each company's deals on its page:
+On the company resource, a `has_many` field lists each company's deals on its page. The related resource needs a `Field::belongs_to` on that foreign key, which `DealResource` has:
 
 ```rust title="src/modules/companies/resources/company.rs"
 fn fields(&self) -> Vec<Field> {
@@ -229,7 +240,7 @@ fn fields(&self) -> Vec<Field> {
 
 ## Search, sorting and filters
 
-The search box matches the `SEARCH` columns with a case-insensitive `LIKE`. The list sorts by any `.sortable()` field, newest first by default; set `const DEFAULT_SORT: &'static str = "-amount_cents";` to change it (a leading `-` sorts descending).
+The search box matches the `SEARCH` columns, ignoring case (non-ASCII letters included). The list sorts by any `.sortable()` field, newest first by default (`-created_at` when the entity has that column, else its primary key descending); set `const DEFAULT_SORT: &'static str = "-amount_cents";` to change it (a leading `-` sorts descending).
 
 Filters narrow the list from the side panel:
 
@@ -238,14 +249,14 @@ Filters narrow the list from the side panel:
 | `Filter::select(column).options(..)` | One or more values |
 | `Filter::belongs_to::<R>(column)` | One or more related records |
 | `Filter::boolean(name, label, f)` | On or off; `f(select, on)` changes the query |
-| `Filter::date_range(column)` | A range of dates, with presets (today, this week, this month, this quarter) |
+| `Filter::date_range(column)` | A range of dates (`2026-10-01..2026-10-31`, either end optional), or a preset: today, this week, this month, this quarter |
 | `Filter::custom(name, label, f)` | A value typed in; `f(select, value)` changes the query |
 
-The search, filters, sort and page are in the URL, so a filtered list is a link you can share.
+The search, filters, sort and page are in the URL (`?search=globex&filters[stage]=won&sort=-amount_cents&page=2`), so a filtered list is a link you can share. A filter takes one or more values: repeat it, or separate them with commas.
 
 ### Scoping the query
 
-`query` is the starting point of every screen, metric and relationship picker. Use it to hide soft-deleted rows or to load what the fields need:
+`query` is the starting point of every screen, metric and relationship picker. Use it to hide soft-deleted rows or to narrow what the panel works on:
 
 ```rust
 fn query(&self, select: Select<company::Entity>) -> Select<company::Entity> {
@@ -285,12 +296,14 @@ Action::new("mark-lost", "Mark as lost")
 | `.confirm(text)` | Asks before running. Actions with `.destructive()` always ask, in red. |
 | `.fields(vec![..])` | A small form shown before the action runs; read the values with `ctx.input(name)`. |
 | `.only_on_detail()`, `.only_on_index()` | Where the button appears. |
-| `.queued()` | Runs the action as a `helm.action` job on your [queue](/docs/digging-deeper/queues/) and answers at once. Use it for slow work, such as exports. |
+| `.queued()` | Runs the action as a `helm.action` job on your [queue](/docs/digging-deeper/queues/) and answers at once. Use it for slow work, such as exports. Without a queue in the app it runs in the request. |
 | `.handle(f)` | The work. `f(ctx, records)` gets an `ActionContext` and the records the user may act on. |
 
-The handler runs inside the request's unit of work: return an error and every change rolls back, and the error's message appears on screen. `ActionContext` has `uow()`, `user_id()`, `get::<T>()` to resolve services, and `input(name)`. Records the user isn't allowed to act on are left out, and the result says how many were skipped.
+The handler runs inside the request's unit of work: return an error and every change rolls back, and the error's message appears on screen. `ActionContext` has `uow()`, `user_id()`, `get::<T>()` to resolve services (with the visibility of the resource's module), `input(name)` and `inputs()`. Records the user isn't allowed to act on are left out, and the result says how many were skipped; when none is left, the action is refused with a 403. A queued action checks the user's abilities again when the job runs.
 
-`ActionResult::message(text)` shows a message, `ActionResult::redirect(url)` goes somewhere, and `ActionResult::download(url)` starts a download, for example of an export a queued action stored on a [disk](/docs/digging-deeper/storage/) with a temporary URL.
+When the handler calls a method on a record itself (rather than passing it to a service), Rust can't infer the records' type: write `|ctx, deals: Vec<deal::Model>|`.
+
+`ActionResult::message(text)` shows a message, `ActionResult::redirect(url)` goes somewhere, and `ActionResult::download(url)` starts a download, for example of an export a queued action stored on a [disk](/docs/digging-deeper/storage/) with a temporary URL. A redirect or download to another site opens from a link on a confirmation page.
 
 ## Metrics
 
@@ -298,11 +311,11 @@ Metrics are cards above a resource's list, and on the dashboard when marked `.on
 
 | Metric | Shows | Built with |
 |---|---|---|
-| `Metric::value(label)` | One number, compared with the previous period | `.count()`, `.sum(col)`, `.average(col)`, `.min(col)`, `.max(col)`, `.filter(cond)`, `.money(currency)` |
+| `Metric::value(label)` | One number | `.count()`, `.sum(col)`, `.average(col)`, `.min(col)`, `.max(col)`, `.filter(cond)`, `.money(currency)`, `.over(col)` |
 | `Metric::trend(label)` | A line over time | an aggregate, then `.by_day(col, days)`, `.by_week(col, weeks)` or `.by_month(col, months)` |
 | `Metric::partition(label)` | A breakdown by a column | an aggregate, then `.group_by(col)` |
 
-A value metric with a date column (`.over(deal::Column::CreatedAt)`) gets a range picker (7, 30 or 90 days, this month, this year) and shows the change against the period before. Results are cached for `helm.metrics_cache_secs` (60) per user and range.
+A value metric with a date column (`.over(deal::Column::CreatedAt)`) gets a range picker (7, 30 or 90 days, this month, this year; 30 days by default) and shows the change against the period before. A partition labels its groups with a select field's option labels, or with the titles of related records for a `belongs_to` column. Results are cached in memory for `helm.metrics_cache_secs` (60) per user, access version and range.
 
 ## Authorization
 
@@ -313,11 +326,12 @@ Helm doesn't have its own permission system. It asks your abilities, with the [a
 | Entering the panel | `view` on `Helm` (permission `helm.view`) |
 | A resource in the menu, its list and its metrics | `read` on its subject, as a type-level check; rows are filtered like `Accessible<E, Read>` |
 | A record's page | `read` on that record; a record the filter hides is a 404 |
-| The create form | `create` on the subject |
-| Editing a record | `update` on that record; fields your rules don't permit (`.fields([..])` rules) are shown read-only |
+| The create form | `create` on the subject; the saved record must then pass your `create` rules too |
+| Editing a record | `update` on that record; fields your rules don't permit (`.fields([..])` rules) are shown read-only, and changing them is a 403 |
 | Deleting a record | `delete` on that record |
 | An action | its ability on each selected record |
 | A relationship picker | `read` on the related resource; it lists only readable records |
+| A field's value | `read` on that field (a `cannot read .. fields [..]` rule hides it) |
 
 So with rules where reps read every deal but update only their own, and only some of its fields, a rep's Helm lists every deal, shows an **Edit** button only on their own, and grays out the fields they may not change. The API under `/admin/api` enforces the same checks: hiding a button is never the only protection.
 
@@ -325,7 +339,7 @@ Every create, update and delete runs through `Repo` in the request's [unit of wo
 
 ### Saving through your services
 
-By default Helm writes the form's values straight to the entity's columns. When your service does more than that, such as moving the other deals of a stage, emitting events or checking a business rule, save through it instead by overriding `create` and `update`:
+By default Helm writes the form's values straight to the entity's columns: a create gets a UUID v7 key when the key is a UUID and `created_at` and `updated_at` set to now when the entity has them, and an update sets `updated_at`. When your service does more than that, such as moving the other deals of a stage, emitting events or checking a business rule, save through it instead by overriding `create`, `update` or `delete`:
 
 ```rust
 use navree::BoxFuture;
@@ -342,14 +356,14 @@ impl Resource for DealResource {
     ) -> BoxFuture<'a, Result<deal::Model>> {
         Box::pin(async move {
             let deals = ctx.get::<DealService>().await?;
-            let input: UpdateDeal = form.parse()?; // garde validation, errors under each field
+            let input: UpdateDeal = form.parse().await?; // garde validation, errors under each field
             deals.update_model(ctx.uow(), ctx.user_id(), deal, input).await
         })
     }
 }
 ```
 
-`form.parse::<T>()` deserializes the submitted values into your DTO and validates it with its garde rules, so the panel and your API apply the same validation. An `AppError` from your service appears on the form: a 400 with field errors under the fields, anything else as a message.
+`form.parse::<T>()` deserializes the submitted values into your DTO and validates it with its garde rules, exactly as `Valid<Json<T>>` does, so the panel and your API apply the same validation. The values have already passed the fields' own rules; money is in minor units, dates are `YYYY-MM-DD` and date-times RFC 3339. `form.values()` and `form.get(name)` give them as JSON. An `AppError` from your service appears on the form: a 400 with field errors under the fields, anything else as a message.
 
 ## The panel's look and pages
 
@@ -363,7 +377,11 @@ accent = "#3dff8f"
 per_page = 25
 ```
 
-Resources are listed in the menu by `GROUP`, then by `const ORDER: i32` (lower first), then by label.
+The look is dark, on ink surfaces, with your accent on the primary button of each screen, focus rings and positive figures. The layout is a sidebar and a top bar:
+
+- **The sidebar** lists the dashboard and your resources and pages, grouped by `GROUP`, then ordered by `const ORDER: i32` (lower first) and label, each with its `ICON`. Its header shows `helm.title` with `helm.logo`, and its footer the signed-in user, with **Sign out**. `Ctrl+B` (`⌘B` on a Mac) or the button at the top left collapses it to its icons; the panel remembers the choice in a cookie (`navree_helm_sidebar`), so the next page opens the same way.
+- **The top bar** shows the breadcrumb and **Go to** (`Ctrl+K`, `⌘K` on a Mac), a command menu that opens any resource or page of the menu by name and, on a list with a search box, searches it.
+- **On phones** the sidebar opens as a sheet over the page, and tables become lists of cards.
 
 ### Custom pages
 
@@ -381,17 +399,17 @@ m.helm_page(
 );
 ```
 
-The page is served at `/admin/pages/pipeline` and appears in the menu for users who pass its check. The template gets `user` and `csrf_token` and can call your API, or provide data with `.data(|ctx| async move { .. })`, which returns a `serde_json::Value` for the template.
+The page is served at `/admin/pages/pipeline` and appears in the menu for users who pass its check. Its template is one of your app's templates, so the app needs `ViewModule`. It gets `title`, `user` (`{id, name, email}`), `csrf_token`, `path` (the panel's path) and `data`, and can call your API, or get its data from `.data(|ctx| async move { .. })`, which returns a `Result<serde_json::Value>`. `ctx` is a `PageContext` with `uow()`, `user_id()` and `get::<T>()`. The panel's Content Security Policy allows scripts from your app's origin only, so a page's script is a file your app serves, never inline.
 
 ## Security
 
-- **Sign-in.** The panel's sign-in screen uses your app's users through `AuthService`: password, then a two-factor code when the account has [two-factor authentication](/docs/security/account-flows/) on, with the same login throttle as `POST /api/auth/login`. The session is an encrypted, httpOnly, `SameSite=Strict` cookie scoped to `/admin`, so your API never accepts it.
-- **CSRF.** Every change the panel makes sends a CSRF token, and requests without it are refused with 403.
+- **Sign-in.** The panel's sign-in screen uses your app's users through `AuthService`: password, then a two-factor code (or a recovery code) when the account has [two-factor authentication](/docs/security/account-flows/) on, with the same login throttle as `POST /api/auth/login`. The session is an encrypted, httpOnly, `SameSite=Strict` cookie named `navree_helm`, scoped to `/admin`, so your API never accepts it. It lasts `helm.session_minutes`, renewed while you use the panel, and is `Secure` on every host but `localhost`. Signing out revokes the sign-in's refresh token.
+- **CSRF.** Every change the panel makes sends a CSRF token (a `_csrf` form field, or the `X-CSRF-Token` header), and requests without it are refused with 403. The sign-in form has its own token. If your app also uses `SessionModule`, add the panel to its exceptions (`session.csrf_except = ["/admin/*"]`): Helm checks its own token there.
 - **Deny by default.** Nobody enters without `view` on `Helm`, and every screen and API call checks the user's ability on the subject and the record, as [above](#authorization). The super-admin role passes every check.
-- **Strict pages.** Pages are served with a strict Content Security Policy and `X-Frame-Options: DENY`. Field values are escaped; `Field::markdown` renders without raw HTML.
-- **Rate limits.** The panel's API is subject to your app's per-IP [rate limit](/docs/basics/rate-limiting/).
+- **Strict pages.** Pages are served with a strict Content Security Policy (no inline scripts or styles), `X-Frame-Options: DENY` and `Cache-Control: no-store`. Field values are escaped; `Field::markdown` renders without raw HTML and keeps only `http(s)`, `mailto` and relative links.
+- **Rate limits.** The panel and its API are subject to your app's per-IP [rate limit](/docs/basics/rate-limiting/).
 
-The panel and its JSON API also accept an access token in `Authorization: Bearer`. That is how you test it, and how a [backend-for-frontend](/docs/patterns/backend-for-frontend/) serves it: when the BFF forwards `/admin` with the signed-in user's token, as the [SaaS starter kit](/docs/getting-started/starter-kits/) does, Helm opens on the web app's origin with the same session and its sign-in screen never appears.
+The panel and its JSON API also accept an access token in `Authorization: Bearer`, which needs no CSRF token. That is how you test it, and how a [backend-for-frontend](/docs/patterns/backend-for-frontend/) serves it: when the BFF forwards `/admin` with the signed-in user's token, as the [SaaS starter kit](/docs/getting-started/starter-kits/) does, Helm opens on the web app's origin with the same session and its sign-in screen never appears.
 
 ## Testing
 
@@ -426,15 +444,23 @@ async fn reps_read_every_deal_but_edit_only_their_own() {
 }
 ```
 
+`boot_app` builds the app with `TestApp::builder().fake_auth()` so `acting_as` works next to `AuthModule`.
+
+### The JSON API
+
 | Route | What it does |
 |---|---|
+| `GET /admin/api/resources` | The resources the user may read, with their fields, filters, actions, metrics and `can.create`, and the pages they may open |
 | `GET /admin/api/resources/{resource}` | The list: `search`, `filters[name]`, `sort`, `page`, `per_page`; answers `{"data": [..], "meta": {..}}` |
 | `GET /admin/api/resources/{resource}/{id}` | One record with its fields |
-| `POST /admin/api/resources/{resource}` | Creates a record from `{"field": value, ..}` |
-| `PATCH /admin/api/resources/{resource}/{id}` | Updates a record |
-| `DELETE /admin/api/resources/{resource}/{id}` | Deletes a record |
-| `POST /admin/api/resources/{resource}/actions/{action}` | Runs an action: `{"ids": [..], "input": {..}}` |
-| `GET /admin/api/resources/{resource}/metrics/{metric}` | One metric: `range` |
+| `GET /admin/api/resources/{resource}/options` | Records for a relationship picker: `search`; answers `{"data": [{"id", "title"}]}`, at most 20 |
+| `POST /admin/api/resources/{resource}` | Creates a record from `{"field": value, ..}` (201) |
+| `PATCH /admin/api/resources/{resource}/{id}` | Updates a record with the fields sent |
+| `DELETE /admin/api/resources/{resource}/{id}` | Deletes a record (204) |
+| `POST /admin/api/resources/{resource}/actions/{action}` | Runs an action: `{"ids": [..], "input": {..}}`; answers the result (`{"type": "message", "message"}`, or `"redirect"` / `"download"` with `url`) with `ran`, `skipped` and `queued` |
+| `GET /admin/api/resources/{resource}/metrics/{metric}` | One metric (its name is its label in kebab-case, `open-pipeline`): `range`; answers `value`, `previous`, `change` and `display`, trend `points` or partition `groups` |
+
+A record is `{"id", "title", "values", "display", "can": {"update", "delete"}}`: `values` holds the raw column values (money in minor units), `display` the text the screens show, and a single record also lists the fields the user may not change under `readonly`. A field sent that isn't an editable field of the resource is a 400 (`property created_at should not exist`). The API doesn't take uploads: a file field accepts only the path of a file the panel's forms stored for that resource (`deals/<random name>.pdf`), and anything else is a 400 (`attachment is invalid`).
 
 Errors use Navree's JSON error shape (`{ "statusCode", "message", "error", "code" }`), and a validation error lists its field messages under `errors`, as in your API.
 
@@ -446,11 +472,12 @@ Every key of the `helm` section is optional. From the environment: `APP_HELM__TI
 |---|---|---|
 | `helm.path` | `/admin` | Where the panel is served. |
 | `helm.title` | `Admin` | The name in the header and the browser tab. |
-| `helm.logo` | none | A logo URL for the header and the sign-in screen. |
-| `helm.accent` | `#3dff8f` | The accent color of buttons and links. |
-| `helm.per_page` | `25` | Rows per page on lists. |
-| `helm.metrics_cache_secs` | `60` | How long metric results are cached per user and range. |
+| `helm.logo` | none | A logo URL for the sidebar's header and the sign-in screen: a path on your app or an `http(s)` URL. |
+| `helm.accent` | `#3dff8f` | The accent color of the primary buttons, focus rings and positive figures (`#rgb` or `#rrggbb`). |
+| `helm.per_page` | `25` | Rows per page on lists (at most 100). |
+| `helm.metrics_cache_secs` | `60` | How long metric results are cached per user and range; `0` turns the cache off. |
 | `helm.dashboard` | `true` | Show metric cards on the panel's home page. |
+| `helm.session_minutes` | `480` | How long a sign-in to the panel lasts. |
 
 | Command | What it does |
 |---|---|

@@ -65,6 +65,7 @@ navree-redis = { path = "crates/navree-redis", version = "0.1.0" }
 navree-logbook = { path = "crates/navree-logbook", version = "0.1.0" }
 navree-micro = { path = "crates/navree-micro", version = "0.1.0" }
 navree-fleet = { path = "crates/navree-fleet", version = "0.1.0" }
+navree-helm = { path = "crates/navree-helm", version = "0.1.0" }
 
 # ---------------------------------------------------------------------------
 # Runtime, async and HTTP (Tokio family)
@@ -324,6 +325,9 @@ rmcp = { version = "3.7.0", default-features = false, features = [
     "transport-streamable-http-server",
 ] }
 async-trait = "0.1.92"
+# Helm: Markdown fields (rendered without raw HTML) and field patterns.
+pulldown-cmark = { version = "0.13.5", default-features = false, features = ["html"] }
+regex = "1.13.1"
 
 # ---------------------------------------------------------------------------
 # Tooling: proc macros and CLI
