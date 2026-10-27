@@ -426,6 +426,9 @@ mod tests {
             counter.count(&format!("SELECT {n}"), Duration::ZERO);
         }
         assert_eq!(counter.by_sql.len(), DISTINCT_STATEMENTS);
-        assert_eq!(counter.stats().statements, (DISTINCT_STATEMENTS + 10) as u64);
+        assert_eq!(
+            counter.stats().statements,
+            (DISTINCT_STATEMENTS + 10) as u64
+        );
     }
 }

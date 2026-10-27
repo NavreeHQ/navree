@@ -541,7 +541,10 @@ impl<Q: Paged> Walk<Q> {
     }
 
     /// Every item, page by page, as a stream.
-    fn stream<'e, E: Executor + ?Sized>(walk: Result<Self>, exec: &'e E) -> RowStream<'e, Result<Q::Item>> {
+    fn stream<'e, E: Executor + ?Sized>(
+        walk: Result<Self>,
+        exec: &'e E,
+    ) -> RowStream<'e, Result<Q::Item>> {
         RowStream::try_generate(move |mut out| async move {
             let outcome = async {
                 let mut walk = walk?;
@@ -599,7 +602,10 @@ impl<M: Model> Builder<M> {
             )
         });
         let is_key = column.name == meta.key_column()
-            && column.table.as_deref().is_none_or(|table| table == meta.table());
+            && column
+                .table
+                .as_deref()
+                .is_none_or(|table| table == meta.table());
         Walk::by_column(
             self.apply_global_scopes(),
             size,
@@ -866,7 +872,9 @@ impl<M: Model> Builder<M> {
     pub fn cursor<'e, E: Executor + ?Sized>(self, exec: &'e E) -> RowStream<'e, Result<Record<M>>> {
         RowStream::try_generate(move |mut out| async move {
             let outcome = async {
-                let target = exec.target_routed(crate::query::read_access(&self.ir), self.route()).await?;
+                let target = exec
+                    .target_routed(crate::query::read_access(&self.ir), self.route())
+                    .await?;
                 let ir = self.into_ir();
                 let mut rows = target.stream(&ir).await?;
                 let ctx = target.context();
@@ -874,7 +882,9 @@ impl<M: Model> Builder<M> {
                 while let Some(row) = rows.next().await {
                     let mut record = Record::<M>::from_row(&row?)?;
                     if !hooks.is_empty() {
-                        hooks.after(ModelEvent::Retrieved, &ctx, &mut record).await?;
+                        hooks
+                            .after(ModelEvent::Retrieved, &ctx, &mut record)
+                            .await?;
                     }
                     out.send(Ok(record)).await;
                 }
@@ -1017,7 +1027,11 @@ impl TableBuilder {
     }
 
     /// The rows as a stream, read `size` at a time in the query's order.
-    pub fn lazy<'e, E: Executor + ?Sized>(self, exec: &'e E, size: u64) -> RowStream<'e, Result<Row>> {
+    pub fn lazy<'e, E: Executor + ?Sized>(
+        self,
+        exec: &'e E,
+        size: u64,
+    ) -> RowStream<'e, Result<Row>> {
         let walk = self
             .for_offset_pages("lazy")
             .and_then(|query| Walk::by_offset(query, size, "lazy"));
@@ -1059,9 +1073,8 @@ impl TableBuilder {
         column: impl IntoExpr,
         alias: impl Into<String>,
     ) -> RowStream<'e, Result<Row>> {
-        let walk = keyset_column(column).and_then(|column| {
-            self.key_walk(size, column, alias.into(), false, "lazy_by_id")
-        });
+        let walk = keyset_column(column)
+            .and_then(|column| self.key_walk(size, column, alias.into(), false, "lazy_by_id"));
         Walk::stream(walk, exec)
     }
 
@@ -1070,7 +1083,9 @@ impl TableBuilder {
     pub fn cursor<'e, E: Executor + ?Sized>(self, exec: &'e E) -> RowStream<'e, Result<Row>> {
         RowStream::try_generate(move |mut out| async move {
             let outcome = async {
-                let target = exec.target_routed(crate::query::read_access(self.ir()), self.route()).await?;
+                let target = exec
+                    .target_routed(crate::query::read_access(self.ir()), self.route())
+                    .await?;
                 let ir = self.into_ir();
                 let mut rows = target.stream(&ir).await?;
                 while let Some(row) = rows.next().await {
@@ -1143,7 +1158,11 @@ mod tests {
                 out.send(i).await;
             }
         });
-        assert_eq!(produced.load(Ordering::SeqCst), 0, "nothing runs before a poll");
+        assert_eq!(
+            produced.load(Ordering::SeqCst),
+            0,
+            "nothing runs before a poll"
+        );
         assert_eq!(stream.next().await, Some(0));
         assert_eq!(produced.load(Ordering::SeqCst), 1, "no read-ahead");
         assert_eq!(stream.next().await, Some(1));

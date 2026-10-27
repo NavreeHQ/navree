@@ -216,7 +216,10 @@ impl PostgresOptions {
             ));
         }
         if let Some(name) = &self.application_name
-            && (name.len() > 63 || name.chars().any(|c| c.is_control() || c == '\'' || c == '\\'))
+            && (name.len() > 63
+                || name
+                    .chars()
+                    .any(|c| c.is_control() || c == '\'' || c == '\\'))
         {
             problems.push(
                 "postgres.application_name must be at most 63 printable characters without quotes"
@@ -232,7 +235,14 @@ impl PostgresOptions {
                 COMMIT.join(", ")
             ));
         }
-        const SSL: [&str; 6] = ["disable", "allow", "prefer", "require", "verify-ca", "verify-full"];
+        const SSL: [&str; 6] = [
+            "disable",
+            "allow",
+            "prefer",
+            "require",
+            "verify-ca",
+            "verify-full",
+        ];
         if let Some(mode) = &self.ssl_mode
             && !SSL.contains(&mode.as_str())
         {
@@ -662,9 +672,7 @@ impl ConfigSection for DbOptions {
                 );
             }
             if !connection.connections.is_empty() {
-                problems.push(format!(
-                    "connections.{name}: connections cannot be nested"
-                ));
+                problems.push(format!("connections.{name}: connections cannot be nested"));
             }
             if let Err(nested) = connection.validate() {
                 problems.push(format!("connections.{name}: {nested}"));

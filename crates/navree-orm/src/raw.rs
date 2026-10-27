@@ -261,20 +261,31 @@ mod tests {
     #[test]
     fn raw_fragments_are_expressions_conditions_and_select_items() {
         let mut query = crate::ir::QueryIr::new("deals");
-        query.columns.push(raw("count(*) AS n", [] as [i64; 0]).into_select());
         query
-            .wheres
-            .push(crate::ir::WhereClause::and(Filter::from(raw("a = ?", [1])).into_where()));
+            .columns
+            .push(raw("count(*) AS n", [] as [i64; 0]).into_select());
+        query.wheres.push(crate::ir::WhereClause::and(
+            Filter::from(raw("a = ?", [1])).into_where(),
+        ));
         let statement = compile_select(&query, Dialect::Postgres).unwrap();
-        assert_eq!(statement.sql, r#"SELECT count(*) AS n FROM "deals" WHERE a = $1"#);
+        assert_eq!(
+            statement.sql,
+            r#"SELECT count(*) AS n FROM "deals" WHERE a = $1"#
+        );
         assert_eq!(statement.values, [Value::from(1)]);
     }
 
     #[test]
     fn statements_check_their_placeholders() {
-        let statement = raw("SELECT ? + ?", [1, 2]).to_statement(Dialect::MySql).unwrap();
+        let statement = raw("SELECT ? + ?", [1, 2])
+            .to_statement(Dialect::MySql)
+            .unwrap();
         assert_eq!(statement.sql, "SELECT ? + ?");
         assert_eq!(statement.values.len(), 2);
-        assert!(raw("SELECT ?", [] as [i64; 0]).to_statement(Dialect::Sqlite).is_err());
+        assert!(
+            raw("SELECT ?", [] as [i64; 0])
+                .to_statement(Dialect::Sqlite)
+                .is_err()
+        );
     }
 }

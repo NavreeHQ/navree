@@ -124,8 +124,6 @@ pub use exec::{
     Access, DocumentTarget, ExecContext, Executor, Route, RowsStream, SqlTarget, Target,
     scoped_connection, using_connection, using_writer,
 };
-pub use raw::{Raw, affecting_statement, raw, scalar, select, select_one, statement, unprepared};
-pub use streams::{RowStream, cursor};
 pub use ir::{Expr, LockMode, VectorMetric};
 pub use model::{ColumnMeta, KeyKind, Model, ModelMeta, PrimaryKey, Timestamp};
 pub use pagination::{
@@ -135,10 +133,12 @@ pub use query::{
     Builder, ConflictUpdate, HasQuery, HasWheres, IntoSelect, JoinClause, Selectable, TableBuilder,
     WhereGroup, table,
 };
+pub use raw::{Raw, affecting_statement, raw, scalar, select, select_one, statement, unprepared};
 pub use record::Record;
 pub use row::Row;
 pub use scope::{GlobalScope, Scoped, SoftDeletes};
 pub use sql::{Dialect, Statement};
+pub use streams::{RowStream, cursor};
 pub use ulid::{Ulid, UlidError};
 pub use value::{
     Decimal, Field, FieldError, Numeric, Value, ValueFor, is_null, same_value, to_json,

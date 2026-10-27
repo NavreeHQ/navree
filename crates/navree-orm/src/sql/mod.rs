@@ -375,7 +375,11 @@ impl Compiler {
             } => self.vector_distance(expr, vector, *metric)?,
             Expr::Binary { left, op, right } => {
                 let allowed = value_operators(self.dialect);
-                let normalized = op.split_whitespace().collect::<Vec<_>>().join(" ").to_ascii_uppercase();
+                let normalized = op
+                    .split_whitespace()
+                    .collect::<Vec<_>>()
+                    .join(" ")
+                    .to_ascii_uppercase();
                 let Some(known) = allowed.iter().find(|known| **known == normalized) else {
                     return Err(OrmError::invalid(format!(
                         "`{op}` is not an operator {} expressions take (they take: {})",
@@ -387,10 +391,9 @@ impl Compiler {
                 self.custom(&format!("({{}} {known} {{}})"), vec![left, right])
             }
             Expr::Excluded { column } => match self.dialect {
-                Dialect::Postgres | Dialect::Sqlite => sea_query::Expr::col((
-                    Alias::new("excluded"),
-                    Alias::new(column.to_string()),
-                )),
+                Dialect::Postgres | Dialect::Sqlite => {
+                    sea_query::Expr::col((Alias::new("excluded"), Alias::new(column.to_string())))
+                }
                 Dialect::MySql => Func::cust(Alias::new("VALUES"))
                     .arg(sea_query::Expr::col(Alias::new(column.to_string())))
                     .into(),
@@ -411,7 +414,9 @@ fn value_operators(dialect: Dialect) -> &'static [&'static str] {
         Dialect::MySql => &[
             "+", "-", "*", "/", "%", "DIV", "MOD", "&", "|", "^", "<<", ">>", "->", "->>",
         ],
-        Dialect::Sqlite => &["+", "-", "*", "/", "%", "||", "&", "|", "<<", ">>", "->", "->>"],
+        Dialect::Sqlite => &[
+            "+", "-", "*", "/", "%", "||", "&", "|", "<<", ">>", "->", "->>",
+        ],
     }
 }
 
@@ -445,7 +450,10 @@ impl Compiler {
                     VectorMetric::InnerProduct => "<#>",
                     _ => "<=>",
                 };
-                self.custom(&format!("({{}} {op} CAST({{}} AS vector))"), vec![column, literal])
+                self.custom(
+                    &format!("({{}} {op} CAST({{}} AS vector))"),
+                    vec![column, literal],
+                )
             }
             (Dialect::MySql, VectorMetric::Cosine | VectorMetric::Euclidean) => {
                 let function = if metric == VectorMetric::Euclidean {
@@ -453,7 +461,10 @@ impl Compiler {
                 } else {
                     "VEC_DISTANCE_COSINE"
                 };
-                self.custom(&format!("{function}({{}}, VEC_FromText({{}}))"), vec![column, literal])
+                self.custom(
+                    &format!("{function}({{}}, VEC_FromText({{}}))"),
+                    vec![column, literal],
+                )
             }
             (Dialect::MySql, _) => {
                 return Err(self.unsupported("the inner-product vector distance"));

@@ -42,7 +42,12 @@ impl ClientCommand {
     /// # Ok::<(), sea_orm::DbErr>(())
     /// ```
     pub fn for_url(url: &str) -> Result<ClientCommand, DbErr> {
-        let unsupported = || DbErr::Custom(format!("no database client is known for `{}`", crate::options::redact_url(url)));
+        let unsupported = || {
+            DbErr::Custom(format!(
+                "no database client is known for `{}`",
+                crate::options::redact_url(url)
+            ))
+        };
         let scheme = scheme(url).ok_or_else(unsupported)?;
         match scheme.as_ref() {
             "sqlite" => sqlite(url),
@@ -99,7 +104,8 @@ fn sqlite(url: &str) -> Result<ClientCommand, DbErr> {
     let path = rest.split(['?', '#']).next().unwrap_or_default();
     if path.is_empty() || path == ":memory:" {
         return Err(DbErr::Custom(
-            "an in-memory SQLite database lives in the app's process; there is no client to open".to_owned(),
+            "an in-memory SQLite database lives in the app's process; there is no client to open"
+                .to_owned(),
         ));
     }
     Ok(ClientCommand {
@@ -223,13 +229,25 @@ mod tests {
         assert_eq!(mysql.program, "mysql");
         assert_eq!(
             mysql.args,
-            ["--host", "127.0.0.1", "--port", "3306", "--user", "root", "--database", "crm"]
+            [
+                "--host",
+                "127.0.0.1",
+                "--port",
+                "3306",
+                "--user",
+                "root",
+                "--database",
+                "crm"
+            ]
         );
         assert_eq!(mysql.env, [("MYSQL_PWD".to_owned(), "p:ss".to_owned())]);
         assert!(!mysql.args.iter().any(|arg| arg.contains("p:ss")));
         let mariadb = client("mariadb://app@db/crm");
         assert_eq!(mariadb.program, "mariadb");
-        assert_eq!(mariadb.args, ["--host", "db", "--user", "app", "--database", "crm"]);
+        assert_eq!(
+            mariadb.args,
+            ["--host", "db", "--user", "app", "--database", "crm"]
+        );
         assert!(mariadb.env.is_empty());
     }
 
@@ -239,7 +257,16 @@ mod tests {
         assert_eq!(pg.program, "psql");
         assert_eq!(
             pg.args,
-            ["--host", "::1", "--port", "5432", "--username", "app", "--dbname", "crm"]
+            [
+                "--host",
+                "::1",
+                "--port",
+                "5432",
+                "--username",
+                "app",
+                "--dbname",
+                "crm"
+            ]
         );
         assert_eq!(pg.env, [("PGPASSWORD".to_owned(), "secret".to_owned())]);
     }
@@ -251,7 +278,10 @@ mod tests {
             ["storage/app.db"]
         );
         assert_eq!(client("sqlite:data.db").args, ["data.db"]);
-        assert_eq!(client("sqlite:///var/app%20data.db").args, ["/var/app data.db"]);
+        assert_eq!(
+            client("sqlite:///var/app%20data.db").args,
+            ["/var/app data.db"]
+        );
         assert!(ClientCommand::for_url("sqlite::memory:").is_err());
         let mongo = client("mongodb://localhost:27017/crm");
         assert_eq!(mongo.program, "mongosh");

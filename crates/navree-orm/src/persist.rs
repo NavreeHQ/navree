@@ -175,11 +175,12 @@ async fn insert<M: Model>(
         .filter(|(column, _)| !(assigned_by_database && *column == meta.key_column()))
         .map(|(column, value)| (Cow::Borrowed(*column), Expr::Value(value.clone())))
         .unzip();
-    let mut insert = InsertIr::new(meta.table(), columns, vec![row]).returning(if assigned_by_database {
-        vec![Cow::Borrowed(meta.key_column())]
-    } else {
-        Vec::new()
-    });
+    let mut insert =
+        InsertIr::new(meta.table(), columns, vec![row]).returning(if assigned_by_database {
+            vec![Cow::Borrowed(meta.key_column())]
+        } else {
+            Vec::new()
+        });
     let skips_conflicts = on_conflict.is_some();
     insert.on_conflict = on_conflict;
     let outcome = target.insert(&insert).await?;

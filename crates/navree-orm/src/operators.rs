@@ -26,7 +26,10 @@ use crate::ir::{ColumnRef, Expr, JsonSegment, Operator, VectorMetric, Where};
 use crate::value::Value;
 
 /// A JSON value for a condition, or the reason it cannot be one.
-fn json_value(value: impl serde::Serialize, column: &ColumnRef) -> Result<serde_json::Value, Filter> {
+fn json_value(
+    value: impl serde::Serialize,
+    column: &ColumnRef,
+) -> Result<serde_json::Value, Filter> {
     serde_json::to_value(value).map_err(|error| {
         Filter(Where::Invalid(format!(
             "the value for JSON column `{column}` cannot be encoded: {error}"

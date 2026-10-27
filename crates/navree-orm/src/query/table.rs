@@ -102,7 +102,11 @@ impl TableBuilder {
     ///     r#"SELECT * FROM generate_series($1, $2) AS "n""#
     /// );
     /// ```
-    pub fn from_function(mut self, call: impl Into<Expr>, alias: impl Into<Cow<'static, str>>) -> Self {
+    pub fn from_function(
+        mut self,
+        call: impl Into<Expr>,
+        alias: impl Into<Cow<'static, str>>,
+    ) -> Self {
         match call.into() {
             call @ Expr::Function { .. } => self.ir.table = TableRef::function(call, alias),
             other => self.ir.errors.push(format!(
@@ -232,7 +236,9 @@ impl TableBuilder {
 
     /// The query's rows.
     pub async fn get<E: Executor + ?Sized>(self, exec: &E) -> Result<Vec<Row>> {
-        let target = exec.target_routed(crate::query::read_access(&self.ir), self.route()).await?;
+        let target = exec
+            .target_routed(crate::query::read_access(&self.ir), self.route())
+            .await?;
         target.fetch(&self.ir).await
     }
 
@@ -258,7 +264,9 @@ impl TableBuilder {
         E: Executor + ?Sized,
         C: Selectable,
     {
-        let target = exec.target_routed(crate::query::read_access(&self.ir), self.route()).await?;
+        let target = exec
+            .target_routed(crate::query::read_access(&self.ir), self.route())
+            .await?;
         let name = self.table_name();
         let item = SelectItem {
             expr: column.selected(),
@@ -280,7 +288,9 @@ impl TableBuilder {
         E: Executor + ?Sized,
         C: Selectable,
     {
-        let target = exec.target_routed(crate::query::read_access(&self.ir), self.route()).await?;
+        let target = exec
+            .target_routed(crate::query::read_access(&self.ir), self.route())
+            .await?;
         let name = self.table_name();
         let item = SelectItem {
             expr: column.selected(),
@@ -309,7 +319,9 @@ impl TableBuilder {
         K: Selectable,
         K::Output: Hash + Eq,
     {
-        let target = exec.target_routed(crate::query::read_access(&self.ir), self.route()).await?;
+        let target = exec
+            .target_routed(crate::query::read_access(&self.ir), self.route())
+            .await?;
         let name = self.table_name();
         let items = vec![
             SelectItem {

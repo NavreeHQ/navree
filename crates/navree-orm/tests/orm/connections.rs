@@ -83,7 +83,10 @@ async fn models_run_on_their_connection_given_the_default_db() {
     Metric::insert(&*db, [metric("signups", 3)]).await.unwrap();
     assert_eq!(Metric::query().count(&*db).await.unwrap(), 2);
     assert_eq!(
-        Metric::query().sum::<i64>(&*db, Metric::VALUE).await.unwrap(),
+        Metric::query()
+            .sum::<i64>(&*db, Metric::VALUE)
+            .await
+            .unwrap(),
         5
     );
     let analytics = db.connection("analytics").await.unwrap();
@@ -107,10 +110,17 @@ async fn models_run_on_their_connection_given_the_default_db() {
     assert_eq!(streamed.len(), 2);
     let cursor: Vec<Record<Metric>> = Metric::query().cursor(&*db).try_collect().await.unwrap();
     assert_eq!(cursor.len(), 2);
-    let page = Metric::query().order_by(Metric::ID).paginate(&*db, 1).await.unwrap();
+    let page = Metric::query()
+        .order_by(Metric::ID)
+        .paginate(&*db, 1)
+        .await
+        .unwrap();
     assert_eq!(page.meta.total, 2);
     assert!(visits.delete(&*db).await.unwrap());
-    assert_eq!(Metric::query().pluck(&*db, Metric::NAME).await.unwrap(), ["signups"]);
+    assert_eq!(
+        Metric::query().pluck(&*db, Metric::NAME).await.unwrap(),
+        ["signups"]
+    );
 }
 
 #[tokio::test]
@@ -122,11 +132,20 @@ async fn a_named_connection_runs_what_it_is_given_and_queries_can_name_one() {
     let archive = app.ctx().get_named::<Db>("archive").await.unwrap();
     assert_eq!(archive.name(), "archive");
     Metric::create(&archive, metric("old", 9)).await.unwrap();
-    assert_eq!(Metric::query().pluck(&archive, Metric::NAME).await.unwrap(), ["old"]);
-    assert_eq!(Metric::query().pluck(&*db, Metric::NAME).await.unwrap(), ["visits"]);
+    assert_eq!(
+        Metric::query().pluck(&archive, Metric::NAME).await.unwrap(),
+        ["old"]
+    );
+    assert_eq!(
+        Metric::query().pluck(&*db, Metric::NAME).await.unwrap(),
+        ["visits"]
+    );
     // A query names its connection, whatever the executor's or the model's.
     assert_eq!(
-        Metric::on_connection("archive").pluck(&*db, Metric::NAME).await.unwrap(),
+        Metric::on_connection("archive")
+            .pluck(&*db, Metric::NAME)
+            .await
+            .unwrap(),
         ["old"]
     );
     assert_eq!(
@@ -138,7 +157,11 @@ async fn a_named_connection_runs_what_it_is_given_and_queries_can_name_one() {
         ["visits"]
     );
     assert_eq!(
-        table("metrics").on_connection("archive").count(&*db).await.unwrap(),
+        table("metrics")
+            .on_connection("archive")
+            .count(&*db)
+            .await
+            .unwrap(),
         1
     );
     table("metrics")
@@ -148,7 +171,10 @@ async fn a_named_connection_runs_what_it_is_given_and_queries_can_name_one() {
         .await
         .unwrap();
     assert_eq!(
-        Metric::query().value(&archive, Metric::VALUE).await.unwrap(),
+        Metric::query()
+            .value(&archive, Metric::VALUE)
+            .await
+            .unwrap(),
         Some(10)
     );
     // An unknown connection.
@@ -262,7 +288,9 @@ async fn a_db_outside_an_app_cannot_reach_other_connections() {
     .await
     .unwrap();
     analytics.conn().execute_unprepared(METRICS).await.unwrap();
-    Metric::create(&analytics, metric("visits", 1)).await.unwrap();
+    Metric::create(&analytics, metric("visits", 1))
+        .await
+        .unwrap();
     assert_eq!(Metric::query().count(&analytics).await.unwrap(), 1);
 }
 
@@ -298,9 +326,17 @@ async fn orm_statements_reach_query_logs_listeners_and_hooks() {
         QueryLog::capture(Company::query().where_(Company::ACTIVE.eq(true)).count(db)).await;
     assert_eq!(count.unwrap(), 1);
     assert_eq!(queries.len(), 1);
-    assert!(queries[0].sql.starts_with("SELECT COUNT(*)"), "{}", queries[0].sql);
+    assert!(
+        queries[0].sql.starts_with("SELECT COUNT(*)"),
+        "{}",
+        queries[0].sql
+    );
     assert_eq!(queries[0].values, [navree_db::sea_orm::Value::from(true)]);
-    assert!(!queries[0].raw_sql().contains('?'), "{}", queries[0].raw_sql());
+    assert!(
+        !queries[0].raw_sql().contains('?'),
+        "{}",
+        queries[0].raw_sql()
+    );
     assert_eq!(executing.lock().unwrap().last(), Some(&queries[0].sql));
     assert!(heard.load(Ordering::SeqCst) >= 2);
 
@@ -362,7 +398,11 @@ async fn reads_go_to_the_writer_on_demand() {
     let db = replicated(&dir).await;
     assert_eq!(company_names(&db).await, ["replica"]);
     assert_eq!(
-        Company::query().use_write().pluck(&db, Company::NAME).await.unwrap(),
+        Company::query()
+            .use_write()
+            .pluck(&db, Company::NAME)
+            .await
+            .unwrap(),
         ["writer"]
     );
     assert_eq!(
@@ -433,7 +473,11 @@ async fn reads_stay_on_the_writer_once_a_unit_of_work_wrote() {
         ["writer"],
         "on the writer after the commit"
     );
-    assert_eq!(company_names(&db).await, ["replica"], "other tasks read replicas");
+    assert_eq!(
+        company_names(&db).await,
+        ["replica"],
+        "other tasks read replicas"
+    );
 
     // A write through `&Db` after the unit of work finished.
     let finished = db.uow(None, None).await;

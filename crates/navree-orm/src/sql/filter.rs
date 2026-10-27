@@ -212,9 +212,7 @@ impl Compiler {
             Operator::Regexp | Operator::NotRegexp => {
                 let not = matches!(op, Operator::NotRegexp);
                 match self.dialect {
-                    Dialect::Postgres => {
-                        l.binary(BinOper::Custom(if not { "!~" } else { "~" }), r)
-                    }
+                    Dialect::Postgres => l.binary(BinOper::Custom(if not { "!~" } else { "~" }), r),
                     // `REGEXP` follows the column's collation (usually
                     // case-insensitive); the `c` flag matches case.
                     Dialect::MySql => self.custom(
@@ -761,10 +759,7 @@ impl Compiler {
                     self.custom("json_array_length({})", vec![base])
                 } else {
                     self.custom(
-                        &format!(
-                            "json_array_length({{}}, {})",
-                            self.json_path(&column.path)
-                        ),
+                        &format!("json_array_length({{}}, {})", self.json_path(&column.path)),
                         vec![base],
                     )
                 }

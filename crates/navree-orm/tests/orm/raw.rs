@@ -43,10 +43,13 @@ async fn raw_selects_return_rows_one_row_or_one_value() {
         .collect();
     assert_eq!(names, ["Globex", "Initech"]);
 
-    let first = select_one(&t.db, raw("SELECT name FROM companies ORDER BY id", [] as [i64; 0]))
-        .await
-        .unwrap()
-        .unwrap();
+    let first = select_one(
+        &t.db,
+        raw("SELECT name FROM companies ORDER BY id", [] as [i64; 0]),
+    )
+    .await
+    .unwrap()
+    .unwrap();
     assert_eq!(first.get::<String>("name").unwrap(), "Acme");
     assert!(
         select_one(&t.db, raw("SELECT name FROM companies WHERE id = ?", [99]))
@@ -55,9 +58,12 @@ async fn raw_selects_return_rows_one_row_or_one_value() {
             .is_none()
     );
 
-    let total: Option<i64> = scalar(&t.db, raw("SELECT SUM(employees) FROM companies", [] as [i64; 0]))
-        .await
-        .unwrap();
+    let total: Option<i64> = scalar(
+        &t.db,
+        raw("SELECT SUM(employees) FROM companies", [] as [i64; 0]),
+    )
+    .await
+    .unwrap();
     assert_eq!(total, Some(70));
     let none: Option<String> = scalar(&t.db, raw("SELECT name FROM companies WHERE id = ?", [99]))
         .await
@@ -75,17 +81,23 @@ async fn raw_statements_report_the_rows_they_change() {
     seed(&t.db).await;
     let changed = affecting_statement(
         &t.db,
-        raw("UPDATE companies SET country = ? WHERE employees >= ?", [
-            Value::from("DE"),
-            Value::from(15),
-        ]),
+        raw(
+            "UPDATE companies SET country = ? WHERE employees >= ?",
+            [Value::from("DE"), Value::from(15)],
+        ),
     )
     .await
     .unwrap();
     assert_eq!(changed, 2);
-    let deleted = statement(&t.db, raw("DELETE FROM companies WHERE country IS NULL", [] as [i64; 0]))
-        .await
-        .unwrap();
+    let deleted = statement(
+        &t.db,
+        raw(
+            "DELETE FROM companies WHERE country IS NULL",
+            [] as [i64; 0],
+        ),
+    )
+    .await
+    .unwrap();
     assert_eq!(deleted, 1);
     unprepared(
         &t.db,
@@ -95,9 +107,12 @@ async fn raw_statements_report_the_rows_they_change() {
     .unwrap();
     assert_eq!(table("scratch").count(&t.db).await.unwrap(), 2);
 
-    let error = statement(&t.db, raw("DELETE FROM companies WHERE id = ?", [] as [i64; 0]))
-        .await
-        .unwrap_err();
+    let error = statement(
+        &t.db,
+        raw("DELETE FROM companies WHERE id = ?", [] as [i64; 0]),
+    )
+    .await
+    .unwrap_err();
     assert_eq!(
         error.to_string(),
         "invalid query: the raw SQL `DELETE FROM companies WHERE id = ?` has 1 placeholder(s) but 0 value(s)"
