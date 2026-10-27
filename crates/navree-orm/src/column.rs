@@ -535,13 +535,17 @@ impl Filter {
     }
 
     /// Raw SQL with `?` placeholders for `values` (`??` for a literal `?`).
-    /// SQL databases only.
+    /// SQL databases only. Beside other conditions (and under `NOT`) the
+    /// fragment is parenthesized, so an `OR` inside it stays its own.
     ///
     /// ```
     /// use navree_orm::{Dialect, Filter};
     ///
     /// let sql = Filter::raw("lower(title) = ?", ["renewal"]).to_sql(Dialect::Postgres).unwrap();
-    /// assert_eq!(sql.sql, "(lower(title) = $1)");
+    /// assert_eq!(sql.sql, "lower(title) = $1");
+    ///
+    /// let either = Filter::raw("stage = ? OR stage = ?", ["won", "lost"]).not();
+    /// assert_eq!(either.to_sql(Dialect::Postgres).unwrap().sql, "NOT (stage = $1 OR stage = $2)");
     /// ```
     pub fn raw(
         sql: impl Into<Cow<'static, str>>,

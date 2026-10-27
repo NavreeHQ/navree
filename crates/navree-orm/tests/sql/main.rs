@@ -11,7 +11,7 @@ use navree_orm::ir::{
     UpdateIr, WhereClause,
 };
 use navree_orm::sql::{compile_delete, compile_insert, compile_update};
-use navree_orm::{Builder, Dialect, Expr, Model, Statement, Value, col, table};
+use navree_orm::{Builder, Dialect, Expr, Filter, Model, Statement, Value, col, table};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -248,6 +248,45 @@ fn raw_fragments_and_operators() {
     ));
     insta::assert_snapshot!(query(Deal::query().where_raw("a = ?", [1, 2])));
     insta::assert_snapshot!(query(Deal::query().where_(Deal::TITLE.op("=>", "x"))));
+}
+
+/// A raw fragment keeps its own grouping: bare when it is the whole
+/// condition, parenthesized beside other conditions and under `NOT`, so an
+/// `OR` inside it never regroups the caller's conditions.
+#[test]
+fn raw_fragments_keep_their_grouping() {
+    let sql = |builder: Builder<Company>| builder.to_sql(Dialect::Postgres).unwrap().sql;
+    let either = || Filter::raw("name = ? OR country = ?", ["a", "b"]);
+    let cases = [
+        (
+            sql(Company::query().where_(either())),
+            "WHERE name = $1 OR country = $2",
+        ),
+        (
+            sql(Company::query().where_not(either())),
+            "WHERE NOT (name = $1 OR country = $2)",
+        ),
+        (
+            sql(Company::query().where_(either()).where_(Company::ID.gt(1))),
+            r#"WHERE (name = $1 OR country = $2) AND "companies"."id" > $3"#,
+        ),
+        (
+            sql(Company::query()
+                .where_(Company::ID.gt(1))
+                .or_where_not(either())),
+            r#"WHERE "companies"."id" > $1 OR (NOT (name = $2 OR country = $3))"#,
+        ),
+        (
+            sql(Company::query()
+                .group_by(["country"])
+                .having_raw("count(*) > ? OR max(id) > ?", [1, 2])
+                .having_raw("min(id) > ?", [0])),
+            "HAVING (count(*) > $1 OR max(id) > $2) AND (min(id) > $3)",
+        ),
+    ];
+    for (sql, ending) in cases {
+        assert!(sql.ends_with(ending), "{sql}\n  should end with\n{ending}");
+    }
 }
 
 #[test]
