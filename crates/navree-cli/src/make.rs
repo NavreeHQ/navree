@@ -381,6 +381,10 @@ pub struct Companions {
     pub controller: bool,
     /// A policy attached to the model (`--policy`).
     pub policy: bool,
+    /// The model is a pivot (`--pivot`): the table of a many-to-many
+    /// between the two models its name joins (`deal_tag`), holding their
+    /// keys instead of a name; it has no controller or policy of its own.
+    pub pivot: bool,
 }
 
 impl Companions {
@@ -392,8 +396,32 @@ impl Companions {
             seeder: true,
             controller: true,
             policy: true,
+            pivot: false,
         }
     }
+
+    /// Every companion a pivot model takes (`--pivot --all`): a migration,
+    /// a factory and a seeder.
+    pub fn all_for_pivot() -> Self {
+        Companions {
+            migration: true,
+            factory: true,
+            seeder: true,
+            controller: false,
+            policy: false,
+            pivot: true,
+        }
+    }
+}
+
+/// The key columns of pivot model `name` (`deal_tag`: `deal_id` and
+/// `tag_id`); `None` unless its name is two words.
+fn pivot_keys(name: &Name) -> Option<[String; 2]> {
+    let (left, right) = name.snake().split_once('_')?;
+    if right.contains('_') || left.is_empty() || right.is_empty() {
+        return None;
+    }
+    Some([format!("{left}_id"), format!("{right}_id")])
 }
 
 /// What the item templates are rendered with.
@@ -442,6 +470,10 @@ struct ItemContext {
     with_policy: bool,
     /// The factory is linked to its model, so `Model::factory()` exists.
     linked: bool,
+    /// The model is a pivot; its two key columns (`deal_id`, `tag_id`),
+    /// which its table and its migration hold instead of a name.
+    pivot: bool,
+    pivot_keys: Vec<String>,
 }
 
 /// The table a migration named `create_<table>_table` / `create_<table>`
@@ -475,20 +507,32 @@ impl ItemContext {
         let altered = altered_table(name.snake()).filter(|_| migration && created.is_none());
         let create_table = created.is_some();
         let alter_table = altered.is_some();
-        let table = created.or(altered).unwrap_or_else(|| name.plural());
+        let companions = options.companions;
+        // A pivot's table is named as the model: `deal_tag`.
+        let pivot_model = (companions.pivot && kind == MakeKind::Model).then(|| name.clone());
+        let table = created
+            .or(altered)
+            .or(pivot_model)
+            .unwrap_or_else(|| name.plural());
         let words = name.snake().replace('_', " ");
         let model = options.model.as_ref().unwrap_or(name);
         let model_words = model.snake().replace('_', " ");
-        let companions = options.companions;
+        let pivot_keys: Vec<String> = match companions.pivot {
+            true => pivot_keys(model).map(Vec::from).unwrap_or_default(),
+            false => Vec::new(),
+        };
         Self {
+            pivot: companions.pivot,
+            pivot_keys,
             model_name: model.snake().to_owned(),
             model_pascal: model.pascal(),
             a_model: with_article(&model_words, "a", "an"),
             plural_words: model.plural().snake().replace('_', " "),
             route: model.plural().kebab(),
             route_param: format!("{{{}}}", model.snake()),
-            // A table created for a model: its migration adds the column.
-            with_name_column: migration && options.model.is_some(),
+            // A table created for a model: its migration adds the column
+            // (a pivot's holds the two keys instead).
+            with_name_column: migration && options.model.is_some() && !companions.pivot,
             with_migration: companions.migration,
             with_factory: companions.factory,
             with_policy: companions.policy,
@@ -877,6 +921,19 @@ pub fn make_model(
     companions: Companions,
     now: Timestamp,
 ) -> anyhow::Result<MakeReport> {
+    if companions.pivot {
+        if pivot_keys(name).is_none() {
+            anyhow::bail!(
+                "a pivot model's name joins the two models it links, one word each: `deal_tag` (not `{}`)",
+                name.snake()
+            );
+        }
+        if companions.controller || companions.policy {
+            anyhow::bail!(
+                "a pivot model has no controller or policy of its own: drop --controller and --policy"
+            );
+        }
+    }
     let options = MakeOptions {
         event: None,
         model: Some(name.clone()),
@@ -891,7 +948,11 @@ pub fn make_model(
         &options,
         now,
     )?;
-    let table = name.plural();
+    let table = if companions.pivot {
+        name.clone()
+    } else {
+        name.plural()
+    };
     let migration = Name::parse("migration", &format!("create_{}_table", table.snake()))?;
     let items = [
         (companions.migration, MakeKind::Migration, &migration),

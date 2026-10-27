@@ -251,7 +251,10 @@ pub struct MakeModelArgs {
     /// Also a policy (policies/NAME.rs) attached to the model, which makes it an access subject.
     #[arg(long)]
     pub policy: bool,
-    /// All of the above.
+    /// A pivot model: the table of a many-to-many between the two models NAME joins (deal_tag), holding their keys.
+    #[arg(long, short = 'p')]
+    pub pivot: bool,
+    /// All of the above (for a pivot: migration, factory and seeder).
     #[arg(long, short = 'a')]
     pub all: bool,
 }
@@ -259,15 +262,17 @@ pub struct MakeModelArgs {
 impl MakeModelArgs {
     /// The companions asked for.
     pub fn companions(&self) -> Companions {
-        if self.all {
-            return Companions::all();
-        }
-        Companions {
-            migration: self.migration,
-            factory: self.factory,
-            seeder: self.seeder,
-            controller: self.controller,
-            policy: self.policy,
+        match (self.all, self.pivot) {
+            (true, false) => Companions::all(),
+            (true, true) => Companions::all_for_pivot(),
+            (false, pivot) => Companions {
+                migration: self.migration,
+                factory: self.factory,
+                seeder: self.seeder,
+                controller: self.controller,
+                policy: self.policy,
+                pivot,
+            },
         }
     }
 }
@@ -510,10 +515,20 @@ mod tests {
                 seeder: true,
                 controller: true,
                 policy: false,
+                pivot: false,
             }
         );
         assert_eq!(companions(&["--all"]), Companions::all());
         assert_eq!(companions(&["-a", "--seeder"]), Companions::all());
+        assert_eq!(companions(&["--pivot", "--all"]), Companions::all_for_pivot());
+        assert_eq!(
+            companions(&["-pm"]),
+            Companions {
+                migration: true,
+                pivot: true,
+                ..Companions::default()
+            }
+        );
     }
 
     #[test]
