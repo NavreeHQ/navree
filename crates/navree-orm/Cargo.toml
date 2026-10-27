@@ -14,14 +14,17 @@ workspace = true
 default = []
 ## Run on PostgreSQL / TimescaleDB (navree-db's `postgres` driver).
 postgres = ["navree-db/postgres"]
-## Run on MySQL / MariaDB (SeaORM's MySQL driver). SQL for every dialect is
-## generated without any feature.
-mysql = ["sea-orm/sqlx-mysql"]
+## Run on MySQL / MariaDB (navree-db's `mysql` driver: `mysql://` and
+## `mariadb://` URLs). SQL for every dialect is generated without any
+## feature.
+mysql = ["navree-db/mysql"]
 
 [dependencies]
 axum = { workspace = true }
 base64 = { workspace = true }
 chrono = { workspace = true }
+# Streams (`lazy`, `cursor`) and the channel their generator hands rows over.
+futures = { workspace = true }
 http = { workspace = true }
 indexmap = { workspace = true }
 navree-contracts = { workspace = true }
@@ -30,7 +33,8 @@ navree-http = { workspace = true }
 navree-kernel = { workspace = true }
 navree-orm-macros = { workspace = true }
 rust_decimal = { workspace = true }
-sea-orm = { workspace = true, features = ["with-rust_decimal"] }
+# `stream`: cursors read rows as the database sends them.
+sea-orm = { workspace = true, features = ["with-rust_decimal", "stream"] }
 sea-query = { workspace = true, features = ["backend-mysql", "with-rust_decimal"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -39,7 +43,6 @@ tracing = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
-futures = { workspace = true }
 insta = { workspace = true }
 navree-config = { workspace = true }
 navree-testing = { workspace = true }
