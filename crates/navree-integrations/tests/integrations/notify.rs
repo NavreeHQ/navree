@@ -86,8 +86,10 @@ async fn a_teams_route_with_a_connection_sends_with_its_token() {
         ..NotifyOptions::default()
     };
     let h = harness(move |b| b.module(NotifyModule::for_root(options))).await;
-    h.fake
-        .on_token("microsoft", FakeGrant::new().access_token("tenant-bot-token"));
+    h.fake.on_token(
+        "microsoft",
+        FakeGrant::new().access_token("tenant-bot-token"),
+    );
     let connection = h.connect_microsoft(Owner::App, TENANT).await;
 
     let route = TeamsRoute::conversation(format!("{}/emea/", server.uri()), "a:1Xyz")

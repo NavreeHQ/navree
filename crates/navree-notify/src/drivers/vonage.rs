@@ -9,7 +9,9 @@ use navree_http_client::HttpClient;
 use serde_json::{Value, json};
 use url::Url;
 
-use super::{ChannelError, SentMessage, SmsDriver, client_for, endpoint, join, refused, unreachable};
+use super::{
+    ChannelError, SentMessage, SmsDriver, client_for, endpoint, join, refused, unreachable,
+};
 use crate::{SmsMessage, SmsOptions, VonageOptions};
 
 /// The provider name of the Vonage driver.
@@ -32,7 +34,9 @@ impl VonageSms {
     /// A driver for the credentials in `vonage` and the defaults in `sms`.
     pub fn new(vonage: &VonageOptions, sms: &SmsOptions) -> Result<Self, String> {
         if vonage.api_key.is_empty() || vonage.api_secret.expose().is_empty() {
-            return Err("the vonage driver needs notify.vonage.api_key and notify.vonage.api_secret".into());
+            return Err(
+                "the vonage driver needs notify.vonage.api_key and notify.vonage.api_secret".into(),
+            );
         }
         let base = endpoint(
             vonage.endpoint.as_deref(),
@@ -69,7 +73,9 @@ impl SmsDriver for VonageSms {
                 .from
                 .as_deref()
                 .or(self.from.as_deref())
-                .ok_or_else(|| ChannelError::Config("set notify.sms.from or the message's sender".into()))?;
+                .ok_or_else(|| {
+                    ChannelError::Config("set notify.sms.from or the message's sender".into())
+                })?;
             let mut body = json!({
                 "message_type": "text",
                 "channel": "sms",

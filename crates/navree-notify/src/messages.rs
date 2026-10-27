@@ -183,7 +183,10 @@ impl TeamsRoute {
     }
 
     /// A conversation with the bot at `service_url`.
-    pub fn conversation(service_url: impl Into<String>, conversation_id: impl Into<String>) -> Self {
+    pub fn conversation(
+        service_url: impl Into<String>,
+        conversation_id: impl Into<String>,
+    ) -> Self {
         TeamsRoute::Bot {
             service_url: service_url.into(),
             conversation_id: conversation_id.into(),
@@ -663,7 +666,12 @@ mod tests {
                 "attachments": [{ "contentType": ADAPTIVE_CARD, "content": card }],
             })
         );
-        assert!(TeamsMessage::new("x").activity().get("attachments").is_none());
+        assert!(
+            TeamsMessage::new("x")
+                .activity()
+                .get("attachments")
+                .is_none()
+        );
     }
 
     #[test]

@@ -18,7 +18,11 @@ async fn a_stop_reply_opts_the_number_out_until_start() {
         .await
         .unwrap();
 
-    let ingested = fakes.sms.reply(app.ctx(), MEMBER_PHONE, "stop").await.unwrap();
+    let ingested = fakes
+        .sms
+        .reply(app.ctx(), MEMBER_PHONE, "stop")
+        .await
+        .unwrap();
     assert_eq!(
         ingested,
         Ingested {
@@ -33,10 +37,17 @@ async fn a_stop_reply_opts_the_number_out_until_start() {
         .unwrap();
     assert_eq!(fakes.sms.sent().len(), 1, "an opted-out number is skipped");
     let deliveries = support::deliveries(&app).await;
-    assert_eq!(deliveries[1].delivery_status(), Some(DeliveryStatus::OptedOut));
+    assert_eq!(
+        deliveries[1].delivery_status(),
+        Some(DeliveryStatus::OptedOut)
+    );
     assert_eq!(deliveries[1].recipient.as_deref(), Some(MEMBER_PHONE));
 
-    let ingested = fakes.sms.reply(app.ctx(), MEMBER_PHONE, "START").await.unwrap();
+    let ingested = fakes
+        .sms
+        .reply(app.ctx(), MEMBER_PHONE, "START")
+        .await
+        .unwrap();
     assert_eq!(ingested.opted_in, 1);
     notifier
         .send(&member, Alert::via(&[Channel::Sms], "Third"))
@@ -57,10 +68,21 @@ async fn an_opt_out_at_the_provider_is_recorded_and_is_not_an_error() {
         .expect("an opted-out recipient is not a failure");
 
     let opt_outs = app.get::<OptOuts>().await;
-    assert!(opt_outs.is_opted_out(Channel::Sms, MEMBER_PHONE).await.unwrap());
-    assert_eq!(opt_outs.list(Channel::Sms).await.unwrap()[0].source, "provider");
+    assert!(
+        opt_outs
+            .is_opted_out(Channel::Sms, MEMBER_PHONE)
+            .await
+            .unwrap()
+    );
+    assert_eq!(
+        opt_outs.list(Channel::Sms).await.unwrap()[0].source,
+        "provider"
+    );
     let deliveries = support::deliveries(&app).await;
-    assert_eq!(deliveries[0].delivery_status(), Some(DeliveryStatus::OptedOut));
+    assert_eq!(
+        deliveries[0].delivery_status(),
+        Some(DeliveryStatus::OptedOut)
+    );
 }
 
 #[tokio::test]
@@ -81,26 +103,54 @@ async fn opt_outs_are_per_channel_and_read_numbers_in_any_format() {
             .unwrap(),
         "already opted out"
     );
-    assert!(opt_outs.is_opted_out(Channel::WhatsApp, MEMBER_WHATSAPP).await.unwrap());
-    assert!(!opt_outs.is_opted_out(Channel::Sms, MEMBER_WHATSAPP).await.unwrap());
+    assert!(
+        opt_outs
+            .is_opted_out(Channel::WhatsApp, MEMBER_WHATSAPP)
+            .await
+            .unwrap()
+    );
+    assert!(
+        !opt_outs
+            .is_opted_out(Channel::Sms, MEMBER_WHATSAPP)
+            .await
+            .unwrap()
+    );
     assert!(
         !opt_outs
             .is_opted_out(Channel::Sms, "(415) 555-0100")
             .await
             .unwrap()
     );
-    assert!(opt_outs.opt_out(Channel::Sms, "555", OptOutSource::Manual).await.is_err());
+    assert!(
+        opt_outs
+            .opt_out(Channel::Sms, "555", OptOutSource::Manual)
+            .await
+            .is_err()
+    );
 
     app.get::<Notifier>()
         .await
-        .send(&Member::new(), Alert::via(&[Channel::WhatsApp, Channel::Sms], "hi"))
+        .send(
+            &Member::new(),
+            Alert::via(&[Channel::WhatsApp, Channel::Sms], "hi"),
+        )
         .await
         .unwrap();
     fakes.whatsapp.assert_nothing_sent();
     assert_eq!(fakes.sms.sent().len(), 1);
 
-    assert!(opt_outs.opt_in(Channel::WhatsApp, MEMBER_WHATSAPP).await.unwrap());
-    assert!(!opt_outs.opt_in(Channel::WhatsApp, MEMBER_WHATSAPP).await.unwrap());
+    assert!(
+        opt_outs
+            .opt_in(Channel::WhatsApp, MEMBER_WHATSAPP)
+            .await
+            .unwrap()
+    );
+    assert!(
+        !opt_outs
+            .opt_in(Channel::WhatsApp, MEMBER_WHATSAPP)
+            .await
+            .unwrap()
+    );
 }
 
 #[tokio::test]
@@ -112,10 +162,21 @@ async fn provider_statuses_move_deliveries_forward_only() {
         .await
         .unwrap();
 
-    fakes.whatsapp.read(app.ctx(), MEMBER_WHATSAPP).await.unwrap();
-    let ingested = fakes.whatsapp.deliver(app.ctx(), MEMBER_WHATSAPP).await.unwrap();
+    fakes
+        .whatsapp
+        .read(app.ctx(), MEMBER_WHATSAPP)
+        .await
+        .unwrap();
+    let ingested = fakes
+        .whatsapp
+        .deliver(app.ctx(), MEMBER_WHATSAPP)
+        .await
+        .unwrap();
 
-    assert_eq!(ingested.updated, 0, "a late `delivered` does not undo `read`");
+    assert_eq!(
+        ingested.updated, 0,
+        "a late `delivered` does not undo `read`"
+    );
     let deliveries = support::deliveries(&app).await;
     assert_eq!(deliveries[0].delivery_status(), Some(DeliveryStatus::Read));
 }
@@ -134,25 +195,44 @@ async fn a_failed_status_keeps_the_providers_error() {
 
     let updated = log
         .apply(
-            &StatusUpdate::new("fake", &message_id, DeliveryStatus::Failed)
-                .error(Some("30003".into()), Some("Unreachable destination handset".into())),
+            &StatusUpdate::new("fake", &message_id, DeliveryStatus::Failed).error(
+                Some("30003".into()),
+                Some("Unreachable destination handset".into()),
+            ),
         )
         .await
         .unwrap()
         .expect("the delivery exists");
 
     assert_eq!(updated.delivery_status(), Some(DeliveryStatus::Failed));
-    assert_eq!(updated.error.as_deref(), Some("Unreachable destination handset"));
     assert_eq!(
-        log.find_by_message("fake", &message_id).await.unwrap().unwrap().id,
-        delivery.id
+        updated.error.as_deref(),
+        Some("Unreachable destination handset")
     );
-    assert_eq!(log.for_notification(delivery.notification_id).await.unwrap().len(), 1);
-    assert!(
-        log.apply(&StatusUpdate::new("fake", "unknown", DeliveryStatus::Delivered))
+    assert_eq!(
+        log.find_by_message("fake", &message_id)
             .await
             .unwrap()
-            .is_none()
+            .unwrap()
+            .id,
+        delivery.id
+    );
+    assert_eq!(
+        log.for_notification(delivery.notification_id)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+    assert!(
+        log.apply(&StatusUpdate::new(
+            "fake",
+            "unknown",
+            DeliveryStatus::Delivered
+        ))
+        .await
+        .unwrap()
+        .is_none()
     );
 }
 
@@ -224,13 +304,23 @@ async fn twilio_callbacks_update_twilio_deliveries_and_opt_outs() {
         }
     );
     let opt_outs = app.get::<OptOuts>().await;
-    assert!(opt_outs.is_opted_out(Channel::Sms, MEMBER_PHONE).await.unwrap());
+    assert!(
+        opt_outs
+            .is_opted_out(Channel::Sms, MEMBER_PHONE)
+            .await
+            .unwrap()
+    );
 
     let inbound = ChannelCallback::from_twilio(
         b"MessageSid=SM9&From=%2B14155550100&To=%2B15550001111&Body=UNSTOP",
     );
     assert_eq!(log.ingest(inbound).await.unwrap().opted_in, 1);
-    assert!(!opt_outs.is_opted_out(Channel::Sms, MEMBER_PHONE).await.unwrap());
+    assert!(
+        !opt_outs
+            .is_opted_out(Channel::Sms, MEMBER_PHONE)
+            .await
+            .unwrap()
+    );
 }
 
 #[tokio::test]

@@ -14,8 +14,8 @@ use navree_kernel::AppContext;
 use crate::{
     Channel, ChannelCallback, ChannelError, DeliveryLog, DeliveryStatus, InboundMessage, Ingested,
     NotifyError, PushTarget, SentMessage, SlackDriver, SlackMessage, SlackRoute, SmsDriver,
-    SmsMessage, StatusUpdate, TeamsDriver, TeamsMessage, TeamsRoute, WebPushDriver,
-    WebPushMessage, WhatsAppDriver, WhatsAppMessage,
+    SmsMessage, StatusUpdate, TeamsDriver, TeamsMessage, TeamsRoute, WebPushDriver, WebPushMessage,
+    WhatsAppDriver, WhatsAppMessage,
 };
 
 /// The provider name the fakes record and report under.
@@ -337,7 +337,11 @@ impl SmsFake {
         let id = self.shared.last_id(|to| to == number).ok_or_else(|| {
             NotifyError::InvalidRecipient(format!("the fake sent nothing to {number}"))
         })?;
-        ingest(app, ChannelCallback::Status(StatusUpdate::new(FAKE_PROVIDER, id, status))).await
+        ingest(
+            app,
+            ChannelCallback::Status(StatusUpdate::new(FAKE_PROVIDER, id, status)),
+        )
+        .await
     }
 
     /// Sends the app a message from `number`, as an inbound SMS.
@@ -418,7 +422,11 @@ impl WhatsAppFake {
         let id = self.shared.last_id(|to| to == number).ok_or_else(|| {
             NotifyError::InvalidRecipient(format!("the fake sent nothing to {number}"))
         })?;
-        ingest(app, ChannelCallback::Status(StatusUpdate::new(FAKE_PROVIDER, id, status))).await
+        ingest(
+            app,
+            ChannelCallback::Status(StatusUpdate::new(FAKE_PROVIDER, id, status)),
+        )
+        .await
     }
 
     /// Sends the app a WhatsApp message from `number`.

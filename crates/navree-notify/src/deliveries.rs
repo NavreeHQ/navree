@@ -209,23 +209,23 @@ impl DeliveryLog {
                         ingested.opted_out += 1;
                     }
                 }
-                ChannelCallback::Inbound(message) => match message.keyword() {
-                    Some(Keyword::OptOut) => {
-                        if self
-                            .opt_outs
-                            .opt_out(message.channel, &message.from, OptOutSource::Keyword)
-                            .await?
-                        {
-                            ingested.opted_out += 1;
+                ChannelCallback::Inbound(message) => {
+                    let (channel, from) = (message.channel, message.from.as_str());
+                    match message.keyword() {
+                        Some(Keyword::OptOut) => {
+                            let added = self
+                                .opt_outs
+                                .opt_out(channel, from, OptOutSource::Keyword)
+                                .await?;
+                            ingested.opted_out += usize::from(added);
                         }
-                    }
-                    Some(Keyword::OptIn) => {
-                        if self.opt_outs.opt_in(message.channel, &message.from).await? {
-                            ingested.opted_in += 1;
+                        Some(Keyword::OptIn) => {
+                            let removed = self.opt_outs.opt_in(channel, from).await?;
+                            ingested.opted_in += usize::from(removed);
                         }
+                        None => {}
                     }
-                    None => {}
-                },
+                }
             }
         }
         Ok(ingested)
@@ -233,8 +233,14 @@ impl DeliveryLog {
 
     /// Applies one status update; returns the delivery as it is now, or
     /// `None` when no delivery has that provider and message id.
-    pub async fn apply(&self, update: &StatusUpdate) -> Result<Option<NotificationDelivery>, NotifyError> {
-        Ok(self.apply_update(update).await?.map(|(delivery, _)| delivery))
+    pub async fn apply(
+        &self,
+        update: &StatusUpdate,
+    ) -> Result<Option<NotificationDelivery>, NotifyError> {
+        Ok(self
+            .apply_update(update)
+            .await?
+            .map(|(delivery, _)| delivery))
     }
 
     async fn apply_update(
@@ -257,10 +263,7 @@ impl DeliveryLog {
         }
         record.status = update.status.as_str().to_owned();
         if update.status == DeliveryStatus::Failed {
-            record.error = update
-                .error
-                .clone()
-                .or_else(|| update.error_code.clone());
+            record.error = update.error.clone().or_else(|| update.error_code.clone());
         }
         record.updated_at = crate::notifier::now_in(&self.app).await;
         on!(&exec, e => record.save(e).await).map_err(DbErr::from)?;
@@ -269,7 +272,10 @@ impl DeliveryLog {
     }
 
     /// Every delivery of notification `id`, oldest first.
-    pub async fn for_notification(&self, id: Uuid) -> Result<Vec<NotificationDelivery>, NotifyError> {
+    pub async fn for_notification(
+        &self,
+        id: Uuid,
+    ) -> Result<Vec<NotificationDelivery>, NotifyError> {
         let exec = Exec::current(&self.app).await?;
         let rows = on!(&exec, e => NotificationDelivery::query()
             .where_(NotificationDelivery::NOTIFICATION_ID.eq(id))

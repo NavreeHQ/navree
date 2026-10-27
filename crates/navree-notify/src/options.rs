@@ -103,7 +103,10 @@ impl ConfigSection for NotifyOptions {
             ("notify.sns.endpoint", &self.sns.endpoint),
             ("notify.meta.endpoint", &self.meta.endpoint),
             ("notify.sms.status_callback", &self.sms.status_callback),
-            ("notify.whatsapp.status_callback", &self.whatsapp.status_callback),
+            (
+                "notify.whatsapp.status_callback",
+                &self.whatsapp.status_callback,
+            ),
         ] {
             if let Some(url) = url.as_deref().filter(|url| !url.trim().is_empty()) {
                 check_url(key, url)?;
@@ -115,8 +118,8 @@ impl ConfigSection for NotifyOptions {
 
 /// An absolute http(s) URL, or an error naming `key`.
 fn check_url(key: &str, url: &str) -> Result<(), String> {
-    let parsed = url::Url::parse(url.trim())
-        .map_err(|error| format!("{key} is not a URL: {error}"))?;
+    let parsed =
+        url::Url::parse(url.trim()).map_err(|error| format!("{key} is not a URL: {error}"))?;
     if !matches!(parsed.scheme(), "http" | "https") || !parsed.has_host() {
         return Err(format!("{key} must be an absolute http(s) URL"));
     }
@@ -257,7 +260,9 @@ impl WebPushOptions {
             return Ok(());
         }
         if self.private_key.expose().is_empty() {
-            return Err("notify.web_push.private_key is required with notify.web_push.public_key".into());
+            return Err(
+                "notify.web_push.private_key is required with notify.web_push.public_key".into(),
+            );
         }
         if !(self.subject.starts_with("mailto:") || self.subject.starts_with("https://")) {
             return Err("notify.web_push.subject must be a `mailto:` or `https://` contact".into());
@@ -500,7 +505,12 @@ mod tests {
             },
             ..NotifyOptions::default()
         };
-        assert!(options.validate().unwrap_err().contains("notify.sns.region"));
+        assert!(
+            options
+                .validate()
+                .unwrap_err()
+                .contains("notify.sns.region")
+        );
 
         let options = NotifyOptions {
             sms: SmsOptions {
@@ -527,7 +537,12 @@ mod tests {
     fn endpoints_and_callbacks_must_be_http_urls() {
         let mut options = NotifyOptions::default();
         options.twilio.endpoint = Some("not a url".to_owned());
-        assert!(options.validate().unwrap_err().contains("notify.twilio.endpoint"));
+        assert!(
+            options
+                .validate()
+                .unwrap_err()
+                .contains("notify.twilio.endpoint")
+        );
         options.twilio.endpoint = Some("http://127.0.0.1:9000".to_owned());
         options.sms.status_callback = Some("ftp://x.test/cb".to_owned());
         assert!(
@@ -536,7 +551,8 @@ mod tests {
                 .unwrap_err()
                 .contains("notify.sms.status_callback")
         );
-        options.sms.status_callback = Some("https://api.acme.test/api/webhooks/notify/twilio".to_owned());
+        options.sms.status_callback =
+            Some("https://api.acme.test/api/webhooks/notify/twilio".to_owned());
         assert!(options.validate().is_ok());
     }
 

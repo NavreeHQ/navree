@@ -7,9 +7,9 @@ use std::sync::Arc;
 
 use navree_crypto::webpush::VapidKey;
 use navree_notify::{
-    ChannelError, LogSms, LogWhatsApp, MetaWhatsApp, SentMessage, SlackApi, SlackDriver,
-    SlackFake, SlackMessage, SlackOptions, SlackRoute, SmsDriver, SmsFake, SmsMessage, SmsOptions,
-    SnsSms, TeamsApi, TeamsDriver, TeamsFake, TeamsMessage, TeamsOptions, TeamsRoute, TwilioSms,
+    ChannelError, LogSms, LogWhatsApp, MetaWhatsApp, SentMessage, SlackApi, SlackDriver, SlackFake,
+    SlackMessage, SlackOptions, SlackRoute, SmsDriver, SmsFake, SmsMessage, SmsOptions, SnsSms,
+    TeamsApi, TeamsDriver, TeamsFake, TeamsMessage, TeamsOptions, TeamsRoute, TwilioSms,
     TwilioWhatsApp, VapidWebPush, VonageSms, WebPushDriver, WebPushFake, WebPushMessage,
     WhatsAppDriver, WhatsAppFake, WhatsAppMessage, WhatsAppOptions,
 };
@@ -18,8 +18,8 @@ use wiremock::matchers::method;
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use crate::drivers::{
-    Browser, local_client, meta_options, sms_options, sns_options, twilio_options,
-    vonage_options, web_push_options,
+    Browser, local_client, meta_options, sms_options, sns_options, twilio_options, vonage_options,
+    web_push_options,
 };
 
 const NUMBER: &str = "+14155550100";
@@ -56,7 +56,9 @@ fn check_accepted(driver: &str, result: Result<SentMessage, ChannelError>, needs
 
 fn check_refused(driver: &str, result: Result<SentMessage, ChannelError>) {
     match result {
-        Err(ChannelError::Refused { status, message, .. }) => {
+        Err(ChannelError::Refused {
+            status, message, ..
+        }) => {
             assert!(status >= 400, "{driver}: refusal status {status}");
             assert!(!message.is_empty(), "{driver}: refusal message");
         }
@@ -64,7 +66,12 @@ fn check_refused(driver: &str, result: Result<SentMessage, ChannelError>) {
     }
 }
 
-fn check(driver: &str, scenario: Scenario, result: Result<SentMessage, ChannelError>, needs_id: bool) {
+fn check(
+    driver: &str,
+    scenario: Scenario,
+    result: Result<SentMessage, ChannelError>,
+    needs_id: bool,
+) {
     match scenario {
         Scenario::Accept => check_accepted(driver, result, needs_id),
         Scenario::Refuse => check_refused(driver, result),
@@ -98,9 +105,12 @@ async fn sms_driver(name: &str, scenario: Scenario) -> (Arc<dyn SmsDriver>, Opti
         "log" => (Arc::new(LogSms::new(Some("Acme".into()))), None),
         "twilio" => {
             let server = answering(match scenario {
-                Scenario::Accept => ResponseTemplate::new(201).set_body_json(json!({ "sid": "SM1" })),
-                Scenario::Refuse => ResponseTemplate::new(400)
-                    .set_body_json(json!({ "code": 21211, "message": "Invalid 'To' Phone Number" })),
+                Scenario::Accept => {
+                    ResponseTemplate::new(201).set_body_json(json!({ "sid": "SM1" }))
+                }
+                Scenario::Refuse => ResponseTemplate::new(400).set_body_json(
+                    json!({ "code": 21211, "message": "Invalid 'To' Phone Number" }),
+                ),
                 _ => ResponseTemplate::new(400)
                     .set_body_json(json!({ "code": 21610, "message": "Unsubscribed recipient" })),
             })
@@ -112,8 +122,9 @@ async fn sms_driver(name: &str, scenario: Scenario) -> (Arc<dyn SmsDriver>, Opti
         }
         "vonage" => {
             let server = answering(match scenario {
-                Scenario::Accept => ResponseTemplate::new(202)
-                    .set_body_json(json!({ "message_uuid": "aaaaaaaa-bbbb-cccc-dddd-0123456789ab" })),
+                Scenario::Accept => ResponseTemplate::new(202).set_body_json(
+                    json!({ "message_uuid": "aaaaaaaa-bbbb-cccc-dddd-0123456789ab" }),
+                ),
                 _ => ResponseTemplate::new(422).set_body_json(json!({
                     "type": "https://developer.nexmo.com/api-errors/messages-olympus#1150",
                     "title": "Invalid params",
@@ -147,16 +158,24 @@ async fn sms_driver(name: &str, scenario: Scenario) -> (Arc<dyn SmsDriver>, Opti
 #[tokio::test]
 async fn sms_drivers_conform() {
     let suites: [(&str, &[Scenario]); 5] = [
-        ("fake", &[Scenario::Accept, Scenario::Refuse, Scenario::OptOut]),
+        (
+            "fake",
+            &[Scenario::Accept, Scenario::Refuse, Scenario::OptOut],
+        ),
         ("log", &[Scenario::Accept]),
-        ("twilio", &[Scenario::Accept, Scenario::Refuse, Scenario::OptOut]),
+        (
+            "twilio",
+            &[Scenario::Accept, Scenario::Refuse, Scenario::OptOut],
+        ),
         ("vonage", &[Scenario::Accept, Scenario::Refuse]),
         ("sns", &[Scenario::Accept, Scenario::Refuse]),
     ];
     for (name, scenarios) in suites {
         for &scenario in scenarios {
             let (driver, _server) = sms_driver(name, scenario).await;
-            let result = driver.send(NUMBER, &SmsMessage::new("Your code is 481 516")).await;
+            let result = driver
+                .send(NUMBER, &SmsMessage::new("Your code is 481 516"))
+                .await;
             check(name, scenario, result, true);
         }
     }
@@ -183,9 +202,12 @@ async fn whatsapp_driver(
         "log" => (Arc::new(LogWhatsApp::new()), None),
         "twilio" => {
             let server = answering(match scenario {
-                Scenario::Accept => ResponseTemplate::new(201).set_body_json(json!({ "sid": "SMwa" })),
-                Scenario::Refuse => ResponseTemplate::new(400)
-                    .set_body_json(json!({ "code": 63016, "message": "Outside the allowed window" })),
+                Scenario::Accept => {
+                    ResponseTemplate::new(201).set_body_json(json!({ "sid": "SMwa" }))
+                }
+                Scenario::Refuse => ResponseTemplate::new(400).set_body_json(
+                    json!({ "code": 63016, "message": "Outside the allowed window" }),
+                ),
                 _ => ResponseTemplate::new(400)
                     .set_body_json(json!({ "code": 21610, "message": "Unsubscribed recipient" })),
             })
@@ -250,7 +272,12 @@ async fn slack_drivers_conform() {
             fake.refuse("invalid_payload");
         }
         let route = SlackRoute::webhook("https://hooks.slack.com/services/T/B/X");
-        check("fake", scenario, fake.send(&route, &SlackMessage::new("x")).await, false);
+        check(
+            "fake",
+            scenario,
+            fake.send(&route, &SlackMessage::new("x")).await,
+            false,
+        );
 
         let server = answering(match scenario {
             Scenario::Accept => ResponseTemplate::new(200).set_body_string("ok"),
@@ -261,7 +288,12 @@ async fn slack_drivers_conform() {
             .unwrap()
             .with_client(local_client());
         let route = SlackRoute::webhook(format!("{}/services/T/B/X", server.uri()));
-        check("slack", scenario, driver.send(&route, &SlackMessage::new("x")).await, false);
+        check(
+            "slack",
+            scenario,
+            driver.send(&route, &SlackMessage::new("x")).await,
+            false,
+        );
     }
 }
 
@@ -273,7 +305,12 @@ async fn teams_drivers_conform() {
             fake.refuse("Bad payload");
         }
         let route = TeamsRoute::webhook("https://prod.logic.azure.com/workflows/x");
-        check("fake", scenario, fake.send(&route, &TeamsMessage::new("x")).await, false);
+        check(
+            "fake",
+            scenario,
+            fake.send(&route, &TeamsMessage::new("x")).await,
+            false,
+        );
 
         let server = answering(match scenario {
             Scenario::Accept => ResponseTemplate::new(202),
@@ -286,7 +323,12 @@ async fn teams_drivers_conform() {
             .unwrap()
             .with_client(local_client());
         let route = TeamsRoute::webhook(format!("{}/workflows/x", server.uri()));
-        check("teams", scenario, driver.send(&route, &TeamsMessage::new("x")).await, false);
+        check(
+            "teams",
+            scenario,
+            driver.send(&route, &TeamsMessage::new("x")).await,
+            false,
+        );
     }
 }
 
@@ -305,7 +347,12 @@ async fn web_push_drivers_conform() {
             _ => {}
         }
         let target = Browser::new().target(endpoint);
-        check("fake", scenario, fake.send(&target, &WebPushMessage::new("x")).await, false);
+        check(
+            "fake",
+            scenario,
+            fake.send(&target, &WebPushMessage::new("x")).await,
+            false,
+        );
 
         let server = answering(match scenario {
             Scenario::Accept => ResponseTemplate::new(201),
@@ -317,6 +364,11 @@ async fn web_push_drivers_conform() {
             .unwrap()
             .with_client(local_client());
         let target = Browser::new().target(&format!("{}/fcm/send/abc", server.uri()));
-        check("web_push", scenario, driver.send(&target, &WebPushMessage::new("x")).await, false);
+        check(
+            "web_push",
+            scenario,
+            driver.send(&target, &WebPushMessage::new("x")).await,
+            false,
+        );
     }
 }

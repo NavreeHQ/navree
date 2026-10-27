@@ -156,19 +156,24 @@ fn keys_round_trip_through_their_base64url_halves() {
     let vapid = VapidKey::generate();
     assert_eq!(vapid.public_key().len(), 65);
     assert_eq!(
-        URL_SAFE_NO_PAD
-            .decode(vapid.private_key())
-            .unwrap()
-            .len(),
+        URL_SAFE_NO_PAD.decode(vapid.private_key()).unwrap().len(),
         32
     );
 
     let loaded =
         VapidKey::from_base64url(&vapid.application_server_key(), &vapid.private_key()).unwrap();
 
-    assert_eq!(loaded.application_server_key(), vapid.application_server_key());
-    let token = loaded.sign("https://fcm.googleapis.com", "mailto:a@b.test", 1).unwrap();
-    Jws::parse(&token).unwrap().verify(&verifier(&vapid)).unwrap();
+    assert_eq!(
+        loaded.application_server_key(),
+        vapid.application_server_key()
+    );
+    let token = loaded
+        .sign("https://fcm.googleapis.com", "mailto:a@b.test", 1)
+        .unwrap();
+    Jws::parse(&token)
+        .unwrap()
+        .verify(&verifier(&vapid))
+        .unwrap();
 }
 
 #[test]

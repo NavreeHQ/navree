@@ -8,10 +8,10 @@
 
 use navree::db::Db;
 use navree::notify::{
-    Channel, NotificationDelivery, Notifiable, Notification, Notifier, OptOutSource, OptOuts,
-    SlackMessage, SlackRoute, SmsDriver, SmsFake, SmsMessage, TeamsDriver, TeamsFake,
-    TeamsMessage, TeamsRoute, USER_NOTIFIABLE_TYPE, Urgency, WebPushDriver, WebPushFake,
-    WebPushMessage, WhatsAppMessage, WhatsAppTemplate,
+    Channel, Notifiable, Notification, NotificationDelivery, Notifier, OptOutSource, OptOuts,
+    SlackMessage, SlackRoute, SmsDriver, SmsFake, SmsMessage, TeamsDriver, TeamsFake, TeamsMessage,
+    TeamsRoute, USER_NOTIFIABLE_TYPE, Urgency, WebPushDriver, WebPushFake, WebPushMessage,
+    WhatsAppMessage, WhatsAppTemplate,
 };
 use navree::orm::Model as _;
 use navree::prelude::*;

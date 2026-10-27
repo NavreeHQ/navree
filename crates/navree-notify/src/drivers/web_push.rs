@@ -76,7 +76,9 @@ fn audience(endpoint: &str) -> Result<String, ChannelError> {
     let url = Url::parse(endpoint)
         .ok()
         .filter(|url| matches!(url.scheme(), "http" | "https"))
-        .ok_or_else(|| ChannelError::InvalidRecipient("the push endpoint is not an http(s) URL".into()))?;
+        .ok_or_else(|| {
+            ChannelError::InvalidRecipient("the push endpoint is not an http(s) URL".into())
+        })?;
     Ok(url.origin().ascii_serialization())
 }
 
@@ -87,11 +89,16 @@ impl WebPushDriver for VapidWebPush {
         message: &'a WebPushMessage,
     ) -> BoxFuture<'a, Result<SentMessage, ChannelError>> {
         Box::pin(async move {
-            let invalid = |what: &str| ChannelError::InvalidRecipient(format!("the subscription's `{what}` is not base64url"));
+            let invalid = |what: &str| {
+                ChannelError::InvalidRecipient(format!(
+                    "the subscription's `{what}` is not base64url"
+                ))
+            };
             let p256dh = webpush::decode_key(&target.p256dh).ok_or_else(|| invalid("p256dh"))?;
             let auth = webpush::decode_key(&target.auth).ok_or_else(|| invalid("auth"))?;
-            let payload = serde_json::to_vec(&message.payload())
-                .map_err(|error| ChannelError::Config(format!("the push payload is not JSON: {error}")))?;
+            let payload = serde_json::to_vec(&message.payload()).map_err(|error| {
+                ChannelError::Config(format!("the push payload is not JSON: {error}"))
+            })?;
             let body = webpush::encrypt(&p256dh, &auth, &payload).map_err(|error| match error {
                 WebPushError::InvalidSubscription(reason) => {
                     ChannelError::InvalidRecipient(reason.to_owned())

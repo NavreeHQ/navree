@@ -18,8 +18,7 @@ use serde_json::Value;
 use url::Url;
 
 use crate::{
-    SlackMessage, SlackRoute, SmsMessage, TeamsMessage, TeamsRoute, WebPushMessage,
-    WhatsAppMessage,
+    SlackMessage, SlackRoute, SmsMessage, TeamsMessage, TeamsRoute, WebPushMessage, WhatsAppMessage,
 };
 
 /// What a provider answered when it accepted a message.
@@ -298,7 +297,10 @@ mod tests {
         assert!(endpoint(Some("ftp://x"), "https://a", "k").is_err());
         assert!(endpoint(Some("not a url"), "https://a", "k").is_err());
         let base = endpoint(Some("http://127.0.0.1:9000/"), "https://a", "k").unwrap();
-        assert_eq!(join(&base, "/v1/messages"), "http://127.0.0.1:9000/v1/messages");
+        assert_eq!(
+            join(&base, "/v1/messages"),
+            "http://127.0.0.1:9000/v1/messages"
+        );
     }
 
     #[test]

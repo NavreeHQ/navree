@@ -35,7 +35,11 @@ impl SmsDriver for LogSms {
         message: &'a SmsMessage,
     ) -> BoxFuture<'a, Result<SentMessage, ChannelError>> {
         let id = self.sent.fetch_add(1, Ordering::Relaxed) + 1;
-        let from = message.from.as_deref().or(self.from.as_deref()).unwrap_or_default();
+        let from = message
+            .from
+            .as_deref()
+            .or(self.from.as_deref())
+            .unwrap_or_default();
         tracing::info!(target: "navree::notify", to, from, "sms (log driver)");
         tracing::debug!(target: "navree::notify::body", to, body = %message.body, "sms body (log driver)");
         Box::pin(async move { Ok(SentMessage::new("log").id(format!("log-{id}"))) })
@@ -63,7 +67,11 @@ impl WhatsAppDriver for LogWhatsApp {
         message: &'a WhatsAppMessage,
     ) -> BoxFuture<'a, Result<SentMessage, ChannelError>> {
         let id = self.sent.fetch_add(1, Ordering::Relaxed) + 1;
-        let template = message.template.as_ref().map(|t| t.name.as_str()).unwrap_or_default();
+        let template = message
+            .template
+            .as_ref()
+            .map(|t| t.name.as_str())
+            .unwrap_or_default();
         tracing::info!(target: "navree::notify", to, template, "whatsapp (log driver)");
         tracing::debug!(
             target: "navree::notify::body",
