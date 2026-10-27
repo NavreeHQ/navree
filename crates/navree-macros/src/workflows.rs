@@ -416,7 +416,10 @@ fn parse_block(kind: BlockKind, args: TokenStream, item: TokenStream) -> syn::Re
         syn::Error::new(error.span(), format!("{attribute} goes on {shape}"))
     })?;
     let mut errors = Errors::default();
-    let args = errors.keep(BlockArgs::parse(kind, args)).unwrap_or_default();
+    // Missing keys are only reported when the keys parsed.
+    let parsed_args = errors.keep(BlockArgs::parse(kind, args));
+    let args_parsed = parsed_args.is_some();
+    let args = parsed_args.unwrap_or_default();
     let block_type = match &args.block_type {
         Some(block_type) => {
             if block_type.value().trim().is_empty() {
@@ -427,7 +430,7 @@ fn parse_block(kind: BlockKind, args: TokenStream, item: TokenStream) -> syn::Re
             }
             Some(block_type.clone())
         }
-        None => {
+        None if args_parsed => {
             errors.push(syn::Error::new(
                 Span::call_site(),
                 format!(
@@ -437,6 +440,7 @@ fn parse_block(kind: BlockKind, args: TokenStream, item: TokenStream) -> syn::Re
             ));
             None
         }
+        None => None,
     };
     let (config, event, function, attrs) = match &item {
         Item::Struct(ItemStruct {
@@ -451,7 +455,7 @@ fn parse_block(kind: BlockKind, args: TokenStream, item: TokenStream) -> syn::Re
                     "a trigger's configuration cannot be generic",
                 ));
             }
-            if args.event.is_none() {
+            if args_parsed && args.event.is_none() {
                 errors.push(syn::Error::new(
                     Span::call_site(),
                     "#[trigger] on a configuration struct needs `event = EventType`",

@@ -84,6 +84,8 @@ fn every_module_crate_is_reexported_whole() {
     assert!(same::<navree::logbook::LogbookModule, LogbookModule>());
     assert!(same::<navree::logbook::Logbook, navree::logbook::Logbook>());
     assert!(same::<navree::fleet::FleetModule, FleetModule>());
+    assert!(same::<navree::workflows::WorkflowsModule, WorkflowsModule>());
+    assert!(same::<navree::workflows::Workflows, navree::workflows::Workflows>());
     // L7 (opt-in)
     #[cfg(feature = "billing")]
     assert!(same::<navree::billing::BillingModule, BillingModule>());
@@ -338,6 +340,64 @@ fn sheets_derives_expand_through_the_facade() {
     assert_eq!(columns[0].aliases, ["Deal"]);
     assert!(columns[0].required);
     assert!(!columns[1].required);
+}
+
+/// `#[workflow]`, `#[trigger]`, `#[condition]` and `#[action]` expand
+/// through `navree::workflows` in an app that depends on the facade only.
+#[test]
+fn workflow_macros_expand_through_the_facade() {
+    use navree::workflows::{
+        Action, AutomationCtx, Condition, Trigger, Workflow, WorkflowCtx, action, condition,
+        trigger, workflow,
+    };
+
+    #[derive(serde::Serialize, serde::Deserialize)]
+    struct Welcome {
+        user_id: u64,
+    }
+
+    /// Welcomes a user.
+    #[workflow(version = 2)]
+    async fn welcome(ctx: WorkflowCtx, input: Welcome) -> Result<u64, BoxError> {
+        let _ = ctx;
+        Ok(input.user_id)
+    }
+
+    #[derive(Clone, serde::Serialize, serde::Deserialize)]
+    struct Signed {
+        user_id: u64,
+    }
+    impl navree::events::Event for Signed {
+        const NAME: &'static str = "user.signed";
+    }
+
+    /// A user signed.
+    #[trigger(type = "user.signed", event = Signed, subject = "user_id")]
+    #[derive(serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+    struct SignedTrigger {}
+
+    #[derive(serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+    struct Always {}
+
+    #[condition(type = "always")]
+    fn always(_config: &Always, _ctx: &AutomationCtx) -> bool {
+        true
+    }
+
+    #[derive(serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+    struct Ping {}
+
+    #[action(type = "ping", label = "Ping")]
+    async fn ping(_config: Ping, _ctx: AutomationCtx) -> Result<String, BoxError> {
+        Ok("pong".into())
+    }
+
+    assert_eq!(<Welcome as Workflow>::NAME, "welcome");
+    assert_eq!(<Welcome as Workflow>::VERSION, 2);
+    assert_eq!(<Welcome as Workflow>::DESCRIPTION, "Welcomes a user.");
+    assert_eq!(<SignedTrigger as Trigger>::SUBJECT, Some("user_id"));
+    assert_eq!(<Always as Condition>::TYPE, "always");
+    assert_eq!(<Ping as Action>::LABEL, "Ping");
 }
 
 /// A migration file as `navree make:migration` writes it: the schema

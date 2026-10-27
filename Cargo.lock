@@ -5394,6 +5394,7 @@ dependencies = [
  "navree-validation",
  "navree-view",
  "navree-webhooks",
+ "navree-workflows",
  "navree-workspace",
  "prost",
  "sea-orm",

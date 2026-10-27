@@ -54,6 +54,7 @@ full = [
     "validation-phone",
     "view",
     "webhooks",
+    "workflows",
     "workspace",
 ]
 # Each module feature turns on the features of the navree crates it builds
@@ -438,6 +439,19 @@ helm = [
     "access",
     "auth",
 ]
+## L7 (in `full`)
+## Workflows: durable workflows in code (steps replayed on resume, timers,
+## event waits, versions) and end-user automations (triggers, conditions and
+## actions in versioned graphs, enrollments, simulation, templates), with
+## `#[workflow]`, `#[trigger]`, `#[condition]` and `#[action]`.
+workflows = [
+    "dep:navree-workflows",
+    "http",
+    "db",
+    "events",
+    "schedule",
+    "workspace",
+]
 ## PostgreSQL driver for navree-db.
 postgres = ["db", "navree-db/postgres"]
 ## MySQL and MariaDB driver for navree-db (`mysql://` and `mariadb://` URLs).
@@ -526,6 +540,7 @@ navree-ui = { workspace = true, optional = true }
 navree-validation = { workspace = true, optional = true }
 navree-view = { workspace = true, optional = true }
 navree-webhooks = { workspace = true, optional = true }
+navree-workflows = { workspace = true, optional = true }
 
 # Re-exported as `navree::axum` (extractors such as `Path` and `Query`), with
 # the `http` feature.
