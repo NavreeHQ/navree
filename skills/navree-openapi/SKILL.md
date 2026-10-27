@@ -136,12 +136,18 @@ docs_ui = true                        # false removes /api/docs (it loads Scalar
 ## Export and typed clients
 
 ```sh
-navree openapi:export web/openapi.json       # exactly what /api/openapi.json serves
+navree openapi:client                        # both steps: web/src/lib/api/openapi.json and schema.d.ts
+navree openapi:client --out web/app/lib/api  # another folder (a Nuxt app)
+
+navree openapi:export web/openapi.json       # only the document: exactly what /api/openapi.json serves
 npx openapi-typescript web/openapi.json -o web/lib/api/schema.d.ts
 ```
 
-Re-export after changing routes or types; commit the file if the front end
-builds from it.
+Re-export after changing routes or types; commit the files if the front end
+builds from them. The schema's `paths` type goes to
+`createNavreeClient<paths>()` from `@navree/client` (see the
+`navree-frontend-next` and `navree-frontend-nuxt` skills and
+`/docs/frontend/typed-client/`).
 
 ## Limits to know
 
