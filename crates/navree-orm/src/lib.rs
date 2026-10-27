@@ -93,6 +93,7 @@ mod collection;
 mod column;
 mod driver;
 mod error;
+pub mod events;
 mod exec;
 mod expr;
 pub mod hooks;
@@ -117,6 +118,7 @@ pub use column::{
 };
 pub use driver::{DocumentDriver, InsertOutcome};
 pub use error::{OrmError, Result};
+pub use events::without_events;
 pub use exec::{Access, DocumentTarget, ExecContext, Executor, SqlTarget, Target};
 pub use ir::Expr;
 pub use model::{ColumnMeta, KeyKind, Model, ModelMeta, PrimaryKey, Timestamp};
