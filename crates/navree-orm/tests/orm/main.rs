@@ -13,6 +13,7 @@ mod documents;
 mod find_or_create;
 mod hooks;
 mod http;
+mod lifecycle;
 mod pagination;
 mod query;
 mod retrieve;
