@@ -624,7 +624,10 @@ impl NativeFilter {
 
     /// The native value, when it is a `T`.
     pub fn downcast_ref<T: std::any::Any>(&self) -> Option<&T> {
-        self.value.as_any().downcast_ref::<T>()
+        // Through the trait object: the `Arc` itself is a `NativeValue`
+        // too, and would answer for itself.
+        let value: &dyn NativeValue = &*self.value;
+        value.as_any().downcast_ref::<T>()
     }
 }
 
