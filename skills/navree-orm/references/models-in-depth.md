@@ -53,20 +53,22 @@ fn split_name(person: &mut Person, full_name: String) { /* .. */ }
 ## Serialization
 
 A record serializes as its model, then its extras and loaded relations
-(under the relation's name). `hidden(..)` / `visible(..)` on the model
-(or `#[model(hidden)]` on a field), `make_hidden([..])` / `make_visible([..])`
-on a collection, `appends(..)` adds accessors. `#[model(resource = DealResource)]` and
-`navree::api` resources shape API output. A queued job carries
-`ModelRef<Deal>` (`deal.to_ref()?`, then `job.deal.restore(&uow)`), not the
-record's values.
+(under the relation's name). Hide fields with `hidden(..)` or
+`visible(..)` on the model (or `#[model(hidden)]` on a field), or with
+`make_hidden([..])` / `make_visible([..])` on a collection; `appends(..)`
+adds accessors. `#[model(resource = DealResource)]` and `navree::api`
+resources shape API output. A queued job carries `ModelRef<Deal>`
+(`deal.to_ref()?`, then `job.deal.restore(&uow)`), not the record's
+values.
 
 ## Events and observers
 
 Events: `retrieved`, `saving`, `creating`, `created`, `updating`,
 `updated`, `saved`, `deleting`, `deleted`, `trashed`, `force_deleting`,
 `force_deleted`, `restoring`, `restored`, `replicating`. The "-ing" ones
-may cancel (`Ok(Flow::Cancel)`; `save` and `delete` then return `false`); inside a unit of work the "-ed" ones run
-after commit unless the observer sets `const IN_TRANSACTION: bool = true`.
+may cancel (`Ok(Flow::Cancel)`; `save` and `delete` then return `false`).
+Inside a unit of work the "-ed" ones run after commit, unless the observer
+sets `const IN_TRANSACTION: bool = true`.
 
 ```rust
 #[injectable]
