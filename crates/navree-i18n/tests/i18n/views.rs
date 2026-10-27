@@ -58,7 +58,9 @@ async fn templates_translate_and_format_in_the_current_locale() {
     let views = app.get::<Views>().await;
     let render = |locale: &'static str| {
         let views = views.clone();
-        i18n.scope(locale, async move { views.render("page", json!({ "count": 2 })).unwrap() })
+        i18n.scope(locale, async move {
+            views.render("page", json!({ "count": 2 })).unwrap()
+        })
     };
     assert_eq!(
         render("fr").await,
@@ -71,7 +73,9 @@ async fn templates_translate_and_format_in_the_current_locale() {
     // A missing message is a render error with `i18n.missing = "error"`.
     let views = views.clone();
     let error = i18n
-        .scope("fr", async move { views.render("broken", json!({})).unwrap_err() })
+        .scope("fr", async move {
+            views.render("broken", json!({})).unwrap_err()
+        })
         .await;
     assert!(error.to_string().contains("no-such-message"), "{error}");
     app.shutdown().await.unwrap();
@@ -91,19 +95,29 @@ async fn mail_renders_in_the_locale_it_is_sent_in() {
         let context = context.clone();
         i18n.scope(locale, async move {
             let subject = t!("deal-won-subject", title = "Lovelace renewal");
-            let mail = TemplateMail::new("ada@navree.test", subject, "mail/deal-won").context(context);
+            let mail =
+                TemplateMail::new("ada@navree.test", subject, "mail/deal-won").context(context);
             mailer.queue(&mail).await.unwrap();
         })
         .await;
     }
     let sent = mailer.array_transport().unwrap().sent();
     assert_eq!(sent[0].subject, "Gewonnen: Lovelace renewal");
-    assert_eq!(sent[0].text.as_deref(), Some("Ada hat Lovelace renewal gewonnen."));
+    assert_eq!(
+        sent[0].text.as_deref(),
+        Some("Ada hat Lovelace renewal gewonnen.")
+    );
     let html = sent[0].html.as_deref().unwrap();
     assert!(html.contains("42.000,00\u{a0}€"), "{html}");
     // `mail-footer` is not in German: it falls back to English.
     assert!(html.contains("Sent by Acme CRM."), "{html}");
     assert_eq!(sent[1].subject, "Affaire gagnée : Lovelace renewal");
-    assert!(sent[1].html.as_deref().unwrap().contains("Envoyé par Acme CRM."));
+    assert!(
+        sent[1]
+            .html
+            .as_deref()
+            .unwrap()
+            .contains("Envoyé par Acme CRM.")
+    );
     app.shutdown().await.unwrap();
 }

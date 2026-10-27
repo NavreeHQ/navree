@@ -4,7 +4,9 @@ use navree_db::Db;
 use navree_i18n::{I18n, t};
 use navree_kernel::{Module, ModuleBuilder};
 use navree_mail::{MailModule, MailOptions, Mailer, TemplateMail, TransportConfig};
-use navree_notify::{Channel, Notifiable, Notification, Notifier, NotifyModule, NotifyOptions, notifications};
+use navree_notify::{
+    Channel, Notifiable, Notification, Notifier, NotifyModule, NotifyOptions, notifications,
+};
 use navree_view::{ModuleBuilderViewExt, ViewModule, ViewOptions};
 use sea_orm::{EntityTrait, QueryOrder};
 use serde::{Deserialize, Serialize};
@@ -103,14 +105,25 @@ async fn notifications_render_in_the_recipients_saved_locale() {
     i18n.scope("de", async {
         for id in [french, unsaved] {
             notifier
-                .send(&Recipient { id }, DealWon { title: "Lovelace renewal".into() })
+                .send(
+                    &Recipient { id },
+                    DealWon {
+                        title: "Lovelace renewal".into(),
+                    },
+                )
                 .await
                 .unwrap();
         }
     })
     .await;
 
-    let mail = world.app.get::<Mailer>().await.array_transport().unwrap().sent();
+    let mail = world
+        .app
+        .get::<Mailer>()
+        .await
+        .array_transport()
+        .unwrap()
+        .sent();
     assert_eq!(mail[0].subject, "Affaire gagnée : Lovelace renewal");
     assert_eq!(mail[0].text.as_deref(), Some("Envoyé par Acme CRM."));
     assert_eq!(mail[1].subject, "You won Lovelace renewal");
@@ -123,7 +136,13 @@ async fn notifications_render_in_the_recipients_saved_locale() {
         .all(db.conn())
         .await
         .unwrap();
-    assert_eq!(rows[0].data, json!({ "message": "Ada a gagné Lovelace renewal." }));
-    assert_eq!(rows[1].data, json!({ "message": "Ada won Lovelace renewal." }));
+    assert_eq!(
+        rows[0].data,
+        json!({ "message": "Ada a gagné Lovelace renewal." })
+    );
+    assert_eq!(
+        rows[1].data,
+        json!({ "message": "Ada won Lovelace renewal." })
+    );
     world.app.shutdown().await.unwrap();
 }

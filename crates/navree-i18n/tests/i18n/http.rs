@@ -61,11 +61,33 @@ async fn the_sources_run_in_the_configured_order() {
         }
         async move { request.send().await.json_value()["locale"].clone() }
     };
-    assert_eq!(locale("/api/deals/summary?locale=de", Some("locale=fr"), Some("pt")).await, "de");
-    assert_eq!(locale("/api/deals/summary", Some("theme=dark; locale=fr"), Some("pt")).await, "fr");
-    assert_eq!(locale("/api/deals/summary", None, Some("pt")).await, "pt-BR");
+    assert_eq!(
+        locale(
+            "/api/deals/summary?locale=de",
+            Some("locale=fr"),
+            Some("pt")
+        )
+        .await,
+        "de"
+    );
+    assert_eq!(
+        locale(
+            "/api/deals/summary",
+            Some("theme=dark; locale=fr"),
+            Some("pt")
+        )
+        .await,
+        "fr"
+    );
+    assert_eq!(
+        locale("/api/deals/summary", None, Some("pt")).await,
+        "pt-BR"
+    );
     // An unsupported value is skipped, not an error.
-    assert_eq!(locale("/api/deals/summary?locale=xx", Some("locale=de"), None).await, "de");
+    assert_eq!(
+        locale("/api/deals/summary?locale=xx", Some("locale=de"), None).await,
+        "de"
+    );
     app.shutdown().await.unwrap();
 
     // The default sources (user, workspace, header) ignore the query.
@@ -129,7 +151,10 @@ async fn the_locales_route_lists_native_names() {
         .assert_status(404);
     app.shutdown().await.unwrap();
 
-    let app = support::builder().config("i18n.routes", false).build().await;
+    let app = support::builder()
+        .config("i18n.routes", false)
+        .build()
+        .await;
     app.client()
         .get("/api/i18n/locales")
         .send()

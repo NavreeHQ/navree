@@ -14,7 +14,11 @@ use crate::support::{self, FIXTURES};
 #[tokio::test]
 async fn check_lists_the_missing_messages_and_fails() {
     let app = support::builder().build().await;
-    let error = app.run_command("i18n:check", &[]).await.unwrap_err().to_string();
+    let error = app
+        .run_command("i18n:check", &[])
+        .await
+        .unwrap_err()
+        .to_string();
     let lines: Vec<&str> = error.lines().collect();
     assert!(
         lines.contains(&"tests/fixtures/locales/fr  login: missing (defined in tests/fixtures/locales/en/main.ftl:5)"),
@@ -26,7 +30,9 @@ async fn check_lists_the_missing_messages_and_fails() {
     );
     // pt-BR is regional: a summary, not problems.
     assert!(
-        lines.contains(&"tests/fixtures/locales/pt-BR  11 of 12 messages missing (falls back to en)"),
+        lines.contains(
+            &"tests/fixtures/locales/pt-BR  11 of 12 messages missing (falls back to en)"
+        ),
         "{error}"
     );
     assert_eq!(lines.last(), Some(&"12 problem(s) in 4 locale(s)"));
@@ -58,7 +64,11 @@ async fn check_passes_when_every_locale_is_complete() {
 #[tokio::test]
 async fn check_reports_syntax_errors_instead_of_failing_the_boot() {
     let dir = tempfile::tempdir().unwrap();
-    write(dir.path(), "en/main.ftl", "ok = Fine\n\nbroken = { $count\n");
+    write(
+        dir.path(),
+        "en/main.ftl",
+        "ok = Fine\n\nbroken = { $count\n",
+    );
     write(dir.path(), "en/more.ftl", "ok = Again\n");
     let shown = dir.path().to_string_lossy().replace('\\', "/");
     let error = Navree::app()
@@ -70,9 +80,14 @@ async fn check_reports_syntax_errors_instead_of_failing_the_boot() {
         .await
         .unwrap_err()
         .to_string();
-    assert!(error.contains(&format!("{shown}/en/main.ftl:3: syntax error")), "{error}");
     assert!(
-        error.contains(&format!("{shown}/en/more.ftl:1: `ok` is already defined in {shown}/en/main.ftl:1")),
+        error.contains(&format!("{shown}/en/main.ftl:3: syntax error")),
+        "{error}"
+    );
+    assert!(
+        error.contains(&format!(
+            "{shown}/en/more.ftl:1: `ok` is already defined in {shown}/en/main.ftl:1"
+        )),
         "{error}"
     );
     assert!(error.ends_with("2 problem(s) in 1 locale(s)"), "{error}");
@@ -107,14 +122,20 @@ async fn missing_lists_ids_for_a_translator() {
 #[tokio::test]
 async fn publish_copies_the_shipped_validation_messages() {
     let dir = tempfile::tempdir().unwrap();
-    write(dir.path(), "fr/validation.ftl", "field-email = adresse e-mail\n");
+    write(
+        dir.path(),
+        "fr/validation.ftl",
+        "field-email = adresse e-mail\n",
+    );
     let app = TestApp::builder()
         .config("i18n.dir", dir.path().to_string_lossy().as_ref())
         .config("i18n.locales", json!(["en", "fr", "pt", "ja"]))
         .module(I18nModule::from_config())
         .build()
         .await;
-    app.run_command("i18n:publish", &["validation"]).await.unwrap();
+    app.run_command("i18n:publish", &["validation"])
+        .await
+        .unwrap();
     let english = fs::read_to_string(dir.path().join("en/validation.ftl")).unwrap();
     assert!(english.contains("validation-required = { $attribute } should not be empty"));
     let portuguese = fs::read_to_string(dir.path().join("pt/validation.ftl")).unwrap();
@@ -125,7 +146,9 @@ async fn publish_copies_the_shipped_validation_messages() {
         fs::read_to_string(dir.path().join("fr/validation.ftl")).unwrap(),
         "field-email = adresse e-mail\n"
     );
-    app.run_command("i18n:publish", &["validation", "--force"]).await.unwrap();
+    app.run_command("i18n:publish", &["validation", "--force"])
+        .await
+        .unwrap();
     assert!(
         fs::read_to_string(dir.path().join("fr/validation.ftl"))
             .unwrap()

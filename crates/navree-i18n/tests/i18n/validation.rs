@@ -40,7 +40,10 @@ async fn validation_errors_are_in_the_requested_language() {
         .json(&json!({ "last_name": "Lovelace" }))
         .send()
         .await
-        .assert_json_path("errors.first_name.0", json!("first_name darf nicht leer sein"));
+        .assert_json_path(
+            "errors.first_name.0",
+            json!("first_name darf nicht leer sein"),
+        );
 
     // English is unchanged.
     app.client()
@@ -48,7 +51,10 @@ async fn validation_errors_are_in_the_requested_language() {
         .json(&json!({ "last_name": "Lovelace" }))
         .send()
         .await
-        .assert_json_path("errors.first_name.0", json!("first_name should not be empty"));
+        .assert_json_path(
+            "errors.first_name.0",
+            json!("first_name should not be empty"),
+        );
     app.shutdown().await.unwrap();
 }
 

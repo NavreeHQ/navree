@@ -367,9 +367,14 @@ mod tests {
             (json!(false), BidiIsolation::Never),
             (json!("false"), BidiIsolation::Never),
         ] {
-            assert_eq!(parse(json!({ "bidi_isolation": value })).bidi_isolation, expected);
+            assert_eq!(
+                parse(json!({ "bidi_isolation": value })).bidi_isolation,
+                expected
+            );
         }
-        assert!(serde_json::from_value::<I18nOptions>(json!({ "bidi_isolation": "maybe" })).is_err());
+        assert!(
+            serde_json::from_value::<I18nOptions>(json!({ "bidi_isolation": "maybe" })).is_err()
+        );
     }
 
     #[test]
@@ -385,7 +390,10 @@ mod tests {
         assert_eq!(errors.len(), 5, "{errors:?}");
         assert!(errors[0].contains("lists `en` twice"), "{errors:?}");
         assert!(errors[1].contains("`not a tag!`"), "{errors:?}");
-        assert!(errors[2].contains("i18n.default_locale `de` must be one of"), "{errors:?}");
+        assert!(
+            errors[2].contains("i18n.default_locale `de` must be one of"),
+            "{errors:?}"
+        );
         assert!(errors[3].contains("lists `header` twice"), "{errors:?}");
         assert!(errors[4].contains("i18n.cookie"), "{errors:?}");
     }

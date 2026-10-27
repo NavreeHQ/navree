@@ -58,7 +58,8 @@ async fn formatting_and_fluent_functions() {
     let i18n = app.get::<I18n>().await;
     let money = navree_i18n::Money::new(4_200_000, "EUR");
     assert_eq!(
-        i18n.t("en", "deal-amount", args!(amount = money.clone())).unwrap(),
+        i18n.t("en", "deal-amount", args!(amount = money.clone()))
+            .unwrap(),
         "€42,000.00"
     );
     assert_eq!(
@@ -66,12 +67,19 @@ async fn formatting_and_fluent_functions() {
         "42\u{202f}000,00\u{a0}€"
     );
     let closes = chrono::NaiveDate::from_ymd_opt(2026, 10, 26).unwrap();
-    assert_eq!(i18n.t("fr", "deal-closes", args!(date = closes)).unwrap(), "Clôture le 26 oct. 2026");
     assert_eq!(
-        i18n.t("en", "deal-closes-long", args!(date = closes)).unwrap(),
+        i18n.t("fr", "deal-closes", args!(date = closes)).unwrap(),
+        "Clôture le 26 oct. 2026"
+    );
+    assert_eq!(
+        i18n.t("en", "deal-closes-long", args!(date = closes))
+            .unwrap(),
         "Closes October 26, 2026"
     );
-    assert_eq!(i18n.t("en", "deal-total", args!(total = 42000)).unwrap(), "Total: €42,000.00");
+    assert_eq!(
+        i18n.t("en", "deal-total", args!(total = 42000)).unwrap(),
+        "Total: €42,000.00"
+    );
     app.shutdown().await.unwrap();
 }
 

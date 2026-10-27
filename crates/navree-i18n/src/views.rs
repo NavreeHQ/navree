@@ -36,12 +36,15 @@ pub(crate) fn current(slot: &Slot) -> Locale {
 ///   chrono `strftime` format.
 pub(crate) fn configure(env: &mut Environment<'static>, slot: &Slot) {
     let for_t = slot.clone();
-    env.add_function("t", move |id: &str, kwargs: Kwargs| -> Result<String, Error> {
-        let args = to_args(&kwargs)?;
-        current(&for_t)
-            .translate(id, &args)
-            .map_err(|error| Error::new(ErrorKind::InvalidOperation, error.to_string()))
-    });
+    env.add_function(
+        "t",
+        move |id: &str, kwargs: Kwargs| -> Result<String, Error> {
+            let args = to_args(&kwargs)?;
+            current(&for_t)
+                .translate(id, &args)
+                .map_err(|error| Error::new(ErrorKind::InvalidOperation, error.to_string()))
+        },
+    );
     let for_locale = slot.clone();
     env.add_function("locale", move || current(&for_locale).tag().to_owned());
     let for_money = slot.clone();
@@ -163,7 +166,9 @@ fn date(locale: &Locale, value: &Value, format: Option<&str>) -> Result<String, 
         Moment::Date(day) => write!(out, "{}", day.format_with_items(items.iter())),
     };
     written.map_err(|_| {
-        invalid("date filter: the format asks for fields the value does not have (a time or offset)")
+        invalid(
+            "date filter: the format asks for fields the value does not have (a time or offset)",
+        )
     })?;
     Ok(out)
 }

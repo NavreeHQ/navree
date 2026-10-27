@@ -102,7 +102,9 @@ pub(crate) fn publish(i18n: &I18n, args: &[String]) -> Result<String, BoxError> 
             continue;
         };
         let Some(source) = shipped::validation_for(&langid) else {
-            lines.push(format!("{locale}: navree-i18n ships no validation messages in this language"));
+            lines.push(format!(
+                "{locale}: navree-i18n ships no validation messages in this language"
+            ));
             continue;
         };
         let path = dir.join(&locale).join("validation.ftl");

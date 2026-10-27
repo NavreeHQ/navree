@@ -7,9 +7,7 @@ use std::sync::Arc;
 use navree_contracts::{BoxFuture, Dispatcher};
 use navree_kernel::{Module, ModuleBuilder};
 use navree_mail::TemplateMail;
-use navree_notify::{
-    Channel, Notifiable, Notification, Notifier, NotifyOptions, RecipientScope,
-};
+use navree_notify::{Channel, Notifiable, Notification, Notifier, NotifyOptions, RecipientScope};
 use navree_view::ModuleBuilderViewExt;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -97,7 +95,10 @@ async fn rendering_and_mail_run_in_the_recipient_scope() {
     assert_eq!(rows[0].data, json!({ "for": tag }));
     let mail = support::sent_mail(&app).await;
     assert_eq!(mail[0].subject, format!("for {tag}"));
-    assert_eq!(mail[0].text.as_deref(), Some(format!("body for {tag}").as_str()));
+    assert_eq!(
+        mail[0].text.as_deref(),
+        Some(format!("body for {tag}").as_str())
+    );
 }
 
 #[tokio::test]

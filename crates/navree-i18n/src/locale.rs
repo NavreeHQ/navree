@@ -104,10 +104,12 @@ impl Locale {
     /// The locale of the running code: the request's or the scope's, else
     /// the default locale of the app (`en` outside any app).
     pub fn current() -> Locale {
-        CURRENT.try_with(Clone::clone).unwrap_or_else(|_| match global() {
-            Some(shared) => shared.default_locale(),
-            None => Locale::detached("en"),
-        })
+        CURRENT
+            .try_with(Clone::clone)
+            .unwrap_or_else(|_| match global() {
+                Some(shared) => shared.default_locale(),
+                None => Locale::detached("en"),
+            })
     }
 
     /// Runs `future` with `locale` as the current locale: a [`Locale`], or
@@ -123,10 +125,7 @@ impl Locale {
     /// # let _ = tag;
     /// # }
     /// ```
-    pub fn scope<F: Future>(
-        locale: impl IntoLocale,
-        future: F,
-    ) -> impl Future<Output = F::Output> {
+    pub fn scope<F: Future>(locale: impl IntoLocale, future: F) -> impl Future<Output = F::Output> {
         CURRENT.scope(locale.into_locale(), future)
     }
 
@@ -339,7 +338,10 @@ mod tests {
         assert_eq!(locale.format_money(1999, "EUR"), "19,99\u{a0}€");
         let day = NaiveDate::from_ymd_opt(2026, 10, 26).unwrap();
         assert_eq!(locale.format_date(day), "26.10.2026");
-        assert_eq!(locale.format_date_with(day, DateStyle::Long), "26. Oktober 2026");
+        assert_eq!(
+            locale.format_date_with(day, DateStyle::Long),
+            "26. Oktober 2026"
+        );
         assert_eq!(locale.translate("hello", &Args::new()).unwrap(), "hello");
         assert!(!locale.has("hello"));
         assert_eq!(Locale::detached("not a tag").tag(), "en");
