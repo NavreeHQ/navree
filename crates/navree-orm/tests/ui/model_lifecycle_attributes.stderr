@@ -1,0 +1,23 @@
+error: unknown model event `creatd` (did you mean `created`?); expected one of: retrieved, saving, creating, created, updating, updated, saved, deleting, deleted, trashed, force_deleting, force_deleted, restoring, restored, replicating
+ --> tests/ui/model_lifecycle_attributes.rs:4:20
+  |
+4 | #[model(dispatches(creatd = DealCreated))]
+  |                    ^^^^^^
+
+error: a model is `prunable` (record by record) or `mass_prunable` (a chunk per statement), not both
+  --> tests/ui/model_lifecycle_attributes.rs:10:19
+   |
+10 | #[model(prunable, mass_prunable)]
+   |                   ^^^^^^^^^^^^^
+
+error: `broadcasts` takes no value: implement `Broadcasts` for the model to choose channels, names, data and a queue
+  --> tests/ui/model_lifecycle_attributes.rs:16:9
+   |
+16 | #[model(broadcasts = true)]
+   |         ^^^^^^^^^^
+
+error: observers(..) needs at least one observer, e.g. observers(DealObserver)
+  --> tests/ui/model_lifecycle_attributes.rs:22:9
+   |
+22 | #[model(observers())]
+   |         ^^^^^^^^^^^
