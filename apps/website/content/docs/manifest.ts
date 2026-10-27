@@ -210,6 +210,7 @@ export const sections: DocsSection[] = [
       "social-sign-in",
       "webhooks",
       "documents",
+      "imports-and-exports",
       "localization",
       "browser-testing",
     ],
