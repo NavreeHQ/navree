@@ -45,13 +45,26 @@
 //!   `dyn Broadcaster`, e.g. navree-realtime). A channel whose service is
 //!   missing fails with [`NotifyError::Unavailable`]; the other channels
 //!   still deliver.
+//! - Preferences: a notification has a category
+//!   ([`Notification::CATEGORY`]), a digest ([`Notification::DIGEST`]), an
+//!   urgency and a send window, set by hand or with `#[notification]`;
+//!   people and workspaces switch channels per category, choose digests
+//!   and quiet hours ([`Preferences`], [`NotificationPreferences`], table
+//!   `notification_preferences`). The notifier skips channels turned off,
+//!   holds digest mail and deliveries outside quiet hours or the send
+//!   window on the recipient's clock ([`NotificationDeferral`], table
+//!   `notification_deferrals`) and `notify:release` (every minute on the
+//!   scheduler, or [`Notifier::release_due`]) sends them, digests as one
+//!   mail. A workspace's mail is restyled through [`TemplateOverrides`].
 //! - Routes (authenticated, for the signed-in user as notifiable type
 //!   [`USER_NOTIFIABLE_TYPE`]): `GET /api/notifications?unread=` (a page,
 //!   newest first), `GET /api/notifications/unread-count` (`{count}`),
 //!   `POST /api/notifications/{id}/read` and
-//!   `POST /api/notifications/read-all` (204), and the push subscriptions:
+//!   `POST /api/notifications/read-all` (204), the push subscriptions:
 //!   `GET /api/notifications/push-key`, `POST` and `DELETE
-//!   /api/notifications/push-subscriptions`. The same read state is
+//!   /api/notifications/push-subscriptions`, and the preferences: `GET` and
+//!   `PATCH /api/notifications/preferences` and
+//!   `/api/notifications/preferences/workspace`. The same read state is
 //!   available in code: [`Notifier::notifications`],
 //!   [`Notifier::unread_count`], [`Notifier::mark_as_read`] and
 //!   [`Notifier::mark_all_as_read`].

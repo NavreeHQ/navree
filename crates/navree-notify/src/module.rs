@@ -27,11 +27,14 @@ use crate::{
 };
 
 /// The global notification module: provides and exports [`Notifier`],
-/// [`DeliveryLog`], [`OptOuts`] and [`PushSubscriptions`], registers job
-/// `notify.send` ([`SendNotificationJob`]), command `notify:vapid`, the
-/// routes and the `notify` migrations (tables `notifications`,
-/// `notification_deliveries`, `notification_opt_outs`,
-/// `push_subscriptions`).
+/// [`DeliveryLog`], [`OptOuts`], [`PushSubscriptions`],
+/// [`NotificationPreferences`] and [`NotificationCatalog`], registers job
+/// `notify.send` ([`SendNotificationJob`]), commands `notify:vapid` and
+/// `notify:release` (scheduled every minute), the built-in digest templates
+/// (`notify/digest`), the routes and the `notify` migrations (tables
+/// `notifications`, `notification_deliveries`, `notification_opt_outs`,
+/// `push_subscriptions`, `notification_preferences`,
+/// `notification_deferrals`).
 ///
 /// - [`NotifyModule::for_root`] takes [`NotifyOptions`] in code;
 /// - [`NotifyModule::from_config`] (and a plain `.module(NotifyModule)`)
