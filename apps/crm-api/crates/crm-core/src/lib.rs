@@ -21,11 +21,10 @@
 //!   [`Complete`];
 //! - [`embeds`]: [`OwnerRef`], [`CompanyRef`], [`ContactRef`], built from
 //!   eager loaded relations;
-//! - [`ownership`]: [`owner_for`](ownership::owner_for), who may set a
-//!   record's `owner_id` (spec §9.3);
-//! - [`notify`]: [`NotifiableUser`](notify::NotifiableUser) and the
-//!   notification [`NotificationData`](notify::NotificationData) shape
-//!   (spec §9.7);
+//! - [`ownership`]: [`owner_for`], who may set a record's `owner_id`
+//!   (spec §9.3);
+//! - [`notify`]: [`NotifiableUser`] and the notification
+//!   [`NotificationData`] shape (spec §9.7);
 //! - [`seed`]: the roles seeder and the demo accounts;
 //! - [`CrmCoreModule`] and [`platform`], the framework modules configured
 //!   for the CRM.

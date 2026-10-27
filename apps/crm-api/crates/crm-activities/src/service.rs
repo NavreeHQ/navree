@@ -18,7 +18,9 @@ use crate::dto::{ActivityFilter, CreateActivity, UpdateActivity};
 use crate::due::Today;
 use crate::resource::ActivityResource;
 
-/// Activities; see the [module docs](self).
+/// Lists, creates, changes, completes and deletes activities, in the
+/// caller's unit of work (the request's), so a change and its audit rows
+/// commit together.
 #[injectable]
 pub struct ActivityService {
     clock: Arc<dyn Clock>,
