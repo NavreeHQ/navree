@@ -18,8 +18,8 @@
 //! - [`rules`] adds what garde lacks: [`confirmed`], [`rules::uuid`],
 //!   [`rules::date_ymd`], [`rules::one_of`]; [`rule_error`] gives your own
 //!   rules table-driven messages.
-//! - [`validate_json`] and [`validate`] check input that does not come from a
-//!   request (a model's tool arguments) with the same messages.
+//! - [`validate_json`] deserializes and checks JSON that does not come from
+//!   a request (a model's tool arguments) with the same messages.
 //! - [`Messages`] holds the templates ([`DEFAULT_MESSAGES`] plus overrides by
 //!   rule, by `field.rule` and attribute names). [`ValidationModule`]
 //!   (global) provides them from [`ValidationOptions`] or the `validation`
@@ -82,7 +82,7 @@ pub use failure::rule_error;
 pub use messages::{DEFAULT_MESSAGES, Messages};
 pub use module::{CONFIG_SECTION, ValidationModule, ValidationOptions};
 pub use rules::confirmed;
-pub use value::{validate, validate_json};
+pub use value::validate_json;
 
 /// garde, the validation library behind [`Valid`].
 pub use garde;
