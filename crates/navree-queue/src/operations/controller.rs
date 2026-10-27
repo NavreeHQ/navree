@@ -153,17 +153,21 @@ impl Controller for OperationsController {
         };
 
         let ops = operations.clone();
-        let events = move |CurrentPrincipal(principal): CurrentPrincipal, Path(id): Path<String>| {
+        let events = move |CurrentPrincipal(principal): CurrentPrincipal,
+                           Path(id): Path<String>| {
             let ops = ops.clone();
             async move {
                 let record = visible(&ops, &principal, &id).await?;
                 let stream = snapshots(ops, record.id, poll);
-                Ok::<_, AppError>(Sse::new(stream).keep_alive(KeepAlive::new().interval(KEEP_ALIVE)))
+                Ok::<_, AppError>(
+                    Sse::new(stream).keep_alive(KeepAlive::new().interval(KEEP_ALIVE)),
+                )
             }
         };
 
         let ops = operations;
-        let cancel = move |CurrentPrincipal(principal): CurrentPrincipal, Path(id): Path<String>| {
+        let cancel = move |CurrentPrincipal(principal): CurrentPrincipal,
+                           Path(id): Path<String>| {
             let ops = ops.clone();
             async move {
                 let record = visible(&ops, &principal, &id).await?;

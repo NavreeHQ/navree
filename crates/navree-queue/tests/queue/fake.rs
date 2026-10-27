@@ -159,7 +159,10 @@ async fn queue_fake_records_batches_apart_from_single_jobs() {
             label: "catch".into()
         })
     );
-    assert_eq!(recorded.finally_of::<Record>(), Some(Record::new("finally")));
+    assert_eq!(
+        recorded.finally_of::<Record>(),
+        Some(Record::new("finally"))
+    );
     assert_eq!(recorded.then_of::<Toggle>(), None);
     fake.assert_batched(|b| b.name() == "recipients.import" && b.jobs.len() == 3);
     // A batch's jobs are not single dispatches.

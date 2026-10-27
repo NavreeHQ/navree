@@ -61,7 +61,9 @@ pub(crate) async fn job_finished(
     };
     let result = if job.membership.batch_id.is_some() {
         match batch {
-            Some(row) if !job.membership.callback => operations.batch_progress(operation, row).await,
+            Some(row) if !job.membership.callback => {
+                operations.batch_progress(operation, row).await
+            }
             _ => return,
         }
     } else {
@@ -204,7 +206,12 @@ impl Queue {
                 operations.note(operation, &progress.note).await
             } else {
                 operations
-                    .progress(operation, progress.done, progress.total, progress.note.clone())
+                    .progress(
+                        operation,
+                        progress.done,
+                        progress.total,
+                        progress.note.clone(),
+                    )
                     .await
             };
             match record {

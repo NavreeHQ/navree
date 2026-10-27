@@ -63,7 +63,12 @@ async fn the_check_answers_only_about_a_workspace() {
     let world = World::new().await;
     let owner = world.user("Olive", "olive@example.test").await;
     let acme = world.workspace(owner, "Acme").await;
-    let checks = world.app.ctx().get_all::<dyn PermissionCheck>().await.unwrap();
+    let checks = world
+        .app
+        .ctx()
+        .get_all::<dyn PermissionCheck>()
+        .await
+        .unwrap();
     // AccessModule's app-wide check, then the workspace module's.
     assert_eq!(checks.len(), 2);
     let who = signed_in(owner);
@@ -74,7 +79,11 @@ async fn the_check_answers_only_about_a_workspace() {
         }
         answers
     };
-    assert_eq!(answers, [Some(false), None], "no workspace: not its question");
+    assert_eq!(
+        answers,
+        [Some(false), None],
+        "no workspace: not its question"
+    );
     let workspace = checks[1]
         .check(&who, "deals.read", Some(acme.id))
         .await

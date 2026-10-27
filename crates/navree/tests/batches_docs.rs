@@ -165,7 +165,11 @@ async fn app() -> TestApp {
 async fn an_import_runs_as_a_batch_behind_an_operation() {
     let app = app().await;
     let me = Uuid::now_v7();
-    let emails = ["ada@example.test", "grace@example.test", "alan@example.test"];
+    let emails = [
+        "ada@example.test",
+        "grace@example.test",
+        "alan@example.test",
+    ];
 
     let op = app
         .acting_as(principal(me))
@@ -200,7 +204,11 @@ async fn an_import_runs_as_a_batch_behind_an_operation() {
         .send()
         .await
         .assert_status(200);
-    assert!(stream.text().contains("event: operation"), "{}", stream.text());
+    assert!(
+        stream.text().contains("event: operation"),
+        "{}",
+        stream.text()
+    );
 
     let batch_id = done["batch_id"].as_str().expect("the batch is recorded");
     let batch: JobBatch = app
@@ -237,7 +245,13 @@ async fn a_failing_chunk_fails_the_operation() {
     app.get::<Queue>().await.run_pending().await.unwrap();
 
     let id: Uuid = serde_json::from_value(op["id"].clone()).unwrap();
-    let failed = app.get::<Operations>().await.find(id).await.unwrap().unwrap();
+    let failed = app
+        .get::<Operations>()
+        .await
+        .find(id)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(failed.status, OperationStatus::Failed);
     assert_eq!(failed.error.as_deref(), Some("1 of 2 jobs failed."));
 }
@@ -264,7 +278,10 @@ async fn the_fake_records_the_batch() {
 
     fake.assert_batched(|batch| batch.name() == "contacts.import" && batch.jobs.len() == 2);
     let batch = &fake.batches()[0];
-    assert_eq!(batch.jobs_of::<ImportChunk>()[1].rows, ["alan@example.test"]);
+    assert_eq!(
+        batch.jobs_of::<ImportChunk>()[1].rows,
+        ["alan@example.test"]
+    );
     assert_eq!(batch.then_of::<FinishImport>().unwrap().rows, 3);
     assert!(batch.catch_of::<ReportImportFailure>().is_some());
     fake.assert_nothing_dispatched();
