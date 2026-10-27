@@ -66,8 +66,9 @@ pub enum StorageError {
         rejection: UploadRejection,
     },
 
-    /// A link cannot be signed as asked (an expiry the provider does not
-    /// allow, a content type that is not a valid header value).
+    /// A link cannot be signed as asked: a presigned upload whose lifetime
+    /// is not positive, or a link lasting longer than the provider allows
+    /// (7 days on S3 and Google Cloud Storage).
     #[error("disk `{disk}` cannot sign this link: {reason}")]
     Signing {
         /// The disk name.
@@ -126,6 +127,9 @@ pub enum UploadRejection {
         /// The allowed types.
         allowed: Vec<String>,
     },
+    /// The declared content type is not a valid `type/subtype` header
+    /// value (it is not repeated in the message).
+    InvalidType,
 }
 
 impl fmt::Display for UploadRejection {
@@ -145,6 +149,9 @@ impl fmt::Display for UploadRejection {
                 "declare the file's content type (allowed: {})",
                 allowed.join(", ")
             ),
+            Self::InvalidType => {
+                f.write_str("the declared content type is not a valid `type/subtype`")
+            }
         }
     }
 }

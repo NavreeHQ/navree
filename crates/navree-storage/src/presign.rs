@@ -102,7 +102,7 @@ impl PresignPut<'_> {
         match &content_type {
             Some(value) => {
                 if !is_content_type(value) {
-                    return Err(signing("the content type is not a valid `type/subtype`"));
+                    return Err(rejected(UploadRejection::InvalidType));
                 }
                 let essence = essence(value);
                 if !self.rules.allows(&essence) {
@@ -127,7 +127,13 @@ impl PresignPut<'_> {
         if let Some(provider) = disk.provider() {
             let ttl = disk.provider_ttl(provider, expires_at)?;
             let (url, headers) = provider
-                .put_url(&path, ttl, content_type.as_deref(), self.rules.max_bytes)
+                .put_url(
+                    &path,
+                    ttl,
+                    content_type.as_deref(),
+                    self.rules.max_bytes,
+                    self.size,
+                )
                 .await
                 .map_err(|error| disk.backend_error(error))?;
             return Ok(PresignedUpload {
@@ -211,9 +217,11 @@ impl Disk {
     /// The declared type and size are checked against `rules` first
     /// ([`StorageError::Rejected`]). Then:
     ///
-    /// - S3 signs a `PUT` bound to the declared `Content-Type`;
+    /// - S3 signs a `PUT` bound to the declared `Content-Type` (S3 cannot
+    ///   bind a size to a presigned `PUT`);
     /// - Google Cloud Storage also binds `x-goog-content-length-range`, so
-    ///   it refuses a body over `rules.max_bytes`;
+    ///   it refuses a body over `rules.max_bytes`, or of another size than
+    ///   the declared one;
     /// - Azure signs a service SAS; the client also sends
     ///   `x-ms-blob-type: BlockBlob` (listed in the headers);
     /// - local and memory disks sign the app's own route

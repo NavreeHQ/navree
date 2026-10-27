@@ -89,14 +89,19 @@ mod cloud {
 
         /// A link that uploads `path` for `ttl`, and the headers the client
         /// must send with it. S3 and Google Cloud Storage refuse an upload
-        /// whose `Content-Type` differs from `content_type`; Google Cloud
-        /// Storage also refuses one over `max_bytes`.
+        /// whose `Content-Type` differs from `content_type`. Google Cloud
+        /// Storage also refuses a body outside `x-goog-content-length-range`:
+        /// up to `max_bytes`, or exactly the declared `size`. S3 cannot bind
+        /// a size to a presigned `PUT` (the signer does not sign
+        /// `Content-Length`); [`Disk::accept_upload`](crate::Disk::accept_upload)
+        /// checks it afterwards.
         pub(crate) async fn put_url(
             &self,
             path: &str,
             ttl: Duration,
             content_type: Option<&str>,
             max_bytes: u64,
+            size: Option<u64>,
         ) -> object_store::Result<(String, BTreeMap<String, String>)> {
             let location = self.location(path)?;
             let mut headers = BTreeMap::new();
@@ -106,10 +111,11 @@ mod cloud {
             let url = match self.kind {
                 ProviderKind::S3 | ProviderKind::Gcs => {
                     if self.kind == ProviderKind::Gcs {
-                        headers.insert(
-                            "x-goog-content-length-range".to_owned(),
-                            format!("0,{max_bytes}"),
-                        );
+                        let range = match size {
+                            Some(size) => format!("{size},{size}"),
+                            None => format!("0,{max_bytes}"),
+                        };
+                        headers.insert("x-goog-content-length-range".to_owned(), range);
                     }
                     let invalid = |source: Box<dyn std::error::Error + Send + Sync>| {
                         object_store::Error::Generic {
@@ -174,6 +180,7 @@ mod none {
             _ttl: Duration,
             _content_type: Option<&str>,
             _max_bytes: u64,
+            _size: Option<u64>,
         ) -> object_store::Result<(String, BTreeMap<String, String>)> {
             match *self {}
         }

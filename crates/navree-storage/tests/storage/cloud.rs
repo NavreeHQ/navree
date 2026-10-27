@@ -113,6 +113,15 @@ mod gcs {
             download.contains("X-Goog-SignedHeaders=host&"),
             "{download}"
         );
+
+        // A declared size narrows the range to exactly that size.
+        let sized = disk
+            .presigned_put("avatars/b.png", Duration::minutes(10), &rules)
+            .content_type("image/png")
+            .size(48_213)
+            .await
+            .unwrap();
+        assert_eq!(sized.headers["x-goog-content-length-range"], "48213,48213");
         // Nothing was sent to the provider: signing is local.
         assert!(server.received_requests().await.unwrap().is_empty());
     }

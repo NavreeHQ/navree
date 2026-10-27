@@ -39,7 +39,7 @@ Mailpit's inbox: http://127.0.0.1:8025
 Wrote 2 settings to .env: APP_DATABASE__URL, APP_MAIL__TRANSPORT.
 ```
 
-The first run pulls the images it doesn't have yet, with Docker's or Podman's own progress output. `navree dock:add postgres` prints the feature hint only when your `Cargo.toml` doesn't turn on `postgres` yet.
+The first run pulls the images it doesn't have yet, with Docker's or Podman's own progress output. `navree dock:add postgres` prints the feature hint only when your `Cargo.toml` doesn't turn on `postgres` yet, and `navree dock:add minio` says how to point a [storage disk](/docs/digging-deeper/storage/#s3-and-s3-compatible-stores) at its bucket (`driver = "s3"` and the bucket's name; the disk reads MinIO's address and keys from the `AWS_*` settings).
 
 Now run your app as usual. `navree dev` passes the services' settings to it, so it migrates the PostgreSQL database and sends its mail to Mailpit, whose inbox is at `http://127.0.0.1:8025`:
 
