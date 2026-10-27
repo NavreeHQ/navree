@@ -7,6 +7,7 @@ use std::sync::{Arc, Mutex};
 use chrono::{DateTime, Utc};
 use navree_db::sea_orm::ConnectionTrait;
 use navree_db::{DatabaseModule, Db};
+use navree_orm::strict::Violation;
 use navree_orm::{Model, OrmError, OrmModule, OrmOptions, OrmRuntime};
 use navree_testing::TestApp;
 use serde::Serialize;
@@ -114,6 +115,48 @@ async fn handlers_on_the_module_take_over_from_errors() {
     assert_eq!(
         *seen.lock().unwrap(),
         ["column `reading` of Probe is missing from the row"]
+    );
+}
+
+#[tokio::test]
+async fn discarded_attributes_and_lazy_loading_have_handlers_too() {
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let (discarded, lazy) = (seen.clone(), seen.clone());
+    let app = navree_kernel::Navree::app()
+        .module(
+            OrmModule::for_root(OrmOptions::strict())
+                .on_discarded_attributes(move |violation| {
+                    discarded.lock().unwrap().push(violation.to_string());
+                    Ok(())
+                })
+                .on_lazy_loading(move |violation| {
+                    lazy.lock().unwrap().push(violation.to_string());
+                    Err(OrmError::InvalidQuery("eager load it".into()))
+                }),
+        )
+        .boot()
+        .await
+        .unwrap();
+    let strictness = app.ctx().get::<OrmRuntime>().await.unwrap().strictness().clone();
+    strictness
+        .check(Violation::DiscardedAttributes {
+            model: "Probe",
+            columns: vec!["reading".into()],
+        })
+        .expect("tolerated by the handler");
+    let error = strictness
+        .check(Violation::LazyLoading {
+            model: "Probe",
+            relation: "sensor".into(),
+        })
+        .unwrap_err();
+    assert_eq!(error.to_string(), "invalid query: eager load it");
+    assert_eq!(
+        *seen.lock().unwrap(),
+        [
+            "columns reading of Probe are not fillable and were not filled",
+            "relation `sensor` of Probe was loaded lazily",
+        ]
     );
 }
 
