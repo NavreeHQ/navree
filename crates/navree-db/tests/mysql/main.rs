@@ -14,6 +14,7 @@ mod fixtures;
 mod support;
 
 mod connect;
+mod errors;
 mod migrations;
 mod paginate;
 mod repo;
