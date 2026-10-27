@@ -1,6 +1,6 @@
 ---
 name: navree-queues-and-scheduling
-description: "Background work in Navree: `Job` types, registering and dispatching jobs, job options (retries, backoff, timeouts, unique jobs), jobs inside transactions, `queue:work` and failed jobs, `QueueFake`, and cron-style schedules with `m.schedule` run by `schedule:work` or `schedule:run`. Use when moving slow work out of a request, adding a job or worker, retrying or inspecting failed jobs, running something every minute, hour or day, or testing jobs and schedules."
+description: "Background work in Navree: `Job` types, registering and dispatching jobs, job options (retries, backoff, timeouts, unique jobs), jobs inside transactions, `queue:work` and failed jobs, job batches with `then`/`catch`/`finally`, job progress, operations (user-visible long work with an SSE stream, a private channel, cancel and a watchdog), `QueueFake`, and cron-style schedules with `m.schedule` run by `schedule:work` or `schedule:run`. Use when moving slow work out of a request, adding a job or worker, splitting an import or export into a batch, showing progress to users, retrying or inspecting failed jobs, running something every minute, hour or day, or testing jobs and schedules."
 ---
 
 # Queues and scheduling
@@ -135,6 +135,50 @@ Run workers as their own processes from the same binary and configuration
 (`./app queue:work` under systemd); restart them after every deploy. The
 `memory` driver never reaches a separate `queue:work` process.
 
+## Long work: batches and operations
+
+For an import, export or bulk update that users wait for: split it into a
+batch of jobs and give it an operation the client follows.
+
+1. Write the chunk job; call `ctx.progress(done, total, note).await?` inside
+   it (throttled to one write per 500 ms; `?` stops it with `JobCancelled`
+   once the operation or batch is cancelled).
+2. Write a `then` job that records the result with
+   `operations.complete(op_id, json!({..}))`.
+3. In the handler, start the operation and dispatch the batch in the
+   request's unit of work, and return the operation:
+
+```rust
+let op = self.operations.start(&uow, Operation::new("contacts.import")
+    .owner(me.user_id).workspace(ws.id()).note("Waiting for a worker")).await?;
+let batch = Batch::new("contacts.import")
+    .add(chunks)                                  // any iterator of one job type; .push(job) for one
+    .then(FinishImport { operation: op.id })      // no job failed, not cancelled
+    .catch(ReportImportFailure { import_id })     // first failure (cancels the rest unless .allow_failures())
+    .finally(CleanUp { import_id });              // always, once every job finished
+self.operations.dispatch_batch(&uow, &op, batch).await?;   // or operations.dispatch(&uow, &op, job)
+Ok(Json(op))
+```
+
+Without an operation: `batch.dispatch_in(&queue, &uow)` (or `dispatch(&queue)`),
+then `queue.find_batch(&id)`, `queue.cancel_batch(&id)`.
+
+- The client follows `GET /api/operations/{id}`, the SSE stream
+  `GET /api/operations/{id}/events` (ends after the finished state) or the
+  private channel `private-operations.{id}` (event `operation.updated`), and
+  cancels with `DELETE /api/operations/{id}`.
+- Visible to the owner and to holders of `operations.view` app-wide
+  (navree-access) or in the operation's workspace (workspace role
+  permissions, e.g. `[workspace.roles.admin] permissions = ["operations.view", "operations.cancel"]`);
+  everyone else gets a 404.
+- The watchdog fails stalled operations (no heartbeat for 300 s) or
+  restarts `Operation::idempotent()` ones; with `ScheduleModule` it runs
+  every minute on its own, otherwise run `queue:watchdog` from cron.
+- `queue:batches`, `queue:prune --hours 168`. Settings: `[queue.operations]`.
+- Test with `fake.assert_batched(|b| b.name() == "contacts.import")` and
+  `fake.batches()[0].jobs_of::<ImportChunk>()`; or run them with
+  `run_pending` and check `operations.find(id)`.
+
 ## Schedules
 
 ```rust
@@ -222,4 +266,5 @@ For schedules, override `dyn Clock` with a `FixedClock`, then
 ## Docs
 
 - https://navree.com/docs/digging-deeper/queues/
+- https://navree.com/docs/digging-deeper/batches-and-operations/
 - https://navree.com/docs/digging-deeper/scheduling/
