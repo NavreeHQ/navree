@@ -13,7 +13,7 @@ workspace = true
 [features]
 default = ["full"]
 ## Every module crate, except the opt-in ones (`social`, `oauth`, `flags`,
-## `graphql`, `billing`, `dock`).
+## `graphql`, `grpc`, `documents`, `billing`, `dock`).
 full = [
     "access",
     "api",
@@ -155,6 +155,11 @@ graphql = [
 ## L6 (opt-in: not in `full`)
 ## gRPC, gRPC-Web and Connect services in modules, on tonic.
 grpc = ["dep:navree-grpc", "http", "db", "validation", "testing"]
+## L6 (opt-in: not in `full`; the embedded Typst compiler and the bundled
+## fonts add to the build)
+## Documents: PDF from Typst or HTML templates (Typst in process, headless
+## Chrome), DOCX, merge and stamps, queued renders.
+documents = ["dep:navree-documents", "http", "view", "storage"]
 ## L7 (opt-in, not in `full`)
 ## Billing: subscriptions, trials, seats, usage, invoices and the portal
 ## with Stripe, Paddle or a fake; verified webhooks on the queue.
@@ -196,6 +201,7 @@ navree-cache = { workspace = true, optional = true }
 navree-crypto = { workspace = true, optional = true }
 navree-db = { workspace = true, optional = true }
 navree-dock = { workspace = true, optional = true }
+navree-documents = { workspace = true, optional = true }
 navree-events = { workspace = true, optional = true }
 navree-graphql = { workspace = true, optional = true }
 navree-http = { workspace = true, optional = true }
