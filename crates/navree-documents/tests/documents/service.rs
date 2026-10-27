@@ -1,7 +1,7 @@
 //! `Documents`: engine selection, saving, queueing and the queued job.
 
-// Most of these tests need the Typst engine.
-#![cfg_attr(not(feature = "typst"), allow(unused_imports, dead_code))]
+// Most of these tests need the native engine.
+#![cfg_attr(not(feature = "native"), allow(unused_imports, dead_code))]
 
 use std::sync::Arc;
 
@@ -30,31 +30,27 @@ fn memory_storage() -> Arc<Storage> {
 }
 
 #[test]
-fn the_template_picks_the_engine_and_the_option_breaks_ties() {
+fn the_render_or_the_option_picks_the_engine() {
     let documents = Documents::new(fixture_templates());
     let engine = |render: Render| documents.engine_for(&render).unwrap();
-    // Only .typ, only .html, both (Typst by default).
-    assert_eq!(engine(Render::template("shared/layout")), EngineKind::Typst);
-    assert_eq!(
-        engine(Render::template("invoices/show")),
-        EngineKind::Chrome
-    );
-    assert_eq!(
-        engine(Render::template("certificates/classic")),
-        EngineKind::Typst
-    );
-    // An extension or the render decides.
+    // `documents.engine` (native, or chrome in a build without it).
+    let default = DocumentsOptions::default().engine;
+    assert_eq!(engine(Render::template("invoices/show")), default);
     assert_eq!(
         engine(Render::template("certificates/classic.html")),
-        EngineKind::Chrome
+        default
     );
+    assert_eq!(engine(Render::html("x")), default);
+    // The render decides.
     assert_eq!(
         engine(Render::template("certificates/classic").engine(EngineKind::Chrome)),
         EngineKind::Chrome
     );
-    assert_eq!(engine(Render::typst("x")), EngineKind::Typst);
-    assert_eq!(engine(Render::html("x")), EngineKind::Chrome);
-    // documents.engine = "chrome" breaks ties the other way.
+    assert_eq!(
+        engine(Render::html("x").engine(EngineKind::Native)),
+        EngineKind::Native
+    );
+    // documents.engine = "chrome".
     let chrome_first = documents.clone().default_engine(EngineKind::Chrome);
     assert_eq!(
         chrome_first
@@ -65,13 +61,13 @@ fn the_template_picks_the_engine_and_the_option_breaks_ties() {
     match documents.engine_for(&Render::template("reports/missing")) {
         Err(DocumentsError::TemplateNotFound { name, tried }) => {
             assert_eq!(name, "reports/missing");
-            assert_eq!(tried, vec!["reports/missing.typ", "reports/missing.html"]);
+            assert_eq!(tried, vec!["reports/missing.html"]);
         }
         other => panic!("{other:?}"),
     }
 }
 
-#[cfg(feature = "typst")]
+#[cfg(feature = "native")]
 #[tokio::test]
 async fn pdf_renders_a_template_with_data() {
     let documents = Documents::new(fixture_templates());
@@ -87,14 +83,14 @@ async fn pdf_renders_a_template_with_data() {
             .unwrap()
             .contains("Ada Lovelace completed Engines on today.")
     );
-    assert!(documents.engine(EngineKind::Typst).is_some());
+    assert!(documents.engine(EngineKind::Native).is_some());
 }
 
-#[cfg(feature = "typst")]
+#[cfg(feature = "native")]
 #[tokio::test]
 async fn options_configure_the_engines() {
     let mut options = DocumentsOptions::default();
-    options.typst.bundled_fonts = false;
+    options.native.bundled_fonts = false;
     let documents = Documents::from_options(&options, fixture_templates());
     assert!(documents.font_families().await.unwrap().is_empty());
     let documents = Documents::new(fixture_templates());
@@ -111,21 +107,21 @@ async fn a_replaced_engine_renders_its_kind() {
     let documents =
         Documents::new(fixture_templates()).with_engine(Arc::new(fake.engine(EngineKind::Chrome)));
     let pdf = documents
-        .pdf("invoices/show", json!({"number": 1}))
+        .render(&Render::template("invoices/show").engine(EngineKind::Chrome))
         .await
         .unwrap();
     assert!(pdf.text().unwrap().starts_with("invoices/show"));
     fake.assert_rendered("invoices/show");
 }
 
-#[cfg(feature = "typst")]
+#[cfg(feature = "native")]
 #[tokio::test]
 async fn save_writes_the_pdf_to_the_documents_disk() {
     let storage = memory_storage();
     let documents =
         Documents::new(fixture_templates()).storage(storage.clone(), Some("exports".into()));
     let stored = documents
-        .save(&Render::typst("Quarterly report"), "reports/q3.pdf")
+        .save(&Render::html("<p>Quarterly report</p>"), "reports/q3.pdf")
         .await
         .unwrap();
     assert_eq!(stored.path, "reports/q3.pdf");
@@ -155,7 +151,7 @@ async fn save_writes_the_pdf_to_the_documents_disk() {
 async fn save_without_storage_says_what_is_missing() {
     let documents = Documents::new(fixture_templates());
     let error = documents
-        .save(&Render::typst("x"), "x.pdf")
+        .save(&Render::html("<p>x</p>"), "x.pdf")
         .await
         .unwrap_err();
     assert!(error.to_string().contains("StorageModule"), "{error}");
@@ -174,7 +170,7 @@ impl Dispatcher for Recorder {
     }
 }
 
-#[cfg(feature = "typst")]
+#[cfg(feature = "native")]
 #[tokio::test]
 async fn queue_dispatches_the_render_job() {
     let storage = memory_storage();
@@ -184,7 +180,7 @@ async fn queue_dispatches_the_render_job() {
         .dispatcher(recorder.clone());
     let queued = documents
         .queue(
-            Render::typst("Export for #json(\"/data.json\").who").data(json!({"who": "Ada"})),
+            Render::html("<p>Export for Ada</p>").data(json!({"who": "Ada"})),
             "exports/ada.pdf",
         )
         .await
@@ -207,20 +203,20 @@ async fn queue_dispatches_the_render_job() {
     );
     // An invalid path fails before anything is queued.
     let error = documents
-        .queue(Render::typst("x"), "../escape.pdf")
+        .queue(Render::html("<p>x</p>"), "../escape.pdf")
         .await
         .unwrap_err();
     assert!(matches!(error, DocumentsError::Storage(_)), "{error:?}");
     assert_eq!(recorder.0.lock().unwrap().len(), 1);
 }
 
-#[cfg(feature = "typst")]
+#[cfg(feature = "native")]
 #[tokio::test]
 async fn without_a_dispatcher_queue_renders_at_once() {
     let storage = memory_storage();
     let documents = Documents::new(fixture_templates()).storage(storage.clone(), None);
     let queued = documents
-        .queue(Render::typst("Now"), "exports/now.pdf")
+        .queue(Render::html("<p>Now</p>"), "exports/now.pdf")
         .await
         .unwrap();
     assert_eq!(queued.job_id, None);
@@ -236,13 +232,13 @@ async fn data_that_is_not_json_is_refused_before_queueing() {
     let mut map = std::collections::BTreeMap::new();
     map.insert((1, 2), "x");
     let error = documents
-        .queue(Render::typst("x").data(map), "x.pdf")
+        .queue(Render::html("<p>x</p>").data(map), "x.pdf")
         .await
         .unwrap_err();
     assert!(matches!(error, DocumentsError::Data(_)), "{error:?}");
 }
 
-#[cfg(feature = "typst")]
+#[cfg(feature = "native")]
 #[tokio::test]
 async fn without_a_dispatcher_a_failed_render_fails_the_call() {
     let storage = memory_storage();

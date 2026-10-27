@@ -403,12 +403,6 @@ async fn template_errors_name_the_template() {
         }
         other => panic!("{other:?}"),
     }
-    match engine.render(&Render::typst("= Typst")).await {
-        Err(DocumentsError::EngineUnavailable {
-            engine: "chrome", ..
-        }) => {}
-        other => panic!("{other:?}"),
-    }
     // Nothing reached the browser.
     assert!(mock.seen().calls.is_empty());
 }

@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="{{ locale }}" dir="{{ dir }}">
+<head>
+  <meta charset="utf-8">
+  <title>Invoice {{ number }}</title>
+  <meta name="author" content="{{ company.name }}">
+  <link rel="stylesheet" href="/_navree/fonts.css">
+  <style>
+    @page { size: A4; margin: 18mm 18mm 22mm 18mm; }
+    body { font-family: "Noto Sans", sans-serif; font-size: 10pt; color: #1f2937; }
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: start; background: #f2f4f7; }
+    td, th { padding: 6px 8px; border-bottom: 1px solid #d0d5dd; }
+    .page-break { break-after: page; }
+  </style>
+</head>
+<body style="font-size: 10pt; color: #1f2937">
+  <table border="0" role="presentation" cellpadding="0">
+    <tr>
+      <td width="55%" valign="middle"><img src="/images/acme-logo.png" width="190" alt="{{ company.name }}"></td>
+      <td style="text-align: right">
+        <p style="font-size: 22pt; font-weight: bold; color: #14532d">INVOICE</p>
+        <p style="color: #4b5563">{{ number }}<br>Issued {{ issued }}<br>Due {{ due }}</p>
+      </td>
+    </tr>
+  </table>
+
+  <table border="0" role="presentation" cellpadding="0">
+    <tr>
+      <td width="50%">
+        <p style="font-size: 8pt; color: #6b7280; font-weight: bold">FROM</p>
+        <p><strong>{{ company.name }}</strong><br>{{ company.street }}<br>{{ company.city }}<br>{{ company.email }}</p>
+      </td>
+      <td>
+        <p style="font-size: 8pt; color: #6b7280; font-weight: bold">BILL TO</p>
+        <p><strong>{{ customer.name }}</strong><br>{{ customer.street }}<br>{{ customer.city }}<br>VAT {{ customer.vat }}</p>
+      </td>
+    </tr>
+  </table>
+
+  <table>
+    <thead>
+      <tr><th width="52%">Description</th><th align="right">Qty</th><th align="right">Unit price</th><th align="right">Amount</th></tr>
+    </thead>
+    <tbody>
+    {% for line in lines %}
+      <tr>
+        <td>{{ line.description }}<br><small style="color: #6b7280">{{ line.detail }}</small></td>
+        <td align="right">{{ line.qty }}</td>
+        <td align="right">{{ line.unit_cents|money(currency) }}</td>
+        <td align="right">{{ line.amount_cents|money(currency) }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  <table border="0" role="presentation">
+    <tr><td width="58%"></td><td>Subtotal</td><td align="right">{{ subtotal_cents|money(currency) }}</td></tr>
+    <tr><td></td><td>VAT {{ vat_rate }}%</td><td align="right">{{ vat_cents|money(currency) }}</td></tr>
+    <tr style="background-color: #14532d; color: #ffffff"><td style="background-color: #ffffff"></td><td><strong>Total due</strong></td><td align="right"><strong>{{ total_cents|money(currency) }}</strong></td></tr>
+  </table>
+
+  <h3>Payment</h3>
+  <p>Pay by bank transfer to <strong>{{ company.iban }}</strong> (BIC {{ company.bic }}), quoting <strong>{{ number }}</strong>, or online at <a href="{{ pay_url }}">{{ pay_url }}</a>.</p>
+  <p style="color: #6b7280; font-size: 8.5pt; text-align: justify">{{ terms }}</p>
+
+  <footer>
+    <p style="text-align: center">{{ company.name }} · {{ company.email }} · Invoice {{ number }} · Page <span class="pageNumber"></span> of <span class="totalPages"></span></p>
+  </footer>
+</body>
+</html>
