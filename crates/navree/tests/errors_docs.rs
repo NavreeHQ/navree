@@ -249,7 +249,10 @@ async fn the_billing_mapper_sets_status_and_code() {
         .send()
         .await
         .assert_error_code(500, "internal_error");
-    assert!(!gateway.text().contains("connection reset"), "logged, not sent");
+    assert!(
+        !gateway.text().contains("connection reset"),
+        "logged, not sent"
+    );
 }
 
 #[tokio::test]
@@ -299,22 +302,54 @@ fn error_values_render_as_the_page_shows() {
 fn the_documented_api_exists() {
     let errors = BTreeMap::from([("email".to_owned(), vec!["taken".to_owned()])]);
     let constructors: Vec<(AppError, u16, &str)> = vec![
-        (AppError::bad_request("The export is empty."), 400, codes::BAD_REQUEST),
+        (
+            AppError::bad_request("The export is empty."),
+            400,
+            codes::BAD_REQUEST,
+        ),
         (AppError::validation(errors), 400, codes::VALIDATION_FAILED),
-        (AppError::invalid_filter("Unknown filter: colour."), 400, codes::INVALID_FILTER),
+        (
+            AppError::invalid_filter("Unknown filter: colour."),
+            400,
+            codes::INVALID_FILTER,
+        ),
         (AppError::unauthenticated(), 401, codes::UNAUTHENTICATED),
-        (AppError::two_factor_required(), 401, codes::TWO_FACTOR_REQUIRED),
+        (
+            AppError::two_factor_required(),
+            401,
+            codes::TWO_FACTOR_REQUIRED,
+        ),
         (AppError::forbidden(), 403, codes::FORBIDDEN),
         (AppError::demo_read_only(), 403, codes::DEMO_READ_ONLY),
         (AppError::csrf_mismatch(), 403, codes::CSRF_TOKEN_MISMATCH),
         (AppError::not_found(), 404, codes::NOT_FOUND),
         (AppError::conflict("..."), 409, codes::CONFLICT),
-        (AppError::limit_reached("Your plan includes 5 seats."), 409, codes::LIMIT_REACHED),
-        (AppError::payload_too_large(16), 413, codes::PAYLOAD_TOO_LARGE),
-        (AppError::too_many_requests(Duration::from_secs(1)), 429, codes::TOO_MANY_REQUESTS),
-        (AppError::service_unavailable("..."), 503, codes::SERVICE_UNAVAILABLE),
+        (
+            AppError::limit_reached("Your plan includes 5 seats."),
+            409,
+            codes::LIMIT_REACHED,
+        ),
+        (
+            AppError::payload_too_large(16),
+            413,
+            codes::PAYLOAD_TOO_LARGE,
+        ),
+        (
+            AppError::too_many_requests(Duration::from_secs(1)),
+            429,
+            codes::TOO_MANY_REQUESTS,
+        ),
+        (
+            AppError::service_unavailable("..."),
+            503,
+            codes::SERVICE_UNAVAILABLE,
+        ),
         (AppError::internal("boom"), 500, codes::INTERNAL_ERROR),
-        (AppError::from_status(StatusCode::PAYMENT_REQUIRED), 402, "payment_required"),
+        (
+            AppError::from_status(StatusCode::PAYMENT_REQUIRED),
+            402,
+            "payment_required",
+        ),
     ];
     for (error, status, code) in constructors {
         assert_eq!(error.status.as_u16(), status, "{error}");
@@ -370,7 +405,10 @@ fn the_documented_api_exists() {
         codes::MAINTENANCE,
         codes::REQUEST_TIMEOUT,
     ] {
-        assert!(codes::ALL.contains(&code) && codes::is_valid(code), "{code}");
+        assert!(
+            codes::ALL.contains(&code) && codes::is_valid(code),
+            "{code}"
+        );
     }
     assert_eq!(codes::ALL.len(), 20, "the page's table lists every code");
     assert!(codes::is_valid("campaign_already_running"));
