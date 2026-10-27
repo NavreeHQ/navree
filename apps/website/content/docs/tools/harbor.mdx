@@ -498,7 +498,7 @@ docker run --env-file production.env registry.example.com/crm-api:1.4.0 migrate
 
 `navree harbor:secrets export > production.env` writes `[env]` and the decrypted `[secrets]` as an env file; keep the file out of your repository, and prefer your platform's secret store. Point the platform's liveness and readiness probes at [`/health/live` and `/health/ready`](/docs/digging-deeper/health-and-metrics/).
 
-To change the image, `navree build:image --dockerfile` writes the `Dockerfile` and `.dockerignore` it uses into your app; later builds use your copy.
+To change the image, `navree build:image --dockerfile` writes the `Dockerfile` and `.dockerignore` it uses into your app; later builds use your copy. In a workspace, where the build context is the workspace root, the ignore file is `Dockerfile.dockerignore` next to the `Dockerfile`, the name BuildKit reads for that Dockerfile. Harbor never overwrites either file.
 
 ## Push to deploy with GitHub Actions
 
@@ -610,7 +610,7 @@ Every command takes `--env <name>`. Harbor looks for `harbor.toml` in the curren
 | `frontend.node_version` | `24` | The Node.js major version on `web` servers and in container builds. |
 | `build.method` | `auto` | `auto`, `native` or `container`. |
 | `build.features` | `[]` | Cargo features of the build. |
-| `build.target` | your servers' architecture | A Rust target triple, to override it. |
+| `build.target` | your servers' architecture | A Rust target triple, to override it, such as `x86_64-unknown-linux-musl`. A container build adds it to the builder's toolchain first. |
 | `build.image` | Harbor's builder image | The image container builds run in. |
 | `deploy.path` | `/srv/<app>` | Where releases live on the servers. |
 | `deploy.keep_releases` | `5` | Releases kept for rollbacks. |
