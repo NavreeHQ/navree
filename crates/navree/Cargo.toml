@@ -39,6 +39,7 @@ full = [
     "schedule",
     "schema",
     "session",
+    "sso",
     "storage",
     "storage-s3",
     "telemetry",
@@ -138,6 +139,20 @@ webhooks = [
     "events",
     "http-client",
     "db",
+    "workspace",
+]
+## Single sign-on: SAML 2.0 and OpenID Connect connections per organization
+## or workspace, verified email domains, just-in-time provisioning (pure
+## Rust, XML signatures on ring; in `full`).
+sso = [
+    "dep:navree-sso",
+    "http",
+    "crypto",
+    "cache",
+    "events",
+    "http-client",
+    "db",
+    "auth",
     "workspace",
 ]
 ## L6 (opt-in, not in `full`)
@@ -389,6 +404,7 @@ navree-schedule = { workspace = true, optional = true }
 navree-schema = { workspace = true, optional = true }
 navree-session = { workspace = true, optional = true }
 navree-social = { workspace = true, optional = true }
+navree-sso = { workspace = true, optional = true }
 navree-storage = { workspace = true, optional = true }
 navree-telemetry = { workspace = true, optional = true }
 navree-testing = { workspace = true, optional = true }
