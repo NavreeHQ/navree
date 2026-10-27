@@ -538,10 +538,52 @@ async fn the_follow_up_enrolls_won_deals() {
     let h = harness(Billing::default()).await;
     let automations = h.app.get::<Automations>().await;
     let catalog = automations.catalog();
-    assert_eq!(catalog.triggers()[0].label, "Deal won");
+    // The trigger as the catalog in automations.mdx shows it.
     assert_eq!(
-        catalog.triggers()[0].schema["properties"]["min_amount_cents"]["description"],
-        "Only deals worth at least this much, in cents."
+        serde_json::to_value(&catalog.triggers()[0]).unwrap(),
+        json!({
+            "kind": "trigger",
+            "type": "deal.won",
+            "label": "Deal won",
+            "description": "A deal moved to won.",
+            "event": "deal.won",
+            "subject": "owner_id",
+            "schema": {
+                "type": "object",
+                "description": "The settings of the \"Deal won\" trigger.",
+                "properties": {
+                    "min_amount_cents": {
+                        "type": ["integer", "null"],
+                        "format": "int64",
+                        "description": "Only deals worth at least this much, in cents."
+                    }
+                }
+            }
+        })
+    );
+    // Validation answers with JSON pointers.
+    let mut broken = big_deal_follow_up();
+    broken["nodes"][0]["type"] = json!("task.make");
+    broken["nodes"][1]["seconds"] = json!(0);
+    broken["nodes"][2]["config"] = json!({});
+    broken["nodes"][4]["next"] = json!("thank");
+    let issues: Vec<(String, String)> = automations
+        .validate(&broken)
+        .issues
+        .into_iter()
+        .map(|issue| (issue.path, issue.message))
+        .collect();
+    assert_eq!(
+        issues,
+        [
+            ("/nodes/0/type".to_owned(), "unknown action `task.make`".to_owned()),
+            ("/nodes/1/seconds".to_owned(), "a delay lasts at least 1 second".to_owned()),
+            ("/nodes/2/config".to_owned(), "missing field `amount_cents`".to_owned()),
+            (
+                "/nodes/4/next".to_owned(),
+                "going to `thank` makes a loop: each node runs at most once".to_owned()
+            ),
+        ]
     );
 
     let db = h.app.get::<Db>().await;
