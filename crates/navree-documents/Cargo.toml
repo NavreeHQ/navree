@@ -1,0 +1,55 @@
+[package]
+name = "navree-documents"
+description = "Navree DocumentsModule: PDF from Typst or HTML templates (embedded Typst compiler, headless Chrome), DOCX, and PDF merge, stamp and text extraction."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = ["typst", "chrome", "docx"]
+## The embedded Typst compiler with the bundled Noto fonts.
+typst = ["dep:typst", "dep:typst-pdf", "dep:typst-layout"]
+## HTML to PDF in headless Chrome over the DevTools protocol.
+chrome = ["dep:tokio-tungstenite", "dep:futures-util", "dep:tempfile", "dep:mime_guess"]
+## The DOCX writer.
+docx = ["dep:docx-rs"]
+
+[dependencies]
+axum = { workspace = true }
+base64 = { workspace = true }
+bytes = { workspace = true }
+chrono = { workspace = true }
+docx-rs = { workspace = true, optional = true }
+futures-util = { workspace = true, optional = true }
+http = { workspace = true }
+lopdf = { workspace = true }
+mime_guess = { workspace = true, optional = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-http = { workspace = true }
+navree-kernel = { workspace = true }
+navree-storage = { workspace = true }
+navree-view = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tempfile = { workspace = true, optional = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tokio-tungstenite = { workspace = true, optional = true }
+tracing = { workspace = true }
+typst = { workspace = true, optional = true }
+typst-layout = { workspace = true, optional = true }
+typst-pdf = { workspace = true, optional = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+navree-queue = { workspace = true }
+navree-testing = { workspace = true }
+tempfile = { workspace = true }
+zip = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }

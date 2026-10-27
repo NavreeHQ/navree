@@ -13,7 +13,8 @@ workspace = true
 [features]
 default = ["full"]
 ## Every module crate, except the opt-in ones (`social`, `oauth`, `flags`,
-## `graphql`, `grpc`, `billing`, `search`, `mcp`, `ai`, `redis`, `dock`).
+## `graphql`, `grpc`, `documents`, `billing`, `search`, `mcp`, `ai`, `redis`,
+## `dock`).
 full = [
     "access",
     "api",
@@ -207,6 +208,11 @@ ai = [
     "access",
     "auth",
 ]
+## L6 (opt-in: not in `full`; the embedded Typst compiler and the bundled
+## fonts add to the build)
+## Documents: PDF from Typst or HTML templates (Typst in process, headless
+## Chrome), DOCX, merge and stamps, queued renders.
+documents = ["dep:navree-documents", "http", "view", "storage"]
 ## L7 (opt-in, not in `full`)
 ## Search: full-text and vector search over entities (postgres,
 ## meilisearch, typesense and memory engines).
@@ -365,6 +371,7 @@ navree-cache = { workspace = true, optional = true }
 navree-crypto = { workspace = true, optional = true }
 navree-db = { workspace = true, optional = true }
 navree-dock = { workspace = true, optional = true }
+navree-documents = { workspace = true, optional = true }
 navree-events = { workspace = true, optional = true }
 navree-graphql = { workspace = true, optional = true }
 navree-helm = { workspace = true, optional = true }
@@ -435,3 +442,9 @@ required-features = ["grpc"]
 [[test]]
 name = "redis"
 required-features = ["redis"]
+
+# The documents docs examples through the facade
+# (`cargo test -p navree --features documents --test documents`).
+[[test]]
+name = "documents"
+required-features = ["documents"]

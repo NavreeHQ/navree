@@ -47,6 +47,7 @@
 //! | `graphql` | navree-graphql | `graphql` (opt-in) | `GraphqlModule`: `#[resolver]`, dataloaders, subscriptions |
 //! | `grpc` | navree-grpc | `grpc` (opt-in) | `GrpcModule`: tonic services with gRPC-Web, Connect, health and reflection |
 //! | `lighthouse` | navree-lighthouse | `lighthouse` | `LighthouseModule`: issues, traces, alerts and the `/_lighthouse` dashboard |
+//! | `documents` | navree-documents | `documents` (opt-in) | `DocumentsModule`: PDF from Typst or HTML templates, DOCX, merge and stamps |
 //! | `billing` | navree-billing | `billing` (opt-in) | `BillingModule`: subscriptions, trials, usage, invoices with Stripe or Paddle |
 //! | `search` | navree-search | `search` (opt-in) | `SearchModule`: full-text and vector search, `#[derive(Searchable)]` |
 //! | `logbook` | navree-logbook | `logbook` | `LogbookModule`: the local debugging timeline at `/_logbook`, with replay |
@@ -59,9 +60,9 @@
 //! | `harbor` | navree-harbor | `harbor` (opt-in) | Harbor as a library: `harbor.toml`, provisioning, deploys, secrets |
 //!
 //! `full` (the default) turns on every module except the opt-in ones
-//! (`social`, `oauth`, `flags`, `graphql`, `grpc`, `billing`, `search`,
-//! `mcp`, `ai`, `redis`, `micro` and its transports, `dock`, `harbor`,
-//! `otel`), and the `storage-s3` driver but not `storage-gcs` or
+//! (`social`, `oauth`, `flags`, `graphql`, `grpc`, `documents`, `billing`,
+//! `search`, `mcp`, `ai`, `redis`, `micro` and its transports, `dock`,
+//! `harbor`, `otel`), and the `storage-s3` driver but not `storage-gcs` or
 //! `storage-azure`. A feature also turns on the features of the crates its
 //! crate builds on (`auth` turns on `access`, `db`, `http`, ...). SQLite is
 //! built in; the `postgres` feature adds navree-db's PostgreSQL driver and
@@ -212,6 +213,8 @@ pub use navree_redis as redis;
 pub use navree_webhooks as webhooks;
 
 // L6 (opt-in)
+#[cfg(feature = "documents")]
+pub use navree_documents as documents;
 #[cfg(feature = "grpc")]
 pub use navree_grpc as grpc;
 #[cfg(feature = "oauth")]

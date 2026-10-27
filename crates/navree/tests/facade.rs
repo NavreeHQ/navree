@@ -357,12 +357,24 @@ struct Features {
 /// runtime never needs (`dock`, `harbor`), and ecosystem libraries and
 /// packages an app turns on by name (`features = ["social"]`,
 /// `features = ["oauth"]`, `features = ["flags"]`, `features = ["graphql"]`,
-/// `features = ["grpc"]`, `features = ["billing"]`, `features = ["search"]`,
-/// `features = ["mcp"]`, `features = ["ai"]`, `features = ["redis"]`,
-/// `features = ["micro"]`).
+/// `features = ["grpc"]`, `features = ["documents"]`, `features = ["billing"]`,
+/// `features = ["search"]`, `features = ["mcp"]`, `features = ["ai"]`,
+/// `features = ["redis"]`, `features = ["micro"]`).
 const OPT_IN: &[&str] = &[
-    "dock", "harbor", "social", "oauth", "flags", "graphql", "grpc", "billing", "search", "mcp",
-    "ai", "redis", "micro",
+    "dock",
+    "harbor",
+    "social",
+    "oauth",
+    "flags",
+    "graphql",
+    "grpc",
+    "documents",
+    "billing",
+    "search",
+    "mcp",
+    "ai",
+    "redis",
+    "micro",
 ];
 
 /// Always compiled into the facade (not behind a feature).
@@ -782,4 +794,15 @@ fn micro_is_reexported_with_its_feature() {
         fake.transport().kind(),
         Some(navree::micro::TransportKind::Custom)
     );
+}
+
+/// `navree::documents` is navree-documents re-exported whole, and the
+/// `documents` feature puts its module in the prelude
+/// (`cargo test -p navree --features documents`).
+#[cfg(feature = "documents")]
+#[test]
+fn documents_is_reexported_with_its_feature() {
+    assert!(same::<navree::documents::DocumentsModule, DocumentsModule>());
+    let pdf = navree::documents::Pdf::from_lines(["Invoice 42"]);
+    assert_eq!(pdf.page_count().unwrap(), 1);
 }

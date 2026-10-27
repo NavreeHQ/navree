@@ -304,6 +304,21 @@ export const ecosystem: EcosystemEntry[] = [
     signature: "impl WebhookEvent for DealWon",
   },
   {
+    slug: "documents",
+    name: "Documents",
+    kind: "library",
+    category: "capabilities",
+    tagline: "PDF and Word documents from your templates and data",
+    summary:
+      "Render certificates, invoices and reports as PDF from Typst templates compiled in process or HTML templates printed by headless Chrome, in any script, and write DOCX. Merge, stamp and queue them.",
+    features: ["Typst and Chrome engines", "Bundled fonts for Arabic and Devanagari", "DOCX writer", "Merge, stamps and overlays", "Queued renders to storage"],
+    crate: "navree-documents",
+    command: "cargo add --git https://github.com/NavreeHQ/navree navree --features documents",
+    href: "/docs/packages/documents/",
+    status: "stable",
+    signature: "documents.pdf(\"certificates/classic\", &data).await?",
+  },
+  {
     slug: "i18n",
     name: "Localization",
     kind: "library",
