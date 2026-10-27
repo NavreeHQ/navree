@@ -10,8 +10,9 @@
 //!   the `mysql` feature (`mysql://` or `mariadb://` URLs; connections in
 //!   UTC, `utf8mb4` and strict SQL mode over TLS when the server offers
 //!   it, see [`MySqlOptions`]). It registers the `database` health check
-//!   and the commands `migrate`, `migrate:rollback`, `migrate:fresh
-//!   [--seed]`, `migrate:status` and `db:seed`.
+//!   and the commands `migrate`, `migrate:install`, `migrate:rollback`,
+//!   `migrate:reset`, `migrate:refresh`, `migrate:fresh`, `migrate:status`,
+//!   `schema:dump` and `db:seed`.
 //! - [`Uow`] is the unit of work: one per HTTP request (opened by the
 //!   module's [`LayerSlot::Uow`](navree_http::LayerSlot::Uow) layer, taken as
 //!   an extractor), job run or command ([`Db::uow`]). Its transaction opens
@@ -28,8 +29,11 @@
 //!   change events (old and new values) automatically.
 //! - [`MigrationSet`]s are contributed per module and run by the
 //!   [`Migrator`] in dependency order (`after`), recorded in
-//!   `navree_migrations`; each migration runs in a transaction unless it opts
-//!   out.
+//!   `navree_migrations` by batch; each migration runs in a transaction
+//!   unless it opts out. Migrations are written with the schema builder
+//!   ([`navree_schema`], re-exported) or with SeaORM; the migrator steps,
+//!   pretends, rolls back, resets, refreshes, and loads and writes schema
+//!   dumps.
 //! - [`Seeder`]s fill the database (`db:seed`); [`Factory`] and
 //!   [`create_many`] build test records.
 //! - [`PageQuery`] / [`Page`] / [`paginate`] give offset
@@ -93,7 +97,10 @@ mod uow;
 
 pub use db::Db;
 pub use http::map_db_error;
-pub use migrate::{MIGRATIONS_TABLE, MigrationError, MigrationSet, MigrationStatus, Migrator};
+pub use migrate::{
+    FreshOptions, LoadedDump, MIGRATIONS_TABLE, MigrateOptions, MigrationError, MigrationReport,
+    MigrationRun, MigrationSet, MigrationStatus, Migrator, Refreshed, RollbackOptions,
+};
 pub use module::{DatabaseModule, ModuleBuilderDbExt};
 pub use options::{DbOptions, IsolationLevel, MySqlOptions};
 pub use paginate::{
@@ -106,5 +113,6 @@ pub use seed::{Factory, Seeder, create, create_many, run_seeders};
 pub use text::{contains_ignore_case, eq_ignore_case};
 pub use uow::{ChangeEvent, ChangeObserver, ChangeOp, Uow};
 
+pub use navree_schema;
 pub use sea_orm;
 pub use sea_orm_migration;

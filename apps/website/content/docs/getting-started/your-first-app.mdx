@@ -82,38 +82,20 @@ A generated resource has a `name` column. A task needs a `title` and a `done` fl
 Open the migration and replace the `name` column with `title` and `done`:
 
 ```rust title="src/modules/tasks/migrations/m20261026_081038_create_tasks_table.rs"
-Table::create()
-    .table(Tasks::Table)
-    .col(ColumnDef::new(Tasks::Id).uuid().not_null().primary_key())
-    .col(ColumnDef::new(Tasks::OwnerId).uuid().null())
-    .col(ColumnDef::new(Tasks::Name).string().not_null()) // [!code --]
-    .col(ColumnDef::new(Tasks::Title).string().not_null()) // [!code ++]
-    .col( // [!code ++]
-        ColumnDef::new(Tasks::Done) // [!code ++]
-            .boolean() // [!code ++]
-            .not_null() // [!code ++]
-            .default(false), // [!code ++]
-    ) // [!code ++]
-    // ... created_at and updated_at
+schema
+    .create("tasks", |t| {
+        t.uuid_primary();
+        t.uuid("owner_id").nullable().index();
+        t.string("name"); // [!code --]
+        t.string("title"); // [!code ++]
+        t.boolean("done").default(false); // [!code ++]
+        t.timestamp_tz("created_at");
+        t.timestamp_tz("updated_at");
+    })
+    .await
 ```
 
-The column names come from the `Tasks` enum at the bottom of the file:
-
-```rust title="src/modules/tasks/migrations/m20261026_081038_create_tasks_table.rs"
-#[derive(DeriveIden)]
-enum Tasks {
-    Table,
-    Id,
-    OwnerId,
-    Name, // [!code --]
-    Title, // [!code ++]
-    Done, // [!code ++]
-    CreatedAt,
-    UpdatedAt,
-}
-```
-
-Migrations are SeaORM migrations. Each module owns a migration set (`MigrationSet::new("tasks")`), and `navree migrate` runs every module's set in dependency order. [Migrations](/docs/database/migrations/) covers the rest.
+Migrations are written with the [schema builder](/docs/database/schema-builder/), which writes the SQL for SQLite in development and for PostgreSQL, MySQL or TimescaleDB in production. Each module owns a migration set (`MigrationSet::new("tasks")`), and `navree migrate` runs every module's set in dependency order. [Migrations](/docs/database/migrations/) covers the rest.
 
 ## Update the entity
 

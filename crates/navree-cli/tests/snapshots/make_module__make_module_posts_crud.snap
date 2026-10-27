@@ -278,73 +278,39 @@ impl UpdatePost {
 //! `navree make:migration posts <name>` adds one here.
 
 use navree::db::MigrationSet;
+use navree::schema::migration;
 
 mod m20261025_143005_create_posts_table;
 
 /// The module's migration set, recorded under `posts` in `navree_migrations`.
 pub fn migrations() -> MigrationSet {
     MigrationSet::new("posts")
-        .migration(m20261025_143005_create_posts_table::Migration)
+        .migration(migration!(m20261025_143005_create_posts_table))
 }
 
 ==> posts/migrations/m20261025_143005_create_posts_table.rs <==
 //! Creates the `posts` table.
 
-use sea_orm_migration::prelude::*;
+use navree::schema::prelude::*;
 
-#[derive(DeriveMigrationName)]
 pub struct Migration;
 
-#[async_trait::async_trait]
-impl MigrationTrait for Migration {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table(Posts::Table)
-                    .col(ColumnDef::new(Posts::Id).uuid().not_null().primary_key())
-                    .col(ColumnDef::new(Posts::OwnerId).uuid().null())
-                    .col(ColumnDef::new(Posts::Name).string().not_null())
-                    .col(
-                        ColumnDef::new(Posts::CreatedAt)
-                            .timestamp_with_time_zone()
-                            .not_null(),
-                    )
-                    .col(
-                        ColumnDef::new(Posts::UpdatedAt)
-                            .timestamp_with_time_zone()
-                            .not_null(),
-                    )
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("idx_posts_owner_id")
-                    .table(Posts::Table)
-                    .col(Posts::OwnerId)
-                    .to_owned(),
-            )
+impl navree::schema::Migration for Migration {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema
+            .create("posts", |t| {
+                t.uuid_primary();
+                t.uuid("owner_id").nullable().index();
+                t.string("name");
+                t.timestamp_tz("created_at");
+                t.timestamp_tz("updated_at");
+            })
             .await
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .drop_table(Table::drop().table(Posts::Table).to_owned())
-            .await
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop_if_exists("posts").await
     }
-}
-
-/// The table and column names (`Posts::Table` is `posts`).
-#[derive(DeriveIden)]
-enum Posts {
-    Table,
-    Id,
-    OwnerId,
-    Name,
-    CreatedAt,
-    UpdatedAt,
 }
 
 ==> posts/tests/mod.rs <==

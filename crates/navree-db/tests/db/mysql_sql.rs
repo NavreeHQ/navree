@@ -590,9 +590,22 @@ async fn a_migration_can_ask_for_a_transaction_on_mysql() {
     assert!(sql[3].starts_with("CREATE TABLE `users`"), "{}", sql[3]);
 }
 
+/// A rollback first reads the server's version and asks whether
+/// `navree_migrations` exists (a database without it has nothing to roll
+/// back), then reads it.
 #[tokio::test]
 async fn rollback_reverts_the_last_batch_on_mysql() {
-    let db = scripted(3, vec![vec![applied_row("users", "m0001_create_users", 1)]]);
+    let row = |column: &str, value: Value| {
+        std::collections::BTreeMap::from([(column, value)]).into_mock_row()
+    };
+    let db = scripted(
+        3,
+        vec![
+            vec![row("version", Value::from("8.4.6"))],
+            vec![row("present", Value::BigInt(Some(1)))],
+            vec![applied_row("users", "m0001_create_users", 1)],
+        ],
+    );
     let app = app_on(db.clone(), None).await;
     let reverted = Migrator::rollback(app.ctx()).await.expect("rolls back");
     assert_eq!(reverted, ["users/m0001_create_users"]);
@@ -601,14 +614,17 @@ async fn rollback_reverts_the_last_batch_on_mysql() {
     assert_eq!(
         sql,
         [
+            "SELECT VERSION() AS version",
+            "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = schema() AND table_name = ? AND table_type IN ('BASE TABLE', 'SYSTEM VERSIONED')) AS present",
             CREATE_MIGRATIONS_TABLE,
             SELECT_APPLIED,
             "DROP TABLE `users`",
             "DELETE FROM `navree_migrations` WHERE `module` = ? AND `name` = ?",
         ]
     );
+    assert_eq!(log[1].1, [Value::from("navree_migrations")]);
     assert_eq!(
-        log[3].1,
+        log[5].1,
         [Value::from("users"), Value::from("m0001_create_users")]
     );
 }

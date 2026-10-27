@@ -113,7 +113,7 @@ L6  navree-social  navree-webhooks  navree-oauth  navree-flags  navree-graphql  
 L5  navree-auth  navree-workspace  navree-redis
 L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify  navree-ui
 L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage
-L2  navree-http  navree-log  navree-crypto  navree-events  navree-view  navree-cache  navree-http-client
+L2  navree-http  navree-log  navree-crypto  navree-events  navree-view  navree-cache  navree-http-client  navree-schema
 L1  navree-contracts  navree-config  navree-telemetry
 L0  navree-kernel                                navree-macros (proc-macro; no runtime navree deps)   navree-dock, navree-harbor (tools; no navree deps)
 ```
@@ -134,7 +134,8 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L2 | `navree-view` | MiniJinja templates (mail and other text) |
 | L2 | `navree-cache` | Cache stores (memory on moka; Redis with navree-redis), remember, tags, locks |
 | L2 | `navree-http-client` | Outgoing HTTP with retries, timeouts, an SSRF policy and fakes |
-| L3 | `navree-db` | SeaORM integration, per-request unit of work, migrations, seeders, factories, pagination |
+| L2 | `navree-schema` | The schema builder: tables, columns, indexes and foreign keys in Rust for PostgreSQL, MySQL/MariaDB and SQLite (SQLite alterations by table rebuild); TimescaleDB hypertables, compression, retention, reorder policies and continuous aggregates with fallbacks on other databases; introspection; schema dumps; migration files (`navree::schema`) |
+| L3 | `navree-db` | SeaORM integration, per-request unit of work, migrations (schema and SeaORM, batches, steps, rollback, reset, refresh, fresh, `--pretend`, `schema:dump`), seeders, factories, pagination |
 | L3 | `navree-testing` | `TestApp`, an in-process `TestClient`, fakes |
 | L3 | `navree-observe` | Health checks, readiness, Prometheus metrics, tracing (spans from telemetry events, `SpanRecorder`, OTLP export behind the opt-in facade feature `otel`) |
 | L3 | `navree-api` | OpenAPI 3.1 from route metadata, docs UI, API resources |

@@ -123,6 +123,8 @@ export const sections: DocsSection[] = [
       "entities-and-repositories",
       "unit-of-work",
       "migrations",
+      "schema-builder",
+      "timescaledb",
       "seeding-and-factories",
       "pagination",
     ],

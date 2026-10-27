@@ -1,0 +1,184 @@
+---
+title: "Schema builder"
+description: "Tables, columns, indexes and foreign keys described in Rust and written as the right SQL for PostgreSQL, MySQL, MariaDB and SQLite: every column type, modifier, index option, alteration and the schema's introspection."
+---
+
+The schema builder (`navree::schema`) describes tables in Rust and writes the SQL each database needs: PostgreSQL (with [TimescaleDB](/docs/database/timescaledb/)), MySQL, MariaDB and SQLite. [Migrations](/docs/database/migrations/) use it through the `Schema` they receive; anywhere else, build one on a connection with `Schema::new(db.conn())`.
+
+```rust
+schema
+    .create("companies", |t| {
+        t.uuid_primary();
+        t.string("name").unique();
+        t.string("domain").nullable();
+        t.foreign_uuid("owner_id")
+            .nullable()
+            .constrained_on("users", "id")
+            .null_on_delete();
+        t.timestamps_tz();
+        t.soft_deletes_tz();
+    })
+    .await?;
+```
+
+`create` takes a closure that describes the table on a `Blueprint` (`t`); `table` alters one the same way. Every statement runs on the schema's connection; inside a migration that is the migration's transaction.
+
+## Tables
+
+| Method | Does |
+|---|---|
+| `schema.create(table, \|t\| ...)` | Creates a table. |
+| `schema.table(table, \|t\| ...)` | Alters a table: adds, changes, renames and drops columns, indexes and foreign keys. |
+| `schema.rename(from, to)` | Renames a table. |
+| `schema.drop(table)` / `drop_if_exists(table)` | Drops a table. |
+| `schema.create_hypertable(table, time_column, \|t\| ...)` | Creates a [time-series table](/docs/database/timescaledb/). |
+| `schema.statement(sql)` | Runs raw SQL. |
+
+Inside `create`, `t.if_not_exists()` adds `IF NOT EXISTS` and `t.temporary()` makes a temporary table; `t.comment("...")` comments the table (PostgreSQL and MySQL). On MySQL, `t.engine("InnoDB")`, `t.charset("utf8mb4")` and `t.collation("utf8mb4_bin")` set the table options; `schema.mysql_charset`, `mysql_collation` and `mysql_engine` in the configuration set the defaults (the character set defaults to `utf8mb4`).
+
+## Columns
+
+| Method | PostgreSQL | MySQL / MariaDB | SQLite |
+|---|---|---|---|
+| `id()` | `BIGINT` identity primary key | `BIGINT UNSIGNED AUTO_INCREMENT` primary key | `INTEGER PRIMARY KEY AUTOINCREMENT` |
+| `uuid_primary()` / `ulid_primary()` | `UUID` / `CHAR(26)` primary key `id` | `CHAR(36)` (`UUID` on MariaDB 10.7+) / `CHAR(26)` | `VARCHAR` |
+| `increments`, `big_increments`, `small_increments`, `tiny_increments`, `medium_increments` | identity | `AUTO_INCREMENT` | `AUTOINCREMENT` |
+| `foreign_id`, `foreign_uuid`, `foreign_ulid` | for keys to `id()`, `uuid_primary()`, `ulid_primary()` | | |
+| `string(name)`, `char(name, n)` | `VARCHAR(255)`, `CHAR(n)` | same | `VARCHAR` |
+| `tiny_text`, `text`, `medium_text`, `long_text` | `TEXT` | `TINYTEXT` ... `LONGTEXT` | `TEXT` |
+| `tiny_integer` ... `big_integer`, `unsigned_*` | `SMALLINT` ... `BIGINT` | `TINYINT` ... `BIGINT`, `UNSIGNED` | `INTEGER` |
+| `decimal(name, precision, scale)` | `DECIMAL(p, s)` | `DECIMAL(p, s)` | `NUMERIC` |
+| `float`, `double` | `FLOAT(53)`, `DOUBLE PRECISION` | `FLOAT(53)`, `DOUBLE` | `FLOAT`, `DOUBLE` |
+| `boolean` | `BOOLEAN` | `TINYINT(1)` | `TINYINT(1)` |
+| `date`, `time`, `time_tz` | `DATE`, `TIME WITHOUT TIME ZONE`, `TIME WITH TIME ZONE` | `DATE`, `TIME(6)` | `DATE`, `TIME` |
+| `date_time`, `timestamp` | `TIMESTAMP WITHOUT TIME ZONE` | `DATETIME(6)`, `TIMESTAMP(6)` | `DATETIME` |
+| `date_time_tz`, `timestamp_tz` | `TIMESTAMP WITH TIME ZONE` | `DATETIME(6)`, `TIMESTAMP(6)` | `DATETIME` |
+| `year` | `INTEGER` | `YEAR` | `INTEGER` |
+| `json`, `jsonb` | `JSON`, `JSONB` | `JSON` | `TEXT` |
+| `binary` | `BYTEA` | `BLOB`, `VARBINARY(n)` with `.length(n)`, `BINARY(n)` with `.fixed()` | `BLOB` |
+| `enumeration(name, [values])` | checked `VARCHAR(255)` | `ENUM(...)` | checked `VARCHAR` |
+| `set(name, [values])` | | `SET(...)` | |
+| `ip_address`, `mac_address` | `INET`, `MACADDR` | `VARCHAR(45)`, `VARCHAR(17)` | `VARCHAR` |
+| `geometry`, `geography` (`.subtype("point")`, `.srid(4326)`) | PostGIS `GEOMETRY`, `GEOGRAPHY` | `GEOMETRY`, `POINT SRID 4326`, ... | `GEOMETRY` |
+| `vector(name, dimensions)` | pgvector `VECTOR(n)` | `VECTOR(n)` (MySQL 9, MariaDB 11.7) | |
+| `tsvector` | `TSVECTOR` | | |
+| `raw_column(name, "SMALLINT CHECK (...)")` | as written | as written | as written |
+
+A type a database doesn't have (`set` on PostgreSQL, `vector` on SQLite) fails with a message saying what to use instead. Time columns keep six fractional digits by default (`.precision(p)` per column, `schema.default_time_precision` for all).
+
+Helpers add several columns at once: `timestamps()` and `timestamps_tz()` (nullable `created_at` and `updated_at`), `soft_deletes()` and `soft_deletes_tz()` (`deleted_at`), `morphs("subject")` and `nullable_morphs("subject")` (`subject_type` and `subject_id`, indexed together; the id's type follows `schema.morph_key`, with `uuid_morphs`, `ulid_morphs` and `numeric_morphs` to choose), `remember_token()`.
+
+### Modifiers
+
+Column methods return a builder; chain modifiers on it:
+
+| Modifier | Does |
+|---|---|
+| `.nullable()` | Allows `NULL` (columns are `NOT NULL` otherwise). |
+| `.default(value)` | A default: `0`, `"lead"`, `true`, `DefaultValue::Null`, a `serde_json::Value`, or SQL with `raw("CURRENT_TIMESTAMP")`. |
+| `.use_current()` | Defaults to the current date or time. |
+| `.use_current_on_update()` | Sets the current time on every update (MySQL). |
+| `.unsigned()` | Unsigned (MySQL). |
+| `.length(n)` | The length of a `string`, `char` or `binary` column. |
+| `.precision(p)` | Fractional-second digits of a time column, bits of a `float`. |
+| `.comment("...")` | A column comment (PostgreSQL, MySQL). |
+| `.collation("C")`, `.charset("utf8mb4")` | The collation; the character set (MySQL). |
+| `.after("column")`, `.first()` | Where a new column goes (MySQL). |
+| `.stored_as("expr")`, `.virtual_as("expr")` | A generated column (virtual needs PostgreSQL 18). |
+| `.generated_as()`, `.generated_as_with("START WITH 1000")`, `.always()` | An identity column (PostgreSQL). |
+| `.starting_value(n)` | The first value of an auto-incrementing column. |
+| `.invisible()` | Hidden from `SELECT *` (MySQL). |
+| `.primary()`, `.unique()`, `.index()`, `.fulltext()`, `.spatial_index()` | An index on the column (`unique_named` and `index_named` name it). |
+| `.change()` | Alters the existing column (inside `table`). |
+| `.using("amount::numeric(12, 2)")` | How existing values convert when the type changes (PostgreSQL). |
+
+A modifier that doesn't apply to the column (`.length(10)` on an integer, `.auto_increment()` on a string) fails before any SQL runs.
+
+## Indexes
+
+```rust
+t.primary(["workspace_id", "user_id"]);
+t.unique(["workspace_id", "email"]).name("members_email");
+t.index(["stage", "created_at"]);
+t.index("deleted_at").where_raw("deleted_at IS NULL");
+t.raw_index("lower(email)", "users_email_lower_index");
+t.fulltext(["title", "body"]).language("english");
+t.spatial_index("location");
+```
+
+Indexes are named `{table}_{columns}_{kind}` (`deals_stage_created_at_index`), shortened with a hash past 63 bytes the same way on every database. On the index builder: `.name(..)`, `.algorithm("gin")`, `.operator_class("text_pattern_ops")`, `.where_raw(..)` (partial, PostgreSQL and SQLite), `.online()` (`CONCURRENTLY`, outside a transaction), `.nulls_not_distinct()` (PostgreSQL 15+), `.deferrable()` with `.initially_deferred()`, and on MySQL `.lock("none")` and `.inplace()`. Full-text indexes are `GIN` over `to_tsvector` on PostgreSQL and `FULLTEXT` on MySQL.
+
+## Foreign keys
+
+```rust
+t.foreign_uuid("company_id").constrained().cascade_on_delete();
+t.foreign("currency").references("code").on("currencies").restrict_on_delete();
+```
+
+`constrained()` points `company_id` at `companies.id`; `constrained_on(table, column)` names both. Actions: `cascade_on_delete`, `restrict_on_delete`, `null_on_delete`, `no_action_on_delete`, the same `_on_update`, or `on_delete(ReferentialAction::SetDefault)`; PostgreSQL also takes `.deferrable()`, `.initially_deferred()` and `.not_valid()`. Foreign keys are named `{table}_{columns}_foreign`.
+
+## Altering tables
+
+```rust
+schema
+    .table("deals", |t| {
+        t.string("stage").default("lead").index();
+        t.text("notes").nullable().after("title");
+        t.decimal("amount", 14, 2).change();
+        t.rename_column("value", "amount_cents");
+        t.drop_column(["legacy", "imported_at"]);
+        t.drop_index(["stage", "created_at"]);
+        t.drop_unique("deals_code_unique");
+        t.drop_foreign(["company_id"]);
+        t.rename_index("deals_title_index", "deals_by_title");
+    })
+    .await?;
+```
+
+Drops take a name or the columns (which give the conventional name): `drop_index`, `drop_unique`, `drop_primary`, `drop_fulltext`, `drop_spatial_index`, `drop_foreign`, `drop_constrained_foreign_id`, `drop_timestamps`, `drop_soft_deletes`, `drop_morphs`.
+
+### SQLite
+
+SQLite's `ALTER TABLE` adds, renames and drops plain columns. For everything else (changing a column, adding or dropping a primary or foreign key, adding a column it can't add in place) the builder rebuilds the table: it reads the table as it is, creates the new one, copies the rows, swaps them, and recreates the indexes and triggers. Several changes in one `table` call share one rebuild. Migrations run SQLite with foreign keys off, so a rebuild never deletes the rows that reference the table; outside a migration, rebuilding a referenced table on a connection with foreign keys on fails with that explanation. Adding a `NOT NULL` column without a default to a table that has rows fails with how to fix it.
+
+## Reading the schema
+
+| Method | Returns |
+|---|---|
+| `has_table(table)`, `has_view(view)` | Whether it exists. |
+| `has_column(table, column)`, `has_columns(table, [..])` | Whether it has them. |
+| `tables()`, `views()`, `table_listing()` | The tables (name, schema, size, comment, engine, collation) and views of the current schema. |
+| `columns(table)`, `column_listing(table)`, `column_type(table, column, full)` | Columns: type, collation, nullable, default, auto-increment, comment, generation. |
+| `indexes(table)`, `has_index(table, name or columns, kind)` | Indexes with their columns, method, uniqueness. |
+| `foreign_keys(table)`, `has_foreign_key(table, ..)` | Foreign keys with their columns and actions. |
+
+`when_table_has_column` and `when_table_doesnt_have_column` alter a table only when it has (or lacks) a column. `drop_all_tables`, `drop_all_views` and `drop_all_types` (PostgreSQL) empty a database, and `enable_foreign_key_constraints` / `disable_foreign_key_constraints` switch the checks.
+
+## Previews
+
+`Schema::offline(Target::postgres(17))` records the SQL for a database without connecting to one: handy in tests and for checking what a migration will write for another database. `Schema::new(conn).pretending()` reads the real database and records what it would change instead of changing it. Both give the statements with `schema.statements()` and what the database couldn't do as asked with `schema.notices()`.
+
+## Configuration
+
+The `schema` section configures the builder (and every migration's schema):
+
+```toml title="config/app.toml"
+[schema]
+default_string_length = 255   # `string` columns without `.length(n)`
+default_time_precision = 6    # fractional seconds of time columns
+morph_key = "uuid"            # int, uuid or ulid: the id column of `morphs`
+timescaledb = "auto"          # auto, require or off
+create_extensions = true      # may run CREATE EXTENSION timescaledb
+hypertable_keys = "extend"    # extend or reject primary keys missing the time column
+mysql_charset = "utf8mb4"
+dump_path = "database/schema" # where `schema:dump` writes
+```
+
+<LinkCards>
+  <LinkCard href="/docs/database/migrations/" title="Migrations">
+    Writing, ordering, running and rolling back migrations.
+  </LinkCard>
+  <LinkCard href="/docs/database/timescaledb/" title="TimescaleDB">
+    Time-series tables, compression, retention and continuous aggregates.
+  </LinkCard>
+</LinkCards>

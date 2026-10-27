@@ -64,6 +64,7 @@ Every module crate is re-exported whole, as a module of the facade. `navree::db:
 | `navree::view` | navree-view | `view` | `ViewModule`: MiniJinja templates |
 | `navree::cache` | navree-cache | `cache` | `CacheModule`: cache stores and locks |
 | `navree::http_client` | navree-http-client | `http-client` | `HttpClientModule`: outgoing HTTP with fakes |
+| `navree::schema` | navree-schema | `schema` | The [schema builder](/docs/database/schema-builder/): tables, columns, indexes, foreign keys, [TimescaleDB](/docs/database/timescaledb/) hypertables, schema dumps |
 | `navree::db` | navree-db | `db` | `DatabaseModule`: SeaORM, unit of work, migrations, pagination |
 | `navree::testing` | navree-testing | `testing` | `TestApp`, `TestClient` |
 | `navree::observe` | navree-observe | `observe` | `ObserveModule`: health checks and metrics |
@@ -156,8 +157,9 @@ navree = { git = "https://github.com/NavreeHQ/navree", default-features = false,
 
 | Feature | Also turns on |
 |---|---|
-| `http`, `log`, `crypto`, `events`, `view`, `cache`, `http-client` | Nothing else (and `http` adds `navree::axum`) |
-| `db`, `testing`, `observe`, `api` | `http` |
+| `http`, `log`, `crypto`, `events`, `view`, `cache`, `http-client`, `schema` | Nothing else (and `http` adds `navree::axum`) |
+| `db` | `http`, `schema` |
+| `testing`, `observe`, `api` | `http` |
 | `mail` | `view` |
 | `realtime`, `storage` | `http`, `crypto` |
 | `session` | `http`, `crypto`, `db` |

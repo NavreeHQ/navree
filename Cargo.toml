@@ -67,6 +67,7 @@ navree-micro = { path = "crates/navree-micro", version = "0.1.0" }
 navree-fleet = { path = "crates/navree-fleet", version = "0.1.0" }
 navree-helm = { path = "crates/navree-helm", version = "0.1.0" }
 navree-harbor = { path = "crates/navree-harbor", version = "0.1.0" }
+navree-schema = { path = "crates/navree-schema", version = "0.1.0" }
 
 # ---------------------------------------------------------------------------
 # Runtime, async and HTTP (Tokio family)

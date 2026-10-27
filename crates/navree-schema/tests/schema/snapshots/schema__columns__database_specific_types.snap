@@ -1,0 +1,15 @@
+---
+source: crates/navree-schema/tests/schema/columns.rs
+expression: sql
+---
+-- postgres
+CREATE TABLE "places" ("id" UUID NOT NULL, "area" GEOMETRY NOT NULL, "spot" GEOMETRY(POINT, 4326) NOT NULL, "route" GEOGRAPHY(LINESTRING, 4326) NOT NULL, PRIMARY KEY ("id"));
+
+-- mysql
+CREATE TABLE `places` (`id` CHAR(36) NOT NULL, `area` GEOMETRY NOT NULL, `spot` POINT SRID 4326 NOT NULL, `route` LINESTRING SRID 4326 NOT NULL, PRIMARY KEY (`id`)) DEFAULT CHARACTER SET utf8mb4;
+
+-- mariadb
+CREATE TABLE `places` (`id` UUID NOT NULL, `area` GEOMETRY NOT NULL, `spot` POINT REF_SYSTEM_ID=4326 NOT NULL, `route` LINESTRING REF_SYSTEM_ID=4326 NOT NULL, PRIMARY KEY (`id`)) DEFAULT CHARACTER SET utf8mb4;
+
+-- sqlite
+CREATE TABLE "places" ("id" VARCHAR NOT NULL, "area" GEOMETRY NOT NULL, "spot" GEOMETRY NOT NULL, "route" GEOMETRY NOT NULL, PRIMARY KEY ("id"));

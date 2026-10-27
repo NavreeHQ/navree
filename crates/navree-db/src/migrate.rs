@@ -1,15 +1,27 @@
 //! Module-owned migrations: [`MigrationSet`], [`Migrator`] and [`MigrationStatus`].
 
+pub(crate) mod commands;
+mod pretend;
+mod report;
+mod runner;
+
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
 use navree_kernel::{AppContext, BoxError};
-use sea_orm::sea_query::{ColumnDef, Expr, ExprTrait, Index, Query, Table};
+use sea_orm::sea_query::{ColumnDef, Index, Query, Table};
 use sea_orm::{ConnectionTrait, DatabaseConnection, DbBackend, DbErr, Statement, TransactionTrait};
-use sea_orm_migration::{MigrationTrait, SchemaManager};
+use sea_orm_migration::MigrationTrait;
 use serde::Serialize;
+
+pub use report::{
+    FreshOptions, LoadedDump, MigrateOptions, MigrationReport, MigrationRun, Refreshed,
+    RollbackOptions,
+};
+pub(crate) use runner::Runner;
 
 use crate::{Db, mysql};
 
@@ -144,6 +156,21 @@ pub enum MigrationError {
         /// `module/name`.
         migration: String,
     },
+    /// The database cannot do what was asked (`--drop-types` on MySQL).
+    #[error("{message}")]
+    Unsupported {
+        /// What, and why not.
+        message: String,
+    },
+    /// A schema dump could not be written or loaded.
+    #[error("schema dump {}: {source}", path.display())]
+    Dump {
+        /// The dump file.
+        path: PathBuf,
+        /// What went wrong.
+        #[source]
+        source: Box<navree_schema::SchemaError>,
+    },
     /// A database error outside a migration.
     #[error(transparent)]
     Db(#[from] DbErr),
@@ -153,7 +180,35 @@ pub enum MigrationError {
 ///
 /// Applied migrations are recorded in `navree_migrations(module, name, batch,
 /// applied_at)`; each [`up`](Migrator::up) run that applies anything is one
-/// batch, and [`rollback`](Migrator::rollback) reverts the last batch.
+/// batch (one batch per migration with [`MigrateOptions::step`]), and
+/// [`rollback`](Migrator::rollback) reverts the last batch.
+///
+/// Migrations written with the schema builder (`navree_schema::Migration`,
+/// added with `navree_schema::migration!`) and SeaORM migrations share a
+/// [`MigrationSet`]. While one runs, the `schema` configuration section
+/// ([`SchemaOptions`](navree_schema::SchemaOptions)) configures its builder,
+/// and its statements and notices are collected in the
+/// [`MigrationReport`].
+///
+/// On SQLite, migrations run on a connection of their own opened with
+/// foreign keys off, so rebuilding a table never runs the ON DELETE actions
+/// of the tables referencing it; before each migration commits,
+/// `PRAGMA foreign_key_check` must find no dangling reference.
+///
+/// ```no_run
+/// # async fn deploy(ctx: &navree_kernel::AppContext) -> Result<(), navree_kernel::BoxError> {
+/// use navree_db::{MigrateOptions, Migrator};
+///
+/// let report = Migrator::run(ctx, &MigrateOptions { pretend: true, ..MigrateOptions::default() }).await?;
+/// for migration in &report.migrations {
+///     println!("{}:", migration.label());
+///     for statement in &migration.statements {
+///         println!("  {statement};");
+///     }
+/// }
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Debug)]
 pub struct Migrator;
 
@@ -161,15 +216,61 @@ impl Migrator {
     /// Applies every pending migration (one new batch); returns
     /// `module/name` of each, in the order they ran.
     pub async fn up(ctx: &AppContext) -> Result<Vec<String>, BoxError> {
-        let db = ctx.get::<Db>().await?;
-        Ok(run_up(&db, &sets_of(ctx)).await?)
+        Ok(Migrator::run(ctx, &MigrateOptions::default())
+            .await?
+            .labels())
+    }
+
+    /// Applies every pending migration as `options` say: pretending,
+    /// stepping, after loading the schema dump into an empty database
+    /// (`navree migrate`).
+    pub async fn run(
+        ctx: &AppContext,
+        options: &MigrateOptions,
+    ) -> Result<MigrationReport, BoxError> {
+        Ok(Runner::of(ctx).await?.up(options).await?)
     }
 
     /// Reverts the last batch, newest migration first; returns `module/name`
     /// of each.
     pub async fn rollback(ctx: &AppContext) -> Result<Vec<String>, BoxError> {
-        let db = ctx.get::<Db>().await?;
-        Ok(run_rollback(&db, &sets_of(ctx)).await?)
+        Ok(Migrator::rollback_with(ctx, &RollbackOptions::default())
+            .await?
+            .labels())
+    }
+
+    /// Reverts the last batch, the last [`step`](RollbackOptions::step)
+    /// migrations or batch [`batch`](RollbackOptions::batch), newest first
+    /// (`navree migrate:rollback`).
+    pub async fn rollback_with(
+        ctx: &AppContext,
+        options: &RollbackOptions,
+    ) -> Result<MigrationReport, BoxError> {
+        Ok(Runner::of(ctx).await?.rollback(options).await?)
+    }
+
+    /// Reverts every migration, newest first (`navree migrate:reset`).
+    pub async fn reset(ctx: &AppContext, pretend: bool) -> Result<MigrationReport, BoxError> {
+        Ok(Runner::of(ctx).await?.reset(pretend).await?)
+    }
+
+    /// Reverts every migration (or the last `step`), then migrates again
+    /// (`navree migrate:refresh`).
+    pub async fn refresh(ctx: &AppContext, step: Option<u32>) -> Result<Refreshed, BoxError> {
+        let runner = Runner::of(ctx).await?;
+        let reverted = match step {
+            Some(step) => {
+                runner
+                    .rollback(&RollbackOptions {
+                        step: Some(step),
+                        ..RollbackOptions::default()
+                    })
+                    .await?
+            }
+            None => runner.reset(false).await?,
+        };
+        let migrated = runner.up(&MigrateOptions::default()).await?;
+        Ok(Refreshed { reverted, migrated })
     }
 
     /// Drops every table, then applies every migration as batch 1.
@@ -181,17 +282,37 @@ impl Migrator {
     /// one connection with `FOREIGN_KEY_CHECKS = 0` (turned back on before
     /// the connection returns to the pool, also when the drop fails).
     pub async fn fresh(ctx: &AppContext) -> Result<Vec<String>, BoxError> {
-        let db = ctx.get::<Db>().await?;
-        let sets = sets_of(ctx);
-        plan(&sets)?;
-        drop_all_tables(db.conn()).await?;
-        Ok(run_up(&db, &sets).await?)
+        Ok(Migrator::fresh_with(ctx, &FreshOptions::default())
+            .await?
+            .labels())
+    }
+
+    /// Drops every table (and views and PostgreSQL types when asked), then
+    /// migrates (`navree migrate:fresh`).
+    pub async fn fresh_with(
+        ctx: &AppContext,
+        options: &FreshOptions,
+    ) -> Result<MigrationReport, BoxError> {
+        Ok(Runner::of(ctx).await?.fresh(options).await?)
     }
 
     /// Every registered migration in run order, with its state.
     pub async fn status(ctx: &AppContext) -> Result<Vec<MigrationStatus>, BoxError> {
-        let db = ctx.get::<Db>().await?;
-        Ok(run_status(&db, &sets_of(ctx)).await?)
+        Ok(Runner::of(ctx).await?.status().await?)
+    }
+
+    /// Creates the migrations table (`navree migrate:install`).
+    pub async fn install(ctx: &AppContext) -> Result<(), BoxError> {
+        Ok(Runner::of(ctx).await?.install().await?)
+    }
+
+    /// Writes the schema, with the migrations table's rows, as an SQL
+    /// script to `path` (default `{schema.dump_path}/{driver}-schema.sql`,
+    /// `database/schema/postgres-schema.sql`); returns the path
+    /// (`navree schema:dump`). [`run`](Migrator::run) loads it into an
+    /// empty database, then runs only the migrations it does not record.
+    pub async fn dump(ctx: &AppContext, path: Option<&Path>) -> Result<PathBuf, BoxError> {
+        Ok(Runner::of(ctx).await?.dump(path).await?)
     }
 }
 
@@ -201,6 +322,16 @@ pub(crate) fn sets_of(ctx: &AppContext) -> Vec<Arc<MigrationSet>> {
         .into_iter()
         .map(|c| c.value)
         .collect()
+}
+
+/// Runs the pending migrations of `app` on `db` while [`Db`] is being
+/// constructed (`database.migrate_on_boot`); `url` opens SQLite's migration
+/// connection.
+pub(crate) async fn migrate_on_boot(db: &Db, app: &AppContext, url: &str) -> Result<(), BoxError> {
+    let options = runner::schema_options(app).await?;
+    let runner = Runner::new(db.clone(), sets_of(app), options, Some(url.to_owned()));
+    runner.up(&MigrateOptions::default()).await?;
+    Ok(())
 }
 
 /// One migration in run order.
@@ -334,170 +465,6 @@ async fn applied_rows(
         applied.insert((module, name), Applied { batch, applied_at });
     }
     Ok(applied)
-}
-
-/// Whether `migration` runs in a transaction on `backend`: as it asks, else
-/// everywhere DDL is transactional (PostgreSQL, SQLite; not MySQL).
-fn transactional(backend: DbBackend, migration: &dyn MigrationTrait) -> bool {
-    migration
-        .use_transaction()
-        .unwrap_or(backend != DbBackend::MySql)
-}
-
-#[derive(Clone, Copy)]
-enum Direction {
-    Up,
-    Down,
-}
-
-/// Runs one migration step and records (or removes) its row, atomically
-/// when the step is transactional.
-async fn run_step(
-    conn: &DatabaseConnection,
-    step: &Step<'_>,
-    direction: Direction,
-    batch: i64,
-) -> Result<(), MigrationError> {
-    let failed = |source| MigrationError::Failed {
-        migration: step.label(),
-        source,
-    };
-    if transactional(conn.get_database_backend(), step.migration) {
-        let tx = conn.begin().await?;
-        let result = async {
-            let manager = SchemaManager::new(&tx);
-            match direction {
-                Direction::Up => step.migration.up(&manager).await?,
-                Direction::Down => step.migration.down(&manager).await?,
-            }
-            bookkeeping(&tx, step, direction, batch).await
-        }
-        .await;
-        match result {
-            Ok(()) => tx.commit().await.map_err(failed),
-            Err(error) => {
-                if let Err(rollback) = tx.rollback().await {
-                    tracing::warn!(target: "navree_db::migrate", migration = %step.label(), error = %rollback, "rollback failed");
-                }
-                Err(failed(error))
-            }
-        }
-    } else {
-        let manager = SchemaManager::new(conn);
-        match direction {
-            Direction::Up => step.migration.up(&manager).await,
-            Direction::Down => step.migration.down(&manager).await,
-        }
-        .map_err(failed)?;
-        bookkeeping(conn, step, direction, batch)
-            .await
-            .map_err(failed)
-    }
-}
-
-async fn bookkeeping<C: ConnectionTrait>(
-    conn: &C,
-    step: &Step<'_>,
-    direction: Direction,
-    batch: i64,
-) -> Result<(), DbErr> {
-    match direction {
-        Direction::Up => {
-            conn.execute(
-                Query::insert()
-                    .into_table(MIGRATIONS_TABLE)
-                    .columns(["module", "name", "batch", "applied_at"])
-                    .values([
-                        step.module.into(),
-                        step.name().into(),
-                        batch.into(),
-                        Utc::now().into(),
-                    ])
-                    .map_err(|e| DbErr::Custom(e.to_string()))?,
-            )
-            .await?;
-        }
-        Direction::Down => {
-            conn.execute(
-                Query::delete()
-                    .from_table(MIGRATIONS_TABLE)
-                    .and_where(Expr::col("module").eq(step.module))
-                    .and_where(Expr::col("name").eq(step.name())),
-            )
-            .await?;
-        }
-    }
-    Ok(())
-}
-
-pub(crate) async fn run_up(
-    db: &Db,
-    sets: &[Arc<MigrationSet>],
-) -> Result<Vec<String>, MigrationError> {
-    let steps = plan(sets)?;
-    let conn = db.conn();
-    let applied = applied_rows(conn).await?;
-    let batch = applied.values().map(|a| a.batch).max().unwrap_or(0) + 1;
-    let mut ran = Vec::new();
-    for step in &steps {
-        if applied.contains_key(&(step.module.to_owned(), step.name().to_owned())) {
-            continue;
-        }
-        tracing::info!(target: "navree_db::migrate", migration = %step.label(), batch, "migrating");
-        run_step(conn, step, Direction::Up, batch).await?;
-        ran.push(step.label());
-    }
-    Ok(ran)
-}
-
-async fn run_rollback(db: &Db, sets: &[Arc<MigrationSet>]) -> Result<Vec<String>, MigrationError> {
-    let steps = plan(sets)?;
-    let conn = db.conn();
-    let applied = applied_rows(conn).await?;
-    let Some(last) = applied.values().map(|a| a.batch).max() else {
-        return Ok(Vec::new());
-    };
-    let mut in_batch: HashSet<(String, String)> = applied
-        .iter()
-        .filter(|(_, a)| a.batch == last)
-        .map(|(key, _)| key.clone())
-        .collect();
-    let mut reverted = Vec::new();
-    for step in steps.iter().rev() {
-        if !in_batch.remove(&(step.module.to_owned(), step.name().to_owned())) {
-            continue;
-        }
-        tracing::info!(target: "navree_db::migrate", migration = %step.label(), batch = last, "rolling back");
-        run_step(conn, step, Direction::Down, last).await?;
-        reverted.push(step.label());
-    }
-    if let Some((module, name)) = in_batch.into_iter().next() {
-        return Err(MigrationError::Unknown {
-            migration: format!("{module}/{name}"),
-        });
-    }
-    Ok(reverted)
-}
-
-async fn run_status(
-    db: &Db,
-    sets: &[Arc<MigrationSet>],
-) -> Result<Vec<MigrationStatus>, MigrationError> {
-    let steps = plan(sets)?;
-    let applied = applied_rows(db.conn()).await?;
-    Ok(steps
-        .iter()
-        .map(|step| {
-            let row = applied.get(&(step.module.to_owned(), step.name().to_owned()));
-            MigrationStatus {
-                module: step.module.to_owned(),
-                name: step.name().to_owned(),
-                applied: row.is_some(),
-                batch: row.map(|r| r.batch),
-                applied_at: row.and_then(|r| r.applied_at),
-            }
-        })
-        .collect())
 }
 
 /// `"name"` with embedded quotes doubled.
