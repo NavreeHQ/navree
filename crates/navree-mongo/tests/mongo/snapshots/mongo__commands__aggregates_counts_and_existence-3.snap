@@ -1,0 +1,10 @@
+---
+source: crates/navree-mongo/tests/mongo/commands.rs
+expression: "format!(\"{distinct:#}\")"
+---
+db.deals.aggregate([
+  {"$match": {"stage": "won", "deleted_at": null}},
+  {"$group": {"_id": "$stage"}},
+  {"$match": {"_id": {"$ne": null}}},
+  {"$count": "aggregate"}
+])

@@ -1,0 +1,5 @@
+---
+source: crates/navree-mongo/tests/mongo/commands.rs
+expression: "show(&table(\"deals\").where_not(col(\"stage\").eq(\"won\")).where_not(col(\"amount\").gt(10)))"
+---
+db.deals.find({"$and": [{"$nor": [{"stage": "won"}]}, {"$nor": [{"amount": {"$gt": 10}}]}]})

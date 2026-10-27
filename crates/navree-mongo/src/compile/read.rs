@@ -14,6 +14,7 @@ use super::expr::{self, Accumulator};
 use super::filter::{self, nothing};
 use super::group;
 use super::scope::{Cx, Place, Scope, output_name};
+use super::subquery::{self, Keys};
 use super::Pending;
 use crate::command::{Aggregate, Count, Find, MongoCommand};
 use crate::error::{invalid, unsupported};
@@ -44,8 +45,11 @@ impl Plan {
     }
 }
 
+/// The message for a computed column without an alias.
+pub(crate) const UNNAMED: &str = "a computed column needs a name on MongoDB, where a document's fields are named: give it an alias (`select_expr(expr, \"name\")`, or `(expr, \"name\")` in `select`)";
+
 /// What MongoDB says about row locks.
-const LOCKS: &str = "row locks (`lock_for_update`, `shared_lock`): MongoDB has none; run the read and the write in a `MongoUow`, where two transactions writing the same document conflict and one is retried";
+const LOCKS: &str = "row locks (`lock_for_update`, `shared_lock`; MongoDB has none: run the read and the write in a `MongoUow`, where two transactions writing the same document conflict and one is retried)";
 
 /// Plans `query` in `scope` (a fresh scope for a top-level query, a child
 /// scope for a subquery).
@@ -71,7 +75,7 @@ pub(crate) fn plan(cx: &mut Cx, scope: &mut Scope<'_>, query: &QueryIr) -> Resul
     if let Some(text) = text {
         if !stages.is_empty() || !query.joins.is_empty() {
             return Err(unsupported(
-                "a full-text condition on a derived table or a join: MongoDB runs `$text` first, on the collection itself",
+                "a full-text condition on a derived table or a join (MongoDB runs `$text` first, on the collection itself)",
             ));
         }
         stages.push(doc! { "$match": text });
@@ -191,7 +195,7 @@ fn split_text(wheres: &[WhereClause]) -> Result<(Option<Document>, Vec<WhereClau
             }
             other if mentions_text(other) => {
                 return Err(unsupported(
-                    "a full-text condition inside OR, NOT or a group, or twice: MongoDB runs one `$text`, joined with AND at the top of the filter",
+                    "a full-text condition inside OR, NOT or a group, or twice (MongoDB runs one `$text`, joined with AND at the top of the filter)",
                 ));
             }
             _ => rest.push(clause.clone()),
@@ -224,62 +228,51 @@ fn join_stages(
         JoinKind::Left => true,
         JoinKind::Right => {
             return Err(unsupported(
-                "RIGHT JOIN: swap the collections and LEFT JOIN, MongoDB joins from the collection queried",
+                "RIGHT JOIN (MongoDB joins from the collection queried: swap the collections and LEFT JOIN)",
             ));
         }
         other => return Err(unsupported(format!("the join {other:?}"))),
     };
-    let lookup = {
-        // An equality between a joined field and one of ours is a plain
-        // `localField`/`foreignField` lookup.
-        let simple = match (&join.table.subquery, join.on.as_slice()) {
-            (None, [clause]) if !clause.negated => match &clause.filter {
-                Where::Compare {
-                    left: Expr::Column(left),
-                    op: navree_orm::ir::Operator::Eq,
-                    right: Expr::Column(right),
-                } => equality(cx, scope, &join.table, left, right)?,
-                _ => None,
-            },
-            _ => None,
-        };
-        match simple {
-            Some((local, foreign)) => doc! {
-                "from": join.table.name.to_string(),
-                "localField": local,
-                "foreignField": foreign,
-                "as": qualifier.clone(),
-            },
-            None => {
-                let joined = scope.child(&join.table);
-                let (collection, mut pipeline) = match &join.table.subquery {
-                    Some(inner) => {
-                        let mut inner_scope = Scope::of(&inner.table);
-                        let inner_plan = plan(cx, &mut inner_scope, inner)?;
-                        (inner_plan.collection, inner_plan.stages)
-                    }
-                    None => (join.table.name.to_string(), Vec::new()),
-                };
-                let mut pending = Pending::default();
-                let on = filter::clauses(cx, &joined, &mut pending, &join.on)?;
-                let temps = pending.flush(&mut pipeline);
-                if !on.is_empty() {
-                    pipeline.push(doc! { "$match": on });
-                }
-                if !temps.is_empty() {
-                    pipeline.push(doc! { "$unset": temps });
-                }
-                let lets = joined.lets();
-                let mut lookup = doc! { "from": collection };
-                if !lets.is_empty() {
-                    lookup.insert("let", lets.into_iter().collect::<Document>());
-                }
-                lookup.insert("pipeline", pipeline);
-                lookup.insert("as", qualifier.clone());
-                lookup
-            }
+    // An equality between a joined field and one of ours is matched by
+    // `localField` and `foreignField` (an index on the joined field serves
+    // it); the other conditions filter in the lookup's pipeline.
+    let keys = join_keys(scope, join);
+    let mut on = join.on.clone();
+    if let Some(keys) = &keys {
+        on.remove(keys.clause);
+    }
+    let joined = scope.child(&join.table);
+    let (collection, mut pipeline) = match &join.table.subquery {
+        Some(inner) => {
+            let mut inner_scope = Scope::of(&inner.table);
+            let inner_plan = plan(cx, &mut inner_scope, inner)?;
+            (inner_plan.collection, inner_plan.stages)
         }
+        None => (join.table.name.to_string(), Vec::new()),
     };
+    let mut pending = Pending::default();
+    let filter = filter::clauses(cx, &joined, &mut pending, &on)?;
+    let temps = pending.flush(&mut pipeline);
+    if !filter.is_empty() {
+        pipeline.push(doc! { "$match": filter });
+    }
+    if !temps.is_empty() {
+        pipeline.push(doc! { "$unset": temps });
+    }
+    let mut lookup = doc! { "from": collection };
+    if let Some(keys) = keys
+        && let Some(first) = keys.matched(&mut lookup)
+    {
+        pipeline.insert(0, first);
+    }
+    let lets = joined.lets();
+    if !lets.is_empty() {
+        lookup.insert("let", lets.into_iter().collect::<Document>());
+    }
+    if !pipeline.is_empty() || !lookup.contains_key("localField") {
+        lookup.insert("pipeline", pipeline);
+    }
+    lookup.insert("as", qualifier.clone());
     stages.push(doc! { "$lookup": lookup });
     stages.push(if keep_unmatched {
         doc! { "$unwind": { "path": format!("${qualifier}"), "preserveNullAndEmptyArrays": true } }
@@ -290,31 +283,38 @@ fn join_stages(
     Ok(())
 }
 
-/// `(localField, foreignField)` of an ON equality between a field of the
-/// joined table and a field we have, if it is one.
-fn equality(
-    cx: &mut Cx,
-    scope: &Scope<'_>,
-    joined: &TableRef,
-    left: &ColumnRef,
-    right: &ColumnRef,
-) -> Result<Option<(String, String)>, OrmError> {
-    let is_joined = |column: &ColumnRef| {
-        column
-            .table
-            .as_deref()
-            .is_some_and(|table| table == joined.qualifier() || table == joined.name)
-    };
-    let (ours, theirs) = match (is_joined(left), is_joined(right)) {
-        (false, true) => (left, right),
-        (true, false) => (right, left),
-        _ => return Ok(None),
-    };
-    let Place::Field(local) = scope.place(cx, ours)? else {
-        return Ok(None);
-    };
-    let foreign = super::scope::field_path(theirs)?;
-    Ok(Some((local, foreign)))
+/// The equality among a join's ON conditions (when they are all joined
+/// with AND) between a field of the joined collection and a field of the
+/// documents joined so far. A derived table has no fields of its
+/// collection to match.
+fn join_keys(scope: &Scope<'_>, join: &Join) -> Option<Keys> {
+    if join.table.subquery.is_some() || subquery::has_or(&join.on) {
+        return None;
+    }
+    let theirs = |column: &ColumnRef| column.table.as_deref() == Some(join.table.qualifier());
+    join.on.iter().enumerate().find_map(|(clause, condition)| {
+        let Where::Compare {
+            left: Expr::Column(left),
+            op: navree_orm::ir::Operator::Eq,
+            right: Expr::Column(right),
+        } = &condition.filter
+        else {
+            return None;
+        };
+        if condition.negated {
+            return None;
+        }
+        let (ours, joined) = match (theirs(left), theirs(right)) {
+            (false, true) => (left, right),
+            (true, false) => (right, left),
+            _ => return None,
+        };
+        Some(Keys {
+            clause,
+            local: scope.field_of(ours)?,
+            foreign: super::scope::field_path(joined).ok()?,
+        })
+    })
 }
 
 /// The select list of a query that is not grouped.
@@ -421,7 +421,7 @@ fn projection(
                 Some(table) if scope.is_own(table) => projection.all = true,
                 Some(table) => {
                     return Err(unsupported(format!(
-                        "every column of another collection (`{table}.*`): name its columns, a joined document is the field `{table}`"
+                        "every column of another collection (`{table}.*`; name its columns: a joined document is the field `{table}`)"
                     )));
                 }
             }
@@ -444,11 +444,7 @@ fn projection(
                 output_name(alias)?.to_owned(),
                 expr::value(cx, scope, &mut projection.pending, other)?,
             ),
-            (other, None) => {
-                return Err(invalid(format!(
-                    "a computed column needs a name on MongoDB: select {other:?} with an alias (`select_expr(expr, \"name\")`)"
-                )));
-            }
+            (_, None) => return Err(invalid(UNNAMED)),
         };
         if projection.outputs.iter().any(|(output, _)| *output == name) {
             return Err(invalid(format!(
@@ -519,7 +515,7 @@ fn plain(
             }
             projection.apply(scope, temps, stages);
         }
-        other => return Err(unsupported(format!("{other:?}"))),
+        other => return Err(unsupported(format!("the DISTINCT form {other:?}"))),
     }
     Ok(columns)
 }
@@ -636,7 +632,7 @@ fn order(
             }
             Order::Raw { .. } => {
                 return Err(unsupported(
-                    "raw SQL orders (`order_by_raw`): order by columns or expressions",
+                    "raw SQL orders (`order_by_raw`; order by columns or expressions)",
                 ));
             }
             other => return Err(unsupported(format!("the order {other:?}"))),

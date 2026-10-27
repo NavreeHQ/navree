@@ -1,0 +1,5 @@
+---
+source: crates/navree-mongo/tests/mongo/commands.rs
+expression: "show(&Deal::query())"
+---
+db.deals.find({"deleted_at": null}, {"_id": 1, "title": 1, "company_id": 1, "amount": 1, "price": 1, "stage": 1, "meta": 1, "tags": 1, "closes_on": 1, "created_at": 1, "updated_at": 1, "deleted_at": 1})

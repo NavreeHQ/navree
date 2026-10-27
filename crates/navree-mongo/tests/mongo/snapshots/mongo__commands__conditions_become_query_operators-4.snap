@@ -1,0 +1,5 @@
+---
+source: crates/navree-mongo/tests/mongo/commands.rs
+expression: "show(&table(\"deals\").where_date(\"closes_on\", \"=\",\nNaiveDate::from_ymd_opt(2026, 6,\n1).unwrap()).where_month(\"closes_on\", \">=\",\n6).where_year(\"closes_on\", \"=\", 2026).where_day(\"closes_on\", \"<\", 15))"
+---
+db.deals.find({"$and": [{"$expr": {"$eq": [{"$dateToString": {"format": "%Y-%m-%d", "date": "$closes_on"}}, "2026-06-01"]}}, {"$expr": {"$gte": [{"$month": "$closes_on"}, 6]}}, {"$expr": {"$eq": [{"$year": "$closes_on"}, 2026]}}, {"$expr": {"$and": [{"$gt": [{"$dayOfMonth": "$closes_on"}, null]}, {"$lt": [{"$dayOfMonth": "$closes_on"}, 15]}]}}]})

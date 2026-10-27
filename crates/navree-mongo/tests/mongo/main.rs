@@ -6,5 +6,6 @@
 mod models;
 mod support;
 
+mod commands;
 mod crud;
 mod queries;

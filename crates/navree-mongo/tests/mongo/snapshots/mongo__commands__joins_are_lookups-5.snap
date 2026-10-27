@@ -1,0 +1,9 @@
+---
+source: crates/navree-mongo/tests/mongo/commands.rs
+expression: "show(&table(\"deals\").join_on(\"companies\", |on|\n{\n    on.on(\"companies.founded_on\", \"<\",\n    \"deals.closes_on\").or_on(\"companies.employees\", \">\", \"deals.amount\")\n}).select([\"deals.title\"]))"
+---
+db.deals.aggregate([
+  {"$lookup": {"from": "companies", "let": {"navree0": "$closes_on", "navree1": "$amount"}, "pipeline": [{"$match": {"$or": [{"$expr": {"$and": [{"$gt": [{"$ifNull": ["$founded_on", null]}, null]}, {"$lt": [{"$ifNull": ["$founded_on", null]}, {"$ifNull": ["$$navree0", null]}]}]}}, {"$expr": {"$and": [{"$gt": [{"$ifNull": ["$$navree1", null]}, null]}, {"$gt": [{"$ifNull": ["$employees", null]}, {"$ifNull": ["$$navree1", null]}]}]}}]}}], "as": "companies"}},
+  {"$unwind": "$companies"},
+  {"$project": {"title": 1, "_id": 0}}
+])

@@ -1,0 +1,9 @@
+---
+source: crates/navree-mongo/tests/mongo/commands.rs
+expression: "show(&table(\"deals\").join_on(\"companies\", |on|\n{\n    on.on(\"companies._id\", \"=\",\n    \"deals.company_id\").where_(col(\"companies.employees\").gt(100))\n}).select([\"deals.title\"]))"
+---
+db.deals.aggregate([
+  {"$lookup": {"from": "companies", "localField": "company_id", "foreignField": "_id", "pipeline": [{"$match": {"employees": {"$gt": 100}}}], "as": "companies"}},
+  {"$unwind": "$companies"},
+  {"$project": {"title": 1, "_id": 0}}
+])

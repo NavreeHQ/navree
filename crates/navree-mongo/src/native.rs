@@ -107,7 +107,8 @@ impl MongoQuery for TableBuilder {
 /// ```no_run
 /// # use bson::doc;
 /// # use navree_mongo::{MongoDb, MongoQuery, ObjectId};
-/// # #[derive(navree_orm::Model, Clone, Debug, Default, serde::Serialize)]
+/// # use navree_orm::Model;
+/// # #[derive(Model, Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 /// # #[model(collection = "deals", driver = "mongodb")]
 /// # struct Deal { id: ObjectId, company_id: ObjectId }
 /// # async fn demo(mongo: MongoDb) -> Result<(), navree_orm::OrmError> {

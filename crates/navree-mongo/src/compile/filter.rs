@@ -106,6 +106,66 @@ fn expression(expr: Bson) -> Document {
     doc! { "$expr": expr }
 }
 
+/// `{"$op": [left, right]}` between aggregation values, with SQL's rule
+/// that no comparison but `<>` holds for NULL, a missing field read as
+/// null.
+///
+/// Aggregation orders null below every value, so `null < 5`, `5 > null`
+/// and `null = null` would hold. The comparison therefore first checks
+/// that the side a null would wrongly satisfy (the left of `<` and `<=`,
+/// the right of `>` and `>=`, either of `=`) is a value, unless it is a
+/// constant. `<>` keeps MongoDB's rule, like every negation here: null
+/// differs from every value.
+pub(crate) fn compared(operator: &str, left: Bson, right: Bson) -> Bson {
+    let (left, right) = (missing_as_null(left), missing_as_null(right));
+    let checked = match operator {
+        "$lt" | "$lte" => Some(&left),
+        "$gt" | "$gte" => Some(&right),
+        // Equal to a constant is a value already.
+        "$eq" if can_be_null(&right) => Some(&left),
+        _ => None,
+    }
+    .filter(|side| can_be_null(side))
+    .map(|side| Bson::Document(doc! { "$gt": [side.clone(), Bson::Null] }));
+    let comparison = Bson::Document(doc! { operator: [left, right] });
+    match checked {
+        Some(check) => Bson::Document(doc! { "$and": [check, comparison] }),
+        None => comparison,
+    }
+}
+
+/// `left <=> right`: equal, or both null (a missing field is null).
+pub(crate) fn null_safe_equal(left: Bson, right: Bson) -> Bson {
+    Bson::Document(doc! { "$eq": [missing_as_null(left), missing_as_null(right)] })
+}
+
+/// A field path or variable as `{"$ifNull": [path, null]}`: in
+/// aggregation, a missing field is neither null nor a value.
+fn missing_as_null(value: Bson) -> Bson {
+    match value {
+        Bson::String(path) if path.starts_with('$') => {
+            Bson::Document(doc! { "$ifNull": [path, Bson::Null] })
+        }
+        other => other,
+    }
+}
+
+/// Whether an aggregation value can be null: anything but a constant
+/// other than null.
+fn can_be_null(value: &Bson) -> bool {
+    match value {
+        Bson::Null | Bson::Undefined => true,
+        Bson::String(text) => text.starts_with('$'),
+        Bson::Document(document) => match document.get("$literal") {
+            Some(constant) if document.len() == 1 => {
+                matches!(constant, Bson::Null | Bson::Undefined)
+            }
+            _ => true,
+        },
+        _ => false,
+    }
+}
+
 /// One condition.
 pub(crate) fn condition(
     cx: &mut Cx,
@@ -183,12 +243,12 @@ pub(crate) fn condition(
         } => full_text(query, options)?,
         Where::Raw { .. } => {
             return Err(unsupported(
-                "raw SQL conditions (`where_raw`): write the condition with typed columns, or as a filter document with `Filter::document(doc! { .. })`",
+                "raw SQL conditions (`where_raw`; write the condition with typed columns, or as a filter document with `Filter::document(doc! { .. })`)",
             ));
         }
         Where::Sql(_) => {
             return Err(unsupported(
-                "SQL conditions (sea-query conditions, navree-access SQL filters): write them with typed columns or a filter document",
+                "SQL conditions (sea-query conditions and navree-access SQL filters; write them with typed columns or as a filter document)",
             ));
         }
         Where::Native(native) => match native.downcast_ref::<Document>() {
@@ -271,6 +331,59 @@ fn comparison(op: &Operator) -> Option<&'static str> {
     })
 }
 
+/// How `op` is written (`<=`, `LIKE`, `@>`), for messages.
+pub(crate) fn operator_text(op: &Operator) -> String {
+    match op {
+        Operator::Eq => "=",
+        Operator::Ne => "<>",
+        Operator::Lt => "<",
+        Operator::Lte => "<=",
+        Operator::Gt => ">",
+        Operator::Gte => ">=",
+        Operator::Like => "LIKE",
+        Operator::NotLike => "NOT LIKE",
+        Operator::ILike => "ILIKE",
+        Operator::NotILike => "NOT ILIKE",
+        Operator::NullSafeEq => "<=>",
+        Operator::BitAnd => "&",
+        Operator::BitOr => "|",
+        Operator::BitXor => "^",
+        Operator::ShiftLeft => "<<",
+        Operator::ShiftRight => ">>",
+        Operator::Regexp => "REGEXP",
+        Operator::NotRegexp => "NOT REGEXP",
+        Operator::Postgres(op) => op,
+        Operator::Invalid(op) => return op.clone(),
+        other => return format!("{other:?}"),
+    }
+    .to_owned()
+}
+
+/// What kind of condition `filter` is, for messages.
+pub(crate) fn kind(filter: &Where) -> &'static str {
+    match filter {
+        Where::Compare { .. } => "a comparison",
+        Where::Null { .. } => "IS NULL",
+        Where::In {
+            values: InValues::Subquery(_),
+            ..
+        } => "IN (subquery)",
+        Where::In { .. } => "IN",
+        Where::Between { .. } => "BETWEEN",
+        Where::Like { .. } => "LIKE",
+        Where::DatePart { .. } => "a date-part condition (`where_date`, `where_month`, ...)",
+        Where::Exists { .. } => "EXISTS (`where_exists`, `where_has`)",
+        Where::Group(_) => "a group of conditions",
+        Where::JsonContains { .. } => "a JSON containment check",
+        Where::JsonLength { .. } => "a JSON length check",
+        Where::FullText { .. } => "a full-text condition",
+        Where::Raw { .. } | Where::Sql(_) => "raw SQL",
+        Where::Native(_) => "a native filter",
+        Where::Invalid(_) => "an invalid condition",
+        _ => "this condition",
+    }
+}
+
 /// The message for an operator nothing knows.
 fn unknown_operator(op: &str) -> OrmError {
     invalid(format!(
@@ -313,19 +426,11 @@ fn compare(
     }
     let l = expr::value(cx, scope, pending, left)?;
     let r = expr::value(cx, scope, pending, right)?;
+    if *op == Operator::NullSafeEq {
+        return Ok(expression(null_safe_equal(l, r)));
+    }
     if let Some(operator) = comparison(op) {
-        // Missing fields compare as null, as in the query language.
-        let null_safe = |value: Bson| -> Bson {
-            match value {
-                Bson::String(path) if path.starts_with('$') => {
-                    Bson::Document(doc! { "$ifNull": [path, Bson::Null] })
-                }
-                other => other,
-            }
-        };
-        return Ok(expression(Bson::Document(doc! {
-            operator: [null_safe(l), null_safe(r)]
-        })));
+        return Ok(expression(compared(operator, l, r)));
     }
     match op {
         Operator::BitAnd => Ok(expression(Bson::Document(doc! {
@@ -344,7 +449,7 @@ fn compare(
             "the PostgreSQL operator `{op}` between computed values"
         ))),
         Operator::Invalid(op) => Err(unknown_operator(op)),
-        other => Err(unsupported(format!("the operator {other:?}"))),
+        other => Err(unsupported(format!("the operator `{}`", operator_text(other)))),
     }
 }
 
@@ -390,7 +495,7 @@ fn field_compare(path: &str, op: &Operator, value: &Value) -> Result<Document, O
         )),
         Operator::Postgres(op) => postgres(path, op, value),
         Operator::Invalid(op) => Err(unknown_operator(op)),
-        other => Err(unsupported(format!("the operator {other:?}"))),
+        other => Err(unsupported(format!("the operator `{}`", operator_text(other)))),
     }
 }
 
@@ -558,7 +663,7 @@ fn between(
     let low = expr::value(cx, scope, pending, low)?;
     let high = expr::value(cx, scope, pending, high)?;
     let within = Bson::Document(doc! {
-        "$and": [{ "$gte": [value.clone(), low] }, { "$lte": [value, high] }]
+        "$and": [compared("$gte", value.clone(), low), compared("$lte", value, high)]
     });
     Ok(expression(if not {
         Bson::Document(doc! { "$not": [within] })
@@ -582,7 +687,7 @@ fn date_part(
 ) -> Result<Document, OrmError> {
     let Some(operator) = comparison(op) else {
         return Err(invalid(format!(
-            "a date-part condition compares with =, <>, <, <=, > or >=, not {op:?}"
+            "a date-part condition compares with =, <>, <, <=, > or >=, not `{}`", operator_text(op)
         )));
     };
     let Expr::Value(value) = value else {
@@ -612,7 +717,7 @@ fn date_part(
         ),
         other => return Err(unsupported(format!("the date part {other:?}"))),
     };
-    Ok(expression(Bson::Document(doc! { operator: [left, right] })))
+    Ok(expression(compared(operator, left, right)))
 }
 
 /// A date value as `YYYY-MM-DD`.
@@ -724,13 +829,14 @@ fn json_length(path: &str, op: &Operator, length: i64) -> Result<Document, OrmEr
     }
     let Some(operator) = comparison(op) else {
         return Err(invalid(format!(
-            "a JSON length compares with =, <>, <, <=, > or >=, not {op:?}"
+            "a JSON length compares with =, <>, <, <=, > or >=, not `{}`", operator_text(op)
         )));
     };
     let field = format!("${path}");
-    Ok(expression(Bson::Document(doc! {
-        operator: [{ "$cond": [{ "$isArray": field.clone() }, { "$size": field }, Bson::Null] }, length]
-    })))
+    let size = Bson::Document(doc! {
+        "$cond": [{ "$isArray": field.clone() }, { "$size": field }, Bson::Null]
+    });
+    Ok(expression(compared(operator, size, Bson::Int64(length))))
 }
 
 /// The languages MongoDB's text indexes stem.
@@ -852,14 +958,92 @@ mod tests {
 
     #[test]
     fn columns_compared_with_columns_use_expr() {
-        let filter = Where::Compare {
+        let compare = |op: &str| Where::Compare {
             left: column("amount"),
-            op: Operator::Gt,
+            op: Operator::from(op),
             right: column("budget"),
         };
+        let amount = doc! { "$ifNull": ["$amount", Bson::Null] };
+        let budget = doc! { "$ifNull": ["$budget", Bson::Null] };
+        // Aggregation holds `null = null` and orders null below every
+        // value, so a comparison first checks the side a null would
+        // satisfy, as SQL never holds for NULL.
         assert_eq!(
-            compile(filter).unwrap(),
-            doc! { "$expr": { "$gt": [{ "$ifNull": ["$amount", Bson::Null] }, { "$ifNull": ["$budget", Bson::Null] }] } }
+            compile(compare("=")).unwrap(),
+            doc! { "$expr": { "$and": [
+                { "$gt": [amount.clone(), Bson::Null] },
+                { "$eq": [amount.clone(), budget.clone()] },
+            ] } }
+        );
+        assert_eq!(
+            compile(compare("<=>")).unwrap(),
+            doc! { "$expr": { "$eq": [amount.clone(), budget.clone()] } },
+            "null-safe equality holds for two nulls"
+        );
+        assert_eq!(
+            compile(compare("<>")).unwrap(),
+            doc! { "$expr": { "$ne": [amount.clone(), budget.clone()] } }
+        );
+        assert_eq!(
+            compile(compare(">")).unwrap(),
+            doc! { "$expr": { "$and": [
+                { "$gt": [budget.clone(), Bson::Null] },
+                { "$gt": [amount.clone(), budget.clone()] },
+            ] } }
+        );
+        assert_eq!(
+            compile(compare("<=")).unwrap(),
+            doc! { "$expr": { "$and": [
+                { "$gt": [amount.clone(), Bson::Null] },
+                { "$lte": [amount, budget] },
+            ] } }
+        );
+    }
+
+    #[test]
+    fn computed_values_below_a_bound_are_not_null() {
+        let month = Where::DatePart {
+            part: DatePart::Month,
+            expr: column("closes_on"),
+            op: Operator::Lt,
+            value: Expr::Value(6_i64.into()),
+        };
+        assert_eq!(
+            compile(month).unwrap(),
+            doc! { "$expr": { "$and": [
+                { "$gt": [{ "$month": "$closes_on" }, Bson::Null] },
+                { "$lt": [{ "$month": "$closes_on" }, 6_i64] },
+            ] } }
+        );
+        let shorter = Where::JsonLength {
+            column: ColumnRef::parse("tags"),
+            op: Operator::Lt,
+            length: 2,
+        };
+        let size = doc! { "$cond": [{ "$isArray": "$tags" }, { "$size": "$tags" }, Bson::Null] };
+        assert_eq!(
+            compile(shorter).unwrap(),
+            doc! { "$expr": { "$and": [{ "$gt": [size.clone(), Bson::Null] }, { "$lt": [size, 2_i64] }] } }
+        );
+        let range = Where::Between {
+            expr: Expr::Function {
+                name: "length".into(),
+                args: vec![column("title")],
+            },
+            low: Expr::Value(2_i64.into()),
+            high: column("max_length"),
+            not: false,
+        };
+        let length = doc! { "$strLenCP": "$title" };
+        assert_eq!(
+            compile(range).unwrap(),
+            doc! { "$expr": { "$and": [
+                { "$gte": [length.clone(), 2_i64] },
+                { "$and": [
+                    { "$gt": [length.clone(), Bson::Null] },
+                    { "$lte": [length, { "$ifNull": ["$max_length", Bson::Null] }] },
+                ] },
+            ] } }
         );
     }
 

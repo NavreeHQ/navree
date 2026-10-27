@@ -1,0 +1,5 @@
+---
+source: crates/navree-mongo/tests/mongo/commands.rs
+expression: "show(&table(\"deals\").where_column(\"amount\", \">\",\n\"budget\").where_group(|g|\ng.where_(col(\"stage\").eq(\"won\")).or_where(col(\"amount\").gt(100))).or_where(col(\"pinned\").eq(true)))"
+---
+db.deals.find({"$or": [{"$expr": {"$and": [{"$gt": [{"$ifNull": ["$budget", null]}, null]}, {"$gt": [{"$ifNull": ["$amount", null]}, {"$ifNull": ["$budget", null]}]}]}, "$or": [{"stage": "won"}, {"amount": {"$gt": 100}}]}, {"pinned": true}]})
