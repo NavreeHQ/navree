@@ -441,3 +441,19 @@ fn flags_is_reexported_with_its_feature() {
     assert!(same::<navree::flags::FlagsModule, FlagsModule>());
     assert!(same::<navree::flags::CurrentFlags, CurrentFlags>());
 }
+
+/// `navree::micro` is navree-micro re-exported whole, and the `micro`
+/// feature puts its module, client and payload in the prelude
+/// (`cargo test -p navree --features micro --test facade`).
+#[cfg(feature = "micro")]
+#[test]
+fn micro_is_reexported_with_its_feature() {
+    assert!(same::<navree::micro::MicroModule, MicroModule>());
+    assert!(same::<navree::micro::ServiceClient, ServiceClient>());
+    assert!(same::<navree::micro::Payload<u8>, Payload<u8>>());
+    let fake = navree::micro::MicroFake::new();
+    assert_eq!(
+        fake.transport().kind(),
+        Some(navree::micro::TransportKind::Custom)
+    );
+}
