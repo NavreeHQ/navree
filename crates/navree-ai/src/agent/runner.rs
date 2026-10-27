@@ -927,17 +927,19 @@ fn error_result(call: &ToolCall, error: AppError) -> ToolResult {
 }
 
 /// `{"error": <Navree error body>}`; server errors say only "The tool
-/// failed" (a timeout says so).
+/// failed" (a timeout says so), with their `code`.
 fn error_content(error: &AppError, _tool: &str) -> Value {
     let status = error.status;
     if status.is_server_error() && status != http::StatusCode::GATEWAY_TIMEOUT {
-        return json!({
-            "error": {
-                "statusCode": status.as_u16(),
-                "message": "The tool failed",
-                "error": status.canonical_reason().unwrap_or("Internal Server Error"),
-            }
+        let mut body = json!({
+            "statusCode": status.as_u16(),
+            "message": "The tool failed",
+            "error": status.canonical_reason().unwrap_or("Internal Server Error"),
         });
+        if !error.code.is_empty() {
+            body["code"] = json!(error.code);
+        }
+        return json!({ "error": body });
     }
     json!({ "error": error.body() })
 }
@@ -1005,12 +1007,12 @@ mod tests {
         let content = error_content(&AppError::internal("database password wrong"), "t");
         assert_eq!(
             content,
-            json!({ "error": { "statusCode": 500, "message": "The tool failed", "error": "Internal Server Error" } })
+            json!({ "error": { "statusCode": 500, "message": "The tool failed", "error": "Internal Server Error", "code": "internal_error" } })
         );
         let content = error_content(&AppError::forbidden(), "t");
         assert_eq!(
             content,
-            json!({ "error": { "statusCode": 403, "message": "Forbidden", "error": "Forbidden" } })
+            json!({ "error": { "statusCode": 403, "message": "Forbidden", "error": "Forbidden", "code": "forbidden" } })
         );
     }
 

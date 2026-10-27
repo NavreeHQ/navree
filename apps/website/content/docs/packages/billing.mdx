@@ -271,8 +271,10 @@ async fn summarize(&self, subscription: Subscribed, Path(id): Path<Uuid>) -> Res
 ```
 
 ```json
-{ "statusCode": 402, "message": "This workspace needs an active subscription", "error": "Payment Required" }
+{ "statusCode": 402, "message": "This workspace needs an active subscription", "error": "Payment Required", "code": "subscription_required" }
 ```
+
+A front end maps the `code` to its "upgrade your plan" screen in the user's language (see [error codes](/docs/basics/errors/#error-codes)).
 
 `billing.access(&billable)` gives the same answer outside a request. To show a feature to some plans before you gate it, combine billing with [feature flags](/docs/packages/feature-flags/).
 
@@ -551,6 +553,20 @@ To test against the provider's own test mode, use real test keys (`sk_test_...`,
 | `billing.plans.<key>.trial_days` | `0` | Trial on checkout |
 | `billing.plans.<key>.seats` | `false` | Quantity follows the workspace's member count |
 | `billing.plans.<key>.meters` | `{}` | Meter key to metered price id |
+
+`BillingError` returned from a handler with `?` becomes an error response with its own `code`:
+
+| Error | Status | `code` |
+|---|---|---|
+| `UnknownPlan`, `NoPrice`, `UnknownMeter`, `Invalid` | 400 | `validation_failed`, with the field under `errors` |
+| `AlreadySubscribed` | 409 | `already_subscribed` |
+| `NoSubscription` | 404 | `no_subscription` |
+| `NoCustomer` | 404 | `no_billing_customer` |
+| `InvalidWebhook` | 400 | `invalid_webhook_signature` |
+| `InvalidPayload` | 400 | `invalid_webhook_payload` |
+| `Provider` | 502 | `payment_provider_error` (no URL or key reaches the client) |
+| `Db`, `Fake`, `Config`, `Other` | 500 | `internal_error` |
+| no valid subscription (`Subscribed`) | 402 | `subscription_required` |
 
 | Command | What it does |
 |---|---|

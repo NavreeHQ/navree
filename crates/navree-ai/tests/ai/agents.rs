@@ -334,7 +334,7 @@ async fn failed_tools_roll_back_and_hide_server_errors() {
     );
     assert_eq!(
         fake.tool_results("add_then_fail")[0],
-        json!({ "error": { "statusCode": 500, "message": "The tool failed", "error": "Internal Server Error" } })
+        json!({ "error": { "statusCode": 500, "message": "The tool failed", "error": "Internal Server Error", "code": "internal_error" } })
     );
 }
 

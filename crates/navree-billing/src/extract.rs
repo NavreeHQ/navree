@@ -19,7 +19,7 @@ use crate::subscription::Subscription;
 /// the `CurrentUser` when you bill users (`billing.routes_billable`).
 ///
 /// ```json
-/// { "statusCode": 402, "message": "This workspace needs an active subscription", "error": "Payment Required" }
+/// { "statusCode": 402, "message": "This workspace needs an active subscription", "error": "Payment Required", "code": "subscription_required" }
 /// ```
 #[derive(Clone, Debug)]
 pub struct Subscribed(pub Subscription);
@@ -71,8 +71,29 @@ impl<S: Send + Sync> FromRequestParts<S> for Subscribed {
     }
 }
 
-/// The 402 of a billable without a valid subscription.
+/// The 402 `subscription_required` of a billable without a valid
+/// subscription.
 pub(crate) fn payment_required(billable_type: &str) -> AppError {
     AppError::from_status(StatusCode::PAYMENT_REQUIRED)
+        .with_code("subscription_required")
         .with_detail(format!("This {billable_type} needs an active subscription"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_missing_subscription_is_a_402_subscription_required() {
+        let error = payment_required("workspace");
+        assert_eq!(
+            error.body(),
+            serde_json::json!({
+                "statusCode": 402,
+                "message": "This workspace needs an active subscription",
+                "error": "Payment Required",
+                "code": "subscription_required",
+            })
+        );
+    }
 }

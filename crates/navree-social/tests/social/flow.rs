@@ -88,7 +88,8 @@ async fn a_new_github_user_gets_an_account_and_tokens_and_the_state_works_once()
 
     callback(&app, "github", "code-ada", &state)
         .await
-        .assert_error(400, "Invalid or expired state");
+        .assert_error(400, "Invalid or expired state")
+        .assert_error_code(400, "invalid_state");
     assert_eq!(
         fake.exchanged(),
         [("github".to_owned(), "code-ada".to_owned())],

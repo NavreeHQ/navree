@@ -12,19 +12,19 @@ use crate::provider::{ProviderError, WebhookError};
 /// A billing error. Returned from a handler with `?`, it becomes an error
 /// response in Navree's JSON error shape:
 ///
-/// | Error | Status | Message |
-/// |---|---|---|
-/// | `UnknownPlan` | 400 | `Unknown plan \`<key>\`.` (under `errors.plan`) |
-/// | `NoPrice` | 400 | `Plan \`<key>\` has no <interval> price.` (under `errors.interval`) |
-/// | `UnknownMeter` | 400 | `Unknown meter \`<key>\` for this plan.` (under `errors.meter`) |
-/// | `Invalid` | 400 | the field's message, under `errors.<field>` |
-/// | `AlreadySubscribed` | 409 | `Already subscribed; change the plan with swap instead.` |
-/// | `NoSubscription` | 404 | `No subscription.` |
-/// | `NoCustomer` | 404 | `No billing customer yet.` |
-/// | `InvalidWebhook` | 400 | `Invalid webhook signature.` |
-/// | `InvalidPayload` | 400 | `Invalid webhook payload.` |
-/// | `Provider` | 502 | `The payment provider refused the request: ...` |
-/// | `Db`, `Fake`, `Config`, `Other` | 500 | |
+/// | Error | Status | `code` | Message |
+/// |---|---|---|---|
+/// | `UnknownPlan` | 400 | `validation_failed` | `Unknown plan \`<key>\`.` (under `errors.plan`) |
+/// | `NoPrice` | 400 | `validation_failed` | `Plan \`<key>\` has no <interval> price.` (under `errors.interval`) |
+/// | `UnknownMeter` | 400 | `validation_failed` | `Unknown meter \`<key>\` for this plan.` (under `errors.meter`) |
+/// | `Invalid` | 400 | `validation_failed` | the field's message, under `errors.<field>` |
+/// | `AlreadySubscribed` | 409 | `already_subscribed` | `Already subscribed; change the plan with swap instead.` |
+/// | `NoSubscription` | 404 | `no_subscription` | `No subscription.` |
+/// | `NoCustomer` | 404 | `no_billing_customer` | `No billing customer yet.` |
+/// | `InvalidWebhook` | 400 | `invalid_webhook_signature` | `Invalid webhook signature.` |
+/// | `InvalidPayload` | 400 | `invalid_webhook_payload` | `Invalid webhook payload.` |
+/// | `Provider` | 502 | `payment_provider_error` | `The payment provider refused the request: ...` |
+/// | `Db`, `Fake`, `Config`, `Other` | 500 | `internal_error` | |
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum BillingError {
@@ -115,12 +115,21 @@ pub(crate) fn map_billing_error(error: &BillingError) -> Option<AppError> {
         BillingError::Invalid { field, message } => field_error(field, message.clone()),
         BillingError::AlreadySubscribed => {
             AppError::conflict("Already subscribed; change the plan with swap instead.")
+                .with_code("already_subscribed")
         }
-        BillingError::NoSubscription => AppError::not_found().with_detail("No subscription."),
-        BillingError::NoCustomer => AppError::not_found().with_detail("No billing customer yet."),
-        BillingError::InvalidWebhook(_) => AppError::bad_request("Invalid webhook signature."),
-        BillingError::InvalidPayload(_) => AppError::bad_request("Invalid webhook payload."),
+        BillingError::NoSubscription => AppError::not_found()
+            .with_code("no_subscription")
+            .with_detail("No subscription."),
+        BillingError::NoCustomer => AppError::not_found()
+            .with_code("no_billing_customer")
+            .with_detail("No billing customer yet."),
+        BillingError::InvalidWebhook(_) => AppError::bad_request("Invalid webhook signature.")
+            .with_code("invalid_webhook_signature"),
+        BillingError::InvalidPayload(_) => {
+            AppError::bad_request("Invalid webhook payload.").with_code("invalid_webhook_payload")
+        }
         BillingError::Provider(provider) => AppError::from_status(StatusCode::BAD_GATEWAY)
+            .with_code("payment_provider_error")
             .with_detail(format!(
                 "The payment provider refused the request: {}",
                 provider_message(provider)
@@ -145,29 +154,44 @@ mod tests {
     use super::*;
 
     #[test]
-    fn errors_map_to_statuses() {
+    fn errors_map_to_statuses_and_codes() {
         let cases = [
-            (BillingError::UnknownPlan("gold".into()), 400),
+            (
+                BillingError::UnknownPlan("gold".into()),
+                400,
+                "validation_failed",
+            ),
             (
                 BillingError::NoPrice {
                     plan: "pro".into(),
                     interval: "yearly",
                 },
                 400,
+                "validation_failed",
             ),
-            (BillingError::UnknownMeter("ai".into()), 400),
+            (
+                BillingError::UnknownMeter("ai".into()),
+                400,
+                "validation_failed",
+            ),
             (
                 BillingError::invalid("quantity", "quantity must be at least 1"),
                 400,
+                "validation_failed",
             ),
-            (BillingError::AlreadySubscribed, 409),
-            (BillingError::NoSubscription, 404),
-            (BillingError::NoCustomer, 404),
+            (BillingError::AlreadySubscribed, 409, "already_subscribed"),
+            (BillingError::NoSubscription, 404, "no_subscription"),
+            (BillingError::NoCustomer, 404, "no_billing_customer"),
             (
                 BillingError::InvalidWebhook(WebhookError::SignatureMismatch),
                 400,
+                "invalid_webhook_signature",
             ),
-            (BillingError::InvalidPayload("x".into()), 400),
+            (
+                BillingError::InvalidPayload("x".into()),
+                400,
+                "invalid_webhook_payload",
+            ),
             (
                 BillingError::Provider(ProviderError::Api {
                     provider: "stripe",
@@ -175,17 +199,22 @@ mod tests {
                     message: "Your card was declined.".into(),
                 }),
                 502,
+                "payment_provider_error",
             ),
             (
                 BillingError::Db(DbErr::RecordNotFound("subscriptions".into())),
                 404,
+                "not_found",
             ),
-            (BillingError::Fake("x".into()), 500),
-            (BillingError::Config("x".into()), 500),
-            (BillingError::Other("boom".into()), 500),
+            (BillingError::Fake("x".into()), 500, "internal_error"),
+            (BillingError::Config("x".into()), 500, "internal_error"),
+            (BillingError::Other("boom".into()), 500, "internal_error"),
         ];
-        for (error, status) in cases {
-            assert_eq!(error.to_app_error().status.as_u16(), status, "{error}");
+        for (error, status, code) in cases {
+            let app = error.to_app_error();
+            assert_eq!(app.status.as_u16(), status, "{error}");
+            assert_eq!(app.code, code, "{error}");
+            assert!(navree_http::codes::is_valid(&app.code), "{error}");
         }
         let body = BillingError::UnknownPlan("gold".into())
             .to_app_error()

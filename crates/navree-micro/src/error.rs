@@ -123,7 +123,7 @@ impl MicroError {
 }
 
 /// An error reply: the status and the JSON error body the handler's service
-/// sent (`{ "statusCode", "message", "error" }`, plus `errors` for
+/// sent (`{ "statusCode", "message", "error", "code" }`, plus `errors` for
 /// validation failures).
 #[derive(Clone, Debug, PartialEq)]
 pub struct RemoteError {
@@ -179,20 +179,32 @@ impl RemoteError {
         &self.body
     }
 
-    /// The same error as an `AppError`: status, message and field errors.
+    /// The machine-readable `code` of the body (`"not_found"`,
+    /// `"email_taken"`), when it has one.
+    pub fn code(&self) -> Option<&str> {
+        self.body["code"].as_str().filter(|code| !code.is_empty())
+    }
+
+    /// The same error as an `AppError`: status, message, `code` and field
+    /// errors.
     pub fn to_app_error(&self) -> AppError {
         let errors = self.errors();
-        if !errors.is_empty() {
+        let error = if errors.is_empty() {
+            let error = AppError::from_status(self.status);
+            match self.body["message"].as_str() {
+                Some(message) if Some(message) != self.status.canonical_reason() => {
+                    error.with_detail(message)
+                }
+                _ => error,
+            }
+        } else {
             let mut error = AppError::validation(errors);
             error.status = self.status;
-            return error;
-        }
-        let error = AppError::from_status(self.status);
-        match self.body["message"].as_str() {
-            Some(message) if Some(message) != self.status.canonical_reason() => {
-                error.with_detail(message)
-            }
-            _ => error,
+            error
+        };
+        match self.code() {
+            Some(code) => error.with_code(code),
+            None => error,
         }
     }
 }
@@ -220,7 +232,7 @@ mod tests {
 
     #[test]
     fn the_error_table() {
-        let not_found = json!({ "statusCode": 404, "message": "Not Found", "error": "Not Found" });
+        let not_found = json!({ "statusCode": 404, "message": "Not Found", "error": "Not Found", "code": "not_found" });
         let cases = [
             (remote(404, not_found.clone()), 404),
             (
@@ -267,6 +279,7 @@ mod tests {
             "statusCode": 400,
             "message": ["position must not be less than 0"],
             "error": "Bad Request",
+            "code": "validation_failed",
             "errors": { "position": ["position must not be less than 0"] },
         });
         let error = RemoteError::new(StatusCode::BAD_REQUEST, body.clone());
@@ -282,11 +295,17 @@ mod tests {
 
         let conflict = RemoteError::new(
             StatusCode::CONFLICT,
-            json!({ "statusCode": 409, "message": "Email taken", "error": "Conflict" }),
+            json!({ "statusCode": 409, "message": "Email taken", "error": "Conflict", "code": "email_taken" }),
         );
         assert_eq!(conflict.message(), "Email taken");
         assert!(conflict.errors().is_empty());
+        assert_eq!(conflict.code(), Some("email_taken"));
         assert_eq!(conflict.to_app_error().body()["message"], "Email taken");
+        assert_eq!(
+            conflict.to_app_error().code,
+            "email_taken",
+            "the remote's own code is kept"
+        );
         assert_eq!(conflict.to_string(), "409 Email taken");
     }
 

@@ -43,8 +43,8 @@ macro_rules! in_context {
 ///
 /// Every failure is a 400 error with field errors
 /// (`{"statusCode": 400, "message": ["email must be a valid email address"],
-/// "error": "Bad Request", "errors": {"email": ["email must be a valid email
-/// address"]}}`):
+/// "error": "Bad Request", "code": "validation_failed", "errors": {"email":
+/// ["email must be a valid email address"]}}`):
 /// malformed JSON (on `body`), serde errors (at the serde path: a missing
 /// field is `required`, a wrong type is `string`, `integer`, ...) and garde
 /// rules, with messages from the app's [`Messages`].

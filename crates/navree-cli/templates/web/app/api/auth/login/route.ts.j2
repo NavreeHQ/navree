@@ -2,7 +2,7 @@ import { error, navree, originAllowed, setTokenCookies, type TokenPair } from "@
 
 /** Signs in at Navree, keeps the tokens in httpOnly cookies and returns only `{user}`. */
 export async function POST(request: Request): Promise<Response> {
-  if (!originAllowed(request)) return error(403, "Cross-origin request refused", "Forbidden");
+  if (!originAllowed(request)) return error(403, "Cross-origin request refused", "Forbidden", "cross_origin_refused");
   const upstream = await navree("/api/auth/login", {
     method: "POST",
     headers: { "content-type": "application/json", accept: "application/json" },

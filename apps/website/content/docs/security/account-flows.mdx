@@ -61,11 +61,11 @@ Content-Type: application/json
 A taken address and a short password are 400 validation errors:
 
 ```json wrap
-{"statusCode": 400, "message": ["email has already been taken"], "error": "Bad Request", "errors": {"email": ["email has already been taken"]}}
+{"statusCode": 400, "message": ["email has already been taken"], "error": "Bad Request", "code": "validation_failed", "errors": {"email": ["email has already been taken"]}}
 ```
 
 ```json wrap
-{"statusCode": 400, "message": ["password must be longer than or equal to 8 characters"], "error": "Bad Request", "errors": {"password": ["password must be longer than or equal to 8 characters"]}}
+{"statusCode": 400, "message": ["password must be longer than or equal to 8 characters"], "error": "Bad Request", "code": "validation_failed", "errors": {"password": ["password must be longer than or equal to 8 characters"]}}
 ```
 
 The new account's email address is unverified, and registering doesn't send a verification mail: the client asks for one with [`POST /api/auth/email/verification`](#sending-the-link). The password rule is a minimum length only; there are no rules about character classes or breached passwords.
@@ -151,7 +151,7 @@ The answer is `204 No Content`. The token works once and for `auth.password_rese
 A wrong, used or expired token, or one for another address, gets:
 
 ```json
-{"statusCode": 400, "message": "Invalid or expired password reset token", "error": "Bad Request"}
+{"statusCode": 400, "message": "Invalid or expired password reset token", "error": "Bad Request", "code": "invalid_reset_token"}
 ```
 
 A pending reset is also cancelled when the user changes their password or their email address, so a token mailed to an old address can't reset whoever owns that address next.
@@ -238,7 +238,7 @@ A new name is trimmed and must not be empty. A new **email address** needs more 
 - It needs the user's `current_password`, so a stolen access token alone can't move the account to an attacker's address. Without it:
 
   ```json wrap
-  {"statusCode": 400, "message": ["current_password should not be empty"], "error": "Bad Request", "errors": {"current_password": ["current_password should not be empty"]}}
+  {"statusCode": 400, "message": ["current_password should not be empty"], "error": "Bad Request", "code": "validation_failed", "errors": {"current_password": ["current_password should not be empty"]}}
   ```
 
   A wrong password is `current_password is incorrect`, and wrong passwords count towards the [login throttle](/docs/security/authentication/#the-login-throttle) of that account and address (429 once it is used up).

@@ -132,7 +132,10 @@ export const api = Object.assign(client, {
 
 - Read data with TanStack Query and `unwrap(api.GET("/api/v1/deals", { params: { query } }))`;
   `unwrap` throws an `ApiError` built from Navree's error body
-  (`{statusCode, message, error, errors?}`).
+  (`{statusCode, message, error, code, errors?}`). Branch on `error.code`
+  (`invalid_two_factor_code`), never on the English `message`, and map codes
+  to the text people see in one catalogue (`CODE_MESSAGES` in
+  `src/lib/api/errors.ts`), the place translations plug in.
 - Show 400 validation errors next to fields with
   `applyFieldErrors(error, form.setError, ["email", "password"])`.
 - Don't retry 4xx in queries (`retry: (n, e) => !(isApiError(e) && e.status < 500) && n < 2`).

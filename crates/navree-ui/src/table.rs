@@ -535,7 +535,7 @@ impl FormErrors {
     }
 
     /// The field errors of an error body in Navree's shape (`{"statusCode",
-    /// "message", "error", "errors"}`), for example one returned by an API
+    /// "message", "error", "code", "errors"}`), for example one returned by an API
     /// call the page made.
     pub fn from_body(body: &serde_json::Value) -> Self {
         let errors: std::collections::BTreeMap<String, Vec<String>> = body

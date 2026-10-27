@@ -48,8 +48,9 @@ tests/                 tests that boot the whole app
 4. **Validate at the edge.** Bodies and queries arrive through
    `Valid<Json<T>>` / `Valid<Query<T>>` with garde rules on `T`.
 5. **One error shape.** Handlers return `Result<T>` (`AppError`); every
-   error is `{ "statusCode", "message", "error" }`, plus `errors` for
-   validation failures.
+   error is `{ "statusCode", "message", "error", "code" }`, plus `errors`
+   for validation failures. A refusal users see gets its own `code`
+   (`.with_code("campaign_already_running")`), which front ends translate.
 6. **The request is a unit of work.** Services take `&Uow`; writes go
    through `Repo::<E>::insert/update/delete`; everything commits when the
    response status is below 400 and rolls back otherwise.

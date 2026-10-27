@@ -90,7 +90,7 @@ Each module is its own crate, and the `navree` crate re-exports all of them, one
 | Area | Modules |
 |---|---|
 | Foundation | The kernel (module graph, dependency injection, lifecycle hooks, commands); typed configuration from `.env`, TOML files and `APP_*` variables; structured logging with redaction |
-| HTTP | Controllers and route attributes on Axum, deny-by-default access declarations, one JSON error shape (`{ "statusCode", "message", "error" }`), rate limits, CORS and security headers, signed URLs, maintenance mode |
+| HTTP | Controllers and route attributes on Axum, deny-by-default access declarations, one JSON error shape (`{ "statusCode", "message", "error", "code" }`) with stable, translatable error codes, rate limits, CORS and security headers, signed URLs, maintenance mode |
 | Validation | `Valid<T>` extractors on garde, one readable message per broken rule, async `unique` and `exists` rules |
 | Database | SeaORM integration, a unit of work per request, per-module migrations, seeders, factories and pagination; SQLite by default, PostgreSQL behind a feature |
 | Security | JWT access tokens with rotating refresh tokens, pluggable authentication strategies, registration, password reset, email verification and two-factor authentication; roles, permissions and abilities with record checks and SQL list filters, shared with the front end; AES-256-GCM encryption and Argon2id hashing; an audit log |

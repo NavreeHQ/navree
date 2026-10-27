@@ -33,7 +33,8 @@ x-request-id: 01a17749fe5e759d9cbb64d266802d8b
 {
   "statusCode": 429,
   "message": "Too Many Requests",
-  "error": "Too Many Requests"
+  "error": "Too Many Requests",
+  "code": "too_many_requests"
 }
 ```
 
@@ -132,7 +133,8 @@ Limits are declared per route, with a fixed number per period. They can't depend
 {
   "statusCode": 429,
   "message": "Too many login attempts. Please try again in 42 seconds.",
-  "error": "Too Many Requests"
+  "error": "Too Many Requests",
+  "code": "too_many_login_attempts"
 }
 ```
 

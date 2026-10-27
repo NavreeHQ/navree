@@ -1,16 +1,18 @@
 //! JSON errors and request ids.
 
 use std::collections::BTreeMap;
+use std::time::Duration;
 
 use axum::Json;
 use axum::body::Body;
 use axum::routing::{get, post};
 use http::{Method, Request};
-use navree_http::{AppError, ModuleBuilderHttpExt, RouteDef};
+use navree_config::ConfigSources;
+use navree_http::{AppError, ErrorOptions, HttpOptions, ModuleBuilderHttpExt, RouteDef};
 use serde::Deserialize;
 use serde_json::json;
 
-use crate::support::{Setup, json_request};
+use crate::support::{Setup, json_request, options};
 
 fn validation_route() -> RouteDef {
     RouteDef::new(
@@ -54,6 +56,7 @@ async fn json_error_shape_and_content_type() {
                 "name must be a string",
             ],
             "error": "Bad Request",
+            "code": "validation_failed",
             "errors": {
                 "email": ["email must be a valid email address"],
                 "name": ["name should not be empty", "name must be a string"],
@@ -61,10 +64,16 @@ async fn json_error_shape_and_content_type() {
         })
     );
     let text = response.text();
-    let positions: Vec<usize> = ["\"statusCode\"", "\"message\"", "\"error\"", "\"errors\""]
-        .iter()
-        .map(|key| text.find(key).expect(key))
-        .collect();
+    let positions: Vec<usize> = [
+        "\"statusCode\"",
+        "\"message\"",
+        "\"error\"",
+        "\"code\"",
+        "\"errors\"",
+    ]
+    .iter()
+    .map(|key| text.find(key).expect(key))
+    .collect();
     assert!(positions.is_sorted(), "error member order: {text}");
 }
 
@@ -86,17 +95,17 @@ async fn plain_errors_carry_message_and_reason_phrase() {
     let body = app.get("/api/missing").await.assert_error(404);
     assert_eq!(
         body,
-        json!({"statusCode": 404, "message": "Not Found", "error": "Not Found"})
+        json!({"statusCode": 404, "message": "Not Found", "error": "Not Found", "code": "not_found"})
     );
     let body = app.get("/api/custom").await.assert_error(404);
     assert_eq!(
         body,
-        json!({"statusCode": 404, "message": "Deal not found", "error": "Not Found"})
+        json!({"statusCode": 404, "message": "Deal not found", "error": "Not Found", "code": "not_found"})
     );
     let body = app.get("/api/no-such-route").await.assert_error(404);
     assert_eq!(
         body,
-        json!({"statusCode": 404, "message": "Not Found", "error": "Not Found"})
+        json!({"statusCode": 404, "message": "Not Found", "error": "Not Found", "code": "not_found"})
     );
 }
 
@@ -181,6 +190,7 @@ async fn internal_errors_hide_their_detail() {
                 "statusCode": 500,
                 "message": "Internal server error",
                 "error": "Internal Server Error",
+                "code": "internal_error",
             })
         );
         assert!(!response.text().contains("secret"));
@@ -280,7 +290,7 @@ async fn contributed_error_mapper_maps_typed_errors() {
     let body = response.assert_error(409);
     assert_eq!(
         body,
-        json!({"statusCode": 409, "message": "The record already exists.", "error": "Conflict"})
+        json!({"statusCode": 409, "message": "The record already exists.", "error": "Conflict", "code": "conflict"})
     );
 }
 
@@ -347,4 +357,157 @@ fn error_mappers_apply_to_the_source_chain_outside_the_pipeline() {
     assert_eq!(mapped.status, http::StatusCode::NOT_FOUND);
     let unrelated = AppError::internal("something else");
     assert!(ErrorMapper::apply(&mappers, &unrelated).is_none());
+}
+
+/// Routes that fail in every way the framework knows.
+fn failing_routes() -> Vec<RouteDef> {
+    vec![
+        validation_route(),
+        RouteDef::on(Method::GET, "/missing", || async {
+            Err::<(), _>(AppError::not_found().with_detail("Deal not found"))
+        })
+        .public(),
+        RouteDef::on(Method::GET, "/private", || async { "secret" }).authenticated(),
+        RouteDef::new(
+            Method::POST,
+            "/things",
+            post(|Json(_thing): Json<NewThing>| async { "created" }),
+        )
+        .public(),
+        RouteDef::on(Method::GET, "/panic", || async {
+            if true {
+                panic!("handler exploded");
+            }
+            "unreachable"
+        })
+        .public(),
+        RouteDef::on(Method::GET, "/slow-route", || async {
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            "late"
+        })
+        .public()
+        .timeout(Duration::from_millis(50)),
+        RouteDef::on(Method::GET, "/slow", || async {
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            "late"
+        })
+        .public(),
+        RouteDef::on(Method::POST, "/campaigns/start", || async {
+            Err::<(), _>(
+                AppError::conflict("The campaign is already running.")
+                    .with_code("campaign_already_running"),
+            )
+        })
+        .public(),
+        RouteDef::on(Method::GET, "/question-mark", || async {
+            let n: i32 = "not a number".parse()?;
+            Ok::<_, AppError>(n.to_string())
+        })
+        .public(),
+    ]
+}
+
+fn get_request(path: &str) -> Request<Body> {
+    Request::get(path).body(Body::empty()).unwrap()
+}
+
+/// Every request of [`failing_routes`] with the status and code it gets.
+fn failing_requests() -> Vec<(Request<Body>, u16, &'static str)> {
+    vec![
+        (
+            Request::post("/api/validate").body(Body::empty()).unwrap(),
+            400,
+            "validation_failed",
+        ),
+        (
+            json_request("POST", "/api/things", json!({"other": 1})),
+            400,
+            "bad_request",
+        ),
+        (
+            Request::post("/api/things")
+                .header("content-type", "application/json")
+                .body(Body::from("{not json"))
+                .unwrap(),
+            400,
+            "bad_request",
+        ),
+        (get_request("/api/private"), 401, "unauthenticated"),
+        (get_request("/api/missing"), 404, "not_found"),
+        (get_request("/api/no-such-route"), 404, "not_found"),
+        (get_request("/api/things"), 405, "method_not_allowed"),
+        (
+            Request::post("/api/campaigns/start")
+                .body(Body::empty())
+                .unwrap(),
+            409,
+            "campaign_already_running",
+        ),
+        (
+            Request::post("/api/things").body(Body::from("x")).unwrap(),
+            415,
+            "unsupported_media_type",
+        ),
+        (get_request("/api/panic"), 500, "internal_error"),
+        (get_request("/api/question-mark"), 500, "internal_error"),
+        (get_request("/api/slow-route"), 503, "request_timeout"),
+        (get_request("/api/slow"), 503, "request_timeout"),
+    ]
+}
+
+#[tokio::test(start_paused = true)]
+async fn framework_errors_carry_their_stable_code() {
+    let app = Setup::new(failing_routes())
+        .options(HttpOptions {
+            timeout_secs: 1,
+            ..options()
+        })
+        .authenticated()
+        .boot()
+        .await;
+
+    for (request, status, code) in failing_requests() {
+        let what = format!("{} {}", request.method(), request.uri());
+        let body = app.send(request).await.assert_error(status);
+        assert_eq!(body["code"], code, "{what}: {body}");
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn http_errors_code_false_leaves_the_code_out() {
+    let app = Setup::new(failing_routes())
+        .options(HttpOptions {
+            timeout_secs: 1,
+            errors: ErrorOptions { code: false },
+            ..options()
+        })
+        .authenticated()
+        .boot()
+        .await;
+
+    for (request, status, _) in failing_requests() {
+        let what = format!("{} {}", request.method(), request.uri());
+        let body = app.send(request).await.assert_error(status);
+        assert!(body.get("code").is_none(), "{what}: {body}");
+    }
+    let body = app.get("/api/missing").await.assert_error(404);
+    assert_eq!(
+        body,
+        json!({"statusCode": 404, "message": "Deal not found", "error": "Not Found"})
+    );
+}
+
+#[tokio::test]
+async fn the_environment_turns_the_code_off() {
+    let sources = ConfigSources::new().env_vars("APP_", [("APP_HTTP__ERRORS__CODE", "false")]);
+    let app = Setup::new(failing_routes())
+        .configured_by(sources)
+        .authenticated()
+        .boot()
+        .await;
+
+    let body = app.get("/api/no-such-route").await.assert_error(404);
+    assert!(body.get("code").is_none(), "{body}");
+    let body = app.get("/api/panic").await.assert_error(500);
+    assert!(body.get("code").is_none(), "{body}");
 }

@@ -652,7 +652,7 @@ Every engine implements the `SearchEngine` trait, which you can implement for an
 A search that the engine can't answer returns `SearchError`. With `?` in a handler it becomes Navree's error shape: an invalid filter or sort field, or a filter the engine can't run, is a 400; an unreachable or timed-out engine is a 503:
 
 ```json
-{ "statusCode": 503, "message": "Search is unavailable. Try again shortly.", "error": "Service Unavailable" }
+{ "statusCode": 503, "message": "Search is unavailable. Try again shortly.", "error": "Service Unavailable", "code": "service_unavailable" }
 ```
 
 The sync jobs log every failure at target `navree::search` with the index, the ids and the engine's answer, and retry.

@@ -3109,6 +3109,11 @@ export interface components {
         };
         /** @description The JSON error shape every error response carries (`application/json`). */
         HttpError: {
+            /**
+             * @description The machine-readable error code (`not_found`, `validation_failed`, `invalid_credentials`), stable across releases, for front ends to map to a translation key. Left out when `http.errors.code` is false.
+             * @example not_found
+             */
+            code?: string;
             /** @description The reason phrase of the status (`Not Found`, `Bad Request`). */
             error: string;
             /** @description Validation messages per field (400 validation errors only). */

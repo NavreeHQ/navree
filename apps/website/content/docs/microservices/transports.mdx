@@ -145,7 +145,7 @@ Headers travel as the broker's native headers: NATS headers, Kafka record header
 
 All of them are constants of `navree::micro::headers` (`headers::MESSAGE_ID`, `headers::DEADLINE`, ...).
 
-A reply's body is the handler's result, or the error in Navree's JSON shape (`{ "statusCode", "message", "error" }`, plus `errors` for validation failures).
+A reply's body is the handler's result, or the error in Navree's JSON shape (`{ "statusCode", "message", "error", "code" }`, plus `errors` for validation failures).
 
 `micro.max_message_bytes` (1 MiB by default) caps the encoded payload in both directions. A larger payload fails on the sending side with `MicroError::PayloadTooLarge`, before it reaches the broker. Send ids, not documents: put files in [storage](/docs/digging-deeper/storage/) and send their path.
 

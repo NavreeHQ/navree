@@ -114,6 +114,7 @@ async fn panics_and_timeouts_are_json_errors() {
             "statusCode": 500,
             "message": "Internal server error",
             "error": "Internal Server Error",
+            "code": "internal_error",
         }),
         "panic message not sent"
     );
@@ -121,6 +122,7 @@ async fn panics_and_timeouts_are_json_errors() {
     let response = app.get("/api/slow-route").await;
     let body = response.assert_error(503);
     assert_eq!(body["error"], "Service Unavailable");
+    assert_eq!(body["code"], "request_timeout");
     assert_eq!(
         body["message"],
         "The server did not finish the request in time."
@@ -301,6 +303,7 @@ async fn maintenance_mode_returns_503() {
     let body = response.assert_error(503);
     assert_eq!(body["message"], "Back soon.");
     assert_eq!(body["error"], "Service Unavailable");
+    assert_eq!(body["code"], "maintenance");
     assert_eq!(response.header("retry-after"), Some("120"));
     assert_eq!(response.header("access-control-allow-origin"), Some(ORIGIN));
 }
@@ -404,6 +407,7 @@ async fn per_ip_rate_limit_returns_429_with_retry_after() {
     let body = response.assert_error(429);
     assert_eq!(body["message"], "Too Many Requests");
     assert_eq!(body["error"], "Too Many Requests");
+    assert_eq!(body["code"], "too_many_requests");
     let retry_after: u64 = response.header("retry-after").unwrap().parse().unwrap();
     assert!((1..=60).contains(&retry_after), "retry after {retry_after}");
     assert_eq!(response.header("access-control-allow-origin"), Some(ORIGIN));
@@ -447,6 +451,7 @@ async fn body_limit_returns_413() {
         .unwrap();
     let body = app.send(declared).await.assert_error(413);
     assert_eq!(body["error"], "Payload Too Large");
+    assert_eq!(body["code"], "payload_too_large");
 
     // Streamed body without a length: the extractor's limit applies.
     let streamed = Request::post("/api/echo")

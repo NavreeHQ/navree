@@ -25,7 +25,7 @@ Install the CLI from the Git repository, and let new apps depend on the reposito
 
 ### HTTP
 
-- **`navree-http`**: Axum integration with a default pipeline (request ids, client IP resolution through trusted proxies, panic catching, timeouts, security headers, compression, a per-IP rate limit, body limits, maintenance mode), controllers, deny-by-default route access, per-route throttles, signed URLs, CORS and one JSON error shape for every error (`{ "statusCode", "message", "error" }`, validation failures as 400 with `errors`).
+- **`navree-http`**: Axum integration with a default pipeline (request ids, client IP resolution through trusted proxies, panic catching, timeouts, security headers, compression, a per-IP rate limit, body limits, maintenance mode), controllers, deny-by-default route access, per-route throttles, signed URLs, CORS and one JSON error shape for every error (`{ "statusCode", "message", "error", "code" }`, validation failures as 400 with `errors`), whose stable `code` a front end translates.
 - **`navree-validation`**: `Valid<Json<T>>`, `Valid<Query<T>>` and friends on garde, with one readable message per broken rule and async `unique` and `exists` rules. International input: phone numbers in E.164 with a per-request default region, rich text sanitized by a configurable policy, names and digits in any script, ISO 3166-1 countries and BCP 47 locales.
 - **`navree-api`**: an OpenAPI 3.1 document built from route metadata at `/api/openapi.json`, a docs UI at `/api/docs`, `openapi:export`, and API resource helpers.
 - **`navree-session`**: encrypted session cookies with memory and database stores, and CSRF protection for single-page apps that use cookies.
@@ -125,7 +125,7 @@ A Navree app is one binary that needs a few megabytes at idle and starts in mill
 ## Design decisions
 
 - **Token authentication for APIs.** `navree-auth` issues stateless JWT access tokens and rotating refresh tokens, and a backend-for-frontend keeps them in httpOnly cookies for browsers. Cookie sessions with CSRF protection are a separate module, [Sessions and CSRF](/docs/basics/sessions-and-csrf/), for apps that want them.
-- **One error shape.** Every error is JSON in Navree's shape, `{ "statusCode", "message", "error" }`, with `errors` for validation failures. Input errors are 400s and CSRF failures are 403s.
+- **One error shape.** Every error is JSON in Navree's shape, `{ "statusCode", "message", "error", "code" }`, with `errors` for validation failures. The `code` is machine-readable and stable (`not_found`, `invalid_credentials`), so front ends show every refusal in the user's language. Input errors are 400s and CSRF failures are 403s.
 - **Real time is built in.** Navree ships an in-process Pusher-protocol server. Processes that don't serve the sockets send their broadcasts to the one that does over a signed HTTP relay.
 - **The framework's own crates don't use the macros.** They implement `Module`, `Injectable` and `Controller` by hand, the escape hatch every app can use too. Apps use the macros.
 

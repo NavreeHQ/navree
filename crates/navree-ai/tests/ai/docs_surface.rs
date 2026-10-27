@@ -567,7 +567,7 @@ fn errors_and_their_statuses() {
     }
     assert_eq!(
         AiError::unavailable("anthropic").to_app_error().body(),
-        json!({ "statusCode": 503, "message": "The AI provider is unavailable", "error": "Service Unavailable" })
+        json!({ "statusCode": 503, "message": "The AI provider is unavailable", "error": "Service Unavailable", "code": "service_unavailable" })
     );
 }
 

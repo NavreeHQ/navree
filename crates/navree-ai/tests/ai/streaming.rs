@@ -111,7 +111,7 @@ async fn an_error_after_the_first_event_is_an_error_event() {
         "{body}"
     );
     assert!(
-        body.ends_with("event: error\ndata: {\"error\":\"Service Unavailable\",\"message\":\"The AI provider is unavailable\",\"statusCode\":503}\n\n"),
+        body.ends_with("event: error\ndata: {\"code\":\"service_unavailable\",\"error\":\"Service Unavailable\",\"message\":\"The AI provider is unavailable\",\"statusCode\":503}\n\n"),
         "{body}"
     );
 }

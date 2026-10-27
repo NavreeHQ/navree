@@ -119,7 +119,8 @@ async fn permissions_follow_the_workspace_role() {
         .json(&json!({ "role": "owner" }))
         .send()
         .await
-        .assert_error(403, "Only an owner can grant or change the owner role.");
+        .assert_error(403, "Only an owner can grant or change the owner role.")
+        .assert_error_code(403, "owner_role_required");
     admin
         .delete(&format!("/api/workspaces/acme/members/{ada}"))
         .send()

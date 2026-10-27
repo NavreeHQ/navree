@@ -436,7 +436,7 @@ async fn reps_read_every_deal_but_edit_only_their_own() {
 | `POST /admin/api/resources/{resource}/actions/{action}` | Runs an action: `{"ids": [..], "input": {..}}` |
 | `GET /admin/api/resources/{resource}/metrics/{metric}` | One metric: `range` |
 
-Errors use Navree's JSON error shape (`{ "statusCode", "message", "error" }`), and a validation error lists its field messages under `errors`, as in your API.
+Errors use Navree's JSON error shape (`{ "statusCode", "message", "error", "code" }`), and a validation error lists its field messages under `errors`, as in your API.
 
 ## Configuration
 

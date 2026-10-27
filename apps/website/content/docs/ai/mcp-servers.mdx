@@ -244,7 +244,7 @@ Every tool sends all four hints, `false` unless set. A tool without `read_only` 
 A tool that returns `Err` answers with a tool result marked `isError`, whose text (and structured content) is Navree's error body, so the model can read it and recover:
 
 ```json title="Tool result"
-{"statusCode": 403, "message": "Forbidden", "error": "Forbidden"}
+{"statusCode": 403, "message": "Forbidden", "error": "Forbidden", "code": "forbidden"}
 ```
 
 The app's error mappers apply, as they do on a response. Server errors (5xx) read `"Internal server error"`; their details go to the log with the request id. Protocol problems are JSON-RPC errors: an unknown tool (or one the user may not see) is `-32602` `Unknown tool: <name>`, and a malformed message is refused by the SDK. Failed resource reads and prompts are JSON-RPC errors too, with Navree's error body as `data`: a 404 is `-32002` (resource not found), a 400 is `-32602` (invalid params) and anything else `-32603`.

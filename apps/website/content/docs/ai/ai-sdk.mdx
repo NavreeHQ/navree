@@ -471,7 +471,7 @@ data: {"model":"fast","provider":"anthropic","usage":{"input_tokens":912,"output
 ```
 
 - Errors before the first event (a bad model name, every provider down) are ordinary error responses, because `ai.stream(..).await?` fails before the handler returns.
-- An error after the first event arrives as `event: error` with Navree's error body, `{"statusCode": 503, "message": "The AI provider is unavailable", "error": "Service Unavailable"}`, and ends the stream.
+- An error after the first event arrives as `event: error` with Navree's error body, `{"statusCode": 503, "message": "The AI provider is unavailable", "error": "Service Unavailable", "code": "service_unavailable"}`, and ends the stream.
 - The response sets `Cache-Control: no-cache` and `X-Accel-Buffering: no` (so nginx passes events through at once) and sends a keep-alive comment every 15 seconds.
 - Once the handler has returned the stream, `http.timeout_secs` no longer applies; `ai.timeout_secs` (or the model's `timeout_secs`, or the request's `.timeout(..)`) limits the gap between events instead, and a stall ends the stream with an `error` event.
 - When the client disconnects, Navree stops reading from the provider, which ends the generation and its cost.
@@ -634,7 +634,7 @@ Every method returns `Result<_, AiError>`. In handlers `?` converts it into an `
 `error.status()` gives the status and `error.to_app_error()` the response. `AiError::unavailable(provider)`, `rate_limited(provider, retry_after)`, `request(provider, message)`, `config(message)`, `not_found(message)` and `internal(message)` build one, for fakes and tests.
 
 ```json title="503 Service Unavailable"
-{"statusCode": 503, "message": "The AI provider is unavailable", "error": "Service Unavailable"}
+{"statusCode": 503, "message": "The AI provider is unavailable", "error": "Service Unavailable", "code": "service_unavailable"}
 ```
 
 The provider's own error text never reaches the client; it is in the log. When an AI feature is optional, handle the error and carry on:
