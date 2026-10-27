@@ -14,6 +14,10 @@ workspace = true
 default = []
 ## PostgreSQL driver (row-level security and schema isolation run there).
 postgres = ["navree-db/postgres"]
+## `navree_workspace::testing`: isolation suites (`WorkspaceTenancy`,
+## `IsolationSuiteExt::factory`) on navree-testing's `TestApp`. The facade
+## turns it on when both its `workspace` and `testing` features are on.
+testing = ["dep:navree-testing"]
 
 [dependencies]
 axum = { workspace = true }
@@ -31,9 +35,7 @@ navree-http = { workspace = true }
 navree-kernel = { workspace = true }
 navree-mail = { workspace = true }
 navree-telemetry = { workspace = true }
-# `navree_workspace::testing`: isolation suites (WorkspaceTenancy) on
-# navree-testing's TestApp.
-navree-testing = { workspace = true }
+navree-testing = { workspace = true, optional = true }
 sea-orm = { workspace = true }
 sea-orm-migration = { workspace = true }
 serde = { workspace = true }
@@ -45,6 +47,9 @@ utoipa = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
+# The crate's own tests run isolation suites (feature `testing`).
+navree-workspace = { workspace = true, features = ["testing"] }
+navree-testing = { workspace = true }
 navree-view = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
