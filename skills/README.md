@@ -54,6 +54,7 @@ conventions, and says which skill to load for each task.
 | [`navree-ai`](navree-ai/SKILL.md) | Models in your app: text, structured output, streaming, failover, budgets, agents with tools, embeddings, vector stores, `AiFake` |
 | [`navree-redis`](navree-redis/SKILL.md) | Redis connections and the Redis cache, locks, queue, sessions, rate limits and real-time backplane (feature `redis`) |
 | [`navree-logbook`](navree-logbook/SKILL.md) | The local debugging timeline at `/_logbook`: filters, N+1 queries, replay, query counts in tests |
+| [`navree-microservices`](navree-microservices/SKILL.md) | Messages and events between services: handlers, `ServiceClient`, the outbox and inbox, dead letters, the transports, and `MicroFake` tests (feature `micro`) |
 
 ## Installing
 

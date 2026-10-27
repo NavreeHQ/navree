@@ -1,7 +1,6 @@
 ---
 title: "Events"
 description: "Publish events with `ServiceClient::emit` and handle them with `#[event_pattern]`: fan-out across services, retries, dead letters, ordering, the transactional outbox and the inbox."
-status: "planned"
 ---
 
 ## Introduction
@@ -216,7 +215,7 @@ Not everything is retried. An event whose payload doesn't decode or fails valida
 An event that used up its attempts is a **dead letter**. Where it goes depends on `micro.events.dead_letter`:
 
 - `database`: a row in `micro_dead_letters` in the service's database, with the pattern, the payload, the headers, the attempts and the last error. The commands below manage them.
-- `transport`: the broker's dead-letter destination (the stream's `dead.` subjects on NATS, `<service>.dead` on Kafka, the `<exchange>.dead` exchange on RabbitMQ, `<prefix>dead` on Redis), for tools that watch the broker.
+- `transport`: the broker's dead-letter destination (`<stream>.dead.<service>.<pattern>` on NATS, `<service>.dead` on Kafka, the `<exchange>.dead` exchange on RabbitMQ, `<prefix>dead` on Redis, `<prefix>/dead/<service>/<topic>` on MQTT), for tools that watch the broker. Each carries the event's headers, plus `navree-error` and `navree-attempts`. TCP has none: use `database` or `log` there.
 - `log`: an `error` line on target `navree::micro` with the pattern, the message id and the error, and the event is dropped.
 
 ```sh
@@ -230,13 +229,13 @@ cargo run -p notifications -- micro:flush                                       
 0199c1d2-6f7e-7a31-b5d4-2f0c8e9a1b23  deal.won  attempts=5  2026-10-26 08:14:02  smtp refused the message
 ```
 
-`micro:retry` hands the event back to this service's handler, not to every subscriber, with its attempts starting over. The same operations are on the `DeadLetters` service (`list`, `retry`, `flush`), for an admin screen.
+`micro:retry` hands the event back to this service's handler in the process that runs the command, not to every subscriber, with its attempts starting over; an event that fails again is a new dead letter. The same operations are on the `DeadLetters` service, for an admin screen: `list()`, `find(id)`, `retry(id)` (`true` when the event was handled), `retry_all()` (how many were handled and how many failed again) and `flush()`. Each `DeadLetter` has the `id`, `pattern`, `message_id`, `headers`, `payload`, `attempts`, the last `error` and `failed_at`.
 
 ## Idempotency and the inbox
 
 At-least-once delivery means a handler can see an event twice: after a crash between its commit and the acknowledgment, after a broker failover, after `micro:retry` of an event that had in fact succeeded. Navree's inbox makes that harmless for handlers that write through a unit of work.
 
-With `micro.inbox` on (the default with `DatabaseModule`), a handler that takes `Uow` gets its message id written to `micro_inbox` in its own transaction. When the same message id arrives again, Navree finds it there and acknowledges the event without running the handler. The handler's writes and the inbox row commit together, so the check is exact: either both happened or neither did.
+With `micro.inbox` on (the default with `DatabaseModule`), every event handler (broadcast ones aside) gets its message id written to `micro_inbox` in the message's unit of work, once the handler returned `Ok`. When the same message id arrives again, Navree finds it there and acknowledges the event without running the handler. The handler's writes and the inbox row commit together, so the check is exact: either both happened or neither did.
 
 Side effects outside your database need one more step. Mail sent and APIs called from inside a handler happen even if the transaction then rolls back, and again on a redelivery. Make them follow the commit instead:
 
@@ -246,7 +245,7 @@ Side effects outside your database need one more step. Mail sent and APIs called
 
 That is what the notifications service's `AlertService` does: it writes the in-app notification and queues the mail through the handler's unit of work, so each `deal.won` notifies the owner exactly once.
 
-Inbox rows are kept for `micro.inbox_retention_hours` (72), and the listener prunes older ones every hour. Keep the retention longer than your broker keeps undelivered events. A handler without `Uow` isn't deduplicated: make it idempotent by itself, with an upsert, `INSERT ... ON CONFLICT DO NOTHING`, or a check before acting.
+Inbox rows are kept for `micro.inbox_retention_hours` (72), and the outbox relay prunes older ones every hour. Keep the retention longer than your broker keeps undelivered events. Without `DatabaseModule` (or with `micro.inbox = false`) nothing is deduplicated: make the handler idempotent by itself, with an upsert, `INSERT ... ON CONFLICT DO NOTHING`, or a check before acting.
 
 ## Ordering
 
@@ -254,7 +253,7 @@ Events with the same key keep the order in which they were emitted, from emissio
 
 - **Publishing.** Events emitted in one unit of work are published in the order of the `emit` calls, outbox included.
 - **Kafka.** A key always lands on the same partition, and a partition is read by one instance of a service, so order per key holds across all its instances.
-- **The other transports.** Within one instance, Navree handles events with the same key one after another, and events with different keys in parallel. Across instances, two events with the same key can be handled at the same time. Mark the handler `ordered` to have one instance at a time consume the pattern: `#[event_pattern("deal.updated", ordered)]`. That trades throughput for order.
+- **The other transports.** Within one instance, Navree handles events with the same key one after another, and events with different keys in parallel. Across instances, two events with the same key can be handled at the same time. Mark the handler `ordered`, `#[event_pattern("deal.updated", ordered)]`, to handle its events one at a time, whatever their key. On NATS (one unacknowledged event per consumer), RabbitMQ (a single active consumer per queue) and the memory transport, that holds across the service's instances: one event at a time for the whole service. On Redis Streams, MQTT and TCP it holds within each instance. Either way it trades throughput for order.
 
 A retry moves an event behind the ones that came after it. When order matters more than progress, `ordered` handlers hold the events behind a failing one until it succeeds or is dead-lettered. Design handlers so they cope with order changes where you can, for example by comparing an `updated_at` or a version number before overwriting.
 

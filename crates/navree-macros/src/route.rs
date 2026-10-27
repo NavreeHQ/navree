@@ -115,7 +115,7 @@ impl Kind {
 }
 
 /// The attribute's name without a `navree::` qualifier, for messages.
-fn short_name(attr: &Attribute) -> String {
+pub(crate) fn short_name(attr: &Attribute) -> String {
     attr.path()
         .segments
         .last()
@@ -336,7 +336,7 @@ impl RequiresFlag {
 
 /// A duration literal (`"500ms"`, `"5s"`, `"1m"`, `"1h"`) in milliseconds;
 /// the error points at the literal.
-fn duration_millis(value: &LitStr) -> syn::Result<u64> {
+pub(crate) fn duration_millis(value: &LitStr) -> syn::Result<u64> {
     duration::parse_millis(&value.value()).map_err(|message| syn::Error::new(value.span(), message))
 }
 

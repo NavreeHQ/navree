@@ -63,6 +63,7 @@ navree-ai = { path = "crates/navree-ai", version = "0.1.0" }
 navree-lighthouse = { path = "crates/navree-lighthouse", version = "0.1.0" }
 navree-redis = { path = "crates/navree-redis", version = "0.1.0" }
 navree-logbook = { path = "crates/navree-logbook", version = "0.1.0" }
+navree-micro = { path = "crates/navree-micro", version = "0.1.0" }
 
 # ---------------------------------------------------------------------------
 # Runtime, async and HTTP (Tokio family)
@@ -136,6 +137,21 @@ prost-reflect = { version = "0.16.5", features = ["serde"] }
 protox = "0.10.0"
 http-body = "1.0.1"
 hyper-util = { version = "0.1.21", features = ["http1", "http2", "server", "server-auto", "server-graceful", "service", "tokio"] }
+# TLS streams for navree-micro's TCP transport (rustls on ring, see above),
+# and the public roots it trusts when no CA is configured.
+tokio-rustls = { version = "0.26.6", default-features = false, features = ["logging", "ring", "tls12"] }
+webpki-roots = "1.0.11"
+# navree-micro's brokers, each behind a feature of its own: pure-Rust
+# clients, TLS through rustls on ring. (Redis is the shared `redis` entry
+# below; navree-micro adds its `tls-rustls-webpki-roots` feature.)
+# async-nats without `nkeys`: it pulls in ed25519-dalek, which the crypto
+# policy forbids (crates/navree/tests/dependency_graph.rs).
+async-nats = { version = "0.50.0", default-features = false, features = ["ring", "jetstream", "server_2_10", "server_2_11"] }
+lapin = { version = "4.12.3", default-features = false, features = ["rustls--ring", "rustls-native-certs", "default-runtime"] }
+rumqttc = { version = "0.25.1", default-features = false }
+# Kafka's wire protocol, for navree-micro's Kafka client (gzip and snappy
+# batches; lz4 and zstd need C libraries).
+kafka-protocol = { version = "0.18.0", default-features = false, features = ["client", "broker", "gzip", "snappy"] }
 ipnet = "2.12.2"
 tokio-tungstenite = "0.30.0"
 # Redis (navree-redis): Tokio, a reconnecting connection manager, Lua
@@ -154,6 +170,8 @@ redis = { version = "1.8.0", default-features = false, features = [
 # ---------------------------------------------------------------------------
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
+# MessagePack payloads (navree-micro's `msgpack` codec).
+rmp-serde = "1.3.1"
 serde_urlencoded = "0.7.1"
 # Raw query/form pair parsing, so navree-validation can report serde paths.
 form_urlencoded = "1.2.2"
@@ -314,6 +332,8 @@ heck = "0.5.0"
 tempfile = "3.27.0"
 trybuild = "1.0.122"
 insta = { version = "1.49.0", features = ["json"] }
+# Test certificates (navree-micro's TCP TLS tests), on ring.
+rcgen = { version = "0.13.2", default-features = false, features = ["crypto", "pem", "ring"] }
 proptest = "1.12.0"
 # HTTP mock servers for provider integrations (navree-social, navree-billing)
 # and the search engines' REST clients (navree-search).

@@ -169,6 +169,15 @@ const HIERARCHY: &[Rule] = &[
         "navree-http-client", "navree-cache", "navree-db", "navree-storage", "navree-validation",
         "navree-access", "navree-auth",
     ]),
+    // Microservices: message handlers run through navree-http's guards and
+    // authorizer, navree-db's unit of work (outbox, inbox, dead letters) and
+    // navree-validation's `Valid`, in a navree-telemetry context that
+    // continues the sender's trace; `forward_event` uses navree-events;
+    // `MicroFake` answers with navree-testing's `TestResponse`.
+    rule("navree-micro", 6, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http",
+        "navree-events", "navree-db", "navree-testing", "navree-validation",
+    ]),
     // L7: packages built on other packages.
     // Search: full-text and vector search over entities. The server engines
     // talk HTTP through navree-http-client; the `Searchable` derive lives in
@@ -277,6 +286,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-mcp",
     "navree-lighthouse",
     "navree-logbook",
+    "navree-micro",
 ];
 
 /// Cargo dependency kind of an edge.

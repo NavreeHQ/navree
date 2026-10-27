@@ -1,7 +1,6 @@
 ---
 title: "Microservices"
 description: "Split an app into services that call each other and publish events over NATS, Kafka, RabbitMQ, Redis Streams, MQTT or TCP, with the same modules, guards, validation and unit of work as your HTTP routes."
-status: "planned"
 ---
 
 ## Introduction
@@ -41,7 +40,7 @@ navree = { git = "https://github.com/NavreeHQ/navree", features = ["micro", "mic
 | `micro-redis` | Redis Streams |
 | `micro-mqtt` | MQTT 5 |
 
-The `micro` features are not part of the default `full` set, because each one brings a broker client. Every client is pure Rust and uses rustls for TLS, so a service still builds into one binary with no OpenSSL or C toolchain.
+The `micro` features are not part of the default `full` set, because each one brings a broker client. Every client is pure Rust and uses rustls for TLS, so a service still builds into one binary with no OpenSSL or C toolchain. Kafka goes through a small client of Navree's own on the Kafka wire protocol, and needs Kafka 4.0 or later (see [Kafka](/docs/microservices/transports/#kafka)).
 
 With `micro` on, the prelude brings `MicroModule`, `ServiceClient`, `Payload`, the `#[message_handlers]` macro and the `m.message_handlers::<T>()` registration method.
 
@@ -305,6 +304,8 @@ Use it for services with no HTTP routes, or to scale message consumers separatel
 
 A listener reports to [readiness](/docs/digging-deeper/health-and-metrics/): with `ObserveModule` in the app, `/health/ready` includes a `micro` check that fails while the transport is disconnected, so an orchestrator stops sending traffic to an instance that can't reach the broker.
 
+In tests and custom commands, `MicroModule::start_listener(ctx)` starts the listener (and the outbox relay) of a booted app the way `serve` does; it returns `false` when they already run. Apps on the in-memory transport don't need it: their listener starts at boot.
+
 ## Configuration
 
 Add `MicroModule` once, in the app root. It is global: modules register handlers and inject `ServiceClient` without importing it. `from_config()`, and a plain `.module(MicroModule)`, read the `micro` section:
@@ -320,8 +321,8 @@ concurrency = 64                   # messages one process handles at once
 
 | Key | Default | Meaning |
 |---|---|---|
-| `micro.service` | `app.name`, else the binary's name | The service's name: its consumer group, its client id and the `navree-service` header of what it sends. |
-| `micro.transport` | none (required) | `tcp`, `nats`, `kafka`, `rabbitmq`, `redis` or `mqtt`. A missing or unknown value fails the boot. |
+| `micro.service` | `app.name`, else the binary's name | The service's name: its consumer group, its client id and the `navree-service` header of what it sends. Letters, digits, `_` and `-`. |
+| `micro.transport` | none (required) | `tcp`, `nats`, `kafka`, `rabbitmq`, `redis`, `mqtt`, or `memory` (in-process, for tests). A missing or unknown value fails the boot, and so does a transport whose feature is off, naming the feature. |
 | `micro.url` | the transport's local default | Where the broker is (`nats://127.0.0.1:4222`, `amqp://127.0.0.1:5672`, ...). |
 | `micro.codec` | `json` | How payloads are encoded: `json` or `msgpack`. See [serialization](/docs/microservices/transports/#serialization). |
 | `micro.request_timeout_ms` | `5000` | The deadline of a `send` that sets none. |
@@ -336,7 +337,7 @@ concurrency = 64                   # messages one process handles at once
 | `micro.outbox_poll_ms` | `1000` | How often the outbox relay looks for events a crashed process left behind. |
 | `micro.auto_setup` | `true` in debug builds | Declare the streams, topics and queues the app needs at boot (`micro:setup` does it on demand). |
 
-Each transport has a section of its own (`micro.nats`, `micro.kafka`, ...), and events have retry and dead-letter settings under `micro.events`; see [transports](/docs/microservices/transports/) and [events](/docs/microservices/events/#retries-and-backoff).
+Each transport has a section of its own (`micro.nats`, `micro.kafka`, ...), and events have retry and dead-letter settings under `micro.events`; see [transports](/docs/microservices/transports/) and [events](/docs/microservices/events/#retries-and-backoff). Traces follow the `observe.tracing` settings: `enabled = false` sends messages without a `traceparent`, and `sample_ratio` decides whether a trace a message starts is recorded (see [tracing](/docs/microservices/tracing/)).
 
 As environment variables: `APP_MICRO__SERVICE=deals`, `APP_MICRO__TRANSPORT=kafka`, `APP_MICRO__URL=nats://nats.internal:4222`. An invalid value fails the boot with a message that names the key.
 

@@ -1,5 +1,6 @@
 //! The [`Valid`] and [`ValidAsync`] extractors.
 
+use std::future::Future;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
@@ -138,6 +139,132 @@ where
             Ok(value) => Ok(Valid(Form(value))),
             Err(invalid) => Err(invalid.reject(ctx.as_ref()).await),
         }
+    }
+}
+
+/// An input extractor from another crate that [`Valid`] and [`ValidAsync`]
+/// can wrap, such as navree-micro's `Payload<T>`: it reads its input as a
+/// JSON value, and validation then runs exactly as for `Valid<Json<T>>`
+/// (serde errors at their path, the garde rules of
+/// [`Target`](ValidInput::Target), the app's [`Messages`]).
+///
+/// ```
+/// use axum::extract::Request;
+/// use garde::Validate;
+/// use navree_http::AppError;
+/// use navree_validation::{Valid, ValidInput};
+/// use serde::Deserialize;
+/// use serde_json::Value;
+///
+/// /// The input, read from a JSON body.
+/// struct Input<T>(T);
+///
+/// impl<T> ValidInput for Input<T>
+/// where
+///     T: serde::de::DeserializeOwned + Validate<Context = ()> + Send,
+/// {
+///     type Target = T;
+///
+///     async fn read(req: Request) -> Result<Option<Value>, AppError> {
+///         let bytes = axum::body::to_bytes(req.into_body(), 1 << 20)
+///             .await
+///             .map_err(|_| AppError::bad_request("unreadable input"))?;
+///         Ok(serde_json::from_slice(&bytes).ok())
+///     }
+///
+///     fn wrap(value: T) -> Self {
+///         Input(value)
+///     }
+/// }
+///
+/// #[derive(Deserialize, Validate)]
+/// struct Rename {
+///     #[garde(length(min = 1))]
+///     name: String,
+/// }
+///
+/// async fn rename(Valid(Input(input)): Valid<Input<Rename>>) -> String {
+///     input.name
+/// }
+/// # let _: axum::routing::MethodRouter = axum::routing::post(rename);
+/// ```
+pub trait ValidInput: Sized + Send {
+    /// The type the input deserializes into.
+    type Target: DeserializeOwned + Validate<Context = ()> + Send;
+
+    /// Reads the request's input as a JSON value. `Ok(None)` means the
+    /// input is malformed and becomes the field error malformed JSON gets
+    /// (`body must be a valid JSON string`); an error is returned to the
+    /// caller as it is.
+    fn read(req: Request) -> impl Future<Output = Result<Option<Value>, AppError>> + Send;
+
+    /// Wraps the validated value.
+    fn wrap(value: Self::Target) -> Self;
+}
+
+impl<E, S> FromRequest<S> for Valid<E>
+where
+    E: ValidInput,
+    S: Send + Sync,
+{
+    type Rejection = AppError;
+
+    async fn from_request(req: Request, _state: &S) -> Result<Self, Self::Rejection> {
+        let ctx = req.extensions().get::<AppContext>().cloned();
+        let Some(input) = E::read(req).await? else {
+            return Err(Invalid::new(vec![Failure::keyed("", "json")], None, "body")
+                .reject(ctx.as_ref())
+                .await);
+        };
+        let value = match serde_path_to_error::deserialize::<_, E::Target>(&input) {
+            Ok(value) => value,
+            Err(error) => {
+                let failure = failure::from_serde(error.path(), &error.inner().to_string());
+                return Err(Invalid::new(vec![failure], Some(input), "body")
+                    .reject(ctx.as_ref())
+                    .await);
+            }
+        };
+        if let Err(failures) = check(&value) {
+            return Err(Invalid::new(failures, Some(input), "body")
+                .reject(ctx.as_ref())
+                .await);
+        }
+        Ok(Valid(E::wrap(value)))
+    }
+}
+
+impl<E, S> FromRequest<S> for ValidAsync<E>
+where
+    E: ValidInput,
+    E::Target: AsyncRules,
+    S: Send + Sync,
+{
+    type Rejection = AppError;
+
+    async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
+        let (mut parts, body) = req.into_parts();
+        let request = RuleRequest::of(&mut parts, state).await;
+        let Valid(input) =
+            Valid::<Checked<E>>::from_request(Request::from_parts(parts, body), state).await?;
+        request.check(input.0.async_rules()).await?;
+        Ok(ValidAsync(E::wrap(input.0)))
+    }
+}
+
+/// The validated value of a [`ValidInput`], before it is wrapped (so
+/// [`ValidAsync`] can run the async rules on it first).
+struct Checked<E: ValidInput>(E::Target);
+
+impl<E: ValidInput> ValidInput for Checked<E> {
+    type Target = E::Target;
+
+    fn read(req: Request) -> impl Future<Output = Result<Option<Value>, AppError>> + Send {
+        E::read(req)
+    }
+
+    fn wrap(value: Self::Target) -> Self {
+        Checked(value)
     }
 }
 

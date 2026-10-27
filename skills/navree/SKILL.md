@@ -123,6 +123,7 @@ navree list                                 # every command of the app
 | AI features: summaries, drafts, extraction, an assistant that calls your services, answers from your own data, embeddings and vector search | `navree-ai` |
 | Several processes or servers sharing the cache, locks, jobs, sessions, rate limits or WebSocket broadcasts; Redis commands | `navree-redis` |
 | Seeing what a request, job or scheduled task did (`/_logbook`), finding N+1 queries, counting queries in a test, replaying a request | `navree-logbook` |
+| Messages and events between services (NATS, Kafka, RabbitMQ, Redis Streams, MQTT, TCP), splitting a module into a service, `MicroFake` tests | `navree-microservices` |
 
 ## Common mistakes
 
