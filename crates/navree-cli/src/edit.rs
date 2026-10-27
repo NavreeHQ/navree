@@ -147,15 +147,28 @@ fn indent_of(line: &str) -> String {
     line.chars().take_while(|c| c.is_whitespace()).collect()
 }
 
-/// Adds `.migration(<stem>::Migration)` to the `MigrationSet` chain: after
+/// Adds schema migration `stem` to the `MigrationSet` chain as
+/// `.migration(migration!(<stem>))` (with the macro's full path,
+/// `navree::schema::migration!`, when the file does not import it): after
 /// the last `.migration(` line (splitting a chain rustfmt joined into one
 /// line), or after `MigrationSet::new(..)` when the set is empty.
-/// `Unchanged` when it is already there; `None` when the file builds no set.
+/// `Unchanged` when `stem` is already in the set (as a schema migration or
+/// a SeaORM `<stem>::Migration`); `None` when the file builds no set.
 pub fn add_migration(src: &str, stem: &str) -> Option<Edit> {
     const CALL: &str = ".migration(";
-    let call = format!("{CALL}{stem}::Migration)");
+    let imported = src
+        .lines()
+        .any(|l| l.trim() == "use navree::schema::migration;");
+    let call = if imported {
+        format!("{CALL}migration!({stem}))")
+    } else {
+        format!("{CALL}navree::schema::migration!({stem}))")
+    };
     let (lines, trailing) = split(src);
-    if lines.iter().any(|l| l.contains(&call)) {
+    let present = |line: &str| {
+        line.contains(&format!("migration!({stem})")) || line.contains(&format!("{stem}::Migration)"))
+    };
+    if lines.iter().any(|l| present(l)) {
         return Some(Edit::Unchanged);
     }
     let mut out: Vec<String> = lines.iter().map(|l| (*l).to_owned()).collect();
@@ -317,11 +330,11 @@ mod tests {
 
     #[test]
     fn adds_a_migration_to_a_multi_line_set() {
-        let src = "pub fn migrations() -> MigrationSet {\n    MigrationSet::new(\"users\")\n        .after([\"auth\"])\n        .migration(a::Migration)\n}\n";
+        let src = "use navree::schema::migration;\n\npub fn migrations() -> MigrationSet {\n    MigrationSet::new(\"users\")\n        .after([\"auth\"])\n        .migration(migration!(a))\n}\n";
         assert_eq!(
             add_migration(src, "b"),
             Some(Edit::Changed(
-                "pub fn migrations() -> MigrationSet {\n    MigrationSet::new(\"users\")\n        .after([\"auth\"])\n        .migration(a::Migration)\n        .migration(b::Migration)\n}\n"
+                "use navree::schema::migration;\n\npub fn migrations() -> MigrationSet {\n    MigrationSet::new(\"users\")\n        .after([\"auth\"])\n        .migration(migration!(a))\n        .migration(migration!(b))\n}\n"
                     .to_owned()
             ))
         );
@@ -329,14 +342,20 @@ mod tests {
     }
 
     #[test]
-    fn adds_a_migration_to_a_set_rustfmt_put_on_one_line() {
+    fn a_set_of_seaorm_migrations_gets_the_macro_by_its_path() {
         let src = "pub fn migrations() -> MigrationSet {\n    MigrationSet::new(\"posts\").migration(a::Migration)\n}\n";
         assert_eq!(
             add_migration(src, "b"),
             Some(Edit::Changed(
-                "pub fn migrations() -> MigrationSet {\n    MigrationSet::new(\"posts\")\n        .migration(a::Migration)\n        .migration(b::Migration)\n}\n"
+                "pub fn migrations() -> MigrationSet {\n    MigrationSet::new(\"posts\")\n        .migration(a::Migration)\n        .migration(navree::schema::migration!(b))\n}\n"
                     .to_owned()
-            ))
+            )),
+            "a chain rustfmt joined into one line is split, one call per line"
+        );
+        assert_eq!(
+            add_migration(src, "a"),
+            Some(Edit::Unchanged),
+            "a SeaORM migration of that name is there"
         );
     }
 
@@ -346,7 +365,7 @@ mod tests {
         assert_eq!(
             add_migration(src, "b"),
             Some(Edit::Changed(
-                "pub fn migrations() -> MigrationSet {\n    MigrationSet::new(\"posts\")\n        .migration(b::Migration)\n}\n"
+                "pub fn migrations() -> MigrationSet {\n    MigrationSet::new(\"posts\")\n        .migration(navree::schema::migration!(b))\n}\n"
                     .to_owned()
             ))
         );

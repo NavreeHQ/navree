@@ -344,20 +344,47 @@ struct ItemContext {
     kebab: String,
     table: String,
     table_iden: String,
+    /// A migration named `create_<table>_table` (or `create_<table>`).
     create_table: bool,
+    /// A migration named `<change>_to|from|in_<table>[_table]`
+    /// (`add_stage_to_deals`, `remove_notes_from_deals_table`).
+    alter_table: bool,
     event: Option<String>,
     event_pascal: Option<String>,
 }
 
+/// The table a migration named `create_<table>_table` / `create_<table>`
+/// creates.
+fn created_table(name: &str) -> Option<Name> {
+    let rest = name.strip_prefix("create_")?;
+    let table = rest.strip_suffix("_table").unwrap_or(rest);
+    Name::parse("table", table).ok()
+}
+
+/// The table a migration named `..._to_<table>`, `..._from_<table>` or
+/// `..._in_<table>` (with or without `_table`) changes: the last such
+/// marker wins (`add_x_to_deals` changes `deals`).
+fn altered_table(name: &str) -> Option<Name> {
+    let (at, marker) = ["_to_", "_from_", "_in_"]
+        .iter()
+        .filter_map(|marker| name.rfind(marker).map(|at| (at, *marker)))
+        .max_by_key(|(at, _)| *at)?;
+    if at == 0 {
+        return None;
+    }
+    let rest = &name[at + marker.len()..];
+    let table = rest.strip_suffix("_table").unwrap_or(rest);
+    Name::parse("table", table).ok()
+}
+
 impl ItemContext {
     fn new(kind: MakeKind, module: &Name, name: &Name, options: &MakeOptions) -> Self {
-        let created = name
-            .snake()
-            .strip_prefix("create_")
-            .and_then(|rest| rest.strip_suffix("_table"))
-            .and_then(|table| Name::parse("table", table).ok());
-        let create_table = kind == MakeKind::Migration && created.is_some();
-        let table = created.unwrap_or_else(|| name.plural());
+        let migration = kind == MakeKind::Migration;
+        let created = created_table(name.snake()).filter(|_| migration);
+        let altered = altered_table(name.snake()).filter(|_| migration && created.is_none());
+        let create_table = created.is_some();
+        let alter_table = altered.is_some();
+        let table = created.or(altered).unwrap_or_else(|| name.plural());
         let words = name.snake().replace('_', " ");
         Self {
             module: module.snake().to_owned(),
@@ -373,6 +400,7 @@ impl ItemContext {
             table: table.snake().to_owned(),
             table_iden: table.pascal(),
             create_table,
+            alter_table,
             event: options.event.as_ref().map(|e| e.snake().to_owned()),
             event_pascal: options.event.as_ref().map(Name::pascal),
         }
@@ -572,7 +600,7 @@ pub fn make_item(
                 |src| add_migration(src, &stem),
                 || {
                     format!(
-                        "add `.migration({stem}::Migration)` to the migration set in {}",
+                        "add `.migration(navree::schema::migration!({stem}))` to the migration set in {}",
                         dir_mod.display()
                     )
                 },
@@ -619,6 +647,30 @@ pub fn make_item(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn migration_names_tell_the_table() {
+        let created = |n: &str| created_table(n).map(|t| t.snake().to_owned());
+        let altered = |n: &str| altered_table(n).map(|t| t.snake().to_owned());
+        assert_eq!(created("create_deals_table").as_deref(), Some("deals"));
+        assert_eq!(created("create_deal_notes").as_deref(), Some("deal_notes"));
+        assert_eq!(created("add_stage_to_deals"), None);
+        assert_eq!(altered("add_stage_to_deals").as_deref(), Some("deals"));
+        assert_eq!(
+            altered("remove_notes_from_deals_table").as_deref(),
+            Some("deals")
+        );
+        assert_eq!(
+            altered("change_amount_in_line_items").as_deref(),
+            Some("line_items")
+        );
+        assert_eq!(
+            altered("add_owner_to_users_to_companies").as_deref(),
+            Some("companies"),
+            "the last marker wins"
+        );
+        assert_eq!(altered("backfill_slugs"), None);
+    }
 
     #[test]
     fn indefinite_articles() {

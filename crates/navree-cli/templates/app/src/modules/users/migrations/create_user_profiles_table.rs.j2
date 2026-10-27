@@ -1,54 +1,23 @@
 //! Creates the `user_profiles` table.
 
-use sea_orm_migration::prelude::*;
+use navree::schema::prelude::*;
 
-#[derive(DeriveMigrationName)]
 pub struct Migration;
 
-#[async_trait::async_trait]
-impl MigrationTrait for Migration {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table(UserProfiles::Table)
-                    .col(
-                        ColumnDef::new(UserProfiles::UserId)
-                            .uuid()
-                            .not_null()
-                            .primary_key(),
-                    )
-                    .col(ColumnDef::new(UserProfiles::Bio).text().null())
-                    .col(ColumnDef::new(UserProfiles::Timezone).string().not_null())
-                    .col(
-                        ColumnDef::new(UserProfiles::CreatedAt)
-                            .timestamp_with_time_zone()
-                            .not_null(),
-                    )
-                    .col(
-                        ColumnDef::new(UserProfiles::UpdatedAt)
-                            .timestamp_with_time_zone()
-                            .not_null(),
-                    )
-                    .to_owned(),
-            )
+impl navree::schema::Migration for Migration {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema
+            .create("user_profiles", |t| {
+                t.uuid("user_id").primary();
+                t.text("bio").nullable();
+                t.string("timezone");
+                t.timestamp_tz("created_at");
+                t.timestamp_tz("updated_at");
+            })
             .await
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .drop_table(Table::drop().table(UserProfiles::Table).to_owned())
-            .await
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop_if_exists("user_profiles").await
     }
-}
-
-/// The table and column names (`UserProfiles::Table` is `user_profiles`).
-#[derive(DeriveIden)]
-enum UserProfiles {
-    Table,
-    UserId,
-    Bio,
-    Timezone,
-    CreatedAt,
-    UpdatedAt,
 }
