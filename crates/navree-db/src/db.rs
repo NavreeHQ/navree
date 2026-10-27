@@ -5,7 +5,7 @@ use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
 
-use navree_kernel::WeakAppContext;
+use navree_kernel::{AppContext, WeakAppContext};
 use sea_orm::sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode};
 use sea_orm::{ConnectOptions, Database, DatabaseConnection, DbBackend, DbErr};
 use tokio::sync::OnceCell;
@@ -90,6 +90,16 @@ impl Db {
     /// The database backend.
     pub fn backend(&self) -> DbBackend {
         self.inner.conn.get_database_backend()
+    }
+
+    /// The app this pool belongs to, while it runs: set for the `Db` that
+    /// `DatabaseModule` provides, `None` for one made with
+    /// [`connect`](Db::connect) or [`from_connection`](Db::from_connection)
+    /// and once the app is dropped. Code that receives only a `Db` (or a
+    /// [`Uow`], through [`Uow::db`]) uses it to reach app services such as
+    /// the `dyn Clock`.
+    pub fn app(&self) -> Option<AppContext> {
+        self.inner.app.as_ref().and_then(WeakAppContext::upgrade)
     }
 
     /// The connection to read with: the open transaction of the task's
