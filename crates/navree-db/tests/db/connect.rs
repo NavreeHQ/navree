@@ -1,5 +1,7 @@
 //! Options and connecting.
 
+use std::time::Duration;
+
 use navree_db::{Db, DbOptions, MySqlOptions};
 use sea_orm::{ConnectionTrait, DbBackend, Statement};
 
@@ -13,6 +15,62 @@ fn default_options() {
     assert_eq!(options.slow_query_ms, 200);
     assert!(!options.migrate_on_boot);
     assert!(!options.log_queries);
+    assert!(!options.test_before_acquire);
+    assert_eq!(options.idle_timeout_secs, 600);
+    assert_eq!(options.max_lifetime_secs, 1800);
+}
+
+/// By default a connection taken from the pool is not pinged first (one
+/// round trip saved per checkout); idle and old connections are replaced.
+#[tokio::test]
+async fn the_pool_does_not_ping_every_checkout_by_default() {
+    let temp = TempDb::new();
+    let db = Db::connect(&temp.options()).await.expect("connects");
+    let pool = db.conn().get_sqlite_connection_pool().options();
+    assert!(!pool.get_test_before_acquire());
+    assert_eq!(pool.get_idle_timeout(), Some(Duration::from_secs(600)));
+    assert_eq!(pool.get_max_lifetime(), Some(Duration::from_secs(1800)));
+}
+
+#[tokio::test]
+async fn pool_checks_and_lifetimes_follow_the_options() {
+    let temp = TempDb::new();
+    let db = Db::connect(&DbOptions {
+        test_before_acquire: true,
+        idle_timeout_secs: 0,
+        max_lifetime_secs: 60,
+        ..temp.options()
+    })
+    .await
+    .expect("connects");
+    let pool = db.conn().get_sqlite_connection_pool().options();
+    assert!(pool.get_test_before_acquire());
+    assert_eq!(pool.get_idle_timeout(), None, "0: idle connections stay");
+    assert_eq!(pool.get_max_lifetime(), Some(Duration::from_secs(60)));
+    let one: i64 = db
+        .conn()
+        .query_one_raw(Statement::from_string(DbBackend::Sqlite, "SELECT 1"))
+        .await
+        .expect("query")
+        .expect("row")
+        .try_get_by_index(0)
+        .expect("value");
+    assert_eq!(one, 1);
+}
+
+#[test]
+fn pool_settings_come_from_the_database_section() {
+    let options: DbOptions = serde_json::from_value(serde_json::json!({
+        "test_before_acquire": true,
+        "idle_timeout_secs": 30,
+        "max_lifetime_secs": 0,
+    }))
+    .expect("valid section");
+    assert!(options.test_before_acquire);
+    assert_eq!(options.idle_timeout_secs, 30);
+    assert_eq!(options.max_lifetime_secs, 0);
+    let debug = format!("{options:?}");
+    assert!(debug.contains("test_before_acquire: true"), "{debug}");
 }
 
 async fn pragma(db: &Db, name: &str) -> String {

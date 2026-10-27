@@ -198,11 +198,9 @@ pub async fn in_a_command(ctx: AppContext) -> Result<(), BoxError> {
 
 `get`, `get_named`, `try_get` and `get_all` on `AppContext` ignore module visibility: they find the provider wherever it's registered (preferring an exported one when several modules register it). `try_get` returns `None` when no provider exists, and logs and returns `None` when one exists but fails to build. The framework uses `try_get` for optional collaborators, such as the audit sink.
 
-<Callout type="note" title="Keep the locator out of hot paths">
+`get`, `try_get` and `get_named` look the provider up in a map the app builds once at boot, so a call costs a hash lookup and an `Arc` clone. In code that runs on every request, injecting the provider (or resolving it once and keeping the `Arc`) is still cheaper and shows the dependency.
 
-`AppContext::get` searches every provider on each call. That's fine in a hook or a command; in code that runs per request, resolve once and keep the `Arc`, or inject the provider.
-
-</Callout>
+`ctx.multi_count::<T>()` tells, without resolving anything, how many multi-bindings of `T` the app registers. A module can decide with it, once at boot, whether anybody listens: navree-db skips preparing change events in an app with no `dyn ChangeObserver`.
 
 ## Request-scoped providers
 

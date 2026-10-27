@@ -1,14 +1,28 @@
 //! [`RequestId`]: the id that ties logs, audit entries and responses together.
 
 use std::fmt;
+use std::sync::Arc;
 
 use uuid::Uuid;
+use uuid::timestamp::Timestamp;
+use uuid::timestamp::context::{ContextV7, ThreadLocalContext};
 
 /// A request id: at most 64 characters of `[A-Za-z0-9_-]`. Incoming
 /// `X-Request-Id` values are accepted only in that form; anything else is
 /// replaced by a generated UUID v7 (32 hex characters).
+///
+/// Cheap to clone: clones share the text.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct RequestId(String);
+pub struct RequestId(Arc<str>);
+
+thread_local! {
+    /// Each thread's UUID v7 counter, so generating an id takes no
+    /// process-wide lock.
+    static V7: ContextV7 = const { ContextV7::new() };
+}
+
+/// [`V7`] as a clock sequence.
+static CONTEXT: ThreadLocalContext<ContextV7> = ThreadLocalContext::new(&V7);
 
 impl RequestId {
     /// The longest accepted request id.
@@ -21,12 +35,16 @@ impl RequestId {
             && candidate
                 .bytes()
                 .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-');
-        valid.then(|| Self(candidate.to_owned()))
+        valid.then(|| Self(Arc::from(candidate)))
     }
 
-    /// A new id: a UUID v7 in simple (hex) form, so ids sort by time.
+    /// A new id: a UUID v7 in simple (hex) form, so ids sort by time (to
+    /// the millisecond; one thread's ids also sort in the order they were
+    /// made).
     pub fn generate() -> Self {
-        Self(Uuid::now_v7().simple().to_string())
+        let uuid = Uuid::new_v7(Timestamp::now(&CONTEXT));
+        let mut buffer = Uuid::encode_buffer();
+        Self(Arc::from(&*uuid.simple().encode_lower(&mut buffer)))
     }
 
     /// The incoming id if it is valid, otherwise a generated one.
