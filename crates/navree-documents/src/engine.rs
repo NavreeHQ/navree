@@ -60,8 +60,11 @@ impl std::str::FromStr for EngineKind {
 /// [`ChromeEngine`](crate::ChromeEngine) implement it, and so does the
 /// engine of [`DocumentsFake`](crate::DocumentsFake). Every
 /// implementation passes the same conformance suite: a named template
-/// renders with its data, an unknown name is
-/// [`DocumentsError::TemplateNotFound`], a broken template is
+/// renders with its data (with or without its extension), inline markup
+/// renders, an unknown name is [`DocumentsError::TemplateNotFound`]
+/// naming the file tried, data that does not serialize is
+/// [`DocumentsError::Data`], and a render's title lands in the PDF's
+/// metadata. The compiling engines also report a broken template as
 /// [`DocumentsError::Template`] naming the file.
 pub trait PdfEngine: Send + Sync + 'static {
     /// Which engine this is.
@@ -69,6 +72,13 @@ pub trait PdfEngine: Send + Sync + 'static {
 
     /// Renders one document.
     fn render<'a>(&'a self, render: &'a Render) -> BoxFuture<'a, Result<Pdf, DocumentsError>>;
+
+    /// Releases what the engine holds (Chrome closes its browser). The
+    /// engine stays usable: the next render starts again. The default does
+    /// nothing.
+    fn shutdown(&self) -> BoxFuture<'_, ()> {
+        Box::pin(async {})
+    }
 }
 
 #[cfg(test)]
