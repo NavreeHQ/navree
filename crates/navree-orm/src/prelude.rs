@@ -4,7 +4,9 @@
 //! collections, the builders and their condition types, executors, errors,
 //! values and the pagination types.
 
+pub use crate::attributes::{Attributes, CastContext};
 pub use crate::hooks::{Flow, ModelEvent, ModelHook};
+pub use crate::{accessors, attrs};
 pub use crate::{
     Assignment, Builder, Collection, Column, CursorPage, CursorRequest, Decimal, Dialect, Executor,
     Expr, Field, Filter, GlobalScope, IntoExpr, JoinClause, Model, OrmError, PageRequest, Record,

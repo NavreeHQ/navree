@@ -14,7 +14,7 @@ use crate::model::Model;
 use crate::persist;
 use crate::relations::Relations;
 use crate::row::Row;
-use crate::value::{Field, Numeric, Value, to_json};
+use crate::value::{Field, Numeric, Value};
 
 /// A model instance as the ORM knows it: the model itself (a `Record<M>`
 /// dereferences to `M`, so fields read and write directly), whether it is
@@ -581,25 +581,12 @@ impl<M: Model + fmt::Debug> fmt::Debug for Record<M> {
     }
 }
 
-/// The model, followed by the extra columns and the loaded relations.
+/// The model (as its own `Serialize` writes it, with cast outputs and the
+/// model's date format), then the extra columns, the appended accessors and
+/// the loaded relations, after the record's visibility (see
+/// [`attributes::serialize`](crate::attributes::serialize)).
 impl<M: Model> Serialize for Record<M> {
     fn serialize<S: Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> {
-        if self.extras.is_empty() && self.relations.is_empty() {
-            return self.model.serialize(serializer);
-        }
-        let mut value = serde_json::to_value(&self.model).map_err(serde::ser::Error::custom)?;
-        if let serde_json::Value::Object(object) = &mut value {
-            for (name, extra) in &self.extras {
-                object.insert(name.clone(), to_json(extra));
-            }
-            if let serde_json::Value::Object(relations) = self
-                .relations
-                .to_json()
-                .map_err(serde::ser::Error::custom)?
-            {
-                object.extend(relations);
-            }
-        }
-        value.serialize(serializer)
+        crate::attributes::serialize::serialize_record(self, serializer)
     }
 }

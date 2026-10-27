@@ -139,9 +139,9 @@ pub use value::{
     Decimal, Field, FieldError, FieldKind, Numeric, Value, ValueFor, is_null, same_value, to_json,
 };
 
-/// `#[derive(Model)]` and `#[scopes]` (see their documentation in
-/// navree-orm-macros).
-pub use navree_orm_macros::{Model, scopes};
+/// `#[derive(Model)]`, `#[scopes]` and `#[accessors]` (see their
+/// documentation in navree-orm-macros).
+pub use navree_orm_macros::{Model, accessor, accessors, scopes};
 
 /// What the macros expand to. Not part of the API.
 #[doc(hidden)]

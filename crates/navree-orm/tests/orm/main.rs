@@ -4,6 +4,7 @@
 mod models;
 mod support;
 
+mod attributes;
 mod casts;
 mod collection;
 mod crud;

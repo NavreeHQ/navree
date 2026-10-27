@@ -253,25 +253,46 @@ impl<'de> Deserialize<'de> for Attributes {
     }
 }
 
-/// [`Attributes`] from `"column" => value` pairs, where each value is
-/// anything serializable (as with `serde_json::json!`).
+/// [`Attributes`] from `"column" => value` pairs. Keys are string
+/// literals; each value is what `serde_json::json!` takes: an expression
+/// of any serializable type, `null`, or JSON written inline.
 ///
 /// ```
 /// use navree_orm::attrs;
 ///
-/// let attributes = attrs! { "title" => "Renewal", "amount_cents" => 1200, "tags" => ["a", "b"] };
-/// assert_eq!(attributes.len(), 3);
-/// assert_eq!(attributes.get("tags"), Some(&serde_json::json!(["a", "b"])));
+/// let owner = 7;
+/// let attributes = attrs! {
+///     "title" => "Renewal",
+///     "owner_id" => owner,
+///     "closed_at" => null,
+///     "meta" => { "source": "partner", "tags": ["a", "b"] },
+/// };
+/// assert_eq!(attributes.len(), 4);
+/// assert_eq!(attributes.get("closed_at"), Some(&serde_json::Value::Null));
+/// assert_eq!(attributes.get("meta"), Some(&serde_json::json!({"source": "partner", "tags": ["a", "b"]})));
 /// ```
 #[macro_export]
 macro_rules! attrs {
     () => {
         $crate::attributes::Attributes::new()
     };
-    ($($key:expr => $value:expr),+ $(,)?) => {
-        $crate::attributes::Attributes::from_pairs([
-            $(($key, $crate::__private::serde_json::json!($value))),+
-        ])
+    (@pairs [$($pairs:tt)*]) => {
+        $crate::attributes::Attributes::from_pairs([$($pairs)*])
+    };
+    (@pairs [$($pairs:tt)*] $key:literal => $($rest:tt)*) => {
+        $crate::attrs!(@value [$($pairs)*] $key [] $($rest)*)
+    };
+    (@value [$($pairs:tt)*] $key:literal [$($value:tt)+] , $($rest:tt)*) => {
+        $crate::attrs!(@pairs [$($pairs)* ($key, $crate::__private::serde_json::json!($($value)+)),] $($rest)*)
+    };
+    (@value [$($pairs:tt)*] $key:literal [$($value:tt)*] $next:tt $($rest:tt)*) => {
+        $crate::attrs!(@value [$($pairs)*] $key [$($value)* $next] $($rest)*)
+    };
+    (@value [$($pairs:tt)*] $key:literal [$($value:tt)+]) => {
+        $crate::attrs!(@pairs [$($pairs)* ($key, $crate::__private::serde_json::json!($($value)+)),])
+    };
+    ($($tokens:tt)+) => {
+        $crate::attrs!(@pairs [] $($tokens)+)
     };
 }
 

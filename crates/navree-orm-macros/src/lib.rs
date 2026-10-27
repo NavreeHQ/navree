@@ -15,6 +15,7 @@
 
 use proc_macro::TokenStream;
 
+mod accessors;
 mod errors;
 mod model;
 mod paths;
@@ -45,17 +46,80 @@ mod scopes;
 /// "int" | "uuid" | "uuid_v7" | "uuid_v4" | "ulid" | "manual"` (default: by
 /// the key's type), `timestamps` or `timestamps(created_at = "...",
 /// updated_at = false)`, `soft_deletes` or `soft_deletes = "..."`,
-/// `connection = "..."`, `per_page = N`, `global_scopes(Scope, ...)`.
+/// `connection = "..."`, `per_page = N`, `global_scopes(Scope, ...)`;
+/// mass assignment: `fillable(field, "json->path", ..)`, `guarded(..)`,
+/// `unguarded`; serialization: `hidden(field, "name", ..)`,
+/// `visible(..)`, `appends(accessor, ..)`, `serialize_dates_with = path`,
+/// `resource = Type`; encryption: `encrypter = "name"`.
 ///
 /// Field attributes: `column = "..."`, `cast = "json" | "string_enum" |
-/// "int_enum" | path::to::Cast`, `default` (a row without the column reads
-/// as the field's default), `skip` (not a column).
+/// "int_enum" | "decimal(N)" | "datetime_format(\"..\")" |
+/// "unix_timestamp" | "unix_timestamp_ms" | "encrypted" |
+/// "encrypted_json" | "hashed" | "binary_uuid" | "binary_ulid" | "vector" |
+/// path::to::Cast`, `cast` (the type's own `Castable` cast), `cast(Path,
+/// args..)`, `inbound = path::to::InboundCast`, `columns(name: Type, ..)`
+/// (a field stored across several columns), `default` (a row without the
+/// column reads as the field's default), `skip` (not a column), `hidden`,
+/// `fillable`, `guarded`, `set_with = path` (a mutator `fn(&mut Model,
+/// T)`, also generating `set_<field>`), `schema = Type` (its OpenAPI
+/// schema).
 #[proc_macro_derive(Model, attributes(model))]
 pub fn derive_model(input: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(input as syn::DeriveInput);
     model::derive(input)
         .unwrap_or_else(syn::Error::into_compile_error)
         .into()
+}
+
+/// Registers the `#[accessor]` methods of an impl block as the model's
+/// accessors: computed values serialized records append, by default
+/// (`#[model(appends(name))]`) or per record (`record.append(["name"])`).
+///
+/// ```ignore
+/// #[accessors]
+/// impl Deal {
+///     /// The amount weighted by the stage's probability.
+///     #[accessor]
+///     fn weighted_amount(&self) -> Decimal {
+///         self.amount * self.stage.probability()
+///     }
+///
+///     #[accessor(name = "label", schema = String)]
+///     fn display_label(&self) -> String {
+///         format!("{} ({})", self.title, self.stage)
+///     }
+/// }
+/// ```
+///
+/// An accessor is `fn name(&self) -> T` with `T: Serialize`; it stays a
+/// plain method. `#[accessor(name = "...")]` renames its key,
+/// `#[accessor(schema = Type)]` gives its OpenAPI schema. One
+/// `#[accessors]` block per model.
+#[proc_macro_attribute]
+pub fn accessors(args: TokenStream, item: TokenStream) -> TokenStream {
+    let item: proc_macro2::TokenStream = item.into();
+    accessors::expand(args.into(), item.clone())
+        .unwrap_or_else(|error| {
+            let mut out = error.into_compile_error();
+            out.extend(accessors::without_markers(item));
+            out
+        })
+        .into()
+}
+
+/// Marks an accessor inside an `#[accessors]` impl block (on its own it
+/// only reports where it belongs).
+#[proc_macro_attribute]
+pub fn accessor(args: TokenStream, item: TokenStream) -> TokenStream {
+    let _ = args;
+    let item: proc_macro2::TokenStream = item.into();
+    let mut out = syn::Error::new(
+        proc_macro2::Span::call_site(),
+        "#[accessor] marks a method of an #[accessors] impl block: put #[accessors] on the block",
+    )
+    .into_compile_error();
+    out.extend(item);
+    out.into()
 }
 
 /// Turns the `#[scope]` functions of an `impl` block into methods of the

@@ -1,0 +1,65 @@
+error: `fillable(titel)` names no field of the model (did you mean `title`?)
+ --> tests/ui/model_attributes_misuse.rs:5:18
+  |
+5 | #[model(fillable(titel, "nope->path"), hidden(secrett), visible(id))]
+  |                  ^^^^^
+
+error: `fillable("nope->path")`: the model has no column `nope`
+ --> tests/ui/model_attributes_misuse.rs:5:25
+  |
+5 | #[model(fillable(titel, "nope->path"), hidden(secrett), visible(id))]
+  |                         ^^^^^^^^^^^^
+
+error: `hidden(secrett)` names no field (did you mean `secret`?); write other names (relations, appended values, extra columns) as strings: hidden("secrett")
+ --> tests/ui/model_attributes_misuse.rs:5:47
+  |
+5 | #[model(fillable(titel, "nope->path"), hidden(secrett), visible(id))]
+  |                                               ^^^^^^^
+
+error: an unguarded model fills every column: drop `fillable` and `guarded`
+  --> tests/ui/model_attributes_misuse.rs:13:9
+   |
+13 | #[model(unguarded, fillable(title))]
+   |         ^^^^^^^^^
+
+error: `title` is both fillable and guarded: keep it in one list
+  --> tests/ui/model_attributes_misuse.rs:20:9
+   |
+20 | #[model(fillable(title), guarded(title))]
+   |         ^^^^^^^^
+
+error: decimal casts take a scale: "decimal(2)" keeps two decimal places
+  --> tests/ui/model_attributes_misuse.rs:29:20
+   |
+29 |     #[model(cast = "decimal")]
+   |                    ^^^^^^^^^
+
+error: a decimal keeps at most 28 decimal places, not 30
+  --> tests/ui/model_attributes_misuse.rs:31:20
+   |
+31 |     #[model(cast = "decimal(30)")]
+   |                    ^^^^^^^^^^^^^
+
+error: `%Q` is not a valid chrono format (see chrono::format::strftime)
+  --> tests/ui/model_attributes_misuse.rs:33:20
+   |
+33 |     #[model(cast = "datetime_format(\"%Q\")")]
+   |                    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: unknown cast `encrypt`: use "json", "string_enum", "int_enum", "decimal(N)", "datetime_format(\"...\")", "unix_timestamp", "unix_timestamp_ms", "encrypted", "encrypted_json", "hashed", "binary_uuid", "binary_ulid", "vector", or the path of a type implementing `Cast`
+  --> tests/ui/model_attributes_misuse.rs:35:20
+   |
+35 |     #[model(cast = "encrypt")]
+   |                    ^^^^^^^^^
+
+error: a skipped field is not a column: it can only be `hidden`
+  --> tests/ui/model_attributes_misuse.rs:42:13
+   |
+42 |     #[model(skip, fillable)]
+   |             ^^^^
+
+error: `fillable` takes a list: fillable(title, amount_cents)
+  --> tests/ui/model_attributes_misuse.rs:47:9
+   |
+47 | #[model(fillable)]
+   |         ^^^^^^^^
