@@ -3,7 +3,7 @@ title: "Resolving the workspace"
 description: "Find the current workspace from a header, a subdomain, a path prefix or a token claim, and check that the user belongs to it."
 ---
 
-Every workspace request names its workspace somewhere: in a header, in the host name, in the URL or inside the access token. Navree's resolvers read those places in the order you configure, load the workspace and check that the signed-in user is a member before your handler runs. Handlers then take a `CurrentWorkspace`.
+Every workspace request names its workspace somewhere: in a header, in the host name, in the URL or inside the access token. Navree's resolvers read those places in the order you configure, load the workspace and check that the signed-in user may enter it before your handler runs: as a member or, with [organizations](/docs/workspaces/organizations/) on, through the organization the workspace belongs to. Handlers then take a `CurrentWorkspace`.
 
 ## The resolvers
 
@@ -97,9 +97,11 @@ async fn show(&self, ws: CurrentWorkspace) -> Json<serde_json::Value> {
 | Method | Returns |
 |---|---|
 | `id()` | The workspace id |
-| `workspace()` | The `Workspace` row (`id`, `name`, `slug`, `owner_id`, `created_at`, `updated_at`) |
-| `member()` | The user's `Member` row |
+| `workspace()` | The `Workspace` row (`id`, `name`, `slug`, `owner_id`, `organization_id`, `created_at`, `updated_at`) |
+| `member()` | The user's `Member` row (for an organization grant, built from the organization membership) |
+| `user_id()` | The signed-in user's id |
 | `role()` | Their `WorkspaceRole` |
+| `granted_by()` | `GrantedBy::Membership`, or `GrantedBy::Organization { organization_id, role }` |
 | `permissions()` | Their role's permission strings, sorted |
 | `ability()`, `access()` | Their abilities inside this workspace, as navree-access's `Ability` and `PrincipalAccess` |
 | `can(action, subject)` | A type-level ability check |
@@ -137,12 +139,23 @@ The guard and the extractor answer in Navree's JSON error shape:
 | No signed-in user | 401 | `Unauthorized` |
 | No resolver found a workspace | 400 | `The request names no workspace.` |
 | No workspace with that slug or id | 404 | `Workspace not found.` |
-| The user is not a member | 403 | `You are not a member of this workspace.` |
+| The user is not a member, and no organization grant reaches the workspace | 403 | `You are not a member of this workspace.` |
 | A pinned credential names another workspace | 403 | `This token is limited to another workspace.` |
 
 ```json title="400 Bad Request"
 { "statusCode": 400, "message": "The request names no workspace.", "error": "Bad Request" }
 ```
+
+## Organizations and partitions
+
+The levels around a workspace resolve the same way, each with its own settings:
+
+| Level | Extractor and guard | Default resolvers | Settings |
+|---|---|---|---|
+| [Organization](/docs/workspaces/organizations/#the-current-organization) | `CurrentOrganization`, `InOrganization::guard()` | `X-Organization`, `/o/{slug}`, subdomain, claim `organization` | `workspace.organizations.*` |
+| [Partition](/docs/workspaces/partitions/#the-partitions-of-a-request) | `CurrentPartition`, `PartitionScope` | `X-Partition`, claim `partition` (path `/p/{slug}` when listed) | `workspace.partitions.*` |
+
+With organizations on, the membership check accepts an organization grant: a member of the workspace's organization whose grant reaches the workspace enters it with the workspace role their organization role gives. A membership of the workspace wins over the grant, and `granted_by()` says which one applied.
 
 ## Jobs and commands
 
