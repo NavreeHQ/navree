@@ -20,14 +20,19 @@ pub enum CacheStoreKind {
     /// In-process: [`MemoryStore`] and [`MemoryLockStore`] (`"memory"`).
     #[default]
     Memory,
+    /// Redis (`"redis"`): the `dyn CacheStore` and `dyn LockStore`
+    /// providers named `redis`, which navree-redis's `RedisModule`
+    /// registers. Shared by every process using the same Redis server.
+    Redis,
 }
 
 impl CacheStoreKind {
-    /// The configuration name (`memory`), also the store's name in
+    /// The configuration name (`memory`, `redis`), also the store's name in
     /// telemetry `CacheEvent`s.
     pub fn as_str(self) -> &'static str {
         match self {
             CacheStoreKind::Memory => "memory",
+            CacheStoreKind::Redis => "redis",
         }
     }
 }
@@ -174,14 +179,22 @@ fn register(m: &mut ModuleBuilder, options: Option<CacheOptions>) {
     m.factory(
         Factory::<dyn CacheStore>::new(|r: Resolver| async move {
             let options = r.get::<CacheOptions>().await?;
-            Ok(cache_store(options.store))
+            match options.store {
+                CacheStoreKind::Memory => Ok(Arc::new(MemoryStore::new()) as Arc<dyn CacheStore>),
+                kind => named_store::<dyn CacheStore>(&r, kind).await,
+            }
         })
         .deps(vec![options_key.clone()]),
     )
     .factory(
         Factory::<dyn LockStore>::new(|r: Resolver| async move {
             let options = r.get::<CacheOptions>().await?;
-            Ok(lock_store(options.store))
+            match options.store {
+                CacheStoreKind::Memory => {
+                    Ok(Arc::new(MemoryLockStore::new()) as Arc<dyn LockStore>)
+                }
+                kind => named_store::<dyn LockStore>(&r, kind).await,
+            }
         })
         .deps(vec![options_key.clone()]),
     )
@@ -235,16 +248,20 @@ fn register(m: &mut ModuleBuilder, options: Option<CacheOptions>) {
     .exports::<dyn LockStore>();
 }
 
-fn cache_store(kind: CacheStoreKind) -> Arc<dyn CacheStore> {
-    match kind {
-        CacheStoreKind::Memory => Arc::new(MemoryStore::new()),
-    }
-}
-
-fn lock_store(kind: CacheStoreKind) -> Arc<dyn LockStore> {
-    match kind {
-        CacheStoreKind::Memory => Arc::new(MemoryLockStore::new()),
-    }
+/// The store a module other than this one provides for `kind`: the
+/// provider of `T` named after it (`redis`: navree-redis's `RedisModule`).
+async fn named_store<T: ?Sized + Send + Sync + 'static>(
+    r: &Resolver,
+    kind: CacheStoreKind,
+) -> Result<Arc<T>, navree_kernel::BoxError> {
+    let name = kind.as_str();
+    r.app().get_named::<T>(name).await.map_err(|error| {
+        let module = match kind {
+            CacheStoreKind::Redis => "RedisModule (navree-redis)",
+            _ => "the module that provides it",
+        };
+        format!("cache.store = \"{name}\" needs {module} in the app: {error}").into()
+    })
 }
 
 /// Readiness: a value written to the cache can be read back.

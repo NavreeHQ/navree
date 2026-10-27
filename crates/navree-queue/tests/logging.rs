@@ -4,6 +4,8 @@
 //! process-wide, so `navree::job` events first hit by other tests' threads
 //! (with no subscriber) could be skipped here if they ran in this process.
 
+#[path = "queue/reference_store.rs"]
+mod reference_store;
 #[path = "queue/support.rs"]
 mod support;
 

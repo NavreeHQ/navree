@@ -1,14 +1,14 @@
-//! The records the drivers store and return: [`FailedJob`] (public) and the
-//! internal [`NewJob`] and [`ReservedJob`].
+//! The records a [`QueueStore`](crate::QueueStore) stores and returns:
+//! [`NewJob`], [`ReservedJob`] and [`FailedJob`].
 
 use chrono::{DateTime, Utc};
 use navree_contracts::JobOptions;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// A job that used up its attempts (or could not run at all), as kept in
 /// `failed_jobs` until it is retried or flushed.
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct FailedJob {
     /// The job id (the id `dispatch` returned).
     pub id: String,
@@ -56,9 +56,9 @@ impl From<String> for RetryTarget {
 }
 
 impl FailedJob {
-    /// The job as it goes back on its queue at `now`: same id, attempts
-    /// start over, not unique.
-    pub(crate) fn requeued(&self, now: i64) -> NewJob {
+    /// The job as it goes back on its queue at `now` (Unix milliseconds):
+    /// same id, attempts start over, not unique.
+    pub fn requeued(&self, now: i64) -> NewJob {
         NewJob {
             id: self.id.clone(),
             queue: self.queue.clone(),
@@ -74,50 +74,70 @@ impl FailedJob {
     }
 }
 
-/// A job ready to be stored.
-#[derive(Clone, Debug)]
-pub(crate) struct NewJob {
-    pub(crate) id: String,
-    pub(crate) queue: String,
-    pub(crate) job_type: String,
-    pub(crate) payload: Value,
-    pub(crate) options: JobOptions,
-    /// Unix milliseconds.
-    pub(crate) available_at: i64,
-    /// Unix milliseconds.
-    pub(crate) created_at: i64,
+/// A job ready to be stored: what [`QueueStore::insert`](crate::QueueStore::insert)
+/// receives. Times are Unix milliseconds.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct NewJob {
+    /// The job id (a UUID v7, so ids sort in dispatch order).
+    pub id: String,
+    /// The queue.
+    pub queue: String,
+    /// The job type ([`Job::NAME`](navree_contracts::Job::NAME)).
+    pub job_type: String,
+    /// The job value as JSON.
+    pub payload: Value,
+    /// The options it was dispatched with.
+    pub options: JobOptions,
+    /// When a worker may take it first.
+    pub available_at: i64,
+    /// When it was dispatched.
+    pub created_at: i64,
     /// Set for unique jobs: a pending job with the same key (dispatched
     /// within [`unique_for_ms`](NewJob::unique_for_ms)) takes its place.
-    pub(crate) unique_key: Option<String>,
+    pub unique_key: Option<String>,
     /// How long a pending unique job blocks its duplicates (`None`: while
     /// it is pending).
-    pub(crate) unique_for_ms: Option<i64>,
+    pub unique_for_ms: Option<i64>,
     /// The W3C `traceparent` of the span that dispatched the job, so its
     /// attempts continue that trace.
-    pub(crate) trace_parent: Option<String>,
+    pub trace_parent: Option<String>,
 }
 
 impl NewJob {
     /// Whether a pending duplicate created at `created_at` (Unix
     /// milliseconds) still blocks this job.
-    pub(crate) fn blocked_by(&self, created_at: i64) -> bool {
+    pub fn blocked_by(&self, created_at: i64) -> bool {
         self.unique_for_ms
             .is_none_or(|window| self.created_at < created_at.saturating_add(window))
     }
+
+    /// How long after a worker reserved it the job counts as abandoned, in
+    /// milliseconds: its `timeout_secs` (one day when 0) plus
+    /// [`STALE_RESERVATION_GRACE_SECS`](crate::STALE_RESERVATION_GRACE_SECS).
+    /// A store hands an abandoned reservation to the next worker.
+    pub fn stale_after_ms(&self) -> i64 {
+        stale_after_ms(&self.options)
+    }
 }
 
-/// A job a worker reserved.
-#[derive(Clone, Debug)]
-pub(crate) struct ReservedJob {
-    pub(crate) id: String,
-    pub(crate) queue: String,
-    pub(crate) job_type: String,
-    pub(crate) payload: Value,
-    pub(crate) options: JobOptions,
-    /// Including the attempt that is starting.
-    pub(crate) attempts: u32,
+/// A job a worker reserved: what [`QueueStore::reserve`](crate::QueueStore::reserve)
+/// returns.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ReservedJob {
+    /// The job id.
+    pub id: String,
+    /// The queue.
+    pub queue: String,
+    /// The job type.
+    pub job_type: String,
+    /// The job value as JSON.
+    pub payload: Value,
+    /// The options it was dispatched with.
+    pub options: JobOptions,
+    /// How many attempts started, including the one that is starting.
+    pub attempts: u32,
     /// The `traceparent` recorded at dispatch (see [`NewJob::trace_parent`]).
-    pub(crate) trace_parent: Option<String>,
+    pub trace_parent: Option<String>,
 }
 
 /// How long a reservation of a job without a time limit (`timeout_secs`
