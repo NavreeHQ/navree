@@ -205,6 +205,11 @@ pub fn kit_files(app: &NewApp, kit: Kit, now: Timestamp) -> Result<FileSet, Temp
     if let Some(env) = files.get(".env.example").map(str::to_owned) {
         files.add(".env", with_dock_settings(&env, files.get("dock.toml"), &ctx));
     }
+    // The web app's settings for this machine (git-ignored), so `navree dev`
+    // starts a front end that reaches the API and its WebSocket server.
+    if let Some(env) = files.get("web/.env.example").map(str::to_owned) {
+        files.add("web/.env.local", env);
+    }
     Ok(files)
 }
 

@@ -159,8 +159,12 @@ fn the_saas_kit_writes_the_api_and_the_web_app() {
     for script in ["dev", "build", "lint", "typecheck", "test", "e2e", "gen:api"] {
         assert!(package["scripts"].get(script).is_some(), "{script}");
     }
-    // The browser reaches the API through the backend-for-frontend.
+    // The browser reaches the API through the backend-for-frontend; the
+    // web app's local settings start as a copy of the example.
     assert!(read(&root, "web/.env.example").contains("NAVREE_API_URL="));
+    assert_eq!(read(&root, "web/.env.local"), read(&root, "web/.env.example"));
+    assert!(read(&root, "web/.env.local").contains("NEXT_PUBLIC_REALTIME_KEY=acme\n"));
+    assert!(read(&root, ".gitignore").contains("/web/.env.local"));
     // The API knows the web app's origin.
     let config = toml(&root, "config/app.toml");
     assert_eq!(config["app"]["url"].as_str(), Some("http://localhost:3000"));

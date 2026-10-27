@@ -114,7 +114,8 @@ are plural. Generators never overwrite a file.
 - **Front end.** The browser calls only the web app's own routes;
   `web/lib/bff` forwards them to the API with the bearer token from an
   httpOnly cookie. Never put a token in browser storage. After changing a
-  DTO, run `navree openapi:export web/openapi.json` and `pnpm --dir web gen:api`.
+  DTO, run `pnpm --dir web gen:api`: it exports `openapi.json` and
+  regenerates `web/lib/api/schema.d.ts`; commit both.
 {% endif %}
 
 ## Before you finish
@@ -128,5 +129,7 @@ Run `cargo fmt`, `cargo clippy --all-targets -- -D warnings` and
 - Docs: https://navree.com/docs/ (the kit:
   https://navree.com/docs/getting-started/starter-kits/; for models:
   https://navree.com/llms.txt).
-- Agent skills: `navree skills:install`, or `npx skills add NavreeHQ/navree`.
+- Agent skills, one per common task: `npx skills add NavreeHQ/navree`, or copy
+  the `skills/` directory of https://github.com/NavreeHQ/navree into
+  `.claude/skills/` or `.agents/skills/`.
   Start with the `navree` and `navree-workspaces` skills.

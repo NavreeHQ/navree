@@ -62,7 +62,7 @@ pub fn execute(cli: Cli, cwd: &Path) -> anyhow::Result<ExitCode> {
             Ok(ExitCode::SUCCESS)
         }
         Command::Check(args) => {
-            let root = app_root(cwd)?;
+            let root = run_root_of(cwd)?;
             let options = CheckOptions {
                 graph: args.graph,
                 json: args.json,
@@ -73,7 +73,7 @@ pub fn execute(cli: Cli, cwd: &Path) -> anyhow::Result<ExitCode> {
             Ok(exit_code(passed))
         }
         Command::Gate(args) => {
-            let root = app_root(cwd)?;
+            let root = run_root_of(cwd)?;
             let options = GateOptions {
                 only: args.only.clone(),
                 skip: args.skip.clone(),
@@ -158,8 +158,9 @@ fn app_root(cwd: &Path) -> anyhow::Result<PathBuf> {
     })
 }
 
-/// Where `dev`, `dock` and forwarded commands run for `cwd`: the app, or a
-/// workspace whose `default-members` is the app ([`run_root`]).
+/// Where `dev`, `dock`, `check`, `gate` and forwarded commands run for
+/// `cwd`: the app, or a workspace whose `default-members` is the app
+/// ([`run_root`]), as in the `micro` starter kit.
 fn run_root_of(cwd: &Path) -> anyhow::Result<PathBuf> {
     run_root(cwd).with_context(|| {
         format!(

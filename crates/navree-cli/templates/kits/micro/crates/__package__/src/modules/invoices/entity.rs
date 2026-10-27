@@ -1,10 +1,11 @@
 //! The `invoices` table.
 
 use sea_orm::entity::prelude::*;
+use serde::Serialize;
 
 /// An invoice, as stored. Other services see it as the contracts crate's
-/// `Invoice` (`InvoiceService::view`).
-#[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
+/// `Invoice` (`view` in `service.rs`).
+#[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
 #[sea_orm(table_name = "invoices")]
 pub struct Model {
     /// A UUID v7, so ids sort by creation time.

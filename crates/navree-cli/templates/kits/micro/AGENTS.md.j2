@@ -29,7 +29,7 @@ navree dock up                                          # PostgreSQL and NATS in
 navree dev                                              # handlers on NATS, health on :8080, rebuild on save
 cargo test --workspace                                  # every test; no broker needed
 cargo clippy --workspace --all-targets -- -D warnings   # must pass
-cargo fmt --all                                         # must leave nothing to change
+cargo fmt                                               # must leave nothing to change
 navree check                                            # validate the module graph without booting
 navree micro:patterns                                   # every message and event pattern with its access rule
 navree micro:send invoices.get '{"id":"..."}'           # send a message and print the reply
@@ -37,7 +37,8 @@ navree micro:failed                                     # dead-lettered events (
 navree migrate                                          # run pending migrations
 ```
 
-The generators (`navree make:module`, `make:migration`, ...) work on one
+`cargo fmt` formats the workspace's crates; `--all` would also format path
+dependencies. The generators (`navree make:module`, `make:migration`, ...) work on one
 package: run them in `crates/{{ package }}`.
 
 ## Messages and events
@@ -89,7 +90,7 @@ package: run them in `crates/{{ package }}`.
 
 ## Before you finish
 
-Run `cargo fmt --all`, `cargo clippy --workspace --all-targets -- -D warnings`
+Run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`
 and `cargo test --workspace`, and fix everything they report.
 
 ## Documentation and skills
@@ -98,5 +99,7 @@ and `cargo test --workspace`, and fix everything they report.
   https://navree.com/docs/microservices/introduction/; the kit:
   https://navree.com/docs/getting-started/starter-kits/; for models:
   https://navree.com/llms.txt).
-- Agent skills: `navree skills:install`, or `npx skills add NavreeHQ/navree`.
+- Agent skills, one per common task: `npx skills add NavreeHQ/navree`, or copy
+  the `skills/` directory of https://github.com/NavreeHQ/navree into
+  `.claude/skills/` or `.agents/skills/`.
   Start with the `navree` and `navree-microservices` skills.

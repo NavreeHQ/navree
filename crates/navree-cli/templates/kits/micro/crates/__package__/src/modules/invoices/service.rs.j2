@@ -28,7 +28,7 @@ impl InvoiceService {
         let invoice = Entity::find_by_id(id)
             .one(&*uow.tx().await?)
             .await?
-            .ok_or_else(|| AppError::not_found("Invoice not found"))?;
+            .ok_or_else(|| AppError::not_found().with_detail("Invoice not found"))?;
         Ok(view(invoice))
     }
 
