@@ -9,7 +9,7 @@ use navree_kernel::{BoxError, BoxFuture};
 use serde_json::{Value, json};
 
 use crate::engine::http::{Api, Auth, Body, encode};
-use crate::engine::{EngineHit, EngineQuery, EngineResults, SearchEngine};
+use crate::engine::{EngineHit, EngineQuery, EngineResults, SearchEngine, every_comparison};
 use crate::filter::{CmpOp, Filter};
 use crate::settings::WORKSPACE_FIELD;
 use crate::text::{MARK_CLOSE, MARK_OPEN, field_text, from_marked};
@@ -452,6 +452,19 @@ impl SearchEngine for MeilisearchEngine {
             Ok(response.status().as_u16() != 404)
         })
     }
+
+    /// Meilisearch's range operators compare numbers; ranges on strings
+    /// are left to the rows.
+    fn filters_exactly(&self, filter: &Filter) -> bool {
+        every_comparison(filter, &|f| match f {
+            Filter::Cmp {
+                op: CmpOp::Lt | CmpOp::Lte | CmpOp::Gt | CmpOp::Gte,
+                value,
+                ..
+            } => value.is_number(),
+            _ => true,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -495,5 +508,19 @@ mod tests {
                 "stopWords": [],
             })
         );
+    }
+
+    #[test]
+    fn ranges_on_strings_are_not_exact() {
+        let engine =
+            MeilisearchEngine::new("http://127.0.0.1:1", None, Duration::from_secs(1)).unwrap();
+        let exact = |filter: Filter| engine.filters_exactly(&filter.normalized());
+        assert!(exact(Filter::All(vec![
+            Filter::ne("stage", "won"),
+            Filter::null("closed_at"),
+            Filter::range("amount", 1..),
+        ])));
+        assert!(!exact(Filter::range("stage", "m"..)));
+        assert!(!exact(Filter::range("flag", false..)));
     }
 }

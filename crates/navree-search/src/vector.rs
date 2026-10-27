@@ -95,6 +95,15 @@ pub trait VectorStore: Send + Sync + 'static {
         filter: &'a Filter,
         limit: u64,
     ) -> BoxFuture<'a, Result<Vec<VectorMatch>, SearchError>>;
+
+    /// Whether the store evaluates `filter` (normalized) exactly as
+    /// [`Filter::matches`] does. An access filter the store can't run
+    /// exactly is applied to the loaded rows instead. The default is
+    /// `true`.
+    fn filters_exactly(&self, filter: &Filter) -> bool {
+        let _ = filter;
+        true
+    }
 }
 
 /// The similarity of `a` and `b` under `metric`, mapped into 0..1.
@@ -358,9 +367,29 @@ fn qdrant_condition(filter: &Filter) -> Value {
     }
 }
 
+/// Whether Qdrant matches `filter` (normalized) exactly: its `match`
+/// compares strings, integers and booleans, and its `range` numbers.
+pub(crate) fn qdrant_exact(filter: &Filter) -> bool {
+    let matchable = |v: &Value| v.is_string() || v.is_boolean() || v.is_i64() || v.is_u64();
+    crate::engine::every_comparison(filter, &|f| match f {
+        Filter::Cmp {
+            op: CmpOp::Eq | CmpOp::Ne,
+            value,
+            ..
+        } => matchable(value),
+        Filter::Cmp { value, .. } => value.is_number(),
+        Filter::In { values, .. } | Filter::NotIn { values, .. } => values.iter().all(matchable),
+        _ => true,
+    })
+}
+
 impl VectorStore for QdrantStore {
     fn name(&self) -> &'static str {
         "qdrant"
+    }
+
+    fn filters_exactly(&self, filter: &Filter) -> bool {
+        qdrant_exact(filter)
     }
 
     fn prepare<'a>(&'a self, index: &'a str) -> BoxFuture<'a, Result<(), SearchError>> {
@@ -825,6 +854,11 @@ impl Vectors {
         }
     }
 
+    /// Whether the store runs `filter` exactly.
+    pub(crate) fn filters_exactly(&self, filter: &Filter) -> bool {
+        self.store.filters_exactly(filter)
+    }
+
     pub(crate) async fn prepare(&self, index: &str) -> Result<(), SearchError> {
         if self
             .prepared
@@ -972,6 +1006,21 @@ mod tests {
         assert_eq!(id, point_id("0199c1d2-1111"));
         assert_ne!(id, point_id("other"));
         assert!(uuid::Uuid::parse_str(&id).is_ok());
+    }
+
+    #[test]
+    fn qdrant_matches_strings_integers_and_booleans_exactly() {
+        let exact = |filter: Filter| qdrant_exact(&filter.normalized());
+        assert!(exact(Filter::All(vec![
+            Filter::eq("status", "customer"),
+            Filter::ne("score", 3),
+            Filter::is_in("flag", [true]),
+            Filter::range("n", 1.5..),
+            Filter::null("closed_at"),
+        ])));
+        assert!(!exact(Filter::eq("score", 2.25)), "match has no floats");
+        assert!(!exact(Filter::is_in("score", [1.5])));
+        assert!(!exact(Filter::range("status", "m"..)), "ranges are numeric");
     }
 
     #[test]

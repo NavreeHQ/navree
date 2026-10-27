@@ -10,7 +10,7 @@ use navree_kernel::{BoxError, BoxFuture};
 use serde_json::{Value, json};
 
 use crate::engine::http::{Api, Auth, Body, encode};
-use crate::engine::{EngineHit, EngineQuery, EngineResults, SearchEngine};
+use crate::engine::{EngineHit, EngineQuery, EngineResults, SearchEngine, every_comparison};
 use crate::filter::{CmpOp, Filter};
 use crate::settings::WORKSPACE_FIELD;
 use crate::text::{MARK_CLOSE, MARK_OPEN, field_text, from_marked};
@@ -561,6 +561,26 @@ impl SearchEngine for TypesenseEngine {
             Ok(response.status().as_u16() != 404)
         })
     }
+
+    /// Typesense doesn't index missing values, so `!=`, `NOT IN` and null
+    /// tests can't match documents without a value; it compares only
+    /// numbers in ranges and can't quote a backtick.
+    fn filters_exactly(&self, filter: &Filter) -> bool {
+        every_comparison(filter, &|f| match f {
+            Filter::Null(_) | Filter::NotNull(_) | Filter::NotIn { .. } | Filter::Not(_) => false,
+            Filter::Cmp {
+                op: CmpOp::Ne, ..
+            } => false,
+            Filter::Cmp {
+                op: CmpOp::Eq,
+                value,
+                ..
+            } => literal(value).is_ok(),
+            Filter::Cmp { value, .. } => value.is_number(),
+            Filter::In { values, .. } => list(values).is_ok(),
+            Filter::All(_) | Filter::Any(_) | Filter::Const(_) => true,
+        })
+    }
 }
 
 /// The highlight of `field` in the pre-0.25 `highlights` array.
@@ -611,5 +631,34 @@ mod tests {
         assert_eq!(fields[1]["type"], "string");
         assert_eq!(fields[2]["type"], "auto");
         assert_eq!(fields[3]["sort"], true);
+    }
+
+    #[test]
+    fn filters_on_missing_values_are_not_exact() {
+        let engine = TypesenseEngine::new(
+            "http://127.0.0.1:1",
+            &[],
+            "k".into(),
+            Duration::from_secs(1),
+        )
+        .unwrap();
+        let exact = |filter: Filter| engine.filters_exactly(&filter.normalized());
+        assert!(exact(Filter::All(vec![
+            Filter::eq("stage", "won"),
+            Filter::is_in("owner", ["a", "b"]),
+            Filter::range("amount", 1..),
+        ])));
+        assert!(exact(Filter::Const(true)));
+        // Typesense skips documents without a value for these.
+        assert!(!exact(Filter::ne("stage", "won")));
+        assert!(!exact(Filter::Not(Box::new(Filter::is_in("owner", ["a"])))));
+        assert!(!exact(Filter::null("stage")));
+        assert!(!exact(Filter::Any(vec![
+            Filter::eq("stage", "won"),
+            Filter::Not(Box::new(Filter::range("amount", 1..))),
+        ])));
+        // Ranges compare numbers only; backticks can't be quoted.
+        assert!(!exact(Filter::range("stage", "m"..)));
+        assert!(!exact(Filter::eq("stage", "a`b")));
     }
 }
