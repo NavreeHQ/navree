@@ -15,7 +15,7 @@ use crate::forward::{ProcessRunner, forward};
 use crate::gate::{GateOptions, default_lock_path, run_gate};
 use crate::make::{MakeOptions, MakeReport, make_item, make_module};
 use crate::names::{AppName, Name};
-use crate::new_app::{NavreeSource, NewApp, create_app};
+use crate::new_app::{NavreeSource, NewApp, create_app, created_message};
 use crate::project::project_root;
 use crate::resource::make_resource;
 
@@ -26,11 +26,12 @@ pub fn execute(cli: Cli, cwd: &Path) -> anyhow::Result<ExitCode> {
             let app = NewApp {
                 name: AppName::parse(&args.name)?,
                 ui: args.ui,
+                database: args.database,
                 navree: NavreeSource::resolve(args.navree_path.as_deref())?,
             };
             let root = create_app(cwd, &app, Timestamp::now())?;
             format_rust(&rust_files(&root));
-            print_new_app(&app, &root);
+            print!("{}", created_message(&app, &root));
             Ok(ExitCode::SUCCESS)
         }
         Command::MakeModule(args) => {
@@ -228,20 +229,5 @@ fn format_rust(files: &[PathBuf]) {
             "warning: rustfmt could not format the generated files:\n{}",
             String::from_utf8_lossy(&output.stderr)
         );
-    }
-}
-
-fn print_new_app(app: &NewApp, root: &Path) {
-    println!("Created {} in {}", app.name.package(), root.display());
-    if let NavreeSource::Path(path) = &app.navree {
-        println!("It depends on navree at {}.", path.display());
-    }
-    println!();
-    println!("Next steps:");
-    println!("  cd {}", app.name.package());
-    println!("  navree key:generate     # then set APP_KEY in .env");
-    println!("  navree dev              # http://127.0.0.1:8080/api/docs");
-    if root.join("web").is_dir() {
-        println!("  cd web && npm install # the front end; `navree dev` starts it");
     }
 }

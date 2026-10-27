@@ -9,13 +9,20 @@ before changing code.
 ```text
 config/app.toml        settings shared by every environment (committed)
 .env                   this machine's secrets, such as APP_KEY (never committed)
+{% if dock %}
+dock.toml              the local services (the database) `navree dock up` runs
+{% endif %}
 src/main.rs            runs the app: `serve` by default, or any other command
 src/app.rs             the root module: every module, configured once
 src/abilities.rs       who may do what: permissions and ability rules
 src/modules/<name>/    feature modules: mod.rs, controller.rs, service.rs,
                        entity.rs, dto.rs, migrations/, tests/
 tests/                 tests that boot the whole app
+{% if database == "sqlite" %}
 storage/               runtime data: the SQLite database, logs, uploads
+{% else %}
+storage/               runtime data: logs, uploads
+{% endif %}
 {% if ui_next %}
 web/                   the Next.js front end; its server holds the API tokens
 {% endif %}
@@ -24,6 +31,9 @@ web/                   the Next.js front end; its server holds the API tokens
 ## Commands
 
 ```sh
+{% if dock %}
+navree dock up                              # start the database (see dock.toml) first
+{% endif %}
 navree dev                                  # serve on http://127.0.0.1:8080, rebuild on save
 cargo test                                  # every test; each gets its own SQLite database
 cargo clippy --all-targets -- -D warnings   # must pass
@@ -103,6 +113,19 @@ snake_case; module names are plural. Generators never overwrite a file.
   "meta" }`) and filter with `Accessible<Entity, Read>`.
 - **Migrations** belong to their module's `MigrationSet`; never edit one
   that has run anywhere, add a new one.
+{% if database == "timescaledb" %}
+- **TimescaleDB.** The database is TimescaleDB (PostgreSQL with
+  time-series hypertables), started by `navree dock up`; tests run on
+  SQLite, where the same migrations give regular tables. Make a table a
+  hypertable when it is append-mostly, keyed by time and large (events,
+  logs, metrics, history): `schema.create_hypertable("events",
+  "occurred_at", |t| ..)` with a `uuid_primary()` key (UUID v7, so ids sort
+  by time). Keep records that are updated in place or referenced by
+  foreign keys (users, orders, settings) regular tables.
+{% elif database == "postgres" %}
+- **PostgreSQL** runs locally with `navree dock up`; tests run on SQLite,
+  with the same migrations.
+{% endif %}
 - **Configuration.** `config/app.toml` holds shared settings; `APP_*`
   environment variables override it (`APP_DATABASE__URL` sets
   `database.url`). `.env` only fills keys that config/app.toml leaves out.

@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use navree_cli::clock::Timestamp;
 use navree_cli::make::{MakeKind, MakeOptions, make_item, make_module};
 use navree_cli::names::{AppName, Name};
-use navree_cli::new_app::{NavreeSource, NewApp, Ui, create_app};
+use navree_cli::new_app::{Database, NavreeSource, NewApp, Ui, create_app};
 use navree_cli::resource::make_resource;
 
 fn now() -> Timestamp {
@@ -23,6 +23,7 @@ fn project() -> (tempfile::TempDir, PathBuf) {
     let app = NewApp {
         name: AppName::parse("crm").unwrap(),
         ui: Ui::None,
+        database: Database::default(),
         navree: NavreeSource::Path(PathBuf::from("/opt/navree/crates/navree")),
     };
     let root = create_app(dir.path(), &app, now()).unwrap();

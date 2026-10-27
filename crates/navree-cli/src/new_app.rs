@@ -21,6 +21,83 @@ pub enum Ui {
     None,
 }
 
+/// The database a new app is set up for: its `database.url`, the driver
+/// feature of its `navree` dependency and, for PostgreSQL, the `dock.toml`
+/// that runs the server.
+///
+/// ```
+/// use navree_cli::new_app::Database;
+///
+/// let database = Database::default();
+/// assert_eq!(database, Database::Timescaledb);
+/// assert_eq!(database.feature(), Some("postgres"));
+/// assert_eq!(
+///     database.url("my_shop"),
+///     "postgres://navree:navree@127.0.0.1:5432/my_shop"
+/// );
+/// assert_eq!(Database::Sqlite.url("my_shop"), "sqlite://storage/my_shop.db?mode=rwc");
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, clap::ValueEnum)]
+pub enum Database {
+    /// TimescaleDB, Navree's default: PostgreSQL with time-series
+    /// hypertables, run on this machine by `navree dock up`.
+    #[default]
+    #[value(alias = "timescale")]
+    Timescaledb,
+    /// Plain PostgreSQL, run by `navree dock up` too.
+    #[value(alias = "postgresql")]
+    Postgres,
+    /// MySQL 8.0+ or MariaDB 10.6+, on a server of your own.
+    #[value(alias = "mariadb")]
+    Mysql,
+    /// SQLite: a file under `storage/`, with nothing to install.
+    Sqlite,
+}
+
+impl Database {
+    /// The facade feature that compiles the database's driver: `postgres`
+    /// for TimescaleDB and PostgreSQL, `mysql` for MySQL and MariaDB, and
+    /// none for SQLite, which is built in.
+    pub fn feature(self) -> Option<&'static str> {
+        match self {
+            Database::Timescaledb | Database::Postgres => Some("postgres"),
+            Database::Mysql => Some("mysql"),
+            Database::Sqlite => None,
+        }
+    }
+
+    /// The `database.url` of a new app whose crate is `crate_name`: the
+    /// database is named after it. The PostgreSQL URL is the one Dock's
+    /// `postgres` service gives the app (user and password `navree`), so
+    /// `config/app.toml` and `navree dock up` agree.
+    pub fn url(self, crate_name: &str) -> String {
+        match self {
+            Database::Timescaledb | Database::Postgres => {
+                format!("postgres://navree:navree@127.0.0.1:5432/{crate_name}")
+            }
+            Database::Mysql => format!("mysql://navree:navree@127.0.0.1:3306/{crate_name}"),
+            Database::Sqlite => format!("sqlite://storage/{crate_name}.db?mode=rwc"),
+        }
+    }
+
+    /// Whether `navree dock up` runs the server, so the app gets a
+    /// `dock.toml` with `[services.postgres]`.
+    pub fn runs_in_dock(self) -> bool {
+        matches!(self, Database::Timescaledb | Database::Postgres)
+    }
+
+    /// The name templates branch on: `timescaledb`, `postgres`, `mysql` or
+    /// `sqlite`.
+    fn key(self) -> &'static str {
+        match self {
+            Database::Timescaledb => "timescaledb",
+            Database::Postgres => "postgres",
+            Database::Mysql => "mysql",
+            Database::Sqlite => "sqlite",
+        }
+    }
+}
+
 /// Where the app gets the `navree` crate from.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NavreeSource {
@@ -65,13 +142,50 @@ impl NavreeSource {
     /// The right-hand side of `navree = ...` in `Cargo.toml`.
     pub fn dependency(&self) -> String {
         match self {
-            NavreeSource::Path(path) => {
-                let path = plain_path(&path.to_string_lossy()).replace('\\', "/");
-                format!("{{ path = {} }}", toml_string(&path))
-            }
+            NavreeSource::Path(path) => format!("{{ path = {} }}", path_value(path)),
             NavreeSource::Version(version) => toml_string(version),
         }
     }
+
+    /// The right-hand side of `navree = ...` with `features` turned on (on
+    /// top of the default ones): `{ path = "..", features = ["postgres"] }`,
+    /// or [`dependency`](NavreeSource::dependency) when `features` is empty.
+    ///
+    /// ```
+    /// use navree_cli::new_app::NavreeSource;
+    ///
+    /// let published = NavreeSource::Version("0.1.0".to_owned());
+    /// assert_eq!(
+    ///     published.dependency_with_features(&["postgres"]),
+    ///     r#"{ version = "0.1.0", features = ["postgres"] }"#
+    /// );
+    /// assert_eq!(published.dependency_with_features(&[]), r#""0.1.0""#);
+    /// ```
+    pub fn dependency_with_features(&self, features: &[&str]) -> String {
+        if features.is_empty() {
+            return self.dependency();
+        }
+        let features = features
+            .iter()
+            .map(|feature| toml_string(feature))
+            .collect::<Vec<_>>()
+            .join(", ");
+        match self {
+            NavreeSource::Path(path) => format!(
+                "{{ path = {}, features = [{features}] }}",
+                path_value(path)
+            ),
+            NavreeSource::Version(version) => format!(
+                "{{ version = {}, features = [{features}] }}",
+                toml_string(version)
+            ),
+        }
+    }
+}
+
+/// A local path as a TOML string, with `/` separators.
+fn path_value(path: &Path) -> String {
+    toml_string(&plain_path(&path.to_string_lossy()).replace('\\', "/"))
 }
 
 /// `path` itself when it is the `navree` package, or its `crates/navree`.
@@ -124,6 +238,8 @@ pub struct NewApp {
     pub name: AppName,
     /// The front end.
     pub ui: Ui,
+    /// The database (TimescaleDB unless `--database` says otherwise).
+    pub database: Database,
     /// Where `navree` comes from.
     pub navree: NavreeSource,
 }
@@ -136,17 +252,28 @@ struct AppContext {
     navree_dependency: String,
     users_migration: String,
     ui_next: bool,
+    /// `timescaledb`, `postgres`, `mysql` or `sqlite`.
+    database: &'static str,
+    database_url: String,
+    /// Whether the app gets a `dock.toml` running its database.
+    dock: bool,
 }
 
 /// The files of the app, relative to its directory.
 pub fn app_files(app: &NewApp, now: Timestamp) -> Result<FileSet, TemplateError> {
+    let crate_name = app.name.crate_name();
     let ctx = AppContext {
         package: app.name.package().to_owned(),
-        crate_name: app.name.crate_name(),
         title: app.name.title(),
-        navree_dependency: app.navree.dependency(),
+        navree_dependency: app
+            .navree
+            .dependency_with_features(&app.database.feature().into_iter().collect::<Vec<_>>()),
         users_migration: format!("{}_create_user_profiles_table", now.migration_prefix()),
         ui_next: app.ui == Ui::Next,
+        database: app.database.key(),
+        database_url: app.database.url(&crate_name),
+        dock: app.database.runs_in_dock(),
+        crate_name,
     };
     let users = "src/modules/users";
     let mut files = FileSet::new();
@@ -197,6 +324,9 @@ pub fn app_files(app: &NewApp, now: Timestamp) -> Result<FileSet, TemplateError>
     ] {
         files.add(path, render(template, &ctx)?);
     }
+    if ctx.dock {
+        files.add("dock.toml", render("app/dock.toml", &ctx)?);
+    }
     if ctx.ui_next {
         for (template, path) in [
             ("web/package.json", "web/package.json"),
@@ -225,6 +355,55 @@ pub fn app_files(app: &NewApp, now: Timestamp) -> Result<FileSet, TemplateError>
         }
     }
     Ok(files)
+}
+
+/// What `navree new` prints once the app is written to `root`: where it
+/// is, and the next steps for its database and front end.
+///
+/// ```
+/// use std::path::{Path, PathBuf};
+///
+/// use navree_cli::names::AppName;
+/// use navree_cli::new_app::{Database, NavreeSource, NewApp, Ui, created_message};
+///
+/// let app = NewApp {
+///     name: AppName::parse("my-shop").unwrap(),
+///     ui: Ui::None,
+///     database: Database::Timescaledb,
+///     navree: NavreeSource::Version("0.1.0".to_owned()),
+/// };
+/// let message = created_message(&app, Path::new("/src/my-shop"));
+/// assert!(message.contains("navree dock up"));
+/// ```
+pub fn created_message(app: &NewApp, root: &Path) -> String {
+    let package = app.name.package();
+    let mut out = format!("Created {package} in {}\n", root.display());
+    if let NavreeSource::Path(path) = &app.navree {
+        out.push_str(&format!("It depends on navree at {}.\n", path.display()));
+    }
+    let database = match app.database {
+        Database::Timescaledb => Some(("navree dock up", "TimescaleDB on 127.0.0.1:5432")),
+        Database::Postgres => Some(("navree dock up", "PostgreSQL on 127.0.0.1:5432")),
+        Database::Mysql | Database::Sqlite => None,
+    };
+    let mut steps: Vec<(&str, &str)> = database.into_iter().collect();
+    steps.push(("navree key:generate", "then set APP_KEY in .env"));
+    if app.ui == Ui::Next {
+        steps.push(("npm --prefix web install", "the front end; `navree dev` starts it"));
+    }
+    steps.push(("navree dev", "http://127.0.0.1:8080/api/docs"));
+    out.push_str("\nNext steps:\n");
+    out.push_str(&format!("  cd {package}\n"));
+    for (command, comment) in steps {
+        out.push_str(&format!("  {command:<26} # {comment}\n"));
+    }
+    if app.database == Database::Mysql {
+        out.push_str(&format!(
+            "\nThe app connects to a MySQL or MariaDB server at {}: point `database.url` in config/app.toml (or APP_DATABASE__URL) at yours.\n",
+            app.database.url(&app.name.crate_name())
+        ));
+    }
+    out
 }
 
 /// Creates the app in `parent/<name>` and returns its directory. The
