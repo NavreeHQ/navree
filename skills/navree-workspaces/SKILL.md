@@ -174,6 +174,7 @@ of this workspace.`
 ```rust
 let ws = workspaces.create(&uow, owner_id, NewWorkspace::named("Acme Inc.")).await?; // slug "acme-inc"
 workspaces.rename(&uow, ws.id, "Acme Corp").await?;          // slug unchanged
+workspaces.set_time_zone(&uow, ws.id, Some("Asia/Calcutta"), Some("in")).await?; // stored Asia/Kolkata, IN
 workspaces.for_user(user_id).await?;                          // Vec<Membership { workspace, role, granted_by }>
 workspaces.resolve("acme").await?;                            // slug or id, 404 otherwise
 workspaces.transfer_ownership(&uow, ws.id, new_owner).await?; // new owner: owner, old: admin
@@ -193,8 +194,10 @@ invitations.prune_expired(&uow).await?;                        // or `navree wor
 
 ## Routes (`workspace.routes = true` by default)
 
-`GET/POST /api/workspaces`, `GET/PATCH/DELETE /api/workspaces/{workspace}`,
-`POST .../transfer`, `POST .../leave`, `GET/POST .../members`,
+`GET/POST /api/workspaces` (`{name, slug?, timezone?, country?}`),
+`GET/PATCH/DELETE /api/workspaces/{workspace}`,
+`PUT .../time-zone {timezone, country}` (`workspace.update`; 400 on an
+unknown zone or country), `POST .../transfer`, `POST .../leave`, `GET/POST .../members`,
 `PATCH/DELETE .../members/{user}`, `GET/POST .../invitations`,
 `DELETE .../invitations/{invitation}`, `POST /api/invitations/accept {token}`.
 Permissions: `workspace.update|delete|transfer`,

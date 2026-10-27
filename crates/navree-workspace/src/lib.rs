@@ -43,6 +43,10 @@
 //!   all or some of them; [`CurrentPartition`] (`X-Partition`) and
 //!   [`PartitionScope`] keep a request to the partitions it may touch, with
 //!   [`PartitionRepo`] and, on PostgreSQL, `navree.partition`.
+//! - **Time zones.** Each workspace has an optional `timezone` and
+//!   `country` ([`Workspaces::set_time_zone`]); the module registers
+//!   [`WorkspaceZones`], the workspace-level `dyn ZoneSource` that
+//!   navree-time's `CurrentZone` and per-workspace schedules read.
 //! - **Routes.** `/api/workspaces...` and `POST /api/invitations/accept`
 //!   ([`WorkspaceController`], [`InvitationController`]), plus
 //!   `/api/organizations...` ([`OrganizationController`]) and
@@ -115,6 +119,7 @@ mod role;
 mod scoped;
 mod tenant;
 mod workspaces;
+mod zone;
 
 pub use access_requests::{
     AccessRequestInfo, AccessRequestStatus, AccessRequests, Approval, ApprovedRequest,
@@ -129,7 +134,7 @@ pub use controller::{
     CreatePartitionInput, CreateWorkspaceInput, InvitationController, InvitationResource,
     InviteInput, MemberResource, PartitionAccessInput, PartitionAccessResource, PartitionResource,
     RenamePartitionInput, RenameWorkspaceInput, TransferWorkspaceInput, WorkspaceController,
-    WorkspaceResource,
+    WorkspaceResource, WorkspaceTimeZoneInput,
 };
 pub use current::{CurrentWorkspace, InWorkspace, PinnedWorkspace, WorkspaceUow};
 pub use directory::{TableUserDirectory, UserDirectory, UserSummary};
@@ -161,3 +166,4 @@ pub use tenant::WorkspaceDatabases;
 pub use workspaces::{
     GrantedBy, MAX_NAME_LEN, MAX_SLUG_LEN, Membership, NewWorkspace, Workspaces, slugify,
 };
+pub use zone::WorkspaceZones;

@@ -67,6 +67,11 @@ pub use navree_observe::ObserveModule;
 pub use navree_realtime::{ModuleBuilderRealtimeExt as _, RealtimeModule};
 #[cfg(feature = "storage")]
 pub use navree_storage::StorageModule;
+#[cfg(feature = "time")]
+pub use navree_time::{
+    CurrentZone, DayRange, LocalDay, ModuleBuilderTimeExt as _, SendWindow, TimeModule, WithZone,
+    Zone,
+};
 
 #[cfg(feature = "access")]
 pub use navree_access::{

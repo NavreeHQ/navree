@@ -28,6 +28,7 @@
 //! | `storage` | navree-storage | `storage` | `StorageModule`: disks, signed links, direct uploads, disk sync |
 //! | | | `storage-s3` | S3 disks: AWS, MinIO, Cloudflare R2, DigitalOcean Spaces |
 //! | | | `storage-gcs`, `storage-azure` (opt-in) | Google Cloud Storage and Azure Blob Storage disks |
+//! | `time` | navree-time | `time` | `TimeModule`: time zones, `CurrentZone`, local days, send windows, holidays |
 //! | `session` | navree-session | `session` | `SessionModule`: cookie sessions and CSRF |
 //! | `validation` | navree-validation | `validation` | `Valid` extractors on garde |
 //! | `queue` | navree-queue | `queue` | `QueueModule`: database and memory job queues, batches, operations |
@@ -176,6 +177,8 @@ pub use navree_realtime as realtime;
 pub use navree_storage as storage;
 #[cfg(feature = "testing")]
 pub use navree_testing as testing;
+#[cfg(feature = "time")]
+pub use navree_time as time;
 
 // L4
 #[cfg(feature = "access")]

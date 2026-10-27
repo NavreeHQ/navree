@@ -1172,6 +1172,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "chrono-tz"
+version = "0.10.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a6139a8597ed92cf816dfb33f5dd6cf0bb93a6adc938f11039f371bc5bcd26c3"
+dependencies = [
+ "chrono",
+ "phf 0.12.1",
+]
+
+[[package]]
 name = "cipher"
 version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3939,6 +3949,7 @@ dependencies = [
  "navree-storage",
  "navree-telemetry",
  "navree-testing",
+ "navree-time",
  "navree-ui",
  "navree-validation",
  "navree-view",
@@ -5074,6 +5085,7 @@ dependencies = [
  "navree-kernel",
  "navree-telemetry",
  "navree-testing",
+ "navree-time",
  "sea-orm",
  "sea-orm-migration",
  "serde",
@@ -5082,6 +5094,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -5264,6 +5277,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "navree-time"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "chrono-tz",
+ "garde",
+ "http",
+ "http-body-util",
+ "navree-config",
+ "navree-contracts",
+ "navree-http",
+ "navree-kernel",
+ "sea-orm",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tower",
+ "tracing",
+ "utoipa",
+ "uuid",
+]
+
+[[package]]
 name = "navree-ui"
 version = "0.1.0"
 dependencies = [
@@ -5386,6 +5424,7 @@ dependencies = [
  "navree-mail",
  "navree-telemetry",
  "navree-testing",
+ "navree-time",
  "navree-view",
  "navree-workspace",
  "sea-orm",
@@ -5960,6 +5999,15 @@ dependencies = [
 
 [[package]]
 name = "phf"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "913273894cec178f401a31ec4b656318d95473527be05c0752cc41cdc32be8b7"
+dependencies = [
+ "phf_shared 0.12.1",
+]
+
+[[package]]
+name = "phf"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c1562dc717473dbaa4c1f85a36410e03c047b2e7df7f45ee938fbef64ae7fadf"
@@ -6021,6 +6069,15 @@ dependencies = [
  "quote",
  "syn 2.0.119",
  "uncased",
+]
+
+[[package]]
+name = "phf_shared"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "06005508882fb681fd97892ecff4b7fd0fee13ef1aa569f8695dae7ab9099981"
+dependencies = [
+ "siphasher",
 ]
 
 [[package]]

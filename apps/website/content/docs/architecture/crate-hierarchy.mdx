@@ -18,7 +18,7 @@ L7  navree-billing  navree-search  navree-lighthouse  navree-logbook  navree-hel
 L6  navree-social  navree-webhooks  navree-flags  navree-mcp  navree-ai (ecosystem libraries)
 L5  navree-auth  navree-workspace  navree-redis
 L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify  navree-ui
-L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage
+L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage  navree-time
 L2  navree-http  navree-log  navree-crypto  navree-events  navree-view  navree-cache  navree-http-client  navree-schema
 L1  navree-contracts  navree-config
 L0  navree-kernel                                navree-macros (proc-macro; no runtime navree deps)   navree-dock (dev tool; no navree deps)
@@ -46,12 +46,13 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L3 | `navree-mail` | Mailables from templates; SMTP, log, array and failover transports; queued sending |
 | L3 | `navree-realtime` | Pusher-protocol WebSocket server and a signed relay for other processes |
 | L3 | `navree-storage` | Named disks on object_store, streaming, signed temporary URLs, upload checks |
+| L3 | `navree-time` | [Time zones](/docs/digging-deeper/time-zones/): the request's zone, local days, send windows, holidays, local-time SQL |
 | L4 | `navree-session` | Encrypted session cookies, memory and database stores, CSRF |
 | L4 | `navree-validation` | `Valid<T>` extractors on garde, field-level messages, async rules |
 | L4 | `navree-queue` | Database and memory job queues, workers, retries with backoff |
 | L4 | `navree-audit` | Audit trail of data changes, sign-ins, permission changes and denials |
 | L4 | `navree-access` | Roles, permissions and abilities, record checks, SQL list filters |
-| L4 | `navree-schedule` | Cron schedules, overlap prevention, single-node runs |
+| L4 | `navree-schedule` | Cron schedules in UTC, a zone or each workspace's local time, overlap prevention, single-node runs |
 | L4 | `navree-notify` | Notifications over mail, database and broadcast, with read state |
 | L4 | `navree-ui` | The UI kit of the server-rendered tools: the app shell, components as MiniJinja macros, embedded CSS, JS and fonts |
 | L5 | `navree-auth` | JWT access tokens, rotating refresh tokens, strategies, accounts, 2FA |
@@ -84,14 +85,16 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | `navree-testing`, `navree-observe`, `navree-api` | kernel, contracts, config, http |
 | `navree-mail` | kernel, contracts, config, view |
 | `navree-realtime`, `navree-storage` | kernel, contracts, config, http, crypto |
+| `navree-time` | kernel, contracts, config, http |
 | `navree-session` | kernel, contracts, config, http, crypto, db |
 | `navree-validation`, `navree-audit` | kernel, contracts, config, http, db |
-| `navree-queue`, `navree-schedule` | kernel, contracts, config, db |
+| `navree-queue` | kernel, contracts, config, db |
+| `navree-schedule` | kernel, contracts, config, db, time |
 | `navree-access` | kernel, contracts, config, http, db, cache |
 | `navree-notify` | kernel, contracts, config, http, db, mail |
 | `navree-ui` | kernel, contracts, config, http, view |
 | `navree-auth` | kernel, contracts, config, http, db, crypto, session, validation, cache, mail, access |
-| `navree-workspace` | kernel, contracts, config, http, db, crypto, events, mail, access |
+| `navree-workspace` | kernel, contracts, config, http, db, crypto, events, mail, access, time |
 | `navree-redis` | kernel, contracts, config, http, cache, db, queue, session, realtime |
 | `navree-social` | kernel, contracts, config, http, crypto, cache, events, http-client, db, audit, auth |
 | `navree-webhooks` | kernel, contracts, config, http, crypto, events, http-client, db, queue, access, workspace |
@@ -131,6 +134,7 @@ Instead, the shared shape lives in `navree-contracts` (L1) as a trait. One modul
 | `SessionStore`, `SessionRecord` | navree-session's memory and database stores | The session layer |
 | `Principal`, `AuthState`, `AuthVia` | navree-auth (through navree-http's `Authenticator`) | Every module that needs the current user |
 | `Clock` | `SystemClock`, `FixedClock` (tests), registered by your app | Modules that need "now" and tests that fix it |
+| `ZoneSource`, `ZoneOwner`, `ZoneLevel`, `ZoneRequest` | navree-workspace (workspaces), your app (users), as multi-bindings | navree-time (`CurrentZone`, `Zones`), navree-schedule (per-workspace schedules) |
 
 Two plain types live there too: `RequestId`, which the HTTP pipeline creates for each request and which logs and audit entries carry, and `Secret<T>`, the wrapper configuration structs use for keys and passwords so they never show up in logs.
 
