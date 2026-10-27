@@ -35,6 +35,10 @@ use crate::session::{
 use crate::values::key_text;
 use crate::{ActionResult, icons, money};
 
+/// The Settings screens (feature `settings`).
+#[cfg(feature = "settings")]
+pub(crate) mod settings;
+
 // ---------------------------------------------------------------------------
 // Responses
 // ---------------------------------------------------------------------------
@@ -288,6 +292,18 @@ impl<'a> Frame<'a> {
                     "url": format!("{base}/pages/{}", page.slug),
                     "active": active == format!("page:{}", page.slug),
                     "icon": icons::svg(&page.icon),
+                }),
+            );
+        }
+        #[cfg(feature = "settings")]
+        if settings::visible(cx).await {
+            push(
+                "System",
+                json!({
+                    "label": "Settings",
+                    "url": format!("{base}/settings"),
+                    "active": active == "settings",
+                    "icon": icons::svg("sliders-horizontal"),
                 }),
             );
         }

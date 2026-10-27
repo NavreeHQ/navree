@@ -1,0 +1,483 @@
+---
+title: "Settings"
+description: "Typed settings with `#[derive(Settings)]`, stored for the whole app, an organization, a workspace or a user, inherited field by field, with the source of every value."
+---
+
+## Introduction
+
+<Badge feature="settings" /> Most apps grow settings that more than one party gets a say in. The product team picks a default welcome text, an organization overrides it for all of its workspaces, one workspace overrides it again, and a user turns on a compact view for themselves. Your screens then need the value that applies and, to explain it, where it came from.
+
+`navree-settings` handles that:
+
+- **Settings are types.** A struct with `#[derive(Settings)]` is one group of settings stored under one key. Its fields are the settings, `Default` gives the values when nothing is stored, and its [garde](https://docs.rs/garde) rules check every write.
+- **Values are inherited field by field** down the chain global → organization → workspace → user. A workspace that sets only `welcome_text` still follows its organization for everything else.
+- **Every resolved value knows its source**: `default`, `global`, `organization`, `workspace` or `user`. The routes return it next to the values, so a settings screen can say "inherited from the organization" and offer to reset a field.
+- **Writes are validated, audited, cached by tag and announced.** They run in your unit of work, write a `settings.updated` audit entry, clear the cached values they affect and emit `settings.changed` after the commit.
+
+You get the `Settings` service, the `Setting<T>` extractor, `GET` and `PATCH /api/settings/{key}`, the `settings:*` commands, a [Helm](/docs/tools/helm/) screen and `SettingsFake` for tests.
+
+## Installation
+
+The `settings` feature of the `navree` facade is part of `full`, so an app on the default features has it. With a hand-picked feature list, add it by name:
+
+```toml title="Cargo.toml"
+[dependencies]
+navree = { git = "https://github.com/NavreeHQ/navree", default-features = false, features = ["settings"] }
+```
+
+It brings `navree::settings` (the `navree-settings` crate, `#[derive(Settings)]` included) and puts `SettingsModule`, `Setting` and `ModuleBuilderSettingsExt` in the prelude.
+
+Add `SettingsModule` to your app root:
+
+```rust title="src/app.rs"
+Navree::app()
+    .module(ConfigModule::for_root(sources))
+    .module(DatabaseModule::from_config())
+    .module(CacheModule::from_config())
+    .module(EventsModule::for_root())
+    .module(AuditModule::from_config())
+    .module(AccessModule::for_root(AccessOptions::default()))
+    .module(AuthModule::from_config())
+    .module(WorkspaceModule::from_config())
+    .module(PortalModule)
+    .module(SettingsModule::from_config()) // section `settings`
+    // ...
+```
+
+The module is global and contributes the migration set `settings`, which creates the `settings` table. It needs `DatabaseModule` (unless `settings.store = "memory"`) and works with whatever else the app has:
+
+| With | You get |
+|---|---|
+| `CacheModule` | Resolved values cached by tag |
+| `AuditModule` | A `settings.updated` entry for every change, in the change's transaction |
+| `EventsModule` | `settings.changed` after every committed change; deleted workspaces and organizations lose their values |
+| `WorkspaceModule` | Workspace scopes inherit their organization's values; `CurrentWorkspace` and `CurrentOrganization` pick the scope of a request |
+| `AccessModule` | The `settings.manage` check on global writes through the routes |
+
+## Configuration
+
+Every key has a default:
+
+```toml title="config/app.toml"
+[settings]
+store = "database"    # database | memory
+cache_ttl_secs = 300  # how long resolved values are cached; 0 turns the cache off
+routes = true         # GET /api/settings and GET, PATCH, DELETE /api/settings/{key}
+```
+
+From the environment: `APP_SETTINGS__STORE=memory`, `APP_SETTINGS__CACHE_TTL_SECS=60`, `APP_SETTINGS__ROUTES=false`. `SettingsModule::for_root(SettingsOptions { .. })` takes the same options in code.
+
+## Defining settings
+
+A settings type is a struct whose fields are the settings. Derive `Settings` next to `Serialize`, `Deserialize` and garde's `Validate`, and give it a `Default`:
+
+```rust title="src/modules/portal/settings.rs"
+use garde::Validate;
+use navree::settings::Settings;
+use serde::{Deserialize, Serialize};
+
+/// What the member portal shows.
+#[derive(Settings, Clone, Debug, Serialize, Deserialize, Validate)]
+#[settings(key = "portal", scopes(global, organization, workspace, user))]
+pub struct PortalSettings {
+    #[garde(skip)]
+    pub show_leaderboard: bool,
+    #[garde(length(max = 200))]
+    pub welcome_text: String,
+    #[garde(range(min = 1, max = 100))]
+    pub page_size: u32,
+}
+
+impl Default for PortalSettings {
+    fn default() -> Self {
+        Self {
+            show_leaderboard: false,
+            welcome_text: "Welcome".to_owned(),
+            page_size: 25,
+        }
+    }
+}
+```
+
+| Argument | Default | Meaning |
+|---|---|---|
+| `key = ".."` | the type name without `Settings`, in kebab case (`TeamPortalSettings` → `team-portal`) | The stored key and the routes' path segment. Keep it stable: values are keyed by it. |
+| `scopes(..)` | `global, organization, workspace` | The levels the settings may be stored at: `global`, `organization`, `workspace`, `user` |
+| `permission = ".."` | per level (see [permissions](#permissions)) | The permission a write needs at every level but the user's |
+| `read_permission = ".."` | none | The permission a read through the routes needs |
+
+The doc comment becomes the description that `settings:list`, `GET /api/settings` and Helm show. A key holds lower-case letters, digits, `-`, `_` and `.` (at most 100 characters, starting with a letter or a digit). A struct without named fields, generics, an unknown or repeated argument, an unknown level or an invalid key is a compile error. `#[derive(Settings)]` implements the `SettingsGroup` trait, whose constants (`KEY`, `SCOPES`, `DESCRIPTION`, `PERMISSION`, `READ_PERMISSION`) you can also write by hand.
+
+Each top-level field (as serde names it) is stored, inherited and reported on its own. Any serde type works as a field: a `Vec<String>` or a nested struct is inherited as one value.
+
+Register each type in the module that owns it:
+
+```rust title="src/modules/portal/mod.rs"
+#[module(
+    imports = [SettingsModule::for_feature::<PortalSettings>()],
+    providers = [PortalService],
+    controllers = [PortalController],
+)]
+pub struct PortalModule;
+```
+
+In a `register` function, `m.settings::<PortalSettings>()` does the same (`ModuleBuilderSettingsExt`). Two types with one key fail the boot, naming both, and so does a type with an invalid key, no level, or a `Default` that does not serialize to a JSON object. Reading or writing a type no module registered fails with `SettingsError::Unregistered`, whose message names the missing `for_feature` import.
+
+## Scopes and inheritance
+
+A `Scope` names who settings are resolved for and where a write goes:
+
+```rust
+use navree::settings::Scope;
+
+Scope::global();                                   // the whole app
+Scope::organization(holding.id);                   // one organization
+Scope::workspace(acme.id);                         // one workspace (and its organization)
+Scope::user(ada.id).in_workspace(acme.id);         // a user's preferences inside a workspace
+Scope::workspace(acme.id).in_organization(holding.id); // the organization named, no lookup
+```
+
+Methods that take a scope also accept a `&Workspace`, a `&CurrentWorkspace`, an `&Organization`, a `&CurrentOrganization` or a `&Principal` (its user).
+
+A scope's **target** is its most specific level: writes go there. Resolution reads the **chain** from the target up, one field at a time:
+
+1. **User.** The user's own value, when the scope names a user.
+2. **Workspace.** The workspace's value.
+3. **Organization.** The value of the organization the workspace belongs to, or the one the scope names.
+4. **Global.** The value set for the whole app.
+5. **Default.** The type's `Default`.
+
+The first level that stores the field wins and becomes its source. Levels a type does not list in `scopes(..)` are skipped: `NotificationSettings` with `scopes(global, workspace)` resolves a user in a workspace to the workspace's values, and refuses a write at the organization level.
+
+For a workspace scope whose organization you did not name, the module looks it up with `WorkspaceModule` and caches the answer; attaching or detaching the workspace clears it. Without `WorkspaceModule`, a workspace has no organization.
+
+## Reading settings
+
+### In handlers: Setting&lt;T&gt;
+
+`Setting<T>` resolves `T` for the request: the signed-in user (when `T` has the user level), in the request's workspace and that workspace's organization (when `T` has either level and the request names a workspace), over the global values. It derefs to `T`:
+
+```rust title="src/modules/portal/controller.rs"
+#[get("/home")]
+#[authenticated]
+async fn home(&self, portal: Setting<PortalSettings>) -> Json<PortalHome> {
+    Json(PortalHome {
+        welcome: portal.welcome_text.clone(),
+        leaderboard: portal.show_leaderboard,
+    })
+}
+```
+
+A request that names no workspace resolves without one. A request that names a workspace the user may not enter is refused as `CurrentWorkspace` refuses it (404 or 403). A guest gets the global values. The extractor checks no permission: it reads for your handler's logic. `portal.source("welcome_text")`, `portal.scope()` and `portal.resolved()` say where the values came from and for whom.
+
+### Anywhere: the Settings service
+
+Inject `Arc<Settings>` and pass a scope:
+
+```rust title="src/modules/portal/service.rs"
+use navree::settings::{Scope, Settings, SettingsError, Source};
+
+#[injectable]
+pub struct PortalService {
+    settings: Arc<Settings>,
+}
+
+impl PortalService {
+    pub async fn welcome(&self, workspace: &Workspace) -> Result<String, SettingsError> {
+        let portal = self.settings.resolve::<PortalSettings>(workspace).await?;
+        if portal.source("welcome_text") == Some(Source::Default) {
+            return Ok(format!("Welcome to {}", workspace.name));
+        }
+        Ok(portal.welcome_text.clone())
+    }
+
+    pub async fn leaderboard(&self, workspace: Uuid) -> Result<bool, SettingsError> {
+        let portal = self.settings.get::<PortalSettings>(Scope::workspace(workspace)).await?;
+        Ok(portal.show_leaderboard)
+    }
+
+    pub async fn page_size(&self, user: Uuid) -> Result<u32, SettingsError> {
+        Ok(self.settings.get::<PortalSettings>(Scope::user(user)).await?.page_size)
+    }
+}
+```
+
+`resolve` returns a `Resolved<T>`: the value (it derefs to it), `sources` (each field's `Source`), `overridden` (the fields stored at the target's own level, sorted) and the `scope` it was resolved for, with its organization filled in. `get` returns the value alone. `Resolved<T>` serializes as `{data, sources, overridden}`, so a handler can return it as JSON.
+
+A stored value the type no longer accepts (the field's type changed since) is skipped with a warning in the log, so the level below shows through; a stored field the type no longer has is ignored.
+
+## Changing settings
+
+### Update
+
+`update` sets fields at the level of the scope's target, in your unit of work, and returns the result. The patch is anything that serializes to a JSON object:
+
+```rust
+settings
+    .update::<PortalSettings>(&uow, Scope::workspace(acme.id), json!({"welcome_text": "Welcome to Acme"}))
+    .await?;
+```
+
+The values after the patch, inherited ones included, are checked with `T`'s garde rules before anything is stored, so a rule across fields sees what will actually apply. A failure is `SettingsError::Invalid` with the messages by field; returned from a handler it is a 400:
+
+```json title="400 Bad Request" wrap
+{"statusCode":400,"message":["page_size must not be less than 1"],"error":"Bad Request","code":"validation_failed","errors":{"page_size":["page_size must not be less than 1"]}}
+```
+
+A field the type does not have is `SettingsError::UnknownFields` (a 400 naming it), a level the type does not allow `SettingsError::ScopeNotAllowed` (a 400), and a patch that is not an object `SettingsError::InvalidPatch`. A field set to the value it already inherits is still stored: it no longer follows the level above. A patch that changes nothing stored writes nothing.
+
+### Inherit and reset
+
+`inherit` removes one field from the target's level, so it follows the level above again; `reset` removes all of them:
+
+```rust
+settings.inherit::<PortalSettings>(&uow, Scope::workspace(acme.id), "welcome_text").await?;
+settings.reset::<PortalSettings>(&uow, Scope::workspace(acme.id)).await?;
+```
+
+Inheriting a field that already inherits changes nothing. `stored::<T>(scope)` returns the fields stored at a level, without inheritance.
+
+### Units of work, audit and events
+
+Writes take the [unit of work](/docs/database/unit-of-work/) they belong to: with the database store they join its transaction and commit or roll back with it, and reads inside it see its uncommitted writes. Each change:
+
+- writes a `settings.updated` [audit entry](/docs/security/audit-log/) in the same transaction (with `AuditModule`): subject `Settings` and the key, the old and new values of the changed fields, and `scope_type`, `scope_id` and `fields` in its metadata, with the unit of work's actor;
+- clears the cached values it affects, at once and again after the commit;
+- emits `SettingsChanged` (`settings.changed`) through the [event bus](/docs/digging-deeper/events/) once the unit of work commits, never for a rolled-back change.
+
+```rust
+use navree::settings::SettingsChanged;
+
+impl Listener<SettingsChanged> for PortalCache {
+    fn handle<'a>(&'a self, event: &'a SettingsChanged, _ctx: &'a AppContext) -> BoxFuture<'a, Result<(), BoxError>> {
+        Box::pin(async move {
+            if event.key == "portal" {
+                self.forget(event.scope_type, event.scope_id).await;
+            }
+            Ok(())
+        })
+    }
+}
+```
+
+`SettingsChanged` carries `key`, `scope_type`, `scope_id` (`None` at the global level), `fields`, `old` and `new` (the changed fields as stored before and after; a field missing from `new` inherits again) and `actor_id`.
+
+When a workspace or an organization is deleted, the module deletes the values stored for it (with `EventsModule`, from `WorkspaceDeleted` and `OrganizationDeleted`). `Settings::forget_scope(target)` does the same by hand.
+
+## Over HTTP
+
+With `settings.routes = true` (the default) the module mounts, for signed-in users:
+
+| Route | Answers |
+|---|---|
+| `GET /api/settings` | `{"data": [{key, description, scopes, fields}]}`: every registered type |
+| `GET /api/settings/{key}?scope=` | `{data, sources, overridden}` at the level |
+| `PATCH /api/settings/{key}?scope=` `{field: value, ..}` | Sets the fields at the level; the result |
+| `DELETE /api/settings/{key}?scope=` | Every field at the level inherits again; the result |
+| `DELETE /api/settings/{key}/{field}?scope=` | One field inherits again; the result |
+
+`scope` picks the level: `global`, `organization` (the request's organization, `X-Organization`), `workspace` (the request's workspace, `X-Workspace`) or `user` (the signed-in user, over the request's workspace when it names one). Without it, the most specific level the type allows.
+
+```http
+GET /api/settings/portal?scope=workspace
+X-Workspace: acme
+```
+
+```json
+{
+  "data": { "show_leaderboard": true, "welcome_text": "Welcome to Acme", "page_size": 50 },
+  "sources": { "page_size": "global", "show_leaderboard": "organization", "welcome_text": "workspace" },
+  "overridden": ["welcome_text"]
+}
+```
+
+A settings screen shows `data`, marks each field with its source, and offers "reset" on the fields in `overridden`. An unknown key is a 404, an unknown level or one the type does not allow a 400. The routes are in the [OpenAPI document](/docs/digging-deeper/openapi/) under the `Settings` tag.
+
+### Permissions
+
+Reads need what the level needs: any signed-in user reads the global values, a member reads the organization's or the workspace's, and users read their own. A type with `read_permission` also needs that permission at the level.
+
+Writes need the type's `permission`, or by default:
+
+| Level | Permission | Checked |
+|---|---|---|
+| `global` | `settings.manage` | App-wide, with navree-access |
+| `organization` | `organization.update` | In the request's organization (org admins and owners) |
+| `workspace` | `workspace.update` | In the request's workspace (admins and owners) |
+| `user` | none | Users change their own values |
+
+## Managing settings
+
+### From the command line
+
+| Command | What it does |
+|---|---|
+| `settings:list` | Every registered type with its levels, fields and description |
+| `settings:show <key> [--workspace <id-or-slug>] [--organization <id-or-slug>] [--user <id>]` | The resolved values with the source of each |
+| `settings:set <key> <field>=<value>... [scope options]` | Sets fields at the level; without an option, globally |
+| `settings:inherit <key> <field>... \| --all [scope options]` | Makes fields inherit again |
+
+```sh
+navree settings:set portal page_size=50 "welcome_text=Hello there"
+navree settings:set portal show_leaderboard=true --organization holding
+navree settings:show portal --workspace acme
+```
+
+```text
+portal for workspace 0192e4c1-5b1e-7a40-9f43-2c0d1b8e6a11 < organization 0192e4c0-9d2a-7c11-8b0e-5f3a7d2c9e04 < global
+
+field             value               source
+page_size         50                  global
+show_leaderboard  true                organization
+welcome_text      "Welcome to Acme"   workspace *
+
+* set at this level
+```
+
+A value is read as JSON when it parses (`true`, `5`, `"5"`, `["a","b"]`) and as text otherwise. The options combine: `--user <id> --workspace acme` is that user's preferences inside Acme. Slugs need `WorkspaceModule`; ids always work. `settings:set` and `settings:inherit` validate like the service and run in a unit of work of their own.
+
+### In Helm
+
+With the `helm` and `settings` features on (both are in `full`), [Helm](/docs/tools/helm/) gets a **Settings** entry under **System**. It lists the types the signed-in user manages: those whose `permission` they hold app-wide, else those `settings.manage` covers. Each type opens a form for a level, global or an organization, workspace or user named by its id or slug, showing every field with where its value comes from. Saving stores only the fields you changed, so the others keep inheriting; a field set at the level has an **Inherit** button. Writes go through `Settings` in the request's unit of work, so they are validated, audited and announced like any other.
+
+## Caching
+
+With `CacheModule` in the app, resolved values are cached for `settings.cache_ttl_secs` (300 seconds), as are the organizations of workspaces. Each entry is tagged `settings:<key>` and `settings:<key>:<level>:<id>` for every level of its chain, so a write clears exactly what it affects: a workspace write clears that workspace's entries and its users', a global write every entry of the key. Reads inside a unit of work whose transaction is open read through it and are not cached. Without `CacheModule`, or with `cache_ttl_secs = 0`, every read goes to the store.
+
+With several app instances, a change reaches the others as their [cache store](/docs/digging-deeper/cache/) allows: within `cache_ttl_secs` with the per-process memory store, at once with a shared Redis store.
+
+## Storage
+
+Values live in one table:
+
+| Column | Holds |
+|---|---|
+| `key` | The settings key (`portal`) |
+| `scope_type` | `global`, `organization`, `workspace` or `user` |
+| `scope_id` | The organization's, workspace's or user's id; the nil UUID for the global level |
+| `value` | The fields set at that level, as a JSON object |
+| `overridden_fields` | Their names, sorted, as a JSON array |
+| `updated_at`, `updated_by` | When and by whom they last changed |
+
+The primary key is `(key, scope_type, scope_id)`, with an index on `(scope_type, scope_id)`. A row holds only the fields set at its level, and disappears with its last field. Scope ids are not foreign keys, so the table works with any user, workspace and organization store. It works on PostgreSQL, MySQL and SQLite.
+
+Storage sits behind the `SettingsStore` trait: `DatabaseSettingsStore` (the table) and `MemorySettingsStore` (`settings.store = "memory"`, lost on restart and not transactional).
+
+## Testing
+
+In an app test, use the memory store, or the database store on a temporary database, and write the values each test needs through `Settings`:
+
+```rust title="tests/portal.rs"
+use navree::settings::{Scope, Settings};
+use navree::testing::{TestApp, principal};
+
+#[tokio::test]
+async fn the_home_page_shows_the_workspace_welcome() {
+    let app = TestApp::builder()
+        .temp_database()
+        .module(DatabaseModule::from_config())
+        .module(PortalModule)
+        .module(SettingsModule::from_config())
+        .build()
+        .await;
+    let settings = app.get::<Settings>().await;
+    let uow = app.get::<Db>().await.uow(None, None).await;
+    settings
+        .update::<PortalSettings>(&uow, Scope::global(), json!({"welcome_text": "Hello"}))
+        .await
+        .unwrap();
+    uow.commit().await.unwrap();
+
+    app.acting_as(principal(Uuid::now_v7()))
+        .get("/api/portal/home")
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("welcome", json!("Hello"));
+}
+```
+
+For unit tests, `SettingsFake` gives a `Settings` with the real resolution and validation on an in-memory store, with no registration and no database:
+
+```rust title="src/modules/portal/service.rs"
+#[cfg(test)]
+mod tests {
+    use navree::settings::{Scope, SettingsFake};
+
+    use super::*;
+
+    #[tokio::test]
+    async fn the_leaderboard_follows_the_organization() {
+        let (acme, holding) = (Uuid::now_v7(), Uuid::now_v7());
+        let fake = SettingsFake::new().attach(acme, holding);
+        fake.set::<PortalSettings>(Scope::organization(holding), json!({"show_leaderboard": true}))
+            .await
+            .unwrap();
+
+        let service = PortalService { settings: Arc::new(fake.settings()) };
+        assert!(service.leaderboard(acme).await.unwrap());
+    }
+}
+```
+
+`set` stores values as test setup: validated like a write, but not recorded as a change. `attach(workspace, organization)` tells the fake which organization a workspace belongs to.
+
+The fake records every change made through its `Settings`. Install it in a test app to check what a route or a job wrote:
+
+```rust
+let fake = SettingsFake::new().register::<PortalSettings>();
+let app = TestApp::builder()
+    .override_value(Arc::new(fake.settings()))
+    // ...
+    .build()
+    .await;
+
+// ... a request that changes the workspace's portal settings ...
+fake.assert_changed::<PortalSettings>(Scope::workspace(acme));
+fake.assert_not_changed::<NotificationSettings>();
+```
+
+`changes()` lists every change in order, `changes_of::<T>(scope)` those of one type at one level, and `clear()` forgets them. Call `register::<T>()` up front when the code under test reads by key, as the routes and commands do; typed calls register their type on first use.
+
+## Reference
+
+| Key | Default | Meaning |
+|---|---|---|
+| `settings.store` | `database` | `database` or `memory` |
+| `settings.cache_ttl_secs` | `300` | Cache lifetime of resolved values; `0` turns the cache off |
+| `settings.routes` | `true` | Mounts `/api/settings` |
+
+| `Settings` method | |
+|---|---|
+| `resolve::<T>(scope)` | `Resolved<T>`: the values with their sources |
+| `get::<T>(scope)` | The values alone |
+| `update::<T>(&uow, scope, patch)` | Sets fields at the target's level, validated |
+| `inherit::<T>(&uow, scope, field)` | One field follows the level above again |
+| `reset::<T>(&uow, scope)` | Every field at the level inherits again |
+| `stored::<T>(scope)` | The fields stored at the target's level |
+| `resolve_key`, `update_key`, `inherit_key`, `reset_key` | The same by key, as JSON (`ResolvedSettings`) |
+| `registry()`, `rows(key)` | The registered types; every stored row |
+| `complete(scope)` | The scope with its workspace's organization filled in |
+| `forget_scope(target)` | Deletes every value stored at a level, without audit or events |
+
+| `SettingsError` | Response |
+|---|---|
+| `UnknownKey` | 404 |
+| `Invalid`, `UnknownFields`, `InvalidPatch` | 400 with `errors` by field |
+| `ScopeNotAllowed` | 400 |
+| `Unregistered`, `Definition`, `Database`, `Corrupt`, `Other` | 500 (logged) |
+
+<LinkCards>
+  <LinkCard href="/docs/workspaces/organizations/" title="Organizations">
+    The level between the app and its workspaces.
+  </LinkCard>
+  <LinkCard href="/docs/basics/validation/" title="Validation">
+    The garde rules every write is checked with.
+  </LinkCard>
+  <LinkCard href="/docs/tools/helm/" title="Helm">
+    The admin panel with the Settings screens.
+  </LinkCard>
+  <LinkCard href="/docs/packages/feature-flags/" title="Feature flags">
+    On or off per user, workspace or plan, for releasing features.
+  </LinkCard>
+</LinkCards>

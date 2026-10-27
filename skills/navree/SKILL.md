@@ -120,6 +120,7 @@ navree list                                 # every command of the app
 | Sign in with Google, GitHub, Apple, Microsoft or an OpenID Connect provider | `navree-social` |
 | Sending webhooks to customers' URLs, receiving Stripe, GitHub, Paddle or other signed webhooks | `navree-webhooks` |
 | Feature flags: hiding a feature until it is released, gradual rollouts, a kill switch, flags for the front end | `navree-flags` |
+| Settings an app, organization, workspace or user can change, inherited down that chain; showing where a value comes from; settings screens and resets | `navree-settings` |
 | Search box, command palette, indexes, Meilisearch/Typesense/Tantivy, vector search | `navree-search` |
 | Receiving requests, queries, jobs, mail or log lines in your own code; tracing with OpenTelemetry; trace ids; asserting on events or spans in tests | `navree-telemetry` |
 | A GraphQL API: resolvers, dataloaders, subscriptions | `navree-graphql` |

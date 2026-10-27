@@ -33,6 +33,7 @@ driver; SQLite is the default and is compiled in.
 | `navree::schedule` | navree-schedule | `schedule` | `ScheduleModule::for_root()` | | `m.schedule`, `schedule:work`, `schedule:run` |
 | `navree::notify` | navree-notify | `notify` | `NotifyModule::from_config()` | `notify` | `Notifier`, `Notification`, `/api/notifications` |
 | `navree::auth` | navree-auth | `auth` | `AuthModule::from_config()` | `auth` | `/api/auth/*`, `AuthService`, `CurrentUser`, strategies, two-factor, sessions, `#[recent_auth]`, impersonation, passwordless, passkeys, platform sign-in, token exchange |
+| `navree::settings` | navree-settings | `settings` | `SettingsModule::from_config()` + `SettingsModule::for_feature::<T>()` | `settings` | `#[derive(Settings)]`, `Settings`, `Scope`, `Resolved<T>`, `Setting<T>`, `/api/settings/{key}`, `settings:*` commands, `SettingsFake` |
 | `navree::billing` | navree-billing | `billing` (opt-in, not in `full`) | `BillingModule::from_config()` + `BillingModule::for_feature::<Workspace>()` | `billing` | `Billing`, `Billable`, `Subscribed`, `/api/billing/*`, `BillingFake`, `billing:*` commands |
 | `navree::dock` | navree-dock | `dock` (opt-in, not in `full`) | (a tool, not a module) | `dock.toml` | `DockFile`, `Dock`, `app_env`: the library behind `navree dock` |
 

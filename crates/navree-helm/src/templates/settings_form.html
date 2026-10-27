@@ -1,0 +1,61 @@
+{% extends "helm/layout.html" %}
+{% import "helm/macros.html" as m %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Settings</p>
+    <h1>{{ settings.label }}</h1>
+    {% if settings.description %}<p class="muted">{{ settings.description }}</p>{% endif %}
+  </div>
+</div>
+
+<form method="get" action="{{ settings.url }}" class="card filters" aria-label="Choose the level">
+  <div class="field">
+    <label for="level" class="label">Level</label>
+    <select id="level" name="level">
+      {% for l in levels %}<option value="{{ l.value }}"{% if l.selected %} selected{% endif %}>{{ l.label }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="target" class="label">Organization, workspace or user</label>
+    <input type="text" id="target" name="target" value="{{ target }}" placeholder="Id or slug (not for the global level)">
+  </div>
+  <div class="form-buttons">
+    <button type="submit" class="btn btn-secondary">Open</button>
+  </div>
+</form>
+
+{% if needs_target and not target_label %}
+<section class="card empty">
+  <p>Name the {{ level }} to edit its settings: its id{% if level != "user" %} or slug{% endif %}.</p>
+</section>
+{% else %}
+<section class="card form-card" aria-label="{{ level_label }} values">
+  <p class="eyebrow">{{ level_label }}{% if target_label %}: {{ target_label }}{% endif %}</p>
+  {% if errors_summary %}
+  <div class="flash flash-error" role="alert">
+    <p>Please fix the highlighted fields.</p>
+    {% if general_error %}<p>{{ general_error }}</p>{% endif %}
+  </div>
+  {% elif general_error %}
+  <div class="flash flash-error" role="alert">{{ general_error }}</div>
+  {% endif %}
+  <form method="post" action="{{ settings.save_url }}" class="stack" novalidate>
+    <input type="hidden" name="_csrf" value="{{ panel.csrf }}">
+    {% for f in fields %}
+    <div class="setting" data-source="{{ f.source }}">
+      {{ m.input(f) }}
+      {% if f.overridden %}
+      <button type="submit" class="btn btn-ghost btn-sm" formaction="{{ settings.inherit_url }}" name="_inherit" value="{{ f.name }}">Inherit {{ f.label|lower }}</button>
+      {% endif %}
+    </div>
+    {% endfor %}
+    <p class="help">Changing a value sets it at this level; the others keep following the level above.</p>
+    <div class="form-buttons">
+      <button type="submit" class="btn btn-primary">Save</button>
+      <a class="btn btn-ghost" href="{{ settings.index_url }}">Back</a>
+    </div>
+  </form>
+</section>
+{% endif %}
+{% endblock %}
