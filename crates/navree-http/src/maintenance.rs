@@ -2,7 +2,9 @@
 
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, PoisonError, RwLock};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{PoisonError, RwLock};
+#[cfg(test)]
 use std::time::Duration;
 
 use http::StatusCode;
@@ -13,7 +15,9 @@ use tokio::time::Instant;
 use crate::AppError;
 
 /// How long a file check is reused before the file is looked at again.
-const CHECK_INTERVAL: Duration = Duration::from_secs(1);
+#[cfg(test)]
+const CHECK_INTERVAL: Duration = Duration::from_millis(CHECK_INTERVAL_MS);
+const CHECK_INTERVAL_MS: u64 = 1000;
 
 /// The contents of the maintenance file (written by the `down` command).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -51,19 +55,31 @@ impl MaintenanceInfo {
 
 /// Maintenance-mode state backed by a file, so `down` in one process takes
 /// effect in a running server within a second.
+///
+/// Every request reads it, so while the app is up it takes no lock: the
+/// state is an atomic flag, and the time of the last check an atomic
+/// timestamp that one request at a time claims to re-read the file.
 #[derive(Debug)]
 pub struct MaintenanceMode {
     path: PathBuf,
-    state: RwLock<Option<MaintenanceInfo>>,
-    checked_at: Mutex<Option<Instant>>,
+    /// Whether the app is down (then `info` says how).
+    down: AtomicBool,
+    /// The contents of the maintenance file, while the app is down.
+    info: RwLock<Option<MaintenanceInfo>>,
+    /// When the state was last set, in milliseconds after `epoch`, plus one
+    /// (0: never).
+    checked_at: AtomicU64,
+    epoch: Instant,
 }
 
 impl MaintenanceMode {
     pub(crate) fn new(path: PathBuf) -> Self {
         Self {
             path,
-            state: RwLock::new(None),
-            checked_at: Mutex::new(None),
+            down: AtomicBool::new(false),
+            info: RwLock::new(None),
+            checked_at: AtomicU64::new(0),
+            epoch: Instant::now(),
         }
     }
 
@@ -79,7 +95,10 @@ impl MaintenanceMode {
             let info = read_info(&self.path).await;
             self.set(info);
         }
-        self.state
+        if !self.down.load(Ordering::Acquire) {
+            return None;
+        }
+        self.info
             .read()
             .unwrap_or_else(PoisonError::into_inner)
             .clone()
@@ -110,27 +129,28 @@ impl MaintenanceMode {
     }
 
     fn set(&self, info: Option<MaintenanceInfo>) {
-        *self.state.write().unwrap_or_else(PoisonError::into_inner) = info;
-        *self
-            .checked_at
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner) = Some(Instant::now());
+        let down = info.is_some();
+        *self.info.write().unwrap_or_else(PoisonError::into_inner) = info;
+        self.down.store(down, Ordering::Release);
+        self.checked_at.store(self.now(), Ordering::Release);
     }
 
     /// True for the one caller that should re-read the file now.
     fn claim_refresh(&self) -> bool {
-        let mut checked_at = self
-            .checked_at
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner);
-        let now = Instant::now();
-        match *checked_at {
-            Some(at) if now.duration_since(at) < CHECK_INTERVAL => false,
-            _ => {
-                *checked_at = Some(now);
-                true
-            }
+        let now = self.now();
+        let at = self.checked_at.load(Ordering::Acquire);
+        if at != 0 && now.saturating_sub(at) < CHECK_INTERVAL_MS {
+            return false;
         }
+        self.checked_at
+            .compare_exchange(at, now, Ordering::AcqRel, Ordering::Relaxed)
+            .is_ok()
+    }
+
+    /// Milliseconds since `epoch`, plus one (never 0).
+    fn now(&self) -> u64 {
+        let elapsed = Instant::now().duration_since(self.epoch).as_millis();
+        u64::try_from(elapsed).unwrap_or(u64::MAX - 1) + 1
     }
 }
 
@@ -170,6 +190,54 @@ mod tests {
         assert!(!mode.path().exists());
         assert_eq!(mode.current().await, None);
         mode.up().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_file_removed_by_another_process_is_noticed_within_a_second() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("down");
+        std::fs::write(&path, r#"{"retry": 5}"#).unwrap();
+        let mode = MaintenanceMode::new(path.clone());
+        assert_eq!(mode.current().await.and_then(|info| info.retry), Some(5));
+
+        std::fs::remove_file(&path).unwrap();
+        assert!(
+            mode.current().await.is_some(),
+            "the last check is reused for up to a second"
+        );
+        tokio::time::sleep(CHECK_INTERVAL + Duration::from_millis(100)).await;
+        assert_eq!(mode.current().await, None);
+    }
+
+    /// Many requests at once: one of them reads the file, all see the
+    /// same state.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn concurrent_requests_agree_on_the_state() {
+        let dir = tempfile::tempdir().unwrap();
+        let mode = std::sync::Arc::new(MaintenanceMode::new(dir.path().join("down")));
+        let readers = |mode: &std::sync::Arc<MaintenanceMode>| {
+            (0..64)
+                .map(|_| {
+                    let mode = mode.clone();
+                    tokio::spawn(async move { mode.current().await })
+                })
+                .collect::<Vec<_>>()
+        };
+        for reader in readers(&mode) {
+            assert_eq!(reader.await.unwrap(), None);
+        }
+        let info = MaintenanceInfo {
+            message: Some("Upgrading".into()),
+            ..MaintenanceInfo::default()
+        };
+        mode.down(info.clone()).await.unwrap();
+        for reader in readers(&mode) {
+            assert_eq!(reader.await.unwrap(), Some(info.clone()));
+        }
+        mode.up().await.unwrap();
+        for reader in readers(&mode) {
+            assert_eq!(reader.await.unwrap(), None);
+        }
     }
 
     #[tokio::test]

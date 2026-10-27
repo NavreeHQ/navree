@@ -13,6 +13,8 @@ workspace = true
 [dependencies]
 axum = { workspace = true }
 chrono = { workspace = true }
+# The per-IP limit and route throttles: keys sharded across locks.
+dashmap = { workspace = true }
 futures-util = { workspace = true }
 hex = { workspace = true }
 hmac = { workspace = true }
