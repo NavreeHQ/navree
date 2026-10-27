@@ -763,6 +763,22 @@ fn configure_postgres(
         }
         o
     });
+    // The driver starts every session with `TimeZone=UTC`, which wins over
+    // the `-c` options above; the time zone is set once connected instead.
+    if let Some(timezone) = &postgres.timezone {
+        let sql = format!("SET TIME ZONE '{timezone}'");
+        connect.map_sqlx_postgres_pool_opts(move |pool| {
+            let sql = sql.clone();
+            pool.after_connect(move |conn, _| {
+                let sql = sql.clone();
+                Box::pin(async move {
+                    sea_orm::sqlx::Executor::execute(conn, sea_orm::sqlx::AssertSqlSafe(sql))
+                        .await
+                        .map(|_| ())
+                })
+            })
+        });
+    }
     Ok(())
 }
 
