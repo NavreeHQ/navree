@@ -12,8 +12,8 @@ use navree_http::AppError;
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum DocumentsError {
-    /// No template has this name: neither `<name>.typ` nor `<name>.html`
-    /// in a template directory or among the embedded templates.
+    /// No template has this name: no `<name>.html` in a template
+    /// directory or among the embedded templates.
     #[error("document template `{name}` not found (tried {})", tried.join(", "))]
     TemplateNotFound {
         /// The name asked for.
@@ -21,28 +21,28 @@ pub enum DocumentsError {
         /// The file names tried, in order.
         tried: Vec<String>,
     },
-    /// The template failed to compile or render: a syntax error, an
-    /// unknown variable, a missing image. `line` and `column` (from 1)
+    /// The template failed to render: a syntax error, an undefined
+    /// variable, an image that does not decode. `line` and `column` (from 1)
     /// point into `file` when the error has a location.
     #[error("{}", template_message(file, *line, *column, message))]
     Template {
-        /// The file the error is in (`certificates/classic.typ`).
+        /// The file the error is in (`certificates/classic.html`).
         file: String,
         /// The line, from 1.
         line: Option<usize>,
         /// The column, from 1.
         column: Option<usize>,
-        /// What went wrong, with the compiler's hints.
+        /// What went wrong.
         message: String,
     },
     /// The data could not be turned into JSON.
     #[error("document data is not valid JSON: {0}")]
     Data(String),
     /// The engine is not compiled in (a crate feature is off) or cannot
-    /// start (no Chrome executable).
+    /// start (no Chrome executable, no fonts).
     #[error("PDF engine `{engine}` is unavailable: {reason}")]
     EngineUnavailable {
-        /// `typst` or `chrome`.
+        /// `native` or `chrome`.
         engine: &'static str,
         /// Why.
         reason: String,
@@ -51,7 +51,7 @@ pub enum DocumentsError {
     /// connection dropped, the browser answered with an error).
     #[error("PDF engine `{engine}` failed: {message}")]
     Engine {
-        /// `typst` or `chrome`.
+        /// `native` or `chrome`.
         engine: &'static str,
         /// What went wrong.
         message: String,
@@ -59,7 +59,7 @@ pub enum DocumentsError {
     /// Rendering took longer than the engine's time limit.
     #[error("rendering with `{engine}` took longer than {secs} s")]
     Timeout {
-        /// `typst` or `chrome`.
+        /// `native` or `chrome`.
         engine: &'static str,
         /// The limit.
         secs: u64,
@@ -118,14 +118,14 @@ mod tests {
     #[test]
     fn template_errors_name_the_file_line_and_column() {
         let error = DocumentsError::Template {
-            file: "certificates/classic.typ".into(),
+            file: "certificates/classic.html".into(),
             line: Some(3),
             column: Some(14),
-            message: "unknown variable: nmae".into(),
+            message: "undefined value".into(),
         };
         assert_eq!(
             error.to_string(),
-            "certificates/classic.typ:3:14: unknown variable: nmae"
+            "certificates/classic.html:3:14: undefined value"
         );
         let error = DocumentsError::Template {
             file: "invoices/show.html".into(),
@@ -150,12 +150,12 @@ mod tests {
         assert_eq!(timeout.status(), StatusCode::SERVICE_UNAVAILABLE);
         let missing = DocumentsError::TemplateNotFound {
             name: "x".into(),
-            tried: vec!["x.typ".into(), "x.html".into()],
+            tried: vec!["x.html".into()],
         };
         assert_eq!(missing.status(), StatusCode::INTERNAL_SERVER_ERROR);
         assert_eq!(
             missing.to_string(),
-            "document template `x` not found (tried x.typ, x.html)"
+            "document template `x` not found (tried x.html)"
         );
     }
 }

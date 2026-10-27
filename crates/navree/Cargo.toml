@@ -329,10 +329,10 @@ ai = [
     "access",
     "auth",
 ]
-## L6 (opt-in: not in `full`; the embedded Typst compiler and the bundled
-## fonts add to the build)
-## Documents: PDF from Typst or HTML templates (Typst in process, headless
-## Chrome), DOCX, merge and stamps, queued renders.
+## L6 (opt-in: not in `full`; the native PDF engine and the bundled fonts
+## add to the build)
+## Documents: PDF from HTML templates or `PdfDocument` (the native engine in
+## process, or headless Chrome), DOCX, merge and stamps, queued renders.
 documents = ["dep:navree-documents", "http", "view", "storage"]
 ## L7 (opt-in, not in `full`)
 ## Search: full-text and vector search over entities (postgres,

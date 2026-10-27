@@ -1,8 +1,8 @@
 //! `DocumentsModule` in an app: the service, responses, error mapping,
 //! embedded templates, queued renders on a worker and the commands.
 
-// Most of these tests need the Typst engine.
-#![cfg_attr(not(feature = "typst"), allow(unused_imports, dead_code))]
+// Most of these tests need the native engine.
+#![cfg_attr(not(feature = "native"), allow(unused_imports, dead_code))]
 
 use std::sync::Arc;
 
@@ -58,7 +58,7 @@ impl Controller for DocumentsController {
             RouteDef::on(Method::GET, "/inline", move || {
                 let this = inline.clone();
                 async move {
-                    let pdf: Pdf = this.0.render(&Render::typst("Inline")).await?;
+                    let pdf: Pdf = this.0.render(&Render::html("<p>Inline</p>")).await?;
                     Ok::<_, AppError>(pdf)
                 }
             })
@@ -110,11 +110,11 @@ impl Module for ReceiptsModule {
     fn register(&self, m: &mut ModuleBuilder) {
         m.controller::<DocumentsController>().document_files([
             (
-                "receipts/simple.typ",
-                &b"Receipt for #json(\"/data.json\").name"[..],
+                "receipts/simple.html",
+                &b"<p>Receipt for {{ name }}</p>"[..],
             ),
             // Not a valid path: ignored.
-            ("../outside.typ", &b"x"[..]),
+            ("../outside.html", &b"x"[..]),
         ]);
     }
 }
@@ -137,7 +137,7 @@ fn app() -> TestAppBuilder {
         .module(ReceiptsModule)
 }
 
-#[cfg(feature = "typst")]
+#[cfg(feature = "native")]
 #[tokio::test]
 async fn handlers_render_and_download_documents() {
     let app = app().build().await;
@@ -169,7 +169,7 @@ async fn handlers_render_and_download_documents() {
     assert_eq!(response.header("content-disposition"), Some("inline"));
 }
 
-#[cfg(feature = "typst")]
+#[cfg(feature = "native")]
 #[tokio::test]
 async fn template_errors_are_500s_without_details() {
     let app = app().build().await;
@@ -181,7 +181,7 @@ async fn template_errors_are_500s_without_details() {
         .assert_error(500, None);
     // The template's file and message stay in the logs.
     assert!(
-        !response.text().contains("broken.typ"),
+        !response.text().contains("broken.html"),
         "{}",
         response.text()
     );
@@ -192,9 +192,10 @@ async fn template_errors_are_500s_without_details() {
 async fn an_unavailable_engine_is_a_503() {
     let app = app()
         .config("documents.chrome.path", "/no/such/chrome")
+        .config("documents.engine", "chrome")
         .build()
         .await;
-    // invoices/show exists only as HTML, so Chrome renders it.
+    // documents.engine = "chrome": Chrome renders it.
     let documents = app.get::<Documents>().await;
     let error = documents
         .pdf(
@@ -216,7 +217,7 @@ async fn an_unavailable_engine_is_a_503() {
     assert_eq!(error.status(), http::StatusCode::SERVICE_UNAVAILABLE);
 }
 
-#[cfg(feature = "typst")]
+#[cfg(feature = "native")]
 #[tokio::test]
 async fn modules_embed_templates() {
     let app = app().build().await;
@@ -232,7 +233,7 @@ async fn modules_embed_templates() {
         !app.get::<Documents>()
             .await
             .templates()
-            .exists("../outside.typ")
+            .exists("../outside.html")
     );
 }
 
@@ -256,7 +257,7 @@ fn for_root_takes_the_options() {
     let _ = DocumentsModule::for_root(options);
 }
 
-#[cfg(feature = "typst")]
+#[cfg(feature = "native")]
 #[tokio::test]
 async fn queued_renders_run_on_a_worker() {
     use navree_documents::DocumentStatus;
@@ -313,12 +314,12 @@ async fn queued_renders_run_on_a_worker() {
     let stats = app.get::<Queue>().await.run_pending().await.unwrap();
     assert_eq!(stats.failed, 0, "{stats:?}");
     match status(queued).await {
-        DocumentStatus::Failed { error } => assert!(error.contains("broken.typ"), "{error}"),
+        DocumentStatus::Failed { error } => assert!(error.contains("broken.html"), "{error}"),
         other => panic!("{other:?}"),
     }
 }
 
-#[cfg(feature = "typst")]
+#[cfg(feature = "native")]
 #[tokio::test]
 async fn documents_render_writes_a_pdf_file() {
     let app = app().build().await;
@@ -337,7 +338,7 @@ async fn documents_render_writes_a_pdf_file() {
             "--data",
             data.to_str().unwrap(),
             "--engine",
-            "typst",
+            "native",
             "--out",
             out.to_str().unwrap(),
         ],

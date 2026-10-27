@@ -7,9 +7,7 @@ use std::sync::Arc;
 
 use bytes::Bytes;
 
-/// The file extension of Typst templates.
-pub const TYPST_EXTENSION: &str = "typ";
-/// The file extension of HTML templates (printed by Chrome).
+/// The file extension of templates (both engines print HTML).
 pub const HTML_EXTENSION: &str = "html";
 
 /// The document templates: the files under the template directories
@@ -17,7 +15,7 @@ pub const HTML_EXTENSION: &str = "html";
 /// with [`ModuleBuilderDocumentsExt::document_files`](crate::ModuleBuilderDocumentsExt::document_files).
 ///
 /// Paths are `/`-separated and relative to a template directory
-/// (`certificates/classic.typ`, `images/logo.png`). The first directory
+/// (`certificates/classic.html`, `images/logo.png`). The first directory
 /// holding a path wins, and any file wins over an embedded one, so an app
 /// can override a template a package ships by putting a file at the same
 /// path. A path that would leave its directory (`..`, an absolute path, a
@@ -118,13 +116,13 @@ impl Templates {
     }
 
     /// The directory for HTML templates that navree-view reads.
-    #[cfg(feature = "chrome")]
+    #[cfg(any(feature = "native", feature = "chrome"))]
     pub(crate) fn view_dirs(&self) -> Vec<PathBuf> {
         self.dirs.clone()
     }
 
     /// Every embedded HTML template, as navree-view (name, source) pairs.
-    #[cfg(feature = "chrome")]
+    #[cfg(any(feature = "native", feature = "chrome"))]
     pub(crate) fn embedded_html(&self) -> Vec<(String, String)> {
         self.embedded
             .iter()
@@ -142,7 +140,7 @@ impl Templates {
     }
 }
 
-/// `path` as a clean relative path (`a/b.typ`), or `None` when it is
+/// `path` as a clean relative path (`a/b.html`), or `None` when it is
 /// empty, absolute, uses backslashes or a drive prefix, has `..`, or names
 /// a hidden segment.
 pub(crate) fn normalize(path: &str) -> Option<String> {
@@ -174,8 +172,8 @@ mod tests {
 
     #[test]
     fn paths_are_normalized_and_cannot_leave_the_directory() {
-        assert_eq!(normalize("a/b.typ").as_deref(), Some("a/b.typ"));
-        assert_eq!(normalize("/a//./b.typ").as_deref(), Some("a/b.typ"));
+        assert_eq!(normalize("a/b.html").as_deref(), Some("a/b.html"));
+        assert_eq!(normalize("/a//./b.html").as_deref(), Some("a/b.html"));
         assert_eq!(normalize("../secret.txt"), None);
         assert_eq!(normalize("a/../../b"), None);
         assert_eq!(normalize("a\\b"), None);
@@ -190,18 +188,18 @@ mod tests {
     #[test]
     fn template_paths_add_the_extension_once() {
         assert_eq!(
-            Templates::template_path("certificates/classic", "typ").as_deref(),
-            Some("certificates/classic.typ")
+            Templates::template_path("certificates/classic", "html").as_deref(),
+            Some("certificates/classic.html")
         );
         assert_eq!(
-            Templates::template_path("certificates/classic.typ", "typ").as_deref(),
-            Some("certificates/classic.typ")
+            Templates::template_path("certificates/classic.html", "html").as_deref(),
+            Some("certificates/classic.html")
         );
         assert_eq!(
             Templates::template_path("invoices/show", "html").as_deref(),
             Some("invoices/show.html")
         );
-        assert_eq!(Templates::template_path("../x", "typ"), None);
+        assert_eq!(Templates::template_path("../x", "html"), None);
     }
 
     #[test]
@@ -210,24 +208,24 @@ mod tests {
         let second = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(first.path().join("a")).unwrap();
         std::fs::create_dir_all(second.path().join("a")).unwrap();
-        std::fs::write(first.path().join("a/one.typ"), "first").unwrap();
-        std::fs::write(second.path().join("a/one.typ"), "second").unwrap();
-        std::fs::write(second.path().join("a/two.typ"), "second two").unwrap();
+        std::fs::write(first.path().join("a/one.html"), "first").unwrap();
+        std::fs::write(second.path().join("a/one.html"), "second").unwrap();
+        std::fs::write(second.path().join("a/two.html"), "second two").unwrap();
         let templates = Templates::new(
             vec![first.path().into(), second.path().into()],
             [
-                ("a/two.typ", "embedded two"),
-                ("a/three.typ", "embedded three"),
+                ("a/two.html", "embedded two"),
+                ("a/three.html", "embedded three"),
             ],
         );
         let read = |path: &str| templates.read(path).unwrap();
-        assert_eq!(read("a/one.typ").unwrap(), "first");
-        assert_eq!(read("a/two.typ").unwrap(), "second two");
-        assert_eq!(read("/a/three.typ").unwrap(), "embedded three");
-        assert_eq!(read("a/four.typ"), None);
+        assert_eq!(read("a/one.html").unwrap(), "first");
+        assert_eq!(read("a/two.html").unwrap(), "second two");
+        assert_eq!(read("/a/three.html").unwrap(), "embedded three");
+        assert_eq!(read("a/four.html"), None);
         assert_eq!(read("a"), None);
-        assert_eq!(read("../a/one.typ"), None);
-        assert!(templates.exists("a/three.typ"));
-        assert!(!templates.exists("a/four.typ"));
+        assert_eq!(read("../a/one.html"), None);
+        assert!(templates.exists("a/three.html"));
+        assert!(!templates.exists("a/four.html"));
     }
 }

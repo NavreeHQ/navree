@@ -73,7 +73,7 @@ async fn chrome_prints_arabic_and_devanagari_with_the_bundled_fonts() {
         )
         .await
         .unwrap();
-    // The same text, in reading order, as the Typst engine gives.
+    // The same text, in reading order, as the native engine gives.
     assert_golden("multilingual-ar.txt", &arabic.text().unwrap());
     let hindi = engine
         .render(

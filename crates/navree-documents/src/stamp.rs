@@ -56,8 +56,8 @@ pub enum Position {
 
 /// Text written over pages of a PDF: a watermark (`DRAFT`), a status
 /// (`PAID`), a copy number. Set in Helvetica Bold, so the text must be
-/// Latin-1; for other scripts, render the stamp as a PDF with Typst and
-/// use [`Pdf::overlay`](crate::Pdf::overlay).
+/// Latin-1; for other scripts, render the stamp as a PDF with the native
+/// engine and use [`Pdf::overlay`](crate::Pdf::overlay).
 ///
 /// ```
 /// use navree_documents::{Pages, Position, Stamp};
@@ -159,7 +159,7 @@ impl Stamp {
                 code @ (0x20..=0x7e | 0xa0..=0xff) => Ok(code as u8),
                 _ => Err(DocumentsError::Pdf(format!(
                     "a text stamp is set in Helvetica, which cannot show {c:?}; \
-                     render the stamp with Typst and use Pdf::overlay"
+                     render the stamp with the native engine and use Pdf::overlay"
                 ))),
             })
             .collect()
