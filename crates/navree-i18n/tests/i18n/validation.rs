@@ -80,3 +80,46 @@ async fn validation_overrides_still_apply_in_the_default_language() {
         .assert_json_path("errors.first_name.0", json!("prénom ne doit pas être vide"));
     app.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn international_types_and_rules_are_translated() {
+    let app = support::builder().build().await;
+    let invalid = json!({ "first_name": "Ada", "last_name": "Lovelace", "country": "XX" });
+
+    // A `Country` that does not parse, in the shipped German and French.
+    app.client()
+        .post("/api/deals/contacts")
+        .header("Accept-Language", "de")
+        .json(&invalid)
+        .send()
+        .await
+        .assert_json_path(
+            "errors.country.0",
+            json!("country muss ein gültiger Ländercode nach ISO 3166-1 alpha-2 sein"),
+        );
+    app.client()
+        .post("/api/deals/contacts")
+        .header("Accept-Language", "fr")
+        .json(&invalid)
+        .send()
+        .await
+        .assert_json_path(
+            "errors.country.0",
+            json!("country doit être un code pays ISO 3166-1 alpha-2 valide"),
+        );
+
+    // `rules::unicode_name`, in Brazilian Portuguese for `pt`.
+    app.client()
+        .post("/api/deals/contacts")
+        .header("Accept-Language", "pt")
+        .json(&json!({ "first_name": "Ada", "last_name": "Lovelace", "company": "<b>Acme</b>" }))
+        .send()
+        .await
+        .assert_json_path(
+            "errors.company.0",
+            json!(
+                "company deve conter apenas letras, números, espaços, hifens, apóstrofos e pontos"
+            ),
+        );
+    app.shutdown().await.unwrap();
+}
