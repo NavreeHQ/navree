@@ -144,6 +144,27 @@ pub trait SearchEngine: Send + Sync + 'static {
         index: &'a str,
         id: &'a str,
     ) -> BoxFuture<'a, Result<bool, SearchError>>;
+
+    /// Whether the engine evaluates `filter` (normalized) exactly as
+    /// [`Filter::matches`] does, documents without a value included. An
+    /// access filter the engine can't run exactly is not sent: the loaded
+    /// rows are filtered with the SQL `Accessible` condition instead. The
+    /// default is `true`.
+    fn filters_exactly(&self, filter: &Filter) -> bool {
+        let _ = filter;
+        true
+    }
+}
+
+/// Whether `filter` (normalized) passes `exact` at every comparison.
+pub(crate) fn every_comparison(filter: &Filter, exact: &dyn Fn(&Filter) -> bool) -> bool {
+    match filter {
+        Filter::All(items) | Filter::Any(items) => {
+            items.iter().all(|item| every_comparison(item, exact))
+        }
+        Filter::Not(inner) => exact(filter) && every_comparison(inner, exact),
+        other => exact(other),
+    }
 }
 
 /// Compares two documents' values of a sort field: values of the same type

@@ -105,12 +105,16 @@ struct Plan {
 }
 
 impl Plan {
+    /// `exact`: whether the engine (or vector store) that runs the query
+    /// evaluates a filter exactly; access filters it can't are applied to
+    /// the loaded rows instead.
     fn new(
         entry: Arc<Entry>,
         filters: &[Filter],
         sort: &[SortBy],
         access: Option<&Access>,
         workspace: Option<&str>,
+        exact: &dyn Fn(&Filter) -> bool,
     ) -> Result<Plan, SearchError> {
         let settings = &entry.settings;
         for filter in filters {
@@ -147,8 +151,10 @@ impl Plan {
                 settings,
                 access.columns,
             ) {
-                AccessFilter::Exact(filter) => all.push(filter),
-                AccessFilter::Rows => rows = Some(access.condition.clone()),
+                AccessFilter::Exact(filter) if exact(&filter) => all.push(filter),
+                AccessFilter::Exact(_) | AccessFilter::Rows => {
+                    rows = Some(access.condition.clone());
+                }
             }
         }
         Ok(Plan {
@@ -349,19 +355,29 @@ impl<E: Searchable> SearchQuery<E> {
         highlight: bool,
     ) -> Result<(Vec<EngineHit>, u64, Option<SimpleExpr>), SearchError> {
         let entry = self.search.entry::<E>()?;
+        let hybrid = self
+            .hybrid
+            .filter(|weight| *weight > 0.0 && !self.text.trim().is_empty());
+        let engine = self.search.engine();
+        let vectors = self.search.inner.vectors.as_ref();
+        let exact = |filter: &Filter| {
+            engine.filters_exactly(filter)
+                && (hybrid.is_none() || vectors.is_none_or(|v| v.filters_exactly(filter)))
+        };
         let plan = Plan::new(
             entry,
             &self.filters,
             &self.sort,
             self.access.as_ref(),
             self.workspace.as_deref(),
+            &exact,
         )?;
         if plan.matches_nothing() {
             return Ok((Vec::new(), 0, None));
         }
         let tags = highlight.then_some(&self.tags);
-        let (hits, total) = match self.hybrid {
-            Some(weight) if weight > 0.0 && !self.text.trim().is_empty() => {
+        let (hits, total) = match hybrid {
+            Some(weight) => {
                 self.run_hybrid(&plan, weight, offset, limit, tags).await?
             }
             _ => {
@@ -618,6 +634,7 @@ impl<E: Searchable> SimilarQuery<E> {
             &[],
             self.access.as_ref(),
             self.workspace.as_deref(),
+            &|filter| vectors.filters_exactly(filter),
         )?;
         if plan.matches_nothing() {
             return Ok(Vec::new());
@@ -752,12 +769,14 @@ impl AcrossQuery {
                 .search
                 .entry_of_type(include.entity)
                 .ok_or(SearchError::NotRegistered(include.name))?;
+            let engine = self.search.engine();
             let plan = Plan::new(
                 entry,
                 &[],
                 &[],
                 include.access.as_ref(),
                 self.workspace.as_deref(),
+                &|filter| engine.filters_exactly(filter),
             )?;
             searches.push(self.run_one(plan));
         }
