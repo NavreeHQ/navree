@@ -27,6 +27,10 @@
 //!   request's transaction. `Schema`: one PostgreSQL schema per workspace,
 //!   selected with `search_path`. `Database`: one database per workspace
 //!   ([`WorkspaceDatabases`]), used through [`WorkspaceUow`].
+//! - **Time zones.** Each workspace has an optional `timezone` and
+//!   `country` ([`Workspaces::set_time_zone`]); the module registers
+//!   [`WorkspaceZones`], the workspace-level `dyn ZoneSource` that
+//!   navree-time's `CurrentZone` and per-workspace schedules read.
 //! - **Routes.** `/api/workspaces...` and `POST /api/invitations/accept`
 //!   ([`WorkspaceController`], [`InvitationController`]), unless
 //!   `workspace.routes` is false.
@@ -74,12 +78,14 @@ mod resolve;
 mod role;
 mod tenant;
 mod workspaces;
+mod zone;
 
 pub use config::{InvitationOptions, Isolation, ResolverKind, RoleOptions, WorkspaceConfig};
 pub use controller::{
     AcceptInvitationInput, AcceptedInvitationResource, AddMemberInput, ChangeRoleInput,
     CreateWorkspaceInput, InvitationController, InvitationResource, InviteInput, MemberResource,
     RenameWorkspaceInput, TransferWorkspaceInput, WorkspaceController, WorkspaceResource,
+    WorkspaceTimeZoneInput,
 };
 pub use current::{CurrentWorkspace, InWorkspace, PinnedWorkspace, WorkspaceUow};
 pub use directory::{TableUserDirectory, UserDirectory, UserSummary};
@@ -95,3 +101,4 @@ pub use module::{ModuleBuilderWorkspaceExt, WorkspaceModule};
 pub use role::{ADMIN, MEMBER, OWNER, RoleTable, VIEWER, WorkspaceRole};
 pub use tenant::WorkspaceDatabases;
 pub use workspaces::{MAX_NAME_LEN, MAX_SLUG_LEN, Membership, NewWorkspace, Workspaces, slugify};
+pub use zone::WorkspaceZones;

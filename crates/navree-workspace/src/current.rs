@@ -272,6 +272,13 @@ async fn resolve_request(parts: &mut Parts, source: &Source) -> Result<CurrentWo
     Ok(current)
 }
 
+/// The request's workspace when it names one the signed-in user belongs
+/// to (resolved as [`CurrentWorkspace`] would, and kept for it); `None`
+/// otherwise, never an error.
+pub(crate) async fn try_resolve(parts: &mut Parts) -> Option<CurrentWorkspace> {
+    resolve_request(parts, &Source::Configured).await.ok()
+}
+
 /// The error response of a [`WorkspaceError`].
 fn app_error(error: WorkspaceError) -> AppError {
     error.to_app_error()

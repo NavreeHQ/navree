@@ -6,6 +6,7 @@ use axum::extract::Request;
 use axum::middleware::{Next, from_fn};
 use axum::response::{IntoResponse, Response};
 use navree_access::{AccessModule, Subject};
+use navree_contracts::ZoneSource;
 use navree_config::ModuleBuilderConfigExt;
 use navree_db::{Db, DbOptions, MigrationSet, ModuleBuilderDbExt};
 use navree_http::{AppError, GlobalLayer, LayerSlot, ModuleBuilderHttpExt};
@@ -26,7 +27,9 @@ use crate::error::map_workspace_error;
 use crate::isolation::{IsolationDriver, WorkspaceScoped};
 use crate::migration::migrations;
 use crate::tenant::{WorkspaceDatabases, WorkspaceMigrationSet};
-use crate::{Invitations, Isolation, Members, WorkspaceConfig, WorkspaceError, Workspaces};
+use crate::{
+    Invitations, Isolation, Members, WorkspaceConfig, WorkspaceError, WorkspaceZones, Workspaces,
+};
 
 /// Multi-tenancy at the workspace level.
 ///
@@ -42,6 +45,8 @@ use crate::{Invitations, Isolation, Members, WorkspaceConfig, WorkspaceError, Wo
 /// - the subjects `Workspace`, `WorkspaceMember` and `WorkspaceInvitation`
 ///   for navree-access (permissions `workspace.*`, `workspace.members.*`,
 ///   `workspace.invitations.*`);
+/// - [`WorkspaceZones`], the workspaces' `dyn ZoneSource` (their
+///   `timezone` and `country`) for navree-time;
 /// - a request layer that commits the workspace database's unit of work
 ///   ([`WorkspaceUow`](crate::WorkspaceUow), database isolation);
 /// - the commands `workspace:migrate` and `workspace:prune-invitations`;
@@ -238,6 +243,13 @@ fn register(m: &mut ModuleBuilder, config: Option<WorkspaceConfig>) {
             .deps(vec![ProviderKey::of::<Core>(), ProviderKey::of::<Members>()]),
         )
         .exports::<Invitations>()
+        .multi(
+            Factory::<dyn ZoneSource>::new(|r: Resolver| async move {
+                Ok(Arc::new(WorkspaceZones::new(r.get::<Workspaces>().await?))
+                    as Arc<dyn ZoneSource>)
+            })
+            .deps(vec![ProviderKey::of::<Workspaces>()]),
+        )
         .controller::<WorkspaceController>()
         .controller::<InvitationController>()
         .migrations(migrations())

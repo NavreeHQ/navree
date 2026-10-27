@@ -163,7 +163,7 @@ fn ranges_deserialize_from_from_and_to() {
             .unwrap();
     assert_eq!(range.day_count(), 7);
     assert_eq!(
-        serde_json::to_value(&range).unwrap(),
+        serde_json::to_value(range).unwrap(),
         serde_json::json!({"from": "2026-10-01", "to": "2026-10-07"})
     );
 }

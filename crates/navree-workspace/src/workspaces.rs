@@ -3,9 +3,12 @@
 use std::fmt;
 use std::sync::Arc;
 
+use navree_contracts::ZoneOwner;
 use navree_db::{Repo, Uow};
+use navree_time::Zone;
 use sea_orm::{
-    ColumnTrait, ConnectionTrait, EntityTrait, IntoActiveModel, QueryFilter, QueryOrder, Set,
+    ColumnTrait, ConnectionTrait, EntityTrait, IntoActiveModel, QueryFilter, QueryOrder,
+    QuerySelect, Set,
 };
 use serde::Serialize;
 use uuid::Uuid;
@@ -109,6 +112,8 @@ impl Workspaces {
                 name: Set(name.clone()),
                 slug: Set(slug.clone()),
                 owner_id: Set(owner),
+                timezone: Set(None),
+                country: Set(None),
                 created_at: Set(now),
                 updated_at: Set(now),
             },
@@ -164,6 +169,47 @@ impl Workspaces {
         row.name = Set(name);
         row.updated_at = Set(self.core.now());
         Ok(Repo::<workspace::Entity>::update(uow, row).await?)
+    }
+
+    /// Sets the time zone and country of workspace `id` (`None` clears
+    /// one). The zone is any IANA name, stored under its current name
+    /// (`Asia/Calcutta` is stored as `Asia/Kolkata`); the country is an ISO
+    /// 3166-1 alpha-2 code, stored upper-case. An unknown zone is a 400 on
+    /// `timezone`, an unknown country a 400 on `country`.
+    ///
+    /// navree-time reads both: a request in this workspace (and every job
+    /// run for it) uses the zone, else the country's primary zone, else the
+    /// app's default zone.
+    pub async fn set_time_zone(
+        &self,
+        uow: &Uow,
+        id: Uuid,
+        timezone: Option<&str>,
+        country: Option<&str>,
+    ) -> Result<Workspace, WorkspaceError> {
+        let (timezone, country) = check_time_zone(timezone, country)?;
+        let current = self.core.workspace_in(&*uow.tx().await?, id).await?;
+        let mut row = current.into_active_model();
+        row.timezone = Set(timezone);
+        row.country = Set(country);
+        row.updated_at = Set(self.core.now());
+        Ok(Repo::<workspace::Entity>::update(uow, row).await?)
+    }
+
+    /// Every workspace's id, time zone and country (for navree-time).
+    pub(crate) async fn zone_owners(&self) -> Result<Vec<ZoneOwner>, WorkspaceError> {
+        let rows: Vec<(Uuid, Option<String>, Option<String>)> = workspace::Entity::find()
+            .select_only()
+            .column(workspace::Column::Id)
+            .column(workspace::Column::Timezone)
+            .column(workspace::Column::Country)
+            .into_tuple()
+            .all(&self.core.db.reader().await)
+            .await?;
+        Ok(rows
+            .into_iter()
+            .map(|(id, zone, country)| ZoneOwner { id, zone, country })
+            .collect())
     }
 
     /// The workspaces `user` belongs to, with their role in each, by name.
@@ -337,6 +383,38 @@ fn check_name(name: &str) -> Result<String, WorkspaceError> {
         ));
     }
     Ok(name.to_owned())
+}
+
+/// A checked time zone (its current IANA name) and country (upper-case);
+/// blank values count as unset.
+pub(crate) fn check_time_zone(
+    timezone: Option<&str>,
+    country: Option<&str>,
+) -> Result<(Option<String>, Option<String>), WorkspaceError> {
+    let timezone = match timezone.map(str::trim).filter(|z| !z.is_empty()) {
+        Some(name) => Some(
+            Zone::canonical_name(name)
+                .ok_or_else(|| {
+                    WorkspaceError::invalid(
+                        "timezone",
+                        "timezone must be a valid IANA time zone name",
+                    )
+                })?
+                .to_owned(),
+        ),
+        None => None,
+    };
+    let country = match country.map(str::trim).filter(|c| !c.is_empty()) {
+        Some(code) if Zone::for_country(code).is_some() => Some(code.to_ascii_uppercase()),
+        Some(_) => {
+            return Err(WorkspaceError::invalid(
+                "country",
+                "country must be a valid ISO 3166-1 alpha-2 country code",
+            ));
+        }
+        None => None,
+    };
+    Ok((timezone, country))
 }
 
 /// Checks a slug: lower-case ASCII letters and digits in groups separated

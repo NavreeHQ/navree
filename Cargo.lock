@@ -5230,6 +5230,7 @@ dependencies = [
  "navree-mail",
  "navree-telemetry",
  "navree-testing",
+ "navree-time",
  "navree-view",
  "sea-orm",
  "sea-orm-migration",
