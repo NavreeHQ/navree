@@ -245,7 +245,7 @@ Everything on the dashboard is also JSON under `/_lighthouse/api`, for scripts, 
 | `GET /api/traces/{id}` | A trace with its spans | `view` |
 | `GET /api/alerts` | The latest alerts and whether they were delivered | `view` |
 
-A session with a coding agent then looks like this: you ask it to fix the newest Lighthouse issue; it fetches `/api/issues?sort=first_seen`, reads the source chain and the failing request from `/api/issues/{id}`, opens the code, writes the fix and a test, and resolves the issue in the next release with a comment linking the change. Give it a token for a user with `lighthouse.view` to let it read, and `lighthouse.resolve` to let it close issues.
+A session with a coding agent then looks like this: you ask it to fix the newest Lighthouse issue; it fetches `/api/issues?sort=first_seen`, reads the source chain and the failing request from `/api/issues/{id}`, opens the code, writes the fix and a test, and resolves the issue in the next release with a comment linking the change. Give it a token for a user with `lighthouse.view` to let it read, and `lighthouse.resolve` to let it close issues. On your own machine, [Navigator](/docs/ai/navigator/#lighthouses-tools) (`navree mcp`) gives the agent the same issues and figures without a token, read-only, straight from your local database.
 
 ## MCP tools for agents
 

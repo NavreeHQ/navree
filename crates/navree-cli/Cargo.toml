@@ -27,9 +27,12 @@ anyhow = { workspace = true }
 clap = { workspace = true }
 heck = { workspace = true }
 minijinja = { workspace = true }
-# `navree dock` and Harbor's commands: tool crates, no runtime crates.
+# `navree dock`, Harbor's commands, and `navree mcp` / `navree skills:install`:
+# tool crates, no runtime crates (Navigator reads configuration with
+# navree-config, D7).
 navree-dock = { workspace = true }
 navree-harbor = { workspace = true }
+navree-navigator = { workspace = true }
 notify = { workspace = true }
 notify-debouncer-mini = { workspace = true }
 serde = { workspace = true }
@@ -41,4 +44,9 @@ toml = { workspace = true }
 
 [dev-dependencies]
 insta = { workspace = true }
+# `tests/navigator.rs`: rmcp's client over `navree mcp`'s stdio, and the
+# fixture app's SQLite database.
+rmcp = { workspace = true, features = ["client", "transport-child-process"] }
+sqlx = { workspace = true }
 tempfile = { workspace = true }
+tokio = { workspace = true }

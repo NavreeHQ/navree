@@ -1,8 +1,8 @@
 //! # navree
 //!
 //! The `navree` command-line tool: `navree new`, `navree make:*`, `navree dev`,
-//! `navree dock`, and forwarding of runtime commands (`migrate`,
-//! `queue:work`, ...) to the app binary.
+//! `navree dock`, `navree mcp`, `navree skills:install`, and forwarding of
+//! runtime commands (`migrate`, `queue:work`, ...) to the app binary.
 #![forbid(unsafe_code)]
 
 use std::process::ExitCode;

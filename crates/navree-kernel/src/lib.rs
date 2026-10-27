@@ -39,6 +39,7 @@ mod command;
 mod container;
 mod error;
 mod graph;
+mod introspect;
 mod key;
 mod lazy;
 mod lifecycle;
