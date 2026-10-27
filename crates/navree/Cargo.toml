@@ -82,7 +82,10 @@ testing = [
 ]
 observe = ["dep:navree-observe", "http"]
 api = ["dep:navree-api", "http"]
-mail = ["dep:navree-mail", "view", "telemetry"]
+## Mail: mailables, SMTP and the SES, Mailgun, Postmark and Resend APIs,
+## tenant transports, a delivery log with provider events, suppressions,
+## hold for approval, tracking, DKIM signing and sending-domain checks.
+mail = ["dep:navree-mail", "view", "telemetry", "http", "crypto", "events", "http-client", "db"]
 realtime = ["dep:navree-realtime", "http", "crypto"]
 storage = ["dep:navree-storage", "http", "crypto"]
 ## S3 and S3-compatible disks (AWS, MinIO, Cloudflare R2, DigitalOcean

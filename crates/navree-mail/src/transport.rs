@@ -8,8 +8,9 @@ use navree_kernel::BoxFuture;
 
 use crate::{MailError, Message};
 
-/// Delivers messages: SMTP, the log, an in-memory array, a failover chain,
-/// or your own implementation.
+/// Delivers messages: SMTP, an email API (SES, Mailgun, Postmark, Resend),
+/// the log, an in-memory array, a failover chain, or your own
+/// implementation.
 ///
 /// [`MailModule`](crate::MailModule) provides and exports
 /// `Arc<dyn MailTransport>` built from [`TransportConfig`](crate::TransportConfig);
@@ -17,15 +18,74 @@ use crate::{MailError, Message};
 ///
 /// Transports receive messages the [`Mailer`](crate::Mailer) has already
 /// validated, with the sender filled in.
+///
+/// Only [`send`](MailTransport::send) is required. A transport whose
+/// provider returns a message id overrides [`deliver`](MailTransport::deliver)
+/// too, so the delivery log can match the provider's events to the message;
+/// one that can test its credentials overrides [`check`](MailTransport::check).
 pub trait MailTransport: Any + Send + Sync {
     /// Delivers `message`.
     fn send<'a>(&'a self, message: &'a Message) -> BoxFuture<'a, Result<(), MailError>>;
+
+    /// Delivers `message` and says how: the transport that took it and the
+    /// provider's message id, if it has one. The default calls
+    /// [`send`](MailTransport::send) and reports no id.
+    fn deliver<'a>(&'a self, message: &'a Message) -> BoxFuture<'a, Result<Sent, MailError>> {
+        Box::pin(async move {
+            self.send(message).await?;
+            Ok(Sent::new(self.name()))
+        })
+    }
+
+    /// The transport's name in reports, logs and the delivery log (`smtp`,
+    /// `ses`, ...); `custom` by default.
+    fn name(&self) -> &'static str {
+        "custom"
+    }
+
+    /// Checks that the transport can deliver, without sending anything:
+    /// SMTP connects and authenticates, an API transport makes a read-only
+    /// call with its credentials. The default does nothing. Used by
+    /// [`TransportResolver::usable`](crate::TransportResolver::usable)
+    /// before a tenant saves a transport.
+    fn check(&self) -> BoxFuture<'_, Result<(), MailError>> {
+        Box::pin(async { Ok(()) })
+    }
 }
 
 /// Prints the type name only (transports may hold credentials).
 impl fmt::Debug for dyn MailTransport {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("dyn MailTransport")
+    }
+}
+
+/// What [`MailTransport::deliver`] reports.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Sent {
+    /// The transport that delivered the message (for a failover, the one
+    /// that succeeded).
+    pub transport: &'static str,
+    /// The provider's message id (`MessageId` for SES, `id` for Mailgun and
+    /// Resend, `MessageID` for Postmark), which its events refer to.
+    pub provider_id: Option<String>,
+}
+
+impl Sent {
+    /// Delivered by `transport`, without a provider id.
+    pub fn new(transport: &'static str) -> Self {
+        Self {
+            transport,
+            provider_id: None,
+        }
+    }
+
+    /// With the provider's message id.
+    #[must_use]
+    pub fn with_provider_id(mut self, id: impl Into<String>) -> Self {
+        self.provider_id = Some(id.into());
+        self
     }
 }
 
@@ -59,6 +119,10 @@ impl MailTransport for LogTransport {
         );
         Box::pin(async { Ok(()) })
     }
+
+    fn name(&self) -> &'static str {
+        "log"
+    }
 }
 
 /// Tries its transports in order until one delivers the message (the
@@ -75,15 +139,24 @@ impl FailoverTransport {
     pub fn new(transports: Vec<Arc<dyn MailTransport>>) -> Self {
         Self { transports }
     }
+
+    /// The transports, in the order they are tried.
+    pub fn transports(&self) -> &[Arc<dyn MailTransport>] {
+        &self.transports
+    }
 }
 
 impl MailTransport for FailoverTransport {
     fn send<'a>(&'a self, message: &'a Message) -> BoxFuture<'a, Result<(), MailError>> {
+        Box::pin(async move { self.deliver(message).await.map(drop) })
+    }
+
+    fn deliver<'a>(&'a self, message: &'a Message) -> BoxFuture<'a, Result<Sent, MailError>> {
         Box::pin(async move {
             let mut errors = Vec::new();
             for (index, transport) in self.transports.iter().enumerate() {
-                match transport.send(message).await {
-                    Ok(()) => return Ok(()),
+                match transport.deliver(message).await {
+                    Ok(sent) => return Ok(sent),
                     Err(error) => {
                         tracing::warn!(
                             target: "navree::mail",
@@ -94,6 +167,24 @@ impl MailTransport for FailoverTransport {
                         );
                         errors.push(error);
                     }
+                }
+            }
+            Err(MailError::AllTransportsFailed { errors })
+        })
+    }
+
+    fn name(&self) -> &'static str {
+        "failover"
+    }
+
+    /// Usable when at least one of its transports is.
+    fn check(&self) -> BoxFuture<'_, Result<(), MailError>> {
+        Box::pin(async move {
+            let mut errors = Vec::new();
+            for transport in &self.transports {
+                match transport.check().await {
+                    Ok(()) => return Ok(()),
+                    Err(error) => errors.push(error),
                 }
             }
             Err(MailError::AllTransportsFailed { errors })

@@ -22,7 +22,7 @@ driver; SQLite is the default and is compiled in.
 | `navree::testing` | navree-testing | `testing` | | | `TestApp`, `TestClient`, `principal`, `temp_sqlite_url` |
 | `navree::observe` | navree-observe | `observe` | `ObserveModule::from_config()` | `observe` | `/health/live`, `/health/ready`, `/metrics` |
 | `navree::api` | navree-api | `api` | `ApiModule::from_config()` | `api` | `/api/openapi.json`, `/api/docs`, `openapi:export` |
-| `navree::mail` | navree-mail | `mail` | `MailModule::from_config()` (needs `ViewModule`) | `mail` | `Mailer`, `TemplateMail`, `Mailable`, `Message` |
+| `navree::mail` | navree-mail | `mail` | `MailModule::from_config()` (needs `ViewModule`; the delivery pipeline also `DatabaseModule` and `CryptoModule`) | `mail` | `Mailer`, `TemplateMail`, `Mailable`, `Message`, `TransportResolver`, `Deliveries`, `Suppressions`, `Outbox`, `SendingDomains`, `MailFake` |
 | `navree::realtime` | navree-realtime | `realtime` | `RealtimeModule::from_config()` | `realtime` | Pusher-protocol WebSockets, channels, `Realtime` |
 | `navree::storage` | navree-storage | `storage` (+ `storage-s3`, `storage-gcs`, `storage-azure`) | `StorageModule::from_config()` | `storage` | `Disk`, `Storage`, `store_upload`, `presigned_put` / `accept_upload`, temporary URLs, `storage:sync` |
 | `navree::session` | navree-session | `session` | `SessionModule::from_config()` | `session` | cookie sessions and CSRF (optional; not used with bearer tokens) |

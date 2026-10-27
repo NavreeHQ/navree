@@ -1,7 +1,8 @@
 //! # navree-mail
 //!
-//! `MailModule`: mailables rendered from templates, SMTP, log, array and
-//! failover transports, and queued sending.
+//! `MailModule`: mailables rendered from templates, transports for SMTP and
+//! the email APIs, queued sending, and the delivery pipeline of a product
+//! that sends mail for its customers.
 //!
 //! - [`MailModule`] is global: it provides and exports [`Mailer`] and
 //!   `Arc<dyn MailTransport>`, configured with [`MailOptions`] (section
@@ -9,20 +10,37 @@
 //!   include `ViewModule`.
 //! - A [`Mailable`] renders into a [`Message`] with the app's
 //!   [`Views`](navree_view::Views); [`TemplateMail`] renders the
-//!   `{template}.html` / `{template}.txt` pair.
-//! - [`Mailer::send`] delivers now; [`Mailer::queue`] renders and validates
-//!   now, then dispatches `mail.send` through the app's
-//!   [`Dispatcher`](navree_contracts::Dispatcher) (or sends now when the app has
-//!   none).
+//!   `{template}.html` / `{template}.txt` pair. The mailer inlines CSS,
+//!   generates the text body of HTML-only mail and sets `lang`/`dir` from
+//!   the message's locale ([`render`], [`RenderOptions`]).
+//! - [`Mailer::send`] delivers now and [`Mailer::deliver`] also returns a
+//!   [`SendReport`]; [`Mailer::queue`] renders and validates now, then
+//!   dispatches `mail.send` through the app's
+//!   [`Dispatcher`](navree_contracts::Dispatcher) (or sends now when the app
+//!   has none). [`Mailer::via`] picks a named transport
+//!   (`mail.transports`), [`Mailer::for_scope`] sends for a tenant
+//!   ([`MailScope`]).
 //! - Transports ([`TransportConfig`]): [`SmtpTransport`] (lettre on Tokio
-//!   with rustls + ring), [`LogTransport`] (development), [`ArrayTransport`]
-//!   (tests) and [`FailoverTransport`]. Implement [`MailTransport`] for your
-//!   own and swap it in with `AppBuilder::override_value::<dyn MailTransport>`.
+//!   with rustls + ring, DKIM-signed with a [`DkimSigner`]),
+//!   [`SesTransport`] (SigV4), [`MailgunTransport`], [`PostmarkTransport`],
+//!   [`ResendTransport`], [`LogTransport`] (development),
+//!   [`ArrayTransport`] (tests) and [`FailoverTransport`]. Implement
+//!   [`MailTransport`] for your own and swap it in with
+//!   `AppBuilder::override_value::<dyn MailTransport>`.
+//! - With `mail.delivery.enabled` (and `DatabaseModule`; migration set
+//!   `mail`): [`TransportResolver`] (transports per domain, workspace,
+//!   organization and platform, stored encrypted), [`Deliveries`] (the
+//!   delivery log and provider events, emitted as [`events`]),
+//!   [`Suppressions`], [`Outbox`] (mail held for approval), open and click
+//!   tracking, the provider webhook and admin routes of [`MailController`]
+//!   and the commands `mail:test` and `mail:suppressions`.
+//! - [`SendingDomains`] checks SPF, DKIM and DMARC (`mail:domains`);
+//!   [`MailFake`] records mail and plays the provider in tests.
 //!
 //! Every message is validated before it reaches a transport (sender, at
-//! least one recipient, parseable addresses, no line break in the subject).
-//! Message bodies and SMTP credentials never appear in errors or in
-//! `INFO`-level logs.
+//! least one recipient, parseable addresses, no line break in the subject
+//! or a header). Message bodies and credentials never appear in errors or
+//! in `INFO`-level logs.
 //!
 //! ```
 //! use navree_kernel::{Navree, Module, ModuleBuilder};
@@ -49,7 +67,7 @@
 //!     .module(MailModule::for_root(MailOptions {
 //!         from: "Acme <hello@acme.test>".into(),
 //!         transport: TransportConfig::Array,
-//!         queue: None,
+//!         ..MailOptions::default()
 //!     }))
 //!     .boot()
 //!     .await?;
@@ -70,24 +88,62 @@
 //! ```
 #![forbid(unsafe_code)]
 
+mod api;
 mod array;
+mod commands;
+mod delivery;
+mod dkim;
+mod domains;
 mod error;
+mod fake;
 mod job;
 mod mailable;
 mod mailer;
 mod message;
 mod module;
 mod options;
+pub mod render;
+mod report;
 mod smtp;
 mod transport;
+mod transport_config;
 
+pub use api::mailgun::{MailgunConfig, MailgunRegion, MailgunTransport};
+pub use api::postmark::{PostmarkConfig, PostmarkTransport};
+pub use api::resend::{ResendConfig, ResendTransport};
+pub use api::ses::{SesConfig, SesTransport};
 pub use array::ArrayTransport;
+pub use delivery::controller::{
+    AddSuppressionInput, DeliveryWithEvents, INVALID_SIGNATURE_CODE, MANAGE_PERMISSION,
+    MailController, ReleasedMail, UNUSABLE_TRANSPORT_CODE, UsableTransport,
+};
+pub use delivery::ingest::{MailEventKind, ProviderEvent};
+pub use delivery::log::{Deliveries, Delivery, DeliveryEvent, DeliveryFilter};
+pub use delivery::migration::MAIL_MIGRATIONS;
+pub use delivery::outbox::{HeldMail, Outbox, OutboxStatus};
+pub use delivery::resolver::{
+    ResolvedTransport, StoredTransport, TransportOwner, TransportResolver,
+};
+pub use delivery::suppressions::{Suppression, SuppressionReason, Suppressions};
+pub use delivery::{entity, events};
+pub use dkim::{DEFAULT_SIGNED_HEADERS, DkimAlgorithm, DkimConfig, DkimSigner};
+pub use domains::{
+    CheckStatus, DkimCheck, DnsResolver, DomainExpectations, DomainReport, RecordCheck,
+    SendingDomains, StaticResolver, SystemResolver,
+};
 pub use error::MailError;
+pub use fake::MailFake;
 pub use job::SendMailJob;
-pub use mailable::{Mailable, TemplateMail};
-pub use mailer::Mailer;
+pub use mailable::{Held, Mailable, TemplateMail};
+pub use mailer::{Mailer, ScopedMailer};
 pub use message::Message;
 pub use module::MailModule;
-pub use options::{MailOptions, TransportConfig};
+pub use options::{
+    DeliveryOptions, MailOptions, MailgunWebhookOptions, PostmarkWebhookOptions,
+    ResendWebhookOptions, SesWebhookOptions, TrackingOptions, WebhookOptions,
+};
+pub use render::RenderOptions;
+pub use report::{DeliveryStatus, MailScope, SendReport, TransportTier};
 pub use smtp::{SmtpTls, SmtpTransport};
-pub use transport::{FailoverTransport, LogTransport, MailTransport};
+pub use transport::{FailoverTransport, LogTransport, MailTransport, Sent};
+pub use transport_config::TransportConfig;

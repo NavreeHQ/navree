@@ -573,6 +573,19 @@ pub mod partition_grant {
 
 /// A workspace (a row of `workspaces`).
 pub type Workspace = workspace::Model;
+
+/// The mail scope of a workspace: the workspace and its organization, so
+/// `mailer.for_scope(&MailScope::from(&workspace))` uses their transports,
+/// suppressions and delivery log.
+impl From<&Workspace> for navree_mail::MailScope {
+    fn from(workspace: &Workspace) -> Self {
+        let scope = navree_mail::MailScope::workspace(workspace.id);
+        match workspace.organization_id {
+            Some(organization) => scope.with_organization(organization),
+            None => scope,
+        }
+    }
+}
 /// A membership (a row of `workspace_members`).
 pub type Member = member::Model;
 /// An invitation (a row of `workspace_invitations`).

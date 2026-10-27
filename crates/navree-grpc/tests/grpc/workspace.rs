@@ -91,7 +91,7 @@ async fn app() -> TestApp {
         .module(MailModule::for_root(MailOptions {
             from: "Navree <hello@navree.test>".into(),
             transport: TransportConfig::Array,
-            queue: None,
+            ..MailOptions::default()
         }))
         .module(AccessModule::for_root(AccessOptions::default()))
         .module(WorkspaceModule::from_config())

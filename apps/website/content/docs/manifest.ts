@@ -146,6 +146,7 @@ export const sections: DocsSection[] = [
       "scheduling",
       "time-zones", // Owner: time-zones
       "mail",
+      "mail-delivery",
       "notifications",
       // Owner: F
       "storage",
