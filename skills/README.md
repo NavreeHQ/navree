@@ -30,7 +30,7 @@ conventions, and says which skill to load for each task.
 | [`navree-queues-and-scheduling`](navree-queues-and-scheduling/SKILL.md) | Jobs, workers, retries, failed jobs and cron-style schedules |
 | [`navree-events-and-broadcasting`](navree-events-and-broadcasting/SKILL.md) | Events and listeners; real-time channels over WebSockets |
 | [`navree-mail-and-notifications`](navree-mail-and-notifications/SKILL.md) | Mail with templates and transports; notifications over several channels |
-| [`navree-storage`](navree-storage/SKILL.md) | Disks, uploads, downloads and signed temporary URLs |
+| [`navree-storage`](navree-storage/SKILL.md) | Disks (local, S3, Google Cloud Storage, Azure), uploads, direct browser uploads, signed links and disk sync |
 | [`navree-cache-and-http-client`](navree-cache-and-http-client/SKILL.md) | The cache, locks, and outgoing HTTP with retries and an SSRF guard |
 | [`navree-openapi`](navree-openapi/SKILL.md) | The OpenAPI 3.1 document, schemas and typed clients |
 | [`navree-config`](navree-config/SKILL.md) | `.env`, `config/app.toml`, `APP_*` variables, the app key, typed sections |

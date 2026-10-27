@@ -62,6 +62,7 @@ async fn from_config_reads_the_storage_section() {
     );
     assert!(
         disk.temporary_url("a.txt", Utc::now())
+            .await
             .unwrap()
             .starts_with("https://api.example.com/storage/files/a.txt?")
     );
@@ -120,6 +121,7 @@ async fn signed_url(app_key: Option<&str>, with_crypto: bool) -> String {
         .await
         .unwrap()
         .temporary_url("a.txt", expires)
+        .await
         .unwrap()
 }
 
@@ -164,6 +166,7 @@ async fn crypto_module_key_signs_without_config() {
                 .await
                 .unwrap()
                 .temporary_url("a.txt", expires)
+                .await
                 .unwrap()
         }
     };

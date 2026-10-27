@@ -36,6 +36,7 @@ full = [
     "schedule",
     "session",
     "storage",
+    "storage-s3",
     "telemetry",
     "testing",
     "ui",
@@ -67,6 +68,13 @@ api = ["dep:navree-api", "http"]
 mail = ["dep:navree-mail", "view", "telemetry"]
 realtime = ["dep:navree-realtime", "http", "crypto"]
 storage = ["dep:navree-storage", "http", "crypto"]
+## S3 and S3-compatible disks (AWS, MinIO, Cloudflare R2, DigitalOcean
+## Spaces), on rustls with ring (in `full`).
+storage-s3 = ["storage", "navree-storage/s3"]
+## Google Cloud Storage disks (opt-in, not in `full`).
+storage-gcs = ["storage", "navree-storage/gcs"]
+## Azure Blob Storage disks (opt-in, not in `full`).
+storage-azure = ["storage", "navree-storage/azure"]
 ## L4
 session = ["dep:navree-session", "http", "crypto", "db"]
 validation = ["dep:navree-validation", "http", "db"]

@@ -213,6 +213,7 @@ Also update, in the same integrator change:
 | Typesense | `typesense/typesense` | `NAVREE_TEST_TYPESENSE_URL`, `_KEY` | M2-6 |
 | Qdrant | `qdrant/qdrant` | `NAVREE_TEST_QDRANT_URL` | M5-3, M5-5 |
 | stripe-mock | `stripe/stripe-mock` | `NAVREE_TEST_STRIPE_MOCK_URL` | M2-5 |
+| MinIO (S3 API) | `pgsty/minio` (Dock's `minio` service) | `NAVREE_TEST_S3_URL` (`http://<access key>:<secret key>@127.0.0.1:9000/<bucket>`) | navree-storage's disk conformance suite (`s3` driver) |
 | NATS with JetStream | `nats:2` (`-js`) | `NAVREE_TEST_NATS_URL` | M4-2 |
 | Kafka 4 (KRaft) | `apache/kafka:4` | `NAVREE_TEST_KAFKA_BROKERS` | M4-2 |
 | RabbitMQ 4 | `rabbitmq:4` | `NAVREE_TEST_RABBITMQ_URL` | M4-2 |

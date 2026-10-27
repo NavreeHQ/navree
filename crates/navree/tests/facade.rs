@@ -432,6 +432,57 @@ fn full_is_the_default_and_turns_on_every_module_but_the_opt_in_ones() {
     }
 }
 
+/// The storage drivers are features of `storage`: S3 is in `full`, Google
+/// Cloud Storage and Azure are opt-in, and each turns on navree-storage's
+/// own feature.
+#[test]
+fn storage_drivers_are_features() {
+    let features = Features::read();
+    let full = features.closure("full");
+    assert!(full.contains("storage-s3"), "`full` has S3 disks");
+    for (feature, driver) in [
+        ("storage-s3", "s3"),
+        ("storage-gcs", "gcs"),
+        ("storage-azure", "azure"),
+    ] {
+        let items = &features.table[feature];
+        assert!(
+            items.contains(&"storage".to_owned()),
+            "{feature}: {items:?}"
+        );
+        assert!(
+            items.contains(&format!("navree-storage/{driver}")),
+            "{feature}: {items:?}"
+        );
+    }
+    for opt_in in ["storage-gcs", "storage-azure"] {
+        assert!(!full.contains(opt_in), "`full` turns on `{opt_in}`");
+    }
+}
+
+/// With `full`, an s3 disk is available through the facade.
+#[cfg(feature = "storage-s3")]
+#[test]
+fn s3_disks_are_built_through_the_facade() {
+    use navree::storage::{DiskConfig, S3Config, Storage, StorageOptions};
+
+    let options = StorageOptions {
+        default: "uploads".into(),
+        disks: [(
+            "uploads".to_owned(),
+            DiskConfig::from(
+                S3Config::new("acme")
+                    .endpoint("http://127.0.0.1:9")
+                    .credentials("key", "secret"),
+            ),
+        )]
+        .into(),
+        ..StorageOptions::default()
+    };
+    let storage = Storage::new(&options, b"key").unwrap();
+    assert_eq!(storage.default_disk().driver(), "s3");
+}
+
 /// `navree::dock` is navree-dock, with the opt-in `dock` feature
 /// (`cargo test -p navree --features dock`).
 #[cfg(feature = "dock")]
