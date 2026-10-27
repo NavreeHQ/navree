@@ -133,8 +133,8 @@ fn refuse_insecure(uri: &str) -> Result<(), SignatureError> {
 /// A canonicalization method and its prefix list.
 fn c14n_of(doc: &Document, id: NodeId) -> Result<(Method, Vec<String>), SignatureError> {
     let uri = algorithm(doc, id)?;
-    let method =
-        Method::from_uri(uri).ok_or_else(|| SignatureError::UnsupportedAlgorithm(uri.to_owned()))?;
+    let method = Method::from_uri(uri)
+        .ok_or_else(|| SignatureError::UnsupportedAlgorithm(uri.to_owned()))?;
     let prefixes = match doc.child(id, EXC_C14N_NS, "InclusiveNamespaces") {
         Some(list) if method.exclusive => doc
             .attr(list, "PrefixList")
@@ -194,7 +194,10 @@ fn signature_algorithm(uri: &str) -> Result<Algorithm, SignatureError> {
 }
 
 /// The `ds:Signature` children of `element`.
-pub(crate) fn signature_of(doc: &Document, element: NodeId) -> Result<Option<NodeId>, SignatureError> {
+pub(crate) fn signature_of(
+    doc: &Document,
+    element: NodeId,
+) -> Result<Option<NodeId>, SignatureError> {
     let mut signatures = doc.children_named(element, DSIG_NS, "Signature");
     let first = signatures.next();
     if signatures.next().is_some() {
@@ -222,7 +225,10 @@ pub(crate) fn verify_enveloped(
     let signature_value = only_child(doc, signature, "SignatureValue")?;
 
     let (method, prefixes) = c14n_of(doc, only_child(doc, signed_info, "CanonicalizationMethod")?)?;
-    let alg = signature_algorithm(algorithm(doc, only_child(doc, signed_info, "SignatureMethod")?)?)?;
+    let alg = signature_algorithm(algorithm(
+        doc,
+        only_child(doc, signed_info, "SignatureMethod")?,
+    )?)?;
     let reference = only_child(doc, signed_info, "Reference")?;
 
     // The reference names the enveloping element, by its id.
@@ -499,10 +505,7 @@ mod tests {
 
     #[test]
     fn duplicate_ids_are_refused() {
-        let xml = signed().replace(
-            "<a:Body v=\"1\">",
-            "<a:Body v=\"1\"><a:Copy ID=\"_s1\"/>",
-        );
+        let xml = signed().replace("<a:Body v=\"1\">", "<a:Body v=\"1\"><a:Copy ID=\"_s1\"/>");
         assert_eq!(
             verify(&xml),
             Err(SignatureError::DuplicateId("_s1".to_owned()))
@@ -538,10 +541,7 @@ mod tests {
             verify(&xml),
             Err(SignatureError::UnsupportedAlgorithm(_))
         ));
-        let xml = signed().replace(
-            &format!("<ds:Transform Algorithm=\"{ENVELOPED}\"/>"),
-            "",
-        );
+        let xml = signed().replace(&format!("<ds:Transform Algorithm=\"{ENVELOPED}\"/>"), "");
         assert!(verify(&xml).is_err());
     }
 
@@ -552,7 +552,10 @@ mod tests {
         let end = xml.find("</ds:Signature>").unwrap() + "</ds:Signature>".len();
         let signature = &xml[start..end];
         let doubled = xml.replacen(signature, &format!("{signature}{signature}"), 1);
-        assert!(matches!(verify(&doubled), Err(SignatureError::Malformed(_))));
+        assert!(matches!(
+            verify(&doubled),
+            Err(SignatureError::Malformed(_))
+        ));
     }
 
     /// A real sample's signatures: `(signed element, signature)`.
@@ -665,9 +668,11 @@ mod tests {
                 );
 
                 let info = c14n::canonicalize(&doc, signed_info, method, &prefixes, None);
-                let signature_method =
-                    algorithm(&doc, only_child(&doc, signed_info, "SignatureMethod").unwrap())
-                        .unwrap();
+                let signature_method = algorithm(
+                    &doc,
+                    only_child(&doc, signed_info, "SignatureMethod").unwrap(),
+                )
+                .unwrap();
                 let legacy: &dyn ring::signature::VerificationAlgorithm =
                     if signature_method.ends_with("sha1") {
                         &ring::signature::RSA_PKCS1_1024_8192_SHA1_FOR_LEGACY_USE_ONLY
@@ -676,9 +681,8 @@ mod tests {
                     } else {
                         &ring::signature::RSA_PKCS1_1024_8192_SHA256_FOR_LEGACY_USE_ONLY
                     };
-                let value =
-                    base64_of(&doc, only_child(&doc, signature, "SignatureValue").unwrap())
-                        .unwrap();
+                let value = base64_of(&doc, only_child(&doc, signature, "SignatureValue").unwrap())
+                    .unwrap();
                 ring::signature::UnparsedPublicKey::new(legacy, sample_rsa_key(&doc, signature))
                     .verify(info.as_bytes(), &value)
                     .unwrap();

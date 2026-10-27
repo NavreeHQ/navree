@@ -47,8 +47,20 @@ fn an_evil_assertion_next_to_the_signed_one() {
     let p = split();
     for xml in [
         // Before it, and after it.
-        format!("{}{}{}{}", p.before, evil(&p.assertion, "_evil"), p.assertion, p.after),
-        format!("{}{}{}{}", p.before, p.assertion, evil(&p.assertion, "_evil"), p.after),
+        format!(
+            "{}{}{}{}",
+            p.before,
+            evil(&p.assertion, "_evil"),
+            p.assertion,
+            p.after
+        ),
+        format!(
+            "{}{}{}{}",
+            p.before,
+            p.assertion,
+            evil(&p.assertion, "_evil"),
+            p.after
+        ),
     ] {
         assert!(invalid(check(&xml, OKTA_ISSUER)), "{xml}");
     }
@@ -74,7 +86,10 @@ fn the_signed_assertion_inside_the_evil_one_with_its_id() {
     // in its Advice, where a lookup by id might find it.
     let evil = evil(&p.assertion, "id17616282001234567890456").replace(
         "</saml2:Assertion>",
-        &format!("<saml2:Advice>{}</saml2:Advice></saml2:Assertion>", p.assertion),
+        &format!(
+            "<saml2:Advice>{}</saml2:Advice></saml2:Assertion>",
+            p.assertion
+        ),
     );
     let xml = format!("{}{evil}{}", p.before, p.after);
     let result = check(&xml, OKTA_ISSUER);
@@ -95,11 +110,9 @@ fn the_signature_moved_to_the_response() {
     let signature = &p.assertion[start..end];
     let unsigned = without_signature(&p.assertion).replace("alice@acme.test", "mallory@acme.test");
     // The response's signature now references the assertion.
-    let before = p.before.replacen(
-        "</saml2:Issuer>",
-        &format!("</saml2:Issuer>{signature}"),
-        1,
-    );
+    let before = p
+        .before
+        .replacen("</saml2:Issuer>", &format!("</saml2:Issuer>{signature}"), 1);
     let xml = format!("{before}{unsigned}{}", p.after);
     assert_eq!(
         check(&xml, OKTA_ISSUER),
@@ -109,7 +122,8 @@ fn the_signature_moved_to_the_response() {
 
 #[test]
 fn the_whole_response_wrapped_in_another_element() {
-    let body = OKTA.trim_start_matches("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>");
+    let body =
+        OKTA.trim_start_matches("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>");
     let xml = format!("<Envelope>{body}</Envelope>");
     assert!(invalid(check(&xml, OKTA_ISSUER)));
 }

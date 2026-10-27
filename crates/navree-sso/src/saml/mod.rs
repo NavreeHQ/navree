@@ -64,7 +64,9 @@ pub enum SamlError {
         message: Option<String>,
     },
     /// The assertion is encrypted; Navree reads plain assertions over TLS.
-    #[error("encrypted assertions are not supported; turn assertion encryption off at the identity provider")]
+    #[error(
+        "encrypted assertions are not supported; turn assertion encryption off at the identity provider"
+    )]
     EncryptedAssertion,
     /// The issuer is not the connection's identity provider.
     #[error("the response comes from `{0}`, not the connection's identity provider")]
@@ -126,7 +128,10 @@ mod tests {
         assert_eq!(parse_instant("2026-10-27T12:00:00Z").unwrap(), expected);
         assert_eq!(parse_instant("2026-10-27T12:00:00.000Z").unwrap(), expected);
         assert_eq!(parse_instant("2026-10-27T12:00:00").unwrap(), expected);
-        assert_eq!(parse_instant("2026-10-27T14:00:00+02:00").unwrap(), expected);
+        assert_eq!(
+            parse_instant("2026-10-27T14:00:00+02:00").unwrap(),
+            expected
+        );
         assert!(parse_instant("yesterday").is_err());
         assert_eq!(format_instant(expected), "2026-10-27T12:00:00Z");
     }

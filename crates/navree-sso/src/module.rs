@@ -128,16 +128,18 @@ fn register(m: &mut ModuleBuilder, options: Option<SsoOptions>) {
                     Some(http) => (*http).clone(),
                     None => HttpClient::new(HttpClientOptions::default())?,
                 };
-                Ok(Arc::new(DohResolver::new(http, options.domains.doh_url.clone()))
-                    as Arc<dyn TxtResolver>)
+                Ok(
+                    Arc::new(DohResolver::new(http, options.domains.doh_url.clone()))
+                        as Arc<dyn TxtResolver>,
+                )
             })
             .deps(vec![ProviderKey::of::<SsoOptions>()]),
         )
         .exports::<dyn TxtResolver>()
         .factory(
-            Factory::<Sso>::new(|r: Resolver| async move {
-                Ok(Arc::new(Sso::build(&r.app()).await?))
-            })
+            Factory::<Sso>::new(
+                |r: Resolver| async move { Ok(Arc::new(Sso::build(&r.app()).await?)) },
+            )
             .deps(vec![
                 ProviderKey::of::<SsoOptions>(),
                 ProviderKey::of::<dyn TxtResolver>(),

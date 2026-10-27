@@ -22,7 +22,8 @@ pub(crate) const ENTRA: &str = include_str!("../fixtures/idp/entra.xml");
 pub(crate) const GOOGLE: &str = include_str!("../fixtures/idp/google.xml");
 
 pub(crate) const OKTA_ISSUER: &str = "http://www.okta.com/exk8acmeTEST4x7";
-pub(crate) const ENTRA_ISSUER: &str = "https://sts.windows.net/9e3c5a0f-1b2d-4c6e-8f0a-2b4c6d8e0f1a/";
+pub(crate) const ENTRA_ISSUER: &str =
+    "https://sts.windows.net/9e3c5a0f-1b2d-4c6e-8f0a-2b4c6d8e0f1a/";
 pub(crate) const GOOGLE_ISSUER: &str = "https://accounts.google.com/o/saml2?idpid=C03acme01";
 
 pub(crate) fn at(instant: &str) -> DateTime<Utc> {
@@ -129,10 +130,25 @@ fn google_signed_response_around_an_unsigned_assertion() {
 #[test]
 fn each_sample_is_refused_once_changed() {
     for (xml, issuer, from, to) in [
-        (OKTA, OKTA_ISSUER, "alice@acme.test</saml2:NameID>", "admin@acme.test</saml2:NameID>"),
+        (
+            OKTA,
+            OKTA_ISSUER,
+            "alice@acme.test</saml2:NameID>",
+            "admin@acme.test</saml2:NameID>",
+        ),
         (OKTA_BOTH, OKTA_ISSUER, ">Engineering<", ">Executives<"),
-        (ENTRA, ENTRA_ISSUER, "<AttributeValue>Bob</AttributeValue>", "<AttributeValue>Rob</AttributeValue>"),
-        (GOOGLE, GOOGLE_ISSUER, "admins@acme.test", "owners@acme.test"),
+        (
+            ENTRA,
+            ENTRA_ISSUER,
+            "<AttributeValue>Bob</AttributeValue>",
+            "<AttributeValue>Rob</AttributeValue>",
+        ),
+        (
+            GOOGLE,
+            GOOGLE_ISSUER,
+            "admins@acme.test",
+            "owners@acme.test",
+        ),
     ] {
         assert!(xml.contains(from), "{from}");
         let changed = xml.replace(from, to);

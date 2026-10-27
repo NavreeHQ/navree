@@ -304,7 +304,10 @@ mod tests {
         };
         let xml = sp.metadata_xml();
         let doc = Document::parse(&xml).unwrap();
-        assert_eq!(doc.attr(doc.root(), "entityID"), Some(sp.entity_id.as_str()));
+        assert_eq!(
+            doc.attr(doc.root(), "entityID"),
+            Some(sp.entity_id.as_str())
+        );
         let acs = doc
             .elements()
             .into_iter()

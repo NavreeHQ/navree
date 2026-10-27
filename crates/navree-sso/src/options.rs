@@ -133,7 +133,11 @@ pub struct OidcOptions {
 impl Default for OidcOptions {
     fn default() -> Self {
         OidcOptions {
-            scopes: vec!["openid".to_owned(), "email".to_owned(), "profile".to_owned()],
+            scopes: vec![
+                "openid".to_owned(),
+                "email".to_owned(),
+                "profile".to_owned(),
+            ],
             clock_skew_secs: 60,
         }
     }
@@ -229,7 +233,8 @@ mod tests {
     #[test]
     fn scopes_read_from_a_string() {
         let options: OidcOptions =
-            serde_json::from_value(serde_json::json!({ "scopes": "openid, email groups" })).unwrap();
+            serde_json::from_value(serde_json::json!({ "scopes": "openid, email groups" }))
+                .unwrap();
         assert_eq!(options.scopes, ["openid", "email", "groups"]);
     }
 
@@ -252,7 +257,10 @@ mod tests {
             "sso.code_ttl_secs",
             "sso.oidc.scopes",
         ] {
-            assert!(errors.iter().any(|e| e.starts_with(key)), "{key}: {errors:?}");
+            assert!(
+                errors.iter().any(|e| e.starts_with(key)),
+                "{key}: {errors:?}"
+            );
         }
     }
 }

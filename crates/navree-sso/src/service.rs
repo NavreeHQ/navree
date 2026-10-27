@@ -36,7 +36,14 @@ use crate::{
 };
 
 /// Slugs the routes use as path segments.
-const RESERVED_SLUGS: &[&str] = &["connections", "domains", "saml", "oidc", "discover", "exchange"];
+const RESERVED_SLUGS: &[&str] = &[
+    "connections",
+    "domains",
+    "saml",
+    "oidc",
+    "discover",
+    "exchange",
+];
 
 /// Where to send the browser to sign in.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, ToSchema)]
@@ -357,7 +364,8 @@ impl Sso {
         }
         // `client_secret` is skipped when serializing the public form, so
         // the stored form is written by hand.
-        let mut value = serde_json::to_value(&stored).map_err(|e| SsoError::Config(e.to_string()))?;
+        let mut value =
+            serde_json::to_value(&stored).map_err(|e| SsoError::Config(e.to_string()))?;
         if let (ConnectionSettings::Oidc(oidc), Value::Object(fields)) = (&stored, &mut value)
             && let Some(secret) = &oidc.client_secret
         {
@@ -399,7 +407,10 @@ impl Sso {
             enforce: loaded.model.enforce,
             has_client_secret: matches!(
                 &loaded.settings,
-                ConnectionSettings::Oidc(OidcSettings { client_secret: Some(_), .. })
+                ConnectionSettings::Oidc(OidcSettings {
+                    client_secret: Some(_),
+                    ..
+                })
             ),
             settings: loaded.settings.redacted(),
             provisioning: loaded.provisioning.clone(),
@@ -435,8 +446,12 @@ impl Sso {
 
     /// The connections of `owner` (every connection when `None`), oldest
     /// first.
-    pub async fn connections(&self, owner: Option<SsoOwner>) -> Result<Vec<SsoConnection>, SsoError> {
-        let mut query = sso_connection::Entity::find().order_by_asc(sso_connection::Column::CreatedAt);
+    pub async fn connections(
+        &self,
+        owner: Option<SsoOwner>,
+    ) -> Result<Vec<SsoConnection>, SsoError> {
+        let mut query =
+            sso_connection::Entity::find().order_by_asc(sso_connection::Column::CreatedAt);
         if let Some(owner) = owner {
             query = query.filter(sso_connection::Column::OwnerType.eq(owner.kind()));
             query = match owner.id() {
@@ -492,9 +507,9 @@ impl Sso {
                     "settings.metadata_url",
                     "metadata_url must be an https URL",
                 )),
-                (None, Some(xml)) => IdpMetadata::parse(xml).map(drop).map_err(|error| {
-                    SsoError::invalid("settings.metadata_xml", error.to_string())
-                }),
+                (None, Some(xml)) => IdpMetadata::parse(xml)
+                    .map(drop)
+                    .map_err(|error| SsoError::invalid("settings.metadata_xml", error.to_string())),
                 _ => Err(SsoError::invalid(
                     "settings",
                     "give exactly one of metadata_url and metadata_xml",
@@ -555,7 +570,10 @@ impl Sso {
     ) -> Result<SsoConnection, SsoError> {
         let name = input.name.trim().to_owned();
         if name.is_empty() || name.chars().count() > 120 {
-            return Err(SsoError::invalid("name", "name must be 1 to 120 characters"));
+            return Err(SsoError::invalid(
+                "name",
+                "name must be 1 to 120 characters",
+            ));
         }
         self.check_owner(input.owner).await?;
         self.check_settings(&input.settings)?;
@@ -627,7 +645,10 @@ impl Sso {
         if let Some(name) = changes.name {
             let name = name.trim().to_owned();
             if name.is_empty() || name.chars().count() > 120 {
-                return Err(SsoError::invalid("name", "name must be 1 to 120 characters"));
+                return Err(SsoError::invalid(
+                    "name",
+                    "name must be 1 to 120 characters",
+                ));
             }
             row.name = Set(name);
         }
@@ -720,7 +741,10 @@ impl Sso {
             .order_by_asc(sso_domain::Column::Domain)
             .all(&reader)
             .await?;
-        Ok(rows.into_iter().map(|row| self.present_domain(row)).collect())
+        Ok(rows
+            .into_iter()
+            .map(|row| self.present_domain(row))
+            .collect())
     }
 
     /// Adds `domain` to a connection in `uow`, unverified: create the TXT
@@ -897,7 +921,10 @@ impl Sso {
     }
 
     /// The connection that keeps `email` off passwords, if any.
-    pub(crate) async fn enforcing_connection(&self, email: &str) -> Result<Option<String>, SsoError> {
+    pub(crate) async fn enforcing_connection(
+        &self,
+        email: &str,
+    ) -> Result<Option<String>, SsoError> {
         let Some((_, domain)) = email.rsplit_once('@') else {
             return Ok(None);
         };
@@ -926,7 +953,11 @@ impl Sso {
     /// to send the browser to (a SAML request with the HTTP-Redirect
     /// binding, or an OpenID Connect authorization request with PKCE and a
     /// nonce). `return_to` (a relative path) comes back with the sign-in.
-    pub async fn login(&self, key: &str, return_to: Option<String>) -> Result<SsoRedirect, SsoError> {
+    pub async fn login(
+        &self,
+        key: &str,
+        return_to: Option<String>,
+    ) -> Result<SsoRedirect, SsoError> {
         if let Some(return_to) = &return_to {
             check_return_to(return_to)?;
         }
@@ -940,7 +971,9 @@ impl Sso {
             nonce: None,
             verifier: None,
             return_to,
-            exp: now.timestamp().saturating_add(i64::try_from(ttl).unwrap_or(i64::MAX)),
+            exp: now
+                .timestamp()
+                .saturating_add(i64::try_from(ttl).unwrap_or(i64::MAX)),
         };
         let url = match &loaded.settings {
             ConnectionSettings::Saml(saml) => {
@@ -991,12 +1024,12 @@ impl Sso {
     }
 
     /// The state of `key`, which works once and must be for `connection`.
-    async fn take_state(&self, key: &str, connection: Uuid) -> Result<Option<LoginState>, SsoError> {
-        let Some(state) = self
-            .cache
-            .pull::<LoginState>(&Self::state_key(key))
-            .await?
-        else {
+    async fn take_state(
+        &self,
+        key: &str,
+        connection: Uuid,
+    ) -> Result<Option<LoginState>, SsoError> {
+        let Some(state) = self.cache.pull::<LoginState>(&Self::state_key(key)).await? else {
             return Ok(None);
         };
         if state.connection_id != connection || state.exp <= self.now().timestamp() {
@@ -1132,7 +1165,8 @@ impl Sso {
         // An assertion works once: remember its id until it expires.
         let remaining = (assertion.not_on_or_after - now)
             + TimeDelta::from_std(skew).unwrap_or(TimeDelta::zero());
-        let remaining = Duration::from_secs(u64::try_from(remaining.num_seconds()).unwrap_or(1).max(1));
+        let remaining =
+            Duration::from_secs(u64::try_from(remaining.num_seconds()).unwrap_or(1).max(1));
         let first_use = self
             .cache
             .add(
@@ -1373,7 +1407,9 @@ impl Sso {
                 (user, created)
             }
         };
-        let role = self.membership(uow, loaded, user.id, &profile.groups).await?;
+        let role = self
+            .membership(uow, loaded, user.id, &profile.groups)
+            .await?;
         if created || role.is_some() {
             self.emit_after_commit(
                 uow,
@@ -1542,7 +1578,10 @@ impl Sso {
     ) -> Result<(User, navree_auth::TokenPair, Option<String>), SsoError> {
         let pending: PendingCode = self
             .cache
-            .pull(&format!("navree-sso:code:{}", sha256_hex(code.trim().as_bytes())))
+            .pull(&format!(
+                "navree-sso:code:{}",
+                sha256_hex(code.trim().as_bytes())
+            ))
             .await?
             .ok_or(SsoError::InvalidCode)?;
         let user = self
@@ -1685,7 +1724,13 @@ mod tests {
         for ok in ["/", "/dashboard?tab=1", "/w/acme/deals#top"] {
             assert!(check_return_to(ok).is_ok(), "{ok}");
         }
-        for bad in ["https://evil.test", "//evil.test", "/\\evil.test", "dashboard", "/a\nb"] {
+        for bad in [
+            "https://evil.test",
+            "//evil.test",
+            "/\\evil.test",
+            "dashboard",
+            "/a\nb",
+        ] {
             assert!(check_return_to(bad).is_err(), "{bad}");
         }
     }
@@ -1693,8 +1738,18 @@ mod tests {
     #[test]
     fn domains_are_normalized_and_checked() {
         assert_eq!(normalize_domain(" Acme.COM. ").unwrap(), "acme.com");
-        assert_eq!(normalize_domain("mail.acme-corp.co.uk").unwrap(), "mail.acme-corp.co.uk");
-        for bad in ["localhost", "acme..com", "-acme.com", "acme.com/x", "a@b.com", "ünï.com"] {
+        assert_eq!(
+            normalize_domain("mail.acme-corp.co.uk").unwrap(),
+            "mail.acme-corp.co.uk"
+        );
+        for bad in [
+            "localhost",
+            "acme..com",
+            "-acme.com",
+            "acme.com/x",
+            "a@b.com",
+            "ünï.com",
+        ] {
             assert!(normalize_domain(bad).is_err(), "{bad}");
         }
     }
@@ -1704,7 +1759,14 @@ mod tests {
         assert_eq!(slugify("Acme Okta (prod)"), "acme-okta-prod");
         assert_eq!(slugify("!"), "sso");
         assert!(check_slug("acme-okta").is_ok());
-        for bad in ["a", "Acme", "-acme", "connections", "saml", &Uuid::nil().to_string()] {
+        for bad in [
+            "a",
+            "Acme",
+            "-acme",
+            "connections",
+            "saml",
+            &Uuid::nil().to_string(),
+        ] {
             assert!(check_slug(bad).is_err(), "{bad}");
         }
     }

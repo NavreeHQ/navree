@@ -13,8 +13,8 @@ use crate::controller::AuthController;
 use crate::error::map_auth_error;
 use crate::service::clock_of;
 use crate::{
-    AuthError, AuthOptions, AuthService, JwtService, JwtStrategy, Strategy, StrategyAuthenticator,
-    PasswordSignInPolicy, UserResourceExtension, migration,
+    AuthError, AuthOptions, AuthService, JwtService, JwtStrategy, PasswordSignInPolicy, Strategy,
+    StrategyAuthenticator, UserResourceExtension, migration,
 };
 
 /// The purpose the JWT signing key is derived for from the application key.
