@@ -354,3 +354,47 @@ async fn the_apps_ffmpeg_runner_is_used() {
     );
     ffmpeg.assert_ran(|call| call.args.contains(&"-version".to_owned()));
 }
+
+#[tokio::test]
+async fn remote_files_go_through_the_apps_http_client() {
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/logo.png"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(image_bytes(
+            30,
+            30,
+            ImageFormat::Png,
+        )))
+        .mount(&server)
+        .await;
+    let url = format!("{}/logo.png", server.uri());
+
+    // The app's client allows the mock server's address.
+    let allowed = app()
+        .config("http_client.ssrf.allow_hosts", "127.0.0.1")
+        .module(navree_http_client::HttpClientModule::from_config())
+        .build()
+        .await;
+    let item = allowed
+        .get::<Media>()
+        .await
+        .add_from_url(&Course { id: 7 }, "gallery", url.as_str())
+        .save(None)
+        .await
+        .unwrap();
+    assert_eq!(item.width, Some(30));
+
+    // Without HttpClientModule, a client with the default policy refuses it.
+    let default = app().build().await;
+    let error = default
+        .get::<Media>()
+        .await
+        .add_from_url(&Course { id: 7 }, "gallery", url.as_str())
+        .save(None)
+        .await
+        .unwrap_err();
+    assert_eq!(error.code(), "remote_file_blocked", "{error}");
+}
