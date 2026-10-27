@@ -1288,12 +1288,16 @@ better.
   values; `Repo` records the model's serde output. Writes of rows with
   skipped fields (users, webhook endpoints, social accounts, workspace
   rows) stay on `Repo`, so audit trails keep their exact content; the
-  plain inserts and updates of token, session, delivery and failed-job
-  rows moved to the ORM.
+  plain inserts and updates that recorded no change events moved to the
+  ORM: auth's sessions, sign-in tokens, resets and passkeys, the webhook
+  delivery log, the OAuth server's clients, grants and tokens, failed
+  jobs, stored notifications and audit rows. Reads moved with them
+  (auth's and social sign-in's user lookups too).
 - **Errors.** `From<OrmError> for DbErr` (database errors as they were,
   not-found as `RecordNotFound`, the rest as `DbErr::Custom`) lets services
   whose API speaks `DbErr` use `?`; the crates' own errors convert through
-  it (`AuditError`, `QueueError`, `AuthError`, `WebhooksError`).
+  it (`QueueError`, `AuthError`, `WebhooksError`, `OAuthError`,
+  `SocialError`, each into its database variant).
 - **`JsonText`** (`cast.rs`): serde values stored as JSON text in `TEXT`
   columns, for tables created before JSON columns were used.
 - **Migrations stay SeaORM.** The schema builder's DDL is not the SeaORM
