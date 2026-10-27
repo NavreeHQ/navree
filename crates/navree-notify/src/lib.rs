@@ -21,7 +21,8 @@
 //!   row joins its transaction and the other channels go out after the
 //!   commit. `send` and `send_now` do the same with the current unit of
 //!   work (`navree_db::Uow::current`, e.g. the request's in a handler).
-//! - Channels: database (a [`notifications`] row), mail (navree-mail's
+//! - Channels: database (a [`notifications`] row, a navree-orm model apps
+//!   query and prune with the ORM), mail (navree-mail's
 //!   `Mailer`; the app needs `MailModule` and `ViewModule`) and broadcast
 //!   (event [`NOTIFICATION_CREATED`] with `{id, type, data, read_at,
 //!   created_at}` on [`Notifiable::broadcast_channel`] through the app's

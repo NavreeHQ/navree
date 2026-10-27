@@ -10,11 +10,8 @@ use chrono::{DateTime, Utc};
 use navree_auth::AuthService;
 use navree_contracts::{AuditEntry, AuditKind};
 use navree_db::Uow;
-use sea_orm::sea_query::Expr;
-use sea_orm::{
-    ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseTransaction, EntityTrait, QueryFilter,
-    Set,
-};
+use navree_orm::{Executor, Model as _, Record};
+use sea_orm::DatabaseTransaction;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use utoipa::ToSchema;
@@ -154,22 +151,21 @@ impl Grants {
         let refresh_family = issue
             .refresh
             .then(|| family_id.unwrap_or_else(Uuid::now_v7));
-        access_token::ActiveModel {
-            id: Set(access_id),
-            token_hash: Set(digest(&access)),
-            client_id: Set(issue.client.id),
-            user_id: Set(issue.user_id),
-            scopes: Set(join_scopes(&issue.scopes)),
-            grant: Set(issue.grant.as_str().to_owned()),
-            code_id: Set(issue.code_id),
-            family_id: Set(refresh_family.or(family_id)),
-            workspace_id: Set(issue.client.workspace_id),
-            expires_at: Set(core.after(ttl)),
-            revoked_at: Set(None),
-            created_at: Set(now),
-        }
-        .insert(tx)
-        .await?;
+        let access_row = access_token::Model {
+            id: access_id,
+            token_hash: digest(&access),
+            client_id: issue.client.id,
+            user_id: issue.user_id,
+            scopes: join_scopes(&issue.scopes),
+            grant: issue.grant.as_str().to_owned(),
+            code_id: issue.code_id,
+            family_id: refresh_family.or(family_id),
+            workspace_id: issue.client.workspace_id,
+            expires_at: core.after(ttl),
+            revoked_at: None,
+            created_at: now,
+        };
+        access_token::Model::insert(tx, [access_row]).await?;
         let refresh = match refresh_family {
             Some(family) => {
                 let token = new_token(REFRESH_TOKEN_PREFIX);
@@ -177,23 +173,22 @@ impl Grants {
                     .family
                     .as_ref()
                     .map_or_else(|| issue.scopes.clone(), |(_, scopes)| scopes.clone());
-                refresh_token::ActiveModel {
-                    id: Set(Uuid::now_v7()),
-                    token_hash: Set(digest(&token)),
-                    client_id: Set(issue.client.id),
-                    user_id: Set(issue.user_id),
-                    scopes: Set(join_scopes(&grant_scopes)),
-                    family_id: Set(family),
-                    code_id: Set(issue.code_id),
-                    access_token_id: Set(Some(access_id)),
-                    workspace_id: Set(issue.client.workspace_id),
-                    expires_at: Set(core.after(core.options.refresh_token_ttl_secs)),
-                    used_at: Set(None),
-                    revoked_at: Set(None),
-                    created_at: Set(now),
-                }
-                .insert(tx)
-                .await?;
+                let refresh_row = refresh_token::Model {
+                    id: Uuid::now_v7(),
+                    token_hash: digest(&token),
+                    client_id: issue.client.id,
+                    user_id: issue.user_id,
+                    scopes: join_scopes(&grant_scopes),
+                    family_id: family,
+                    code_id: issue.code_id,
+                    access_token_id: Some(access_id),
+                    workspace_id: issue.client.workspace_id,
+                    expires_at: core.after(core.options.refresh_token_ttl_secs),
+                    used_at: None,
+                    revoked_at: None,
+                    created_at: now,
+                };
+                refresh_token::Model::insert(tx, [refresh_row]).await?;
                 Some(token)
             }
             None => None,
@@ -296,9 +291,9 @@ impl Grants {
             ));
         }
         let tx = uow.tx().await?;
-        let row = code::Entity::find()
-            .filter(code::Column::CodeHash.eq(digest(code)))
-            .one(&*tx)
+        let row = code::Model::query()
+            .where_(code::Model::CODE_HASH.eq(digest(code)))
+            .first(&*tx)
             .await?
             .ok_or_else(|| OAuthError::InvalidGrant("The authorization code is invalid".into()))?;
         if row.client_id != client.id {
@@ -332,13 +327,12 @@ impl Grants {
                 "code_verifier does not match the code challenge".into(),
             ));
         }
-        let claimed = code::Entity::update_many()
-            .col_expr(code::Column::UsedAt, Expr::value(now))
-            .filter(code::Column::Id.eq(row.id))
-            .filter(code::Column::UsedAt.is_null())
-            .exec(&*tx)
+        let claimed = code::Model::query()
+            .where_key(row.id)
+            .where_null(code::Model::USED_AT)
+            .update(&*tx, [code::Model::USED_AT.set(now)])
             .await?;
-        if claimed.rows_affected != 1 {
+        if claimed != 1 {
             self.revoke_code_tokens(&tx, row.id, now).await?;
             return Err(OAuthError::InvalidGrant(
                 "The authorization code was already used".into(),
@@ -369,17 +363,15 @@ impl Grants {
         code_id: Uuid,
         now: DateTime<Utc>,
     ) -> Result<(), OAuthError> {
-        access_token::Entity::update_many()
-            .col_expr(access_token::Column::RevokedAt, Expr::value(now))
-            .filter(access_token::Column::CodeId.eq(code_id))
-            .filter(access_token::Column::RevokedAt.is_null())
-            .exec(tx)
+        access_token::Model::query()
+            .where_(access_token::Model::CODE_ID.eq(code_id))
+            .where_null(access_token::Model::REVOKED_AT)
+            .update(tx, [access_token::Model::REVOKED_AT.set(now)])
             .await?;
-        refresh_token::Entity::update_many()
-            .col_expr(refresh_token::Column::RevokedAt, Expr::value(now))
-            .filter(refresh_token::Column::CodeId.eq(code_id))
-            .filter(refresh_token::Column::RevokedAt.is_null())
-            .exec(tx)
+        refresh_token::Model::query()
+            .where_(refresh_token::Model::CODE_ID.eq(code_id))
+            .where_null(refresh_token::Model::REVOKED_AT)
+            .update(tx, [refresh_token::Model::REVOKED_AT.set(now)])
             .await?;
         self.core.forget_all();
         tracing::warn!(target: "navree::security", %code_id, "an authorization code was presented twice; its tokens were revoked");
@@ -445,9 +437,9 @@ impl Grants {
             ));
         }
         let tx = uow.tx().await?;
-        let row = device_code::Entity::find()
-            .filter(device_code::Column::DeviceCodeHash.eq(digest(device_code)))
-            .one(&*tx)
+        let mut row = device_code::Model::query()
+            .where_(device_code::Model::DEVICE_CODE_HASH.eq(digest(device_code)))
+            .first(&*tx)
             .await?
             .filter(|row| row.client_id == client.id)
             .ok_or_else(|| OAuthError::InvalidGrant("The device code is invalid".into()))?;
@@ -464,33 +456,32 @@ impl Grants {
         let too_fast = row
             .last_polled_at
             .is_some_and(|last| (now - last).num_seconds() < interval);
-        let mut active: device_code::ActiveModel = row.clone().into();
-        active.last_polled_at = Set(Some(now));
+        row.last_polled_at = Some(now);
         if too_fast {
             // RFC 8628 §3.5: every slow_down adds five seconds.
-            active.interval_secs = Set(interval + 5);
-            active.update(&*tx).await?;
+            row.interval_secs = interval + 5;
+            row.save(&*tx).await?;
             return Err(OAuthError::SlowDown);
         }
         match row.status.as_str() {
             "approved" => {}
             "denied" => {
-                active.used_at = Set(Some(now));
-                active.update(&*tx).await?;
+                row.used_at = Some(now);
+                row.save(&*tx).await?;
                 return Err(OAuthError::AccessDenied(
                     "The user denied the request".into(),
                 ));
             }
             _ => {
-                active.update(&*tx).await?;
+                row.save(&*tx).await?;
                 return Err(OAuthError::AuthorizationPending);
             }
         }
         let user_id = row
             .user_id
             .ok_or_else(|| OAuthError::InvalidGrant("The device code is invalid".into()))?;
-        active.used_at = Set(Some(now));
-        active.update(&*tx).await?;
+        row.used_at = Some(now);
+        row.save(&*tx).await?;
         let scopes = parse_scope(&row.scopes);
         self.issue(
             &tx,
@@ -519,9 +510,9 @@ impl Grants {
     ) -> Result<TokenResponse, OAuthError> {
         let tx = uow.tx().await?;
         let invalid = || OAuthError::InvalidGrant("The refresh token is invalid".into());
-        let row = refresh_token::Entity::find()
-            .filter(refresh_token::Column::TokenHash.eq(digest(token)))
-            .one(&*tx)
+        let row = refresh_token::Model::query()
+            .where_(refresh_token::Model::TOKEN_HASH.eq(digest(token)))
+            .first(&*tx)
             .await?
             .filter(|row| row.client_id == client.id)
             .ok_or_else(invalid)?;
@@ -560,13 +551,12 @@ impl Grants {
             }
             None => granted.clone(),
         };
-        let claimed = refresh_token::Entity::update_many()
-            .col_expr(refresh_token::Column::UsedAt, Expr::value(now))
-            .filter(refresh_token::Column::Id.eq(row.id))
-            .filter(refresh_token::Column::UsedAt.is_null())
-            .exec(&*tx)
+        let claimed = refresh_token::Model::query()
+            .where_key(row.id)
+            .where_null(refresh_token::Model::USED_AT)
+            .update(&*tx, [refresh_token::Model::USED_AT.set(now)])
             .await?;
-        if claimed.rows_affected != 1 {
+        if claimed != 1 {
             self.revoke_family(&*tx, row.family_id, now).await?;
             return Err(invalid());
         }
@@ -587,23 +577,21 @@ impl Grants {
     }
 
     /// Revokes refresh family `family_id` and its access tokens.
-    pub(crate) async fn revoke_family<C: ConnectionTrait>(
+    pub(crate) async fn revoke_family<E: Executor + ?Sized>(
         &self,
-        conn: &C,
+        exec: &E,
         family_id: Uuid,
         now: DateTime<Utc>,
     ) -> Result<(), OAuthError> {
-        refresh_token::Entity::update_many()
-            .col_expr(refresh_token::Column::RevokedAt, Expr::value(now))
-            .filter(refresh_token::Column::FamilyId.eq(family_id))
-            .filter(refresh_token::Column::RevokedAt.is_null())
-            .exec(conn)
+        refresh_token::Model::query()
+            .where_(refresh_token::Model::FAMILY_ID.eq(family_id))
+            .where_null(refresh_token::Model::REVOKED_AT)
+            .update(exec, [refresh_token::Model::REVOKED_AT.set(now)])
             .await?;
-        access_token::Entity::update_many()
-            .col_expr(access_token::Column::RevokedAt, Expr::value(now))
-            .filter(access_token::Column::FamilyId.eq(family_id))
-            .filter(access_token::Column::RevokedAt.is_null())
-            .exec(conn)
+        access_token::Model::query()
+            .where_(access_token::Model::FAMILY_ID.eq(family_id))
+            .where_null(access_token::Model::REVOKED_AT)
+            .update(exec, [access_token::Model::REVOKED_AT.set(now)])
             .await?;
         self.core.forget_all();
         Ok(())
@@ -622,24 +610,23 @@ impl Grants {
         let hash = digest(token);
         let now = self.core.now();
         if token.starts_with(REFRESH_TOKEN_PREFIX) {
-            if let Some(row) = refresh_token::Entity::find()
-                .filter(refresh_token::Column::TokenHash.eq(&hash))
-                .one(&*tx)
+            if let Some(row) = refresh_token::Model::query()
+                .where_(refresh_token::Model::TOKEN_HASH.eq(hash.as_str()))
+                .first(&*tx)
                 .await?
                 .filter(|row| row.client_id == client.id)
             {
                 self.revoke_family(&*tx, row.family_id, now).await?;
             }
         } else if token.starts_with(ACCESS_TOKEN_PREFIX)
-            && let Some(row) = access_token::Entity::find()
-                .filter(access_token::Column::TokenHash.eq(&hash))
-                .one(&*tx)
+            && let Some(mut row) = access_token::Model::query()
+                .where_(access_token::Model::TOKEN_HASH.eq(hash.as_str()))
+                .first(&*tx)
                 .await?
                 .filter(|row| row.client_id == client.id && row.revoked_at.is_none())
         {
-            let mut active: access_token::ActiveModel = row.into();
-            active.revoked_at = Set(Some(now));
-            active.update(&*tx).await?;
+            row.revoked_at = Some(now);
+            row.save(&*tx).await?;
             self.core.forget([hash]).await;
         }
         Ok(())
@@ -650,13 +637,14 @@ impl Grants {
         let inactive = || json!({ "active": false });
         let hash = digest(token);
         let now = self.core.now();
-        let conn = self.core.db.reader().await;
+        let db = &self.core.db;
         let (user_id, client_id, scopes, exp, iat, token_type) =
             if token.starts_with(ACCESS_TOKEN_PREFIX) {
-                let Some(row) = access_token::Entity::find()
-                    .filter(access_token::Column::TokenHash.eq(&hash))
-                    .one(&conn)
+                let Some(row) = access_token::Model::query()
+                    .where_(access_token::Model::TOKEN_HASH.eq(hash.as_str()))
+                    .first(db)
                     .await?
+                    .map(Record::into_inner)
                     .filter(|row| row.revoked_at.is_none() && row.expires_at > now)
                 else {
                     return Ok(inactive());
@@ -670,10 +658,11 @@ impl Grants {
                     "Bearer",
                 )
             } else if token.starts_with(REFRESH_TOKEN_PREFIX) {
-                let Some(row) = refresh_token::Entity::find()
-                    .filter(refresh_token::Column::TokenHash.eq(&hash))
-                    .one(&conn)
+                let Some(row) = refresh_token::Model::query()
+                    .where_(refresh_token::Model::TOKEN_HASH.eq(hash.as_str()))
+                    .first(db)
                     .await?
+                    .map(Record::into_inner)
                     .filter(|row| {
                         row.revoked_at.is_none() && row.used_at.is_none() && row.expires_at > now
                     })
@@ -689,10 +678,11 @@ impl Grants {
                     "refresh_token",
                 )
             } else if token.starts_with(PERSONAL_ACCESS_TOKEN_PREFIX) {
-                let Some(row) = personal_access_token::Entity::find()
-                    .filter(personal_access_token::Column::TokenHash.eq(&hash))
-                    .one(&conn)
+                let Some(row) = personal_access_token::Model::query()
+                    .where_(personal_access_token::Model::TOKEN_HASH.eq(hash.as_str()))
+                    .first(db)
                     .await?
+                    .map(Record::into_inner)
                     .filter(|row| {
                         row.revoked_at.is_none() && row.expires_at.is_none_or(|exp| exp > now)
                     })
@@ -711,12 +701,11 @@ impl Grants {
                 return Ok(inactive());
             };
         if let Some(client_id) = client_id {
-            let client = client::Entity::find_by_id(client_id).one(&conn).await?;
+            let client = client::Model::find(db, client_id).await?;
             if client.is_none_or(|client| client.is_revoked()) {
                 return Ok(inactive());
             }
         }
-        drop(conn);
         let mut body = json!({
             "active": true,
             "scope": scopes,
@@ -763,19 +752,19 @@ impl Grants {
     }
 
     async fn load(&self, token: &str, hash: &str) -> Result<Option<CachedToken>, OAuthError> {
-        let conn = self.core.db.reader().await;
+        let db = &self.core.db;
         if token.starts_with(ACCESS_TOKEN_PREFIX) {
-            let Some(row) = access_token::Entity::find()
-                .filter(access_token::Column::TokenHash.eq(hash))
-                .one(&conn)
+            let Some(row) = access_token::Model::query()
+                .where_(access_token::Model::TOKEN_HASH.eq(hash))
+                .first(db)
                 .await?
                 .filter(|row| row.revoked_at.is_none())
             else {
                 return Ok(None);
             };
-            let Some(client) = client::Entity::find_by_id(row.client_id)
-                .one(&conn)
+            let Some(client) = client::Model::find(db, row.client_id)
                 .await?
+                .map(Record::into_inner)
                 .filter(|client| !client.is_revoked())
             else {
                 return Ok(None);
@@ -793,9 +782,9 @@ impl Grants {
             }));
         }
         if token.starts_with(PERSONAL_ACCESS_TOKEN_PREFIX) {
-            let Some(row) = personal_access_token::Entity::find()
-                .filter(personal_access_token::Column::TokenHash.eq(hash))
-                .one(&conn)
+            let Some(row) = personal_access_token::Model::query()
+                .where_(personal_access_token::Model::TOKEN_HASH.eq(hash))
+                .first(db)
                 .await?
                 .filter(|row| row.revoked_at.is_none())
             else {

@@ -7,12 +7,12 @@ use std::sync::Arc;
 use navree_contracts::{AuditEntry, AuditKind};
 use navree_crypto::constant_time_eq;
 use navree_db::Uow;
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, Set};
+use navree_orm::{Model as _, Record};
 use serde_json::json;
 use uuid::Uuid;
 
 use crate::core::Core;
-use crate::entity::{Client, access_token, client, refresh_token};
+use crate::entity::{Client, access_token, refresh_token};
 use crate::error::OAuthError;
 use crate::scope::{OFFLINE_ACCESS, join_scopes};
 use crate::token::{CLIENT_SECRET_PREFIX, check_redirect_uri, digest, new_token};
@@ -239,25 +239,24 @@ impl OAuthClients {
         self.check(&new)?;
         let now = self.core.now();
         let secret = (!new.public).then(|| new_token(CLIENT_SECRET_PREFIX));
-        let model = client::ActiveModel {
-            id: Set(Uuid::now_v7()),
-            name: Set(new.name.trim().to_owned()),
-            secret_hash: Set(secret.as_deref().map(digest)),
-            redirect_uris: Set(new.redirect_uris.join(" ")),
-            scopes: Set(join_scopes(&dedup(&new.scopes))),
-            grants: Set(new.effective_grants().join(" ")),
-            owner_id: Set(new.owner_id),
-            trusted: Set(new.trusted),
-            introspect: Set(new.introspect),
-            workspace_id: Set(new.workspace_id),
-            logo_url: Set(new.logo_url.clone()),
-            website: Set(new.website.clone()),
-            created_at: Set(now),
-            updated_at: Set(now),
-            revoked_at: Set(None),
-        }
-        .insert(&*uow.tx().await?)
-        .await?;
+        let model = Client {
+            id: Uuid::now_v7(),
+            name: new.name.trim().to_owned(),
+            secret_hash: secret.as_deref().map(digest),
+            redirect_uris: new.redirect_uris.join(" "),
+            scopes: join_scopes(&dedup(&new.scopes)),
+            grants: new.effective_grants().join(" "),
+            owner_id: new.owner_id,
+            trusted: new.trusted,
+            introspect: new.introspect,
+            workspace_id: new.workspace_id,
+            logo_url: new.logo_url.clone(),
+            website: new.website.clone(),
+            created_at: now,
+            updated_at: now,
+            revoked_at: None,
+        };
+        Client::insert(&*uow.tx().await?, [model.clone()]).await?;
         let mut entry = AuditEntry::new(AuditKind::Security, "oauth.client_created")
             .subject("OAuthClient", model.id.to_string())
             .metadata(json!({
@@ -360,27 +359,29 @@ impl OAuthClients {
 
     /// The client with `id` (revoked ones included).
     pub async fn find(&self, id: Uuid) -> Result<Option<Client>, OAuthError> {
-        Ok(client::Entity::find_by_id(id)
-            .one(&self.core.db.reader().await)
-            .await?)
+        Ok(Client::find(&self.core.db, id)
+            .await?
+            .map(Record::into_inner))
     }
 
     /// Every client, oldest first (revoked ones included).
     pub async fn list(&self) -> Result<Vec<Client>, OAuthError> {
-        Ok(client::Entity::find()
-            .order_by_asc(client::Column::CreatedAt)
-            .all(&self.core.db.reader().await)
-            .await?)
+        Ok(Client::query()
+            .order_by(Client::CREATED_AT)
+            .get(&self.core.db)
+            .await?
+            .into_models())
     }
 
     /// The clients `user_id` owns (a developer portal's list).
     pub async fn owned_by(&self, user_id: Uuid) -> Result<Vec<Client>, OAuthError> {
-        Ok(client::Entity::find()
-            .filter(client::Column::OwnerId.eq(user_id))
-            .filter(client::Column::RevokedAt.is_null())
-            .order_by_asc(client::Column::CreatedAt)
-            .all(&self.core.db.reader().await)
-            .await?)
+        Ok(Client::query()
+            .where_(Client::OWNER_ID.eq(user_id))
+            .where_null(Client::REVOKED_AT)
+            .order_by(Client::CREATED_AT)
+            .get(&self.core.db)
+            .await?
+            .into_models())
     }
 
     /// Gives confidential client `id` a new secret (the old one stops
@@ -395,10 +396,16 @@ impl OAuthClients {
             ));
         }
         let secret = new_token(CLIENT_SECRET_PREFIX);
-        let mut active: client::ActiveModel = client.into();
-        active.secret_hash = Set(Some(digest(&secret)));
-        active.updated_at = Set(self.core.now());
-        active.update(&*uow.tx().await?).await?;
+        Client::query()
+            .where_key(client.id)
+            .update(
+                &*uow.tx().await?,
+                [
+                    Client::SECRET_HASH.set(digest(&secret)),
+                    Client::UPDATED_AT.set(self.core.now()),
+                ],
+            )
+            .await?;
         Ok(secret)
     }
 
@@ -408,21 +415,22 @@ impl OAuthClients {
         let client = self.active(uow, id).await?;
         let now = self.core.now();
         let tx = uow.tx().await?;
-        let mut active: client::ActiveModel = client.clone().into();
-        active.revoked_at = Set(Some(now));
-        active.updated_at = Set(now);
-        active.update(&*tx).await?;
-        access_token::Entity::update_many()
-            .col_expr(access_token::Column::RevokedAt, now.into())
-            .filter(access_token::Column::ClientId.eq(id))
-            .filter(access_token::Column::RevokedAt.is_null())
-            .exec(&*tx)
+        Client::query()
+            .where_key(id)
+            .update(
+                &*tx,
+                [Client::REVOKED_AT.set(now), Client::UPDATED_AT.set(now)],
+            )
             .await?;
-        refresh_token::Entity::update_many()
-            .col_expr(refresh_token::Column::RevokedAt, now.into())
-            .filter(refresh_token::Column::ClientId.eq(id))
-            .filter(refresh_token::Column::RevokedAt.is_null())
-            .exec(&*tx)
+        access_token::Model::query()
+            .where_(access_token::Model::CLIENT_ID.eq(id))
+            .where_null(access_token::Model::REVOKED_AT)
+            .update(&*tx, [access_token::Model::REVOKED_AT.set(now)])
+            .await?;
+        refresh_token::Model::query()
+            .where_(refresh_token::Model::CLIENT_ID.eq(id))
+            .where_null(refresh_token::Model::REVOKED_AT)
+            .update(&*tx, [refresh_token::Model::REVOKED_AT.set(now)])
             .await?;
         drop(tx);
         let core = self.core.clone();
@@ -443,9 +451,9 @@ impl OAuthClients {
 
     /// The client `id`, unless unknown or revoked (404).
     async fn active(&self, uow: &Uow, id: Uuid) -> Result<Client, OAuthError> {
-        client::Entity::find_by_id(id)
-            .one(&*uow.tx().await?)
+        Client::find(&*uow.tx().await?, id)
             .await?
+            .map(Record::into_inner)
             .filter(|client| !client.is_revoked())
             .ok_or(OAuthError::NotFound("OAuth client not found."))
     }

@@ -305,6 +305,64 @@ impl<T: Serialize + DeserializeOwned> Cast<T> for AsJson {
     }
 }
 
+/// Any serde type stored as JSON text in a text column
+/// (`#[model(cast = navree_orm::cast::JsonText)]`), for tables whose JSON
+/// lives in `TEXT` columns rather than `JSON`/`JSONB` ones (the
+/// [`AsJson`] cast binds a JSON value, which PostgreSQL refuses for a text
+/// column). The text is serde's compact JSON; a field compares by its JSON
+/// value, and untyped input (`fill`) is the JSON value itself, not text.
+///
+/// ```
+/// use navree_orm::cast::{Cast, JsonText};
+/// use serde::{Deserialize, Serialize};
+///
+/// #[derive(Debug, PartialEq, Serialize, Deserialize)]
+/// struct Retry {
+///     attempts: u32,
+/// }
+///
+/// let stored = <JsonText as Cast<Retry>>::set(&Retry { attempts: 3 }).unwrap();
+/// assert_eq!(stored, r#"{"attempts":3}"#);
+/// let retry: Retry = JsonText::get(r#"{ "attempts": 3 }"#.to_owned()).unwrap();
+/// assert_eq!(retry, Retry { attempts: 3 });
+/// assert!(<JsonText as Cast<Retry>>::get("not json".to_owned()).is_err());
+/// ```
+#[derive(Clone, Copy, Debug, Default)]
+pub struct JsonText;
+
+impl<T: Serialize + DeserializeOwned> Cast<T> for JsonText {
+    type Stored = String;
+
+    const KIND: FieldKind = FieldKind::Json;
+
+    fn get(stored: String) -> Result<T, CastError> {
+        serde_json::from_str(&stored)
+            .map_err(|error| CastError::new(format!("invalid JSON text: {error}")))
+    }
+
+    fn set(value: &T) -> Result<String, CastError> {
+        serde_json::to_string(value)
+            .map_err(|error| CastError::new(format!("cannot encode as JSON: {error}")))
+    }
+
+    /// Texts holding the same JSON value are the same, whatever their
+    /// spacing or key order.
+    fn eq_stored(a: &String, b: &String) -> bool {
+        match (
+            serde_json::from_str::<serde_json::Value>(a),
+            serde_json::from_str::<serde_json::Value>(b),
+        ) {
+            (Ok(a), Ok(b)) => a == b,
+            _ => a == b,
+        }
+    }
+
+    fn from_json(input: serde_json::Value, _context: &CastContext) -> Result<T, CastError> {
+        serde_json::from_value(input)
+            .map_err(|error| CastError::new(format!("invalid JSON: {error}")))
+    }
+}
+
 /// A unit enum stored as its serde name (`#[model(cast = "string_enum")]`):
 /// `#[serde(rename_all = "snake_case")] enum Stage { ClosedWon }` is
 /// stored as `closed_won`.
@@ -456,5 +514,35 @@ mod tests {
             error.to_string().contains("does not serialize as a string"),
             "{error}"
         );
+    }
+
+    #[test]
+    fn json_text_is_stored_as_text_and_compared_as_json() {
+        assert_eq!(
+            encode::<JsonText, Point>(&Point { x: 3 }).unwrap(),
+            Value::String(Some(r#"{"x":3}"#.to_owned()))
+        );
+        let row = Row::from_values(vec![("point".into(), Value::from(r#"{ "x": 5 }"#))]);
+        assert_eq!(
+            decode::<JsonText, Point>(&row, "point").unwrap(),
+            Point { x: 5 }
+        );
+        let row = Row::from_values(vec![("point".into(), Value::from("{"))]);
+        assert!(matches!(
+            decode::<JsonText, Point>(&row, "point"),
+            Err(FieldError::Invalid(message)) if message.starts_with("invalid JSON text")
+        ));
+
+        let same = <JsonText as Cast<serde_json::Value>>::eq_stored;
+        assert!(same(
+            &r#"{"a":1,"b":2}"#.to_owned(),
+            &r#"{ "b": 2, "a": 1 }"#.to_owned()
+        ));
+        assert!(!same(&r#"{"a":1}"#.to_owned(), &r#"{"a":2}"#.to_owned()));
+        assert!(same(&"not json".to_owned(), &"not json".to_owned()));
+
+        let filled: Point =
+            JsonText::from_json(serde_json::json!({"x": 7}), &CastContext::new()).unwrap();
+        assert_eq!(filled, Point { x: 7 });
     }
 }

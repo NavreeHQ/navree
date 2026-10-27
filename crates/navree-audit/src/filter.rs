@@ -6,11 +6,13 @@ use axum::extract::{FromRequestParts, Query};
 use axum::http::request::Parts;
 use navree_contracts::AuditKind;
 use navree_http::AppError;
+use navree_orm::{Builder, Model as _};
 use sea_orm::sea_query::LikeExpr;
 use sea_orm::{ColumnTrait, Condition, QueryFilter, Select};
 use serde::Deserialize;
 use uuid::Uuid;
 
+use crate::AuditRecord;
 use crate::audit_log::{self, Column};
 use crate::log::kind_str;
 
@@ -40,8 +42,34 @@ pub struct AuditFilter {
 }
 
 impl AuditFilter {
-    /// `select` restricted to the matching entries.
+    /// The matching entries as an ORM query, unordered: what
+    /// [`AuditLog::list`](crate::AuditLog::list) pages through, newest
+    /// first. Chain anything else on it: an order, a limit, a stream.
+    ///
+    /// ```no_run
+    /// use navree_audit::{AuditFilter, AuditRecord};
+    /// use navree_db::Db;
+    /// # async fn demo(db: Db, user: uuid::Uuid) -> navree_orm::Result<()> {
+    /// let filter = AuditFilter { actor_id: Some(user), ..AuditFilter::default() };
+    /// let changes = filter.query().count(&db).await?;
+    /// let latest = filter.query().latest_by(AuditRecord::CREATED_AT).first(&db).await?;
+    /// # Ok(()) }
+    /// ```
+    pub fn query(&self) -> Builder<AuditRecord> {
+        AuditRecord::query().where_(self.condition())
+    }
+
+    /// `select` restricted to the matching entries (the SeaORM form of
+    /// [`query`](AuditFilter::query)).
     pub fn apply(&self, select: Select<audit_log::Entity>) -> Select<audit_log::Entity> {
+        select.filter(self.condition())
+    }
+
+    /// The condition both query forms share. An action without a `.` also
+    /// matches the actions ending in `.<action>`, with the `LIKE` wildcards
+    /// in it escaped (the escape character is given, since SQLite has none
+    /// by default).
+    fn condition(&self) -> Condition {
         let mut condition = Condition::all();
         if let Some(actor_id) = self.actor_id {
             condition = condition.add(Column::ActorId.eq(actor_id));
@@ -70,7 +98,7 @@ impl AuditFilter {
         if let Some(kind) = self.kind {
             condition = condition.add(Column::Kind.eq(kind_str(kind)));
         }
-        select.filter(condition)
+        condition
     }
 }
 

@@ -151,7 +151,7 @@ Hand-written routes use `.audit("contacts.exported")` on `RouteDef`.
 
 ## The record shape
 
-Each row of `audit_logs` is a `navree::audit::AuditRecord` (the model of `navree::audit::audit_log::Entity`), and `GET /api/audit` returns the same fields:
+Each row of `audit_logs` is a `navree::audit::AuditRecord`: a model of Navree's ORM (`AuditRecord::query()`, typed columns such as `AuditRecord::ACTION`), and the model of the SeaORM entity `navree::audit::audit_log::Entity`. `GET /api/audit` returns the same fields:
 
 | Field | Type | |
 |---|---|---|
@@ -266,7 +266,26 @@ pub async fn history_of_deal(log: &AuditLog, id: &str) -> Result<(), DbErr> {
 }
 ```
 
-For queries `list` can't express, `AuditFilter::apply` adds the filter to a SeaORM `Select` of `navree::audit::audit_log::Entity` that you build yourself.
+For queries `list` can't express, `AuditFilter::query()` gives the filter's entries as an ORM query to order, limit, count or stream:
+
+```rust
+use navree::audit::{AuditFilter, AuditRecord};
+use navree::orm::Model as _;
+
+let filter = AuditFilter {
+    actor_id: Some(user_id),
+    ..AuditFilter::default()
+};
+let total = filter.query().count(&db).await?;
+let latest = filter
+    .query()
+    .latest_by(AuditRecord::CREATED_AT)
+    .limit(10)
+    .get(&db)
+    .await?;
+```
+
+`AuditFilter::apply` adds the same filter to a SeaORM `Select` of `navree::audit::audit_log::Entity` instead.
 
 ## Adding entries
 

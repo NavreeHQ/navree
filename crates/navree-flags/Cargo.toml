@@ -28,6 +28,8 @@ navree-db = { workspace = true }
 navree-events = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
+# The flags table is a model (`feature_flag::Model`).
+navree-orm = { workspace = true }
 navree-workspace = { workspace = true }
 sea-orm = { workspace = true }
 sea-orm-migration = { workspace = true }

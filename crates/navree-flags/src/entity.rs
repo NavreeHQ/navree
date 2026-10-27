@@ -1,4 +1,8 @@
-//! The module's tables as SeaORM entities.
+//! The module's tables as SeaORM entities; `feature_flags` is a navree-orm
+//! model too (`feature_flag::Model::query()`, typed columns such as
+//! `feature_flag::Model::KILLED`). The overrides table is keyed by three
+//! columns, which an ORM model (one key column) does not describe, so it
+//! stays an entity only.
 //!
 //! - `feature_flags(name PRIMARY KEY, everyone NULL, rollout JSON NULL,
 //!   killed, updated_at, updated_by NULL)`: one row per flag that has
@@ -18,8 +22,11 @@ pub mod feature_flag {
     use serde::{Deserialize, Serialize};
 
     /// The global state of one flag.
-    #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Deserialize)]
+    #[derive(
+        Clone, Debug, PartialEq, DeriveEntityModel, navree_orm::Model, Serialize, Deserialize,
+    )]
     #[sea_orm(table_name = "feature_flags")]
+    #[model(table = "feature_flags", primary_key = "name")]
     pub struct Model {
         /// The flag's name.
         #[sea_orm(primary_key, auto_increment = false)]

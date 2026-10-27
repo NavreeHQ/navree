@@ -26,6 +26,8 @@ navree-events = { workspace = true }
 navree-http = { workspace = true }
 navree-http-client = { workspace = true }
 navree-kernel = { workspace = true }
+# The billing tables are models (customers, subscriptions, items, usage, events).
+navree-orm = { workspace = true }
 navree-schedule = { workspace = true }
 navree-workspace = { workspace = true }
 sea-orm = { workspace = true }

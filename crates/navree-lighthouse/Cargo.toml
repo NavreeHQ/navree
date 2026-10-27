@@ -39,6 +39,8 @@ navree-http-client = { workspace = true }
 navree-kernel = { workspace = true }
 navree-mail = { workspace = true }
 navree-mcp = { workspace = true, optional = true }
+# The Lighthouse tables are models (issues, occurrences, samples, aggregates, alerts).
+navree-orm = { workspace = true }
 navree-schedule = { workspace = true }
 navree-telemetry = { workspace = true }
 navree-view = { workspace = true }

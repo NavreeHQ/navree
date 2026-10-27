@@ -483,5 +483,10 @@ Inside the migrator it converts to `DbErr::Migration` with the same text.
   TimescaleDB cannot turn back into a plain table in place. Their prune
   commands go through `navree_db::prune_time_series`. The facade's
   `time_series` suite checks all of it on real TimescaleDB and MySQL
-  servers. Moving the rest of the framework's tables to schema migrations
-  is the adoption phase's; their SeaORM migrations keep running meanwhile.
+  servers. The framework's table-creating migrations stay SeaORM ones: the
+  builder's DDL differs from theirs (`string` is `VARCHAR(255)` where they
+  made unbounded `varchar` on PostgreSQL, `uuid` is `CHAR(36)` where they
+  made `binary(16)` on MySQL, time columns get six fractional digits on
+  MySQL), and rewriting them would give new databases other columns than
+  the ones already migrated. New framework migrations are schema
+  migrations.

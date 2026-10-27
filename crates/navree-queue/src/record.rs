@@ -8,7 +8,15 @@ use serde_json::Value;
 
 /// A job that used up its attempts (or could not run at all), as kept in
 /// `failed_jobs` until it is retried or flushed.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+///
+/// It is also the navree-orm model of the database driver's `failed_jobs`
+/// table ([`FAILED_JOBS_TABLE`](crate::FAILED_JOBS_TABLE)), which the
+/// driver writes and reads through the ORM: the payload and options are
+/// stored as JSON text, the failure time as Unix milliseconds, and code
+/// queries them with typed columns (`FailedJob::query().where_(FailedJob::QUEUE.eq("mail"))`).
+/// Other drivers keep failed jobs their own way.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, navree_orm::Model)]
+#[model(table = "failed_jobs")]
 pub struct FailedJob {
     /// The job id (the id `dispatch` returned).
     pub id: String,
@@ -17,14 +25,17 @@ pub struct FailedJob {
     /// The job type ([`Job::NAME`](navree_contracts::Job::NAME)).
     pub job_type: String,
     /// The job value as JSON.
+    #[model(cast = navree_orm::cast::JsonText)]
     pub payload: Value,
     /// The options it was dispatched with.
+    #[model(cast = navree_orm::cast::JsonText)]
     pub options: JobOptions,
     /// The error of the last attempt.
     pub error: String,
     /// How many attempts ran.
     pub attempts: u32,
     /// When it failed.
+    #[model(cast = "unix_timestamp_ms")]
     pub failed_at: DateTime<Utc>,
 }
 
@@ -171,6 +182,21 @@ impl From<String> for RetryTarget {
 }
 
 impl FailedJob {
+    /// Reserved `job` as it fails at `now` (Unix milliseconds) with
+    /// `error`, after its attempts so far.
+    pub(crate) fn of(job: &ReservedJob, error: &str, now: i64) -> FailedJob {
+        FailedJob {
+            id: job.id.clone(),
+            queue: job.queue.clone(),
+            job_type: job.job_type.clone(),
+            payload: job.payload.clone(),
+            options: job.options.clone(),
+            error: error.to_owned(),
+            attempts: job.attempts,
+            failed_at: from_millis(now),
+        }
+    }
+
     /// The job as it goes back on its queue at `now` (Unix milliseconds):
     /// same id, attempts start over, not unique.
     pub fn requeued(&self, now: i64) -> NewJob {

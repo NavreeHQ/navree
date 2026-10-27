@@ -12,6 +12,7 @@ mod isolation_suite;
 mod org_isolation;
 mod org_routes;
 mod organizations;
+mod orm;
 mod partitions;
 mod permission_check;
 mod resolution;

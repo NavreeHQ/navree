@@ -13,11 +13,9 @@ use navree_db::{Db, Repo, Uow};
 use navree_kernel::{
     AppContext, BoxFuture, Injectable, KernelError, ProviderKey, Resolver, WeakAppContext,
 };
+use navree_orm::{Executor, Model as _, Record};
 use navree_validation::Messages;
-use sea_orm::sea_query::Expr;
-use sea_orm::{
-    ActiveModelTrait, ColumnTrait, ConnectionTrait, DbErr, EntityTrait, QueryFilter, Set, Unchanged,
-};
+use sea_orm::{DbErr, Set, Unchanged};
 use serde::Serialize;
 use serde_json::{Map, Value, json};
 use tokio::sync::OnceCell;
@@ -25,12 +23,13 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::policy::Policies;
+use crate::refresh_token::Model as RefreshToken;
 use crate::throttle::{Attempt, LoginThrottle};
 use crate::token::RefreshSecret;
 use crate::two_factor::{LoginOutcome, two_factor_enabled};
 use crate::{
     AuthError, AuthOptions, JwtService, PasswordSignInPolicy, SessionClaims, TokenType, User,
-    UserResource, UserResourceExtension, refresh_token, user,
+    UserResource, UserResourceExtension, user,
 };
 
 /// The `audience` of platform sessions in `refresh_tokens`.
@@ -137,7 +136,7 @@ pub(crate) struct SessionState {
 }
 
 impl SessionState {
-    fn of(row: &refresh_token::Model) -> Self {
+    fn of(row: &RefreshToken) -> Self {
         Self {
             family_id: row.family_id,
             expires_at: row.expires_at,
@@ -477,7 +476,7 @@ impl AuthService {
         let row = self.refresh_row(&secret, user.id, &session, &meta);
         self.write(Some(user.id), |uow| async move {
             let tx = uow.tx().await?;
-            row.insert(&*tx).await?;
+            RefreshToken::insert(&*tx, [row]).await?;
             Ok(())
         })
         .await?;
@@ -628,10 +627,7 @@ impl AuthService {
                 let Some(presented) = presented else {
                     return Ok(0);
                 };
-                match refresh_token::Entity::find_by_id(presented.id())
-                    .one(&*tx)
-                    .await?
-                {
+                match RefreshToken::find(&*tx, presented.id()).await? {
                     Some(row) if row.user_id == user_id && same_hash(&row, &presented) => {
                         revoke_family(&*tx, row.family_id, now).await
                     }
@@ -667,18 +663,17 @@ impl AuthService {
     /// transaction (`Db::reader`), so the request never waits for a second
     /// pool connection while it holds SQLite's write lock.
     pub async fn find_user(&self, id: Uuid) -> Result<Option<User>, AuthError> {
-        Ok(user::Entity::find_by_id(id)
-            .one(&self.db.reader().await)
-            .await?)
+        Ok(User::find(&self.db, id).await?.map(Record::into_inner))
     }
 
     /// The user with `email` (compared trimmed and case-insensitively);
     /// read like [`find_user`](AuthService::find_user).
     pub async fn find_by_email(&self, email: &str) -> Result<Option<User>, AuthError> {
-        Ok(user::Entity::find()
-            .filter(user::Column::Email.eq(normalize_email(email)))
-            .one(&self.db.reader().await)
-            .await?)
+        Ok(User::query()
+            .where_(User::EMAIL.eq(normalize_email(email)))
+            .first(&self.db)
+            .await?
+            .map(Record::into_inner))
     }
 
     /// Sets `user_id`'s password (checked against
@@ -819,11 +814,10 @@ impl AuthService {
         let now = self.clock.now();
         let taken = {
             let tx = uow.tx().await?;
-            user::Entity::find()
-                .filter(user::Column::Email.eq(email.as_str()))
-                .one(&*tx)
+            User::query()
+                .where_(User::EMAIL.eq(email.as_str()))
+                .exists(&*tx)
                 .await?
-                .is_some()
         };
         if taken {
             return Err(AuthError::EmailTaken);
@@ -854,10 +848,7 @@ impl AuthService {
         now: DateTime<Utc>,
     ) -> Result<Rotation, AuthError> {
         let tx = uow.tx().await?;
-        let Some(row) = refresh_token::Entity::find_by_id(presented.id())
-            .one(&*tx)
-            .await?
-        else {
+        let Some(row) = RefreshToken::find(&*tx, presented.id()).await? else {
             return Ok(Rotation::Invalid);
         };
         if !same_hash(&row, presented) {
@@ -885,47 +876,51 @@ impl AuthService {
         }
         // Claim the token; a concurrent refresh that got there first
         // makes this one a reuse.
-        let claimed = refresh_token::Entity::update_many()
-            .col_expr(refresh_token::Column::RevokedAt, Expr::value(now))
-            .col_expr(refresh_token::Column::ReplacedBy, Expr::value(next.id()))
-            .filter(refresh_token::Column::Id.eq(row.id))
-            .filter(refresh_token::Column::RevokedAt.is_null())
-            .exec(&*tx)
+        let claimed = RefreshToken::query()
+            .where_key(row.id)
+            .where_null(RefreshToken::REVOKED_AT)
+            .update(
+                &*tx,
+                [
+                    RefreshToken::REVOKED_AT.set(now),
+                    RefreshToken::REPLACED_BY.set(next.id()),
+                ],
+            )
             .await?;
-        if claimed.rows_affected != 1 {
+        if claimed != 1 {
             revoke_family(&*tx, row.family_id, now).await?;
             return Ok(reused);
         }
-        self.refresh_row(next, row.user_id, &session, meta)
-            .insert(&*tx)
-            .await?;
+        RefreshToken::insert(&*tx, [self.refresh_row(next, row.user_id, &session, meta)]).await?;
         Ok(Rotation::Rotated {
             user_id: row.user_id,
             session,
         })
     }
 
+    /// The stored row of `secret`, the next token of `session` for
+    /// `user_id`, issued now to the client of `meta`.
     fn refresh_row(
         &self,
         secret: &RefreshSecret,
         user_id: Uuid,
         session: &SessionState,
         meta: &ClientMeta,
-    ) -> refresh_token::ActiveModel {
-        refresh_token::ActiveModel {
-            id: Set(secret.id()),
-            user_id: Set(user_id),
-            family_id: Set(session.family_id),
-            token_hash: Set(secret.hash().to_owned()),
-            expires_at: Set(session.expires_at),
-            revoked_at: Set(None),
-            replaced_by: Set(None),
-            ip: Set(meta.ip.clone()),
-            user_agent: Set(meta.user_agent.as_deref().map(truncate_user_agent)),
-            created_at: Set(self.clock.now()),
-            authenticated_at: Set(session.authenticated_at),
-            impersonator_id: Set(session.impersonator),
-            audience: Set(session.audience.clone()),
+    ) -> RefreshToken {
+        RefreshToken {
+            id: secret.id(),
+            user_id,
+            family_id: session.family_id,
+            token_hash: secret.hash().to_owned(),
+            expires_at: session.expires_at,
+            revoked_at: None,
+            replaced_by: None,
+            ip: meta.ip.clone(),
+            user_agent: meta.user_agent.as_deref().map(truncate_user_agent),
+            created_at: self.clock.now(),
+            authenticated_at: session.authenticated_at,
+            impersonator_id: session.impersonator,
+            audience: session.audience.clone(),
         }
     }
 
@@ -1133,36 +1128,35 @@ pub(crate) fn entry(kind: AuditKind, action: &str, meta: &ClientMeta) -> AuditEn
     entry
 }
 
-fn same_hash(row: &refresh_token::Model, presented: &RefreshSecret) -> bool {
+fn same_hash(row: &RefreshToken, presented: &RefreshSecret) -> bool {
     constant_time_eq(row.token_hash.as_bytes(), presented.hash().as_bytes())
 }
 
-pub(crate) async fn revoke_family<C: ConnectionTrait>(
-    conn: &C,
+/// Revokes the live tokens of session (token family) `family_id` at `now`;
+/// how many.
+pub(crate) async fn revoke_family<E: Executor + ?Sized>(
+    exec: &E,
     family_id: Uuid,
     now: DateTime<Utc>,
 ) -> Result<u64, AuthError> {
-    let result = refresh_token::Entity::update_many()
-        .col_expr(refresh_token::Column::RevokedAt, Expr::value(now))
-        .filter(refresh_token::Column::FamilyId.eq(family_id))
-        .filter(refresh_token::Column::RevokedAt.is_null())
-        .exec(conn)
-        .await?;
-    Ok(result.rows_affected)
+    Ok(RefreshToken::query()
+        .where_(RefreshToken::FAMILY_ID.eq(family_id))
+        .where_null(RefreshToken::REVOKED_AT)
+        .update(exec, [RefreshToken::REVOKED_AT.set(now)])
+        .await?)
 }
 
-pub(crate) async fn revoke_user<C: ConnectionTrait>(
-    conn: &C,
+/// Revokes every live token of `user_id` at `now`; how many.
+pub(crate) async fn revoke_user<E: Executor + ?Sized>(
+    exec: &E,
     user_id: Uuid,
     now: DateTime<Utc>,
 ) -> Result<u64, AuthError> {
-    let result = refresh_token::Entity::update_many()
-        .col_expr(refresh_token::Column::RevokedAt, Expr::value(now))
-        .filter(refresh_token::Column::UserId.eq(user_id))
-        .filter(refresh_token::Column::RevokedAt.is_null())
-        .exec(conn)
-        .await?;
-    Ok(result.rows_affected)
+    Ok(RefreshToken::query()
+        .where_(RefreshToken::USER_ID.eq(user_id))
+        .where_null(RefreshToken::REVOKED_AT)
+        .update(exec, [RefreshToken::REVOKED_AT.set(now)])
+        .await?)
 }
 
 /// Emails are compared and stored trimmed and lower-cased.

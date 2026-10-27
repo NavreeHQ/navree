@@ -9,11 +9,8 @@ use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use navree_contracts::{AuditEntry, AuditKind};
 use navree_db::Uow;
+use navree_orm::{Executor, Model as _, Record};
 use navree_workspace::Members;
-use sea_orm::sea_query::Expr;
-use sea_orm::{
-    ActiveModelTrait, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, Set,
-};
 use serde::Serialize;
 use serde_json::json;
 use utoipa::ToSchema;
@@ -278,21 +275,20 @@ impl Requests {
         };
         let id = Uuid::new_v4();
         let now = core.now();
-        authorization_request::ActiveModel {
-            id: Set(id),
-            client_id: Set(client.id),
-            redirect_uri: Set(redirect_uri),
-            scopes: Set(join_scopes(&scopes)),
-            state: Set(params.state),
-            code_challenge: Set(challenge.to_owned()),
-            nonce: Set(params.nonce),
-            user_id: Set(None),
-            status: Set("pending".to_owned()),
-            expires_at: Set(core.after(core.options.request_ttl_secs)),
-            created_at: Set(now),
-        }
-        .insert(&*uow.tx().await?)
-        .await?;
+        let request = authorization_request::Model {
+            id,
+            client_id: client.id,
+            redirect_uri,
+            scopes: join_scopes(&scopes),
+            state: params.state,
+            code_challenge: challenge.to_owned(),
+            nonce: params.nonce,
+            user_id: None,
+            status: "pending".to_owned(),
+            expires_at: core.after(core.options.request_ttl_secs),
+            created_at: now,
+        };
+        authorization_request::Model::insert(&*uow.tx().await?, [request]).await?;
         Ok(AuthorizeOutcome::Redirect(with_query(
             &consent_url,
             &[("request", &id.to_string())],
@@ -303,23 +299,23 @@ impl Requests {
         let Some(id) = id.and_then(|id| Uuid::parse_str(id).ok()) else {
             return Ok(None);
         };
-        Ok(client::Entity::find_by_id(id)
-            .one(&self.core.db.reader().await)
+        Ok(client::Model::find(&self.core.db, id)
             .await?
+            .map(Record::into_inner)
             .filter(|client| !client.is_revoked()))
     }
 
     /// The pending request `id`: 404 when unknown or decided, 410 once
     /// expired.
-    async fn pending<C: ConnectionTrait>(
+    async fn pending<E: Executor + ?Sized>(
         &self,
-        conn: &C,
+        exec: &E,
         id: Uuid,
     ) -> Result<(authorization_request::Model, Client), OAuthError> {
         let not_found = OAuthError::NotFound("Authorization request not found.");
-        let request = authorization_request::Entity::find_by_id(id)
-            .one(conn)
+        let request = authorization_request::Model::find(exec, id)
             .await?
+            .map(Record::into_inner)
             .filter(|request| request.status == "pending")
             .ok_or(not_found)?;
         if request.expires_at <= self.core.now() {
@@ -327,9 +323,9 @@ impl Requests {
                 "The authorization request has expired.",
             ));
         }
-        let client = client::Entity::find_by_id(request.client_id)
-            .one(conn)
+        let client = client::Model::find(exec, request.client_id)
             .await?
+            .map(Record::into_inner)
             .filter(|client| !client.is_revoked())
             .ok_or(OAuthError::NotFound("Authorization request not found."))?;
         Ok((request, client))
@@ -341,11 +337,11 @@ impl Requests {
         user_id: Uuid,
         id: Uuid,
     ) -> Result<AuthorizationRequestView, OAuthError> {
-        let conn = self.core.db.reader().await;
-        let (request, client) = self.pending(&conn, id).await?;
+        let db = &self.core.db;
+        let (request, client) = self.pending(db, id).await?;
         let scopes = parse_scope(&request.scopes);
         let already_approved =
-            client.trusted || self.approved(&conn, user_id, &client, &scopes).await?;
+            client.trusted || self.approved(db, user_id, &client, &scopes).await?;
         Ok(AuthorizationRequestView {
             id: request.id,
             client: ClientSummary::from(&client),
@@ -356,17 +352,17 @@ impl Requests {
     }
 
     /// Whether `user_id` already approved `scopes` for `client`.
-    async fn approved<C: ConnectionTrait>(
+    async fn approved<E: Executor + ?Sized>(
         &self,
-        conn: &C,
+        exec: &E,
         user_id: Uuid,
         client: &Client,
         scopes: &[String],
     ) -> Result<bool, OAuthError> {
-        Ok(authorization::Entity::find()
-            .filter(authorization::Column::UserId.eq(user_id))
-            .filter(authorization::Column::ClientId.eq(client.id))
-            .one(conn)
+        Ok(authorization::Model::query()
+            .where_(authorization::Model::USER_ID.eq(user_id))
+            .where_(authorization::Model::CLIENT_ID.eq(client.id))
+            .first(exec)
             .await?
             .is_some_and(|row| is_subset(scopes, &row.scope_list())))
     }
@@ -385,36 +381,26 @@ impl Requests {
         self.check_workspace_member(&client, user_id).await?;
         let tx = uow.tx().await?;
         let now = self.core.now();
-        let claimed = authorization_request::Entity::update_many()
-            .col_expr(
-                authorization_request::Column::Status,
-                Expr::value("approved"),
-            )
-            .col_expr(authorization_request::Column::UserId, Expr::value(user_id))
-            .filter(authorization_request::Column::Id.eq(id))
-            .filter(authorization_request::Column::Status.eq("pending"))
-            .exec(&*tx)
-            .await?;
-        if claimed.rows_affected != 1 {
+        let claimed = decide_request(&*tx, id, "approved", user_id).await?;
+        if claimed != 1 {
             return Err(OAuthError::NotFound("Authorization request not found."));
         }
         let scopes = parse_scope(&request.scopes);
         let code = new_token(CODE_PREFIX);
-        code::ActiveModel {
-            id: Set(Uuid::now_v7()),
-            code_hash: Set(digest(&code)),
-            client_id: Set(client.id),
-            user_id: Set(user_id),
-            redirect_uri: Set(request.redirect_uri.clone()),
-            scopes: Set(request.scopes.clone()),
-            code_challenge: Set(request.code_challenge.clone()),
-            nonce: Set(request.nonce.clone()),
-            expires_at: Set(self.core.after(self.core.options.code_ttl_secs)),
-            used_at: Set(None),
-            created_at: Set(now),
-        }
-        .insert(&*tx)
-        .await?;
+        let row = code::Model {
+            id: Uuid::now_v7(),
+            code_hash: digest(&code),
+            client_id: client.id,
+            user_id,
+            redirect_uri: request.redirect_uri.clone(),
+            scopes: request.scopes.clone(),
+            code_challenge: request.code_challenge.clone(),
+            nonce: request.nonce.clone(),
+            expires_at: self.core.after(self.core.options.code_ttl_secs),
+            used_at: None,
+            created_at: now,
+        };
+        code::Model::insert(&*tx, [row]).await?;
         drop(tx);
         self.remember(uow, user_id, &client, &scopes).await?;
         self.audit_decision(
@@ -445,15 +431,9 @@ impl Requests {
     ) -> Result<Decision, OAuthError> {
         let tx = uow.tx().await?;
         let (request, client) = self.pending(&*tx, id).await?;
-        let claimed = authorization_request::Entity::update_many()
-            .col_expr(authorization_request::Column::Status, Expr::value("denied"))
-            .col_expr(authorization_request::Column::UserId, Expr::value(user_id))
-            .filter(authorization_request::Column::Id.eq(id))
-            .filter(authorization_request::Column::Status.eq("pending"))
-            .exec(&*tx)
-            .await?;
+        let claimed = decide_request(&*tx, id, "denied", user_id).await?;
         drop(tx);
-        if claimed.rows_affected != 1 {
+        if claimed != 1 {
             return Err(OAuthError::NotFound("Authorization request not found."));
         }
         let scopes = parse_scope(&request.scopes);
@@ -519,35 +499,33 @@ impl Requests {
     ) -> Result<(), OAuthError> {
         let tx = uow.tx().await?;
         let now = self.core.now();
-        let existing = authorization::Entity::find()
-            .filter(authorization::Column::UserId.eq(user_id))
-            .filter(authorization::Column::ClientId.eq(client.id))
-            .one(&*tx)
+        let existing = authorization::Model::query()
+            .where_(authorization::Model::USER_ID.eq(user_id))
+            .where_(authorization::Model::CLIENT_ID.eq(client.id))
+            .first(&*tx)
             .await?;
         match existing {
-            Some(row) => {
+            Some(mut row) => {
                 let mut merged = row.scope_list();
                 for scope in scopes {
                     if !merged.contains(scope) {
                         merged.push(scope.clone());
                     }
                 }
-                let mut active: authorization::ActiveModel = row.into();
-                active.scopes = Set(join_scopes(&merged));
-                active.updated_at = Set(now);
-                active.update(&*tx).await?;
+                row.scopes = join_scopes(&merged);
+                row.updated_at = now;
+                row.save(&*tx).await?;
             }
             None => {
-                authorization::ActiveModel {
-                    id: Set(Uuid::now_v7()),
-                    user_id: Set(user_id),
-                    client_id: Set(client.id),
-                    scopes: Set(join_scopes(scopes)),
-                    created_at: Set(now),
-                    updated_at: Set(now),
-                }
-                .insert(&*tx)
-                .await?;
+                let row = authorization::Model {
+                    id: Uuid::now_v7(),
+                    user_id,
+                    client_id: client.id,
+                    scopes: join_scopes(scopes),
+                    created_at: now,
+                    updated_at: now,
+                };
+                authorization::Model::insert(&*tx, [row]).await?;
             }
         }
         Ok(())
@@ -610,33 +588,31 @@ impl Requests {
         // A clash with a pending code is astronomically rare; retry anyway.
         let mut user_code = new_user_code();
         for _ in 0..5 {
-            let taken = device_code::Entity::find()
-                .filter(device_code::Column::UserCode.eq(&user_code))
-                .one(&*tx)
-                .await?
-                .is_some();
+            let taken = device_code::Model::query()
+                .where_(device_code::Model::USER_CODE.eq(user_code.as_str()))
+                .exists(&*tx)
+                .await?;
             if !taken {
                 break;
             }
             user_code = new_user_code();
         }
         let ttl = core.options.request_ttl_secs;
-        device_code::ActiveModel {
-            id: Set(Uuid::now_v7()),
-            device_code_hash: Set(digest(&device_code)),
-            user_code: Set(user_code.clone()),
-            client_id: Set(client.id),
-            scopes: Set(join_scopes(&scopes)),
-            user_id: Set(None),
-            status: Set("pending".to_owned()),
-            interval_secs: Set(DEVICE_INTERVAL_SECS as i64),
-            last_polled_at: Set(None),
-            expires_at: Set(core.after(ttl)),
-            used_at: Set(None),
-            created_at: Set(core.now()),
-        }
-        .insert(&*tx)
-        .await?;
+        let row = device_code::Model {
+            id: Uuid::now_v7(),
+            device_code_hash: digest(&device_code),
+            user_code: user_code.clone(),
+            client_id: client.id,
+            scopes: join_scopes(&scopes),
+            user_id: None,
+            status: "pending".to_owned(),
+            interval_secs: DEVICE_INTERVAL_SECS as i64,
+            last_polled_at: None,
+            expires_at: core.after(ttl),
+            used_at: None,
+            created_at: core.now(),
+        };
+        device_code::Model::insert(&*tx, [row]).await?;
         let shown = display_user_code(&user_code);
         Ok(DeviceAuthorization {
             device_code,
@@ -650,21 +626,22 @@ impl Requests {
 
     /// The pending device authorization with `user_code`: 404 when
     /// unknown, decided or expired.
-    async fn pending_device<C: ConnectionTrait>(
+    async fn pending_device<E: Executor + ?Sized>(
         &self,
-        conn: &C,
+        exec: &E,
         user_code: &str,
     ) -> Result<(device_code::Model, Client), OAuthError> {
         let not_found = || OAuthError::NotFound("Device code not found or expired.");
-        let row = device_code::Entity::find()
-            .filter(device_code::Column::UserCode.eq(normalize_user_code(user_code)))
-            .one(conn)
+        let row = device_code::Model::query()
+            .where_(device_code::Model::USER_CODE.eq(normalize_user_code(user_code)))
+            .first(exec)
             .await?
+            .map(Record::into_inner)
             .filter(|row| row.status == "pending" && row.expires_at > self.core.now())
             .ok_or_else(not_found)?;
-        let client = client::Entity::find_by_id(row.client_id)
-            .one(conn)
+        let client = client::Model::find(exec, row.client_id)
             .await?
+            .map(Record::into_inner)
             .filter(|client| !client.is_revoked())
             .ok_or_else(not_found)?;
         Ok((row, client))
@@ -676,11 +653,11 @@ impl Requests {
         user_id: Uuid,
         user_code: &str,
     ) -> Result<DeviceRequestView, OAuthError> {
-        let conn = self.core.db.reader().await;
-        let (row, client) = self.pending_device(&conn, user_code).await?;
+        let db = &self.core.db;
+        let (row, client) = self.pending_device(db, user_code).await?;
         let scopes = parse_scope(&row.scopes);
         let already_approved =
-            client.trusted || self.approved(&conn, user_id, &client, &scopes).await?;
+            client.trusted || self.approved(db, user_id, &client, &scopes).await?;
         Ok(DeviceRequestView {
             user_code: display_user_code(&row.user_code),
             client: ClientSummary::from(&client),
@@ -708,15 +685,19 @@ impl Requests {
         }
         let tx = uow.tx().await?;
         let status = if approve { "approved" } else { "denied" };
-        let claimed = device_code::Entity::update_many()
-            .col_expr(device_code::Column::Status, Expr::value(status))
-            .col_expr(device_code::Column::UserId, Expr::value(user_id))
-            .filter(device_code::Column::Id.eq(row.id))
-            .filter(device_code::Column::Status.eq("pending"))
-            .exec(&*tx)
+        let claimed = device_code::Model::query()
+            .where_key(row.id)
+            .where_(device_code::Model::STATUS.eq("pending"))
+            .update(
+                &*tx,
+                [
+                    device_code::Model::STATUS.set(status),
+                    device_code::Model::USER_ID.set(user_id),
+                ],
+            )
             .await?;
         drop(tx);
-        if claimed.rows_affected != 1 {
+        if claimed != 1 {
             return Err(OAuthError::NotFound("Device code not found or expired."));
         }
         let scopes = parse_scope(&row.scopes);
@@ -738,17 +719,18 @@ impl Requests {
         &self,
         user_id: Uuid,
     ) -> Result<Vec<AuthorizationView>, OAuthError> {
-        let conn = self.core.db.reader().await;
-        let rows: Vec<Authorization> = authorization::Entity::find()
-            .filter(authorization::Column::UserId.eq(user_id))
-            .order_by_desc(authorization::Column::UpdatedAt)
-            .all(&conn)
-            .await?;
+        let db = &self.core.db;
+        let rows: Vec<Authorization> = authorization::Model::query()
+            .where_(authorization::Model::USER_ID.eq(user_id))
+            .order_by_desc(authorization::Model::UPDATED_AT)
+            .get(db)
+            .await?
+            .into_models();
         let mut views = Vec::with_capacity(rows.len());
         for row in rows {
-            let Some(client) = client::Entity::find_by_id(row.client_id)
-                .one(&conn)
+            let Some(client) = client::Model::find(db, row.client_id)
                 .await?
+                .map(Record::into_inner)
                 .filter(|client| !client.is_revoked())
             else {
                 continue;
@@ -773,39 +755,39 @@ impl Requests {
         client_id: Uuid,
     ) -> Result<(), OAuthError> {
         let tx = uow.tx().await?;
-        let row = authorization::Entity::find()
-            .filter(authorization::Column::UserId.eq(user_id))
-            .filter(authorization::Column::ClientId.eq(client_id))
-            .one(&*tx)
+        let row = authorization::Model::query()
+            .where_(authorization::Model::USER_ID.eq(user_id))
+            .where_(authorization::Model::CLIENT_ID.eq(client_id))
+            .first(&*tx)
             .await?
             .ok_or(OAuthError::NotFound("Authorization not found."))?;
         let scopes = row.scope_list();
-        authorization::Entity::delete_by_id(row.id)
-            .exec(&*tx)
+        authorization::Model::query()
+            .where_key(row.id)
+            .delete(&*tx)
             .await?;
         let now = self.core.now();
-        access_token::Entity::update_many()
-            .col_expr(access_token::Column::RevokedAt, Expr::value(now))
-            .filter(access_token::Column::UserId.eq(user_id))
-            .filter(access_token::Column::ClientId.eq(client_id))
-            .filter(access_token::Column::RevokedAt.is_null())
-            .exec(&*tx)
+        access_token::Model::query()
+            .where_(access_token::Model::USER_ID.eq(user_id))
+            .where_(access_token::Model::CLIENT_ID.eq(client_id))
+            .where_null(access_token::Model::REVOKED_AT)
+            .update(&*tx, [access_token::Model::REVOKED_AT.set(now)])
             .await?;
-        refresh_token::Entity::update_many()
-            .col_expr(refresh_token::Column::RevokedAt, Expr::value(now))
-            .filter(refresh_token::Column::UserId.eq(user_id))
-            .filter(refresh_token::Column::ClientId.eq(client_id))
-            .filter(refresh_token::Column::RevokedAt.is_null())
-            .exec(&*tx)
+        refresh_token::Model::query()
+            .where_(refresh_token::Model::USER_ID.eq(user_id))
+            .where_(refresh_token::Model::CLIENT_ID.eq(client_id))
+            .where_null(refresh_token::Model::REVOKED_AT)
+            .update(&*tx, [refresh_token::Model::REVOKED_AT.set(now)])
             .await?;
-        code::Entity::update_many()
-            .col_expr(code::Column::UsedAt, Expr::value(now))
-            .filter(code::Column::UserId.eq(user_id))
-            .filter(code::Column::ClientId.eq(client_id))
-            .filter(code::Column::UsedAt.is_null())
-            .exec(&*tx)
+        code::Model::query()
+            .where_(code::Model::USER_ID.eq(user_id))
+            .where_(code::Model::CLIENT_ID.eq(client_id))
+            .where_null(code::Model::USED_AT)
+            .update(&*tx, [code::Model::USED_AT.set(now)])
             .await?;
-        let client = client::Entity::find_by_id(client_id).one(&*tx).await?;
+        let client = client::Model::find(&*tx, client_id)
+            .await?
+            .map(Record::into_inner);
         drop(tx);
         let core = self.core.clone();
         uow.after_commit(move || {
@@ -826,6 +808,28 @@ impl Requests {
         }
         Ok(())
     }
+}
+
+/// Records `user_id`'s decision (`approved` or `denied`) on the pending
+/// authorization request `id`; how many requests were still pending (one,
+/// or none when a concurrent decision got there first).
+async fn decide_request<E: Executor + ?Sized>(
+    exec: &E,
+    id: Uuid,
+    status: &str,
+    user_id: Uuid,
+) -> Result<u64, OAuthError> {
+    Ok(authorization_request::Model::query()
+        .where_key(id)
+        .where_(authorization_request::Model::STATUS.eq("pending"))
+        .update(
+            exec,
+            [
+                authorization_request::Model::STATUS.set(status),
+                authorization_request::Model::USER_ID.set(user_id),
+            ],
+        )
+        .await?)
 }
 
 impl fmt::Debug for Requests {

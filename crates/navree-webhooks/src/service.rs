@@ -11,16 +11,12 @@ use chrono::{DateTime, SecondsFormat, TimeDelta, Utc};
 use http::header::{CONTENT_TYPE, HeaderName, HeaderValue, USER_AGENT};
 use navree_contracts::{Clock, Dispatcher, Job, JobEnvelope, JobOptions, SystemClock};
 use navree_crypto::Encrypter;
-use navree_db::{Db, Page, PageQuery, Repo, Uow, paginate, prune_time_series};
+use navree_db::{Db, Page, PageQuery, Repo, Uow, prune_time_series};
 use navree_events::EventBus;
 use navree_http_client::{HttpClient, HttpClientError};
 use navree_kernel::{AppContext, WeakAppContext};
+use navree_orm::{Builder, Executor, Model as _, Record};
 use sea_orm::ActiveValue::{Set, Unchanged};
-use sea_orm::sea_query::Query;
-use sea_orm::{
-    ActiveModelTrait, ColumnTrait, ConnectionTrait, EntityTrait, PaginatorTrait, QueryFilter,
-    QueryOrder,
-};
 use serde::Serialize;
 use serde_json::{Value, json};
 use tokio::sync::OnceCell;
@@ -413,10 +409,9 @@ impl Webhooks {
     /// One endpoint.
     pub async fn endpoint(&self, id: Uuid) -> Result<Endpoint, WebhooksError> {
         let db = self.deps().await?.db()?;
-        endpoint::Entity::find_by_id(id)
-            .one(&db.reader().await)
+        endpoint::Model::find(db, id)
             .await?
-            .map(|model| Endpoint::from(&model))
+            .map(|record| Endpoint::from(record.model()))
             .ok_or(WebhooksError::EndpointNotFound(id))
     }
 
@@ -427,16 +422,15 @@ impl Webhooks {
         workspace_id: Option<Uuid>,
     ) -> Result<Vec<Endpoint>, WebhooksError> {
         let db = self.deps().await?.db()?;
-        let models = endpoint::Entity::find()
-            .filter(workspace_filter(
-                endpoint::Column::WorkspaceId,
-                workspace_id,
-            ))
-            .order_by_asc(endpoint::Column::CreatedAt)
-            .order_by_asc(endpoint::Column::Id)
-            .all(&db.reader().await)
+        let models = in_workspace(endpoint::Model::query(), workspace_id)
+            .order_by(endpoint::Model::CREATED_AT)
+            .order_by(endpoint::Model::ID)
+            .get(db)
             .await?;
-        Ok(models.iter().map(Endpoint::from).collect())
+        Ok(models
+            .iter()
+            .map(|record| Endpoint::from(record.model()))
+            .collect())
     }
 
     /// Sends a `webhook.test` message to an endpoint at once (even a
@@ -445,9 +439,9 @@ impl Webhooks {
     pub async fn send_test(&self, id: Uuid) -> Result<Attempt, WebhooksError> {
         let deps = self.deps().await?;
         let db = deps.db()?;
-        let endpoint = endpoint::Entity::find_by_id(id)
-            .one(&db.reader().await)
+        let endpoint = endpoint::Model::find(db, id)
             .await?
+            .map(Record::into_inner)
             .ok_or(WebhooksError::EndpointNotFound(id))?;
         let now = deps.now();
         let message_id = new_message_id();
@@ -456,30 +450,29 @@ impl Webhooks {
         let attempt = self
             .in_uow(db, |uow| async move {
                 let tx = uow.tx().await?;
-                let delivery = delivery::ActiveModel {
-                    id: Set(Uuid::now_v7()),
-                    endpoint_id: Set(endpoint.id),
-                    workspace_id: Set(endpoint.workspace_id),
-                    message_id: Set(message_id),
-                    event_type: Set(TEST_EVENT_TYPE.to_owned()),
-                    payload: Set(payload),
-                    status: Set(if outcome.succeeded {
+                let delivery = delivery::Model {
+                    id: Uuid::now_v7(),
+                    endpoint_id: endpoint.id,
+                    workspace_id: endpoint.workspace_id,
+                    message_id,
+                    event_type: TEST_EVENT_TYPE.to_owned(),
+                    payload,
+                    status: if outcome.succeeded {
                         DeliveryStatus::Succeeded
                     } else {
                         DeliveryStatus::Failed
                     }
                     .as_str()
-                    .to_owned()),
-                    attempts: Set(1),
-                    max_attempts: Set(1),
-                    next_attempt_at: Set(None),
-                    last_status_code: Set(outcome.status_code.map(i32::from)),
-                    last_error: Set(outcome.last_error()),
-                    created_at: Set(now),
-                    updated_at: Set(now),
-                }
-                .insert(&*tx)
-                .await?;
+                    .to_owned(),
+                    attempts: 1,
+                    max_attempts: 1,
+                    next_attempt_at: None,
+                    last_status_code: outcome.status_code.map(i32::from),
+                    last_error: outcome.last_error(),
+                    created_at: now,
+                    updated_at: now,
+                };
+                delivery::Model::insert(&*tx, [delivery.clone()]).await?;
                 let attempt = insert_attempt(&*tx, &delivery, 1, &outcome, now).await?;
                 Ok(attempt)
             })
@@ -498,41 +491,43 @@ impl Webhooks {
         page: PageQuery,
     ) -> Result<Page<Delivery>, WebhooksError> {
         let db = self.deps().await?.db()?;
-        let reader = db.reader().await;
-        if endpoint::Entity::find_by_id(endpoint_id)
-            .one(&reader)
+        if endpoint::Model::query()
+            .where_key(endpoint_id)
+            .doesnt_exist(db)
             .await?
-            .is_none()
         {
             return Err(WebhooksError::EndpointNotFound(endpoint_id));
         }
-        let select = delivery::Entity::find()
-            .filter(delivery::Column::EndpointId.eq(endpoint_id))
-            .order_by_desc(delivery::Column::CreatedAt)
-            .order_by_desc(delivery::Column::Id);
-        let page = paginate(select, &reader, page).await?;
-        Ok(page.map(|model| Delivery::from(&model)))
+        let page = delivery::Model::query()
+            .where_(delivery::Model::ENDPOINT_ID.eq(endpoint_id))
+            .order_by_desc(delivery::Model::CREATED_AT)
+            .order_by_desc(delivery::Model::ID)
+            .paginate(db, page)
+            .await?;
+        Ok(page.map(|record| Delivery::from(record.model())))
     }
 
     /// One delivery.
     pub async fn delivery(&self, id: Uuid) -> Result<Delivery, WebhooksError> {
         let db = self.deps().await?.db()?;
-        delivery::Entity::find_by_id(id)
-            .one(&db.reader().await)
+        delivery::Model::find(db, id)
             .await?
-            .map(|model| Delivery::from(&model))
+            .map(|record| Delivery::from(record.model()))
             .ok_or(WebhooksError::DeliveryNotFound(id))
     }
 
     /// A delivery's attempts, first first.
     pub async fn attempts(&self, delivery_id: Uuid) -> Result<Vec<Attempt>, WebhooksError> {
         let db = self.deps().await?.db()?;
-        let models = attempt::Entity::find()
-            .filter(attempt::Column::DeliveryId.eq(delivery_id))
-            .order_by_asc(attempt::Column::Attempt)
-            .all(&db.reader().await)
+        let models = attempt::Model::query()
+            .where_(attempt::Model::DELIVERY_ID.eq(delivery_id))
+            .order_by(attempt::Model::ATTEMPT)
+            .get(db)
             .await?;
-        Ok(models.iter().map(Attempt::from).collect())
+        Ok(models
+            .iter()
+            .map(|record| Attempt::from(record.model()))
+            .collect())
     }
 
     /// Queues a failed delivery again, keeping its id and `webhook-id`: it
@@ -542,40 +537,34 @@ impl Webhooks {
         let deps = self.deps().await?;
         let db = deps.db()?;
         self.in_uow(db, |uow| async move {
-            let current = {
+            let mut delivery = {
                 let tx = uow.tx().await?;
-                delivery::Entity::find_by_id(delivery_id)
-                    .one(&*tx)
+                delivery::Model::find(&*tx, delivery_id)
                     .await?
                     .ok_or(WebhooksError::DeliveryNotFound(delivery_id))?
             };
-            let status = DeliveryStatus::parse(&current.status);
+            let status = DeliveryStatus::parse(&delivery.status);
             if status != DeliveryStatus::Failed {
                 return Err(WebhooksError::NotRetryable(status));
             }
             let now = deps.now();
-            let updated = {
+            delivery.status = DeliveryStatus::Pending.as_str().to_owned();
+            delivery.max_attempts = delivery.attempts + 1;
+            delivery.next_attempt_at = Some(now);
+            delivery.updated_at = now;
+            {
                 let tx = uow.tx().await?;
-                delivery::ActiveModel {
-                    id: Unchanged(current.id),
-                    status: Set(DeliveryStatus::Pending.as_str().to_owned()),
-                    max_attempts: Set(current.attempts + 1),
-                    next_attempt_at: Set(Some(now)),
-                    updated_at: Set(now),
-                    ..Default::default()
-                }
-                .update(&*tx)
-                .await?
-            };
+                delivery.save(&*tx).await?;
+            }
             self.dispatch_job(
                 deps,
                 &Deliver {
-                    delivery_id: current.id,
+                    delivery_id: delivery.id,
                 },
                 None,
             )
             .await?;
-            Ok(Delivery::from(&updated))
+            Ok(Delivery::from(delivery.model()))
         })
         .await
     }
@@ -584,14 +573,14 @@ impl Webhooks {
     /// returns how many.
     pub async fn retry_failed(&self) -> Result<u64, WebhooksError> {
         let db = self.deps().await?.db()?;
-        let failed = delivery::Entity::find()
-            .filter(delivery::Column::Status.eq(DeliveryStatus::Failed.as_str()))
-            .order_by_asc(delivery::Column::CreatedAt)
-            .all(&db.reader().await)
+        let failed = delivery::Model::query()
+            .where_(delivery::Model::STATUS.eq(DeliveryStatus::Failed.as_str()))
+            .order_by(delivery::Model::CREATED_AT)
+            .pluck(db, delivery::Model::ID)
             .await?;
         let mut count = 0;
-        for delivery in failed {
-            self.retry(delivery.id).await?;
+        for delivery_id in failed {
+            self.retry(delivery_id).await?;
             count += 1;
         }
         Ok(count)
@@ -619,25 +608,22 @@ impl Webhooks {
             // whole chunks), then the late retries of the deliveries that
             // go, then those deliveries.
             prune_time_series(&*tx, ATTEMPTS_TABLE, "created_at", deliveries_before).await?;
-            attempt::Entity::delete_many()
-                .filter(
-                    attempt::Column::DeliveryId.in_subquery(
-                        Query::select()
-                            .column(delivery::Column::Id)
-                            .from(delivery::Entity)
-                            .and_where(delivery::Column::CreatedAt.lt(deliveries_before))
-                            .to_owned(),
+            attempt::Model::query()
+                .where_(
+                    attempt::Model::DELIVERY_ID.in_subquery(
+                        delivery::Model::query()
+                            .select([delivery::Model::ID])
+                            .where_(delivery::Model::CREATED_AT.lt(deliveries_before)),
                     ),
                 )
-                .exec(&*tx)
+                .delete(&*tx)
                 .await?;
             let deliveries =
                 prune_time_series(&*tx, DELIVERIES_TABLE, "created_at", deliveries_before).await?;
-            let receipts = receipt::Entity::delete_many()
-                .filter(receipt::Column::ReceivedAt.lt(receipts_before))
-                .exec(&*tx)
-                .await?
-                .rows_affected;
+            let receipts = receipt::Model::query()
+                .where_(receipt::Model::RECEIVED_AT.lt(receipts_before))
+                .delete(&*tx)
+                .await?;
             Ok(Pruned {
                 deliveries,
                 receipts,
@@ -649,10 +635,10 @@ impl Webhooks {
     /// How many failed deliveries each endpoint has.
     pub(crate) async fn failed_count(&self, endpoint_id: Uuid) -> Result<u64, WebhooksError> {
         let db = self.deps().await?.db()?;
-        Ok(delivery::Entity::find()
-            .filter(delivery::Column::EndpointId.eq(endpoint_id))
-            .filter(delivery::Column::Status.eq(DeliveryStatus::Failed.as_str()))
-            .count(&db.reader().await)
+        Ok(delivery::Model::query()
+            .where_(delivery::Model::ENDPOINT_ID.eq(endpoint_id))
+            .where_(delivery::Model::STATUS.eq(DeliveryStatus::Failed.as_str()))
+            .count(db)
             .await?)
     }
 
@@ -661,11 +647,10 @@ impl Webhooks {
         let db = self.deps().await?.db()?;
         self.in_uow(db, |uow| async move {
             let tx = uow.tx().await?;
-            Ok(endpoint::Entity::delete_many()
-                .filter(endpoint::Column::WorkspaceId.eq(workspace_id))
-                .exec(&*tx)
-                .await?
-                .rows_affected)
+            Ok(endpoint::Model::query()
+                .where_(endpoint::Model::WORKSPACE_ID.eq(workspace_id))
+                .delete(&*tx)
+                .await?)
         })
         .await
     }
@@ -766,26 +751,23 @@ impl Webhooks {
         };
         let payload = render_body(&job.event_type, job.timestamp, &data)?;
         self.check_size(&payload)?;
-        let already: HashSet<Uuid> = delivery::Entity::find()
-            .filter(delivery::Column::MessageId.eq(job.message_id.as_str()))
-            .all(db.conn())
+        let already: HashSet<Uuid> = delivery::Model::query()
+            .where_(delivery::Model::MESSAGE_ID.eq(job.message_id.as_str()))
+            .pluck(db.conn(), delivery::Model::ENDPOINT_ID)
             .await?
             .into_iter()
-            .map(|d| d.endpoint_id)
             .collect();
-        let endpoints: Vec<endpoint::Model> = endpoint::Entity::find()
-            .filter(endpoint::Column::Enabled.eq(true))
-            .filter(workspace_filter(
-                endpoint::Column::WorkspaceId,
-                job.workspace_id,
-            ))
-            .order_by_asc(endpoint::Column::CreatedAt)
-            .all(db.conn())
-            .await?
-            .into_iter()
-            .filter(|e| Endpoint::from(e).subscribes_to(&job.event_type))
-            .filter(|e| !already.contains(&e.id))
-            .collect();
+        let endpoints: Vec<endpoint::Model> =
+            in_workspace(endpoint::Model::query(), job.workspace_id)
+                .where_(endpoint::Model::ENABLED.eq(true))
+                .order_by(endpoint::Model::CREATED_AT)
+                .get(db.conn())
+                .await?
+                .into_models()
+                .into_iter()
+                .filter(|e| Endpoint::from(e).subscribes_to(&job.event_type))
+                .filter(|e| !already.contains(&e.id))
+                .collect();
         if endpoints.is_empty() {
             return Ok(0);
         }
@@ -797,24 +779,23 @@ impl Webhooks {
                 let tx = uow.tx().await?;
                 for endpoint in &endpoints {
                     let id = Uuid::now_v7();
-                    delivery::ActiveModel {
-                        id: Set(id),
-                        endpoint_id: Set(endpoint.id),
-                        workspace_id: Set(endpoint.workspace_id),
-                        message_id: Set(job.message_id.clone()),
-                        event_type: Set(job.event_type.clone()),
-                        payload: Set(payload.clone()),
-                        status: Set(DeliveryStatus::Pending.as_str().to_owned()),
-                        attempts: Set(0),
-                        max_attempts: Set(MAX_ATTEMPTS as i32),
-                        next_attempt_at: Set(Some(now)),
-                        last_status_code: Set(None),
-                        last_error: Set(None),
-                        created_at: Set(now),
-                        updated_at: Set(now),
-                    }
-                    .insert(&*tx)
-                    .await?;
+                    let delivery = delivery::Model {
+                        id,
+                        endpoint_id: endpoint.id,
+                        workspace_id: endpoint.workspace_id,
+                        message_id: job.message_id.clone(),
+                        event_type: job.event_type.clone(),
+                        payload: payload.clone(),
+                        status: DeliveryStatus::Pending.as_str().to_owned(),
+                        attempts: 0,
+                        max_attempts: MAX_ATTEMPTS as i32,
+                        next_attempt_at: Some(now),
+                        last_status_code: None,
+                        last_error: None,
+                        created_at: now,
+                        updated_at: now,
+                    };
+                    delivery::Model::insert(&*tx, [delivery]).await?;
                     ids.push(id);
                 }
             }
@@ -832,18 +813,18 @@ impl Webhooks {
     pub(crate) async fn deliver(&self, delivery_id: Uuid) -> Result<(), WebhooksError> {
         let deps = self.deps().await?;
         let db = deps.db()?;
-        let Some(delivery) = delivery::Entity::find_by_id(delivery_id)
-            .one(db.conn())
+        let Some(delivery) = delivery::Model::find(db.conn(), delivery_id)
             .await?
+            .map(Record::into_inner)
         else {
             return Ok(()); // deleted with its endpoint, or pruned
         };
         if DeliveryStatus::parse(&delivery.status) != DeliveryStatus::Pending {
             return Ok(());
         }
-        let Some(endpoint) = endpoint::Entity::find_by_id(delivery.endpoint_id)
-            .one(db.conn())
+        let Some(endpoint) = endpoint::Model::find(db.conn(), delivery.endpoint_id)
             .await?
+            .map(Record::into_inner)
         else {
             return Ok(());
         };
@@ -881,16 +862,18 @@ impl Webhooks {
         self.in_uow(db, |uow| async move {
             {
                 let tx = uow.tx().await?;
-                delivery::ActiveModel {
-                    id: Unchanged(delivery.id),
-                    status: Set(DeliveryStatus::Failed.as_str().to_owned()),
-                    next_attempt_at: Set(None),
-                    last_error: Set(Some(reason)),
-                    updated_at: Set(now),
-                    ..Default::default()
-                }
-                .update(&*tx)
-                .await?;
+                delivery::Model::query()
+                    .where_key(delivery.id)
+                    .update(
+                        &*tx,
+                        [
+                            delivery::Model::STATUS.set(DeliveryStatus::Failed.as_str()),
+                            delivery::Model::NEXT_ATTEMPT_AT.set(None),
+                            delivery::Model::LAST_ERROR.set(reason),
+                            delivery::Model::UPDATED_AT.set(now),
+                        ],
+                    )
+                    .await?;
             }
             self.emit_after_commit(deps, &uow, vec![Emitted::Failed(event)]);
             Ok(())
@@ -926,13 +909,10 @@ impl Webhooks {
                     tracing::debug!(target: "navree::webhooks", delivery = %delivery.id, "test message attempt recorded");
                 } else if outcome.succeeded {
                     if endpoint.failing_since.is_some() {
-                        endpoint::ActiveModel {
-                            id: Unchanged(endpoint.id),
-                            failing_since: Set(None),
-                            ..Default::default()
-                        }
-                        .update(&*tx)
-                        .await?;
+                        endpoint::Model::query()
+                            .where_key(endpoint.id)
+                            .update(&*tx, [endpoint::Model::FAILING_SINCE.set(None)])
+                            .await?;
                     }
                 } else {
                     let failing_since = endpoint.failing_since.unwrap_or(now);
@@ -941,17 +921,19 @@ impl Webhooks {
                         && now - failing_since >= days_of(options.disable_after_days);
                     if gone || failing_too_long {
                         let reason = if gone { "gone" } else { "failing" };
-                        endpoint::ActiveModel {
-                            id: Unchanged(endpoint.id),
-                            enabled: Set(false),
-                            disabled_at: Set(Some(now)),
-                            disabled_reason: Set(Some(reason.to_owned())),
-                            failing_since: Set(Some(failing_since)),
-                            updated_at: Set(now),
-                            ..Default::default()
-                        }
-                        .update(&*tx)
-                        .await?;
+                        endpoint::Model::query()
+                            .where_key(endpoint.id)
+                            .update(
+                                &*tx,
+                                [
+                                    endpoint::Model::ENABLED.set(false),
+                                    endpoint::Model::DISABLED_AT.set(now),
+                                    endpoint::Model::DISABLED_REASON.set(reason),
+                                    endpoint::Model::FAILING_SINCE.set(failing_since),
+                                    endpoint::Model::UPDATED_AT.set(now),
+                                ],
+                            )
+                            .await?;
                         endpoint_disabled = true;
                         emitted.push(Emitted::Disabled(WebhookEndpointDisabled {
                             endpoint_id: endpoint.id,
@@ -960,13 +942,10 @@ impl Webhooks {
                             reason: reason.to_owned(),
                         }));
                     } else if endpoint.failing_since.is_none() {
-                        endpoint::ActiveModel {
-                            id: Unchanged(endpoint.id),
-                            failing_since: Set(Some(now)),
-                            ..Default::default()
-                        }
-                        .update(&*tx)
-                        .await?;
+                        endpoint::Model::query()
+                            .where_key(endpoint.id)
+                            .update(&*tx, [endpoint::Model::FAILING_SINCE.set(now)])
+                            .await?;
                     }
                 }
                 let status = if outcome.succeeded {
@@ -994,18 +973,21 @@ impl Webhooks {
                 }
                 let next_attempt_at = next_delay
                     .map(|delay| now + TimeDelta::from_std(delay).unwrap_or(TimeDelta::MAX));
-                delivery::ActiveModel {
-                    id: Unchanged(delivery.id),
-                    status: Set(status.as_str().to_owned()),
-                    attempts: Set(attempts),
-                    next_attempt_at: Set(next_attempt_at),
-                    last_status_code: Set(outcome.status_code.map(i32::from)),
-                    last_error: Set(outcome.last_error()),
-                    updated_at: Set(now),
-                    ..Default::default()
-                }
-                .update(&*tx)
-                .await?;
+                delivery::Model::query()
+                    .where_key(delivery.id)
+                    .update(
+                        &*tx,
+                        [
+                            delivery::Model::STATUS.set(status.as_str()),
+                            delivery::Model::ATTEMPTS.set(attempts),
+                            delivery::Model::NEXT_ATTEMPT_AT.set(next_attempt_at),
+                            delivery::Model::LAST_STATUS_CODE
+                                .set(outcome.status_code.map(i32::from)),
+                            delivery::Model::LAST_ERROR.set(outcome.last_error()),
+                            delivery::Model::UPDATED_AT.set(now),
+                        ],
+                    )
+                    .await?;
             }
             if let Some(delay) = next_delay {
                 self.dispatch_job(
@@ -1381,35 +1363,40 @@ pub(crate) fn render_body(
 }
 
 /// `column = workspace_id`, or `column IS NULL` for app-wide rows.
-fn workspace_filter<C: ColumnTrait>(column: C, workspace_id: Option<Uuid>) -> sea_orm::Condition {
+/// `endpoints` narrowed to the ones of workspace `workspace_id`, or to
+/// the app-wide ones (no workspace) for `None`.
+fn in_workspace(
+    endpoints: Builder<endpoint::Model>,
+    workspace_id: Option<Uuid>,
+) -> Builder<endpoint::Model> {
     match workspace_id {
-        Some(id) => sea_orm::Condition::all().add(column.eq(id)),
-        None => sea_orm::Condition::all().add(column.is_null()),
+        Some(id) => endpoints.where_(endpoint::Model::WORKSPACE_ID.eq(id)),
+        None => endpoints.where_null(endpoint::Model::WORKSPACE_ID),
     }
 }
 
-/// Inserts the attempt row of `outcome`.
-async fn insert_attempt<C: ConnectionTrait>(
-    conn: &C,
+/// Inserts the attempt row of `outcome` through `exec`.
+async fn insert_attempt<E: Executor + ?Sized>(
+    exec: &E,
     delivery: &delivery::Model,
     number: i32,
     outcome: &SendOutcome,
     now: DateTime<Utc>,
 ) -> Result<attempt::Model, WebhooksError> {
-    Ok(attempt::ActiveModel {
-        id: Set(Uuid::now_v7()),
-        delivery_id: Set(delivery.id),
-        endpoint_id: Set(delivery.endpoint_id),
-        attempt: Set(number),
-        status_code: Set(outcome.status_code.map(i32::from)),
-        succeeded: Set(outcome.succeeded),
-        response_body: Set(outcome.response_body.clone()),
-        error: Set(outcome.error.clone()),
-        duration_ms: Set(i64::try_from(outcome.duration_ms).unwrap_or(i64::MAX)),
-        created_at: Set(now),
-    }
-    .insert(conn)
-    .await?)
+    let attempt = attempt::Model {
+        id: Uuid::now_v7(),
+        delivery_id: delivery.id,
+        endpoint_id: delivery.endpoint_id,
+        attempt: number,
+        status_code: outcome.status_code.map(i32::from),
+        succeeded: outcome.succeeded,
+        response_body: outcome.response_body.clone(),
+        error: outcome.error.clone(),
+        duration_ms: i64::try_from(outcome.duration_ms).unwrap_or(i64::MAX),
+        created_at: now,
+    };
+    attempt::Model::insert(exec, [attempt.clone()]).await?;
+    Ok(attempt)
 }
 
 /// What an attempt that got no response says about it.
