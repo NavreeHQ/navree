@@ -33,7 +33,13 @@ async fn in_zone_runs_on_that_zones_clock() {
         )
         .await;
     let scheduler = scheduler(&app).await;
-    assert!(scheduler.tick(at("2026-10-26T09:00:00Z")).await.unwrap().is_empty());
+    assert!(
+        scheduler
+            .tick(at("2026-10-26T09:00:00Z"))
+            .await
+            .unwrap()
+            .is_empty()
+    );
     let due = scheduler.tick(at("2026-10-26T03:30:00Z")).await.unwrap();
     assert_eq!(ticks(&due), ["digest"]);
     assert_eq!(due[0].status, RunStatus::Succeeded);
@@ -60,9 +66,29 @@ async fn local_times_follow_daylight_saving_time() {
         .await;
     let scheduler = scheduler(&app).await;
     // Friday 6 March (EST) and Monday 9 March (EDT).
-    assert_eq!(scheduler.tick(at("2026-03-06T14:00:00Z")).await.unwrap().len(), 1);
-    assert!(scheduler.tick(at("2026-03-09T14:00:00Z")).await.unwrap().is_empty());
-    assert_eq!(scheduler.tick(at("2026-03-09T13:00:00Z")).await.unwrap().len(), 1);
+    assert_eq!(
+        scheduler
+            .tick(at("2026-03-06T14:00:00Z"))
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+    assert!(
+        scheduler
+            .tick(at("2026-03-09T14:00:00Z"))
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(
+        scheduler
+            .tick(at("2026-03-09T13:00:00Z"))
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
     assert_eq!(runs.get(), 2);
 }
 
@@ -112,8 +138,21 @@ async fn a_time_repeated_by_dst_runs_once() {
         .await;
     let scheduler = scheduler(&app).await;
     // 1 November 2026: 01:30 EDT (05:30Z), then 01:30 EST (06:30Z).
-    assert_eq!(scheduler.tick(at("2026-11-01T05:30:00Z")).await.unwrap().len(), 1);
-    assert!(scheduler.tick(at("2026-11-01T06:30:00Z")).await.unwrap().is_empty());
+    assert_eq!(
+        scheduler
+            .tick(at("2026-11-01T05:30:00Z"))
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+    assert!(
+        scheduler
+            .tick(at("2026-11-01T06:30:00Z"))
+            .await
+            .unwrap()
+            .is_empty()
+    );
     assert_eq!(runs.get(), 1);
 }
 
@@ -159,8 +198,17 @@ async fn the_default_zone_comes_from_time_module() {
         .await
         .unwrap();
     let dubai = scheduler(&app).await;
-    assert!(dubai.tick(at("2026-10-26T09:00:00Z")).await.unwrap().is_empty());
-    assert_eq!(dubai.tick(at("2026-10-26T05:00:00Z")).await.unwrap().len(), 1);
+    assert!(
+        dubai
+            .tick(at("2026-10-26T09:00:00Z"))
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(
+        dubai.tick(at("2026-10-26T05:00:00Z")).await.unwrap().len(),
+        1
+    );
     assert_eq!(dubai.list(at("2026-10-26T06:00:00Z"))[0].zone, "Asia/Dubai");
 
     // Without TimeModule the default zone is UTC.
@@ -270,7 +318,10 @@ async fn per_workspace_local_runs_each_workspace_at_its_own_nine() {
 
     // Each workspace's tick is claimed on its own.
     let again = scheduler.tick(at("2026-10-26T03:30:00Z")).await.unwrap();
-    assert_eq!(again[0].status, RunStatus::Skipped(SkipReason::AlreadyClaimed));
+    assert_eq!(
+        again[0].status,
+        RunStatus::Skipped(SkipReason::AlreadyClaimed)
+    );
 
     // A workspace added later joins at its next local nine.
     let later = Uuid::now_v7();
@@ -415,7 +466,9 @@ async fn a_counter_still_counts_runs_in_zones() {
         .boot(
             &clock("2026-10-26T00:00:00Z"),
             Tasks::new(move |s| {
-                s.task("paris", a.task()).daily_at("10:00").in_zone("Europe/Paris");
+                s.task("paris", a.task())
+                    .daily_at("10:00")
+                    .in_zone("Europe/Paris");
                 s.task("utc", b.task()).daily_at("09:00");
             }),
         )

@@ -77,7 +77,11 @@ pub fn zones_listing(
     let width = rows.iter().map(|row| row[0].len()).max().unwrap_or(0);
     Ok(rows
         .iter()
-        .map(|row| format!("{:width$}  {:6}  {}", row[0], row[1], row[2]).trim_end().to_owned())
+        .map(|row| {
+            format!("{:width$}  {:6}  {}", row[0], row[1], row[2])
+                .trim_end()
+                .to_owned()
+        })
         .collect::<Vec<_>>()
         .join("\n"))
 }

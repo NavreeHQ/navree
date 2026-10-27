@@ -24,8 +24,7 @@ use navree::testing::{TestApp, principal};
 use navree::time::{FixedHolidays, Holidays, LocalDayError, ZoneError, Zones, ZonesFake};
 use sea_orm::sea_query::{self, Alias, ColumnDef, Expr, ExprTrait, Table};
 use sea_orm::{
-    ActiveValue::Set, ColumnTrait, ConnectionTrait, DbErr, EntityTrait, PaginatorTrait,
-    QueryFilter,
+    ActiveValue::Set, ColumnTrait, ConnectionTrait, DbErr, EntityTrait, PaginatorTrait, QueryFilter,
 };
 use sea_orm_migration::async_trait::async_trait;
 use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
@@ -314,8 +313,8 @@ async fn sql_groups_rows_by_local_day() {
     }
     let db = app.get::<Db>().await;
     let zone = Zone::parse("Europe/London").unwrap();
-    let range = DayRange::new("2026-03-28".parse().unwrap(), "2026-03-30".parse().unwrap())
-        .unwrap();
+    let range =
+        DayRange::new("2026-03-28".parse().unwrap(), "2026-03-30".parse().unwrap()).unwrap();
 
     let (from, to) = range.utc_bounds(&zone);
     let day = zone
@@ -403,8 +402,8 @@ async fn queue_digest(
 #[tokio::test]
 async fn digests_wait_for_the_workspaces_working_hours() {
     let workspace = Uuid::now_v7();
-    let workspaces = ZonesFake::new(ZoneLevel::Workspace)
-        .owner(ZoneOwner::new(workspace).zone("Asia/Kolkata"));
+    let workspaces =
+        ZonesFake::new(ZoneLevel::Workspace).owner(ZoneOwner::new(workspace).zone("Asia/Kolkata"));
     // Friday 30 October 2026, 17:30 in Kolkata.
     let clock = Arc::new(FixedClock::new("2026-10-30T12:00:00Z".parse().unwrap()));
     let app = TestApp::builder()
@@ -474,8 +473,8 @@ impl Module for DigestsModule {
 #[tokio::test]
 async fn schedules_run_on_local_clocks() {
     let workspace = Uuid::now_v7();
-    let workspaces = ZonesFake::new(ZoneLevel::Workspace)
-        .owner(ZoneOwner::new(workspace).zone("Asia/Kolkata"));
+    let workspaces =
+        ZonesFake::new(ZoneLevel::Workspace).owner(ZoneOwner::new(workspace).zone("Asia/Kolkata"));
     let recorder = Arc::new(Recorder::default());
     let app = TestApp::builder()
         .temp_database()
@@ -566,8 +565,8 @@ impl Module for ProbeModule {
 #[tokio::test]
 async fn jobs_resolve_zones_with_the_service() {
     let workspace_id = Uuid::now_v7();
-    let workspaces = ZonesFake::new(ZoneLevel::Workspace)
-        .owner(ZoneOwner::new(workspace_id).country("AE"));
+    let workspaces =
+        ZonesFake::new(ZoneLevel::Workspace).owner(ZoneOwner::new(workspace_id).country("AE"));
     let app = TestApp::builder()
         .module(TimeModule::from_config())
         .module(workspaces.module())
@@ -576,7 +575,10 @@ async fn jobs_resolve_zones_with_the_service() {
     let ctx = app.ctx();
 
     let zones = ctx.get::<Zones>().await.unwrap();
-    let zone = zones.zone_of(ZoneLevel::Workspace, workspace_id).await.unwrap();
+    let zone = zones
+        .zone_of(ZoneLevel::Workspace, workspace_id)
+        .await
+        .unwrap();
     let yesterday = DayRange::single(zone.today(zones.now()).pred());
 
     assert_eq!(zone.name(), "Asia/Dubai");

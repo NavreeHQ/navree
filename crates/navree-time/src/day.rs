@@ -331,10 +331,8 @@ impl DayRange {
     /// Every day of the range, in order.
     pub fn days(&self) -> impl Iterator<Item = LocalDay> + use<> {
         let (from, to) = (self.from, self.to);
-        std::iter::successors(Some(from), move |day| {
-            (*day < to).then(|| day.succ())
-        })
-        .take_while(move |day| *day <= to)
+        std::iter::successors(Some(from), move |day| (*day < to).then(|| day.succ()))
+            .take_while(move |day| *day <= to)
     }
 
     /// `(start, end)`: the half-open span of instants from the start of

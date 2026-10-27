@@ -18,9 +18,10 @@ fn defaults_match_the_documentation() {
     assert!(options.routes);
     assert_eq!(options.holidays.country, None);
     assert!(options.holidays.days.is_empty());
-    let parsed: TimeOptions =
-        serde_json::from_value(json!({"default_zone": "Asia/Dubai", "holidays": {"country": "AE"}}))
-            .unwrap();
+    let parsed: TimeOptions = serde_json::from_value(
+        json!({"default_zone": "Asia/Dubai", "holidays": {"country": "AE"}}),
+    )
+    .unwrap();
     assert_eq!(parsed.default_zone, "Asia/Dubai");
     assert!(parsed.routes);
     assert_eq!(parsed.holidays.country.as_deref(), Some("AE"));
@@ -173,7 +174,11 @@ async fn owners_resolve_to_their_zone_their_country_or_the_default() {
     };
     assert_eq!(of(w.kolkata).await, "Asia/Kolkata");
     assert_eq!(of(w.country_only).await, "Asia/Dubai");
-    assert_eq!(of(w.broken).await, "Europe/London", "a bad stored zone falls back");
+    assert_eq!(
+        of(w.broken).await,
+        "Europe/London",
+        "a bad stored zone falls back"
+    );
     assert_eq!(of(w.bare).await, "Europe/London");
     assert_eq!(of(Uuid::now_v7()).await, "Europe/London");
     // No user-level source: the default.
@@ -264,7 +269,7 @@ async fn the_zones_command_lists_and_filters() {
     assert!(listing.contains("Asia/Kolkata"), "{listing}");
     assert!(listing.contains("+05:30"), "{listing}");
     assert!(!listing.contains("Europe/Paris"), "{listing}");
-    let none = navree_time::zones_listing(Some("nowhere"), None, utc("2026-01-01T00:00:00Z"))
-        .unwrap();
+    let none =
+        navree_time::zones_listing(Some("nowhere"), None, utc("2026-01-01T00:00:00Z")).unwrap();
     assert_eq!(none, "No time zones match.");
 }

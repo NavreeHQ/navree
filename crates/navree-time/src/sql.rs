@@ -112,9 +112,8 @@ impl ZoneSql {
                     ))
                 }),
             },
-            _ => self.by_offset(|seconds| {
-                format!("{sqlite_function}({EXPR}, '{seconds:+} seconds')")
-            }),
+            _ => self
+                .by_offset(|seconds| format!("{sqlite_function}({EXPR}, '{seconds:+} seconds')")),
         };
         self.custom(&template, expr)
     }
@@ -222,7 +221,12 @@ mod tests {
         );
         let kolkata = Zone::parse("Asia/Kolkata").unwrap();
         assert_eq!(
-            offsets_between(&kolkata, utc("2026-01-01T00:00:00Z"), utc("2027-01-01T00:00:00Z")).len(),
+            offsets_between(
+                &kolkata,
+                utc("2026-01-01T00:00:00Z"),
+                utc("2027-01-01T00:00:00Z")
+            )
+            .len(),
             1
         );
     }

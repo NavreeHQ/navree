@@ -104,12 +104,18 @@ async fn at_time_zone_agrees_with_local_days() {
         .await
         .unwrap();
     }
-    for name in ["Europe/London", "Asia/Kolkata", "America/New_York", "Asia/Calcutta"] {
+    for name in [
+        "Europe/London",
+        "Asia/Kolkata",
+        "America/New_York",
+        "Asia/Calcutta",
+    ] {
         let zone = Zone::parse(name).unwrap();
         let query = Query::select()
             .column("id")
             .expr_as(
-                zone.sql(DbBackend::Postgres).local_date(Expr::col("created_at")),
+                zone.sql(DbBackend::Postgres)
+                    .local_date(Expr::col("created_at")),
                 Alias::new("day"),
             )
             .from("navree_time_events")

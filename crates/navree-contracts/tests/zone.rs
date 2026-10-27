@@ -18,7 +18,11 @@ fn levels_resolve_from_the_user_up() {
     levels.sort();
     assert_eq!(
         levels,
-        [ZoneLevel::User, ZoneLevel::Workspace, ZoneLevel::Organization]
+        [
+            ZoneLevel::User,
+            ZoneLevel::Workspace,
+            ZoneLevel::Organization
+        ]
     );
     assert_eq!(ZoneLevel::Workspace.as_str(), "workspace");
     assert_eq!(ZoneLevel::ALL.len(), 3);

@@ -16,7 +16,14 @@ fn days_parse_and_print_as_yyyy_mm_dd() {
     assert_eq!(LocalDay::from(date("2026-10-27")), d);
     assert_eq!((d.year(), d.month(), d.day()), (2026, 10, 27));
     assert_eq!(d.weekday(), Weekday::Tue);
-    for bad in ["2026-13-01", "2026-02-30", "27/10/2026", "2026-1-5", "", "2026-10-27T00:00"] {
+    for bad in [
+        "2026-13-01",
+        "2026-02-30",
+        "27/10/2026",
+        "2026-1-5",
+        "",
+        "2026-10-27T00:00",
+    ] {
         let error = bad.parse::<LocalDay>().unwrap_err();
         assert!(error.to_string().contains("yyyy-MM-dd"), "{bad}: {error}");
     }
@@ -26,7 +33,10 @@ fn days_parse_and_print_as_yyyy_mm_dd() {
 fn days_round_trip_through_json() {
     let d = day("2026-03-29");
     assert_eq!(serde_json::to_string(&d).unwrap(), r#""2026-03-29""#);
-    assert_eq!(serde_json::from_str::<LocalDay>(r#""2026-03-29""#).unwrap(), d);
+    assert_eq!(
+        serde_json::from_str::<LocalDay>(r#""2026-03-29""#).unwrap(),
+        d
+    );
     assert!(serde_json::from_str::<LocalDay>(r#""2026-03-32""#).is_err());
     assert!(serde_json::from_str::<LocalDay>("20260329").is_err());
 }
@@ -44,10 +54,22 @@ fn days_step_forward_and_back() {
 #[test]
 fn an_instant_falls_on_the_local_day_of_its_zone() {
     let late_evening_utc = utc("2026-10-26T20:00:00Z");
-    assert_eq!(LocalDay::of(late_evening_utc, &zone("Asia/Kolkata")), day("2026-10-27"));
-    assert_eq!(LocalDay::of(late_evening_utc, &Zone::UTC), day("2026-10-26"));
-    assert_eq!(zone("America/Los_Angeles").today(late_evening_utc), day("2026-10-26"));
-    assert_eq!(zone("Pacific/Kiritimati").today(late_evening_utc), day("2026-10-27"));
+    assert_eq!(
+        LocalDay::of(late_evening_utc, &zone("Asia/Kolkata")),
+        day("2026-10-27")
+    );
+    assert_eq!(
+        LocalDay::of(late_evening_utc, &Zone::UTC),
+        day("2026-10-26")
+    );
+    assert_eq!(
+        zone("America/Los_Angeles").today(late_evening_utc),
+        day("2026-10-26")
+    );
+    assert_eq!(
+        zone("Pacific/Kiritimati").today(late_evening_utc),
+        day("2026-10-27")
+    );
 }
 
 #[test]
@@ -81,7 +103,12 @@ fn days_are_shorter_or_longer_when_clocks_change() {
 #[test]
 fn a_day_starts_at_its_first_instant_even_when_midnight_is_skipped() {
     // Wherever clocks jump forward at midnight, a day starts at 01:00.
-    for name in ["America/Santiago", "America/Asuncion", "America/Havana", "Asia/Beirut"] {
+    for name in [
+        "America/Santiago",
+        "America/Asuncion",
+        "America/Havana",
+        "Asia/Beirut",
+    ] {
         let z = zone(name);
         let mut found_gap = false;
         let mut d = day("2024-01-01");
@@ -136,7 +163,10 @@ fn ranges_have_helpers_for_common_windows() {
     assert_eq!((week.from, week.to), (day("2026-10-21"), day("2026-10-27")));
     assert_eq!(DayRange::last_days(0, &kolkata, now).day_count(), 1);
     let month = DayRange::month_of(day("2026-02-14"));
-    assert_eq!((month.from, month.to), (day("2026-02-01"), day("2026-02-28")));
+    assert_eq!(
+        (month.from, month.to),
+        (day("2026-02-01"), day("2026-02-28"))
+    );
     let single = DayRange::single(day("2026-02-14"));
     assert_eq!(single.day_count(), 1);
 }

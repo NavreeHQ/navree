@@ -373,11 +373,7 @@ mod tests {
         assert!(COUNTRY_ZONES.windows(2).all(|w| w[0].0 < w[1].0));
         for (country, zones) in COUNTRY_ZONES {
             for zone in *zones {
-                assert_eq!(
-                    Zone::canonical_name(zone),
-                    Some(*zone),
-                    "{country}: {zone}"
-                );
+                assert_eq!(Zone::canonical_name(zone), Some(*zone), "{country}: {zone}");
             }
         }
     }

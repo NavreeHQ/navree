@@ -3,9 +3,7 @@
 use chrono::{DateTime, Utc};
 use navree_time::Zone;
 use sea_orm::sea_query::{Alias, Expr, ExprTrait, Order, Query, SqliteQueryBuilder};
-use sea_orm::{
-    ConnectionTrait, Database, DatabaseBackend, DbBackend, FromQueryResult, Statement,
-};
+use sea_orm::{ConnectionTrait, Database, DatabaseBackend, DbBackend, FromQueryResult, Statement};
 
 use crate::support::{day, utc, zone};
 
@@ -23,7 +21,10 @@ fn postgres_converts_with_at_time_zone() {
     let sql = zone("Asia/Calcutta").sql(DbBackend::Postgres);
     assert_eq!(sql.literal(), "'Asia/Kolkata'");
     assert_eq!(
-        render(DbBackend::Postgres, sql.local_timestamp(Expr::col("created_at"))),
+        render(
+            DbBackend::Postgres,
+            sql.local_timestamp(Expr::col("created_at"))
+        ),
         r#"SELECT ("created_at" AT TIME ZONE 'Asia/Kolkata')"#
     );
     assert_eq!(
@@ -40,7 +41,10 @@ fn postgres_converts_with_at_time_zone() {
 fn mysql_converts_with_convert_tz() {
     let sql = zone("Europe/Paris").sql(DbBackend::MySql);
     assert_eq!(
-        render(DbBackend::MySql, sql.local_timestamp(Expr::col("created_at"))),
+        render(
+            DbBackend::MySql,
+            sql.local_timestamp(Expr::col("created_at"))
+        ),
         "SELECT CONVERT_TZ(`created_at`, '+00:00', 'Europe/Paris')"
     );
     assert_eq!(
@@ -57,7 +61,10 @@ fn mysql_converts_with_convert_tz() {
 fn a_fixed_offset_zone_needs_no_case_on_sqlite() {
     let sql = zone("Asia/Kolkata").sql(DbBackend::Sqlite);
     assert_eq!(
-        render(DbBackend::Sqlite, sql.local_timestamp(Expr::col("created_at"))),
+        render(
+            DbBackend::Sqlite,
+            sql.local_timestamp(Expr::col("created_at"))
+        ),
         r#"SELECT datetime("created_at", '+19800 seconds')"#
     );
     assert_eq!(
@@ -75,9 +82,18 @@ fn sqlite_uses_each_offset_in_force_within_the_window() {
         .utc_bounds(&london);
     let sql = london.sql(DbBackend::Sqlite).within(from, to);
     let text = render(DbBackend::Sqlite, sql.local_date(Expr::col("created_at")));
-    assert!(text.contains("CASE WHEN julianday(\"created_at\") <"), "{text}");
-    assert!(text.contains("date(\"created_at\", '+0 seconds')"), "{text}");
-    assert!(text.contains("date(\"created_at\", '+3600 seconds')"), "{text}");
+    assert!(
+        text.contains("CASE WHEN julianday(\"created_at\") <"),
+        "{text}"
+    );
+    assert!(
+        text.contains("date(\"created_at\", '+0 seconds')"),
+        "{text}"
+    );
+    assert!(
+        text.contains("date(\"created_at\", '+3600 seconds')"),
+        "{text}"
+    );
 }
 
 #[derive(Debug, PartialEq, FromQueryResult)]
@@ -143,9 +159,18 @@ async fn sqlite_groups_rows_by_local_day_across_a_dst_change() {
     assert_eq!(
         rows,
         [
-            DayCount { day: "2026-03-28".into(), count: 1 },
-            DayCount { day: "2026-03-29".into(), count: 2 },
-            DayCount { day: "2026-03-30".into(), count: 2 },
+            DayCount {
+                day: "2026-03-28".into(),
+                count: 1
+            },
+            DayCount {
+                day: "2026-03-29".into(),
+                count: 2
+            },
+            DayCount {
+                day: "2026-03-30".into(),
+                count: 2
+            },
         ]
     );
 }
@@ -164,8 +189,14 @@ async fn sqlite_groups_rows_by_local_day_in_a_half_hour_zone() {
     assert_eq!(
         rows,
         [
-            DayCount { day: "2026-10-26".into(), count: 2 },
-            DayCount { day: "2026-10-27".into(), count: 1 },
+            DayCount {
+                day: "2026-10-26".into(),
+                count: 2
+            },
+            DayCount {
+                day: "2026-10-27".into(),
+                count: 1
+            },
         ]
     );
 }
