@@ -131,11 +131,16 @@ const HIERARCHY: &[Rule] = &[
     // called through navree-http-client, web push is encrypted and VAPID
     // signed with navree-crypto, and numbers are read as E.164 with
     // navree-validation's `Phone` (same layer; validation never depends on
-    // notify).
+    // notify). Preferences: quiet hours, send windows and digests are
+    // counted on the recipient's clock (navree-time's zones and windows),
+    // `notify:release` runs on the scheduler (navree-schedule, same layer;
+    // schedule never depends on notify), digests and workspace overrides
+    // render through navree-view, and `#[notification]` comes from
+    // navree-macros.
     rule("navree-notify", 4, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http",
         "navree-db", "navree-mail", "navree-orm", "navree-crypto", "navree-http-client",
-        "navree-validation",
+        "navree-validation", "navree-time", "navree-schedule", "navree-view", "navree-macros",
     ]),
     // The UI kit of the server-rendered tools: templates through navree-view,
     // embedded assets served by a navree-http controller. Layer 4 so that its
@@ -256,11 +261,13 @@ const HIERARCHY: &[Rule] = &[
     // emitted (navree-events), resolved values cached by tag (navree-cache),
     // workspace and organization scopes from navree-workspace, the global
     // write permission checked with navree-access; it re-exports
-    // `#[derive(Settings)]` from navree-macros.
+    // `#[derive(Settings)]` from navree-macros. With its `notify` feature,
+    // the `notification-templates` settings are navree-notify's template
+    // overrides.
     rule("navree-settings", 6, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-macros", "navree-http",
         "navree-cache", "navree-events", "navree-db", "navree-validation", "navree-audit",
-        "navree-access", "navree-workspace",
+        "navree-access", "navree-workspace", "navree-notify",
     ]),
     // GraphQL: `#[resolver]` fields with route-style access, per-request
     // units of work and dataloaders, subscriptions over WebSockets.
