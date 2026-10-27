@@ -429,3 +429,71 @@ fn a_model_is_not_generated_twice() {
     assert_eq!(read(&root, "src/modules/users/mod.rs"), module_before);
     assert!(!path(&root, "src/modules/users/factories").exists());
 }
+
+#[test]
+fn a_pivot_model_holds_the_two_keys() {
+    let (_dir, root) = project();
+    let report = make_model(
+        &root,
+        "src/modules",
+        &name("users"),
+        &name("deal_tag"),
+        Companions::all_for_pivot(),
+        now(),
+    )
+    .unwrap();
+    let model = read(&root, "src/modules/users/models/deal_tag.rs");
+    for expected in [
+        "the `deal_tag` pivot table",
+        "    table = \"deal_tag\",\n",
+        "factory = super::super::factories::deal_tag::DealTagFactory,",
+        "    pub deal_id: Uuid,\n",
+        "    pub tag_id: Uuid,\n",
+    ] {
+        assert!(model.contains(expected), "{expected}\n{model}");
+    }
+    assert!(!model.contains("pub name"), "{model}");
+    let migration = read(
+        &root,
+        "src/modules/users/migrations/m20261025_143005_create_deal_tag_table.rs",
+    );
+    assert!(
+        migration.contains(
+            "                t.uuid_primary();\n                t.foreign_uuid(\"deal_id\");\n                t.foreign_uuid(\"tag_id\");\n                t.unique([\"deal_id\", \"tag_id\"]);\n                t.timestamps_tz();\n"
+        ),
+        "{migration}"
+    );
+    let factory = read(&root, "src/modules/users/factories/deal_tag.rs");
+    assert!(!factory.contains("name:"), "{factory}");
+    assert!(!path(&root, "src/modules/users/controllers/deal_tag.rs").exists());
+    assert!(
+        !report.hints.iter().any(|h| h.contains("make:migration")),
+        "{:?}",
+        report.hints
+    );
+
+    for (pivot, companions, problem) in [
+        ("deal", Companions::all_for_pivot(), "one word each"),
+        ("line_item_tag", Companions::all_for_pivot(), "one word each"),
+        (
+            "deal_note",
+            Companions {
+                controller: true,
+                ..Companions::all_for_pivot()
+            },
+            "no controller or policy",
+        ),
+    ] {
+        let error = make_model(
+            &root,
+            "src/modules",
+            &name("users"),
+            &name(pivot),
+            companions,
+            now(),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains(problem), "{pivot}: {error}");
+    }
+}

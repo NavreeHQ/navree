@@ -1,4 +1,9 @@
+{% if pivot %}
+//! {{ a_title }}: the `{{ table }}` pivot table (a many-to-many link) as an
+//! ORM model.
+{% else %}
 //! {{ a_title }}: the `{{ table }}` table as an ORM model.
+{% endif %}
 {% if with_migration %}
 //! The module's `create_{{ table }}_table` migration creates the table.
 {% else %}
@@ -33,8 +38,15 @@ pub struct {{ pascal }} {
     /// A UUID v7, generated when the record is created, so ids sort by
     /// creation time.
     pub id: Uuid,
+{% if pivot %}
+{% for key in pivot_keys %}
+    /// A key of the linked pair.
+    pub {{ key }}: Uuid,
+{% endfor %}
+{% else %}
     /// The name.
     pub name: String,
+{% endif %}
     /// When the record was created.
     pub created_at: DateTime<Utc>,
     /// When the record last changed.

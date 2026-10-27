@@ -148,6 +148,8 @@ fn navree_new_output_compiles_against_the_workspace() {
         ..Companions::default()
     };
     make_model(&root, "src/modules", &name("tags"), &name("label"), label, now).unwrap();
+    let pivot = Companions::all_for_pivot();
+    make_model(&root, "src/modules", &name("posts"), &name("post_label"), pivot, now).unwrap();
     let for_comments = MakeOptions {
         model: Some(name("comment")),
         ..MakeOptions::default()
