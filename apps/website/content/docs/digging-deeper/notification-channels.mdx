@@ -223,7 +223,7 @@ access_token = ""                 # APP_NOTIFY__META__ACCESS_TOKEN
 | `notify.teams.app_password` | empty | Its client secret. Required with `app_id`. |
 | `notify.teams.tenant` | `botframework.com` | The tenant that issues the bot's tokens: `botframework.com` for a multi-tenant bot, your tenant id for a single-tenant one. |
 | `notify.teams.token_url` | `https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token` | The token endpoint. |
-| `notify.sms.driver` | none | `twilio`, `vonage`, `sns` or `log`. Without one, the SMS channel is unavailable. |
+| `notify.sms.driver` | none | `twilio`, `vonage`, `sns` (also spelled `aws_sns`) or `log`. Without one, the SMS channel is unavailable. |
 | `notify.sms.from` | none | The default sender. |
 | `notify.sms.default_region` | none | The ISO 3166-1 country numbers without a country code are read in. Without it, such numbers are invalid. |
 | `notify.sms.status_callback` | none | The URL the provider reports statuses to: Twilio's `StatusCallback`, Vonage's `webhook_url`. |
