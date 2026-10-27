@@ -134,7 +134,7 @@ Most Navree apps have a separate web front end with a BFF in front of the API. `
 | `.timeout(duration)` | How long to wait for it to start (default 60 s) |
 | `.serve(ctx)` | Starts it if needed, routes its API calls to this app, and returns a `WebSession` |
 
-The front end process starts on the first `serve`. It is given the address of a small proxy that navree-browser runs, and each `serve` starts a `TestServer` for the calling test's app and points that proxy at it. A `WebSession` holds the front end until it is dropped, so browser tests that share a front end run one after another, each against its own fresh database, while the rest of your tests keep running in parallel. `web.url(path)` is a URL of the front end and `web.server()` the test's `TestServer`.
+The front end process starts on the first `serve`. It is given the address of a small proxy that navree-browser runs, and each `serve` starts a `TestServer` for the calling test's app and points that proxy at it. A `WebSession` holds the front end until it is dropped, so browser tests that share a front end run one after another, each against its own fresh database, while the rest of your tests keep running in parallel. `web.url(path)` is a URL of the front end and `web.server()` the test's `TestServer`. The proxy forwards HTTP requests, which is what a BFF sends; WebSocket upgrades don't go through it.
 
 The process keeps running while any test of the binary uses it or waits for its turn; when the last `WebSession` is dropped, it is stopped together with every process it started. If something already answers at the front end's URL before it starts, `serve` fails rather than test against a stranger, and a front end that exits or never answers fails `serve` with the end of its output.
 
