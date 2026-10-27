@@ -22,6 +22,15 @@
 //!   rule, by `field.rule` and attribute names). [`ValidationModule`]
 //!   (global) provides them from [`ValidationOptions`] or the `validation`
 //!   config section; without the module the defaults apply.
+//! - International input: [`rules::unicode_name`] (names in any script),
+//!   [`fold_digits`] and [`Folded`] (Arabic-Indic, Persian, Devanagari and
+//!   every other script's digits as ASCII before rules run), [`Country`]
+//!   (ISO 3166-1 alpha-2) and [`Locale`] (BCP 47), with the `phone` feature
+//!   `Phone` (E.164, the default region from `validation.phone` or a
+//!   [`RegionSource`]) and with the `html` feature `SafeHtml` (rich text
+//!   sanitized by the app's [`HtmlPolicy`] while deserializing). Their
+//!   messages come from the same table (`phone`, `country`, `locale`,
+//!   `unicode_name`), so translated tables translate them too.
 //!
 //! ```
 //! use garde::Validate;
@@ -65,19 +74,37 @@
 #![forbid(unsafe_code)]
 
 mod async_rules;
+mod context;
+mod country;
+mod digits;
 mod errors;
 mod extract;
 mod failure;
+mod html;
+mod locale;
 mod messages;
 mod module;
+#[cfg(feature = "phone")]
+mod phone;
 pub mod rules;
 
 pub use async_rules::{AsyncRule, AsyncRules, RuleError};
+pub use context::{InputContext, RegionSource};
+pub use country::{Country, InvalidCountry};
+pub use digits::{Folded, fold_digits};
 pub use errors::ValidationErrors;
 pub use extract::{Valid, ValidAsync, validate, validate_in};
 pub use failure::rule_error;
+pub use html::HtmlPolicy;
+#[cfg(feature = "html")]
+pub use html::SafeHtml;
+pub use locale::{InvalidLocale, Locale};
 pub use messages::{DEFAULT_MESSAGES, Messages};
-pub use module::{CONFIG_SECTION, ValidationModule, ValidationOptions};
+pub use module::{
+    CONFIG_SECTION, ModuleBuilderValidationExt, PhoneOptions, ValidationModule, ValidationOptions,
+};
+#[cfg(feature = "phone")]
+pub use phone::{InvalidPhone, Phone};
 pub use rules::confirmed;
 
 /// garde, the validation library behind [`Valid`].

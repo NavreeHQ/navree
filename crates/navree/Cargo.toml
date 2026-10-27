@@ -37,6 +37,8 @@ full = [
     "telemetry",
     "testing",
     "validation",
+    "validation-html",
+    "validation-phone",
     "view",
     "webhooks",
     "workspace",
@@ -170,6 +172,12 @@ billing = [
 ]
 ## PostgreSQL driver for navree-db.
 postgres = ["db", "navree-db/postgres"]
+## navree-validation's `Phone`: E.164 phone numbers (the phonenumber crate).
+## Pure Rust; in `full`.
+validation-phone = ["validation", "navree-validation/phone"]
+## navree-validation's `SafeHtml`: rich text sanitized by the app's
+## `HtmlPolicy` (ammonia). Pure Rust; in `full`.
+validation-html = ["validation", "navree-validation/html"]
 ## Opt-in, not in `full`: Dock's library (`dock.toml`, the services' settings,
 ## the Compose file), for tools and tests. `navree dock` (the CLI) does not need it.
 dock = ["dep:navree-dock"]

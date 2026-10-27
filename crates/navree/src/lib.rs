@@ -47,7 +47,9 @@
 //! (`social`, `oauth`, `flags`, `graphql`, `grpc`, `billing`, `dock`, `otel`). A feature also turns on the features of the crates its crate
 //! builds on (`auth` turns on `access`, `db`, `http`, ...). The `postgres` feature adds
 //! navree-db's PostgreSQL driver, and the opt-in `otel` feature adds
-//! navree-observe's OTLP span exporter. `axum` is re-exported with `http`. `dock`
+//! navree-observe's OTLP span exporter; `validation-phone` and `validation-html`
+//! (both in `full`) add navree-validation's `Phone` and `SafeHtml`. `axum` is
+//! re-exported with `http`. `dock`
 //! is a development tool (`navree dock`), for tools and tests that read
 //! `dock.toml`.
 //!
