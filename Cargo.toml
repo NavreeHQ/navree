@@ -307,6 +307,14 @@ lettre = { version = "0.11.23", default-features = false, features = [
     "tracing",
     "webpki-roots",
 ] }
+# Mail rendering (navree-mail): CSS inlined into `style` attributes and a
+# plain-text body from the HTML, on the html5ever already in the tree (no
+# remote stylesheets, no CLI).
+css-inline = { version = "0.23.0", default-features = false }
+html2text = { version = "0.17.4", default-features = false }
+# DNS TXT lookups for navree-mail's sending-domain checks (SPF, DKIM,
+# DMARC): pure Rust, the system's resolver configuration, no DNS over TLS.
+hickory-resolver = { version = "0.26.3", default-features = false, features = ["system-config", "tokio"] }
 croner = "4.0.2"
 moka = { version = "0.12.16", features = ["future"] }
 dashmap = "6.2.1"
