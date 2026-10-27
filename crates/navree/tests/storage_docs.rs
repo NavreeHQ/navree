@@ -3,6 +3,8 @@
 //! run.
 #![cfg(all(feature = "storage", feature = "testing"))]
 
+use std::collections::BTreeMap;
+
 use chrono::{Duration, Utc};
 use navree::http::CurrentPrincipal;
 use navree::prelude::*;
@@ -113,6 +115,19 @@ impl DocumentUploadController {
         let disk = self.storage.disk("documents")?;
         let file = disk.accept_upload(&done.path, &document_rules()).await?;
         Ok(Json(file))
+    }
+}
+
+/// Checks an uploaded document; a rejection is shown next to the form's
+/// `document` field, with the rejection's code.
+pub async fn accept_document(disk: &Disk, path: &str) -> Result<StoredFile> {
+    match disk.accept_upload(path, &document_rules()).await {
+        Ok(file) => Ok(file),
+        Err(StorageError::Rejected { rejection, .. }) => {
+            let errors = BTreeMap::from([("document".to_owned(), vec![rejection.to_string()])]);
+            Err(AppError::validation(errors).with_code(rejection.code()))
+        }
+        Err(error) => Err(error.into()),
     }
 }
 
@@ -233,19 +248,23 @@ async fn a_disallowed_upload_is_refused_and_deleted() {
     let client = app.acting_as(principal(Uuid::now_v7()));
 
     // A type the rules do not allow is refused before anything is sent.
-    client
+    let refused: serde_json::Value = client
         .post("/api/v1/documents/uploads")
         .json(&serde_json::json!({ "content_type": "text/html", "size": 10 }))
         .send()
         .await
-        .assert_status(400);
+        .assert_status(400)
+        .json();
+    assert_eq!(refused["code"], "file_type_not_allowed");
     // So is a file over the limit.
-    client
+    let refused: serde_json::Value = client
         .post("/api/v1/documents/uploads")
         .json(&serde_json::json!({ "content_type": "image/png", "size": 30 * 1024 * 1024 }))
         .send()
         .await
-        .assert_status(413);
+        .assert_status(413)
+        .json();
+    assert_eq!(refused["code"], "payload_too_large");
 
     // A file that claims to be an image but is not is deleted on completion.
     let body = b"<script>alert(1)</script>".to_vec();
@@ -263,14 +282,58 @@ async fn a_disallowed_upload_is_refused_and_deleted() {
         .send()
         .await
         .assert_status(200);
-    client
+    let refused: serde_json::Value = client
         .post("/api/v1/documents/uploads/complete")
         .json(&serde_json::json!({ "path": upload.path }))
         .send()
         .await
-        .assert_status(400);
+        .assert_status(400)
+        .json();
+    assert_eq!(refused["code"], "file_type_not_allowed");
     let documents = app.get::<Storage>().await.disk("documents").unwrap();
     assert!(!documents.exists(&upload.path).await.unwrap());
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn a_rejection_handled_in_code_keeps_its_code() {
+    let app = app().await;
+    let documents = app.get::<Storage>().await.disk("documents").unwrap();
+
+    documents
+        .put("incoming/a/fake.png", "<script>alert(1)</script>")
+        .await
+        .unwrap();
+    let error = accept_document(&documents, "incoming/a/fake.png")
+        .await
+        .unwrap_err();
+    assert_eq!(error.status.as_u16(), 400);
+    assert_eq!(error.code, "file_type_not_allowed");
+    assert_eq!(
+        error.body()["errors"]["document"][0],
+        "the file must be of type: application/pdf, image/* (it is text/html)"
+    );
+    assert!(!documents.exists("incoming/a/fake.png").await.unwrap());
+
+    documents.put("incoming/a/real.png", png(500)).await.unwrap();
+    let file = accept_document(&documents, "incoming/a/real.png")
+        .await
+        .unwrap();
+    assert_eq!(file.mime, "image/png");
+
+    // Any other storage error travels on unchanged, for the module's
+    // mapping to turn into its response (a missing file is a 404).
+    let missing = accept_document(&documents, "incoming/a/missing.png")
+        .await
+        .unwrap_err();
+    let source = missing.source.expect("the storage error");
+    assert!(
+        matches!(
+            source.downcast_ref::<StorageError>(),
+            Some(StorageError::NotFound { .. })
+        ),
+        "{source}"
+    );
     app.shutdown().await.unwrap();
 }
 

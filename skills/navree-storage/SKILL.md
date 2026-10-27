@@ -167,6 +167,11 @@ async fn complete(&self, CurrentPrincipal(me): CurrentPrincipal, Json(done): Jso
   upload.headers, body: file })`.
 - `accept_upload` checks size and sniffed type and **deletes** a bad file
   (`StorageError::Rejected`: 400, or 413 when too large). Always call it.
+- Each rejection carries a `code` the front end translates:
+  `file_type_not_allowed`, `missing_content_type`, `invalid_content_type`,
+  `empty_file`, `payload_too_large` (and `upload_size_mismatch` from the
+  local upload route). Handling a rejection yourself, keep it with
+  `AppError::validation(..).with_code(rejection.code())`.
 - What the link enforces: S3 the `Content-Type` (no size); GCS type and
   `x-goog-content-length-range`; Azure only expiry (send `x-ms-blob-type`);
   local/memory disks the app's `PUT /storage/{disk}/{*path}` route checks
@@ -194,8 +199,8 @@ bucket. Local/memory disks: `StorageModule` serves
 `GET /storage/{disk}/{*path}?expires=..&signature=..` (public; the signature
 is the credential): 403 for a bad or expired link, 404 when the file is
 gone, HTML/SVG/JS sent as attachments. Keep expiry short and don't log the
-links. A `StorageError` through `?` in a handler is a 404 (not found), 400
-(invalid path), 400/413 (rejected upload) or 500.
+links. A `StorageError` through `?` in a handler is a 404 (`not_found`), 400
+(`invalid_file_path`), 400/413 (rejected upload, a code per rule) or 500.
 
 ## Copy between disks
 
