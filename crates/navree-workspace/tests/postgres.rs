@@ -601,7 +601,10 @@ async fn isolation_suites_pass_under_schema_isolation() {
         .unwrap()
         .query_all_raw(Statement::from_string(
             DbBackend::Postgres,
-            format!("SELECT workspace_id AS w FROM workspace_{}.items", b.simple()),
+            format!(
+                "SELECT workspace_id AS w FROM workspace_{}.items",
+                b.simple()
+            ),
         ))
         .await
         .unwrap()
