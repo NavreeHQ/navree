@@ -5,14 +5,15 @@ use sea_orm::{ConnectionTrait, DbBackend, DbErr, QueryResult, Statement, Value};
 
 use crate::migration::{FAILED_JOBS_TABLE, JOBS_TABLE};
 use crate::record::{
-    FailedJob, NewJob, ReservedJob, RetryTarget, UNLIMITED_RESERVATION_SECS, from_millis,
+    FailedJob, Membership, NewJob, ReservedJob, RetryTarget, UNLIMITED_RESERVATION_SECS,
+    from_millis,
 };
 use crate::{QueueError, STALE_RESERVATION_GRACE_SECS};
 
 /// Jobs in the app database.
 #[derive(Clone, Debug)]
 pub(crate) struct DatabaseStore {
-    db: Db,
+    pub(super) db: Db,
 }
 
 impl DatabaseStore {
@@ -231,7 +232,7 @@ impl DatabaseStore {
 
 /// A statement for `backend`: `?` placeholders become `$1, $2, …` on
 /// PostgreSQL. (No SQL here contains a literal `?`.)
-fn statement(backend: DbBackend, sql: &str, values: Vec<Value>) -> Statement {
+pub(crate) fn statement(backend: DbBackend, sql: &str, values: Vec<Value>) -> Statement {
     let sql = if backend == DbBackend::Postgres {
         let mut numbered = String::with_capacity(sql.len() + 8);
         let mut n = 0;
@@ -266,7 +267,8 @@ fn reserve_statement(backend: DbBackend, queue: &str, worker: &str, now: i64) ->
                  OR reserved_at + (CASE WHEN timeout_secs = 0 THEN {UNLIMITED_RESERVATION_SECS} \
                      ELSE timeout_secs END + {STALE_RESERVATION_GRACE_SECS}) * 1000 <= ?) \
              ORDER BY available_at, id LIMIT 1{lock}) \
-         RETURNING id, queue, job_type, payload, options, attempts, trace_parent"
+         RETURNING id, queue, job_type, payload, options, attempts, trace_parent, batch_id, \
+             batch_callback, operation_id"
     );
     statement(
         backend,
@@ -336,15 +338,16 @@ async fn insert_on<C: ConnectionTrait>(
 }
 
 /// `INSERT INTO jobs …` for `job` (`ON CONFLICT (unique_key) DO NOTHING`).
-fn insert_job(backend: DbBackend, job: &NewJob) -> Result<Statement, QueueError> {
+pub(super) fn insert_job(backend: DbBackend, job: &NewJob) -> Result<Statement, QueueError> {
     let options = serde_json::to_string(&job.options).map_err(QueueError::Payload)?;
     Ok(statement(
         backend,
         &format!(
             "INSERT INTO {JOBS_TABLE} \
              (id, queue, job_type, payload, options, attempts, max_attempts, timeout_secs, \
-              available_at, unique_key, created_at, trace_parent) \
-             VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?) \
+              available_at, unique_key, created_at, trace_parent, batch_id, batch_callback, \
+              operation_id) \
+             VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?) \
              ON CONFLICT (unique_key) DO NOTHING"
         ),
         vec![
@@ -361,11 +364,14 @@ fn insert_job(backend: DbBackend, job: &NewJob) -> Result<Statement, QueueError>
             job.unique_key.clone().into(),
             job.created_at.into(),
             job.trace_parent.clone().into(),
+            job.membership.batch_id.clone().into(),
+            job.membership.callback.into(),
+            job.membership.operation_id.clone().into(),
         ],
     ))
 }
 
-fn json<T: serde::de::DeserializeOwned>(text: &str) -> Result<T, QueueError> {
+pub(super) fn json<T: serde::de::DeserializeOwned>(text: &str) -> Result<T, QueueError> {
     serde_json::from_str(text).map_err(QueueError::Payload)
 }
 
@@ -383,10 +389,15 @@ fn reserved_job(row: &QueryResult) -> Result<ReservedJob, QueueError> {
         options: json(&row.try_get::<String>("", "options")?)?,
         attempts: count(row, "attempts")?,
         trace_parent: row.try_get("", "trace_parent")?,
+        membership: Membership {
+            batch_id: row.try_get("", "batch_id")?,
+            callback: row.try_get("", "batch_callback")?,
+            operation_id: row.try_get("", "operation_id")?,
+        },
     })
 }
 
-fn failed_job(row: &QueryResult) -> Result<FailedJob, QueueError> {
+pub(super) fn failed_job(row: &QueryResult) -> Result<FailedJob, QueueError> {
     Ok(FailedJob {
         id: row.try_get("", "id")?,
         queue: row.try_get("", "queue")?,

@@ -1,14 +1,30 @@
 //! The `queue:*` commands.
 
 use std::fmt::Write as _;
+use std::time::Duration;
 
 use navree_kernel::{AppContext, BoxError, CommandSpec};
 
-use crate::{FailedJob, Queue, WorkOptions};
+use crate::{FailedJob, JobBatch, Operations, Queue, WorkOptions};
 
 /// The commands `QueueModule` registers.
-pub(crate) fn commands() -> [CommandSpec; 4] {
+pub(crate) fn commands() -> [CommandSpec; 7] {
     [
+        CommandSpec::new(
+            "queue:batches",
+            "List the most recent job batches ([--limit N])",
+            batches_command,
+        ),
+        CommandSpec::new(
+            "queue:watchdog",
+            "Fail or restart operations that stopped responding (schedule it every minute)",
+            watchdog_command,
+        ),
+        CommandSpec::new(
+            "queue:prune",
+            "Delete finished batches and operations older than --hours N (default 168)",
+            prune_command,
+        ),
         CommandSpec::new(
             "queue:work",
             "Run queued jobs until shutdown ([--queue a,b] [--once] [--stop-when-empty] [--max-jobs N])",
@@ -40,8 +56,8 @@ async fn work_command(ctx: AppContext, args: Vec<String>) -> Result<(), BoxError
     );
     let stats = queue.work(options).await?;
     println!(
-        "Processed {} job attempt(s): {} succeeded, {} released for retry, {} failed.",
-        stats.processed, stats.succeeded, stats.released, stats.failed
+        "Processed {} job attempt(s): {} succeeded, {} released for retry, {} failed, {} cancelled.",
+        stats.processed, stats.succeeded, stats.released, stats.failed, stats.cancelled
     );
     Ok(())
 }
@@ -65,6 +81,86 @@ async fn flush_command(ctx: AppContext, _args: Vec<String>) -> Result<(), BoxErr
     let deleted = ctx.get::<Queue>().await?.flush_failed().await?;
     println!("Deleted {deleted} failed job(s).");
     Ok(())
+}
+
+async fn batches_command(ctx: AppContext, args: Vec<String>) -> Result<(), BoxError> {
+    let limit = parse_number_flag(&args, "--limit", "queue:batches")?.unwrap_or(20);
+    let limit = usize::try_from(limit).unwrap_or(usize::MAX);
+    let batches = ctx.get::<Queue>().await?.batches(limit).await?;
+    print!("{}", batch_listing(&batches));
+    Ok(())
+}
+
+async fn watchdog_command(ctx: AppContext, _args: Vec<String>) -> Result<(), BoxError> {
+    let report = ctx.get::<Operations>().await?.sweep().await?;
+    println!(
+        "Operations: {} failed, {} restarted, {} finished with their batch.",
+        report.failed, report.redispatched, report.finished
+    );
+    Ok(())
+}
+
+async fn prune_command(ctx: AppContext, args: Vec<String>) -> Result<(), BoxError> {
+    let hours = parse_number_flag(&args, "--hours", "queue:prune")?.unwrap_or(168);
+    let older_than = Duration::from_secs(hours.saturating_mul(3600));
+    let batches = ctx.get::<Queue>().await?.prune_batches(older_than).await?;
+    let operations = match ctx.try_get::<Operations>().await {
+        Some(operations) => operations.prune(older_than).await?,
+        None => 0,
+    };
+    println!("Deleted {batches} batch(es) and {operations} operation(s) finished over {hours} hour(s) ago.");
+    Ok(())
+}
+
+/// The value of `--flag N` or `--flag=N`; no other argument is accepted.
+fn parse_number_flag(args: &[String], flag: &str, command: &str) -> Result<Option<u64>, String> {
+    let mut value = None;
+    let mut args = args.iter();
+    while let Some(arg) = args.next() {
+        let text = match arg.split_once('=') {
+            Some((name, text)) if name == flag => text.to_owned(),
+            None if arg == flag => args
+                .next()
+                .cloned()
+                .ok_or_else(|| format!("`{flag}` needs a value"))?,
+            _ => return Err(format!("unknown option `{arg}` for {command} (expected {flag})")),
+        };
+        value = Some(
+            text.parse()
+                .map_err(|_| format!("`{flag}` must be a whole number, not `{text}`"))?,
+        );
+    }
+    Ok(value)
+}
+
+/// One line per batch: id, name, finished of total jobs, failures and
+/// state.
+pub(crate) fn batch_listing(batches: &[JobBatch]) -> String {
+    if batches.is_empty() {
+        return "No batches.\n".to_owned();
+    }
+    let mut out = String::new();
+    for batch in batches {
+        let state = if batch.cancelled() {
+            "cancelled"
+        } else if batch.finished() {
+            "finished"
+        } else {
+            "running"
+        };
+        let _ = writeln!(
+            out,
+            "{}  {}  {}/{} jobs ({}%)  {} failed  {state}  {}",
+            batch.id,
+            batch.name,
+            batch.processed_jobs(),
+            batch.total_jobs,
+            batch.progress(),
+            batch.failed_jobs,
+            batch.created_at.to_rfc3339(),
+        );
+    }
+    out
 }
 
 /// Parses `[--queue a,b] [--once] [--stop-when-empty] [--max-jobs N]`

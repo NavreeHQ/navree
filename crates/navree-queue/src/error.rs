@@ -29,4 +29,8 @@ pub enum QueueError {
     /// The app owning the queue has been dropped.
     #[error("the app owning this queue has shut down")]
     ShutDown,
+    /// Operations are stored in the app database, and the app has no
+    /// `DatabaseModule`.
+    #[error("operations need the app database: add DatabaseModule to the app")]
+    NoDatabase,
 }
