@@ -17,7 +17,7 @@ Navree supports four SQL databases:
 - **TimescaleDB** is the default: PostgreSQL with hypertables for time-series data. `navree new` sets an app up for it and [Dock](/docs/tools/dock/) runs it on your machine ([below](#timescaledb)).
 - **PostgreSQL** without TimescaleDB works the same; tables declared as hypertables are regular tables there ([below](#postgresql)). Both need the `postgres` Cargo feature.
 - **MySQL** and **MariaDB** are behind the `mysql` Cargo feature ([below](#mysql-and-mariadb)).
-- **SQLite** is compiled into your app (bundled), so there is nothing to install. Every test runs on it, each in a file of its own, and an app whose configuration names no database uses a SQLite file ([below](#sqlite)).
+- **SQLite** is compiled into your app (bundled), so there is nothing to install. Tests run on it by default, each in a file of its own, and an app whose configuration names no database uses a SQLite file ([below](#sqlite)).
 
 `navree new my-app` makes a TimescaleDB app; `--database postgres`, `--database mysql` and `--database sqlite` make the others. MongoDB is supported too, by the ORM's [document driver](/docs/orm/mongodb/).
 
@@ -263,7 +263,7 @@ MariaDB connects through the same code but hasn't been run against a server yet,
 
 ## SQLite
 
-SQLite is built in: every test runs on it, `navree new my-app --database sqlite` makes an app on it, and an app whose configuration has no `database.url` uses `sqlite://storage/app.db?mode=rwc`. Migrations that declare [hypertables](/docs/database/timescaledb/#one-migration-every-database) run on it too, as regular tables with the same keys and time indexes.
+SQLite is built in: tests run on it by default, `navree new my-app --database sqlite` makes an app on it, and an app whose configuration has no `database.url` uses `sqlite://storage/app.db?mode=rwc`. Migrations that declare [hypertables](/docs/database/timescaledb/#one-migration-every-database) run on it too, as regular tables with the same keys and time indexes.
 
 A SQLite URL names a file. `mode=rwc` creates the file if it doesn't exist, and Navree creates its directory, so `sqlite://storage/app.db?mode=rwc` works on a fresh checkout. A relative path is relative to the working directory the app runs in.
 
