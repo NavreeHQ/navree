@@ -1313,6 +1313,66 @@ opt-in); its `DESIGN.md` has the details.
   against `NAVREE_TEST_MONGODB_URL` (a replica set), locally through
   `scripts/dev-databases.ps1` and in CI (`.github/workflows/mongodb.yml`).
 
+### orm-adopt-crates (shipped): the framework's tables as models
+
+The framework crates' tables are navree-orm models, and the crates read
+and write them through the ORM where that keeps behaviour and reads
+better.
+
+- **One struct, two derives.** A table whose SeaORM entity is public API
+  (apps, Helm's panels and tests query `Entity`, `Column` and
+  `ActiveModel`) keeps it: its `Model` derives `DeriveEntityModel` and
+  `navree_orm::Model` together, with `#[model(table = "..")]` (and
+  `primary_key`, `column = ".."` where the entity says so). The struct is
+  both; nothing public changes, and apps gain `AuditRecord::query()`,
+  `User::query()`, typed columns and records. `tests/orm/entities.rs` pins
+  the pattern: rows written by one API read by the other, dirty tracking,
+  serialization through the struct's own serde (secrets marked
+  `#[serde(skip_serializing)]` stay out of records too). The derive must
+  name the trait by path (`navree_orm::Model`): the struct is called
+  `Model`.
+- **The tables.** navree-audit (`audit_logs`, `AuditRecord`), navree-notify
+  (`notifications`), navree-queue (`failed_jobs`: `FailedJob` itself, with
+  `JsonText` payload and options and a `unix_timestamp_ms` failure time),
+  navree-auth (users, refresh tokens, password resets, sign-in tokens,
+  passkeys), navree-workspace (workspaces, members, invitations,
+  organizations and their members and grants, access requests, partitions),
+  navree-social, navree-webhooks, navree-oauth, navree-flags
+  (`feature_flags`), navree-billing and navree-lighthouse. Tables keyed by
+  several columns (flag overrides, saved locales) stay entities: a model
+  has one key column. Crates below the ORM's layer, and navree-access and
+  navree-validation (the ORM's optional dependencies), keep SeaORM.
+- **Executors keep the semantics.** Code that wrote on the pool outside the
+  request (the audit log's own connection) passes `db.conn()`; code that
+  wrote in a transaction it was handed passes `&*tx` (no change events,
+  exactly as the SeaORM statement recorded none); reads that went through
+  `Db::reader` pass `&Db`, which reads the same way.
+- **Change events.** An ORM write through a `Uow` records the stored column
+  values; `Repo` records the model's serde output. Writes of rows with
+  skipped fields (users, webhook endpoints, social accounts, workspace
+  rows) stay on `Repo`, so audit trails keep their exact content; the
+  plain inserts and updates that recorded no change events moved to the
+  ORM: auth's sessions, sign-in tokens, resets and passkeys, the webhook
+  delivery log, the OAuth server's clients, grants and tokens, failed
+  jobs, stored notifications and audit rows. Reads moved with them
+  (auth's and social sign-in's user lookups too).
+- **Errors.** `From<OrmError> for DbErr` (database errors as they were,
+  not-found as `RecordNotFound`, the rest as `DbErr::Custom`) lets services
+  whose API speaks `DbErr` use `?`; the crates' own errors convert through
+  it (`QueueError`, `AuthError`, `WebhooksError`, `OAuthError`,
+  `SocialError`, each into its database variant).
+- **`JsonText`** (`cast.rs`): serde values stored as JSON text in `TEXT`
+  columns, for tables created before JSON columns were used.
+- **Migrations stay SeaORM.** The schema builder's DDL is not the SeaORM
+  migrations' (PostgreSQL `VARCHAR(255)` for `string` where they made
+  unbounded `varchar`; MySQL `CHAR(36)` for `uuid` where they made
+  `binary(16)`, which is how both ORMs bind UUIDs there; MySQL
+  `TIMESTAMP(6)` for `timestamp(0)`), so rewriting the table-creating
+  migrations would give new databases other columns than migrated ones.
+  New migrations of these crates use navree-schema (the hypertable
+  conversions do), and the facade's `framework_models` suite checks the
+  models on SQLite, PostgreSQL and MySQL.
+
 ## 12. The lifecycle
 
 ### Events and when listeners hear them

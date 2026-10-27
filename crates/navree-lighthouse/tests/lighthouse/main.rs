@@ -11,6 +11,7 @@ mod fake;
 #[cfg(feature = "mcp")]
 mod mcp;
 mod module;
+mod orm;
 mod recording;
 mod statuses;
 mod time_series;

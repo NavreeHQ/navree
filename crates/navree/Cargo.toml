@@ -105,22 +105,26 @@ session = ["dep:navree-session", "http", "crypto", "db"]
 ## With `orm` on too, also `navree::orm::validation` (`unique` and `exists`
 ## rules on models).
 validation = ["dep:navree-validation", "http", "db", "navree-orm?/validation"]
-audit = ["dep:navree-audit", "http", "db"]
-## With `documents` on too, queued renders can run behind an operation
-## (navree-documents' `operations` feature).
+## The audit trail; its entries are ORM models (`orm`).
+audit = ["dep:navree-audit", "http", "db", "orm"]
+## Job queues; failed jobs are ORM models (`orm`). With `documents` on too,
+## queued renders can run behind an operation (navree-documents'
+## `operations` feature).
 queue = [
     "dep:navree-queue",
     "http",
     "db",
     "realtime",
     "schedule",
+    "orm",
     "navree-documents?/operations",
 ]
 schedule = ["dep:navree-schedule", "db", "time"]
 ## With `orm` on too, models can be subjects (`#[model(subject, policy)]`,
 ## `accessible` queries, `Authorized<Model, A>`).
 access = ["dep:navree-access", "http", "db", "navree-orm?/access"]
-notify = ["dep:navree-notify", "http", "db", "mail"]
+## Notifications; stored ones are ORM models (`orm`).
+notify = ["dep:navree-notify", "http", "db", "mail", "orm"]
 ## The UI kit of the server-rendered tools: the app shell, components as
 ## MiniJinja macros, embedded CSS, JS and fonts (light: no new dependencies).
 ui = ["dep:navree-ui", "http", "view"]
@@ -149,6 +153,7 @@ auth = [
     "mail",
     "access",
     "http-client",
+    "orm",
 ]
 ## Workspaces: multi-tenancy with members, roles, invitations, isolation and
 ## demo workspaces (reset nightly through `schedule`).
@@ -162,6 +167,7 @@ workspace = [
     "access",
     "time",
     "schedule",
+    "orm",
 ]
 ## L5 (opt-in, not in `full`)
 ## MongoDB: `MongoModule` (connections, pools, readiness), the ORM's
@@ -205,6 +211,7 @@ webhooks = [
     "http-client",
     "db",
     "workspace",
+    "orm",
 ]
 ## Single sign-on: SAML 2.0 and OpenID Connect connections per organization
 ## or workspace, verified email domains, just-in-time provisioning (pure
@@ -246,6 +253,7 @@ social = [
     "http-client",
     "db",
     "auth",
+    "orm",
 ]
 ## L6 (opt-in, not in `full`)
 ## OAuth 2.1 authorization server and OpenID Connect provider.
@@ -258,6 +266,7 @@ oauth = [
     "http",
     "testing",
     "workspace",
+    "orm",
 ]
 ## L6 (ecosystem libraries, opt-in: not part of `full`)
 ## Feature flags: `#[flag]`, `Flags`, `CurrentFlags`, `#[requires_flag]`.
@@ -270,6 +279,7 @@ flags = [
     "audit",
     "workspace",
     "auth",
+    "orm",
 ]
 ## L6 (opt-in, not in `full`)
 ## GraphQL: `GraphqlModule`, `#[resolver]`, dataloaders, subscriptions.
@@ -331,6 +341,7 @@ billing = [
     "schedule",
     "auth",
     "workspace",
+    "orm",
 ]
 ## L6 (ecosystem, opt-in: not in `full`)
 ## MCP servers: `McpModule`, `#[mcp_server]`, streamable HTTP and stdio.
@@ -396,6 +407,7 @@ lighthouse = [
     "schedule",
     "access",
     "auth",
+    "orm",
 ]
 ## L7 (in `full`)
 ## Logbook: the local debugging timeline at `/_logbook` (requests, queries,

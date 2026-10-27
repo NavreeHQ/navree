@@ -9,9 +9,9 @@ use navree_contracts::{Broadcaster, Clock, Dispatcher, JobEnvelope};
 use navree_db::{Db, Uow};
 use navree_kernel::{AppContext, WeakAppContext};
 use navree_mail::Mailer;
+use navree_orm::{Executor, Model as _};
 use navree_telemetry::{EventKind, NotificationSent, Telemetry, TelemetryEvent};
-use sea_orm::sea_query::OnConflict;
-use sea_orm::{ActiveValue::Set, ConnectionTrait, EntityTrait};
+use sea_orm::DbErr;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -474,29 +474,26 @@ async fn now(ctx: &AppContext) -> DateTime<Utc> {
     now.trunc_subsecs(6)
 }
 
-/// Inserts the `notifications` row (nothing when it exists: a retried job).
-async fn store<C: ConnectionTrait>(
-    conn: &C,
+/// Inserts the `notifications` row through `exec` (the pool, or the unit
+/// of work's transaction), nothing when it exists: a retried job. A plain
+/// insert, so it records no change events.
+async fn store<E: Executor + ?Sized>(
+    exec: &E,
     job: &SendNotificationJob,
     data: &Value,
 ) -> Result<(), NotifyError> {
-    let row = notifications::ActiveModel {
-        id: Set(job.id),
-        notifiable_type: Set(job.notifiable_type.clone()),
-        notifiable_id: Set(job.notifiable_id.clone()),
-        notification_type: Set(job.notification_type.clone()),
-        data: Set(data.clone()),
-        read_at: Set(None),
-        created_at: Set(job.created_at),
+    let row = notifications::Model {
+        id: job.id,
+        notifiable_type: job.notifiable_type.clone(),
+        notifiable_id: job.notifiable_id.clone(),
+        notification_type: job.notification_type.clone(),
+        data: data.clone(),
+        read_at: None,
+        created_at: job.created_at,
     };
-    notifications::Entity::insert(row)
-        .on_conflict(
-            OnConflict::column(notifications::Column::Id)
-                .do_nothing()
-                .to_owned(),
-        )
-        .exec_without_returning(conn)
-        .await?;
+    notifications::Model::insert_or_ignore(exec, [row])
+        .await
+        .map_err(DbErr::from)?;
     Ok(())
 }
 

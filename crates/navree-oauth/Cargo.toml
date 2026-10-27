@@ -26,6 +26,8 @@ navree-crypto = { workspace = true }
 navree-db = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
+# The OAuth tables are models (`Client`, `PersonalAccessToken`, ...).
+navree-orm = { workspace = true }
 # `navree_oauth::testing` drives the flows with navree-testing's TestClient.
 navree-testing = { workspace = true }
 # Workspace-limited clients pin their tokens with `PinnedWorkspace`.

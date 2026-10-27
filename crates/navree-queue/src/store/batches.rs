@@ -2,14 +2,15 @@
 //! operation columns of `jobs`.
 
 use navree_db::Uow;
+use navree_orm::Model as _;
 use sea_orm::{ConnectionTrait, DbBackend, QueryResult, Statement};
 
 use super::PrepareCallback;
 use super::database::{DatabaseStore, insert_job, json, statement};
 use crate::QueueError;
 use crate::batch::{BatchRow, BatchStep, Finish, Finished};
-use crate::migration::{FAILED_JOBS_TABLE, JOB_BATCHES_TABLE, JOBS_TABLE};
-use crate::record::{NewJob, ReservedJob};
+use crate::migration::{JOB_BATCHES_TABLE, JOBS_TABLE};
+use crate::record::{FailedJob, NewJob, ReservedJob};
 
 /// The columns of `job_batches`, in [`batch_row`]'s order.
 const BATCH_COLUMNS: &str = "id, name, total_jobs, pending_jobs, failed_jobs, failed_job_ids, \
@@ -69,8 +70,7 @@ impl DatabaseStore {
                 return Ok(Finished::Lost);
             }
             if finish == Finish::Failed {
-                tx.execute_raw(insert_failed(backend, job, error, now)?)
-                    .await?;
+                FailedJob::insert(&*tx, [FailedJob::of(job, error, now)]).await?;
             }
             let Some(batch_id) = &job.membership.batch_id else {
                 return Ok(Finished::Done(None));
@@ -286,34 +286,6 @@ fn update_batch(backend: DbBackend, row: &BatchRow) -> Result<Statement, QueueEr
             row.cancelled_at.into(),
             row.finished_at.into(),
             row.id.as_str().into(),
-        ],
-    ))
-}
-
-/// `INSERT INTO failed_jobs …` for `job`.
-fn insert_failed(
-    backend: DbBackend,
-    job: &ReservedJob,
-    error: &str,
-    now: i64,
-) -> Result<Statement, QueueError> {
-    let options = serde_json::to_string(&job.options).map_err(QueueError::Payload)?;
-    Ok(statement(
-        backend,
-        &format!(
-            "INSERT INTO {FAILED_JOBS_TABLE} \
-             (id, queue, job_type, payload, options, error, attempts, failed_at) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-        ),
-        vec![
-            job.id.as_str().into(),
-            job.queue.as_str().into(),
-            job.job_type.as_str().into(),
-            job.payload.to_string().into(),
-            options.into(),
-            error.into(),
-            i64::from(job.attempts).into(),
-            now.into(),
         ],
     ))
 }

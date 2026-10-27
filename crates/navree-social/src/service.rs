@@ -9,10 +9,8 @@ use navree_auth::{ClientMeta, LoginOutcome, TokenType, User, two_factor_enabled,
 use navree_contracts::{AuditEntry, AuditKind, Secret};
 use navree_db::{Repo, Uow};
 use navree_kernel::{AppContext, BoxError, BoxFuture, Lifecycle};
-use sea_orm::{
-    ActiveValue, ColumnTrait, ConnectionTrait, DbErr, EntityTrait, QueryFilter, QueryOrder, Set,
-    Unchanged,
-};
+use navree_orm::{Executor, Model as _, Record};
+use sea_orm::{ActiveValue, Set, Unchanged};
 use serde_json::json;
 use tokio::sync::OnceCell;
 use uuid::Uuid;
@@ -340,13 +338,12 @@ impl Social {
         let (account, user, others) = {
             let tx = uow.tx().await?;
             let account = find_user_account(&*tx, user_id, provider).await?;
-            let user = user::Entity::find_by_id(user_id).one(&*tx).await?;
-            let others = social_account::Entity::find()
-                .filter(social_account::Column::UserId.eq(user_id))
-                .filter(social_account::Column::Provider.ne(provider))
-                .all(&*tx)
-                .await?
-                .len();
+            let user = User::find(&*tx, user_id).await?;
+            let others = social_account::Model::query()
+                .where_(social_account::Model::USER_ID.eq(user_id))
+                .where_(social_account::Model::PROVIDER.ne(provider))
+                .count(&*tx)
+                .await?;
             (account, user, others)
         };
         let Some(account) = account else {
@@ -381,12 +378,13 @@ impl Social {
     /// The user's linked accounts, oldest first.
     pub async fn accounts(&self, user_id: Uuid) -> Result<Vec<LinkedAccount>, SocialError> {
         let rt = self.rt()?;
-        let rows = social_account::Entity::find()
-            .filter(social_account::Column::UserId.eq(user_id))
-            .order_by_asc(social_account::Column::CreatedAt)
-            .all(&rt.db.reader().await)
+        let rows = social_account::Model::query()
+            .where_(social_account::Model::USER_ID.eq(user_id))
+            .order_by(social_account::Model::CREATED_AT)
+            .get(&rt.db)
             .await?;
         Ok(rows
+            .into_models()
             .into_iter()
             .map(|row| linked_account(rt, row))
             .collect())
@@ -399,13 +397,12 @@ impl Social {
         provider_user_id: &str,
     ) -> Result<Option<User>, SocialError> {
         let rt = self.rt()?;
-        let Some(account) = find_account(&rt.db.reader().await, provider, provider_user_id).await?
-        else {
+        let Some(account) = find_account(&rt.db, provider, provider_user_id).await? else {
             return Ok(None);
         };
-        Ok(user::Entity::find_by_id(account.user_id)
-            .one(&rt.db.reader().await)
-            .await?)
+        Ok(User::find(&rt.db, account.user_id)
+            .await?
+            .map(Record::into_inner))
     }
 
     /// A current access token of `user_id` at `provider`, refreshed first
@@ -421,7 +418,7 @@ impl Social {
     ) -> Result<Secret<String>, SocialError> {
         let rt = self.rt()?;
         let entry = rt.provider(provider)?;
-        let account = find_user_account(&rt.db.reader().await, user_id, provider)
+        let account = find_user_account(&rt.db, user_id, provider)
             .await?
             .ok_or_else(|| SocialError::NotLinked {
                 provider: entry.name.clone(),
@@ -540,19 +537,17 @@ impl Social {
         let (linked, by_email) = {
             let tx = uow.tx().await?;
             let linked = match find_account(&*tx, &entry.key, &social_user.id).await? {
-                Some(account) => {
-                    let user = user::Entity::find_by_id(account.user_id).one(&*tx).await?;
-                    user.map(|user| (account, user))
-                }
+                Some(account) => User::find(&*tx, account.user_id)
+                    .await?
+                    .map(|user| (account, user.into_inner())),
                 None => None,
             };
             let by_email = match (&linked, &social_user.email) {
-                (None, Some(email)) => {
-                    user::Entity::find()
-                        .filter(user::Column::Email.eq(email.as_str()))
-                        .one(&*tx)
-                        .await?
-                }
+                (None, Some(email)) => User::query()
+                    .where_(User::EMAIL.eq(email.as_str()))
+                    .first(&*tx)
+                    .await?
+                    .map(Record::into_inner),
                 _ => None,
             };
             (linked, by_email)
@@ -881,28 +876,33 @@ fn entry_for(kind: AuditKind, action: &str, meta: &ClientMeta) -> AuditEntry {
     entry
 }
 
-async fn find_account<C: ConnectionTrait>(
-    conn: &C,
+/// The account linked to `provider_user_id` at `provider`, read through
+/// `exec`.
+async fn find_account<E: Executor + ?Sized>(
+    exec: &E,
     provider: &str,
     provider_user_id: &str,
-) -> Result<Option<social_account::Model>, DbErr> {
-    social_account::Entity::find()
-        .filter(social_account::Column::Provider.eq(provider))
-        .filter(social_account::Column::ProviderUserId.eq(provider_user_id))
-        .one(conn)
-        .await
+) -> Result<Option<social_account::Model>, SocialError> {
+    Ok(social_account::Model::query()
+        .where_(social_account::Model::PROVIDER.eq(provider))
+        .where_(social_account::Model::PROVIDER_USER_ID.eq(provider_user_id))
+        .first(exec)
+        .await?
+        .map(Record::into_inner))
 }
 
-async fn find_user_account<C: ConnectionTrait>(
-    conn: &C,
+/// `user_id`'s account at `provider`, read through `exec`.
+async fn find_user_account<E: Executor + ?Sized>(
+    exec: &E,
     user_id: Uuid,
     provider: &str,
-) -> Result<Option<social_account::Model>, DbErr> {
-    social_account::Entity::find()
-        .filter(social_account::Column::UserId.eq(user_id))
-        .filter(social_account::Column::Provider.eq(provider))
-        .one(conn)
-        .await
+) -> Result<Option<social_account::Model>, SocialError> {
+    Ok(social_account::Model::query()
+        .where_(social_account::Model::USER_ID.eq(user_id))
+        .where_(social_account::Model::PROVIDER.eq(provider))
+        .first(exec)
+        .await?
+        .map(Record::into_inner))
 }
 
 /// The token columns of an account: encrypted, and only with

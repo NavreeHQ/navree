@@ -232,6 +232,14 @@ pub(crate) fn map_oauth_error(error: &OAuthError) -> Option<AppError> {
     })
 }
 
+/// The server's ORM operations fail as database errors
+/// ([`OAuthError::Db`]), like its SeaORM ones.
+impl From<navree_orm::OrmError> for OAuthError {
+    fn from(error: navree_orm::OrmError) -> Self {
+        OAuthError::Db(error.into())
+    }
+}
+
 impl IntoResponse for OAuthError {
     /// Navree's error shape (handlers outside the protocol endpoints).
     fn into_response(self) -> Response {

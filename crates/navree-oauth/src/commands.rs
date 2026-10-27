@@ -7,9 +7,8 @@ use chrono::TimeDelta;
 use navree_auth::AuthService;
 use navree_db::{Db, Uow};
 use navree_kernel::{AppContext, BoxError, CommandSpec};
+use navree_orm::Model as _;
 use navree_workspace::Workspaces;
-use sea_orm::sea_query::Condition;
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use uuid::Uuid;
 
 use crate::core::Core;
@@ -309,49 +308,34 @@ pub(crate) async fn prune(ctx: &AppContext, args: &[String]) -> Result<String, B
     let deleted = in_uow(ctx, |uow| async move {
         let tx = uow.tx().await?;
         let mut total = 0;
-        total += authorization_request::Entity::delete_many()
-            .filter(authorization_request::Column::ExpiresAt.lt(cutoff))
-            .exec(&*tx)
-            .await?
-            .rows_affected;
-        total += code::Entity::delete_many()
-            .filter(code::Column::ExpiresAt.lt(cutoff))
-            .exec(&*tx)
-            .await?
-            .rows_affected;
-        total += device_code::Entity::delete_many()
-            .filter(device_code::Column::ExpiresAt.lt(cutoff))
-            .exec(&*tx)
-            .await?
-            .rows_affected;
-        total += access_token::Entity::delete_many()
-            .filter(
-                Condition::any()
-                    .add(access_token::Column::ExpiresAt.lt(cutoff))
-                    .add(access_token::Column::RevokedAt.lt(cutoff)),
-            )
-            .exec(&*tx)
-            .await?
-            .rows_affected;
+        total += authorization_request::Model::query()
+            .where_(authorization_request::Model::EXPIRES_AT.lt(cutoff))
+            .delete(&*tx)
+            .await?;
+        total += code::Model::query()
+            .where_(code::Model::EXPIRES_AT.lt(cutoff))
+            .delete(&*tx)
+            .await?;
+        total += device_code::Model::query()
+            .where_(device_code::Model::EXPIRES_AT.lt(cutoff))
+            .delete(&*tx)
+            .await?;
+        total += access_token::Model::query()
+            .where_(access_token::Model::EXPIRES_AT.lt(cutoff))
+            .or_where(access_token::Model::REVOKED_AT.lt(cutoff))
+            .delete(&*tx)
+            .await?;
         // Rotated tokens stay until they expire: reuse detection needs them.
-        total += refresh_token::Entity::delete_many()
-            .filter(
-                Condition::any()
-                    .add(refresh_token::Column::ExpiresAt.lt(cutoff))
-                    .add(refresh_token::Column::RevokedAt.lt(cutoff)),
-            )
-            .exec(&*tx)
-            .await?
-            .rows_affected;
-        total += personal_access_token::Entity::delete_many()
-            .filter(
-                Condition::any()
-                    .add(personal_access_token::Column::ExpiresAt.lt(cutoff))
-                    .add(personal_access_token::Column::RevokedAt.lt(cutoff)),
-            )
-            .exec(&*tx)
-            .await?
-            .rows_affected;
+        total += refresh_token::Model::query()
+            .where_(refresh_token::Model::EXPIRES_AT.lt(cutoff))
+            .or_where(refresh_token::Model::REVOKED_AT.lt(cutoff))
+            .delete(&*tx)
+            .await?;
+        total += personal_access_token::Model::query()
+            .where_(personal_access_token::Model::EXPIRES_AT.lt(cutoff))
+            .or_where(personal_access_token::Model::REVOKED_AT.lt(cutoff))
+            .delete(&*tx)
+            .await?;
         Ok(total)
     })
     .await?;

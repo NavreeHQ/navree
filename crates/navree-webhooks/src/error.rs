@@ -101,6 +101,14 @@ impl WebhooksError {
     }
 }
 
+/// The module's ORM operations fail as database errors
+/// ([`WebhooksError::Db`]), like its SeaORM ones.
+impl From<navree_orm::OrmError> for WebhooksError {
+    fn from(error: navree_orm::OrmError) -> Self {
+        WebhooksError::Db(error.into())
+    }
+}
+
 /// The error mapper registered by `WebhooksModule`.
 pub(crate) fn map_webhooks_error(error: &WebhooksError) -> Option<AppError> {
     error.to_app_error()
