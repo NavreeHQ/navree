@@ -1,7 +1,8 @@
 //! The examples of the documents docs page
 //! (`apps/website/content/docs/packages/documents.mdx`), through the facade
 //! alone: a controller that downloads a certificate, queues an export and
-//! builds a Word report, a module that ships its templates, and the fake.
+//! builds a Word report, an export behind an operation, a module that
+//! ships its templates, and the fake.
 
 #![cfg(feature = "documents")]
 
@@ -10,12 +11,14 @@ use navree::documents::{
     DocumentStatus, Documents, DocumentsFake, Docx, Download, Pdf, Position, QueuedDocument,
     Render, Stamp,
 };
+use navree::http::CurrentPrincipal;
 use navree::prelude::*;
-use navree::queue::{Queue, QueueDriver, QueueOptions};
+use navree::queue::{OperationRecord, Queue, QueueDriver, QueueOptions};
 use navree::storage::{DiskConfig, StorageOptions};
-use navree::testing::TestApp;
+use navree::testing::{TestApp, principal};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use uuid::Uuid;
 
 /// What a certificate shows.
 #[derive(Serialize)]
@@ -114,6 +117,42 @@ impl ReportsController {
         Ok(file.download("audit-q3.docx"))
     }
 }
+
+/// Audit reports queued behind an operation the client follows.
+#[injectable]
+pub struct ExportsController {
+    documents: Arc<Documents>,
+    operations: Arc<Operations>,
+}
+
+#[controller("/exports", version = "1")]
+impl ExportsController {
+    #[post("/audit")]
+    #[authenticated]
+    async fn export(
+        &self,
+        uow: Uow,
+        CurrentPrincipal(me): CurrentPrincipal,
+        Json(input): Json<ExportInput>,
+    ) -> Result<Json<OperationRecord>> {
+        let render = Render::template("reports/audit").data(json!({ "quarter": input.quarter }));
+        let op = self
+            .documents
+            .queue_operation(
+                &self.operations,
+                &uow,
+                Operation::new("audit.export").owner(me.user_id),
+                render,
+                format!("exports/audit-{}.pdf", input.quarter),
+            )
+            .await?;
+        Ok(Json(op))
+    }
+}
+
+/// The exports route (it needs `QueueModule` and `DatabaseModule`).
+#[module(controllers = [ExportsController])]
+pub struct ExportsModule;
 
 /// Ships the module's templates with the binary.
 #[module(controllers = [CertificatesController, ReportsController], register = Self::wire)]
@@ -227,6 +266,63 @@ async fn certificates_download_and_reports_queue() {
         file.text()
             .unwrap()
             .contains("Multi-factor sign-in\tPassed")
+    );
+}
+
+#[tokio::test]
+async fn an_export_runs_behind_an_operation() {
+    let app = TestApp::builder()
+        .temp_database()
+        .module(DatabaseModule::from_config())
+        .module(StorageModule::for_root(storage()))
+        .module(QueueModule::for_root(QueueOptions {
+            driver: QueueDriver::Database,
+            ..QueueOptions::default()
+        }))
+        .module(DocumentsModule::from_config())
+        .module(CertificatesModule)
+        .module(ExportsModule)
+        .build()
+        .await;
+    let me = Uuid::now_v7();
+
+    let op = app
+        .acting_as(principal(me))
+        .post("/api/v1/exports/audit")
+        .json(&json!({"quarter": "Q3"}))
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("status", json!("pending"))
+        .assert_json_path("kind", json!("audit.export"))
+        .json_value();
+    let id = op["id"].as_str().unwrap().to_owned();
+
+    app.get::<Queue>().await.run_pending().await.unwrap();
+
+    app.acting_as(principal(me))
+        .get(&format!("/api/operations/{id}"))
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("status", json!("succeeded"))
+        .assert_json_path("progress.percent", json!(100))
+        .assert_json_path("result.disk", json!("local"))
+        .assert_json_path("result.path", json!("exports/audit-Q3.pdf"));
+    let pdf = app
+        .get::<Documents>()
+        .await
+        .disk()
+        .unwrap()
+        .get("exports/audit-Q3.pdf")
+        .await
+        .unwrap();
+    assert!(
+        Pdf::from_bytes(pdf)
+            .unwrap()
+            .text()
+            .unwrap()
+            .contains("Audit report Q3")
     );
 }
 
