@@ -85,7 +85,9 @@ async fn the_page_and_its_assets_are_public_and_hold_no_data() {
     assert!(csp.contains("script-src 'self'"), "{csp}");
     assert!(!csp.contains("unsafe-inline"), "{csp}");
     assert_eq!(page.header("x-frame-options"), Some("DENY"));
-    let html = page.text();
+    // navree-view escapes `/` in attributes as `&#x2f;`, which browsers read
+    // back as `/`.
+    let html = page.text().replace("&#x2f;", "/");
     let version = env!("CARGO_PKG_VERSION");
     let script = format!("/_fleet/assets/fleet-{version}.js");
     let styles = format!("/_fleet/assets/fleet-{version}.css");
