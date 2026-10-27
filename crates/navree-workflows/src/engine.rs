@@ -308,7 +308,12 @@ impl Engine {
     }
 
     /// Logs the outcome and wakes the run when it must go on.
-    async fn after_release(self: &Arc<Self>, run: &WorkflowRun, status: RunStatus, release: &Release) {
+    async fn after_release(
+        self: &Arc<Self>,
+        run: &WorkflowRun,
+        status: RunStatus,
+        release: &Release,
+    ) {
         let next = match (status, release) {
             (RunStatus::Pending, _) => Some(None),
             (RunStatus::Sleeping, Release::Sleeping(at)) => Some(Some(*at)),

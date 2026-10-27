@@ -51,9 +51,13 @@ impl Workflow for AutomationRun {
                 "$definition".to_owned(),
                 StepOptions::default(),
                 || async move {
-                    let version = store.version(automation_id, version).await?.ok_or_else(|| {
-                        format!("automation {automation_id} has no version {version}")
-                    })?;
+                    let version =
+                        store
+                            .version(automation_id, version)
+                            .await?
+                            .ok_or_else(|| {
+                                format!("automation {automation_id} has no version {version}")
+                            })?;
                     Ok::<_, BoxError>(version.definition)
                 },
             )
@@ -78,7 +82,9 @@ impl Workflow for AutomationRun {
                     let actx = self.ctx_for(&ctx, &id, &data, false);
                     let config = config.clone();
                     let output: Value = ctx
-                        .run_step(id.clone(), StepOptions::default(), move || run(config, actx))
+                        .run_step(id.clone(), StepOptions::default(), move || {
+                            run(config, actx)
+                        })
                         .await?;
                     set_output(&mut data, &id, output);
                     next.clone()
@@ -158,7 +164,13 @@ impl Workflow for AutomationRun {
 }
 
 impl AutomationRun {
-    fn ctx_for(&self, ctx: &WorkflowCtx, node: &str, data: &Value, simulation: bool) -> AutomationCtx {
+    fn ctx_for(
+        &self,
+        ctx: &WorkflowCtx,
+        node: &str,
+        data: &Value,
+        simulation: bool,
+    ) -> AutomationCtx {
         AutomationCtx {
             app: ctx.app().clone(),
             automation_id: self.automation_id,
@@ -527,17 +539,30 @@ pub(crate) async fn simulate(
         };
         let block_type = node.step.block_type().map(str::to_owned);
         let (outcome, detail, next) = match &node.step {
-            NodeStep::Action { block_type, config, next } => {
+            NodeStep::Action {
+                block_type,
+                config,
+                next,
+            } => {
                 let detail = match catalog.action(block_type) {
-                    Some(entry) => (entry.preview)(config, &ctx).unwrap_or_else(|e| json!({"error": e})),
+                    Some(entry) => {
+                        (entry.preview)(config, &ctx).unwrap_or_else(|e| json!({"error": e}))
+                    }
                     None => json!({"error": format!("unknown action `{block_type}`")}),
                 };
                 set_output(&mut data, &id, Value::Null);
                 ("would_run".to_owned(), detail, next.clone())
             }
-            NodeStep::Condition { block_type, config, then, otherwise } => {
+            NodeStep::Condition {
+                block_type,
+                config,
+                then,
+                otherwise,
+            } => {
                 let result = match catalog.condition(block_type) {
-                    Some(entry) => (entry.evaluate)(config.clone(), ctx).await.map_err(|e| e.to_string()),
+                    Some(entry) => (entry.evaluate)(config.clone(), ctx)
+                        .await
+                        .map_err(|e| e.to_string()),
                     None => Err(format!("unknown condition `{block_type}`")),
                 };
                 match result {
@@ -546,7 +571,11 @@ pub(crate) async fn simulate(
                         (
                             passed.to_string(),
                             Value::Null,
-                            if passed { then.clone() } else { otherwise.clone() },
+                            if passed {
+                                then.clone()
+                            } else {
+                                otherwise.clone()
+                            },
                         )
                     }
                     Err(error) => ("error".to_owned(), json!({"error": error}), None),
@@ -566,10 +595,19 @@ pub(crate) async fn simulate(
                 current = next.clone();
                 continue;
             }
-            NodeStep::Wait { timeout_seconds, next, on_timeout, .. } => match waits {
+            NodeStep::Wait {
+                timeout_seconds,
+                next,
+                on_timeout,
+                ..
+            } => match waits {
                 WaitOutcome::Received => {
                     set_output(&mut data, &id, Value::Null);
-                    ("received".to_owned(), json!({"timeout_seconds": timeout_seconds}), next.clone())
+                    (
+                        "received".to_owned(),
+                        json!({"timeout_seconds": timeout_seconds}),
+                        next.clone(),
+                    )
                 }
                 WaitOutcome::TimedOut => {
                     let reached = at_seconds;
@@ -580,10 +618,19 @@ pub(crate) async fn simulate(
                         kind: node.step.kind().to_owned(),
                         block_type,
                         at_seconds: reached,
-                        outcome: if timeout_seconds.is_some() { "timed_out" } else { "waits_forever" }.to_owned(),
+                        outcome: if timeout_seconds.is_some() {
+                            "timed_out"
+                        } else {
+                            "waits_forever"
+                        }
+                        .to_owned(),
                         detail: json!({"timeout_seconds": timeout_seconds}),
                     });
-                    current = if timeout_seconds.is_some() { on_timeout.clone() } else { None };
+                    current = if timeout_seconds.is_some() {
+                        on_timeout.clone()
+                    } else {
+                        None
+                    };
                     continue;
                 }
             },

@@ -158,7 +158,11 @@ fn template_error(key: &str, issues: &[DefinitionIssue]) -> String {
     let details = issues
         .iter()
         .map(|issue| {
-            let path = if issue.path.is_empty() { "/" } else { &issue.path };
+            let path = if issue.path.is_empty() {
+                "/"
+            } else {
+                &issue.path
+            };
             format!("{path}: {}", issue.message)
         })
         .collect::<Vec<_>>()
@@ -186,10 +190,12 @@ impl std::fmt::Debug for Automations {
 fn check_name(name: &str) -> Result<String, WorkflowsError> {
     let name = name.trim();
     if name.is_empty() || name.chars().count() > MAX_AUTOMATION_NAME_LEN {
-        return Err(WorkflowsError::InvalidDefinition(vec![DefinitionIssue::new(
-            "/name",
-            format!("name must be 1 to {MAX_AUTOMATION_NAME_LEN} characters"),
-        )]));
+        return Err(WorkflowsError::InvalidDefinition(vec![
+            DefinitionIssue::new(
+                "/name",
+                format!("name must be 1 to {MAX_AUTOMATION_NAME_LEN} characters"),
+            ),
+        ]));
     }
     Ok(name.to_owned())
 }
@@ -199,7 +205,9 @@ fn parse(definition: &Value) -> Result<AutomationGraph, WorkflowsError> {
         WorkflowsError::InvalidDefinition(
             issues
                 .into_iter()
-                .map(|issue| DefinitionIssue::new(format!("/definition{}", issue.path), issue.message))
+                .map(|issue| {
+                    DefinitionIssue::new(format!("/definition{}", issue.path), issue.message)
+                })
                 .collect(),
         )
     })
@@ -241,7 +249,11 @@ impl Automations {
     /// Creates a draft automation. The definition must have the right
     /// shape (a 400 [`InvalidDefinition`](WorkflowsError::InvalidDefinition)
     /// otherwise); what it names is checked by [`publish`](Automations::publish).
-    pub async fn create(&self, uow: &Uow, new: NewAutomation) -> Result<Automation, WorkflowsError> {
+    pub async fn create(
+        &self,
+        uow: &Uow,
+        new: NewAutomation,
+    ) -> Result<Automation, WorkflowsError> {
         self.create_in(Some(uow), new, None).await
     }
 
@@ -369,7 +381,12 @@ impl Automations {
     }
 
     async fn save(&self, uow: &Uow, automation: &Automation) -> Result<(), WorkflowsError> {
-        if !self.engine.automations.update(Some(uow), automation).await? {
+        if !self
+            .engine
+            .automations
+            .update(Some(uow), automation)
+            .await?
+        {
             return Err(WorkflowsError::UnknownAutomation(automation.id));
         }
         Ok(())
@@ -545,7 +562,10 @@ impl Automations {
         {
             return Err(WorkflowsError::conflict(
                 codes::ENROLLMENT_FINISHED,
-                format!("The enrollment has already finished ({}).", enrollment.status),
+                format!(
+                    "The enrollment has already finished ({}).",
+                    enrollment.status
+                ),
             ));
         }
         self.enrollment(id).await

@@ -127,13 +127,19 @@ pub(crate) fn parse_workflow(args: TokenStream, item: TokenStream) -> syn::Resul
         }
         None => item.sig.ident.to_string().to_kebab_case(),
     };
-    let version = args.version.as_ref().and_then(|v| errors.keep(v.base10_parse::<u32>()));
+    let version = args
+        .version
+        .as_ref()
+        .and_then(|v| errors.keep(v.base10_parse::<u32>()));
     let min_version = args
         .min_version
         .as_ref()
         .and_then(|v| errors.keep(v.base10_parse::<u32>()));
     if let (Some(0), Some(literal)) = (version, &args.version) {
-        errors.push(syn::Error::new(literal.span(), "a workflow version is at least 1"));
+        errors.push(syn::Error::new(
+            literal.span(),
+            "a workflow version is at least 1",
+        ));
     }
     if let (Some(min), Some(literal)) = (min_version, &args.min_version)
         && min > version.unwrap_or(1)
@@ -412,9 +418,8 @@ fn parse_block(kind: BlockKind, args: TokenStream, item: TokenStream) -> syn::Re
             "async fn send_note(config: SendNote, ctx: AutomationCtx) -> Result<Value, BoxError>"
         }
     };
-    let item: Item = syn::parse2(item).map_err(|error| {
-        syn::Error::new(error.span(), format!("{attribute} goes on {shape}"))
-    })?;
+    let item: Item = syn::parse2(item)
+        .map_err(|error| syn::Error::new(error.span(), format!("{attribute} goes on {shape}")))?;
     let mut errors = Errors::default();
     // Missing keys are only reported when the keys parsed.
     let parsed_args = errors.keep(BlockArgs::parse(kind, args));
@@ -631,8 +636,10 @@ fn generate_block(parsed: &ParsedBlock, w: &TokenStream) -> TokenStream {
             let workspace = parsed.workspace.as_ref().map(|workspace| match workspace {
                 Some(path) => quote!(const WORKSPACE: ::core::option::Option<&'static str> =
                     ::core::option::Option::Some(#path);),
-                None => quote!(const WORKSPACE: ::core::option::Option<&'static str> =
-                    ::core::option::Option::None;),
+                None => quote!(
+                    const WORKSPACE: ::core::option::Option<&'static str> =
+                        ::core::option::Option::None;
+                ),
             });
             let event = parsed.event.as_ref().expect("a trigger has an event");
             let matches = parsed.function.as_ref().map(|function| {
@@ -881,12 +888,24 @@ mod tests {
             out.contains("impl :: navree :: workflows :: Workflow for FollowUp"),
             "{out}"
         );
-        assert!(out.contains("const NAME : & 'static str = \"deal-follow-up\""), "{out}");
-        assert!(out.contains("\"Welcomes a new user, then nudges them.\""), "{out}");
+        assert!(
+            out.contains("const NAME : & 'static str = \"deal-follow-up\""),
+            "{out}"
+        );
+        assert!(
+            out.contains("\"Welcomes a new user, then nudges them.\""),
+            "{out}"
+        );
         assert!(out.contains("type Output = u32"), "{out}");
         assert!(out.contains("deal_follow_up (ctx , self) . await"), "{out}");
-        assert!(!out.contains("const VERSION"), "the trait default applies: {out}");
-        assert!(out.contains("pub async fn deal_follow_up"), "the fn is kept: {out}");
+        assert!(
+            !out.contains("const VERSION"),
+            "the trait default applies: {out}"
+        );
+        assert!(
+            out.contains("pub async fn deal_follow_up"),
+            "the fn is kept: {out}"
+        );
     }
 
     #[test]
@@ -907,18 +926,90 @@ mod tests {
     #[test]
     fn workflow_mistakes_are_reported() {
         let cases = [
-            (quote!(), quote!(fn f(ctx: WorkflowCtx, i: In) -> Result<(), E> {}), "goes on an `async fn`"),
-            (quote!(), quote!(struct S;), "#[workflow] goes on an async fn"),
-            (quote!(), quote!(async fn f(i: In) -> Result<(), E> {}), "takes two arguments"),
-            (quote!(), quote!(async fn f(ctx: &WorkflowCtx, i: In) -> Result<(), E> {}), "is its `WorkflowCtx`"),
-            (quote!(), quote!(async fn f(ctx: WorkflowCtx, i: &In) -> Result<(), E> {}), "input by value"),
-            (quote!(), quote!(async fn f(ctx: WorkflowCtx, i: In) -> u32 {}), "returns `Result<T, E>`"),
-            (quote!(), quote!(async fn f<T>(ctx: WorkflowCtx, i: In) -> Result<(), E> {}), "without generic"),
-            (quote!(name = "Bad Name"), quote!(async fn f(ctx: WorkflowCtx, i: In) -> Result<(), E> {}), "invalid workflow name"),
-            (quote!(version = 0), quote!(async fn f(ctx: WorkflowCtx, i: In) -> Result<(), E> {}), "at least 1"),
-            (quote!(version = 2, min_version = 3), quote!(async fn f(ctx: WorkflowCtx, i: In) -> Result<(), E> {}), "cannot be above version (2)"),
-            (quote!(retries = 3), quote!(async fn f(ctx: WorkflowCtx, i: In) -> Result<(), E> {}), "unknown #[workflow] key `retries`"),
-            (quote!(name = "a", name = "b"), quote!(async fn f(ctx: WorkflowCtx, i: In) -> Result<(), E> {}), "duplicate `name` key"),
+            (
+                quote!(),
+                quote!(
+                    fn f(ctx: WorkflowCtx, i: In) -> Result<(), E> {}
+                ),
+                "goes on an `async fn`",
+            ),
+            (
+                quote!(),
+                quote!(
+                    struct S;
+                ),
+                "#[workflow] goes on an async fn",
+            ),
+            (
+                quote!(),
+                quote!(
+                    async fn f(i: In) -> Result<(), E> {}
+                ),
+                "takes two arguments",
+            ),
+            (
+                quote!(),
+                quote!(
+                    async fn f(ctx: &WorkflowCtx, i: In) -> Result<(), E> {}
+                ),
+                "is its `WorkflowCtx`",
+            ),
+            (
+                quote!(),
+                quote!(
+                    async fn f(ctx: WorkflowCtx, i: &In) -> Result<(), E> {}
+                ),
+                "input by value",
+            ),
+            (
+                quote!(),
+                quote!(
+                    async fn f(ctx: WorkflowCtx, i: In) -> u32 {}
+                ),
+                "returns `Result<T, E>`",
+            ),
+            (
+                quote!(),
+                quote!(
+                    async fn f<T>(ctx: WorkflowCtx, i: In) -> Result<(), E> {}
+                ),
+                "without generic",
+            ),
+            (
+                quote!(name = "Bad Name"),
+                quote!(
+                    async fn f(ctx: WorkflowCtx, i: In) -> Result<(), E> {}
+                ),
+                "invalid workflow name",
+            ),
+            (
+                quote!(version = 0),
+                quote!(
+                    async fn f(ctx: WorkflowCtx, i: In) -> Result<(), E> {}
+                ),
+                "at least 1",
+            ),
+            (
+                quote!(version = 2, min_version = 3),
+                quote!(
+                    async fn f(ctx: WorkflowCtx, i: In) -> Result<(), E> {}
+                ),
+                "cannot be above version (2)",
+            ),
+            (
+                quote!(retries = 3),
+                quote!(
+                    async fn f(ctx: WorkflowCtx, i: In) -> Result<(), E> {}
+                ),
+                "unknown #[workflow] key `retries`",
+            ),
+            (
+                quote!(name = "a", name = "b"),
+                quote!(
+                    async fn f(ctx: WorkflowCtx, i: In) -> Result<(), E> {}
+                ),
+                "duplicate `name` key",
+            ),
         ];
         for (args, item, expected) in cases {
             let out = workflow(args, item);
@@ -936,9 +1027,18 @@ mod tests {
                 fn deal_won(config: &DealWonTrigger, event: &DealWon) -> bool { true }
             },
         );
-        assert!(out.contains("impl :: navree :: workflows :: Trigger for DealWonTrigger"), "{out}");
-        assert!(out.contains("const TYPE : & 'static str = \"deal.won\""), "{out}");
-        assert!(out.contains("const LABEL : & 'static str = \"Deal won\""), "{out}");
+        assert!(
+            out.contains("impl :: navree :: workflows :: Trigger for DealWonTrigger"),
+            "{out}"
+        );
+        assert!(
+            out.contains("const TYPE : & 'static str = \"deal.won\""),
+            "{out}"
+        );
+        assert!(
+            out.contains("const LABEL : & 'static str = \"Deal won\""),
+            "{out}"
+        );
         assert!(out.contains("\"A deal moved to won.\""), "{out}");
         assert!(out.contains("Some (\"owner_id\")"), "{out}");
         assert!(out.contains("Some (\"team_id\")"), "{out}");
@@ -973,7 +1073,10 @@ mod tests {
             },
         );
         assert!(out.contains("Condition for AmountAtLeast"), "{out}");
-        assert!(out.contains("at_least (self , ctx) . await . map_err"), "{out}");
+        assert!(
+            out.contains("at_least (self , ctx) . await . map_err"),
+            "{out}"
+        );
         let sync = block(
             BlockKind::Condition,
             quote!(type = "deal.big"),
@@ -1005,23 +1108,174 @@ mod tests {
     #[test]
     fn block_mistakes_are_reported() {
         let cases = [
-            (BlockKind::Trigger, quote!(), quote!(fn t(c: &C, e: &E) -> bool { true }), "needs `type = \"..\"`"),
-            (BlockKind::Trigger, quote!(type = "t"), quote!(struct C;), "needs `event = EventType`"),
-            (BlockKind::Trigger, quote!(type = "t", event = E), quote!(fn t(c: &C, e: &E) -> bool { true }), "`event` is for #[trigger] on a struct"),
-            (BlockKind::Trigger, quote!(type = "t"), quote!(async fn t(c: &C, e: &E) -> bool { true }), "drop `async`"),
-            (BlockKind::Trigger, quote!(type = "t"), quote!(fn t(c: C, e: &E) -> bool { true }), "takes `config: &DealWonTrigger`"),
-            (BlockKind::Trigger, quote!(type = "t"), quote!(fn t(c: &C, e: &E) -> u8 { 1 }), "returns `bool`"),
-            (BlockKind::Trigger, quote!(type = "t", workspace = true), quote!(fn t(c: &C, e: &E) -> bool { true }), "or `false` when the event has none"),
-            (BlockKind::Trigger, quote!(type = "t", preview = p), quote!(fn t(c: &C, e: &E) -> bool { true }), "unknown #[trigger] key `preview`"),
-            (BlockKind::Condition, quote!(type = "c"), quote!(fn c(x: &C, ctx: &Other) -> bool { true }), "the second argument is `ctx: &AutomationCtx`"),
-            (BlockKind::Condition, quote!(type = "c"), quote!(fn c(x: &C, ctx: &AutomationCtx) -> u8 { 1 }), "returns `bool` or `Result<bool, E>`"),
-            (BlockKind::Condition, quote!(type = "c", subject = "x"), quote!(fn c(x: &C, ctx: &AutomationCtx) -> bool { true }), "unknown #[condition] key `subject`"),
-            (BlockKind::Action, quote!(type = "a"), quote!(async fn a(x: &C, ctx: AutomationCtx) -> Result<(), E> { Ok(()) }), "takes `config: SendNote`"),
-            (BlockKind::Action, quote!(type = "a"), quote!(async fn a(x: C, ctx: AutomationCtx) -> u8 { 1 }), "returns `Result<T, E>`"),
-            (BlockKind::Action, quote!(type = "a"), quote!(async fn a(x: C) -> Result<(), E> { Ok(()) }), "takes two arguments"),
-            (BlockKind::Action, quote!(type = "a"), quote!(enum A { X }), "#[action] goes on"),
-            (BlockKind::Action, quote!(type = " "), quote!(async fn a(x: C, ctx: AutomationCtx) -> Result<(), E> { Ok(()) }), "the stable name stored"),
-            (BlockKind::Action, quote!(type = "a", type = "b"), quote!(async fn a(x: C, ctx: AutomationCtx) -> Result<(), E> { Ok(()) }), "duplicate `type` key"),
+            (
+                BlockKind::Trigger,
+                quote!(),
+                quote!(
+                    fn t(c: &C, e: &E) -> bool {
+                        true
+                    }
+                ),
+                "needs `type = \"..\"`",
+            ),
+            (
+                BlockKind::Trigger,
+                quote!(type = "t"),
+                quote!(
+                    struct C;
+                ),
+                "needs `event = EventType`",
+            ),
+            (
+                BlockKind::Trigger,
+                quote!(type = "t", event = E),
+                quote!(
+                    fn t(c: &C, e: &E) -> bool {
+                        true
+                    }
+                ),
+                "`event` is for #[trigger] on a struct",
+            ),
+            (
+                BlockKind::Trigger,
+                quote!(type = "t"),
+                quote!(
+                    async fn t(c: &C, e: &E) -> bool {
+                        true
+                    }
+                ),
+                "drop `async`",
+            ),
+            (
+                BlockKind::Trigger,
+                quote!(type = "t"),
+                quote!(
+                    fn t(c: C, e: &E) -> bool {
+                        true
+                    }
+                ),
+                "takes `config: &DealWonTrigger`",
+            ),
+            (
+                BlockKind::Trigger,
+                quote!(type = "t"),
+                quote!(
+                    fn t(c: &C, e: &E) -> u8 {
+                        1
+                    }
+                ),
+                "returns `bool`",
+            ),
+            (
+                BlockKind::Trigger,
+                quote!(type = "t", workspace = true),
+                quote!(
+                    fn t(c: &C, e: &E) -> bool {
+                        true
+                    }
+                ),
+                "or `false` when the event has none",
+            ),
+            (
+                BlockKind::Trigger,
+                quote!(type = "t", preview = p),
+                quote!(
+                    fn t(c: &C, e: &E) -> bool {
+                        true
+                    }
+                ),
+                "unknown #[trigger] key `preview`",
+            ),
+            (
+                BlockKind::Condition,
+                quote!(type = "c"),
+                quote!(
+                    fn c(x: &C, ctx: &Other) -> bool {
+                        true
+                    }
+                ),
+                "the second argument is `ctx: &AutomationCtx`",
+            ),
+            (
+                BlockKind::Condition,
+                quote!(type = "c"),
+                quote!(
+                    fn c(x: &C, ctx: &AutomationCtx) -> u8 {
+                        1
+                    }
+                ),
+                "returns `bool` or `Result<bool, E>`",
+            ),
+            (
+                BlockKind::Condition,
+                quote!(type = "c", subject = "x"),
+                quote!(
+                    fn c(x: &C, ctx: &AutomationCtx) -> bool {
+                        true
+                    }
+                ),
+                "unknown #[condition] key `subject`",
+            ),
+            (
+                BlockKind::Action,
+                quote!(type = "a"),
+                quote!(
+                    async fn a(x: &C, ctx: AutomationCtx) -> Result<(), E> {
+                        Ok(())
+                    }
+                ),
+                "takes `config: SendNote`",
+            ),
+            (
+                BlockKind::Action,
+                quote!(type = "a"),
+                quote!(
+                    async fn a(x: C, ctx: AutomationCtx) -> u8 {
+                        1
+                    }
+                ),
+                "returns `Result<T, E>`",
+            ),
+            (
+                BlockKind::Action,
+                quote!(type = "a"),
+                quote!(
+                    async fn a(x: C) -> Result<(), E> {
+                        Ok(())
+                    }
+                ),
+                "takes two arguments",
+            ),
+            (
+                BlockKind::Action,
+                quote!(type = "a"),
+                quote!(
+                    enum A {
+                        X,
+                    }
+                ),
+                "#[action] goes on",
+            ),
+            (
+                BlockKind::Action,
+                quote!(type = " "),
+                quote!(
+                    async fn a(x: C, ctx: AutomationCtx) -> Result<(), E> {
+                        Ok(())
+                    }
+                ),
+                "the stable name stored",
+            ),
+            (
+                BlockKind::Action,
+                quote!(type = "a", type = "b"),
+                quote!(
+                    async fn a(x: C, ctx: AutomationCtx) -> Result<(), E> {
+                        Ok(())
+                    }
+                ),
+                "duplicate `type` key",
+            ),
         ];
         for (kind, args, item, expected) in cases {
             let out = block(kind, args, item);

@@ -261,8 +261,9 @@ impl WorkflowStore for MemoryWorkflowStore {
                         .lease
                         .filter(|(_, until)| *until < query.now)
                         .map(|(_, until)| (until, run.id)),
-                    RunStatus::Pending => (run.updated_at <= query.stale_before)
-                        .then_some((run.updated_at, run.id)),
+                    RunStatus::Pending => {
+                        (run.updated_at <= query.stale_before).then_some((run.updated_at, run.id))
+                    }
                     _ => None,
                 }
             })

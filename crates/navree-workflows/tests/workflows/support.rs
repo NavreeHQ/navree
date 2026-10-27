@@ -201,7 +201,11 @@ impl Workflow for AwaitCourse {
         let done = ctx
             .wait_for::<CourseCompleted>(EventMatch::field("user_id", self.user_id), 14 * DAY)
             .await?;
-        let call = if done.is_some() { "congratulate" } else { "remind" };
+        let call = if done.is_some() {
+            "congratulate"
+        } else {
+            "remind"
+        };
         ctx.step(call, || async move {
             j.record(call);
             Ok::<_, BoxError>(())
@@ -220,7 +224,8 @@ impl Workflow for AwaitUnregistered {
     type Output = ();
 
     async fn run(self, ctx: WorkflowCtx) -> Result<(), BoxError> {
-        ctx.wait_for::<Unregistered>(EventMatch::any(), None).await?;
+        ctx.wait_for::<Unregistered>(EventMatch::any(), None)
+            .await?;
         Ok(())
     }
 }
@@ -488,7 +493,8 @@ pub struct InWorkspace {}
 /// The deal belongs to a workspace.
 #[condition(type = "deal.in_workspace", label = "In a workspace")]
 pub fn in_workspace(_config: &InWorkspace, ctx: &AutomationCtx) -> bool {
-    ctx.field("event.workspace_id").is_some_and(|id| !id.is_null())
+    ctx.field("event.workspace_id")
+        .is_some_and(|id| !id.is_null())
 }
 
 /// A follow-up for big deals.
@@ -718,7 +724,13 @@ pub fn builder(
 /// A harness on a fresh database.
 pub async fn harness(configure: impl FnOnce(TestAppBuilder) -> TestAppBuilder) -> Harness {
     let database = Arc::new(TestDatabase::new().await);
-    harness_on(database, Arc::new(FixedClock::new(start())), Arc::new(Journal::default()), configure).await
+    harness_on(
+        database,
+        Arc::new(FixedClock::new(start())),
+        Arc::new(Journal::default()),
+        configure,
+    )
+    .await
 }
 
 /// A harness on `database`, with `clock` and `journal` (a second boot of

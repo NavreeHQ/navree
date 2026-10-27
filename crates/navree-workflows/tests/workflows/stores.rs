@@ -179,7 +179,9 @@ async fn cancellation_keys_and_listing(h: Harness) {
     let workspace = uuid::Uuid::now_v7();
     let later = workflows
         .spawn_with(
-            Greet { name: "later".into() },
+            Greet {
+                name: "later".into(),
+            },
             StartOptions::new().delay(HOUR).workspace(workspace),
         )
         .await
@@ -206,7 +208,10 @@ async fn cancellation_keys_and_listing(h: Harness) {
         .await
         .unwrap();
     assert_eq!(page.meta.total, 3);
-    assert_eq!(page.data.iter().map(|r| r.id).collect::<Vec<_>>(), [cancelled]);
+    assert_eq!(
+        page.data.iter().map(|r| r.id).collect::<Vec<_>>(),
+        [cancelled]
+    );
 
     // The cancelled run finished at the start; nothing else did.
     h.clock.advance(DAY);
@@ -293,7 +298,10 @@ async fn automation_records(h: Harness) {
                     definition: Some(v2),
                     ..AutomationChanges::default()
                 };
-                automations.update(&uow, published.id, changes).await.unwrap();
+                automations
+                    .update(&uow, published.id, changes)
+                    .await
+                    .unwrap();
                 automations.publish(&uow, published.id, None).await.unwrap()
             }
         })

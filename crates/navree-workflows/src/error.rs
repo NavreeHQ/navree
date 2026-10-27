@@ -62,9 +62,7 @@ pub enum WorkflowsError {
         message: String,
     },
     /// A step name that is empty, starts with `$` or holds `#`.
-    #[error(
-        "invalid step name `{0}`: use 1 to 100 characters without `#`, not starting with `$`"
-    )]
+    #[error("invalid step name `{0}`: use 1 to 100 characters without `#`, not starting with `$`")]
     InvalidStepName(String),
     /// No workflow run has this id.
     #[error("unknown workflow run `{0}`")]

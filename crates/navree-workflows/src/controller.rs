@@ -13,7 +13,9 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::{RunDetails, RunQuery, RunStatus, WorkflowRun, Workflows, WorkflowsError, WorkflowsOptions};
+use crate::{
+    RunDetails, RunQuery, RunStatus, WorkflowRun, Workflows, WorkflowsError, WorkflowsOptions,
+};
 
 /// The permission of the read routes (`GET /api/workflows...`).
 pub const VIEW_PERMISSION: &str = "workflows.view";
@@ -252,14 +254,17 @@ impl Controller for WorkflowsController {
                     None,
                     Some(schema_fn::<WorkflowRun>),
                 )),
-            route(RouteDef::on(Method::GET, "/runs/{id}", show), VIEW_PERMISSION)
-                .name("workflows.runs.show")
-                .api(api(
-                    "Show a workflow run with its steps",
-                    &[401, 403, 404],
-                    None,
-                    Some(schema_fn::<RunDetails>),
-                )),
+            route(
+                RouteDef::on(Method::GET, "/runs/{id}", show),
+                VIEW_PERMISSION,
+            )
+            .name("workflows.runs.show")
+            .api(api(
+                "Show a workflow run with its steps",
+                &[401, 403, 404],
+                None,
+                Some(schema_fn::<RunDetails>),
+            )),
             route(
                 RouteDef::on(Method::POST, "/runs/{id}/cancel", cancel),
                 MANAGE_PERMISSION,

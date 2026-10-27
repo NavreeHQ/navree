@@ -133,7 +133,11 @@ mod tests {
             lease_secs: 0,
             ..WorkflowsOptions::default()
         };
-        assert!(zero.validate().unwrap_err().contains("workflows.lease_secs"));
+        assert!(
+            zero.validate()
+                .unwrap_err()
+                .contains("workflows.lease_secs")
+        );
         let blank = WorkflowsOptions {
             queue: " ".into(),
             ..WorkflowsOptions::default()

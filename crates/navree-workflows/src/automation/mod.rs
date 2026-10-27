@@ -24,8 +24,8 @@ pub use model::{
     Automation, AutomationQuery, AutomationStatus, AutomationTemplate, AutomationVersion,
     Enrollment, EnrollmentPolicy, EnrollmentQuery, EnrollmentRecord,
 };
-pub(crate) use runner::{AutomationRun, enroll};
 pub use runner::{AUTOMATION_WORKFLOW, SimulateInput, SimulatedStep, Simulation, WaitOutcome};
+pub(crate) use runner::{AutomationRun, enroll};
 pub(crate) use service::TemplateRegistry;
 pub use service::{
     AutomationChanges, AutomationDetails, Automations, MAX_AUTOMATION_NAME_LEN, NewAutomation,
