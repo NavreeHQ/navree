@@ -197,6 +197,114 @@ mod timescaledb {
             .unwrap()
     }
 
+    /// The webhook tables as the release before the delivery log became
+    /// time series created them: attempts reference their delivery.
+    const PREVIOUS_WEBHOOK_TABLES: &str = r#"
+CREATE TABLE "webhook_endpoints" ("id" uuid NOT NULL PRIMARY KEY, "workspace_id" uuid NULL, "url" text NOT NULL, "description" varchar NULL, "events" json NOT NULL, "headers" json NOT NULL, "secret" text NOT NULL, "previous_secret" text NULL, "previous_secret_expires_at" timestamp with time zone NULL, "enabled" bool NOT NULL, "disabled_at" timestamp with time zone NULL, "disabled_reason" varchar NULL, "failing_since" timestamp with time zone NULL, "created_at" timestamp with time zone NOT NULL, "updated_at" timestamp with time zone NOT NULL);
+CREATE INDEX "webhook_endpoints_workspace_id_index" ON "webhook_endpoints" ("workspace_id");
+CREATE TABLE "webhook_deliveries" ("id" uuid NOT NULL PRIMARY KEY, "endpoint_id" uuid NOT NULL, "workspace_id" uuid NULL, "message_id" varchar NOT NULL, "event_type" varchar NOT NULL, "payload" text NOT NULL, "status" varchar NOT NULL, "attempts" integer NOT NULL, "max_attempts" integer NOT NULL, "next_attempt_at" timestamp with time zone NULL, "last_status_code" integer NULL, "last_error" text NULL, "created_at" timestamp with time zone NOT NULL, "updated_at" timestamp with time zone NOT NULL, FOREIGN KEY ("endpoint_id") REFERENCES "webhook_endpoints" ("id") ON DELETE CASCADE);
+CREATE INDEX "webhook_deliveries_endpoint_created_index" ON "webhook_deliveries" ("endpoint_id", "created_at");
+CREATE INDEX "webhook_deliveries_status_index" ON "webhook_deliveries" ("status");
+CREATE INDEX "webhook_deliveries_created_at_index" ON "webhook_deliveries" ("created_at");
+CREATE TABLE "webhook_attempts" ("id" uuid NOT NULL PRIMARY KEY, "delivery_id" uuid NOT NULL, "endpoint_id" uuid NOT NULL, "attempt" integer NOT NULL, "status_code" integer NULL, "succeeded" bool NOT NULL, "response_body" text NULL, "error" text NULL, "duration_ms" bigint NOT NULL, "created_at" timestamp with time zone NOT NULL, FOREIGN KEY ("delivery_id") REFERENCES "webhook_deliveries" ("id") ON DELETE CASCADE);
+CREATE INDEX "webhook_attempts_delivery_id_index" ON "webhook_attempts" ("delivery_id");
+CREATE TABLE "webhook_receipts" ("id" uuid NOT NULL PRIMARY KEY, "source" varchar NOT NULL, "message_id" varchar NOT NULL, "received_at" timestamp with time zone NOT NULL);
+CREATE UNIQUE INDEX "webhook_receipts_source_message_unique" ON "webhook_receipts" ("source", "message_id");
+CREATE INDEX "webhook_receipts_received_at_index" ON "webhook_receipts" ("received_at");
+INSERT INTO "navree_migrations" ("module", "name", "batch", "applied_at") VALUES ('webhooks', 'm20261026_000001_create_webhook_tables', 1, now());
+INSERT INTO "webhook_endpoints" VALUES ('0199a7a0-0000-7000-8000-00000000000e', NULL, 'https://hooks.example.com/in', NULL, '["*"]', '{}', 'whsec_test', NULL, NULL, TRUE, NULL, NULL, NULL, now(), now());
+INSERT INTO "webhook_deliveries" VALUES
+  ('0199a7a0-0000-7000-8000-0000000000d1', '0199a7a0-0000-7000-8000-00000000000e', NULL, 'msg_1', 'deal.won', '{}', 'delivered', 1, 8, NULL, 200, NULL, now() - INTERVAL '2 days', now()),
+  ('0199a7a0-0000-7000-8000-0000000000d2', '0199a7a0-0000-7000-8000-00000000000e', NULL, 'msg_2', 'deal.won', '{}', 'delivered', 2, 8, NULL, 200, NULL, now() - INTERVAL '1 day', now());
+INSERT INTO "webhook_attempts" VALUES
+  (gen_random_uuid(), '0199a7a0-0000-7000-8000-0000000000d1', '0199a7a0-0000-7000-8000-00000000000e', 1, 200, TRUE, NULL, NULL, 12, now() - INTERVAL '2 days'),
+  (gen_random_uuid(), '0199a7a0-0000-7000-8000-0000000000d2', '0199a7a0-0000-7000-8000-00000000000e', 1, 500, FALSE, NULL, NULL, 15, now() - INTERVAL '1 day'),
+  (gen_random_uuid(), '0199a7a0-0000-7000-8000-0000000000d2', '0199a7a0-0000-7000-8000-00000000000e', 2, 200, TRUE, NULL, NULL, 11, now() - INTERVAL '23 hours');
+"#;
+
+    /// An app the previous release migrated, with deliveries and attempts:
+    /// `migrate --pretend` plans the conversion and changes nothing, and
+    /// `migrate` makes both tables hypertables with every row kept.
+    #[tokio::test]
+    async fn upgrading_converts_an_existing_delivery_log() {
+        use navree::prelude::*;
+        use navree::testing::TestApp;
+
+        let Some(scratch) = Scratch::new("NAVREE_TEST_POSTGRES_URL", false).await else {
+            return;
+        };
+        // Every other module migrated as usual; the webhook tables as the
+        // previous release left them.
+        let before = TestApp::builder()
+            .config("database.url", scratch.url.clone())
+            .config("database.migrate_on_boot", true)
+            .config("audit.routes", false)
+            .config("fleet.dashboard", false)
+            .config("lighthouse.dashboard", false)
+            .module(DatabaseModule::from_config())
+            .module(EventsModule::for_root())
+            .module(QueueModule::from_config())
+            .module(AuditModule::from_config())
+            .module(FleetModule::from_config())
+            .module(ScheduleModule::for_root())
+            .module(LighthouseModule::from_config())
+            .build()
+            .await;
+        let db = before.get::<Db>().await;
+        if Schema::new(db.conn()).target().await.unwrap().timescaledb().is_none() {
+            eprintln!("TimescaleDB is not available on this server: skipping");
+            before.shutdown().await.unwrap();
+            scratch.drop().await;
+            return;
+        }
+        db.conn()
+            .execute_unprepared(PREVIOUS_WEBHOOK_TABLES)
+            .await
+            .unwrap();
+        before.shutdown().await.unwrap();
+
+        let app = app()
+            .config("database.url", scratch.url.clone())
+            .config("database.migrate_on_boot", false)
+            .build()
+            .await;
+        let db = app.get::<Db>().await;
+        let attempt_keys = || async {
+            Schema::new(db.conn())
+                .foreign_keys("webhook_attempts")
+                .await
+                .unwrap()
+                .into_iter()
+                .map(|key| key.foreign_table)
+                .collect::<Vec<_>>()
+        };
+        app.run_command("migrate", &["--pretend"]).await.unwrap();
+        assert_eq!(attempt_keys().await, ["webhook_deliveries"], "pretending changes nothing");
+        assert!(!Schema::new(db.conn()).is_hypertable("webhook_attempts").await.unwrap());
+        assert!(!conversions_applied(&db).await.iter().any(|name| name.contains("webhook")));
+
+        app.run_command("migrate", &[]).await.unwrap();
+        assert_eq!(conversions_applied(&db).await, CONVERSIONS);
+        assert_eq!(attempt_keys().await, ["webhook_endpoints"]);
+        let schema = Schema::new(db.conn());
+        for table in ["webhook_deliveries", "webhook_attempts"] {
+            assert!(schema.is_hypertable(table).await.unwrap(), "{table}");
+        }
+        assert_eq!(number(&db, "SELECT count(*) FROM webhook_deliveries").await, 2);
+        assert_eq!(
+            number(
+                &db,
+                "SELECT count(*) FROM webhook_attempts WHERE delivery_id = '0199a7a0-0000-7000-8000-0000000000d2'"
+            )
+            .await,
+            2,
+            "the rows moved into chunks, links intact"
+        );
+        assert_eq!(number(&db, "SELECT count(*) FROM show_chunks('webhook_deliveries')").await, 2);
+        app.shutdown().await.unwrap();
+        scratch.drop().await;
+    }
+
     /// With `lighthouse.database_url`, Lighthouse creates its tables in that
     /// database at boot and makes the event tables hypertables there.
     #[tokio::test]
