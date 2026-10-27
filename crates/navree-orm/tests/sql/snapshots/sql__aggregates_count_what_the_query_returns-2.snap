@@ -1,0 +1,10 @@
+---
+source: crates/navree-orm/tests/sql/main.rs
+expression: "per_dialect(|d| compile_aggregate(&grouped.clone().into_ir(), &count, d))"
+---
+PostgreSQL: SELECT COUNT(*) AS "aggregate" FROM (SELECT "stage" FROM "deals" GROUP BY "stage" HAVING COUNT(*) > $1) AS "aggregate_table"
+  values: [Int(Some(1))]
+MySQL: SELECT COUNT(*) AS `aggregate` FROM (SELECT `stage` FROM `deals` GROUP BY `stage` HAVING COUNT(*) > ?) AS `aggregate_table`
+  values: [Int(Some(1))]
+SQLite: SELECT COUNT(*) AS "aggregate" FROM (SELECT "stage" FROM "deals" GROUP BY "stage" HAVING COUNT(*) > ?) AS "aggregate_table"
+  values: [Int(Some(1))]

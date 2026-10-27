@@ -1,0 +1,17 @@
+error: a scope takes the query, not `self`: `fn open(query: Builder<Self>) -> Builder<Self>`
+  --> tests/ui/scopes_misuse.rs:11:13
+   |
+11 |     fn open(&self, query: Builder<Self>) -> Builder<Self> {
+   |             ^
+
+error: a scope only builds the query, so it cannot be async
+  --> tests/ui/scopes_misuse.rs:16:5
+   |
+16 |     async fn later(query: Builder<Self>) -> Builder<Self> {
+   |     ^^^^^
+
+error: #[scopes] found no #[scope] function in this impl block
+  --> tests/ui/scopes_misuse.rs:24:6
+   |
+24 | impl Other {
+   |      ^^^^^

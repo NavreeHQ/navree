@@ -1,0 +1,10 @@
+---
+source: crates/navree-orm/tests/sql/main.rs
+expression: "query(Company::query().where_key_in([1_i64, 2, 3]))"
+---
+PostgreSQL: SELECT "companies"."id", "companies"."name", "companies"."country" FROM "companies" WHERE "companies"."id" IN ($1, $2, $3)
+  values: [BigInt(Some(1)), BigInt(Some(2)), BigInt(Some(3))]
+MySQL: SELECT `companies`.`id`, `companies`.`name`, `companies`.`country` FROM `companies` WHERE `companies`.`id` IN (?, ?, ?)
+  values: [BigInt(Some(1)), BigInt(Some(2)), BigInt(Some(3))]
+SQLite: SELECT "companies"."id", "companies"."name", "companies"."country" FROM "companies" WHERE "companies"."id" IN (?, ?, ?)
+  values: [BigInt(Some(1)), BigInt(Some(2)), BigInt(Some(3))]

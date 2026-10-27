@@ -3927,6 +3927,7 @@ dependencies = [
  "navree-notify",
  "navree-oauth",
  "navree-observe",
+ "navree-orm",
  "navree-queue",
  "navree-realtime",
  "navree-redis",
@@ -4920,6 +4921,48 @@ dependencies = [
  "tower",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "navree-orm"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "base64 0.23.1",
+ "chrono",
+ "futures",
+ "http",
+ "indexmap",
+ "insta",
+ "navree-config",
+ "navree-contracts",
+ "navree-db",
+ "navree-http",
+ "navree-kernel",
+ "navree-orm-macros",
+ "navree-testing",
+ "rust_decimal",
+ "sea-orm",
+ "sea-query",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "trybuild",
+ "uuid",
+]
+
+[[package]]
+name = "navree-orm-macros"
+version = "0.1.0"
+dependencies = [
+ "heck 0.5.0",
+ "proc-macro-crate",
+ "proc-macro2",
+ "quote",
+ "syn 3.0.9",
 ]
 
 [[package]]
