@@ -228,6 +228,15 @@ fn analyse(input: &DeriveInput) -> syn::Result<Model> {
                 ));
             }
         }
+        // A missing related pivot column is also the missing key of a
+        // model keyed by it: the error above says it once.
+        if keyed_by_pivot && !columns.iter().any(|column| column.name == key_name) {
+            errors.finish()?;
+            return Err(syn::Error::new(
+                related_key.span(),
+                format!("the pivot column `{key_name}` is not a column of {ident}"),
+            ));
+        }
     }
     let Some(key) = columns.iter().position(|column| column.name == key_name) else {
         return Err(errors.with(syn::Error::new(

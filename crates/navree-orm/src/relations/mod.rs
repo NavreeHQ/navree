@@ -136,6 +136,11 @@ pub(crate) mod private {
 /// A relation from model `P`: one of the relation types ([`BelongsTo`],
 /// [`HasMany`], [`BelongsToMany`], [`MorphTo`], ...), as a relation method
 /// returns it.
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` is not a relation of `{P}`",
+    label = "a relation method returns a relation",
+    note = "relation methods return a relation built from `self`: `self.belongs_to(..)` (`BelongsTo<{P}, R>`), `self.has_many(..)` (`HasMany<{P}, R>`), `self.belongs_to_many(..)`, `self.morph_to(..)`, ..."
+)]
 pub trait Relation<P: Model>: Clone + Send + Sync + 'static + private::Erase<P> {
     /// What the relation holds once loaded on a record:
     /// `Option<Record<R>>`, [`Collection<R>`](crate::Collection), or
