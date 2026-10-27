@@ -5,9 +5,9 @@ use std::time::Duration;
 
 use chrono::Utc;
 use navree_telemetry::{
-    CacheEvent, CacheOperation, EventKind, ExceptionReported, HttpClientRequest, JobFailed,
-    JobProcessed, LogLevel, LogRecord, MailSent, NotificationSent, QueryExecuted, RequestHandled,
-    ScheduledTaskRan, Telemetry, TelemetryEvent, TelemetryRecorder,
+    CacheEvent, CacheOperation, EventEmitted, EventKind, ExceptionReported, HttpClientRequest,
+    JobFailed, JobProcessed, LogLevel, LogRecord, MailSent, NotificationSent, QueryExecuted,
+    RequestHandled, ScheduledTaskRan, Telemetry, TelemetryEvent, TelemetryRecorder,
 };
 
 fn every_event() -> Vec<TelemetryEvent> {
@@ -98,6 +98,14 @@ fn every_event() -> Vec<TelemetryEvent> {
             message: "slow".into(),
             fields: Default::default(),
         }),
+        TelemetryEvent::EventEmitted(EventEmitted {
+            name: "deal.won".into(),
+            payload: serde_json::json!({ "id": 7 }),
+            listeners: vec!["crm::NotifyOwner".into()],
+            queued: Vec::new(),
+            failed: Vec::new(),
+            duration: ms(1),
+        }),
     ]
 }
 
@@ -108,7 +116,7 @@ fn typed_accessors_return_each_kind() {
     for event in every_event() {
         telemetry.emit(event);
     }
-    assert_eq!(recorder.len(), 11);
+    assert_eq!(recorder.len(), 12);
     assert_eq!(
         recorder.requests()[0].route.as_deref(),
         Some("/api/v1/deals/{id}")
@@ -124,7 +132,8 @@ fn typed_accessors_return_each_kind() {
     assert_eq!(recorder.exceptions()[0].message, "boom");
     assert_eq!(recorder.logs()[0].level, LogLevel::Warn);
     assert_eq!(recorder.of_kind(EventKind::JobFailed).len(), 1);
-    assert_eq!(recorder.events().len(), 11);
+    assert_eq!(recorder.emitted_events()[0].name, "deal.won");
+    assert_eq!(recorder.events().len(), 12);
 
     recorder.clear();
     assert!(recorder.is_empty());

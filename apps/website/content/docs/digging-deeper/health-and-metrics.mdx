@@ -229,7 +229,7 @@ With `observe.metrics = false`, no recorder is installed and `/metrics` isn't mo
 
 ## Telemetry events
 
-<Badge feature="telemetry" /> Navree's modules report what they do as typed events: every request answered, query run, job attempt, scheduled task, mail, notification, cache call, outgoing HTTP call, exception and log line. [Tracing](/docs/microservices/tracing/) turns them into spans, [Lighthouse](/docs/tools/lighthouse/), [Logbook](/docs/tools/logbook/) and [Fleet](/docs/tools/fleet/) are built on them, and your own code can receive them by registering a **sink**. The types live in `navree::telemetry` (the `navree-telemetry` crate, in `full`).
+<Badge feature="telemetry" /> Navree's modules report what they do as typed events: every request answered, query run, job attempt, scheduled task, mail, notification, cache call, outgoing HTTP call, exception, log line and app event. [Tracing](/docs/microservices/tracing/) turns them into spans, [Lighthouse](/docs/tools/lighthouse/), [Logbook](/docs/tools/logbook/) and [Fleet](/docs/tools/fleet/) are built on them, and your own code can receive them by registering a **sink**. The types live in `navree::telemetry` (the `navree-telemetry` crate, in `full`).
 
 | Event | Emitted by | When | Fields |
 |---|---|---|---|
@@ -244,6 +244,7 @@ With `observe.metrics = false`, no recorder is installed and `/metrics` isn't mo
 | `HttpClientRequest` | `HttpClient` | an outgoing call finished, after its retries | `method`, `url` (no query string, fragment or credentials), `status`, `duration`, `attempts`, `error`, `span_id` |
 | `ExceptionReported` | `HttpModule`, or your code | a 500 (or a 5xx with an underlying error), a panicking handler | `message`, `chain` (the message, then each source's), `location` (the panic's or the reporting call's `file:line:column`), `panic`, `request` (method, path, route and status) |
 | `LogRecord` | `LoggerModule` | a log line passed the level filter | `level`, `target`, `message`, `fields` (redacted, as in the output) |
+| `EventEmitted` | `EventsModule` | an event was emitted or published, and every listener ran or was queued | `name`, `payload` (JSON), `listeners` (the ones that ran), `queued` (the ones whose job was dispatched), `failed`, `duration` |
 
 A sink receives each one as a `TelemetryRecord`: the `event` (a `TelemetryEvent`), the time it was emitted (`at`) and its `context`, an `EventContext` with the request id or job id, the trace, the user id and the workspace id of the request or job it happened in. Records serialize to JSON with a `type` tag (`{"type": "query_executed", "sql": ...}`) and durations in milliseconds, ready to store or send.
 

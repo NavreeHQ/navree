@@ -109,6 +109,8 @@ pub use navree_mcp::{McpModule, ModuleBuilderMcpExt as _};
 
 #[cfg(feature = "lighthouse")]
 pub use navree_lighthouse::{LighthouseModule, ModuleBuilderLighthouseExt as _};
+#[cfg(feature = "logbook")]
+pub use navree_logbook::LogbookModule;
 
 #[cfg(feature = "workspace")]
 pub use navree_workspace::{

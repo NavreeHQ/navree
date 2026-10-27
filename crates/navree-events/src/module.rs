@@ -7,6 +7,7 @@ use navree_kernel::{
     AppContext, BoxError, BoxFuture, Factory, Lifecycle, Module, ModuleBuilder, ModuleId,
     ProviderKey, Resolver,
 };
+use navree_telemetry::Telemetry;
 
 use crate::EventBus;
 
@@ -60,7 +61,9 @@ impl Module for ConfiguredEventsModule {
 fn register(m: &mut ModuleBuilder) {
     m.global()
         .factory(Factory::<EventBus>::new(|r: Resolver| async move {
-            Ok(Arc::new(EventBus::new(r.app())))
+            let app = r.app();
+            let telemetry = Telemetry::from_app(&app).await;
+            Ok(Arc::new(EventBus::new(app, telemetry)))
         }))
         .exports::<EventBus>()
         .factory(

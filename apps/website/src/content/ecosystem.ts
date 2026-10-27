@@ -181,7 +181,7 @@ export const ecosystem: EcosystemEntry[] = [
     crate: "navree-logbook",
     command: "navree::LogbookModule::from_config()",
     href: "/docs/tools/logbook/",
-    status: "planned",
+    status: "stable",
     signature: "LogbookModule::from_config()",
     mount: "/_logbook",
   },

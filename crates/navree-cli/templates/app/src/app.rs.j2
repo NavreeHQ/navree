@@ -12,6 +12,7 @@ use navree::http::HttpModule;
 use navree::kernel::{AppBuilder, Navree};
 use navree::lighthouse::LighthouseModule;
 use navree::log::LoggerModule;
+use navree::logbook::LogbookModule;
 use navree::mail::MailModule;
 use navree::observe::ObserveModule;
 use navree::queue::QueueModule;
@@ -48,6 +49,9 @@ pub fn app(sources: ConfigSources) -> AppBuilder {
         .module(ObserveModule::from_config())
         // Monitoring: issues, traces and alerts, the dashboard at `/_lighthouse`.
         .module(LighthouseModule::from_config())
+        // Logbook: the debugging timeline at `/_logbook` (development only;
+        // off in release builds).
+        .module(LogbookModule::from_config())
         // Feature modules (`navree make:module` adds new ones above the marker).
         .module(modules::users::UsersModule)
     // navree:modules

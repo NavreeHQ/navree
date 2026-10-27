@@ -93,6 +93,7 @@ Every module crate is re-exported whole, as a module of the facade. `navree::db:
 | `navree::search` | navree-search | `search` (opt-in) | `SearchModule`: [full-text and vector search](/docs/packages/search/), `#[derive(Searchable)]` |
 | `navree::mcp` | navree-mcp | `mcp` (opt-in) | `McpModule`: [MCP servers](/docs/ai/mcp-servers/) with `#[mcp_server]`, `#[mcp_tool]`, `#[mcp_resource]` and `#[mcp_prompt]`, and `navree::mcp::testing::McpTestClient` |
 | `navree::lighthouse` | navree-lighthouse | `lighthouse` | `LighthouseModule`: [application monitoring](/docs/tools/lighthouse/), issues, traces, alerts and the `/_lighthouse` dashboard |
+| `navree::logbook` | navree-logbook | `logbook` | `LogbookModule`: the [local debugging timeline](/docs/tools/logbook/) at `/_logbook`, with filters and request replay |
 
 The facade's root also has:
 
@@ -117,7 +118,7 @@ The facade's root also has:
 | Authentication | `AuthModule`, `AuthService`, `CurrentUser` |
 | MCP (with `mcp`) | `McpModule` (and `m.mcp_server::<S>()`) |
 | Access | `AccessModule`, `AccessOptions`, `Abilities`, `AbilityCtx`, `Accessible`, `Authorized`, `Rules`, `Subject`, `ActionMarker`, `field`, the action markers `Read`, `Create`, `Update`, `Delete`, `Manage` and the constants `READ`, `CREATE`, `UPDATE`, `DELETE`, `MANAGE`, `ALL` |
-| Other modules | `LoggerModule`, `CryptoModule`, `EventsModule`, `ViewModule`, `CacheModule`, `HttpClientModule`, `ApiModule`, `MailModule`, `ObserveModule`, `RealtimeModule`, `StorageModule`, `SessionModule`, `QueueModule`, `AuditModule`, `ScheduleModule`, `NotifyModule`, `WorkspaceModule`, `WebhooksModule` |
+| Other modules | `LoggerModule`, `CryptoModule`, `EventsModule`, `ViewModule`, `CacheModule`, `HttpClientModule`, `ApiModule`, `MailModule`, `ObserveModule`, `RealtimeModule`, `StorageModule`, `SessionModule`, `QueueModule`, `AuditModule`, `ScheduleModule`, `NotifyModule`, `WorkspaceModule`, `WebhooksModule`, `LogbookModule` |
 | OAuth (with `oauth`) | `OAuthServerModule`, `OAuthToken` |
 | Feature flags (`flags`) | `FlagsModule`, `CurrentFlags` |
 | GraphQL (with `graphql`) | `GraphqlModule` |
@@ -171,6 +172,7 @@ navree = { git = "https://github.com/NavreeHQ/navree", default-features = false,
 | `ai` (opt-in, not in `full`) | `http`, `http-client`, `cache`, `db`, `storage`, `validation`, `access`, `auth` |
 | `lighthouse` | `telemetry`, `http`, `crypto`, `view`, `http-client`, `db`, `mail`, `schedule`, `access`, `auth` |
 | `redis` (opt-in, not in `full`) | `cache`, `queue`, `session`, `realtime` |
+| `logbook` | `http`, `view`, `db`, `auth` |
 | `postgres` | `db`, and navree-db's PostgreSQL driver |
 
 SQLite is always available with `db`. The `postgres` feature adds the PostgreSQL driver. Navree's [performance](/performance/) harness runs it on PostgreSQL 17 and the test suite runs on SQLite; [the database pages](/docs/database/getting-started/#postgresql) list which PostgreSQL-only paths to try in staging first.

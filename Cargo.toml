@@ -62,6 +62,7 @@ navree-mcp = { path = "crates/navree-mcp", version = "0.1.0" }
 navree-ai = { path = "crates/navree-ai", version = "0.1.0" }
 navree-lighthouse = { path = "crates/navree-lighthouse", version = "0.1.0" }
 navree-redis = { path = "crates/navree-redis", version = "0.1.0" }
+navree-logbook = { path = "crates/navree-logbook", version = "0.1.0" }
 
 # ---------------------------------------------------------------------------
 # Runtime, async and HTTP (Tokio family)

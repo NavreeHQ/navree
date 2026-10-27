@@ -8,8 +8,8 @@
 //!   (navree-queue), [`ScheduledTaskRan`] (navree-schedule), [`MailSent`]
 //!   (navree-mail), [`NotificationSent`] (navree-notify), [`CacheEvent`]
 //!   (navree-cache), [`HttpClientRequest`] (navree-http-client),
-//!   [`ExceptionReported`] (navree-http, or your code) and [`LogRecord`]
-//!   (navree-log). A sink receives each one as a [`TelemetryRecord`]: the
+//!   [`ExceptionReported`] (navree-http, or your code), [`LogRecord`]
+//!   (navree-log) and [`EventEmitted`] (navree-events). A sink receives each one as a [`TelemetryRecord`]: the
 //!   event, when it was emitted and the [`EventContext`] (request id, job
 //!   id, trace, user, workspace) it happened in.
 //! - **Sinks** ([`TelemetrySink`]) are `dyn TelemetrySink` multi-bindings,
@@ -56,9 +56,9 @@ mod trace;
 
 pub use context::{TelemetryContext, capture_panic_locations, current_trace_id};
 pub use event::{
-    CacheEvent, CacheOperation, EventContext, EventKind, ExceptionReported, HttpClientRequest,
-    JobFailed, JobProcessed, LogLevel, LogRecord, MailSent, NotificationSent, QueryExecuted,
-    RequestHandled, RequestInfo, ScheduledTaskRan, TelemetryEvent, TelemetryRecord,
+    CacheEvent, CacheOperation, EventContext, EventEmitted, EventKind, ExceptionReported,
+    HttpClientRequest, JobFailed, JobProcessed, LogLevel, LogRecord, MailSent, NotificationSent,
+    QueryExecuted, RequestHandled, RequestInfo, ScheduledTaskRan, TelemetryEvent, TelemetryRecord,
 };
 pub use module::{ModuleBuilderTelemetryExt, TelemetryModule};
 pub use recorder::TelemetryRecorder;

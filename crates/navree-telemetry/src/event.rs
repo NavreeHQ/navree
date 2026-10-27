@@ -40,11 +40,13 @@ pub enum EventKind {
     ExceptionReported,
     /// [`LogRecord`].
     Log,
+    /// [`EventEmitted`].
+    EventEmitted,
 }
 
 impl EventKind {
     /// Every kind, in declaration order.
-    pub const ALL: [EventKind; 11] = [
+    pub const ALL: [EventKind; 12] = [
         EventKind::RequestHandled,
         EventKind::QueryExecuted,
         EventKind::JobProcessed,
@@ -56,6 +58,7 @@ impl EventKind {
         EventKind::HttpClientRequest,
         EventKind::ExceptionReported,
         EventKind::Log,
+        EventKind::EventEmitted,
     ];
 
     /// The snake_case name, as in serialized records (`query_executed`).
@@ -72,6 +75,7 @@ impl EventKind {
             EventKind::HttpClientRequest => "http_client_request",
             EventKind::ExceptionReported => "exception_reported",
             EventKind::Log => "log",
+            EventKind::EventEmitted => "event_emitted",
         }
     }
 
@@ -117,6 +121,9 @@ pub enum TelemetryEvent {
     ExceptionReported(ExceptionReported),
     /// A log line was written (navree-log).
     Log(LogRecord),
+    /// An app event was emitted or published on the event bus
+    /// (navree-events).
+    EventEmitted(EventEmitted),
 }
 
 impl TelemetryEvent {
@@ -134,6 +141,7 @@ impl TelemetryEvent {
             TelemetryEvent::HttpClientRequest(_) => EventKind::HttpClientRequest,
             TelemetryEvent::ExceptionReported(_) => EventKind::ExceptionReported,
             TelemetryEvent::Log(_) => EventKind::Log,
+            TelemetryEvent::EventEmitted(_) => EventKind::EventEmitted,
         }
     }
 }
@@ -429,6 +437,27 @@ pub struct LogRecord {
     pub message: String,
     /// The other fields of the line (redacted, as in the log output).
     pub fields: BTreeMap<String, Value>,
+}
+
+/// An app event was emitted (`EventBus::emit`) or published
+/// (`EventSink::publish`) on the event bus: emitted by navree-events once
+/// every listener ran or was queued.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct EventEmitted {
+    /// The event name (`Event::NAME`, such as `deal.won`).
+    pub name: String,
+    /// The payload as JSON (`null` when it does not serialize).
+    pub payload: Value,
+    /// The listeners that handled it, by type name, in delivery order:
+    /// sync listeners, and queued ones that ran inline (no dispatcher).
+    pub listeners: Vec<String>,
+    /// The queued listeners whose job was dispatched.
+    pub queued: Vec<String>,
+    /// The listeners that failed (their errors are logged).
+    pub failed: Vec<String>,
+    /// How long delivery took.
+    #[serde(with = "millis")]
+    pub duration: Duration,
 }
 
 /// The unit of work an event happened in, captured from the current
