@@ -287,6 +287,19 @@ Navree's modules give each refusal its own code, so a login form can say "wrong 
 | billing | `invalid_webhook_payload` | 400 | `Invalid webhook payload.` |
 | billing | `payment_provider_error` | 502 | `The payment provider refused the request: ...` |
 | webhooks | `invalid_webhook_signature` | 400 | `Invalid webhook signature` |
+| integrations | `unknown_integration` | 404 | ``Unknown integration `zoom` `` |
+| integrations | `unknown_scope_set` | 400 | ``Unknown scope set `directory` for Slack`` |
+| integrations | `unsupported_connection` | 400 | `Slack does not connect with an API key` |
+| integrations | `invalid_state` | 400 | `Invalid or expired state` (a consent callback whose state was changed, has expired or was used) |
+| integrations | `invalid_return_to` | 400 | `return_to must be a relative path` |
+| integrations | `consent_denied` | 400 | `Microsoft 365 consent was not granted: access_denied` |
+| integrations | `integration_refused` | 400 | `Slack refused the connection: invalid_code` |
+| integrations | `invalid_credentials` | 400 | `key must not be empty` (a key file that isn't a service-account key, an empty API key) |
+| integrations | `integration_not_connected` | 404 | `Microsoft 365 is not connected` |
+| integrations | `connection_not_found` | 404 | `Connection not found` |
+| integrations | `integration_reauthorization_required` | 409 | `Connect Google Workspace again to continue` |
+| integrations | `integration_unavailable` | 502 | `Slack is unavailable. Please try again.` |
+| integrations | `integration_api_error` | 502 | `Slack answered: channel_not_found` |
 | queue | `operation_finished` | 409 | `The operation has already finished.` |
 | storage | `invalid_file_path` | 400 | `Invalid file path.` |
 | storage | `file_type_not_allowed` | 400 | `The file must be of type: application/pdf, image/* (it is text/html).` |

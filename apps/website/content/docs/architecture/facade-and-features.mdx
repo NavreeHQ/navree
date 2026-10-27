@@ -88,6 +88,7 @@ Every module crate is re-exported whole, as a module of the facade. `navree::db:
 | `navree::redis` | navree-redis | `redis` (opt-in) | `RedisModule`: [Redis](/docs/digging-deeper/redis/) connections, and the Redis drivers of the cache, locks, queue, sessions and real-time backplane; `RateLimiter` |
 | `navree::social` | navree-social | `social` (opt-in) | `SocialModule`: [social sign-in](/docs/packages/social-sign-in/) with Google, GitHub, Apple and other providers |
 | `navree::sso` | navree-sso | `sso` | `SsoModule`: [single sign-on](/docs/security/single-sign-on/) with SAML 2.0 and OpenID Connect per organization or workspace, verified domains, just-in-time provisioning |
+| `navree::integrations` | navree-integrations | `integrations` | `IntegrationsModule`: [connections to third-party APIs](/docs/packages/integrations/) per workspace or organization, with consent flows, encrypted credentials, scope sets, health checks and typed clients |
 | `navree::sheets` | navree-sheets, plus `#[derive(Exportable)]` and `#[derive(Importable)]` | `sheets` | `SheetsModule`: [CSV and Excel exports and imports](/docs/packages/imports-and-exports/) with header mapping, a staging preview and error files |
 | `navree::webhooks` | navree-webhooks | `webhooks` | `WebhooksModule`: signed outgoing webhooks with retries and a delivery log, verified incoming ones |
 | `navree::oauth` | navree-oauth | `oauth` (opt-in) | `OAuthServerModule`: [OAuth 2.1 and OpenID Connect provider](/docs/packages/oauth-server/), personal access tokens |
@@ -138,6 +139,7 @@ The facade's root also has:
 | AI (`ai`) | `AiModule` (and `m.agent::<A>()`, `m.vector_collection(..)` through `ModuleBuilderAiExt`) |
 | Microservices (`micro`) | `MicroModule`, `ServiceClient`, `Payload`, `message_handlers` |
 | Documents (`documents`) | `DocumentsModule` |
+| Integrations (`integrations`) | `IntegrationsModule` (and `m.integration_scope_set::<S>()` through `ModuleBuilderIntegrationsExt`) |
 | Imports and exports (`sheets`) | `SheetsModule` (and `m.export::<E>()`, `m.importer::<I>()` through `ModuleBuilderSheetsExt`) |
 | Billing (`billing`) | `BillingModule` |
 | Localization (`i18n`) | `I18nModule`, `Locale` |
@@ -185,6 +187,7 @@ navree = { git = "https://github.com/NavreeHQ/navree", default-features = false,
 | `social` | `http`, `crypto`, `cache`, `events`, `http-client`, `db`, `auth` |
 | `sso` | `http`, `crypto`, `cache`, `events`, `http-client`, `db`, `auth`, `workspace` |
 | `webhooks` | `http`, `crypto`, `events`, `http-client`, `db`, `workspace` |
+| `integrations` | `http`, `crypto`, `cache`, `events`, `http-client`, `db`, `schedule`, `workspace`, `orm` |
 | `sheets` | `http`, `db`, `storage`, `validation`, `queue`, `workspace`; with `i18n` on too, translated export headers |
 | `oauth` | `http`, `db`, `crypto`, `access`, `auth`, `workspace`, `testing` |
 | `flags` | `http`, `cache`, `db`, `events`, `audit`, `workspace`, `auth` |

@@ -148,6 +148,19 @@ transient -> unhealthy after `unhealthy_after` (3) in a row. Events
 `integrations.connected`, `.disconnected`, `.unhealthy`
 (`ConnectionUnhealthy`, once on the change), `.restored`.
 
+## The table
+
+`integration_connections` is the navree-orm model `IntegrationConnection`
+(`use navree::orm::Model as _;`): query it for reports and admin pages,
+`IntegrationConnection::query().where_(IntegrationConnection::STATUS.eq("unhealthy")).count(&db)`.
+`credentials` / `access_token` are ciphertexts, hidden from serialization
+and `Debug`. Never write the table yourself: `Integrations` encrypts,
+emits the events and writes the audit entries (`integration.connected`,
+`integration.disconnected`; rows are written without change events, so no
+ciphertext reaches the audit log). Return `ConnectionInfo` from your own
+routes. The migration is a schema-builder one; its UUID columns are
+`BINARY(16)` on MySQL/MariaDB (models write UUIDs as 16 bytes there).
+
 ## Tests
 
 ```rust
@@ -162,7 +175,11 @@ assert_eq!(fake.minted()[0].grant_type, "client_credentials");
 States, encryption and service-account signatures stay real. For real
 provider responses: point `authority_url`/`token_url`/`api_url` at a
 wiremock server and allow `127.0.0.1` in `http_client.ssrf.allow_hosts`.
-Set `integrations.routes = false` in tests without AccessModule.
+Set `integrations.routes = false` in tests without AccessModule. The
+crate's PostgreSQL and MySQL suite: `cargo test -p navree-integrations
+--features postgres,mysql --test integrations servers` with
+`NAVREE_TEST_POSTGRES_URL` / `NAVREE_TEST_MYSQL_URL` (each test creates and
+drops its own database).
 
 ## Errors (`code`)
 
