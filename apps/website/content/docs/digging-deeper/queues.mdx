@@ -18,7 +18,7 @@ For work bigger than one job, the same module runs [batches](/docs/digging-deepe
 
 <Callout type="note" title="Drivers">
 
-More queue backends, Redis among them, are on the [roadmap](/docs/prologue/roadmap/#more-drivers). The database driver reserves jobs on PostgreSQL with `FOR UPDATE SKIP LOCKED`; the queue's tests run on SQLite, so try that path in staging first (see [what has been run on PostgreSQL](/docs/database/getting-started/#postgresql)).
+More queue backends, Redis among them, are on the [roadmap](/docs/prologue/roadmap/#more-drivers). The database driver reserves jobs on PostgreSQL with `FOR UPDATE SKIP LOCKED`. The queue's test suites, batches and operations included, run on SQLite, and on PostgreSQL with `cargo test -p navree-queue --features postgres` and `NAVREE_TEST_POSTGRES_URL` set (see [what has been run on PostgreSQL](/docs/database/getting-started/#postgresql)).
 
 </Callout>
 
