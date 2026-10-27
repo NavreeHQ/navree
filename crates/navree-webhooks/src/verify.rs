@@ -1,12 +1,15 @@
 //! Verifying incoming webhooks: [`WebhookVerifier`], [`WebhookSource`] and
 //! the built-in verifiers [`StandardWebhooks`], [`Stripe`], [`GitHub`],
-//! [`Paddle`] and [`Hmac`].
+//! [`Paddle`] and [`Hmac`] (the others are in `sources`).
+
+use std::future::Future;
 
 use chrono::{DateTime, Utc};
 use http::HeaderMap;
 use serde_json::Value;
 
 use crate::options::{HmacAlgorithm, SignatureEncoding, SourceOptions};
+use crate::request::{IncomingRequest, Verdict};
 use crate::signing::{self, standard_key};
 use crate::template::{Field, SignatureFormat, SignedTemplate};
 
@@ -39,7 +42,7 @@ impl Tolerance {
     }
 
     /// Accepts `timestamp` when it is within the window.
-    fn check(&self, timestamp: DateTime<Utc>) -> Result<(), VerifyError> {
+    pub(crate) fn check(&self, timestamp: DateTime<Utc>) -> Result<(), VerifyError> {
         let age = (self.now.timestamp() - timestamp.timestamp()).unsigned_abs();
         if age > self.secs {
             return Err(VerifyError::TimestampOutOfTolerance {
@@ -89,21 +92,77 @@ pub enum VerifyError {
     /// malformed template).
     #[error("the source is misconfigured: {0}")]
     Misconfigured(String),
+    /// The body does not have the shape the scheme signs (a missing field,
+    /// JSON that does not parse).
+    #[error("the body has no valid {0}")]
+    MalformedBody(String),
+    /// The request is signed, but not by a sender the source accepts: a
+    /// topic, audience, account or URL that is not the configured one.
+    #[error("the request is refused: {0}")]
+    Rejected(String),
+    /// A key needed to verify the request could not be fetched (the sender
+    /// retries a request answered with 503).
+    #[error("{0} could not be fetched")]
+    Unavailable(String),
 }
 
 /// A signature scheme. The built-in ones are [`StandardWebhooks`],
-/// [`Stripe`], [`GitHub`], [`Paddle`] and the configurable [`Hmac`];
-/// implement it for a sender with a scheme of its own.
+/// [`Stripe`], [`GitHub`], [`Paddle`], [`AwsSns`](crate::AwsSns),
+/// [`GooglePubSub`](crate::GooglePubSub),
+/// [`MicrosoftGraph`](crate::MicrosoftGraph), [`Twilio`](crate::Twilio),
+/// [`Slack`](crate::Slack), [`Mailgun`](crate::Mailgun),
+/// [`Postmark`](crate::Postmark) and the configurable [`Hmac`]; implement
+/// it for a sender with a scheme of its own.
+///
+/// A scheme that signs the headers and body implements
+/// [`verify_request`](WebhookVerifier::verify_request). One that needs more
+/// (the URL the sender called, keys fetched from the sender, a handshake
+/// answered without the handler) implements
+/// [`verify_incoming`](WebhookVerifier::verify_incoming) instead.
 pub trait WebhookVerifier: Send + Sync + 'static {
     /// Verifies a request with the source's options (its secret, and
     /// whatever else the scheme reads), checking a signed timestamp against
     /// `tolerance` when there is one (`None` skips the age check).
+    ///
+    /// The default refuses every request: a verifier implements this or
+    /// [`verify_incoming`](WebhookVerifier::verify_incoming).
     fn verify_request(
         source: &SourceOptions,
         headers: &HeaderMap,
         body: &[u8],
         tolerance: Option<Tolerance>,
-    ) -> Result<Verified, VerifyError>;
+    ) -> Result<Verified, VerifyError> {
+        let _ = (source, headers, body, tolerance);
+        Err(VerifyError::Misconfigured(
+            "this verifier checks whole requests: call `verify_incoming`".to_owned(),
+        ))
+    }
+
+    /// Verifies a whole request: an authentic delivery is
+    /// [`Verdict::Verified`], a handshake the sender expects an answer to
+    /// is [`Verdict::Handshake`]. What [`VerifiedWebhook`](crate::VerifiedWebhook)
+    /// calls. The default runs
+    /// [`verify_request`](WebhookVerifier::verify_request).
+    fn verify_incoming(
+        request: &IncomingRequest<'_>,
+    ) -> impl Future<Output = Result<Verdict, VerifyError>> + Send {
+        std::future::ready(
+            Self::verify_request(
+                request.source(),
+                request.headers(),
+                request.body(),
+                request.tolerance(),
+            )
+            .map(Verdict::Verified),
+        )
+    }
+
+    /// The setting the source cannot verify without, when it is not set:
+    /// by default `secret`. A request for a source that lacks it is answered
+    /// with 500, and the error log names the key.
+    fn missing_setting(source: &SourceOptions) -> Option<&'static str> {
+        source.secret.trim().is_empty().then_some("secret")
+    }
 }
 
 /// A sender of incoming webhooks, for [`VerifiedWebhook<S>`](crate::VerifiedWebhook):
@@ -130,7 +189,7 @@ pub trait WebhookSource: Send + Sync + 'static {
 }
 
 /// The value of header `name`.
-fn header<'a>(headers: &'a HeaderMap, name: &str) -> Result<&'a str, VerifyError> {
+pub(crate) fn header<'a>(headers: &'a HeaderMap, name: &str) -> Result<&'a str, VerifyError> {
     headers
         .get(name)
         .ok_or_else(|| VerifyError::MissingHeader(name.to_owned()))?
@@ -139,7 +198,7 @@ fn header<'a>(headers: &'a HeaderMap, name: &str) -> Result<&'a str, VerifyError
 }
 
 /// The value of header `name`, if present and text.
-fn optional_header(headers: &HeaderMap, name: &str) -> Option<String> {
+pub(crate) fn optional_header(headers: &HeaderMap, name: &str) -> Option<String> {
     headers
         .get(name)
         .and_then(|value| value.to_str().ok())
@@ -147,7 +206,7 @@ fn optional_header(headers: &HeaderMap, name: &str) -> Option<String> {
 }
 
 /// A Unix timestamp in seconds from header `name`.
-fn parse_timestamp(raw: &str, name: &str) -> Result<DateTime<Utc>, VerifyError> {
+pub(crate) fn parse_timestamp(raw: &str, name: &str) -> Result<DateTime<Utc>, VerifyError> {
     raw.trim()
         .parse::<i64>()
         .ok()
@@ -156,12 +215,12 @@ fn parse_timestamp(raw: &str, name: &str) -> Result<DateTime<Utc>, VerifyError> 
 }
 
 /// Checks `timestamp` against `tolerance`, when there is one.
-fn check_age(timestamp: DateTime<Utc>, tolerance: Option<Tolerance>) -> Result<(), VerifyError> {
+pub(crate) fn check_age(timestamp: DateTime<Utc>, tolerance: Option<Tolerance>) -> Result<(), VerifyError> {
     tolerance.map_or(Ok(()), |tolerance| tolerance.check(timestamp))
 }
 
 /// Refuses an empty secret.
-fn require_secret(secret: &str) -> Result<(), VerifyError> {
+pub(crate) fn require_secret(secret: &str) -> Result<(), VerifyError> {
     if secret.is_empty() {
         Err(VerifyError::MissingSecret)
     } else {
@@ -170,7 +229,7 @@ fn require_secret(secret: &str) -> Result<(), VerifyError> {
 }
 
 /// String fields `id_field` and `type_field` of a JSON object body.
-fn body_fields(body: &[u8], id_field: &str, type_field: &str) -> (Option<String>, Option<String>) {
+pub(crate) fn body_fields(body: &[u8], id_field: &str, type_field: &str) -> (Option<String>, Option<String>) {
     let Ok(Value::Object(object)) = serde_json::from_slice::<Value>(body) else {
         return (None, None);
     };
@@ -179,7 +238,7 @@ fn body_fields(body: &[u8], id_field: &str, type_field: &str) -> (Option<String>
 }
 
 /// Whether any candidate (decoded with `encoding`) equals `expected`.
-fn any_matches<'a>(
+pub(crate) fn any_matches<'a>(
     candidates: impl IntoIterator<Item = &'a str>,
     encoding: SignatureEncoding,
     expected: &[u8],
