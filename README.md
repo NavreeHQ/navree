@@ -204,8 +204,11 @@ abilities, platform modules), `crm-companies` (companies and contacts),
 - Rust 1.95 or newer (edition 2024; the build machine uses 1.99.1). On
   Windows, the MSVC build tools (SQLite is compiled from source through the
   bundled `libsqlite3-sys`).
-- [sccache](https://github.com/mozilla/sccache): `.cargo/config.toml` sets
-  `rustc-wrapper = "sccache"`. Remove that line if you don't want it.
+- Optional: [sccache](https://github.com/mozilla/sccache), to share compiled
+  dependencies between target directories. The repository doesn't set a
+  compiler wrapper; set `RUSTC_WRAPPER=sccache`, or `rustc-wrapper =
+  "sccache"` under `[build]` in a Cargo config outside the repository (for
+  example `~/.cargo/config.toml`).
 - For the web app: Node.js 20.9 or newer (the build machine uses 24) and
   pnpm 11.
 
@@ -228,8 +231,8 @@ including the CRM API's feature tests and the dependency-graph test. Each
 test that touches a database gets its own temporary SQLite file.
 
 Several builds (people, CI jobs or agents) often run at the same time. Cargo
-locks the target directory, so give each one its own and let sccache share
-the compiled dependencies:
+locks the target directory, so give each one its own (and, if you use it, let
+sccache share the compiled dependencies):
 
 ```sh
 CARGO_TARGET_DIR=target/agents/<label> cargo test -p <crate>
