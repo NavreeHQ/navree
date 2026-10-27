@@ -756,6 +756,8 @@ fn cors_layer(options: &CorsOptions) -> Result<Option<CorsLayer>, BoxError> {
         HeaderName::from_static("location"),
         HeaderName::from_static("retry-after"),
         HeaderName::from_static("content-disposition"),
+        // navree-workspace marks responses about a demo workspace with it.
+        HeaderName::from_static("x-navree-demo"),
     ];
     Ok(Some(
         CorsLayer::new()

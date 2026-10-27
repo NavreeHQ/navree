@@ -149,7 +149,8 @@ auth = [
     "access",
     "http-client",
 ]
-## Workspaces: multi-tenancy with members, roles, invitations and isolation.
+## Workspaces: multi-tenancy with members, roles, invitations, isolation and
+## demo workspaces (reset nightly through `schedule`).
 workspace = [
     "dep:navree-workspace",
     "http",
@@ -159,6 +160,7 @@ workspace = [
     "mail",
     "access",
     "time",
+    "schedule",
 ]
 ## L5 (opt-in, not in `full`)
 ## MongoDB: `MongoModule` (connections, pools, readiness), the ORM's
