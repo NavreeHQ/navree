@@ -3091,6 +3091,7 @@ dependencies = [
  "navree-observe",
  "navree-queue",
  "navree-realtime",
+ "navree-redis",
  "navree-schedule",
  "navree-session",
  "navree-social",
