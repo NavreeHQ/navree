@@ -665,22 +665,52 @@ pub(crate) fn security_entry(
     ip: ClientIp,
     metadata: serde_json::Value,
 ) -> AuditEntry {
-    let mut entry = AuditEntry::new(AuditKind::Security, action)
-        .ip(ip.0.to_string())
-        .metadata(metadata);
-    if let Some(user) = extensions
-        .get::<AuthState>()
-        .and_then(|state| state.0.as_ref())
-    {
-        entry = entry.actor(user.user_id);
+    Requester::of(headers, extensions, ip).security_entry(action, metadata)
+}
+
+/// What a security audit entry says about a request: taken (cheaply) while
+/// the request is at hand, so the entry is only built if it is recorded.
+pub(crate) struct Requester {
+    ip: ClientIp,
+    actor: Option<Uuid>,
+    request_id: Option<RequestId>,
+    user_agent: Option<HeaderValue>,
+}
+
+impl Requester {
+    /// The request with `headers` and `extensions`, from `ip`.
+    pub(crate) fn of(headers: &HeaderMap, extensions: &http::Extensions, ip: ClientIp) -> Self {
+        Self {
+            ip,
+            actor: extensions
+                .get::<AuthState>()
+                .and_then(|state| state.0.as_ref())
+                .map(|user| user.user_id),
+            request_id: extensions.get::<RequestId>().cloned(),
+            user_agent: headers.get(USER_AGENT).cloned(),
+        }
     }
-    if let Some(request_id) = extensions.get::<RequestId>() {
-        entry = entry.request_id(request_id.as_str());
+
+    /// The security audit entry `action` about this request.
+    pub(crate) fn security_entry(&self, action: &str, metadata: serde_json::Value) -> AuditEntry {
+        let mut entry = AuditEntry::new(AuditKind::Security, action)
+            .ip(self.ip.0.to_string())
+            .metadata(metadata);
+        if let Some(user) = self.actor {
+            entry = entry.actor(user);
+        }
+        if let Some(request_id) = &self.request_id {
+            entry = entry.request_id(request_id.as_str());
+        }
+        if let Some(agent) = self
+            .user_agent
+            .as_ref()
+            .and_then(|value| value.to_str().ok())
+        {
+            entry = entry.user_agent(agent.to_owned());
+        }
+        entry
     }
-    if let Some(agent) = user_agent(headers) {
-        entry = entry.user_agent(agent);
-    }
-    entry
 }
 
 /// Hands `entry` to `sink`, logging a failure (the response stands).

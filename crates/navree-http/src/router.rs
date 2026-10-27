@@ -2,23 +2,26 @@
 //! the per-route pipeline and the global layers.
 
 use std::collections::HashMap;
+use std::convert::Infallible;
 use std::fmt;
 use std::net::IpAddr;
 use std::panic::AssertUnwindSafe;
 use std::sync::Arc;
+use std::task::{Context, Poll};
 use std::time::Duration;
 
 use axum::Router;
-use axum::extract::{DefaultBodyLimit, Request, State};
-use axum::middleware::{Next, from_fn_with_state};
+use axum::extract::{DefaultBodyLimit, Request};
+use axum::middleware::from_fn_with_state;
 use axum::response::{IntoResponse, Response};
 use http::header::{CONTENT_LENGTH, HeaderName, HeaderValue};
 use http::request::Parts;
 use http::{Method, StatusCode};
 use navree_config::Config;
 use navree_contracts::{AuditEntry, AuditKind, AuditSink, AuthState, RequestId};
-use navree_kernel::{AppContext, BoxError};
+use navree_kernel::{AppContext, BoxError, BoxFuture};
 use navree_telemetry::{EventKind, Telemetry, TracePolicy};
+use tower::{Layer, Service, ServiceExt};
 use tower_http::compression::CompressionLayer;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use uuid::Uuid;
@@ -27,7 +30,8 @@ use crate::controller::ControllerRegistration;
 use crate::extract::ProxyTrust;
 use crate::limiter::RateLimiter;
 use crate::pipeline::{
-    self, CheckStages, ContextState, GuardStages, Stages, TimeoutOverride, X_REQUEST_ID,
+    self, CheckStages, ContextState, GuardStages, Requester, Stages, TimeoutOverride,
+    X_REQUEST_ID,
 };
 use crate::{
     AppError, Authenticator, ClientIp, CorsOptions, ErrorMapper, GlobalLayer, HttpOptions,
@@ -380,7 +384,7 @@ fn mount(router: Router, route: Mounted, shared: &Shared) -> Result<Router, Rout
     if let Some(limit) = meta.body_limit {
         handler = handler.route_layer(DefaultBodyLimit::max(limit));
     }
-    handler = handler.route_layer(from_fn_with_state(runtime, route_pipeline));
+    handler = handler.route_layer(RouteLayer(runtime));
     let path = meta.full_path.clone();
     std::panic::catch_unwind(AssertUnwindSafe(move || router.route(&path, handler))).map_err(|_| {
         RouteErrors(vec![format!(
@@ -491,9 +495,16 @@ impl RouteRuntime {
             });
     }
 
-    fn security_entry(
+    fn security_entry(&self, parts: &Parts, action: &str, metadata: serde_json::Value) -> AuditEntry {
+        let requester = Requester::of(&parts.headers, &parts.extensions, ClientIp(client_ip(parts)));
+        self.requester_entry(&requester, action, metadata)
+    }
+
+    /// A security audit entry about this route, from what was taken of the
+    /// request.
+    fn requester_entry(
         &self,
-        parts: &Parts,
+        requester: &Requester,
         action: &str,
         mut metadata: serde_json::Value,
     ) -> AuditEntry {
@@ -501,13 +512,7 @@ impl RouteRuntime {
             object.insert("method".to_owned(), serde_json::json!(self.meta.method));
             object.insert("route".to_owned(), serde_json::json!(self.meta.full_path));
         }
-        pipeline::security_entry(
-            action,
-            &parts.headers,
-            &parts.extensions,
-            ClientIp(client_ip(parts)),
-            metadata,
-        )
+        requester.security_entry(action, metadata)
     }
 
     /// Writes the route's audit action after a 2xx response.
@@ -557,14 +562,57 @@ fn client_ip(parts: &Parts) -> IpAddr {
         .0
 }
 
+/// Runs [`route_pipeline`] around a route's handler: a Tower layer of its
+/// own rather than a `from_fn` middleware, so a request pays for one boxed
+/// future here, not three.
+#[derive(Clone)]
+struct RouteLayer(Arc<RouteRuntime>);
+
+impl<S> Layer<S> for RouteLayer {
+    type Service = RouteService<S>;
+
+    fn layer(&self, inner: S) -> RouteService<S> {
+        RouteService {
+            runtime: self.0.clone(),
+            inner,
+        }
+    }
+}
+
+/// A route's handler behind its [`route_pipeline`].
+#[derive(Clone)]
+struct RouteService<S> {
+    runtime: Arc<RouteRuntime>,
+    inner: S,
+}
+
+impl<S> Service<Request> for RouteService<S>
+where
+    S: Service<Request, Response = Response, Error = Infallible> + Clone + Send + 'static,
+    S::Future: Send + 'static,
+{
+    type Response = Response;
+    type Error = Infallible;
+    type Future = BoxFuture<'static, Result<Response, Infallible>>;
+
+    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Infallible>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn call(&mut self, request: Request) -> Self::Future {
+        let runtime = self.runtime.clone();
+        let handler = self.inner.clone();
+        Box::pin(async move { Ok(route_pipeline(runtime, request, handler).await) })
+    }
+}
+
 /// The per-route pipeline: route metadata into the extensions, body limit,
 /// authentication, per-user throttle, guards, authorization, route timeout,
 /// the handler, then the audit action.
-async fn route_pipeline(
-    State(runtime): State<Arc<RouteRuntime>>,
-    request: Request,
-    next: Next,
-) -> Response {
+async fn route_pipeline<S>(runtime: Arc<RouteRuntime>, request: Request, handler: S) -> Response
+where
+    S: Service<Request, Response = Response, Error = Infallible>,
+{
     let meta = runtime.meta.clone();
     let (mut parts, body) = request.into_parts();
     parts.extensions.insert(meta.clone());
@@ -580,14 +628,15 @@ async fn route_pipeline(
             let audit = runtime.audit_entry(&parts, user);
             // A 403 the handler returns itself (an ownership rule, a
             // channel it will not authorize) is a denial no authorizer saw.
-            let denied = runtime.security.as_ref().map(|_| {
-                runtime.security_entry(
-                    &parts,
-                    "access.denied",
-                    serde_json::json!({ "check": "handler" }),
-                )
+            let requester = runtime.security.as_ref().map(|_| {
+                Requester::of(&parts.headers, &parts.extensions, ClientIp(client_ip(&parts)))
             });
-            let run = next.run(Request::from_parts(parts, body));
+            let run = async move {
+                match handler.oneshot(Request::from_parts(parts, body)).await {
+                    Ok(response) => response,
+                    Err(never) => match never {},
+                }
+            };
             let response = match meta.timeout {
                 Some(limit) => match tokio::time::timeout(limit, run).await {
                     Ok(response) => response,
@@ -600,9 +649,14 @@ async fn route_pipeline(
             {
                 runtime.audit(entry).await;
             }
-            if let (Some(entry), Some(sink)) = (denied, &runtime.security)
+            if let (Some(requester), Some(sink)) = (requester, &runtime.security)
                 && response.status() == StatusCode::FORBIDDEN
             {
+                let entry = runtime.requester_entry(
+                    &requester,
+                    "access.denied",
+                    serde_json::json!({ "check": "handler" }),
+                );
                 pipeline::record_security(sink.as_ref(), entry).await;
             }
             response
