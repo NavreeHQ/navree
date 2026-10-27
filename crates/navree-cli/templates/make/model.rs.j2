@@ -1,0 +1,41 @@
+//! {{ a_title }}: the `{{ table }}` table as an ORM model.
+{% if with_migration %}
+//! The module's `create_{{ table }}_table` migration creates the table.
+{% else %}
+//! Create the table with `navree make:migration {{ module }} create_{{ table }}_table`.
+{% endif %}
+
+use chrono::{DateTime, Utc};
+use navree::orm::Model;
+use serde::Serialize;
+use uuid::Uuid;
+
+/// {{ a_title }}. Query it with `{{ pascal }}::query()`, create one with
+/// `{{ pascal }}::create(&uow, {{ pascal }} { .. })`.
+#[derive(Model, Clone, Debug, Default, Serialize)]
+{% if with_factory or with_policy %}
+#[model(
+    table = "{{ table }}",
+    timestamps,
+{% if with_factory %}
+    factory = super::super::factories::{{ name }}::{{ pascal }}Factory,
+{% endif %}
+{% if with_policy %}
+    subject,
+    policy = super::super::policies::{{ name }}::{{ pascal }}Policy,
+{% endif %}
+)]
+{% else %}
+#[model(table = "{{ table }}", timestamps)]
+{% endif %}
+pub struct {{ pascal }} {
+    /// A UUID v7, generated when the record is created, so ids sort by
+    /// creation time.
+    pub id: Uuid,
+    /// The name.
+    pub name: String,
+    /// When the record was created.
+    pub created_at: DateTime<Utc>,
+    /// When the record last changed.
+    pub updated_at: DateTime<Utc>,
+}

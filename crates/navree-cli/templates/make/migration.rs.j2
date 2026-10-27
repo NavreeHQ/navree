@@ -10,6 +10,9 @@ impl navree::schema::Migration for Migration {
         schema
             .create("{{ table }}", |t| {
                 t.uuid_primary();
+{% if with_name_column %}
+                t.string("name");
+{% endif %}
                 t.timestamps_tz();
             })
             .await
