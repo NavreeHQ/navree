@@ -43,7 +43,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L3 | `navree-testing` | `TestApp`, an in-process `TestClient`, fakes |
 | L3 | `navree-observe` | Health checks, readiness, Prometheus metrics |
 | L3 | `navree-api` | OpenAPI 3.1 from route metadata, docs UI, API resources |
-| L3 | `navree-mail` | Mailables from templates; SMTP, log, array and failover transports; queued sending |
+| L3 | `navree-mail` | Mailables from templates with CSS inlined; SMTP (DKIM-signed), SES, Mailgun, Postmark, Resend, log, array and failover transports; queued sending; tenant transports, a delivery log fed by provider webhooks, suppressions, hold for approval, open and click tracking, SPF/DKIM/DMARC checks |
 | L3 | `navree-realtime` | Pusher-protocol WebSocket server and a signed relay for other processes |
 | L3 | `navree-storage` | Named disks on object_store, streaming, signed temporary URLs, upload checks |
 | L4 | `navree-session` | Encrypted session cookies, memory and database stores, CSRF |
@@ -82,7 +82,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | `navree-http`, `navree-log`, `navree-crypto`, `navree-events`, `navree-view`, `navree-cache`, `navree-http-client`, `navree-schema` | kernel, contracts, config |
 | `navree-db` | kernel, contracts, config, http, schema |
 | `navree-testing`, `navree-observe`, `navree-api` | kernel, contracts, config, http |
-| `navree-mail` | kernel, contracts, config, view |
+| `navree-mail` | kernel, contracts, config, telemetry, view, http, crypto, events, http-client, db (a same-layer edge: the delivery tables) |
 | `navree-realtime`, `navree-storage` | kernel, contracts, config, http, crypto |
 | `navree-session` | kernel, contracts, config, http, crypto, db |
 | `navree-validation`, `navree-audit` | kernel, contracts, config, http, db |
