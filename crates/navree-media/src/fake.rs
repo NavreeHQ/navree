@@ -40,7 +40,7 @@ impl Recorder {
 /// Media for tests: the real service on a memory disk (`media`, the
 /// default) and memory rows, with every conversion generated at once
 /// (nothing is queued), remote downloads answered by a fake HTTP server,
-/// FFmpeg answered by an [`FfmpegFake`](crate::video::FfmpegFake) (the
+/// FFmpeg answered by a `video::FfmpegFake` (the
 /// `ffmpeg` feature), and every add and delete recorded.
 ///
 /// ```

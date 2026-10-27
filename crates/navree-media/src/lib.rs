@@ -23,7 +23,7 @@
 //! - **Text.** [`text::extract`] reads the text of PDF, DOCX, HTML and
 //!   plain-text files (for search and retrieval).
 //! - **Video and audio** (feature `ffmpeg`): an FFmpeg sidecar probes
-//!   files, grabs poster frames and transcodes ([`video`]).
+//!   files, grabs poster frames and transcodes (the `video` module).
 //! - **Tests.** [`MediaFake`] runs the real pipeline on memory disks and
 //!   rows and records what was added and deleted.
 //!
