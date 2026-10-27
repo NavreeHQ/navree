@@ -1,12 +1,13 @@
 //! Writes: units of work, `flag.changed` events, audit entries and the
 //! cache.
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use navree_audit::{AuditLog, audit_log};
-use navree_cache::Cache;
+use navree_cache::{Cache, CacheStore, MemoryStore};
 use navree_db::Db;
-use navree_flags::{FlagScope, FlagStore, FlagsError, Rollout, ScopeType};
+use navree_flags::{FlagScope, FlagStore, FlagsError, MemoryFlagStore, Rollout, ScopeType};
 use sea_orm::sea_query::Query;
 use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder};
 use serde_json::json;
@@ -280,6 +281,42 @@ async fn other_instances_see_a_change_once_the_cache_expires() {
             .await
             .unwrap()
     );
+}
+
+#[tokio::test]
+async fn instances_sharing_a_cache_store_see_a_change_at_once() {
+    // Two instances of one app: one flag store (the database) and one cache
+    // store (what `cache.store = "redis"` gives every process).
+    let flag_store: Arc<dyn FlagStore> = Arc::new(MemoryFlagStore::new());
+    let cache_store: Arc<dyn CacheStore> = Arc::new(MemoryStore::new());
+    let instance = || {
+        builder()
+            .config("flags.store", "memory")
+            .config("flags.cache_ttl_secs", 3600)
+            .override_value::<dyn FlagStore>(flag_store.clone())
+            .override_value::<dyn CacheStore>(cache_store.clone())
+    };
+    let (one, two) = (World::with(instance()).await, World::with(instance()).await);
+    let (flags_one, flags_two) = (one.flags().await, two.flags().await);
+    let acme = FlagScope::workspace(Uuid::now_v7());
+
+    // The second instance caches "off" for an hour...
+    assert!(!flags_two.active::<NewPipeline>(acme).await.unwrap());
+    assert!(
+        two.app
+            .get::<Cache>()
+            .await
+            .has("flags:states")
+            .await
+            .unwrap()
+    );
+
+    // ...and a change on the first clears the shared entries, so the
+    // second sees it on its next check.
+    flags_one.activate::<NewPipeline>(acme).await.unwrap();
+    assert!(flags_two.active::<NewPipeline>(acme).await.unwrap());
+    flags_one.kill::<NewPipeline>().await.unwrap();
+    assert!(!flags_two.active::<NewPipeline>(acme).await.unwrap());
 }
 
 #[tokio::test]

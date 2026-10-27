@@ -90,6 +90,33 @@ async fn two_flags_with_one_name_fail_the_boot() {
     );
 }
 
+#[tokio::test]
+async fn admin_routes_without_access_fail_the_boot() {
+    // The admin routes declare `flags.manage`: without AccessModule's
+    // authorizer the boot fails and says what to import...
+    let error = TestApp::builder()
+        .config("flags.store", "memory")
+        .module(FlagsModule::for_feature::<NewPipeline>())
+        .module(FlagsModule::from_config())
+        .try_build()
+        .await
+        .expect_err("the boot fails");
+    let message = error.to_string();
+    assert!(
+        message.contains("flags.manage") && message.contains("RouteAuthorizer"),
+        "{message}"
+    );
+
+    // ...unless they are turned off (`GET /api/flags` only needs a user).
+    TestApp::builder()
+        .config("flags.store", "memory")
+        .config("flags.admin_routes", false)
+        .module(FlagsModule::for_feature::<NewPipeline>())
+        .module(FlagsModule::from_config())
+        .build()
+        .await;
+}
+
 /// The registry lists the flags of every module, each once.
 #[tokio::test]
 async fn registrations_from_several_modules_are_collected() {
