@@ -24,7 +24,9 @@ use chrono::{DateTime, TimeDelta, Utc};
 use http::{Method, StatusCode, header};
 use navree_contracts::Secret;
 use navree_db::MigrationSet;
-use navree_db::navree_schema::{Blueprint, ColumnBuilder, Dialect, Migration, Schema, SchemaResult};
+use navree_db::navree_schema::{
+    Blueprint, ColumnBuilder, Dialect, Migration, Schema, SchemaResult,
+};
 use navree_http::{ApiMeta, AppError, Controller, RouteDef};
 use navree_kernel::{
     AppContext, BoxError, BoxFuture, CommandSpec, Injectable, KernelError, ProviderKey, Resolver,
@@ -366,13 +368,10 @@ impl MailboxWatches {
                     .await
                     .map(|(id, expires)| (Some(id), None, expires)),
             },
-            _ => self.gmail_watch(&watch).await.map(|(history, expires)| {
-                (
-                    None,
-                    watch.cursor.clone().or(Some(history)),
-                    expires,
-                )
-            }),
+            _ => self
+                .gmail_watch(&watch)
+                .await
+                .map(|(history, expires)| (None, watch.cursor.clone().or(Some(history)), expires)),
         };
         match outcome {
             Ok((subscription, cursor, expires)) => {
@@ -422,26 +421,30 @@ impl MailboxWatches {
         let watch = self.find(id).await?;
         let stopped = match watch.provider.as_str() {
             "microsoft" => match &watch.subscription_id {
-                Some(subscription) => async {
-                    let graph = self.graph(&watch).await?;
-                    graph
-                        .delete(format!("/subscriptions/{subscription}"))
-                        .send()
-                        .await?;
-                    Ok::<(), IntegrationsError>(())
+                Some(subscription) => {
+                    async {
+                        let graph = self.graph(&watch).await?;
+                        graph
+                            .delete(format!("/subscriptions/{subscription}"))
+                            .send()
+                            .await?;
+                        Ok::<(), IntegrationsError>(())
+                    }
+                    .await
                 }
-                .await,
                 None => Ok(()),
             },
-            _ => async {
-                let gmail = self.gmail(&watch).await?;
-                gmail
-                    .post(format!("{GMAIL_API}/users/{}/stop", user_id(&watch)))
-                    .send()
-                    .await?;
-                Ok(())
+            _ => {
+                async {
+                    let gmail = self.gmail(&watch).await?;
+                    gmail
+                        .post(format!("{GMAIL_API}/users/{}/stop", user_id(&watch)))
+                        .send()
+                        .await?;
+                    Ok(())
+                }
+                .await
             }
-            .await,
         };
         if let Err(error) = stopped {
             tracing::warn!(target: "navree::integrations", watch = %id, %error, "could not stop the mailbox watch at the provider");
@@ -508,7 +511,10 @@ impl MailboxWatches {
             .as_str()
             .ok_or_else(|| api_error("Microsoft 365", "the subscription has no id"))?
             .to_owned();
-        Ok((id, parse_time(&created["expirationDateTime"]).or(Some(expires))))
+        Ok((
+            id,
+            parse_time(&created["expirationDateTime"]).or(Some(expires)),
+        ))
     }
 
     /// Extends the subscription: the new expiry.
@@ -537,7 +543,10 @@ impl MailboxWatches {
     ) -> Result<Received, IntegrationsError> {
         let graph = self.graph(watch).await?;
         let response = graph
-            .get(format!("/users/{}/messages/{message}/$value", watch.mailbox))
+            .get(format!(
+                "/users/{}/messages/{message}/$value",
+                watch.mailbox
+            ))
             .send()
             .await?
             .error_for_status()?;
@@ -781,7 +790,10 @@ impl MailboxWatches {
         let mut received = Vec::new();
         for id in ids.iter().take(MAX_MESSAGES) {
             let message: Value = gmail
-                .get(format!("{GMAIL_API}/users/{}/messages/{id}", user_id(watch)))
+                .get(format!(
+                    "{GMAIL_API}/users/{}/messages/{id}",
+                    user_id(watch)
+                ))
                 .query(&[("format", "raw")])
                 .send_json()
                 .await?;
@@ -1071,10 +1083,8 @@ impl Controller for MailboxesController {
                 let token = token.clone();
                 async move {
                     let given = query.get("token").map(String::as_str).unwrap_or_default();
-                    if !navree_crypto::constant_time_eq(
-                        given.as_bytes(),
-                        token.expose().as_bytes(),
-                    ) {
+                    if !navree_crypto::constant_time_eq(given.as_bytes(), token.expose().as_bytes())
+                    {
                         return Err(AppError::new(
                             StatusCode::UNAUTHORIZED,
                             navree_http::codes::INVALID_SIGNATURE,

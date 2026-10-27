@@ -14,8 +14,7 @@ use navree_crypto::CryptoModule;
 use navree_events::{EventBus, EventsModule};
 use navree_kernel::{Module, ModuleBuilder};
 use navree_mail::{
-    Inbound, InboundMail, MailFake, MailModule, MailTransport, MailboxContext,
-    ModuleBuilderMailExt,
+    Inbound, InboundMail, MailFake, MailModule, MailTransport, MailboxContext, ModuleBuilderMailExt,
 };
 use navree_storage::StorageModule;
 use navree_testing::{TestApp, TestAppBuilder};

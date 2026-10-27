@@ -17,8 +17,7 @@ use super::sources::{self, FormFile, MailgunForm};
 use super::{Inbound, InboundError, Incoming, Received};
 use crate::MailOptions;
 use crate::delivery::controller::{
-    INVALID_SIGNATURE_CODE, basic_auth_or_token, confirm_sns_subscription,
-    mailgun_signature_valid,
+    INVALID_SIGNATURE_CODE, basic_auth_or_token, confirm_sns_subscription, mailgun_signature_valid,
 };
 
 /// The routes the providers post received mail to, under
@@ -378,7 +377,9 @@ fn bearer_or_token(headers: &HeaderMap, query: &HashMap<String, String>, token: 
         .get(header::AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.strip_prefix("Bearer "))
-        .is_some_and(|given| navree_crypto::constant_time_eq(given.trim().as_bytes(), token.as_bytes()))
+        .is_some_and(|given| {
+            navree_crypto::constant_time_eq(given.trim().as_bytes(), token.as_bytes())
+        })
 }
 
 fn header_value(headers: &HeaderMap, name: &str) -> Option<String> {

@@ -308,7 +308,11 @@ impl Compose {
         field(&mut out, "To", address_list(&self.to));
         field(&mut out, "Cc", address_list(&self.cc));
         field(&mut out, "Reply-To", address_list(&self.reply_to));
-        field(&mut out, "In-Reply-To", self.in_reply_to.as_deref().map(angled));
+        field(
+            &mut out,
+            "In-Reply-To",
+            self.in_reply_to.as_deref().map(angled),
+        );
         field(
             &mut out,
             "References",
@@ -374,9 +378,8 @@ impl Compose {
         let alternative = match (&self.text, &self.html) {
             (Some(text), Some(html)) => {
                 let boundary = boundary("alt");
-                let mut entity = format!(
-                    "Content-Type: multipart/alternative; boundary=\"{boundary}\"\r\n\r\n"
-                );
+                let mut entity =
+                    format!("Content-Type: multipart/alternative; boundary=\"{boundary}\"\r\n\r\n");
                 for (subtype, body) in [("plain", text), ("html", html)] {
                     let _ = write!(entity, "--{boundary}\r\n");
                     entity.push_str(&text_entity(subtype, body));

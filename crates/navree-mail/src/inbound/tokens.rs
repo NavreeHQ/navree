@@ -99,9 +99,9 @@ impl ReplyTokens {
     #[must_use]
     pub fn scoped(&self, purpose: &str) -> Self {
         Self {
-            key: self.key.map(|key| {
-                navree_crypto::hmac_sha256(&key, format!("scope:{purpose}").as_bytes())
-            }),
+            key: self
+                .key
+                .map(|key| navree_crypto::hmac_sha256(&key, format!("scope:{purpose}").as_bytes())),
             ttl_days: self.ttl_days,
             clock: self.clock.clone(),
         }

@@ -143,12 +143,7 @@ async fn the_module_derives_the_key_from_the_app_key() {
 
     let other = inbound_app(&[], |b| b).await;
     assert!(
-        other
-            .app
-            .get::<ReplyTokens>()
-            .await
-            .verify(&token)
-            .is_err(),
+        other.app.get::<ReplyTokens>().await.verify(&token).is_err(),
         "another app key gives other tokens"
     );
 }
@@ -164,8 +159,5 @@ async fn without_an_app_key_tokens_fail_clearly() {
     let tokens = app.get::<ReplyTokens>().await;
 
     assert!(!tokens.has_key());
-    assert!(matches!(
-        tokens.sign("x"),
-        Err(InboundError::MissingKey)
-    ));
+    assert!(matches!(tokens.sign("x"), Err(InboundError::MissingKey)));
 }

@@ -6,8 +6,7 @@ use std::future::Future;
 use std::sync::Arc;
 
 use navree_kernel::{
-    AppContext, BoxError, BoxFuture, Injectable, KernelError, ModuleBuilder, ModuleId,
-    RequestScope,
+    AppContext, BoxError, BoxFuture, Injectable, KernelError, ModuleBuilder, ModuleId, RequestScope,
 };
 use regex::Regex;
 use uuid::Uuid;
@@ -149,7 +148,9 @@ impl MailboxPattern {
 
 impl fmt::Debug for MailboxPattern {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("MailboxPattern").field(&self.pattern).finish()
+        f.debug_tuple("MailboxPattern")
+            .field(&self.pattern)
+            .finish()
     }
 }
 
@@ -176,11 +177,8 @@ impl fmt::Display for MailboxPattern {
 ///   [`message_id`](InboundMail::message_id) identify a message).
 pub trait MailboxHandler: Send + Sync + 'static {
     /// Handles one message.
-    fn handle(
-        &self,
-        mail: InboundMail,
-        ctx: MailboxContext,
-    ) -> BoxFuture<'_, Result<(), BoxError>>;
+    fn handle(&self, mail: InboundMail, ctx: MailboxContext)
+    -> BoxFuture<'_, Result<(), BoxError>>;
 }
 
 impl<F, Fut> MailboxHandler for F
@@ -434,7 +432,10 @@ mod tests {
 
     #[test]
     fn wildcards_match_runs_and_everything() {
-        assert_eq!(params("*@in.acme.test", "anything@in.acme.test"), Some(vec![]));
+        assert_eq!(
+            params("*@in.acme.test", "anything@in.acme.test"),
+            Some(vec![])
+        );
         assert_eq!(params("*@in.acme.test", "x@acme.test"), None);
         assert_eq!(params("*", "who@ever.test"), Some(vec![]));
     }

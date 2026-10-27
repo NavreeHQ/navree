@@ -29,7 +29,10 @@ fn a_composed_message_parses_back() {
         incoming.envelope.recipients,
         vec!["reply+abc@in.acme.test", "grace@example.com"]
     );
-    assert_eq!(incoming.envelope.sender.as_deref(), Some("juergen@example.de"));
+    assert_eq!(
+        incoming.envelope.sender.as_deref(),
+        Some("juergen@example.de")
+    );
 
     let mail = incoming.parse().unwrap();
     assert_eq!(mail.source, "test");
@@ -45,7 +48,10 @@ fn a_composed_message_parses_back() {
         mail.text.as_deref().map(str::trim),
         Some("Danke schön!\r\nBis bald.")
     );
-    assert_eq!(mail.html.as_deref().map(str::trim), Some("<p>Danke schön!</p>"));
+    assert_eq!(
+        mail.html.as_deref().map(str::trim),
+        Some("<p>Danke schön!</p>")
+    );
     assert_eq!(mail.message_id.as_deref(), Some("m-1@example.de"));
     assert_eq!(mail.in_reply_to.as_deref(), Some("ticket-42@acme.test"));
     assert_eq!(
