@@ -10,6 +10,14 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+default = []
+## PostgreSQL for the tests: with `NAVREE_TEST_POSTGRES_URL` set, the
+## `servers` tests run the store and resolution on a database of their own.
+postgres = ["navree-db/postgres"]
+## MySQL for the tests, with `NAVREE_TEST_MYSQL_URL`.
+mysql = ["navree-db/mysql"]
+
 [dependencies]
 axum = { workspace = true }
 chrono = { workspace = true }
