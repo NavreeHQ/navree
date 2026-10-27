@@ -41,15 +41,18 @@
 //! | `graphql` | navree-graphql | `graphql` (opt-in) | `GraphqlModule`: `#[resolver]`, dataloaders, subscriptions |
 //! | `grpc` | navree-grpc | `grpc` (opt-in) | `GrpcModule`: tonic services with gRPC-Web, Connect, health and reflection |
 //! | `billing` | navree-billing | `billing` (opt-in) | `BillingModule`: subscriptions, trials, usage, invoices with Stripe or Paddle |
+//! | `search` | navree-search | `search` (opt-in) | `SearchModule`: full-text and vector search, `#[derive(Searchable)]` |
 //! | `dock` | navree-dock | `dock` (opt-in) | Dock's `dock.toml`, the services' settings and the Compose file |
 //!
 //! `full` (the default) turns on every module except the opt-in ones
-//! (`social`, `oauth`, `flags`, `graphql`, `grpc`, `billing`, `dock`, `otel`). A feature also turns on the features of the crates its crate
-//! builds on (`auth` turns on `access`, `db`, `http`, ...). The `postgres` feature adds
-//! navree-db's PostgreSQL driver, and the opt-in `otel` feature adds
-//! navree-observe's OTLP span exporter. `axum` is re-exported with `http`. `dock`
-//! is a development tool (`navree dock`), for tools and tests that read
-//! `dock.toml`.
+//! (`social`, `oauth`, `flags`, `graphql`, `grpc`, `billing`, `search`,
+//! `dock`, `otel`). A feature also turns on the features of the crates its
+//! crate builds on (`auth` turns on `access`, `db`, `http`, ...). The
+//! `postgres` feature adds navree-db's PostgreSQL driver, and the opt-in
+//! `otel` feature adds navree-observe's OTLP span exporter. `search-tantivy`
+//! adds search's embedded Tantivy engine. `axum` is re-exported with `http`.
+//! `dock` is a development tool (`navree dock`), for tools and tests that
+//! read `dock.toml`.
 //!
 //! The macros sit at the root: [`module`], [`injectable`] and
 //! [`controller`] (with the route attributes [`get`], [`post`], [`put`],
@@ -204,9 +207,11 @@ pub mod flags {
     pub use navree_macros::flag;
 }
 
-// L7
+// L7 (opt-in)
 #[cfg(feature = "billing")]
 pub use navree_billing as billing;
+#[cfg(feature = "search")]
+pub use navree_search as search;
 
 // Tools (opt-in)
 #[cfg(feature = "dock")]

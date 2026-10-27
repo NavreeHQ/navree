@@ -1,7 +1,6 @@
 ---
 title: "Search"
 description: "Full-text and vector search over your entities with `#[derive(Searchable)]`, on PostgreSQL, Meilisearch, Typesense or an embedded Tantivy index, kept in sync through the queue."
-status: "planned"
 ---
 
 ## Introduction
@@ -10,7 +9,7 @@ status: "planned"
 
 `navree-search` adds full-text and vector search to the entities you already have. You derive `Searchable` on a SeaORM model, register it with `SearchModule`, and from then on:
 
-- every insert, update and delete made through [`Repo`](/docs/database/entities-and-repositories/) queues a sync job, so the index follows the database without code in your services;
+- every insert, update and delete made through [`Repo`](/docs/database/entities-and-repositories/) queues a sync job in the same commit, so the index follows the database without code in your services;
 - the `Search` service queries the index and returns your models, in relevance order, as a normal `Page`;
 - `navree search:import Deal` builds or rebuilds an index from the table.
 
@@ -18,7 +17,7 @@ One API runs on five engines. Pick the one that fits your deployment and change 
 
 | Engine | What it is | Good for |
 |---|---|---|
-| `postgres` | Full-text search in your PostgreSQL database (`tsvector`, GIN index, optional trigram typo tolerance) | Apps that want no extra service |
+| `postgres` | Full-text search in your database: PostgreSQL `tsvector` with a GIN index and optional trigram typo tolerance, or SQLite FTS5 when the app runs on SQLite | Apps that want no extra service |
 | `meilisearch` | A Meilisearch server | Typo tolerance and instant search out of the box |
 | `typesense` | A Typesense server or cluster | High query volume, clustering |
 | `tantivy` | An embedded Tantivy index on local disk, inside your binary | Single-server apps and offline tools |
@@ -28,7 +27,7 @@ Vector search stores embeddings in **pgvector** or **Qdrant** next to the full-t
 
 ## Installation
 
-Turn on the `search` feature of the `navree` facade:
+Search is not part of the default `full` feature set. Turn on the `search` feature of the `navree` facade:
 
 ```toml title="Cargo.toml"
 [dependencies]
@@ -41,7 +40,7 @@ The `search` feature includes the PostgreSQL, Meilisearch, Typesense and memory 
 navree = { git = "https://github.com/NavreeHQ/navree", features = ["search", "search-tantivy"] }
 ```
 
-The `postgres` engine and the `pgvector` store need navree-db's PostgreSQL driver (the `postgres` feature). For local development, `navree dock:add meilisearch` starts a Meilisearch container next to your database (see [Dock](/docs/tools/dock/)).
+The `postgres` engine on PostgreSQL and the `pgvector` store need navree-db's PostgreSQL driver (the `postgres` feature). On SQLite the `postgres` engine works with the default driver.
 
 ## Configuration
 
@@ -93,11 +92,13 @@ Navree::app().module(SearchModule::for_root(Engine::tantivy("storage/search")))
 
 // Or the whole options struct:
 Navree::app().module(SearchModule::for_root(SearchOptions {
-    engine: Engine::meilisearch("http://127.0.0.1:7700"),
+    engine: Engine::meilisearch("http://127.0.0.1:7700").key("masterKey"),
     prefix: "crm_".to_owned(),
     ..SearchOptions::default()
 }))
 ```
+
+At boot the module pushes every registered index's settings to the engine. An engine that is down at boot doesn't stop the app: the failure is logged and the settings are pushed on first use.
 
 ### Choosing an engine
 
@@ -113,7 +114,11 @@ language = "english"   # the text search configuration
 trigram = true         # typo tolerance with pg_trgm
 ```
 
-The module contributes a migration set named `search` that creates one table, `search_documents`, with a generated `tsvector` column and a GIN index. Your own tables are not changed. With `trigram = true` the migration also enables the `pg_trgm` extension, and short misspellings ("lovlace") still match. Queries run on the app's connection pool, inside no transaction.
+The module contributes a migration set named `search` that creates one table, `search_documents`, holding each document's fields (`jsonb`) and a weighted `tsvector` with a GIN index. Field boosts map to the four `tsvector` weights (5 and up `A`, 3 and 4 `B`, 2 `C`, 1 `D`). Your own tables are not changed. With `trigram = true` the engine enables the `pg_trgm` extension and adds a trigram index on the text the first time it runs. Each word of the query then matches either the `tsvector` or, by trigram word similarity, the text, so a misspelled word ("ada lovlace") still finds its record while the other words keep narrowing the results. Queries run on the app's connection pool, or inside the request's transaction when it already wrote.
+
+On SQLite, in development and tests, the same engine uses an FTS5 table, `search_documents_fts`, that the migration creates next to `search_documents`: one column per boost, ranked with BM25. Prefixes match there; misspellings don't.
+
+The migration set is part of the module whatever the engine; with another engine its table stays empty.
 
 </Tab>
 <Tab label="Meilisearch">
@@ -125,7 +130,7 @@ url = "https://search.internal:7700"
 # key: APP_SEARCH__KEY
 ```
 
-Navree creates each index on first use and pushes its settings (searchable, filterable and sortable fields, synonyms) at boot and with `search:settings`. Use a key with the `indexes.*`, `documents.*`, `search` and `settings.*` actions, not the master key, in production.
+Navree creates each index on first use and pushes its settings (searchable fields, heaviest first; filterable and sortable fields; synonyms; stop words) at boot and with `search:settings`. Writes wait for their Meilisearch task, so a failed task fails the sync job, which retries. Use a key with the `indexes.*`, `documents.*`, `search`, `settings.*` and `tasks.get` actions, not the master key, in production.
 
 </Tab>
 <Tab label="Typesense">
@@ -138,7 +143,7 @@ nodes = ["https://typesense-2.internal:8108", "https://typesense-3.internal:8108
 # key: APP_SEARCH__KEY (required)
 ```
 
-Every index is a Typesense collection behind an alias, so `search:import --fresh` builds the new collection and swaps the alias in one step. `nodes` lists the other nodes of a cluster; requests fail over between them.
+Every index is a Typesense collection behind an alias, so `search:import --fresh` (and `search:flush`) builds a new collection and moves the alias in one step. `nodes` lists the other nodes of a cluster; requests fail over between them. Typesense doesn't index null values: `filter_null` isn't available on it (a 400), and `filter_not` doesn't match records without a value.
 
 </Tab>
 <Tab label="Tantivy">
@@ -149,10 +154,10 @@ engine = "tantivy"
 
 [search.tantivy]
 path = "storage/search"     # one directory per index
-memory_budget_mb = 64       # writer buffer
+memory_budget_mb = 64       # writer buffer; less than 15 counts as 15
 ```
 
-The index lives in the process. Only one process may write to a Tantivy directory, so run the sync jobs in the server process (`sync = "inline"`) or on a single worker. Use it for single-server apps; switch to a server engine when you scale out.
+The index lives in the process. Each index has its own directory, and a fresh import builds a new generation of it and swaps it in. Only one process may write to a Tantivy directory, so run the sync jobs in the server process (`sync = "inline"`) or on a single worker. Use it for single-server apps; switch to a server engine when you scale out.
 
 </Tab>
 </Tabs>
@@ -197,21 +202,24 @@ pub struct Model {
 }
 ```
 
-The derive implements `Searchable` for the module's `Entity`, so you search with the same type your [access rules](/docs/security/authorization/) use (`Contact`). The primary key is always stored; fields without `#[searchable]` stay out of the index.
+The derive implements `Searchable` for the module's `Entity`, so you search with the same type your [access rules](/docs/security/authorization/) use (`Contact`). The primary key is always stored; fields without `#[searchable]` stay out of the index, and the entity needs a single-column primary key.
+
+Full-text and embedded fields go into the document as serde serializes them. Filter and sort fields hold the column's database value, the form access rules compare: an enum's stored string (`"closed_won"`, whatever its serde name), a UUID hyphenated, a timestamp in UTC. Filter with those values: `filter("stage", "closed_won")`. A field's column is the field's name, or its `#[sea_orm(column_name = "..")]`.
 
 | Field attribute | Effect |
 |---|---|
 | `#[searchable]` | Full-text field, matched by the query text |
 | `#[searchable(boost = 3)]` | Full-text field that weighs 3 times as much as a plain one (1 to 10) |
-| `#[searchable(filter)]` | Exact-match field for `filter`, `filter_in` and `range`; not matched by the text |
+| `#[searchable(filter)]` | Exact-match field for `filter`, `filter_in`, `range` and `filter_null`; not matched by the text |
 | `#[searchable(sort)]` | Field you can sort on |
 | `#[searchable(filter, sort)]` | Both |
 | `#[searchable(embed)]` | Text that goes into the record's [embedding](#vector-search) |
-| `#[searchable(rename = "email_address")]` | The field's name in the index |
+| `#[searchable(boost = 2, embed)]` | Flags combine in one attribute |
+| `#[searchable(rename = "email_address")]` | The field's name in the index (access rules still name the column) |
 
 | Model attribute | Default | Effect |
 |---|---|---|
-| `name` | the table name | The name commands and results use: `navree search:import Contact`, `"__type": "Contact"` |
+| `name` | the table name | The name commands and results use: `navree search:import Contact`, `hit.kind == "Contact"` |
 | `index` | the table name | The index name, after `search.prefix` (`crm_contacts`) |
 | `soft_delete` | none | A nullable timestamp column: rows where it is set are removed from the index |
 | `workspace` | the entity's `WorkspaceScoped` column | The column that scopes documents to a [workspace](#workspaces) |
@@ -231,7 +239,7 @@ Then register the entity with `SearchModule::for_feature`, in the module that ow
 pub struct CrmCoreModule;
 ```
 
-Registration does three things: it adds the index to `search:import` and `search:status`, pushes the index settings to the engine at boot, and subscribes the entity's changes to the sync observer.
+Registration does three things: it adds the index to `search:import` and `search:status`, pushes the index settings to the engine at boot, and subscribes the entity's changes to the sync observer. Two entities can't share an index name or a `name`; the boot fails if they do.
 
 ### Documents with related data
 
@@ -278,7 +286,7 @@ impl Searchable for deal::Entity {
 }
 ```
 
-Return `Ok(None)` to keep a record out of the index (an archived deal, a draft). A record that returns `None` after it was indexed is removed.
+Return `Ok(None)` to keep a record out of the index (an archived deal, a draft). A record that returns `None` after it was indexed is removed. Only the fields `settings()` declares reach the index. A hand-written `settings()` names its soft-delete and workspace columns itself: `.soft_delete("deleted_at")`, `.workspace("workspace_id")`. Give a filter field the column's database value, as `deal.stage.as_str()` does here, so that [access rules](#access-control) on that column filter in the engine exactly.
 
 When a company is renamed, its deals' documents are stale. Queue them for a re-sync from an [event listener](/docs/digging-deeper/events/), or wherever you rename the company:
 
@@ -289,28 +297,32 @@ search.reindex::<Deal>(ids).await?;
 
 ## Keeping indexes in sync
 
-`SearchModule` registers a change observer on the [unit of work](/docs/database/unit-of-work/). When a unit of work that wrote a searchable entity through `Repo` commits, the observer queues one `search.sync` job per entity type with the changed ids. Because the job joins the same transaction:
+`SearchModule` registers a change observer on the [unit of work](/docs/database/unit-of-work/). When a unit of work that wrote a searchable entity through `Repo` commits, the observer queues one `search.sync` job per entity type (and per workspace) with the changed ids. The job is part of the commit: with the database queue driver its row is written in the same transaction, and the memory driver queues it right after the commit. So:
 
 - a request that fails (status 400 or above) rolls back its writes and queues nothing;
 - the worker runs after the commit, so it always indexes committed data;
-- a burst of writes to the same record collapses into one sync, since sync jobs are [unique](/docs/digging-deeper/queues/#unique-jobs) per entity and id for `search.unique_for_secs` (5 seconds).
+- a burst of writes to the same records collapses into one sync, since sync jobs are [unique](/docs/digging-deeper/queues/#unique-jobs) per entity and ids for `search.unique_for_secs` (5 seconds).
 
 The job loads the current rows and upserts or deletes their documents. It retries with backoff like any job, so an engine that is down for a minute catches up on its own.
 
 | `search.sync` | Behavior |
 |---|---|
 | `queued` (default) | Sync jobs on the `search.queue` queue, run by `queue:work` |
-| `inline` | The documents are written after the commit, in the request's task. The response does not wait for it. |
+| `inline` | The documents are written after the commit by a background task, one sync at a time in commit order. The response does not wait for it. |
 | `off` | Nothing is synced. Use `search:import` or `reindex` yourself. |
 
-Writes that bypass `Repo` (raw SQL, `update_many`, a migration that backfills a column) are not observed. Re-sync those records with `search.reindex::<E>(ids)`, or rebuild the index with `search:import`.
+With `queued` and no `QueueModule` in the app, sync jobs go to the app's `dyn Dispatcher` if it has one; with neither, the module syncs inline and logs a warning once.
 
-To pause syncing for a block of work, such as a bulk import that ends with a full reindex, wrap it:
+Writes that bypass `Repo` (raw SQL, `update_many`, a migration that backfills a column) are not observed. Re-sync those records with `search.reindex::<E>(ids)`, or rebuild the index with `search:import`. `reindex` queues a sync job with `sync = "queued"` and syncs the records right away otherwise (`off` included).
+
+To pause syncing for a block of work, such as a bulk import that ends with a full reindex, wrap it. Changes committed while the future runs are not synced, so commit inside it:
 
 ```rust
 search
     .without_syncing(async {
-        import_contacts_from_csv(&uow, &file).await
+        let uow = db.uow(None, None).await;
+        import_contacts_from_csv(&uow, &file).await?;
+        uow.commit().await
     })
     .await?;
 search.import::<Contact>().await?;
@@ -332,14 +344,14 @@ Imported 12,480 documents (37 skipped by the document filter).
 
 | Command | What it does |
 |---|---|
-| `search:import <Name>` | Upserts every row's document. Existing documents are replaced. |
-| `search:import <Name> --fresh` | Builds a new index, imports into it and swaps it in. Searches keep working on the old index until the swap. |
-| `search:import --all` | Every registered index. |
+| `search:import <Name>` | Upserts every row's document. Existing documents are replaced; rows the document filter skips are removed. |
+| `search:import <Name> --fresh` | Builds a new index, imports into it and swaps it in. Searches keep working on the old index until the swap, and records synced while the import runs are synced again after it, so no change is lost. |
+| `search:import --all` | Every registered index (with `--fresh` too). |
 | `search:flush <Name>` | Removes every document from the index. |
-| `search:settings [<Name>]` | Pushes index settings (fields, synonyms, stop words) to the engine. |
-| `search:status` | Each index with its engine, document count, row count and pending sync jobs. |
+| `search:settings [<Name>]` | Pushes index settings (fields, synonyms, stop words) to the engine; every index without a name. |
+| `search:status` | Each index with its engine, document count, row count and the jobs pending on `search.queue`. |
 
-Run `search:import --all --fresh` after you change a model's searchable fields, and as part of a deploy that changes them. `search.import::<E>()` does the same from code, for an admin screen or a scheduled task.
+Run `search:import --all --fresh` after you change a model's searchable fields, and as part of a deploy that changes them. `search.import::<E>()` and `search.import_fresh::<E>()` do the same from code, for an admin screen or a scheduled task; both return an `ImportReport` with the rows read, documents written and rows skipped.
 
 ## Searching
 
@@ -380,7 +392,7 @@ impl ContactSearchController {
             query = query.filter("status", status);
         }
         let contacts = query.paginate(page).await?;
-        Ok(contacts.map(ContactResource::from))
+        Ok(contacts.map(|contact| ContactResource::new(contact, None, None)))
     }
 }
 ```
@@ -414,17 +426,20 @@ let deals = search
 | Method | Matches |
 |---|---|
 | `filter(field, value)` | Equal to `value` |
-| `filter_not(field, value)` | Not equal to `value` |
+| `filter_not(field, value)` | Not equal to `value` (records without a value included) |
 | `filter_in(field, values)` | Equal to one of `values` |
 | `range(field, range)` | Inside a Rust range: `10..20`, `10..`, `..=20` (numbers and dates) |
 | `filter_null(field)` | Without a value |
-| `sort_asc(field)`, `sort_desc(field)` | Sort by the field; relevance breaks ties. Without a sort, results are by relevance. |
+| `filter_by(filter)` | Any combination of `Filter::eq`, `ne`, `is_in`, `range` and `null` under `Filter::All`, `Any` and `Not` |
+| `sort_asc(field)`, `sort_desc(field)` | Sort by the field, records without a value last; relevance breaks ties. Without a sort, results are by relevance. |
 
-An empty query text matches every document, so a filtered empty query is a fast list: `search.query::<Deal>("").filter("owner_id", me).sort_desc("expected_close_date")`.
+Values compare by JSON type: a number never equals a string. Dates and timestamps are stored in the index as Unix milliseconds, so ranges and sorts on them work on every engine; pass dates (`NaiveDate`, `DateTime<Utc>`) or their ISO strings.
+
+An empty query text matches every document, so a filtered empty query is a fast list: `search.query::<Deal>("").filter("owner_id", me).sort_desc("expected_close_date")`. `ids(limit)` returns the first matches' primary keys and `count()` the number of matches.
 
 ### Access control
 
-`accessible(scope)` takes the `Accessible<E, Read>` extractor from [authorization](/docs/security/authorization/). Navree turns the user's ability conditions into engine filters when they only use filterable fields (the usual `owner_id = me` rule becomes `filter("owner_id", me)`), so pages stay full and totals stay exact. Conditions on fields the index doesn't hold are applied when the rows are loaded, and records the user can't read are dropped from the page. Mark the columns your rules use as `filter` to keep totals exact.
+`accessible(scope)` takes the `Accessible<E, Read>` extractor from [authorization](/docs/security/authorization/). Navree turns the user's ability conditions into engine filters when they only use filterable fields on boolean, number, string, UUID or enum columns (the usual `owner_id = me` rule becomes `filter("owner_id", me)`), with the same rule order and the same comparisons as SQL lists, so pages stay full and totals stay exact. Other conditions are applied when the rows are loaded, with the same SQL filter as `Accessible` lists: conditions on fields the index doesn't hold, and on date and time columns, which the index keeps in milliseconds while the database compares finer. Records the user can't read are then dropped from the page, and its total can still count them. Mark the columns your rules use as `filter` to keep totals exact.
 
 ### Hits and highlights
 
@@ -438,7 +453,7 @@ for hit in &page.data {
 }
 ```
 
-`Hit<T>` has `record`, `score` (0 to 1, higher is better) and `highlights`, a map of field to text with `<mark>` around the matches. Change the tags with `.highlight_tags("<em>", "</em>")`. `Hit<T>` serializes as the record's fields plus `_score` and `_highlights`.
+`Hit<T>` has `record`, `score` (0 to 1, higher is better) and `highlights`, a map of field to its text, HTML-escaped, with `<mark>` around the matches; fields without a match are left out. Change the tags with `.highlight_tags("<em>", "</em>")`. `Hit<T>` serializes as the record's fields plus `_score` and `_highlights`, and `hit.map(f)` converts the record.
 
 ### Searching several entities at once
 
@@ -459,17 +474,21 @@ for hit in results {
 }
 ```
 
-Each `include` takes that entity's `Accessible` scope. A result carries the `name` of its index as `kind` and the first full-text field as `title`; call `hit.load::<Contact>(&uow)` for the whole record.
+Each `include` takes that entity's `Accessible` scope. A result carries the `name` of its index as `kind`, the first full-text field as `title` and its highlights; call `hit.load::<Contact>(&uow)` for the whole record (`None` for a hit of another kind).
 
 ## Workspaces
 
-In an app with [workspaces](/docs/workspaces/introduction/) and row isolation, a searchable entity that implements `WorkspaceScoped` stores its workspace column (`workspace_id` by default) in every document. Every query made during a request is then filtered to the request's `CurrentWorkspace`, as `WorkspaceRepo` filters rows, so one workspace's search never returns another's records. In jobs and commands, where there is no current workspace, name one:
+In an app with [workspaces](/docs/workspaces/introduction/) and row isolation, a searchable entity that implements `WorkspaceScoped` stores its workspace column (`workspace_id` by default) in every document. The derive finds the column; a hand-written `settings()` names it with `.workspace("workspace_id")`.
+
+Every query on such an index names the workspace, as `WorkspaceRepo` does for rows. In a request, pass the `CurrentWorkspace` id; in jobs and commands, the workspace you work in:
 
 ```rust
-search.query::<Contact>("ada").workspace(workspace_id).paginate(page).await?;
+search.query::<Contact>("ada").workspace(ws.id()).paginate(page).await?;
 ```
 
-With `Schema` or `Database` isolation, each workspace gets its own index (`crm_contacts__acme`), created when the workspace is created and dropped when it is deleted.
+A query without a workspace fails with `SearchError::WorkspaceRequired`, so one workspace's search never returns another's records. `across` and `similar` take `.workspace(id)` the same way. Sync jobs carry their records' workspace, and on PostgreSQL they read the rows inside it, so row-level security policies hold; `search:import` imports workspace by workspace there.
+
+All workspaces share one index per entity, filtered by workspace. Schema and database isolation are not supported by search: the sync reads the app's own tables.
 
 ## Vector search
 
@@ -482,19 +501,41 @@ pub title: String,
 pub notes: Option<String>,
 ```
 
-On each sync, the embedded fields are joined into one text and turned into a vector with the app's `Embeddings` provider from the [AI SDK](/docs/ai/embeddings-and-rag/), so the app needs `AiModule`. Vectors are stored in the configured vector store:
+On each sync, the embedded fields are joined into one text, one field per line, and turned into a vector by the app's embeddings provider: an `Arc<dyn Embeddings>` the app registers, usually a wrapper around an [embedding model's](/docs/ai/embeddings-and-rag/) API:
+
+```rust
+use navree::BoxFuture;
+use navree::prelude::*;
+use navree::search::Embeddings;
+
+struct ModelEmbeddings { /* the model's client */ }
+
+impl Embeddings for ModelEmbeddings {
+    fn embed<'a>(&'a self, texts: &'a [String]) -> BoxFuture<'a, Result<Vec<Vec<f32>>, BoxError>> {
+        Box::pin(async move {
+            // One vector per text, `search.vectors.dimensions` numbers each.
+            todo!()
+        })
+    }
+}
+
+// In a module's `register`:
+m.value_arc(Arc::new(ModelEmbeddings { /* .. */ }) as Arc<dyn Embeddings>);
+```
+
+Vectors are stored in the configured vector store:
 
 ```toml title="config/app.toml"
 [search.vectors]
-store = "pgvector"        # pgvector | qdrant
+store = "pgvector"        # pgvector | qdrant | memory
 dimensions = 1536         # must match the embedding model
 metric = "cosine"         # cosine | dot | euclidean
 
 # store = "qdrant"
-# url = "http://127.0.0.1:6334"   # APP_SEARCH__VECTORS__KEY for the API key
+# url = "http://127.0.0.1:6333"   # the REST port; APP_SEARCH__VECTORS__KEY for the API key
 ```
 
-With `pgvector`, the `search` migration set adds an `embedding vector(1536)` column and an HNSW index to `search_documents`. With Qdrant, each index gets a collection of the same name.
+With vectors on, the boot fails without an `Embeddings` provider. With `pgvector`, the store enables the `vector` extension and creates a `search_vectors` table, with an `embedding vector(1536)` column and an HNSW index, the first time it is used. With Qdrant, each index gets a collection of the same name. The `memory` store is for tests.
 
 Query by meaning with `similar`, or blend both kinds of relevance with `hybrid`:
 
@@ -514,7 +555,7 @@ let like_this = search.similar_to::<Deal>(deal.id).limit(5).run().await?;
 let deals = search.query::<Deal>("renewal risk").hybrid(0.4).paginate(page).await?;
 ```
 
-Filters, workspaces and `accessible` work the same for vector queries. Embedding calls go through the AI SDK's provider failover and are cached by text, so re-syncing an unchanged record costs no tokens.
+`run()` returns `Hit`s, nearest first, with the similarity (0 to 1) as `score`. Filters, workspaces and `accessible` work the same for vector queries. `hybrid` scores the best candidates of each side (at least 100, or as many as the page needs) as `(1 - weight) * keyword + weight * vector`. Embeddings are cached in memory by text, so re-syncing an unchanged record costs no call to the provider.
 
 ## Testing
 
@@ -553,10 +594,14 @@ async fn finds_contacts_by_a_misspelled_name() {
 }
 ```
 
-- `flush_pending()` waits until inline syncs that are still running have finished. With `sync = "queued"`, run the queue instead: `crm.run_queue().await`, or `app.get::<Queue>().await.run_pending().await` in a plain `TestApp`.
+- `flush_pending()` waits until the inline syncs queued so far have finished. With `sync = "queued"`, run the queue instead: `crm.run_queue().await`, or `app.get::<Queue>().await.run_pending().await` in a plain `TestApp`.
 - The memory engine supports every query method, typo tolerance included, and ranks with the same field boosts, so tests and production agree on what matches. Exact scores differ between engines; assert on order and membership, not on `_score`.
 - To check that a write queues a sync without running it, install a [`QueueFake`](/docs/testing/fakes/#the-queue) and assert on the sync job, `navree::search::SyncDocuments` (job name `search.sync`): `fake.assert_dispatched::<SyncDocuments>(|job| job.index == "contacts")`.
 - `search.assert_indexed::<Contact>(id)` and `search.assert_not_indexed::<Contact>(id)` check the index directly.
+- For vector search, set `search.vectors.store = "memory"` and register a fake `Embeddings` with `override_value(Arc::new(fake) as Arc<dyn Embeddings>)`.
+- To test a hand-written `document()`, build a `SearchContext::new(tx, app.ctx().clone(), None)` around a transaction.
+
+Every engine implements the `SearchEngine` trait, which you can implement for an engine of your own and plug in with `Engine::custom(Arc::new(engine))`.
 
 ## Reference
 
@@ -577,35 +622,38 @@ async fn finds_contacts_by_a_misspelled_name() {
 | `search.postgres.language` | `english` | The text search configuration |
 | `search.postgres.trigram` | `false` | Typo tolerance with `pg_trgm` |
 | `search.tantivy.path` | `storage/search` | Index directory |
-| `search.tantivy.memory_budget_mb` | `64` | Writer buffer |
-| `search.vectors.store` | none | `pgvector` or `qdrant`; vector search is off without it |
+| `search.tantivy.memory_budget_mb` | `64` | Writer buffer in MB (less than 15 counts as 15) |
+| `search.vectors.store` | none | `pgvector`, `qdrant` or `memory`; vector search is off without it |
 | `search.vectors.url`, `search.vectors.key` | none | The Qdrant server |
 | `search.vectors.dimensions` | `1536` | Vector size |
 | `search.vectors.metric` | `cosine` | `cosine`, `dot` or `euclidean` |
-| `search.indexes.<index>.synonyms` | `{}` | Synonyms per index: `{ "acme" = ["acme corp"] }` |
-| `search.indexes.<index>.stop_words` | `[]` | Words the index ignores |
+| `search.indexes.<index>.synonyms` | `{}` | Synonyms per index, both ways: `{ "acme" = ["acme corp"] }` |
+| `search.indexes.<index>.stop_words` | `[]` | Words the index ignores in queries |
 
 ### The Search service
 
 | Method | Returns |
 |---|---|
-| `query::<E>(text)` | A query builder: `filter`, `filter_in`, `range`, `sort_desc`, `accessible`, `workspace`, `hybrid`, then `paginate(page)`, `hits(page)`, `ids(limit)` or `count()` |
-| `similar::<E>(text)`, `similar_to::<E>(id)` | A vector query builder, run with `run()` |
-| `across(text)` | A multi-index query: `include::<E>(scope)`, `limit`, `run()` |
-| `reindex::<E>(ids)` | Queues a sync for those records |
-| `import::<E>()`, `flush::<E>()` | Rebuilds or empties an index |
+| `query::<E>(text)` | A query builder: `filter`, `filter_not`, `filter_in`, `range`, `filter_null`, `filter_by`, `sort_asc`, `sort_desc`, `accessible`, `workspace`, `hybrid`, `highlight_tags`, then `paginate(page)`, `hits(page)`, `ids(limit)` or `count()` |
+| `similar::<E>(text)`, `similar_to::<E>(id)` | A vector query builder (`filter`.., `accessible`, `workspace`, `limit`), run with `run()` |
+| `across(text)` | A multi-index query: `include::<E>(scope)`, `limit`, `workspace`, `run()` |
+| `reindex::<E>(ids)` | Queues a sync for those records, or syncs them now unless `sync = "queued"` |
+| `import::<E>()`, `import_fresh::<E>()` | Indexes every row (into a new index swapped in, for `fresh`) |
+| `flush::<E>()`, `push_settings::<E>()` | Empties an index; pushes its settings to the engine |
+| `status()` | Every index with its engine, documents, rows and pending jobs |
 | `without_syncing(future)` | Runs the future with change syncing paused |
-| `flush_pending()` | Waits for running inline syncs (tests) |
+| `flush_pending()` | Waits for inline syncs (tests) |
+| `assert_indexed::<E>(id)`, `assert_not_indexed::<E>(id)` | Panics unless the index holds (or lacks) the record (tests) |
 
 ### Errors
 
-A search that the engine can't answer returns `SearchError`. With `?` in a handler it becomes Navree's error shape: an invalid filter or sort field is a 400, an unreachable or timed-out engine is a 503:
+A search that the engine can't answer returns `SearchError`. With `?` in a handler it becomes Navree's error shape: an invalid filter or sort field, or a filter the engine can't run, is a 400; an unreachable or timed-out engine is a 503:
 
 ```json
 { "statusCode": 503, "message": "Search is unavailable. Try again shortly.", "error": "Service Unavailable" }
 ```
 
-The sync jobs log every failure at target `navree::search` with the index, the ids and the engine's answer, and retry it.
+The sync jobs log every failure at target `navree::search` with the index, the ids and the engine's answer, and retry.
 
 <LinkCards>
   <LinkCard href="/docs/digging-deeper/queues/" title="Queues">
@@ -615,9 +663,9 @@ The sync jobs log every failure at target `navree::search` with the index, the i
     The abilities behind `accessible(scope)`.
   </LinkCard>
   <LinkCard href="/docs/ai/embeddings-and-rag/" title="Embeddings and RAG">
-    The embeddings that power vector search.
+    Embedding models for vector search.
   </LinkCard>
   <LinkCard href="/docs/workspaces/isolation/" title="Workspace isolation">
-    Row, schema and database isolation, and what they mean for indexes.
+    Row, schema and database isolation.
   </LinkCard>
 </LinkCards>

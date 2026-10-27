@@ -139,6 +139,13 @@ const HIERARCHY: &[Rule] = &[
         "navree-testing", "navree-db", "navree-validation",
     ]),
     // L7: packages built on other packages.
+    // Search: full-text and vector search over entities. The server engines
+    // talk HTTP through navree-http-client; the `Searchable` derive lives in
+    // navree-macros and is re-exported next to the trait.
+    rule("navree-search", 7, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-macros", "navree-http",
+        "navree-http-client", "navree-db", "navree-queue", "navree-access", "navree-workspace",
+    ]),
     // Billing: Stripe and Paddle over navree-http-client, billables from
     // navree-auth (users) and navree-workspace (workspaces).
     rule("navree-billing", 7, &[
@@ -211,6 +218,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-webhooks",
     "navree-oauth",
     "navree-flags",
+    "navree-search",
     "navree-graphql",
     "navree-grpc",
     "navree-billing",

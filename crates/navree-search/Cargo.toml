@@ -1,0 +1,52 @@
+[package]
+name = "navree-search"
+description = "Navree SearchModule: full-text and vector search over entities, on the database, Meilisearch, Typesense, Tantivy or memory, kept in sync through the queue."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = []
+## The embedded Tantivy engine (`search.engine = "tantivy"`).
+tantivy = ["dep:tantivy"]
+## PostgreSQL driver for navree-db (the `postgres` engine and `pgvector`).
+postgres = ["navree-db/postgres", "navree-workspace/postgres"]
+
+[dependencies]
+chrono = { workspace = true }
+futures = { workspace = true }
+http = { workspace = true }
+navree-access = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+navree-db = { workspace = true }
+navree-http = { workspace = true }
+navree-http-client = { workspace = true }
+navree-kernel = { workspace = true }
+navree-macros = { workspace = true }
+navree-queue = { workspace = true }
+navree-workspace = { workspace = true }
+sea-orm = { workspace = true }
+sea-orm-migration = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
+tantivy = { workspace = true, optional = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+axum = { workspace = true }
+navree-testing = { workspace = true }
+proptest = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+wiremock = { workspace = true }

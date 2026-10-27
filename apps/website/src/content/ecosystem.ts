@@ -228,7 +228,7 @@ export const ecosystem: EcosystemEntry[] = [
     crate: "navree-search",
     command: "navree search:import Deal",
     href: "/docs/packages/search/",
-    status: "planned",
+    status: "stable",
     signature: "search.query::<Contact>(\"ada\").paginate(page)",
   },
   {
