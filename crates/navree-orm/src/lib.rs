@@ -147,9 +147,10 @@ pub use value::{
     Decimal, Field, FieldError, Numeric, Value, ValueFor, is_null, same_value, to_json,
 };
 
-/// `#[derive(Model)]` and `#[scopes]` (see their documentation in
-/// navree-orm-macros).
-pub use navree_orm_macros::{Model, scopes};
+/// `#[derive(Model)]`, `#[scopes]` and `#[test]` (see their documentation
+/// in navree-orm-macros; `#[test]` needs the `testing` feature for its
+/// databases).
+pub use navree_orm_macros::{Model, scopes, test};
 
 /// What the macros expand to. Not part of the API.
 #[doc(hidden)]
@@ -158,6 +159,7 @@ pub mod __private {
     pub use crate::model::derive_support::*;
     pub use chrono::{DateTime, Utc};
     pub use std::sync::Arc;
+    pub use tokio;
 }
 
 /// The models the documentation examples use, so every example compiles.

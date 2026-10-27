@@ -1,5 +1,5 @@
-//! What `#[derive(Model)]` and `#[scopes]` refuse, and how they say it
-//! (`TRYBUILD=overwrite` rewrites the expected messages).
+//! What `#[derive(Model)]`, `#[scopes]` and `#[test]` refuse, and how they
+//! say it (`TRYBUILD=overwrite` rewrites the expected messages).
 
 #[test]
 fn macro_misuse_is_reported_precisely() {

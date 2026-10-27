@@ -7,6 +7,8 @@
 //!   named fields and gives it one typed column constant per column.
 //! - `#[scopes]` on an `impl` block turns its `#[scope]` functions into
 //!   methods of the model's query builders.
+//! - `#[test]` (`#[navree::test]`) runs an `async fn` test, on a database
+//!   of its own when it takes one.
 //!
 //! The expansions name the runtime crate as `::navree_orm` when the crate
 //! being compiled depends on navree-orm, else as `::navree::orm` through
@@ -19,6 +21,7 @@ mod errors;
 mod model;
 mod paths;
 mod scopes;
+mod test;
 
 /// Implements `Model` for a struct with named fields.
 ///
@@ -45,7 +48,16 @@ mod scopes;
 /// "int" | "uuid" | "uuid_v7" | "uuid_v4" | "ulid" | "manual"` (default: by
 /// the key's type), `timestamps` or `timestamps(created_at = "...",
 /// updated_at = false)`, `soft_deletes` or `soft_deletes = "..."`,
-/// `connection = "..."`, `per_page = N`, `global_scopes(Scope, ...)`.
+/// `connection = "..."`, `per_page = N`, `global_scopes(Scope, ...)`,
+/// `factory = DealFactory` (`Deal::factory()`, see `navree_orm::factory`),
+/// `route_key = "slug"` (the column route model binding looks records up
+/// by), `workspace` or `workspace = "..."` (scoped to the current
+/// workspace through that column, default `workspace_id`), and with
+/// navree-orm's `access` feature `subject` or `subject = "Name"` (records
+/// are navree-access subjects; default: the struct's name),
+/// `permission_prefix = "..."` (default: the table) and `policy =
+/// DealPolicy` (a `navree_access::Policy` attached to the model; implies
+/// `subject`).
 ///
 /// Field attributes: `column = "..."`, `cast = "json" | "string_enum" |
 /// "int_enum" | path::to::Cast`, `default` (a row without the column reads
@@ -54,6 +66,38 @@ mod scopes;
 pub fn derive_model(input: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(input as syn::DeriveInput);
     model::derive(input)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
+
+/// An `async fn` test, run on a runtime of its own (no `#[tokio::test]`
+/// needed), given a database of its own when it takes one (navree-orm's
+/// `testing` feature; see `navree_orm::testing::database`):
+///
+/// ```ignore
+/// static DATABASE: Template = Template::new("crm", |template| Box::pin(migrate(template)));
+///
+/// #[navree::test(template = DATABASE)]          // a copy of the template, on SQLite
+/// async fn wins_deals(db: TestDb) { /* ... */ }
+///
+/// #[navree::test(template = DATABASE, database = "postgres")]   // skipped without a server
+/// async fn on_postgres(db: TestDb) -> Result<(), BoxError> { /* ... */ Ok(()) }
+///
+/// #[navree::test(database = "memory")]          // an empty in-memory SQLite database
+/// async fn in_memory(db: TestDb) { /* ... */ }
+///
+/// #[navree::test]                               // no database
+/// async fn plain() { /* ... */ }
+/// ```
+///
+/// Options: `template = PATH` (a `static` `Template`), `database = "sqlite"
+/// | "memory" | "postgres" | "mysql"` (default `"sqlite"`). Without a
+/// template the database is empty. On a server that is not configured
+/// (`NAVREE_TEST_POSTGRES_URL`, `NAVREE_TEST_MYSQL_URL`, or
+/// `target/test-databases.env`) the test returns early, after a notice.
+#[proc_macro_attribute]
+pub fn test(args: TokenStream, item: TokenStream) -> TokenStream {
+    test::expand(args.into(), item.into())
         .unwrap_or_else(syn::Error::into_compile_error)
         .into()
 }

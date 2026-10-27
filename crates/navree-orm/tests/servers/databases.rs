@@ -132,6 +132,19 @@ async fn mysql_template_copies() {
     copies_truncation_and_cleanup(TestServer::MySql, first, second).await;
 }
 
+#[navree_orm::test(template = SCHEMA, database = "postgres")]
+async fn the_test_attribute_copies_templates_on_postgres(db: TestDb) {
+    assert_eq!(db.kind(), DatabaseKind::Postgres);
+    assert_eq!(count(db.db(), "authors").await, 1);
+}
+
+#[navree_orm::test(template = SCHEMA, database = "mysql")]
+async fn the_test_attribute_copies_templates_on_mysql(db: TestDb) -> Result<(), String> {
+    assert_eq!(db.kind(), DatabaseKind::MySql);
+    assert_eq!(count(db.db(), "authors").await, 1);
+    Ok(())
+}
+
 #[tokio::test]
 async fn fresh_server_databases_are_empty() {
     for server in [TestServer::Postgres, TestServer::MySql] {

@@ -1,6 +1,6 @@
 [package]
 name = "navree-orm-macros"
-description = "Navree ORM macros: #[derive(Model)] and #[scopes] (re-exported by navree-orm)."
+description = "Navree ORM macros: #[derive(Model)], #[scopes] and #[test] (re-exported by navree-orm)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
