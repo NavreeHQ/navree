@@ -4913,6 +4913,45 @@ dependencies = [
 ]
 
 [[package]]
+name = "navree-integrations"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "base64 0.23.1",
+ "bytes",
+ "chrono",
+ "form_urlencoded",
+ "http",
+ "navree-access",
+ "navree-api",
+ "navree-cache",
+ "navree-config",
+ "navree-contracts",
+ "navree-crypto",
+ "navree-db",
+ "navree-events",
+ "navree-http",
+ "navree-http-client",
+ "navree-kernel",
+ "navree-schedule",
+ "navree-testing",
+ "navree-workspace",
+ "ring",
+ "sea-orm",
+ "sea-orm-migration",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "url",
+ "utoipa",
+ "uuid",
+ "wiremock",
+]
+
+[[package]]
 name = "navree-kernel"
 version = "0.1.0"
 dependencies = [
