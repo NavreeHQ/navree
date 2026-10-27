@@ -82,7 +82,7 @@ Every module crate is re-exported whole, as a module of the facade. `navree::db:
 | `navree::notify` | navree-notify | `notify` | `NotifyModule`: database, mail and broadcast notifications |
 | `navree::ui` | navree-ui | `ui` | `UiModule`: the app shell and components of server-rendered tools, embedded assets |
 | `navree::auth` | navree-auth | `auth` | `AuthModule`: JWT access and refresh tokens, users, sessions, impersonation, passwordless sign-in and passkeys |
-| `navree::workspace` | navree-workspace | `workspace` | `WorkspaceModule`: workspaces, members, roles, invitations and isolation |
+| `navree::workspace` | navree-workspace | `workspace` | `WorkspaceModule`: workspaces, members, roles, invitations, isolation and demo workspaces |
 | `navree::redis` | navree-redis | `redis` (opt-in) | `RedisModule`: [Redis](/docs/digging-deeper/redis/) connections, and the Redis drivers of the cache, locks, queue, sessions and real-time backplane; `RateLimiter` |
 | `navree::social` | navree-social | `social` (opt-in) | `SocialModule`: [social sign-in](/docs/packages/social-sign-in/) with Google, GitHub, Apple and other providers |
 | `navree::sso` | navree-sso | `sso` | `SsoModule`: [single sign-on](/docs/security/single-sign-on/) with SAML 2.0 and OpenID Connect per organization or workspace, verified domains, just-in-time provisioning |
@@ -174,7 +174,7 @@ navree = { git = "https://github.com/NavreeHQ/navree", default-features = false,
 | `schedule` | `db`, `time` |
 | `notify` | `http`, `db`, `mail` |
 | `auth` | `http`, `db`, `crypto`, `validation`, `cache`, `mail`, `access`, `http-client` |
-| `workspace` | `http`, `db`, `crypto`, `events`, `mail`, `access`, `time` |
+| `workspace` | `http`, `db`, `crypto`, `events`, `mail`, `access`, `time`, `schedule` |
 | `social` | `http`, `crypto`, `cache`, `events`, `http-client`, `db`, `auth` |
 | `sso` | `http`, `crypto`, `cache`, `events`, `http-client`, `db`, `auth`, `workspace` |
 | `webhooks` | `http`, `crypto`, `events`, `http-client`, `db`, `workspace` |

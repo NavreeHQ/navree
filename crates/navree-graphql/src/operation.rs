@@ -15,7 +15,7 @@ use navree_contracts::{AuthState, Principal, RequestId};
 use navree_db::Uow;
 use navree_http::{AccessSpec, AppError, CanSpec, RouteMeta};
 use navree_kernel::AppContext;
-use navree_workspace::CurrentWorkspace;
+use navree_workspace::{CurrentWorkspace, DemoIntent};
 use tokio::sync::OnceCell;
 
 use crate::__private::FieldAccess;
@@ -186,14 +186,17 @@ impl Operation {
             .map(|user| user.0.clone())
     }
 
-    /// The workspace of the operation (navree-workspace).
-    pub(crate) async fn workspace(&self) -> Result<CurrentWorkspace, AppError> {
+    /// The workspace of the operation (navree-workspace). `intent` tells a
+    /// read-only demo workspace whether the operation reads (a query or a
+    /// subscription) or writes (a mutation): every operation is a `POST`.
+    pub(crate) async fn workspace(&self, intent: DemoIntent) -> Result<CurrentWorkspace, AppError> {
         self.workspace
             .get_or_try_init(|| async {
                 let mut parts = self.parts();
                 if let Some(uow) = self.reads() {
                     parts.extensions.insert(uow);
                 }
+                parts.extensions.insert(intent);
                 CurrentWorkspace::from_request_parts(&mut parts, &()).await
             })
             .await
