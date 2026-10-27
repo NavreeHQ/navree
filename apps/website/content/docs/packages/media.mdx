@@ -138,7 +138,7 @@ Register the model in the feature module that owns it:
 pub struct CoursesModule;
 ```
 
-Registration checks the collection and conversion names at boot, lets `media:regenerate` find the model's conversions, and, with `MEDIA_TABLE` set, deletes a course's media when the course is deleted ([deleting](#deleting-media)). Adding a file registers the model too, so a model that only needs the first two can skip it. In a hand-written module, `m.media_model::<Course>()` does the same.
+Registration checks the collection and conversion names at boot, lets `media:regenerate` and queue workers find the model's conversions, and, with `MEDIA_TABLE` set, deletes a course's media when the course is deleted ([deleting](#deleting-media)). Adding a file also registers its model, but only in the process that adds it: register every model that has conversions, so a worker or a command that never added a file knows them. In a hand-written module, `m.media_model::<Course>()` does the same.
 
 `MEDIA_TYPE` is stored with every row: keep it stable, or rows of the old name lose their model.
 

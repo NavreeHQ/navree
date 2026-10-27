@@ -214,6 +214,10 @@ fake.assert_deleted(id);
 - `media.add(&record, ..)` with a `Record<Course>` does not compile: pass
   `record.model()` (the trait is on `Course`).
 - `MEDIA_TYPE` is stored on every row; renaming it orphans rows.
+- Register every model that has conversions with `for_feature`: adding a
+  file registers its model only in that process, so a separate queue worker
+  (or `media:regenerate`) that never added one fails the job with
+  `unknown_media_collection`.
 - `srcset`/`url` need a disk with `public_url`; `resource` falls back to
   temporary URLs, which on local/memory disks are served by storage's route.
 - A conversion that runs at once and fails fails the whole add (500 for
