@@ -32,13 +32,16 @@ use crate::model::Model;
 use crate::query::Builder;
 use crate::relations::core::{constrain, qualified};
 
+/// A constraint on the subqueries of a one-of-many relation.
+pub(crate) type OfManyConstraint<R> = Arc<dyn Fn(Builder<R>) -> Builder<R> + Send + Sync>;
+
 /// How a `has_one` picks its record among many.
 pub(crate) struct OneOfMany<R: Model> {
     /// The columns and aggregates, the key last (added with `MAX` when it
     /// is not listed).
     pub(crate) columns: Vec<(Cow<'static, str>, AggregateFunction)>,
     /// A constraint on every subquery.
-    pub(crate) constraint: Option<Arc<dyn Fn(Builder<R>) -> Builder<R> + Send + Sync>>,
+    pub(crate) constraint: Option<OfManyConstraint<R>>,
     /// The join's alias; the relation's name by default.
     pub(crate) alias: Option<Cow<'static, str>>,
 }

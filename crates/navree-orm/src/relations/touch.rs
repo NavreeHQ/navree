@@ -53,7 +53,21 @@ pub async fn without_touching<F: Future>(future: F) -> F::Output {
 }
 
 /// Runs `future` without touching the models of tuple `T`
-/// (`without_touching_on::<(Company,)>(..)`).
+/// (`without_touching_on::<(Company,), _>(..)`); other models are touched
+/// as usual.
+///
+/// ```
+/// # use navree_orm::__doc_models::*;
+/// use navree_orm::relations::{is_ignoring_touch, without_touching_on};
+///
+/// # tokio::runtime::Builder::new_current_thread().build().unwrap().block_on(async {
+/// without_touching_on::<(Company,), _>(async {
+///     assert!(is_ignoring_touch::<Company>());
+///     assert!(!is_ignoring_touch::<Deal>());
+/// })
+/// .await;
+/// # });
+/// ```
 pub async fn without_touching_on<T: TouchList, F: Future>(future: F) -> F::Output {
     let mut current = ignoring();
     current.models.extend(T::type_ids());
@@ -61,7 +75,15 @@ pub async fn without_touching_on<T: TouchList, F: Future>(future: F) -> F::Outpu
 }
 
 /// Whether model `M` is not touched now: it keeps no update timestamp, or
-/// a [`without_touching`] scope covers it.
+/// a [`without_touching`] (or [`without_touching_on`]) scope covers it.
+///
+/// ```
+/// # use navree_orm::__doc_models::*;
+/// use navree_orm::relations::is_ignoring_touch;
+///
+/// assert!(!is_ignoring_touch::<Deal>());
+/// assert!(is_ignoring_touch::<Tag>(), "tags keep no update timestamp");
+/// ```
 pub fn is_ignoring_touch<M: Model>() -> bool {
     is_ignoring_touch_of::<M>()
 }

@@ -108,7 +108,7 @@ struct HasKeys<'a> {
 
 impl HasKeys<'_> {
     /// `R.type = P's morph name`, for a morph relation.
-    fn morph_condition<P: Model, R: Model>(&self, table: &str) -> Option<Where> {
+    fn morph_condition<P: Model>(&self, table: &str) -> Option<Where> {
         self.morph.map(|column| Where::Compare {
             left: Expr::Column(qualified(table, column)),
             op: Operator::Eq,
@@ -136,7 +136,7 @@ impl HasKeys<'_> {
                 not: true,
             },
         ];
-        conditions.extend(self.morph_condition::<P, R>(table));
+        conditions.extend(self.morph_condition::<P>(table));
         Ok(Some(conditions))
     }
 
@@ -149,7 +149,7 @@ impl HasKeys<'_> {
     ) -> Vec<Where> {
         let table = R::meta().table();
         let mut conditions = vec![in_keys_on(target, qualified(table, self.foreign_key), keys)];
-        conditions.extend(self.morph_condition::<P, R>(table));
+        conditions.extend(self.morph_condition::<P>(table));
         conditions
     }
 
@@ -165,7 +165,7 @@ impl HasKeys<'_> {
         let aliased = (table == parent_table).then_some(table);
         let local = qualified(parent_table, self.local_key);
         let foreign_key = self.foreign_key.to_owned();
-        let morph = self.morph_condition::<P, R>(table);
+        let morph = self.morph_condition::<P>(table);
         let group_by = self.group_by::<R>();
         build_subquery::<R>(
             P::meta(),
@@ -797,6 +797,19 @@ macro_rules! has_write_methods {
 ///
 /// `latest_of_many`, `oldest_of_many` and `of_many` make it pick one record
 /// among many (a deal's latest activity).
+///
+/// ```no_run
+/// # use navree_orm::__doc_models::*;
+/// # async fn demo(db: Db, deal: Record<Deal>) -> Result<()> {
+/// // #[relations] impl Deal {
+/// //     fn latest_activity(&self) -> HasOne<Deal, Activity> {
+/// //         self.has_many(Activity::DEAL_ID).latest_of_many_by(Activity::CREATED_AT)
+/// //     }
+/// // }
+/// let latest: Option<Record<Activity>> = deal.latest_activity().first(&db).await?;
+/// let deals = Deal::query().with("latest_activity").get(&db).await?;
+/// # Ok(()) }
+/// ```
 pub struct HasOne<P: Model, R: Model> {
     pub(crate) core: RelationCore<P, R>,
     pub(crate) foreign_key: Cow<'static, str>,
@@ -814,6 +827,23 @@ pub type MorphOne<P, R> = HasOne<P, R>;
 /// The records of `R` that hold the parent's key: a deal's activities.
 /// With a type column (`morph_many`), they also hold the parent's morph
 /// name. Loaded, it holds a [`Collection<R>`].
+///
+/// ```no_run
+/// # use navree_orm::__doc_models::*;
+/// # async fn demo(uow: Uow, deal: Record<Deal>) -> Result<()> {
+/// // #[relations] impl Deal {
+/// //     fn activities(&self) -> HasMany<Deal, Activity> {
+/// //         self.has_many(Activity::DEAL_ID)
+/// //     }
+/// // }
+/// let open = deal.activities().where_(Activity::SUBJECT.ne("closed")).get(&uow).await?;
+/// let call = deal
+///     .activities()
+///     .create(&uow, Activity { subject: "call".into(), ..Activity::default() })
+///     .await?;
+/// assert_eq!(call.deal_id, deal.id);
+/// # Ok(()) }
+/// ```
 pub struct HasMany<P: Model, R: Model> {
     pub(crate) core: RelationCore<P, R>,
     pub(crate) foreign_key: Cow<'static, str>,

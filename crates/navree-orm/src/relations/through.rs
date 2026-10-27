@@ -357,6 +357,18 @@ macro_rules! through_methods {
 /// The record of `R` reached through an intermediate model: a supplier's
 /// account history through its user. Loaded, it holds an
 /// `Option<Record<R>>`.
+///
+/// ```
+/// # use navree_orm::__doc_models::*;
+/// use navree_orm::relations::HasOneThrough;
+///
+/// // A company's latest activity, through its deals.
+/// # fn demo(company: &Company) -> HasOneThrough<Company, Activity> {
+/// company
+///     .has_one_through::<Activity, Deal, _, _>(Deal::COMPANY_ID, Activity::DEAL_ID)
+///     .latest_of_many_by(Activity::CREATED_AT)
+/// # }
+/// ```
 pub struct HasOneThrough<P: Model, R: Model> {
     pub(crate) core: RelationCore<P, R>,
     pub(crate) def: ThroughDef,
@@ -366,6 +378,22 @@ pub struct HasOneThrough<P: Model, R: Model> {
 
 /// The records of `R` reached through an intermediate model: a country's
 /// posts through its users. Loaded, it holds a [`Collection<R>`].
+///
+/// `R`'s `second_key` holds the intermediate model's key, and the
+/// intermediate model's `first_key` holds the parent's; soft-deleted
+/// intermediate records are left out unless
+/// [`with_trashed_parents`](HasManyThrough::with_trashed_parents).
+///
+/// ```
+/// # use navree_orm::__doc_models::*;
+/// // A company's activities, through its deals.
+/// let sql = Company { id: 3, ..Company::default() }
+///     .has_many_through::<Activity, Deal, _, _>(Deal::COMPANY_ID, Activity::DEAL_ID)
+///     .to_sql(Dialect::Sqlite)
+///     .unwrap();
+/// assert!(sql.sql.contains(r#"INNER JOIN "deals" ON "deals"."id" = "activities"."deal_id""#));
+/// assert!(sql.sql.contains(r#"WHERE "deals"."company_id" = ?"#));
+/// ```
 pub struct HasManyThrough<P: Model, R: Model> {
     pub(crate) core: RelationCore<P, R>,
     pub(crate) def: ThroughDef,
@@ -901,7 +929,11 @@ impl<A: Model, B: Model> ThroughLeg<A> for HasOne<A, B> {
     type Card = One;
 
     fn leg(&self) -> Leg {
-        has_leg::<A, B>(&self.local_key, &self.foreign_key, self.morph.as_deref())
+        has_leg::<A, B>(
+            self.local_key.clone(),
+            self.foreign_key.clone(),
+            self.morph.as_deref(),
+        )
     }
 }
 
@@ -910,7 +942,11 @@ impl<A: Model, B: Model> ThroughLeg<A> for HasMany<A, B> {
     type Card = Many;
 
     fn leg(&self) -> Leg {
-        has_leg::<A, B>(&self.local_key, &self.foreign_key, self.morph.as_deref())
+        has_leg::<A, B>(
+            self.local_key.clone(),
+            self.foreign_key.clone(),
+            self.morph.as_deref(),
+        )
     }
 }
 
@@ -927,14 +963,16 @@ impl<A: Model, B: Model> ThroughLeg<A> for BelongsTo<A, B> {
     }
 }
 
+/// The leg of a `has_one`/`has_many` from `A` to `B`: `A.local` matches
+/// `B.foreign` (and `B`'s type column holds `A`'s morph name).
 fn has_leg<A: Model, B: Model>(
-    local: &Cow<'static, str>,
-    foreign: &Cow<'static, str>,
+    local: Cow<'static, str>,
+    foreign: Cow<'static, str>,
     morph: Option<&str>,
 ) -> Leg {
     Leg {
-        parent_column: local.clone(),
-        child_column: foreign.clone(),
+        parent_column: local,
+        child_column: foreign,
         condition: morph.map(|column| Where::Compare {
             left: Expr::Column(ColumnRef::new(Some(B::meta().table()), column.to_owned())),
             op: Operator::Eq,
