@@ -4937,6 +4937,7 @@ dependencies = [
  "navree-contracts",
  "navree-crypto",
  "navree-db",
+ "navree-directory",
  "navree-dock",
  "navree-documents",
  "navree-events",
