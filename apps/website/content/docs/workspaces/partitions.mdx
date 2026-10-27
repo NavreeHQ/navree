@@ -1,0 +1,225 @@
+---
+title: "Partitions"
+description: "Split a workspace's data into named partitions, limit members to some of them, and scope every query to the partitions a request may touch."
+---
+
+A partition is a named slice of one workspace's data: a mail domain, a region, a brand, a business unit. Rows of partitioned tables carry a `partition_id`, and each member sees every partition or only the ones granted to them. The workspace stays the tenant, with one set of members, roles and settings; partitions decide which of its rows a member works with.
+
+Partitions are off by default and are independent of [organizations](/docs/workspaces/organizations/): use either, both or neither.
+
+## Turning them on
+
+<Badge feature="workspace" /> Partitions are part of `WorkspaceModule`:
+
+```toml title="config/app.toml"
+[workspace.partitions]
+enabled = true
+resolvers = ["header", "claim"]   # header, path or claim, tried in order
+header = "X-Partition"            # X-Partition: acme-co-uk (a slug or an id)
+path_prefix = "/p"                # /api/p/acme-co-uk/... with the path resolver
+claim = "partition"               # a claim of the bearer JWT
+```
+
+From the environment: `APP_WORKSPACE__PARTITIONS__ENABLED=true`. Partitions have no subdomain resolver; listing `subdomain` fails the boot. While `enabled` is `false`, the partition routes aren't mounted and the services answer a 500 that names the setting.
+
+The `workspace` migration set creates the tables whether the feature is on or not:
+
+| Table | Columns |
+|---|---|
+| `workspace_partitions` | `id`, `workspace_id` (cascades on delete), `name`, `slug` (unique in the workspace), `created_at`, `updated_at` |
+| `partition_grants` | `id`, `workspace_id`, `member_id` (cascades), `partition_id` (cascades), `created_at`: the partitions of an `only` member |
+
+It also adds `workspace_members.partition_scope`, `all` (the default) or `only`.
+
+## Creating partitions
+
+The `Partitions` service manages a workspace's partitions:
+
+```rust
+use navree::workspace::{NewPartition, PartitionSelector, Partitions};
+
+let uk = partitions.create(&uow, workspace.id, NewPartition::named("acme.co.uk")).await?;
+assert_eq!(uk.slug, "acme-co-uk");
+let de = partitions.create(&uow, workspace.id, NewPartition::named("acme.de").slug("de")).await?;
+
+// Grace works with the UK partition only.
+partitions.grant(&uow, workspace.id, grace, PartitionSelector::only([uk.id])).await?;
+```
+
+| Method | Does |
+|---|---|
+| `create(&uow, workspace, NewPartition)` | Creates a partition; the slug comes from the name (`acme.co.uk` becomes `acme-co-uk`) unless you set one; a taken slug is a 400 on `slug` |
+| `rename(&uow, workspace, id, name)` | Renames it; the slug stays |
+| `delete(&uow, workspace, id)` | Deletes it with its grants. Rows of your tables keep their `partition_id`: delete or move them first |
+| `list(workspace)`, `visible(workspace, selector)` | The workspace's partitions by name, and the ones a selector sees |
+| `find(workspace, id)`, `resolve(workspace, slug_or_id)` | Looks one up; `resolve` is a 404 when there is none |
+| `access(workspace, user)` | The `PartitionSelector` of a member; 404 for a non-member |
+| `grant(&uow, workspace, user, selector)` | Sets what a member sees: `All`, or `Only` partitions of this workspace (a 400 on `partitions` otherwise) |
+| `enter(&uow, id)` | Scopes a job's unit of work to one partition (see [row-level security](#row-level-security-on-postgresql)) |
+
+## Who sees which partitions
+
+- A new member sees every partition (`All`) until you grant them `Only` some.
+- The workspace owner always sees every partition: limiting them is a 409.
+- A user who enters the workspace [through its organization](/docs/workspaces/organizations/#entering-workspaces-through-the-organization) sees every partition.
+- A member limited to `Only` some partitions doesn't see rows without a partition.
+
+## Making a table partitioned
+
+Give the table a `partition_id` column next to its `workspace_id`, and mark the entity with `PartitionScoped` on top of `WorkspaceScoped`:
+
+```rust title="src/contacts/entity.rs"
+/// Rows carry `workspace_id` and `partition_id` columns.
+impl WorkspaceScoped for contact::Entity {}
+impl PartitionScoped for contact::Entity {}
+```
+
+Another column name goes in the trait: `impl PartitionScoped for contact::Entity { const PARTITION_COLUMN: &'static str = "domain_id"; }`. Then read and write through `PartitionRepo`, which is `WorkspaceRepo` narrowed to a `PartitionSelector`:
+
+| `PartitionRepo::<E>::` | Does |
+|---|---|
+| `select(workspace, selector)` | The workspace's rows the selector sees |
+| `scope(workspace, selector, select)` | Adds both filters to any `Select<E>` |
+| `find(&uow, workspace, selector, id)`, `find_or_fail` | One record, if the selector sees it; else not found (a 404 from a handler) |
+| `insert(&uow, workspace, partition, model)` | Sets both columns, then inserts |
+| `update(&uow, workspace, selector, model)` | Updates a record the selector sees; moving it to another partition needs the selector to see that one too |
+| `delete(&uow, workspace, selector, model)` | Deletes a record the selector sees |
+
+## The partitions of a request
+
+Two extractors resolve the request's partitions inside its workspace. Both resolve the [workspace](/docs/workspaces/resolution/) first.
+
+`PartitionScope` is what a list or a report needs: the partition the request names, if it names one, else every partition the member sees.
+
+```rust title="src/contacts/controller.rs"
+#[controller("/contacts", version = "1")]
+#[guard(InWorkspace::guard())]
+impl ContactsController {
+    #[get("/")]
+    #[permissions("contacts.read")]
+    async fn index(&self, scope: PartitionScope, uow: Uow, page: PageQuery) -> Result<Page<contact::Model>> {
+        let select = PartitionRepo::<Contact>::select(scope.workspace_id(), scope.selector());
+        Ok(paginate(select, &*uow.tx().await?, page).await?)
+    }
+
+    #[post("/")]
+    #[permissions("contacts.create")]
+    async fn store(
+        &self,
+        ws: CurrentWorkspace,
+        partition: CurrentPartition,
+        uow: Uow,
+        Json(input): Json<NewContact>,
+    ) -> Result<Created<contact::Model>> {
+        let contact = PartitionRepo::<Contact>::insert(
+            &uow,
+            ws.id(),
+            partition.id(),
+            contact::ActiveModel {
+                id: Set(Uuid::now_v7()),
+                name: Set(input.name),
+                ..Default::default()
+            },
+        )
+        .await?;
+        Ok(Created(format!("/api/v1/contacts/{}", contact.id), contact))
+    }
+}
+```
+
+`CurrentPartition` requires the request to name a partition, as a write that must land in one does. It dereferences to the `Partition` row (`partition.slug`) and has `id()`, `workspace_id()` and `resolver()`.
+
+| `PartitionScope` method | Returns |
+|---|---|
+| `workspace_id()` | The workspace |
+| `selector()` | What this request touches: the named partition, else `allowed()` |
+| `allowed()` | Every partition the member sees, whatever the request names |
+| `current()` | The named partition, as a `CurrentPartition` |
+| `includes(id)` | Whether the request may touch partition `id` |
+| `scope(select)` | `select` limited to the workspace and `selector()` |
+
+| Situation | Status | `message` |
+|---|---|---|
+| `CurrentPartition` and no resolver found a partition | 400 | `The request names no partition.` |
+| No partition with that slug or id in the workspace | 404 | `Partition not found.` |
+| The member doesn't see that partition | 403 | `You don't have access to this partition.` |
+
+Both extractors also answer the workspace's errors (401, 400, 404, 403) first.
+
+## Row-level security on PostgreSQL
+
+When a request names a partition, its transaction gets `navree.partition`, next to `navree.workspace`. `RlsPolicy::partitioned()` adds the partition to the workspace policy: while the setting is set, only that partition's rows are visible and writable.
+
+```rust
+if manager.get_database_backend() == DbBackend::Postgres {
+    manager
+        .get_connection()
+        .execute_unprepared(&RlsPolicy::new("contacts").partitioned().create_sql())
+        .await?;
+}
+```
+
+The policy it creates (after the same `ALTER TABLE` lines as the [workspace policy](/docs/workspaces/isolation/#row-level-security-on-postgresql)) checks the workspace and, when one is set, the partition:
+
+```sql
+CREATE POLICY "contacts_workspace_isolation" ON "contacts"
+    USING (("workspace_id" = NULLIF(current_setting('navree.workspace', true), '')::uuid) AND (NULLIF(current_setting('navree.partition', true), '') IS NULL OR "partition_id" = NULLIF(current_setting('navree.partition', true), '')::uuid))
+    WITH CHECK (("workspace_id" = NULLIF(current_setting('navree.workspace', true), '')::uuid) AND (NULLIF(current_setting('navree.partition', true), '') IS NULL OR "partition_id" = NULLIF(current_setting('navree.partition', true), '')::uuid));
+```
+
+A request that names no partition has no `navree.partition`, so the policy holds it to the workspace only: a member limited to some partitions is kept to them by `PartitionScope` and `PartitionRepo`, not by the database. `RlsPolicy::partition_column("domain_id")` uses another column. Jobs call `partitions.enter(&uow, id)` after `workspaces.enter(&uow, workspace_id)`. Under database isolation the request doesn't set it.
+
+## The routes
+
+With `workspace.routes` and `workspace.partitions.enabled` on, the workspace routes gain:
+
+| Route | Permission | Answer |
+|---|---|---|
+| `GET /api/workspaces/{workspace}/partitions` | `workspace.partitions.read` | The partitions the caller sees, `{"data": [...]}` |
+| `POST /api/workspaces/{workspace}/partitions` `{name, slug?}` | `workspace.partitions.create` | 201, the partition |
+| `PATCH /api/workspaces/{workspace}/partitions/{partition}` `{name}` | `workspace.partitions.update` | The partition |
+| `DELETE /api/workspaces/{workspace}/partitions/{partition}` | `workspace.partitions.delete` | 204 |
+| `GET /api/workspaces/{workspace}/members/{user}/partitions` | `workspace.members.read` | `{"user_id": "...", "partitions": "all"}` |
+| `PUT /api/workspaces/{workspace}/members/{user}/partitions` `{partitions}` | `workspace.members.update` | The same shape |
+
+`{partition}` is a slug or an id, and `partitions` is `"all"` or an array of partition ids. With partitions on, the built-in roles gain `workspace.partitions.*` (`admin`) and `workspace.partitions.read` (`member`, `viewer`); the `WorkspacePartition` subject has the prefix `workspace.partitions`. Creating, renaming and deleting partitions also takes seeing every partition, and a member limited to some partitions grants only those: anything else is a 403.
+
+## Events
+
+| Event | Name | Payload |
+|---|---|---|
+| `PartitionCreated` | `workspace.partition_created` | `workspace_id`, `partition_id`, `name`, `slug` |
+| `PartitionDeleted` | `workspace.partition_deleted` | `workspace_id`, `partition_id`, `slug` |
+| `PartitionAccessChanged` | `workspace.partition_access_changed` | `workspace_id`, `user_id`, `partitions` |
+
+## Testing
+
+Partitions run on SQLite. Create two partitions, limit a member to one and check both reads and writes:
+
+```rust
+let limited = app.acting_as(principal(grace)); // granted Only the UK partition
+
+limited
+    .get("/api/v1/contacts")
+    .header("X-Workspace", "acme")
+    .send()
+    .await
+    .assert_status(200); // the UK contacts only
+limited
+    .post("/api/v1/contacts")
+    .header("X-Workspace", "acme")
+    .header("X-Partition", "de")
+    .json(&json!({ "name": "Nope" }))
+    .send()
+    .await
+    .assert_error(403, "You don't have access to this partition.");
+```
+
+<LinkCards>
+  <LinkCard href="/docs/workspaces/organizations/" title="Organizations">
+    A level above workspaces.
+  </LinkCard>
+  <LinkCard href="/docs/workspaces/isolation/" title="Data isolation">
+    Row, schema or database isolation, and row-level security.
+  </LinkCard>
+</LinkCards>
