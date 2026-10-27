@@ -89,7 +89,9 @@ pub use index::{
     Columns, ForeignKeyBuilder, ForeignKeyDefinition, IndexBuilder, IndexDefinition, IndexKind,
     IndexRef, ReferentialAction,
 };
-pub use inspect::{ColumnInfo, ForeignKeyInfo, Generation, IndexInfo, TableInfo, ViewInfo};
+pub use inspect::{
+    ColumnInfo, ForeignKeyInfo, Generation, IndexInfo, TableInfo, TimeDimension, ViewInfo,
+};
 pub use interval::{Interval, IntervalUnit};
 pub use migration::{Migration, MigrationContext, SchemaMigration};
 pub use options::{KeyStrategy, MorphKey, SchemaOptions, TimescaleMode};

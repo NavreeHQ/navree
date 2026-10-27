@@ -8,7 +8,9 @@ use crate::dump::{self, DumpOptions};
 use crate::error::{SchemaError, SchemaResult};
 use crate::grammar::{self, Compiled, Context, ident, sqlite, table, timescale};
 use crate::index::{IndexKind, IndexRef};
-use crate::inspect::{self, ColumnInfo, ForeignKeyInfo, IndexInfo, TableInfo, ViewInfo};
+use crate::inspect::{
+    self, ColumnInfo, ForeignKeyInfo, IndexInfo, TableInfo, TimeDimension, ViewInfo,
+};
 use crate::migration::MigrationContext;
 use crate::naming::index_name;
 use crate::options::SchemaOptions;
@@ -860,6 +862,36 @@ impl<'c> Schema<'c> {
         }
         let conn = self.connection(|| format!("checking whether `{table}` is a hypertable"))?;
         inspect::is_hypertable(conn, table).await
+    }
+
+    /// The time dimension of hypertable `table`: its time column, the
+    /// column's type and the chunk interval, from TimescaleDB's catalog.
+    /// `None` when `table` is not a hypertable, which on MySQL, MariaDB,
+    /// SQLite and PostgreSQL without TimescaleDB is always the case (see
+    /// [`is_hypertable`](Schema::is_hypertable)).
+    ///
+    /// ```no_run
+    /// # async fn show(conn: &sea_orm::DatabaseConnection) -> navree_schema::SchemaResult {
+    /// use navree_schema::Schema;
+    ///
+    /// if let Some(time) = Schema::new(conn).time_dimension("events").await? {
+    ///     println!("{} ({}), chunks of {}", time.column, time.column_type, time.chunk_interval);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn time_dimension(&self, table: &str) -> SchemaResult<Option<TimeDimension>> {
+        if let Some(conn) = &self.conn
+            && Dialect::of(conn.get().backend()) != Some(Dialect::Postgres)
+        {
+            return Ok(None);
+        }
+        let target = self.target().await?;
+        if target.dialect() != Dialect::Postgres || target.timescaledb().is_none() {
+            return Ok(None);
+        }
+        let conn = self.connection(|| format!("reading the time dimension of `{table}`"))?;
+        inspect::time_dimension(conn, table).await
     }
 
     /// Converts existing `table` into a hypertable: checks its keys (widening

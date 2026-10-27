@@ -92,6 +92,36 @@ pub struct IndexInfo {
     pub primary: bool,
 }
 
+/// The time dimension of a TimescaleDB hypertable, as its catalog reports
+/// it: the column that partitions the table into chunks.
+///
+/// [`Schema::time_dimension`](crate::Schema::time_dimension) reads it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[non_exhaustive]
+pub struct TimeDimension {
+    /// The time column.
+    pub column: String,
+    /// Its type, as PostgreSQL names it: `timestamp with time zone`,
+    /// `timestamp without time zone`, `date`, `bigint`, `integer` or
+    /// `smallint`.
+    pub column_type: String,
+    /// The span of each chunk: an interval as PostgreSQL writes it (`1
+    /// day`, `7 days`, `06:00:00`) for a temporal column, a whole number of
+    /// the column's units (`86400000`) for an integer one.
+    pub chunk_interval: String,
+}
+
+impl TimeDimension {
+    /// Whether the time column holds integers (Unix seconds, milliseconds,
+    /// a sequence) rather than dates or timestamps.
+    pub fn is_integer(&self) -> bool {
+        matches!(
+            self.column_type.as_str(),
+            "bigint" | "integer" | "smallint"
+        )
+    }
+}
+
 /// A foreign key of a table.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct ForeignKeyInfo {
@@ -349,6 +379,42 @@ pub(crate) async fn is_hypertable(
     };
     let found = rows(conn, sql, values).await?;
     Ok(found.first().is_some_and(|r| boolean(r, "present")))
+}
+
+/// The time dimension of hypertable `table_name`, read from
+/// `timescaledb_information.dimensions` (so TimescaleDB must be installed);
+/// `None` when the table is not a hypertable.
+pub(crate) async fn time_dimension(
+    conn: &dyn SchemaConnection,
+    table_name: &str,
+) -> SchemaResult<Option<TimeDimension>> {
+    let name = unqualified(table_name);
+    let select = "SELECT column_name::text AS column_name, column_type::text AS column_type, \
+         coalesce(time_interval::text, integer_interval::text) AS chunk_interval \
+         FROM timescaledb_information.dimensions WHERE dimension_type = 'Time' AND ";
+    let (sql, values) = match schema_of(table_name) {
+        Some(schema) => (
+            format!(
+                "{select}hypertable_schema = $1 AND hypertable_name = $2 ORDER BY dimension_number LIMIT 1"
+            ),
+            vec![s(schema), s(name)],
+        ),
+        None => (
+            format!(
+                "{select}hypertable_schema = ANY (current_schemas(false)) AND hypertable_name = $1 \
+                 ORDER BY array_position(current_schemas(false), hypertable_schema), dimension_number LIMIT 1"
+            ),
+            vec![s(name)],
+        ),
+    };
+    let found = rows(conn, &sql, values).await?;
+    Ok(found.first().and_then(|row| {
+        Some(TimeDimension {
+            column: text(row, "column_name")?,
+            column_type: text(row, "column_type")?,
+            chunk_interval: text(row, "chunk_interval").unwrap_or_default(),
+        })
+    }))
 }
 
 fn sqlite_master(schema: Option<&str>) -> String {
