@@ -14,6 +14,12 @@
 //!   `last`. [`TableBuilder`] queries tables without a model.
 //! - **Records** ([`Record`]) carry dirty tracking, extras and loaded
 //!   relations; saving inserts or updates, with lifecycle [`hooks`].
+//! - **The lifecycle**: model [`events`] heard by observers, closures,
+//!   typed application events and [`broadcast`]s (after the commit inside a
+//!   unit of work), quiet operations, soft deletes (`restore`,
+//!   `force_delete`, `only_trashed`), global scopes registered at boot,
+//!   [`strict`] modes, and [`prune`] (`model:prune`), configured by
+//!   [`OrmModule`].
 //! - **Executors**: every terminal method takes the executor first — a
 //!   [`Db`](navree_db::Db) or a [`Uow`](navree_db::Uow) — so statements run
 //!   in the request's transaction, with its actor, workspace settings and
@@ -88,25 +94,35 @@
 
 extern crate self as navree_orm;
 
+pub mod broadcast;
 pub mod cast;
 mod collection;
 mod column;
 mod driver;
 mod error;
+pub mod events;
 mod exec;
 mod expr;
+mod global_scopes;
 pub mod hooks;
 pub mod ir;
+mod lifecycle;
 mod model;
+mod module;
+mod options;
 pub mod pagination;
 mod persist;
 pub mod prelude;
+pub mod prune;
 mod query;
+mod quiet;
 mod record;
 pub mod relations;
 mod row;
 mod scope;
+mod soft_deletes;
 pub mod sql;
+pub mod strict;
 mod ulid;
 mod value;
 
@@ -117,9 +133,17 @@ pub use column::{
 };
 pub use driver::{DocumentDriver, InsertOutcome};
 pub use error::{OrmError, Result};
+pub use events::{Observer, ObserverHook, without_events};
 pub use exec::{Access, DocumentTarget, ExecContext, Executor, SqlTarget, Target};
+pub use global_scopes::ClosureScope;
 pub use ir::Expr;
+pub use lifecycle::ModelLifecycle;
 pub use model::{ColumnMeta, KeyKind, Model, ModelMeta, PrimaryKey, Timestamp};
+pub use module::{
+    ConfiguredOrmModule, ModuleBuilderOrmExt, OrmModule, OrmRuntime, RegisteredModel,
+    registered_models,
+};
+pub use options::{DEFAULT_PRUNE_CHUNK, OrmOptions};
 pub use pagination::{
     CursorPage, CursorRequest, Page, PageMeta, PageQuery, PageRequest, SimplePage, SimplePageMeta,
 };
@@ -130,6 +154,7 @@ pub use query::{
 pub use record::Record;
 pub use row::Row;
 pub use scope::{GlobalScope, Scoped, SoftDeletes};
+pub use soft_deletes::SoftDeleting;
 pub use sql::{Dialect, Statement};
 pub use ulid::{Ulid, UlidError};
 pub use value::{
@@ -146,7 +171,7 @@ pub mod __private {
     pub use crate::cast::{decode, decode_option, encode, encode_option};
     pub use crate::model::derive_support::*;
     pub use chrono::{DateTime, Utc};
-    pub use std::sync::Arc;
+    pub use std::sync::{Arc, OnceLock};
 }
 
 /// The models the documentation examples use, so every example compiles.

@@ -341,6 +341,7 @@ pub struct ModelMeta {
     deleted_at: Option<&'static str>,
     connection: Option<&'static str>,
     per_page: u64,
+    pruning: Option<crate::prune::Pruning>,
 }
 
 impl ModelMeta {
@@ -358,7 +359,22 @@ impl ModelMeta {
             deleted_at: None,
             connection: None,
             per_page: 15,
+            pruning: None,
         }
+    }
+
+    /// How `model:prune` prunes the model (`#[model(prunable)]`,
+    /// `#[model(mass_prunable)]`).
+    pub const fn pruned(self, pruning: crate::prune::Pruning) -> Self {
+        ModelMeta {
+            pruning: Some(pruning),
+            ..self
+        }
+    }
+
+    /// How the model is pruned, when it is prunable.
+    pub const fn pruning(&self) -> Option<&crate::prune::Pruning> {
+        self.pruning.as_ref()
     }
 
     /// The key column and how it gets its value.
@@ -706,10 +722,101 @@ pub mod derive_support {
         }
     }
 
-    /// Reads field column `column` of model `M`.
-    pub fn read<M: Model, T: Field>(row: &Row, column: &str) -> Result<T, OrmError> {
-        row.field::<T>(column)
-            .map_err(|error| field_error::<M>(row, column, T::type_name(), &error))
+    /// Reads field column `column` of model `M`; `default` is the field's
+    /// default when its type has one (for a column a partial select left
+    /// out, in lenient mode).
+    pub fn read<M: Model, T: Field>(
+        row: &Row,
+        column: &str,
+        default: Option<fn() -> T>,
+    ) -> Result<T, OrmError> {
+        match row.field::<T>(column) {
+            Ok(value) => Ok(value),
+            Err(FieldError::Missing) => missing::<M, T>(row, column, T::type_name(), default),
+            Err(error) => Err(decode_error(
+                M::meta().name(),
+                column,
+                T::type_name(),
+                &error,
+            )),
+        }
+    }
+
+    /// A field whose column the row lacks: an error in strict mode (unless
+    /// a handler tolerates it) and when the field has no default; else the
+    /// default.
+    fn missing<M: Model, T>(
+        row: &Row,
+        column: &str,
+        expected: Cow<'static, str>,
+        default: Option<fn() -> T>,
+    ) -> Result<T, OrmError> {
+        let error = |expected| OrmError::MissingAttribute {
+            model: Cow::Borrowed(M::meta().name()),
+            column: column.to_owned(),
+            expected,
+            selected: row.columns(),
+        };
+        let Some(default) = default else {
+            return Err(error(expected));
+        };
+        crate::strict::current().check_with(
+            crate::strict::Violation::MissingAttribute {
+                model: M::meta().name(),
+                column: column.to_owned(),
+            },
+            |_| error(expected),
+        )?;
+        Ok(default())
+    }
+
+    /// The default of a field's type, when it has one: `(&DefaultOf::<T>::new()).default_fn()`
+    /// is `Some(T::default)` for a `T: Default` and `None` otherwise (the
+    /// derive names concrete types, so the method resolves to one of
+    /// [`ViaDefault`] and [`WithoutDefault`]).
+    pub struct DefaultOf<T>(std::marker::PhantomData<fn() -> T>);
+
+    impl<T> DefaultOf<T> {
+        /// The probe for `T`.
+        pub const fn new() -> Self {
+            DefaultOf(std::marker::PhantomData)
+        }
+    }
+
+    impl<T> Default for DefaultOf<T> {
+        fn default() -> Self {
+            DefaultOf::new()
+        }
+    }
+
+    /// The default of a type that has one.
+    pub trait ViaDefault {
+        /// The field type.
+        type Field;
+        /// `Some(Field::default)`.
+        fn default_fn(&self) -> Option<fn() -> Self::Field>;
+    }
+
+    impl<T: Default> ViaDefault for DefaultOf<T> {
+        type Field = T;
+        fn default_fn(&self) -> Option<fn() -> T> {
+            Some(T::default)
+        }
+    }
+
+    /// No default for a type that has none.
+    pub trait WithoutDefault {
+        /// The field type.
+        type Field;
+        /// `None`.
+        fn default_fn(&self) -> Option<fn() -> Self::Field>;
+    }
+
+    impl<T> WithoutDefault for &DefaultOf<T> {
+        type Field = T;
+        fn default_fn(&self) -> Option<fn() -> T> {
+            None
+        }
     }
 
     /// Reads field column `column`, or the field's default when the row
@@ -721,46 +828,59 @@ pub mod derive_support {
         match row.field::<T>(column) {
             Ok(value) => Ok(value),
             Err(FieldError::Missing) => Ok(T::default()),
-            Err(error) => Err(field_error::<M>(row, column, T::type_name(), &error)),
+            Err(error) => Err(decode_error(
+                M::meta().name(),
+                column,
+                T::type_name(),
+                &error,
+            )),
         }
     }
 
-    fn field_error<M: Model>(
+    /// Reads cast column `column` through cast `C`; `default` as for
+    /// [`read`].
+    pub fn read_cast<M: Model, C: Cast<T>, T>(
         row: &Row,
         column: &str,
-        expected: Cow<'static, str>,
-        error: &FieldError,
-    ) -> OrmError {
-        match error {
-            FieldError::Missing => OrmError::Decode {
-                model: Cow::Borrowed(M::meta().name()),
-                column: column.to_owned(),
-                expected,
-                message: format!(
-                    "the row has no such column (it has: {}); select it, or mark the field #[model(default)]",
-                    row.columns().join(", ")
-                ),
-            },
-            other => decode_error(M::meta().name(), column, expected, other),
+        default: Option<fn() -> T>,
+    ) -> Result<T, OrmError> {
+        match row.field::<C::Stored>(column) {
+            Ok(stored) => {
+                C::get(stored).map_err(|error| cast_error::<M>(column, error.to_string()))
+            }
+            Err(FieldError::Missing) => {
+                missing::<M, T>(row, column, C::Stored::type_name(), default)
+            }
+            Err(error) => Err(decode_error(
+                M::meta().name(),
+                column,
+                C::Stored::type_name(),
+                &error,
+            )),
         }
     }
 
-    /// Reads cast column `column` through cast `C`.
-    pub fn read_cast<M: Model, C: Cast<T>, T>(row: &Row, column: &str) -> Result<T, OrmError> {
-        let stored = read::<M, C::Stored>(row, column)?;
-        C::get(stored).map_err(|error| cast_error::<M>(column, error.to_string()))
-    }
-
-    /// Reads nullable cast column `column` through cast `C`.
+    /// Reads nullable cast column `column` through cast `C`; `default` as
+    /// for [`read`].
     pub fn read_cast_option<M: Model, C: Cast<T>, T>(
         row: &Row,
         column: &str,
+        default: Option<fn() -> Option<T>>,
     ) -> Result<Option<T>, OrmError> {
-        match read::<M, Option<C::Stored>>(row, column)? {
-            Some(stored) => C::get(stored)
+        match row.field::<Option<C::Stored>>(column) {
+            Ok(Some(stored)) => C::get(stored)
                 .map(Some)
                 .map_err(|error| cast_error::<M>(column, error.to_string())),
-            None => Ok(None),
+            Ok(None) => Ok(None),
+            Err(FieldError::Missing) => {
+                missing::<M, Option<T>>(row, column, <Option<C::Stored>>::type_name(), default)
+            }
+            Err(error) => Err(decode_error(
+                M::meta().name(),
+                column,
+                <Option<C::Stored>>::type_name(),
+                &error,
+            )),
         }
     }
 
@@ -770,7 +890,7 @@ pub mod derive_support {
         column: &str,
     ) -> Result<T, OrmError> {
         if row.has_column(column) {
-            read_cast::<M, C, T>(row, column)
+            read_cast::<M, C, T>(row, column, Some(T::default))
         } else {
             Ok(T::default())
         }
@@ -782,7 +902,7 @@ pub mod derive_support {
         column: &str,
     ) -> Result<Option<T>, OrmError> {
         if row.has_column(column) {
-            read_cast_option::<M, C, T>(row, column)
+            read_cast_option::<M, C, T>(row, column, Some(|| None))
         } else {
             Ok(None)
         }

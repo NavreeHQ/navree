@@ -7,6 +7,7 @@ use syn::punctuated::Punctuated;
 use syn::{Attribute, LitBool, LitInt, LitStr, Token};
 
 use crate::errors::{Errors, key_name, suggestion};
+use crate::model::lifecycle::{self, Lifecycle};
 
 /// How the key gets its value (navree-orm's `KeyKind`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -54,6 +55,8 @@ pub(crate) struct Container {
     pub(crate) key_type: Option<KeyType>,
     pub(crate) timestamps: Timestamps,
     pub(crate) soft_deletes: Option<(String, Span)>,
+    /// `observers(..)`, `dispatches(..)`, `broadcasts`, `prunable`, ...
+    pub(crate) lifecycle: Lifecycle,
     pub(crate) connection: Option<LitStr>,
     pub(crate) per_page: Option<LitInt>,
     pub(crate) global_scopes: Vec<syn::Expr>,
@@ -111,6 +114,8 @@ fn parse_key(container: &mut Container, meta: &ParseNestedMeta<'_>) -> syn::Resu
             "deleted_at".to_owned()
         };
         container.soft_deletes = Some((column, span));
+    } else if lifecycle::parse_key(&mut container.lifecycle, meta)? {
+        // An observer, dispatch, broadcast or pruning attribute.
     } else if path.is_ident("connection") {
         container.connection = Some(non_empty(meta.value()?.parse()?)?);
     } else if path.is_ident("per_page") {
@@ -130,12 +135,13 @@ fn parse_key(container: &mut Container, meta: &ParseNestedMeta<'_>) -> syn::Resu
         container.global_scopes.extend(scopes);
     } else {
         let key = key_name(path);
-        let hint = suggestion(&key, KEYS)
+        let known: Vec<&str> = KEYS.iter().chain(lifecycle::KEYS).copied().collect();
+        let hint = suggestion(&key, &known)
             .map(|known| format!(" (did you mean `{known}`?)"))
             .unwrap_or_default();
         return Err(meta.error(format!(
             "unknown model attribute `{key}`{hint}; expected one of: {}",
-            KEYS.join(", ")
+            known.join(", ")
         )));
     }
     Ok(())

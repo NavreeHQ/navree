@@ -5,6 +5,7 @@
 //!
 //! `cargo test -p navree-orm --features postgres,mysql --test servers`
 
+mod lifecycle;
 mod models;
 mod scenarios;
 mod support;
@@ -48,6 +49,19 @@ async fn timescaledb_time_buckets() {
         scenarios::time_buckets(db, Server::Postgres)
     })
     .await;
+}
+
+#[tokio::test]
+async fn postgres_lifecycle() {
+    run(Server::Postgres, |db| {
+        lifecycle::scenario(db, Server::Postgres)
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn mysql_lifecycle() {
+    run(Server::MySql, |db| lifecycle::scenario(db, Server::MySql)).await;
 }
 
 #[tokio::test]

@@ -43,6 +43,8 @@ pub struct Record<M: Model> {
     pub(crate) previous: Vec<(&'static str, Value)>,
     pub(crate) extras: Vec<(String, Value)>,
     pub(crate) relations: Relations,
+    /// Set while `force_delete` runs (see `is_force_deleting`).
+    pub(crate) force_deleting: bool,
 }
 
 impl<M: Model> Record<M> {
@@ -58,6 +60,7 @@ impl<M: Model> Record<M> {
             previous: Vec::new(),
             extras: Vec::new(),
             relations: Relations::new(),
+            force_deleting: false,
         }
     }
 
@@ -82,6 +85,7 @@ impl<M: Model> Record<M> {
             previous: Vec::new(),
             extras,
             relations: Relations::new(),
+            force_deleting: false,
         })
     }
 
@@ -452,7 +456,48 @@ impl<M: Model> Record<M> {
     {
         let extra: Vec<Assignment> = extra.into_iter().collect();
         let target = exec.target(Access::Write).await?;
-        persist::increment(&target, self, &column, amount, false, extra).await
+        persist::increment(&target, self, vec![(column, amount)], false, extra).await
+    }
+
+    /// Adds each amount to its column in one statement (`SET a = a + 1, b
+    /// = b + 5`, plus the update timestamp), in the database and in the
+    /// record. A column may appear once. Returns `false` when a hook
+    /// cancelled it.
+    ///
+    /// ```no_run
+    /// # use navree_orm::__doc_models::*;
+    /// # async fn demo(db: Db, mut deal: Record<Deal>) -> Result<()> {
+    /// deal.increment_each(&db, [(Deal::VIEWS, 1), (Deal::AMOUNT_CENTS, 500)]).await?;
+    /// # Ok(()) }
+    /// ```
+    pub async fn increment_each<E, T>(
+        &mut self,
+        exec: &E,
+        steps: impl IntoIterator<Item = (Column<M, T>, T)>,
+    ) -> Result<bool>
+    where
+        E: Executor + ?Sized,
+        T: Numeric,
+    {
+        let steps: Vec<(Column<M, T>, T)> = steps.into_iter().collect();
+        let target = exec.target(Access::Write).await?;
+        persist::increment(&target, self, steps, false, Vec::new()).await
+    }
+
+    /// Subtracts each amount from its column in one statement, in the
+    /// database and in the record.
+    pub async fn decrement_each<E, T>(
+        &mut self,
+        exec: &E,
+        steps: impl IntoIterator<Item = (Column<M, T>, T)>,
+    ) -> Result<bool>
+    where
+        E: Executor + ?Sized,
+        T: Numeric,
+    {
+        let steps: Vec<(Column<M, T>, T)> = steps.into_iter().collect();
+        let target = exec.target(Access::Write).await?;
+        persist::increment(&target, self, steps, true, Vec::new()).await
     }
 
     /// Subtracts `amount` from `column` in the database and in the record.
@@ -485,7 +530,7 @@ impl<M: Model> Record<M> {
     {
         let extra: Vec<Assignment> = extra.into_iter().collect();
         let target = exec.target(Access::Write).await?;
-        persist::increment(&target, self, &column, amount, true, extra).await
+        persist::increment(&target, self, vec![(column, amount)], true, extra).await
     }
 
     /// The error for an operation that needs a stored record.
@@ -528,6 +573,7 @@ impl<M: Model> Clone for Record<M> {
             previous: self.previous.clone(),
             extras: self.extras.clone(),
             relations: self.relations.clone(),
+            force_deleting: self.force_deleting,
         }
     }
 }
