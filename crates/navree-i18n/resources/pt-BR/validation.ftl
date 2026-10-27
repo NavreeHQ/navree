@@ -11,6 +11,7 @@ validation-ascii = { $attribute } deve conter apenas caracteres ASCII
 validation-boolean = { $attribute } deve ser um valor booleano
 validation-confirmed = a confirmação de { $attribute } não corresponde
 validation-contains = { $attribute } deve conter o texto { $value }
+validation-country = { $attribute } deve ser um código de país ISO 3166-1 alfa-2 válido
 validation-credit_card = { $attribute } deve ser um cartão de crédito
 validation-date = { $attribute } deve ser uma data ISO 8601 válida
 validation-date_format = { $attribute } deve ser uma data válida no formato { $format }
@@ -24,6 +25,7 @@ validation-ip = { $attribute } deve ser um endereço IP
 validation-ipv4 = { $attribute } deve ser um endereço IPv4
 validation-ipv6 = { $attribute } deve ser um endereço IPv6
 validation-json = { $attribute } deve ser um texto JSON válido
+validation-locale = { $attribute } deve ser uma localidade válida
 validation-max-array = { $attribute } não deve conter mais de { $max } { $max ->
         [one] item
        *[other] itens
@@ -51,6 +53,7 @@ validation-required = { $attribute } não deve estar vazio
 validation-same = { $attribute } deve corresponder a { $other }
 validation-starts_with = { $attribute } deve começar com { $values }
 validation-string = { $attribute } deve ser um texto
+validation-unicode_name = { $attribute } deve conter apenas letras, números, espaços, hifens, apóstrofos e pontos
 validation-unique = { $attribute } já está em uso
 validation-url = { $attribute } deve ser um endereço URL
 validation-uuid = { $attribute } deve ser um UUID
