@@ -66,7 +66,8 @@ impl Vonage {
             return Err(malformed());
         };
         let decode = |part: &str| URL_SAFE_NO_PAD.decode(part).map_err(|_| malformed());
-        let jwt_header: Value = serde_json::from_slice(&decode(encoded_header)?).map_err(|_| malformed())?;
+        let jwt_header: Value =
+            serde_json::from_slice(&decode(encoded_header)?).map_err(|_| malformed())?;
         if jwt_header["alg"] != "HS256" {
             return Err(malformed());
         }
@@ -77,9 +78,16 @@ impl Vonage {
         if !signing::same(&decode(encoded_signature)?, &expected) {
             return Err(VerifyError::SignatureMismatch);
         }
-        let claims: Value = serde_json::from_slice(&decode(encoded_claims)?).map_err(|_| malformed())?;
-        let hash = claims["payload_hash"].as_str().unwrap_or_default().to_ascii_lowercase();
-        if !signing::same(hash.as_bytes(), hex::encode(Sha256::digest(body)).as_bytes()) {
+        let claims: Value =
+            serde_json::from_slice(&decode(encoded_claims)?).map_err(|_| malformed())?;
+        let hash = claims["payload_hash"]
+            .as_str()
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        if !signing::same(
+            hash.as_bytes(),
+            hex::encode(Sha256::digest(body)).as_bytes(),
+        ) {
             return Err(VerifyError::SignatureMismatch);
         }
         let timestamp = claims["iat"]
@@ -163,14 +171,21 @@ mod tests {
         );
         assert_eq!(
             Vonage::verify(SECRET, &headers(&auth), body, at(IAT + 3600)),
-            Err(VerifyError::TimestampOutOfTolerance { tolerance_secs: 300 })
+            Err(VerifyError::TimestampOutOfTolerance {
+                tolerance_secs: 300
+            })
         );
     }
 
     #[test]
     fn malformed_tokens_are_refused() {
         let body = b"{}";
-        for value in ["Basic abc", "Bearer a.b", "Bearer a.b.c.d", "Bearer %%.%%.%%"] {
+        for value in [
+            "Basic abc",
+            "Bearer a.b",
+            "Bearer a.b.c.d",
+            "Bearer %%.%%.%%",
+        ] {
             assert_eq!(
                 Vonage::verify(SECRET, &headers(value), body, None),
                 Err(VerifyError::MalformedHeader("authorization".to_owned())),

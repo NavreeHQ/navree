@@ -304,22 +304,42 @@ mod tests {
     #[test]
     fn subscriptions_need_https_and_valid_keys() {
         let auth = "BTBZMqHH6r4Tts7J_aSIgg";
-        assert!(subscription("https://fcm.googleapis.com/fcm/send/x", P256DH, auth).check().is_ok());
-        assert!(subscription("http://localhost:8080/push", P256DH, auth).check().is_ok());
+        assert!(
+            subscription("https://fcm.googleapis.com/fcm/send/x", P256DH, auth)
+                .check()
+                .is_ok()
+        );
+        assert!(
+            subscription("http://localhost:8080/push", P256DH, auth)
+                .check()
+                .is_ok()
+        );
         assert_eq!(
-            subscription("http://push.example.com/x", P256DH, auth).check().unwrap_err().0,
+            subscription("http://push.example.com/x", P256DH, auth)
+                .check()
+                .unwrap_err()
+                .0,
             "endpoint"
         );
         assert_eq!(
-            subscription("not a url", P256DH, auth).check().unwrap_err().0,
+            subscription("not a url", P256DH, auth)
+                .check()
+                .unwrap_err()
+                .0,
             "endpoint"
         );
         assert_eq!(
-            subscription("https://x.test/1", "BAAA", auth).check().unwrap_err().0,
+            subscription("https://x.test/1", "BAAA", auth)
+                .check()
+                .unwrap_err()
+                .0,
             "keys.p256dh"
         );
         assert_eq!(
-            subscription("https://x.test/1", P256DH, "c2hvcnQ").check().unwrap_err().0,
+            subscription("https://x.test/1", P256DH, "c2hvcnQ")
+                .check()
+                .unwrap_err()
+                .0,
             "keys.auth"
         );
     }

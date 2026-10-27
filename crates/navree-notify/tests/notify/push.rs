@@ -86,7 +86,10 @@ async fn a_user_subscribes_and_unsubscribes_their_browser() {
         .send()
         .await
         .assert_status(201);
-    assert_eq!(push.of("user", &user.id.to_string()).await.unwrap().len(), 1);
+    assert_eq!(
+        push.of("user", &user.id.to_string()).await.unwrap().len(),
+        1
+    );
 
     // Someone else cannot remove it.
     let other = TestUser::new();
@@ -103,7 +106,12 @@ async fn a_user_subscribes_and_unsubscribes_their_browser() {
         .send()
         .await
         .assert_status(204);
-    assert!(push.of("user", &user.id.to_string()).await.unwrap().is_empty());
+    assert!(
+        push.of("user", &user.id.to_string())
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[tokio::test]
@@ -142,10 +150,18 @@ async fn a_browser_moves_to_whoever_subscribes_it_last() {
     let browser = subscription("https://web.push.apple.com/QGuA");
 
     push.subscribe(&first, browser.clone(), None).await.unwrap();
-    let moved = push.subscribe(&second, browser.clone(), None).await.unwrap();
+    let moved = push
+        .subscribe(&second, browser.clone(), None)
+        .await
+        .unwrap();
 
     assert_eq!(moved.notifiable_id, second.id.to_string());
-    assert!(push.of("user", &first.id.to_string()).await.unwrap().is_empty());
+    assert!(
+        push.of("user", &first.id.to_string())
+            .await
+            .unwrap()
+            .is_empty()
+    );
     assert!(push.delete(moved.id).await.unwrap());
     assert!(!push.delete(moved.id).await.unwrap());
 }

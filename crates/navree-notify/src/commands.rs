@@ -45,7 +45,10 @@ mod tests {
     fn the_settings_hold_both_halves_of_one_key() {
         let key = VapidKey::generate();
         let text = vapid_settings(&key);
-        assert!(text.contains(&format!("public_key = \"{}\"", key.application_server_key())));
+        assert!(text.contains(&format!(
+            "public_key = \"{}\"",
+            key.application_server_key()
+        )));
         assert!(text.contains(&format!("private_key = \"{}\"", key.private_key())));
         assert!(text.contains("APP_NOTIFY__WEB_PUSH__PRIVATE_KEY="));
         let loaded = VapidKey::from_base64url(&key.application_server_key(), &key.private_key());

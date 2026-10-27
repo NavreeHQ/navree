@@ -169,7 +169,10 @@ mod tests {
         let us = Country::parse("US").ok();
         assert_eq!(normalize("(415) 555-0100", us).unwrap(), "+14155550100");
         assert_eq!(normalize("+44 7400 123456", us).unwrap(), "+447400123456");
-        assert_eq!(normalize("whatsapp:+447400123456", None).unwrap(), "+447400123456");
+        assert_eq!(
+            normalize("whatsapp:+447400123456", None).unwrap(),
+            "+447400123456"
+        );
         assert!(normalize("415 555 0100", None).is_err());
         assert!(normalize("not a number", us).is_err());
     }

@@ -131,7 +131,9 @@ pub fn encrypt(p256dh: &[u8], auth: &[u8], payload: &[u8]) -> Result<Vec<u8>, We
 /// Decodes a base64url member of a subscription (`p256dh`, `auth`),
 /// padded or not.
 pub fn decode_key(text: &str) -> Option<Vec<u8>> {
-    URL_SAFE_NO_PAD.decode(text.trim().trim_end_matches('=')).ok()
+    URL_SAFE_NO_PAD
+        .decode(text.trim().trim_end_matches('='))
+        .ok()
 }
 
 /// Checks the shape of a subscription's keys.
@@ -277,10 +279,7 @@ impl VapidKey {
     /// The private scalar in base64url without padding (32 bytes), to
     /// store next to the public key.
     pub fn private_key(&self) -> String {
-        let (d, _) = self
-            .key
-            .p256_parts()
-            .expect("a VapidKey holds a P-256 key");
+        let (d, _) = self.key.p256_parts().expect("a VapidKey holds a P-256 key");
         URL_SAFE_NO_PAD.encode(d)
     }
 

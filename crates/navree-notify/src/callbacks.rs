@@ -134,7 +134,12 @@ impl InboundMessage {
     /// when it gives one, else the whole text matched against
     /// [`OPT_OUT_KEYWORDS`] and [`OPT_IN_KEYWORDS`].
     pub fn keyword(&self) -> Option<Keyword> {
-        match self.opt_out_type.as_deref().map(str::to_ascii_uppercase).as_deref() {
+        match self
+            .opt_out_type
+            .as_deref()
+            .map(str::to_ascii_uppercase)
+            .as_deref()
+        {
             Some("STOP") => return Some(Keyword::OptOut),
             Some("START") => return Some(Keyword::OptIn),
             Some(_) => return None,
@@ -177,7 +182,12 @@ impl ChannelCallback {
     /// addresses).
     pub fn from_twilio(body: &[u8]) -> Vec<ChannelCallback> {
         let params: HashMap<String, String> = form_urlencoded::parse(body).into_owned().collect();
-        let get = |name: &str| params.get(name).map(String::as_str).filter(|v| !v.is_empty());
+        let get = |name: &str| {
+            params
+                .get(name)
+                .map(String::as_str)
+                .filter(|v| !v.is_empty())
+        };
         let status = get("MessageStatus").or_else(|| get("SmsStatus"));
         if let (Some(sid), Some(status)) = (get("MessageSid").or_else(|| get("SmsSid")), status)
             && let Some(status) = twilio_status(status)
@@ -218,7 +228,8 @@ impl ChannelCallback {
             Some("whatsapp") => Channel::WhatsApp,
             _ => Channel::Sms,
         };
-        if let (Some(id), Some(status)) = (event["message_uuid"].as_str(), event["status"].as_str()) {
+        if let (Some(id), Some(status)) = (event["message_uuid"].as_str(), event["status"].as_str())
+        {
             let Some(status) = vonage_status(status) else {
                 return Vec::new();
             };
@@ -265,7 +276,8 @@ impl ChannelCallback {
         for value in values {
             let to = value["metadata"]["display_phone_number"].as_str().map(plus);
             for status in value["statuses"].as_array().into_iter().flatten() {
-                let (Some(id), Some(state)) = (status["id"].as_str(), status["status"].as_str()) else {
+                let (Some(id), Some(state)) = (status["id"].as_str(), status["status"].as_str())
+                else {
                     continue;
                 };
                 let Some(state) = meta_status(state) else {
@@ -378,7 +390,10 @@ mod tests {
             ("failed", DeliveryStatus::Failed),
         ] {
             let body = format!("MessageSid=SM2&MessageStatus={state}");
-            assert_eq!(status(&ChannelCallback::from_twilio(body.as_bytes())).status, expected);
+            assert_eq!(
+                status(&ChannelCallback::from_twilio(body.as_bytes())).status,
+                expected
+            );
         }
     }
 

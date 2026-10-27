@@ -160,7 +160,11 @@ async fn status_of(app: &TestApp, provider: &str, id: &str) -> Option<DeliverySt
 }
 
 /// Posts Twilio's signed form to the callback route.
-async fn post_twilio(app: &TestApp, params: &[(&str, &str)], token: &str) -> navree_testing::TestResponse {
+async fn post_twilio(
+    app: &TestApp,
+    params: &[(&str, &str)],
+    token: &str,
+) -> navree_testing::TestResponse {
     let url = "https://api.example.com/api/webhooks/notify/twilio";
     app.client()
         .post("/api/webhooks/notify/twilio")
@@ -181,18 +185,30 @@ async fn twilio_statuses_and_stop_replies_are_applied() {
 
     let response = post_twilio(
         &app,
-        &[("MessageSid", &sid), ("MessageStatus", "delivered"), ("To", PHONE)],
+        &[
+            ("MessageSid", &sid),
+            ("MessageStatus", "delivered"),
+            ("To", PHONE),
+        ],
         TWILIO_TOKEN,
     )
     .await
     .assert_status(200);
     assert_eq!(response.header("content-type"), Some("text/xml"));
     assert!(response.text().contains("<Response></Response>"));
-    assert_eq!(status_of(&app, "twilio", &sid).await, Some(DeliveryStatus::Delivered));
+    assert_eq!(
+        status_of(&app, "twilio", &sid).await,
+        Some(DeliveryStatus::Delivered)
+    );
 
     post_twilio(
         &app,
-        &[("MessageSid", "SMinbound"), ("From", PHONE), ("To", "+15550001111"), ("Body", "STOP")],
+        &[
+            ("MessageSid", "SMinbound"),
+            ("From", PHONE),
+            ("To", "+15550001111"),
+            ("Body", "STOP"),
+        ],
         TWILIO_TOKEN,
     )
     .await
@@ -200,10 +216,17 @@ async fn twilio_statuses_and_stop_replies_are_applied() {
     let opt_outs = app.get::<OptOuts>().await;
     assert!(opt_outs.is_opted_out(Channel::Sms, PHONE).await.unwrap());
 
-    post_twilio(&app, &[("MessageSid", &sid), ("MessageStatus", "read")], "wrong-token")
-        .await
-        .assert_error(400, "Invalid webhook signature");
-    assert_eq!(status_of(&app, "twilio", &sid).await, Some(DeliveryStatus::Delivered));
+    post_twilio(
+        &app,
+        &[("MessageSid", &sid), ("MessageStatus", "read")],
+        "wrong-token",
+    )
+    .await
+    .assert_error(400, "Invalid webhook signature");
+    assert_eq!(
+        status_of(&app, "twilio", &sid).await,
+        Some(DeliveryStatus::Delivered)
+    );
 }
 
 #[tokio::test]
@@ -228,7 +251,10 @@ async fn vonage_statuses_and_replies_are_applied() {
     )
     .await
     .assert_status(200);
-    assert_eq!(status_of(&app, "vonage", &id).await, Some(DeliveryStatus::Delivered));
+    assert_eq!(
+        status_of(&app, "vonage", &id).await,
+        Some(DeliveryStatus::Delivered)
+    );
 
     send(
         json!({ "channel": "sms", "message_uuid": "in-1", "to": "15550001111", "from": "14155550100", "text": "stop", "message_type": "text" }),
@@ -244,9 +270,12 @@ async fn vonage_statuses_and_replies_are_applied() {
             .unwrap()
     );
 
-    send(json!({ "message_uuid": id, "status": "read" }), "not-the-secret")
-        .await
-        .assert_error(400, "Invalid webhook signature");
+    send(
+        json!({ "message_uuid": id, "status": "read" }),
+        "not-the-secret",
+    )
+    .await
+    .assert_error(400, "Invalid webhook signature");
 }
 
 #[tokio::test]
@@ -280,16 +309,27 @@ async fn meta_answers_the_handshake_and_applies_statuses_and_replies() {
     .to_string();
     app.client()
         .post("/api/webhooks/notify/meta")
-        .header("x-hub-signature-256", Meta::sign(META_SECRET, body.as_bytes()))
+        .header(
+            "x-hub-signature-256",
+            Meta::sign(META_SECRET, body.as_bytes()),
+        )
         .header("content-type", "application/json")
         .body(body.clone())
         .send()
         .await
         .assert_status(200);
 
-    assert_eq!(status_of(&app, "meta", &wamid).await, Some(DeliveryStatus::Read));
+    assert_eq!(
+        status_of(&app, "meta", &wamid).await,
+        Some(DeliveryStatus::Read)
+    );
     let opt_outs = app.get::<OptOuts>().await;
-    assert!(opt_outs.is_opted_out(Channel::WhatsApp, PHONE).await.unwrap());
+    assert!(
+        opt_outs
+            .is_opted_out(Channel::WhatsApp, PHONE)
+            .await
+            .unwrap()
+    );
     assert!(!opt_outs.is_opted_out(Channel::Sms, PHONE).await.unwrap());
 
     app.client()

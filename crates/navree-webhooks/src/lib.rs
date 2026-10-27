@@ -80,8 +80,6 @@ mod sources;
 mod template;
 mod verify;
 
-#[cfg(feature = "notify")]
-pub use notify::{NOTIFY_CALLBACKS_PREFIX, NotifyCallbacksController};
 pub use controller::{
     CreateEndpointInput, MANAGE_PERMISSION, RotatedSecret, UpdateEndpointInput, WebhooksController,
 };
@@ -93,6 +91,8 @@ pub use jobs::{Deliver, FanOut, MAX_ATTEMPTS, RETRY_SCHEDULE, retry_delay};
 pub use keys::SenderKeys;
 pub use migration::WEBHOOKS_MIGRATIONS;
 pub use module::{ModuleBuilderWebhooksExt, WebhooksModule};
+#[cfg(feature = "notify")]
+pub use notify::{NOTIFY_CALLBACKS_PREFIX, NotifyCallbacksController};
 pub use options::{
     HmacAlgorithm, IncomingOptions, SignatureEncoding, SourceOptions, WebhooksOptions,
 };

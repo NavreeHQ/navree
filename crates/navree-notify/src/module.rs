@@ -19,16 +19,22 @@ use crate::{
 };
 
 /// The global notification module: provides and exports [`Notifier`],
-/// registers job `notify.send` ([`SendNotificationJob`]) and the `notify`
-/// migrations (table `notifications`).
+/// [`DeliveryLog`], [`OptOuts`] and [`PushSubscriptions`], registers job
+/// `notify.send` ([`SendNotificationJob`]), command `notify:vapid`, the
+/// routes and the `notify` migrations (tables `notifications`,
+/// `notification_deliveries`, `notification_opt_outs`,
+/// `push_subscriptions`).
 ///
 /// - [`NotifyModule::for_root`] takes [`NotifyOptions`] in code;
 /// - [`NotifyModule::from_config`] (and a plain `.module(NotifyModule)`)
 ///   reads section `notify` at boot, so the app must include `ConfigModule`.
 ///
-/// The channels use what the app provides: the database channel needs
-/// `DatabaseModule`, the mail channel `MailModule` (and `ViewModule`), the
-/// broadcast channel a `dyn Broadcaster` (`RealtimeModule`), and queueing a
+/// The channels use what the app provides: the database channel (and the
+/// delivery log, opt-outs and push subscriptions) needs `DatabaseModule`, the
+/// mail channel `MailModule` (and `ViewModule`), the broadcast channel a
+/// `dyn Broadcaster` (`RealtimeModule`), the SMS, WhatsApp and web push
+/// channels a driver (`notify.sms.driver`, `notify.whatsapp.driver`,
+/// `notify.web_push`, or the app's `dyn SmsDriver`...), and queueing a
 /// `dyn Dispatcher` (`QueueModule`). They are looked up when a notification
 /// is sent, so a missing one fails only the channels that need it.
 #[derive(Clone, Copy, Debug, Default)]
@@ -123,7 +129,10 @@ fn register(m: &mut ModuleBuilder, source: Source) {
         .factory(
             Factory::<OptOuts>::new(|r| async move {
                 let options = r.get::<NotifyOptions>().await?;
-                Ok(Arc::new(OptOuts::new(r.app().downgrade(), region(&options))))
+                Ok(Arc::new(OptOuts::new(
+                    r.app().downgrade(),
+                    region(&options),
+                )))
             })
             .deps(options_key()),
         )
@@ -156,7 +165,10 @@ fn register(m: &mut ModuleBuilder, source: Source) {
                     push: r.get::<PushSubscriptions>().await?,
                     app,
                 };
-                Ok(Arc::new(Notifier::new(NotifyOptions::clone(&options), parts)))
+                Ok(Arc::new(Notifier::new(
+                    NotifyOptions::clone(&options),
+                    parts,
+                )))
             })
             .deps(vec![
                 ProviderKey::of::<NotifyOptions>(),

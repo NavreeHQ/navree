@@ -36,7 +36,11 @@ impl Meta {
     }
 
     /// Verifies a request signed with `app_secret`.
-    pub fn verify(app_secret: &str, headers: &HeaderMap, body: &[u8]) -> Result<Verified, VerifyError> {
+    pub fn verify(
+        app_secret: &str,
+        headers: &HeaderMap,
+        body: &[u8],
+    ) -> Result<Verified, VerifyError> {
         require_secret(app_secret)?;
         let signature = header(headers, Self::SIGNATURE_HEADER)?
             .trim()
@@ -66,10 +70,14 @@ impl Meta {
             .as_deref()
             .filter(|t| !t.is_empty())
             .ok_or_else(|| {
-                VerifyError::Rejected("the source has no `verify_token` for the handshake".to_owned())
+                VerifyError::Rejected(
+                    "the source has no `verify_token` for the handshake".to_owned(),
+                )
             })?;
         if !signing::same(token.as_bytes(), expected.as_bytes()) {
-            return Err(VerifyError::Rejected("the verify token does not match".to_owned()));
+            return Err(VerifyError::Rejected(
+                "the verify token does not match".to_owned(),
+            ));
         }
         Ok(Handshake::text(challenge))
     }
@@ -123,7 +131,10 @@ mod tests {
     fn a_signed_body_verifies_and_names_its_object() {
         let body = br#"{"object":"whatsapp_business_account","entry":[]}"#;
         let verified = Meta::verify(SECRET, &signed(body), body).unwrap();
-        assert_eq!(verified.event_type.as_deref(), Some("whatsapp_business_account"));
+        assert_eq!(
+            verified.event_type.as_deref(),
+            Some("whatsapp_business_account")
+        );
         assert_eq!(verified.id, None);
     }
 
@@ -140,13 +151,17 @@ mod tests {
         );
         assert_eq!(
             Meta::verify(SECRET, &HeaderMap::new(), body),
-            Err(VerifyError::MissingHeader(Meta::SIGNATURE_HEADER.to_owned()))
+            Err(VerifyError::MissingHeader(
+                Meta::SIGNATURE_HEADER.to_owned()
+            ))
         );
         let mut bare = HeaderMap::new();
         bare.insert(Meta::SIGNATURE_HEADER, HeaderValue::from_static("abc"));
         assert_eq!(
             Meta::verify(SECRET, &bare, body),
-            Err(VerifyError::MalformedHeader(Meta::SIGNATURE_HEADER.to_owned()))
+            Err(VerifyError::MalformedHeader(
+                Meta::SIGNATURE_HEADER.to_owned()
+            ))
         );
     }
 

@@ -12,7 +12,9 @@ use url::Url;
 use uuid::Uuid;
 
 use super::slack::Tokens;
-use super::{ChannelError, SentMessage, TeamsDriver, client_for, endpoint, refused, text_of, unreachable};
+use super::{
+    ChannelError, SentMessage, TeamsDriver, client_for, endpoint, refused, text_of, unreachable,
+};
 use crate::{ConnectionTokens, TeamsMessage, TeamsOptions, TeamsRoute};
 
 /// The provider name of the Teams driver.
@@ -44,7 +46,11 @@ impl TeamsApi {
             "https://login.microsoftonline.com/{}/oauth2/v2.0/token",
             options.tenant
         );
-        let token_url = endpoint(options.token_url.as_deref(), &default, "notify.teams.token_url")?;
+        let token_url = endpoint(
+            options.token_url.as_deref(),
+            &default,
+            "notify.teams.token_url",
+        )?;
         let client = client_for(options.token_url.as_ref().map(|_| &token_url))?;
         Ok(Self {
             app_id: options.app_id.clone().filter(|id| !id.is_empty()),
@@ -78,7 +84,11 @@ impl TeamsApi {
         self
     }
 
-    async fn webhook(&self, url: &str, message: &TeamsMessage) -> Result<SentMessage, ChannelError> {
+    async fn webhook(
+        &self,
+        url: &str,
+        message: &TeamsMessage,
+    ) -> Result<SentMessage, ChannelError> {
         let response = self
             .client
             .post(url)
@@ -194,9 +204,13 @@ fn activities_url(service_url: &str, conversation_id: &str) -> Result<Url, Chann
     let mut url = Url::parse(service_url)
         .ok()
         .filter(|url| matches!(url.scheme(), "http" | "https"))
-        .ok_or_else(|| ChannelError::InvalidRecipient("the Teams service URL is not an http(s) URL".into()))?;
+        .ok_or_else(|| {
+            ChannelError::InvalidRecipient("the Teams service URL is not an http(s) URL".into())
+        })?;
     url.path_segments_mut()
-        .map_err(|()| ChannelError::InvalidRecipient("the Teams service URL cannot hold a path".into()))?
+        .map_err(|()| {
+            ChannelError::InvalidRecipient("the Teams service URL cannot hold a path".into())
+        })?
         .pop_if_empty()
         .extend(["v3", "conversations", conversation_id, "activities"]);
     Ok(url)
@@ -244,7 +258,11 @@ mod tests {
             url.as_str(),
             "https://smba.trafficmanager.net/emea/v3/conversations/a:1X%2Fy%20z/activities"
         );
-        let url = activities_url("https://smba.trafficmanager.net/amer", "19:abc@thread.skype").unwrap();
+        let url = activities_url(
+            "https://smba.trafficmanager.net/amer",
+            "19:abc@thread.skype",
+        )
+        .unwrap();
         assert_eq!(
             url.as_str(),
             "https://smba.trafficmanager.net/amer/v3/conversations/19:abc@thread.skype/activities"

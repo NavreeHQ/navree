@@ -10,7 +10,9 @@ use serde_json::{Value, json};
 use url::Url;
 use uuid::Uuid;
 
-use super::{ChannelError, SentMessage, SlackDriver, client_for, endpoint, join, refused, unreachable};
+use super::{
+    ChannelError, SentMessage, SlackDriver, client_for, endpoint, join, refused, unreachable,
+};
 use crate::{ConnectionTokens, SlackMessage, SlackOptions, SlackRoute};
 
 /// The provider name of the Slack driver.
@@ -67,7 +69,11 @@ impl SlackApi {
         self
     }
 
-    async fn webhook(&self, url: &str, message: &SlackMessage) -> Result<SentMessage, ChannelError> {
+    async fn webhook(
+        &self,
+        url: &str,
+        message: &SlackMessage,
+    ) -> Result<SentMessage, ChannelError> {
         let response = self
             .client
             .post(url)
@@ -123,7 +129,10 @@ impl SlackApi {
         }
         let answer: Value = response.json().unwrap_or(Value::Null);
         if answer["ok"] != true {
-            let code = answer["error"].as_str().unwrap_or("unknown_error").to_owned();
+            let code = answer["error"]
+                .as_str()
+                .unwrap_or("unknown_error")
+                .to_owned();
             return Err(ChannelError::Refused {
                 provider: PROVIDER.to_owned(),
                 status: response.status().as_u16(),
@@ -203,9 +212,8 @@ impl Tokens {
                 "the route names connection {connection}, but the app has no `dyn ConnectionTokens` (add IntegrationsModule with navree-integrations' `notify` feature)"
             ))
         })?;
-        tokens
-            .token(connection)
-            .await
-            .map_err(|error| ChannelError::Config(format!("no token for connection {connection}: {error}")))
+        tokens.token(connection).await.map_err(|error| {
+            ChannelError::Config(format!("no token for connection {connection}: {error}"))
+        })
     }
 }

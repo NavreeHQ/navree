@@ -15,9 +15,8 @@ use navree_notify::{
     ChannelError, ConnectionTokens, MetaOptions, MetaWhatsApp, PushTarget, SlackApi, SlackDriver,
     SlackMessage, SlackOptions, SlackRoute, SmsDriver, SmsMessage, SmsOptions, SnsOptions, SnsSms,
     TeamsApi, TeamsDriver, TeamsMessage, TeamsOptions, TeamsRoute, TwilioOptions, TwilioSms,
-    TwilioWhatsApp, Urgency, VapidWebPush, VonageOptions, VonageSms, WebPushDriver,
-    WebPushMessage, WebPushOptions, WhatsAppDriver, WhatsAppMessage, WhatsAppOptions,
-    WhatsAppTemplate,
+    TwilioWhatsApp, Urgency, VapidWebPush, VonageOptions, VonageSms, WebPushDriver, WebPushMessage,
+    WebPushOptions, WhatsAppDriver, WhatsAppMessage, WhatsAppOptions, WhatsAppTemplate,
 };
 use ring::aead::{AES_128_GCM, Aad, LessSafeKey, Nonce, UnboundKey};
 use ring::agreement::{self, ECDH_P256, EphemeralPrivateKey, UnparsedPublicKey};
@@ -48,7 +47,9 @@ fn form(request: &Request) -> Vec<(String, String)> {
 }
 
 fn form_value<'a>(form: &'a [(String, String)], name: &str) -> Option<&'a str> {
-    form.iter().find(|(n, _)| n == name).map(|(_, v)| v.as_str())
+    form.iter()
+        .find(|(n, _)| n == name)
+        .map(|(_, v)| v.as_str())
 }
 
 fn header_value<'a>(request: &'a Request, name: &str) -> &'a str {
@@ -92,7 +93,9 @@ async fn slack_webhooks_get_the_message_json() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/services/T0/B0/X"))
-        .and(body_json(json!({ "text": "Deal won", "blocks": [{ "type": "divider" }] })))
+        .and(body_json(
+            json!({ "text": "Deal won", "blocks": [{ "type": "divider" }] }),
+        ))
         .respond_with(ResponseTemplate::new(200).set_body_string("ok"))
         .mount(&server)
         .await;
@@ -114,7 +117,10 @@ async fn a_refused_slack_webhook_reports_slacks_code() {
         .await;
 
     let route = SlackRoute::webhook(format!("{}/services/gone", server.uri()));
-    let error = slack(&server, "").send(&route, &SlackMessage::new("x")).await.unwrap_err();
+    let error = slack(&server, "")
+        .send(&route, &SlackMessage::new("x"))
+        .await
+        .unwrap_err();
 
     match error {
         ChannelError::Refused { status, code, .. } => {
@@ -136,9 +142,11 @@ async fn slack_channels_are_posted_with_the_bot_token() {
             "text": "Reply",
             "thread_ts": "1700000000.000100",
         })))
-        .respond_with(ResponseTemplate::new(200).set_body_json(
-            json!({ "ok": true, "channel": "C0123", "ts": "1700000001.000200" }),
-        ))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(
+                json!({ "ok": true, "channel": "C0123", "ts": "1700000001.000200" }),
+            ),
+        )
         .mount(&server)
         .await;
 
@@ -180,9 +188,7 @@ async fn a_slack_connection_route_uses_the_connections_token() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(header("authorization", "Bearer xoxb-install"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(json!({ "ok": true, "ts": "1.2" })),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "ok": true, "ts": "1.2" })))
         .mount(&server)
         .await;
 
@@ -224,7 +230,10 @@ fn teams(server: &MockServer, app_id: Option<&str>) -> TeamsApi {
     TeamsApi::new(&TeamsOptions {
         app_id: app_id.map(str::to_owned),
         app_password: Secret::new("bot-secret".to_owned()),
-        token_url: Some(format!("{}/botframework.com/oauth2/v2.0/token", server.uri())),
+        token_url: Some(format!(
+            "{}/botframework.com/oauth2/v2.0/token",
+            server.uri()
+        )),
         ..TeamsOptions::default()
     })
     .unwrap()
@@ -250,8 +259,14 @@ async fn teams_webhooks_get_an_adaptive_card() {
     let body: Value = serde_json::from_slice(&request.body).unwrap();
     assert_eq!(body["type"], "message");
     let attachment = &body["attachments"][0];
-    assert_eq!(attachment["contentType"], "application/vnd.microsoft.card.adaptive");
-    assert_eq!(attachment["content"]["body"][0]["text"], "Training due today");
+    assert_eq!(
+        attachment["contentType"],
+        "application/vnd.microsoft.card.adaptive"
+    );
+    assert_eq!(
+        attachment["content"]["body"][0]["text"],
+        "Training due today"
+    );
 }
 
 #[tokio::test]
@@ -304,14 +319,19 @@ async fn teams_proactive_messages_use_a_cached_bot_framework_token() {
             .body,
     )
     .unwrap();
-    assert_eq!(activity, json!({ "type": "message", "text": "Due today", "summary": "Training" }));
+    assert_eq!(
+        activity,
+        json!({ "type": "message", "text": "Due today", "summary": "Training" })
+    );
 }
 
 #[tokio::test]
 async fn a_teams_connection_route_uses_the_connections_token() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
-        .and(path("/amer/v3/conversations/19:abc@thread.skype/activities"))
+        .and(path(
+            "/amer/v3/conversations/19:abc@thread.skype/activities",
+        ))
         .and(header("authorization", "Bearer tenant-token"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "id": "a1" })))
         .mount(&server)
@@ -332,7 +352,8 @@ async fn teams_refusals_carry_the_bot_frameworks_code() {
     Mock::given(method("POST"))
         .and(path("/botframework.com/oauth2/v2.0/token"))
         .respond_with(
-            ResponseTemplate::new(200).set_body_json(json!({ "access_token": "t", "expires_in": 3600 })),
+            ResponseTemplate::new(200)
+                .set_body_json(json!({ "access_token": "t", "expires_in": 3600 })),
         )
         .mount(&server)
         .await;
@@ -358,7 +379,10 @@ async fn teams_refusals_carry_the_bot_frameworks_code() {
         .send(&route, &TeamsMessage::new("x"))
         .await
         .unwrap_err();
-    assert!(matches!(error, ChannelError::Config(_)), "no bot, no connection");
+    assert!(
+        matches!(error, ChannelError::Config(_)),
+        "no bot, no connection"
+    );
 }
 
 #[tokio::test]
@@ -415,7 +439,8 @@ async fn twilio_sms_posts_the_messages_api_form() {
         .and(path("/2010-04-01/Accounts/AC123/Messages.json"))
         .and(header("authorization", basic("AC123", "tw-token").as_str()))
         .respond_with(
-            ResponseTemplate::new(201).set_body_json(json!({ "sid": "SM0001", "status": "queued" })),
+            ResponseTemplate::new(201)
+                .set_body_json(json!({ "sid": "SM0001", "status": "queued" })),
         )
         .mount(&server)
         .await;
@@ -468,14 +493,18 @@ async fn twilio_messaging_services_and_api_keys() {
 async fn twilio_refusals_keep_the_error_code_and_21610_is_an_opt_out() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
-        .and(wiremock::matchers::body_string_contains("To=%2B15550000000"))
+        .and(wiremock::matchers::body_string_contains(
+            "To=%2B15550000000",
+        ))
         .respond_with(ResponseTemplate::new(400).set_body_json(json!({
             "code": 21211, "message": "Invalid 'To' Phone Number", "status": 400
         })))
         .mount(&server)
         .await;
     Mock::given(method("POST"))
-        .and(wiremock::matchers::body_string_contains("To=%2B14155550100"))
+        .and(wiremock::matchers::body_string_contains(
+            "To=%2B14155550100",
+        ))
         .respond_with(ResponseTemplate::new(400).set_body_json(json!({
             "code": 21610, "message": "Attempt to send to unsubscribed recipient", "status": 400
         })))
@@ -485,13 +514,19 @@ async fn twilio_refusals_keep_the_error_code_and_21610_is_an_opt_out() {
         .unwrap()
         .with_client(local_client());
 
-    let error = driver.send("+15550000000", &SmsMessage::new("x")).await.unwrap_err();
+    let error = driver
+        .send("+15550000000", &SmsMessage::new("x"))
+        .await
+        .unwrap_err();
     assert!(
         matches!(&error, ChannelError::Refused { status: 400, code: Some(code), message, .. }
             if code == "21211" && message == "Invalid 'To' Phone Number"),
         "{error:?}"
     );
-    let error = driver.send("+14155550100", &SmsMessage::new("x")).await.unwrap_err();
+    let error = driver
+        .send("+14155550100", &SmsMessage::new("x"))
+        .await
+        .unwrap_err();
     assert!(matches!(error, ChannelError::OptedOut { .. }), "{error:?}");
 }
 
@@ -539,7 +574,8 @@ async fn twilio_whatsapp_sends_templates_as_content() {
         form_value(&form, "ContentSid"),
         Some("HXb5b62575e6e4ff6129ad7c8efe1f983e")
     );
-    let variables: Value = serde_json::from_str(form_value(&form, "ContentVariables").unwrap()).unwrap();
+    let variables: Value =
+        serde_json::from_str(form_value(&form, "ContentVariables").unwrap()).unwrap();
     assert_eq!(variables, json!({ "1": "Ada", "2": "A-1042" }));
     assert_eq!(form_value(&form, "Body"), None);
 }
@@ -561,7 +597,10 @@ async fn vonage_sends_through_the_messages_api() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/v1/messages"))
-        .and(header("authorization", basic("abcd1234", "vonage-secret").as_str()))
+        .and(header(
+            "authorization",
+            basic("abcd1234", "vonage-secret").as_str(),
+        ))
         .and(body_json(json!({
             "message_type": "text",
             "channel": "sms",
@@ -570,9 +609,10 @@ async fn vonage_sends_through_the_messages_api() {
             "text": "Your code is 481 516",
             "webhook_url": "https://api.acme.test/api/webhooks/notify/twilio",
         })))
-        .respond_with(ResponseTemplate::new(202).set_body_json(
-            json!({ "message_uuid": "aaaaaaaa-bbbb-cccc-dddd-0123456789ab" }),
-        ))
+        .respond_with(
+            ResponseTemplate::new(202)
+                .set_body_json(json!({ "message_uuid": "aaaaaaaa-bbbb-cccc-dddd-0123456789ab" })),
+        )
         .mount(&server)
         .await;
 
@@ -670,7 +710,9 @@ async fn sns_publishes_to_the_number_signed_with_sigv4() {
         authorization.starts_with("AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/"),
         "{authorization}"
     );
-    assert!(authorization.contains("/us-east-1/sns/aws4_request, SignedHeaders=content-type;host;x-amz-date, Signature="));
+    assert!(authorization.contains(
+        "/us-east-1/sns/aws4_request, SignedHeaders=content-type;host;x-amz-date, Signature="
+    ));
     assert_eq!(header_value(&request, "x-amz-date").len(), 16);
     let form = form(&request);
     assert_eq!(form_value(&form, "Action"), Some("Publish"));
@@ -761,12 +803,18 @@ async fn the_cloud_api_gets_text_messages() {
     let sent = MetaWhatsApp::new(&meta_options(&server))
         .unwrap()
         .with_client(local_client())
-        .send("+447400123456", &WhatsAppMessage::text("Your order has shipped"))
+        .send(
+            "+447400123456",
+            &WhatsAppMessage::text("Your order has shipped"),
+        )
         .await
         .unwrap();
 
     assert_eq!(sent.provider, "meta");
-    assert_eq!(sent.message_id.as_deref(), Some("wamid.HBgLNDQ3NDAwMTIzNDU2"));
+    assert_eq!(
+        sent.message_id.as_deref(),
+        Some("wamid.HBgLNDQ3NDAwMTIzNDU2")
+    );
 }
 
 #[tokio::test]
@@ -859,7 +907,11 @@ impl Browser {
             .unwrap();
         let key = LessSafeKey::new(UnboundKey::new(&AES_128_GCM, cek).unwrap());
         let plain = key
-            .open_in_place(Nonce::assume_unique_for_key(nonce), Aad::empty(), &mut record)
+            .open_in_place(
+                Nonce::assume_unique_for_key(nonce),
+                Aad::empty(),
+                &mut record,
+            )
             .unwrap();
         plain[..plain.len() - 1].to_vec()
     }
@@ -907,7 +959,10 @@ async fn pushes_are_encrypted_for_the_browser_and_signed_with_vapid() {
         .unwrap();
 
     assert_eq!(sent.provider, "web_push");
-    assert_eq!(sent.message_id.as_deref(), Some("https://push.test/m/msg-1"));
+    assert_eq!(
+        sent.message_id.as_deref(),
+        Some("https://push.test/m/msg-1")
+    );
     let request = only_request(&server).await;
     let authorization = header_value(&request, "authorization").to_owned();
     let (token, k) = authorization
@@ -968,12 +1023,18 @@ async fn gone_subscriptions_and_refusals() {
     let browser = Browser::new();
 
     let gone = driver
-        .send(&browser.target(&format!("{}/push/gone", server.uri())), &WebPushMessage::new("x"))
+        .send(
+            &browser.target(&format!("{}/push/gone", server.uri())),
+            &WebPushMessage::new("x"),
+        )
         .await
         .unwrap_err();
     assert!(matches!(gone, ChannelError::Gone));
     let refused = driver
-        .send(&browser.target(&format!("{}/push/bad", server.uri())), &WebPushMessage::new("x"))
+        .send(
+            &browser.target(&format!("{}/push/bad", server.uri())),
+            &WebPushMessage::new("x"),
+        )
         .await
         .unwrap_err();
     assert!(
@@ -996,7 +1057,10 @@ async fn endpoints_at_internal_addresses_are_refused() {
         .await
         .unwrap_err();
 
-    assert!(matches!(error, ChannelError::Unreachable { .. }), "{error:?}");
+    assert!(
+        matches!(error, ChannelError::Unreachable { .. }),
+        "{error:?}"
+    );
     assert!(server.received_requests().await.unwrap().is_empty());
 }
 
@@ -1009,8 +1073,14 @@ async fn malformed_subscription_keys_are_invalid_recipients() {
         p256dh: "%%%".to_owned(),
         auth: "AAAA".to_owned(),
     };
-    let error = driver.send(&target, &WebPushMessage::new("x")).await.unwrap_err();
-    assert!(matches!(error, ChannelError::InvalidRecipient(_)), "{error:?}");
+    let error = driver
+        .send(&target, &WebPushMessage::new("x"))
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(error, ChannelError::InvalidRecipient(_)),
+        "{error:?}"
+    );
     assert!(
         VapidWebPush::new(&WebPushOptions::default()).is_err(),
         "a key pair is required"

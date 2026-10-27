@@ -119,8 +119,9 @@ impl SmsDriver for SnsSms {
         message: &'a SmsMessage,
     ) -> BoxFuture<'a, Result<SentMessage, ChannelError>> {
         Box::pin(async move {
-            let body = serde_urlencoded::to_string(self.form(to, message))
-                .map_err(|error| ChannelError::Config(format!("cannot encode the request: {error}")))?;
+            let body = serde_urlencoded::to_string(self.form(to, message)).map_err(|error| {
+                ChannelError::Config(format!("cannot encode the request: {error}"))
+            })?;
             let mut url = self.base.clone();
             if url.path().is_empty() {
                 url.set_path("/");
@@ -151,7 +152,8 @@ impl SmsDriver for SnsSms {
                     provider: PROVIDER.to_owned(),
                     status: response.status().as_u16(),
                     code: tag(&text, "Code"),
-                    message: tag(&text, "Message").unwrap_or_else(|| "SNS refused the message".to_owned()),
+                    message: tag(&text, "Message")
+                        .unwrap_or_else(|| "SNS refused the message".to_owned()),
                 });
             }
             let sent = SentMessage::new(PROVIDER);

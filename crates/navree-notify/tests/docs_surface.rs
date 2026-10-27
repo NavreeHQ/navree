@@ -202,7 +202,16 @@ fn channels_tables_and_keywords_have_their_documented_names() {
     assert_eq!(PUSH_SUBSCRIPTIONS_TABLE, "push_subscriptions");
     assert_eq!(
         OPT_OUT_KEYWORDS,
-        ["STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT", "OPTOUT", "REVOKE"]
+        [
+            "STOP",
+            "STOPALL",
+            "UNSUBSCRIBE",
+            "CANCEL",
+            "END",
+            "QUIT",
+            "OPTOUT",
+            "REVOKE"
+        ]
     );
     assert_eq!(OPT_IN_KEYWORDS, ["START", "YES", "UNSTOP", "OPTIN"]);
     let statuses = [
@@ -213,13 +222,27 @@ fn channels_tables_and_keywords_have_their_documented_names() {
         DeliveryStatus::OptedOut,
     ]
     .map(DeliveryStatus::as_str);
-    assert_eq!(statuses, ["sent", "delivered", "read", "failed", "opted_out"]);
     assert_eq!(
-        [OptOutSource::Keyword, OptOutSource::Provider, OptOutSource::Manual].map(OptOutSource::as_str),
+        statuses,
+        ["sent", "delivered", "read", "failed", "opted_out"]
+    );
+    assert_eq!(
+        [
+            OptOutSource::Keyword,
+            OptOutSource::Provider,
+            OptOutSource::Manual
+        ]
+        .map(OptOutSource::as_str),
         ["keyword", "provider", "manual"]
     );
     assert_eq!(
-        [Urgency::VeryLow, Urgency::Low, Urgency::Normal, Urgency::High].map(Urgency::as_str),
+        [
+            Urgency::VeryLow,
+            Urgency::Low,
+            Urgency::Normal,
+            Urgency::High
+        ]
+        .map(Urgency::as_str),
         ["very-low", "low", "normal", "high"]
     );
     let _: Option<Keyword> = navree_notify::keyword("STOP");
@@ -306,10 +329,18 @@ async fn _documented_api(
     let _: Ingested = log.ingest(ChannelCallback::from_twilio(b"")).await?;
     let _ = ChannelCallback::from_vonage(b"{}");
     let _ = ChannelCallback::from_meta(b"{}");
-    let _ = log.apply(&StatusUpdate::new("twilio", "SM1", DeliveryStatus::Delivered)).await?;
+    let _ = log
+        .apply(&StatusUpdate::new(
+            "twilio",
+            "SM1",
+            DeliveryStatus::Delivered,
+        ))
+        .await?;
     let _: Option<&InboundMessage> = None;
 
-    opt_outs.opt_out(Channel::Sms, "+1", OptOutSource::Manual).await?;
+    opt_outs
+        .opt_out(Channel::Sms, "+1", OptOutSource::Manual)
+        .await?;
     opt_outs.opt_in(Channel::Sms, "+1").await?;
     opt_outs.is_opted_out(Channel::Sms, "+1").await?;
     opt_outs.list(Channel::Sms).await?;

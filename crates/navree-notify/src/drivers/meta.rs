@@ -7,7 +7,10 @@ use navree_http_client::HttpClient;
 use serde_json::{Value, json};
 use url::Url;
 
-use super::{ChannelError, SentMessage, WhatsAppDriver, client_for, endpoint, join, refused, text_of, unreachable};
+use super::{
+    ChannelError, SentMessage, WhatsAppDriver, client_for, endpoint, join, refused, text_of,
+    unreachable,
+};
 use crate::{MetaOptions, WhatsAppMessage};
 
 /// The provider name of the WhatsApp Cloud API driver.
@@ -33,7 +36,10 @@ impl MetaWhatsApp {
     /// A driver for `options`.
     pub fn new(options: &MetaOptions) -> Result<Self, String> {
         if options.phone_number_id.is_empty() || options.access_token.expose().is_empty() {
-            return Err("the meta driver needs notify.meta.phone_number_id and notify.meta.access_token".into());
+            return Err(
+                "the meta driver needs notify.meta.phone_number_id and notify.meta.access_token"
+                    .into(),
+            );
         }
         let base = endpoint(
             options.endpoint.as_deref(),
@@ -119,9 +125,14 @@ impl WhatsAppDriver for MetaWhatsApp {
             if !response.is_success() {
                 let error = refused(PROVIDER, &response, |body| {
                     let error = &body["error"];
-                    (text_of(&error["code"]), error["message"].as_str().map(str::to_owned))
+                    (
+                        text_of(&error["code"]),
+                        error["message"].as_str().map(str::to_owned),
+                    )
                 });
-                if let ChannelError::Refused { code: Some(code), .. } = &error
+                if let ChannelError::Refused {
+                    code: Some(code), ..
+                } = &error
                     && code == STOPPED
                 {
                     return Err(ChannelError::OptedOut {

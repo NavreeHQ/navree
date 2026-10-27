@@ -83,7 +83,10 @@ async fn a_configured_driver_without_credentials_fails_the_boot() {
         .module(NotifyModule::from_config())
         .try_build()
         .await;
-    let error = result.err().expect("the boot fails").to_string();
+    let Err(error) = result else {
+        panic!("the boot fails");
+    };
+    let error = error.to_string();
     assert!(error.contains("notify.twilio.account_sid"), "{error}");
 }
 

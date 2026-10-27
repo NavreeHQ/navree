@@ -44,7 +44,10 @@ async fn each_channel_goes_to_the_notifiables_route() {
         TeamsRoute::conversation("https://smba.trafficmanager.net/emea/", "a:1Xyz")
     );
     // Numbers are sent in E.164, read in notify.sms.default_region.
-    assert_eq!(fakes.sms.sent_to(MEMBER_PHONE)[0].body, "Training due today");
+    assert_eq!(
+        fakes.sms.sent_to(MEMBER_PHONE)[0].body,
+        "Training due today"
+    );
     assert_eq!(
         fakes.whatsapp.sent_to(MEMBER_WHATSAPP)[0].body.as_deref(),
         Some("Training due today")
@@ -108,7 +111,10 @@ async fn webhook_routes_are_recorded_by_host_only() {
         .await
         .unwrap();
 
-    assert!(matches!(&fakes.slack.sent()[0].to, SlackRoute::Webhook { .. }));
+    assert!(matches!(
+        &fakes.slack.sent()[0].to,
+        SlackRoute::Webhook { .. }
+    ));
     let deliveries = support::deliveries(&app).await;
     assert_eq!(
         deliveries[0].recipient.as_deref(),
@@ -156,7 +162,10 @@ async fn a_refused_message_fails_its_channel_only_and_is_recorded() {
     let error = app
         .get::<Notifier>()
         .await
-        .send(&Member::new(), Alert::via(&[Channel::Slack, Channel::Sms], "hi"))
+        .send(
+            &Member::new(),
+            Alert::via(&[Channel::Slack, Channel::Sms], "hi"),
+        )
         .await
         .unwrap_err();
 
@@ -167,11 +176,21 @@ async fn a_refused_message_fails_its_channel_only_and_is_recorded() {
         } => assert_eq!(message, "channel_not_found"),
         other => panic!("unexpected error: {other:?}"),
     }
-    assert_eq!(fakes.sms.sent().len(), 1, "the other channel still delivers");
+    assert_eq!(
+        fakes.sms.sent().len(),
+        1,
+        "the other channel still delivers"
+    );
     let deliveries = support::deliveries(&app).await;
     let slack = deliveries.iter().find(|d| d.channel == "slack").unwrap();
     assert_eq!(slack.delivery_status(), Some(DeliveryStatus::Failed));
-    assert!(slack.error.as_deref().unwrap().contains("channel_not_found"));
+    assert!(
+        slack
+            .error
+            .as_deref()
+            .unwrap()
+            .contains("channel_not_found")
+    );
 
     // A retry updates the same row.
     fakes.slack.accept();
@@ -210,11 +229,17 @@ async fn an_invalid_number_fails_the_sms_channel() {
         .await
         .unwrap_err();
 
-    assert!(matches!(error, NotifyError::InvalidRecipient(_)), "{error:?}");
+    assert!(
+        matches!(error, NotifyError::InvalidRecipient(_)),
+        "{error:?}"
+    );
     fakes.sms.assert_nothing_sent();
     let deliveries = support::deliveries(&app).await;
     assert_eq!(deliveries[0].recipient.as_deref(), Some("555"));
-    assert_eq!(deliveries[0].delivery_status(), Some(DeliveryStatus::Failed));
+    assert_eq!(
+        deliveries[0].delivery_status(),
+        Some(DeliveryStatus::Failed)
+    );
 }
 
 #[tokio::test]
@@ -246,13 +271,20 @@ async fn the_log_driver_takes_messages_in_development() {
 
     app.get::<Notifier>()
         .await
-        .send(&Member::new(), Alert::via(&[Channel::Sms, Channel::WhatsApp], "hi"))
+        .send(
+            &Member::new(),
+            Alert::via(&[Channel::Sms, Channel::WhatsApp], "hi"),
+        )
         .await
         .unwrap();
 
     let deliveries = support::deliveries(&app).await;
     assert_eq!(deliveries.len(), 2);
-    assert!(deliveries.iter().all(|d| d.provider.as_deref() == Some("log")));
+    assert!(
+        deliveries
+            .iter()
+            .all(|d| d.provider.as_deref() == Some("log"))
+    );
 }
 
 #[tokio::test]
@@ -293,7 +325,10 @@ async fn channels_work_without_a_database_and_record_nothing() {
 
     app.get::<Notifier>()
         .await
-        .send_now(&Member::new(), Alert::via(&[Channel::Slack, Channel::Sms], "hi"))
+        .send_now(
+            &Member::new(),
+            Alert::via(&[Channel::Slack, Channel::Sms], "hi"),
+        )
         .await
         .unwrap();
 
@@ -368,8 +403,12 @@ async fn web_push_goes_to_every_subscription_and_drops_gone_ones() {
     let push = app.get::<PushSubscriptions>().await;
     let phone = subscription("https://fcm.googleapis.com/fcm/send/phone");
     let laptop = subscription("https://updates.push.services.mozilla.com/wpush/v2/laptop");
-    push.subscribe(&member, phone.clone(), Some("Android")).await.unwrap();
-    push.subscribe(&member, laptop.clone(), Some("Firefox")).await.unwrap();
+    push.subscribe(&member, phone.clone(), Some("Android"))
+        .await
+        .unwrap();
+    push.subscribe(&member, laptop.clone(), Some("Firefox"))
+        .await
+        .unwrap();
     fakes.web_push.expire(&laptop.endpoint);
 
     app.get::<Notifier>()

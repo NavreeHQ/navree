@@ -36,11 +36,18 @@ pub(crate) struct ChannelDrivers {
 
 impl ChannelDrivers {
     /// The drivers `options` configure; connection tokens come from `app`.
-    pub(crate) fn from_options(options: &NotifyOptions, app: &WeakAppContext) -> Result<Self, String> {
+    pub(crate) fn from_options(
+        options: &NotifyOptions,
+        app: &WeakAppContext,
+    ) -> Result<Self, String> {
         let sms: Option<Arc<dyn SmsDriver>> = match options.sms.driver {
             None => None,
-            Some(SmsDriverKind::Twilio) => Some(Arc::new(TwilioSms::new(&options.twilio, &options.sms)?)),
-            Some(SmsDriverKind::Vonage) => Some(Arc::new(VonageSms::new(&options.vonage, &options.sms)?)),
+            Some(SmsDriverKind::Twilio) => {
+                Some(Arc::new(TwilioSms::new(&options.twilio, &options.sms)?))
+            }
+            Some(SmsDriverKind::Vonage) => {
+                Some(Arc::new(VonageSms::new(&options.vonage, &options.sms)?))
+            }
             Some(SmsDriverKind::Sns) => Some(Arc::new(SnsSms::new(&options.sns, &options.sms)?)),
             Some(SmsDriverKind::Log) => Some(Arc::new(LogSms::new(options.sms.from.clone()))),
         };
@@ -70,7 +77,10 @@ impl ChannelDrivers {
         })
     }
 
-    pub(crate) async fn slack(&self, ctx: &AppContext) -> Result<Arc<dyn SlackDriver>, NotifyError> {
+    pub(crate) async fn slack(
+        &self,
+        ctx: &AppContext,
+    ) -> Result<Arc<dyn SlackDriver>, NotifyError> {
         if let Some(driver) = ctx.try_get::<dyn SlackDriver>().await {
             return Ok(driver);
         }
@@ -78,10 +88,15 @@ impl ChannelDrivers {
             SlackApi::new(&self.slack_options)
                 .map(|driver| Arc::new(driver.with_app(self.app.clone())) as Arc<dyn SlackDriver>)
         });
-        built.clone().map_err(|reason| unavailable(Channel::Slack, reason))
+        built
+            .clone()
+            .map_err(|reason| unavailable(Channel::Slack, reason))
     }
 
-    pub(crate) async fn teams(&self, ctx: &AppContext) -> Result<Arc<dyn TeamsDriver>, NotifyError> {
+    pub(crate) async fn teams(
+        &self,
+        ctx: &AppContext,
+    ) -> Result<Arc<dyn TeamsDriver>, NotifyError> {
         if let Some(driver) = ctx.try_get::<dyn TeamsDriver>().await {
             return Ok(driver);
         }

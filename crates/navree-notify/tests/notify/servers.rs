@@ -104,8 +104,13 @@ async fn flow(scratch: &Scratch) {
     let browser = subscription("https://fcm.googleapis.com/fcm/send/server-test");
 
     // Subscribing twice keeps one row; the keys survive the round trip.
-    push.subscribe(&member, browser.clone(), Some("Firefox")).await.unwrap();
-    let saved = push.subscribe(&member, browser.clone(), Some("Firefox")).await.unwrap();
+    push.subscribe(&member, browser.clone(), Some("Firefox"))
+        .await
+        .unwrap();
+    let saved = push
+        .subscribe(&member, browser.clone(), Some("Firefox"))
+        .await
+        .unwrap();
     assert_eq!(PushSubscription::query().count(&*db).await.unwrap(), 1);
     let found = push.of("user", &member.id.to_string()).await.unwrap();
     assert_eq!(found[0].id, saved.id);
@@ -136,12 +141,19 @@ async fn flow(scratch: &Scratch) {
     assert_eq!(deliveries.len(), 5);
     assert!(deliveries.iter().all(|d| d.notification_id == id));
     let push_delivery = deliveries.iter().find(|d| d.channel == "web_push").unwrap();
-    assert_eq!(push_delivery.recipient.as_deref(), Some(saved.id.to_string().as_str()));
+    assert_eq!(
+        push_delivery.recipient.as_deref(),
+        Some(saved.id.to_string().as_str())
+    );
     let pushed = push.of("user", &member.id.to_string()).await.unwrap();
     assert!(pushed[0].last_used_at.is_some());
 
     // Provider callbacks move them forward.
-    fakes.whatsapp.read(app.ctx(), MEMBER_WHATSAPP).await.unwrap();
+    fakes
+        .whatsapp
+        .read(app.ctx(), MEMBER_WHATSAPP)
+        .await
+        .unwrap();
     fakes.sms.deliver(app.ctx(), MEMBER_PHONE).await.unwrap();
     let whatsapp = deliveries.iter().find(|d| d.channel == "whatsapp").unwrap();
     let whatsapp = log
@@ -161,7 +173,15 @@ async fn flow(scratch: &Scratch) {
 
     // STOP, the unique key, and START.
     let opt_outs = app.get::<OptOuts>().await;
-    assert_eq!(fakes.sms.reply(app.ctx(), MEMBER_PHONE, "STOP").await.unwrap().opted_out, 1);
+    assert_eq!(
+        fakes
+            .sms
+            .reply(app.ctx(), MEMBER_PHONE, "STOP")
+            .await
+            .unwrap()
+            .opted_out,
+        1
+    );
     assert!(
         !opt_outs
             .opt_out(Channel::Sms, "(415) 555-0100", OptOutSource::Manual)
@@ -177,7 +197,12 @@ async fn flow(scratch: &Scratch) {
         .unwrap();
     assert_eq!(fakes.sms.sent().len(), 1, "the opted-out number is skipped");
     assert!(opt_outs.opt_in(Channel::Sms, MEMBER_PHONE).await.unwrap());
-    assert!(!opt_outs.is_opted_out(Channel::Sms, MEMBER_PHONE).await.unwrap());
+    assert!(
+        !opt_outs
+            .is_opted_out(Channel::Sms, MEMBER_PHONE)
+            .await
+            .unwrap()
+    );
 
     // A gone subscription is deleted.
     fakes.web_push.expire(&browser.endpoint);

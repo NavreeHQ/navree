@@ -33,7 +33,10 @@ struct Twilio {
 impl Twilio {
     fn new(options: &TwilioOptions) -> Result<Self, String> {
         if options.account_sid.is_empty() || options.auth_token.expose().is_empty() {
-            return Err("the twilio driver needs notify.twilio.account_sid and notify.twilio.auth_token".into());
+            return Err(
+                "the twilio driver needs notify.twilio.account_sid and notify.twilio.auth_token"
+                    .into(),
+            );
         }
         let base = endpoint(
             options.endpoint.as_deref(),
@@ -60,7 +63,8 @@ impl Twilio {
             &self.base,
             &format!("/2010-04-01/Accounts/{}/Messages.json", self.account_sid),
         );
-        let credentials = STANDARD.encode(format!("{}:{}", self.username, self.auth_token.expose()));
+        let credentials =
+            STANDARD.encode(format!("{}:{}", self.username, self.auth_token.expose()));
         let response = self
             .client
             .post(url)
@@ -71,9 +75,14 @@ impl Twilio {
             .map_err(|error| unreachable(PROVIDER, error))?;
         if !response.is_success() {
             let error = refused(PROVIDER, &response, |body| {
-                (text_of(&body["code"]), body["message"].as_str().map(str::to_owned))
+                (
+                    text_of(&body["code"]),
+                    body["message"].as_str().map(str::to_owned),
+                )
             });
-            if let ChannelError::Refused { code: Some(code), .. } = &error
+            if let ChannelError::Refused {
+                code: Some(code), ..
+            } = &error
                 && code == UNSUBSCRIBED
             {
                 return Err(ChannelError::OptedOut {
@@ -141,7 +150,9 @@ impl SmsDriver for TwilioSms {
                 .from
                 .as_deref()
                 .or(self.from.as_deref())
-                .ok_or_else(|| ChannelError::Config("set notify.sms.from or the message's sender".into()))?;
+                .ok_or_else(|| {
+                    ChannelError::Config("set notify.sms.from or the message's sender".into())
+                })?;
             let (name, value) = sender(from);
             let mut form = vec![
                 ("To", to.to_owned()),
@@ -214,7 +225,9 @@ impl WhatsAppDriver for TwilioWhatsApp {
                 .from
                 .as_deref()
                 .or(self.from.as_deref())
-                .ok_or_else(|| ChannelError::Config("set notify.whatsapp.from or the message's sender".into()))?;
+                .ok_or_else(|| {
+                    ChannelError::Config("set notify.whatsapp.from or the message's sender".into())
+                })?;
             let mut form = vec![("To", whatsapp_address(to))];
             let (name, value) = sender(from);
             form.push(if name == "From" {
