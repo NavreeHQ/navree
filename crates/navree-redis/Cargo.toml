@@ -34,5 +34,7 @@ uuid = { workspace = true }
 # The backplane tests serve two apps and connect Pusher clients to them.
 axum = { workspace = true }
 navree-crypto = { workspace = true }
+# A unit of work for the queue's after-commit dispatch.
+navree-db = { workspace = true }
 navree-http = { workspace = true }
 tokio-tungstenite = { workspace = true }
