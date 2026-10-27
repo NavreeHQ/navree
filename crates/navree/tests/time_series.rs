@@ -330,7 +330,7 @@ INSERT INTO "webhook_attempts" VALUES
             monitoring.drop().await;
             return;
         }
-        let app = app()
+        let first = app()
             .config("database.url", app_db.url.clone())
             .config("lighthouse.database_url", monitoring.url.clone())
             .build()
@@ -350,7 +350,7 @@ INSERT INTO "webhook_attempts" VALUES
             assert_eq!(dimension.chunk_interval, "1 day", "{table}");
         }
         assert!(!schema.is_hypertable("lighthouse_issues").await.unwrap());
-        app.shutdown().await.unwrap();
+        first.shutdown().await.unwrap();
         // Booting again finds the hypertables and leaves them as they are.
         let again = app()
             .config("database.url", app_db.url.clone())
