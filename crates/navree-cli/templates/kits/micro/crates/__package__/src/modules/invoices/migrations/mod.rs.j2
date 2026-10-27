@@ -10,6 +10,5 @@ mod {{ migration_prefix }}_create_invoices_table;
 
 /// The module's migration set, recorded under `invoices` in `navree_migrations`.
 pub fn migrations() -> MigrationSet {
-    MigrationSet::new("invoices")
-        .migration(migration!({{ migration_prefix }}_create_invoices_table))
+    MigrationSet::new("invoices").migration(migration!({{ migration_prefix }}_create_invoices_table))
 }

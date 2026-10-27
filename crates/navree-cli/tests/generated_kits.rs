@@ -103,26 +103,35 @@ fn finish(parent: tempfile::TempDir, ok: bool, what: &str) {
     }
 }
 
-/// `cargo test`, then the app's `check` (the module graph resolves) and
-/// `conformity:check` (every route is documented), then clippy. A `micro`
-/// kit is a workspace whose default member is the service, so `cargo run`
-/// runs the service there too.
-fn rust_checks(root: &Path) -> bool {
+/// `cargo test` and clippy over the whole project, then the app's `check`
+/// (the module graph resolves) and `extra`, an app command.
+fn rust_checks(root: &Path, extra: &[&str]) -> bool {
     std::fs::create_dir_all(root.join("storage")).unwrap();
-    cargo(root, &["test", "--quiet"])
-        && cargo(root, &["run", "--quiet", "--", "check"])
-        && cargo(root, &["run", "--quiet", "--", "conformity:check"])
+    let mut run = vec!["run", "--quiet", "--"];
+    run.extend_from_slice(extra);
+    cargo(root, &["test", "--workspace", "--quiet"])
         && cargo(
             root,
-            &["clippy", "--quiet", "--all-targets", "--", "-D", "warnings"],
+            &[
+                "clippy",
+                "--workspace",
+                "--quiet",
+                "--all-targets",
+                "--",
+                "-D",
+                "warnings",
+            ],
         )
+        && cargo(root, &["run", "--quiet", "--", "check"])
+        && cargo(root, &run)
 }
 
 #[test]
 #[ignore = "builds the whole framework in a new project; run with --ignored"]
 fn api_kit_compiles_and_its_tests_pass() {
     let (parent, root) = generate(Kit::Api, "acme-api");
-    let ok = rust_checks(&root)
+    // Every route is documented, and the OpenAPI document exports.
+    let ok = rust_checks(&root, &["conformity:check"])
         && cargo(
             &root,
             &["run", "--quiet", "--", "openapi:export", "openapi.json"],
@@ -135,7 +144,7 @@ fn api_kit_compiles_and_its_tests_pass() {
 #[ignore = "builds the whole framework in a new project; run with --ignored"]
 fn saas_kit_api_compiles_and_its_tests_pass() {
     let (parent, root) = generate(Kit::Saas, "acme");
-    let ok = rust_checks(&root);
+    let ok = rust_checks(&root, &["conformity:check"]);
     finish(parent, ok, "saas kit");
 }
 
@@ -143,7 +152,9 @@ fn saas_kit_api_compiles_and_its_tests_pass() {
 #[ignore = "builds the whole framework in a new project; run with --ignored"]
 fn micro_kit_compiles_and_its_tests_pass() {
     let (parent, root) = generate(Kit::Micro, "billing");
-    let ok = rust_checks(&root);
+    // A workspace whose default member is the service: `cargo run` runs it,
+    // and it lists its message and event patterns.
+    let ok = rust_checks(&root, &["micro:patterns"]);
     finish(parent, ok, "micro kit");
 }
 
