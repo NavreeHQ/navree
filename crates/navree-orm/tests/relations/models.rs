@@ -29,6 +29,7 @@ CREATE TABLE companies (
     parent_id INTEGER NULL,
     owner_id INTEGER NULL,
     name TEXT NOT NULL,
+    code TEXT NULL,
     active BOOLEAN NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -36,6 +37,7 @@ CREATE TABLE companies (
 CREATE TABLE contacts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     company_id INTEGER NULL,
+    company_code TEXT NULL,
     name TEXT NOT NULL,
     email TEXT NOT NULL UNIQUE
 );
@@ -199,6 +201,8 @@ pub struct Company {
     pub parent_id: Option<i64>,
     pub owner_id: Option<i64>,
     pub name: String,
+    /// The company's code in the accounting system.
+    pub code: Option<String>,
     pub active: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -235,6 +239,18 @@ impl Company {
     /// The people at the company.
     pub fn contacts(&self) -> HasMany<Company, Contact> {
         self.has_many(Contact::COMPANY_ID)
+    }
+
+    /// One person at the company (`has_one`).
+    pub fn contact(&self) -> HasOne<Company, Contact> {
+        self.has_one(Contact::COMPANY_ID)
+    }
+
+    /// The people filed under the company's accounting code: the parent's
+    /// column is not its key.
+    pub fn coded_contacts(&self) -> HasMany<Company, Contact> {
+        self.has_many(Contact::COMPANY_CODE)
+            .local_key(Company::CODE)
     }
 
     /// The company's deals; each loads with its company already set.
@@ -274,6 +290,9 @@ impl GlobalScope<Contact> for Visible {
 pub struct Contact {
     pub id: i64,
     pub company_id: Option<i64>,
+    /// The accounting code of the company the contact is filed under.
+    #[model(default)]
+    pub company_code: Option<String>,
     pub name: String,
     #[model(default)]
     pub email: String,
@@ -284,6 +303,12 @@ impl Contact {
     /// The contact's company.
     pub fn company(&self) -> BelongsTo<Contact, Company> {
         self.belongs_to(Contact::COMPANY_ID)
+    }
+
+    /// The company the contact is filed under, by its accounting code.
+    pub fn coded_company(&self) -> BelongsTo<Contact, Company> {
+        self.belongs_to(Contact::COMPANY_CODE)
+            .owner_key(Company::CODE)
     }
 }
 

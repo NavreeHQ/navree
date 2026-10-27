@@ -449,3 +449,94 @@ async fn children_get_a_snapshot_of_their_parent() {
     assert_eq!(made.company_id, Some(crm.acme.id));
     assert_eq!(company_of(&made).unwrap().name, "Acme");
 }
+
+#[tokio::test]
+async fn has_one_and_relations_on_other_columns_than_keys() {
+    let t = sqlite().await;
+    let crm = seed(&t.db).await;
+    // `has_one`: the record holding the parent's key, or nothing.
+    let companies = Company::query()
+        .with("contact")
+        .order_by(Company::ID)
+        .get(&t.db)
+        .await
+        .unwrap();
+    let contact = |company: &Record<Company>| {
+        company
+            .loaded(Company::contact)
+            .unwrap()
+            .as_ref()
+            .map(|contact| contact.name.clone())
+    };
+    assert!(contact(&companies[0]).is_some(), "one of Acme's two");
+    assert_eq!(contact(&companies[1]), None);
+    assert_eq!(contact(&companies[2]).as_deref(), Some("Dave"));
+    assert_eq!(
+        crm.globex
+            .contact()
+            .first(&t.db)
+            .await
+            .unwrap()
+            .unwrap()
+            .name,
+        "Dave"
+    );
+
+    // Text columns as the keys: the parent's `code`, the contacts'
+    // `company_code`.
+    let mut acme = Company::find_or_fail(&t.db, crm.acme.id).await.unwrap();
+    acme.code = Some("ACM-1".into());
+    acme.save(&t.db).await.unwrap();
+    let filed = acme
+        .coded_contacts()
+        .create(
+            &t.db,
+            Contact {
+                name: "Filed".into(),
+                email: "filed@acme.test".into(),
+                ..Contact::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(filed.company_code.as_deref(), Some("ACM-1"));
+    let companies = Company::query()
+        .with("coded_contacts")
+        .order_by(Company::ID)
+        .get(&t.db)
+        .await
+        .unwrap();
+    assert_eq!(
+        companies[0].loaded(Company::coded_contacts).unwrap().len(),
+        1
+    );
+    assert!(
+        companies[2]
+            .loaded(Company::coded_contacts)
+            .unwrap()
+            .is_empty(),
+        "no code, nothing related"
+    );
+    let contacts = Contact::query()
+        .with("coded_company")
+        .where_key(filed.id)
+        .get(&t.db)
+        .await
+        .unwrap();
+    assert_eq!(
+        contacts[0]
+            .loaded(Contact::coded_company)
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .name,
+        "Acme"
+    );
+    assert!(contacts[0].coded_company().is(&acme));
+    let coded = Contact::query()
+        .has("coded_company")
+        .count(&t.db)
+        .await
+        .unwrap();
+    assert_eq!(coded, 1);
+}
