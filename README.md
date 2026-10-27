@@ -107,7 +107,7 @@ each test run.
 ```
 L9+ apps/crm-api (Navree app)                   apps/crm-web (Next.js 16)
 L8  navree (facade: re-exports + prelude)       navree-cli (binary `navree`; no runtime navree deps, uses navree-dock)
-L7  navree-billing (packages built on other packages)
+L7  navree-billing  navree-lighthouse (packages built on other packages)
 L6  navree-social  navree-webhooks  navree-oauth  navree-flags  navree-graphql  navree-grpc (ecosystem libraries)
 L5  navree-auth  navree-workspace
 L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify
@@ -155,6 +155,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L6 | `navree-graphql` | GraphQL on async-graphql: `#[resolver]` fields in modules with route-style access, per-request dataloaders, subscriptions over WebSockets, GraphiQL, `graphql:schema` (facade feature `graphql`, opt-in) |
 | L6 | `navree-grpc` | gRPC on tonic: `#[grpc_service]` services in modules with DI, guards, access rules and the unit of work; gRPC-Web, Connect, health, reflection, named client channels (facade feature `grpc`, opt-in) |
 | L7 | `navree-billing` | Billing for users or workspaces: Stripe and Paddle clients, plans, trials, seats, metered usage, invoices, the portal, verified webhooks on the queue, a fake (facade feature `billing`, opt-in) |
+| L7 | `navree-lighthouse` | Application monitoring inside the app: a telemetry sink grouping exceptions, slow requests and queries, failed jobs and failing outgoing calls into issues, per-minute aggregates and sampled traces in the app's database, alerts (mail, Slack, signed webhooks, your own channels) through the queue, the `/_lighthouse` dashboard and its JSON API, `lighthouse:prune` (facade feature `lighthouse`, in `full`) |
 | L8 | `navree` | The facade: re-exports every module crate (one Cargo feature each, `full` by default) and the macros |
 | L8 | `navree-cli` | The `navree` binary: `navree new`, `navree make:*`, `navree dev`, `navree dock` |
 

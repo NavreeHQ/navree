@@ -91,7 +91,8 @@ impl Histogram {
             let Some((bucket, count)) = pair.split_once(':') else {
                 continue;
             };
-            let (Ok(bucket), Ok(count)) = (bucket.trim().parse::<u16>(), count.trim().parse::<u64>())
+            let (Ok(bucket), Ok(count)) =
+                (bucket.trim().parse::<u16>(), count.trim().parse::<u64>())
             else {
                 continue;
             };

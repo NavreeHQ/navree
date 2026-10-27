@@ -25,6 +25,7 @@ full = [
     "events",
     "http",
     "http-client",
+    "lighthouse",
     "log",
     "mail",
     "notify",
@@ -168,6 +169,22 @@ billing = [
     "auth",
     "workspace",
 ]
+## L7 (in `full`)
+## Lighthouse: application monitoring inside the app. Issues grouped by
+## fingerprint, traces, aggregates, alerts and the `/_lighthouse` dashboard.
+lighthouse = [
+    "dep:navree-lighthouse",
+    "telemetry",
+    "http",
+    "crypto",
+    "view",
+    "http-client",
+    "db",
+    "mail",
+    "schedule",
+    "access",
+    "auth",
+]
 ## PostgreSQL driver for navree-db.
 postgres = ["db", "navree-db/postgres"]
 ## Opt-in, not in `full`: Dock's library (`dock.toml`, the services' settings,
@@ -200,6 +217,7 @@ navree-events = { workspace = true, optional = true }
 navree-graphql = { workspace = true, optional = true }
 navree-http = { workspace = true, optional = true }
 navree-http-client = { workspace = true, optional = true }
+navree-lighthouse = { workspace = true, optional = true }
 navree-log = { workspace = true, optional = true }
 navree-mail = { workspace = true, optional = true }
 navree-notify = { workspace = true, optional = true }

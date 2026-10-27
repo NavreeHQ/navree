@@ -1,0 +1,32 @@
+{% extends "lighthouse/layout.html" %}
+{% block content %}
+<div>
+  <h1>Overview</h1>
+  <div class="muted small">The last {{ period }}: {{ overview.requests }} requests, {{ overview.exceptions }} exceptions.</div>
+</div>
+<div class="figures">
+  <div class="card figure"><div class="label">Requests per minute</div><div class="value" id="fig-rpm">{{ overview.requests_per_minute|round(1) }}</div></div>
+  <div class="card figure"><div class="label">Error rate</div><div class="value{% if error_percent >= 5 %} bad{% endif %}" id="fig-error-rate">{{ error_percent }}%</div></div>
+  <div class="card figure"><div class="label">p95 latency</div><div class="value" id="fig-p95">{{ overview.p95_ms|round|int }} ms</div></div>
+  <div class="card figure"><div class="label">Failed jobs</div><div class="value{% if overview.failed_jobs %} bad{% endif %}" id="fig-failed-jobs">{{ overview.failed_jobs }}</div></div>
+  <div class="card figure"><div class="label">Open issues</div><div class="value" id="fig-open-issues">{{ overview.open_issues }}</div></div>
+</div>
+<div class="card">
+  <h2>Requests and exceptions</h2>
+  <svg class="chart" viewBox="0 0 960 170" role="img" aria-label="Requests and exceptions over time">
+    {% for b in requests_bars %}<rect class="bar requests" x="{{ b.x }}" y="{{ b.y }}" width="{{ b.w }}" height="{{ b.h }}"><title>{{ b.value }} requests</title></rect>{% endfor %}
+    <g transform="translate(0 130)">{% for b in error_bars %}<rect class="bar errors" x="{{ b.x }}" y="{{ b.y }}" width="{{ b.w }}" height="{{ b.h }}"><title>{{ b.value }} exceptions</title></rect>{% endfor %}</g>
+  </svg>
+  <div class="legend"><span><span class="swatch requests"></span>Requests</span><span><span class="swatch errors"></span>Exceptions</span></div>
+</div>
+<div class="card">
+  <h2>Latest occurrences</h2>
+  <ul class="feed" id="feed">
+    {% for item in overview.feed %}
+    <li data-id="{{ item.occurrence_id }}"><span class="dot {{ item.level }}"></span><a href="{{ mount }}/issues/{{ item.issue_id }}">{{ item.title }}</a><span class="sub">{{ item.culprit }}</span><span class="when">{{ item.at|date("%Y-%m-%d %H:%M:%S") }}</span></li>
+    {% else %}
+    <li class="empty">Nothing yet. New occurrences appear here as they happen.</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endblock %}

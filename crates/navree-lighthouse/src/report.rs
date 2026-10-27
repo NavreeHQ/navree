@@ -87,6 +87,8 @@ pub struct Report {
     pub(crate) user: Option<String>,
     pub(crate) backtrace: Option<String>,
     pub(crate) location: Option<String>,
+    /// The error's `Debug` form (kept for fakes).
+    pub(crate) debug: Option<String>,
 }
 
 impl Report {
@@ -131,6 +133,7 @@ impl Report {
                 caller.line(),
                 caller.column()
             )),
+            debug: None,
         }
     }
 

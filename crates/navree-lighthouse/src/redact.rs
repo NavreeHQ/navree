@@ -12,7 +12,12 @@ pub(crate) const DEFAULT_FRAGMENTS: [&str; 5] =
     ["password", "token", "authorization", "cookie", "secret"];
 
 /// Headers masked whatever the fragments say.
-const ALWAYS_MASKED: [&str; 4] = ["authorization", "cookie", "set-cookie", "proxy-authorization"];
+const ALWAYS_MASKED: [&str; 4] = [
+    "authorization",
+    "cookie",
+    "set-cookie",
+    "proxy-authorization",
+];
 
 /// Masks values by name.
 #[derive(Clone, Debug)]
@@ -90,7 +95,8 @@ mod tests {
     use super::*;
 
     fn redactor() -> Redactor {
-        let mut fragments: Vec<String> = DEFAULT_FRAGMENTS.iter().map(|s| (*s).to_owned()).collect();
+        let mut fragments: Vec<String> =
+            DEFAULT_FRAGMENTS.iter().map(|s| (*s).to_owned()).collect();
         fragments.push("iban".to_owned());
         Redactor::new(&fragments)
     }
@@ -107,7 +113,10 @@ mod tests {
         let masked = Redactor::new(&[]).headers(&headers);
         assert_eq!(masked["authorization"], REDACTED);
         assert_eq!(masked["cookie"], REDACTED);
-        assert_eq!(masked["x-api-token"], "t0k", "no fragments: only the fixed ones");
+        assert_eq!(
+            masked["x-api-token"], "t0k",
+            "no fragments: only the fixed ones"
+        );
         let masked = redactor().headers(&headers);
         assert_eq!(masked["x-api-token"], REDACTED);
         assert_eq!(masked["accept"], "application/json");
