@@ -418,3 +418,44 @@ async fn the_phone_message_is_overridable() {
         &json!({ "phone": ["Check the number."] })
     );
 }
+
+/// A message that arrives without a request (a gRPC call, a job payload).
+#[derive(Validate)]
+struct CallBack {
+    #[garde(custom(rules::phone))]
+    number: String,
+}
+
+#[tokio::test]
+async fn validate_in_reads_numbers_in_the_configured_region() {
+    let national = CallBack {
+        number: "٠٧٤٠٠ ١٢٣٤٥٦".to_owned(),
+    };
+    // Without an app, a national number has no region.
+    let errors = navree_validation::validate_in(&national, None)
+        .await
+        .expect_err("no region");
+    assert_eq!(
+        errors.get("number"),
+        Some(&["number must be a valid phone number".to_owned()][..])
+    );
+
+    let app = TestApp::builder()
+        .config("validation", json!({ "phone": { "default_region": "GB" } }))
+        .module(ValidationModule::from_config())
+        .build()
+        .await;
+    assert!(
+        navree_validation::validate_in(&national, Some(app.ctx()))
+            .await
+            .is_ok()
+    );
+    let wrong = CallBack {
+        number: "12".to_owned(),
+    };
+    assert!(
+        navree_validation::validate_in(&wrong, Some(app.ctx()))
+            .await
+            .is_err()
+    );
+}
