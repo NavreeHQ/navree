@@ -90,11 +90,15 @@ impl LdapServer {
 
     /// Serves over LDAPS with a certificate for 127.0.0.1; returns the
     /// server and the certificate's PEM.
-    pub async fn start_tls(entries: Vec<Entry>, credentials: Option<(&str, &str)>) -> (Self, String) {
+    pub async fn start_tls(
+        entries: Vec<Entry>,
+        credentials: Option<(&str, &str)>,
+    ) -> (Self, String) {
         let certified = rcgen::generate_simple_self_signed(vec!["127.0.0.1".to_owned()]).unwrap();
         let pem = certified.cert.pem();
         let cert = CertificateDer::from(certified.cert.der().to_vec());
-        let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(certified.key_pair.serialize_der()));
+        let key =
+            PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(certified.key_pair.serialize_der()));
         let config = rustls::ServerConfig::builder_with_provider(Arc::new(
             rustls::crypto::ring::default_provider(),
         ))
@@ -219,7 +223,9 @@ async fn session<S: AsyncRead + AsyncWrite + Unpin>(
         }
         let id = integer(&parts[0]);
         let op = parts.remove(1);
-        let controls = parts.into_iter().find(|t| t.class == TagClass::Context && t.id == 0);
+        let controls = parts
+            .into_iter()
+            .find(|t| t.class == TagClass::Context && t.id == 0);
         let mut replies = Vec::new();
         match (op.class, op.id) {
             (TagClass::Application, 0) => {
@@ -375,7 +381,12 @@ fn in_scope(dn: &str, base: &str, scope: i64) -> bool {
 
 fn normalize(dn: &str) -> String {
     dn.split(',')
-        .map(|rdn| rdn.trim().to_ascii_lowercase().replace(" =", "=").replace("= ", "="))
+        .map(|rdn| {
+            rdn.trim()
+                .to_ascii_lowercase()
+                .replace(" =", "=")
+                .replace("= ", "=")
+        })
         .collect::<Vec<_>>()
         .join(",")
 }
@@ -431,7 +442,9 @@ fn matches(filter: &StructureTag, entry: &Entry) -> bool {
             })
         }
         (TagClass::Context, 7) => {
-            let attr = String::from_utf8_lossy(&filter.clone().expect_primitive().unwrap_or_default()).into_owned();
+            let attr =
+                String::from_utf8_lossy(&filter.clone().expect_primitive().unwrap_or_default())
+                    .into_owned();
             attr.eq_ignore_ascii_case("objectClass") || !entry.values(&attr).is_empty()
         }
         _ => false,
@@ -446,7 +459,11 @@ fn text(tag: &StructureTag) -> String {
 
 fn integer(tag: &StructureTag) -> i64 {
     let bytes = tag.clone().expect_primitive().unwrap_or_default();
-    let mut value: i64 = if bytes.first().is_some_and(|b| b & 0x80 != 0) { -1 } else { 0 };
+    let mut value: i64 = if bytes.first().is_some_and(|b| b & 0x80 != 0) {
+        -1
+    } else {
+        0
+    };
     for byte in bytes {
         value = (value << 8) | i64::from(byte);
     }
@@ -522,7 +539,10 @@ fn search_entry(entry: &Entry, wanted: &[String]) -> StructureTag {
 
 fn paged_control(size: i64, cookie: &str) -> StructureTag {
     let mut value = BytesMut::new();
-    lber::write::encode_into(&mut value, sequence(vec![int(size, 2), octets(cookie.as_bytes())]))
-        .unwrap();
+    lber::write::encode_into(
+        &mut value,
+        sequence(vec![int(size, 2), octets(cookie.as_bytes())]),
+    )
+    .unwrap();
     sequence(vec![octets(PAGED_RESULTS.as_bytes()), octets(&value)])
 }

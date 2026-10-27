@@ -124,7 +124,10 @@ impl IntoResponse for ScimError {
 /// A JSON body sent as `application/scim+json`.
 pub(crate) fn scim_body(value: &Value) -> impl IntoResponse + use<> {
     (
-        [(header::CONTENT_TYPE, HeaderValue::from_static(SCIM_CONTENT_TYPE))],
+        [(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static(SCIM_CONTENT_TYPE),
+        )],
         serde_json::to_vec(value).unwrap_or_default(),
     )
 }
@@ -145,7 +148,12 @@ mod tests {
                 "detail": "`is` is not a filter operator"
             })
         );
-        assert!(ScimError::not_found("User not found").body().get("scimType").is_none());
+        assert!(
+            ScimError::not_found("User not found")
+                .body()
+                .get("scimType")
+                .is_none()
+        );
         let response = ScimError::unauthorized().into_response();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
         assert_eq!(

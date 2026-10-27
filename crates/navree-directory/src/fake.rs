@@ -176,7 +176,10 @@ impl std::fmt::Debug for DirectoryFake {
 }
 
 impl DirectorySource for FakeState {
-    fn pull<'a>(&'a self, request: &'a PullRequest) -> BoxFuture<'a, Result<Pulled, DirectoryError>> {
+    fn pull<'a>(
+        &'a self,
+        request: &'a PullRequest,
+    ) -> BoxFuture<'a, Result<Pulled, DirectoryError>> {
         Box::pin(async move {
             let answer = self.with(|inner| {
                 inner.pulls.push(FakePull {

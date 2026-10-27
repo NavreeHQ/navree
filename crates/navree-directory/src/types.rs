@@ -509,10 +509,18 @@ mod tests {
         ] {
             assert_eq!(ChangeAction::parse(action.as_str()), action);
         }
-        for trigger in [RunTrigger::Manual, RunTrigger::Schedule, RunTrigger::Command] {
+        for trigger in [
+            RunTrigger::Manual,
+            RunTrigger::Schedule,
+            RunTrigger::Command,
+        ] {
             assert_eq!(RunTrigger::parse(trigger.as_str()), trigger);
         }
-        for status in [ChangeStatus::Planned, ChangeStatus::Applied, ChangeStatus::Failed] {
+        for status in [
+            ChangeStatus::Planned,
+            ChangeStatus::Applied,
+            ChangeStatus::Failed,
+        ] {
             assert_eq!(ChangeStatus::parse(status.as_str()), status);
         }
         assert_eq!(ConnectionStatus::parse("paused"), ConnectionStatus::Paused);

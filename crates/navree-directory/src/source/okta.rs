@@ -27,7 +27,10 @@ const MAX_PAGES: usize = 100_000;
 pub(crate) struct OktaSource;
 
 impl DirectorySource for OktaSource {
-    fn pull<'a>(&'a self, request: &'a PullRequest) -> BoxFuture<'a, Result<Pulled, DirectoryError>> {
+    fn pull<'a>(
+        &'a self,
+        request: &'a PullRequest,
+    ) -> BoxFuture<'a, Result<Pulled, DirectoryError>> {
         Box::pin(async move {
             let client = request.client(OKTA).await?;
             let mut first = "/api/v1/users?limit=200".to_owned();
@@ -60,9 +63,13 @@ impl DirectorySource for OktaSource {
                     let mut group = DirectoryGroup::new(id.clone(), name);
                     group.description = text(item.pointer("/profile/description"));
                     if let Some(kind) = text(item.get("type")) {
-                        group.attributes.insert("type".to_owned(), Value::String(kind));
+                        group
+                            .attributes
+                            .insert("type".to_owned(), Value::String(kind));
                     }
-                    for member in list(&client, &format!("/api/v1/groups/{id}/users?limit=200")).await? {
+                    for member in
+                        list(&client, &format!("/api/v1/groups/{id}/users?limit=200")).await?
+                    {
                         if let Some(member_id) = text(member.get("id"))
                             && known.contains(member_id.as_str())
                         {
@@ -137,19 +144,26 @@ pub(crate) fn user_of(item: &Value) -> Option<DirectoryUser> {
     user.family_name = text(profile.get("lastName"));
     user.display_name = text(profile.get("displayName"));
     if let Some(email) = text(profile.get("email")) {
-        user.emails.push(ContactValue::new(email, Some("work"), true));
+        user.emails
+            .push(ContactValue::new(email, Some("work"), true));
     }
     if let Some(second) = text(profile.get("secondEmail"))
-        && !user.emails.iter().any(|e| e.value.eq_ignore_ascii_case(&second))
+        && !user
+            .emails
+            .iter()
+            .any(|e| e.value.eq_ignore_ascii_case(&second))
     {
-        user.emails.push(ContactValue::new(second, Some("other"), false));
+        user.emails
+            .push(ContactValue::new(second, Some("other"), false));
     }
     if let Some(phone) = text(profile.get("primaryPhone")) {
-        user.phone_numbers.push(ContactValue::new(phone, Some("work"), true));
+        user.phone_numbers
+            .push(ContactValue::new(phone, Some("work"), true));
     }
     if let Some(mobile) = text(profile.get("mobilePhone")) {
         let primary = user.phone_numbers.is_empty();
-        user.phone_numbers.push(ContactValue::new(mobile, Some("mobile"), primary));
+        user.phone_numbers
+            .push(ContactValue::new(mobile, Some("mobile"), primary));
     }
     user.title = text(profile.get("title"));
     user.department = text(profile.get("department"));
@@ -164,7 +178,8 @@ pub(crate) fn user_of(item: &Value) -> Option<DirectoryUser> {
         }
     }
     if let Some(status) = text(item.get("status")) {
-        user.attributes.insert("status".to_owned(), Value::String(status));
+        user.attributes
+            .insert("status".to_owned(), Value::String(status));
     }
     Some(user)
 }
@@ -210,11 +225,13 @@ mod tests {
         assert_eq!(user.time_zone.as_deref(), Some("Europe/London"));
         assert_eq!(user.attributes["costCenter"], json!("4130"));
         assert_eq!(user.attributes["status"], json!("SUSPENDED"));
-        let active = user_of(&json!({ "id": "x", "status": "PROVISIONED", "profile": { "login": "x" } }))
-            .unwrap();
+        let active =
+            user_of(&json!({ "id": "x", "status": "PROVISIONED", "profile": { "login": "x" } }))
+                .unwrap();
         assert!(active.active);
-        let staged = user_of(&json!({ "id": "x", "status": "STAGED", "profile": { "login": "x" } }))
-            .unwrap();
+        let staged =
+            user_of(&json!({ "id": "x", "status": "STAGED", "profile": { "login": "x" } }))
+                .unwrap();
         assert!(!staged.active);
         assert!(user_of(&json!({ "id": "x", "profile": {} })).is_none());
     }

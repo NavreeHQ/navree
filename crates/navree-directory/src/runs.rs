@@ -12,8 +12,11 @@ use navree_orm::{Model as _, Record};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::Directory;
 use crate::apply::Applier;
-use crate::diff::{Current, CurrentGroup, CurrentUser, GroupStep, Plan, UserStep, diff, exceeds_deactivation_limit};
+use crate::diff::{
+    Current, CurrentGroup, CurrentUser, GroupStep, Plan, UserStep, diff, exceeds_deactivation_limit,
+};
 use crate::error::DirectoryError;
 use crate::events::DirectorySyncFinished;
 use crate::models;
@@ -25,7 +28,6 @@ use crate::types::{
     RunTrigger, SyncChange, SyncRun,
 };
 use crate::user::{DirectoryGroup, DirectoryUser};
-use crate::Directory;
 
 /// The job of a queued run: `directory.sync`, one attempt, up to an hour.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -56,8 +58,8 @@ impl Job for SyncDirectory {
 /// One step of a plan, in apply order.
 #[derive(Clone, Debug)]
 enum Step {
-    User(UserStep),
-    Group(GroupStep),
+    User(Box<UserStep>),
+    Group(Box<GroupStep>),
 }
 
 impl Step {
@@ -70,17 +72,25 @@ impl Step {
 }
 
 fn steps(plan: Plan) -> Vec<Step> {
+    let user = |step| Step::User(Box::new(step));
+    let group = |step| Step::Group(Box::new(step));
     plan.users
         .into_iter()
-        .map(Step::User)
-        .chain(plan.groups.into_iter().map(Step::Group))
-        .chain(plan.deleted_groups.into_iter().map(Step::Group))
-        .chain(plan.deactivations.into_iter().map(Step::User))
+        .map(user)
+        .chain(plan.groups.into_iter().map(group))
+        .chain(plan.deleted_groups.into_iter().map(group))
+        .chain(plan.deactivations.into_iter().map(user))
         .collect()
 }
 
 /// The recorded form of a step.
-fn change_row(run_id: Uuid, step: &Step, status: ChangeStatus, error: Option<String>, now: DateTime<Utc>) -> models::RunChange {
+fn change_row(
+    run_id: Uuid,
+    step: &Step,
+    status: ChangeStatus,
+    error: Option<String>,
+    now: DateTime<Utc>,
+) -> models::RunChange {
     let (action, external_id, label, fields, added, removed) = match step {
         Step::User(step) => (
             step.action,
@@ -212,7 +222,11 @@ impl Runtime {
         };
         if ConnectionStatus::parse(&connection.status) == ConnectionStatus::Paused {
             return self
-                .finish(&run, Some(&connection), failed_outcome("the connection is paused"))
+                .finish(
+                    &run,
+                    Some(&connection),
+                    failed_outcome("the connection is paused"),
+                )
                 .await;
         }
         let started = self.now();
@@ -370,7 +384,11 @@ impl Runtime {
         let source = self.source(&connection.source)?;
         let request = PullRequest {
             connection: info.clone(),
-            cursor: if full { None } else { connection.cursor.clone() },
+            cursor: if full {
+                None
+            } else {
+                connection.cursor.clone()
+            },
             secret: self.secret(connection)?,
             app: self.app()?,
         };
@@ -491,7 +509,10 @@ impl Runtime {
                     if *recorded < max {
                         let tx = uow.tx().await?;
                         models::RunChange::query()
-                            .insert(&*tx, [change_row(run_id, step, ChangeStatus::Applied, None, now)])
+                            .insert(
+                                &*tx,
+                                [change_row(run_id, step, ChangeStatus::Applied, None, now)],
+                            )
                             .await?;
                         drop(tx);
                         *recorded += 1;
@@ -505,7 +526,13 @@ impl Runtime {
                     }
                     tracing::warn!(target: "navree::directory", %error, "a directory change failed");
                     if *recorded < max {
-                        let row = change_row(run_id, step, ChangeStatus::Failed, Some(error.to_string()), now);
+                        let row = change_row(
+                            run_id,
+                            step,
+                            ChangeStatus::Failed,
+                            Some(error.to_string()),
+                            now,
+                        );
                         models::RunChange::query().insert(&*self.db, [row]).await?;
                         *recorded += 1;
                     }
@@ -591,7 +618,8 @@ impl Runtime {
                         assignments.push(models::Connection::LAST_SYNCED_AT.set(Some(now)));
                     }
                     if connection.sync_interval_mins > 0 && !dry_run {
-                        let next = now + TimeDelta::minutes(i64::from(connection.sync_interval_mins));
+                        let next =
+                            now + TimeDelta::minutes(i64::from(connection.sync_interval_mins));
                         assignments.push(models::Connection::NEXT_SYNC_AT.set(Some(next)));
                     }
                     models::Connection::query()
@@ -677,20 +705,23 @@ mod tests {
                 Step::Group(step) => format!("{}:{}", step.action.as_str(), step.group.external_id),
             })
             .collect();
-        assert_eq!(order, vec!["create:u1", "create:g1", "delete:g2", "deactivate:u2"]);
+        assert_eq!(
+            order,
+            vec!["create:u1", "create:g1", "delete:g2", "deactivate:u2"]
+        );
     }
 
     #[test]
     fn change_rows_record_labels_fields_and_member_counts() {
         let now = Utc::now();
-        let step = Step::Group(GroupStep {
+        let step = Step::Group(Box::new(GroupStep {
             action: ChangeAction::Update,
             group: DirectoryGroup::new("g1", "Engineering"),
             previous: None,
             changed: vec!["members".into()],
             added: vec!["u1".into(), "u2".into()],
             removed: vec!["u3".into()],
-        });
+        }));
         let row = change_row(Uuid::nil(), &step, ChangeStatus::Applied, None, now);
         assert_eq!(row.subject, "group");
         assert_eq!(row.action, "update");

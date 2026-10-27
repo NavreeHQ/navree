@@ -358,14 +358,14 @@ impl Directory {
             let settings: Value = serde_json::from_str(&row.settings).unwrap_or_else(|_| json!({}));
             rt.check_settings(&row.source, &settings, row.secret.is_some())?;
         }
-        if let Some(minutes) = update.sync_interval_mins {
-            if row.source != SCIM {
-                row.sync_interval_mins = i32::try_from(minutes).unwrap_or(i32::MAX);
-                if minutes == 0 {
-                    row.next_sync_at = None;
-                } else if row.next_sync_at.is_none() {
-                    row.next_sync_at = Some(rt.now());
-                }
+        if let Some(minutes) = update.sync_interval_mins
+            && row.source != SCIM
+        {
+            row.sync_interval_mins = i32::try_from(minutes).unwrap_or(i32::MAX);
+            if minutes == 0 {
+                row.next_sync_at = None;
+            } else if row.next_sync_at.is_none() {
+                row.next_sync_at = Some(rt.now());
             }
         }
         if let Some(status) = update.status {
@@ -459,7 +459,10 @@ impl Directory {
     }
 
     /// The connections of `owner`, by name.
-    pub async fn connections(&self, owner: Owner) -> Result<Vec<DirectoryConnection>, DirectoryError> {
+    pub async fn connections(
+        &self,
+        owner: Owner,
+    ) -> Result<Vec<DirectoryConnection>, DirectoryError> {
         let rt = self.rt()?;
         let (owner_type, owner_id) = owner_columns(owner);
         let rows = models::Connection::query()
@@ -619,13 +622,19 @@ impl Directory {
     /// Runs a sync of connection `id` in this task and returns the
     /// finished run. For commands, jobs and tests: inside a request, use
     /// [`sync`](Directory::sync).
-    pub async fn sync_now(&self, id: Uuid, options: SyncOptions) -> Result<SyncRun, DirectoryError> {
+    pub async fn sync_now(
+        &self,
+        id: Uuid,
+        options: SyncOptions,
+    ) -> Result<SyncRun, DirectoryError> {
         let rt = self.rt()?.clone();
         let row = self.row(id).await?;
         self.check_can_sync(&row).await?;
         let runtime = rt.clone();
         let run = rt
-            .own_unit(None, |uow| async move { runtime.new_run(&uow, &row, options, None).await })
+            .own_unit(None, |uow| async move {
+                runtime.new_run(&uow, &row, options, None).await
+            })
             .await?;
         rt.execute(run.id, None).await
     }
@@ -694,11 +703,15 @@ impl Directory {
         }
         let going = models::Run::query()
             .where_(models::Run::CONNECTION_ID.eq(row.id))
-            .where_(models::Run::STATUS.is_in([RunStatus::Queued.as_str(), RunStatus::Running.as_str()]))
+            .where_(
+                models::Run::STATUS
+                    .is_in([RunStatus::Queued.as_str(), RunStatus::Running.as_str()]),
+            )
             .get(&*rt.db)
             .await?
             .into_models();
-        let stale_before = rt.now() - TimeDelta::minutes(i64::from(rt.options.sync.stale_after_mins));
+        let stale_before =
+            rt.now() - TimeDelta::minutes(i64::from(rt.options.sync.stale_after_mins));
         for run in going {
             if run.created_at > stale_before {
                 return Err(DirectoryError::SyncRunning);
@@ -731,7 +744,11 @@ impl Directory {
     }
 
     /// The runs of connection `id`, newest first, at most `limit`.
-    pub async fn runs(&self, connection_id: Uuid, limit: u64) -> Result<Vec<SyncRun>, DirectoryError> {
+    pub async fn runs(
+        &self,
+        connection_id: Uuid,
+        limit: u64,
+    ) -> Result<Vec<SyncRun>, DirectoryError> {
         let rt = self.rt()?;
         let rows = models::Run::query()
             .where_(models::Run::CONNECTION_ID.eq(connection_id))
@@ -770,7 +787,10 @@ impl Directory {
         let cutoff = rt.now() - TimeDelta::days(i64::from(rt.options.sync.keep_runs_days));
         let ids: Vec<Uuid> = models::Run::query()
             .where_(models::Run::CREATED_AT.lt(cutoff))
-            .where_(models::Run::STATUS.not_in([RunStatus::Queued.as_str(), RunStatus::Running.as_str()]))
+            .where_(
+                models::Run::STATUS
+                    .not_in([RunStatus::Queued.as_str(), RunStatus::Running.as_str()]),
+            )
             .get(&*rt.db)
             .await?
             .into_models()
@@ -836,7 +856,10 @@ impl Directory {
     }
 
     /// The groups user `directory_user_id` belongs to.
-    pub async fn groups_of(&self, directory_user_id: Uuid) -> Result<Vec<SyncedGroup>, DirectoryError> {
+    pub async fn groups_of(
+        &self,
+        directory_user_id: Uuid,
+    ) -> Result<Vec<SyncedGroup>, DirectoryError> {
         let rt = self.rt()?;
         let rows = groups_of(&*rt.db, directory_user_id).await?;
         let mut groups = Vec::with_capacity(rows.len());

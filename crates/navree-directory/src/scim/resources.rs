@@ -45,12 +45,16 @@ const USER_FIELDS: [&str; 10] = [
 /// without `password` (never stored).
 pub(crate) fn stored_resource(input: &Value) -> Result<Value, ScimError> {
     let Some(object) = input.as_object() else {
-        return Err(ScimError::invalid_syntax("the resource must be a JSON object"));
+        return Err(ScimError::invalid_syntax(
+            "the resource must be a JSON object",
+        ));
     };
     let kept: Map<String, Value> = object
         .iter()
         .filter(|(key, _)| {
-            !SERVER_OWNED.iter().any(|owned| key.eq_ignore_ascii_case(owned))
+            !SERVER_OWNED
+                .iter()
+                .any(|owned| key.eq_ignore_ascii_case(owned))
                 && !key.eq_ignore_ascii_case("password")
         })
         .map(|(key, value)| (key.clone(), value.clone()))
@@ -69,8 +73,9 @@ pub(crate) fn user_from_resource(resource: &Value) -> Result<(DirectoryUser, boo
     let has_external_id = external_id.is_some();
     let active = match get_ci(resource, "active") {
         None | Some(Value::Null) => true,
-        Some(value) => boolean(value)
-            .ok_or_else(|| ScimError::invalid_value("active must be a boolean"))?,
+        Some(value) => {
+            boolean(value).ok_or_else(|| ScimError::invalid_value("active must be a boolean"))?
+        }
     };
     let mut attributes = BTreeMap::new();
     let (given_name, family_name) = match get_ci(resource, "name") {
@@ -127,7 +132,10 @@ pub(crate) fn user_from_resource(resource: &Value) -> Result<(DirectoryUser, boo
                 if !rest.is_empty() {
                     attributes.insert(ENTERPRISE_USER_SCHEMA.to_owned(), Value::Object(rest));
                 }
-            } else if !USER_FIELDS.iter().any(|field| key.eq_ignore_ascii_case(field)) {
+            } else if !USER_FIELDS
+                .iter()
+                .any(|field| key.eq_ignore_ascii_case(field))
+            {
                 attributes.insert(key.clone(), value.clone());
             }
         }
@@ -143,7 +151,9 @@ pub(crate) fn user_from_resource(resource: &Value) -> Result<(DirectoryUser, boo
 
 /// The normalized group of a stored Group resource, and its members' SCIM
 /// ids (`members[].value`).
-pub(crate) fn group_from_resource(resource: &Value) -> Result<(DirectoryGroup, Vec<String>), ScimError> {
+pub(crate) fn group_from_resource(
+    resource: &Value,
+) -> Result<(DirectoryGroup, Vec<String>), ScimError> {
     let display_name = string(resource, "displayName")?
         .filter(|name| !name.trim().is_empty())
         .ok_or_else(|| ScimError::invalid_value("displayName is required"))?;
@@ -169,9 +179,15 @@ pub(crate) fn group_from_resource(resource: &Value) -> Result<(DirectoryGroup, V
     let mut attributes = BTreeMap::new();
     if let Some(object) = resource.as_object() {
         for (key, value) in object {
-            if !["schemas", "externalId", "displayName", "members", "description"]
-                .iter()
-                .any(|field| key.eq_ignore_ascii_case(field))
+            if ![
+                "schemas",
+                "externalId",
+                "displayName",
+                "members",
+                "description",
+            ]
+            .iter()
+            .any(|field| key.eq_ignore_ascii_case(field))
             {
                 attributes.insert(key.clone(), value.clone());
             }
@@ -362,9 +378,12 @@ fn keep_subs(value: Value, subs: &[&str]) -> Value {
                 .filter(|(key, _)| subs.iter().any(|sub| sub.eq_ignore_ascii_case(key)))
                 .collect(),
         ),
-        Value::Array(items) => {
-            Value::Array(items.into_iter().map(|item| keep_subs(item, subs)).collect())
-        }
+        Value::Array(items) => Value::Array(
+            items
+                .into_iter()
+                .map(|item| keep_subs(item, subs))
+                .collect(),
+        ),
         other => other,
     }
 }
@@ -452,7 +471,11 @@ pub(crate) fn schemas(base: &str) -> Vec<Value> {
     };
     let multi_contact = |name: &str, description: &str| {
         with(
-            with(attr(name, "complex", description), "multiValued", json!(true)),
+            with(
+                attr(name, "complex", description),
+                "multiValued",
+                json!(true),
+            ),
             "subAttributes",
             json!([
                 attr("value", "string", "The value"),
@@ -551,7 +574,12 @@ pub(crate) fn schemas(base: &str) -> Vec<Value> {
     [
         (USER_SCHEMA, "User", "User Account", user_attributes),
         (GROUP_SCHEMA, "Group", "Group", group_attributes),
-        (ENTERPRISE_USER_SCHEMA, "EnterpriseUser", "Enterprise User", enterprise_attributes),
+        (
+            ENTERPRISE_USER_SCHEMA,
+            "EnterpriseUser",
+            "Enterprise User",
+            enterprise_attributes,
+        ),
     ]
     .into_iter()
     .map(|(id, name, description, attributes)| {
@@ -589,7 +617,10 @@ pub(crate) fn boolean(value: &Value) -> Option<bool> {
 }
 
 fn take(object: &mut Map<String, Value>, key: &str) -> Option<Value> {
-    let found = object.keys().find(|k| k.eq_ignore_ascii_case(key)).cloned()?;
+    let found = object
+        .keys()
+        .find(|k| k.eq_ignore_ascii_case(key))
+        .cloned()?;
     object.remove(&found)
 }
 
@@ -693,8 +724,14 @@ mod tests {
             user.manager_id.as_deref(),
             Some("26118915-6090-4610-87e4-49d8ca9f808d")
         );
-        assert_eq!(user.attributes["addresses"], json!([{ "type": "work", "country": "GB" }]));
-        assert_eq!(user.attributes["name"], json!({ "formatted": "Ada Lovelace" }));
+        assert_eq!(
+            user.attributes["addresses"],
+            json!([{ "type": "work", "country": "GB" }])
+        );
+        assert_eq!(
+            user.attributes["name"],
+            json!({ "formatted": "Ada Lovelace" })
+        );
         assert_eq!(
             user.attributes[ENTERPRISE_USER_SCHEMA],
             json!({ "costCenter": "4130" })
@@ -707,12 +744,18 @@ mod tests {
     fn user_resources_are_checked() {
         let err = |resource: Value| user_from_resource(&resource).unwrap_err();
         assert_eq!(err(json!({})).detail, "userName is required");
-        assert_eq!(err(json!({ "userName": " " })).detail, "userName is required");
+        assert_eq!(
+            err(json!({ "userName": " " })).detail,
+            "userName is required"
+        );
         assert_eq!(
             err(json!({ "userName": "a", "active": "maybe" })).detail,
             "active must be a boolean"
         );
-        assert_eq!(err(json!({ "userName": 7 })).detail, "userName must be a string");
+        assert_eq!(
+            err(json!({ "userName": 7 })).detail,
+            "userName must be a string"
+        );
         assert_eq!(
             err(json!({ "userName": "a", "emails": "a@b" })).detail,
             "emails must be an array"
@@ -746,7 +789,9 @@ mod tests {
         assert_eq!(members, vec!["u1", "u2"]);
         assert!(group.members.is_empty());
         assert_eq!(
-            group_from_resource(&json!({ "members": [] })).unwrap_err().detail,
+            group_from_resource(&json!({ "members": [] }))
+                .unwrap_err()
+                .detail,
             "displayName is required"
         );
         assert_eq!(
@@ -775,9 +820,15 @@ mod tests {
             rendered["schemas"],
             json!([USER_SCHEMA, ENTERPRISE_USER_SCHEMA])
         );
-        assert_eq!(rendered["id"], json!("2819c223-7f76-453a-919d-413861904646"));
+        assert_eq!(
+            rendered["id"],
+            json!("2819c223-7f76-453a-919d-413861904646")
+        );
         assert_eq!(rendered["meta"]["resourceType"], json!("User"));
-        assert_eq!(rendered["meta"]["created"], json!("2026-10-27T08:00:00.000Z"));
+        assert_eq!(
+            rendered["meta"]["created"],
+            json!("2026-10-27T08:00:00.000Z")
+        );
         assert_eq!(rendered["meta"]["version"], json!("W/\"abc123\""));
         assert_eq!(rendered["groups"], json!([]));
         assert_eq!(rendered["userName"], json!("ada@acme.test"));
@@ -804,8 +855,8 @@ mod tests {
                 "name": { "givenName": "Ada" }
             })
         );
-        let core = Projection::new(Some(&format!("{USER_SCHEMA}:userName")), None)
-            .apply(user.clone());
+        let core =
+            Projection::new(Some(&format!("{USER_SCHEMA}:userName")), None).apply(user.clone());
         assert_eq!(core["userName"], json!("ada"));
         assert!(core.get("name").is_none());
         let without = Projection::new(None, Some("emails.type,meta,id")).apply(user);

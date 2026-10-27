@@ -75,10 +75,7 @@ fn connections(t: &mut Blueprint, mysql: bool) {
     t.string("source").length(64);
     t.text("settings");
     t.text("secret").nullable();
-    t.string("scim_token_hash")
-        .length(64)
-        .nullable()
-        .unique();
+    t.string("scim_token_hash").length(64).nullable().unique();
     t.string("scim_token_hint").length(32).nullable();
     t.text("cursor").nullable();
     t.string("status").length(16).default("active");

@@ -200,7 +200,11 @@ impl Applier {
 
     /// Deletes a user the SCIM client deleted: the sinks deactivate them
     /// (`deleted`), then the row and its memberships go.
-    pub(crate) async fn delete_user(&self, uow: &Uow, row: models::User) -> Result<(), DirectoryError> {
+    pub(crate) async fn delete_user(
+        &self,
+        uow: &Uow,
+        row: models::User,
+    ) -> Result<(), DirectoryError> {
         let mut user: DirectoryUser = serde_json::from_str(&row.data).unwrap_or_default();
         let previous = user.clone();
         user.active = false;

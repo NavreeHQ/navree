@@ -141,7 +141,9 @@ impl Runtime {
 
     /// Whether `name` is a source connections can use.
     pub(crate) fn knows_source(&self, name: &str) -> bool {
-        name == SCIM || self.sources.contains_key(name) || (self.fake.is_some() && is_source_name(name))
+        name == SCIM
+            || self.sources.contains_key(name)
+            || (self.fake.is_some() && is_source_name(name))
     }
 
     /// Checks a pull connection's settings with its source.
@@ -285,7 +287,11 @@ impl Runtime {
 
     /// Runs `f` in the task's unfinished unit of work (a request's), or else
     /// in a new one committed when `f` succeeds.
-    pub(crate) async fn write<T, F, Fut>(&self, actor: Option<Uuid>, f: F) -> Result<T, DirectoryError>
+    pub(crate) async fn write<T, F, Fut>(
+        &self,
+        actor: Option<Uuid>,
+        f: F,
+    ) -> Result<T, DirectoryError>
     where
         F: FnOnce(Uow) -> Fut,
         Fut: Future<Output = Result<T, DirectoryError>>,
@@ -344,7 +350,10 @@ impl Runtime {
 /// The `owner_type` and `owner_id` columns of an owner (the nil UUID for
 /// the app).
 pub(crate) fn owner_columns(owner: Owner) -> (&'static str, Uuid) {
-    (owner_type(owner).as_str(), owner.id().unwrap_or(Uuid::nil()))
+    (
+        owner_type(owner).as_str(),
+        owner.id().unwrap_or(Uuid::nil()),
+    )
 }
 
 /// The owner of a row.

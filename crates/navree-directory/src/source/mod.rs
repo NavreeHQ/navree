@@ -54,8 +54,10 @@ pub trait DirectorySource: Send + Sync + 'static {
 
     /// Pulls the directory: everything, or the changes since
     /// `request.cursor` when the source supports deltas.
-    fn pull<'a>(&'a self, request: &'a PullRequest)
-    -> BoxFuture<'a, Result<Pulled, DirectoryError>>;
+    fn pull<'a>(
+        &'a self,
+        request: &'a PullRequest,
+    ) -> BoxFuture<'a, Result<Pulled, DirectoryError>>;
 }
 
 /// What a source gets for a pull.
@@ -74,7 +76,9 @@ pub struct PullRequest {
 impl PullRequest {
     /// A setting as a string (`None` when missing or empty).
     pub fn setting(&self, key: &str) -> Option<&str> {
-        self.connection.setting(key).filter(|value| !value.is_empty())
+        self.connection
+            .setting(key)
+            .filter(|value| !value.is_empty())
     }
 
     /// A boolean setting.
@@ -102,7 +106,10 @@ impl PullRequest {
     /// The client of the owner's integrations connection to `provider`
     /// (setting `provider`, else `default_provider`) in the scope set
     /// `directory` (setting `scope_set`).
-    pub async fn client(&self, default_provider: &str) -> Result<IntegrationClient, DirectoryError> {
+    pub async fn client(
+        &self,
+        default_provider: &str,
+    ) -> Result<IntegrationClient, DirectoryError> {
         let integrations = self.app.try_get::<Integrations>().await.ok_or_else(|| {
             DirectoryError::Config(format!(
                 "the `{}` source needs IntegrationsModule in the app",

@@ -13,12 +13,14 @@ use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use serde_json::Value;
 
 use super::filter::Filter;
-use super::resources::{Projection, list_response, resource_types, schemas, service_provider_config};
+use super::resources::{
+    Projection, list_response, resource_types, schemas, service_provider_config,
+};
 use super::server::{ListQuery, Server, scim_error};
 use super::{ScimError, scim_body};
+use crate::Directory;
 use crate::options::DirectoryOptions;
 use crate::types::ConnectionStatus;
-use crate::Directory;
 
 /// The SCIM 2.0 server, mounted at `directory.scim.path` (default
 /// `/scim/v2`, outside the API prefix) when `directory.scim.enabled`.
@@ -101,10 +103,16 @@ fn param<'a>(params: &'a HashMap<String, String>, name: &str) -> Option<&'a str>
 }
 
 fn projection(params: &HashMap<String, String>) -> Projection {
-    Projection::new(param(params, "attributes"), param(params, "excludedAttributes"))
+    Projection::new(
+        param(params, "attributes"),
+        param(params, "excludedAttributes"),
+    )
 }
 
-fn list_query(params: &HashMap<String, String>, max_results: usize) -> Result<ListQuery, ScimError> {
+fn list_query(
+    params: &HashMap<String, String>,
+    max_results: usize,
+) -> Result<ListQuery, ScimError> {
     let filter = param(params, "filter")
         .filter(|filter| !filter.trim().is_empty())
         .map(Filter::parse)
@@ -112,16 +120,19 @@ fn list_query(params: &HashMap<String, String>, max_results: usize) -> Result<Li
     let number = |name: &str| -> Result<Option<i64>, ScimError> {
         param(params, name)
             .map(|value| {
-                value.trim().parse::<i64>().map_err(|_| {
-                    ScimError::invalid_value(format!("{name} must be an integer"))
-                })
+                value
+                    .trim()
+                    .parse::<i64>()
+                    .map_err(|_| ScimError::invalid_value(format!("{name} must be an integer")))
             })
             .transpose()
     };
     // startIndex below 1 is 1, a negative count 0 (RFC 7644 §3.4.2.4).
     let start_index = usize::try_from(number("startIndex")?.unwrap_or(1).max(1)).unwrap_or(1);
     let count = number("count")?
-        .map_or(max_results, |count| usize::try_from(count.max(0)).unwrap_or(0))
+        .map_or(max_results, |count| {
+            usize::try_from(count.max(0)).unwrap_or(0)
+        })
         .min(max_results);
     Ok(ListQuery {
         filter,
@@ -199,7 +210,9 @@ impl Controller for ScimController {
                         .into_iter()
                         .find(|t| t["id"].as_str() == Some(id.as_str()))
                         .map(|t| ok(&t))
-                        .ok_or_else(|| ScimError::not_found(format!("Resource type {id} not found"))),
+                        .ok_or_else(|| {
+                            ScimError::not_found(format!("Resource type {id} not found"))
+                        }),
                 )
             }
         };
@@ -229,124 +242,148 @@ impl Controller for ScimController {
 
         // -- users --------------------------------------------------------------
         let s = shared.clone();
-        let list_users = move |headers: HeaderMap, Query(params): Query<HashMap<String, String>>| {
-            let s = s.clone();
-            async move {
-                respond(async {
-                    let server = server(&s, &headers).await?;
-                    let query = list_query(&params, max_results)?;
-                    Ok(ok(&server.list_users(&query).await?))
+        let list_users =
+            move |headers: HeaderMap, Query(params): Query<HashMap<String, String>>| {
+                let s = s.clone();
+                async move {
+                    respond(
+                        async {
+                            let server = server(&s, &headers).await?;
+                            let query = list_query(&params, max_results)?;
+                            Ok(ok(&server.list_users(&query).await?))
+                        }
+                        .await,
+                    )
                 }
-                .await)
-            }
-        };
+            };
         let s = shared.clone();
         let create_user = move |headers: HeaderMap, body: Bytes| {
             let s = s.clone();
             async move {
-                respond(async {
-                    let server = server(&s, &headers).await?;
-                    let (_, user) = server.create_user(&json_body(&body)?).await?;
-                    Ok(created(&user))
-                }
-                .await)
+                respond(
+                    async {
+                        let server = server(&s, &headers).await?;
+                        let (_, user) = server.create_user(&json_body(&body)?).await?;
+                        Ok(created(&user))
+                    }
+                    .await,
+                )
             }
         };
         let s = shared.clone();
-        let show_user = move |headers: HeaderMap,
-                              Path(id): Path<String>,
-                              Query(params): Query<HashMap<String, String>>| {
-            let s = s.clone();
-            async move {
-                respond(async {
-                    let server = server(&s, &headers).await?;
-                    Ok(ok(&server.get_user(&id, &projection(&params)).await?))
+        let show_user =
+            move |headers: HeaderMap,
+                  Path(id): Path<String>,
+                  Query(params): Query<HashMap<String, String>>| {
+                let s = s.clone();
+                async move {
+                    respond(
+                        async {
+                            let server = server(&s, &headers).await?;
+                            Ok(ok(&server.get_user(&id, &projection(&params)).await?))
+                        }
+                        .await,
+                    )
                 }
-                .await)
-            }
-        };
+            };
         let s = shared.clone();
         let replace_user = move |headers: HeaderMap, Path(id): Path<String>, body: Bytes| {
             let s = s.clone();
             async move {
-                respond(async {
-                    let server = server(&s, &headers).await?;
-                    Ok(ok(&server.replace_user(&id, &json_body(&body)?).await?))
-                }
-                .await)
+                respond(
+                    async {
+                        let server = server(&s, &headers).await?;
+                        Ok(ok(&server.replace_user(&id, &json_body(&body)?).await?))
+                    }
+                    .await,
+                )
             }
         };
         let s = shared.clone();
         let patch_user = move |headers: HeaderMap, Path(id): Path<String>, body: Bytes| {
             let s = s.clone();
             async move {
-                respond(async {
-                    let server = server(&s, &headers).await?;
-                    Ok(ok(&server.patch_user(&id, &json_body(&body)?).await?))
-                }
-                .await)
+                respond(
+                    async {
+                        let server = server(&s, &headers).await?;
+                        Ok(ok(&server.patch_user(&id, &json_body(&body)?).await?))
+                    }
+                    .await,
+                )
             }
         };
         let s = shared.clone();
         let delete_user = move |headers: HeaderMap, Path(id): Path<String>| {
             let s = s.clone();
             async move {
-                respond(async {
-                    let server = server(&s, &headers).await?;
-                    server.delete_user(&id).await?;
-                    Ok(StatusCode::NO_CONTENT.into_response())
-                }
-                .await)
+                respond(
+                    async {
+                        let server = server(&s, &headers).await?;
+                        server.delete_user(&id).await?;
+                        Ok(StatusCode::NO_CONTENT.into_response())
+                    }
+                    .await,
+                )
             }
         };
 
         // -- groups -------------------------------------------------------------
         let s = shared.clone();
-        let list_groups = move |headers: HeaderMap, Query(params): Query<HashMap<String, String>>| {
-            let s = s.clone();
-            async move {
-                respond(async {
-                    let server = server(&s, &headers).await?;
-                    let query = list_query(&params, max_results)?;
-                    Ok(ok(&server.list_groups(&query).await?))
+        let list_groups =
+            move |headers: HeaderMap, Query(params): Query<HashMap<String, String>>| {
+                let s = s.clone();
+                async move {
+                    respond(
+                        async {
+                            let server = server(&s, &headers).await?;
+                            let query = list_query(&params, max_results)?;
+                            Ok(ok(&server.list_groups(&query).await?))
+                        }
+                        .await,
+                    )
                 }
-                .await)
-            }
-        };
+            };
         let s = shared.clone();
         let create_group = move |headers: HeaderMap, body: Bytes| {
             let s = s.clone();
             async move {
-                respond(async {
-                    let server = server(&s, &headers).await?;
-                    let (_, group) = server.create_group(&json_body(&body)?).await?;
-                    Ok(created(&group))
-                }
-                .await)
+                respond(
+                    async {
+                        let server = server(&s, &headers).await?;
+                        let (_, group) = server.create_group(&json_body(&body)?).await?;
+                        Ok(created(&group))
+                    }
+                    .await,
+                )
             }
         };
         let s = shared.clone();
-        let show_group = move |headers: HeaderMap,
-                               Path(id): Path<String>,
-                               Query(params): Query<HashMap<String, String>>| {
-            let s = s.clone();
-            async move {
-                respond(async {
-                    let server = server(&s, &headers).await?;
-                    Ok(ok(&server.get_group(&id, &projection(&params)).await?))
+        let show_group =
+            move |headers: HeaderMap,
+                  Path(id): Path<String>,
+                  Query(params): Query<HashMap<String, String>>| {
+                let s = s.clone();
+                async move {
+                    respond(
+                        async {
+                            let server = server(&s, &headers).await?;
+                            Ok(ok(&server.get_group(&id, &projection(&params)).await?))
+                        }
+                        .await,
+                    )
                 }
-                .await)
-            }
-        };
+            };
         let s = shared.clone();
         let replace_group = move |headers: HeaderMap, Path(id): Path<String>, body: Bytes| {
             let s = s.clone();
             async move {
-                respond(async {
-                    let server = server(&s, &headers).await?;
-                    Ok(ok(&server.replace_group(&id, &json_body(&body)?).await?))
-                }
-                .await)
+                respond(
+                    async {
+                        let server = server(&s, &headers).await?;
+                        Ok(ok(&server.replace_group(&id, &json_body(&body)?).await?))
+                    }
+                    .await,
+                )
             }
         };
         let s = shared.clone();
@@ -356,24 +393,30 @@ impl Controller for ScimController {
                                 body: Bytes| {
             let s = s.clone();
             async move {
-                respond(async {
-                    let server = server(&s, &headers).await?;
-                    let body = json_body(&body)?;
-                    Ok(ok(&server.patch_group(&id, &body, &projection(&params)).await?))
-                }
-                .await)
+                respond(
+                    async {
+                        let server = server(&s, &headers).await?;
+                        let body = json_body(&body)?;
+                        Ok(ok(&server
+                            .patch_group(&id, &body, &projection(&params))
+                            .await?))
+                    }
+                    .await,
+                )
             }
         };
         let s = shared;
         let delete_group = move |headers: HeaderMap, Path(id): Path<String>| {
             let s = s.clone();
             async move {
-                respond(async {
-                    let server = server(&s, &headers).await?;
-                    server.delete_group(&id).await?;
-                    Ok(StatusCode::NO_CONTENT.into_response())
-                }
-                .await)
+                respond(
+                    async {
+                        let server = server(&s, &headers).await?;
+                        server.delete_group(&id).await?;
+                        Ok(StatusCode::NO_CONTENT.into_response())
+                    }
+                    .await,
+                )
             }
         };
 

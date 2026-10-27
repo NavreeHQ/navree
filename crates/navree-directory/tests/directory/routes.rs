@@ -31,7 +31,10 @@ async fn admins_manage_scim_connections() {
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("data", json!(["scim", "google", "ldap", "microsoft", "okta"]));
+        .assert_json_path(
+            "data",
+            json!(["scim", "google", "ldap", "microsoft", "okta"]),
+        );
 
     let created = admin
         .post("/api/directory/connections")
@@ -225,11 +228,16 @@ async fn syncs_run_as_operations_and_report_their_changes() {
         .assert_json_path("data.0.id", json!(run_id))
         .assert_json_path("data.0.done", json!(3));
     admin
-        .get(&format!("/api/directory/connections/{id}/users?per_page=1&page=2"))
+        .get(&format!(
+            "/api/directory/connections/{id}/users?per_page=1&page=2"
+        ))
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("meta", json!({ "current_page": 2, "per_page": 1, "total": 2, "last_page": 2 }))
+        .assert_json_path(
+            "meta",
+            json!({ "current_page": 2, "per_page": 1, "total": 2, "last_page": 2 }),
+        )
         .assert_json_path("data.0.user.user_name", json!("grace@acme.test"))
         .assert_json_path("data.0.local_id", json!("local-u2"));
     admin
@@ -291,22 +299,36 @@ async fn the_commands_sync_list_and_rotate() {
         .run_command("directory:sync", &[&id.to_string(), "--dry-run"])
         .await
         .unwrap();
-    h.app.run_command("directory:sync", &["--all"]).await.unwrap();
+    h.app
+        .run_command("directory:sync", &["--all"])
+        .await
+        .unwrap();
     assert_eq!(h.directory().await.users(id).await.unwrap().len(), 1);
-    h.app.run_command("directory:sync", &["--due"]).await.unwrap();
+    h.app
+        .run_command("directory:sync", &["--due"])
+        .await
+        .unwrap();
     h.app.run_command("directory:runs", &[]).await.unwrap();
     h.app
         .run_command("directory:runs", &[&id.to_string(), "--limit", "1"])
         .await
         .unwrap();
-    h.app.run_command("directory:connections", &[]).await.unwrap();
+    h.app
+        .run_command("directory:connections", &[])
+        .await
+        .unwrap();
     let scim = h.scim(navree_directory::Owner::App).await;
     h.app
         .run_command("directory:token", &[&scim.connection.id.to_string()])
         .await
         .unwrap();
     assert!(h.app.run_command("directory:sync", &[]).await.is_err());
-    assert!(h.app.run_command("directory:sync", &["--nope"]).await.is_err());
+    assert!(
+        h.app
+            .run_command("directory:sync", &["--nope"])
+            .await
+            .is_err()
+    );
     assert!(h.app.run_command("directory:token", &[]).await.is_err());
     h.fake().fail_next_pull("down");
     assert!(

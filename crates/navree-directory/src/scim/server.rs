@@ -86,11 +86,16 @@ impl Server {
             })
     }
 
-    async fn render_users(&self, rows: &[models::User], projection: &Projection) -> Result<Vec<Value>, ScimError> {
+    async fn render_users(
+        &self,
+        rows: &[models::User],
+        projection: &Projection,
+    ) -> Result<Vec<Value>, ScimError> {
         let groups = if projection.excludes("groups") {
             HashMap::new()
         } else {
-            self.groups_of_users(rows.iter().map(|row| row.id).collect()).await?
+            self.groups_of_users(rows.iter().map(|row| row.id).collect())
+                .await?
         };
         Ok(rows
             .iter()
@@ -130,7 +135,10 @@ impl Server {
     }
 
     /// Each user's groups: (group id, name).
-    async fn groups_of_users(&self, users: Vec<Uuid>) -> Result<HashMap<Uuid, Vec<(Uuid, String)>>, ScimError> {
+    async fn groups_of_users(
+        &self,
+        users: Vec<Uuid>,
+    ) -> Result<HashMap<Uuid, Vec<(Uuid, String)>>, ScimError> {
         let db = &*self.rt.db;
         let mut memberships = Vec::new();
         for chunk in users.chunks(500) {
@@ -172,23 +180,35 @@ impl Server {
         Ok(by_user)
     }
 
-    pub(crate) async fn get_user(&self, id: &str, projection: &Projection) -> Result<Value, ScimError> {
+    pub(crate) async fn get_user(
+        &self,
+        id: &str,
+        projection: &Projection,
+    ) -> Result<Value, ScimError> {
         let row = self.user_row(id).await?;
         Ok(self.render_users(&[row], projection).await?.remove(0))
     }
 
     pub(crate) async fn list_users(&self, query: &ListQuery) -> Result<Value, ScimError> {
         let db = &*self.rt.db;
-        let base = || models::User::query().where_(models::User::CONNECTION_ID.eq(self.connection.id));
-        let indexed = query.filter.as_ref().and_then(Filter::simple_eq).and_then(|(attr, value)| {
-            let builder = match attr.to_ascii_lowercase().as_str() {
-                "username" => base().where_(models::User::USER_NAME.eq_ignore_case(value)),
-                "externalid" => base().where_(models::User::EXTERNAL_ID.eq(value)),
-                "id" => base().where_(models::User::ID.eq(value.parse::<Uuid>().unwrap_or(Uuid::nil()))),
-                _ => return None,
-            };
-            Some(builder)
-        });
+        let base =
+            || models::User::query().where_(models::User::CONNECTION_ID.eq(self.connection.id));
+        let indexed =
+            query
+                .filter
+                .as_ref()
+                .and_then(Filter::simple_eq)
+                .and_then(|(attr, value)| {
+                    let builder = match attr.to_ascii_lowercase().as_str() {
+                        "username" => base().where_(models::User::USER_NAME.eq_ignore_case(value)),
+                        "externalid" => base().where_(models::User::EXTERNAL_ID.eq(value)),
+                        "id" => base().where_(
+                            models::User::ID.eq(value.parse::<Uuid>().unwrap_or(Uuid::nil())),
+                        ),
+                        _ => return None,
+                    };
+                    Some(builder)
+                });
         let matched: Vec<models::User> = match (indexed, &query.filter) {
             (Some(builder), _) => builder
                 .order_by(models::User::CREATED_AT)
@@ -235,14 +255,22 @@ impl Server {
         let stored = stored_resource(body)?;
         let row = self.write_user(None, stored).await?;
         let id = row.id;
-        Ok((id, self.render_users(&[row], &Projection::default()).await?.remove(0)))
+        Ok((
+            id,
+            self.render_users(&[row], &Projection::default())
+                .await?
+                .remove(0),
+        ))
     }
 
     pub(crate) async fn replace_user(&self, id: &str, body: &Value) -> Result<Value, ScimError> {
         let existing = self.user_row(id).await?;
         let stored = stored_resource(body)?;
         let row = self.write_user(Some(existing), stored).await?;
-        Ok(self.render_users(&[row], &Projection::default()).await?.remove(0))
+        Ok(self
+            .render_users(&[row], &Projection::default())
+            .await?
+            .remove(0))
     }
 
     pub(crate) async fn patch_user(&self, id: &str, body: &Value) -> Result<Value, ScimError> {
@@ -252,7 +280,10 @@ impl Server {
         patch::apply(&mut resource, &ops)?;
         let stored = stored_resource(&resource)?;
         let row = self.write_user(Some(existing), stored).await?;
-        Ok(self.render_users(&[row], &Projection::default()).await?.remove(0))
+        Ok(self
+            .render_users(&[row], &Projection::default())
+            .await?
+            .remove(0))
     }
 
     pub(crate) async fn delete_user(&self, id: &str) -> Result<(), ScimError> {
@@ -261,14 +292,21 @@ impl Server {
             .await
             .map_err(scim_error)?;
         self.rt
-            .write(None, |uow| async move { applier.delete_user(&uow, row).await })
+            .write(
+                None,
+                |uow| async move { applier.delete_user(&uow, row).await },
+            )
             .await
             .map_err(scim_error)
     }
 
     /// Creates or changes a user from a stored resource: uniqueness, the
     /// step, then the applier in the request's unit of work.
-    async fn write_user(&self, existing: Option<models::User>, stored: Value) -> Result<models::User, ScimError> {
+    async fn write_user(
+        &self,
+        existing: Option<models::User>,
+        stored: Value,
+    ) -> Result<models::User, ScimError> {
         let (mut user, has_external_id) = user_from_resource(&stored)?;
         let id = existing.as_ref().map_or_else(Uuid::now_v7, |row| row.id);
         if !has_external_id {
@@ -343,7 +381,11 @@ impl Server {
             .map_err(scim_error)
     }
 
-    async fn keep_resource(&self, row: models::User, stored: &Value) -> Result<models::User, ScimError> {
+    async fn keep_resource(
+        &self,
+        row: models::User,
+        stored: &Value,
+    ) -> Result<models::User, ScimError> {
         let text = stored.to_string();
         if row.resource.as_deref() == Some(text.as_str()) {
             return Ok(row);
@@ -408,7 +450,11 @@ impl Server {
             .map_err(scim_error)
     }
 
-    async fn render_groups(&self, rows: &[models::Group], projection: &Projection) -> Result<Vec<Value>, ScimError> {
+    async fn render_groups(
+        &self,
+        rows: &[models::Group],
+        projection: &Projection,
+    ) -> Result<Vec<Value>, ScimError> {
         let mut rendered = Vec::with_capacity(rows.len());
         for row in rows {
             let mut extra = Vec::new();
@@ -445,23 +491,37 @@ impl Server {
         Ok(rendered)
     }
 
-    pub(crate) async fn get_group(&self, id: &str, projection: &Projection) -> Result<Value, ScimError> {
+    pub(crate) async fn get_group(
+        &self,
+        id: &str,
+        projection: &Projection,
+    ) -> Result<Value, ScimError> {
         let row = self.group_row(id).await?;
         Ok(self.render_groups(&[row], projection).await?.remove(0))
     }
 
     pub(crate) async fn list_groups(&self, query: &ListQuery) -> Result<Value, ScimError> {
         let db = &*self.rt.db;
-        let base = || models::Group::query().where_(models::Group::CONNECTION_ID.eq(self.connection.id));
-        let indexed = query.filter.as_ref().and_then(Filter::simple_eq).and_then(|(attr, value)| {
-            let builder = match attr.to_ascii_lowercase().as_str() {
-                "displayname" => base().where_(models::Group::DISPLAY_NAME.eq_ignore_case(value)),
-                "externalid" => base().where_(models::Group::EXTERNAL_ID.eq(value)),
-                "id" => base().where_(models::Group::ID.eq(value.parse::<Uuid>().unwrap_or(Uuid::nil()))),
-                _ => return None,
-            };
-            Some(builder)
-        });
+        let base =
+            || models::Group::query().where_(models::Group::CONNECTION_ID.eq(self.connection.id));
+        let indexed =
+            query
+                .filter
+                .as_ref()
+                .and_then(Filter::simple_eq)
+                .and_then(|(attr, value)| {
+                    let builder = match attr.to_ascii_lowercase().as_str() {
+                        "displayname" => {
+                            base().where_(models::Group::DISPLAY_NAME.eq_ignore_case(value))
+                        }
+                        "externalid" => base().where_(models::Group::EXTERNAL_ID.eq(value)),
+                        "id" => base().where_(
+                            models::Group::ID.eq(value.parse::<Uuid>().unwrap_or(Uuid::nil())),
+                        ),
+                        _ => return None,
+                    };
+                    Some(builder)
+                });
         let matched: Vec<models::Group> = match (indexed, &query.filter) {
             (Some(builder), _) => builder
                 .order_by(models::Group::CREATED_AT)
@@ -505,16 +565,29 @@ impl Server {
     pub(crate) async fn create_group(&self, body: &Value) -> Result<(Uuid, Value), ScimError> {
         let row = self.write_group(None, body).await?;
         let id = row.id;
-        Ok((id, self.render_groups(&[row], &Projection::default()).await?.remove(0)))
+        Ok((
+            id,
+            self.render_groups(&[row], &Projection::default())
+                .await?
+                .remove(0),
+        ))
     }
 
     pub(crate) async fn replace_group(&self, id: &str, body: &Value) -> Result<Value, ScimError> {
         let existing = self.group_row(id).await?;
         let row = self.write_group(Some(existing), body).await?;
-        Ok(self.render_groups(&[row], &Projection::default()).await?.remove(0))
+        Ok(self
+            .render_groups(&[row], &Projection::default())
+            .await?
+            .remove(0))
     }
 
-    pub(crate) async fn patch_group(&self, id: &str, body: &Value, projection: &Projection) -> Result<Value, ScimError> {
+    pub(crate) async fn patch_group(
+        &self,
+        id: &str,
+        body: &Value,
+        projection: &Projection,
+    ) -> Result<Value, ScimError> {
         let existing = self.group_row(id).await?;
         let ops = patch::parse(body)?;
         let mut resource = Self::group_resource(&existing);
@@ -545,7 +618,9 @@ impl Server {
             .await
             .map_err(scim_error)?;
         self.rt
-            .write(None, |uow| async move { applier.group(&uow, &step, None, None).await.map(|_| ()) })
+            .write(None, |uow| async move {
+                applier.group(&uow, &step, None, None).await.map(|_| ())
+            })
             .await
             .map_err(scim_error)
     }
@@ -569,7 +644,11 @@ impl Server {
 
     /// Creates or changes a group from a client's resource (members by
     /// SCIM id; ids that are not users of this connection are left out).
-    async fn write_group(&self, existing: Option<models::Group>, body: &Value) -> Result<models::Group, ScimError> {
+    async fn write_group(
+        &self,
+        existing: Option<models::Group>,
+        body: &Value,
+    ) -> Result<models::Group, ScimError> {
         let mut stored = stored_resource(body)?;
         let (mut group, member_ids) = group_from_resource(&stored)?;
         if let Value::Object(object) = &mut stored {

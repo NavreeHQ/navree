@@ -33,7 +33,15 @@ const TENANT: &str = "9188040d-6c67-4c5b-b112-36a304b66dad";
 
 /// A user as every source must give it: id, sign-in name, active, name,
 /// email, title, department.
-type UserCore = (String, String, bool, String, Option<String>, Option<String>, Option<String>);
+type UserCore = (
+    String,
+    String,
+    bool,
+    String,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+);
 /// A group: id, name, members.
 type GroupCore = (String, String, Vec<String>);
 
@@ -51,13 +59,42 @@ fn expected() -> (Vec<UserCore>, Vec<GroupCore>) {
     };
     (
         vec![
-            user(ADA, "ada@acme.test", true, "Ada Lovelace", Some("Principal engineer"), "Engineering"),
-            user(ALAN, "alan@acme.test", true, "Alan Turing", None, "Research"),
-            user(GRACE, "grace@acme.test", false, "Grace Hopper", Some("Rear admiral"), "Navy"),
+            user(
+                ADA,
+                "ada@acme.test",
+                true,
+                "Ada Lovelace",
+                Some("Principal engineer"),
+                "Engineering",
+            ),
+            user(
+                ALAN,
+                "alan@acme.test",
+                true,
+                "Alan Turing",
+                None,
+                "Research",
+            ),
+            user(
+                GRACE,
+                "grace@acme.test",
+                false,
+                "Grace Hopper",
+                Some("Rear admiral"),
+                "Navy",
+            ),
         ],
         vec![
-            (ENG.to_owned(), "Engineering".to_owned(), vec![ADA.to_owned(), GRACE.to_owned()]),
-            (OPS.to_owned(), "Operations".to_owned(), vec![ALAN.to_owned()]),
+            (
+                ENG.to_owned(),
+                "Engineering".to_owned(),
+                vec![ADA.to_owned(), GRACE.to_owned()],
+            ),
+            (
+                OPS.to_owned(),
+                "Operations".to_owned(),
+                vec![ALAN.to_owned()],
+            ),
         ],
     )
 }
@@ -99,7 +136,10 @@ async fn synced(directory: &Directory, id: Uuid) -> (Vec<UserCore>, Vec<GroupCor
 /// Syncs connection `id` and checks it holds the expected directory.
 async fn sync_and_compare(h: &Harness, id: Uuid) {
     let directory = h.directory().await;
-    let run = directory.sync_now(id, SyncOptions::default()).await.unwrap();
+    let run = directory
+        .sync_now(id, SyncOptions::default())
+        .await
+        .unwrap();
     assert_eq!(run.status, RunStatus::Succeeded, "{run:?}");
     let (users, groups) = synced(&directory, id).await;
     let (mut want_users, mut want_groups) = expected();
@@ -126,7 +166,10 @@ fn loopback(builder: TestAppBuilder) -> TestAppBuilder {
         }))
         .module(IntegrationsModule::from_config())
         .config("integrations.routes", false)
-        .config("integrations.redirect_base", "https://app.acme.test/settings/integrations")
+        .config(
+            "integrations.redirect_base",
+            "https://app.acme.test/settings/integrations",
+        )
 }
 
 fn ok(body: Value) -> ResponseTemplate {
@@ -168,7 +211,15 @@ async fn the_fake_gives_the_directory() {
 
 // -- Microsoft Graph ------------------------------------------------------------
 
-fn graph_user(id: &str, upn: &str, given: &str, family: &str, enabled: bool, title: Option<&str>, dept: &str) -> Value {
+fn graph_user(
+    id: &str,
+    upn: &str,
+    given: &str,
+    family: &str,
+    enabled: bool,
+    title: Option<&str>,
+    dept: &str,
+) -> Value {
     json!({
         "id": id,
         "userPrincipalName": upn,
@@ -186,9 +237,33 @@ fn graph_user(id: &str, upn: &str, given: &str, family: &str, enabled: bool, tit
 
 fn graph_users() -> [Value; 3] {
     [
-        graph_user(ADA, "ada@acme.test", "Ada", "Lovelace", true, Some("Principal engineer"), "Engineering"),
-        graph_user(GRACE, "grace@acme.test", "Grace", "Hopper", false, Some("Rear admiral"), "Navy"),
-        graph_user(ALAN, "alan@acme.test", "Alan", "Turing", true, None, "Research"),
+        graph_user(
+            ADA,
+            "ada@acme.test",
+            "Ada",
+            "Lovelace",
+            true,
+            Some("Principal engineer"),
+            "Engineering",
+        ),
+        graph_user(
+            GRACE,
+            "grace@acme.test",
+            "Grace",
+            "Hopper",
+            false,
+            Some("Rear admiral"),
+            "Navy",
+        ),
+        graph_user(
+            ALAN,
+            "alan@acme.test",
+            "Alan",
+            "Turing",
+            true,
+            None,
+            "Research",
+        ),
     ]
 }
 
@@ -248,7 +323,9 @@ async fn graph(mock: &MockServer) -> (Harness, Uuid) {
     let uri = mock.uri();
     Mock::given(method("POST"))
         .and(path(format!("/{TENANT}/oauth2/v2.0/token")))
-        .respond_with(ok(json!({ "token_type": "Bearer", "expires_in": 3599, "access_token": "graph-token" })))
+        .respond_with(ok(
+            json!({ "token_type": "Bearer", "expires_in": 3599, "access_token": "graph-token" }),
+        ))
         .mount(mock)
         .await;
     let h = real(move |b| {
@@ -265,12 +342,21 @@ async fn graph(mock: &MockServer) -> (Harness, Uuid) {
     .await;
     let integrations = h.app.get::<navree_integrations::Integrations>().await;
     let state = integrations
-        .connect_url(Owner::App, "microsoft", ConnectOptions::default().scope_set("directory"))
+        .connect_url(
+            Owner::App,
+            "microsoft",
+            ConnectOptions::default().scope_set("directory"),
+        )
         .await
         .unwrap()
         .state;
     integrations
-        .complete(Owner::App, "microsoft", &ConnectCallback::admin_consent(state, TENANT), None)
+        .complete(
+            Owner::App,
+            "microsoft",
+            &ConnectCallback::admin_consent(state, TENANT),
+            None,
+        )
         .await
         .unwrap();
     let id = h.connection("microsoft").await;
@@ -293,7 +379,10 @@ async fn microsoft_graph_delta_rounds_bring_only_changes_and_resync_when_expired
     mount_graph_snapshot(&mock).await;
     let (h, id) = graph(&mock).await;
     let directory = h.directory().await;
-    directory.sync_now(id, SyncOptions::default()).await.unwrap();
+    directory
+        .sync_now(id, SyncOptions::default())
+        .await
+        .unwrap();
     h.log.clear();
 
     // Round two: Ada's title changed (Graph sends only the changed
@@ -333,10 +422,15 @@ async fn microsoft_graph_delta_rounds_bring_only_changes_and_resync_when_expired
     Mock::given(method("GET"))
         .and(path("/v1.0/groups"))
         .and(query_param("$filter", format!("id in ('{ENG}')").as_str()))
-        .respond_with(ok(json!({ "value": [{ "id": ENG, "displayName": "Engineering" }] })))
+        .respond_with(ok(
+            json!({ "value": [{ "id": ENG, "displayName": "Engineering" }] }),
+        ))
         .mount(&mock)
         .await;
-    let run = directory.sync_now(id, SyncOptions::default()).await.unwrap();
+    let run = directory
+        .sync_now(id, SyncOptions::default())
+        .await
+        .unwrap();
     assert_eq!(run.status, RunStatus::Succeeded, "{run:?}");
     assert_eq!(run.complete, Some(false));
     assert_eq!(
@@ -349,7 +443,11 @@ async fn microsoft_graph_delta_rounds_bring_only_changes_and_resync_when_expired
     );
     let ada = directory.user(id, ADA).await.unwrap().unwrap();
     assert_eq!(ada.user.title.as_deref(), Some("Chief engineer"));
-    assert_eq!(ada.user.department.as_deref(), Some("Engineering"), "re-read in full");
+    assert_eq!(
+        ada.user.department.as_deref(),
+        Some("Engineering"),
+        "re-read in full"
+    );
 
     // Round three: the delta link expired (410), so the source starts over
     // with a snapshot, which brings Alan back.
@@ -362,7 +460,10 @@ async fn microsoft_graph_delta_rounds_bring_only_changes_and_resync_when_expired
         .mount(&mock)
         .await;
     h.log.clear();
-    let run = directory.sync_now(id, SyncOptions::default()).await.unwrap();
+    let run = directory
+        .sync_now(id, SyncOptions::default())
+        .await
+        .unwrap();
     assert_eq!(run.complete, Some(true));
     assert_eq!(
         h.log.calls(),
@@ -385,17 +486,32 @@ async fn a_graph_refusal_fails_the_run_with_graphs_message() {
         .mount(&mock)
         .await;
     let (h, id) = graph(&mock).await;
-    let run = h.directory().await.sync_now(id, SyncOptions::default()).await.unwrap();
+    let run = h
+        .directory()
+        .await
+        .sync_now(id, SyncOptions::default())
+        .await
+        .unwrap();
     assert_eq!(run.status, RunStatus::Failed);
     assert_eq!(
         run.error.as_deref(),
-        Some("Microsoft Graph could not be read: 403: Insufficient privileges to complete the operation.")
+        Some(
+            "Microsoft Graph could not be read: 403: Insufficient privileges to complete the operation."
+        )
     );
 }
 
 // -- Google Workspace -----------------------------------------------------------
 
-fn google_user(id: &str, email: &str, given: &str, family: &str, suspended: bool, title: Option<&str>, dept: &str) -> Value {
+fn google_user(
+    id: &str,
+    email: &str,
+    given: &str,
+    family: &str,
+    suspended: bool,
+    title: Option<&str>,
+    dept: &str,
+) -> Value {
     let mut organization = json!({ "department": dept, "primary": true });
     if let Some(title) = title {
         organization["title"] = json!(title);
@@ -416,7 +532,9 @@ async fn google_workspace_gives_the_directory() {
     let uri = mock.uri();
     Mock::given(method("POST"))
         .and(path("/token"))
-        .respond_with(ok(json!({ "token_type": "Bearer", "expires_in": 3599, "access_token": "google-token" })))
+        .respond_with(ok(
+            json!({ "token_type": "Bearer", "expires_in": 3599, "access_token": "google-token" }),
+        ))
         .mount(&mock)
         .await;
     Mock::given(method("GET"))
@@ -450,14 +568,18 @@ async fn google_workspace_gives_the_directory() {
         .mount(&mock)
         .await;
     Mock::given(method("GET"))
-        .and(path(format!("/google/admin/directory/v1/groups/{ENG}/members")))
+        .and(path(format!(
+            "/google/admin/directory/v1/groups/{ENG}/members"
+        )))
         .respond_with(ok(json!({ "members": [
             { "id": ADA, "type": "USER" }, { "id": GRACE, "type": "USER" }
         ] })))
         .mount(&mock)
         .await;
     Mock::given(method("GET"))
-        .and(path(format!("/google/admin/directory/v1/groups/{OPS}/members")))
+        .and(path(format!(
+            "/google/admin/directory/v1/groups/{OPS}/members"
+        )))
         .respond_with(ok(json!({ "members": [
             { "id": ALAN, "type": "USER" }, { "id": ENG, "type": "GROUP" }
         ] })))
@@ -512,7 +634,15 @@ async fn google_workspace_gives_the_directory() {
 
 // -- Okta -------------------------------------------------------------------------
 
-fn okta_user(id: &str, login: &str, first: &str, last: &str, status: &str, title: Option<&str>, dept: &str) -> Value {
+fn okta_user(
+    id: &str,
+    login: &str,
+    first: &str,
+    last: &str,
+    status: &str,
+    title: Option<&str>,
+    dept: &str,
+) -> Value {
     json!({
         "id": id,
         "status": status,
@@ -533,18 +663,48 @@ async fn okta_gives_the_directory() {
         .and(header("authorization", "SSWS 00okta-api-token"))
         .respond_with(
             ok(json!([
-                okta_user(ADA, "ada@acme.test", "Ada", "Lovelace", "ACTIVE", Some("Principal engineer"), "Engineering"),
-                okta_user(GRACE, "grace@acme.test", "Grace", "Hopper", "SUSPENDED", Some("Rear admiral"), "Navy")
+                okta_user(
+                    ADA,
+                    "ada@acme.test",
+                    "Ada",
+                    "Lovelace",
+                    "ACTIVE",
+                    Some("Principal engineer"),
+                    "Engineering"
+                ),
+                okta_user(
+                    GRACE,
+                    "grace@acme.test",
+                    "Grace",
+                    "Hopper",
+                    "SUSPENDED",
+                    Some("Rear admiral"),
+                    "Navy"
+                )
             ]))
-            .append_header("link", format!("<{uri}/okta/api/v1/users?limit=200>; rel=\"self\"").as_str())
-            .append_header("link", format!("<{uri}/okta/api/v1/users?after=p2&limit=200>; rel=\"next\"").as_str()),
+            .append_header(
+                "link",
+                format!("<{uri}/okta/api/v1/users?limit=200>; rel=\"self\"").as_str(),
+            )
+            .append_header(
+                "link",
+                format!("<{uri}/okta/api/v1/users?after=p2&limit=200>; rel=\"next\"").as_str(),
+            ),
         )
         .mount(&mock)
         .await;
     Mock::given(method("GET"))
         .and(path("/okta/api/v1/users"))
         .and(query_param("after", "p2"))
-        .respond_with(ok(json!([okta_user(ALAN, "alan@acme.test", "Alan", "Turing", "ACTIVE", None, "Research")])))
+        .respond_with(ok(json!([okta_user(
+            ALAN,
+            "alan@acme.test",
+            "Alan",
+            "Turing",
+            "ACTIVE",
+            None,
+            "Research"
+        )])))
         .mount(&mock)
         .await;
     Mock::given(method("GET"))
@@ -602,7 +762,12 @@ async fn a_pull_source_without_its_integration_connection_fails_the_run() {
     })
     .await;
     let id = h.connection("okta").await;
-    let run = h.directory().await.sync_now(id, SyncOptions::default()).await.unwrap();
+    let run = h
+        .directory()
+        .await
+        .sync_now(id, SyncOptions::default())
+        .await
+        .unwrap();
     assert_eq!(run.status, RunStatus::Failed);
     assert_eq!(run.error.as_deref(), Some("Okta is not connected"));
 }
@@ -614,7 +779,10 @@ fn active_directory() -> Vec<Entry> {
     let guid = |id: &str| Uuid::parse_str(id).unwrap().to_bytes_le().to_vec();
     let person = |dn: &str, id: &str, upn: &str, given: &str, family: &str, uac: &str| {
         Entry::new(dn)
-            .attr("objectClass", &["top", "person", "organizationalPerson", "user"])
+            .attr(
+                "objectClass",
+                &["top", "person", "organizationalPerson", "user"],
+            )
             .attr("objectCategory", &["person"])
             .binary("objectGUID", guid(id))
             .attr("userPrincipalName", &[upn])
@@ -626,15 +794,36 @@ fn active_directory() -> Vec<Entry> {
             .attr("userAccountControl", &[uac])
     };
     vec![
-        person("CN=Ada Lovelace,OU=People,DC=acme,DC=test", ADA, "ada@acme.test", "Ada", "Lovelace", "512")
-            .attr("title", &["Principal engineer"])
-            .attr("department", &["Engineering"])
-            .attr("memberOf", &["CN=Engineering,OU=Groups,DC=acme,DC=test"]),
-        person("CN=Grace Hopper,OU=People,DC=acme,DC=test", GRACE, "grace@acme.test", "Grace", "Hopper", "514")
-            .attr("title", &["Rear admiral"])
-            .attr("department", &["Navy"]),
-        person("CN=Alan Turing,OU=People,DC=acme,DC=test", ALAN, "alan@acme.test", "Alan", "Turing", "66048")
-            .attr("department", &["Research"]),
+        person(
+            "CN=Ada Lovelace,OU=People,DC=acme,DC=test",
+            ADA,
+            "ada@acme.test",
+            "Ada",
+            "Lovelace",
+            "512",
+        )
+        .attr("title", &["Principal engineer"])
+        .attr("department", &["Engineering"])
+        .attr("memberOf", &["CN=Engineering,OU=Groups,DC=acme,DC=test"]),
+        person(
+            "CN=Grace Hopper,OU=People,DC=acme,DC=test",
+            GRACE,
+            "grace@acme.test",
+            "Grace",
+            "Hopper",
+            "514",
+        )
+        .attr("title", &["Rear admiral"])
+        .attr("department", &["Navy"]),
+        person(
+            "CN=Alan Turing,OU=People,DC=acme,DC=test",
+            ALAN,
+            "alan@acme.test",
+            "Alan",
+            "Turing",
+            "66048",
+        )
+        .attr("department", &["Research"]),
         Entry::new("CN=Engineering,OU=Groups,DC=acme,DC=test")
             .attr("objectClass", &["top", "group"])
             .binary("objectGUID", guid(ENG))
@@ -644,7 +833,13 @@ fn active_directory() -> Vec<Entry> {
             .attr("objectClass", &["top", "group"])
             .binary("objectGUID", guid(OPS))
             .attr("cn", &["Operations"])
-            .attr("member", &["CN=Alan Turing, OU=People, DC=acme, DC=test", "CN=Engineering,OU=Groups,DC=acme,DC=test"]),
+            .attr(
+                "member",
+                &[
+                    "CN=Alan Turing, OU=People, DC=acme, DC=test",
+                    "CN=Engineering,OU=Groups,DC=acme,DC=test",
+                ],
+            ),
         // Not a user: a computer account.
         Entry::new("CN=DC1,OU=Domain Controllers,DC=acme,DC=test")
             .attr("objectClass", &["top", "computer"])
@@ -683,7 +878,10 @@ async fn active_directory_gives_the_directory_through_paged_searches() {
     let searches = server.searches();
     // Users in two pages of two, then groups in one.
     assert_eq!(
-        searches.iter().map(|s| (s.page_size, s.returned)).collect::<Vec<_>>(),
+        searches
+            .iter()
+            .map(|s| (s.page_size, s.returned))
+            .collect::<Vec<_>>(),
         vec![(Some(2), 2), (Some(2), 1), (Some(2), 2)]
     );
     let ada = h.directory().await.user(id, ADA).await.unwrap().unwrap();
@@ -703,10 +901,20 @@ async fn a_refused_bind_fails_the_run_without_the_password() {
         Some("wrong password"),
     )
     .await;
-    let run = h.directory().await.sync_now(id, SyncOptions::default()).await.unwrap();
+    let run = h
+        .directory()
+        .await
+        .sync_now(id, SyncOptions::default())
+        .await
+        .unwrap();
     assert_eq!(run.status, RunStatus::Failed);
     let error = run.error.unwrap();
-    assert!(error.starts_with(&format!("LDAP could not be read: the bind as {BIND_DN} failed: result code 49")), "{error}");
+    assert!(
+        error.starts_with(&format!(
+            "LDAP could not be read: the bind as {BIND_DN} failed: result code 49"
+        )),
+        "{error}"
+    );
     assert!(!error.contains("wrong password"));
     // An unreachable server fails too.
     let id = ldap_connection(
@@ -715,9 +923,18 @@ async fn a_refused_bind_fails_the_run_without_the_password() {
         None,
     )
     .await;
-    let run = h.directory().await.sync_now(id, SyncOptions::default()).await.unwrap();
+    let run = h
+        .directory()
+        .await
+        .sync_now(id, SyncOptions::default())
+        .await
+        .unwrap();
     assert_eq!(run.status, RunStatus::Failed);
-    assert!(run.error.unwrap().starts_with("LDAP could not be read: could not connect to ldap://127.0.0.1:1"));
+    assert!(
+        run.error
+            .unwrap()
+            .starts_with("LDAP could not be read: could not connect to ldap://127.0.0.1:1")
+    );
 }
 
 #[tokio::test]
@@ -745,7 +962,13 @@ async fn openldap_over_ldaps_with_the_servers_certificate() {
             .attr("objectClass", &["groupOfUniqueNames"])
             .attr("entryUUID", &[ENG])
             .attr("cn", &["Engineering"])
-            .attr("uniqueMember", &["uid=ada,ou=people,dc=acme,dc=test", "uid=grace,ou=people,dc=acme,dc=test"]),
+            .attr(
+                "uniqueMember",
+                &[
+                    "uid=ada,ou=people,dc=acme,dc=test",
+                    "uid=grace,ou=people,dc=acme,dc=test",
+                ],
+            ),
         Entry::new("cn=operations,ou=groups,dc=acme,dc=test")
             .attr("objectClass", &["posixGroup"])
             .attr("entryUUID", &[OPS])
@@ -767,17 +990,27 @@ async fn openldap_over_ldaps_with_the_servers_certificate() {
     )
     .await;
     let directory = h.directory().await;
-    let run = directory.sync_now(id, SyncOptions::default()).await.unwrap();
+    let run = directory
+        .sync_now(id, SyncOptions::default())
+        .await
+        .unwrap();
     assert_eq!(run.status, RunStatus::Succeeded, "{run:?}");
     let (users, groups) = synced(&directory, id).await;
     let names: Vec<(&str, bool)> = users.iter().map(|u| (u.1.as_str(), u.2)).collect();
     assert_eq!(
         names,
-        vec![("ada@acme.test", true), ("alan@acme.test", true), ("grace@acme.test", false)]
+        vec![
+            ("ada@acme.test", true),
+            ("alan@acme.test", true),
+            ("grace@acme.test", false)
+        ]
     );
     assert_eq!(groups, expected().1);
     let ada = directory.user(id, ADA).await.unwrap().unwrap();
-    assert_eq!(ada.user.attributes["departmentNumber"], json!("Engineering"));
+    assert_eq!(
+        ada.user.attributes["departmentNumber"],
+        json!("Engineering")
+    );
     assert!(server.binds().is_empty(), "an anonymous search");
 
     // Without the certificate the TLS handshake fails.
@@ -787,7 +1020,10 @@ async fn openldap_over_ldaps_with_the_servers_certificate() {
         None,
     )
     .await;
-    let run = directory.sync_now(untrusted, SyncOptions::default()).await.unwrap();
+    let run = directory
+        .sync_now(untrusted, SyncOptions::default())
+        .await
+        .unwrap();
     assert_eq!(run.status, RunStatus::Failed, "{run:?}");
 }
 
@@ -823,7 +1059,10 @@ async fn ldap_settings_are_checked_when_saved() {
         )
         .await
         .unwrap_err();
-    assert_eq!(error.to_string(), "settings.admin_email must be an email address");
+    assert_eq!(
+        error.to_string(),
+        "settings.admin_email must be an email address"
+    );
     assert_eq!(
         directory.sources().unwrap(),
         vec!["scim", "google", "ldap", "microsoft", "okta"]

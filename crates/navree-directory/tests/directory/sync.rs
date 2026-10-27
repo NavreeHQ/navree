@@ -4,10 +4,9 @@
 use std::time::Duration;
 
 use navree_directory::{
-    ChangeAction, ChangeStatus, ConnectionStatus, ConnectionUpdate, DirectoryError,
-    DirectoryGroup, DirectorySyncFinished, DirectoryUser, DirectoryUserCreated,
-    DirectoryUserDeactivated, DirectoryUserUpdated, NewConnection, Owner, Pulled, RunStatus,
-    RunTrigger, SyncOptions,
+    ChangeAction, ChangeStatus, ConnectionStatus, ConnectionUpdate, DirectoryError, DirectoryGroup,
+    DirectorySyncFinished, DirectoryUser, DirectoryUserCreated, DirectoryUserDeactivated,
+    DirectoryUserUpdated, NewConnection, Owner, Pulled, RunStatus, RunTrigger, SyncOptions,
 };
 use serde_json::json;
 
@@ -40,7 +39,10 @@ async fn a_first_sync_creates_users_and_groups_through_the_sink() {
     let id = h.connection("ldap").await;
     let directory = h.directory().await;
 
-    let run = directory.sync_now(id, SyncOptions::default()).await.unwrap();
+    let run = directory
+        .sync_now(id, SyncOptions::default())
+        .await
+        .unwrap();
     assert_eq!(run.status, RunStatus::Succeeded, "{run:?}");
     assert_eq!(run.trigger, RunTrigger::Manual);
     assert_eq!(run.complete, Some(true));
@@ -118,7 +120,10 @@ async fn a_second_snapshot_updates_reactivates_and_deactivates() {
         .group(DirectoryGroup::new("g2", "Legacy"));
     let id = h.connection("okta").await;
     let directory = h.directory().await;
-    directory.sync_now(id, SyncOptions::default()).await.unwrap();
+    directory
+        .sync_now(id, SyncOptions::default())
+        .await
+        .unwrap();
     h.log.clear();
     h.inbox.clear();
 
@@ -128,7 +133,10 @@ async fn a_second_snapshot_updates_reactivates_and_deactivates() {
         .remove_user("u3")
         .remove_group("g2")
         .group(DirectoryGroup::new("g1", "Engineering").members(["u1", "u2"]));
-    let run = directory.sync_now(id, SyncOptions::default()).await.unwrap();
+    let run = directory
+        .sync_now(id, SyncOptions::default())
+        .await
+        .unwrap();
     assert_eq!(run.status, RunStatus::Succeeded);
     assert_eq!(
         h.log.calls(),
@@ -158,7 +166,10 @@ async fn a_second_snapshot_updates_reactivates_and_deactivates() {
 
     // Nothing changed: nothing is applied.
     h.log.clear();
-    let run = directory.sync_now(id, SyncOptions::default()).await.unwrap();
+    let run = directory
+        .sync_now(id, SyncOptions::default())
+        .await
+        .unwrap();
     assert_eq!(run.total, 0);
     // u3 is gone from the directory and stays deactivated.
     assert_eq!(run.summary.users_unchanged, 2);
@@ -175,7 +186,10 @@ async fn the_cursor_is_handed_to_the_next_pull_and_deltas_change_only_what_they_
         .group(DirectoryGroup::new("g1", "Engineering").members(["u1"]));
     let id = h.connection("microsoft").await;
     let directory = h.directory().await;
-    directory.sync_now(id, SyncOptions::default()).await.unwrap();
+    directory
+        .sync_now(id, SyncOptions::default())
+        .await
+        .unwrap();
     h.log.clear();
 
     h.fake().next_pull(
@@ -185,7 +199,10 @@ async fn the_cursor_is_handed_to_the_next_pull_and_deltas_change_only_what_they_
             .member_removed("g1", "u1")
             .cursor("delta-2"),
     );
-    let run = directory.sync_now(id, SyncOptions::default()).await.unwrap();
+    let run = directory
+        .sync_now(id, SyncOptions::default())
+        .await
+        .unwrap();
     assert_eq!(run.complete, Some(false));
     assert_eq!(
         h.log.calls(),
@@ -198,7 +215,10 @@ async fn the_cursor_is_handed_to_the_next_pull_and_deltas_change_only_what_they_
     // u1 is not in the delta and stays as it is.
     assert!(directory.user(id, "u1").await.unwrap().unwrap().user.active);
 
-    directory.sync_now(id, SyncOptions::default()).await.unwrap();
+    directory
+        .sync_now(id, SyncOptions::default())
+        .await
+        .unwrap();
     let pulls = h.fake().pulls();
     assert_eq!(pulls.len(), 3);
     assert_eq!(pulls[0].cursor, None);
@@ -222,7 +242,10 @@ async fn a_dry_run_plans_without_applying() {
     let id = h.connection("google").await;
     let directory = h.directory().await;
 
-    let run = directory.sync_now(id, SyncOptions::dry_run()).await.unwrap();
+    let run = directory
+        .sync_now(id, SyncOptions::dry_run())
+        .await
+        .unwrap();
     assert_eq!(run.status, RunStatus::Succeeded);
     assert!(run.dry_run);
     assert_eq!((run.total, run.done), (2, 0));
@@ -237,7 +260,10 @@ async fn a_dry_run_plans_without_applying() {
     // A dry run keeps no cursor and does not move the schedule.
     let connection = directory.connection(id).await.unwrap();
     assert!(connection.last_synced_at.is_none());
-    directory.sync_now(id, SyncOptions::default()).await.unwrap();
+    directory
+        .sync_now(id, SyncOptions::default())
+        .await
+        .unwrap();
     assert_eq!(h.fake().pulls()[1].cursor, None);
     let finished = h.inbox.of::<DirectorySyncFinished>();
     assert!(finished[0].dry_run);
@@ -252,23 +278,34 @@ async fn a_run_that_would_deactivate_too_many_users_is_held_until_forced() {
     h.fake().users(people.clone());
     let id = h.connection("ldap").await;
     let directory = h.directory().await;
-    directory.sync_now(id, SyncOptions::default()).await.unwrap();
+    directory
+        .sync_now(id, SyncOptions::default())
+        .await
+        .unwrap();
     h.log.clear();
 
     // A filter gone wrong: 30 of 40 people disappear.
     h.fake().users(people[..10].to_vec());
-    let held = directory.sync_now(id, SyncOptions::default()).await.unwrap();
+    let held = directory
+        .sync_now(id, SyncOptions::default())
+        .await
+        .unwrap();
     assert_eq!(held.status, RunStatus::Held);
     assert_eq!(held.summary.users_deactivated, 30);
     assert_eq!(
         held.error.as_deref(),
-        Some("the run would deactivate 30 of 40 active users (more than 20 percent); approve it to apply")
+        Some(
+            "the run would deactivate 30 of 40 active users (more than 20 percent); approve it to apply"
+        )
     );
     assert!(h.log.calls().is_empty());
     let planned = directory.changes(held.id, 0, 100).await.unwrap();
     assert_eq!(planned.len(), 30);
     assert!(planned.iter().all(|c| c.status == ChangeStatus::Planned));
-    assert_eq!(h.inbox.of::<DirectorySyncFinished>().last().unwrap().status, RunStatus::Held);
+    assert_eq!(
+        h.inbox.of::<DirectorySyncFinished>().last().unwrap().status,
+        RunStatus::Held
+    );
 
     let forced = SyncOptions {
         force: true,
@@ -292,14 +329,21 @@ async fn failing_changes_are_recorded_and_retried_by_the_next_run() {
     let directory = h.directory().await;
     h.log.refuse("u2");
 
-    let run = directory.sync_now(id, SyncOptions::default()).await.unwrap();
+    let run = directory
+        .sync_now(id, SyncOptions::default())
+        .await
+        .unwrap();
     assert_eq!(run.status, RunStatus::Partial);
     assert_eq!(run.summary.failed, 1);
     assert_eq!(run.error.as_deref(), Some("1 changes failed"));
     assert_eq!(run.done, 3);
     let users = directory.users(id).await.unwrap();
     let names: Vec<&str> = users.iter().map(|u| u.user.external_id.as_str()).collect();
-    assert_eq!(names, vec!["u1", "u3"], "the refused user's change rolled back");
+    assert_eq!(
+        names,
+        vec!["u1", "u3"],
+        "the refused user's change rolled back"
+    );
     let changes = directory.changes(run.id, 0, 10).await.unwrap();
     let failed: Vec<_> = changes
         .iter()
@@ -309,10 +353,20 @@ async fn failing_changes_are_recorded_and_retried_by_the_next_run() {
     assert_eq!(failed[0].external_id, "u2");
     assert!(failed[0].error.as_deref().unwrap().contains("refusing u2"));
     // A partial run keeps no cursor, so the next run sees everything again.
-    assert!(directory.connection(id).await.unwrap().last_synced_at.is_none());
+    assert!(
+        directory
+            .connection(id)
+            .await
+            .unwrap()
+            .last_synced_at
+            .is_none()
+    );
 
     h.log.accept_all();
-    let run = directory.sync_now(id, SyncOptions::default()).await.unwrap();
+    let run = directory
+        .sync_now(id, SyncOptions::default())
+        .await
+        .unwrap();
     assert_eq!(run.status, RunStatus::Succeeded);
     assert_eq!(run.summary.users_created, 1);
     assert_eq!(run.summary.users_unchanged, 2);
@@ -325,7 +379,10 @@ async fn a_source_that_fails_fails_the_run() {
     let id = h.connection("ldap").await;
     let directory = h.directory().await;
     h.fake().fail_next_pull("the server refused the bind");
-    let run = directory.sync_now(id, SyncOptions::default()).await.unwrap();
+    let run = directory
+        .sync_now(id, SyncOptions::default())
+        .await
+        .unwrap();
     assert_eq!(run.status, RunStatus::Failed);
     assert_eq!(
         run.error.as_deref(),
@@ -362,7 +419,9 @@ async fn only_active_pull_connections_sync() {
         Err(DirectoryError::Paused)
     ));
     assert!(matches!(
-        directory.sync_now(uuid::Uuid::nil(), SyncOptions::default()).await,
+        directory
+            .sync_now(uuid::Uuid::nil(), SyncOptions::default())
+            .await,
         Err(DirectoryError::ConnectionNotFound)
     ));
 }
@@ -462,15 +521,23 @@ async fn connections_keep_secrets_sealed_and_delete_their_rows() {
     assert_eq!(updated.name, "Acme Active Directory");
     assert!(!updated.has_secret);
 
-    h.fake().user(ada()).group(DirectoryGroup::new("g1", "Eng").members(["u1"]));
-    directory.sync_now(id, SyncOptions::default()).await.unwrap();
+    h.fake()
+        .user(ada())
+        .group(DirectoryGroup::new("g1", "Eng").members(["u1"]));
+    directory
+        .sync_now(id, SyncOptions::default())
+        .await
+        .unwrap();
     directory.delete_connection(id).await.unwrap();
     assert!(matches!(
         directory.connection(id).await,
         Err(DirectoryError::ConnectionNotFound)
     ));
     assert_eq!(
-        navree_directory::models::User::query().count(&*db).await.unwrap(),
+        navree_directory::models::User::query()
+            .count(&*db)
+            .await
+            .unwrap(),
         0
     );
     assert_eq!(
@@ -481,7 +548,10 @@ async fn connections_keep_secrets_sealed_and_delete_their_rows() {
         0
     );
     assert_eq!(
-        navree_directory::models::Run::query().count(&*db).await.unwrap(),
+        navree_directory::models::Run::query()
+            .count(&*db)
+            .await
+            .unwrap(),
         0
     );
 }
@@ -524,9 +594,15 @@ async fn old_runs_are_pruned() {
     let id = h.connection("ldap").await;
     let directory = h.directory().await;
     h.fake().user(ada());
-    let old = directory.sync_now(id, SyncOptions::default()).await.unwrap();
+    let old = directory
+        .sync_now(id, SyncOptions::default())
+        .await
+        .unwrap();
     h.clock.advance(Duration::from_secs(91 * 24 * 3600));
-    let recent = directory.sync_now(id, SyncOptions::dry_run()).await.unwrap();
+    let recent = directory
+        .sync_now(id, SyncOptions::dry_run())
+        .await
+        .unwrap();
     assert_eq!(directory.prune_runs().await.unwrap(), 1);
     assert!(matches!(
         directory.run(old.id).await,

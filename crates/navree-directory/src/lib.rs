@@ -71,7 +71,9 @@ mod source;
 mod types;
 mod user;
 
-pub use controller::{DirectoryController, MANAGE_PERMISSION, PageInput, ScimTokenOutput, SyncInput};
+pub use controller::{
+    DirectoryController, MANAGE_PERMISSION, PageInput, ScimTokenOutput, SyncInput,
+};
 pub use error::DirectoryError;
 pub use events::{
     DirectorySyncFinished, DirectoryUserCreated, DirectoryUserDeactivated, DirectoryUserUpdated,

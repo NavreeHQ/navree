@@ -206,7 +206,11 @@ impl DirectoryUser {
     /// The name to show: the display name, else the given and family
     /// names, else the sign-in name.
     pub fn full_name(&self) -> String {
-        if let Some(name) = self.display_name.as_deref().filter(|n| !n.trim().is_empty()) {
+        if let Some(name) = self
+            .display_name
+            .as_deref()
+            .filter(|n| !n.trim().is_empty())
+        {
             return name.to_owned();
         }
         let parts: Vec<&str> = [self.given_name.as_deref(), self.family_name.as_deref()]
