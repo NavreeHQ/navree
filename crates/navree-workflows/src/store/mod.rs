@@ -13,6 +13,8 @@ use uuid::Uuid;
 pub use database::DatabaseWorkflowStore;
 pub use memory::MemoryWorkflowStore;
 
+pub(crate) use database::{from_millis, statement};
+
 use crate::{RunQuery, RunStatus, WorkflowRun, WorkflowStep, WorkflowsError};
 
 /// A store result.
@@ -47,6 +49,22 @@ pub enum Release {
     Pending,
 }
 
+/// Which runs [`WorkflowStore::due`] returns.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DueQuery {
+    /// The current time: running runs whose lease ran out before it are
+    /// due.
+    pub now: DateTime<Utc>,
+    /// Sleeping and waiting runs whose `wake_at` is at or before this are
+    /// due.
+    pub wake_before: DateTime<Utc>,
+    /// Pending runs not touched since this are due (their job was lost);
+    /// the store marks them touched at `now`, so the next pass waits again.
+    pub stale_before: DateTime<Utc>,
+    /// At most this many, oldest first.
+    pub limit: u64,
+}
+
 /// Where workflow runs and their steps are stored. Two drivers ship:
 /// [`DatabaseWorkflowStore`] (`workflow_runs`, `workflow_steps`) and
 /// [`MemoryWorkflowStore`]; both pass the same conformance suite.
@@ -66,7 +84,8 @@ pub trait WorkflowStore: Send + Sync + 'static {
     /// The run `id`.
     fn run(&self, id: Uuid) -> BoxFuture<'_, StoreResult<Option<WorkflowRun>>>;
 
-    /// The unfinished run of `workflow` started with `key`.
+    /// The unfinished run of `workflow` started with deduplication key
+    /// `key`.
     fn unfinished_with_key<'a>(
         &'a self,
         workflow: &'a str,
@@ -76,18 +95,23 @@ pub trait WorkflowStore: Send + Sync + 'static {
     /// Runs passing `query`, newest first.
     fn runs<'a>(&'a self, query: &'a RunQuery) -> BoxFuture<'a, StoreResult<Vec<WorkflowRun>>>;
 
+    /// How many runs pass `query` (its limit and offset aside).
+    fn count_runs<'a>(&'a self, query: &'a RunQuery) -> BoxFuture<'a, StoreResult<u64>>;
+
     /// The steps of run `run_id`, in the order they were reached.
     fn steps(&self, run_id: Uuid) -> BoxFuture<'_, StoreResult<Vec<WorkflowStep>>>;
 
     /// Takes the run for one execution when it is ready: pending, a
     /// sleeping or waiting run whose `wake_at` has passed, or a running run
-    /// whose lease ran out. Returns the run as it was before the claim
-    /// (`None`: not ready, finished, unknown, or claimed by someone else).
+    /// whose lease ran out. Returns the run, now running (`None`: not
+    /// ready, finished, unknown, or held by another execution).
     fn claim(&self, lease: Lease) -> BoxFuture<'_, StoreResult<Option<WorkflowRun>>>;
 
     /// Inserts or replaces a step (by run and key) and renews the lease;
     /// `false` (and nothing written) when the lease is lost: the run was
-    /// cancelled, or another execution took it over.
+    /// cancelled, or another execution took it over. A completed step is
+    /// never replaced (an event that resolved a wait wins over a timeout
+    /// recorded at the same moment).
     fn save_step<'a>(
         &'a self,
         lease: &'a Lease,
@@ -103,29 +127,21 @@ pub trait WorkflowStore: Send + Sync + 'static {
         outcome: &'a Release,
     ) -> BoxFuture<'a, StoreResult<Option<RunStatus>>>;
 
-    /// Runs that need an execution now: sleeping or waiting runs whose
-    /// `wake_at` has passed, running runs whose lease ran out, and pending
-    /// runs not touched since `stale_before` (their job was lost). At most
-    /// `limit`, oldest first.
-    fn due(
-        &self,
-        now: DateTime<Utc>,
-        stale_before: DateTime<Utc>,
-        limit: u64,
-    ) -> BoxFuture<'_, StoreResult<Vec<Uuid>>>;
+    /// Runs that need an execution (see [`DueQuery`]), oldest first.
+    fn due(&self, query: DueQuery) -> BoxFuture<'_, StoreResult<Vec<Uuid>>>;
 
-    /// The open waits for event `event`.
+    /// The open waits for event `event`, of unfinished runs.
     fn open_waits<'a>(&'a self, event: &'a str) -> BoxFuture<'a, StoreResult<Vec<WorkflowStep>>>;
 
-    /// Resolves an open wait with the event's payload and wakes its run
-    /// (pending when it was waiting; flagged when it is running). `false`
+    /// Resolves an open wait with `output` and wakes its run (pending when
+    /// it was sleeping or waiting; flagged when it is running). `false`
     /// when the wait was no longer open.
     fn resolve_wait<'a>(
         &'a self,
         uow: Option<&'a Uow>,
         run_id: Uuid,
         key: &'a str,
-        payload: &'a Value,
+        output: &'a Value,
         now: DateTime<Utc>,
     ) -> BoxFuture<'a, StoreResult<bool>>;
 

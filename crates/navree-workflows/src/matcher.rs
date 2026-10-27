@@ -42,6 +42,9 @@ pub(crate) struct TriggerRef {
     /// Its configuration.
     #[serde(default)]
     pub(crate) config: Value,
+    /// Only events of this subject (by the trigger's `SUBJECT` path).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) subject: Option<String>,
 }
 
 impl EventMatch {
