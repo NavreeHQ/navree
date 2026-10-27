@@ -506,6 +506,9 @@ impl Engine {
                 "a stored setting no longer fits its type and is ignored"
             );
         }
+        // The target's fields that resolution used: the type's, minus those
+        // whose stored value was skipped.
+        let own = target.kind.source();
         let mut overridden: Vec<String> = rows
             .iter()
             .find(|row| row.scope == target)
@@ -513,6 +516,12 @@ impl Engine {
                 row.values
                     .keys()
                     .filter(|field| entry.has_field(field))
+                    .filter(|field| {
+                        !merged
+                            .skipped
+                            .iter()
+                            .any(|(skipped, level, _)| skipped == *field && *level == own)
+                    })
                     .cloned()
                     .collect()
             })
