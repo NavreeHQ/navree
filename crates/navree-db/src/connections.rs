@@ -10,7 +10,8 @@ use sea_orm::DbErr;
 use tokio::sync::Mutex;
 
 use crate::db::DEFAULT_CONNECTION;
-use crate::{Db, DbOptions};
+use crate::events::publish;
+use crate::{ConnectionEstablished, DatabaseBusy, DatabaseStatus, Db, DbOptions};
 
 /// Every configured database connection: the default one (the app's
 /// [`Db`]) and the named ones of `[database.connections.<name>]`, each
@@ -93,7 +94,51 @@ impl DbConnections {
             None => db,
         });
         open.insert(name.to_owned(), db.clone());
+        drop(open);
+        if let Some(app) = self.app.as_ref().and_then(WeakAppContext::upgrade) {
+            let established = ConnectionEstablished {
+                connection: name.to_owned(),
+            };
+            publish(&app, ConnectionEstablished::NAME, &established).await;
+        }
         Ok(db)
+    }
+
+    /// The connections each database server has open (from every client),
+    /// for the connections named in `databases` (every configured one when
+    /// it is empty); for each one above `max`, a [`DatabaseBusy`] event
+    /// (`db.busy`) through the app's `dyn EventSink`. SQLite has no server:
+    /// its count is unknown and never busy. Backs `db:monitor`.
+    pub async fn monitor(
+        &self,
+        databases: &[String],
+        max: Option<u64>,
+    ) -> Result<Vec<DatabaseStatus>, DbErr> {
+        let names: Vec<String> = if databases.is_empty() {
+            self.names().into_iter().map(str::to_owned).collect()
+        } else {
+            databases.to_vec()
+        };
+        let app = self.app.as_ref().and_then(WeakAppContext::upgrade);
+        let mut statuses = Vec::with_capacity(names.len());
+        for name in names {
+            let db = self.get(&name).await?;
+            let open = db.open_connections().await?;
+            let busy = matches!((open, max), (Some(open), Some(max)) if open > max);
+            if busy && let (Some(app), Some(open)) = (&app, open) {
+                let event = DatabaseBusy {
+                    connection: name.clone(),
+                    open,
+                };
+                publish(app, DatabaseBusy::NAME, &event).await;
+            }
+            statuses.push(DatabaseStatus {
+                connection: name,
+                open,
+                busy,
+            });
+        }
+        Ok(statuses)
     }
 
     /// Closes the named connections opened so far (the default one closes
