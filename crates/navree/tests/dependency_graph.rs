@@ -547,7 +547,7 @@ fn sideways_edge_within_a_layer_is_reported() {
 fn forbidden_dev_and_build_edges_are_reported() {
     let found = violations(&[
         edge("navree-http", "navree-db", Kind::Dev),
-        edge("navree-queue", "navree-http", Kind::Build),
+        edge("navree-queue", "navree-session", Kind::Build),
     ]);
     assert_eq!(found.len(), 2, "{found:?}");
 }
