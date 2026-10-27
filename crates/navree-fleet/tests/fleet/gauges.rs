@@ -20,9 +20,13 @@ fn sample(body: &str, series: &str) -> Option<f64> {
 
 #[tokio::test]
 async fn the_metrics_route_shows_fleets_numbers() {
-    let h = Harness::new(builder().module(ObserveModule::for_root(ObserveOptions::default()))).await;
+    let h =
+        Harness::new(builder().module(ObserveModule::for_root(ObserveOptions::default()))).await;
     for i in 0..2 {
-        h.queue.dispatch(Record::new(&format!("r{i}"))).await.unwrap();
+        h.queue
+            .dispatch(Record::new(&format!("r{i}")))
+            .await
+            .unwrap();
     }
     h.queue
         .dispatch(Export {
@@ -60,20 +64,53 @@ async fn the_metrics_route_shows_fleets_numbers() {
         .with_settings(fast());
     let stop = CancellationToken::new();
     let task = tokio::spawn(master.run(stop.clone()));
-    eventually("a heartbeat", || async { !h.fleet.masters().await.unwrap().is_empty() }).await;
-    spawner.report(0, WorkerReport::Heartbeat { jobs: 0, memory_mb: None });
+    eventually("a heartbeat", || async {
+        !h.fleet.masters().await.unwrap().is_empty()
+    })
+    .await;
+    spawner.report(
+        0,
+        WorkerReport::Heartbeat {
+            jobs: 0,
+            memory_mb: None,
+        },
+    );
 
-    let body = h.app.client().get("/metrics").send().await.assert_status(200).text();
-    assert_eq!(sample(&body, r#"fleet_queue_pending{queue="default"}"#), Some(2.0), "{body}");
-    assert!(sample(&body, r#"fleet_queue_wait_seconds{queue="default"}"#).is_some(), "{body}");
+    let body = h
+        .app
+        .client()
+        .get("/metrics")
+        .send()
+        .await
+        .assert_status(200)
+        .text();
     assert_eq!(
-        sample(&body, r#"fleet_queue_throughput_per_minute{queue="default"}"#),
+        sample(&body, r#"fleet_queue_pending{queue="default"}"#),
+        Some(2.0),
+        "{body}"
+    );
+    assert!(
+        sample(&body, r#"fleet_queue_wait_seconds{queue="default"}"#).is_some(),
+        "{body}"
+    );
+    assert_eq!(
+        sample(
+            &body,
+            r#"fleet_queue_throughput_per_minute{queue="default"}"#
+        ),
         Some(3.0),
         "{body}"
     );
-    assert_eq!(sample(&body, r#"fleet_job_runtime_seconds{job="test.record"}"#), Some(3.0), "{body}");
     assert_eq!(
-        sample(&body, r#"fleet_processes{supervisor="default",queue="default"}"#),
+        sample(&body, r#"fleet_job_runtime_seconds{job="test.record"}"#),
+        Some(3.0),
+        "{body}"
+    );
+    assert_eq!(
+        sample(
+            &body,
+            r#"fleet_processes{supervisor="default",queue="default"}"#
+        ),
         Some(1.0),
         "{body}"
     );
@@ -83,7 +120,10 @@ async fn the_metrics_route_shows_fleets_numbers() {
     task.await.unwrap().unwrap();
     let body = h.app.client().get("/metrics").send().await.text();
     assert_eq!(
-        sample(&body, r#"fleet_processes{supervisor="default",queue="default"}"#),
+        sample(
+            &body,
+            r#"fleet_processes{supervisor="default",queue="default"}"#
+        ),
         Some(0.0),
         "a stopped master's processes go to zero: {body}"
     );

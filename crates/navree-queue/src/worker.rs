@@ -507,7 +507,11 @@ impl Worker {
     async fn run(self) -> Result<WorkStats, QueueError> {
         let mut stats = WorkStats::default();
         while !self.token.is_cancelled() {
-            if self.hooks.as_ref().is_some_and(|hooks| !hooks.may_reserve()) {
+            if self
+                .hooks
+                .as_ref()
+                .is_some_and(|hooks| !hooks.may_reserve())
+            {
                 // Held by the supervisor (paused).
                 if self.finite || !self.idle().await {
                     break;

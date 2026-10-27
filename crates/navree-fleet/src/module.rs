@@ -126,7 +126,10 @@ fn register(m: &mut ModuleBuilder, options: Option<FleetOptions>) {
                 let clock = app.try_get::<dyn Clock>().await;
                 let redactor = match app.try_get::<Config>().await {
                     Some(config) => Redactor::from_setting(
-                        config.section::<serde_json::Value>("log.redact").ok().as_ref(),
+                        config
+                            .section::<serde_json::Value>("log.redact")
+                            .ok()
+                            .as_ref(),
                     ),
                     None => Redactor::default(),
                 };
@@ -149,7 +152,8 @@ fn register(m: &mut ModuleBuilder, options: Option<FleetOptions>) {
         .exports::<Fleet>()
         .multi(
             Factory::<dyn MetricsCollector>::new(|r: Resolver| async move {
-                Ok(Arc::new(FleetGauges::new(r.get::<Fleet>().await?)) as Arc<dyn MetricsCollector>)
+                Ok(Arc::new(FleetGauges::new(r.get::<Fleet>().await?))
+                    as Arc<dyn MetricsCollector>)
             })
             .deps(vec![ProviderKey::of::<Fleet>()]),
         )

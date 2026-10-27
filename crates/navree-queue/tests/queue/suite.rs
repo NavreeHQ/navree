@@ -590,7 +590,10 @@ pub async fn status_counts_waiting_delayed_and_running_jobs(driver: QueueDriver)
         .later(Record::new("later"), Duration::from_secs(60))
         .await
         .unwrap();
-    h.queue.dispatch(Urgent { label: "u".into() }).await.unwrap();
+    h.queue
+        .dispatch(Urgent { label: "u".into() })
+        .await
+        .unwrap();
     h.advance(5);
 
     let status = h.queue.status("default").await.unwrap();
@@ -612,7 +615,11 @@ pub async fn pending_jobs_lists_and_finds_unfinished_jobs(driver: QueueDriver) {
     let h = harness(driver).await;
     let first = h.queue.dispatch(Record::new("first")).await.unwrap();
     h.advance(1);
-    let urgent = h.queue.dispatch(Urgent { label: "u".into() }).await.unwrap();
+    let urgent = h
+        .queue
+        .dispatch(Urgent { label: "u".into() })
+        .await
+        .unwrap();
     h.advance(1);
     let later = h
         .queue
@@ -620,7 +627,11 @@ pub async fn pending_jobs_lists_and_finds_unfinished_jobs(driver: QueueDriver) {
         .await
         .unwrap();
 
-    let all = h.queue.pending_jobs(&PendingQuery::default()).await.unwrap();
+    let all = h
+        .queue
+        .pending_jobs(&PendingQuery::default())
+        .await
+        .unwrap();
     let ids: Vec<&str> = all.iter().map(|job| job.id.as_str()).collect();
     assert_eq!(ids, [first.as_str(), urgent.as_str(), later.as_str()]);
     assert_eq!(all[0].state, PendingState::Waiting);

@@ -32,12 +32,22 @@ async fn pausing_one_or_every_supervisor_is_stored_for_every_server() {
 
     fleet.pause(None).await.unwrap();
     assert_eq!(
-        fleet.paused().await.unwrap().into_iter().collect::<Vec<_>>(),
+        fleet
+            .paused()
+            .await
+            .unwrap()
+            .into_iter()
+            .collect::<Vec<_>>(),
         ["default", "exports"]
     );
     fleet.resume(Some("default")).await.unwrap();
     assert_eq!(
-        fleet.paused().await.unwrap().into_iter().collect::<Vec<_>>(),
+        fleet
+            .paused()
+            .await
+            .unwrap()
+            .into_iter()
+            .collect::<Vec<_>>(),
         ["exports"]
     );
     fleet.resume(None).await.unwrap();
@@ -58,8 +68,17 @@ async fn without_masters_fleet_is_inactive() {
     let h = Harness::new(builder()).await;
     assert_eq!(h.fleet.status().await.unwrap(), FleetStatus::Inactive);
     assert!(h.fleet.masters().await.unwrap().is_empty());
-    let names: Vec<_> = h.fleet.supervisors().iter().map(|s| s.name.as_str()).collect();
-    assert_eq!(names, ["default"], "an app without supervisors gets `default`");
+    let names: Vec<_> = h
+        .fleet
+        .supervisors()
+        .iter()
+        .map(|s| s.name.as_str())
+        .collect();
+    assert_eq!(
+        names,
+        ["default"],
+        "an app without supervisors gets `default`"
+    );
     assert_eq!(h.fleet.queues(), ["default"]);
 }
 
@@ -70,8 +89,8 @@ async fn only_must_name_a_supervisor() {
         .config("fleet.only", "imports")
         .try_build()
         .await
-        .err()
-        .expect("the boot fails")
+        .map(|_| ())
+        .expect_err("the boot fails")
         .to_string();
     assert!(error.contains("imports"), "{error}");
 }
@@ -85,8 +104,8 @@ async fn an_invalid_supervisor_fails_the_boot_with_its_name() {
         )
         .try_build()
         .await
-        .err()
-        .expect("the boot fails")
+        .map(|_| ())
+        .expect_err("the boot fails")
         .to_string();
     assert!(error.contains("fleet.supervisors.busy"), "{error}");
 }
@@ -109,7 +128,10 @@ async fn a_mail_waiting_two_minutes_is_a_long_wait() {
         .await
         .unwrap();
     clock.advance(Duration::from_secs(60));
-    assert!(h.fleet.long_waits().await.unwrap().is_empty(), "60 s is not longer than 60 s");
+    assert!(
+        h.fleet.long_waits().await.unwrap().is_empty(),
+        "60 s is not longer than 60 s"
+    );
     clock.advance(Duration::from_secs(60));
 
     let late = h.fleet.long_waits().await.unwrap();
@@ -132,7 +154,10 @@ async fn the_workload_counts_pending_jobs_runtimes_and_throughput() {
     )
     .await;
     for i in 0..3 {
-        h.queue.dispatch(Record::new(&format!("r{i}"))).await.unwrap();
+        h.queue
+            .dispatch(Record::new(&format!("r{i}")))
+            .await
+            .unwrap();
     }
     h.queue
         .later(Record::new("later"), Duration::from_secs(600))
@@ -167,11 +192,17 @@ async fn the_workload_counts_pending_jobs_runtimes_and_throughput() {
     let queues: Vec<_> = workload.iter().map(|w| w.queue.as_str()).collect();
     assert_eq!(queues, ["default", "mail", "exports"]);
     let default = &workload[0];
-    assert_eq!((default.waiting, default.delayed, default.running), (3, 1, 0));
+    assert_eq!(
+        (default.waiting, default.delayed, default.running),
+        (3, 1, 0)
+    );
     assert_eq!(default.pending, 4);
     assert_eq!(default.oldest_wait_secs, 45);
     assert_eq!(default.avg_runtime_ms, 500, "the last five minutes only");
-    assert!((default.workload_secs - 1.5).abs() < 1e-9, "3 jobs x 500 ms");
+    assert!(
+        (default.workload_secs - 1.5).abs() < 1e-9,
+        "3 jobs x 500 ms"
+    );
     assert_eq!(default.jobs_per_minute, 1);
     assert_eq!(default.processes, 0, "no master runs");
     assert_eq!(default.long_wait_threshold_secs, Some(30));
@@ -226,7 +257,13 @@ async fn failed_jobs_are_searched_retried_and_forgotten() {
         assert!(!found.is_empty(), "{search}");
     }
     assert_eq!(h.fleet.failed_jobs(Some("grace")).await.unwrap().len(), 1);
-    assert!(h.fleet.failed_jobs(Some("nothing")).await.unwrap().is_empty());
+    assert!(
+        h.fleet
+            .failed_jobs(Some("nothing"))
+            .await
+            .unwrap()
+            .is_empty()
+    );
 
     // Retry one, then forget one, then retry every match.
     h.fleet.retry(&ids[0]).await.unwrap();
@@ -254,14 +291,17 @@ async fn failed_jobs_are_searched_retried_and_forgotten() {
 #[tokio::test]
 async fn payloads_are_redacted_by_the_log_redact_fragments() {
     let h = Harness::new(builder()).await;
-    let payload = json!({ "contact": "ada", "password": "hunter2", "nested": { "api_token": "x" } });
+    let payload =
+        json!({ "contact": "ada", "password": "hunter2", "nested": { "api_token": "x" } });
     assert_eq!(
         h.fleet.redact(&payload),
         json!({ "contact": "ada", "password": REDACTED, "nested": { "api_token": REDACTED } })
     );
     let custom = Harness::new(builder().config("log.redact", "contact")).await;
     assert_eq!(
-        custom.fleet.redact(&json!({ "contact": "ada", "password": "p" })),
+        custom
+            .fleet
+            .redact(&json!({ "contact": "ada", "password": "p" })),
         json!({ "contact": REDACTED, "password": "p" })
     );
 }
@@ -295,7 +335,14 @@ async fn pending_and_completed_jobs_are_listed_and_searched() {
         finished_at: start() - TimeDelta::minutes(ago_minutes),
     };
     h.fleet
-        .record(None, &[job("a", "default", 5), job("b", "mail", 1), job("c", "mail", 90)])
+        .record(
+            None,
+            &[
+                job("a", "default", 5),
+                job("b", "mail", 1),
+                job("c", "mail", 90),
+            ],
+        )
         .await
         .unwrap();
     let completed = h.fleet.completed_jobs(None).await.unwrap();
@@ -327,7 +374,10 @@ async fn metrics_are_charted_from_the_snapshots_of_every_master() {
         .record_snapshots(Some("m1"), &[snap(2, 10), snap(30, 5), snap(30 * 60, 99)])
         .await
         .unwrap();
-    h.fleet.record_snapshots(Some("m2"), &[snap(2, 20)]).await.unwrap();
+    h.fleet
+        .record_snapshots(Some("m2"), &[snap(2, 20)])
+        .await
+        .unwrap();
 
     let hour = h.fleet.metrics(MetricsPeriod::Hour).await.unwrap();
     assert_eq!(hour.len(), 1);
@@ -351,7 +401,12 @@ async fn metrics_are_charted_from_the_snapshots_of_every_master() {
 
 #[tokio::test]
 async fn the_queue_settings_shape_the_default_supervisor() {
-    let h = Harness::new(builder().config("queue.queues", "high,default").config("queue.workers", 2)).await;
+    let h = Harness::new(
+        builder()
+            .config("queue.queues", "high,default")
+            .config("queue.workers", 2),
+    )
+    .await;
     let default = &h.fleet.supervisors()[0];
     assert_eq!(default.queues, ["high", "default"]);
     assert_eq!(default.concurrency, 2);

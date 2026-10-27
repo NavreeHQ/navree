@@ -56,10 +56,7 @@ impl FleetGauges {
             metrics::gauge!(QUEUE_THROUGHPUT, "queue" => queue).set(w.jobs_per_minute as f64);
         }
         let since = fleet.now() - TimeDelta::from_std(RUNTIME_WINDOW).unwrap_or_default();
-        let runtimes = fleet
-            .store()
-            .job_runtimes(since.timestamp_millis())
-            .await?;
+        let runtimes = fleet.store().job_runtimes(since.timestamp_millis()).await?;
         let mut processes: std::collections::BTreeMap<(String, String), usize> =
             std::collections::BTreeMap::new();
         for master in fleet.masters().await? {

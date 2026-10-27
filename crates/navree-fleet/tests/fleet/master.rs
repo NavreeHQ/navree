@@ -11,7 +11,9 @@ use navree_fleet::{
     CompletedJob, ExitReason, FleetError, FleetStatus, Master, MasterSummary, MetricKind,
     MetricsPeriod, WorkerCommand, WorkerReport,
 };
-use navree_kernel::{AppContext, BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
+use navree_kernel::{
+    AppContext, BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver,
+};
 use navree_queue::{AttemptOutcome, WorkOptions};
 use serde_json::json;
 use tokio::task::JoinHandle;
@@ -82,7 +84,10 @@ impl Running {
 async fn a_master_starts_each_supervisors_processes_and_reports_them() {
     let h = Harness::new(builder().config("fleet.supervisors", supervisors())).await;
     let master = Running::start(&h).await;
-    eventually("four workers", || async { master.spawner.running().len() == 4 }).await;
+    eventually("four workers", || async {
+        master.spawner.running().len() == 4
+    })
+    .await;
     assert_eq!(
         master.running_queues(),
         ["default", "exports", "exports", "mail"]
@@ -139,7 +144,10 @@ async fn a_master_starts_each_supervisors_processes_and_reports_them() {
         assert_eq!(spawner.commands(worker), [WorkerCommand::Stop]);
     }
     assert!(spawner.running().is_empty());
-    assert!(h.fleet.masters().await.unwrap().is_empty(), "the heartbeat is removed");
+    assert!(
+        h.fleet.masters().await.unwrap().is_empty(),
+        "the heartbeat is removed"
+    );
 }
 
 #[tokio::test]
@@ -151,7 +159,10 @@ async fn only_runs_the_named_supervisors() {
     )
     .await;
     let master = Running::start(&h).await;
-    eventually("two workers", || async { master.spawner.running().len() == 2 }).await;
+    eventually("two workers", || async {
+        master.spawner.running().len() == 2
+    })
+    .await;
     tokio::time::sleep(Duration::from_millis(100)).await;
     assert_eq!(master.running_queues(), ["exports", "exports"]);
     master.stop().await;
@@ -168,7 +179,10 @@ async fn the_memory_driver_is_refused() {
 async fn a_backlog_moves_processes_to_its_queue_and_back() {
     let h = Harness::new(
         builder()
-            .config("fleet.supervisors.default", json!({ "queues": ["default", "mail"], "max_processes": 4 }))
+            .config(
+                "fleet.supervisors.default",
+                json!({ "queues": ["default", "mail"], "max_processes": 4 }),
+            )
             .config("fleet.balance_cooldown_secs", 1),
     )
     .await;
@@ -183,7 +197,10 @@ async fn a_backlog_moves_processes_to_its_queue_and_back() {
     }
     let master = Running::start(&h).await;
     // `mail` gets every spare process: 1 + 2, one step per cooldown.
-    eventually("three mail workers", || async { master.count_on("mail") == 3 }).await;
+    eventually("three mail workers", || async {
+        master.count_on("mail") == 3
+    })
+    .await;
     assert_eq!(master.count_on("default"), 1);
 
     // The backlog drains (a worker of the test runs it): back to one.
@@ -205,7 +222,10 @@ async fn a_backlog_moves_processes_to_its_queue_and_back() {
 async fn pausing_reaches_running_and_new_workers() {
     let h = Harness::new(builder().config("fleet.supervisors", supervisors())).await;
     let master = Running::start(&h).await;
-    eventually("four workers", || async { master.spawner.running().len() == 4 }).await;
+    eventually("four workers", || async {
+        master.spawner.running().len() == 4
+    })
+    .await;
 
     h.fleet.pause(Some("exports")).await.unwrap();
     let exports: Vec<usize> = master
@@ -231,7 +251,10 @@ async fn pausing_reaches_running_and_new_workers() {
 
     // A replacement of a paused supervisor starts paused.
     master.spawner.exit(exports[0], ExitReason::MaxJobs);
-    eventually("a replacement", || async { master.spawner.spawned().len() == 5 }).await;
+    eventually("a replacement", || async {
+        master.spawner.spawned().len() == 5
+    })
+    .await;
     assert!(master.spawner.spawned()[4].paused);
 
     h.fleet.pause(None).await.unwrap();
@@ -252,10 +275,21 @@ async fn pausing_reaches_running_and_new_workers() {
 
 #[tokio::test]
 async fn a_worker_at_a_limit_is_replaced_at_once() {
-    let h = Harness::new(builder().config("fleet.supervisors.default", json!({ "queues": ["default"], "max_processes": 1 }))).await;
+    let h = Harness::new(builder().config(
+        "fleet.supervisors.default",
+        json!({ "queues": ["default"], "max_processes": 1 }),
+    ))
+    .await;
     let master = Running::start(&h).await;
-    eventually("one worker", || async { master.spawner.running().len() == 1 }).await;
-    for reason in [ExitReason::MaxJobs, ExitReason::MaxMemory, ExitReason::MaxTime] {
+    eventually("one worker", || async {
+        master.spawner.running().len() == 1
+    })
+    .await;
+    for reason in [
+        ExitReason::MaxJobs,
+        ExitReason::MaxMemory,
+        ExitReason::MaxTime,
+    ] {
         let current = master.spawner.running()[0];
         let started = Instant::now();
         master.spawner.exit(current, reason);
@@ -273,9 +307,16 @@ async fn a_worker_at_a_limit_is_replaced_at_once() {
 
 #[tokio::test]
 async fn a_failing_worker_is_restarted_with_growing_delays() {
-    let h = Harness::new(builder().config("fleet.supervisors.default", json!({ "queues": ["default"], "max_processes": 1 }))).await;
+    let h = Harness::new(builder().config(
+        "fleet.supervisors.default",
+        json!({ "queues": ["default"], "max_processes": 1 }),
+    ))
+    .await;
     let master = Running::start(&h).await;
-    eventually("one worker", || async { master.spawner.running().len() == 1 }).await;
+    eventually("one worker", || async {
+        master.spawner.running().len() == 1
+    })
+    .await;
 
     // 100 ms, then 200 ms, then 400 ms (the maximum here).
     let mut gaps = Vec::new();
@@ -289,7 +330,11 @@ async fn a_failing_worker_is_restarted_with_growing_delays() {
             },
         );
         eventually("a restart", || async {
-            master.spawner.running().first().is_some_and(|i| *i != current)
+            master
+                .spawner
+                .running()
+                .first()
+                .is_some_and(|i| *i != current)
         })
         .await;
         gaps.push(crashed.elapsed());
@@ -298,12 +343,17 @@ async fn a_failing_worker_is_restarted_with_growing_delays() {
     assert!(gaps[1] >= Duration::from_millis(200), "{gaps:?}");
     assert!(gaps[2] >= Duration::from_millis(400), "{gaps:?}");
     assert!(gaps[3] >= Duration::from_millis(400), "{gaps:?}");
-    assert!(gaps[3] < Duration::from_millis(800) + Duration::from_secs(1), "capped: {gaps:?}");
+    assert!(
+        gaps[3] < Duration::from_millis(800) + Duration::from_secs(1),
+        "capped: {gaps:?}"
+    );
 
     // A worker that cannot even start counts as a failure too.
     master.spawner.fail_next(1);
     let current = master.spawner.running()[0];
-    master.spawner.exit(current, ExitReason::Crashed { error: "x".into() });
+    master
+        .spawner
+        .exit(current, ExitReason::Crashed { error: "x".into() });
     eventually("a restart after the failed spawn", || async {
         master.spawner.running().len() == 1
     })
@@ -317,7 +367,10 @@ async fn terminate_stops_every_running_master() {
     let h = Harness::new(builder()).await;
     let one = Running::start(&h).await;
     let two = Running::start(&h).await;
-    eventually("two masters", || async { h.fleet.masters().await.unwrap().len() == 2 }).await;
+    eventually("two masters", || async {
+        h.fleet.masters().await.unwrap().len() == 2
+    })
+    .await;
 
     h.fleet.terminate().await.unwrap();
     for master in [one, two] {
@@ -376,14 +429,15 @@ async fn reported_jobs_are_stored_and_snapshotted() {
     })
     .await;
     let series = h.fleet.metrics(MetricsPeriod::Hour).await.unwrap();
-    let job_series = series
-        .iter()
-        .find(|s| s.kind == MetricKind::Job)
-        .unwrap();
+    let job_series = series.iter().find(|s| s.kind == MetricKind::Job).unwrap();
     let processed: u64 = job_series.points.iter().map(|p| p.processed).sum();
     let failed: u64 = job_series.points.iter().map(|p| p.failed).sum();
     assert_eq!((processed, failed), (2, 1));
-    assert!(series.iter().any(|s| s.kind == MetricKind::Queue && s.name == "default"));
+    assert!(
+        series
+            .iter()
+            .any(|s| s.kind == MetricKind::Queue && s.name == "default")
+    );
     assert_eq!(h.fleet.overview().await.unwrap().jobs_past_hour, 2);
     let summary = master.stop().await;
     assert_eq!(summary.jobs, 2);
@@ -452,7 +506,10 @@ async fn long_waits_raise_one_event_per_cooldown_across_masters() {
 
     // After the cooldown (15 minutes), the next one.
     clock.advance(Duration::from_secs(15 * 60));
-    eventually("a second event", || async { inbox.0.lock().unwrap().len() == 2 }).await;
+    eventually("a second event", || async {
+        inbox.0.lock().unwrap().len() == 2
+    })
+    .await;
     assert_eq!(inbox.0.lock().unwrap()[1].wait_secs, 120 + 15 * 60);
     one.stop().await;
     two.stop().await;
