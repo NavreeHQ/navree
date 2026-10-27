@@ -438,7 +438,7 @@ impl SourceFile {
             return;
         }
         match first.as_str() {
-            "crate" => out.push(join(&[self.krate.clone()], rest)),
+            "crate" => out.push(join(std::slice::from_ref(&self.krate), rest)),
             "self" => out.push(join(&here, rest)),
             "super" => {
                 let mut base = here.clone();

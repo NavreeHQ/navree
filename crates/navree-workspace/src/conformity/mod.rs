@@ -259,9 +259,9 @@ fn table_findings(table: &str, column: &str, facts: &tables::TableFacts) -> Vec<
     if !facts.columns.iter().any(|c| c == column) {
         return vec![
             Finding::error(table, format!("has no `{column}` column"))
-                .hint(format!(
-                    "add the column in a migration, or set WorkspaceScoped::WORKSPACE_COLUMN to the column that holds the workspace id"
-                )),
+                .hint(
+                    "add the column in a migration, or set WorkspaceScoped::WORKSPACE_COLUMN to the column that holds the workspace id",
+                ),
         ];
     }
     let mut findings = Vec::new();

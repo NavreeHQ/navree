@@ -566,7 +566,7 @@ impl Run<'_, '_> {
         let b = self.b.clone();
         let a = self.a.clone();
         let id = self
-            .records(&[param.clone()], &b)
+            .records(std::slice::from_ref(&param), &b)
             .await?
             .remove(&param)
             .unwrap_or_default();
