@@ -218,10 +218,10 @@ async fn the_event_stream_sends_the_operation_until_it_finishes() {
         "{:?}",
         response.headers()
     );
-    let events = events(&response.text());
-    assert_eq!(events.len(), 1, "{events:?}");
-    assert_eq!(events[0]["status"], "succeeded");
-    assert_eq!(events[0]["result"], json!({"url": "/exports/1.csv"}));
+    let finished = events(&response.text());
+    assert_eq!(finished.len(), 1, "{finished:?}");
+    assert_eq!(finished[0]["status"], "succeeded");
+    assert_eq!(finished[0]["result"], json!({"url": "/exports/1.csv"}));
 
     // A running operation: an event now and after each change.
     let live = start(&h, Operation::new("export").owner(owner).total(2)).await;
@@ -244,13 +244,13 @@ async fn the_event_stream_sends_the_operation_until_it_finishes() {
     .expect("the stream ends once the operation finishes")
     .assert_status(200);
     worker.await.unwrap();
-    let events = events(&response.text());
-    let statuses: Vec<&str> = events
+    let live = events(&response.text());
+    let statuses: Vec<&str> = live
         .iter()
         .map(|event| event["status"].as_str().unwrap())
         .collect();
     assert_eq!(statuses, ["pending", "running", "succeeded"]);
-    assert_eq!(events[1]["progress"]["percent"], 50);
+    assert_eq!(live[1]["progress"]["percent"], 50);
 
     // Not visible: a 404 before any event.
     h.app
