@@ -227,6 +227,26 @@ impl SigningKey {
         Ok(Self::new(Private::Ed25519 { pair, seed }, Algorithm::EdDSA))
     }
 
+    /// A P-256 (ES256) key from its private scalar `d` (32 bytes) and its
+    /// public key as an uncompressed point (65 bytes), the form Web Push
+    /// VAPID keys are written in.
+    pub(crate) fn es256_from_parts(d: &[u8], point: &[u8]) -> Result<Self, JoseError> {
+        Self::ec_parts(Curve::P256, d, point)
+    }
+
+    /// The private scalar and the uncompressed public point of a P-256
+    /// key; `None` for any other key.
+    pub(crate) fn p256_parts(&self) -> Option<(&[u8], &[u8])> {
+        match &*self.private {
+            Private::Ecdsa {
+                pair,
+                curve: Curve::P256,
+                d,
+            } => Some((d.as_slice(), pair.public_key().as_ref())),
+            _ => None,
+        }
+    }
+
     fn ec_parts(curve: Curve, d: &[u8], point: &[u8]) -> Result<Self, JoseError> {
         let algorithm = match curve {
             Curve::P256 => &signature::ECDSA_P256_SHA256_FIXED_SIGNING,

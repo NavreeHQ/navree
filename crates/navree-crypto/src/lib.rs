@@ -22,6 +22,9 @@
 //! - [`jose`] signs and verifies JSON Web Signatures (HS256, EdDSA, ES256,
 //!   RS256 and their siblings) on `ring`, reads and publishes JSON Web Keys
 //!   and key sets, and loads PKCS#8 keys such as Apple's `.p8` files.
+//! - [`webpush`] encrypts Web Push messages (RFC 8291, `aes128gcm`) and
+//!   signs their VAPID headers (RFC 8292) with a P-256
+//!   [`VapidKey`](webpush::VapidKey).
 //!
 //! Keys, plaintexts and passwords never appear in `Debug` output or error
 //! messages.
@@ -49,6 +52,7 @@ pub mod jose;
 mod key;
 mod module;
 mod tokens;
+pub mod webpush;
 
 pub use encrypter::Encrypter;
 pub use error::{CryptoError, Result};
