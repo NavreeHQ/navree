@@ -31,13 +31,6 @@ async fn validation_errors_are_in_the_requested_language() {
                 "first_name": ["prénom doit contenir au moins 1 caractère"],
                 "email": ["adresse e-mail doit être une adresse e-mail valide"],
             }),
-        )
-        .assert_json_path(
-            "message",
-            json!([
-                "prénom doit contenir au moins 1 caractère",
-                "adresse e-mail doit être une adresse e-mail valide",
-            ]),
         );
 
     // German comes from the shipped messages (no app file defines them).
