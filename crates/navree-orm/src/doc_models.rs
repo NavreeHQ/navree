@@ -1,7 +1,7 @@
 //! The models the documentation examples use (`Deal`, `Company`,
-//! `Activity`, `Tag`, `Setting`, `Event`), with every name the examples
-//! need in scope, so that each example compiles. Not API: hidden from the
-//! docs, and it may change at any time.
+//! `Activity`, `Tag`, `Note`, `Setting`, `Event`) and their relations, with
+//! every name the examples need in scope, so that each example compiles.
+//! Not API: hidden from the docs, and it may change at any time.
 
 pub use chrono::{DateTime, Duration, Utc};
 pub use indexmap::IndexMap;
@@ -56,6 +56,34 @@ pub struct Deal {
     pub updated_at: DateTime<Utc>,
 }
 
+#[relations]
+impl Deal {
+    /// The company the deal is with.
+    pub fn company(&self) -> BelongsTo<Deal, Company> {
+        self.belongs_to(Deal::COMPANY_ID)
+    }
+
+    /// The deal's activities.
+    pub fn activities(&self) -> HasMany<Deal, Activity> {
+        self.has_many(Activity::DEAL_ID)
+    }
+
+    /// The deal's latest activity.
+    pub fn latest_activity(&self) -> HasOne<Deal, Activity> {
+        self.has_many(Activity::DEAL_ID).latest_of_many()
+    }
+
+    /// The deal's tags, through `deal_tag`.
+    pub fn tags(&self) -> BelongsToMany<Deal, Tag> {
+        self.belongs_to_many("deal_tag").with_pivot(["role"]).with_timestamps()
+    }
+
+    /// The notes on the deal.
+    pub fn notes(&self) -> MorphMany<Deal, Note> {
+        self.morph_many("notable")
+    }
+}
+
 /// A customer company.
 #[derive(Model, Clone, Debug, Default, Serialize)]
 #[model(table = "companies")]
@@ -66,6 +94,14 @@ pub struct Company {
     pub name: String,
     /// Whether the company is a current customer.
     pub active: bool,
+}
+
+#[relations]
+impl Company {
+    /// The company's deals.
+    pub fn deals(&self) -> HasMany<Company, Deal> {
+        self.has_many(Deal::COMPANY_ID)
+    }
 }
 
 /// A call, meeting or task on a deal.
@@ -86,6 +122,14 @@ pub struct Activity {
     pub updated_at: DateTime<Utc>,
 }
 
+#[relations]
+impl Activity {
+    /// The deal the activity is on.
+    pub fn deal(&self) -> BelongsTo<Activity, Deal> {
+        self.belongs_to(Activity::DEAL_ID)
+    }
+}
+
 /// A label on deals.
 #[derive(Model, Clone, Debug, Default, Serialize)]
 pub struct Tag {
@@ -95,6 +139,35 @@ pub struct Tag {
     pub name: String,
     /// The display color.
     pub color: String,
+}
+
+#[relations]
+impl Tag {
+    /// The deals with the tag.
+    pub fn deals(&self) -> BelongsToMany<Tag, Deal> {
+        self.belongs_to_many("deal_tag").with_pivot(["role"]).with_timestamps()
+    }
+}
+
+/// A note on a deal or an event.
+#[derive(Model, Clone, Debug, Default, Serialize)]
+pub struct Note {
+    /// The key (assigned by the database).
+    pub id: i64,
+    /// The morph name of what the note is on.
+    pub notable_type: Option<String>,
+    /// The key of what the note is on.
+    pub notable_id: Option<Uuid>,
+    /// The text.
+    pub body: String,
+}
+
+#[relations]
+impl Note {
+    /// What the note is on: a deal or an event.
+    pub fn notable(&self) -> MorphTo<Note> {
+        self.morph_to("notable").targets::<(Deal, Event)>()
+    }
 }
 
 /// An application setting.

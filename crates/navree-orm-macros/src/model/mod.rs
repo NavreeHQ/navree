@@ -12,6 +12,7 @@ mod container;
 mod expand;
 mod field;
 mod naming;
+mod relations;
 
 pub(crate) use container::KeyType;
 pub(crate) use field::Cast;
@@ -49,6 +50,18 @@ pub(crate) struct Model {
     pub(crate) connection: Option<LitStr>,
     pub(crate) per_page: Option<LitInt>,
     pub(crate) global_scopes: Vec<syn::Expr>,
+    /// The name polymorphic type columns store for the model.
+    pub(crate) morph_name: String,
+    /// The default name of foreign keys to the model.
+    pub(crate) foreign_key: String,
+    /// Relations touched when a record is saved or deleted.
+    pub(crate) touches: Vec<LitStr>,
+    /// Relations every query eager loads.
+    pub(crate) with: Vec<LitStr>,
+    /// Relations every query counts.
+    pub(crate) with_count: Vec<LitStr>,
+    /// The pivot columns of a pivot model.
+    pub(crate) pivot: Option<(String, String)>,
 }
 
 impl Model {
@@ -188,10 +201,34 @@ fn analyse(input: &DeriveInput) -> syn::Result<Model> {
     errors.finish()?;
     let mut errors = Errors::default();
 
-    let key_name = attrs
-        .primary_key
+    // A pivot model without an `id` column is keyed by its related pivot
+    // column (rows are identified by both pivot columns).
+    let pivot = attrs
+        .relations
+        .pivot
         .as_ref()
-        .map_or_else(|| "id".to_owned(), LitStr::value);
+        .map(|(foreign, related)| (foreign.value(), related.value()));
+    let keyed_by_pivot = attrs.primary_key.is_none()
+        && pivot.is_some()
+        && !columns.iter().any(|column| column.name == "id");
+    let key_name = match (&attrs.primary_key, &pivot) {
+        (Some(key), _) => key.value(),
+        (None, Some((_, related))) if keyed_by_pivot => related.clone(),
+        _ => "id".to_owned(),
+    };
+    if let Some((foreign_key, related_key)) = &attrs.relations.pivot {
+        for column in [foreign_key, related_key] {
+            if !columns.iter().any(|candidate| candidate.name == column.value()) {
+                errors.push(syn::Error::new(
+                    column.span(),
+                    format!(
+                        "the pivot column `{}` is not a column of {ident}: add a field for it",
+                        column.value()
+                    ),
+                ));
+            }
+        }
+    }
     let Some(key) = columns.iter().position(|column| column.name == key_name) else {
         return Err(errors.with(syn::Error::new(
             ident.span(),
@@ -213,9 +250,13 @@ fn analyse(input: &DeriveInput) -> syn::Result<Model> {
             "the key field cannot be an `Option`: an unset key is `0`, the nil UUID or ULID, or an empty string",
         ));
     }
-    let key_type = attrs
-        .key_type
-        .unwrap_or_else(|| inferred_key_type(&key_column.ty));
+    let key_type = attrs.key_type.unwrap_or_else(|| {
+        if keyed_by_pivot {
+            KeyType::Manual
+        } else {
+            inferred_key_type(&key_column.ty)
+        }
+    });
 
     let timestamp_span = attrs.timestamps.span.unwrap_or_else(Span::call_site);
     let mut check_timestamp = |column: &Option<String>, what: &str, option: &str, span: Span| {
@@ -271,6 +312,13 @@ fn analyse(input: &DeriveInput) -> syn::Result<Model> {
         .table
         .as_ref()
         .map_or_else(|| naming::table_name(&ident.to_string()), LitStr::value);
+    let snake = heck::ToSnakeCase::to_snake_case(ident.to_string().as_str());
+    let morph_name = attrs
+        .relations
+        .morph_name
+        .as_ref()
+        .map_or_else(|| snake.clone(), LitStr::value);
+    let foreign_key = format!("{snake}_{key_name}");
     Ok(Model {
         ident,
         vis: input.vis.clone(),
@@ -293,5 +341,11 @@ fn analyse(input: &DeriveInput) -> syn::Result<Model> {
         connection: attrs.connection,
         per_page: attrs.per_page,
         global_scopes: attrs.global_scopes,
+        morph_name,
+        foreign_key,
+        touches: attrs.relations.touches,
+        with: attrs.relations.with,
+        with_count: attrs.relations.with_count,
+        pivot,
     })
 }

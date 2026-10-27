@@ -14,7 +14,7 @@ use sea_query::{
 };
 
 use crate::error::OrmError;
-use crate::ir::{AggregateFunction, ColumnRef, Expr, JsonSegment, Where};
+use crate::ir::{AggregateFunction, ColumnRef, Direction, Expr, JsonSegment, Nulls, Order, Where};
 use crate::value::Value;
 
 mod filter;
@@ -327,7 +327,107 @@ impl Compiler {
                 Some(table) => sea_query::Expr::col((Alias::new(table.to_string()), Asterisk)),
                 None => sea_query::Expr::col(Asterisk),
             },
+            Expr::Exists(query) => {
+                let mut query = (**query).clone();
+                query.orders.clear();
+                filter::exists_select_list(&mut query);
+                sea_query::Expr::exists(self.select(&query)?)
+            }
+            Expr::RowNumber { partition, order } => self.row_number(partition, order)?,
         })
+    }
+
+    /// `ROW_NUMBER() OVER (PARTITION BY .. ORDER BY ..)`. MySQL has no
+    /// `NULLS FIRST`/`LAST`: a leading `expr IS NULL` key sorts the NULLs
+    /// there.
+    fn row_number(&self, partition: &[Expr], order: &[Order]) -> Result<sea_query::Expr, OrmError> {
+        let mut template = String::from("ROW_NUMBER() OVER (");
+        let mut exprs = Vec::new();
+        if !partition.is_empty() {
+            template.push_str("PARTITION BY ");
+            for (i, expr) in partition.iter().enumerate() {
+                if i > 0 {
+                    template.push_str(", ");
+                }
+                template.push_str("{}");
+                exprs.push(self.expr(expr)?);
+            }
+        }
+        if !order.is_empty() {
+            if !partition.is_empty() {
+                template.push(' ');
+            }
+            template.push_str("ORDER BY ");
+            for (i, item) in order.iter().enumerate() {
+                if i > 0 {
+                    template.push_str(", ");
+                }
+                match item {
+                    Order::By {
+                        expr,
+                        direction,
+                        nulls,
+                    } => {
+                        let compiled = self.expr(expr)?;
+                        let direction = match direction {
+                            Direction::Asc => "ASC",
+                            Direction::Desc => "DESC",
+                        };
+                        match (nulls, self.dialect) {
+                            (Some(nulls), Dialect::MySql) => {
+                                template.push_str(match nulls {
+                                    Nulls::First => "{} IS NULL DESC, ",
+                                    Nulls::Last => "{} IS NULL ASC, ",
+                                });
+                                exprs.push(compiled.clone());
+                                template.push_str("{} ");
+                                template.push_str(direction);
+                            }
+                            (Some(nulls), _) => {
+                                template.push_str("{} ");
+                                template.push_str(direction);
+                                template.push_str(match nulls {
+                                    Nulls::First => " NULLS FIRST",
+                                    Nulls::Last => " NULLS LAST",
+                                });
+                            }
+                            (None, _) => {
+                                template.push_str("{} ");
+                                template.push_str(direction);
+                            }
+                        }
+                        exprs.push(compiled);
+                    }
+                    Order::Random => template.push_str(match self.dialect {
+                        Dialect::MySql => "RAND()",
+                        Dialect::Postgres | Dialect::Sqlite => "RANDOM()",
+                    }),
+                    Order::Raw { sql, values } => {
+                        let (body, direction, nulls) = select::split_direction(sql);
+                        let body = raw_sql(body, values.len(), self.dialect)?;
+                        exprs.push(sea_query::Expr::cust_with_values(
+                            body,
+                            values.iter().cloned(),
+                        ));
+                        template.push_str(match direction {
+                            sea_query::Order::Desc => "{} DESC",
+                            _ => "{} ASC",
+                        });
+                        match nulls {
+                            Some(sea_query::NullOrdering::First) => {
+                                template.push_str(" NULLS FIRST");
+                            }
+                            Some(sea_query::NullOrdering::Last) => {
+                                template.push_str(" NULLS LAST");
+                            }
+                            None => {}
+                        }
+                    }
+                }
+            }
+        }
+        template.push(')');
+        Ok(self.custom(&template, exprs))
     }
 }
 

@@ -51,6 +51,31 @@ fn stored_key<M: Model>(record: &Record<M>) -> M::Key {
     }
 }
 
+/// The conditions identifying `record`'s stored row: its key and, for a
+/// pivot model without an `id` column (`#[model(pivot(..))]`, keyed by one
+/// pivot column), the other pivot column too.
+fn identity<M: Model>(record: &Record<M>) -> Result<Vec<WhereClause>> {
+    let meta = M::meta();
+    let mut wheres = by_key::<M>(&stored_key(record));
+    if let Some((foreign, related)) = meta.pivot_key_columns() {
+        let other = if meta.key_column() == related {
+            foreign
+        } else {
+            related
+        };
+        let source = record.original.as_ref().unwrap_or(&record.model);
+        let value = source
+            .value(other)?
+            .ok_or_else(|| crate::model::derive_support::unknown_column::<M>(other))?;
+        wheres.push(WhereClause::and(Where::Compare {
+            left: Expr::Column(ColumnRef::new(Some(meta.table()), other)),
+            op: Operator::Eq,
+            right: Expr::Value(value),
+        }));
+    }
+    Ok(wheres)
+}
+
 /// `values` as a JSON object (change events).
 fn json_object(values: &[(&'static str, Value)]) -> serde_json::Value {
     serde_json::Value::Object(
@@ -87,6 +112,7 @@ pub(crate) async fn save<M: Model>(target: &Target<'_>, record: &mut Record<M>) 
     if hooks.before(ModelEvent::Saving, &ctx, record).await? == Flow::Cancel {
         return Ok(false);
     }
+    let changed = !record.exists || record.is_dirty();
     let saved = if record.exists {
         if record.is_dirty() {
             update(target, &ctx, &hooks, record).await?
@@ -100,6 +126,9 @@ pub(crate) async fn save<M: Model>(target: &Target<'_>, record: &mut Record<M>) 
         return Ok(false);
     }
     hooks.after(ModelEvent::Saved, &ctx, record).await?;
+    if changed {
+        crate::relations::touch::touch_owners(target, record).await?;
+    }
     record.sync_original();
     Ok(true)
 }
@@ -223,7 +252,7 @@ async fn update<M: Model>(
             .iter()
             .map(|(column, value)| (Cow::Borrowed(*column), Expr::Value(value.clone())))
             .collect(),
-        wheres: by_key::<M>(&key),
+        wheres: identity(record)?,
     };
     target.update(&update).await?;
     record.sync_changes(dirty)?;
@@ -248,8 +277,12 @@ pub(crate) async fn delete<M: Model>(target: &Target<'_>, record: &mut Record<M>
     if hooks.before(ModelEvent::Deleting, &ctx, record).await? == Flow::Cancel {
         return Ok(false);
     }
+    // The owners are touched while the row (and its pivot rows) still
+    // exist.
+    crate::relations::touch::touch_owners(target, record).await?;
     let meta = M::meta();
     let key = stored_key(record);
+    let wheres = identity(record)?;
     let before = match &record.original {
         Some(original) => original.values()?,
         None => record.model.values()?,
@@ -275,7 +308,7 @@ pub(crate) async fn delete<M: Model>(target: &Target<'_>, record: &mut Record<M>
             let update = UpdateIr {
                 table: TableRef::new(meta.table()),
                 sets,
-                wheres: by_key::<M>(&key),
+                wheres,
             };
             target.update(&update).await?;
             record.sync_original_on(columns)?;
@@ -292,7 +325,7 @@ pub(crate) async fn delete<M: Model>(target: &Target<'_>, record: &mut Record<M>
         None => {
             let delete = DeleteIr {
                 table: TableRef::new(meta.table()),
-                wheres: by_key::<M>(&key),
+                wheres,
             };
             target.delete(&delete).await?;
             record.exists = false;
@@ -311,16 +344,16 @@ pub(crate) async fn delete<M: Model>(target: &Target<'_>, record: &mut Record<M>
 
 /// The stored row of `record`, read without global scopes.
 async fn reload<M: Model>(target: &Target<'_>, record: &Record<M>) -> Result<Option<Record<M>>> {
-    Builder::<M>::new()
-        .without_global_scopes()
-        .where_key(stored_key(record))
-        .limit(1)
+    let mut query = Builder::<M>::new().without_global_scopes().limit(1);
+    query.ir.wheres = identity(record)?;
+    query
         .fetch(target)
         .await
         .map(|records| records.into_vec().into_iter().next())
 }
 
-/// Reloads `record`'s columns.
+/// Reloads `record`'s columns, and the relations it has loaded (pivots and
+/// values set by hand stay as they are).
 pub(crate) async fn refresh<M: Model>(target: &Target<'_>, record: &mut Record<M>) -> Result<()> {
     if !record.exists {
         return Ok(());
@@ -331,7 +364,7 @@ pub(crate) async fn refresh<M: Model>(target: &Target<'_>, record: &mut Record<M
     record.model = fresh.model;
     record.extras = fresh.extras;
     record.sync_original();
-    Ok(())
+    crate::relations::lazy::reload_relations(target, record).await
 }
 
 /// `record` as stored now.
@@ -470,7 +503,7 @@ pub(crate) async fn increment<M: Model, T: Numeric>(
     let update = UpdateIr {
         table: TableRef::new(meta.table()),
         sets,
-        wheres: by_key::<M>(&key),
+        wheres: identity(record)?,
     };
     target.update(&update).await?;
     let dirty = record.get_dirty()?;

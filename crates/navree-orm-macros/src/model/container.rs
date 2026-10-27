@@ -57,6 +57,8 @@ pub(crate) struct Container {
     pub(crate) connection: Option<LitStr>,
     pub(crate) per_page: Option<LitInt>,
     pub(crate) global_scopes: Vec<syn::Expr>,
+    /// `touches`, `morph_name`, `with`, `with_count`, `pivot`.
+    pub(crate) relations: super::relations::RelationAttrs,
 }
 
 /// The keys `#[model(...)]` takes on a struct.
@@ -69,6 +71,11 @@ const KEYS: &[&str] = &[
     "connection",
     "per_page",
     "global_scopes",
+    "touches",
+    "morph_name",
+    "with",
+    "with_count",
+    "pivot",
 ];
 
 /// Parses the `#[model(...)]` attributes of the struct.
@@ -128,6 +135,8 @@ fn parse_key(container: &mut Container, meta: &ParseNestedMeta<'_>) -> syn::Resu
         syn::parenthesized!(content in meta.input);
         let scopes = Punctuated::<syn::Expr, Token![,]>::parse_terminated(&content)?;
         container.global_scopes.extend(scopes);
+    } else if super::relations::parse_key(&mut container.relations, meta)? {
+        // A relation attribute.
     } else {
         let key = key_name(path);
         let hint = suggestion(&key, KEYS)

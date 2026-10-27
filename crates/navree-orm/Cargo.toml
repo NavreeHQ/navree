@@ -35,6 +35,9 @@ sea-query = { workspace = true, features = ["backend-mysql", "with-rust_decimal"
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+# Task-local scopes: quiet writes, suspended touching, scoped morph maps and
+# lazy-loading rules.
+tokio = { workspace = true }
 tracing = { workspace = true }
 uuid = { workspace = true }
 
@@ -44,7 +47,6 @@ insta = { workspace = true }
 navree-config = { workspace = true }
 navree-testing = { workspace = true }
 tempfile = { workspace = true }
-tokio = { workspace = true }
 trybuild = { workspace = true }
 
 # Real-server tests: each skips with a notice unless NAVREE_TEST_POSTGRES_URL

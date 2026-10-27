@@ -43,6 +43,9 @@ pub struct Record<M: Model> {
     pub(crate) previous: Vec<(&'static str, Value)>,
     pub(crate) extras: Vec<(String, Value)>,
     pub(crate) relations: Relations,
+    /// The lazy-loading rules' marks (see
+    /// [`LazyLoading`](crate::relations::LazyLoading)).
+    pub(crate) loading: crate::relations::lazy::LoadState<M>,
 }
 
 impl<M: Model> Record<M> {
@@ -58,6 +61,23 @@ impl<M: Model> Record<M> {
             previous: Vec::new(),
             extras: Vec::new(),
             relations: Relations::new(),
+            loading: crate::relations::lazy::LoadState::default(),
+        }
+    }
+
+    /// A record of `model` as it is stored (a parent a relation was made
+    /// from).
+    pub(crate) fn stored(model: M) -> Self {
+        Record {
+            original: Some(model.clone()),
+            model,
+            exists: true,
+            recently_created: false,
+            changes: Vec::new(),
+            previous: Vec::new(),
+            extras: Vec::new(),
+            relations: Relations::new(),
+            loading: crate::relations::lazy::LoadState::default(),
         }
     }
 
@@ -82,6 +102,7 @@ impl<M: Model> Record<M> {
             previous: Vec::new(),
             extras,
             relations: Relations::new(),
+            loading: crate::relations::lazy::LoadState::default(),
         })
     }
 
@@ -528,6 +549,7 @@ impl<M: Model> Clone for Record<M> {
             previous: self.previous.clone(),
             extras: self.extras.clone(),
             relations: self.relations.clone(),
+            loading: self.loading.clone(),
         }
     }
 }
