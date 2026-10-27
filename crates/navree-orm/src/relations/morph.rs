@@ -400,9 +400,20 @@ impl<M: Model> MorphTarget for MorphTargetOf<M> {
                     }
                 }
                 Some(spec) => {
-                    let paths = loads.with.paths();
-                    let top: Vec<String> = paths.into_iter().filter(|path| !path.contains('.')).collect();
-                    crate::relations::aggregates::load_aggregate_on(target, &mut typed, &top, spec)
+                    // The relations listed for the model, with `on` (first
+                    // steps) or `count_on`.
+                    let mut paths: Vec<String> = loads
+                        .with
+                        .paths()
+                        .into_iter()
+                        .filter(|path| !path.contains('.'))
+                        .collect();
+                    for counted in &loads.counts {
+                        if !paths.contains(counted) {
+                            paths.push(counted.clone());
+                        }
+                    }
+                    crate::relations::aggregates::load_aggregate_on(target, &mut typed, &paths, spec)
                         .await?;
                 }
             }
@@ -1278,15 +1289,17 @@ impl<M: Model> Builder<M> {
         self.push_has_morph(Boolean::Or, &text, types.into(), Operator::Gte, 1, &mut |_| None)
     }
 
-    /// Only records whose `morph_to` does not point at an existing record
-    /// of one of `types` (over every type, a NULL type too).
+    /// Only records whose `morph_to` relation `path` is of one of `types`
+    /// but points at no existing record (a note about a deleted deal).
+    /// Records of other types are left out; over every type
+    /// (`MorphTypes::all()`), records with a NULL type are included.
     pub fn doesnt_have_morph(self, path: impl RelationPath<M>, types: impl Into<MorphTypes>) -> Self {
         let text = path.relation_path().into_owned();
         self.push_has_morph(Boolean::And, &text, types.into(), Operator::Lt, 1, &mut |_| None)
     }
 
-    /// `OR` records whose `morph_to` does not point at an existing record
-    /// of one of `types`.
+    /// `OR` records whose `morph_to` is of one of `types` but points at no
+    /// existing record.
     pub fn or_doesnt_have_morph(
         self,
         path: impl RelationPath<M>,
@@ -1344,8 +1357,8 @@ impl<M: Model> Builder<M> {
         )
     }
 
-    /// Only records whose `morph_to` does not point at a record matching
-    /// `constraint`.
+    /// Only records whose `morph_to` is of one of `types` but points at no
+    /// record matching `constraint` (over every type, NULL types too).
     pub fn where_doesnt_have_morph(
         self,
         path: impl RelationPath<M>,
@@ -1363,8 +1376,8 @@ impl<M: Model> Builder<M> {
         )
     }
 
-    /// `OR` records whose `morph_to` does not point at a record matching
-    /// `constraint`.
+    /// `OR` records whose `morph_to` is of one of `types` but points at no
+    /// record matching `constraint`.
     pub fn or_where_doesnt_have_morph(
         self,
         path: impl RelationPath<M>,
@@ -1411,8 +1424,8 @@ impl<M: Model> Builder<M> {
         })
     }
 
-    /// Only records whose `morph_to` does not point at a record matching
-    /// `filter`.
+    /// Only records whose `morph_to` is of one of `types` but points at no
+    /// record matching `filter`.
     pub fn where_morph_doesnt_have_relation(
         self,
         path: impl RelationPath<M>,
@@ -1426,8 +1439,8 @@ impl<M: Model> Builder<M> {
         })
     }
 
-    /// `OR` records whose `morph_to` does not point at a record matching
-    /// `filter`.
+    /// `OR` records whose `morph_to` is of one of `types` but points at no
+    /// record matching `filter`.
     pub fn or_where_morph_doesnt_have_relation(
         self,
         path: impl RelationPath<M>,
