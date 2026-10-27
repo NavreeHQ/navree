@@ -43,6 +43,7 @@ pub trait Spawner: Send + Sync + 'static {
 pub struct ProcessSpawner {
     program: PathBuf,
     args: Vec<OsString>,
+    envs: Vec<(OsString, OsString)>,
 }
 
 impl ProcessSpawner {
@@ -51,7 +52,16 @@ impl ProcessSpawner {
         Self {
             program: program.into(),
             args: args.into_iter().map(Into::into).collect(),
+            envs: Vec::new(),
         }
+    }
+
+    /// Sets an environment variable for every worker (on top of the
+    /// master's environment, which workers inherit).
+    #[must_use]
+    pub fn env(mut self, key: impl Into<OsString>, value: impl Into<OsString>) -> Self {
+        self.envs.push((key.into(), value.into()));
+        self
     }
 
     /// The running binary (`std::env::current_exe`), with no extra
@@ -68,6 +78,7 @@ impl Spawner for ProcessSpawner {
         Box::pin(async move {
             let mut child = Command::new(&self.program)
                 .args(&self.args)
+                .envs(self.envs.iter().map(|(k, v)| (k, v)))
                 .arg("fleet:work")
                 .args(spec.to_args())
                 .stdin(Stdio::piped())
