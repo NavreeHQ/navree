@@ -92,7 +92,12 @@ async fn the_openapi_document_lists_the_routes() {
         assert!(paths.contains_key(route), "{route}");
     }
     let schemas = document["components"]["schemas"].as_object().unwrap();
-    for schema in ["SsoConnection", "SsoDomain", "SsoDiscovery", "NewConnection"] {
+    for schema in [
+        "SsoConnection",
+        "SsoDomain",
+        "SsoDiscovery",
+        "NewConnection",
+    ] {
         assert!(schemas.contains_key(schema), "{schema}");
     }
 }

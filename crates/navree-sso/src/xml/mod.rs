@@ -171,7 +171,9 @@ fn is_xml_char(c: char) -> bool {
 
 fn split_qname(name: &str) -> Result<(Option<&str>, &str), XmlError> {
     match name.split_once(':') {
-        Some((prefix, local)) if !prefix.is_empty() && !local.is_empty() && !local.contains(':') => {
+        Some((prefix, local))
+            if !prefix.is_empty() && !local.is_empty() && !local.contains(':') =>
+        {
             Ok((Some(prefix), local))
         }
         Some(_) => Err(XmlError::Malformed(format!("invalid name `{name}`"))),
@@ -260,9 +262,7 @@ impl Builder {
 
     fn start(&mut self, start: &BytesStart<'_>) -> Result<NodeId, XmlError> {
         if self.stack.is_empty() && self.root.is_some() {
-            return Err(XmlError::Malformed(
-                "more than one root element".to_owned(),
-            ));
+            return Err(XmlError::Malformed("more than one root element".to_owned()));
         }
         if self.stack.len() >= self.limits.max_depth {
             return Err(XmlError::TooLarge("nested too deeply"));
@@ -278,10 +278,9 @@ impl Builder {
             let value = attr
                 .normalized_value(XmlVersion::Implicit1_0)
                 .map_err(|error| match &error {
-                    quick_xml::Error::Escape(quick_xml::escape::EscapeError::UnrecognizedEntity(
-                        _,
-                        entity,
-                    )) => XmlError::UndefinedEntity(entity.clone()),
+                    quick_xml::Error::Escape(
+                        quick_xml::escape::EscapeError::UnrecognizedEntity(_, entity),
+                    ) => XmlError::UndefinedEntity(entity.clone()),
                     _ => malformed(error),
                 })?
                 .into_owned();
@@ -315,7 +314,11 @@ impl Builder {
             Some("") => None,
             Some(uri) => Some(uri.to_owned()),
             None if prefix.is_none() => None,
-            None => return Err(XmlError::UnboundPrefix(prefix.unwrap_or_default().to_owned())),
+            None => {
+                return Err(XmlError::UnboundPrefix(
+                    prefix.unwrap_or_default().to_owned(),
+                ));
+            }
         };
         let mut attrs: Vec<Attr> = Vec::with_capacity(raw_attrs.len());
         for (key, value) in raw_attrs {
@@ -443,7 +446,9 @@ impl Document {
                 }
                 Event::Comment(comment) => {
                     if !builder.stack.is_empty() {
-                        builder.push(Node::Comment(comment.decode().map_err(malformed)?.into_owned()))?;
+                        builder.push(Node::Comment(
+                            comment.decode().map_err(malformed)?.into_owned(),
+                        ))?;
                     }
                 }
                 Event::PI(pi) => {
@@ -658,8 +663,8 @@ mod tests {
 
     #[test]
     fn text_references_and_cdata_merge_into_one_text_node() {
-        let doc =
-            Document::parse("<a>x &amp; &lt;y&gt; &#65;&#x42; <![CDATA[<z>&]]> \r\nend</a>").unwrap();
+        let doc = Document::parse("<a>x &amp; &lt;y&gt; &#65;&#x42; <![CDATA[<z>&]]> \r\nend</a>")
+            .unwrap();
         let root = doc.root();
         assert_eq!(doc.element(root).unwrap().children.len(), 1);
         assert_eq!(doc.text(root), "x & <y> AB <z>& \nend");

@@ -165,10 +165,16 @@ mod tests {
             .with_timezone(&Utc);
         let options = RequestOptions {
             force_authn: true,
-            name_id_format: Some("urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress".to_owned()),
+            name_id_format: Some(
+                "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress".to_owned(),
+            ),
         };
         let request = AuthnRequest::new(&sp(), &idp(), "state&1", now, &options).unwrap();
-        assert!(request.url.starts_with("https://idp.acme.test/sso?tenant=1&SAMLRequest="));
+        assert!(
+            request
+                .url
+                .starts_with("https://idp.acme.test/sso?tenant=1&SAMLRequest=")
+        );
         let (xml, relay_state) = AuthnRequest::decode_redirect(&request.url).unwrap();
         assert_eq!(relay_state.as_deref(), Some("state&1"));
         let doc = Document::parse(&xml).unwrap();

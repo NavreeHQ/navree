@@ -55,9 +55,8 @@ impl SsoProfile {
                 email_like.then(|| assertion.name_id.clone())
             })
             .map(|email| email.to_lowercase());
-        let name = first(&mapping.name).or_else(|| {
-            join_name(first(&mapping.first_name), first(&mapping.last_name))
-        });
+        let name = first(&mapping.name)
+            .or_else(|| join_name(first(&mapping.first_name), first(&mapping.last_name)));
         let groups = mapping
             .groups
             .iter()
@@ -80,10 +79,13 @@ impl SsoProfile {
             Value::String(s) if !s.trim().is_empty() => Some(s.trim().to_owned()),
             _ => None,
         };
-        let first = |names: &[String]| names.iter().find_map(|name| claims.get(name).and_then(text));
-        let name = first(&mapping.name).or_else(|| {
-            join_name(first(&mapping.first_name), first(&mapping.last_name))
-        });
+        let first = |names: &[String]| {
+            names
+                .iter()
+                .find_map(|name| claims.get(name).and_then(text))
+        };
+        let name = first(&mapping.name)
+            .or_else(|| join_name(first(&mapping.first_name), first(&mapping.last_name)));
         let groups = mapping
             .groups
             .iter()
@@ -174,13 +176,17 @@ mod tests {
     #[test]
     fn an_email_name_id_stands_in_for_a_missing_email_attribute() {
         let email = "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress";
-        let profile =
-            SsoProfile::from_saml(&assertion("Ann@Acme.test", email, &[]), &AttributeMapping::default());
+        let profile = SsoProfile::from_saml(
+            &assertion("Ann@Acme.test", email, &[]),
+            &AttributeMapping::default(),
+        );
         assert_eq!(profile.email.as_deref(), Some("ann@acme.test"));
         // A transient id that happens to contain `@` is not an email.
         let transient = "urn:oasis:names:tc:SAML:2.0:nameid-format:transient";
-        let profile =
-            SsoProfile::from_saml(&assertion("x@y", transient, &[]), &AttributeMapping::default());
+        let profile = SsoProfile::from_saml(
+            &assertion("x@y", transient, &[]),
+            &AttributeMapping::default(),
+        );
         assert_eq!(profile.email, None);
     }
 

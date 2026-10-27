@@ -490,7 +490,10 @@ mod tests {
             serde_json::to_value(SsoOwner::App).unwrap(),
             json!({ "type": "app" })
         );
-        assert_eq!(SsoOwner::from_parts("organization", Some(id)), Some(SsoOwner::Organization(id)));
+        assert_eq!(
+            SsoOwner::from_parts("organization", Some(id)),
+            Some(SsoOwner::Organization(id))
+        );
         assert_eq!(SsoOwner::from_parts("app", Some(id)), None);
     }
 
@@ -535,7 +538,10 @@ mod tests {
             provisioning.role_for(&groups(&["engineering", "acme admins"])),
             Some("admin".to_owned())
         );
-        assert_eq!(provisioning.role_for(&groups(&["Sales"])), Some("viewer".to_owned()));
+        assert_eq!(
+            provisioning.role_for(&groups(&["Sales"])),
+            Some("viewer".to_owned())
+        );
         let strict = Provisioning {
             default_role: None,
             ..provisioning

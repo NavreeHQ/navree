@@ -51,13 +51,23 @@ async fn workspace_members_get_the_role_of_their_groups() {
         .subscribe_json("sso.user_provisioned");
 
     let admin = world
-        .saml_sign_in(&fake, "acme", "ada@acme.test", &[("groups", &["Engineering", "acme admins"])])
+        .saml_sign_in(
+            &fake,
+            "acme",
+            "ada@acme.test",
+            &[("groups", &["Engineering", "acme admins"])],
+        )
         .await
         .assert_status(200)
         .json_value();
     let admin_id = uuid::Uuid::parse_str(admin["user"]["id"].as_str().unwrap()).unwrap();
     let viewer = world
-        .saml_sign_in(&fake, "acme", "cy@acme.test", &[("groups", &["Contractors"])])
+        .saml_sign_in(
+            &fake,
+            "acme",
+            "cy@acme.test",
+            &[("groups", &["Contractors"])],
+        )
         .await
         .assert_status(200)
         .json_value();
@@ -72,7 +82,14 @@ async fn workspace_members_get_the_role_of_their_groups() {
     let members = world.app.get::<Members>().await;
     let role = |user| {
         let members = members.clone();
-        async move { members.find(workspace.id, user).await.unwrap().unwrap().role }
+        async move {
+            members
+                .find(workspace.id, user)
+                .await
+                .unwrap()
+                .unwrap()
+                .role
+        }
     };
     assert_eq!(role(admin_id).await, "admin");
     assert_eq!(role(viewer_id).await, "viewer");
@@ -80,13 +97,23 @@ async fn workspace_members_get_the_role_of_their_groups() {
 
     // Roles follow the groups at the next sign-in.
     world
-        .saml_sign_in(&fake, "acme", "cy@acme.test", &[("groups", &["Acme Admins"])])
+        .saml_sign_in(
+            &fake,
+            "acme",
+            "cy@acme.test",
+            &[("groups", &["Acme Admins"])],
+        )
         .await
         .assert_status(200);
     assert_eq!(role(viewer_id).await, "admin");
     // The owner signing in keeps the owner role.
     world
-        .saml_sign_in(&fake, "acme", "olive@acme.test", &[("groups", &["Contractors"])])
+        .saml_sign_in(
+            &fake,
+            "acme",
+            "olive@acme.test",
+            &[("groups", &["Contractors"])],
+        )
         .await
         .assert_status(200);
     assert_eq!(role(owner.id).await, "owner");
@@ -152,11 +179,21 @@ async fn organization_members_reach_its_workspaces() {
         .await
         .unwrap();
     let connection = world
-        .saml_connection(&fake, SsoOwner::Organization(organization.id), "acme", rules())
+        .saml_connection(
+            &fake,
+            SsoOwner::Organization(organization.id),
+            "acme",
+            rules(),
+        )
         .await;
     world.verified_domain(&connection, "acme.test").await;
     let body = world
-        .saml_sign_in(&fake, "acme", "ada@acme.test", &[("groups", &["Acme Admins"])])
+        .saml_sign_in(
+            &fake,
+            "acme",
+            "ada@acme.test",
+            &[("groups", &["Acme Admins"])],
+        )
         .await
         .assert_status(200)
         .json_value();

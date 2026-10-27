@@ -328,13 +328,20 @@ impl FakeResponse {
              <saml:Issuer>{entity}</saml:Issuer><samlp:Status>{status}</samlp:Status>{assertion}</samlp:Response>"
         );
         if self.sign_assertion && self.status.is_none() {
-            xml = sign_enveloped(&xml, &self.assertion_id, &self.idp.key, Some(&self.certificate()))
-                .expect("the fake signs its assertion");
+            xml = sign_enveloped(
+                &xml,
+                &self.assertion_id,
+                &self.idp.key,
+                Some(&self.certificate()),
+            )
+            .expect("the fake signs its assertion");
         } else {
             xml = xml.replacen(SIGNATURE_PLACEHOLDER, "", 1);
         }
         if self.sign_response {
-            let issuer_end = xml.find("</saml:Issuer>").expect("the response has an issuer")
+            let issuer_end = xml
+                .find("</saml:Issuer>")
+                .expect("the response has an issuer")
                 + "</saml:Issuer>".len();
             xml.insert_str(issuer_end, SIGNATURE_PLACEHOLDER);
             xml = sign_enveloped(&xml, &response_id, &self.idp.key, Some(&self.certificate()))
@@ -343,7 +350,13 @@ impl FakeResponse {
         xml
     }
 
-    fn assertion_xml(&self, at: &str, until: &str, not_before: &str, in_response_to: &str) -> String {
+    fn assertion_xml(
+        &self,
+        at: &str,
+        until: &str,
+        not_before: &str,
+        in_response_to: &str,
+    ) -> String {
         let entity = escape(&self.idp.entity_id);
         let acs = escape(&self.acs_url);
         let mut attributes = String::new();
@@ -450,9 +463,11 @@ mod tests {
                 .attribute("groups", ["Admins", "Sales & Ops"])
                 .sign_response(sign_response)
                 .sign_assertion(sign_assertion);
-            let assertion =
-                validate_response(&response.encoded(), &check(&sp, &idp, Some(&request.id), now))
-                    .unwrap();
+            let assertion = validate_response(
+                &response.encoded(),
+                &check(&sp, &idp, Some(&request.id), now),
+            )
+            .unwrap();
             assert_eq!(assertion.name_id, "alice@acme.test");
             assert_eq!(assertion.values("groups"), ["Admins", "Sales & Ops"]);
             assert_eq!(response.form()[1].1, "rs");

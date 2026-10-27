@@ -102,7 +102,11 @@ impl Provider {
     }
 }
 
-async fn connection(world: &World, provider: &Provider, provisioning: Provisioning) -> SsoConnection {
+async fn connection(
+    world: &World,
+    provider: &Provider,
+    provisioning: Provisioning,
+) -> SsoConnection {
     let sso = world.sso().await;
     let input = NewConnection::oidc(
         SsoOwner::App,
@@ -185,10 +189,18 @@ async fn a_full_sign_in_with_pkce_and_a_nonce() {
         URL_SAFE_NO_PAD.encode(Sha256::digest(form["code_verifier"].as_bytes())),
         query["code_challenge"]
     );
-    let basic = token.headers.get("authorization").unwrap().to_str().unwrap();
+    let basic = token
+        .headers
+        .get("authorization")
+        .unwrap()
+        .to_str()
+        .unwrap();
     assert_eq!(
         basic,
-        format!("Basic {}", STANDARD.encode(format!("{CLIENT_ID}:{CLIENT_SECRET}")))
+        format!(
+            "Basic {}",
+            STANDARD.encode(format!("{CLIENT_ID}:{CLIENT_SECRET}"))
+        )
     );
 
     // The state works once.

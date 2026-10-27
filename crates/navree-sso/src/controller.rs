@@ -103,7 +103,10 @@ fn redirect(status: StatusCode, url: &str) -> Response {
     match HeaderValue::from_str(url) {
         Ok(location) => (
             status,
-            [(LOCATION, location), (CACHE_CONTROL, HeaderValue::from_static("no-store"))],
+            [
+                (LOCATION, location),
+                (CACHE_CONTROL, HeaderValue::from_static("no-store")),
+            ],
         )
             .into_response(),
         Err(_) => AppError::internal("an invalid redirect URL").into_response(),
@@ -116,10 +119,12 @@ fn redirect(status: StatusCode, url: &str) -> Response {
 async fn finish(sso: &Sso, result: Result<SsoSignIn, SsoError>, meta: &ClientMeta) -> Response {
     let has_complete_url = sso.options().complete_url.is_some();
     let outcome = match result {
-        Ok(sign_in) if has_complete_url => sso
-            .issue_code(&sign_in)
-            .await
-            .map(|code| redirect(StatusCode::SEE_OTHER, &sso.complete_url(&[("code", &code)]).unwrap_or_default())),
+        Ok(sign_in) if has_complete_url => sso.issue_code(&sign_in).await.map(|code| {
+            redirect(
+                StatusCode::SEE_OTHER,
+                &sso.complete_url(&[("code", &code)]).unwrap_or_default(),
+            )
+        }),
         Ok(sign_in) => sso
             .tokens_for(&sign_in, meta)
             .await
@@ -237,20 +242,21 @@ impl Controller for SsoController {
         );
 
         let sso = self.sso.clone();
-        let acs = move |Path(connection): Path<String>, meta: ClientMeta, Form(form): Form<AcsForm>| {
-            let sso = sso.clone();
-            async move {
-                let result = sso
-                    .complete_saml(
-                        &connection,
-                        &form.saml_response,
-                        form.relay_state.as_deref(),
-                        &meta,
-                    )
-                    .await;
-                finish(&sso, result, &meta).await
-            }
-        };
+        let acs =
+            move |Path(connection): Path<String>, meta: ClientMeta, Form(form): Form<AcsForm>| {
+                let sso = sso.clone();
+                async move {
+                    let result = sso
+                        .complete_saml(
+                            &connection,
+                            &form.saml_response,
+                            form.relay_state.as_deref(),
+                            &meta,
+                        )
+                        .await;
+                    finish(&sso, result, &meta).await
+                }
+            };
         routes.push(
             RouteDef::on(Method::POST, path("/saml/{connection}/acs"), acs)
                 .public()
@@ -263,7 +269,10 @@ impl Controller for SsoController {
                             .to_owned(),
                     ),
                     response: Some(schema_fn::<navree_auth::LoginResponse>),
-                    ..api("SAML assertion consumer service", &[400, 403, 404, 409, 502])
+                    ..api(
+                        "SAML assertion consumer service",
+                        &[400, 403, 404, 409, 502],
+                    )
                 }),
         );
 
@@ -274,7 +283,10 @@ impl Controller for SsoController {
                 let xml = sso.saml_metadata(&connection).await.map_err(sso_error)?;
                 Ok::<_, AppError>(
                     (
-                        [(CONTENT_TYPE, HeaderValue::from_static("application/samlmetadata+xml"))],
+                        [(
+                            CONTENT_TYPE,
+                            HeaderValue::from_static("application/samlmetadata+xml"),
+                        )],
                         xml,
                     )
                         .into_response(),
@@ -285,7 +297,10 @@ impl Controller for SsoController {
             RouteDef::on(Method::GET, path("/saml/{connection}/metadata"), metadata)
                 .public()
                 .name("sso.saml.metadata")
-                .api(api("The service provider metadata of a SAML connection", &[404])),
+                .api(api(
+                    "The service provider metadata of a SAML connection",
+                    &[404],
+                )),
         );
 
         let sso = self.sso.clone();
@@ -409,16 +424,17 @@ impl Controller for SsoController {
         );
 
         let sso = self.sso.clone();
-        let update = move |Path(id): Path<String>, uow: Uow, Json(input): Json<ConnectionUpdate>| {
-            let sso = sso.clone();
-            async move {
-                let connection = sso
-                    .update_connection(&uow, &id, input)
-                    .await
-                    .map_err(sso_error)?;
-                Ok::<_, AppError>(Json(connection))
-            }
-        };
+        let update =
+            move |Path(id): Path<String>, uow: Uow, Json(input): Json<ConnectionUpdate>| {
+                let sso = sso.clone();
+                async move {
+                    let connection = sso
+                        .update_connection(&uow, &id, input)
+                        .await
+                        .map_err(sso_error)?;
+                    Ok::<_, AppError>(Json(connection))
+                }
+            };
         routes.push(
             RouteDef::on(Method::PATCH, path("/connections/{id}"), update)
                 .permissions(&manage)
@@ -467,16 +483,17 @@ impl Controller for SsoController {
         );
 
         let sso = self.sso.clone();
-        let add_domain = move |Path(id): Path<String>, uow: Uow, Json(input): Json<AddDomainInput>| {
-            let sso = sso.clone();
-            async move {
-                let domain = sso
-                    .add_domain(&uow, &id, &input.domain)
-                    .await
-                    .map_err(sso_error)?;
-                Ok::<_, AppError>((StatusCode::CREATED, Json(domain)).into_response())
-            }
-        };
+        let add_domain =
+            move |Path(id): Path<String>, uow: Uow, Json(input): Json<AddDomainInput>| {
+                let sso = sso.clone();
+                async move {
+                    let domain = sso
+                        .add_domain(&uow, &id, &input.domain)
+                        .await
+                        .map_err(sso_error)?;
+                    Ok::<_, AppError>((StatusCode::CREATED, Json(domain)).into_response())
+                }
+            };
         routes.push(
             RouteDef::on(Method::POST, path("/connections/{id}/domains"), add_domain)
                 .permissions(&manage)
@@ -508,7 +525,10 @@ impl Controller for SsoController {
                 .name("sso.domains.verify")
                 .api(ApiMeta {
                     response: Some(schema_fn::<SsoDomain>),
-                    ..api("Verify a domain's TXT record", &[400, 401, 403, 404, 409, 502])
+                    ..api(
+                        "Verify a domain's TXT record",
+                        &[400, 401, 403, 404, 409, 502],
+                    )
                 }),
         );
 

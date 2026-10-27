@@ -9,8 +9,8 @@ use chrono::{DateTime, TimeDelta, Utc};
 use serde::Serialize;
 
 use super::{
-    ASSERTION_NS, CM_BEARER, IdpMetadata, PROTOCOL_NS, STATUS_SUCCESS, SamlError,
-    ServiceProvider, parse_instant,
+    ASSERTION_NS, CM_BEARER, IdpMetadata, PROTOCOL_NS, STATUS_SUCCESS, SamlError, ServiceProvider,
+    parse_instant,
 };
 use crate::dsig::{DSIG_NS, SignatureError, check_unique_ids, verify_enveloped};
 use crate::xml::{Document, NodeId};
@@ -118,7 +118,10 @@ pub fn validate_response(
     validate_xml(&xml, check)
 }
 
-pub(crate) fn validate_xml(xml: &str, check: &ResponseCheck<'_>) -> Result<SamlAssertion, SamlError> {
+pub(crate) fn validate_xml(
+    xml: &str,
+    check: &ResponseCheck<'_>,
+) -> Result<SamlAssertion, SamlError> {
     let doc = Document::parse(xml)?;
     let response = doc.root();
     if !doc.is(response, PROTOCOL_NS, "Response") {
@@ -220,7 +223,11 @@ fn check_status(doc: &Document, response: NodeId) -> Result<(), SamlError> {
     })
 }
 
-fn check_issuer(doc: &Document, issuer: NodeId, check: &ResponseCheck<'_>) -> Result<(), SamlError> {
+fn check_issuer(
+    doc: &Document,
+    issuer: NodeId,
+    check: &ResponseCheck<'_>,
+) -> Result<(), SamlError> {
     let value = doc.trimmed_text(issuer).unwrap_or_default();
     if value != check.idp.entity_id {
         return Err(SamlError::WrongIssuer(value));
@@ -559,10 +566,7 @@ mod tests {
 
     #[test]
     fn idp_initiated_responses_need_the_switch() {
-        let xml = sign(
-            &template()
-                .replace(&format!(" InResponseTo=\"{REQUEST}\""), ""),
-        );
+        let xml = sign(&template().replace(&format!(" InResponseTo=\"{REQUEST}\""), ""));
         assert_eq!(
             validate_with(&xml, |c| c.request_id = None),
             Err(SamlError::Unsolicited)
@@ -578,12 +582,10 @@ mod tests {
     #[test]
     fn required_assertion_signatures() {
         // The response signed around an unsigned assertion.
-        let xml = template()
-            .replace(SIGNATURE_PLACEHOLDER, "")
-            .replace(
-                &format!("<saml:Issuer>{IDP}</saml:Issuer><samlp:Status>"),
-                &format!("<saml:Issuer>{IDP}</saml:Issuer>{SIGNATURE_PLACEHOLDER}<samlp:Status>"),
-            );
+        let xml = template().replace(SIGNATURE_PLACEHOLDER, "").replace(
+            &format!("<saml:Issuer>{IDP}</saml:Issuer><samlp:Status>"),
+            &format!("<saml:Issuer>{IDP}</saml:Issuer>{SIGNATURE_PLACEHOLDER}<samlp:Status>"),
+        );
         let signed =
             sign_enveloped(&xml, "_resp1", &SigningKey::from_pem(KEY).unwrap(), None).unwrap();
         assert!(validate(&signed).is_ok());
@@ -599,7 +601,10 @@ mod tests {
             "</samlp:Response>",
             "<saml:EncryptedAssertion/></samlp:Response>",
         );
-        assert_eq!(validate(&sign(&encrypted)), Err(SamlError::EncryptedAssertion));
+        assert_eq!(
+            validate(&sign(&encrypted)),
+            Err(SamlError::EncryptedAssertion)
+        );
         // A second, unsigned assertion next to the signed one.
         let signed = sign(&template());
         let start = signed.find("<saml:Assertion").unwrap();
@@ -607,11 +612,7 @@ mod tests {
         let forged = signed[start..end]
             .replace("alice@acme.test", "admin@acme.test")
             .replace("ID=\"_a1\"", "ID=\"_a2\"");
-        let forged = forged
-            .split("<ds:Signature")
-            .next()
-            .unwrap()
-            .to_owned()
+        let forged = forged.split("<ds:Signature").next().unwrap().to_owned()
             + &forged[forged.find("</ds:Signature>").unwrap() + "</ds:Signature>".len()..];
         let wrapped = signed.replacen("<saml:Assertion", &format!("{forged}<saml:Assertion"), 1);
         assert!(matches!(validate(&wrapped), Err(SamlError::Invalid(_))));

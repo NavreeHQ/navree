@@ -89,7 +89,11 @@ async fn a_new_user_from_a_verified_domain_is_created_and_signed_in() {
         .assert_json_path("email", json!("alice@acme.test"));
     // The user has no password and a verified email.
     let auth = world.app.get::<AuthService>().await;
-    let user = auth.find_by_email("alice@acme.test").await.unwrap().unwrap();
+    let user = auth
+        .find_by_email("alice@acme.test")
+        .await
+        .unwrap()
+        .unwrap();
     assert!(user.email_verified_at.is_some());
     assert!(auth.validate_user("alice@acme.test", "").await.is_err());
     assert!(world.audit.actions().contains(&"sso.login".to_owned()));
@@ -101,10 +105,7 @@ async fn a_new_user_from_a_verified_domain_is_created_and_signed_in() {
         .await
         .assert_error_code(400, "invalid_state");
     let again = response.clone().relay_state(None);
-    world
-        .acs("acme", &again.form())
-        .await
-        .assert_status(400);
+    world.acs("acme", &again.form()).await.assert_status(400);
     world
         .saml_sign_in(&fake, "acme", "alice@acme.test", &[])
         .await
@@ -225,10 +226,9 @@ async fn provisioning_switches() {
 async fn idp_initiated_sign_in_needs_the_switch() {
     let fake = SsoFake::new();
     for allowed in [false, true] {
-        let world = support::world_with(
-            support::builder().config("sso.saml.allow_idp_initiated", allowed),
-        )
-        .await;
+        let world =
+            support::world_with(support::builder().config("sso.saml.allow_idp_initiated", allowed))
+                .await;
         let connection = world
             .saml_connection(&fake, SsoOwner::App, "acme", Provisioning::default())
             .await;
@@ -273,7 +273,11 @@ async fn refusals_from_the_identity_provider_and_bad_responses() {
 
     // A response changed after signing.
     let url = world.login_url("acme", None).await;
-    let mut form = fake.respond_to(&url).unwrap().name_id("eve@acme.test").form();
+    let mut form = fake
+        .respond_to(&url)
+        .unwrap()
+        .name_id("eve@acme.test")
+        .form();
     let xml = String::from_utf8(STANDARD.decode(&form[0].1).unwrap()).unwrap();
     form[0].1 = STANDARD.encode(xml.replace("eve@acme.test", "admin@acme.test"));
     world
@@ -283,10 +287,7 @@ async fn refusals_from_the_identity_provider_and_bad_responses() {
 
     // Not base64, no form at all.
     world
-        .acs(
-            "acme",
-            &[("SAMLResponse".to_owned(), "%%%".to_owned())],
-        )
+        .acs("acme", &[("SAMLResponse".to_owned(), "%%%".to_owned())])
         .await
         .assert_error_code(400, "invalid_saml_response");
 }
@@ -369,7 +370,12 @@ async fn a_complete_url_gets_a_one_time_code_or_the_error() {
     assert!(query["message"].contains("elsewhere.test"));
     // Nothing was written by the refused sign-in.
     let auth = world.app.get::<AuthService>().await;
-    assert!(auth.find_by_email("dan@elsewhere.test").await.unwrap().is_none());
+    assert!(
+        auth.find_by_email("dan@elsewhere.test")
+            .await
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[tokio::test]

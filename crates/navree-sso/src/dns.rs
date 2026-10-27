@@ -87,7 +87,9 @@ impl TxtResolver for DohResolver {
                     .map(|record| txt_strings(&record.data))
                     .collect()),
                 NAME_ERROR => Ok(Vec::new()),
-                status => Err(unavailable(format!("DNS lookup failed with status {status}"))),
+                status => Err(unavailable(format!(
+                    "DNS lookup failed with status {status}"
+                ))),
             }
         })
     }
@@ -177,8 +179,14 @@ mod tests {
     #[test]
     fn presentation_strings_are_joined_and_unescaped() {
         assert_eq!(txt_strings("\"v=1\""), "v=1");
-        assert_eq!(txt_strings("\"part one \" \"part two\""), "part one part two");
-        assert_eq!(txt_strings(r#""a \"quoted\" \\ word""#), r#"a "quoted" \ word"#);
+        assert_eq!(
+            txt_strings("\"part one \" \"part two\""),
+            "part one part two"
+        );
+        assert_eq!(
+            txt_strings(r#""a \"quoted\" \\ word""#),
+            r#"a "quoted" \ word"#
+        );
         assert_eq!(txt_strings("plain"), "plain");
     }
 

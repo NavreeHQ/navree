@@ -380,10 +380,9 @@ mod tests {
 
     #[test]
     fn inclusive_renders_every_namespace_in_scope_and_xml_attributes() {
-        let doc = Document::parse(
-            r#"<a xmlns:x="urn:x" xml:lang="en"><b xmlns:y="urn:y"><c/></b></a>"#,
-        )
-        .unwrap();
+        let doc =
+            Document::parse(r#"<a xmlns:x="urn:x" xml:lang="en"><b xmlns:y="urn:y"><c/></b></a>"#)
+                .unwrap();
         let b = find(&doc, "b");
         assert_eq!(
             canonicalize(&doc, b, INCLUSIVE_METHOD, &[], None),

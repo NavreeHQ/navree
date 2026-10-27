@@ -75,7 +75,11 @@ async fn a_policy_refuses_login_and_registration_for_its_accounts() {
         auth.check_password_sign_in("ADA@corp.test").await,
         Err(AuthError::PasswordSignInRefused { .. })
     ));
-    assert!(auth.check_password_sign_in("grace@example.com").await.is_ok());
+    assert!(
+        auth.check_password_sign_in("grace@example.com")
+            .await
+            .is_ok()
+    );
 }
 
 #[tokio::test]

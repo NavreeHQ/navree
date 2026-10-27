@@ -262,13 +262,22 @@ pub(crate) async fn verify_id_token(
     let claims: Map<String, Value> = jws
         .claims()
         .map_err(|_| invalid("the claims are not a JSON object"))?;
-    let keys = key_set(http, cache, &discovery.jwks_uri, jws.header().kid.as_deref()).await?;
+    let keys = key_set(
+        http,
+        cache,
+        &discovery.jwks_uri,
+        jws.header().kid.as_deref(),
+    )
+    .await?;
     // RS*, PS*, ES256, ES384 or EdDSA: a key set never verifies `none` or
     // an HMAC token.
     jws.verify_with(&keys)
         .map_err(|e| SsoError::InvalidIdToken(e.to_string()))?;
 
-    let iss = claims.get("iss").and_then(Value::as_str).unwrap_or_default();
+    let iss = claims
+        .get("iss")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
     if !same_issuer(iss, &discovery.issuer) {
         return Err(invalid("unexpected issuer"));
     }
