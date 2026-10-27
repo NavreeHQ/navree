@@ -17,13 +17,15 @@
 //! }
 //! ```
 
+use std::str::FromStr;
 use std::sync::Arc;
 
 use navree_db::{Db, Factory, Repo};
 use navree_kernel::{BoxError, BoxFuture};
 use navree_testing::{IsolationSuite, RecordContext, Tenancy, Tenant, TestApp};
 use sea_orm::{
-    EntityName, EntityTrait, IntoActiveModel, Iterable, ModelTrait, PrimaryKeyToColumn, Value,
+    ActiveModelTrait, EntityName, EntityTrait, IntoActiveModel, Iterable, ModelTrait,
+    PrimaryKeyToColumn, Value,
 };
 use serde::Serialize;
 use uuid::Uuid;
@@ -120,7 +122,8 @@ pub trait IsolationSuiteExt: Sized {
     /// workspaces, and uses [`WorkspaceTenancy`] unless another tenancy is
     /// set. Under row isolation the record goes through
     /// [`WorkspaceRepo::insert`]; under schema and database isolation it is
-    /// inserted in the workspace's own schema or database.
+    /// inserted in the workspace's own schema or database, with the
+    /// workspace column set when the entity has one.
     fn factory<F>(self, factory: F) -> Self
     where
         F: Factory + 'static,
@@ -200,7 +203,19 @@ where
         }
         let model = match config.isolation {
             Isolation::Row => WorkspaceRepo::<F::Entity>::insert(&uow, workspace, model).await?,
-            _ => Repo::<F::Entity>::insert(&uow, model).await?,
+            _ => {
+                // A table in the workspace's own schema or database may still
+                // keep the workspace column (a policy, a foreign key).
+                let mut model = model;
+                let column = <F::Entity as EntityTrait>::Column::from_str(
+                    <F::Entity as WorkspaceScoped>::WORKSPACE_COLUMN,
+                )
+                .ok();
+                if let Some(column) = column {
+                    model.set(column, workspace.into());
+                }
+                Repo::<F::Entity>::insert(&uow, model).await?
+            }
         };
         Ok::<_, BoxError>(model)
     }
