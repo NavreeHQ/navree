@@ -188,20 +188,36 @@ mod tests {
             <a href="mailto:ada@example.com">mail</a> <a href="#top">top</a>
             <a data-no-track href="https://acme.test/c">C</a> <abbr>no</abbr> <a class="x">none</a></p>"##;
         let out = rewrite_links(html, |url| format!("T({url})"));
-        assert!(out.contains(r#"<a href="T(https://acme.test/a?x=1&amp;y=2)">A</a>"#), "{out}");
-        assert!(out.contains("<A HREF='T(http://acme.test/b)'>B</A>"), "{out}");
-        assert!(out.contains(r#"<a href="mailto:ada@example.com">"#), "{out}");
+        assert!(
+            out.contains(r#"<a href="T(https://acme.test/a?x=1&amp;y=2)">A</a>"#),
+            "{out}"
+        );
+        assert!(
+            out.contains("<A HREF='T(http://acme.test/b)'>B</A>"),
+            "{out}"
+        );
+        assert!(
+            out.contains(r#"<a href="mailto:ada@example.com">"#),
+            "{out}"
+        );
         assert!(out.contains(r##"<a href="#top">"##), "{out}");
-        assert!(out.contains(r#"<a data-no-track href="https://acme.test/c">"#), "{out}");
+        assert!(
+            out.contains(r#"<a data-no-track href="https://acme.test/c">"#),
+            "{out}"
+        );
         assert!(out.contains("<abbr>no</abbr>"), "{out}");
         assert!(out.contains(r#"<a class="x">none</a>"#), "{out}");
     }
 
     #[test]
     fn an_attribute_named_like_href_is_not_rewritten() {
-        let out = rewrite_links(r#"<a data-href="https://x.test" href="https://y.test">"#, |url| {
-            format!("T({url})")
-        });
-        assert_eq!(out, r#"<a data-href="https://x.test" href="T(https://y.test)">"#);
+        let out = rewrite_links(
+            r#"<a data-href="https://x.test" href="https://y.test">"#,
+            |url| format!("T({url})"),
+        );
+        assert_eq!(
+            out,
+            r#"<a data-href="https://x.test" href="T(https://y.test)">"#
+        );
     }
 }

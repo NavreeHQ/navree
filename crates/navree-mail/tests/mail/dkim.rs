@@ -5,9 +5,9 @@ use std::any::Any;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
+use navree_contracts::Secret;
 use navree_crypto::jose::{Algorithm, SigningKey, VerifyingKey};
 use navree_mail::{DkimAlgorithm, DkimConfig, DkimSigner, Message, SmtpTransport, TransportConfig};
-use navree_contracts::Secret;
 use serde_json::json;
 use sha2::{Digest as _, Sha256};
 
@@ -31,7 +31,10 @@ fn parse(header: &str) -> (String, Vec<u8>) {
         .trim_end_matches("\r\n")
         .replace("\r\n\t", " ");
     let (unsigned, signature) = value.rsplit_once("b=").expect("b=");
-    (format!("{unsigned}b="), STANDARD.decode(signature).expect("base64"))
+    (
+        format!("{unsigned}b="),
+        STANDARD.decode(signature).expect("base64"),
+    )
 }
 
 /// The canonical input of [`MESSAGE`] for `h=from:subject:to`.
@@ -54,7 +57,11 @@ fn rsa_signatures_verify_with_the_published_key() {
     let signer = DkimSigner::from_pem("acme.test", "mail", RSA_KEY).expect("signer");
     assert_eq!(signer.algorithm(), DkimAlgorithm::RsaSha256);
     assert_eq!(signer.record_name(), "mail._domainkey.acme.test");
-    assert!(signer.dns_record().starts_with("v=DKIM1; k=rsa; p=MIIBIjAN"));
+    assert!(
+        signer
+            .dns_record()
+            .starts_with("v=DKIM1; k=rsa; p=MIIBIjAN")
+    );
 
     let header = signer.sign_at(MESSAGE, 1_700_000_000).expect("sign");
     let (unsigned, signature) = parse(&header);
@@ -109,7 +116,10 @@ fn invalid_settings_are_config_errors() {
         ("acme.test", "mail", "not a key"),
     ] {
         let error = DkimSigner::from_pem(domain, selector, key).unwrap_err();
-        assert!(error.to_string().contains("invalid DKIM settings"), "{error}");
+        assert!(
+            error.to_string().contains("invalid DKIM settings"),
+            "{error}"
+        );
     }
     let p256 = SigningKey::generate_es256().to_pkcs8_pem().expect("pem");
     let error = DkimSigner::from_pem("acme.test", "mail", &p256).unwrap_err();
@@ -152,7 +162,10 @@ fn smtp_signs_mail_from_its_domain() {
         text.starts_with("DKIM-Signature: v=1;\r\n\ta=ed25519-sha256;"),
         "{text}"
     );
-    assert!(text.contains("\r\nFrom: Acme <hello@acme.test>\r\n"), "{text}");
+    assert!(
+        text.contains("\r\nFrom: Acme <hello@acme.test>\r\n"),
+        "{text}"
+    );
 
     assert!(
         transport

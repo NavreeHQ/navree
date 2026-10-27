@@ -220,7 +220,9 @@ impl Mailer {
         }
         let suppressed = pipeline.suppress(&mut message, &options).await?;
         if message.recipients().next().is_none() {
-            return pipeline.log_suppressed(&message, &options, suppressed).await;
+            return pipeline
+                .log_suppressed(&message, &options, suppressed)
+                .await;
         }
         let (transport, tier) = match options.via.as_deref() {
             Some(name) => self.configured_transport(Some(name))?,
@@ -299,8 +301,7 @@ impl Mailer {
             template: mailable.template().map(str::to_owned),
             ..SendOptions::default()
         };
-        self.queue_with(mailable.build(&self.views)?, options)
-            .await
+        self.queue_with(mailable.build(&self.views)?, options).await
     }
 
     /// Queues `message` with `options`.
@@ -324,8 +325,7 @@ impl Mailer {
             via: options.via,
             template: options.template,
         };
-        let mut envelope =
-            JobEnvelope::of(&job).map_err(|source| MailError::Queue { source })?;
+        let mut envelope = JobEnvelope::of(&job).map_err(|source| MailError::Queue { source })?;
         if let Some(queue) = &self.queue {
             envelope.options.queue.clone_from(queue);
         }

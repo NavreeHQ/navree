@@ -98,7 +98,12 @@ impl PostmarkTransport {
         if !message.metadata.is_empty() {
             body["Metadata"] = json!(message.metadata);
         }
-        if let Some(stream) = self.config.message_stream.as_deref().filter(|s| !s.is_empty()) {
+        if let Some(stream) = self
+            .config
+            .message_stream
+            .as_deref()
+            .filter(|s| !s.is_empty())
+        {
             body["MessageStream"] = json!(stream);
         }
         Ok(body)
@@ -117,7 +122,10 @@ impl MailTransport for PostmarkTransport {
                 .client
                 .post(url.as_str())
                 .header("accept", "application/json")
-                .header("x-postmark-server-token", self.config.server_token.expose().as_str())
+                .header(
+                    "x-postmark-server-token",
+                    self.config.server_token.expose().as_str(),
+                )
                 .json(&self.body(message)?)
                 .send()
                 .await
@@ -150,7 +158,10 @@ impl MailTransport for PostmarkTransport {
                 .client
                 .get(url.as_str())
                 .header("accept", "application/json")
-                .header("x-postmark-server-token", self.config.server_token.expose().as_str())
+                .header(
+                    "x-postmark-server-token",
+                    self.config.server_token.expose().as_str(),
+                )
                 .send()
                 .await
                 .map_err(|error| MailError::Unusable(format!("postmark: {error}")))?;

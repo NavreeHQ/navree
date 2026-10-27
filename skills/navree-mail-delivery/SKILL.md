@@ -102,6 +102,7 @@ let app = TestApp::builder()
     .temp_database()
     .config("app.key", navree::crypto::generate_key())
     .config("mail.delivery.enabled", true)
+    .config("mail.delivery.routes", false)   // the admin routes need AccessModule
     .module(CryptoModule::from_config())
     .module(DatabaseModule::from_config())
     .module(ViewModule::from_config())
@@ -126,6 +127,9 @@ through the SSRF policy). Domain checks: override `dyn DnsResolver` with
 - Expecting `for_scope` to resolve tenant transports with
   `mail.delivery.enabled = false`: the scope is then ignored.
 - Webhook routes 404: their secret isn't set, or the pipeline is off.
+- Boot error "declares permissions:mail.manage but no `dyn RouteAuthorizer`":
+  the admin routes need `AccessModule` (and an authenticator); set
+  `mail.delivery.routes = false` where the app has none.
 - Signed tracking links break when `http.signing_key`/`app.key` changes.
 
 ## Docs

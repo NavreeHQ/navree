@@ -45,7 +45,9 @@ fn ses_events() {
     assert_eq!(click[0].kind, MailEventKind::Clicked);
     assert_eq!(click[0].url.as_deref(), Some("https://acme.test/x"));
 
-    let open = ProviderEvent::from_ses(&json!({ "eventType": "Open", "mail": { "messageId": "m-5" }, "open": {} }));
+    let open = ProviderEvent::from_ses(
+        &json!({ "eventType": "Open", "mail": { "messageId": "m-5" }, "open": {} }),
+    );
     assert_eq!(open[0].kind, MailEventKind::Opened);
     let delayed = ProviderEvent::from_ses(&json!({
         "eventType": "DeliveryDelay",
@@ -59,7 +61,8 @@ fn ses_events() {
 
 #[test]
 fn mailgun_events() {
-    let event = |data: serde_json::Value| ProviderEvent::from_mailgun(&json!({ "event-data": data }));
+    let event =
+        |data: serde_json::Value| ProviderEvent::from_mailgun(&json!({ "event-data": data }));
 
     let temporary = event(json!({
         "event": "failed", "severity": "temporary", "recipient": "a@x.test",
@@ -68,13 +71,21 @@ fn mailgun_events() {
     }));
     assert_eq!(temporary[0].kind, MailEventKind::Bounced);
     assert!(!temporary[0].permanent);
-    assert_eq!(temporary[0].provider_id.as_deref(), Some("20261027.1@mg.acme.test"));
+    assert_eq!(
+        temporary[0].provider_id.as_deref(),
+        Some("20261027.1@mg.acme.test")
+    );
     assert_eq!(temporary[0].detail.as_deref(), Some("Mailbox full"));
 
-    let clicked = event(json!({ "event": "clicked", "url": "https://acme.test", "timestamp": 1_793_088_000.25 }));
+    let clicked = event(
+        json!({ "event": "clicked", "url": "https://acme.test", "timestamp": 1_793_088_000.25 }),
+    );
     assert_eq!(clicked[0].kind, MailEventKind::Clicked);
     assert_eq!(clicked[0].url.as_deref(), Some("https://acme.test"));
-    assert_eq!(clicked[0].occurred_at.unwrap().timestamp_millis(), 1_793_088_000_250);
+    assert_eq!(
+        clicked[0].occurred_at.unwrap().timestamp_millis(),
+        1_793_088_000_250
+    );
 
     for (name, kind) in [
         ("delivered", MailEventKind::Delivered),
@@ -97,7 +108,10 @@ fn postmark_events() {
     assert!(bounce("HardBounce", false).permanent);
     assert!(bounce("BadEmailAddress", false).permanent);
     assert!(!bounce("SoftBounce", false).permanent);
-    assert!(bounce("SoftBounce", true).permanent, "an inactive recipient");
+    assert!(
+        bounce("SoftBounce", true).permanent,
+        "an inactive recipient"
+    );
 
     let click = ProviderEvent::from_postmark(&json!({
         "RecordType": "Click", "MessageID": "p-2", "Recipient": "a@x.test",
@@ -107,9 +121,13 @@ fn postmark_events() {
     assert_eq!(click[0].url.as_deref(), Some("https://acme.test/y"));
     assert_eq!(click[0].recipient.as_deref(), Some("a@x.test"));
 
-    let complaint = ProviderEvent::from_postmark(&json!({ "RecordType": "SpamComplaint", "MessageID": "p-3", "Email": "a@x.test" }));
+    let complaint = ProviderEvent::from_postmark(
+        &json!({ "RecordType": "SpamComplaint", "MessageID": "p-3", "Email": "a@x.test" }),
+    );
     assert_eq!(complaint[0].kind, MailEventKind::Complained);
-    assert!(ProviderEvent::from_postmark(&json!({ "RecordType": "SubscriptionChange" })).is_empty());
+    assert!(
+        ProviderEvent::from_postmark(&json!({ "RecordType": "SubscriptionChange" })).is_empty()
+    );
 }
 
 #[test]
@@ -146,5 +164,8 @@ fn events_built_by_hand() {
     assert!(event.suppresses());
     assert!(!ProviderEvent::new("custom", "id-1", MailEventKind::Bounced).suppresses());
     assert_eq!(MailEventKind::Complained.as_str(), "complained");
-    assert_eq!("clicked".parse::<MailEventKind>(), Ok(MailEventKind::Clicked));
+    assert_eq!(
+        "clicked".parse::<MailEventKind>(),
+        Ok(MailEventKind::Clicked)
+    );
 }

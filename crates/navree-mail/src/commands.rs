@@ -133,7 +133,11 @@ async fn suppressions_command(ctx: AppContext, args: Vec<String>) -> Result<(), 
     match action {
         "list" => {
             let page = suppressions
-                .list(workspace, positional.get(1).copied(), PageQuery::new(1, 1000))
+                .list(
+                    workspace,
+                    positional.get(1).copied(),
+                    PageQuery::new(1, 1000),
+                )
                 .await?;
             if page.data.is_empty() {
                 println!("No suppressed addresses.");
@@ -238,7 +242,11 @@ async fn domains_command(ctx: AppContext, args: Vec<String>) -> Result<(), BoxEr
     for include in flags(&args, "spf-include")? {
         expect = expect.spf_include(include);
     }
-    let report = ctx.get::<SendingDomains>().await?.check(domain, &expect).await?;
+    let report = ctx
+        .get::<SendingDomains>()
+        .await?
+        .check(domain, &expect)
+        .await?;
     print!("{}", format_domain_report(&report));
     if report.ready() {
         Ok(())

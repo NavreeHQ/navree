@@ -30,7 +30,10 @@ async fn style_blocks_are_inlined_and_media_queries_kept() {
     mailer.send_message(html_mail(html)).await.expect("send");
 
     let sent = transport.sent().remove(0).html.expect("html");
-    assert!(sent.contains(r#"style="color: red;font-size: 20px;""#), "{sent}");
+    assert!(
+        sent.contains(r#"style="color: red;font-size: 20px;""#),
+        "{sent}"
+    );
     assert!(!sent.contains("p { color: red }"), "{sent}");
     assert!(sent.contains("@media (max-width: 600px)"), "{sent}");
 }

@@ -101,7 +101,11 @@ impl TransportOwner {
                 domain,
                 workspace_id,
                 organization_id,
-            } => (*workspace_id, *organization_id, Some(normalize_domain(domain))),
+            } => (
+                *workspace_id,
+                *organization_id,
+                Some(normalize_domain(domain)),
+            ),
             TransportOwner::Workspace { workspace_id } => (Some(*workspace_id), None, None),
             TransportOwner::Organization { organization_id } => {
                 (None, Some(*organization_id), None)
@@ -196,6 +200,10 @@ impl fmt::Debug for ResolvedTransport {
     }
 }
 
+/// Built transports by stored transport id, with the `updated_at` they were
+/// built from.
+type Cache = HashMap<Uuid, (DateTime<Utc>, Arc<dyn MailTransport>)>;
+
 /// Transports stored per sending domain, workspace, organization or for the
 /// platform, and which one a message goes through: the sender's **domain**
 /// (owned by the message's workspace or organization, or by nobody), then
@@ -217,7 +225,7 @@ impl fmt::Debug for ResolvedTransport {
 /// `mail.delivery.tenants`).
 pub struct TransportResolver {
     store: Arc<Store>,
-    cache: Mutex<HashMap<Uuid, (DateTime<Utc>, Arc<dyn MailTransport>)>>,
+    cache: Mutex<Cache>,
 }
 
 impl fmt::Debug for TransportResolver {
@@ -251,7 +259,9 @@ impl TransportResolver {
         if let TransportOwner::Domain { domain, .. } = &owner
             && (domain.is_empty() || !domain.contains('.'))
         {
-            return Err(MailError::Config(format!("`{domain}` is not a domain name")));
+            return Err(MailError::Config(format!(
+                "`{domain}` is not a domain name"
+            )));
         }
         let sealed = self.store.seal(&config.to_json().to_string()).await?;
         let now = self.store.now().await;
@@ -363,7 +373,10 @@ impl TransportResolver {
     }
 
     /// Every stored transport (of `tier`, when given), oldest first.
-    pub async fn list(&self, tier: Option<TransportTier>) -> Result<Vec<StoredTransport>, MailError> {
+    pub async fn list(
+        &self,
+        tier: Option<TransportTier>,
+    ) -> Result<Vec<StoredTransport>, MailError> {
         let db = self.store.db().await?;
         let mut select = transport::Entity::find();
         if let Some(tier) = tier {
@@ -423,7 +436,8 @@ impl TransportResolver {
         sender_domain: Option<&str>,
     ) -> Result<Option<ResolvedTransport>, MailError> {
         let db = self.store.db().await?;
-        let mut any = Condition::any().add(transport::Column::Tier.eq(TransportTier::Platform.as_str()));
+        let mut any =
+            Condition::any().add(transport::Column::Tier.eq(TransportTier::Platform.as_str()));
         if let Some(domain) = sender_domain {
             any = any.add(
                 Condition::all()
@@ -472,7 +486,8 @@ impl TransportResolver {
                 .iter()
                 .filter(|row| row.tier == tier.as_str() && applies(row))
                 .collect();
-            candidates.sort_by_key(|row| (row.workspace_id.is_none(), row.organization_id.is_none()));
+            candidates
+                .sort_by_key(|row| (row.workspace_id.is_none(), row.organization_id.is_none()));
             if let Some(row) = candidates.first() {
                 let transport = self.built(row).await?;
                 return Ok(Some(ResolvedTransport {
@@ -500,7 +515,7 @@ impl TransportResolver {
         Ok(transport)
     }
 
-    fn cache(&self) -> std::sync::MutexGuard<'_, HashMap<Uuid, (DateTime<Utc>, Arc<dyn MailTransport>)>> {
+    fn cache(&self) -> std::sync::MutexGuard<'_, Cache> {
         self.cache.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
@@ -551,7 +566,9 @@ impl TransportResolver {
                     )));
                 }
                 Err(error) => {
-                    return Err(MailError::Config(format!("invalid SMTP host `{host}`: {error}")));
+                    return Err(MailError::Config(format!(
+                        "invalid SMTP host `{host}`: {error}"
+                    )));
                 }
             }
         }

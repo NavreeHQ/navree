@@ -68,9 +68,7 @@ impl DnsResolver for SystemResolver {
                         _ => None,
                     })
                     .collect()),
-                Err(error) if error.is_no_records_found() || error.is_nx_domain() => {
-                    Ok(Vec::new())
-                }
+                Err(error) if error.is_no_records_found() || error.is_nx_domain() => Ok(Vec::new()),
                 Err(error) => Err(dns_error(error.to_string())),
             }
         })
@@ -239,7 +237,10 @@ impl DomainReport {
     pub fn ready(&self) -> bool {
         self.spf.status != CheckStatus::Fail
             && self.dmarc.status != CheckStatus::Fail
-            && self.dkim.iter().all(|d| d.check.status != CheckStatus::Fail)
+            && self
+                .dkim
+                .iter()
+                .all(|d| d.check.status != CheckStatus::Fail)
     }
 }
 
@@ -282,7 +283,18 @@ impl fmt::Debug for SendingDomains {
 
 /// SPF mechanisms and modifiers that cost a DNS lookup (RFC 7208 §4.6.4
 /// allows ten).
-const SPF_LOOKUPS: &[&str] = &["include:", "a", "a:", "a/", "mx", "mx:", "mx/", "ptr", "exists:", "redirect="];
+const SPF_LOOKUPS: &[&str] = &[
+    "include:",
+    "a",
+    "a:",
+    "a/",
+    "mx",
+    "mx:",
+    "mx/",
+    "ptr",
+    "exists:",
+    "redirect=",
+];
 
 impl SendingDomains {
     /// Checks with `resolver`.
@@ -299,7 +311,9 @@ impl SendingDomains {
     ) -> Result<DomainReport, MailError> {
         let domain = normalize(domain);
         if domain.is_empty() || !domain.contains('.') {
-            return Err(MailError::Config(format!("`{domain}` is not a domain name")));
+            return Err(MailError::Config(format!(
+                "`{domain}` is not a domain name"
+            )));
         }
         let spf = self.spf(&domain, expect).await?;
         let mut dkim = Vec::new();
@@ -318,7 +332,11 @@ impl SendingDomains {
         })
     }
 
-    async fn spf(&self, domain: &str, expect: &DomainExpectations) -> Result<RecordCheck, MailError> {
+    async fn spf(
+        &self,
+        domain: &str,
+        expect: &DomainExpectations,
+    ) -> Result<RecordCheck, MailError> {
         let records: Vec<String> = self
             .resolver
             .txt(domain)
@@ -344,11 +362,18 @@ impl SendingDomains {
             .collect();
         for include in &expect.spf_includes {
             let wanted = format!("include:{}", include.to_ascii_lowercase());
-            if !terms.iter().any(|t| t.trim_start_matches(['+', '~', '?']) == wanted) {
+            if !terms
+                .iter()
+                .any(|t| t.trim_start_matches(['+', '~', '?']) == wanted)
+            {
                 check.fail(format!("the record does not include `{wanted}`"));
             }
         }
-        match terms.iter().find(|t| t.ends_with("all") && t.len() <= 4).map(String::as_str) {
+        match terms
+            .iter()
+            .find(|t| t.ends_with("all") && t.len() <= 4)
+            .map(String::as_str)
+        {
             Some("+all" | "all") => check.fail("`+all` lets anyone send as this domain"),
             Some("?all") => check.warn("`?all` is neutral: use `~all` or `-all`"),
             Some(_) => {}
@@ -359,15 +384,13 @@ impl SendingDomains {
             .iter()
             .filter(|t| {
                 let t = t.trim_start_matches(['+', '-', '~', '?']);
-                SPF_LOOKUPS
-                    .iter()
-                    .any(|m| {
-                        if m.ends_with([':', '/', '=']) {
-                            t.starts_with(m)
-                        } else {
-                            t == *m
-                        }
-                    })
+                SPF_LOOKUPS.iter().any(|m| {
+                    if m.ends_with([':', '/', '=']) {
+                        t.starts_with(m)
+                    } else {
+                        t == *m
+                    }
+                })
             })
             .count();
         if lookups > 10 {
@@ -440,7 +463,9 @@ impl SendingDomains {
         if let Some(pct) = tags.get("pct")
             && pct != "100"
         {
-            check.warn(format!("`pct={pct}` applies the policy to part of the mail only"));
+            check.warn(format!(
+                "`pct={pct}` applies the policy to part of the mail only"
+            ));
         }
         if !tags.contains_key("rua") {
             check.warn("no `rua=` address: you get no aggregate reports");

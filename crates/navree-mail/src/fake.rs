@@ -85,7 +85,10 @@ impl MailFake {
                 .iter()
                 .map(|(_, m)| format!("[{}: {:?}]", m.to.join(", "), m.subject))
                 .collect();
-            panic!("no sent message matches the predicate; sent: {}", sent.join(", "));
+            panic!(
+                "no sent message matches the predicate; sent: {}",
+                sent.join(", ")
+            );
         }
     }
 
@@ -99,13 +102,22 @@ impl MailFake {
     }
 
     /// Reports the last message to `recipient` delivered.
-    pub async fn deliver(&self, app: &AppContext, recipient: &str) -> Result<Option<Delivery>, MailError> {
-        self.report(app, recipient, MailEventKind::Delivered, |e| e).await
+    pub async fn deliver(
+        &self,
+        app: &AppContext,
+        recipient: &str,
+    ) -> Result<Option<Delivery>, MailError> {
+        self.report(app, recipient, MailEventKind::Delivered, |e| e)
+            .await
     }
 
     /// Reports a hard bounce for the last message to `recipient` (which
     /// suppresses the address with `mail.delivery.auto_suppress`).
-    pub async fn bounce(&self, app: &AppContext, recipient: &str) -> Result<Option<Delivery>, MailError> {
+    pub async fn bounce(
+        &self,
+        app: &AppContext,
+        recipient: &str,
+    ) -> Result<Option<Delivery>, MailError> {
         self.report(app, recipient, MailEventKind::Bounced, |e| {
             e.permanent().detail("550 5.1.1 user unknown")
         })
@@ -125,13 +137,23 @@ impl MailFake {
     }
 
     /// Reports a spam complaint about the last message to `recipient`.
-    pub async fn complain(&self, app: &AppContext, recipient: &str) -> Result<Option<Delivery>, MailError> {
-        self.report(app, recipient, MailEventKind::Complained, |e| e).await
+    pub async fn complain(
+        &self,
+        app: &AppContext,
+        recipient: &str,
+    ) -> Result<Option<Delivery>, MailError> {
+        self.report(app, recipient, MailEventKind::Complained, |e| e)
+            .await
     }
 
     /// Reports that `recipient` opened the last message sent to them.
-    pub async fn open(&self, app: &AppContext, recipient: &str) -> Result<Option<Delivery>, MailError> {
-        self.report(app, recipient, MailEventKind::Opened, |e| e).await
+    pub async fn open(
+        &self,
+        app: &AppContext,
+        recipient: &str,
+    ) -> Result<Option<Delivery>, MailError> {
+        self.report(app, recipient, MailEventKind::Opened, |e| e)
+            .await
     }
 
     /// Reports that `recipient` clicked `url` in the last message sent to
@@ -165,9 +187,12 @@ impl MailFake {
             .ok_or(MailError::NotFound("message sent to this recipient"))?;
         let event = build(ProviderEvent::new("fake", provider_id, kind).recipient(wanted));
         self.state().events.push(event.clone());
-        let deliveries = app.get::<Deliveries>().await.map_err(|error| MailError::Store {
-            source: Box::new(error),
-        })?;
+        let deliveries = app
+            .get::<Deliveries>()
+            .await
+            .map_err(|error| MailError::Store {
+                source: Box::new(error),
+            })?;
         deliveries.record(event).await
     }
 

@@ -125,7 +125,12 @@ impl SesTransport {
                 .map(|(name, value)| json!({ "Name": tag_text(name), "Value": tag_text(value) }))
                 .collect();
         }
-        if let Some(set) = self.config.configuration_set.as_deref().filter(|s| !s.is_empty()) {
+        if let Some(set) = self
+            .config
+            .configuration_set
+            .as_deref()
+            .filter(|s| !s.is_empty())
+        {
             request["ConfigurationSetName"] = json!(set);
         }
         Ok(request)

@@ -42,7 +42,11 @@ impl ResendTransport {
                 "the resend transport needs an `api_key`".to_owned(),
             ));
         }
-        let base = endpoint(config.endpoint.as_deref(), "https://api.resend.com", "resend")?;
+        let base = endpoint(
+            config.endpoint.as_deref(),
+            "https://api.resend.com",
+            "resend",
+        )?;
         let client = client_for(config.endpoint.as_ref().map(|_| &base))?;
         Ok(Self {
             config,

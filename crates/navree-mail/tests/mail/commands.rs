@@ -12,7 +12,10 @@ async fn mail_test_sends_a_test_message() {
     let mail = mail_app(|b| b).await;
 
     mail.app
-        .run_command("mail:test", &["ops@acme.test", "--subject", "Is mail working?"])
+        .run_command(
+            "mail:test",
+            &["ops@acme.test", "--subject", "Is mail working?"],
+        )
         .await
         .expect("mail:test");
 
@@ -25,7 +28,10 @@ async fn mail_test_sends_a_test_message() {
         .run_command("mail:test", &["ops@acme.test", "--via", "nope"])
         .await
         .unwrap_err();
-    assert!(error.to_string().contains("mail.transports.nope"), "{error}");
+    assert!(
+        error.to_string().contains("mail.transports.nope"),
+        "{error}"
+    );
 }
 
 #[tokio::test]
@@ -34,10 +40,18 @@ async fn mail_suppressions_adds_lists_and_removes() {
     let suppressions = mail.get::<Suppressions>().await;
 
     mail.app
-        .run_command("mail:suppressions", &["add", "eve@example.com", "--reason", "complaint"])
+        .run_command(
+            "mail:suppressions",
+            &["add", "eve@example.com", "--reason", "complaint"],
+        )
         .await
         .expect("add");
-    assert!(suppressions.is_suppressed(None, "eve@example.com").await.unwrap());
+    assert!(
+        suppressions
+            .is_suppressed(None, "eve@example.com")
+            .await
+            .unwrap()
+    );
     mail.app
         .run_command("mail:suppressions", &["list"])
         .await
@@ -46,14 +60,25 @@ async fn mail_suppressions_adds_lists_and_removes() {
         .run_command("mail:suppressions", &["remove", "eve@example.com"])
         .await
         .expect("remove");
-    assert!(!suppressions.is_suppressed(None, "eve@example.com").await.unwrap());
+    assert!(
+        !suppressions
+            .is_suppressed(None, "eve@example.com")
+            .await
+            .unwrap()
+    );
 
     let error = mail
         .app
-        .run_command("mail:suppressions", &["add", "eve@example.com", "--reason", "boredom"])
+        .run_command(
+            "mail:suppressions",
+            &["add", "eve@example.com", "--reason", "boredom"],
+        )
         .await
         .unwrap_err();
-    assert!(error.to_string().contains("unknown suppression reason"), "{error}");
+    assert!(
+        error.to_string().contains("unknown suppression reason"),
+        "{error}"
+    );
     let error = mail
         .app
         .run_command("mail:suppressions", &["purge"])
@@ -73,13 +98,22 @@ async fn mail_domains_checks_a_domain() {
     let dns = StaticResolver::new()
         .record("acme.test", "v=spf1 include:amazonses.com -all")
         .record("mail._domainkey.acme.test", &signer.dns_record())
-        .record("_dmarc.acme.test", "v=DMARC1; p=reject; rua=mailto:d@acme.test");
+        .record(
+            "_dmarc.acme.test",
+            "v=DMARC1; p=reject; rua=mailto:d@acme.test",
+        );
     let mail = mail_app(|b| b.override_value::<dyn DnsResolver>(Arc::new(dns))).await;
 
     mail.app
         .run_command(
             "mail:domains",
-            &["acme.test", "--selector", "mail", "--spf-include", "amazonses.com"],
+            &[
+                "acme.test",
+                "--selector",
+                "mail",
+                "--spf-include",
+                "amazonses.com",
+            ],
         )
         .await
         .expect("ready");
@@ -96,11 +130,22 @@ async fn the_fake_plays_the_provider() {
     let mail = mail_app(|b| b).await;
     let mailer = mail.mailer().await;
     mailer
-        .send_message(navree_mail::Message::new().to("ada@example.com").cc("bob@example.com").subject("One").text("1"))
+        .send_message(
+            navree_mail::Message::new()
+                .to("ada@example.com")
+                .cc("bob@example.com")
+                .subject("One")
+                .text("1"),
+        )
         .await
         .unwrap();
     mailer
-        .send_message(navree_mail::Message::new().to("bob@example.com").subject("Two").text("2"))
+        .send_message(
+            navree_mail::Message::new()
+                .to("bob@example.com")
+                .subject("Two")
+                .text("2"),
+        )
         .await
         .unwrap();
 
@@ -109,10 +154,19 @@ async fn the_fake_plays_the_provider() {
     assert_eq!(mail.fake.sent_to("ada@example.com")[0].subject, "One");
 
     // The event goes to the last message sent to the recipient.
-    let delivery = mail.fake.open(mail.app.ctx(), "bob@example.com").await.unwrap().unwrap();
+    let delivery = mail
+        .fake
+        .open(mail.app.ctx(), "bob@example.com")
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(delivery.provider_id.as_deref(), Some("fake-2"));
     assert_eq!(mail.fake.events()[0].provider_id.as_deref(), Some("fake-2"));
 
-    let error = mail.fake.bounce(mail.app.ctx(), "nobody@example.com").await.unwrap_err();
+    let error = mail
+        .fake
+        .bounce(mail.app.ctx(), "nobody@example.com")
+        .await
+        .unwrap_err();
     assert!(matches!(error, MailError::NotFound(_)));
 }

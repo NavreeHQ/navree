@@ -120,19 +120,32 @@ async fn a_hard_bounce_suppresses_the_address_and_later_mail_is_not_sent() {
 
     assert_eq!(delivery.id, first.delivery_id.unwrap());
     assert_eq!(delivery.status, DeliveryStatus::Bounced);
-    let events = mail.get::<Deliveries>().await.events(delivery.id).await.expect("events");
+    let events = mail
+        .get::<Deliveries>()
+        .await
+        .events(delivery.id)
+        .await
+        .expect("events");
     assert_eq!(events.len(), 1);
     assert_eq!(events[0].kind, MailEventKind::Bounced);
     assert_eq!(events[0].bounce_type.as_deref(), Some("hard"));
     assert_eq!(events[0].provider, "fake");
-    assert_eq!(events[0].recipient_hash.as_deref(), Some(hash("ada@example.com").as_str()));
+    assert_eq!(
+        events[0].recipient_hash.as_deref(),
+        Some(hash("ada@example.com").as_str())
+    );
     let event = bounced.try_recv().expect("MailBounced emitted");
     assert_eq!(event["permanent"], true);
     assert_eq!(event["recipient"], "ada@example.com");
     assert_eq!(event["delivery_id"], json!(delivery.id));
 
     let suppressions = mail.get::<Suppressions>().await;
-    assert!(suppressions.is_suppressed(None, "ADA@example.com").await.unwrap());
+    assert!(
+        suppressions
+            .is_suppressed(None, "ADA@example.com")
+            .await
+            .unwrap()
+    );
 
     // The next message is not sent, and is logged as suppressed.
     let second = mail
@@ -156,7 +169,11 @@ async fn a_hard_bounce_suppresses_the_address_and_later_mail_is_not_sent() {
 #[tokio::test]
 async fn soft_bounces_and_deferrals_change_nothing() {
     let mail = app().await;
-    mail.mailer().await.send(&welcome("ada@example.com")).await.unwrap();
+    mail.mailer()
+        .await
+        .send(&welcome("ada@example.com"))
+        .await
+        .unwrap();
 
     let delivery = mail
         .fake
@@ -167,13 +184,22 @@ async fn soft_bounces_and_deferrals_change_nothing() {
 
     assert_eq!(delivery.status, DeliveryStatus::Sent);
     let suppressions = mail.get::<Suppressions>().await;
-    assert!(!suppressions.is_suppressed(None, "ada@example.com").await.unwrap());
+    assert!(
+        !suppressions
+            .is_suppressed(None, "ada@example.com")
+            .await
+            .unwrap()
+    );
 }
 
 #[tokio::test]
 async fn a_complaint_suppresses_with_its_reason() {
     let mail = app().await;
-    mail.mailer().await.send(&welcome("ada@example.com")).await.unwrap();
+    mail.mailer()
+        .await
+        .send(&welcome("ada@example.com"))
+        .await
+        .unwrap();
 
     let delivery = mail
         .fake
@@ -197,9 +223,18 @@ async fn a_complaint_suppresses_with_its_reason() {
 async fn deliveries_opens_and_clicks_are_stamped() {
     let mail = app().await;
     let mut clicked = mail.events("mail.clicked").await;
-    mail.mailer().await.send(&welcome("ada@example.com")).await.unwrap();
+    mail.mailer()
+        .await
+        .send(&welcome("ada@example.com"))
+        .await
+        .unwrap();
 
-    let delivered = mail.fake.deliver(mail.app.ctx(), "ada@example.com").await.unwrap().unwrap();
+    let delivered = mail
+        .fake
+        .deliver(mail.app.ctx(), "ada@example.com")
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(delivered.status, DeliveryStatus::Delivered);
     assert_eq!(delivered.opened_at, None);
 
@@ -210,21 +245,39 @@ async fn deliveries_opens_and_clicks_are_stamped() {
         .unwrap()
         .unwrap();
     assert_eq!(clicked_delivery.status, DeliveryStatus::Delivered);
-    assert!(clicked_delivery.opened_at.is_some(), "a click implies an open");
+    assert!(
+        clicked_delivery.opened_at.is_some(),
+        "a click implies an open"
+    );
     assert!(clicked_delivery.clicked_at.is_some());
-    assert_eq!(clicked.try_recv().unwrap()["url"], "https://acme.test/start");
+    assert_eq!(
+        clicked.try_recv().unwrap()["url"],
+        "https://acme.test/start"
+    );
     assert_eq!(mail.fake.events().len(), 2);
 }
 
 #[tokio::test]
 async fn auto_suppression_can_be_turned_off() {
     let mail = mail_app(|b| b.config("mail.delivery.auto_suppress", false)).await;
-    mail.mailer().await.send(&welcome("ada@example.com")).await.unwrap();
+    mail.mailer()
+        .await
+        .send(&welcome("ada@example.com"))
+        .await
+        .unwrap();
 
-    mail.fake.bounce(mail.app.ctx(), "ada@example.com").await.unwrap();
+    mail.fake
+        .bounce(mail.app.ctx(), "ada@example.com")
+        .await
+        .unwrap();
 
     let suppressions = mail.get::<Suppressions>().await;
-    assert!(!suppressions.is_suppressed(None, "ada@example.com").await.unwrap());
+    assert!(
+        !suppressions
+            .is_suppressed(None, "ada@example.com")
+            .await
+            .unwrap()
+    );
 }
 
 #[tokio::test]
@@ -243,7 +296,12 @@ async fn events_for_unknown_messages_are_still_recorded() {
 
     assert_eq!(found, None);
     let suppressions = mail.get::<Suppressions>().await;
-    assert!(suppressions.is_suppressed(None, "eve@example.com").await.unwrap());
+    assert!(
+        suppressions
+            .is_suppressed(None, "eve@example.com")
+            .await
+            .unwrap()
+    );
 }
 
 #[tokio::test]
@@ -253,16 +311,34 @@ async fn suppressions_apply_per_workspace_and_everywhere() {
     let suppressions = mail.get::<Suppressions>().await;
     let uow = mail.uow().await;
     suppressions
-        .add(&uow, Some(a), "ada@example.com", SuppressionReason::Unsubscribed, None)
+        .add(
+            &uow,
+            Some(a),
+            "ada@example.com",
+            SuppressionReason::Unsubscribed,
+            None,
+        )
         .await
         .unwrap();
     suppressions
-        .add(&uow, None, "eve@example.com", SuppressionReason::Manual, Some("spam trap".into()))
+        .add(
+            &uow,
+            None,
+            "eve@example.com",
+            SuppressionReason::Manual,
+            Some("spam trap".into()),
+        )
         .await
         .unwrap();
     // Adding again returns the existing row.
     let again = suppressions
-        .add(&uow, Some(a), "Ada@Example.com", SuppressionReason::Manual, None)
+        .add(
+            &uow,
+            Some(a),
+            "Ada@Example.com",
+            SuppressionReason::Manual,
+            None,
+        )
         .await
         .unwrap();
     assert_eq!(again.reason, SuppressionReason::Unsubscribed);
@@ -271,7 +347,13 @@ async fn suppressions_apply_per_workspace_and_everywhere() {
 
     let in_a = mailer
         .for_scope(&MailScope::workspace(a))
-        .deliver(&Message::new().to("ada@example.com").to("bob@example.com").subject("Hi").text("Hi"))
+        .deliver(
+            &Message::new()
+                .to("ada@example.com")
+                .to("bob@example.com")
+                .subject("Hi")
+                .text("Hi"),
+        )
         .await
         .unwrap();
     assert_eq!(in_a.status, DeliveryStatus::Sent);
@@ -310,10 +392,25 @@ async fn suppressions_apply_per_workspace_and_everywhere() {
 
     // Removing a suppression.
     let uow = mail.uow().await;
-    assert!(suppressions.remove_email(&uow, Some(a), "ada@example.com").await.unwrap());
-    assert!(!suppressions.remove_email(&uow, Some(a), "ada@example.com").await.unwrap());
+    assert!(
+        suppressions
+            .remove_email(&uow, Some(a), "ada@example.com")
+            .await
+            .unwrap()
+    );
+    assert!(
+        !suppressions
+            .remove_email(&uow, Some(a), "ada@example.com")
+            .await
+            .unwrap()
+    );
     uow.commit().await.unwrap();
-    assert!(!suppressions.is_suppressed(Some(a), "ada@example.com").await.unwrap());
+    assert!(
+        !suppressions
+            .is_suppressed(Some(a), "ada@example.com")
+            .await
+            .unwrap()
+    );
 }
 
 #[tokio::test]
@@ -322,12 +419,23 @@ async fn suppression_checks_can_be_turned_off() {
     let uow = mail.uow().await;
     mail.get::<Suppressions>()
         .await
-        .add(&uow, None, "ada@example.com", SuppressionReason::Manual, None)
+        .add(
+            &uow,
+            None,
+            "ada@example.com",
+            SuppressionReason::Manual,
+            None,
+        )
         .await
         .unwrap();
     uow.commit().await.unwrap();
 
-    let report = mail.mailer().await.deliver(&welcome("ada@example.com")).await.unwrap();
+    let report = mail
+        .mailer()
+        .await
+        .deliver(&welcome("ada@example.com"))
+        .await
+        .unwrap();
 
     assert_eq!(report.status, DeliveryStatus::Sent);
 }
@@ -367,7 +475,8 @@ async fn held_mail_waits_in_the_outbox_until_released() {
     let released = outbox.release(id, Some(admin)).await.unwrap();
 
     assert_eq!(released.status, DeliveryStatus::Sent);
-    mail.fake.assert_sent(|m| m.subject == "Welcome" && m.hold.is_some());
+    mail.fake
+        .assert_sent(|m| m.subject == "Welcome" && m.hold.is_some());
     let held = outbox.find(id).await.unwrap();
     assert_eq!(held.status, OutboxStatus::Released);
     assert_eq!(held.decided_by, Some(admin));
@@ -403,9 +512,18 @@ async fn discarded_mail_is_never_sent() {
     let discarded = outbox.discard(id, None).await.unwrap();
 
     assert_eq!(discarded.status, OutboxStatus::Discarded);
-    assert!(matches!(outbox.release(id, None).await, Err(MailError::Conflict(_))));
-    assert!(matches!(outbox.discard(id, None).await, Err(MailError::Conflict(_))));
-    assert!(matches!(outbox.find(Uuid::now_v7()).await, Err(MailError::NotFound(_))));
+    assert!(matches!(
+        outbox.release(id, None).await,
+        Err(MailError::Conflict(_))
+    ));
+    assert!(matches!(
+        outbox.discard(id, None).await,
+        Err(MailError::Conflict(_))
+    ));
+    assert!(matches!(
+        outbox.find(Uuid::now_v7()).await,
+        Err(MailError::NotFound(_))
+    ));
     mail.fake.assert_nothing_sent();
 }
 
@@ -425,14 +543,15 @@ async fn held_mail_needs_an_app_key() {
 
 #[tokio::test]
 async fn delivery_without_a_database_fails_the_boot() {
-    let error = TestApp::builder()
+    let Err(error) = TestApp::builder()
         .config("mail.delivery.enabled", true)
         .module(view_module())
         .module(MailModule::from_config())
         .try_build()
         .await
-        .err()
-        .expect("the boot fails");
+    else {
+        panic!("the boot should fail");
+    };
 
     assert!(error.to_string().contains("DatabaseModule"), "{error}");
 }
@@ -441,7 +560,12 @@ async fn delivery_without_a_database_fails_the_boot() {
 async fn without_the_pipeline_nothing_is_logged() {
     let mail = mail_app(|b| b.config("mail.delivery.enabled", false)).await;
 
-    let report = mail.mailer().await.deliver(&welcome("ada@example.com")).await.unwrap();
+    let report = mail
+        .mailer()
+        .await
+        .deliver(&welcome("ada@example.com"))
+        .await
+        .unwrap();
 
     assert_eq!(report.delivery_id, None);
     let page = mail

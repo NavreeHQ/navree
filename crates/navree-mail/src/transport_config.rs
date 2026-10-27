@@ -104,9 +104,7 @@ impl TransportConfig {
             }
             TransportConfig::Ses(config) => Arc::new(SesTransport::new(config.clone())?),
             TransportConfig::Mailgun(config) => Arc::new(MailgunTransport::new(config.clone())?),
-            TransportConfig::Postmark(config) => {
-                Arc::new(PostmarkTransport::new(config.clone())?)
-            }
+            TransportConfig::Postmark(config) => Arc::new(PostmarkTransport::new(config.clone())?),
             TransportConfig::Resend(config) => Arc::new(ResendTransport::new(config.clone())?),
             TransportConfig::Log => Arc::new(LogTransport),
             TransportConfig::Array => Arc::new(ArrayTransport::new()),
@@ -162,13 +160,21 @@ impl TransportConfig {
                     "secret_access_key".to_owned(),
                     secret(&config.secret_access_key),
                 );
-                optional(&mut map, "session_token", config.session_token.as_ref().map(secret));
+                optional(
+                    &mut map,
+                    "session_token",
+                    config.session_token.as_ref().map(secret),
+                );
                 optional(
                     &mut map,
                     "configuration_set",
                     config.configuration_set.as_ref().map(|s| json!(s)),
                 );
-                optional(&mut map, "endpoint", config.endpoint.as_ref().map(|s| json!(s)));
+                optional(
+                    &mut map,
+                    "endpoint",
+                    config.endpoint.as_ref().map(|s| json!(s)),
+                );
             }
             TransportConfig::Mailgun(config) => {
                 map.insert("domain".to_owned(), json!(config.domain));
@@ -180,7 +186,11 @@ impl TransportConfig {
                         MailgunRegion::Eu => "eu",
                     }),
                 );
-                optional(&mut map, "endpoint", config.endpoint.as_ref().map(|s| json!(s)));
+                optional(
+                    &mut map,
+                    "endpoint",
+                    config.endpoint.as_ref().map(|s| json!(s)),
+                );
             }
             TransportConfig::Postmark(config) => {
                 map.insert("server_token".to_owned(), secret(&config.server_token));
@@ -189,11 +199,19 @@ impl TransportConfig {
                     "message_stream",
                     config.message_stream.as_ref().map(|s| json!(s)),
                 );
-                optional(&mut map, "endpoint", config.endpoint.as_ref().map(|s| json!(s)));
+                optional(
+                    &mut map,
+                    "endpoint",
+                    config.endpoint.as_ref().map(|s| json!(s)),
+                );
             }
             TransportConfig::Resend(config) => {
                 map.insert("api_key".to_owned(), secret(&config.api_key));
-                optional(&mut map, "endpoint", config.endpoint.as_ref().map(|s| json!(s)));
+                optional(
+                    &mut map,
+                    "endpoint",
+                    config.endpoint.as_ref().map(|s| json!(s)),
+                );
             }
             TransportConfig::Log | TransportConfig::Array => {}
             TransportConfig::Failover(transports) => {

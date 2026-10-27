@@ -6,7 +6,9 @@ use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use navree_db::{Page, PageQuery, paginate};
 use sea_orm::ActiveValue::{Set, Unchanged};
-use sea_orm::{ActiveModelTrait as _, ColumnTrait as _, EntityTrait as _, QueryFilter as _, QueryOrder as _};
+use sea_orm::{
+    ActiveModelTrait as _, ColumnTrait as _, EntityTrait as _, QueryFilter as _, QueryOrder as _,
+};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -170,7 +172,10 @@ impl Deliveries {
     }
 
     /// The delivery whose provider id is `provider_id`.
-    pub async fn find_by_provider_id(&self, provider_id: &str) -> Result<Option<Delivery>, MailError> {
+    pub async fn find_by_provider_id(
+        &self,
+        provider_id: &str,
+    ) -> Result<Option<Delivery>, MailError> {
         let db = self.store.db().await?;
         Ok(delivery::Entity::find()
             .filter(delivery::Column::ProviderId.eq(provider_id))
@@ -256,9 +261,8 @@ impl Deliveries {
                     provider: Set(event.provider.clone()),
                     kind: Set(event.kind.as_str().to_owned()),
                     recipient_hash: Set(event.recipient.as_deref().map(recipient_hash)),
-                    bounce_type: Set((event.kind == MailEventKind::Bounced).then(|| {
-                        if event.permanent { "hard" } else { "soft" }.to_owned()
-                    })),
+                    bounce_type: Set((event.kind == MailEventKind::Bounced)
+                        .then(|| if event.permanent { "hard" } else { "soft" }.to_owned())),
                     url: Set(event.url.clone()),
                     detail: Set(event
                         .detail

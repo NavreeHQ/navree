@@ -5,8 +5,8 @@ use std::sync::Arc;
 
 use navree_mail::entity::transport;
 use navree_mail::{
-    ArrayTransport, DeliveryStatus, MailError, MailScope, MailTransport, Message,
-    TransportConfig, TransportOwner, TransportResolver, TransportTier,
+    ArrayTransport, DeliveryStatus, MailError, MailScope, MailTransport, Message, TransportConfig,
+    TransportOwner, TransportResolver, TransportTier,
 };
 use sea_orm::EntityTrait as _;
 use serde_json::json;
@@ -62,11 +62,26 @@ async fn the_most_specific_tier_wins() {
     assert_eq!(tier("hello@acme.test").await, TransportTier::Config);
     set(&mail, TransportOwner::Platform, &TransportConfig::Array).await;
     assert_eq!(tier("hello@acme.test").await, TransportTier::Platform);
-    set(&mail, TransportOwner::organization(organization), &TransportConfig::Array).await;
+    set(
+        &mail,
+        TransportOwner::organization(organization),
+        &TransportConfig::Array,
+    )
+    .await;
     assert_eq!(tier("hello@acme.test").await, TransportTier::Organization);
-    set(&mail, TransportOwner::workspace(workspace), &TransportConfig::Array).await;
+    set(
+        &mail,
+        TransportOwner::workspace(workspace),
+        &TransportConfig::Array,
+    )
+    .await;
     assert_eq!(tier("hello@acme.test").await, TransportTier::Workspace);
-    set(&mail, TransportOwner::domain("ACME.test"), &TransportConfig::Array).await;
+    set(
+        &mail,
+        TransportOwner::domain("ACME.test"),
+        &TransportConfig::Array,
+    )
+    .await;
     assert_eq!(tier("Acme <hello@acme.test>").await, TransportTier::Domain);
     // Another sender domain skips the domain tier.
     assert_eq!(tier("hello@other.test").await, TransportTier::Workspace);
@@ -78,7 +93,12 @@ async fn the_most_specific_tier_wins() {
 async fn a_workspaces_domain_is_not_used_for_another_workspace() {
     let mail = mail_app(|b| b).await;
     let (a, b) = (Uuid::now_v7(), Uuid::now_v7());
-    set(&mail, TransportOwner::workspace_domain("acme.test", a), &TransportConfig::Array).await;
+    set(
+        &mail,
+        TransportOwner::workspace_domain("acme.test", a),
+        &TransportConfig::Array,
+    )
+    .await;
     let mailer = mail.mailer().await;
 
     let for_a = mailer
@@ -100,12 +120,25 @@ async fn a_workspaces_domain_is_not_used_for_another_workspace() {
 async fn the_resolved_transport_delivers_and_is_reused() {
     let mail = mail_app(|b| b).await;
     let workspace = Uuid::now_v7();
-    set(&mail, TransportOwner::workspace(workspace), &TransportConfig::Array).await;
+    set(
+        &mail,
+        TransportOwner::workspace(workspace),
+        &TransportConfig::Array,
+    )
+    .await;
     let resolver = mail.get::<TransportResolver>().await;
     let scope = MailScope::workspace(workspace);
 
-    let first = resolver.resolve(&scope, None).await.unwrap().expect("resolved");
-    let second = resolver.resolve(&scope, None).await.unwrap().expect("resolved");
+    let first = resolver
+        .resolve(&scope, None)
+        .await
+        .unwrap()
+        .expect("resolved");
+    let second = resolver
+        .resolve(&scope, None)
+        .await
+        .unwrap()
+        .expect("resolved");
     assert!(Arc::ptr_eq(&first.transport, &second.transport), "cached");
 
     let report = mail
@@ -163,14 +196,24 @@ async fn settings_are_stored_encrypted_and_replaced_in_place() {
         .await
         .unwrap()
         .unwrap();
-    assert!(!model.config.contains("topsecret"), "the settings are encrypted");
+    assert!(
+        !model.config.contains("topsecret"),
+        "the settings are encrypted"
+    );
     assert_eq!(resolver.config(stored.id).await.unwrap(), ses);
 
     set(&mail, owner.clone(), &TransportConfig::Log).await;
     let replaced = resolver.get(&owner).await.unwrap().unwrap();
     assert_eq!(replaced.id, stored.id);
     assert_eq!(replaced.kind, "log");
-    assert_eq!(resolver.list(Some(TransportTier::Platform)).await.unwrap().len(), 1);
+    assert_eq!(
+        resolver
+            .list(Some(TransportTier::Platform))
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
 }
 
 #[tokio::test]
@@ -189,9 +232,10 @@ async fn tenants_cannot_point_transports_at_private_networks_or_other_endpoints(
     let error = resolver.usable(&local).await.unwrap_err();
     assert!(matches!(error, MailError::Unusable(_)), "{error}");
 
-    let endpoint: TransportConfig =
-        serde_json::from_value(json!("resend://re_1@api.resend.com?endpoint=https://evil.test"))
-            .unwrap();
+    let endpoint: TransportConfig = serde_json::from_value(json!(
+        "resend://re_1@api.resend.com?endpoint=https://evil.test"
+    ))
+    .unwrap();
     let error = resolver.set(&uow, owner, &endpoint).await.unwrap_err();
     assert!(error.to_string().contains("endpoint"), "{error}");
 
@@ -208,14 +252,20 @@ async fn usable_runs_the_transports_check() {
     let mail = mail_app(|b| b).await;
     let resolver = mail.get::<TransportResolver>().await;
 
-    resolver.usable(&TransportConfig::Array).await.expect("usable");
+    resolver
+        .usable(&TransportConfig::Array)
+        .await
+        .expect("usable");
 
     let unreachable = TransportConfig::smtp("smtp://u:p@smtp.invalid:2525");
     let error = resolver.usable(&unreachable).await.unwrap_err();
     assert!(matches!(error, MailError::Unusable(_)), "{error}");
 
     let invalid = TransportConfig::Failover(Vec::new());
-    assert!(matches!(resolver.usable(&invalid).await, Err(MailError::Config(_))));
+    assert!(matches!(
+        resolver.usable(&invalid).await,
+        Err(MailError::Config(_))
+    ));
 }
 
 #[tokio::test]
@@ -226,7 +276,11 @@ async fn a_domain_owner_needs_a_domain_name() {
     let error = mail
         .get::<TransportResolver>()
         .await
-        .set(&uow, TransportOwner::domain("localhost"), &TransportConfig::Array)
+        .set(
+            &uow,
+            TransportOwner::domain("localhost"),
+            &TransportConfig::Array,
+        )
         .await
         .unwrap_err();
 
@@ -238,7 +292,12 @@ async fn a_domain_owner_needs_a_domain_name() {
 async fn via_bypasses_tenant_transports() {
     let mail = mail_app(|b| b.config("mail.transports.simulation", "array")).await;
     let workspace = Uuid::now_v7();
-    set(&mail, TransportOwner::workspace(workspace), &TransportConfig::Log).await;
+    set(
+        &mail,
+        TransportOwner::workspace(workspace),
+        &TransportConfig::Log,
+    )
+    .await;
 
     let report = mail
         .mailer()
