@@ -255,3 +255,9 @@ required-features = ["graphql"]
 [[test]]
 name = "grpc"
 required-features = ["grpc"]
+
+# The documents docs examples through the facade
+# (`cargo test -p navree --features documents --test documents`).
+[[test]]
+name = "documents"
+required-features = ["documents"]
