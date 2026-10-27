@@ -23,6 +23,7 @@ full = [
     "cache",
     "crypto",
     "db",
+    "directory",
     "events",
     "fleet",
     "helm",
@@ -523,6 +524,23 @@ workflows = [
     "schedule",
     "workspace",
 ]
+## Directory sync: a SCIM 2.0 server and pull connectors (Microsoft Graph
+## with delta queries, Google Workspace, Okta, LDAP and Active Directory
+## through ldap3 with rustls) that sync users and groups into the app in
+## runs with dry runs, a deactivation limit and progress (pure Rust; in
+## `full`).
+directory = [
+    "dep:navree-directory",
+    "http",
+    "crypto",
+    "events",
+    "db",
+    "orm",
+    "queue",
+    "schedule",
+    "workspace",
+    "integrations",
+]
 ## PostgreSQL driver for navree-db.
 postgres = ["db", "navree-db/postgres"]
 ## MySQL and MariaDB driver for navree-db (`mysql://` and `mariadb://` URLs).
@@ -573,6 +591,7 @@ navree-search = { workspace = true, optional = true }
 navree-cache = { workspace = true, optional = true }
 navree-crypto = { workspace = true, optional = true }
 navree-db = { workspace = true, optional = true }
+navree-directory = { workspace = true, optional = true }
 navree-dock = { workspace = true, optional = true }
 navree-documents = { workspace = true, optional = true }
 navree-navigator = { workspace = true, optional = true }
