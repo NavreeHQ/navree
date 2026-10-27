@@ -130,13 +130,20 @@ async fn hand_written_operators_and_null_safe_inequality() {
         .await
         .unwrap_err();
     assert!(error.to_string().contains("is not an operator SQLite conditions take"), "{error}");
-    // Without a registered `regexp` function SQLite refuses the statement.
+    // Without a registered `regexp` function SQLite cannot run it.
     let error = Company::query()
         .where_(Company::NAME.regex("^A"))
         .get(&t.db)
         .await
         .unwrap_err();
-    assert!(error.to_string().to_lowercase().contains("regexp"), "{error}");
+    assert!(
+        matches!(error, navree_orm::OrmError::Unsupported { .. }),
+        "{error:?}"
+    );
+    assert_eq!(
+        error.to_string(),
+        "a regular expression without a `regexp` function registered on the connection is not supported on SQLite"
+    );
     let _ = col("unused");
     assert_eq!(Company::meta().table(), "companies");
 }

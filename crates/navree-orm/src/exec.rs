@@ -604,12 +604,17 @@ impl<'a> SqlTarget<'a> {
         ensure_free(self.conn.transaction_id())?;
         self.announce(&statement.sql);
         let statement = statement.to_sea_orm();
-        Ok(match &self.conn {
-            SqlConn::Pool(conn) => read_again_if_lost(conn, statement, |conn, s| conn.query_all_raw(s)).await?,
-            SqlConn::Owned(conn) => read_again_if_lost(conn, statement, |conn, s| conn.query_all_raw(s)).await?,
-            SqlConn::Transaction(tx) => tx.query_all_raw(statement).await?,
-            SqlConn::TransactionRef(tx) => tx.query_all_raw(statement).await?,
-        })
+        let rows = match &self.conn {
+            SqlConn::Pool(conn) => {
+                read_again_if_lost(conn, statement, |conn, s| conn.query_all_raw(s)).await
+            }
+            SqlConn::Owned(conn) => {
+                read_again_if_lost(conn, statement, |conn, s| conn.query_all_raw(s)).await
+            }
+            SqlConn::Transaction(tx) => tx.query_all_raw(statement).await,
+            SqlConn::TransactionRef(tx) => tx.query_all_raw(statement).await,
+        };
+        rows.map_err(|error| self.error(error))
     }
 
     /// Runs `statement` and returns its first row (read again once outside
@@ -619,12 +624,17 @@ impl<'a> SqlTarget<'a> {
         ensure_free(self.conn.transaction_id())?;
         self.announce(&statement.sql);
         let statement = statement.to_sea_orm();
-        Ok(match &self.conn {
-            SqlConn::Pool(conn) => read_again_if_lost(conn, statement, |conn, s| conn.query_one_raw(s)).await?,
-            SqlConn::Owned(conn) => read_again_if_lost(conn, statement, |conn, s| conn.query_one_raw(s)).await?,
-            SqlConn::Transaction(tx) => tx.query_one_raw(statement).await?,
-            SqlConn::TransactionRef(tx) => tx.query_one_raw(statement).await?,
-        })
+        let row = match &self.conn {
+            SqlConn::Pool(conn) => {
+                read_again_if_lost(conn, statement, |conn, s| conn.query_one_raw(s)).await
+            }
+            SqlConn::Owned(conn) => {
+                read_again_if_lost(conn, statement, |conn, s| conn.query_one_raw(s)).await
+            }
+            SqlConn::Transaction(tx) => tx.query_one_raw(statement).await,
+            SqlConn::TransactionRef(tx) => tx.query_one_raw(statement).await,
+        };
+        row.map_err(|error| self.error(error))
     }
 
     /// Runs `statement` for its effect.
@@ -632,12 +642,31 @@ impl<'a> SqlTarget<'a> {
         ensure_free(self.conn.transaction_id())?;
         self.announce(&statement.sql);
         let statement = statement.to_sea_orm();
-        Ok(match &self.conn {
-            SqlConn::Pool(conn) => conn.execute_raw(statement).await?,
-            SqlConn::Owned(conn) => conn.execute_raw(statement).await?,
-            SqlConn::Transaction(tx) => tx.execute_raw(statement).await?,
-            SqlConn::TransactionRef(tx) => tx.execute_raw(statement).await?,
-        })
+        let result = match &self.conn {
+            SqlConn::Pool(conn) => conn.execute_raw(statement).await,
+            SqlConn::Owned(conn) => conn.execute_raw(statement).await,
+            SqlConn::Transaction(tx) => tx.execute_raw(statement).await,
+            SqlConn::TransactionRef(tx) => tx.execute_raw(statement).await,
+        };
+        result.map_err(|error| self.error(error))
+    }
+
+    /// The ORM error for a database error: SQLite without a registered
+    /// `regexp` function cannot run regular expressions (`Unsupported`);
+    /// anything else is the database's error.
+    fn error(&self, error: sea_orm::DbErr) -> OrmError {
+        if self.dialect == Dialect::Sqlite
+            && error
+                .to_string()
+                .to_ascii_lowercase()
+                .contains("no such function: regexp")
+        {
+            return OrmError::unsupported(
+                "a regular expression without a `regexp` function registered on the connection",
+                "SQLite",
+            );
+        }
+        OrmError::Db(error)
     }
 
     /// Runs `sql` as written, without values (several statements may be
