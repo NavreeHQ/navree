@@ -1,0 +1,18 @@
+{
+  "name": "navree-js",
+  "private": true,
+  "description": "Navree's front-end packages: @navree/client, @navree/bff, @navree/next, @navree/nuxt and @navree/theme.",
+  "type": "module",
+  "packageManager": "pnpm@11.25.0",
+  "scripts": {
+    "build": "pnpm --filter @navree/client --filter @navree/bff --filter @navree/theme build && pnpm --filter @navree/next --filter @navree/nuxt build",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "check": "pnpm typecheck && pnpm test && pnpm build"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "typescript": "5.9.3",
+    "vitest": "5.0.5"
+  }
+}
