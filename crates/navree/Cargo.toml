@@ -208,6 +208,7 @@ flags = [
     "audit",
     "workspace",
     "auth",
+    "orm",
 ]
 ## L6 (opt-in, not in `full`)
 ## GraphQL: `GraphqlModule`, `#[resolver]`, dataloaders, subscriptions.
@@ -264,6 +265,7 @@ billing = [
     "schedule",
     "auth",
     "workspace",
+    "orm",
 ]
 ## L6 (ecosystem, opt-in: not in `full`)
 ## MCP servers: `McpModule`, `#[mcp_server]`, streamable HTTP and stdio.
@@ -327,6 +329,7 @@ lighthouse = [
     "schedule",
     "access",
     "auth",
+    "orm",
 ]
 ## L7 (in `full`)
 ## Logbook: the local debugging timeline at `/_logbook` (requests, queries,

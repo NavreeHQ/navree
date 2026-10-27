@@ -9,6 +9,7 @@ mod commands;
 mod fake;
 mod http;
 mod module;
+mod orm;
 mod resolution;
 mod rollout;
 mod store;
