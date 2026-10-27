@@ -194,11 +194,7 @@ fn normalize_domain(domain: &str) -> Result<String, SsoError> {
         .rsplit('.')
         .next()
         .is_some_and(|tld| tld.chars().any(|c| c.is_ascii_lowercase()));
-    if domain.len() > 253
-        || !domain.contains('.')
-        || !domain.split('.').all(label_ok)
-        || !tld_ok
-    {
+    if domain.len() > 253 || !domain.contains('.') || !domain.split('.').all(label_ok) || !tld_ok {
         return Err(SsoError::invalid(
             "domain",
             "domain must be a domain name such as acme.com",
@@ -498,7 +494,11 @@ impl Sso {
         let found = match owner {
             SsoOwner::App => true,
             SsoOwner::Workspace(id) => {
-                if app.try_get::<navree_workspace::Workspaces>().await.is_none() {
+                if app
+                    .try_get::<navree_workspace::Workspaces>()
+                    .await
+                    .is_none()
+                {
                     return Err(needs_workspaces());
                 }
                 navree_workspace::entity::workspace::Entity::find_by_id(id)
@@ -507,7 +507,11 @@ impl Sso {
                     .is_some()
             }
             SsoOwner::Organization(id) => {
-                if app.try_get::<navree_workspace::Organizations>().await.is_none() {
+                if app
+                    .try_get::<navree_workspace::Organizations>()
+                    .await
+                    .is_none()
+                {
                     return Err(needs_workspaces());
                 }
                 // Without organizations (`workspace.organizations.enabled`)
@@ -1226,8 +1230,11 @@ impl Sso {
                 .map(str::to_owned),
         };
         let profile = SsoProfile::from_saml(&assertion, &loaded.provisioning.attributes);
-        let started = state.is_some().then(|| relay_state.unwrap_or_default().to_owned());
-        self.finish(&loaded, profile, return_to, started, meta).await
+        let started = state
+            .is_some()
+            .then(|| relay_state.unwrap_or_default().to_owned());
+        self.finish(&loaded, profile, return_to, started, meta)
+            .await
     }
 
     /// Finishes an OpenID Connect sign-in at the callback of connection
@@ -1304,8 +1311,14 @@ impl Sso {
             oidc::merge_userinfo(&self.http, &discovery, access_token, &mut claims).await?;
         }
         let profile = SsoProfile::from_claims(&claims, mapping);
-        self.finish(&loaded, profile, state.return_to, callback.state.clone(), meta)
-            .await
+        self.finish(
+            &loaded,
+            profile,
+            state.return_to,
+            callback.state.clone(),
+            meta,
+        )
+        .await
     }
 
     /// Signs `profile` in with connection `key`, as the flows do after
@@ -1630,10 +1643,9 @@ impl Sso {
             .await?
             .ok_or(SsoError::InvalidCode)?;
         if let Some(state) = state
-            && !pending
-                .state
-                .as_deref()
-                .is_some_and(|started| navree_crypto::constant_time_eq(started.as_bytes(), state.as_bytes()))
+            && !pending.state.as_deref().is_some_and(|started| {
+                navree_crypto::constant_time_eq(started.as_bytes(), state.as_bytes())
+            })
         {
             return Err(SsoError::InvalidCode);
         }
