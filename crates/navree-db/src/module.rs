@@ -161,7 +161,7 @@ fn register(m: &mut ModuleBuilder, options: Option<DbOptions>) {
         ))
         .command(CommandSpec::new(
             "migrate:status",
-            "Show which migrations have run ([--pending])",
+            "Show which migrations have run ([--pending] [--json])",
             commands::status,
         ))
         .command(CommandSpec::new(

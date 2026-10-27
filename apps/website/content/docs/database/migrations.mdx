@@ -186,7 +186,7 @@ Migrations run through commands that `DatabaseModule` registers on your app. The
 | `migrate --step` | Runs them as one batch each, so they roll back one at a time. |
 | `migrate --pretend` | Prints the SQL the pending migrations would run, and runs nothing. |
 | `migrate --seed` | Runs the [seeders](/docs/database/seeding-and-factories/) afterwards. |
-| `migrate:status` | Lists every migration in run order, with its batch and whether it ran (`--pending`: only those that haven't). |
+| `migrate:status` | Lists every migration in run order, with its batch and whether it ran (`--pending`: only those that haven't; `--json` prints them as JSON: `module`, `name`, `applied`, `batch`, `applied_at`). |
 | `migrate:rollback` | Reverts the last batch, newest migration first. |
 | `migrate:rollback --step 3` | Reverts the last three migrations, whatever their batches. |
 | `migrate:rollback --batch 2` | Reverts batch 2. |

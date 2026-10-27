@@ -70,6 +70,7 @@ navree-harbor = { path = "crates/navree-harbor", version = "0.1.0" }
 navree-schema = { path = "crates/navree-schema", version = "0.1.0" }
 navree-orm = { path = "crates/navree-orm", version = "0.1.0" }
 navree-orm-macros = { path = "crates/navree-orm-macros", version = "0.1.0" }
+navree-navigator = { path = "crates/navree-navigator", version = "0.1.0" }
 
 # ---------------------------------------------------------------------------
 # Runtime, async and HTTP (Tokio family)
@@ -257,6 +258,8 @@ sea-query = { version = "1.0.2", default-features = false, features = [
     "with-uuid",
 ] }
 sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "sqlite-bundled"] }
+# Navigator's read-only query guard: parses a statement before it is sent.
+sqlparser = { version = "0.63.0", features = ["visitor"] }
 
 # ---------------------------------------------------------------------------
 # Security and crypto (RustCrypto 2026 wave: argon2 0.6, hmac 0.13, sha2 0.11)
