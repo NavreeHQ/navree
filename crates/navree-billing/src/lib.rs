@@ -73,7 +73,6 @@ mod subscription;
 mod webhook;
 
 pub use billable::{AsBillable, Billable, BillableRef, USER_BILLABLE, WORKSPACE_BILLABLE};
-pub use entity::SUBSCRIPTION_SUBJECT;
 pub use billing::{Billing, UsageReportSummary};
 pub use checkout::{Checkout, CheckoutBuilder, CheckoutUrl};
 pub use config::{
@@ -84,6 +83,7 @@ pub use controller::{
     BillingController, BillingOverview, CheckoutInput, PlanPricesResource, PlanResource,
     PortalInput, SubscriptionResource, SwapInput, TrialResource, WebhookAnswer,
 };
+pub use entity::SUBSCRIPTION_SUBJECT;
 pub use error::BillingError;
 pub use events::{
     InvoicePaid, PaymentFailed, SubscriptionCanceled, SubscriptionCreated, SubscriptionUpdated,

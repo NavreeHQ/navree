@@ -148,7 +148,8 @@ fn the_saas_kit_writes_the_api_and_the_web_app() {
         ],
     );
     // The front end is named after the app and pins its package manager.
-    let package: serde_json::Value = serde_json::from_str(&read(&root, "web/package.json")).unwrap();
+    let package: serde_json::Value =
+        serde_json::from_str(&read(&root, "web/package.json")).unwrap();
     assert_eq!(package["name"], "acme-web");
     assert!(
         package["packageManager"]
@@ -156,13 +157,24 @@ fn the_saas_kit_writes_the_api_and_the_web_app() {
             .unwrap()
             .starts_with("pnpm@")
     );
-    for script in ["dev", "build", "lint", "typecheck", "test", "e2e", "gen:api"] {
+    for script in [
+        "dev",
+        "build",
+        "lint",
+        "typecheck",
+        "test",
+        "e2e",
+        "gen:api",
+    ] {
         assert!(package["scripts"].get(script).is_some(), "{script}");
     }
     // The browser reaches the API through the backend-for-frontend; the
     // web app's local settings start as a copy of the example.
     assert!(read(&root, "web/.env.example").contains("NAVREE_API_URL="));
-    assert_eq!(read(&root, "web/.env.local"), read(&root, "web/.env.example"));
+    assert_eq!(
+        read(&root, "web/.env.local"),
+        read(&root, "web/.env.example")
+    );
     assert!(read(&root, "web/.env.local").contains("NEXT_PUBLIC_REALTIME_KEY=acme\n"));
     assert!(read(&root, ".gitignore").contains("/web/.env.local"));
     // The API knows the web app's origin.
@@ -173,8 +185,13 @@ fn the_saas_kit_writes_the_api_and_the_web_app() {
         Some("http://localhost:3000")
     );
     // Harbor ships the web app in the same release.
-    let harbor = navree_harbor::HarborConfig::parse(&read(&root, "harbor.toml"), Path::new("harbor.toml")).unwrap();
-    assert_eq!(harbor.frontend.as_ref().map(|f| f.path.as_str()), Some("web"));
+    let harbor =
+        navree_harbor::HarborConfig::parse(&read(&root, "harbor.toml"), Path::new("harbor.toml"))
+            .unwrap();
+    assert_eq!(
+        harbor.frontend.as_ref().map(|f| f.path.as_str()),
+        Some("web")
+    );
     // CI covers the web app, from a committed lockfile.
     assert!(read(&root, ".github/workflows/ci.yml").contains("pnpm build"));
     assert!(read(&root, "web/pnpm-lock.yaml").starts_with("lockfileVersion:"));
@@ -188,7 +205,8 @@ fn the_saas_kit_writes_the_api_and_the_web_app() {
 fn saas_and_api_kits_ship_their_openapi_document() {
     for kit in [Kit::Saas, Kit::Api] {
         let (_dir, root) = generate("acme-cloud", kit);
-        let document: serde_json::Value = serde_json::from_str(&read(&root, "openapi.json")).unwrap();
+        let document: serde_json::Value =
+            serde_json::from_str(&read(&root, "openapi.json")).unwrap();
         assert_eq!(document["info"]["title"], "Acme cloud API", "{kit}");
         for path in [
             "/api/auth/register",
@@ -229,7 +247,9 @@ fn the_api_kit_is_the_saas_api_without_the_web_app() {
     let config = toml(&api, "config/app.toml");
     assert_eq!(config["app"]["url"].as_str(), Some("http://localhost:8080"));
     assert!(config["http"].get("cors").is_none());
-    let harbor = navree_harbor::HarborConfig::parse(&read(&api, "harbor.toml"), Path::new("harbor.toml")).unwrap();
+    let harbor =
+        navree_harbor::HarborConfig::parse(&read(&api, "harbor.toml"), Path::new("harbor.toml"))
+            .unwrap();
     assert!(harbor.frontend.is_none());
     assert!(!read(&api, ".github/workflows/ci.yml").contains("pnpm"));
     assert!(read(&api, ".github/workflows/ci.yml").contains("openapi:export"));
@@ -312,14 +332,22 @@ fn every_kit_records_its_kit_and_its_navree_features() {
         if kit == Kit::Micro {
             assert_eq!(dependency["default-features"].as_bool(), Some(false));
             let service = toml(&root, "crates/acme/Cargo.toml");
-            let features = service["dependencies"]["navree"]["features"].as_array().unwrap();
+            let features = service["dependencies"]["navree"]["features"]
+                .as_array()
+                .unwrap();
             for feature in ["full", "micro", "micro-nats", "postgres"] {
-                assert!(features.iter().any(|f| f.as_str() == Some(feature)), "{feature}");
+                assert!(
+                    features.iter().any(|f| f.as_str() == Some(feature)),
+                    "{feature}"
+                );
             }
         } else {
             let features = dependency["features"].as_array().unwrap();
             for feature in ["billing", "social", "postgres"] {
-                assert!(features.iter().any(|f| f.as_str() == Some(feature)), "{feature}");
+                assert!(
+                    features.iter().any(|f| f.as_str() == Some(feature)),
+                    "{feature}"
+                );
             }
         }
     }
@@ -362,7 +390,11 @@ fn the_micro_kit_is_a_workspace_of_the_service_and_its_contracts() {
             "crates/billing/tests/support/mod.rs",
         ],
     );
-    assert!(files.iter().all(|file| !file.starts_with("web/") && !file.starts_with("src/")));
+    assert!(
+        files
+            .iter()
+            .all(|file| !file.starts_with("web/") && !file.starts_with("src/"))
+    );
 
     // `cargo run` (and `navree dev`) run the service.
     let manifest = toml(&root, "Cargo.toml");
@@ -393,7 +425,10 @@ fn the_micro_kit_is_a_workspace_of_the_service_and_its_contracts() {
     assert!(handlers.contains("#[message_pattern(\"invoices.get\")]"));
     assert!(handlers.contains("#[event_pattern(\"deal.won\")]"));
     assert!(handlers.contains("use billing_contracts::"));
-    assert!(read(&root, "crates/billing/src/modules/invoices/mod.rs").contains("m.migrations(migrations::migrations())"));
+    assert!(
+        read(&root, "crates/billing/src/modules/invoices/mod.rs")
+            .contains("m.migrations(migrations::migrations())")
+    );
 
     // NATS is the transport, from Dock in development.
     let config = toml(&root, "config/app.toml");
@@ -402,7 +437,10 @@ fn the_micro_kit_is_a_workspace_of_the_service_and_its_contracts() {
     let dock = navree_dock::DockFile::parse(&read(&root, "dock.toml"), "billing").unwrap();
     assert!(dock.service("postgres").is_ok() && dock.service("nats").is_ok());
     let env = read(&root, ".env");
-    assert!(env.contains("APP_MICRO__URL=nats://127.0.0.1:4222"), "{env}");
+    assert!(
+        env.contains("APP_MICRO__URL=nats://127.0.0.1:4222"),
+        "{env}"
+    );
     assert!(env.contains("APP_DATABASE__URL=postgres://"), "{env}");
 }
 
@@ -416,8 +454,14 @@ fn env_points_at_the_services_dock_starts() {
         assert!(env.lines().any(|l| l == line), "{line} in {env}");
     }
     assert!(env.contains("# dock:start"), "{env}");
-    assert!(env.contains("APP_DATABASE__URL=postgres://navree:navree@127.0.0.1:5432/"), "{env}");
-    assert!(env.contains("APP_MAIL__TRANSPORT=smtp://127.0.0.1:1025"), "{env}");
+    assert!(
+        env.contains("APP_DATABASE__URL=postgres://navree:navree@127.0.0.1:5432/"),
+        "{env}"
+    );
+    assert!(
+        env.contains("APP_MAIL__TRANSPORT=smtp://127.0.0.1:1025"),
+        "{env}"
+    );
     assert!(!example.contains("# dock:start"));
     // Secrets are placeholders, never values.
     assert!(env.contains("APP_KEY=\n"));
@@ -427,12 +471,16 @@ fn env_points_at_the_services_dock_starts() {
 fn every_kit_s_harbor_and_dock_files_are_valid() {
     for kit in Kit::ALL {
         let (_dir, root) = generate("acme", kit);
-        let harbor = navree_harbor::HarborConfig::parse(&read(&root, "harbor.toml"), &root.join("harbor.toml"))
-            .unwrap_or_else(|e| panic!("{kit}: {e}"));
+        let harbor = navree_harbor::HarborConfig::parse(
+            &read(&root, "harbor.toml"),
+            &root.join("harbor.toml"),
+        )
+        .unwrap_or_else(|e| panic!("{kit}: {e}"));
         assert_eq!(harbor.app, "acme");
         assert_eq!(harbor.validate(), Vec::<String>::new(), "{kit}");
         assert_eq!(harbor.deploy.health_check, "/health/ready");
-        navree_dock::DockFile::parse(&read(&root, "dock.toml"), "acme").unwrap_or_else(|e| panic!("{kit}: {e}"));
+        navree_dock::DockFile::parse(&read(&root, "dock.toml"), "acme")
+            .unwrap_or_else(|e| panic!("{kit}: {e}"));
     }
 }
 
@@ -442,10 +490,22 @@ fn generated_files_are_free_of_template_syntax() {
         let (_dir, root) = generate("acme-cloud", kit);
         for file in tree(&root) {
             let text = read(&root, &file);
-            for marker in ["{%", "%}", "{{ package", "{{ crate_name", "{{ title", "{{ kit", "__package__", "mNOW"] {
+            for marker in [
+                "{%",
+                "%}",
+                "{{ package",
+                "{{ crate_name",
+                "{{ title",
+                "{{ kit",
+                "__package__",
+                "mNOW",
+            ] {
                 assert!(!text.contains(marker), "{kit}: {file} contains {marker}");
             }
-            assert!(!file.contains("__package__") && !file.ends_with(".j2"), "{file}");
+            assert!(
+                !file.contains("__package__") && !file.ends_with(".j2"),
+                "{file}"
+            );
             assert!(!text.contains('\r'), "{kit}: {file} has CRLF line endings");
         }
     }
@@ -562,7 +622,13 @@ fn kit_rust_is_rustfmt_clean() {
         rust_files(&root, &mut files);
         for file in files {
             let output = Command::new("rustfmt")
-                .args(["--edition", "2024", "--check", "--config", "skip_children=true"])
+                .args([
+                    "--edition",
+                    "2024",
+                    "--check",
+                    "--config",
+                    "skip_children=true",
+                ])
                 .arg(&file)
                 .output()
                 .unwrap();
@@ -578,5 +644,9 @@ fn kit_rust_is_rustfmt_clean() {
             }
         }
     }
-    assert!(unformatted.is_empty(), "not rustfmt-clean:\n{}", unformatted.join("\n"));
+    assert!(
+        unformatted.is_empty(),
+        "not rustfmt-clean:\n{}",
+        unformatted.join("\n")
+    );
 }

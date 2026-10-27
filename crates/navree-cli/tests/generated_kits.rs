@@ -64,7 +64,10 @@ fn cargo(dir: &Path, args: &[&str]) -> bool {
         .args(args)
         .current_dir(dir)
         .env("CARGO_TARGET_DIR", target())
-        .env("APP_DATABASE__URL", "sqlite://storage/kit-check.db?mode=rwc")
+        .env(
+            "APP_DATABASE__URL",
+            "sqlite://storage/kit-check.db?mode=rwc",
+        )
         .env("APP_MICRO__TRANSPORT", "memory")
         .env("APP_MAIL__TRANSPORT", "log")
         .env_remove("RUSTFLAGS");
@@ -132,10 +135,17 @@ fn rust_checks(root: &Path, extra: &[&str]) -> bool {
 /// Whether the committed `openapi.json` is what the app exports now (the
 /// CI workflow's drift check).
 fn openapi_is_current(root: &Path) -> bool {
-    let committed = std::fs::read_to_string(root.join("openapi.json")).expect("the kit ships openapi.json");
+    let committed =
+        std::fs::read_to_string(root.join("openapi.json")).expect("the kit ships openapi.json");
     cargo(
         root,
-        &["run", "--quiet", "--", "openapi:export", "openapi.fresh.json"],
+        &[
+            "run",
+            "--quiet",
+            "--",
+            "openapi:export",
+            "openapi.fresh.json",
+        ],
     ) && {
         let fresh = std::fs::read_to_string(root.join("openapi.fresh.json")).unwrap();
         let same = fresh.replace("\r\n", "\n") == committed;
@@ -217,7 +227,9 @@ fn saas_kit_web_installs_lints_tests_and_builds() {
             let same = read("lib/api/schema.check.d.ts") == read("lib/api/schema.d.ts");
             std::fs::remove_file(web.join("lib/api/schema.check.d.ts")).unwrap();
             if !same {
-                eprintln!("web/lib/api/schema.d.ts does not match openapi.json: run `pnpm gen:api`");
+                eprintln!(
+                    "web/lib/api/schema.d.ts does not match openapi.json: run `pnpm gen:api`"
+                );
             }
             same
         }

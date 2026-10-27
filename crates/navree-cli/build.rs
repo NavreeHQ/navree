@@ -32,13 +32,15 @@ fn main() {
     }
     out.push_str("];\n");
 
-    let target = PathBuf::from(std::env::var_os("OUT_DIR").expect("set by cargo")).join("kit_files.rs");
+    let target =
+        PathBuf::from(std::env::var_os("OUT_DIR").expect("set by cargo")).join("kit_files.rs");
     std::fs::write(&target, out).expect("OUT_DIR is writable");
 }
 
 /// Every file below `dir`, as (`/`-separated path relative to `root`, absolute path).
 fn walk(root: &Path, dir: &Path, out: &mut Vec<(String, PathBuf)>) {
-    let entries = std::fs::read_dir(dir).unwrap_or_else(|e| panic!("cannot read {}: {e}", dir.display()));
+    let entries =
+        std::fs::read_dir(dir).unwrap_or_else(|e| panic!("cannot read {}: {e}", dir.display()));
     for entry in entries {
         let path = entry.expect("a directory entry").path();
         if path.is_dir() {

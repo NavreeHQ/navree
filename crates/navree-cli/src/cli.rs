@@ -355,7 +355,11 @@ mod tests {
 
     #[test]
     fn new_with_a_kit() {
-        for (flag, kit) in [("saas", Kit::Saas), ("api", Kit::Api), ("micro", Kit::Micro)] {
+        for (flag, kit) in [
+            ("saas", Kit::Saas),
+            ("api", Kit::Api),
+            ("micro", Kit::Micro),
+        ] {
             let Command::New(args) = parse(&["new", "acme", "--kit", flag]) else {
                 panic!("expected new");
             };

@@ -53,8 +53,13 @@ under `[billing.plans.*]`.
 
 ## The API contract
 
-`navree openapi:export openapi.json` writes the OpenAPI document; commit it.
-The CI workflow fails when the committed file no longer matches the code.
+`openapi.json` is the OpenAPI document, committed. After changing a route
+or a DTO, run `navree openapi:export openapi.json` to write it again; the
+CI workflow fails when the committed file no longer matches the code.
+{% if web %}
+`pnpm --dir web gen:api` does both: it exports the document and
+regenerates the web app's types in `web/lib/api/schema.d.ts`.
+{% endif %}
 
 ## Tests
 
