@@ -5,6 +5,7 @@ use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
 
+use navree_config::ConfigSection;
 use navree_kernel::WeakAppContext;
 use navree_telemetry::{EventKind, QueryExecuted, Telemetry, TelemetryEvent};
 use sea_orm::sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode};
@@ -47,7 +48,10 @@ impl Db {
     /// The URL's scheme picks the driver: `sqlite:`, `postgres://` (the
     /// `postgres` feature), `mysql://` or `mariadb://` (the `mysql`
     /// feature). A URL whose driver is not compiled in fails with a message
-    /// naming the feature to turn on.
+    /// naming the feature to turn on. `options` are checked first, as the
+    /// `database` configuration section is (an invalid pool size or SQL
+    /// mode fails before anything connects), so options built in code get
+    /// the same errors as configured ones.
     ///
     /// ```no_run
     /// # async fn demo() -> Result<(), sea_orm::DbErr> {
@@ -74,6 +78,9 @@ impl Db {
         options: &DbOptions,
         telemetry: Telemetry,
     ) -> Result<Db, DbErr> {
+        options
+            .validate()
+            .map_err(|problems| DbErr::Custom(format!("invalid database options: {problems}")))?;
         let mut connect = ConnectOptions::new(driver_url(&options.url).into_owned());
         connect
             .max_connections(options.max_connections)

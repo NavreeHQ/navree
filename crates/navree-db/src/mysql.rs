@@ -28,15 +28,15 @@ const LENIENT_SESSION: &str = "SET SESSION sql_mode = TRIM(BOTH ',' FROM \
 /// the SQL mode (`modes` exactly, else strict or lenient), then the
 /// isolation level when one is set.
 ///
-/// The mode names in `modes` were validated as names (letters, digits and
-/// underscores) with the rest of `DbOptions`, so they are written into the
-/// statement as they are, upper-cased.
+/// `Db::connect` has checked that every entry of `modes` is a mode name
+/// (letters, digits and underscores); the list is still written as an
+/// escaped string literal, upper-cased.
 #[cfg(any(feature = "mysql", test))]
 pub(crate) fn session_statements(options: &MySqlOptions) -> Vec<String> {
     let mode = match &options.modes {
         Some(modes) => {
             let modes: Vec<String> = modes.iter().map(|m| m.to_ascii_uppercase()).collect();
-            format!("SET SESSION sql_mode = '{}'", modes.join(","))
+            format!("SET SESSION sql_mode = {}", string_literal(&modes.join(",")))
         }
         None if options.strict => STRICT_SESSION.to_owned(),
         None => LENIENT_SESSION.to_owned(),
@@ -76,6 +76,15 @@ pub(crate) const FOREIGN_KEY_CHECKS_OFF: &str = "SET FOREIGN_KEY_CHECKS = 0";
 
 /// Turns them back on before the connection returns to the pool.
 pub(crate) const FOREIGN_KEY_CHECKS_ON: &str = "SET FOREIGN_KEY_CHECKS = 1";
+
+/// `'text'`, with embedded single quotes doubled. Only checked mode names
+/// reach it, which hold no backslash (whose meaning in a literal depends on
+/// the server's `NO_BACKSLASH_ESCAPES`), so doubling quotes is all the
+/// escaping it needs.
+#[cfg(any(feature = "mysql", test))]
+fn string_literal(text: &str) -> String {
+    format!("'{}'", text.replace('\'', "''"))
+}
 
 /// `` `name` `` with embedded backticks doubled.
 pub(crate) fn quote(identifier: &str) -> String {
@@ -185,6 +194,11 @@ mod tests {
         assert_eq!(
             session_statements(&options(|o| o.modes = Some(Vec::new()))),
             ["SET SESSION sql_mode = ''"]
+        );
+        // Checked names hold no quote; one would still stay inside the literal.
+        assert_eq!(
+            session_statements(&options(|o| o.modes = Some(vec!["a'b".to_owned()]))),
+            ["SET SESSION sql_mode = 'A''B'"]
         );
     }
 
