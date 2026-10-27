@@ -2,7 +2,9 @@
 //! written with the schema builder.
 
 use navree_db::MigrationSet;
-use navree_db::navree_schema::{Migration, Schema, SchemaMigration, SchemaResult};
+use navree_db::navree_schema::{
+    Blueprint, ColumnBuilder, Dialect, Migration, Schema, SchemaMigration, SchemaResult,
+};
 
 /// The name of the integrations module's migration set.
 pub const INTEGRATIONS_MIGRATIONS: &str = "integrations";
@@ -22,15 +24,29 @@ pub(crate) fn migrations() -> MigrationSet {
 /// set, indexed by the last check (`integrations:check --due`). Owners are
 /// not foreign keys, so the module works with or without navree-workspace;
 /// the module forgets a deleted workspace's or organization's connections.
+///
+/// The UUID columns are native `UUID`s, except on MySQL and MariaDB, where
+/// the model's `Uuid` fields are written as 16 bytes: `BINARY(16)` there.
 struct CreateIntegrationConnections;
+
+/// A UUID column `name` of the model: `BINARY(16)` on MySQL, `uuid`
+/// elsewhere.
+fn uuid<'a>(t: &'a mut Blueprint, name: &str, mysql: bool) -> ColumnBuilder<'a> {
+    if mysql {
+        t.binary(name).length(16).fixed()
+    } else {
+        t.uuid(name)
+    }
+}
 
 impl Migration for CreateIntegrationConnections {
     async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        let mysql = schema.target().await?.dialect() == Dialect::MySql;
         schema
             .create(CONNECTIONS_TABLE, |t| {
-                t.uuid_primary();
+                uuid(t, "id", mysql).primary();
                 t.string("owner_type").length(16);
-                t.uuid("owner_id");
+                uuid(t, "owner_id", mysql);
                 t.string("provider").length(64);
                 t.string("scope_set").length(64);
                 t.string("kind").length(32);
@@ -46,7 +62,7 @@ impl Migration for CreateIntegrationConnections {
                 t.timestamp_tz("last_checked_at")
                     .nullable()
                     .index_named("integration_connections_last_checked_index");
-                t.uuid("connected_by").nullable();
+                uuid(t, "connected_by", mysql).nullable();
                 t.timestamp_tz("created_at");
                 t.timestamp_tz("updated_at");
                 t.unique(["owner_type", "owner_id", "provider", "scope_set"])
