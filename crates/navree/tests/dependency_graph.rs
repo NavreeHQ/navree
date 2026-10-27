@@ -62,7 +62,8 @@ const HIERARCHY: &[Rule] = &[
     rule("navree-http", 2, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry"]),
     rule("navree-log", 2, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry"]),
     rule("navree-crypto", 2, &["navree-kernel", "navree-contracts", "navree-config"]),
-    rule("navree-events", 2, &["navree-kernel", "navree-contracts", "navree-config"]),
+    // Events report each emit to the telemetry sinks (`EventEmitted`).
+    rule("navree-events", 2, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry"]),
     rule("navree-view", 2, &["navree-kernel", "navree-contracts", "navree-config"]),
     rule("navree-cache", 2, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry"]),
     rule("navree-http-client", 2, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry"]),
@@ -194,6 +195,13 @@ const HIERARCHY: &[Rule] = &[
         "navree-crypto", "navree-view", "navree-http-client", "navree-db", "navree-mail",
         "navree-schedule", "navree-access", "navree-auth",
     ]),
+    // Logbook: a telemetry sink and a data-change observer (navree-db), an
+    // HTTP layer and UI (navree-http, navree-view), replay as the signed-in
+    // user (navree-auth's JwtService).
+    rule("navree-logbook", 7, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http",
+        "navree-view", "navree-db", "navree-auth",
+    ]),
     // L8: entry points.
     rule("navree", 8, RUNTIME_CRATES),
     // The CLI uses no runtime crate; navree-dock runs `navree dock`.
@@ -268,6 +276,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-billing",
     "navree-mcp",
     "navree-lighthouse",
+    "navree-logbook",
 ];
 
 /// Cargo dependency kind of an edge.
