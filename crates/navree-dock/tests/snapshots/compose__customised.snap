@@ -6,7 +6,7 @@ expression: "compose(r#\"\nproject = \"crm\"\n\n[services.postgres]\nversion = \
 name: "crm"
 services:
   postgres:
-    image: "pgvector/pgvector:pg16"
+    image: "timescale/timescaledb:2.31.0-pg16"
     container_name: "crm-postgres"
     labels:
       dev.navree.dock.project: "crm"
@@ -15,6 +15,8 @@ services:
       POSTGRES_USER: "crm"
       POSTGRES_PASSWORD: "s3cret-pass"
       POSTGRES_DB: "crm_dev"
+      TIMESCALEDB_TELEMETRY: "off"
+    command: ["postgres", "-c", "shared_preload_libraries=timescaledb", "-c", "timescaledb.telemetry_level=off"]
     ports:
       - "127.0.0.1:5433:5432"
     volumes:

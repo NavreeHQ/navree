@@ -1,14 +1,16 @@
 //! # navree-dock
 //!
-//! Dock runs the services an app needs during development (PostgreSQL,
-//! Redis, Meilisearch, Mailpit, MinIO and NATS) in containers, with Docker
-//! or Podman, and points the app's settings at them. It is the library
-//! behind `navree dock` (navree-cli); the facade re-exports it as
+//! Dock runs the services an app needs during development (PostgreSQL with
+//! TimescaleDB, Redis, Meilisearch, Mailpit, MinIO and NATS) in containers,
+//! with Docker or Podman, and points the app's settings at them. It is the
+//! library behind `navree dock` (navree-cli); the facade re-exports it as
 //! `navree::dock` with its opt-in `dock` feature.
 //!
 //! - **`dock.toml`** ([`DockFile`]) lists the services, next to the app's
 //!   `Cargo.toml`. [`add_service`] and [`remove_service`] edit it and keep
-//!   its comments.
+//!   its comments. `[services.postgres]` runs TimescaleDB
+//!   ([`TIMESCALEDB_IMAGE`], Navree's default database) unless it sets
+//!   `timescaledb = false`.
 //! - **A Compose file** ([`compose::render`]) is generated from it under
 //!   `.navree/dock/` and run with `docker compose` or `podman compose`
 //!   ([`Runtime`]; `NAVREE_DOCK_RUNTIME` picks one).
@@ -68,5 +70,6 @@ pub use exec::{Cmd, CmdOutput, Executor, ProcessExecutor};
 pub use fake::FakeExecutor;
 pub use runtime::{RUNTIME_VARIABLE, Runtime, RuntimeChoice};
 pub use service::{
-    HOST, NATS_BOX_IMAGE, Port, Readiness, Service, ServiceOptions, ServiceSpec, SetupStep, Shell,
+    HOST, NATS_BOX_IMAGE, POSTGRES_VERSION, Port, Readiness, Service, ServiceOptions, ServiceSpec,
+    SetupStep, Shell, TIMESCALEDB_IMAGE, TIMESCALEDB_POSTGRES_VERSIONS, TIMESCALEDB_VERSION,
 };
