@@ -285,7 +285,8 @@ fn the_next_steps_start_the_database_first() {
     let message = created_message(&mysql, &dir.path().join("my-shop"));
     assert!(!message.contains("dock"), "{message}");
     assert!(
-        message.contains("a MySQL or MariaDB server at mysql://navree:navree@127.0.0.1:3306/my_shop"),
+        message
+            .contains("a MySQL or MariaDB server at mysql://navree:navree@127.0.0.1:3306/my_shop"),
         "{message}"
     );
 }
@@ -315,10 +316,16 @@ fn the_generated_files_describe_the_database() {
         readme.contains("navree dock up               # the database on 127.0.0.1:5432"),
         "{readme}"
     );
-    assert!(readme.contains("dock.toml              the local services"), "{readme}");
+    assert!(
+        readme.contains("dock.toml              the local services"),
+        "{readme}"
+    );
     let agents = read(&root, "AGENTS.md");
     assert!(agents.contains("storage/               runtime data: logs, uploads"));
-    assert!(agents.contains("schema.create_hypertable(\"events\""), "{agents}");
+    assert!(
+        agents.contains("schema.create_hypertable(\"events\""),
+        "{agents}"
+    );
 
     let pg = create_app(
         dir.path(),
@@ -327,7 +334,10 @@ fn the_generated_files_describe_the_database() {
     )
     .unwrap();
     let dock = read(&pg, "dock.toml");
-    assert!(dock.contains("[services.postgres]\ntimescaledb = false\n"), "{dock}");
+    assert!(
+        dock.contains("[services.postgres]\ntimescaledb = false\n"),
+        "{dock}"
+    );
     assert!(!read(&pg, "AGENTS.md").contains("hypertable"));
 
     let lite = create_app(

@@ -97,7 +97,6 @@ pub struct IndexInfo {
 ///
 /// [`Schema::time_dimension`](crate::Schema::time_dimension) reads it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-#[non_exhaustive]
 pub struct TimeDimension {
     /// The time column.
     pub column: String,
@@ -115,10 +114,7 @@ impl TimeDimension {
     /// Whether the time column holds integers (Unix seconds, milliseconds,
     /// a sequence) rather than dates or timestamps.
     pub fn is_integer(&self) -> bool {
-        matches!(
-            self.column_type.as_str(),
-            "bigint" | "integer" | "smallint"
-        )
+        matches!(self.column_type.as_str(), "bigint" | "integer" | "smallint")
     }
 }
 

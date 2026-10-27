@@ -36,6 +36,9 @@
 //!   dumps.
 //! - [`Seeder`]s fill the database (`db:seed`); [`Factory`] and
 //!   [`create_many`] build test records.
+//! - [`prune_time_series`] deletes the rows of a time-series table older
+//!   than a cutoff; on a TimescaleDB hypertable it drops whole chunks
+//!   instead of deleting row by row.
 //! - [`PageQuery`] / [`Page`] / [`paginate`] give offset
 //!   pages (`{"data", "meta": {"current_page", "per_page", "total",
 //!   "last_page"}}`); [`CursorQuery`] / [`CursorPage`] / [`cursor_paginate`]
@@ -93,6 +96,7 @@ mod reader;
 mod repo;
 mod seed;
 mod text;
+mod time_series;
 mod uow;
 
 pub use db::Db;
@@ -111,6 +115,7 @@ pub use reader::Reader;
 pub use repo::Repo;
 pub use seed::{Factory, Seeder, create, create_many, run_seeders};
 pub use text::{contains_ignore_case, eq_ignore_case};
+pub use time_series::{TimePoint, prune_time_series};
 pub use uow::{ChangeEvent, ChangeObserver, ChangeOp, Uow};
 
 pub use navree_schema;

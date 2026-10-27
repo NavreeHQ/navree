@@ -171,10 +171,9 @@ impl NavreeSource {
             .collect::<Vec<_>>()
             .join(", ");
         match self {
-            NavreeSource::Path(path) => format!(
-                "{{ path = {}, features = [{features}] }}",
-                path_value(path)
-            ),
+            NavreeSource::Path(path) => {
+                format!("{{ path = {}, features = [{features}] }}", path_value(path))
+            }
             NavreeSource::Version(version) => format!(
                 "{{ version = {}, features = [{features}] }}",
                 toml_string(version)
@@ -389,7 +388,10 @@ pub fn created_message(app: &NewApp, root: &Path) -> String {
     let mut steps: Vec<(&str, &str)> = database.into_iter().collect();
     steps.push(("navree key:generate", "then set APP_KEY in .env"));
     if app.ui == Ui::Next {
-        steps.push(("npm --prefix web install", "the front end; `navree dev` starts it"));
+        steps.push((
+            "npm --prefix web install",
+            "the front end; `navree dev` starts it",
+        ));
     }
     steps.push(("navree dev", "http://127.0.0.1:8080/api/docs"));
     out.push_str("\nNext steps:\n");
