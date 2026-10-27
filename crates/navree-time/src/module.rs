@@ -22,8 +22,8 @@ use crate::{TimeOptions, Zones};
 /// - the command `time:zones`.
 ///
 /// Zone sources come from other modules as `dyn ZoneSource` multi-bindings
-/// (navree-workspace registers one for workspaces; register your users'
-/// with [`ModuleBuilderTimeExt::zone_source`]). `from_config` and the plain
+/// (navree-workspace registers the workspace and organization levels;
+/// register your users' with [`ModuleBuilderTimeExt::zone_source`]). `from_config` and the plain
 /// module read the `time` section, so the app must include
 /// `ConfigModule`.
 ///
