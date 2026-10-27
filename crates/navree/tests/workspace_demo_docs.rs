@@ -243,10 +243,7 @@ fn builder(fixtures: &TempDirGuard) -> TestAppBuilder {
         .temp_database()
         .config("http.per_ip_rate_limit", serde_json::Value::Null)
         .config("workspace.users_table", "")
-        .config(
-            "workspace.roles.member.permissions",
-            json!(["companies.*"]),
-        )
+        .config("workspace.roles.member.permissions", json!(["companies.*"]))
         .config(
             "workspace.demo.fixtures",
             fixtures.path().display().to_string(),

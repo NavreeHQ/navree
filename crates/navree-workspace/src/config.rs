@@ -216,12 +216,14 @@ impl DemoOptions {
         if self.editor_roles.iter().any(|editor| editor == role) {
             return true;
         }
-        self.allow.iter().any(|entry| match entry.trim().split_once(' ') {
-            Some((verb, route)) => {
-                verb.eq_ignore_ascii_case(method.as_str()) && Some(route.trim()) == path
-            }
-            None => Some(entry.trim()) == name,
-        })
+        self.allow
+            .iter()
+            .any(|entry| match entry.trim().split_once(' ') {
+                Some((verb, route)) => {
+                    verb.eq_ignore_ascii_case(method.as_str()) && Some(route.trim()) == path
+                }
+                None => Some(entry.trim()) == name,
+            })
     }
 
     /// The problems with the options, naming their keys; `roles` checks

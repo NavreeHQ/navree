@@ -208,8 +208,8 @@ export const ecosystem: EcosystemEntry[] = [
     category: "capabilities",
     tagline: "Multi-tenancy at the workspace level",
     summary:
-      "Workspaces, members, roles and invitations, with every query scoped to the current workspace. Isolate data by row, by schema or by database. On by default.",
-    features: ["Header, subdomain, path or token resolution", "Owner, admin, member, viewer and custom roles", "Email invitations", "Row, schema or database isolation"],
+      "Workspaces, members, roles and invitations, with every query scoped to the current workspace. Isolate data by row, by schema or by database, and seed demo workspaces from fixtures. On by default.",
+    features: ["Header, subdomain, path or token resolution", "Owner, admin, member, viewer and custom roles", "Email invitations", "Row, schema or database isolation", "Demo workspaces, read-only or reset nightly"],
     crate: "navree-workspace",
     command: "navree::WorkspaceModule::from_config()",
     href: "/docs/workspaces/introduction/",

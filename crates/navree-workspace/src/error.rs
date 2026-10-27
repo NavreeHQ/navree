@@ -132,9 +132,7 @@ pub(crate) fn map_workspace_error(error: &WorkspaceError) -> Option<AppError> {
             AppError::new(StatusCode::FORBIDDEN, DEMO_READ_ONLY, "Forbidden")
                 .with_detail("Demo workspaces are read-only.")
         }
-        WorkspaceError::NotDemo(_) => {
-            AppError::conflict("This workspace is not a demo workspace.")
-        }
+        WorkspaceError::NotDemo(_) => AppError::conflict("This workspace is not a demo workspace."),
         WorkspaceError::Db(db) => return navree_db::map_db_error(db),
         WorkspaceError::Other(_) => return None,
     })
@@ -187,6 +185,9 @@ mod tests {
         assert_eq!(error.body()["message"], "Demo workspaces are read-only.");
         assert_eq!(error.body()["error"], "Forbidden");
         let error = WorkspaceError::NotDemo("acme".into()).to_app_error();
-        assert_eq!(error.body()["message"], "This workspace is not a demo workspace.");
+        assert_eq!(
+            error.body()["message"],
+            "This workspace is not a demo workspace."
+        );
     }
 }

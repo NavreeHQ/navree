@@ -144,8 +144,7 @@ struct DemoModule;
 
 impl Module for DemoModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.demo_seeder::<DealsDemo>()
-            .controller::<DealsController>();
+        m.demo_seeder::<DealsDemo>().controller::<DealsController>();
     }
 }
 
@@ -162,7 +161,10 @@ fn fixtures() -> TempDirGuard {
     dir
 }
 
-async fn world_with(dir: &TempDirGuard, configure: impl FnOnce(navree_testing::TestAppBuilder) -> navree_testing::TestAppBuilder) -> World {
+async fn world_with(
+    dir: &TempDirGuard,
+    configure: impl FnOnce(navree_testing::TestAppBuilder) -> navree_testing::TestAppBuilder,
+) -> World {
     World::with(configure(
         builder()
             .config("workspace.demo.fixtures", dir.path().display().to_string())
@@ -211,7 +213,9 @@ fn seeded() -> Vec<String> {
 async fn demo_workspaces_are_created_and_seeded_from_fixtures() {
     let dir = fixtures();
     let world = world_with(&dir, |b| b).await;
-    let mut events = world.events(&["workspace.created", "workspace.demo_seeded"]).await;
+    let mut events = world
+        .events(&["workspace.created", "workspace.demo_seeded"])
+        .await;
     let ada = world.user("Ada", "ada@example.com").await;
     let live = world.workspace(ada, "Acme").await;
     let demo = world.demo(ada, "Acme demo").await;
@@ -295,7 +299,11 @@ async fn read_only_demos_refuse_writes_and_mark_their_responses() {
         .await
         .assert_status(200);
     assert_eq!(live.header(DEMO_HEADER), None);
-    let outside = client.get("/api/workspaces").send().await.assert_status(200);
+    let outside = client
+        .get("/api/workspaces")
+        .send()
+        .await
+        .assert_status(200);
     assert_eq!(outside.header(DEMO_HEADER), None);
 }
 
@@ -304,7 +312,10 @@ async fn editor_roles_and_allowed_routes_write_to_read_only_demos() {
     let dir = fixtures();
     let world = world_with(&dir, |b| {
         b.config("workspace.demo.editor_roles", json!(["admin"]))
-            .config("workspace.demo.allow", "deals.preview, POST /api/workspaces/{workspace}/leave")
+            .config(
+                "workspace.demo.allow",
+                "deals.preview, POST /api/workspaces/{workspace}/leave",
+            )
     })
     .await;
     let ada = world.user("Ada", "ada@example.com").await;
@@ -453,7 +464,14 @@ async fn the_create_command_makes_a_seeded_demo() {
         .app
         .run_command(
             "workspace:demo-create",
-            &["Sales", "demo", "--owner", "ada@example.com", "--slug", "sales"],
+            &[
+                "Sales",
+                "demo",
+                "--owner",
+                "ada@example.com",
+                "--slug",
+                "sales",
+            ],
         )
         .await
         .unwrap();
@@ -465,7 +483,10 @@ async fn the_create_command_makes_a_seeded_demo() {
 
     world
         .app
-        .run_command("workspace:demo-create", &["Other", "--owner", ada.to_string().as_str()])
+        .run_command(
+            "workspace:demo-create",
+            &["Other", "--owner", ada.to_string().as_str()],
+        )
         .await
         .unwrap();
     let other = world.workspaces().await.resolve("other").await.unwrap();
@@ -624,15 +645,11 @@ async fn read_only_demos_are_not_reset_on_the_schedule() {
         .send()
         .await
         .assert_status(200);
-    let at = chrono::Utc.with_ymd_and_hms(2026, 10, 27, 3, 30, 0).unwrap();
-    world.clock.set(at);
-    world
-        .app
-        .get::<Scheduler>()
-        .await
-        .tick(at)
-        .await
+    let at = chrono::Utc
+        .with_ymd_and_hms(2026, 10, 27, 3, 30, 0)
         .unwrap();
+    world.clock.set(at);
+    world.app.get::<Scheduler>().await.tick(at).await.unwrap();
     assert_eq!(world.deal_titles(demo.id).await.len(), 4);
 }
 
@@ -693,13 +710,37 @@ async fn seeder_names_must_be_unique() {
 async fn invalid_demo_options_fail_the_boot() {
     for (key, value, needle) in [
         ("workspace.demo.mode", json!("sometimes"), "workspace"),
-        ("workspace.demo.reset_at", json!("25:00"), "workspace.demo.reset_at"),
-        ("workspace.demo.guest_role", json!("owner"), "workspace.demo.guest_role"),
-        ("workspace.demo.guest_role", json!("auditor"), "workspace.demo.guest_role"),
-        ("workspace.demo.editor_roles", json!(["auditor"]), "workspace.demo.editor_roles"),
-        ("workspace.demo.allow", json!(["POST deals"]), "workspace.demo.allow"),
+        (
+            "workspace.demo.reset_at",
+            json!("25:00"),
+            "workspace.demo.reset_at",
+        ),
+        (
+            "workspace.demo.guest_role",
+            json!("owner"),
+            "workspace.demo.guest_role",
+        ),
+        (
+            "workspace.demo.guest_role",
+            json!("auditor"),
+            "workspace.demo.guest_role",
+        ),
+        (
+            "workspace.demo.editor_roles",
+            json!(["auditor"]),
+            "workspace.demo.editor_roles",
+        ),
+        (
+            "workspace.demo.allow",
+            json!(["POST deals"]),
+            "workspace.demo.allow",
+        ),
         ("workspace.demo.allow", json!([" "]), "workspace.demo.allow"),
-        ("workspace.demo.fixtures", json!(" "), "workspace.demo.fixtures"),
+        (
+            "workspace.demo.fixtures",
+            json!(" "),
+            "workspace.demo.fixtures",
+        ),
     ] {
         let error = builder()
             .config(key, value.clone())

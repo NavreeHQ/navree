@@ -86,7 +86,9 @@ async fn demo_create_command(ctx: AppContext, args: Vec<String>) -> Result<(), B
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         let (flag, inline) = match arg.split_once('=') {
-            Some((flag, value)) if flag.starts_with("--") => (flag.to_owned(), Some(value.to_owned())),
+            Some((flag, value)) if flag.starts_with("--") => {
+                (flag.to_owned(), Some(value.to_owned()))
+            }
             _ => (arg.clone(), None),
         };
         match flag.as_str() {

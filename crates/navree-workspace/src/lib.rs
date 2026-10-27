@@ -85,8 +85,7 @@ mod tenant;
 mod workspaces;
 
 pub use config::{
-    DemoMode, DemoOptions, InvitationOptions, Isolation, ResolverKind, RoleOptions,
-    WorkspaceConfig,
+    DemoMode, DemoOptions, InvitationOptions, Isolation, ResolverKind, RoleOptions, WorkspaceConfig,
 };
 pub use controller::{
     AcceptInvitationInput, AcceptedInvitationResource, AddMemberInput, ChangeRoleInput,
