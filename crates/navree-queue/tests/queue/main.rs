@@ -48,6 +48,10 @@ driver_suite!(
         work_options_select_queues_and_limit_jobs,
         worker_polls_until_the_app_shuts_down,
         run_pending_drains_available_jobs_in_order,
+        status_counts_waiting_delayed_and_running_jobs,
+        pending_jobs_lists_and_finds_unfinished_jobs,
+        forget_deletes_one_failed_job,
+        supervised_work_reports_attempts_and_obeys_pause_and_stop,
     ]
 );
 
@@ -73,5 +77,9 @@ driver_suite!(
         work_options_select_queues_and_limit_jobs,
         worker_polls_until_the_app_shuts_down,
         run_pending_drains_available_jobs_in_order,
+        status_counts_waiting_delayed_and_running_jobs,
+        pending_jobs_lists_and_finds_unfinished_jobs,
+        forget_deletes_one_failed_job,
+        supervised_work_reports_attempts_and_obeys_pause_and_stop,
     ]
 );

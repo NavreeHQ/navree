@@ -11,7 +11,7 @@ use navree_kernel::{AppContext, WeakAppContext};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
-use crate::record::{FailedJob, NewJob, RetryTarget};
+use crate::record::{FailedJob, NewJob, PendingJob, PendingQuery, QueueStatus, RetryTarget};
 use crate::store::Store;
 use crate::{QueueError, QueueOptions};
 
@@ -175,6 +175,37 @@ impl Queue {
     /// running.
     pub async fn pending_count(&self, queue: &str) -> Result<u64, QueueError> {
         self.inner.store.pending_count(queue).await
+    }
+
+    /// The failed job with id `id`, if there is one.
+    pub async fn failed_job(&self, id: &str) -> Result<Option<FailedJob>, QueueError> {
+        self.inner.store.failed_job(id).await
+    }
+
+    /// Deletes one failed job (it is not retried);
+    /// [`QueueError::FailedJobNotFound`] when there is none with that id.
+    pub async fn forget(&self, id: &str) -> Result<(), QueueError> {
+        self.inner.store.forget(id).await
+    }
+
+    /// `queue` now: how many jobs wait (available now), are delayed
+    /// (available later) and run (reserved by a worker), and since when its
+    /// oldest waiting job is available, so
+    /// [`oldest_wait`](QueueStatus::oldest_wait) is how far the queue is
+    /// behind. One query with the database driver.
+    pub async fn status(&self, queue: &str) -> Result<QueueStatus, QueueError> {
+        self.inner.store.status(queue, self.now_ms()).await
+    }
+
+    /// The jobs that are not finished yet, oldest first (by availability):
+    /// waiting, delayed and running, filtered by `query`.
+    pub async fn pending_jobs(&self, query: &PendingQuery) -> Result<Vec<PendingJob>, QueueError> {
+        self.inner.store.pending_jobs(query, self.now_ms()).await
+    }
+
+    /// The unfinished job with id `id`, if there is one.
+    pub async fn pending_job(&self, id: &str) -> Result<Option<PendingJob>, QueueError> {
+        self.inner.store.pending_job(id, self.now_ms()).await
     }
 
     /// The current time in Unix milliseconds (the app's `dyn Clock` when it
