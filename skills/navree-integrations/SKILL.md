@@ -161,6 +161,15 @@ ciphertext reaches the audit log). Return `ConnectionInfo` from your own
 routes. The migration is a schema-builder one; its UUID columns are
 `BINARY(16)` on MySQL/MariaDB (models write UUIDs as 16 bytes there).
 
+## Notification bot routes
+
+With the facade's `integrations` and `notify` features (both in `full`),
+`IntegrationsModule` registers navree-notify's `dyn ConnectionTokens`
+(`IntegrationTokens`): `SlackRoute::channel("C1").connection(conn.id)` posts
+with the install's bot token, `TeamsRoute::conversation(url, id).connection(conn.id)`
+sends with a `microsoft` connection's app-only token (scope set asking for
+`https://api.botframework.com/.default`). See `navree-notification-channels`.
+
 ## Tests
 
 ```rust
