@@ -76,6 +76,14 @@ impl Scratch {
         f(&mut options);
         Db::connect(&options).await.expect("connects")
     }
+
+    /// A connection to the server as the admin of `NAVREE_TEST_MYSQL_URL`
+    /// (to kill connections, or drop and create the scratch database).
+    pub async fn admin(&self) -> sea_orm::DatabaseConnection {
+        Database::connect(self.admin.as_str())
+            .await
+            .expect("connects as the admin")
+    }
 }
 
 impl Drop for Scratch {
