@@ -7,7 +7,7 @@ A **scope** is a piece of a query you reuse. Local scopes are conditions you nam
 
 ## Local scopes
 
-Write scopes as functions of a builder in a `#[scopes]` block, each marked `#[scope]`:
+Write scopes as functions of a builder in a `#[scopes]` block (from `navree::orm::prelude`), each marked `#[scope]`:
 
 ```rust title="src/modules/deals/models/deal.rs"
 #[scopes]

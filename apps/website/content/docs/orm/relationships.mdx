@@ -36,7 +36,7 @@ impl Deal {
 }
 ```
 
-Each method is a relation named after itself: `deal.company()` is the relation, and `"company"` names it in `with`, `where_has` and `load`. The definitions (`belongs_to`, `has_many`, ...) are in scope in the block; foreign keys are typed columns, so a key on the wrong model doesn't compile. A model has one `#[relations]` block, and a model with relations derives `Default`: relations used by name are read from a default instance.
+`#[relations]` and the relation types come with `use navree::orm::prelude::*;`. Each method is a relation named after itself: `deal.company()` is the relation, and `"company"` names it in `with`, `where_has` and `load`. The definitions (`belongs_to`, `has_many`, ...) are in scope in the block; foreign keys are typed columns, so a key on the wrong model doesn't compile. A model has one `#[relations]` block, and a model with relations derives `Default`: relations used by name are read from a default instance.
 
 | Relation | Defined with | Holds when loaded |
 |---|---|---|
