@@ -13,4 +13,5 @@ mod migrations;
 mod module;
 mod queries;
 mod schema;
+mod streams;
 mod uow;
