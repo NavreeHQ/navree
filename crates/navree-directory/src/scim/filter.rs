@@ -493,7 +493,9 @@ fn tokenize(text: &str) -> Result<Vec<Token>, FilterError> {
                     i += 1;
                 }
                 if i >= chars.len() {
-                    return Err(FilterError("a string in the filter is not closed".to_owned()));
+                    return Err(FilterError(
+                        "a string in the filter is not closed".to_owned(),
+                    ));
                 }
                 let literal: String = chars[start..=i].iter().collect();
                 let value: String = serde_json::from_str(&literal)
@@ -635,9 +637,7 @@ impl Parser {
                 )));
             }
             None => {
-                return Err(FilterError(format!(
-                    "expected an operator after `{path}`"
-                )));
+                return Err(FilterError(format!("expected an operator after `{path}`")));
             }
         };
         let value = match self.next() {
@@ -741,7 +741,9 @@ mod tests {
     fn logic_follows_precedence_and_parentheses() {
         // `and` binds tighter than `or`.
         assert!(matches(r#"title eq "x" and title eq "y" or userName pr"#));
-        assert!(!matches(r#"title eq "x" and (title eq "y" or userName pr)"#));
+        assert!(!matches(
+            r#"title eq "x" and (title eq "y" or userName pr)"#
+        ));
         assert!(matches(r#"not (title eq "Manager")"#));
         assert!(!matches(r#"not (title pr)"#));
         assert!(matches(r#"(title pr) and ((userName pr))"#));
@@ -813,13 +815,25 @@ mod tests {
             ("userName eq", "expected a value after `userName`"),
             (r#"userName is "x""#, "`is` is not a filter operator"),
             (r#"userName eq "x"#, "a string in the filter is not closed"),
-            (r#"(userName eq "x""#, "expected `)` at the end of the filter"),
+            (
+                r#"(userName eq "x""#,
+                "expected `)` at the end of the filter",
+            ),
             (r#"userName eq "x" junk"#, "unexpected `junk` in the filter"),
             (r#"not userName eq "x""#, "`not` must be followed by `(`"),
-            (r#"emails[type eq "work""#, "expected `]` at the end of the filter"),
+            (
+                r#"emails[type eq "work""#,
+                "expected `]` at the end of the filter",
+            ),
             (r#"1bad eq "x""#, "`1bad` is not an attribute path"),
-            (r#""x" eq "x""#, "expected an attribute in the filter, found `\"x\"`"),
-            (r#"user..name eq "x""#, "`user..name` is not an attribute path"),
+            (
+                r#""x" eq "x""#,
+                "expected an attribute in the filter, found `\"x\"`",
+            ),
+            (
+                r#"user..name eq "x""#,
+                "`user..name` is not an attribute path",
+            ),
         ] {
             let error = Filter::parse(filter).unwrap_err();
             assert_eq!(error.0, message, "{filter}");
@@ -849,18 +863,16 @@ mod tests {
         assert_eq!(path.attr.name, "members");
         assert!(path.sub.is_none());
 
-        let path = PatchPath::parse(
-            "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:manager",
-        )
-        .unwrap();
+        let path =
+            PatchPath::parse("urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:manager")
+                .unwrap();
         assert_eq!(
             path.attr.urn.as_deref(),
             Some("urn:ietf:params:scim:schemas:extension:enterprise:2.0:User")
         );
         assert_eq!(path.attr.name, "manager");
 
-        let path =
-            PatchPath::parse("urn:ietf:params:scim:schemas:core:2.0:User:userName").unwrap();
+        let path = PatchPath::parse("urn:ietf:params:scim:schemas:core:2.0:User:userName").unwrap();
         assert_eq!(path.attr, AttrPath::top("userName"));
 
         assert!(PatchPath::parse(r#"emails[type eq "work""#).is_err());

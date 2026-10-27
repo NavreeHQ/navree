@@ -35,7 +35,10 @@ impl DirectorySource for GoogleSource {
         Ok(())
     }
 
-    fn pull<'a>(&'a self, request: &'a PullRequest) -> BoxFuture<'a, Result<Pulled, DirectoryError>> {
+    fn pull<'a>(
+        &'a self,
+        request: &'a PullRequest,
+    ) -> BoxFuture<'a, Result<Pulled, DirectoryError>> {
         Box::pin(async move {
             let mut client = GoogleClient::from(request.client(GOOGLE).await?);
             if let Some(admin) = request.setting("admin_email") {
@@ -46,7 +49,10 @@ impl DirectorySource for GoogleSource {
                 Some(domain) => vec![("domain", domain.to_owned())],
                 None => vec![(
                     "customer",
-                    request.setting("customer").unwrap_or("my_customer").to_owned(),
+                    request
+                        .setting("customer")
+                        .unwrap_or("my_customer")
+                        .to_owned(),
                 )],
             };
             let mut query = scope.clone();
@@ -64,7 +70,10 @@ impl DirectorySource for GoogleSource {
                 .collect();
             for user in &mut users {
                 if let Some(manager) = user.manager_id.take() {
-                    user.manager_id = by_email.get(&manager.to_lowercase()).cloned().or(Some(manager));
+                    user.manager_id = by_email
+                        .get(&manager.to_lowercase())
+                        .cloned()
+                        .or(Some(manager));
                 }
             }
             let mut groups = Vec::new();
@@ -151,23 +160,35 @@ pub(crate) fn user_of(item: &Value) -> Option<DirectoryUser> {
     let id = text(item.get("id"))?;
     let primary = text(item.get("primaryEmail"))?;
     let mut user = DirectoryUser::new(id, primary.clone());
-    let suspended = item.get("suspended").and_then(Value::as_bool).unwrap_or(false);
-    let archived = item.get("archived").and_then(Value::as_bool).unwrap_or(false);
+    let suspended = item
+        .get("suspended")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let archived = item
+        .get("archived")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     user.active = !suspended && !archived;
     user.given_name = text(item.pointer("/name/givenName"));
     user.family_name = text(item.pointer("/name/familyName"));
     user.display_name = text(item.pointer("/name/fullName"));
-    user.emails.push(ContactValue::new(primary, Some("work"), true));
+    user.emails
+        .push(ContactValue::new(primary, Some("work"), true));
     if let Some(Value::Array(emails)) = item.get("emails") {
         for email in emails {
             let Some(address) = text(email.get("address")) else {
                 continue;
             };
-            if user.emails.iter().any(|e| e.value.eq_ignore_ascii_case(&address)) {
+            if user
+                .emails
+                .iter()
+                .any(|e| e.value.eq_ignore_ascii_case(&address))
+            {
                 continue;
             }
             let kind = text(email.get("type")).unwrap_or_else(|| "other".to_owned());
-            user.emails.push(ContactValue::new(address, Some(&kind), false));
+            user.emails
+                .push(ContactValue::new(address, Some(&kind), false));
         }
     }
     if let Some(Value::Array(phones)) = item.get("phones") {
@@ -176,8 +197,12 @@ pub(crate) fn user_of(item: &Value) -> Option<DirectoryUser> {
                 continue;
             };
             let kind = text(phone.get("type")).unwrap_or_else(|| "work".to_owned());
-            let primary = phone.get("primary").and_then(Value::as_bool).unwrap_or(false);
-            user.phone_numbers.push(ContactValue::new(value, Some(&kind), primary));
+            let primary = phone
+                .get("primary")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            user.phone_numbers
+                .push(ContactValue::new(value, Some(&kind), primary));
         }
     }
     if let Some(Value::Array(organizations)) = item.get("organizations") {
@@ -211,7 +236,8 @@ pub(crate) fn user_of(item: &Value) -> Option<DirectoryUser> {
             .and_then(|l| text(l.get("languageCode")));
     }
     if let Some(path) = text(item.get("orgUnitPath")) {
-        user.attributes.insert("orgUnitPath".to_owned(), Value::String(path));
+        user.attributes
+            .insert("orgUnitPath".to_owned(), Value::String(path));
     }
     Some(user)
 }

@@ -124,7 +124,11 @@ impl DirectorySink for RecordingSink {
                 "user:{}:{}{}",
                 change.action.as_str(),
                 change.user.external_id,
-                if change.user.active { "" } else { " (inactive)" }
+                if change.user.active {
+                    ""
+                } else {
+                    " (inactive)"
+                }
             ));
             Ok(Some(format!("local-{}", change.user.external_id)))
         })

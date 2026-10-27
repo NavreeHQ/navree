@@ -140,7 +140,11 @@ impl LdapSettings {
             }
         };
         let url = string("url")?.ok_or("settings.url is required (ldap:// or ldaps://)")?;
-        let scheme = url.split("://").next().unwrap_or_default().to_ascii_lowercase();
+        let scheme = url
+            .split("://")
+            .next()
+            .unwrap_or_default()
+            .to_ascii_lowercase();
         if !matches!(scheme.as_str(), "ldap" | "ldaps") || !url.contains("://") {
             return Err(format!(
                 "settings.url must start with ldap:// or ldaps://, got `{url}`"
@@ -149,7 +153,9 @@ impl LdapSettings {
         let base_dn = string("base_dn")?.ok_or("settings.base_dn is required")?;
         let starttls = flag("starttls", false)?;
         if starttls && scheme == "ldaps" {
-            return Err("settings.starttls is for ldap:// URLs; ldaps:// is TLS already".to_owned());
+            return Err(
+                "settings.starttls is for ldap:// URLs; ldaps:// is TLS already".to_owned(),
+            );
         }
         let page_size = number("page_size", 500)?;
         if page_size == 0 || page_size > 10_000 {
@@ -158,7 +164,9 @@ impl LdapSettings {
         let timeout = number("timeout_secs", 30)?.max(1);
         let ca_certificate = string("ca_certificate")?;
         if let Some(pem) = &ca_certificate
-            && CertificateDer::pem_slice_iter(pem.as_bytes()).next().is_none()
+            && CertificateDer::pem_slice_iter(pem.as_bytes())
+                .next()
+                .is_none()
         {
             return Err("settings.ca_certificate must be a PEM certificate".to_owned());
         }
@@ -178,7 +186,9 @@ impl LdapSettings {
                 .filter(|name| !name.is_empty())
                 .map(str::to_owned)
                 .collect(),
-            Some(_) => return Err("settings.attributes must be a list of attribute names".to_owned()),
+            Some(_) => {
+                return Err("settings.attributes must be a list of attribute names".to_owned());
+            }
         };
         Ok(LdapSettings {
             url,
@@ -211,23 +221,34 @@ impl DirectorySource for LdapSource {
     fn check_settings(&self, settings: &Value, has_secret: bool) -> Result<(), String> {
         let settings = LdapSettings::from_value(settings)?;
         if settings.bind_dn.is_some() && !has_secret {
-            return Err("settings.bind_dn needs the bind password as the connection's secret".to_owned());
+            return Err(
+                "settings.bind_dn needs the bind password as the connection's secret".to_owned(),
+            );
         }
         Ok(())
     }
 
-    fn pull<'a>(&'a self, request: &'a PullRequest) -> BoxFuture<'a, Result<Pulled, DirectoryError>> {
+    fn pull<'a>(
+        &'a self,
+        request: &'a PullRequest,
+    ) -> BoxFuture<'a, Result<Pulled, DirectoryError>> {
         Box::pin(async move {
             let settings = LdapSettings::from_value(&request.connection.settings)
                 .map_err(DirectoryError::InvalidSettings)?;
-            let password = request.secret.as_ref().map(|secret| secret.expose().clone());
+            let password = request
+                .secret
+                .as_ref()
+                .map(|secret| secret.expose().clone());
             pull(&settings, password.as_deref()).await
         })
     }
 }
 
 /// Binds, searches and maps.
-pub(crate) async fn pull(settings: &LdapSettings, password: Option<&str>) -> Result<Pulled, DirectoryError> {
+pub(crate) async fn pull(
+    settings: &LdapSettings,
+    password: Option<&str>,
+) -> Result<Pulled, DirectoryError> {
     let mut conn_settings = LdapConnSettings::new()
         .set_conn_timeout(settings.timeout)
         .set_starttls(settings.starttls);
@@ -245,7 +266,9 @@ pub(crate) async fn pull(settings: &LdapSettings, password: Option<&str>) -> Res
             .simple_bind(dn, password.unwrap_or_default())
             .await
             .and_then(ldap3::LdapResult::success)
-            .map_err(|error| failed(format!("the bind as {dn} failed: {}", ldap_message(&error))))?;
+            .map_err(|error| {
+                failed(format!("the bind as {dn} failed: {}", ldap_message(&error)))
+            })?;
     }
     let mut user_attrs: Vec<String> = [
         settings.id_attribute(),
@@ -280,7 +303,10 @@ pub(crate) async fn pull(settings: &LdapSettings, password: Option<&str>) -> Res
             user_attrs.push(extra.clone());
         }
     }
-    let user_base = settings.user_base_dn.as_deref().unwrap_or(&settings.base_dn);
+    let user_base = settings
+        .user_base_dn
+        .as_deref()
+        .unwrap_or(&settings.base_dn);
     let user_filter = settings
         .user_filter
         .as_deref()
@@ -301,7 +327,10 @@ pub(crate) async fn pull(settings: &LdapSettings, password: Option<&str>) -> Res
         .into_iter()
         .map(str::to_owned)
         .collect();
-        let group_base = settings.group_base_dn.as_deref().unwrap_or(&settings.base_dn);
+        let group_base = settings
+            .group_base_dn
+            .as_deref()
+            .unwrap_or(&settings.base_dn);
         let group_filter = settings
             .group_filter
             .as_deref()
@@ -327,20 +356,27 @@ async fn search(
         .with_timeout(settings.timeout)
         .streaming_search_with(adapters, base, Scope::Subtree, filter, attrs)
         .await
-        .map_err(|error| failed(format!("the search under {base} failed: {}", ldap_message(&error))))?;
+        .map_err(|error| {
+            failed(format!(
+                "the search under {base} failed: {}",
+                ldap_message(&error)
+            ))
+        })?;
     let mut entries = Vec::new();
-    while let Some(entry) = stream
-        .next()
-        .await
-        .map_err(|error| failed(format!("the search under {base} failed: {}", ldap_message(&error))))?
-    {
+    while let Some(entry) = stream.next().await.map_err(|error| {
+        failed(format!(
+            "the search under {base} failed: {}",
+            ldap_message(&error)
+        ))
+    })? {
         entries.push(LdapEntry::from(SearchEntry::construct(entry)));
     }
-    stream
-        .finish()
-        .await
-        .success()
-        .map_err(|error| failed(format!("the search under {base} failed: {}", ldap_message(&error))))?;
+    stream.finish().await.success().map_err(|error| {
+        failed(format!(
+            "the search under {base} failed: {}",
+            ldap_message(&error)
+        ))
+    })?;
     Ok(entries)
 }
 
@@ -349,7 +385,9 @@ fn tls_config(pem: &str) -> Result<Arc<rustls::ClientConfig>, DirectoryError> {
     let mut roots = rustls::RootCertStore::empty();
     for cert in CertificateDer::pem_slice_iter(pem.as_bytes()) {
         let cert = cert.map_err(|_| {
-            DirectoryError::InvalidSettings("settings.ca_certificate must be a PEM certificate".to_owned())
+            DirectoryError::InvalidSettings(
+                "settings.ca_certificate must be a PEM certificate".to_owned(),
+            )
         })?;
         roots.add(cert).map_err(|error| {
             DirectoryError::InvalidSettings(format!("settings.ca_certificate: {error}"))
@@ -396,11 +434,16 @@ impl From<SearchEntry> for LdapEntry {
     fn from(entry: SearchEntry) -> Self {
         let mut text: HashMap<String, Vec<String>> = HashMap::new();
         for (name, values) in entry.attrs {
-            text.entry(name.to_ascii_lowercase()).or_default().extend(values);
+            text.entry(name.to_ascii_lowercase())
+                .or_default()
+                .extend(values);
         }
         let mut binary: HashMap<String, Vec<Vec<u8>>> = HashMap::new();
         for (name, values) in entry.bin_attrs {
-            binary.entry(name.to_ascii_lowercase()).or_default().extend(values);
+            binary
+                .entry(name.to_ascii_lowercase())
+                .or_default()
+                .extend(values);
         }
         LdapEntry {
             dn: entry.dn,
@@ -456,19 +499,18 @@ impl LdapEntry {
 /// A DN as compared: lower-case, without spaces around `,` and `=`.
 pub(crate) fn normalize_dn(dn: &str) -> String {
     dn.split(',')
-        .map(|rdn| {
-            rdn.split('=')
-                .map(str::trim)
-                .collect::<Vec<_>>()
-                .join("=")
-        })
+        .map(|rdn| rdn.split('=').map(str::trim).collect::<Vec<_>>().join("="))
         .collect::<Vec<_>>()
         .join(",")
         .to_lowercase()
 }
 
 /// Users and groups from the entries.
-pub(crate) fn map_entries(settings: &LdapSettings, users: &[LdapEntry], groups: &[LdapEntry]) -> Pulled {
+pub(crate) fn map_entries(
+    settings: &LdapSettings,
+    users: &[LdapEntry],
+    groups: &[LdapEntry],
+) -> Pulled {
     let id_attribute = settings.id_attribute();
     let mut by_dn: HashMap<String, String> = HashMap::new();
     let mut by_uid: HashMap<String, String> = HashMap::new();
@@ -509,19 +551,24 @@ pub(crate) fn map_entries(settings: &LdapSettings, users: &[LdapEntry], groups: 
         user.family_name = entry.first("sn");
         user.display_name = entry.first("displayName").or_else(|| entry.first("cn"));
         for (n, mail) in entry.all("mail").into_iter().enumerate() {
-            user.emails.push(ContactValue::new(mail, Some("work"), n == 0));
+            user.emails
+                .push(ContactValue::new(mail, Some("work"), n == 0));
         }
         if let Some(phone) = entry.first("telephoneNumber") {
-            user.phone_numbers.push(ContactValue::new(phone, Some("work"), true));
+            user.phone_numbers
+                .push(ContactValue::new(phone, Some("work"), true));
         }
         if let Some(mobile) = entry.first("mobile") {
             let primary = user.phone_numbers.is_empty();
-            user.phone_numbers.push(ContactValue::new(mobile, Some("mobile"), primary));
+            user.phone_numbers
+                .push(ContactValue::new(mobile, Some("mobile"), primary));
         }
         user.title = entry.first("title");
         user.department = entry.first("department");
         user.organization = entry.first("company").or_else(|| entry.first("o"));
-        user.employee_number = entry.first("employeeID").or_else(|| entry.first("employeeNumber"));
+        user.employee_number = entry
+            .first("employeeID")
+            .or_else(|| entry.first("employeeNumber"));
         user.manager_id = entry
             .first("manager")
             .map(|dn| by_dn.get(&normalize_dn(&dn)).cloned().unwrap_or(dn));
@@ -565,7 +612,11 @@ pub(crate) fn map_entries(settings: &LdapSettings, users: &[LdapEntry], groups: 
         let mut members: BTreeSet<String> = members_of
             .remove(&normalize_dn(&entry.dn))
             .unwrap_or_default();
-        for dn in entry.all("member").into_iter().chain(entry.all("uniqueMember")) {
+        for dn in entry
+            .all("member")
+            .into_iter()
+            .chain(entry.all("uniqueMember"))
+        {
             if let Some(id) = by_dn.get(&normalize_dn(&dn)) {
                 members.insert(id.clone());
             }
@@ -630,7 +681,10 @@ mod tests {
         assert_eq!(s.flavor, Flavor::ActiveDirectory);
         assert_eq!(s.page_size, 200);
         assert!(!s.groups);
-        assert_eq!(s.attributes, vec!["extensionAttribute1", "physicalDeliveryOfficeName"]);
+        assert_eq!(
+            s.attributes,
+            vec!["extensionAttribute1", "physicalDeliveryOfficeName"]
+        );
         assert_eq!(s.timeout, Duration::from_secs(30));
         for (settings, message) in [
             (json!({}), "settings.url is required (ldap:// or ldaps://)"),
@@ -693,11 +747,24 @@ mod tests {
             ..LdapEntry::default()
         };
         entry.binary.insert("objectguid".into(), vec![bytes]);
-        assert_eq!(entry.id("objectGUID"), "6e7b768e-07e2-4810-8459-485f84f8f204");
+        assert_eq!(
+            entry.id("objectGUID"),
+            "6e7b768e-07e2-4810-8459-485f84f8f204"
+        );
         let entry = entry_with_text_guid();
         // The first three fields swap byte order; the last eight stay.
-        assert_eq!(entry.id("objectGUID"), "30313233-3435-3637-3938-616263646566");
-        assert_eq!(LdapEntry { dn: "CN=X".into(), ..LdapEntry::default() }.id("objectGUID"), "CN=X");
+        assert_eq!(
+            entry.id("objectGUID"),
+            "30313233-3435-3637-3938-616263646566"
+        );
+        assert_eq!(
+            LdapEntry {
+                dn: "CN=X".into(),
+                ..LdapEntry::default()
+            }
+            .id("objectGUID"),
+            "CN=X"
+        );
     }
 
     fn entry_with_text_guid() -> LdapEntry {
@@ -731,7 +798,10 @@ mod tests {
                     ("company", &["Acme"]),
                     ("employeeID", &["1815"]),
                     ("telephoneNumber", &["+44 20 7946 0958"]),
-                    ("manager", &["CN=Charles Babbage, OU=People,DC=acme,DC=test"]),
+                    (
+                        "manager",
+                        &["CN=Charles Babbage, OU=People,DC=acme,DC=test"],
+                    ),
                     ("userAccountControl", &["512"]),
                     ("memberOf", &["CN=Engineering,OU=Groups,DC=acme,DC=test"]),
                     ("physicalDeliveryOfficeName", &["London"]),
@@ -745,7 +815,10 @@ mod tests {
                     ("userAccountControl", &["514"]),
                 ],
             ),
-            entry("CN=No Name,OU=People,DC=acme,DC=test", &[("objectGUID", &["x"])]),
+            entry(
+                "CN=No Name,OU=People,DC=acme,DC=test",
+                &[("objectGUID", &["x"])],
+            ),
         ];
         let groups = vec![entry(
             "CN=Engineering,OU=Groups,DC=acme,DC=test",
@@ -753,7 +826,13 @@ mod tests {
                 ("objectGUID", &["eng-guid"]),
                 ("cn", &["Engineering"]),
                 ("description", &["Builders"]),
-                ("member", &["CN=Charles Babbage,OU=People,DC=acme,DC=test", "CN=Gone,DC=x"]),
+                (
+                    "member",
+                    &[
+                        "CN=Charles Babbage,OU=People,DC=acme,DC=test",
+                        "CN=Gone,DC=x",
+                    ],
+                ),
             ],
         )];
         let pulled = map_entries(&settings("active_directory"), &users, &groups);
@@ -772,7 +851,10 @@ mod tests {
             ada.manager_id.as_deref(),
             Some("CN=Charles Babbage,OU=People,DC=acme,DC=test")
         );
-        assert_eq!(ada.attributes["physicalDeliveryOfficeName"], json!("London"));
+        assert_eq!(
+            ada.attributes["physicalDeliveryOfficeName"],
+            json!("London")
+        );
         let charles = &pulled.users[1];
         assert_eq!(charles.user_name, "charles");
         assert!(!charles.active, "userAccountControl 514 is disabled");
@@ -820,7 +902,11 @@ mod tests {
             ),
             entry(
                 "cn=ops,ou=groups,dc=acme,dc=test",
-                &[("entryUUID", &["g-ops"]), ("cn", &["ops"]), ("memberUid", &["GRACE"])],
+                &[
+                    ("entryUUID", &["g-ops"]),
+                    ("cn", &["ops"]),
+                    ("memberUid", &["GRACE"]),
+                ],
             ),
         ];
         let pulled = map_entries(&settings("openldap"), &users, &groups);

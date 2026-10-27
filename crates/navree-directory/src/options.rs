@@ -229,7 +229,10 @@ mod tests {
             "directory.sync.max_deactivation_percent",
             "directory.sync.stale_after_mins",
         ] {
-            assert!(errors.iter().any(|e| e.starts_with(key)), "{key}: {errors:?}");
+            assert!(
+                errors.iter().any(|e| e.starts_with(key)),
+                "{key}: {errors:?}"
+            );
         }
     }
 }

@@ -247,7 +247,9 @@ mod tests {
 
     #[test]
     fn internal_errors_stay_500_without_details() {
-        let body = body(DirectoryError::Sink("the recipients table is locked".into()));
+        let body = body(DirectoryError::Sink(
+            "the recipients table is locked".into(),
+        ));
         assert_eq!(body["statusCode"], json!(500));
         assert!(!body.to_string().contains("recipients"));
         assert!(DirectoryError::NotBound.to_app_error().is_none());

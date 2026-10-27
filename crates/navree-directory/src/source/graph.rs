@@ -44,7 +44,10 @@ struct Cursor {
 }
 
 impl DirectorySource for GraphSource {
-    fn pull<'a>(&'a self, request: &'a PullRequest) -> BoxFuture<'a, Result<Pulled, DirectoryError>> {
+    fn pull<'a>(
+        &'a self,
+        request: &'a PullRequest,
+    ) -> BoxFuture<'a, Result<Pulled, DirectoryError>> {
         Box::pin(async move {
             let client = request.client(MICROSOFT).await?;
             let groups = request.flag("groups", true);
@@ -157,10 +160,9 @@ async fn delta(
     let mut groups_link = cursor.groups.clone();
     if with_groups {
         // Groups were off for the first pull: start their delta now.
-        let start = cursor
-            .groups
-            .clone()
-            .unwrap_or_else(|| "/groups/delta?$select=displayName,description,mail,members".to_owned());
+        let start = cursor.groups.clone().unwrap_or_else(|| {
+            "/groups/delta?$select=displayName,description,mail,members".to_owned()
+        });
         let first = cursor.groups.is_none();
         let (items, link) = pages(client, &start).await?;
         groups_link = Some(link);
@@ -210,13 +212,20 @@ async fn pages(client: &IntegrationClient, start: &str) -> Result<(Vec<Value>, S
     let mut items = Vec::new();
     let mut next = start.to_owned();
     for _ in 0..MAX_PAGES {
-        let response = client.get(next.clone()).send().await.map_err(DirectoryError::from)?;
+        let response = client
+            .get(next.clone())
+            .send()
+            .await
+            .map_err(DirectoryError::from)?;
         let status = response.status().as_u16();
         if status == 410 {
             return Err(Round::Resync);
         }
         if !response.is_success() {
-            return Err(Round::Failed(failed(error_message(status, &response.text()))));
+            return Err(Round::Failed(failed(error_message(
+                status,
+                &response.text(),
+            ))));
         }
         let page: Value = response
             .json()
@@ -255,7 +264,10 @@ async fn by_ids(
         .map_err(DirectoryError::from)?;
     let status = response.status().as_u16();
     if !response.is_success() {
-        return Err(Round::Failed(failed(error_message(status, &response.text()))));
+        return Err(Round::Failed(failed(error_message(
+            status,
+            &response.text(),
+        ))));
     }
     let page: Value = response
         .json()
@@ -301,8 +313,7 @@ fn apply_group_attributes(group: &mut DirectoryGroup, item: &Value) {
 /// A Graph user as a [`DirectoryUser`].
 pub(crate) fn user_of(item: &Value) -> Option<DirectoryUser> {
     let id = text(item.get("id"))?;
-    let user_name = text(item.get("userPrincipalName"))
-        .or_else(|| text(item.get("mail")))?;
+    let user_name = text(item.get("userPrincipalName")).or_else(|| text(item.get("mail")))?;
     let mut user = DirectoryUser::new(id, user_name);
     user.active = item
         .get("accountEnabled")
@@ -312,24 +323,32 @@ pub(crate) fn user_of(item: &Value) -> Option<DirectoryUser> {
     user.family_name = text(item.get("surname"));
     user.display_name = text(item.get("displayName"));
     if let Some(mail) = text(item.get("mail")) {
-        user.emails.push(ContactValue::new(mail, Some("work"), true));
+        user.emails
+            .push(ContactValue::new(mail, Some("work"), true));
     }
     if let Some(Value::Array(others)) = item.get("otherMails") {
         for other in others.iter().filter_map(|v| text(Some(v))) {
-            if !user.emails.iter().any(|email| email.value.eq_ignore_ascii_case(&other)) {
-                user.emails.push(ContactValue::new(other, Some("other"), false));
+            if !user
+                .emails
+                .iter()
+                .any(|email| email.value.eq_ignore_ascii_case(&other))
+            {
+                user.emails
+                    .push(ContactValue::new(other, Some("other"), false));
             }
         }
     }
     if let Some(Value::Array(phones)) = item.get("businessPhones") {
         for phone in phones.iter().filter_map(|v| text(Some(v))) {
             let primary = user.phone_numbers.is_empty();
-            user.phone_numbers.push(ContactValue::new(phone, Some("work"), primary));
+            user.phone_numbers
+                .push(ContactValue::new(phone, Some("work"), primary));
         }
     }
     if let Some(mobile) = text(item.get("mobilePhone")) {
         let primary = user.phone_numbers.is_empty();
-        user.phone_numbers.push(ContactValue::new(mobile, Some("mobile"), primary));
+        user.phone_numbers
+            .push(ContactValue::new(mobile, Some("mobile"), primary));
     }
     user.title = text(item.get("jobTitle"));
     user.department = text(item.get("department"));
@@ -423,7 +442,10 @@ mod tests {
                 { "@odata.type": "#microsoft.graph.user", "id": "u2", "@removed": { "reason": "deleted" } }
             ]
         }));
-        assert_eq!(changes, vec![("u1".to_owned(), true), ("u2".to_owned(), false)]);
+        assert_eq!(
+            changes,
+            vec![("u1".to_owned(), true), ("u2".to_owned(), false)]
+        );
     }
 
     #[test]

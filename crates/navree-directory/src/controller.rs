@@ -19,7 +19,9 @@ use uuid::Uuid;
 use crate::options::DirectoryOptions;
 use crate::owner::DirectoryOwner;
 use crate::service::{ConnectionUpdate, CreatedConnection, NewConnection, synced_user};
-use crate::types::{DirectoryConnection, SyncChange, SyncOptions, SyncRun, SyncedGroup, SyncedUser};
+use crate::types::{
+    DirectoryConnection, SyncChange, SyncOptions, SyncRun, SyncedGroup, SyncedUser,
+};
 use crate::{Directory, DirectoryError, models};
 
 /// The permission every directory route requires.
@@ -142,7 +144,12 @@ impl Injectable for DirectoryController {
     }
 }
 
-fn api(summary: &str, responses: &[u16], request: Option<SchemaFn>, response: Option<SchemaFn>) -> ApiMeta {
+fn api(
+    summary: &str,
+    responses: &[u16],
+    request: Option<SchemaFn>,
+    response: Option<SchemaFn>,
+) -> ApiMeta {
     ApiMeta {
         summary: Some(summary.to_owned()),
         tags: vec!["Directory".to_owned()],
@@ -290,9 +297,7 @@ impl Controller for DirectoryController {
                 d.connection_for(owner, id).await?;
                 let (page, per_page) = page.resolve();
                 let rt = d.rt()?;
-                let query = || {
-                    models::User::query().where_(models::User::CONNECTION_ID.eq(id))
-                };
+                let query = || models::User::query().where_(models::User::CONNECTION_ID.eq(id));
                 let total = query().count(&*rt.db).await.map_err(DirectoryError::from)?;
                 let rows = query()
                     .order_by(models::User::USER_NAME)
@@ -416,7 +421,12 @@ impl Controller for DirectoryController {
                 .name("directory.connections.destroy")
                 .api(ApiMeta {
                     success_status: 204,
-                    ..api("Delete a directory connection", &[401, 403, 404], None, None)
+                    ..api(
+                        "Delete a directory connection",
+                        &[401, 403, 404],
+                        None,
+                        None,
+                    )
                 }),
             route(RouteDef::on(Method::POST, "/connections/{id}/token", token))
                 .name("directory.connections.token")
@@ -456,14 +466,18 @@ impl Controller for DirectoryController {
                     None,
                     Some(schema_fn::<SyncedUser>),
                 )),
-            route(RouteDef::on(Method::GET, "/connections/{id}/groups", groups))
-                .name("directory.connections.groups")
-                .api(api(
-                    "List a connection's synced groups",
-                    &[401, 403, 404],
-                    None,
-                    Some(schema_fn::<SyncedGroup>),
-                )),
+            route(RouteDef::on(
+                Method::GET,
+                "/connections/{id}/groups",
+                groups,
+            ))
+            .name("directory.connections.groups")
+            .api(api(
+                "List a connection's synced groups",
+                &[401, 403, 404],
+                None,
+                Some(schema_fn::<SyncedGroup>),
+            )),
             route(RouteDef::on(Method::GET, "/runs/{id}", run))
                 .name("directory.runs.show")
                 .api(api(

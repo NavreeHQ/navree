@@ -155,7 +155,9 @@ pub(crate) fn diff(current: &Current, pulled: &Pulled) -> Plan {
         let mut gone: Vec<&CurrentUser> = current
             .users
             .values()
-            .filter(|user| user.user.active && !seen_ids.contains_key(user.user.external_id.as_str()))
+            .filter(|user| {
+                user.user.active && !seen_ids.contains_key(user.user.external_id.as_str())
+            })
             .collect();
         gone.sort_by(|a, b| a.user.external_id.cmp(&b.user.external_id));
         gone
@@ -211,10 +213,12 @@ pub(crate) fn diff(current: &Current, pulled: &Pulled) -> Plan {
     let mut delta_groups: Vec<&str> = Vec::new();
     if !pulled.complete {
         for change in &pulled.member_changes {
-            let entry = member_changes.entry(change.group.as_str()).or_insert_with(|| {
-                delta_groups.push(change.group.as_str());
-                (Vec::new(), Vec::new())
-            });
+            let entry = member_changes
+                .entry(change.group.as_str())
+                .or_insert_with(|| {
+                    delta_groups.push(change.group.as_str());
+                    (Vec::new(), Vec::new())
+                });
             if change.added {
                 entry.0.push(&change.user);
             } else {
@@ -224,35 +228,37 @@ pub(crate) fn diff(current: &Current, pulled: &Pulled) -> Plan {
     }
 
     let mut unknown_members = 0_u64;
-    let mut desired_members =
-        |base: BTreeSet<String>, group: &str, listed: Option<&DirectoryGroup>| -> BTreeSet<String> {
-            if pulled.complete {
-                let listed = listed.map(|g| g.members.as_slice()).unwrap_or_default();
-                let mut members = BTreeSet::new();
-                for member in listed {
-                    if known(member) {
-                        members.insert(member.clone());
-                    } else {
-                        unknown_members += 1;
-                    }
-                }
-                return members;
-            }
-            let mut members = base;
-            if let Some((added, removed)) = member_changes.get(group) {
-                for member in added {
-                    if known(member) {
-                        members.insert((*member).to_owned());
-                    } else {
-                        unknown_members += 1;
-                    }
-                }
-                for member in removed {
-                    members.remove(*member);
+    let mut desired_members = |base: BTreeSet<String>,
+                               group: &str,
+                               listed: Option<&DirectoryGroup>|
+     -> BTreeSet<String> {
+        if pulled.complete {
+            let listed = listed.map(|g| g.members.as_slice()).unwrap_or_default();
+            let mut members = BTreeSet::new();
+            for member in listed {
+                if known(member) {
+                    members.insert(member.clone());
+                } else {
+                    unknown_members += 1;
                 }
             }
-            members
-        };
+            return members;
+        }
+        let mut members = base;
+        if let Some((added, removed)) = member_changes.get(group) {
+            for member in added {
+                if known(member) {
+                    members.insert((*member).to_owned());
+                } else {
+                    unknown_members += 1;
+                }
+            }
+            for member in removed {
+                members.remove(*member);
+            }
+        }
+        members
+    };
 
     let mut handled: HashSet<&str> = HashSet::new();
     let ordered: Vec<(&str, Option<&DirectoryGroup>)> = groups
@@ -338,7 +344,9 @@ pub(crate) fn diff(current: &Current, pulled: &Pulled) -> Plan {
     } else {
         let mut ids: Vec<&str> = removed_groups.iter().copied().collect();
         ids.sort_unstable();
-        ids.into_iter().filter_map(|id| current.groups.get(id)).collect()
+        ids.into_iter()
+            .filter_map(|id| current.groups.get(id))
+            .collect()
     };
     for previous in deleted {
         summary.groups_deleted += 1;
@@ -463,12 +471,18 @@ mod tests {
         let plan = diff(&current, &pulled);
         assert_eq!(
             actions(&plan.users),
-            vec![(ChangeAction::Update, "u1"), (ChangeAction::Reactivate, "u2")]
+            vec![
+                (ChangeAction::Update, "u1"),
+                (ChangeAction::Reactivate, "u2")
+            ]
         );
         assert_eq!(plan.users[0].changed, vec!["title"]);
         assert_eq!(
             actions(&plan.deactivations),
-            vec![(ChangeAction::Deactivate, "u3"), (ChangeAction::Deactivate, "u4")]
+            vec![
+                (ChangeAction::Deactivate, "u3"),
+                (ChangeAction::Deactivate, "u4")
+            ]
         );
         // u4 is missing from the snapshot: deactivated with its last data.
         assert_eq!(plan.deactivations[1].changed, vec!["active"]);
@@ -534,17 +548,30 @@ mod tests {
             actions(&plan.users),
             vec![(ChangeAction::Create, "u4"), (ChangeAction::Update, "u1")]
         );
-        assert_eq!(actions(&plan.deactivations), vec![(ChangeAction::Deactivate, "u2")]);
+        assert_eq!(
+            actions(&plan.deactivations),
+            vec![(ChangeAction::Deactivate, "u2")]
+        );
         let groups: Vec<(&str, ChangeAction, Vec<String>)> = plan
             .groups
             .iter()
-            .map(|g| (g.group.external_id.as_str(), g.action, g.group.members.clone()))
+            .map(|g| {
+                (
+                    g.group.external_id.as_str(),
+                    g.action,
+                    g.group.members.clone(),
+                )
+            })
             .collect();
         assert_eq!(
             groups,
             vec![
                 ("g4", ChangeAction::Create, vec!["u1".to_owned()]),
-                ("g1", ChangeAction::Update, vec!["u1".to_owned(), "u4".to_owned()]),
+                (
+                    "g1",
+                    ChangeAction::Update,
+                    vec!["u1".to_owned(), "u4".to_owned()]
+                ),
             ]
         );
         assert_eq!(plan.groups[1].changed, vec!["members"]);

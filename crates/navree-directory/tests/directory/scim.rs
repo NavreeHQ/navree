@@ -87,14 +87,25 @@ fn assert_scim_error(response: &TestResponse, status: u16, scim_type: Option<&st
 #[tokio::test]
 async fn discovery_describes_the_server_without_a_token() {
     let (h, _, _) = scim().await;
-    let config = h.app.client().get("/scim/v2/ServiceProviderConfig").send().await;
+    let config = h
+        .app
+        .client()
+        .get("/scim/v2/ServiceProviderConfig")
+        .send()
+        .await;
     let config = config.assert_status(200);
     assert_eq!(config.header("content-type"), Some("application/scim+json"));
     let body = config.json_value();
     assert_eq!(body["patch"]["supported"], json!(true));
     assert_eq!(body["bulk"]["supported"], json!(false));
-    assert_eq!(body["filter"], json!({ "supported": true, "maxResults": 200 }));
-    assert_eq!(body["authenticationSchemes"][0]["type"], json!("oauthbearertoken"));
+    assert_eq!(
+        body["filter"],
+        json!({ "supported": true, "maxResults": 200 })
+    );
+    assert_eq!(
+        body["authenticationSchemes"][0]["type"],
+        json!("oauthbearertoken")
+    );
     assert_eq!(
         body["meta"]["location"],
         json!("https://app.acme.test/scim/v2/ServiceProviderConfig")
@@ -112,7 +123,9 @@ async fn discovery_describes_the_server_without_a_token() {
         .assert_status(200)
         .assert_json_path("schema", json!(GROUP));
     let schemas = h.app.client().get("/scim/v2/Schemas").send().await;
-    schemas.assert_status(200).assert_json_path("totalResults", json!(3));
+    schemas
+        .assert_status(200)
+        .assert_json_path("totalResults", json!(3));
     h.app
         .client()
         .get(&format!("/scim/v2/Schemas/{ENTERPRISE}"))
@@ -129,7 +142,10 @@ async fn requests_carry_the_connections_token() {
     let (h, token, id) = scim().await;
     let none = h.app.client().get("/scim/v2/Users").send().await;
     assert_scim_error(&none, 401, None);
-    assert_eq!(none.header("www-authenticate"), Some("Bearer realm=\"SCIM\""));
+    assert_eq!(
+        none.header("www-authenticate"),
+        Some("Bearer realm=\"SCIM\"")
+    );
     let wrong = get(&h, "nvscim_wrong", "/scim/v2/Users").await;
     assert_scim_error(&wrong, 401, None);
     let basic = h
@@ -169,17 +185,32 @@ async fn requests_carry_the_connections_token() {
     // A new token replaces the old one.
     let fresh = directory.rotate_scim_token(id).await.unwrap();
     assert_scim_error(&get(&h, &token, "/scim/v2/Users").await, 401, None);
-    get(&h, fresh.expose(), "/scim/v2/Users").await.assert_status(200);
+    get(&h, fresh.expose(), "/scim/v2/Users")
+        .await
+        .assert_status(200);
     let shown = directory.connection(id).await.unwrap();
-    assert!(fresh.expose().starts_with(shown.scim_token_hint.as_deref().unwrap()));
+    assert!(
+        fresh
+            .expose()
+            .starts_with(shown.scim_token_hint.as_deref().unwrap())
+    );
 }
 
 #[tokio::test]
 async fn users_are_created_read_filtered_and_paged() {
     let (h, token, _) = scim().await;
-    let created = post(&h, &token, "/scim/v2/Users", &entra_user("8f6c9a1e", "ada@acme.test")).await;
+    let created = post(
+        &h,
+        &token,
+        "/scim/v2/Users",
+        &entra_user("8f6c9a1e", "ada@acme.test"),
+    )
+    .await;
     let created = created.assert_status(201);
-    assert_eq!(created.header("content-type"), Some("application/scim+json"));
+    assert_eq!(
+        created.header("content-type"),
+        Some("application/scim+json")
+    );
     let ada = created.json_value();
     let id = ada["id"].as_str().unwrap().to_owned();
     Uuid::parse_str(&id).unwrap();
@@ -214,29 +245,58 @@ async fn users_are_created_read_filtered_and_paged() {
     assert!(grace.json_value().get("externalId").is_none());
     let directory = h.directory().await;
     let connection = directory.all_connections().await.unwrap()[0].id;
-    assert!(directory.user(connection, &grace_id).await.unwrap().is_some());
+    assert!(
+        directory
+            .user(connection, &grace_id)
+            .await
+            .unwrap()
+            .is_some()
+    );
 
     // Filters: indexed equality (case-insensitive userName), and the rest.
-    let by_name = get(&h, &token, "/scim/v2/Users?filter=userName%20eq%20%22ADA%40acme.test%22").await;
+    let by_name = get(
+        &h,
+        &token,
+        "/scim/v2/Users?filter=userName%20eq%20%22ADA%40acme.test%22",
+    )
+    .await;
     by_name
         .assert_status(200)
-        .assert_json_path("schemas", json!(["urn:ietf:params:scim:api:messages:2.0:ListResponse"]))
+        .assert_json_path(
+            "schemas",
+            json!(["urn:ietf:params:scim:api:messages:2.0:ListResponse"]),
+        )
         .assert_json_path("totalResults", json!(1))
         .assert_json_path("Resources.0.id", json!(id));
-    get(&h, &token, "/scim/v2/Users?filter=externalId%20eq%20%228f6c9a1e%22")
-        .await
-        .assert_json_path("totalResults", json!(1));
-    get(&h, &token, "/scim/v2/Users?filter=externalId%20eq%20%228F6C9A1E%22")
-        .await
-        .assert_json_path("totalResults", json!(0));
-    get(&h, &token, "/scim/v2/Users?filter=name.familyName%20sw%20%22hop%22")
-        .await
-        .assert_json_path("totalResults", json!(1))
-        .assert_json_path("Resources.0.userName", json!("grace@acme.test"));
     get(
         &h,
         &token,
-        &format!("/scim/v2/Users?filter={}", urlencode(&format!("{ENTERPRISE}:department eq \"Engineering\""))),
+        "/scim/v2/Users?filter=externalId%20eq%20%228f6c9a1e%22",
+    )
+    .await
+    .assert_json_path("totalResults", json!(1));
+    get(
+        &h,
+        &token,
+        "/scim/v2/Users?filter=externalId%20eq%20%228F6C9A1E%22",
+    )
+    .await
+    .assert_json_path("totalResults", json!(0));
+    get(
+        &h,
+        &token,
+        "/scim/v2/Users?filter=name.familyName%20sw%20%22hop%22",
+    )
+    .await
+    .assert_json_path("totalResults", json!(1))
+    .assert_json_path("Resources.0.userName", json!("grace@acme.test"));
+    get(
+        &h,
+        &token,
+        &format!(
+            "/scim/v2/Users?filter={}",
+            urlencode(&format!("{ENTERPRISE}:department eq \"Engineering\""))
+        ),
     )
     .await
     .assert_json_path("totalResults", json!(1));
@@ -258,12 +318,22 @@ async fn users_are_created_read_filtered_and_paged() {
         .assert_json_path("itemsPerPage", json!(2));
 
     // Projections.
-    let only = get(&h, &token, &format!("/scim/v2/Users/{id}?attributes=userName,name.givenName")).await;
+    let only = get(
+        &h,
+        &token,
+        &format!("/scim/v2/Users/{id}?attributes=userName,name.givenName"),
+    )
+    .await;
     assert_eq!(
         only.json_value(),
         json!({ "schemas": [USER, ENTERPRISE], "id": id, "userName": "ada@acme.test", "name": { "givenName": "Ada" } })
     );
-    let without = get(&h, &token, &format!("/scim/v2/Users/{id}?excludedAttributes=emails,meta")).await;
+    let without = get(
+        &h,
+        &token,
+        &format!("/scim/v2/Users/{id}?excludedAttributes=emails,meta"),
+    )
+    .await;
     let without = without.json_value();
     assert!(without.get("emails").is_none() && without.get("meta").is_none());
     assert_eq!(without["title"], json!("Principal engineer"));
@@ -276,16 +346,36 @@ fn urlencode(text: &str) -> String {
 #[tokio::test]
 async fn bad_requests_get_scim_errors() {
     let (h, token, _) = scim().await;
-    post(&h, &token, "/scim/v2/Users", &entra_user("e1", "ada@acme.test"))
-        .await
-        .assert_status(201);
-    let taken = post(&h, &token, "/scim/v2/Users", &entra_user("e2", "ADA@acme.test")).await;
+    post(
+        &h,
+        &token,
+        "/scim/v2/Users",
+        &entra_user("e1", "ada@acme.test"),
+    )
+    .await
+    .assert_status(201);
+    let taken = post(
+        &h,
+        &token,
+        "/scim/v2/Users",
+        &entra_user("e2", "ADA@acme.test"),
+    )
+    .await;
     assert_scim_error(&taken, 409, Some("uniqueness"));
-    let same_external = post(&h, &token, "/scim/v2/Users", &entra_user("e1", "other@acme.test")).await;
+    let same_external = post(
+        &h,
+        &token,
+        "/scim/v2/Users",
+        &entra_user("e1", "other@acme.test"),
+    )
+    .await;
     assert_scim_error(&same_external, 409, Some("uniqueness"));
     let nameless = post(&h, &token, "/scim/v2/Users", &json!({ "schemas": [USER] })).await;
     assert_scim_error(&nameless, 400, Some("invalidValue"));
-    assert_eq!(nameless.json_value()["detail"], json!("userName is required"));
+    assert_eq!(
+        nameless.json_value()["detail"],
+        json!("userName is required")
+    );
     let garbage = h
         .app
         .client()
@@ -298,12 +388,19 @@ async fn bad_requests_get_scim_errors() {
     assert_scim_error(&garbage, 400, Some("invalidSyntax"));
     let filter = get(&h, &token, "/scim/v2/Users?filter=userName%20is%20%22x%22").await;
     assert_scim_error(&filter, 400, Some("invalidFilter"));
-    assert_eq!(filter.json_value()["detail"], json!("`is` is not a filter operator"));
+    assert_eq!(
+        filter.json_value()["detail"],
+        json!("`is` is not a filter operator")
+    );
     let count = get(&h, &token, "/scim/v2/Users?count=many").await;
     assert_scim_error(&count, 400, Some("invalidValue"));
     let missing = get(&h, &token, &format!("/scim/v2/Users/{}", Uuid::now_v7())).await;
     assert_scim_error(&missing, 404, None);
-    assert_scim_error(&get(&h, &token, "/scim/v2/Users/not-a-uuid").await, 404, None);
+    assert_scim_error(
+        &get(&h, &token, "/scim/v2/Users/not-a-uuid").await,
+        404,
+        None,
+    );
     // Nothing of a refused request is kept.
     get(&h, &token, "/scim/v2/Users")
         .await
@@ -313,21 +410,46 @@ async fn bad_requests_get_scim_errors() {
 #[tokio::test]
 async fn users_are_patched_the_way_identity_providers_send_it() {
     let (h, token, _) = scim().await;
-    let ada = post(&h, &token, "/scim/v2/Users", &entra_user("8f6c9a1e", "ada@acme.test")).await;
-    let path = format!("/scim/v2/Users/{}", ada.json_value()["id"].as_str().unwrap());
+    let ada = post(
+        &h,
+        &token,
+        "/scim/v2/Users",
+        &entra_user("8f6c9a1e", "ada@acme.test"),
+    )
+    .await;
+    let path = format!(
+        "/scim/v2/Users/{}",
+        ada.json_value()["id"].as_str().unwrap()
+    );
     h.log.clear();
 
     // Microsoft Entra ID disables with a string boolean.
-    let disabled = patch(&h, &token, &path, json!([{ "op": "Replace", "path": "active", "value": "False" }])).await;
-    disabled.assert_status(200).assert_json_path("active", json!("False"));
+    let disabled = patch(
+        &h,
+        &token,
+        &path,
+        json!([{ "op": "Replace", "path": "active", "value": "False" }]),
+    )
+    .await;
+    disabled
+        .assert_status(200)
+        .assert_json_path("active", json!("False"));
     assert_eq!(h.log.calls(), vec!["user:deactivate:8f6c9a1e"]);
     let event = &h.inbox.of::<DirectoryUserDeactivated>()[0];
     assert!(!event.user.active && !event.deleted);
     assert_eq!(event.run_id, None);
 
     // Okta enables with a path-less object.
-    let enabled = patch(&h, &token, &path, json!([{ "op": "replace", "value": { "active": true } }])).await;
-    enabled.assert_status(200).assert_json_path("active", json!(true));
+    let enabled = patch(
+        &h,
+        &token,
+        &path,
+        json!([{ "op": "replace", "value": { "active": true } }]),
+    )
+    .await;
+    enabled
+        .assert_status(200)
+        .assert_json_path("active", json!(true));
     assert_eq!(h.log.calls()[1], "user:reactivate:8f6c9a1e");
     assert!(h.inbox.of::<DirectoryUserUpdated>()[0].reactivated);
 
@@ -346,22 +468,39 @@ async fn users_are_patched_the_way_identity_providers_send_it() {
     let changed = changed.assert_status(200);
     let user = changed.json_value();
     assert_eq!(user["emails"][0]["value"], json!("lovelace@acme.test"));
-    assert_eq!(user["phoneNumbers"], json!([{ "type": "mobile", "value": "+44 7700 900123" }]));
+    assert_eq!(
+        user["phoneNumbers"],
+        json!([{ "type": "mobile", "value": "+44 7700 900123" }])
+    );
     assert_eq!(user[ENTERPRISE]["department"], json!("Research"));
     assert!(user.get("title").is_none());
     let updated = h.inbox.of::<DirectoryUserUpdated>();
     let last = updated.last().unwrap();
-    assert_eq!(last.changed, vec!["department", "emails", "phone_numbers", "title"]);
+    assert_eq!(
+        last.changed,
+        vec!["department", "emails", "phone_numbers", "title"]
+    );
     assert_eq!(last.user.primary_email(), Some("lovelace@acme.test"));
 
     // A PATCH that changes nothing calls nobody.
     h.log.clear();
-    patch(&h, &token, &path, json!([{ "op": "replace", "path": "active", "value": true }]))
-        .await
-        .assert_status(200);
+    patch(
+        &h,
+        &token,
+        &path,
+        json!([{ "op": "replace", "path": "active", "value": true }]),
+    )
+    .await
+    .assert_status(200);
     assert!(h.log.calls().is_empty());
 
-    let bad = patch(&h, &token, &path, json!([{ "op": "replace", "path": "emails[", "value": 1 }])).await;
+    let bad = patch(
+        &h,
+        &token,
+        &path,
+        json!([{ "op": "replace", "path": "emails[", "value": 1 }]),
+    )
+    .await;
     assert_scim_error(&bad, 400, Some("invalidPath"));
     let no_target = patch(&h, &token, &path, json!([{ "op": "remove" }])).await;
     assert_scim_error(&no_target, 400, Some("noTarget"));
@@ -370,7 +509,13 @@ async fn users_are_patched_the_way_identity_providers_send_it() {
 #[tokio::test]
 async fn put_replaces_and_delete_removes() {
     let (h, token, _) = scim().await;
-    let ada = post(&h, &token, "/scim/v2/Users", &entra_user("8f6c9a1e", "ada@acme.test")).await;
+    let ada = post(
+        &h,
+        &token,
+        "/scim/v2/Users",
+        &entra_user("8f6c9a1e", "ada@acme.test"),
+    )
+    .await;
     let id = ada.json_value()["id"].as_str().unwrap().to_owned();
     let path = format!("/scim/v2/Users/{id}");
     h.log.clear();
@@ -398,19 +543,40 @@ async fn put_replaces_and_delete_removes() {
     assert_eq!(h.log.calls()[1], "user:deactivate:8f6c9a1e (deleted)");
     assert!(h.inbox.of::<DirectoryUserDeactivated>()[0].deleted);
     assert_scim_error(&get(&h, &token, &path).await, 404, None);
-    assert_scim_error(&h.app.client().delete(&path).bearer(&token).send().await, 404, None);
+    assert_scim_error(
+        &h.app.client().delete(&path).bearer(&token).send().await,
+        404,
+        None,
+    );
     // The user name is free again.
-    post(&h, &token, "/scim/v2/Users", &entra_user("8f6c9a1e", "ada@acme.test"))
-        .await
-        .assert_status(201);
+    post(
+        &h,
+        &token,
+        "/scim/v2/Users",
+        &entra_user("8f6c9a1e", "ada@acme.test"),
+    )
+    .await
+    .assert_status(201);
 }
 
 #[tokio::test]
 async fn groups_carry_their_members() {
     let (h, token, _) = scim().await;
-    let ada = post(&h, &token, "/scim/v2/Users", &entra_user("e-ada", "ada@acme.test")).await;
+    let ada = post(
+        &h,
+        &token,
+        "/scim/v2/Users",
+        &entra_user("e-ada", "ada@acme.test"),
+    )
+    .await;
     let ada_id = ada.json_value()["id"].as_str().unwrap().to_owned();
-    let grace = post(&h, &token, "/scim/v2/Users", &entra_user("e-grace", "grace@acme.test")).await;
+    let grace = post(
+        &h,
+        &token,
+        "/scim/v2/Users",
+        &entra_user("e-grace", "grace@acme.test"),
+    )
+    .await;
     let grace_id = grace.json_value()["id"].as_str().unwrap().to_owned();
     h.log.clear();
 
@@ -434,7 +600,11 @@ async fn groups_carry_their_members() {
     assert_eq!(group["members"][0]["value"], json!(ada_id));
     assert_eq!(group["members"][0]["display"], json!("Ada Lovelace"));
     assert_eq!(group["members"][0]["type"], json!("User"));
-    assert_eq!(group["members"].as_array().unwrap().len(), 1, "unknown members are left out");
+    assert_eq!(
+        group["members"].as_array().unwrap().len(),
+        1,
+        "unknown members are left out"
+    );
     assert_eq!(h.log.calls(), vec!["group:create:grp-eng:+local-e-ada-"]);
 
     // The user shows the group.
@@ -445,13 +615,23 @@ async fn groups_carry_their_members() {
 
     let path = format!("/scim/v2/Groups/{group_id}");
     // Microsoft Entra ID adds and removes members with value lists.
-    patch(&h, &token, &path, json!([{ "op": "Add", "path": "members", "value": [{ "value": grace_id }] }]))
-        .await
-        .assert_status(200);
+    patch(
+        &h,
+        &token,
+        &path,
+        json!([{ "op": "Add", "path": "members", "value": [{ "value": grace_id }] }]),
+    )
+    .await
+    .assert_status(200);
     assert_eq!(h.log.calls()[1], "group:update:grp-eng:+local-e-grace-");
-    patch(&h, &token, &path, json!([{ "op": "Remove", "path": "members", "value": [{ "value": ada_id }] }]))
-        .await
-        .assert_status(200);
+    patch(
+        &h,
+        &token,
+        &path,
+        json!([{ "op": "Remove", "path": "members", "value": [{ "value": ada_id }] }]),
+    )
+    .await
+    .assert_status(200);
     assert_eq!(h.log.calls()[2], "group:update:grp-eng:+-e-ada");
     // Okta removes with a value filter and renames with replace.
     let renamed = patch(
@@ -470,12 +650,23 @@ async fn groups_carry_their_members() {
         .assert_json_path("members", json!([]));
 
     // Lists, filters and excluded members.
-    let list = get(&h, &token, "/scim/v2/Groups?filter=displayName%20eq%20%22research%22&excludedAttributes=members").await;
-    let list = list.assert_status(200).assert_json_path("totalResults", json!(1));
-    assert!(list.json_value()["Resources"][0].get("members").is_none());
-    get(&h, &token, "/scim/v2/Groups?filter=displayName%20co%20%22sear%22")
-        .await
+    let list = get(
+        &h,
+        &token,
+        "/scim/v2/Groups?filter=displayName%20eq%20%22research%22&excludedAttributes=members",
+    )
+    .await;
+    let list = list
+        .assert_status(200)
         .assert_json_path("totalResults", json!(1));
+    assert!(list.json_value()["Resources"][0].get("members").is_none());
+    get(
+        &h,
+        &token,
+        "/scim/v2/Groups?filter=displayName%20co%20%22sear%22",
+    )
+    .await
+    .assert_json_path("totalResults", json!(1));
 
     // PUT replaces the members.
     h.app
@@ -507,17 +698,37 @@ async fn connections_are_kept_apart() {
     let (h, token, _) = scim().await;
     let other = h.scim(Owner::Workspace(Uuid::now_v7())).await;
     let other_token = other.scim_token.unwrap().expose().clone();
-    let ada = post(&h, &token, "/scim/v2/Users", &entra_user("e1", "ada@acme.test")).await;
+    let ada = post(
+        &h,
+        &token,
+        "/scim/v2/Users",
+        &entra_user("e1", "ada@acme.test"),
+    )
+    .await;
     let id = ada.json_value()["id"].as_str().unwrap().to_owned();
     // The same person in another tenant is another user.
-    post(&h, &other_token, "/scim/v2/Users", &entra_user("e1", "ada@acme.test"))
-        .await
-        .assert_status(201);
-    assert_scim_error(&get(&h, &other_token, &format!("/scim/v2/Users/{id}")).await, 404, None);
+    post(
+        &h,
+        &other_token,
+        "/scim/v2/Users",
+        &entra_user("e1", "ada@acme.test"),
+    )
+    .await
+    .assert_status(201);
+    assert_scim_error(
+        &get(&h, &other_token, &format!("/scim/v2/Users/{id}")).await,
+        404,
+        None,
+    );
     get(&h, &other_token, "/scim/v2/Users")
         .await
         .assert_json_path("totalResults", json!(1));
     // A deletion reaches only its own connection.
-    let connection = h.directory().await.connection(other.connection.id).await.unwrap();
+    let connection = h
+        .directory()
+        .await
+        .connection(other.connection.id)
+        .await
+        .unwrap();
     assert_eq!(connection.owner(), other.connection.owner());
 }

@@ -49,7 +49,10 @@ impl PatchError {
 /// The operations of a PATCH request body.
 pub(crate) fn parse(body: &Value) -> Result<Vec<PatchOp>, PatchError> {
     let Some(object) = body.as_object() else {
-        return Err(PatchError::new("invalidSyntax", "the body must be a JSON object"));
+        return Err(PatchError::new(
+            "invalidSyntax",
+            "the body must be a JSON object",
+        ));
     };
     if let Some(schemas) = get_ci(body, "schemas")
         && !schemas.as_array().is_some_and(|schemas| {
@@ -89,8 +92,7 @@ pub(crate) fn parse(body: &Value) -> Result<Vec<PatchOp>, PatchError> {
             None | Some(Value::Null) => None,
             Some(Value::String(path)) if path.trim().is_empty() => None,
             Some(Value::String(path)) => Some(
-                PatchPath::parse(path)
-                    .map_err(|error| PatchError::new("invalidPath", error.0))?,
+                PatchPath::parse(path).map_err(|error| PatchError::new("invalidPath", error.0))?,
             ),
             Some(_) => return Err(PatchError::new("invalidPath", "path must be a string")),
         };
@@ -100,7 +102,10 @@ pub(crate) fn parse(body: &Value) -> Result<Vec<PatchOp>, PatchError> {
                 return Err(PatchError::new("noTarget", "remove needs a path"));
             }
             OpKind::Add | OpKind::Replace if value.is_none() => {
-                return Err(PatchError::new("invalidValue", "add and replace need a value"));
+                return Err(PatchError::new(
+                    "invalidValue",
+                    "add and replace need a value",
+                ));
             }
             _ => {}
         }
@@ -216,7 +221,9 @@ fn key_ci(map: &Map<String, Value>, name: &str) -> Option<String> {
     if map.contains_key(name) {
         return Some(name.to_owned());
     }
-    map.keys().find(|key| key.eq_ignore_ascii_case(name)).cloned()
+    map.keys()
+        .find(|key| key.eq_ignore_ascii_case(name))
+        .cloned()
 }
 
 fn set_plain(
@@ -239,7 +246,9 @@ fn set_plain(
                 }
                 Value::Array(_) => Err(PatchError::new(
                     "invalidPath",
-                    format!("`{attr}` names a sub-attribute of a multi-valued attribute without a value filter"),
+                    format!(
+                        "`{attr}` names a sub-attribute of a multi-valued attribute without a value filter"
+                    ),
                 )),
                 other => {
                     let mut object = Map::new();
@@ -556,7 +565,10 @@ mod tests {
             user["phoneNumbers"],
             json!([{ "type": "mobile", "value": "+44 20 7946 0958" }])
         );
-        assert_eq!(user["emails"][1], json!({ "type": "home", "value": "ada@home.test" }));
+        assert_eq!(
+            user["emails"][1],
+            json!({ "type": "home", "value": "ada@home.test" })
+        );
         let error = patch(
             ada(),
             json!([{ "op": "replace", "path": "emails[value co \"x\"].type", "value": "home" }]),
@@ -631,12 +643,18 @@ mod tests {
             "invalidSyntax"
         );
         assert_eq!(bad(json!({ "Operations": "x" })), "invalidSyntax");
-        assert_eq!(bad(json!({ "Operations": [{ "path": "x" }] })), "invalidSyntax");
+        assert_eq!(
+            bad(json!({ "Operations": [{ "path": "x" }] })),
+            "invalidSyntax"
+        );
         assert_eq!(
             bad(json!({ "Operations": [{ "op": "move", "path": "x" }] })),
             "invalidSyntax"
         );
-        assert_eq!(bad(json!({ "Operations": [{ "op": "remove" }] })), "noTarget");
+        assert_eq!(
+            bad(json!({ "Operations": [{ "op": "remove" }] })),
+            "noTarget"
+        );
         assert_eq!(
             bad(json!({ "Operations": [{ "op": "add", "path": "title" }] })),
             "invalidValue"

@@ -11,7 +11,10 @@
 //! create databases. Each test creates its own database and drops it at
 //! the end.
 
-#![cfg_attr(not(any(feature = "postgres", feature = "mysql")), allow(dead_code, unused_imports))]
+#![cfg_attr(
+    not(any(feature = "postgres", feature = "mysql")),
+    allow(dead_code, unused_imports)
+)]
 
 use std::time::Duration;
 
@@ -168,7 +171,10 @@ async fn flow(scratch: &Scratch) {
         .await
         .assert_status(204);
     client
-        .get(&format!("/scim/v2/Groups/{}", group["id"].as_str().unwrap()))
+        .get(&format!(
+            "/scim/v2/Groups/{}",
+            group["id"].as_str().unwrap()
+        ))
         .bearer(&token)
         .send()
         .await
@@ -182,21 +188,30 @@ async fn flow(scratch: &Scratch) {
                 .email(format!("p{n}@acme.test"))
         })
         .collect();
-    h.fake()
-        .users(people.clone())
-        .group(DirectoryGroup::new("g1", "Everyone").members(people.iter().map(|p| p.external_id.clone())));
+    h.fake().users(people.clone()).group(
+        DirectoryGroup::new("g1", "Everyone").members(people.iter().map(|p| p.external_id.clone())),
+    );
     let id = h.connection("ldap").await;
-    let run = directory.sync_now(id, SyncOptions::default()).await.unwrap();
+    let run = directory
+        .sync_now(id, SyncOptions::default())
+        .await
+        .unwrap();
     assert_eq!(run.status, RunStatus::Succeeded, "{run:?}");
     assert_eq!((run.done, run.total), (16, 16));
     assert_eq!(run.complete, Some(true));
     assert_eq!(run.started_at, Some(start()));
     assert_eq!(directory.users(id).await.unwrap().len(), 15);
-    assert_eq!(directory.groups(id).await.unwrap()[0].group.members.len(), 15);
+    assert_eq!(
+        directory.groups(id).await.unwrap()[0].group.members.len(),
+        15
+    );
 
     // A mistaken filter: held, then forced.
     h.fake().users(people[..2].to_vec());
-    let held = directory.sync_now(id, SyncOptions::default()).await.unwrap();
+    let held = directory
+        .sync_now(id, SyncOptions::default())
+        .await
+        .unwrap();
     assert_eq!(held.status, RunStatus::Held);
     let planned = directory.changes(held.id, 0, 100).await.unwrap();
     assert!(planned.iter().all(|c| c.status == ChangeStatus::Planned));

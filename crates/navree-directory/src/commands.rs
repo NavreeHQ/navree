@@ -5,8 +5,8 @@ use navree_integrations::Owner;
 use navree_kernel::{AppContext, BoxError, CommandSpec};
 use uuid::Uuid;
 
-use crate::types::{DirectoryConnection, RunTrigger, SyncOptions, SyncRun};
 use crate::Directory;
+use crate::types::{DirectoryConnection, RunTrigger, SyncOptions, SyncRun};
 
 /// The module's commands.
 pub(crate) fn commands() -> Vec<CommandSpec> {
@@ -259,6 +259,9 @@ mod tests {
             finished_at: None,
         };
         let line = run_line(&run);
-        assert!(line.contains("held  users +2 ~0 ^0 -40  groups +0 ~0 -0  too many"), "{line}");
+        assert!(
+            line.contains("held  users +2 ~0 ^0 -40  groups +0 ~0 -0  too many"),
+            "{line}"
+        );
     }
 }
