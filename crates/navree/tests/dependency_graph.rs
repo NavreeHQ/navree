@@ -260,6 +260,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-schedule",
     "navree-notify",
     "navree-ui",
+    "navree-browser",
     "navree-auth",
     "navree-workspace",
     "navree-redis",

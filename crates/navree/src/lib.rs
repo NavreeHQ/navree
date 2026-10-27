@@ -46,12 +46,13 @@
 //! | `billing` | navree-billing | `billing` (opt-in) | `BillingModule`: subscriptions, trials, usage, invoices with Stripe or Paddle |
 //! | `search` | navree-search | `search` (opt-in) | `SearchModule`: full-text and vector search, `#[derive(Searchable)]` |
 //! | `dock` | navree-dock | `dock` (opt-in) | Dock's `dock.toml`, the services' settings and the Compose file |
+//! | `browser` | navree-browser | `browser` (opt-in) | Browser testing: `Browser`, `Page`, `TestServer`, `FrontEnd` over the Chrome DevTools Protocol |
 //! | `mcp` | navree-mcp | `mcp` (opt-in) | `McpModule`: MCP servers over streamable HTTP and stdio, with `#[mcp_server]` |
 //! | `ai` | navree-ai | `ai` (opt-in) | `AiModule`: models, structured output, streaming, agents, embeddings, vector stores |
 //!
 //! `full` (the default) turns on every module except the opt-in ones
 //! (`social`, `oauth`, `flags`, `graphql`, `grpc`, `billing`, `search`,
-//! `mcp`, `ai`, `redis`, `dock`, `otel`). A feature also turns on the
+//! `mcp`, `ai`, `redis`, `dock`, `browser`, `otel`). A feature also turns on the
 //! features of the crates its crate builds on (`auth` turns on `access`,
 //! `db`, `http`, ...). SQLite is built in; the `postgres` feature adds
 //! navree-db's PostgreSQL driver and the `mysql` feature its MySQL and
@@ -59,7 +60,8 @@
 //! span exporter. `search-tantivy` adds search's embedded Tantivy engine.
 //! `axum` is re-exported with `http`. `dock` is a development tool
 //! (`navree dock`), for tools and tests that read
-//! `dock.toml`.
+//! `dock.toml`. `browser` is for tests: turn it on in
+//! `[dev-dependencies]`.
 //!
 //! The macros sit at the root: [`module`], [`injectable`] and
 //! [`controller`] (with the route attributes [`get`], [`post`], [`put`],
@@ -241,6 +243,8 @@ pub use navree_search as search;
 // Tools (opt-in)
 #[cfg(feature = "dock")]
 pub use navree_dock as dock;
+#[cfg(feature = "browser")]
+pub use navree_browser as browser;
 
 /// Axum, for extractors and types navree-http does not re-export
 /// (`navree::axum::extract::Path`, `navree::axum::http::HeaderMap`, ...).

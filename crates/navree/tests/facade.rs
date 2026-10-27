@@ -253,10 +253,11 @@ struct Features {
 /// turns on by name (`features = ["social"]`, `features = ["oauth"]`,
 /// `features = ["flags"]`, `features = ["graphql"]`, `features = ["grpc"]`,
 /// `features = ["billing"]`, `features = ["search"]`, `features = ["mcp"]`,
-/// `features = ["ai"]`, `features = ["redis"]`).
+/// `features = ["ai"]`, `features = ["redis"]`), and test-only crates
+/// (`features = ["browser"]` in `[dev-dependencies]`).
 const OPT_IN: &[&str] = &[
     "dock", "social", "oauth", "flags", "graphql", "grpc", "billing", "search", "mcp", "ai",
-    "redis",
+    "redis", "browser",
 ];
 
 /// Always compiled into the facade (not behind a feature).
@@ -438,6 +439,17 @@ fn dock_is_reexported_with_its_feature() {
     let file = navree::dock::DockFile::parse("[services.redis]\n", "shop").unwrap();
     assert_eq!(navree::dock::DOCK_FILE, "dock.toml");
     assert_eq!(file.env()[0].1, "redis://127.0.0.1:6379");
+}
+
+/// `navree::browser` is navree-browser, with the opt-in `browser` feature
+/// (`cargo test -p navree --features browser --test facade`).
+#[cfg(feature = "browser")]
+#[test]
+fn browser_is_reexported_with_its_feature() {
+    let target = navree::browser::Target::from("@deal-card").nth(1);
+    assert_eq!(target.to_string(), r#""@deal-card" nth 1"#);
+    assert_eq!(navree::browser::Viewport::phone().width(), 390);
+    let _launch = navree::browser::Browser::builder().window(1440, 900);
 }
 
 /// The opt-in ecosystem libraries are re-exported whole too.

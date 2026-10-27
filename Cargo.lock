@@ -3222,6 +3222,7 @@ dependencies = [
  "navree-audit",
  "navree-auth",
  "navree-billing",
+ "navree-browser",
  "navree-cache",
  "navree-config",
  "navree-contracts",
