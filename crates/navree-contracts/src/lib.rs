@@ -6,8 +6,9 @@
 //! session sinks, the job contract ([`Job`], [`Dispatcher`],
 //! [`JobRegistration`], with progress and cancellation through
 //! [`JobMonitor`]), permission checks outside routes ([`PermissionCheck`],
-//! [`permitted`]), [`Clock`], and the conformity checks behind
-//! `navree check` ([`ConformityCheck`], [`ConformityModule`]).
+//! [`permitted`]), [`Clock`], the zone sources ([`ZoneSource`]), and the
+//! conformity checks behind `navree check` ([`ConformityCheck`],
+//! [`ConformityModule`]).
 //!
 //! A module that needs, say, auditing resolves `Arc<dyn AuditSink>` (usually
 //! with `AppContext::try_get`) instead of depending on navree-audit.
@@ -25,6 +26,7 @@ mod principal;
 mod request_id;
 mod secret;
 mod session;
+mod zone;
 
 pub use audit::{AuditEntry, AuditKind, AuditSink};
 pub use broadcast::Broadcaster;
@@ -46,3 +48,4 @@ pub use principal::{AuthState, AuthVia, Impersonator, Principal};
 pub use request_id::RequestId;
 pub use secret::Secret;
 pub use session::{SessionRecord, SessionStore};
+pub use zone::{ZoneLevel, ZoneOwner, ZoneRequest, ZoneSource};

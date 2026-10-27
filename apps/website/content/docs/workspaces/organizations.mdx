@@ -58,7 +58,7 @@ organizations.attach(&uow, acme.id, uk_workspace.id).await?;
 organizations.attach(&uow, acme.id, de_workspace.id).await?;
 ```
 
-The creator becomes the owner, with the `owner` role and every workspace. Slugs follow the workspace rules (`Acme Group` becomes `acme-group`, then `acme-group-2`; or set one with `.slug("acme")`). `country` is an ISO 3166-1 alpha-2 code, stored in upper case; `timezone` is an IANA name such as `Europe/London`. A bad value is a 400 on that field.
+The creator becomes the owner, with the `owner` role and every workspace. Slugs follow the workspace rules (`Acme Group` becomes `acme-group`, then `acme-group-2`; or set one with `.slug("acme")`). `country` is an ISO 3166-1 alpha-2 code, stored in upper case; `timezone` is an IANA name such as `Europe/London`, stored under its current name (`Asia/Calcutta` is stored as `Asia/Kolkata`). An unknown zone or country is a 400 on that field. The organization's zone is the zone of its workspaces that have none of their own: see [time zones](/docs/digging-deeper/time-zones/#workspaces-and-organizations).
 
 | Method | Does |
 |---|---|

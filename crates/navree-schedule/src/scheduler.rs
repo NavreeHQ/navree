@@ -5,22 +5,26 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::Instant;
 
-use chrono::{DateTime, DurationRound, TimeDelta, Timelike, Utc};
+use chrono::{
+    DateTime, DurationRound, LocalResult, NaiveDateTime, TimeDelta, TimeZone, Timelike, Utc,
+};
 use croner::Cron;
 use croner::parser::{CronParser, Seconds};
 use futures_util::future::join_all;
-use navree_contracts::Clock;
+use navree_contracts::{Clock, ZoneLevel};
 use navree_db::Db;
 use navree_kernel::{AppContext, BoxError, CommandFn, WeakAppContext};
 use navree_telemetry::{
     EventKind, ScheduledTaskRan, Telemetry, TelemetryContext, TelemetryEvent, TracePolicy,
 };
+use navree_time::{Zone, Zones};
 use tokio::sync::Mutex;
 use tokio::task::JoinError;
 use tokio_util::sync::CancellationToken;
+use uuid::Uuid;
 
-use crate::schedule::{Schedule, TaskFn, TaskKind};
-use crate::{ScheduleError, store};
+use crate::schedule::{Schedule, TaskFn, TaskKind, ZoneChoice};
+use crate::{LocalRun, ScheduleError, store};
 
 /// The outcome of one due task in a [`Scheduler::tick`].
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -61,18 +65,24 @@ pub struct TaskInfo {
     pub name: String,
     /// The module that scheduled it.
     pub module: &'static str,
-    /// The cron expression (UTC).
+    /// The cron expression, read on [`zone`](TaskInfo::zone)'s clock.
     pub expr: String,
-    /// The first due minute after the time given to `list`.
+    /// The first due minute after the time given to `list` (`None` for
+    /// tasks that run per owner, whose zones differ).
     pub next_run: Option<DateTime<Utc>>,
     /// Whether it skips ticks while an earlier run is still running.
     pub without_overlapping: bool,
+    /// The clock the expression is read on: `UTC`, a zone name, or
+    /// `per workspace (local)`.
+    pub zone: String,
 }
 
 /// Runs the tasks every module scheduled (see
 /// [`ModuleBuilderScheduleExt`](crate::ModuleBuilderScheduleExt)).
 ///
-/// Provided and exported by `ScheduleModule`. Ticks are whole minutes, UTC.
+/// Provided and exported by `ScheduleModule`. Ticks are whole minutes, UTC;
+/// each task reads its frequency on its own clock (UTC, a zone, or each
+/// owner's zone).
 ///
 /// Each run is reported as a `ScheduledTaskRan` telemetry event (skipped
 /// ticks are not), and the task runs in its own telemetry context with a
@@ -82,9 +92,21 @@ pub struct Scheduler {
     app: WeakAppContext,
     db: Arc<Db>,
     clock: Arc<dyn Clock>,
+    zones: Option<Arc<Zones>>,
     tasks: Vec<Arc<Task>>,
     telemetry: Telemetry,
     policy: TracePolicy,
+}
+
+/// The clock of a validated task.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TaskZone {
+    /// UTC (the cron expression as written).
+    Utc,
+    /// One zone.
+    Fixed(Zone),
+    /// Each owner's zone at a level.
+    PerOwner(ZoneLevel),
 }
 
 /// A validated task.
@@ -94,17 +116,42 @@ struct Task {
     expr: String,
     cron: Cron,
     body: Body,
+    zone: TaskZone,
     without_overlapping: bool,
-    /// Held while a run of a `without_overlapping` task is in progress.
-    running: Arc<Mutex<()>>,
+    /// Held while a run of a `without_overlapping` task is in progress,
+    /// one lock per owner (`None` for tasks that do not run per owner).
+    running: std::sync::Mutex<HashMap<Option<Uuid>, Arc<Mutex<()>>>>,
+}
+
+impl Task {
+    /// The overlap lock of `owner`'s runs.
+    fn lock_for(&self, owner: Option<Uuid>) -> Arc<Mutex<()>> {
+        self.running
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .entry(owner)
+            .or_default()
+            .clone()
+    }
+}
+
+/// One run of a due task: for an owner (per-owner tasks) on a zone.
+#[derive(Clone, Debug)]
+struct Run {
+    /// `<task>` or `<task>@<owner>`: the key in `schedule_runs`.
+    name: String,
+    local: LocalRun,
 }
 
 impl Scheduler {
-    /// Collects and validates the schedules contributed to `app`.
+    /// Collects and validates the schedules contributed to `app`. `zones`
+    /// (navree-time's, when `TimeModule` is in the app) gives the default
+    /// zone and the owners of per-owner tasks.
     pub(crate) fn new(
         app: &AppContext,
         db: Arc<Db>,
         clock: Arc<dyn Clock>,
+        zones: Option<Arc<Zones>>,
     ) -> Result<Self, ScheduleError> {
         let parser = CronParser::builder().seconds(Seconds::Disallowed).build();
         let mut tasks = Vec::new();
@@ -138,6 +185,32 @@ impl Scheduler {
                 let cron = parser
                     .parse(&def.expr)
                     .map_err(|error| invalid(error.to_string()))?;
+                let zone = match &def.zone {
+                    ZoneChoice::Utc => TaskZone::Utc,
+                    ZoneChoice::Named(name) => {
+                        TaskZone::Fixed(Zone::parse(name).map_err(|error| {
+                            invalid(format!("{error}: use an IANA name such as Europe/Paris"))
+                        })?)
+                    }
+                    ZoneChoice::Default => TaskZone::Fixed(
+                        zones
+                            .as_ref()
+                            .map_or(Zone::UTC, |zones| zones.default_zone()),
+                    ),
+                    ZoneChoice::PerOwner(level) => {
+                        if zones.is_none() {
+                            return Err(invalid(format!(
+                                "running per {level} on local clocks needs TimeModule (navree-time) in the app"
+                            )));
+                        }
+                        if def.name.len() > MAX_PER_OWNER_NAME_LEN {
+                            return Err(invalid(format!(
+                                "a task that runs per {level} has a name of at most {MAX_PER_OWNER_NAME_LEN} bytes (the {level} id is appended in schedule_runs)"
+                            )));
+                        }
+                        TaskZone::PerOwner(*level)
+                    }
+                };
                 let body = match &def.kind {
                     TaskKind::Run(f) => Body::Run(f.clone()),
                     TaskKind::Command { name, args } => {
@@ -157,8 +230,9 @@ impl Scheduler {
                     expr: def.expr.clone(),
                     cron,
                     body,
+                    zone,
                     without_overlapping: def.without_overlapping,
-                    running: Arc::new(Mutex::new(())),
+                    running: std::sync::Mutex::default(),
                 }));
             }
         }
@@ -166,6 +240,7 @@ impl Scheduler {
             app: app.downgrade(),
             db,
             clock,
+            zones,
             tasks,
             telemetry: Telemetry::disabled(),
             policy: TracePolicy::default(),
@@ -186,18 +261,96 @@ impl Scheduler {
     /// scheduler whose insert succeeded runs it. Due tasks run concurrently,
     /// each in its own task on the app's tracker (a panic becomes a failed
     /// run). Fails only when the app is gone or a tick cannot be claimed.
+    ///
+    /// A task that runs per owner is due once for each owner whose local
+    /// clock matches; when listing the owners fails, the task is skipped
+    /// for this tick (and the error logged).
     pub async fn tick(&self, now: DateTime<Utc>) -> Result<Vec<RunOutcome>, ScheduleError> {
         let app = self.app.upgrade().ok_or(ScheduleError::AppDropped)?;
         let tick = minute_of(now);
         if tick.minute() == 0 {
             self.prune(tick).await;
         }
-        let due = self
-            .tasks
-            .iter()
-            .filter(|task| task.cron.is_time_matching(&tick).unwrap_or(false))
-            .map(|task| self.run_due(&app, task.clone(), tick));
-        join_all(due).await.into_iter().collect()
+        let mut owners: HashMap<ZoneLevel, Vec<(Uuid, Zone)>> = HashMap::new();
+        let mut due = Vec::new();
+        for task in &self.tasks {
+            match task.zone {
+                TaskZone::Utc => {
+                    if task.cron.is_time_matching(&tick).unwrap_or(false) {
+                        due.push((task.clone(), self.run(task, tick, None, Zone::UTC)));
+                    }
+                }
+                TaskZone::Fixed(zone) => {
+                    if due_on_local_clock(&task.cron, tick, zone) {
+                        due.push((task.clone(), self.run(task, tick, None, zone)));
+                    }
+                }
+                TaskZone::PerOwner(level) => {
+                    let Some(list) = self.owners(&mut owners, level, &task.name).await else {
+                        continue;
+                    };
+                    for (owner, zone) in list {
+                        if due_on_local_clock(&task.cron, tick, zone) {
+                            due.push((
+                                task.clone(),
+                                self.run(task, tick, Some((level, owner)), zone),
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+        let runs = due
+            .into_iter()
+            .map(|(task, run)| self.run_due(&app, task, run, tick));
+        join_all(runs).await.into_iter().collect()
+    }
+
+    /// The run of `task` at `tick` for `owner` on `zone`'s clock.
+    fn run(
+        &self,
+        task: &Task,
+        tick: DateTime<Utc>,
+        owner: Option<(ZoneLevel, Uuid)>,
+        zone: Zone,
+    ) -> Run {
+        let name = match owner {
+            Some((_, id)) => format!("{}@{id}", task.name),
+            None => task.name.clone(),
+        };
+        Run {
+            name,
+            local: LocalRun {
+                owner: owner.map(|(_, id)| id),
+                level: owner.map(|(level, _)| level),
+                zone,
+                tick,
+                local: zone.local(tick).naive_local(),
+            },
+        }
+    }
+
+    /// The owners at `level` with their zones, listed once per tick.
+    async fn owners(
+        &self,
+        cache: &mut HashMap<ZoneLevel, Vec<(Uuid, Zone)>>,
+        level: ZoneLevel,
+        task: &str,
+    ) -> Option<Vec<(Uuid, Zone)>> {
+        if let Some(list) = cache.get(&level) {
+            return Some(list.clone());
+        }
+        let zones = self.zones.as_ref()?;
+        match zones.owners(level).await {
+            Ok(list) => {
+                cache.insert(level, list.clone());
+                Some(list)
+            }
+            Err(error) => {
+                tracing::error!(target: "navree::schedule", task, %level, %error, "cannot list the owners of a per-owner task; skipped this tick");
+                None
+            }
+        }
     }
 
     /// The current time on the scheduler's clock (the app's `dyn Clock`,
@@ -246,12 +399,29 @@ impl Scheduler {
     pub fn list(&self, now: DateTime<Utc>) -> Vec<TaskInfo> {
         self.tasks
             .iter()
-            .map(|task| TaskInfo {
-                name: task.name.clone(),
-                module: task.module,
-                expr: task.expr.clone(),
-                next_run: task.cron.find_next_occurrence(&now, false).ok(),
-                without_overlapping: task.without_overlapping,
+            .map(|task| {
+                let (next_run, zone) = match task.zone {
+                    TaskZone::Utc => (
+                        task.cron.find_next_occurrence(&now, false).ok(),
+                        "UTC".to_owned(),
+                    ),
+                    TaskZone::Fixed(zone) => (
+                        task.cron
+                            .find_next_occurrence(&zone.local(now), false)
+                            .ok()
+                            .map(|next| next.with_timezone(&Utc)),
+                        zone.name().to_owned(),
+                    ),
+                    TaskZone::PerOwner(level) => (None, format!("per {level} (local)")),
+                };
+                TaskInfo {
+                    name: task.name.clone(),
+                    module: task.module,
+                    expr: task.expr.clone(),
+                    next_run,
+                    without_overlapping: task.without_overlapping,
+                    zone,
+                }
             })
             .collect()
     }
@@ -269,31 +439,33 @@ impl Scheduler {
         }
     }
 
-    /// Claims, runs and records one due task.
+    /// Claims, runs and records one due run of a task.
     async fn run_due(
         &self,
         app: &AppContext,
         task: Arc<Task>,
+        run: Run,
         tick: DateTime<Utc>,
     ) -> Result<RunOutcome, ScheduleError> {
         let conn = self.db.conn();
+        let name = run.name.clone();
         let outcome = |status| RunOutcome {
-            task: task.name.clone(),
+            task: name.clone(),
             tick,
             status,
         };
         let mut overlap_guard = None;
         if task.without_overlapping {
             let since = self.clock.now() - OVERLAP_EXPIRY;
-            let guard = task.running.clone().try_lock_owned().ok();
-            if guard.is_none() || store::running_elsewhere(conn, &task.name, tick, since).await? {
-                tracing::debug!(target: "navree::schedule", task = %task.name, %tick, "still running, skipped");
+            let guard = task.lock_for(run.local.owner).try_lock_owned().ok();
+            if guard.is_none() || store::running_elsewhere(conn, &name, tick, since).await? {
+                tracing::debug!(target: "navree::schedule", task = %name, %tick, "still running, skipped");
                 return Ok(outcome(RunStatus::Skipped(SkipReason::Overlapping)));
             }
             overlap_guard = guard;
         }
-        if !store::claim(conn, &task.name, tick, self.clock.now()).await? {
-            tracing::debug!(target: "navree::schedule", task = %task.name, %tick, "tick already claimed, skipped");
+        if !store::claim(conn, &name, tick, self.clock.now()).await? {
+            tracing::debug!(target: "navree::schedule", task = %name, %tick, "tick already claimed, skipped");
             return Ok(outcome(RunStatus::Skipped(SkipReason::AlreadyClaimed)));
         }
 
@@ -302,9 +474,12 @@ impl Scheduler {
         if let Some(trace) = self.policy.start(None, None) {
             context = context.with_trace(trace);
         }
-        let run = context
-            .clone()
-            .scope(execute(task.clone(), app.clone(), tick));
+        let run = run.local.clone().scope(context.clone().scope(execute(
+            task.clone(),
+            app.clone(),
+            name.clone(),
+            tick,
+        )));
         let handle = app.tracker().spawn(async move {
             // Released when the run ends, even if this tick is dropped meanwhile.
             let _overlap_guard = overlap_guard;
@@ -320,7 +495,7 @@ impl Scheduler {
         context.sync_scope(|| {
             telemetry.emit_with(EventKind::ScheduledTaskRan, || {
                 TelemetryEvent::ScheduledTaskRan(ScheduledTaskRan {
-                    task: task.name.clone(),
+                    task: name.clone(),
                     tick,
                     duration: elapsed,
                     error: error.clone(),
@@ -329,17 +504,16 @@ impl Scheduler {
         });
         let duration_ms = u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX);
         let stored = error.as_deref().map(|e| truncate(e, MAX_ERROR_LEN));
-        if let Err(db_error) = store::finish(conn, &task.name, tick, self.clock.now(), stored).await
-        {
-            tracing::warn!(target: "navree::schedule", task = %task.name, %tick, error = %db_error, "cannot record the end of a scheduled run");
+        if let Err(db_error) = store::finish(conn, &name, tick, self.clock.now(), stored).await {
+            tracing::warn!(target: "navree::schedule", task = %name, %tick, error = %db_error, "cannot record the end of a scheduled run");
         }
         Ok(match error {
             None => {
-                tracing::info!(target: "navree::schedule", task = %task.name, %tick, duration_ms, outcome = "succeeded", "scheduled task finished");
+                tracing::info!(target: "navree::schedule", task = %name, %tick, duration_ms, outcome = "succeeded", "scheduled task finished");
                 outcome(RunStatus::Succeeded)
             }
             Some(error) => {
-                tracing::error!(target: "navree::schedule", task = %task.name, %tick, duration_ms, outcome = "failed", %error, "scheduled task failed");
+                tracing::error!(target: "navree::schedule", task = %name, %tick, duration_ms, outcome = "failed", %error, "scheduled task failed");
                 outcome(RunStatus::Failed(error))
             }
         })
@@ -370,12 +544,47 @@ enum Body {
     Command(CommandFn, Vec<String>),
 }
 
-/// Runs a task's body.
-async fn execute(task: Arc<Task>, app: AppContext, tick: DateTime<Utc>) -> Result<(), BoxError> {
+/// Runs a task's body for the run called `name`.
+async fn execute(
+    task: Arc<Task>,
+    app: AppContext,
+    name: String,
+    tick: DateTime<Utc>,
+) -> Result<(), BoxError> {
     match &task.body {
-        Body::Run(f) => f(app, format!("{}@{}", task.name, tick.to_rfc3339())).await,
+        Body::Run(f) => f(app, format!("{name}@{}", tick.to_rfc3339())).await,
         Body::Command(run, args) => run(app, args.clone()).await,
     }
+}
+
+/// Whether `cron` is due at `tick` on `zone`'s clock.
+///
+/// A wall-clock time that happens twice (clocks going back) is due only
+/// the first time; one that is skipped (clocks going forward) is due at
+/// the first minute after the gap.
+fn due_on_local_clock(cron: &Cron, tick: DateTime<Utc>, zone: Zone) -> bool {
+    let local = zone.local(tick).naive_local();
+    if matches_wall_clock(cron, local) {
+        return match zone.tz().from_local_datetime(&local) {
+            LocalResult::Ambiguous(earliest, _) => earliest.with_timezone(&Utc) == tick,
+            _ => true,
+        };
+    }
+    let previous = zone.local(tick - TimeDelta::minutes(1)).naive_local();
+    let mut skipped = previous + TimeDelta::minutes(1);
+    while skipped < local {
+        if matches_wall_clock(cron, skipped) {
+            return true;
+        }
+        skipped += TimeDelta::minutes(1);
+    }
+    false
+}
+
+/// Whether `cron` matches the wall-clock time `local`.
+fn matches_wall_clock(cron: &Cron, local: NaiveDateTime) -> bool {
+    cron.is_time_matching(&Utc.from_utc_datetime(&local))
+        .unwrap_or(false)
 }
 
 /// `schedule_runs` rows are kept this long (pruned at the top of each hour).
@@ -387,6 +596,10 @@ const OVERLAP_EXPIRY: TimeDelta = TimeDelta::hours(24);
 
 /// The longest task name (`schedule_runs.task` is `VARCHAR(191)`).
 const MAX_NAME_LEN: usize = 191;
+
+/// The longest name of a task that runs per owner: `@` and a 36-character
+/// UUID follow it in `schedule_runs`.
+const MAX_PER_OWNER_NAME_LEN: usize = MAX_NAME_LEN - 37;
 
 /// Stored error messages are cut to this many bytes.
 const MAX_ERROR_LEN: usize = 4000;

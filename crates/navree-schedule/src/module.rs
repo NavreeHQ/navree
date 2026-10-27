@@ -10,6 +10,7 @@ use navree_kernel::{
     Resolver,
 };
 use navree_telemetry::{Telemetry, TracePolicy};
+use navree_time::Zones;
 
 use crate::store::{CreateScheduleRuns, MIGRATION_MODULE};
 use crate::{RunStatus, Scheduler, SkipReason, TaskInfo};
@@ -78,8 +79,9 @@ fn register(m: &mut ModuleBuilder) {
                     )?,
                     None => TracePolicy::default(),
                 };
+                let zones = app.try_get::<Zones>().await;
                 Ok(Arc::new(
-                    Scheduler::new(&app, db, clock)?.instrumented(telemetry, policy),
+                    Scheduler::new(&app, db, clock, zones)?.instrumented(telemetry, policy),
                 ))
             })
             .deps(vec![ProviderKey::of::<Db>()]),
@@ -151,30 +153,32 @@ fn list_table(tasks: &[TaskInfo]) -> String {
     if tasks.is_empty() {
         return "No tasks are scheduled.\n".to_owned();
     }
-    let rows: Vec<[String; 3]> = tasks
+    let rows: Vec<[String; 4]> = tasks
         .iter()
         .map(|t| {
-            let next = t
-                .next_run
-                .map(|n| n.format("%Y-%m-%d %H:%M UTC").to_string())
-                .unwrap_or_else(|| "never".to_owned());
+            let next = match t.next_run {
+                Some(next) => next.format("%Y-%m-%d %H:%M UTC").to_string(),
+                None if t.zone.starts_with("per ") => "per owner".to_owned(),
+                None => "never".to_owned(),
+            };
             let name = if t.without_overlapping {
                 format!("{} (without overlapping)", t.name)
             } else {
                 t.name.clone()
             };
-            [t.expr.clone(), next, name]
+            [t.expr.clone(), t.zone.clone(), next, name]
         })
         .collect();
     let expr_width = rows.iter().map(|r| r[0].len()).max().unwrap_or(0).max(10);
-    let next_width = rows.iter().map(|r| r[1].len()).max().unwrap_or(0).max(8);
+    let zone_width = rows.iter().map(|r| r[1].len()).max().unwrap_or(0).max(4);
+    let next_width = rows.iter().map(|r| r[2].len()).max().unwrap_or(0).max(8);
     let mut out = format!(
-        "{:<expr_width$}  {:<next_width$}  Task\n",
-        "Expression", "Next run"
+        "{:<expr_width$}  {:<zone_width$}  {:<next_width$}  Task\n",
+        "Expression", "Zone", "Next run"
     );
-    for [expr, next, name] in rows {
+    for [expr, zone, next, name] in rows {
         out.push_str(&format!(
-            "{expr:<expr_width$}  {next:<next_width$}  {name}\n"
+            "{expr:<expr_width$}  {zone:<zone_width$}  {next:<next_width$}  {name}\n"
         ));
     }
     out
@@ -198,6 +202,7 @@ mod tests {
                 expr: "30 2 * * *".to_owned(),
                 next_run: Some(next),
                 without_overlapping: true,
+                zone: "UTC".to_owned(),
             },
             TaskInfo {
                 name: "sync".to_owned(),
@@ -205,13 +210,23 @@ mod tests {
                 expr: "*/5 * * * *".to_owned(),
                 next_run: None,
                 without_overlapping: false,
+                zone: "Asia/Kolkata".to_owned(),
+            },
+            TaskInfo {
+                name: "digest".to_owned(),
+                module: "ReportsModule",
+                expr: "0 9 * * *".to_owned(),
+                next_run: None,
+                without_overlapping: false,
+                zone: "per workspace (local)".to_owned(),
             },
         ]);
         assert_eq!(
             table,
-            "Expression   Next run              Task\n\
-             30 2 * * *   2026-10-26 02:30 UTC  report (without overlapping)\n\
-             */5 * * * *  never                 sync\n"
+            "Expression   Zone                   Next run              Task\n\
+             30 2 * * *   UTC                    2026-10-26 02:30 UTC  report (without overlapping)\n\
+             */5 * * * *  Asia/Kolkata           never                 sync\n\
+             0 9 * * *    per workspace (local)  per owner             digest\n"
         );
         assert_eq!(list_table(&[]), "No tasks are scheduled.\n");
     }

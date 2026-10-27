@@ -74,6 +74,7 @@ navree-navigator = { path = "crates/navree-navigator", version = "0.1.0" }
 navree-i18n = { path = "crates/navree-i18n", version = "0.1.0" }
 navree-i18n-macros = { path = "crates/navree-i18n-macros", version = "0.1.0" }
 navree-browser = { path = "crates/navree-browser", version = "0.1.0" }
+navree-time = { path = "crates/navree-time", version = "0.1.0" }
 
 # ---------------------------------------------------------------------------
 # Runtime, async and HTTP (Tokio family)
@@ -195,6 +196,9 @@ uuid = { version = "1.29.0", features = ["serde", "v4", "v7"] }
 chrono = { version = "0.4.45", features = ["serde"] }
 # Exact decimals: navree-orm's `Decimal` fields (SeaORM's `with-rust_decimal`).
 rust_decimal = { version = "1.43.0", default-features = false, features = ["serde", "std"] }
+# The IANA time zone database compiled in (navree-time): no build script,
+# no system tzdata.
+chrono-tz = "0.10.4"
 base64 = "0.23.1"
 hex = "0.4.3"
 # Insertion-ordered maps: navree-orm's `key_by`, `group_by` and keyed plucks.

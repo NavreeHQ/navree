@@ -265,6 +265,8 @@ mod tests {
             slug: "acme".into(),
             owner_id: Uuid::now_v7(),
             organization_id: None,
+            timezone: None,
+            country: None,
             created_at: now,
             updated_at: now,
         };

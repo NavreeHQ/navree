@@ -44,13 +44,14 @@ Install the CLI from the Git repository, and let new apps depend on the reposito
 
 ### Workspaces
 
-- **`navree-workspace`**: multi-tenancy at the workspace level, on in the default features. `WorkspaceModule`, the `CurrentWorkspace` extractor, the `Workspaces`, `Members` and `Invitations` services, the `Owner`, `Admin`, `Member` and `Viewer` roles plus your own, workspace-scoped permissions for `navree-access`, resolution from a header, a subdomain, a path prefix or a token claim, and isolation by row, schema or database. See [Workspaces](/docs/workspaces/introduction/).
+- **`navree-workspace`**: multi-tenancy at the workspace level, on in the default features. `WorkspaceModule`, the `CurrentWorkspace` extractor, the `Workspaces`, `Members` and `Invitations` services, the `Owner`, `Admin`, `Member` and `Viewer` roles plus your own, workspace-scoped permissions for `navree-access`, resolution from a header, a subdomain, a path prefix or a token claim, a time zone and country per workspace, and isolation by row, schema or database. See [Workspaces](/docs/workspaces/introduction/).
 
 ### Background work
 
 - **`navree-queue`**: database and memory job queues with workers, retries with backoff, unique and delayed jobs, failed-job storage and the `queue:work`, `queue:failed`, `queue:retry` and `queue:flush` commands. Jobs dispatched during a request are queued only if its transaction commits. [Batches](/docs/digging-deeper/batches-and-operations/) run many jobs as one with `then`, `catch` and `finally` callbacks, jobs report progress with `ctx.progress`, and operations show long work to users: `GET /api/operations/{id}`, an SSE progress stream, a private channel, cooperative cancel and a watchdog that fails or restarts stalled work.
 - **`navree-events`**: a typed event bus with synchronous and queued listeners.
-- **`navree-schedule`**: schedules on cron expressions in UTC, overlap prevention, single-node runs across servers sharing a database, and `schedule:run`, `schedule:work` and `schedule:list`.
+- **`navree-schedule`**: schedules on cron expressions in UTC, in a time zone (`in_zone`) or once per workspace at its local time (`per_workspace_local`), overlap prevention, single-node runs across servers sharing a database, and `schedule:run`, `schedule:work` and `schedule:list`.
+- **`navree-time`**: time zones for users, workspaces and organizations. `CurrentZone`, local days and report windows counted in the tenant's days, send windows with weekends and public holidays, `AT TIME ZONE` with a checked zone, zone names every PostgreSQL accepts, and the public zone list at `/api/time/zones`. See [Time zones](/docs/digging-deeper/time-zones/).
 
 ### Communication
 

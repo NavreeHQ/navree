@@ -222,6 +222,29 @@ async fn request_context(
     Ok((ctx, principal, config))
 }
 
+/// The organization a request names when the signed-in user is a member of
+/// it: the one [`CurrentOrganization`] already resolved, else a read-only
+/// lookup with the configured resolvers (no access scope, no unit of work
+/// entered, nothing kept); `None` otherwise, never an error. The
+/// organization zone source reads it.
+pub(crate) async fn try_organization(parts: &Parts) -> Option<Organization> {
+    if let Some(current) = parts.extensions.get::<CurrentOrganization>() {
+        return Some(current.organization().clone());
+    }
+    let (ctx, principal, config) = request_context(parts, "CurrentZone").await.ok()?;
+    if !config.organizations.enabled || parts.extensions.get::<PinnedWorkspace>().is_some() {
+        return None;
+    }
+    let (_, identifier) = Lookup::organization(&config.organizations).find(parts)?;
+    let organizations = ctx.get::<Organizations>().await.ok()?;
+    let organization = organizations.resolve(&identifier).await.ok()?;
+    organizations
+        .membership(organization.id, principal.user_id)
+        .await
+        .ok()??;
+    Some(organization)
+}
+
 /// Resolves, loads and checks the request's organization once.
 async fn resolve_organization(
     parts: &mut Parts,
