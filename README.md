@@ -122,7 +122,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L0 | `navree-kernel` | Module graph, type-keyed DI container, lifecycle, command runner |
 | L0 | `navree-macros` | `#[module]`, `#[injectable]`, `#[controller]`, `#[resolver]`, route and access attributes |
 | L0 | `navree-dock` | Dock: `dock.toml`, local PostgreSQL, Redis, Meilisearch, Mailpit, MinIO and NATS through `docker compose` or `podman compose`, the app's `.env` settings (behind `navree dock`; opt-in facade feature `dock`) |
-| L1 | `navree-contracts` | Shared traits and types: `Secret<T>`, `RequestId`, `Principal`, `AuthState`, sinks, `Broadcaster`, jobs, `Clock` |
+| L1 | `navree-contracts` | Shared traits and types: `Secret<T>`, `RequestId`, `Principal`, `AuthState`, sinks, `Broadcaster`, jobs, `Clock`, conformity checks (`conformity:check`) |
 | L1 | `navree-config` | Typed configuration from `.env`, TOML files and `APP_*` variables |
 | L1 | `navree-telemetry` | Typed telemetry events (requests, queries, jobs, scheduled tasks, mail, notifications, cache, outgoing HTTP, exceptions, log lines) delivered to registered sinks, `TelemetryRecorder`, W3C trace context |
 | L2 | `navree-http` | Axum integration, default Tower layers, JSON errors, controllers, rate limits, trusted proxies |
@@ -133,9 +133,9 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L2 | `navree-cache` | Cache stores (memory on moka), remember, tags, locks |
 | L2 | `navree-http-client` | Outgoing HTTP with retries, timeouts, an SSRF policy and fakes |
 | L3 | `navree-db` | SeaORM integration, per-request unit of work, migrations, seeders, factories, pagination |
-| L3 | `navree-testing` | `TestApp`, an in-process `TestClient`, fakes |
+| L3 | `navree-testing` | `TestApp`, an in-process `TestClient`, fakes, cross-tenant isolation suites generated from a module's routes |
 | L3 | `navree-observe` | Health checks, readiness, Prometheus metrics, tracing (spans from telemetry events, `SpanRecorder`, OTLP export behind the opt-in facade feature `otel`) |
-| L3 | `navree-api` | OpenAPI 3.1 from route metadata, docs UI, API resources |
+| L3 | `navree-api` | OpenAPI 3.1 from route metadata, docs UI, API resources, `api.require_docs` and the `api.docs` check |
 | L3 | `navree-mail` | Mailables from templates; SMTP, log, array and failover transports; queued sending |
 | L3 | `navree-realtime` | Pusher-protocol WebSocket server (public, private, presence channels) and a signed relay for other processes |
 | L3 | `navree-storage` | Named disks on object_store, streaming, signed temporary URLs, upload checks |
@@ -147,7 +147,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L4 | `navree-schedule` | Cron schedules, overlap prevention, single-node runs |
 | L4 | `navree-notify` | Notifications over mail, database and broadcast, with read state |
 | L5 | `navree-auth` | JWT auth: rotating refresh tokens, strategies, accounts, 2FA, throttles |
-| L5 | `navree-workspace` | Workspaces: members, roles, invitations, row, schema or database isolation |
+| L5 | `navree-workspace` | Workspaces: members, roles, invitations, row, schema or database isolation, entity classification and isolation checks, workspace isolation suites (feature `testing`) |
 | L6 | `navree-social` | Social sign-in: Google, GitHub, Apple, Microsoft, GitLab, Slack, LinkedIn, Discord, X and OpenID Connect, linked to Navree users (facade feature `social`, opt-in) |
 | L6 | `navree-webhooks` | Webhooks: signed outgoing deliveries with queue-backed retries and a delivery log, verified incoming webhooks (Stripe, GitHub, Paddle, Standard Webhooks) |
 | L6 | `navree-oauth` | OAuth 2.1 and OpenID Connect provider: PKCE, client credentials, device and refresh grants, scopes mapped to permissions, personal access tokens (facade feature `oauth`, opt-in) |
@@ -156,7 +156,7 @@ L0  navree-kernel                                navree-macros (proc-macro; no r
 | L6 | `navree-grpc` | gRPC on tonic: `#[grpc_service]` services in modules with DI, guards, access rules and the unit of work; gRPC-Web, Connect, health, reflection, named client channels (facade feature `grpc`, opt-in) |
 | L7 | `navree-billing` | Billing for users or workspaces: Stripe and Paddle clients, plans, trials, seats, metered usage, invoices, the portal, verified webhooks on the queue, a fake (facade feature `billing`, opt-in) |
 | L8 | `navree` | The facade: re-exports every module crate (one Cargo feature each, `full` by default) and the macros |
-| L8 | `navree-cli` | The `navree` binary: `navree new`, `navree make:*`, `navree dev`, `navree dock` |
+| L8 | `navree-cli` | The `navree` binary: `navree new`, `navree make:*`, `navree dev`, `navree dock`, `navree check`, `navree gate` |
 
 The CRM API is split the same way: `crm-core` (entities, migrations,
 abilities, platform modules), `crm-companies` (companies and contacts),

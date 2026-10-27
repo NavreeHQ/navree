@@ -11,6 +11,8 @@
 //! | `navree make:module <name> [--crud] [--path src/modules]` | A feature module, wired into the app ([`make::make_module`]) |
 //! | `navree make:<kind> <module> <name>` | A controller, service, entity, migration, job, event, listener, mail, notification, policy, command or test in a module ([`make::make_item`]) |
 //! | `navree dev [-- <serve args>]` | Build, serve, rebuild and restart on change ([`dev`]) |
+//! | `navree check [--graph] [--json] [--only <checks>]` | The module graph, then the app's conformity checks ([`check`]) |
+//! | `navree gate [--only <steps>] [--skip <steps>] [--keep-going] [--no-lock]` | fmt, clippy, tests, `navree check` and the front end's typecheck, tests and build, under a machine lock with per-step times ([`gate`]) |
 //! | `navree dock up\|down\|status\|logs\|env\|shell` | The app's local services from `dock.toml`, in Docker or Podman ([`dock`]) |
 //! | `navree dock:add <service>`, `navree dock:remove <service>` | Edit `dock.toml` ([`dock`]) |
 //! | `navree <anything else> [args...]` | `cargo run --quiet -- <command> [args...]` in the app ([`forward`]) |
@@ -25,6 +27,7 @@
 //! edited safely becomes a printed hint.
 #![forbid(unsafe_code)]
 
+pub mod check;
 pub mod cli;
 pub mod clock;
 pub mod commands;
@@ -32,6 +35,7 @@ pub mod dev;
 pub mod dock;
 pub mod edit;
 pub mod forward;
+pub mod gate;
 pub mod make;
 pub mod names;
 pub mod new_app;

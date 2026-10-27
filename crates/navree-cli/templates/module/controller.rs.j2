@@ -27,6 +27,7 @@ impl {{ entity_pascal }}Controller {
     /// (`?page=2&per_page=50`).
     #[get("/")]
     #[can(Read, {{ entity_pascal }})]
+    #[api(summary = "List {{ module_words }}", tag = "{{ entity_pascal }}")]
     async fn index(
         &self,
         uow: Uow,
@@ -39,6 +40,7 @@ impl {{ entity_pascal }}Controller {
     /// Shows one {{ entity_words }}.
     #[get("/{id}")]
     #[can(Read, {{ entity_pascal }}, from = "id")]
+    #[api(summary = "Show {{ a_entity }}", tag = "{{ entity_pascal }}")]
     async fn show(&self, {{ entity_var }}: Authorized<{{ entity_pascal }}, Read>) -> Json<Model> {
         Json({{ entity_var }}.into_inner())
     }
@@ -46,6 +48,7 @@ impl {{ entity_pascal }}Controller {
     /// Creates {{ a_entity }} owned by the caller.
     #[post("/")]
     #[can(Create, {{ entity_pascal }})]
+    #[api(summary = "Create {{ a_entity }}", tag = "{{ entity_pascal }}", status = 201)]
     async fn store(
         &self,
         uow: Uow,
@@ -58,6 +61,7 @@ impl {{ entity_pascal }}Controller {
     /// Updates the fields present in the body.
     #[patch("/{id}")]
     #[can(Update, {{ entity_pascal }}, from = "id")]
+    #[api(summary = "Update {{ a_entity }}", tag = "{{ entity_pascal }}")]
     async fn update(
         &self,
         uow: Uow,
@@ -72,6 +76,7 @@ impl {{ entity_pascal }}Controller {
     /// Deletes {{ a_entity }}.
     #[delete("/{id}")]
     #[can(Delete, {{ entity_pascal }}, from = "id")]
+    #[api(summary = "Delete {{ a_entity }}", tag = "{{ entity_pascal }}", status = 204)]
     async fn destroy(&self, uow: Uow, {{ entity_var }}: Authorized<{{ entity_pascal }}, Delete>) -> Result<NoContent> {
         self.{{ module }}.delete(&uow, {{ entity_var }}.into_inner()).await?;
         Ok(NoContent)
@@ -96,6 +101,7 @@ pub struct {{ entity_pascal }}Controller {
 impl {{ entity_pascal }}Controller {
     /// Lists every {{ entity_words }}, newest first.
     #[get("/")]
+    #[api(summary = "List {{ module_words }}", tag = "{{ entity_pascal }}")]
     async fn index(&self, uow: Uow) -> Result<Json<Vec<Model>>> {
         Ok(Json(self.{{ module }}.all(&uow).await?))
     }

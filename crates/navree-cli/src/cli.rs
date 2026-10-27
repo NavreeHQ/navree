@@ -20,7 +20,7 @@ pub const MODULES_DIR: &str = "src/modules";
     about = "Create Navree apps, generate code and run the dev loop",
     after_help = "Every other command runs in the app binary: `navree <command> [args...]` is \
                   `cargo run --quiet -- <command> [args...]` (migrate, migrate:fresh --seed, db:seed, \
-                  queue:work, schedule:run, routes, check --graph, openapi:export, key:generate, \
+                  queue:work, schedule:run, routes, openapi:export, key:generate, \
                   <module>:<command>, ...). `navree list` shows the app's commands."
 )]
 pub struct Cli {
@@ -75,6 +75,10 @@ pub enum Command {
     MakeTest(MakeArgs),
     /// Serve the app, rebuilding and restarting it when the code changes.
     Dev(DevArgs),
+    /// Check the app: its module graph, then the conformity checks (routes documented, entities classified, workspace isolation, translations, migrations).
+    Check(CheckArgs),
+    /// Run fmt, clippy, the tests, navree check and the front end's typecheck, tests and build, one gate at a time on this machine.
+    Gate(GateArgs),
     /// Run the app's local services (dock.toml) with Docker or Podman.
     #[command(subcommand)]
     Dock(DockCommand),
@@ -178,6 +182,40 @@ pub struct DevArgs {
     /// Arguments for the app's `serve` command (after `--`).
     #[arg(last = true)]
     pub serve_args: Vec<String>,
+}
+
+/// `navree check [--graph] [--json] [--only <check,...>]`.
+#[derive(Debug, Args)]
+pub struct CheckArgs {
+    /// Print the module graph (every module, provider and command) and stop.
+    #[arg(long)]
+    pub graph: bool,
+    /// Print the conformity report as JSON.
+    #[arg(long)]
+    pub json: bool,
+    /// Only these checks: names or prefixes (`api.docs`, `workspace`).
+    #[arg(long, value_delimiter = ',', value_name = "CHECK")]
+    pub only: Vec<String>,
+}
+
+/// `navree gate [--only <step,...>] [--skip <step,...>] [--keep-going] [--no-lock] [--web <dir>]`.
+#[derive(Debug, Args)]
+pub struct GateArgs {
+    /// Only these steps: fmt, clippy, test, check, web:typecheck, web:test, web:build (`web` = every web step).
+    #[arg(long, value_delimiter = ',', value_name = "STEP")]
+    pub only: Vec<String>,
+    /// Leave these steps out.
+    #[arg(long, value_delimiter = ',', value_name = "STEP")]
+    pub skip: Vec<String>,
+    /// Run every step even after one fails.
+    #[arg(long)]
+    pub keep_going: bool,
+    /// Do not wait for other gates on this machine.
+    #[arg(long)]
+    pub no_lock: bool,
+    /// The front end's directory, relative to the app (default web/).
+    #[arg(long, value_name = "DIR")]
+    pub web: Option<PathBuf>,
 }
 
 /// `navree dock <command>`: the app's local services.
@@ -413,6 +451,46 @@ mod tests {
     }
 
     #[test]
+    fn check_and_gate_options() {
+        let Command::Check(args) = parse(&["check"]) else {
+            panic!("expected check");
+        };
+        assert!(!args.graph && !args.json && args.only.is_empty());
+        let Command::Check(args) = parse(&["check", "--graph"]) else {
+            panic!("expected check");
+        };
+        assert!(args.graph);
+        let Command::Check(args) = parse(&["check", "--json", "--only", "api.docs,workspace"])
+        else {
+            panic!("expected check");
+        };
+        assert!(args.json);
+        assert_eq!(args.only, ["api.docs", "workspace"]);
+
+        let Command::Gate(args) = parse(&["gate"]) else {
+            panic!("expected gate");
+        };
+        assert!(args.only.is_empty() && args.skip.is_empty());
+        assert!(!args.keep_going && !args.no_lock && args.web.is_none());
+        let Command::Gate(args) = parse(&[
+            "gate",
+            "--skip",
+            "web,clippy",
+            "--only=fmt",
+            "--keep-going",
+            "--no-lock",
+            "--web",
+            "frontend",
+        ]) else {
+            panic!("expected gate");
+        };
+        assert_eq!(args.skip, ["web", "clippy"]);
+        assert_eq!(args.only, ["fmt"]);
+        assert!(args.keep_going && args.no_lock);
+        assert_eq!(args.web.as_deref(), Some(std::path::Path::new("frontend")));
+    }
+
+    #[test]
     fn other_commands_are_forwarded_with_their_arguments() {
         for (args, expected) in [
             (&["migrate"][..], &["migrate"][..]),
@@ -424,7 +502,6 @@ mod tests {
             ),
             (&["schedule:run"], &["schedule:run"]),
             (&["routes", "--json"], &["routes", "--json"]),
-            (&["check", "--graph"], &["check", "--graph"]),
             (
                 &["openapi:export", "web/openapi.json"],
                 &["openapi:export", "web/openapi.json"],

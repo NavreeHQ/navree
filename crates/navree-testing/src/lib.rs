@@ -19,6 +19,10 @@
 //!   as any `Principal` ([`principal`] builds a plain test user).
 //! - [`temp_sqlite_url`], [`TempDirGuard`] and [`FixedClock`] provide
 //!   databases and controllable time.
+//! - [`TestApp::isolation_suite`] generates cross-tenant tests from a
+//!   module's route table: from one tenant, another tenant's records are a
+//!   404, are not listed and cannot be created into ([`Tenancy`] creates the
+//!   tenants; navree-workspace provides one for workspaces).
 //!
 //! ```
 //! use std::sync::Arc;
@@ -85,12 +89,16 @@ mod app;
 mod auth;
 mod client;
 mod cookies;
+mod isolation;
 mod response;
 mod temp;
 
 pub use app::{TestApp, TestAppBuilder};
 pub use auth::{ActingAs, TestAuthenticator, principal};
 pub use client::{TestClient, TestRequest};
+pub use isolation::{
+    IsolationOutcome, IsolationReport, IsolationSuite, RecordContext, RouteResult, Tenancy, Tenant,
+};
 pub use response::TestResponse;
 pub use temp::{TempDirGuard, temp_sqlite_url};
 

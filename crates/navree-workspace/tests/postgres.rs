@@ -10,17 +10,20 @@
 
 use std::sync::Arc;
 
+use axum::extract::Path;
 use http::Method;
 use navree_access::{AccessModule, AccessOptions};
-use navree_db::{DatabaseModule, MigrationSet, ModuleBuilderDbExt, Repo};
+use navree_contracts::{ConformityOptions, ConformityReport};
+use navree_db::{DatabaseModule, Factory, MigrationSet, ModuleBuilderDbExt, Repo};
 use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
-use navree_testing::{TestApp, principal};
+use navree_testing::{IsolationReport, TestApp, principal};
+use navree_workspace::testing::IsolationSuiteExt;
 use navree_workspace::{
     CurrentWorkspace, ModuleBuilderWorkspaceExt, NewWorkspace, RlsPolicy, WorkspaceModule,
     WorkspaceRepo, WorkspaceScoped, WorkspaceUow, Workspaces,
 };
-use sea_orm::sea_query::{ColumnDef, Table};
+use sea_orm::sea_query::{ColumnDef, Index, Table};
 use sea_orm::{
     ActiveValue::Set, ConnectionTrait, Database, DbBackend, DbErr, EntityTrait, Statement,
 };
@@ -120,6 +123,30 @@ async fn index(_ws: CurrentWorkspace, uow: WorkspaceUow) -> Result<Json<Value>, 
     Ok(Json(json!({ "data": items })))
 }
 
+/// One item by id, again without a workspace filter.
+async fn show(
+    _ws: CurrentWorkspace,
+    uow: WorkspaceUow,
+    Path(id): Path<Uuid>,
+) -> Result<Json<item::Model>, AppError> {
+    Ok(Json(Repo::<item::Entity>::find_or_fail(&uow, id).await?))
+}
+
+/// Items for isolation suites; the suite sets `workspace_id`.
+struct ItemFactory;
+
+impl Factory for ItemFactory {
+    type Entity = item::Entity;
+
+    fn definition(&self, n: usize) -> item::ActiveModel {
+        item::ActiveModel {
+            id: Set(Uuid::now_v7()),
+            workspace_id: Set(Uuid::nil()),
+            title: Set(format!("Item {n}")),
+        }
+    }
+}
+
 impl Controller for ItemsController {
     fn prefix(&self) -> &'static str {
         "/items"
@@ -129,6 +156,7 @@ impl Controller for ItemsController {
         vec![
             RouteDef::on(Method::GET, "/", index).authenticated(),
             RouteDef::on(Method::POST, "/", store).authenticated(),
+            RouteDef::on(Method::GET, "/{id}", show).authenticated(),
         ]
     }
 }
@@ -375,6 +403,217 @@ async fn schema_isolation_gives_each_workspace_its_own_tables() {
         .await
         .unwrap();
     assert!(left.is_none());
+
+    app.shutdown().await.unwrap();
+    scratch.drop().await;
+}
+
+/// `notes(id, workspace_id)`: indexed by workspace, without the policy.
+mod note {
+    use sea_orm::entity::prelude::*;
+
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
+    #[sea_orm(table_name = "notes")]
+    pub struct Model {
+        #[sea_orm(primary_key, auto_increment = false)]
+        pub id: Uuid,
+        pub workspace_id: Uuid,
+    }
+
+    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+    pub enum Relation {}
+
+    impl ActiveModelBehavior for ActiveModel {}
+}
+
+impl WorkspaceScoped for note::Entity {}
+
+struct CreateNotes;
+
+impl MigrationName for CreateNotes {
+    fn name(&self) -> &str {
+        "m20261026_000002_create_notes"
+    }
+}
+
+#[async_trait]
+impl MigrationTrait for CreateNotes {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .create_table(
+                Table::create()
+                    .table("notes")
+                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
+                    .col(ColumnDef::new("workspace_id").uuid().not_null())
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .create_index(
+                Index::create()
+                    .name("notes_workspace_id_idx")
+                    .table("notes")
+                    .col("workspace_id")
+                    .to_owned(),
+            )
+            .await
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_table(Table::drop().table("notes").to_owned())
+            .await
+    }
+}
+
+/// `items` (policy, no workspace index) and `notes` (index, no policy),
+/// both classified as workspace entities.
+struct ClassifiedModule;
+
+impl Module for ClassifiedModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.migrations(
+            MigrationSet::new("classified")
+                .after(["workspace"])
+                .migration(CreateItems)
+                .migration(CreateNotes),
+        )
+        .workspace_entity::<item::Entity>()
+        .workspace_entity::<note::Entity>();
+    }
+}
+
+/// `workspace.tables` reads indexes and row-level security from the
+/// PostgreSQL catalog.
+#[tokio::test]
+async fn workspace_tables_reads_indexes_and_row_level_security_from_the_catalog() {
+    let Some(scratch) = Scratch::new().await else {
+        return;
+    };
+    let app = app(&scratch, "row", ClassifiedModule).await;
+    let report = ConformityReport::run(
+        app.ctx(),
+        &ConformityOptions::new(".").only(["workspace.tables".to_owned()]),
+    )
+    .await;
+    let check = report.check("workspace.tables").unwrap();
+    assert_eq!(check.outcome.checked, 2);
+    let findings: Vec<(&str, &str)> = check
+        .outcome
+        .findings
+        .iter()
+        .map(|f| (f.subject.as_str(), f.message.as_str()))
+        .collect();
+    assert_eq!(
+        findings,
+        [
+            ("items", "no index starts with `workspace_id`"),
+            ("notes", "row-level security is off"),
+        ]
+    );
+
+    app.shutdown().await.unwrap();
+    scratch.drop().await;
+}
+
+/// `GET /api/items/{id}: ok: 404 ...` for every route of a report.
+fn lines(report: &IsolationReport) -> Vec<String> {
+    report
+        .routes
+        .iter()
+        .map(|r| {
+            let detail = match &r.outcome {
+                navree_testing::IsolationOutcome::Passed(d) => format!("ok: {d}"),
+                navree_testing::IsolationOutcome::Failed(d) => format!("FAIL: {d}"),
+                navree_testing::IsolationOutcome::Skipped(d) => format!("skip: {d}"),
+            };
+            format!("{} {}: {detail}", r.method, r.path)
+        })
+        .collect()
+}
+
+const PASSING: [&str; 3] = [
+    "GET /api/items: ok: another workspace's records are not listed",
+    "POST /api/items: ok: 200; the record stays in the caller's workspace",
+    "GET /api/items/{id}: ok: 404 from another workspace, 200 in its own",
+];
+
+/// The id of the workspace the suite named `name`.
+async fn workspace_named(app: &TestApp, name: &str) -> Uuid {
+    let db = app.get::<navree_db::Db>().await;
+    let row = db
+        .conn()
+        .query_one_raw(Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            "SELECT id FROM workspaces WHERE name = $1",
+            [name.into()],
+        ))
+        .await
+        .unwrap()
+        .unwrap();
+    row.try_get::<Uuid>("", "id").unwrap()
+}
+
+/// The handlers read by id without a workspace filter: row-level security
+/// alone keeps the suite's workspaces apart, and the suite's records pass
+/// the policy because they are inserted inside their workspace.
+#[tokio::test]
+async fn isolation_suites_pass_on_row_level_security_alone() {
+    let Some(scratch) = Scratch::new().await else {
+        return;
+    };
+    let app = app(&scratch, "row", RowItemsModule).await;
+    let report = app
+        .isolation_suite::<RowItemsModule>()
+        .factory(ItemFactory)
+        .body("POST", "/api/items", json!({ "title": "Renewal" }))
+        .run()
+        .await;
+    assert_eq!(lines(&report), PASSING);
+
+    app.shutdown().await.unwrap();
+    scratch.drop().await;
+}
+
+/// Under schema isolation the suite's records go into each workspace's
+/// schema, with the workspace column filled when the table has one.
+#[tokio::test]
+async fn isolation_suites_pass_under_schema_isolation() {
+    let Some(scratch) = Scratch::new().await else {
+        return;
+    };
+    let app = app(&scratch, "schema", SchemaItemsModule).await;
+    let report = app
+        .isolation_suite::<SchemaItemsModule>()
+        .factory(ItemFactory)
+        .body("POST", "/api/items", json!({ "title": "Renewal" }))
+        .run()
+        .await;
+    assert_eq!(lines(&report), PASSING);
+
+    // Inside B (the policy on `items` hides rows outside a workspace).
+    let b = workspace_named(&app, "Isolation B").await;
+    let uow = app.get::<navree_db::Db>().await.uow(None, None).await;
+    app.get::<Workspaces>().await.enter(&uow, b).await.unwrap();
+    let owners: Vec<Uuid> = uow
+        .tx()
+        .await
+        .unwrap()
+        .query_all_raw(Statement::from_string(
+            DbBackend::Postgres,
+            format!(
+                "SELECT workspace_id AS w FROM workspace_{}.items",
+                b.simple()
+            ),
+        ))
+        .await
+        .unwrap()
+        .iter()
+        .map(|row| row.try_get::<Uuid>("", "w").unwrap())
+        .collect();
+    uow.rollback().await.unwrap();
+    assert!(!owners.is_empty());
+    assert!(owners.iter().all(|w| *w == b), "{owners:?} in {b}");
 
     app.shutdown().await.unwrap();
     scratch.drop().await;

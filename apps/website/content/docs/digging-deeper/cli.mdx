@@ -201,6 +201,8 @@ The tools of the ecosystem add their own commands to the CLI:
 | `navree make:resource` | Generates a [Helm](/docs/tools/helm/) admin resource for an entity. |
 | `navree mcp` | Starts [Navigator](/docs/ai/navigator/), the MCP server for your coding agent. |
 | `navree skills:install` | Installs the [agent skills](/docs/ai/agent-skills/) into the project. |
+| `navree check` | Validates the module graph, then runs the app's [conformity checks](/docs/testing/conformity-checks/) (`--only`, `--json`). |
+| `navree gate` | Runs fmt, clippy, the tests, `navree check` and the front end's typecheck, tests and build, [one gate at a time](/docs/testing/conformity-checks/#the-gate) on the machine. |
 
 ## Running your app's commands
 
@@ -276,6 +278,8 @@ module graph OK: 33 modules, 84 providers
 
 `check --graph` prints the module tree instead: each module with its providers, their dependencies, its exports and its commands.
 
+`navree check` runs this `check` first, then the app's `conformity:check` command when a module registers it (`ApiModule` and `WorkspaceModule` do): it boots the app once and verifies that every route is documented and that workspace data stays in its workspace. See [Conformity checks](/docs/testing/conformity-checks/).
+
 ### Commands by module
 
 Each module registers its own commands, so `list` shows only those of the modules your app uses.
@@ -296,6 +300,7 @@ Each module registers its own commands, so `list` shows only those of the module
 | `access:role`, `access:grant`, `access:explain` | `AccessModule` | See [Authorization](/docs/security/authorization/). |
 | `audit:prune [--days N]` | `AuditModule` | See [The audit log](/docs/security/audit-log/). |
 | `openapi:export [path]` | `ApiModule` | See [OpenAPI](/docs/digging-deeper/openapi/#exporting-the-document). |
+| `conformity:check [--json] [--root DIR] [--only a,b]` | `ApiModule`, `WorkspaceModule` | Runs the [conformity checks](/docs/testing/conformity-checks/); `navree check` runs it for you. |
 
 A few of them in the CRM, against a freshly seeded database:
 
