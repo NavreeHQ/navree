@@ -103,9 +103,15 @@ mod tests {
     #[test]
     fn wrong_lengths_are_cast_errors() {
         let error = <BinaryUuid as Cast<Uuid>>::get(vec![1, 2, 3]).unwrap_err();
-        assert_eq!(error.to_string(), "3 bytes are not a binary UUID (16 bytes)");
+        assert_eq!(
+            error.to_string(),
+            "3 bytes are not a binary UUID (16 bytes)"
+        );
         let error = <BinaryUlid as Cast<Ulid>>::get(Vec::new()).unwrap_err();
-        assert_eq!(error.to_string(), "0 bytes are not a binary ULID (16 bytes)");
+        assert_eq!(
+            error.to_string(),
+            "0 bytes are not a binary ULID (16 bytes)"
+        );
     }
 
     #[test]

@@ -62,7 +62,9 @@ pub(crate) fn without_markers(item: TokenStream) -> TokenStream {
     };
     for item in &mut block.items {
         if let ImplItem::Fn(function) = item {
-            function.attrs.retain(|attr| !attr.path().is_ident("accessor"));
+            function
+                .attrs
+                .retain(|attr| !attr.path().is_ident("accessor"));
         }
     }
     quote!(#block)
@@ -177,7 +179,10 @@ pub(crate) fn expand(args: TokenStream, item: TokenStream) -> syn::Result<TokenS
             .name
             .as_ref()
             .map_or_else(|| plain_name(method), LitStr::value);
-        let name_span = args.name.as_ref().map_or_else(|| method.span(), LitStr::span);
+        let name_span = args
+            .name
+            .as_ref()
+            .map_or_else(|| method.span(), LitStr::span);
         if let Some((_, first)) = names.iter().find(|(known, _)| *known == name) {
             let mut error = syn::Error::new(name_span, format!("two accessors are named `{name}`"));
             error.combine(syn::Error::new(*first, "the first one"));

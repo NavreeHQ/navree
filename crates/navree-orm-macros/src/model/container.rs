@@ -136,7 +136,11 @@ fn parse_key(container: &mut Container, meta: &ParseNestedMeta<'_>) -> syn::Resu
         // An attribute-layer key.
     } else {
         let key = key_name(path);
-        let keys: Vec<&str> = KEYS.iter().chain(attributes::CONTAINER_KEYS).copied().collect();
+        let keys: Vec<&str> = KEYS
+            .iter()
+            .chain(attributes::CONTAINER_KEYS)
+            .copied()
+            .collect();
         let hint = suggestion(&key, &keys)
             .map(|known| format!(" (did you mean `{known}`?)"))
             .unwrap_or_default();

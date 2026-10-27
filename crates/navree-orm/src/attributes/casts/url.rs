@@ -8,7 +8,8 @@ use url::Url;
 use crate::value::{Field, FieldError, FieldKind, Value, sql_get};
 
 fn parse(text: &str) -> Result<Url, FieldError> {
-    Url::parse(text.trim()).map_err(|error| FieldError::Invalid(format!("`{text}` is not a URL: {error}")))
+    Url::parse(text.trim())
+        .map_err(|error| FieldError::Invalid(format!("`{text}` is not a URL: {error}")))
 }
 
 /// A URL, stored as its text; text that does not parse is a decode error

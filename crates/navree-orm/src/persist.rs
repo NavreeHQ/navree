@@ -461,7 +461,15 @@ pub(crate) async fn increment<M: Model, T: Numeric>(
     let ctx = target.context();
     in_model_scope::<M, _, _>(
         &ctx,
-        apply_increment(target, &ctx, record, name, amount.to_value(), decrement, extra),
+        apply_increment(
+            target,
+            &ctx,
+            record,
+            name,
+            amount.to_value(),
+            decrement,
+            extra,
+        ),
     )
     .await
 }

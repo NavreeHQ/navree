@@ -47,15 +47,33 @@ struct SendInvoice {
 #[tokio::test]
 async fn identities_round_trip_through_a_job_and_restore_records() {
     let t = sqlite(SCHEMA).await;
-    let invoice = Invoice::create(&t.db, Invoice { number: "INV-1".into(), ..Invoice::default() })
-        .await
-        .unwrap();
+    let invoice = Invoice::create(
+        &t.db,
+        Invoice {
+            number: "INV-1".into(),
+            ..Invoice::default()
+        },
+    )
+    .await
+    .unwrap();
     let mut lines = Vec::new();
     for item in ["a", "b", "c"] {
-        lines.push(Line::create(&t.db, Line { item: item.into(), ..Line::default() }).await.unwrap());
+        lines.push(
+            Line::create(
+                &t.db,
+                Line {
+                    item: item.into(),
+                    ..Line::default()
+                },
+            )
+            .await
+            .unwrap(),
+        );
     }
     let mut invoice_with_relation = invoice.clone();
-    invoice_with_relation.relations_mut().set("lines", Vec::<String>::new());
+    invoice_with_relation
+        .relations_mut()
+        .set("lines", Vec::<String>::new());
     let reversed: navree_orm::Collection<Line> = lines.iter().rev().cloned().collect();
     let job = SendInvoice {
         invoice: invoice_with_relation.to_ref().unwrap(),
@@ -79,7 +97,11 @@ async fn identities_round_trip_through_a_job_and_restore_records() {
 
     Line::destroy(&t.db, [2_i64]).await.unwrap();
     let restored = job.lines.restore(&t.db).await.unwrap();
-    assert_eq!(restored.map(|line| line.item.clone()), ["c", "a"], "in order, the deleted one left out");
+    assert_eq!(
+        restored.map(|line| line.item.clone()),
+        ["c", "a"],
+        "in order, the deleted one left out"
+    );
     assert_eq!(job.lines.keys().unwrap(), [3, 2, 1]);
     assert_eq!((job.lines.len(), job.lines.is_empty()), (3, false));
 }
@@ -87,9 +109,15 @@ async fn identities_round_trip_through_a_job_and_restore_records() {
 #[tokio::test]
 async fn missing_records_fail_clearly_or_are_skipped_on_request() {
     let t = sqlite(SCHEMA).await;
-    let mut invoice = Invoice::create(&t.db, Invoice { number: "INV-2".into(), ..Invoice::default() })
-        .await
-        .unwrap();
+    let mut invoice = Invoice::create(
+        &t.db,
+        Invoice {
+            number: "INV-2".into(),
+            ..Invoice::default()
+        },
+    )
+    .await
+    .unwrap();
     let reference = invoice.to_ref().unwrap();
     invoice.delete(&t.db).await.unwrap();
     let trashed = reference.restore(&t.db).await.unwrap();
@@ -98,17 +126,32 @@ async fn missing_records_fail_clearly_or_are_skipped_on_request() {
     navree_orm::table("invoices").delete(&t.db).await.unwrap();
     let error = reference.restore(&t.db).await.unwrap_err();
     assert!(error.is_not_found(), "{error:?}");
-    assert_eq!(error.to_string(), format!("no Invoice found for key {}", invoice.id));
+    assert_eq!(
+        error.to_string(),
+        format!("no Invoice found for key {}", invoice.id)
+    );
     assert!(reference.restore_or_skip(&t.db).await.unwrap().is_none());
 
     let error = Record::new(Line::default()).to_ref().unwrap_err();
-    assert_eq!(error.to_string(), "cannot refer to a Line that has not been saved");
+    assert_eq!(
+        error.to_string(),
+        "cannot refer to a Line that has not been saved"
+    );
 
-    let wrong: ModelRef<Line> = serde_json::from_value(json!({"model": "Invoice", "key": 1})).unwrap();
+    let wrong: ModelRef<Line> =
+        serde_json::from_value(json!({"model": "Invoice", "key": 1})).unwrap();
     let error = wrong.restore(&t.db).await.unwrap_err();
-    assert_eq!(error.to_string(), "invalid query: this reference names model Invoice, not Line");
-    let malformed: ModelRef<Invoice> = serde_json::from_value(json!({"model": "Invoice", "key": "nope"})).unwrap();
-    assert!(matches!(malformed.key().unwrap_err(), OrmError::Decode { .. }));
-    let none: ModelRefs<Line> = serde_json::from_value(json!({"model": "Line", "keys": []})).unwrap();
+    assert_eq!(
+        error.to_string(),
+        "invalid query: this reference names model Invoice, not Line"
+    );
+    let malformed: ModelRef<Invoice> =
+        serde_json::from_value(json!({"model": "Invoice", "key": "nope"})).unwrap();
+    assert!(matches!(
+        malformed.key().unwrap_err(),
+        OrmError::Decode { .. }
+    ));
+    let none: ModelRefs<Line> =
+        serde_json::from_value(json!({"model": "Line", "keys": []})).unwrap();
     assert!(none.restore(&t.db).await.unwrap().is_empty());
 }

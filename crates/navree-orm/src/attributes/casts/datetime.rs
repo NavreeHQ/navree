@@ -52,7 +52,11 @@ impl FormattedDateTime for DateTime<Utc> {
         DateTime::parse_from_str(text, format)
             .map(|at| at.to_utc())
             .ok()
-            .or_else(|| NaiveDateTime::parse_from_str(text, format).ok().map(|at| at.and_utc()))
+            .or_else(|| {
+                NaiveDateTime::parse_from_str(text, format)
+                    .ok()
+                    .map(|at| at.and_utc())
+            })
             .or_else(|| {
                 NaiveDate::parse_from_str(text, format)
                     .ok()
@@ -68,7 +72,8 @@ impl FormattedDateTime for DateTime<FixedOffset> {
 
     fn parse_with(text: &str, format: &str) -> Option<Self> {
         DateTime::parse_from_str(text, format).ok().or_else(|| {
-            <DateTime<Utc> as FormattedDateTime>::parse_with(text, format).map(|at| at.fixed_offset())
+            <DateTime<Utc> as FormattedDateTime>::parse_with(text, format)
+                .map(|at| at.fixed_offset())
         })
     }
 }
@@ -86,7 +91,11 @@ impl FormattedDateTime for NaiveDateTime {
                     .ok()
                     .map(|day| day.and_time(NaiveTime::MIN))
             })
-            .or_else(|| DateTime::parse_from_str(text, format).ok().map(|at| at.naive_utc()))
+            .or_else(|| {
+                DateTime::parse_from_str(text, format)
+                    .ok()
+                    .map(|at| at.naive_utc())
+            })
     }
 }
 
@@ -96,9 +105,11 @@ impl FormattedDateTime for NaiveDate {
     }
 
     fn parse_with(text: &str, format: &str) -> Option<Self> {
-        NaiveDate::parse_from_str(text, format)
-            .ok()
-            .or_else(|| NaiveDateTime::parse_from_str(text, format).ok().map(|at| at.date()))
+        NaiveDate::parse_from_str(text, format).ok().or_else(|| {
+            NaiveDateTime::parse_from_str(text, format)
+                .ok()
+                .map(|at| at.date())
+        })
     }
 }
 
@@ -175,7 +186,10 @@ impl<F: DateTimeFormatSpec, T: FormattedDateTime> Cast<T> for DateTimeFormat<F> 
     }
 
     /// The record keeps the value at the precision the format stores.
-    fn prepare<'a>(value: &'a mut T, context: &'a CastContext) -> BoxFuture<'a, Result<(), CastError>> {
+    fn prepare<'a>(
+        value: &'a mut T,
+        context: &'a CastContext,
+    ) -> BoxFuture<'a, Result<(), CastError>> {
         let _ = context;
         let result = value.format_with(F::FORMAT).map(|text| {
             if let Some(stored) = T::parse_with(&text, F::FORMAT) {
@@ -224,7 +238,9 @@ fn timestamp_input(input: serde_json::Value, millis: bool) -> Result<DateTime<Ut
         _ => None,
     };
     match number {
-        Some(n) if millis => DateTime::from_timestamp_millis(n).ok_or_else(|| out_of_range(n, "milliseconds")),
+        Some(n) if millis => {
+            DateTime::from_timestamp_millis(n).ok_or_else(|| out_of_range(n, "milliseconds"))
+        }
         Some(n) => DateTime::from_timestamp(n, 0).ok_or_else(|| out_of_range(n, "seconds")),
         None => DateTime::<Utc>::from_json(input).map_err(CastError::from),
     }
@@ -254,7 +270,10 @@ macro_rules! unix_casts {
                 Ok(value.$to())
             }
 
-            fn from_json(input: serde_json::Value, context: &CastContext) -> Result<DateTime<Utc>, CastError> {
+            fn from_json(
+                input: serde_json::Value,
+                context: &CastContext,
+            ) -> Result<DateTime<Utc>, CastError> {
                 let _ = context;
                 timestamp_input(input, $millis)
             }
@@ -284,7 +303,10 @@ macro_rules! unix_casts {
                 Ok(value.and_utc().$to())
             }
 
-            fn from_json(input: serde_json::Value, context: &CastContext) -> Result<NaiveDateTime, CastError> {
+            fn from_json(
+                input: serde_json::Value,
+                context: &CastContext,
+            ) -> Result<NaiveDateTime, CastError> {
                 let _ = context;
                 timestamp_input(input, $millis).map(|at| at.naive_utc())
             }
@@ -301,8 +323,16 @@ macro_rules! unix_casts {
     };
 }
 
-unix_casts!(UnixTimestamp, false, "seconds", timestamp, |s| DateTime::from_timestamp(s, 0));
-unix_casts!(UnixTimestampMs, true, "milliseconds", timestamp_millis, DateTime::from_timestamp_millis);
+unix_casts!(UnixTimestamp, false, "seconds", timestamp, |s| {
+    DateTime::from_timestamp(s, 0)
+});
+unix_casts!(
+    UnixTimestampMs,
+    true,
+    "milliseconds",
+    timestamp_millis,
+    DateTime::from_timestamp_millis
+);
 
 #[cfg(test)]
 mod tests {
@@ -389,7 +419,11 @@ mod tests {
         assert!(error.to_string().contains("out of the range"), "{error}");
 
         let context = CastContext::new();
-        for input in [json!(1_793_089_800), json!("1793089800"), json!("2026-10-27T08:30:00Z")] {
+        for input in [
+            json!(1_793_089_800),
+            json!("1793089800"),
+            json!("2026-10-27T08:30:00Z"),
+        ] {
             let read: DateTime<Utc> = UnixTimestamp::from_json(input.clone(), &context).unwrap();
             assert_eq!(read, at, "{input}");
         }
@@ -398,10 +432,15 @@ mod tests {
 
     #[tokio::test]
     async fn preparation_drops_the_fractions_that_are_not_stored() {
-        let mut at = Utc.with_ymd_and_hms(2026, 10, 27, 8, 30, 0).unwrap() + chrono::Duration::milliseconds(1_234);
-        UnixTimestampMs::prepare(&mut at, &CastContext::new()).await.unwrap();
+        let mut at = Utc.with_ymd_and_hms(2026, 10, 27, 8, 30, 0).unwrap()
+            + chrono::Duration::milliseconds(1_234);
+        UnixTimestampMs::prepare(&mut at, &CastContext::new())
+            .await
+            .unwrap();
         assert_eq!(at.timestamp_subsec_millis(), 234);
-        UnixTimestamp::prepare(&mut at, &CastContext::new()).await.unwrap();
+        UnixTimestamp::prepare(&mut at, &CastContext::new())
+            .await
+            .unwrap();
         assert_eq!(at.timestamp_subsec_nanos(), 0);
     }
 }

@@ -144,7 +144,10 @@ impl navree_orm::Field for Opaque {
         navree_orm::Value::String(None)
     }
 
-    fn from_sql(_row: &navree_db::sea_orm::QueryResult, _column: &str) -> Result<Self, navree_orm::FieldError> {
+    fn from_sql(
+        _row: &navree_db::sea_orm::QueryResult,
+        _column: &str,
+    ) -> Result<Self, navree_orm::FieldError> {
         Ok(Opaque)
     }
 
@@ -180,7 +183,8 @@ fn ada() -> Person {
                 .unwrap(),
         ),
         score: 42,
-        created_at: Utc.with_ymd_and_hms(2026, 10, 27, 8, 0, 0).unwrap() + chrono::Duration::nanoseconds(123_456_789),
+        created_at: Utc.with_ymd_and_hms(2026, 10, 27, 8, 0, 0).unwrap()
+            + chrono::Duration::nanoseconds(123_456_789),
         updated_at: Utc.with_ymd_and_hms(2026, 10, 27, 9, 0, 0).unwrap(),
     }
 }
@@ -192,9 +196,15 @@ fn records_serialize_with_serdes_keys_one_date_format_and_appends() {
         person.to_json().unwrap(),
         r#"{"id":1,"firstName":"Ada","lastName":"Lovelace","mail":"ada@example.com","bornOn":"1815-12-10","lastSeenAt":"2026-10-27T09:30:00.000000Z","score":"42","createdAt":"2026-10-27T08:00:00.123456Z","updatedAt":"2026-10-27T09:00:00.000000Z","full_name":"Ada Lovelace"}"#
     );
-    assert_eq!(serde_json::to_value(&person).unwrap(), person.to_value().unwrap());
+    assert_eq!(
+        serde_json::to_value(&person).unwrap(),
+        person.to_value().unwrap()
+    );
     let pretty = person.to_json_pretty().unwrap();
-    assert!(pretty.starts_with("{\n  \"id\": 1,\n  \"firstName\": \"Ada\""), "{pretty}");
+    assert!(
+        pretty.starts_with("{\n  \"id\": 1,\n  \"firstName\": \"Ada\""),
+        "{pretty}"
+    );
 }
 
 #[test]
@@ -208,7 +218,10 @@ fn visibility_changes_per_record() {
     person.make_visible(["secret_token"]);
     assert_eq!(person.to_value().unwrap()["secretToken"], "s3cret");
     person.set_visible(["id", "mail"]);
-    assert_eq!(person.to_value().unwrap(), json!({"id": 1, "mail": "ada@example.com"}));
+    assert_eq!(
+        person.to_value().unwrap(),
+        json!({"id": 1, "mail": "ada@example.com"})
+    );
     person.merge_visible(["last_name"]);
     assert_eq!(person.visible(), ["id", "mail", "last_name"]);
     person.make_visible(["first_name"]);
@@ -216,7 +229,9 @@ fn visibility_changes_per_record() {
         person.to_value().unwrap(),
         json!({"id": 1, "firstName": "Ada", "lastName": "Lovelace", "mail": "ada@example.com"})
     );
-    person.set_hidden(Vec::<String>::new()).set_visible(Vec::<String>::new());
+    person
+        .set_hidden(Vec::<String>::new())
+        .set_visible(Vec::<String>::new());
     assert!(person.to_value().unwrap().get("secretToken").is_some());
 
     let mut person = Record::new(ada());
@@ -225,7 +240,9 @@ fn visibility_changes_per_record() {
     let json = person.to_value().unwrap();
     assert!(json.get("score").is_none());
     assert_eq!(json["id"], 1);
-    person.make_visible_if(true, ["score"]).merge_hidden(["mail"]);
+    person
+        .make_visible_if(true, ["score"])
+        .merge_hidden(["mail"]);
     let json = person.to_value().unwrap();
     assert_eq!(json["score"], "42");
     assert!(json.get("mail").is_none(), "serde keys work too");
@@ -234,7 +251,11 @@ fn visibility_changes_per_record() {
 #[test]
 fn appends_change_per_record() {
     let mut person = Record::new(ada());
-    assert_eq!(person.full_name(), "Ada Lovelace", "an accessor is a plain method of the model");
+    assert_eq!(
+        person.full_name(),
+        "Ada Lovelace",
+        "an accessor is a plain method of the model"
+    );
     assert_eq!(person.appends(), ["full_name"]);
     assert!(person.has_appended("full_name"));
     person.append(["initials"]).unwrap();
@@ -252,12 +273,21 @@ fn appends_change_per_record() {
     assert!(person.to_value().unwrap().get("initials").is_none());
     person.merge_appends(["full_name"]).unwrap();
     assert_eq!(person.appends(), ["full_name"]);
-    assert_eq!(Person::accessors().iter().map(|a| a.name()).collect::<Vec<_>>(), ["full_name", "initials", "broken"]);
+    assert_eq!(
+        Person::accessors()
+            .iter()
+            .map(|a| a.name())
+            .collect::<Vec<_>>(),
+        ["full_name", "initials", "broken"]
+    );
     assert_eq!(Person::accessors()[0].rust_type(), "String");
     assert_eq!(Person::meta().appended_names(), ["full_name"]);
     let mut badge = Record::new(Badge::default());
     let error = badge.append(["full_name"]).unwrap_err();
-    assert!(error.to_string().contains("it has no #[accessors] block"), "{error}");
+    assert!(
+        error.to_string().contains("it has no #[accessors] block"),
+        "{error}"
+    );
 }
 
 #[test]
@@ -281,12 +311,22 @@ async fn extras_and_relations_serialize_with_the_records_visibility() {
     let t = sqlite(SCHEMA).await;
     let person = Person::create(&t.db, ada()).await.unwrap();
     for body in ["first", "second"] {
-        Remark::create(&t.db, Remark { person_id: person.id, body: body.into(), ..Remark::default() })
-            .await
-            .unwrap();
+        Remark::create(
+            &t.db,
+            Remark {
+                person_id: person.id,
+                body: body.into(),
+                ..Remark::default()
+            },
+        )
+        .await
+        .unwrap();
     }
     let mut people = Person::query()
-        .select_raw("(SELECT COUNT(*) FROM remarks) AS remarks_count", [] as [i64; 0])
+        .select_raw(
+            "(SELECT COUNT(*) FROM remarks) AS remarks_count",
+            [] as [i64; 0],
+        )
         .select_raw("'2026-05-06 07:08:09' AS reviewed_at", [] as [i64; 0])
         .with_casts([("reviewed_at", ExtraCast::DateTime)])
         .get(&t.db)
@@ -296,14 +336,24 @@ async fn extras_and_relations_serialize_with_the_records_visibility() {
     let person = &mut people[0];
     person.relations_mut().set("remarks", remarks);
     person.relations_mut().set("mentor", None::<Record<Person>>);
-    person.relations_mut().set("replies", Collection::<Remark>::new());
+    person
+        .relations_mut()
+        .set("replies", Collection::<Remark>::new());
     let json = person.to_value().unwrap();
     assert!(json.get("remarks_count").is_none(), "hidden by the model");
-    assert_eq!(json["reviewed_at"], "2026-05-06T07:08:09.000000Z", "extras use the date format");
-    assert_eq!(json["remarks"], json!([{"id": 1, "body": "first"}, {"id": 2, "body": "second"}]));
+    assert_eq!(
+        json["reviewed_at"], "2026-05-06T07:08:09.000000Z",
+        "extras use the date format"
+    );
+    assert_eq!(
+        json["remarks"],
+        json!([{"id": 1, "body": "first"}, {"id": 2, "body": "second"}])
+    );
     assert_eq!(json["mentor"], serde_json::Value::Null, "an empty to-one");
     assert_eq!(json["replies"], json!([]), "an empty to-many");
-    person.make_hidden(["remarks"]).make_visible(["remarks_count"]);
+    person
+        .make_hidden(["remarks"])
+        .make_visible(["remarks_count"]);
     let json = person.to_value().unwrap();
     assert!(json.get("remarks").is_none());
     assert_eq!(json["remarks_count"], 2);
@@ -314,10 +364,22 @@ async fn extras_and_relations_serialize_with_the_records_visibility() {
 async fn collections_serialize_as_arrays_and_change_every_record() {
     let t = sqlite(SCHEMA).await;
     for name in ["Ada", "Grace"] {
-        Person::create(&t.db, Person { id: 0, first_name: name.into(), ..ada() }).await.unwrap();
+        Person::create(
+            &t.db,
+            Person {
+                id: 0,
+                first_name: name.into(),
+                ..ada()
+            },
+        )
+        .await
+        .unwrap();
     }
     let mut people: Collection<Person> = Person::all(&t.db).await.unwrap();
-    people.make_hidden(["mail", "score"]).append(["initials"]).unwrap();
+    people
+        .make_hidden(["mail", "score"])
+        .append(["initials"])
+        .unwrap();
     let json = serde_json::to_value(&people).unwrap();
     assert_eq!(json.as_array().unwrap().len(), 2);
     for (person, first) in json.as_array().unwrap().iter().zip(["Ada", "Grace"]) {
@@ -326,13 +388,22 @@ async fn collections_serialize_as_arrays_and_change_every_record() {
         assert!(person.get("initials").is_some());
     }
     people.set_visible(["id"]).without_appends();
-    assert_eq!(serde_json::to_value(&people).unwrap(), json!([{"id": 1}, {"id": 2}]));
-    people.merge_visible(["first_name"]).make_visible(["mail"]).set_hidden(["id"]);
+    assert_eq!(
+        serde_json::to_value(&people).unwrap(),
+        json!([{"id": 1}, {"id": 2}])
+    );
+    people
+        .merge_visible(["first_name"])
+        .make_visible(["mail"])
+        .set_hidden(["id"]);
     assert_eq!(
         serde_json::to_value(&people).unwrap(),
         json!([{"firstName": "Ada", "mail": "ada@example.com"}, {"firstName": "Grace", "mail": "ada@example.com"}])
     );
-    people.merge_hidden(["mail"]).set_appends(["full_name"]).unwrap();
+    people
+        .merge_hidden(["mail"])
+        .set_appends(["full_name"])
+        .unwrap();
     assert_eq!(
         serde_json::to_value(&people).unwrap(),
         json!([{"firstName": "Ada"}, {"firstName": "Grace"}]),
@@ -350,19 +421,32 @@ fn serialization_failures_name_the_model_and_column() {
         matches!(&error, OrmError::Serialize { column: Some(column), .. } if column == "broken"),
         "{error:?}"
     );
-    assert_eq!(error.to_string(), "cannot serialize `broken` of Person: key must be a string");
+    assert_eq!(
+        error.to_string(),
+        "cannot serialize `broken` of Person: key must be a string"
+    );
     let odd = Record::new(Odd::default());
     let error = odd.to_json().unwrap_err();
-    assert_eq!(error.to_string(), "cannot serialize `body` of Odd: opaque values do not serialize");
+    assert_eq!(
+        error.to_string(),
+        "cannot serialize `body` of Odd: opaque values do not serialize"
+    );
     let error = serde_json::to_value(&odd).unwrap_err();
-    assert_eq!(error.to_string(), "cannot serialize `body` of Odd: opaque values do not serialize");
+    assert_eq!(
+        error.to_string(),
+        "cannot serialize `body` of Odd: opaque values do not serialize"
+    );
 }
 
 #[test]
 fn only_and_except_pick_values_whatever_the_visibility() {
     let person = Record::new(ada());
     assert_eq!(
-        serde_json::Value::Object(person.only(["first_name", "secret_token", "initials", "nope", "mail"]).unwrap()),
+        serde_json::Value::Object(
+            person
+                .only(["first_name", "secret_token", "initials", "nope", "mail"])
+                .unwrap()
+        ),
         json!({
             "first_name": "Ada",
             "secret_token": "s3cret",
@@ -371,7 +455,15 @@ fn only_and_except_pick_values_whatever_the_visibility() {
             "mail": "ada@example.com",
         })
     );
-    let except = person.except(["secret_token", "score", "created_at", "updated_at", "born_on"]).unwrap();
+    let except = person
+        .except([
+            "secret_token",
+            "score",
+            "created_at",
+            "updated_at",
+            "born_on",
+        ])
+        .unwrap();
     assert_eq!(
         serde_json::Value::Object(except),
         json!({
@@ -403,16 +495,25 @@ impl Essay {
     /// How many words the body has (counted once per record).
     #[accessor]
     pub fn word_count(&self) -> usize {
-        *self.words.get_or_init(|| self.body.split_whitespace().count())
+        *self
+            .words
+            .get_or_init(|| self.body.split_whitespace().count())
     }
 }
 
 #[tokio::test]
 async fn expensive_accessors_cache_in_fields_that_are_not_columns() {
     let t = sqlite(SCHEMA).await;
-    Remark::create(&t.db, Remark { person_id: 1, body: "one two three".into(), ..Remark::default() })
-        .await
-        .unwrap();
+    Remark::create(
+        &t.db,
+        Remark {
+            person_id: 1,
+            body: "one two three".into(),
+            ..Remark::default()
+        },
+    )
+    .await
+    .unwrap();
     let essay = Essay::query().first(&t.db).await.unwrap().unwrap();
     assert_eq!(essay.words.get(), None, "not computed until asked");
     assert_eq!(essay.to_value().unwrap()["word_count"], 3);
@@ -441,7 +542,10 @@ impl<T: std::fmt::Display> DisplayProbe<T> {
 
 #[test]
 fn records_have_no_display_and_templates_get_their_values() {
-    assert!(DisplayProbe::<String>(std::marker::PhantomData).displays(), "the probe tells");
+    assert!(
+        DisplayProbe::<String>(std::marker::PhantomData).displays(),
+        "the probe tells"
+    );
     assert!(
         !DisplayProbe::<Record<Person>>(std::marker::PhantomData).displays(),
         "records do not print themselves"

@@ -17,7 +17,9 @@ mod vector;
 
 pub use binary::{BinaryUlid, BinaryUuid};
 pub use castable::Castable;
-pub use datetime::{DateTimeFormat, DateTimeFormatSpec, FormattedDateTime, UnixTimestamp, UnixTimestampMs};
+pub use datetime::{
+    DateTimeFormat, DateTimeFormatSpec, FormattedDateTime, UnixTimestamp, UnixTimestampMs,
+};
 pub use decimal::DecimalScale;
 pub use encrypted::{Encrypted, EncryptedJson, EncryptedValue};
 pub use hashed::{Hashed, is_password_hash};

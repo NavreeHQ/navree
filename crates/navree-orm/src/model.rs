@@ -869,7 +869,11 @@ pub trait Model: Clone + Send + Sync + Serialize + 'static {
     /// columns) from untyped input at once, so the field is checked whole
     /// rather than one column at a time.
     #[doc(hidden)]
-    fn set_attribute_parts(&mut self, field: &str, inputs: Vec<(String, serde_json::Value)>) -> Result<()> {
+    fn set_attribute_parts(
+        &mut self,
+        field: &str,
+        inputs: Vec<(String, serde_json::Value)>,
+    ) -> Result<()> {
         let _ = field;
         for (column, input) in inputs {
             self.set_attribute(&column, input)?;
@@ -1303,7 +1307,11 @@ pub mod derive_support {
     // Untyped input (mass assignment)
     // ---------------------------------------------------------------------
 
-    fn input_error<M: Model>(column: &str, expected: Cow<'static, str>, message: String) -> OrmError {
+    fn input_error<M: Model>(
+        column: &str,
+        expected: Cow<'static, str>,
+        message: String,
+    ) -> OrmError {
         OrmError::Decode {
             model: Cow::Borrowed(M::meta().name()),
             column: column.to_owned(),
@@ -1313,12 +1321,19 @@ pub mod derive_support {
     }
 
     /// Converts untyped input into a field.
-    pub fn input<M: Model, T: Field>(column: &str, input: serde_json::Value) -> Result<T, OrmError> {
+    pub fn input<M: Model, T: Field>(
+        column: &str,
+        input: serde_json::Value,
+    ) -> Result<T, OrmError> {
         T::from_json(input).map_err(|error| {
-            input_error::<M>(column, T::type_name(), match error {
-                FieldError::Null => "the input is null (make the field an Option)".to_owned(),
-                other => other.to_string(),
-            })
+            input_error::<M>(
+                column,
+                T::type_name(),
+                match error {
+                    FieldError::Null => "the input is null (make the field an Option)".to_owned(),
+                    other => other.to_string(),
+                },
+            )
         })
     }
 
@@ -1577,7 +1592,12 @@ pub mod derive_support {
         let mut values = write_multi::<M, C, T>(field, current)?.to_values();
         values[index] = value;
         let stored = C::Stored::from_values(values).map_err(|(index, error)| {
-            decode_error(M::meta().name(), column, C::Stored::type_name(index), &error)
+            decode_error(
+                M::meta().name(),
+                column,
+                C::Stored::type_name(index),
+                &error,
+            )
         })?;
         read_multi::<M, C, T>(field, stored)
     }
@@ -1598,7 +1618,12 @@ pub mod derive_support {
             return Ok(None);
         }
         let stored = C::Stored::from_values(values).map_err(|(index, error)| {
-            decode_error(M::meta().name(), column, C::Stored::type_name(index), &error)
+            decode_error(
+                M::meta().name(),
+                column,
+                C::Stored::type_name(index),
+                &error,
+            )
         })?;
         read_multi::<M, C, T>(field, stored).map(Some)
     }
@@ -1611,7 +1636,12 @@ pub mod derive_support {
     ) -> Result<T, OrmError> {
         let stored = C::Stored::from_values(values).map_err(|(index, error)| {
             let column = columns.get(index).copied().unwrap_or(field);
-            decode_error(M::meta().name(), column, C::Stored::type_name(index), &error)
+            decode_error(
+                M::meta().name(),
+                column,
+                C::Stored::type_name(index),
+                &error,
+            )
         })?;
         read_multi::<M, C, T>(field, stored)
     }
@@ -1636,8 +1666,13 @@ pub mod derive_support {
         a: &T,
         b: &T,
     ) -> Vec<usize> {
-        match (multi_values::<M, C, T>(field, a), multi_values::<M, C, T>(field, b)) {
-            (Ok(a), Ok(b)) => (0..a.len()).filter(|&i| !same_value(&a[i], &b[i])).collect(),
+        match (
+            multi_values::<M, C, T>(field, a),
+            multi_values::<M, C, T>(field, b),
+        ) {
+            (Ok(a), Ok(b)) => (0..a.len())
+                .filter(|&i| !same_value(&a[i], &b[i]))
+                .collect(),
             _ => (0..C::Stored::COUNT).collect(),
         }
     }
@@ -1648,8 +1683,13 @@ pub mod derive_support {
         a: &Option<T>,
         b: &Option<T>,
     ) -> Vec<usize> {
-        match (write_multi_option::<M, C, T>(field, a), write_multi_option::<M, C, T>(field, b)) {
-            (Ok(a), Ok(b)) => (0..a.len()).filter(|&i| !same_value(&a[i], &b[i])).collect(),
+        match (
+            write_multi_option::<M, C, T>(field, a),
+            write_multi_option::<M, C, T>(field, b),
+        ) {
+            (Ok(a), Ok(b)) => (0..a.len())
+                .filter(|&i| !same_value(&a[i], &b[i]))
+                .collect(),
             _ => (0..C::Stored::COUNT).collect(),
         }
     }

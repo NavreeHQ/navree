@@ -144,12 +144,13 @@ fn parse_cast(meta: &ParseNestedMeta<'_>) -> syn::Result<(Cast, Span)> {
                     "give the cast's arguments once: either cast(path::To::Cast, args..) or cast = path::To::Cast<args..>",
                 ));
             }
-            last.arguments = syn::PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments {
-                colon2_token: None,
-                lt_token: Token![<](span),
-                args: arguments,
-                gt_token: Token![>](span),
-            });
+            last.arguments =
+                syn::PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments {
+                    colon2_token: None,
+                    lt_token: Token![<](span),
+                    args: arguments,
+                    gt_token: Token![>](span),
+                });
         }
         return Ok((Cast::Path(path), span));
     }

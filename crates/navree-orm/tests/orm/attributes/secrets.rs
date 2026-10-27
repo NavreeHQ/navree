@@ -96,45 +96,83 @@ async fn encrypted_fields_are_stored_encrypted_and_read_plain() {
     assert!(ssn.starts_with("v1."), "{ssn}");
     assert!(!ssn.contains("078"));
     let history = stored_text(&db, "patients", "history").await.unwrap();
-    assert!(history.starts_with("v1.") && !history.contains("checkup"), "{history}");
+    assert!(
+        history.starts_with("v1.") && !history.contains("checkup"),
+        "{history}"
+    );
 
     let stored = Patient::find_or_fail(&*db, created.id).await.unwrap();
     assert_eq!(stored.ssn, "078-05-1120");
     assert_eq!(stored.notes.as_deref(), Some("allergic to penicillin"));
     assert_eq!(stored.history, created.history);
     assert_eq!(stored.scan, [0, 159, 146, 150]);
-    assert!(stored.is_clean(), "every write differs, the plain values do not");
+    assert!(
+        stored.is_clean(),
+        "every write differs, the plain values do not"
+    );
 
     // The app's encrypter wrote them.
     let encrypter = app.get::<Encrypter>().await;
     assert_eq!(encrypter.decrypt_string(&ssn).unwrap(), "078-05-1120");
 
     let json = stored.to_value().unwrap();
-    assert_eq!(json["ssn"], "078-05-1120", "serialized records hold the plain value");
-    assert_eq!(json["history"], json!([{"on": "2026-03-01", "reason": "checkup"}]));
+    assert_eq!(
+        json["ssn"], "078-05-1120",
+        "serialized records hold the plain value"
+    );
+    assert_eq!(
+        json["history"],
+        json!([{"on": "2026-03-01", "reason": "checkup"}])
+    );
     assert!(json.get("password").is_none() && json.get("pin").is_none());
 
     let mut stored = stored;
     stored.notes = None;
     stored.save(&*db).await.unwrap();
-    assert_eq!(stored_text(&db, "patients", "notes").await, None, "None is NULL");
+    assert_eq!(
+        stored_text(&db, "patients", "notes").await,
+        None,
+        "None is NULL"
+    );
     stored.ssn = "000-00-0000".into();
     assert!(stored.is_dirty_on(["ssn"]));
     stored.save(&*db).await.unwrap();
-    assert_eq!(Patient::find_or_fail(&*db, created.id).await.unwrap().ssn, "000-00-0000");
+    assert_eq!(
+        Patient::find_or_fail(&*db, created.id).await.unwrap().ssn,
+        "000-00-0000"
+    );
 }
 
 #[tokio::test]
 async fn hashed_fields_hold_the_hash_once_saved() {
     let (app, db) = crypto_app(SCHEMA).await;
     let hasher = app.get::<Hasher>().await;
-    let mut created = Patient::create(&*db, Patient { pin: Some("1234".into()), ..patient() })
-        .await
-        .unwrap();
+    let mut created = Patient::create(
+        &*db,
+        Patient {
+            pin: Some("1234".into()),
+            ..patient()
+        },
+    )
+    .await
+    .unwrap();
     assert!(is_password_hash(&created.password), "{}", created.password);
-    assert!(hasher.verify("correct horse battery staple", &created.password).await.unwrap());
-    assert!(hasher.verify("1234", created.pin.as_deref().unwrap()).await.unwrap());
-    assert_eq!(stored_text(&db, "patients", "password").await.as_deref(), Some(created.password.as_str()));
+    assert!(
+        hasher
+            .verify("correct horse battery staple", &created.password)
+            .await
+            .unwrap()
+    );
+    assert!(
+        hasher
+            .verify("1234", created.pin.as_deref().unwrap())
+            .await
+            .unwrap()
+    );
+    assert_eq!(
+        stored_text(&db, "patients", "password").await.as_deref(),
+        Some(created.password.as_str())
+    );
     assert!(created.is_clean());
 
     let first = created.password.clone();
@@ -147,9 +185,17 @@ async fn hashed_fields_hold_the_hash_once_saved() {
     assert!(error.to_string().contains("not hashed yet"), "{error}");
     created.save(&*db).await.unwrap();
     assert_ne!(created.password, first);
-    assert!(hasher.verify("new password", &created.password).await.unwrap());
+    assert!(
+        hasher
+            .verify("new password", &created.password)
+            .await
+            .unwrap()
+    );
     let stored = Patient::find_or_fail(&*db, created.id).await.unwrap();
-    assert_eq!(stored.password, created.password, "reading returns the hash");
+    assert_eq!(
+        stored.password, created.password,
+        "reading returns the hash"
+    );
 
     created.password = "$2y$10$abcdefghijklmnopqrstuuJ8Wbm3gx9z5HFRz8wE2PxDZtjVYZxq2".into();
     let error = created.save(&*db).await.unwrap_err();
@@ -158,10 +204,18 @@ async fn hashed_fields_hold_the_hash_once_saved() {
         "{error:?}"
     );
 
-    let filled = Patient::create_from(&*db, attrs! { "name" => "Grace", "ssn" => "1", "password" => "from a form" })
-        .await
-        .unwrap();
-    assert!(hasher.verify("from a form", &filled.password).await.unwrap());
+    let filled = Patient::create_from(
+        &*db,
+        attrs! { "name" => "Grace", "ssn" => "1", "password" => "from a form" },
+    )
+    .await
+    .unwrap();
+    assert!(
+        hasher
+            .verify("from a form", &filled.password)
+            .await
+            .unwrap()
+    );
 }
 
 #[tokio::test]
@@ -199,7 +253,10 @@ async fn records_read_under_a_previous_key_are_re_encrypted_on_save() {
         .await;
     let new_payload = stored_text(&t.db, "patients", "ssn").await.unwrap();
     assert_ne!(new_payload, old_payload);
-    assert!(new_payload.starts_with(&format!("v1.{current_kid}.")), "{new_payload}");
+    assert!(
+        new_payload.starts_with(&format!("v1.{current_kid}.")),
+        "{new_payload}"
+    );
 }
 
 /// Registers the `vault` encrypter.
@@ -223,28 +280,56 @@ async fn a_model_can_name_its_encrypter() {
     let vault_key = AppKey::generate();
     let app = navree_testing::TestApp::builder()
         .temp_database()
-        .module(navree_crypto::CryptoModule::for_root(navree_crypto::CryptoOptions::new(generate_key())))
+        .module(navree_crypto::CryptoModule::for_root(
+            navree_crypto::CryptoOptions::new(generate_key()),
+        ))
         .module(navree_db::DatabaseModule::from_config())
         .module(VaultKeys(vault_key.clone()))
         .build()
         .await;
     let db = app.get::<navree_db::Db>().await;
     super::support::create(&db, SCHEMA).await;
-    let vault = Vault::create(&*db, Vault { secret: "launch codes".into(), ..Vault::default() })
-        .await
-        .unwrap();
+    let vault = Vault::create(
+        &*db,
+        Vault {
+            secret: "launch codes".into(),
+            ..Vault::default()
+        },
+    )
+    .await
+    .unwrap();
     let payload = stored_text(&db, "vaults", "secret").await.unwrap();
-    assert!(app.get::<Encrypter>().await.decrypt_string(&payload).is_err(), "not the app's key");
-    assert_eq!(Encrypter::new(vault_key).decrypt_string(&payload).unwrap(), "launch codes");
-    assert_eq!(Vault::find_or_fail(&*db, vault.id).await.unwrap().secret, "launch codes");
+    assert!(
+        app.get::<Encrypter>()
+            .await
+            .decrypt_string(&payload)
+            .is_err(),
+        "not the app's key"
+    );
+    assert_eq!(
+        Encrypter::new(vault_key).decrypt_string(&payload).unwrap(),
+        "launch codes"
+    );
+    assert_eq!(
+        Vault::find_or_fail(&*db, vault.id).await.unwrap().secret,
+        "launch codes"
+    );
 
     // An app without the named encrypter says what to register.
     let (_app, db) = crypto_app(SCHEMA).await;
-    let error = Vault::create(&*db, Vault { secret: "x".into(), ..Vault::default() })
-        .await
-        .unwrap_err();
+    let error = Vault::create(
+        &*db,
+        Vault {
+            secret: "x".into(),
+            ..Vault::default()
+        },
+    )
+    .await
+    .unwrap_err();
     assert!(
-        error.to_string().contains("provides no Encrypter named `vault`"),
+        error
+            .to_string()
+            .contains("provides no Encrypter named `vault`"),
         "{error}"
     );
 }
@@ -260,7 +345,10 @@ async fn without_an_app_the_services_come_from_explicit_scopes() {
     let error = Patient::create(&t.db, Patient { password: "$argon2id$v=19$m=19456,t=2,p=1$c29tZXNhbHRzb21lc2FsdA$Tr6ffxUqo5TVOlcIZeVY0pIBn6bv7HJbNSuDn9t1Bzo".into(), ..patient() })
         .await
         .unwrap_err();
-    assert!(error.to_string().contains("no Encrypter is available"), "{error}");
+    assert!(
+        error.to_string().contains("no Encrypter is available"),
+        "{error}"
+    );
 
     let services = CastContext::new()
         .with_encrypter(Encrypter::new(AppKey::generate()))
@@ -288,7 +376,10 @@ async fn without_an_app_the_services_come_from_explicit_scopes() {
     let payload = stored_text(&db, "patients", "ssn").await.unwrap();
     assert_eq!(pinned.decrypt_string(&payload).unwrap(), "078-05-1120");
     let record = Record::new(patient());
-    assert!(record.is_dirty(), "a new record is dirty without any service");
+    assert!(
+        record.is_dirty(),
+        "a new record is dirty without any service"
+    );
 }
 
 const INVOICES: &str = r#"
@@ -391,39 +482,81 @@ async fn custom_casts_read_the_apps_clock_and_configuration() {
     let db = app.get::<navree_db::Db>().await;
     super::support::create(&db, INVOICES).await;
 
-    let created = Invoice::create(&*db, Invoice { number: "7".into(), minutes_left: 90, ..Invoice::default() })
+    let created = Invoice::create(
+        &*db,
+        Invoice {
+            number: "7".into(),
+            minutes_left: 90,
+            ..Invoice::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        stored_text(&db, "invoices", "number").await.as_deref(),
+        Some("INV-7")
+    );
+    let row = navree_orm::table("invoices")
+        .first(&*db)
         .await
+        .unwrap()
         .unwrap();
-    assert_eq!(stored_text(&db, "invoices", "number").await.as_deref(), Some("INV-7"));
-    let row = navree_orm::table("invoices").first(&*db).await.unwrap().unwrap();
-    assert_eq!(row.get::<DateTime<Utc>>("due_at").unwrap(), now + chrono::Duration::minutes(90));
+    assert_eq!(
+        row.get::<DateTime<Utc>>("due_at").unwrap(),
+        now + chrono::Duration::minutes(90)
+    );
 
     clock.advance(std::time::Duration::from_secs(30 * 60));
     let mut stored = Invoice::find_or_fail(&*db, created.id).await.unwrap();
-    assert_eq!((stored.number.as_str(), stored.minutes_left), ("7", 60), "read on the app's clock");
-    assert!(stored.is_clean(), "outside any scope, the record compares with the services it was read with");
+    assert_eq!(
+        (stored.number.as_str(), stored.minutes_left),
+        ("7", 60),
+        "read on the app's clock"
+    );
+    assert!(
+        stored.is_clean(),
+        "outside any scope, the record compares with the services it was read with"
+    );
     stored.fill(attrs! { "number" => "8" }).unwrap();
     stored.save(&*db).await.unwrap();
-    assert_eq!(stored_text(&db, "invoices", "number").await.as_deref(), Some("INV-8"));
+    assert_eq!(
+        stored_text(&db, "invoices", "number").await.as_deref(),
+        Some("INV-8")
+    );
 
     // Untyped input reaches the casts with the app's services before the
     // record is first saved (the deadline is read on the app's clock).
-    let filled = Invoice::create_from(&*db, attrs! { "number" => "9", "due_at" => "2026-10-27T11:30:00Z" })
-        .await
-        .unwrap();
+    let filled = Invoice::create_from(
+        &*db,
+        attrs! { "number" => "9", "due_at" => "2026-10-27T11:30:00Z" },
+    )
+    .await
+    .unwrap();
     assert_eq!(filled.minutes_left, 120);
     assert!(filled.is_clean());
-    assert_eq!(filled.to_value().unwrap(), json!({"id": 2, "number": "9", "minutes_left": 120}));
+    assert_eq!(
+        filled.to_value().unwrap(),
+        json!({"id": 2, "number": "9", "minutes_left": 120})
+    );
 
     // Conditions are encoded where they are built, so a condition on a cast
     // that reads services is built inside a scope that has them.
     let config = app.get::<navree_config::Config>().await;
     let count = CastContext::new()
         .with_config(config)
-        .scope(async { Invoice::query().where_(Invoice::NUMBER.eq("8")).count(&*db).await })
+        .scope(async {
+            Invoice::query()
+                .where_(Invoice::NUMBER.eq("8"))
+                .count(&*db)
+                .await
+        })
         .await
         .unwrap();
     assert_eq!(count, 1);
-    let error = Invoice::query().where_(Invoice::NUMBER.eq("8")).count(&*db).await.unwrap_err();
+    let error = Invoice::query()
+        .where_(Invoice::NUMBER.eq("8"))
+        .count(&*db)
+        .await
+        .unwrap_err();
     assert!(error.to_string().contains("set billing.prefix"), "{error}");
 }

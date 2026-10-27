@@ -106,7 +106,10 @@ impl<M: Model> Record<M> {
 
     /// Shows `names` again: they leave the hidden list, and join the visible
     /// list when there is one.
-    pub fn make_visible<N: Into<Cow<'static, str>>>(&mut self, names: impl IntoIterator<Item = N>) -> &mut Self {
+    pub fn make_visible<N: Into<Cow<'static, str>>>(
+        &mut self,
+        names: impl IntoIterator<Item = N>,
+    ) -> &mut Self {
         let shown = self::names(names);
         let hidden: Names = self
             .hidden_names()
@@ -135,7 +138,10 @@ impl<M: Model> Record<M> {
     }
 
     /// Hides `names` too.
-    pub fn make_hidden<N: Into<Cow<'static, str>>>(&mut self, names: impl IntoIterator<Item = N>) -> &mut Self {
+    pub fn make_hidden<N: Into<Cow<'static, str>>>(
+        &mut self,
+        names: impl IntoIterator<Item = N>,
+    ) -> &mut Self {
         let hidden = merged(self.hidden_names(), self::names(names));
         self.attributes.hidden = Some(hidden);
         self
@@ -154,24 +160,36 @@ impl<M: Model> Record<M> {
     }
 
     /// Replaces the hidden names.
-    pub fn set_hidden<N: Into<Cow<'static, str>>>(&mut self, names: impl IntoIterator<Item = N>) -> &mut Self {
+    pub fn set_hidden<N: Into<Cow<'static, str>>>(
+        &mut self,
+        names: impl IntoIterator<Item = N>,
+    ) -> &mut Self {
         self.attributes.hidden = Some(self::names(names));
         self
     }
 
     /// Adds to the hidden names.
-    pub fn merge_hidden<N: Into<Cow<'static, str>>>(&mut self, names: impl IntoIterator<Item = N>) -> &mut Self {
+    pub fn merge_hidden<N: Into<Cow<'static, str>>>(
+        &mut self,
+        names: impl IntoIterator<Item = N>,
+    ) -> &mut Self {
         self.make_hidden(names)
     }
 
     /// Replaces the visible names (empty keeps every name).
-    pub fn set_visible<N: Into<Cow<'static, str>>>(&mut self, names: impl IntoIterator<Item = N>) -> &mut Self {
+    pub fn set_visible<N: Into<Cow<'static, str>>>(
+        &mut self,
+        names: impl IntoIterator<Item = N>,
+    ) -> &mut Self {
         self.attributes.visible = Some(self::names(names));
         self
     }
 
     /// Adds to the visible names.
-    pub fn merge_visible<N: Into<Cow<'static, str>>>(&mut self, names: impl IntoIterator<Item = N>) -> &mut Self {
+    pub fn merge_visible<N: Into<Cow<'static, str>>>(
+        &mut self,
+        names: impl IntoIterator<Item = N>,
+    ) -> &mut Self {
         let visible = merged(self.visible_names(), self::names(names));
         self.attributes.visible = Some(visible);
         self
@@ -179,20 +197,32 @@ impl<M: Model> Record<M> {
 
     /// Appends the accessors `names` to serialized records of this record;
     /// a name that is not an accessor of the model is an error.
-    pub fn append<N: Into<Cow<'static, str>>>(&mut self, names: impl IntoIterator<Item = N>) -> Result<&mut Self> {
-        let appends = merged(self.current_appends(), checked_accessors::<M>(self::names(names))?);
+    pub fn append<N: Into<Cow<'static, str>>>(
+        &mut self,
+        names: impl IntoIterator<Item = N>,
+    ) -> Result<&mut Self> {
+        let appends = merged(
+            self.current_appends(),
+            checked_accessors::<M>(self::names(names))?,
+        );
         self.attributes.appends = Some(appends);
         Ok(self)
     }
 
     /// Replaces the appended accessors.
-    pub fn set_appends<N: Into<Cow<'static, str>>>(&mut self, names: impl IntoIterator<Item = N>) -> Result<&mut Self> {
+    pub fn set_appends<N: Into<Cow<'static, str>>>(
+        &mut self,
+        names: impl IntoIterator<Item = N>,
+    ) -> Result<&mut Self> {
         self.attributes.appends = Some(checked_accessors::<M>(self::names(names))?);
         Ok(self)
     }
 
     /// Adds to the appended accessors (like [`append`](Record::append)).
-    pub fn merge_appends<N: Into<Cow<'static, str>>>(&mut self, names: impl IntoIterator<Item = N>) -> Result<&mut Self> {
+    pub fn merge_appends<N: Into<Cow<'static, str>>>(
+        &mut self,
+        names: impl IntoIterator<Item = N>,
+    ) -> Result<&mut Self> {
         self.append(names)
     }
 
@@ -219,7 +249,10 @@ impl<M: Model> Record<M> {
 fn checked_accessors<M: Model>(names: Names) -> Result<Names> {
     let accessors = M::accessors();
     for name in &names {
-        if !accessors.iter().any(|accessor| accessor.name() == name.as_ref()) {
+        if !accessors
+            .iter()
+            .any(|accessor| accessor.name() == name.as_ref())
+        {
             let known: Vec<&str> = accessors.iter().map(|accessor| accessor.name()).collect();
             return Err(OrmError::InvalidQuery(format!(
                 "{} has no accessor named `{name}` to append ({})",
@@ -237,7 +270,10 @@ fn checked_accessors<M: Model>(names: Names) -> Result<Names> {
 
 impl<M: Model> Collection<M> {
     /// Hides `names` in every record.
-    pub fn make_hidden<N: Into<Cow<'static, str>>>(&mut self, names: impl IntoIterator<Item = N>) -> &mut Self {
+    pub fn make_hidden<N: Into<Cow<'static, str>>>(
+        &mut self,
+        names: impl IntoIterator<Item = N>,
+    ) -> &mut Self {
         let names = self::names(names);
         for record in self.iter_mut() {
             record.make_hidden(names.iter().cloned());
@@ -246,12 +282,18 @@ impl<M: Model> Collection<M> {
     }
 
     /// Adds to the hidden names of every record.
-    pub fn merge_hidden<N: Into<Cow<'static, str>>>(&mut self, names: impl IntoIterator<Item = N>) -> &mut Self {
+    pub fn merge_hidden<N: Into<Cow<'static, str>>>(
+        &mut self,
+        names: impl IntoIterator<Item = N>,
+    ) -> &mut Self {
         self.make_hidden(names)
     }
 
     /// Replaces the hidden names of every record.
-    pub fn set_hidden<N: Into<Cow<'static, str>>>(&mut self, names: impl IntoIterator<Item = N>) -> &mut Self {
+    pub fn set_hidden<N: Into<Cow<'static, str>>>(
+        &mut self,
+        names: impl IntoIterator<Item = N>,
+    ) -> &mut Self {
         let names = self::names(names);
         for record in self.iter_mut() {
             record.set_hidden(names.iter().cloned());
@@ -260,7 +302,10 @@ impl<M: Model> Collection<M> {
     }
 
     /// Shows `names` again in every record.
-    pub fn make_visible<N: Into<Cow<'static, str>>>(&mut self, names: impl IntoIterator<Item = N>) -> &mut Self {
+    pub fn make_visible<N: Into<Cow<'static, str>>>(
+        &mut self,
+        names: impl IntoIterator<Item = N>,
+    ) -> &mut Self {
         let names = self::names(names);
         for record in self.iter_mut() {
             record.make_visible(names.iter().cloned());
@@ -269,7 +314,10 @@ impl<M: Model> Collection<M> {
     }
 
     /// Adds to the visible names of every record.
-    pub fn merge_visible<N: Into<Cow<'static, str>>>(&mut self, names: impl IntoIterator<Item = N>) -> &mut Self {
+    pub fn merge_visible<N: Into<Cow<'static, str>>>(
+        &mut self,
+        names: impl IntoIterator<Item = N>,
+    ) -> &mut Self {
         let names = self::names(names);
         for record in self.iter_mut() {
             record.merge_visible(names.iter().cloned());
@@ -278,7 +326,10 @@ impl<M: Model> Collection<M> {
     }
 
     /// Replaces the visible names of every record.
-    pub fn set_visible<N: Into<Cow<'static, str>>>(&mut self, names: impl IntoIterator<Item = N>) -> &mut Self {
+    pub fn set_visible<N: Into<Cow<'static, str>>>(
+        &mut self,
+        names: impl IntoIterator<Item = N>,
+    ) -> &mut Self {
         let names = self::names(names);
         for record in self.iter_mut() {
             record.set_visible(names.iter().cloned());
@@ -287,7 +338,10 @@ impl<M: Model> Collection<M> {
     }
 
     /// Appends the accessors `names` to every record.
-    pub fn append<N: Into<Cow<'static, str>>>(&mut self, names: impl IntoIterator<Item = N>) -> Result<&mut Self> {
+    pub fn append<N: Into<Cow<'static, str>>>(
+        &mut self,
+        names: impl IntoIterator<Item = N>,
+    ) -> Result<&mut Self> {
         let names = checked_accessors::<M>(self::names(names))?;
         for record in self.iter_mut() {
             record.append(names.iter().cloned())?;
@@ -296,7 +350,10 @@ impl<M: Model> Collection<M> {
     }
 
     /// Replaces the appended accessors of every record.
-    pub fn set_appends<N: Into<Cow<'static, str>>>(&mut self, names: impl IntoIterator<Item = N>) -> Result<&mut Self> {
+    pub fn set_appends<N: Into<Cow<'static, str>>>(
+        &mut self,
+        names: impl IntoIterator<Item = N>,
+    ) -> Result<&mut Self> {
         let names = checked_accessors::<M>(self::names(names))?;
         for record in self.iter_mut() {
             record.set_appends(names.iter().cloned())?;

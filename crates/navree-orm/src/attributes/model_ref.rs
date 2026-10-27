@@ -134,7 +134,10 @@ impl<M: Model> ModelRef<M> {
 
     /// Like [`restore`](ModelRef::restore), with `None` when the record is
     /// gone: for jobs that skip records deleted since they were queued.
-    pub async fn restore_or_skip<E: Executor + ?Sized>(&self, exec: &E) -> Result<Option<Record<M>>> {
+    pub async fn restore_or_skip<E: Executor + ?Sized>(
+        &self,
+        exec: &E,
+    ) -> Result<Option<Record<M>>> {
         let key = self.key()?;
         let target = exec.target(Access::Write).await?;
         Ok(Builder::<M>::new()

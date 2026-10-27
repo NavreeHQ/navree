@@ -25,12 +25,18 @@ impl<M: Model> Record<M> {
     /// // implements Cast::increment and Cast::decrement.
     /// account.increment_cast(&uow, Account::BALANCE, Money::eur(5)).await?;
     /// ```
-    pub async fn increment_cast<E, T>(&mut self, exec: &E, column: Column<M, T>, amount: T) -> Result<bool>
+    pub async fn increment_cast<E, T>(
+        &mut self,
+        exec: &E,
+        column: Column<M, T>,
+        amount: T,
+    ) -> Result<bool>
     where
         E: Executor + ?Sized,
         T: Send + Sync,
     {
-        self.increment_cast_with(exec, column, amount, std::iter::empty()).await
+        self.increment_cast_with(exec, column, amount, std::iter::empty())
+            .await
     }
 
     /// Like [`increment_cast`](Record::increment_cast), also setting
@@ -53,12 +59,18 @@ impl<M: Model> Record<M> {
 
     /// Subtracts `amount` from cast field `column` (the cast's
     /// [`decrement`](crate::cast::Cast::decrement)), atomically.
-    pub async fn decrement_cast<E, T>(&mut self, exec: &E, column: Column<M, T>, amount: T) -> Result<bool>
+    pub async fn decrement_cast<E, T>(
+        &mut self,
+        exec: &E,
+        column: Column<M, T>,
+        amount: T,
+    ) -> Result<bool>
     where
         E: Executor + ?Sized,
         T: Send + Sync,
     {
-        self.decrement_cast_with(exec, column, amount, std::iter::empty()).await
+        self.decrement_cast_with(exec, column, amount, std::iter::empty())
+            .await
     }
 
     /// Like [`decrement_cast`](Record::decrement_cast), also setting

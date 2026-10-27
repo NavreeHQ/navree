@@ -448,9 +448,11 @@ mod tests {
         let outer = CastContext::new().with_dialect(Dialect::Postgres);
         outer.sync_scope(|| {
             assert_eq!(CastContext::current().dialect(), Some(Dialect::Postgres));
-            CastContext::new().with_dialect(Dialect::MySql).sync_scope(|| {
-                assert_eq!(CastContext::current().dialect(), Some(Dialect::MySql));
-            });
+            CastContext::new()
+                .with_dialect(Dialect::MySql)
+                .sync_scope(|| {
+                    assert_eq!(CastContext::current().dialect(), Some(Dialect::MySql));
+                });
             assert_eq!(CastContext::current().dialect(), Some(Dialect::Postgres));
         });
         assert_eq!(CastContext::current().dialect(), None);
@@ -494,7 +496,11 @@ mod tests {
             pii_kid
         );
         assert_ne!(
-            context.encrypter().unwrap().current_kid().map(str::to_owned),
+            context
+                .encrypter()
+                .unwrap()
+                .current_kid()
+                .map(str::to_owned),
             pii_kid
         );
         assert_eq!(

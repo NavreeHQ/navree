@@ -170,7 +170,10 @@ fn ledger() -> Ledger {
             .with_ymd_and_hms(2026, 10, 27, 4, 30, 0)
             .unwrap(),
         synced_at: Utc.with_ymd_and_hms(2026, 10, 27, 9, 0, 0).unwrap(),
-        pinged_at: Some(Utc.with_ymd_and_hms(2026, 10, 27, 9, 0, 1).unwrap() + chrono::Duration::milliseconds(250)),
+        pinged_at: Some(
+            Utc.with_ymd_and_hms(2026, 10, 27, 9, 0, 1).unwrap()
+                + chrono::Duration::milliseconds(250),
+        ),
         reference: Uuid::now_v7(),
         batch: Ulid::new(),
         website: Some(url::Url::parse("https://navree.com/").unwrap()),
@@ -271,7 +274,14 @@ pub async fn casts(db: Db, server: Server) {
             assert_eq!(record.secret, "new");
             assert!(record.is_dirty_on(["secret", "history"]));
             record.save(&db).await.unwrap();
-            assert!(Ledger::query().first(&db).await.unwrap().unwrap().is_clean());
+            assert!(
+                Ledger::query()
+                    .first(&db)
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .is_clean()
+            );
         })
         .await;
 }
@@ -321,5 +331,9 @@ pub async fn vectors(db: Db, server: Server) {
     created.optional = Some(vec![1.0, 0.0, -0.125]);
     created.save(&db).await.unwrap();
     let stored = Embedding::find_or_fail(&db, created.id).await.unwrap();
-    assert_eq!(stored.optional.as_deref(), Some(&[1.0, 0.0, -0.125][..]), "{server:?}");
+    assert_eq!(
+        stored.optional.as_deref(),
+        Some(&[1.0, 0.0, -0.125][..]),
+        "{server:?}"
+    );
 }

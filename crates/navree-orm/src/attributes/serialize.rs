@@ -79,7 +79,10 @@ struct Entries {
     key: Option<String>,
 }
 
-fn field_value<T: Serialize + ?Sized>(key: &str, value: &T) -> std::result::Result<serde_json::Value, CaptureError> {
+fn field_value<T: Serialize + ?Sized>(
+    key: &str,
+    value: &T,
+) -> std::result::Result<serde_json::Value, CaptureError> {
     serde_json::to_value(value).map_err(|error| CaptureError {
         column: Some(key.to_owned()),
         message: error.to_string(),
@@ -109,7 +112,10 @@ impl ser::SerializeMap for Entries {
     type Ok = Object;
     type Error = CaptureError;
 
-    fn serialize_key<T: Serialize + ?Sized>(&mut self, key: &T) -> std::result::Result<(), CaptureError> {
+    fn serialize_key<T: Serialize + ?Sized>(
+        &mut self,
+        key: &T,
+    ) -> std::result::Result<(), CaptureError> {
         match serde_json::to_value(key) {
             Ok(serde_json::Value::String(key)) => {
                 self.key = Some(key);
@@ -126,7 +132,10 @@ impl ser::SerializeMap for Entries {
         }
     }
 
-    fn serialize_value<T: Serialize + ?Sized>(&mut self, value: &T) -> std::result::Result<(), CaptureError> {
+    fn serialize_value<T: Serialize + ?Sized>(
+        &mut self,
+        value: &T,
+    ) -> std::result::Result<(), CaptureError> {
         let key = self.key.take().unwrap_or_default();
         let value = field_value(&key, value)?;
         self.entries.push((key, value));
@@ -187,7 +196,10 @@ impl Serializer for Capture {
         serialize_unit_variant(&'static str, u32, &'static str) => "a string";
     }
 
-    fn serialize_some<T: Serialize + ?Sized>(self, value: &T) -> std::result::Result<Object, CaptureError> {
+    fn serialize_some<T: Serialize + ?Sized>(
+        self,
+        value: &T,
+    ) -> std::result::Result<Object, CaptureError> {
         value.serialize(self)
     }
 
@@ -209,11 +221,17 @@ impl Serializer for Capture {
         Err(not_an_object("an enum variant"))
     }
 
-    fn serialize_seq(self, _len: Option<usize>) -> std::result::Result<Self::SerializeSeq, CaptureError> {
+    fn serialize_seq(
+        self,
+        _len: Option<usize>,
+    ) -> std::result::Result<Self::SerializeSeq, CaptureError> {
         Err(not_an_object("an array"))
     }
 
-    fn serialize_tuple(self, _len: usize) -> std::result::Result<Self::SerializeTuple, CaptureError> {
+    fn serialize_tuple(
+        self,
+        _len: usize,
+    ) -> std::result::Result<Self::SerializeTuple, CaptureError> {
         Err(not_an_object("an array"))
     }
 
@@ -242,7 +260,11 @@ impl Serializer for Capture {
         })
     }
 
-    fn serialize_struct(self, _name: &'static str, len: usize) -> std::result::Result<Entries, CaptureError> {
+    fn serialize_struct(
+        self,
+        _name: &'static str,
+        len: usize,
+    ) -> std::result::Result<Entries, CaptureError> {
         Ok(Entries {
             entries: Vec::with_capacity(len),
             key: None,
@@ -330,9 +352,10 @@ pub(crate) fn attributes_object<M: Model>(record: &Record<M>) -> Result<Object> 
 
 fn collect_attributes<M: Model>(record: &Record<M>) -> Result<Object> {
     let meta = M::meta();
-    let mut object = record.model.serialize(Capture).map_err(|error| {
-        serialize_error::<M>(error.column.as_deref(), error.message)
-    })?;
+    let mut object = record
+        .model
+        .serialize(Capture)
+        .map_err(|error| serialize_error::<M>(error.column.as_deref(), error.message))?;
 
     let overrides = record.model.serialized_overrides()?;
     for (key, json) in &overrides {
@@ -433,7 +456,10 @@ pub(crate) fn to_value(object: Object) -> serde_json::Value {
 }
 
 /// Writes `object` with `serializer`, in order.
-pub(crate) fn write_object<S: Serializer>(object: &Object, serializer: S) -> std::result::Result<S::Ok, S::Error> {
+pub(crate) fn write_object<S: Serializer>(
+    object: &Object,
+    serializer: S,
+) -> std::result::Result<S::Ok, S::Error> {
     let mut map = serializer.serialize_map(Some(object.len()))?;
     for (key, value) in object {
         map.serialize_entry(key, value)?;
@@ -528,11 +554,17 @@ impl<M: Model> Record<M> {
         names: impl IntoIterator<Item = N>,
     ) -> Result<serde_json::Map<String, serde_json::Value>> {
         let meta = M::meta();
-        let excluded: Vec<String> = names.into_iter().map(|name| name.as_ref().to_owned()).collect();
+        let excluded: Vec<String> = names
+            .into_iter()
+            .map(|name| name.as_ref().to_owned())
+            .collect();
         let object = attributes_object(self)?;
         let mut except = serde_json::Map::new();
         for column in meta.all_columns() {
-            if excluded.iter().any(|name| name == column.name() || name == column.field()) {
+            if excluded
+                .iter()
+                .any(|name| name == column.name() || name == column.field())
+            {
                 continue;
             }
             let Some(key) = column.serialized_name() else {
@@ -562,15 +594,28 @@ mod tests {
 
     #[test]
     fn capture_keeps_serdes_order_and_skips() {
-        let object = Point { z: 1, a: 2, label: None }.serialize(Capture).unwrap();
+        let object = Point {
+            z: 1,
+            a: 2,
+            label: None,
+        }
+        .serialize(Capture)
+        .unwrap();
         assert_eq!(
             object,
-            vec![("z".to_owned(), serde_json::json!(1)), ("a".to_owned(), serde_json::json!(2))]
+            vec![
+                ("z".to_owned(), serde_json::json!(1)),
+                ("a".to_owned(), serde_json::json!(2))
+            ]
         );
         let map: std::collections::BTreeMap<&str, i32> = [("b", 1), ("a", 2)].into();
         assert_eq!(map.serialize(Capture).unwrap().len(), 2);
         let error = 7_u8.serialize(Capture).unwrap_err();
-        assert!(error.message.starts_with("it serializes as a number"), "{}", error.message);
+        assert!(
+            error.message.starts_with("it serializes as a number"),
+            "{}",
+            error.message
+        );
     }
 
     #[test]
@@ -591,9 +636,15 @@ mod tests {
     #[test]
     fn dates_are_written_in_utc_with_microseconds() {
         let at = parse_serialized("2026-10-27T10:30:00.5+02:00").unwrap();
-        assert_eq!(default_date(&at), serde_json::json!("2026-10-27T08:30:00.500000Z"));
+        assert_eq!(
+            default_date(&at),
+            serde_json::json!("2026-10-27T08:30:00.500000Z")
+        );
         let naive = parse_serialized("2026-10-27T08:30:00").unwrap();
-        assert_eq!(default_date(&naive), serde_json::json!("2026-10-27T08:30:00.000000Z"));
+        assert_eq!(
+            default_date(&naive),
+            serde_json::json!("2026-10-27T08:30:00.000000Z")
+        );
         assert!(parse_serialized("yesterday").is_none());
     }
 }

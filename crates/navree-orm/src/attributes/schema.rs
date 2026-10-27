@@ -42,7 +42,11 @@ pub fn kind_schema(kind: FieldKind) -> Json {
     match kind {
         FieldKind::Bool => json!({"type": "boolean"}),
         FieldKind::Integer { bits, signed } => {
-            let format = if bits <= 32 && signed { "int32" } else { "int64" };
+            let format = if bits <= 32 && signed {
+                "int32"
+            } else {
+                "int64"
+            };
             if signed {
                 json!({"type": "integer", "format": format})
             } else {
@@ -63,7 +67,9 @@ pub fn kind_schema(kind: FieldKind) -> Json {
         FieldKind::Time => json!({"type": "string", "format": "time"}),
         FieldKind::DateTime => json!({"type": "string", "format": "date-time"}),
         FieldKind::Url => json!({"type": "string", "format": "uri"}),
-        FieldKind::Vector => json!({"type": "array", "items": {"type": "number", "format": "float"}}),
+        FieldKind::Vector => {
+            json!({"type": "array", "items": {"type": "number", "format": "float"}})
+        }
         FieldKind::Json | FieldKind::Any => json!({}),
         // Kinds added later describe themselves as any value until mapped.
         #[allow(unreachable_patterns)]
@@ -103,20 +109,47 @@ pub fn rust_type_schema(text: &str) -> Json {
     if let Some(inner) = generic("Option") {
         return nullable(rust_type_schema(inner));
     }
-    if let Some(inner) = generic("Vec").or_else(|| generic("BTreeSet")).or_else(|| generic("HashSet")) {
+    if let Some(inner) = generic("Vec")
+        .or_else(|| generic("BTreeSet"))
+        .or_else(|| generic("HashSet"))
+    {
         return json!({"type": "array", "items": rust_type_schema(inner)});
     }
     let last = text.rsplit("::").next().unwrap_or(text);
     let kind = match last.trim_start_matches('&').trim_start_matches("'static ") {
         "bool" => FieldKind::Bool,
-        "i8" => FieldKind::Integer { bits: 8, signed: true },
-        "i16" => FieldKind::Integer { bits: 16, signed: true },
-        "i32" => FieldKind::Integer { bits: 32, signed: true },
-        "i64" | "isize" => FieldKind::Integer { bits: 64, signed: true },
-        "u8" => FieldKind::Integer { bits: 8, signed: false },
-        "u16" => FieldKind::Integer { bits: 16, signed: false },
-        "u32" => FieldKind::Integer { bits: 32, signed: false },
-        "u64" | "usize" => FieldKind::Integer { bits: 64, signed: false },
+        "i8" => FieldKind::Integer {
+            bits: 8,
+            signed: true,
+        },
+        "i16" => FieldKind::Integer {
+            bits: 16,
+            signed: true,
+        },
+        "i32" => FieldKind::Integer {
+            bits: 32,
+            signed: true,
+        },
+        "i64" | "isize" => FieldKind::Integer {
+            bits: 64,
+            signed: true,
+        },
+        "u8" => FieldKind::Integer {
+            bits: 8,
+            signed: false,
+        },
+        "u16" => FieldKind::Integer {
+            bits: 16,
+            signed: false,
+        },
+        "u32" => FieldKind::Integer {
+            bits: 32,
+            signed: false,
+        },
+        "u64" | "usize" => FieldKind::Integer {
+            bits: 64,
+            signed: false,
+        },
         "f32" => FieldKind::Float { bits: 32 },
         "f64" => FieldKind::Float { bits: 64 },
         "Decimal" => FieldKind::Decimal,
@@ -151,7 +184,10 @@ impl<M: Model> ModelSchema<M> {
     pub fn json() -> Json {
         let meta = M::meta();
         let keys = |names: &'static [&'static str]| -> Vec<String> {
-            names.iter().filter_map(|name| output_key(meta, name)).collect()
+            names
+                .iter()
+                .filter_map(|name| output_key(meta, name))
+                .collect()
         };
         let hidden = keys(meta.hidden_names());
         let visible = keys(meta.visible_names());
@@ -179,7 +215,11 @@ impl<M: Model> ModelSchema<M> {
                 None if column.is_date_time() && meta.date_serializer().is_some() => json!({}),
                 None => kind_schema(column.field_kind()),
             };
-            let schema = if column.is_nullable() { nullable(schema) } else { schema };
+            let schema = if column.is_nullable() {
+                nullable(schema)
+            } else {
+                schema
+            };
             properties.insert(key.to_owned(), schema);
             if !column.is_serde_optional() {
                 required.push(key.to_owned());
@@ -380,15 +420,33 @@ mod tests {
 
     #[test]
     fn kinds_and_rust_types_map_to_schemas() {
-        assert_eq!(kind_schema(FieldKind::Integer { bits: 32, signed: true }), json!({"type": "integer", "format": "int32"}));
         assert_eq!(
-            kind_schema(FieldKind::Integer { bits: 64, signed: false }),
+            kind_schema(FieldKind::Integer {
+                bits: 32,
+                signed: true
+            }),
+            json!({"type": "integer", "format": "int32"})
+        );
+        assert_eq!(
+            kind_schema(FieldKind::Integer {
+                bits: 64,
+                signed: false
+            }),
             json!({"type": "integer", "format": "int64", "minimum": 0})
         );
-        assert_eq!(nullable(kind_schema(FieldKind::DateTime)), json!({"type": ["string", "null"], "format": "date-time"}));
+        assert_eq!(
+            nullable(kind_schema(FieldKind::DateTime)),
+            json!({"type": ["string", "null"], "format": "date-time"})
+        );
         assert_eq!(nullable(json!({})), json!({}));
-        assert_eq!(rust_type_schema("Option<Vec<String>>"), json!({"type": ["array", "null"], "items": {"type": "string"}}));
-        assert_eq!(rust_type_schema("rust_decimal::Decimal"), json!({"type": "string", "format": "decimal"}));
+        assert_eq!(
+            rust_type_schema("Option<Vec<String>>"),
+            json!({"type": ["array", "null"], "items": {"type": "string"}})
+        );
+        assert_eq!(
+            rust_type_schema("rust_decimal::Decimal"),
+            json!({"type": "string", "format": "decimal"})
+        );
         assert_eq!(rust_type_schema("MyThing"), json!({}));
     }
 

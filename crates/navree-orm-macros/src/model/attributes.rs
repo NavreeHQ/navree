@@ -17,8 +17,8 @@
 use heck::ToShoutySnakeCase;
 use proc_macro2::{Span, TokenStream};
 use quote::{format_ident, quote, quote_spanned};
-use syn::meta::ParseNestedMeta;
 use syn::ext::IdentExt;
+use syn::meta::ParseNestedMeta;
 use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
 use syn::{Attribute, Ident, LitStr, Token, Type};
@@ -134,23 +134,41 @@ pub(crate) fn parse_container_key(
     if path.is_ident("fillable") {
         let span = key_span(meta);
         let names = parse_list(meta, "fillable(title, amount_cents)")?;
-        attrs.fillable.get_or_insert_with(|| (Vec::new(), span)).0.extend(names);
+        attrs
+            .fillable
+            .get_or_insert_with(|| (Vec::new(), span))
+            .0
+            .extend(names);
     } else if path.is_ident("guarded") {
         let span = key_span(meta);
         let names = parse_list(meta, "guarded(id, owner_id), or guarded() to guard nothing")?;
-        attrs.guarded.get_or_insert_with(|| (Vec::new(), span)).0.extend(names);
+        attrs
+            .guarded
+            .get_or_insert_with(|| (Vec::new(), span))
+            .0
+            .extend(names);
     } else if path.is_ident("unguarded") {
         attrs.unguarded = Some(key_span(meta));
     } else if path.is_ident("hidden") {
-        attrs.hidden.extend(parse_list::<Name>(meta, "hidden(password_hash, \"internal\")")?);
+        attrs.hidden.extend(parse_list::<Name>(
+            meta,
+            "hidden(password_hash, \"internal\")",
+        )?);
     } else if path.is_ident("visible") {
-        attrs.visible.extend(parse_list::<Name>(meta, "visible(id, title)")?);
+        attrs
+            .visible
+            .extend(parse_list::<Name>(meta, "visible(id, title)")?);
     } else if path.is_ident("appends") {
-        attrs.appends.extend(parse_list::<Ident>(meta, "appends(full_name)")?);
+        attrs
+            .appends
+            .extend(parse_list::<Ident>(meta, "appends(full_name)")?);
     } else if path.is_ident("encrypter") {
         let name: LitStr = meta.value()?.parse()?;
         if name.value().trim().is_empty() {
-            return Err(syn::Error::new(name.span(), "the encrypter's name cannot be empty"));
+            return Err(syn::Error::new(
+                name.span(),
+                "the encrypter's name cannot be empty",
+            ));
         }
         attrs.encrypter = Some(name);
     } else if path.is_ident("serialize_dates_with") {
@@ -210,7 +228,10 @@ impl Parse for ColumnDecl {
 
 /// Parses an attribute-layer key on a field; `Ok(false)` when the key is
 /// not one.
-pub(crate) fn parse_field_key(attrs: &mut FieldAttrs, meta: &ParseNestedMeta<'_>) -> syn::Result<bool> {
+pub(crate) fn parse_field_key(
+    attrs: &mut FieldAttrs,
+    meta: &ParseNestedMeta<'_>,
+) -> syn::Result<bool> {
     let path = &meta.path;
     if path.is_ident("hidden") {
         attrs.hidden = Some(key_span(meta));
@@ -235,10 +256,16 @@ pub(crate) fn parse_field_key(attrs: &mut FieldAttrs, meta: &ParseNestedMeta<'_>
             ));
         }
         if columns.len() > 8 {
-            return Err(syn::Error::new(span, "a field can be stored across at most eight columns"));
+            return Err(syn::Error::new(
+                span,
+                "a field can be stored across at most eight columns",
+            ));
         }
         attrs.columns = Some((
-            columns.into_iter().map(|ColumnDecl(name, ty)| (name, ty)).collect(),
+            columns
+                .into_iter()
+                .map(|ColumnDecl(name, ty)| (name, ty))
+                .collect(),
             span,
         ));
     } else {
@@ -314,7 +341,9 @@ pub(crate) fn parse_builtin_cast(text: &LitStr) -> syn::Result<Option<BuiltinCas
         let scale: u32 = arguments.trim().parse().map_err(|_| {
             syn::Error::new(
                 text.span(),
-                format!("`{arguments}` is not a scale: write \"decimal(2)\" for two decimal places"),
+                format!(
+                    "`{arguments}` is not a scale: write \"decimal(2)\" for two decimal places"
+                ),
             )
         })?;
         if scale > MAX_SCALE {
@@ -394,7 +423,12 @@ pub(crate) fn cast_name(cast: &Cast) -> String {
 
 /// The type implementing `Cast<T>` for a column's field (`T` is the field's
 /// type, or its inner type for an `Option`).
-pub(crate) fn cast_type(model: &Model, column: &Column, cast: &Cast, krate: &TokenStream) -> TokenStream {
+pub(crate) fn cast_type(
+    model: &Model,
+    column: &Column,
+    cast: &Cast,
+    krate: &TokenStream,
+) -> TokenStream {
     let value_ty = column.inner.as_ref().unwrap_or(&column.ty);
     match cast {
         Cast::Json => quote!(#krate::cast::AsJson),
@@ -557,7 +591,10 @@ pub(crate) fn serde_container(attrs: &[Attribute]) -> SerdeContainer {
     for attr in attrs.iter().filter(|attr| attr.path().is_ident("serde")) {
         let _ = attr.parse_nested_meta(|meta| {
             if meta.path.is_ident("rename_all") {
-                if let Some(rule) = serialize_name(&meta)?.as_deref().and_then(RenameRule::parse) {
+                if let Some(rule) = serialize_name(&meta)?
+                    .as_deref()
+                    .and_then(RenameRule::parse)
+                {
                     serde.rename_all = Some(rule);
                 }
                 Ok(())
@@ -587,7 +624,10 @@ pub(crate) fn serde_field(attrs: &[Attribute]) -> SerdeField {
             } else if path.is_ident("flatten") {
                 serde.flatten = true;
                 serde.custom = true;
-            } else if path.is_ident("serialize_with") || path.is_ident("with") || path.is_ident("getter") {
+            } else if path.is_ident("serialize_with")
+                || path.is_ident("with")
+                || path.is_ident("getter")
+            {
                 serde.custom = true;
                 skip_serde_value(&meta)?;
             } else {
@@ -665,18 +705,15 @@ pub(crate) fn serialized_key(
     }
     Some(field.rename.clone().unwrap_or_else(|| {
         let name = plain_name(ident);
-        container.rename_all.map_or(name.clone(), |rule| rule.apply(&name))
+        container
+            .rename_all
+            .map_or(name.clone(), |rule| rule.apply(&name))
     }))
 }
 
 /// The column names a list name stands for: a field's columns, or a
 /// column (with or without a JSON path).
-fn resolve_columns(
-    columns: &[Column],
-    name: &Name,
-    key: &str,
-    errors: &mut Errors,
-) -> Vec<String> {
+fn resolve_columns(columns: &[Column], name: &Name, key: &str, errors: &mut Errors) -> Vec<String> {
     match name {
         Name::Field(ident) => {
             let field = plain_name(ident);
@@ -700,7 +737,12 @@ fn resolve_columns(
         }
         Name::Text(text) => {
             let value = text.value();
-            let column = value.split("->").next().unwrap_or_default().trim().to_owned();
+            let column = value
+                .split("->")
+                .next()
+                .unwrap_or_default()
+                .trim()
+                .to_owned();
             if !columns.iter().any(|candidate| candidate.name == column) {
                 errors.push(syn::Error::new(
                     text.span(),
@@ -713,12 +755,7 @@ fn resolve_columns(
 }
 
 /// A name for the visibility lists: a field's name (checked) or any text.
-fn resolve_output(
-    fields: &[String],
-    name: &Name,
-    key: &str,
-    errors: &mut Errors,
-) -> String {
+fn resolve_output(fields: &[String], name: &Name, key: &str, errors: &mut Errors) -> String {
     match name {
         Name::Field(ident) => {
             let field = plain_name(ident);
@@ -905,7 +942,11 @@ fn context_flag(model: &Model, column: &Column, krate: &TokenStream) -> Option<T
 }
 
 /// The `ColumnMeta` builder calls of the attribute layer.
-pub(crate) fn column_meta_calls(model: &Model, column: &Column, krate: &TokenStream) -> TokenStream {
+pub(crate) fn column_meta_calls(
+    model: &Model,
+    column: &Column,
+    krate: &TokenStream,
+) -> TokenStream {
     let field = &column.field;
     let mut calls = TokenStream::new();
     let serialized = match &field.serialized {
@@ -936,7 +977,8 @@ pub(crate) fn column_meta_calls(model: &Model, column: &Column, krate: &TokenStr
         calls.extend(quote!(.mutator()));
     }
     if let Some(schema) = &field.schema {
-        calls.extend(quote!(.schema(<#schema as #krate::__private::utoipa::PartialSchema>::schema)));
+        calls
+            .extend(quote!(.schema(<#schema as #krate::__private::utoipa::PartialSchema>::schema)));
     }
     calls
 }
