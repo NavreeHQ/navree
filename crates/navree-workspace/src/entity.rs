@@ -1,4 +1,9 @@
-//! The workspace module's tables as SeaORM entities.
+//! The workspace module's tables: navree-orm models, and SeaORM entities.
+//!
+//! Each table's `Model` is one struct deriving both: the rows are ORM
+//! models (`Workspace::query()`, typed columns such as `Member::USER_ID`),
+//! and the SeaORM entities (`Entity`, `Column`, `ActiveModel`, the
+//! navree-access subjects) stay for code built on them.
 //!
 //! - `workspaces(id, name, slug UNIQUE, owner_id, timezone, country,
 //!   created_at, updated_at)`
@@ -48,8 +53,9 @@ pub mod workspace {
     use serde::Serialize;
 
     /// A workspace.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
     #[sea_orm(table_name = "workspaces")]
+    #[model(table = "workspaces")]
     pub struct Model {
         /// The id (UUID v7).
         #[sea_orm(primary_key, auto_increment = false)]
@@ -108,8 +114,9 @@ pub mod member {
     use crate::WorkspaceRole;
 
     /// A membership.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
     #[sea_orm(table_name = "workspace_members")]
+    #[model(table = "workspace_members")]
     pub struct Model {
         /// The id (UUID v7).
         #[sea_orm(primary_key, auto_increment = false)]
@@ -172,8 +179,9 @@ pub mod invitation {
     use crate::WorkspaceRole;
 
     /// An invitation. The token digest is never serialized.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
     #[sea_orm(table_name = "workspace_invitations")]
+    #[model(table = "workspace_invitations")]
     pub struct Model {
         /// The id (UUID v7).
         #[sea_orm(primary_key, auto_increment = false)]
@@ -240,8 +248,9 @@ pub mod organization {
     use serde::Serialize;
 
     /// An organization.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
     #[sea_orm(table_name = "organizations")]
+    #[model(table = "organizations")]
     pub struct Model {
         /// The id (UUID v7).
         #[sea_orm(primary_key, auto_increment = false)]
@@ -299,8 +308,9 @@ pub mod organization_member {
     use crate::OrgRole;
 
     /// An organization membership.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
     #[sea_orm(table_name = "organization_members")]
+    #[model(table = "organization_members")]
     pub struct Model {
         /// The id (UUID v7).
         #[sea_orm(primary_key, auto_increment = false)]
@@ -362,8 +372,9 @@ pub mod organization_grant {
     use serde::Serialize;
 
     /// A grant of one workspace to one organization member.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
     #[sea_orm(table_name = "organization_grants")]
+    #[model(table = "organization_grants")]
     pub struct Model {
         /// The id (UUID v7).
         #[sea_orm(primary_key, auto_increment = false)]
@@ -408,8 +419,9 @@ pub mod access_request {
     use crate::AccessRequestStatus;
 
     /// An access request.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
     #[sea_orm(table_name = "access_requests")]
+    #[model(table = "access_requests")]
     pub struct Model {
         /// The id (UUID v7).
         #[sea_orm(primary_key, auto_increment = false)]
@@ -478,8 +490,9 @@ pub mod partition {
     use serde::Serialize;
 
     /// A partition.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
     #[sea_orm(table_name = "workspace_partitions")]
+    #[model(table = "workspace_partitions")]
     pub struct Model {
         /// The id (UUID v7).
         #[sea_orm(primary_key, auto_increment = false)]
@@ -525,8 +538,9 @@ pub mod partition_grant {
     use serde::Serialize;
 
     /// A grant of one partition to one workspace member.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
     #[sea_orm(table_name = "partition_grants")]
+    #[model(table = "partition_grants")]
     pub struct Model {
         /// The id (UUID v7).
         #[sea_orm(primary_key, auto_increment = false)]

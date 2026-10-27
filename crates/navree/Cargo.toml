@@ -149,6 +149,7 @@ workspace = [
     "mail",
     "access",
     "time",
+    "orm",
 ]
 ## L5 (opt-in, not in `full`)
 ## Redis: shared connections and the Redis drivers of the cache and locks,
