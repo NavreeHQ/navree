@@ -53,6 +53,12 @@ pub(crate) const AUTH: RuntimeCrate = RuntimeCrate {
     facade_module: "auth",
 };
 
+/// navree-settings: `SettingsGroup` and `ScopeKind` (`#[derive(Settings)]`).
+pub(crate) const SETTINGS: RuntimeCrate = RuntimeCrate {
+    package: "navree-settings",
+    facade_module: "settings",
+};
+
 /// navree-graphql: `GraphqlResolver`, async-graphql and the field runtime
 /// (`#[resolver]`).
 pub(crate) const GRAPHQL: RuntimeCrate = RuntimeCrate {

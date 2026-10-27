@@ -7,19 +7,24 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use navree_kernel::BoxFuture;
+use chrono::{TimeZone, Timelike, Utc};
+use navree_contracts::{Clock, FixedClock};
+use navree_db::{ChangeEvent, ChangeOp, Uow};
+use navree_kernel::{AppContext, BoxFuture};
 use navree_orm::ir::{
     Aggregate, AggregateFunction, Boolean, DeleteIr, Direction, Expr, InValues, InsertIr, Operator,
     Order, QueryIr, UpdateIr, Where, WhereClause,
 };
 use navree_orm::relations::{BelongsTo, HasMany};
 use navree_orm::{
-    Access, DocumentDriver, DocumentTarget, Executor, InsertOutcome, Model, OrmError, Row, Target,
-    Value, relations, same_value, to_json,
+    Access, ChangeRecorder, DocumentDriver, DocumentTarget, Executor, InsertOutcome, Model,
+    OrmError, Row, Target, Value, relations, same_value, to_json,
 };
+use navree_testing::TestApp;
 use serde::Serialize;
 
 use crate::models::Company;
+use crate::support::sqlite;
 
 /// A customer kept in a document store, with support tickets.
 #[derive(Model, Clone, Debug, Default, PartialEq, Serialize)]
@@ -55,10 +60,21 @@ impl SupportTicket {
 type Document = Vec<(String, Value)>;
 
 /// Collections of documents in memory.
-#[derive(Default)]
 struct Memory {
     collections: Mutex<HashMap<String, Vec<Document>>>,
     next_id: Mutex<i64>,
+    /// The fractional-second digits the store keeps.
+    precision: u32,
+}
+
+impl Default for Memory {
+    fn default() -> Self {
+        Memory {
+            collections: Mutex::default(),
+            next_id: Mutex::default(),
+            precision: 6,
+        }
+    }
 }
 
 fn field<'a>(document: &'a Document, name: &str) -> Option<&'a Value> {
@@ -190,6 +206,10 @@ impl Memory {
 impl DocumentDriver for Memory {
     fn name(&self) -> &'static str {
         "memory"
+    }
+
+    fn time_precision(&self) -> u32 {
+        self.precision
     }
 
     fn find<'a>(&'a self, query: &'a QueryIr) -> BoxFuture<'a, Result<Vec<Row>, OrmError>> {
@@ -355,18 +375,52 @@ impl DocumentDriver for Memory {
     }
 }
 
-/// The executor of the in-memory store.
-struct MemoryStore(Arc<Memory>);
+/// The executor of the in-memory store: in an app (for its clock), joined
+/// to a unit of work, or recording its change events elsewhere.
+struct MemoryStore {
+    memory: Arc<Memory>,
+    app: Option<AppContext>,
+    uow: Option<Uow>,
+    recorder: Option<Arc<dyn ChangeRecorder>>,
+}
+
+impl MemoryStore {
+    fn new(memory: Memory) -> Self {
+        MemoryStore {
+            memory: Arc::new(memory),
+            app: None,
+            uow: None,
+            recorder: None,
+        }
+    }
+}
 
 impl Executor for MemoryStore {
     async fn target(&self, _access: Access) -> Result<Target<'_>, OrmError> {
-        Ok(Target::Document(DocumentTarget::new(self.0.clone(), None)))
+        let mut target = DocumentTarget::new(self.memory.clone(), self.app.clone());
+        if let Some(uow) = &self.uow {
+            target = target.with_uow(uow.clone());
+        }
+        if let Some(recorder) = &self.recorder {
+            target = target.recording_changes(recorder.clone());
+        }
+        Ok(Target::Document(target))
+    }
+}
+
+/// Change events kept in memory.
+#[derive(Default)]
+struct Recorded(Mutex<Vec<ChangeEvent>>);
+
+impl ChangeRecorder for Recorded {
+    fn record_change(&self, event: ChangeEvent) {
+        self.0.lock().unwrap().push(event);
     }
 }
 
 #[tokio::test]
 async fn models_run_on_a_document_store() {
-    let store = MemoryStore(Arc::new(Memory::default()));
+    let store = MemoryStore::new(Memory::default());
     let mut acme = Company::create(
         &store,
         Company {
@@ -443,7 +497,7 @@ async fn models_run_on_a_document_store() {
 
 #[tokio::test]
 async fn relations_eager_load_on_a_document_store() {
-    let store = MemoryStore(Arc::new(Memory::default()));
+    let store = MemoryStore::new(Memory::default());
     let mut acme = Customer::create(
         &store,
         Customer {
@@ -538,7 +592,7 @@ async fn relations_eager_load_on_a_document_store() {
 async fn documents_stream_through_cursors_and_pages() {
     use futures::TryStreamExt;
 
-    let store = MemoryStore(Arc::new(Memory::default()));
+    let store = MemoryStore::new(Memory::default());
     for (name, employees) in [("Acme", 5), ("Globex", 50), ("Initech", 15)] {
         Company::create(
             &store,
@@ -577,4 +631,132 @@ async fn documents_stream_through_cursors_and_pages() {
         .await
         .unwrap_err();
     assert!(matches!(error, OrmError::Unsupported { .. }), "{error:?}");
+}
+
+/// A store that keeps milliseconds (as MongoDB does) gets timestamps
+/// truncated to milliseconds, so a saved record and its stored document
+/// agree.
+#[tokio::test]
+async fn timestamps_keep_the_precision_of_the_store() {
+    let at = Utc.with_ymd_and_hms(2026, 10, 27, 9, 30, 0).unwrap()
+        + chrono::Duration::nanoseconds(123_456_789);
+    let app = TestApp::builder()
+        .override_value::<dyn Clock>(Arc::new(FixedClock::new(at)))
+        .build()
+        .await;
+    let mut store = MemoryStore::new(Memory {
+        precision: 3,
+        ..Memory::default()
+    });
+    store.app = Some(app.ctx().clone());
+    let acme = Company::create(
+        &store,
+        Company {
+            name: "Acme".into(),
+            ..Company::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(acme.created_at.nanosecond(), 123_000_000);
+    let stored = Company::find_or_fail(&store, acme.id).await.unwrap();
+    assert_eq!(stored.created_at, acme.created_at);
+    let target = store.target(Access::Read).await.unwrap();
+    assert_eq!(target.context().time_precision(), 3);
+
+    // The default is microseconds.
+    let mut store = MemoryStore::new(Memory::default());
+    store.app = Some(app.ctx().clone());
+    let globex = Company::create(&store, Company::default()).await.unwrap();
+    assert_eq!(globex.created_at.nanosecond(), 123_456_000);
+}
+
+/// Writes through a document target record their change events where the
+/// target says: a recorder of the store's own (a MongoDB unit of work)...
+#[tokio::test]
+async fn document_writes_record_change_events() {
+    let recorded = Arc::new(Recorded::default());
+    let mut store = MemoryStore::new(Memory::default());
+    store.recorder = Some(recorded.clone());
+    let mut acme = Company::create(
+        &store,
+        Company {
+            name: "Acme".into(),
+            ..Company::default()
+        },
+    )
+    .await
+    .unwrap();
+    acme.name = "Acme Corp".into();
+    acme.save(&store).await.unwrap();
+    acme.delete(&store).await.unwrap();
+
+    let events = recorded.0.lock().unwrap().clone();
+    let ops: Vec<(&str, &str, ChangeOp)> = events
+        .iter()
+        .map(|event| (event.entity.as_str(), event.id.as_str(), event.op))
+        .collect();
+    assert_eq!(
+        ops,
+        [
+            ("companies", "1", ChangeOp::Created),
+            ("companies", "1", ChangeOp::Updated),
+            ("companies", "1", ChangeOp::Deleted),
+        ]
+    );
+    assert_eq!(events[1].old.as_ref().unwrap()["name"], "Acme");
+    assert_eq!(events[1].new.as_ref().unwrap()["name"], "Acme Corp");
+}
+
+/// ...or navree-db's unit of work, which the operation's context then
+/// carries (hooks schedule after-commit work on it).
+#[tokio::test]
+async fn document_targets_join_a_unit_of_work() {
+    let t = sqlite().await;
+    let uow = t.db.uow(None, Some("req-7".into())).await;
+    let mut store = MemoryStore::new(Memory::default());
+    store.uow = Some(uow.clone());
+    Company::create(
+        &store,
+        Company {
+            name: "Acme".into(),
+            ..Company::default()
+        },
+    )
+    .await
+    .unwrap();
+    let changes = uow.changes();
+    assert_eq!(changes.len(), 1);
+    assert_eq!(
+        (changes[0].entity.as_str(), changes[0].op),
+        ("companies", ChangeOp::Created)
+    );
+    let target = store.target(Access::Write).await.unwrap();
+    assert!(target.uow().is_some_and(|joined| joined.same_as(&uow)));
+    assert!(target.context().uow().is_some());
+    drop(target);
+    uow.rollback().await.unwrap();
+}
+
+/// A driver's own rows (a native query) become records the way a query's
+/// rows do: stored, with the model's columns and the rest as extras.
+#[tokio::test]
+async fn drivers_turn_native_rows_into_records() {
+    let store = MemoryStore::new(Memory::default());
+    let target = store.target(Access::Read).await.unwrap();
+    let rows = vec![Row::from_values(vec![
+        ("id".to_owned(), Value::from(7_i64)),
+        ("name".to_owned(), Value::from("Initech")),
+        ("country".to_owned(), Value::String(None)),
+        ("active".to_owned(), Value::from(true)),
+        ("employees".to_owned(), Value::from(15_i32)),
+        ("created_at".to_owned(), Value::from(Utc::now())),
+        ("updated_at".to_owned(), Value::from(Utc::now())),
+        ("score".to_owned(), Value::from(0.5_f64)),
+    ])];
+    let records = target.records::<Company>(&rows).await.unwrap();
+    assert_eq!(records.len(), 1);
+    assert!(records[0].exists() && !records[0].is_dirty());
+    assert_eq!(records[0].name, "Initech");
+    assert_eq!(records[0].extra::<f64>("score").unwrap(), Some(0.5));
 }

@@ -69,7 +69,7 @@ Every module crate is re-exported whole, as a module of the facade. `navree::db:
 | `navree::testing` | navree-testing | `testing` | `TestApp`, `TestClient` |
 | `navree::observe` | navree-observe | `observe` | `ObserveModule`: health checks and metrics |
 | `navree::api` | navree-api | `api` | `ApiModule`: OpenAPI document and docs UI |
-| `navree::mail` | navree-mail | `mail` | `MailModule`: mailables, transports, queued mail |
+| `navree::mail` | navree-mail | `mail` | `MailModule`: mailables, transports (SMTP, SES, Mailgun, Postmark, Resend), queued mail, the delivery log, suppressions, tracking |
 | `navree::realtime` | navree-realtime | `realtime` | `RealtimeModule`: Pusher-protocol broadcasting |
 | `navree::storage` | navree-storage | `storage` | `StorageModule`: [disks](/docs/digging-deeper/storage/), signed links, direct uploads, disk sync |
 | `navree::time` | navree-time | `time` | `TimeModule`: [time zones](/docs/digging-deeper/time-zones/), `CurrentZone`, local days, send windows, holidays |
@@ -82,9 +82,10 @@ Every module crate is re-exported whole, as a module of the facade. `navree::db:
 | `navree::notify` | navree-notify | `notify` | `NotifyModule`: database, mail and broadcast notifications |
 | `navree::ui` | navree-ui | `ui` | `UiModule`: the app shell and components of server-rendered tools, embedded assets |
 | `navree::auth` | navree-auth | `auth` | `AuthModule`: JWT access and refresh tokens, users, sessions, impersonation, passwordless sign-in and passkeys |
-| `navree::workspace` | navree-workspace | `workspace` | `WorkspaceModule`: workspaces, members, roles, invitations and isolation |
+| `navree::workspace` | navree-workspace | `workspace` | `WorkspaceModule`: workspaces, members, roles, invitations, isolation and demo workspaces |
 | `navree::redis` | navree-redis | `redis` (opt-in) | `RedisModule`: [Redis](/docs/digging-deeper/redis/) connections, and the Redis drivers of the cache, locks, queue, sessions and real-time backplane; `RateLimiter` |
 | `navree::social` | navree-social | `social` (opt-in) | `SocialModule`: [social sign-in](/docs/packages/social-sign-in/) with Google, GitHub, Apple and other providers |
+| `navree::sso` | navree-sso | `sso` | `SsoModule`: [single sign-on](/docs/security/single-sign-on/) with SAML 2.0 and OpenID Connect per organization or workspace, verified domains, just-in-time provisioning |
 | `navree::webhooks` | navree-webhooks | `webhooks` | `WebhooksModule`: signed outgoing webhooks with retries and a delivery log, verified incoming ones |
 | `navree::oauth` | navree-oauth | `oauth` (opt-in) | `OAuthServerModule`: [OAuth 2.1 and OpenID Connect provider](/docs/packages/oauth-server/), personal access tokens |
 | `navree::flags` | navree-flags, plus `#[flag]` | `flags` (opt-in) | `FlagsModule`: [feature flags](/docs/packages/feature-flags/) per user, workspace, plan or percentage |
@@ -92,6 +93,7 @@ Every module crate is re-exported whole, as a module of the facade. `navree::db:
 | `navree::grpc` | navree-grpc, plus `#[grpc_service]` | `grpc` (opt-in) | `GrpcModule`: [gRPC](/docs/microservices/grpc/) services with gRPC-Web, Connect, health and reflection |
 | `navree::ai` | navree-ai, plus `#[agent]` | `ai` (opt-in) | `AiModule`: the [AI SDK](/docs/ai/ai-sdk/), [agents and tools](/docs/ai/agents-and-tools/), [embeddings and vector stores](/docs/ai/embeddings-and-rag/) |
 | `navree::micro` | navree-micro, plus `#[message_handlers]` | `micro` (opt-in), with `micro-nats`, `micro-kafka`, `micro-rabbitmq`, `micro-redis` and `micro-mqtt` | `MicroModule`, `ServiceClient`: [messages and events between services](/docs/microservices/introduction/) over TCP or a broker |
+| `navree::documents` | navree-documents | `documents` (opt-in) | `DocumentsModule`: [PDF from Typst or HTML templates, DOCX, merge and stamps](/docs/packages/documents/) |
 | `navree::billing` | navree-billing | `billing` (opt-in) | `BillingModule`: [subscriptions, trials, usage and invoices](/docs/packages/billing/) with Stripe or Paddle |
 | `navree::search` | navree-search | `search` (opt-in) | `SearchModule`: [full-text and vector search](/docs/packages/search/), `#[derive(Searchable)]` |
 | `navree::mcp` | navree-mcp | `mcp` (opt-in) | `McpModule`: [MCP servers](/docs/ai/mcp-servers/) with `#[mcp_server]`, `#[mcp_tool]`, `#[mcp_resource]` and `#[mcp_prompt]`, and `navree::mcp::testing::McpTestClient` |
@@ -131,6 +133,7 @@ The facade's root also has:
 | gRPC (`grpc`) | `GrpcModule` |
 | AI (`ai`) | `AiModule` (and `m.agent::<A>()`, `m.vector_collection(..)` through `ModuleBuilderAiExt`) |
 | Microservices (`micro`) | `MicroModule`, `ServiceClient`, `Payload`, `message_handlers` |
+| Documents (`documents`) | `DocumentsModule` |
 | Billing (`billing`) | `BillingModule` |
 | Localization (`i18n`) | `I18nModule`, `Locale` |
 | Search (`search`) | `SearchModule` |
@@ -149,7 +152,7 @@ Three details to know:
 
 ## Cargo features
 
-The facade has one feature per module crate, named after it (`http-client` for `navree::http_client`). The default feature, `full`, turns on all of them except the opt-in ecosystem libraries and packages (`social`, `oauth`, `flags`, `graphql`, `grpc`, `billing`, `search`, `mcp`, `ai`, `redis`, `i18n`, and `micro` with its transports), which you list by name: `features = ["flags"]`. It includes the S3 storage driver (`storage-s3`); the Google Cloud Storage and Azure drivers are opt-in (`storage-gcs`, `storage-azure`). To build only what you use, turn the defaults off and list the modules:
+The facade has one feature per module crate, named after it (`http-client` for `navree::http_client`). The default feature, `full`, turns on all of them except the opt-in ecosystem libraries and packages (`social`, `oauth`, `flags`, `graphql`, `grpc`, `documents`, `billing`, `search`, `mcp`, `ai`, `redis`, `i18n`, and `micro` with its transports), which you list by name: `features = ["flags"]`. It includes the S3 storage driver (`storage-s3`); the Google Cloud Storage and Azure drivers are opt-in (`storage-gcs`, `storage-azure`). To build only what you use, turn the defaults off and list the modules:
 
 ```toml title="Cargo.toml"
 [dependencies]
@@ -163,7 +166,7 @@ navree = { git = "https://github.com/NavreeHQ/navree", default-features = false,
 | `http`, `log`, `crypto`, `events`, `view`, `cache`, `http-client`, `schema` | Nothing else (and `http` adds `navree::axum`) |
 | `db` | `http`, `schema` |
 | `testing`, `observe`, `api`, `time` | `http` |
-| `mail` | `view` |
+| `mail` | `view`, `http`, `crypto`, `events`, `http-client`, `db` |
 | `realtime`, `storage` | `http`, `crypto` |
 | `session` | `http`, `crypto`, `db` |
 | `validation`, `audit`, `access` | `http`, `db` |
@@ -171,12 +174,14 @@ navree = { git = "https://github.com/NavreeHQ/navree", default-features = false,
 | `schedule` | `db`, `time` |
 | `notify` | `http`, `db`, `mail` |
 | `auth` | `http`, `db`, `crypto`, `validation`, `cache`, `mail`, `access`, `http-client` |
-| `workspace` | `http`, `db`, `crypto`, `events`, `mail`, `access`, `time` |
+| `workspace` | `http`, `db`, `crypto`, `events`, `mail`, `access`, `time`, `schedule` |
 | `social` | `http`, `crypto`, `cache`, `events`, `http-client`, `db`, `auth` |
+| `sso` | `http`, `crypto`, `cache`, `events`, `http-client`, `db`, `auth`, `workspace` |
 | `webhooks` | `http`, `crypto`, `events`, `http-client`, `db`, `workspace` |
 | `oauth` | `http`, `db`, `crypto`, `access`, `auth`, `workspace`, `testing` |
 | `flags` | `http`, `cache`, `db`, `events`, `audit`, `workspace`, `auth` |
 | `graphql` (opt-in, not in `full`) | `http`, `events`, `db`, `validation`, `access`, `auth`, `workspace` |
+| `documents` (opt-in, not in `full`) | `http`, `view`, `storage`; with `queue` on too, renders queued behind an operation |
 | `billing` (opt-in, not in `full`) | `http`, `events`, `http-client`, `db`, `schedule`, `auth`, `workspace` |
 | `search` (opt-in, not in `full`) | `http`, `http-client`, `db`, `queue`, `access`, `workspace` |
 | `search-tantivy` (opt-in) | `search`, and its embedded Tantivy engine |

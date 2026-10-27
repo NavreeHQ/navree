@@ -37,7 +37,7 @@ Principles:
 |---|---|---|
 | `navree-orm` | L4 | Models, records, collections, the builders, the IR, SQL per dialect, execution on `Db`/`Uow`, casts, scopes, hooks, pagination, the relation and document-driver seams |
 | `navree-orm-macros` | L0 | `#[derive(Model)]`, `#[scopes]`, `#[relations]`, `#[accessors]`/`#[accessor]` and `#[test]` (proc macros; no runtime navree dependencies) |
-| `navree-orm-mongodb` | L5 | MongoDB: implements `DocumentDriver` (mongodb track) |
+| `navree-mongo` | L5 | MongoDB: `MongoModule`, `MongoDriver: DocumentDriver`, sessions and units of work, the schema builder and migrations on collections (mongodb track; its own `DESIGN.md`) |
 | `navree-schema` | L3/L4 | Migrations and the schema builder (own design; the ORM does not depend on it) |
 
 `navree-orm` depends on navree-kernel, navree-contracts, navree-http,
@@ -620,6 +620,7 @@ log, slow-query warnings and telemetry apply.
 ```rust
 pub trait DocumentDriver: Send + Sync + 'static {
     fn name(&self) -> &'static str;
+    fn time_precision(&self) -> u32 { 6 } // fractional-second digits kept; MongoDB keeps 3
     fn find<'a>(&'a self, query: &'a QueryIr) -> BoxFuture<'a, Result<Vec<Row>, OrmError>>;
     fn aggregate<'a>(&'a self, query: &'a QueryIr, aggregate: &'a Aggregate) -> BoxFuture<'a, Result<Value, OrmError>>;
     fn exists<'a>(&'a self, query: &'a QueryIr) -> BoxFuture<'a, Result<bool, OrmError>>; // default: a count
@@ -638,6 +639,26 @@ back as returned rows. Rows are `Row::from_values`, decoded leniently by
 driver running the model API (create with store-assigned keys, queries,
 counts, pagination, saves, deletes, plucks) and refusing what it cannot
 express.
+
+The seams a document store's executors use:
+
+- `DocumentTarget::with_uow(uow)` joins navree-db's unit of work (its
+  change events, observers and after-commit hooks);
+  `DocumentTarget::recording_changes(recorder)` sends the change events of
+  model writes to the store's own unit of work (`ChangeRecorder`).
+  `Target::record_change` routes an event to whichever applies.
+- `ExecContext::time_precision()` (from `DocumentDriver::time_precision`)
+  truncates the timestamps the ORM sets, so a saved record equals its
+  stored document.
+- `OrmError::unique_violation(driver, message)` makes a store's duplicate
+  key a unique violation (409 through navree-db's mapping).
+- `Target::records::<M>(rows)` turns rows a driver fetched natively (an
+  aggregation pipeline after a query) into records, with the model's
+  `retrieved` hooks.
+- Cursor pagination keeps typed values a driver carries as `Value::Enum`
+  (ObjectIds) in its cursors.
+- `NativeFilter` carries a store's own filter (a MongoDB filter document)
+  through the IR; SQL dialects refuse it.
 
 ## 7. Row decoding
 
@@ -1236,19 +1257,46 @@ Built. What each part is and where it plugs in:
 
 ### mongodb
 
-- Creates `crates/navree-orm-mongodb` (L5): implements `DocumentDriver`
-  (section 6; `tests/orm/documents.rs` is the reference), an executor for
-  the client and one for a session (`Executor::target` returning
-  `Target::Document(DocumentTarget::new(driver, app))`), BSON conversion
-  for `Value`, ObjectId keys (an `ObjectId` field type implementing `Field`
-  and `PrimaryKey`, empty when all zero; store-assigned like
-  `KeyKind::Increments`: an empty key inserts without `_id` and the driver
-  returns the generated one in `InsertOutcome::returned`; the derive
-  learns `key_type = "object_id"` and infers it for an `ObjectId` key
-  field, one line each in `model/container.rs` and `model/mod.rs`), embedded
-  documents as JSON casts, `$lookup` or batched `$in` loads for relations,
-  and time-series collections for the schema builder's engine helpers.
-  Integration tests run against `NAVREE_TEST_MONGODB_URL`.
+Built as `crates/navree-mongo` (L5; facade features `mongo` and `mongodb`,
+opt-in); its `DESIGN.md` has the details.
+
+- `MongoDriver: DocumentDriver` compiles the IR into filter documents,
+  `find`s and aggregation pipelines (`compile`), and runs them on the
+  official driver, in a session when it has one. Executors: `MongoDb` (the
+  connection; it joins the task's `MongoUow` on the same connection),
+  `MongoSession` and `MongoUow`, all returning
+  `Target::Document(DocumentTarget::new(driver, app))` with the seams of
+  section 6.
+- ObjectId keys: `navree_mongo::ObjectId` implements `Field` and
+  `PrimaryKey`; `KeyKind::ObjectId` generates it before the insert when it
+  is all zeros (like UUID keys, so the record knows its key without a round
+  trip), stored as `_id`. Integer keys the database would assign are
+  counted in a `navree_sequences` collection, one atomic counter per
+  collection and field.
+- Embedded documents and arrays are JSON casts; joins, subqueries
+  (`EXISTS`, `IN`, scalar) and unions are `$lookup` and `$unionWith`, an
+  equality with the enclosing document matched by `localField` and
+  `foreignField` so an index serves it. Relations (orm-relations) load
+  through the IR's `IN` lists, which become `$in`.
+- Units of work: `MongoUow` (a session with a transaction, the actor and
+  request id, change events for `MongoChangeObserver`s inside the
+  transaction, after-commit hooks), `MongoDb::transaction` retrying on
+  write conflicts, and `MongoDb::begin_in(&Uow)` joining navree-db's unit
+  of work (its change events go there; the MongoDB transaction commits
+  right after it, not atomically with it).
+- The schema builder (`MongoSchema`) takes navree-schema's blueprints:
+  collections with JSON-schema validators, indexes, TTL and text indexes,
+  hypertables as time-series collections, continuous aggregates as views;
+  `MongoMigrator` runs `MongoMigration`s recorded in a collection.
+- Bulk writes: an `InsertIr` with `on_conflict` (the builders'
+  `insert_or_ignore` and `upsert`) is an unordered `insertMany` skipping
+  duplicate keys, or one `update` command of upserts by the unique fields.
+  Cursor streams: `DocumentDriver::stream` reads a MongoDB cursor batch by
+  batch (in the session when there is one), for `cursor` and `lazy` as for
+  `MongoStream::stream`.
+- Tests: the generated commands as snapshots without a server, the rest
+  against `NAVREE_TEST_MONGODB_URL` (a replica set), locally through
+  `scripts/dev-databases.ps1` and in CI (`.github/workflows/mongodb.yml`).
 
 ### orm-adopt-crates (shipped): the framework's tables as models
 

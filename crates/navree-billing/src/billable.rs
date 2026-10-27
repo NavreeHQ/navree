@@ -267,6 +267,7 @@ mod tests {
             organization_id: None,
             timezone: None,
             country: None,
+            kind: "live".into(),
             created_at: now,
             updated_at: now,
         };

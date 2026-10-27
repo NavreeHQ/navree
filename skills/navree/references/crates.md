@@ -22,7 +22,7 @@ driver; SQLite is the default and is compiled in.
 | `navree::testing` | navree-testing | `testing` | | | `TestApp`, `TestClient`, `principal`, `temp_sqlite_url` |
 | `navree::observe` | navree-observe | `observe` | `ObserveModule::from_config()` | `observe` | `/health/live`, `/health/ready`, `/metrics` |
 | `navree::api` | navree-api | `api` | `ApiModule::from_config()` | `api` | `/api/openapi.json`, `/api/docs`, `openapi:export` |
-| `navree::mail` | navree-mail | `mail` | `MailModule::from_config()` (needs `ViewModule`) | `mail` | `Mailer`, `TemplateMail`, `Mailable`, `Message` |
+| `navree::mail` | navree-mail | `mail` | `MailModule::from_config()` (needs `ViewModule`; the delivery pipeline also `DatabaseModule` and `CryptoModule`) | `mail` | `Mailer`, `TemplateMail`, `Mailable`, `Message`, `TransportResolver`, `Deliveries`, `Suppressions`, `Outbox`, `SendingDomains`, `MailFake` |
 | `navree::realtime` | navree-realtime | `realtime` | `RealtimeModule::from_config()` | `realtime` | Pusher-protocol WebSockets, channels, `Realtime` |
 | `navree::storage` | navree-storage | `storage` (+ `storage-s3`, `storage-gcs`, `storage-azure`) | `StorageModule::from_config()` | `storage` | `Disk`, `Storage`, `store_upload`, `presigned_put` / `accept_upload`, temporary URLs, `storage:sync` |
 | `navree::session` | navree-session | `session` | `SessionModule::from_config()` | `session` | cookie sessions and CSRF (optional; not used with bearer tokens) |
@@ -33,6 +33,7 @@ driver; SQLite is the default and is compiled in.
 | `navree::schedule` | navree-schedule | `schedule` | `ScheduleModule::for_root()` | | `m.schedule`, `schedule:work`, `schedule:run` |
 | `navree::notify` | navree-notify | `notify` | `NotifyModule::from_config()` | `notify` | `Notifier`, `Notification`, `/api/notifications` |
 | `navree::auth` | navree-auth | `auth` | `AuthModule::from_config()` | `auth` | `/api/auth/*`, `AuthService`, `CurrentUser`, strategies, two-factor, sessions, `#[recent_auth]`, impersonation, passwordless, passkeys, platform sign-in, token exchange |
+| `navree::settings` | navree-settings | `settings` | `SettingsModule::from_config()` + `SettingsModule::for_feature::<T>()` | `settings` | `#[derive(Settings)]`, `Settings`, `Scope`, `Resolved<T>`, `Setting<T>`, `/api/settings/{key}`, `settings:*` commands, `SettingsFake` |
 | `navree::billing` | navree-billing | `billing` (opt-in, not in `full`) | `BillingModule::from_config()` + `BillingModule::for_feature::<Workspace>()` | `billing` | `Billing`, `Billable`, `Subscribed`, `/api/billing/*`, `BillingFake`, `billing:*` commands |
 | `navree::dock` | navree-dock | `dock` (opt-in, not in `full`) | (a tool, not a module) | `dock.toml` | `DockFile`, `Dock`, `app_env`: the library behind `navree dock` |
 

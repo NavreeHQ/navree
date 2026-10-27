@@ -18,6 +18,7 @@ use crate::gate::{GateOptions, default_lock_path, run_gate};
 use crate::make::{MakeKind, MakeOptions, MakeReport, make_item, make_model, make_module};
 use crate::names::{AppName, Name};
 use crate::new_app::{NavreeSource, NewApp, create_app, created_message};
+use crate::openapi_client;
 use crate::project::{project_root, run_root};
 use crate::resource::make_resource;
 
@@ -127,6 +128,37 @@ pub fn execute(cli: Cli, cwd: &Path) -> anyhow::Result<ExitCode> {
                 .build()
                 .context("cannot start the download")?;
             runtime.block_on(browser::install(&options, &mut std::io::stdout()))?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::OpenapiClient(args) => {
+            let root = run_root_of(cwd)?;
+            let plan = openapi_client::plan(&args.out, args.input.as_deref());
+            std::fs::create_dir_all(root.join(&args.out))
+                .with_context(|| format!("cannot create {}", args.out.display()))?;
+            let env = dock::app_env(&root)?;
+            for step in &plan.steps {
+                println!("  run      {step}");
+                let status = step
+                    .clone()
+                    .with_env(env.clone())
+                    .run(&root)
+                    .with_context(|| {
+                        format!("cannot run {} (is it installed and on PATH?)", step.program)
+                    })?;
+                if !status.success() {
+                    return Ok(status
+                        .code()
+                        .and_then(|code| u8::try_from(code).ok())
+                        .map_or(ExitCode::FAILURE, ExitCode::from));
+                }
+            }
+            if args.input.is_none() {
+                println!("  wrote    {}", shown(&root, &root.join(&plan.document)));
+            }
+            println!("  wrote    {}", shown(&root, &root.join(&plan.schema)));
+            println!(
+                "  next     createNavreeClient<paths>() from @navree/client, with `import type {{ paths }} from \"./schema\"`"
+            );
             Ok(ExitCode::SUCCESS)
         }
         Command::Forward(words) => {

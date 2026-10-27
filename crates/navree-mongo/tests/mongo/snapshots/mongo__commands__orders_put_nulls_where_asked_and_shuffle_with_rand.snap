@@ -1,0 +1,10 @@
+---
+source: crates/navree-mongo/tests/mongo/commands.rs
+expression: "show(&Company::query().order(Order::asc(Company::COUNTRY.expr()).nulls_last()).order(Order::desc(Expr::col(\"employees\")).nulls_first()).limit(10))"
+---
+db.companies.aggregate([
+  {"$set": {"__navree_nulls0": {"$cond": [{"$eq": [{"$ifNull": ["$country", null]}, null]}, 1, 0]}, "__navree_nulls1": {"$cond": [{"$eq": [{"$ifNull": ["$employees", null]}, null]}, 1, 0]}}},
+  {"$sort": {"__navree_nulls0": 1, "country": 1, "__navree_nulls1": -1, "employees": -1}},
+  {"$limit": 10},
+  {"$project": {"_id": 1, "name": 1, "country": 1, "employees": 1, "created_at": 1, "updated_at": 1}}
+])

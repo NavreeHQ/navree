@@ -53,6 +53,7 @@ navree-social = { path = "crates/navree-social", version = "0.1.0" }
 navree-webhooks = { path = "crates/navree-webhooks", version = "0.1.0" }
 navree-oauth = { path = "crates/navree-oauth", version = "0.1.0" }
 navree-flags = { path = "crates/navree-flags", version = "0.1.0" }
+navree-settings = { path = "crates/navree-settings", version = "0.1.0" }
 navree-search = { path = "crates/navree-search", version = "0.1.0" }
 navree-graphql = { path = "crates/navree-graphql", version = "0.1.0" }
 navree-billing = { path = "crates/navree-billing", version = "0.1.0" }
@@ -70,11 +71,14 @@ navree-harbor = { path = "crates/navree-harbor", version = "0.1.0" }
 navree-schema = { path = "crates/navree-schema", version = "0.1.0" }
 navree-orm = { path = "crates/navree-orm", version = "0.1.0" }
 navree-orm-macros = { path = "crates/navree-orm-macros", version = "0.1.0" }
+navree-mongo = { path = "crates/navree-mongo", version = "0.1.0" }
 navree-navigator = { path = "crates/navree-navigator", version = "0.1.0" }
 navree-i18n = { path = "crates/navree-i18n", version = "0.1.0" }
 navree-i18n-macros = { path = "crates/navree-i18n-macros", version = "0.1.0" }
 navree-browser = { path = "crates/navree-browser", version = "0.1.0" }
 navree-time = { path = "crates/navree-time", version = "0.1.0" }
+navree-sso = { path = "crates/navree-sso", version = "0.1.0" }
+navree-documents = { path = "crates/navree-documents", version = "0.1.0" }
 
 # ---------------------------------------------------------------------------
 # Runtime, async and HTTP (Tokio family)
@@ -175,6 +179,16 @@ redis = { version = "1.8.0", default-features = false, features = [
     "tokio-comp",
     "tokio-rustls-comp",
 ] }
+# MongoDB (navree-mongo): the official driver on Tokio, TLS through rustls
+# with ring (never aws-lc or OpenSSL), SRV lookups for mongodb+srv:// URLs,
+# and BSON 3 with its chrono, uuid and Extended JSON conversions.
+mongodb = { version = "3.9.1", default-features = false, features = [
+    "bson-3",
+    "compat-3-3-0",
+    "dns-resolver",
+    "rustls-tls",
+] }
+bson = { version = "3.1.0", features = ["chrono-0_4", "serde", "serde_json-1", "uuid-1"] }
 
 # ---------------------------------------------------------------------------
 # Serialization, errors, ids, time
@@ -201,6 +215,9 @@ rust_decimal = { version = "1.43.0", default-features = false, features = ["serd
 chrono-tz = "0.10.4"
 base64 = "0.23.1"
 hex = "0.4.3"
+# XML for single sign-on (navree-sso): SAML messages and metadata, read into
+# its own tree for exclusive canonicalization and signature checks.
+quick-xml = "0.41.0"
 # Insertion-ordered maps: navree-orm's `key_by`, `group_by` and keyed plucks.
 indexmap = { version = "2.14.2", features = ["serde"] }
 
@@ -317,6 +334,14 @@ lettre = { version = "0.11.23", default-features = false, features = [
     "tracing",
     "webpki-roots",
 ] }
+# Mail rendering (navree-mail): CSS inlined into `style` attributes and a
+# plain-text body from the HTML, on the html5ever already in the tree (no
+# remote stylesheets, no CLI).
+css-inline = { version = "0.23.0", default-features = false }
+html2text = { version = "0.17.4", default-features = false }
+# DNS TXT lookups for navree-mail's sending-domain checks (SPF, DKIM,
+# DMARC): pure Rust, the system's resolver configuration, no DNS over TLS.
+hickory-resolver = { version = "0.26.3", default-features = false, features = ["system-config", "tokio"] }
 croner = "4.0.2"
 moka = { version = "0.12.16", features = ["future"] }
 dashmap = "6.2.1"
@@ -325,8 +350,9 @@ utoipa = { version = "6.0.0", features = ["chrono", "preserve_order", "preserve_
 utoipa-scalar = { version = "0.4.0", features = ["axum"] }
 object_store = { version = "0.14.2", default-features = false, features = ["fs"] }
 csv = "1.4.0"
-# Chrome for Testing archives (`navree browser:install`): deflate through
-# flate2 on zlib-rs, pure Rust; no bzip2, lzma or zstd (C).
+# Chrome for Testing archives (`navree browser:install`), and reading DOCX
+# archives back in navree-documents tests: deflate through flate2 on
+# zlib-rs, pure Rust; no bzip2, lzma or zstd (C).
 zip = { version = "9.1.2", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 # Embedded full-text index (navree-search, `search-tantivy`): no zstd (C), pure Rust.
 tantivy = { version = "0.27.0", default-features = false, features = ["lz4-compression", "mmap", "stemmer", "stopwords"] }
@@ -349,6 +375,13 @@ async-trait = "0.1.92"
 # Helm: Markdown fields (rendered without raw HTML) and field patterns.
 pulldown-cmark = { version = "0.13.5", default-features = false, features = ["html"] }
 regex = "1.13.1"
+# Documents (navree-documents): the Typst compiler and its PDF exporter, a
+# DOCX writer, and PDF editing (merge, stamp, text extraction). Pure Rust.
+typst = "0.15.1"
+typst-pdf = "0.15.1"
+typst-layout = "0.15.1"
+docx-rs = { version = "0.4.22", default-features = false }
+lopdf = { version = "0.46.0", default-features = false }
 
 # Localization (navree-i18n): Fluent messages, and ICU4X decimal and date
 # formatting with compiled data (pure Rust; Gregorian dates only).

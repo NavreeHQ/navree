@@ -30,9 +30,12 @@ conventions, and says which skill to load for each task.
 | [`navree-queues-and-scheduling`](navree-queues-and-scheduling/SKILL.md) | Jobs, workers, retries, failed jobs, batches, operations with progress, and cron-style schedules |
 | [`navree-events-and-broadcasting`](navree-events-and-broadcasting/SKILL.md) | Events and listeners; real-time channels over WebSockets |
 | [`navree-mail-and-notifications`](navree-mail-and-notifications/SKILL.md) | Mail with templates and transports; notifications over several channels |
+| [`navree-mail-delivery`](navree-mail-delivery/SKILL.md) | Email APIs, tenant transports, the delivery log, suppressions, hold for approval, tracking, DKIM and domain checks |
 | [`navree-storage`](navree-storage/SKILL.md) | Disks (local, S3, Google Cloud Storage, Azure), uploads, direct browser uploads, signed links and disk sync |
 | [`navree-cache-and-http-client`](navree-cache-and-http-client/SKILL.md) | The cache, locks, and outgoing HTTP with retries and an SSRF guard |
 | [`navree-openapi`](navree-openapi/SKILL.md) | The OpenAPI 3.1 document, schemas and typed clients |
+| [`navree-frontend-next`](navree-frontend-next/SKILL.md) | A Next.js front end with `@navree/next`, `@navree/client` and `@navree/theme`: the BFF, sign-in, server components, list screens, real time |
+| [`navree-frontend-nuxt`](navree-frontend-nuxt/SKILL.md) | A Nuxt front end with the `@navree/nuxt` module: the BFF as Nitro routes, the session gate, composables, list screens |
 | [`navree-config`](navree-config/SKILL.md) | `.env`, `config/app.toml`, `APP_*` variables, the app key, typed sections |
 | [`navree-testing`](navree-testing/SKILL.md) | `TestApp`, HTTP tests, database tests and fakes |
 | [`navree-cli-generators`](navree-cli-generators/SKILL.md) | The `navree` CLI, every `make:*` generator and console commands |
@@ -48,8 +51,10 @@ conventions, and says which skill to load for each task.
 | [`navree-dock`](navree-dock/SKILL.md) | Run PostgreSQL, Redis, Meilisearch, Mailpit, MinIO and NATS locally and in CI with `navree dock` |
 | [`navree-harbor`](navree-harbor/SKILL.md) | Provision Ubuntu servers and ship zero-downtime releases with `navree deploy`: `harbor.toml`, secrets, rollbacks, several servers, `build:image`, GitHub Actions |
 | [`navree-social`](navree-social/SKILL.md) | Sign in with Google, GitHub, Apple and other providers; linked accounts |
+| [`navree-sso`](navree-sso/SKILL.md) | SAML 2.0 and OpenID Connect single sign-on per organization or workspace, verified domains, provisioning |
 | [`navree-webhooks`](navree-webhooks/SKILL.md) | Signed outgoing webhooks with retries, and verified incoming ones |
 | [`navree-flags`](navree-flags/SKILL.md) | Feature flags: define, check, roll out by percentage or plan, kill, test |
+| [`navree-settings`](navree-settings/SKILL.md) | Typed settings per app, organization, workspace or user, inherited field by field with the source of every value |
 | [`navree-search`](navree-search/SKILL.md) | Full-text and vector search over entities, engines and index syncing |
 | [`navree-telemetry`](navree-telemetry/SKILL.md) | Telemetry events and sinks, OpenTelemetry tracing and OTLP export, trace context, `TelemetryRecorder` and `SpanRecorder` in tests |
 | [`navree-graphql`](navree-graphql/SKILL.md) | GraphQL resolvers, dataloaders and subscriptions (feature `graphql`) |
@@ -64,6 +69,7 @@ conventions, and says which skill to load for each task.
 | [`navree-i18n`](navree-i18n/SKILL.md) | Localization: Fluent files, `t!`, the request's locale, formatting, translated validation, mail and notifications (feature `i18n`) |
 | [`navree-browser-testing`](navree-browser-testing/SKILL.md) | Browser tests with navree-browser: Chrome over the DevTools Protocol, waiting steps, failure screenshots, `TestServer` and `FrontEnd` |
 | [`navree-performance`](navree-performance/SKILL.md) | Measure and lower per-request cost: the pipeline benchmarks, pool and transaction settings, hot-path habits |
+| [`navree-documents`](navree-documents/SKILL.md) | PDF from Typst or HTML templates, DOCX, merge and stamps, queued renders, `DocumentsFake` (feature `documents`) |
 
 ## Installing
 

@@ -47,7 +47,7 @@ fn builder() -> TestAppBuilder {
         .module(MailModule::for_root(MailOptions {
             from: "Navree <noreply@navree.test>".to_owned(),
             transport: TransportConfig::Array,
-            queue: None,
+            ..MailOptions::default()
         }))
 }
 

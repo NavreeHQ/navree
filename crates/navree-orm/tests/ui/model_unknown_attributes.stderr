@@ -1,4 +1,4 @@
-error: unknown model attribute `tabel` (did you mean `table`?); expected one of: table, primary_key, key_type, timestamps, soft_deletes, connection, per_page, global_scopes, touches, morph_name, with, with_count, pivot, factory, route_key, workspace, subject, permission_prefix, policy, observers, dispatches, broadcasts, prunable, mass_prunable, fillable, guarded, unguarded, hidden, visible, appends, encrypter, serialize_dates_with, resource
+error: unknown model attribute `tabel` (did you mean `table`?); expected one of: table, collection, primary_key, key_type, timestamps, soft_deletes, connection, driver, per_page, global_scopes, touches, morph_name, with, with_count, pivot, factory, route_key, workspace, subject, permission_prefix, policy, observers, dispatches, broadcasts, prunable, mass_prunable, fillable, guarded, unguarded, hidden, visible, appends, encrypter, serialize_dates_with, resource
  --> tests/ui/model_unknown_attributes.rs:4:9
   |
 4 | #[model(tabel = "deals")]
@@ -10,7 +10,7 @@ error: unknown field attribute `colum` (did you mean `column`?); expected one of
 7 |     #[model(colum = "name")]
   |             ^^^^^
 
-error: unknown key type `serial`: use "int" (the database assigns it), "uuid" (UUID v7), "uuid_v4", "ulid" or "manual" (the application sets it)
+error: unknown key type `serial`: use "int" (the database assigns it), "uuid" (UUID v7), "uuid_v4", "ulid", "object_id" (MongoDB) or "manual" (the application sets it)
   --> tests/ui/model_unknown_attributes.rs:12:20
    |
 12 | #[model(key_type = "serial")]

@@ -25,6 +25,7 @@
 //! | `navree mcp [--path <dir>] [--no-build] [--allow-remote-database] [--docs-offline]` | Navigator, the MCP server for coding agents, on stdio (navree-navigator) |
 //! | `navree skills:install [--path <dir>]` | The Navree agent skills into `.claude/skills/` and `.agents/skills/` |
 //! | `navree browser:install [--version <version>] [--force]` | Download Chrome for Testing into Navree's cache for navree-browser ([`browser`]) |
+//! | `navree openapi:client [--out web/src/lib/api] [--input <file>]` | The OpenAPI document and the front end's `schema.d.ts` for `@navree/client` ([`openapi_client`]) |
 //! | `navree <anything else> [args...]` | `cargo run --quiet -- <command> [args...]` in the app ([`forward`]) |
 //!
 //! When the app has a `dock.toml`, `navree dev` and forwarded commands pass
@@ -51,6 +52,7 @@ pub mod kits;
 pub mod make;
 pub mod names;
 pub mod new_app;
+pub mod openapi_client;
 pub mod project;
 pub mod resource;
 pub mod scaffold;

@@ -39,15 +39,19 @@
 //! | `ui` | navree-ui | `ui` | `UiModule`: the app shell and components for server-rendered tools, embedded assets |
 //! | `orm` | navree-orm | `orm` | `#[derive(Model)]` models, the query builder, records, collections, pagination |
 //! | `auth` | navree-auth | `auth` | `AuthModule`: JWT access and refresh tokens, users, sessions, impersonation, passwordless, passkeys |
-//! | `workspace` | navree-workspace | `workspace` | `WorkspaceModule`: workspaces, members, roles, invitations, isolation, organizations, partitions |
+//! | `workspace` | navree-workspace | `workspace` | `WorkspaceModule`: workspaces, members, roles, invitations, isolation, organizations, partitions, demo workspaces |
+//! | `mongo` | navree-mongo | `mongo` or `mongodb` (opt-in) | `MongoModule`: MongoDB connections and readiness; ORM models on collections, sessions and units of work; the schema builder, migrations and time-series collections on MongoDB |
 //! | `redis` | navree-redis | `redis` (opt-in) | `RedisModule`: shared Redis connections; Redis cache, locks, queue, sessions, rate limits and real-time backplane |
 //! | `webhooks` | navree-webhooks | `webhooks` | `WebhooksModule`: signed outgoing webhooks with retries, verified incoming ones |
+//! | `settings` | navree-settings (plus `#[derive(Settings)]`) | `settings` | `SettingsModule`: typed settings per global, organization, workspace and user, inherited, with the source of every value |
+//! | `sso` | navree-sso | `sso` | `SsoModule`: SAML 2.0 and OpenID Connect single sign-on per organization or workspace, verified domains, just-in-time provisioning |
 //! | `social` | navree-social | `social` (opt-in) | `SocialModule`: sign-in with Google, GitHub, Apple and other providers |
 //! | `oauth` | navree-oauth | `oauth` (opt-in) | `OAuthServerModule`: OAuth 2.1 and OpenID Connect provider, personal access tokens |
 //! | `flags` | navree-flags (plus `#[flag]`) | `flags` (opt-in) | `FlagsModule`: feature flags per user, workspace, plan or percentage |
 //! | `graphql` | navree-graphql | `graphql` (opt-in) | `GraphqlModule`: `#[resolver]`, dataloaders, subscriptions |
 //! | `grpc` | navree-grpc | `grpc` (opt-in) | `GrpcModule`: tonic services with gRPC-Web, Connect, health and reflection |
 //! | `lighthouse` | navree-lighthouse | `lighthouse` | `LighthouseModule`: issues, traces, alerts and the `/_lighthouse` dashboard |
+//! | `documents` | navree-documents | `documents` (opt-in) | `DocumentsModule`: PDF from Typst or HTML templates, DOCX, merge and stamps |
 //! | `billing` | navree-billing | `billing` (opt-in) | `BillingModule`: subscriptions, trials, usage, invoices with Stripe or Paddle |
 //! | `search` | navree-search | `search` (opt-in) | `SearchModule`: full-text and vector search, `#[derive(Searchable)]` |
 //! | `logbook` | navree-logbook | `logbook` | `LogbookModule`: the local debugging timeline at `/_logbook`, with replay |
@@ -63,23 +67,24 @@
 //! | `i18n` | navree-i18n | `i18n` (opt-in) | `I18nModule`: Fluent translations, `t!`, the request's `Locale`, translated validation messages |
 //!
 //! `full` (the default) turns on every module except the opt-in ones
-//! (`social`, `oauth`, `flags`, `graphql`, `grpc`, `billing`, `search`,
-//! `mcp`, `ai`, `redis`, `micro` and its transports, `i18n`, `dock`,
-//! `harbor`, `navigator`, `browser`, `otel`), and the `storage-s3` driver but
-//! not `storage-gcs` or `storage-azure`. A feature also turns on the features
-//! of the crates its crate builds on (`auth` turns on `access`, `db`, `http`,
-//! ...). SQLite is built in; the `postgres` feature adds navree-db's
-//! PostgreSQL driver and the `mysql` feature its MySQL and MariaDB driver,
-//! and the opt-in `otel` feature adds navree-observe's OTLP span exporter.
-//! `validation-phone` and `validation-html` (both in `full`) add
-//! navree-validation's `Phone` and `SafeHtml`. `search-tantivy` adds search's
-//! embedded Tantivy engine. `axum` is re-exported with `http`. `dock` is a
-//! development tool (`navree dock`), for tools and tests that read
-//! `dock.toml`. `harbor` is a deployment tool: the `navree` CLI has Harbor
-//! built in, and an app turns it on only to read `harbor.toml` or drive
-//! deploys from its own code. `navigator` is the library behind `navree mcp`
-//! and `navree skills:install`, for tools and tests. `browser` is for tests:
-//! turn it on in `[dev-dependencies]`.
+//! (`social`, `oauth`, `flags`, `graphql`, `grpc`, `documents`, `billing`,
+//! `search`, `mcp`, `ai`, `mongo`, `redis`, `micro` and its transports,
+//! `i18n`, `dock`, `harbor`, `navigator`, `browser`, `otel`), and the
+//! `storage-s3` driver but not `storage-gcs` or `storage-azure`. A feature
+//! also turns on the features of the crates its crate builds on (`auth`
+//! turns on `access`, `db`, `http`, ...). SQLite is built in; the `postgres`
+//! feature adds navree-db's PostgreSQL driver and the `mysql` feature its
+//! MySQL and MariaDB driver, and the opt-in `otel` feature adds
+//! navree-observe's OTLP span exporter. `validation-phone` and
+//! `validation-html` (both in `full`) add navree-validation's `Phone` and
+//! `SafeHtml`. `search-tantivy` adds search's embedded Tantivy engine.
+//! `axum` is re-exported with `http`. `dock` is a development tool
+//! (`navree dock`), for tools and tests that read `dock.toml`. `harbor` is a
+//! deployment tool: the `navree` CLI has Harbor built in, and an app turns it
+//! on only to read `harbor.toml` or drive deploys from its own code.
+//! `navigator` is the library behind `navree mcp` and `navree skills:install`,
+//! for tools and tests. `browser` is for tests: turn it on in
+//! `[dev-dependencies]`.
 //!
 //! The macros sit at the root: [`module`], [`injectable`] and
 //! [`controller`] (with the route attributes [`get`], [`post`], [`put`],
@@ -213,14 +218,25 @@ pub use navree_auth as auth;
 pub use navree_workspace as workspace;
 
 // L5 (opt-in)
+#[cfg(feature = "mongo")]
+pub use navree_mongo as mongo;
 #[cfg(feature = "redis")]
 pub use navree_redis as redis;
 
 // L6: ecosystem libraries.
+/// Typed settings with inheritance (the `settings` feature): navree-settings
+/// re-exported whole, `#[derive(Settings)]` included
+/// (`use navree::settings::{Settings, Scope};`).
+#[cfg(feature = "settings")]
+pub use navree_settings as settings;
+#[cfg(feature = "sso")]
+pub use navree_sso as sso;
 #[cfg(feature = "webhooks")]
 pub use navree_webhooks as webhooks;
 
 // L6 (opt-in)
+#[cfg(feature = "documents")]
+pub use navree_documents as documents;
 #[cfg(feature = "grpc")]
 pub use navree_grpc as grpc;
 #[cfg(feature = "oauth")]

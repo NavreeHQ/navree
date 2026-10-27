@@ -1,30 +1,139 @@
 ---
 name: navree-frontend-nuxt
-description: "Build a Nuxt 4 (Vue 3) front end on a Navree API: Nitro server routes as the backend-for-frontend (Navree's access token and rotating refresh token in httpOnly cookies, single-flight refresh, the Origin check that stops CSRF, a server-side session gate, private-channel authorization), a typed openapi-fetch client generated from the app's OpenAPI document, TanStack Query for Vue, Pinia, VeeValidate with zod, CASL abilities from `GET /api/me/abilities`, real time with pusher-js, MSW mocks, Vitest and Playwright tests, and the navree.com app UI (shadcn-vue on Reka UI, the sidebar-07 shell, 4px corners, a command palette). Use when creating or changing a Vue or Nuxt app that talks to a Navree API, wiring sign-in, refresh or sign-out in Nitro, calling the API from Vue, subscribing to private channels in the browser, or theming a Vue app like navree.com. The reference app is apps/crm-nuxt."
+description: "Build a Nuxt (3.13+ or 4) front end on a Navree API with the `@navree/nuxt` module: the backend-for-frontend as Nitro routes (httpOnly token cookies, single-flight refresh, two-factor sign-in, CSRF, `/broadcasting/auth`), a session gate that guards pages and refreshes tokens before server rendering, and auto-imported `useNavreeAuth`, `useWorkspace`, `useNavreeClient`, `useListQuery`, `useOperation`, `useChannel`, `useAbility`, `<NavreeDataTable>` and `<Can>`; with `@navree/client` (the typed client from `navree openapi:client`, `NavreeError` with codes) and `@navree/theme` (navree.com's dark theme for Tailwind 4 and shadcn-vue). Use when creating or changing a Nuxt or Vue app that talks to a Navree API, wiring sign-in or sign-out, calling the API in pages, server routes or during SSR, building list screens, subscribing to private channels, following operations, translating API errors with @nuxtjs/i18n, or theming like navree.com. The reference app, with the full app UI (sidebar shell, command palette) and Playwright tests, is apps/crm-nuxt."
 ---
 
 # A Nuxt front end on a Navree API
 
-The browser never holds a token. Nitro, Nuxt's server, is the
-**backend-for-frontend (BFF)**: server routes under `server/api` and
-`server/routes/broadcasting` keep Navree's JWT access token and rotating
-refresh token in httpOnly cookies and forward each call with
-`Authorization: Bearer`. The browser calls only its own origin. The one
-exception is the real-time socket, which connects straight to Navree's
-Pusher-protocol server; private channels are authorized through the BFF.
+`@navree/nuxt` is a Nuxt module. Nitro serves the **backend-for-frontend**
+at `/api/**` and `/broadcasting/auth`: Navree's access token and rotating
+refresh token live in httpOnly cookies and every call is forwarded with
+`Authorization: Bearer`. A session gate keeps pages behind sign-in and
+refreshes expired tokens before a page renders. The browser never holds a
+token.
 
-```
-browser ── same-origin /api/*, /broadcasting/auth ──▶ Nitro BFF ── Bearer ──▶ Navree API
-   └────────────── ws://api-host/app/{key} (pusher-js) ─────────────────────▶ Navree real time
-```
-
-`apps/crm-nuxt` (the Navree CRM on Nuxt) is the reference: copy from it.
-Every path below is a file there. Architecture background:
-`/docs/patterns/backend-for-frontend/`. The React version of the same app is
-`apps/crm-web` (skill `navree-frontend-next`); the BFF module is the same
-code.
+Docs: `/docs/frontend/nuxt/` (options, composables, what the module adds),
+`/docs/frontend/typed-client/`, `/docs/frontend/auth-and-bff/`,
+`/docs/frontend/data-tables/`, `/docs/frontend/theming/`,
+`/docs/frontend/localization/`. Sources and tests: `packages/js/nuxt`
+(`test/fixture` is a minimal app; `pnpm smoke` builds and checks it).
+`apps/crm-nuxt` is the Navree CRM on Nuxt: the reference for the look,
+the shell and the tests ("The reference app" below).
 
 ## Steps
+
+1. **Install** `@navree/nuxt`, `@navree/client`, `@navree/theme` (from the
+   repository's `packages/js`: `pnpm install && pnpm build`, then `link:`
+   dependencies), plus `@casl/ability @casl/vue` for abilities and
+   `pusher-js` for real time.
+2. **Add the module:**
+
+   ```ts
+   // nuxt.config.ts
+   export default defineNuxtConfig({
+     modules: ["@navree/nuxt"],
+     css: ["~/assets/css/main.css"],
+     navree: {
+       apiUrl: "http://127.0.0.1:8080",               // NAVREE_API_URL / NUXT_NAVREE_API_URL win at runtime
+       sessionGate: { loginPath: "/login", publicPaths: ["/", "/pricing"] },
+       realtime: { key: "app-key", wsHost: "127.0.0.1", wsPort: 8080 }, // optional, needs pusher-js
+       abilities: true,                                // optional, needs @casl/ability and @casl/vue
+       mounts: ["/admin"],                            // optional: more prefixes to forward
+     },
+   });
+   ```
+
+3. **Generate the schema:** `navree openapi:client --out web/app/lib/api`.
+4. **Theme** (`app/assets/css/main.css`): `@import "tailwindcss";
+   @import "@navree/theme/theme.css"; @import "@navree/theme/fonts.css";
+   @source "../../../node_modules/@navree/nuxt/dist";` and
+   `app: { head: { htmlAttrs: { class: "dark" } } }`.
+5. **Pages:** use the auto-imported composables (below).
+6. **Test:** the vue pieces from `@navree/nuxt/vue` with `@vue/test-utils`
+   and a memory router; server handlers from `@navree/nuxt/server` on an h3
+   app with `toWebHandler`; `@navree/bff/testing` for a scripted API
+   (`fakeNavree`, `serveFakeNavree` for a built app).
+
+## Composables (auto-imported)
+
+| Composable | Use |
+|---|---|
+| `useNavreeAuth<User>()` | `user`, `status`, `signedIn`, `load()`, `signIn({email, password})` → `{twoFactor:false, user}` or `{twoFactor:true, expiresIn}`, `verifyTwoFactor({code})`, `signOut({all?})` |
+| `useNavreeClient<paths>()` | The typed client (cookie mode, `X-Workspace` from the cookie; in-process on the server) |
+| `useWorkspace()` | `workspace` (computed) and `setWorkspace(slug)` (the `navree_workspace` cookie, then `refreshNuxtData()`) |
+| `useListQuery(defaults)` | `query`, `setQuery`, `setFilter`, `setSearch`, `toggleSort`, `setPage` in the route's query string |
+| `useOperation(idRef)` | `operation`, `error`, `finished`, `cancel()` over `/api/operations/{id}/events` |
+| `useChannel(channel, event, handler)`, `useRealtimeState()` | With `realtime`: private channels by bare name; a ref/getter channel moves the listener |
+| `useAbility()`, `<Can>` | With `abilities`: rules load from `GET /api/me/abilities` after sign-in and each workspace switch |
+| `applyFieldErrors(error, setFieldError, { fields, onOther })` | A 400's field errors onto vee-validate fields |
+| `<NavreeDataTable>`, `<NavreePagination>` | The list table (`@update:query`, `@row-click`, `#empty` slot) |
+
+Server side (Nitro auto-imports): `getNavreeSession(event)` →
+`{user, accessToken, workspace}` or `null`; `useNavreeBff(event)` → the BFF
+(`.api(path, {accessToken, workspace})`, `.me(token)`).
+
+```html
+<script setup lang="ts">
+import type { paths } from "~/lib/api/schema";
+const api = useNavreeClient<paths>();
+const list = useListQuery({ per_page: 25 });
+const { data, pending } = await useAsyncData("deals", () => unwrap(api.GET("/api/v1/deals", { params: { query: list.query.value } })), { watch: [list.query] });
+</script>
+
+<template>
+  <NavreeDataTable :columns="columns" :data="data?.data" :meta="data?.meta" :query="list.query.value"
+    :loading="pending" clickable @update:query="list.setQuery" @row-click="(d) => navigateTo(`/deals/${d.id}`)" />
+</template>
+```
+
+## What the BFF guarantees (don't re-implement it)
+
+- **Cookies.** `navree_at` (access token, `Max-Age` = `expires_in`) and
+  `navree_rt` (refresh token, 30 days), both `HttpOnly; SameSite=Lax;
+  Path=/`, `Secure` in production. The two-factor challenge lives in
+  `navree_2fa` on `Path=/api/auth/2fa` only. A token pair in any
+  `/api/auth/*` response (`PATCH /api/auth/me/password`) replaces the cookies
+  and is stripped from the body.
+- **Refresh.** On a 401, or when only the refresh cookie is left, the proxy
+  refreshes once and retries. Refresh is **single-flight per refresh token**:
+  Navree rotates refresh tokens and revokes the family when one is reused,
+  so parallel requests share one refresh. A finished refresh is remembered
+  for 30 s for requests still carrying the old cookie. A failed refresh
+  clears both cookies.
+- **CSRF.** Every non-GET request whose `Origin` is not the app's own host
+  (or listed in `APP_ORIGINS`) gets `403 {"message": "Invalid origin"}`
+  before anything reaches Navree.
+- **Pass-through.** Status, body (streamed), `content-type` (CSV included),
+  `content-disposition`, `x-request-id`, `retry-after` and `x-ratelimit-*`
+  come back; upstream calls use `cache: "no-store"`.
+- **Client address.** The browser's `X-Forwarded-For` never reaches Navree.
+  Behind N trusted reverse proxies set `NAVREE_TRUSTED_PROXY_HOPS=N`; the BFF
+  sends the address the outermost proxy saw.
+- **Workspaces.** `X-Workspace` is forwarded (else the `navree_workspace`
+  cookie); server-sent events stream through too.
+- **Its own errors:** `session_expired`, `two_factor_expired`,
+  `invalid_origin`, `api_unreachable`, `unexpected_response`.
+
+## Errors and locales
+
+- `unwrap` throws `NavreeError` (`status`, `code`, `errors`, `is(...)`,
+  `requestId`).
+- With @nuxtjs/i18n: `const { t, te } = useI18n(); translateError(error, t,
+  { has: te })` (keys `errors.<code>`, then `errors.unknown`).
+- `useHead({ htmlAttrs: { lang: locale, dir: () => direction(locale.value) } })`
+  with `direction` from `@navree/nuxt/vue`; use logical classes.
+
+## The reference app: apps/crm-nuxt
+
+`apps/crm-nuxt` (the Navree CRM on Nuxt) wires the same BFF by hand, the
+way an app without the module does: copy its look, shell and tests. Every
+path below is a file there. Architecture background:
+`/docs/patterns/backend-for-frontend/`. The React version of the same app is
+`apps/crm-web` (skill `navree-frontend-next`). An app on `@navree/nuxt`
+drops `server/lib/bff.ts`, the `server/api` and `server/routes` files and
+the session gate; the module provides them.
+
+Its steps:
 
 1. **Create the app** (Nuxt 4, `app/` source directory) and add the pieces:
    `pnpm add @pinia/nuxt pinia @tanstack/vue-query openapi-fetch @casl/ability @casl/vue pusher-js vee-validate zod reka-ui @vueuse/core vue-sonner @lucide/vue class-variance-authority clsx tailwind-merge`
@@ -57,9 +166,9 @@ code.
 9. **Test it**: Vitest for the BFF, its Nitro handlers and components;
    Playwright against the real API.
 
-## The BFF in Nitro
+### The BFF in Nitro
 
-### Routes
+#### Routes
 
 | File | Calls | Purpose |
 |---|---|---|
@@ -130,33 +239,9 @@ export default defineEventHandler((event) => {
 Whether a cookie is still valid is the API's call; the gate only spares a
 signed-out visitor the app shell. The app redirects on a 401 too.
 
-### What the BFF guarantees
+### The browser side
 
-- **Cookies.** `navree_at` (access token, `Max-Age` = `expires_in`) and
-  `navree_rt` (refresh token, 30 days), both `HttpOnly; SameSite=Lax;
-  Path=/`, `Secure` in production. The two-factor challenge lives in
-  `navree_2fa` on `Path=/api/auth/2fa` only. A token pair in any
-  `/api/auth/*` response (`PATCH /api/auth/me/password`) replaces the cookies
-  and is stripped from the body.
-- **Refresh.** On a 401, or when only the refresh cookie is left, the proxy
-  refreshes once and retries. Refresh is **single-flight per refresh token**:
-  Navree rotates refresh tokens and revokes the family when one is reused,
-  so parallel requests share one refresh. A finished refresh is remembered
-  for 30 s for requests still carrying the old cookie. A failed refresh
-  clears both cookies.
-- **CSRF.** Every non-GET request whose `Origin` is not the app's own host
-  (or listed in `APP_ORIGINS`) gets `403 {"message": "Invalid origin"}`
-  before anything reaches Navree.
-- **Pass-through.** Status, body (streamed), `content-type` (CSV included),
-  `content-disposition`, `x-request-id`, `retry-after` and `x-ratelimit-*`
-  come back; upstream calls use `cache: "no-store"`.
-- **Client address.** The browser's `X-Forwarded-For` never reaches Navree.
-  Behind N trusted reverse proxies set `NAVREE_TRUSTED_PROXY_HOPS=N`; the BFF
-  sends the address the outermost proxy saw.
-
-## The browser side
-
-### Runtime config
+#### Runtime config
 
 ```ts
 // nuxt.config.ts (abridged)
@@ -176,7 +261,7 @@ runtimeConfig: {
 `NUXT_PUBLIC_*` variables override these when the server starts, so one build
 runs anywhere. `app/composables/useCrmConfig.ts` reads them typed.
 
-### The client
+#### The client
 
 ```ts
 // app/lib/api/client.ts (abridged)
@@ -194,7 +279,7 @@ export const api = Object.assign(client, {
   Navree's error body (`{statusCode, message, error, errors?}`).
 - Only same-site paths are valid `?next=` destinations after sign-in.
 
-### Queries
+#### Queries
 
 One `QueryClient` (`app/plugins/02.vue-query.ts`): `staleTime` 20 s, no retry
 on 4xx, and mutation errors become toasts unless they are 401, 403 or a 400
@@ -215,7 +300,7 @@ List filters live in the URL (`app/composables/useUrlState.ts`:
 `url.set({ search: "acme" })` replaces the entry and resets the page), so
 views survive reloads and can be shared.
 
-### Session and abilities
+#### Session and abilities
 
 ```ts
 // app/middleware/session.global.ts (abridged)
@@ -238,7 +323,7 @@ Every API resource carries a constant `__type` (`"Deal"`), so records work as
 subjects straight from JSON: `useAbility<AppAbility>().can("move", deal)`.
 Hide what the rules deny; the API still enforces every rule (403).
 
-### Forms
+#### Forms
 
 VeeValidate with a zod 4 schema through a small adapter
 (`app/lib/forms/zod-schema.ts`, `toTypedSchema`), and the API's 400 errors
@@ -264,7 +349,7 @@ const onSubmit = form.handleSubmit((values) => {
 `app/components/crm/TextField.vue` binds a labelled input with `useField`, so
 dialogs read as a list of fields (`<TextField name="name" label="Name" required />`).
 
-## Real time
+### Real time
 
 Navree's `RealtimeModule` speaks the Pusher protocol, so pusher-js connects
 to it directly. `app/lib/realtime/pusher.ts` wraps it:
@@ -305,7 +390,7 @@ socket state to the Pinia store for the top bar. Real time is optional: if the
 socket can't connect, queries still refetch on focus. The API must list the
 web origin in `realtime.allowed_origins` (the WebSocket checks `Origin`).
 
-## The look
+### The look
 
 Dark only, on the navree.com tokens, following `apps/website/DESIGN.md` §9
 (app UI). `app/assets/css/main.css` holds it all.
@@ -345,7 +430,7 @@ Dark only, on the navree.com tokens, following `apps/website/DESIGN.md` §9
   404, toasts with `vue-sonner`. Tables hide secondary columns on small
   screens; nothing scrolls sideways at 390 px.
 
-## Testing
+### Testing
 
 - **BFF:** `tests/unit/bff.test.ts` drives `createBff` with plain `Request`s
   and a scripted `fetch`: cookies set and cleared, refresh once and
@@ -373,6 +458,13 @@ Dark only, on the navree.com tokens, following `apps/website/DESIGN.md` §9
 
 ```bash
 pnpm typecheck && pnpm test && pnpm build
+cd packages/js && pnpm check && pnpm smoke
+```
+
+In `apps/crm-nuxt`:
+
+```bash
+pnpm typecheck && pnpm test && pnpm build
 pnpm e2e                       # real API on :8092 + production build on :3102
 pnpm screenshots               # every screen at 1440 and 390 px into ./screenshots
 pnpm dev:mock                  # the whole app on MSW, no API
@@ -380,6 +472,13 @@ pnpm dev:mock                  # the whole app on MSW, no API
 
 ## Common mistakes
 
+- Keeping a hand-written `server/api/[...path].ts` next to the module (two
+  handlers for `/api/**`): remove the app's BFF files when adopting it.
+- Calling `$fetch("/api/...")` during SSR without cookies: use
+  `useNavreeClient()` or `useNavree().fetch`, which forward them in-process.
+- Turning on `realtime` or `abilities` without installing `pusher-js` or
+  `@casl/ability` and `@casl/vue`.
+- Reading `useListQuery().query` without `.value` in script code.
 - Putting a token in `localStorage`, a non-httpOnly cookie or the Nuxt
   payload, or calling Navree from the browser: everything goes through Nitro.
 - `useCookie` or `$fetch` to Navree from a page: with `ssr: false` that runs
@@ -397,5 +496,6 @@ pnpm dev:mock                  # the whole app on MSW, no API
   listen on `crm.deals`.
 - A web origin missing from `realtime.allowed_origins`: the socket is refused
   and the page silently falls back to refetching.
-- Green for navigation, selection or hover, `rounded-full` buttons, glowing
-  shadows, or raw hex values in components.
+- Green for navigation, selection or hover (`bg-accent` is not a hover
+  color), `rounded-full` buttons, glowing shadows, or raw hex values in
+  components (see the theme rules in `/docs/frontend/theming/#the-rules`).

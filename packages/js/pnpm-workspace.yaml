@@ -1,0 +1,15 @@
+# Navree's front-end packages. Each folder here is one npm package:
+#   client  @navree/client  the typed client, the error shape, list queries, pagination, real time, operations
+#   bff     @navree/bff     the framework-neutral backend-for-frontend (httpOnly token cookies, refresh, CSRF)
+#   next    @navree/next    Next.js: route handlers, auth(), middleware, abilities, channels, operations, DataTable
+#   nuxt    @navree/nuxt    Nuxt: a module with Nitro BFF routes and composables, DataTable
+#   theme   @navree/theme   navree.com's dark theme: CSS variables, the Tailwind 4 preset, fonts
+packages:
+  - "*"
+
+# Dependencies' install scripts stay off unless listed here.
+allowBuilds:
+  esbuild: false
+  "@parcel/watcher": false
+  unrs-resolver: false
+  vue-demi: false

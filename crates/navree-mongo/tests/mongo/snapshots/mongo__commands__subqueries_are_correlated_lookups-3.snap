@@ -1,0 +1,8 @@
+---
+source: crates/navree-mongo/tests/mongo/commands.rs
+expression: "show(&Company::query().select_sub(Deal::query().select([(Expr::count_all(),\n\"n\")]).where_column(Deal::COMPANY_ID, \"=\", Company::ID), \"deals_count\",))"
+---
+db.companies.aggregate([
+  {"$lookup": {"from": "deals", "localField": "_id", "foreignField": "company_id", "pipeline": [{"$match": {"deleted_at": null}}, {"$group": {"_id": null, "__navree_a0": {"$sum": 1}}}, {"$set": {"n": "$__navree_a0"}}, {"$project": {"n": 1, "_id": 0}}, {"$limit": 1}, {"$project": {"_v": "$n", "_id": 0}}], "as": "__navree_value1"}},
+  {"$project": {"_id": 1, "name": 1, "country": 1, "employees": 1, "created_at": 1, "updated_at": 1, "deals_count": {"$ifNull": [{"$first": "$__navree_value1._v"}, 0]}}}
+])

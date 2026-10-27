@@ -51,6 +51,44 @@ fn all_keys() -> Vec<&'static str> {
     KEYS.iter().chain(attributes::FIELD_KEYS).copied().collect()
 }
 
+/// The column a field names with `#[model(column = "...")]`, read ahead of
+/// [`parse`] (which reports malformed attributes).
+pub(crate) fn peek_column(attrs: &[Attribute]) -> Option<String> {
+    let mut column = None;
+    for attr in attrs.iter().filter(|attr| attr.path().is_ident("model")) {
+        let _ = attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("column") {
+                let name: LitStr = meta.value()?.parse()?;
+                column = Some(name.value());
+            } else if meta.input.peek(syn::token::Paren) {
+                let _: proc_macro2::Group = meta.input.parse()?;
+            } else if meta.input.peek(Token![=]) {
+                skip_value(meta.value()?)?;
+            }
+            Ok(())
+        });
+    }
+    column
+}
+
+/// Skips a key's value (an expression, a path or a type) up to the comma
+/// that ends it.
+fn skip_value(input: syn::parse::ParseStream<'_>) -> syn::Result<()> {
+    let mut angles = 0usize;
+    while !input.is_empty() {
+        if angles == 0 && input.peek(Token![,]) {
+            break;
+        }
+        if input.peek(Token![<]) {
+            angles += 1;
+        } else if input.peek(Token![>]) {
+            angles = angles.saturating_sub(1);
+        }
+        let _: proc_macro2::TokenTree = input.parse()?;
+    }
+    Ok(())
+}
+
 /// Parses the `#[model(...)]` attributes of a field.
 pub(crate) fn parse(attrs: &[Attribute], errors: &mut Errors) -> FieldAttrs {
     let mut field = FieldAttrs::default();

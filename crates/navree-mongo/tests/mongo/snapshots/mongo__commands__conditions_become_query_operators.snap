@@ -1,0 +1,5 @@
+---
+source: crates/navree-mongo/tests/mongo/commands.rs
+expression: "show(&table(\"deals\").where_(col(\"amount\").gt(1_000)).where_(col(\"amount\").ne(5_000)).where_in(\"stage\",\n[\"won\",\n\"lost\"]).where_not_in(\"stage\",\n[\"lead\"]).where_between(\"amount\", 10,\n20).where_null(\"deleted_at\").where_not_null(\"closes_on\").where_(col(\"meta->source\").eq(\"web\")).where_(col(\"meta->scores->0\").gte(5)))"
+---
+db.deals.find({"$and": [{"amount": {"$gt": 1000}}, {"amount": {"$ne": 5000}}, {"stage": {"$in": ["won", "lost"]}}, {"stage": {"$nin": ["lead"]}}, {"amount": {"$gte": 10, "$lte": 20}}, {"deleted_at": null}, {"closes_on": {"$ne": null}}, {"meta.source": "web"}, {"meta.scores.0": {"$gte": 5}}]})

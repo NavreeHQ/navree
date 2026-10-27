@@ -92,7 +92,16 @@ const HIERARCHY: &[Rule] = &[
     rule("navree-testing", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-http"]),
     rule("navree-observe", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http"]),
     rule("navree-api", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-http"]),
-    rule("navree-mail", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-view"]),
+    // Mail: API transports over navree-http-client; the delivery log,
+    // suppressions, the outbox and tenant transports in navree-db (a
+    // same-layer edge, like navree-queue -> navree-schedule), their routes
+    // on navree-http, events through navree-events, credentials sealed and
+    // DKIM signed with navree-crypto; navree-testing backs its tests.
+    rule("navree-mail", 3, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-view",
+        "navree-http", "navree-crypto", "navree-events", "navree-http-client", "navree-db",
+        "navree-testing",
+    ]),
     rule("navree-realtime", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto"]),
     rule("navree-storage", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto"]),
     // Time zones: zones, local days, send windows, holidays; the
@@ -150,7 +159,8 @@ const HIERARCHY: &[Rule] = &[
         "navree-access", "navree-http-client", "navree-orm",
     ]),
     // Workspaces: user ids come from the request's `Principal`, so the
-    // module needs no navree-auth (a sibling at L5).
+    // module needs no navree-auth (a sibling at L5). The nightly demo
+    // reset is a navree-schedule task.
     rule("navree-workspace", 5, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db",
         "navree-crypto", "navree-events", "navree-mail", "navree-access", "navree-telemetry",
@@ -159,6 +169,8 @@ const HIERARCHY: &[Rule] = &[
         "navree-testing",
         // Workspace time zones and countries, and its `dyn ZoneSource`.
         "navree-time",
+        // The nightly reset of demo workspaces.
+        "navree-schedule",
         // The workspace tables are navree-orm models.
         "navree-orm",
     ]),
@@ -168,6 +180,15 @@ const HIERARCHY: &[Rule] = &[
     rule("navree-redis", 5, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-cache",
         "navree-db", "navree-queue", "navree-session", "navree-realtime",
+    ]),
+    // MongoDB: the ORM's document driver (navree-orm), the schema builder's
+    // blueprints compiled into collections, validators and time-series
+    // collections (navree-schema), units of work that join navree-db's and
+    // record its change events, and MongoDB commands reported as query
+    // telemetry (navree-telemetry).
+    rule("navree-mongo", 5, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-telemetry",
+        "navree-schema", "navree-db", "navree-orm",
     ]),
     // L6: ecosystem libraries (ecosystem build plan §3).
     // Social sign-in: links provider accounts to navree-auth users and
@@ -203,6 +224,18 @@ const HIERARCHY: &[Rule] = &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-cache",
         "navree-db", "navree-events", "navree-audit", "navree-access", "navree-auth",
         "navree-workspace", "navree-orm",
+    ]),
+    // Settings: typed settings stored per scope (global, organization,
+    // workspace, user) with inheritance; patches validated with
+    // navree-validation's messages, changes audited (navree-audit) and
+    // emitted (navree-events), resolved values cached by tag (navree-cache),
+    // workspace and organization scopes from navree-workspace, the global
+    // write permission checked with navree-access; it re-exports
+    // `#[derive(Settings)]` from navree-macros.
+    rule("navree-settings", 6, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-macros", "navree-http",
+        "navree-cache", "navree-events", "navree-db", "navree-validation", "navree-audit",
+        "navree-access", "navree-workspace",
     ]),
     // GraphQL: `#[resolver]` fields with route-style access, per-request
     // units of work and dataloaders, subscriptions over WebSockets.
@@ -243,6 +276,17 @@ const HIERARCHY: &[Rule] = &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-http",
         "navree-events", "navree-db", "navree-testing", "navree-validation",
     ]),
+    // Single sign-on: SAML 2.0 and OpenID Connect connections owned by an
+    // organization or a workspace (navree-workspace), signing in navree-auth
+    // users; XML signatures and ID tokens are verified with navree-crypto's
+    // `jose` (ring), IdP metadata, key sets and DNS checks go through
+    // navree-http-client, and states, replays and one-time codes live in
+    // navree-cache.
+    rule("navree-sso", 6, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto",
+        "navree-cache", "navree-events", "navree-http-client", "navree-db", "navree-auth",
+        "navree-workspace",
+    ]),
     // Localization: Fluent messages, the request's locale (the signed-in
     // user's or the workspace's saved one, a query parameter, a cookie,
     // Accept-Language), translated validation messages, a `t` function in
@@ -251,6 +295,16 @@ const HIERARCHY: &[Rule] = &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-view",
         "navree-db", "navree-validation", "navree-notify", "navree-workspace",
         "navree-i18n-macros",
+    ]),
+    // Documents: PDF from Typst templates (an embedded compiler) or HTML
+    // templates (navree-view, printed by headless Chrome), DOCX, and PDF
+    // merge and stamp. Queued renders go through the job dispatcher of
+    // navree-contracts and land on a storage disk; with its `operations`
+    // feature, a render runs as the work of a navree-queue operation
+    // started in a navree-db unit of work.
+    rule("navree-documents", 6, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-view",
+        "navree-storage", "navree-db", "navree-queue",
     ]),
     // L7: packages built on other packages.
     // Search: full-text and vector search over entities. The server engines
@@ -297,11 +351,14 @@ const HIERARCHY: &[Rule] = &[
         "navree-events", "navree-view", "navree-db", "navree-observe", "navree-queue",
         "navree-access",
     ]),
-    // Helm: the admin panel. navree-crypto seals its session cookie.
+    // Helm: the admin panel. navree-crypto seals its session cookie; with
+    // its `settings` feature, the Settings screens edit navree-settings'
+    // types (organizations and workspaces named by navree-workspace).
     rule("navree-helm", 7, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-view",
         "navree-cache", "navree-crypto", "navree-db", "navree-storage", "navree-queue",
         "navree-validation", "navree-audit", "navree-access", "navree-auth", "navree-workspace",
+        "navree-settings",
     ]),
     // L8: entry points.
     rule("navree", 8, RUNTIME_CRATES),
@@ -373,11 +430,13 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-browser",
     "navree-auth",
     "navree-workspace",
+    "navree-mongo",
     "navree-redis",
     "navree-social",
     "navree-webhooks",
     "navree-oauth",
     "navree-flags",
+    "navree-settings",
     "navree-search",
     "navree-graphql",
     "navree-grpc",
@@ -387,10 +446,12 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-lighthouse",
     "navree-logbook",
     "navree-micro",
+    "navree-sso",
     "navree-fleet",
     "navree-helm",
     "navree-i18n",
     "navree-i18n-macros",
+    "navree-documents",
 ];
 
 /// Cargo dependency kind of an edge.

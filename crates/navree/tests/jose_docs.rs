@@ -22,6 +22,30 @@ use serde_json::{Value, json};
 /// An RSA key in PKCS#8, from navree-crypto's fixtures.
 const RSA_PEM: &str = include_str!("../../navree-crypto/tests/fixtures/jose/rsa-2048.pem");
 
+/// A self-signed certificate of [`RSA_PEM`]'s key.
+const RSA_CERT: &str = include_str!("../../navree-crypto/tests/fixtures/jose/rsa-2048-cert.pem");
+
+/// "Verifying keys": a certificate (PEM or DER) gives its public key.
+#[test]
+fn certificates_give_their_public_key() -> Result<(), JoseError> {
+    use base64::Engine as _;
+    let body: String = RSA_CERT
+        .lines()
+        .filter(|line| !line.starts_with("-----"))
+        .collect();
+    let der = base64::engine::general_purpose::STANDARD
+        .decode(body)
+        .expect("base64");
+    let signature = SigningKey::from_pem(RSA_PEM)?.sign(b"signed")?;
+    for key in [
+        VerifyingKey::from_pem(RSA_CERT)?,
+        VerifyingKey::from_certificate_der(&der)?,
+    ] {
+        key.verify(Algorithm::RS256, b"signed", &signature)?;
+    }
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // "Signing a token": the page's function, as written.
 

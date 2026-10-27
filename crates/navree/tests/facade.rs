@@ -67,6 +67,13 @@ fn every_module_crate_is_reexported_whole() {
     assert!(same::<navree::workspace::WorkspaceModule, WorkspaceModule>());
     // L6
     assert!(same::<navree::webhooks::WebhooksModule, WebhooksModule>());
+    assert!(same::<navree::settings::SettingsModule, SettingsModule>());
+    assert!(same::<
+        navree::settings::Setting<FacadeSettings>,
+        Setting<FacadeSettings>,
+    >());
+    assert!(same::<navree::settings::Settings, navree::settings::Settings>());
+    assert!(same::<navree::sso::SsoModule, SsoModule>());
     // L7
     assert!(same::<navree::lighthouse::LighthouseModule, LighthouseModule>());
     assert!(same::<
@@ -198,6 +205,34 @@ type DummyEntity = navree::access::entity::role::Entity;
 struct Thing {
     id: i64,
     name: String,
+}
+
+/// Settings declared through the facade: the derive names
+/// `::navree::settings`.
+#[derive(
+    navree::settings::Settings,
+    Clone,
+    Debug,
+    Default,
+    serde::Serialize,
+    serde::Deserialize,
+    garde::Validate,
+)]
+#[settings(key = "facade", scopes(global, user))]
+struct FacadeSettings {
+    #[garde(skip)]
+    compact: bool,
+}
+
+#[test]
+fn the_settings_derive_works_through_the_facade() {
+    use navree::settings::{ScopeKind, SettingsGroup};
+    assert_eq!(FacadeSettings::KEY, "facade");
+    assert_eq!(FacadeSettings::SCOPES, [ScopeKind::Global, ScopeKind::User]);
+    assert_eq!(
+        FacadeSettings::DESCRIPTION,
+        "Settings declared through the facade: the derive names `::navree::settings`."
+    );
 }
 
 #[test]
@@ -372,10 +407,11 @@ struct Features {
 /// runtime never needs (`dock`, `harbor`, `navigator`), and ecosystem
 /// libraries and packages an app turns on by name (`features = ["social"]`,
 /// `features = ["oauth"]`, `features = ["flags"]`, `features = ["graphql"]`,
-/// `features = ["grpc"]`, `features = ["billing"]`, `features = ["search"]`,
-/// `features = ["mcp"]`, `features = ["ai"]`, `features = ["redis"]`,
-/// `features = ["micro"]`, `features = ["i18n"]`), and test-only crates
-/// (`features = ["browser"]` in `[dev-dependencies]`).
+/// `features = ["grpc"]`, `features = ["documents"]`, `features = ["billing"]`,
+/// `features = ["search"]`, `features = ["mcp"]`, `features = ["ai"]`,
+/// `features = ["redis"]`, `features = ["micro"]`, `features = ["i18n"]`,
+/// `features = ["mongodb"]`), and test-only crates (`features = ["browser"]`
+/// in `[dev-dependencies]`).
 const OPT_IN: &[&str] = &[
     "dock",
     "harbor",
@@ -385,6 +421,7 @@ const OPT_IN: &[&str] = &[
     "flags",
     "graphql",
     "grpc",
+    "documents",
     "billing",
     "search",
     "mcp",
@@ -393,6 +430,8 @@ const OPT_IN: &[&str] = &[
     "micro",
     "i18n",
     "browser",
+    "mongo",
+    "mongodb",
 ];
 
 /// Always compiled into the facade (not behind a feature).
@@ -761,6 +800,21 @@ fn opt_in_libraries_are_reexported_whole() {
         navree::social::Social::fake();
 }
 
+/// `navree::mongo` is navree-mongo re-exported whole, and the `mongo`
+/// feature (also called `mongodb`) puts `MongoModule` and `MongoDb` in the
+/// prelude (`cargo test -p navree --features mongodb --test facade`).
+#[cfg(feature = "mongo")]
+#[test]
+fn mongo_is_reexported_with_its_feature() {
+    assert!(same::<navree::mongo::MongoModule, MongoModule>());
+    assert!(same::<navree::mongo::MongoDb, MongoDb>());
+    assert_eq!(
+        navree::mongo::MongoOptions::default().url,
+        "mongodb://127.0.0.1:27017/navree"
+    );
+    assert!(!navree::mongo::ObjectId::new().is_nil());
+}
+
 /// `navree::redis` is navree-redis re-exported whole, and the `redis`
 /// feature puts `RedisModule` in the prelude
 /// (`cargo test -p navree --features redis --test facade`).
@@ -838,4 +892,15 @@ fn micro_is_reexported_with_its_feature() {
         fake.transport().kind(),
         Some(navree::micro::TransportKind::Custom)
     );
+}
+
+/// `navree::documents` is navree-documents re-exported whole, and the
+/// `documents` feature puts its module in the prelude
+/// (`cargo test -p navree --features documents`).
+#[cfg(feature = "documents")]
+#[test]
+fn documents_is_reexported_with_its_feature() {
+    assert!(same::<navree::documents::DocumentsModule, DocumentsModule>());
+    let pdf = navree::documents::Pdf::from_lines(["Invoice 42"]);
+    assert_eq!(pdf.page_count().unwrap(), 1);
 }
