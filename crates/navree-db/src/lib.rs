@@ -82,8 +82,10 @@
 //! ```
 #![forbid(unsafe_code)]
 
+mod client;
 mod connections;
 mod db;
+mod events;
 mod http;
 mod migrate;
 mod module;
@@ -97,8 +99,10 @@ mod seed;
 mod text;
 mod uow;
 
+pub use client::ClientCommand;
 pub use connections::DbConnections;
 pub use db::{DEFAULT_CONNECTION, Db, PoolStats};
+pub use events::{ConnectionEstablished, DatabaseBusy, DatabaseStatus};
 pub use http::map_db_error;
 pub use migrate::{
     FreshOptions, LoadedDump, MIGRATIONS_TABLE, MigrateOptions, MigrationError, MigrationReport,

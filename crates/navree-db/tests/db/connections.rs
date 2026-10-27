@@ -188,6 +188,120 @@ async fn any_connection_reaches_the_others_by_name() {
     assert!(error.to_string().contains("belongs to no app"), "{error}");
 }
 
+/// Records the events published through `dyn EventSink`.
+#[derive(Default)]
+pub struct Recorder(std::sync::Mutex<Vec<(String, serde_json::Value)>>);
+
+impl Recorder {
+    pub fn events(&self) -> Vec<(String, serde_json::Value)> {
+        self.0.lock().unwrap().clone()
+    }
+}
+
+impl navree_contracts::EventSink for Recorder {
+    fn publish(
+        &self,
+        name: &str,
+        payload: serde_json::Value,
+    ) -> navree_kernel::BoxFuture<'_, Result<(), navree_kernel::BoxError>> {
+        self.0.lock().unwrap().push((name.to_owned(), payload));
+        Box::pin(async { Ok(()) })
+    }
+}
+
+/// Provides `recorder` as the app's `dyn EventSink`.
+pub struct Events(pub Arc<Recorder>);
+
+impl navree_kernel::Module for Events {
+    fn register(&self, m: &mut navree_kernel::ModuleBuilder) {
+        m.global();
+        m.value_arc::<dyn navree_contracts::EventSink>(self.0.clone());
+        m.exports::<dyn navree_contracts::EventSink>();
+    }
+}
+
+#[tokio::test]
+async fn connections_announce_themselves_and_the_monitor_reports_them() {
+    use navree_db::{ConnectionEstablished, DatabaseStatus};
+    use serde_json::json;
+
+    let main = TempDb::new();
+    let analytics = TempDb::new();
+    let mut connections = BTreeMap::new();
+    connections.insert("analytics".to_owned(), analytics.options());
+    let recorder = Arc::new(Recorder::default());
+    let app = Navree::app()
+        .module(Events(recorder.clone()))
+        .module(DatabaseModule::for_root(DbOptions {
+            connections,
+            ..main.options()
+        }))
+        .boot()
+        .await
+        .unwrap();
+    assert_eq!(
+        recorder.events(),
+        [(
+            ConnectionEstablished::NAME.to_owned(),
+            json!({"connection": "default"})
+        )]
+    );
+    let registry = app.ctx().get::<DbConnections>().await.unwrap();
+    let statuses = registry.monitor(&[], Some(0)).await.unwrap();
+    assert_eq!(
+        statuses,
+        [
+            DatabaseStatus {
+                connection: "analytics".into(),
+                open: None,
+                busy: false
+            },
+            DatabaseStatus {
+                connection: "default".into(),
+                open: None,
+                busy: false
+            },
+        ],
+        "SQLite has no server to count connections on"
+    );
+    assert_eq!(
+        recorder.events()[1],
+        (
+            ConnectionEstablished::NAME.to_owned(),
+            json!({"connection": "analytics"})
+        ),
+        "a named connection announces itself when it opens"
+    );
+    assert_eq!(recorder.events().len(), 2, "no db.busy for SQLite");
+    let unknown = registry.monitor(&["reports".to_owned()], None).await;
+    assert!(unknown.is_err());
+
+    // The commands.
+    app.run_command("db:monitor", vec!["--databases".into(), "default".into()])
+        .await
+        .unwrap();
+    let bad = app
+        .run_command("db:monitor", vec!["--max".into(), "many".into()])
+        .await
+        .unwrap_err();
+    assert!(bad.to_string().contains("--max takes a number"), "{bad}");
+    let missing = app
+        .run_command("db", vec!["reports".into()])
+        .await
+        .unwrap_err();
+    assert!(
+        missing
+            .to_string()
+            .contains("no database connection named `reports`"),
+        "{missing}"
+    );
+    let flag = app
+        .run_command("db", vec!["--both".into()])
+        .await
+        .unwrap_err();
+    assert!(flag.to_string().contains("unknown argument `--both`"), "{flag}");
+}
+
 #[tokio::test]
 async fn pool_settings_statistics_and_closing() {
     let temp = TempDb::new();

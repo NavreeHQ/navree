@@ -7,7 +7,7 @@ use navree_contracts::{HealthCheck, HealthStatus};
 use navree_http::ModuleBuilderHttpExt;
 use navree_kernel::{
     AppContext, BoxError, BoxFuture, CommandSpec, Factory as ProviderFactory, Injectable,
-    Lifecycle, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver,
+    Lifecycle, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver, Scope,
 };
 use navree_telemetry::Telemetry;
 use sea_orm::DbErr;
@@ -15,7 +15,11 @@ use sea_orm::DbErr;
 use crate::http::{map_db_error, uow_layer};
 use crate::migrate::{self, MigrationSet, commands};
 use crate::seed::run_seeders;
-use crate::{ChangeObserver, DEFAULT_CONNECTION, Db, DbConnections, DbOptions, Seeder};
+use crate::events::publish;
+use crate::{
+    ChangeObserver, ClientCommand, ConnectionEstablished, DEFAULT_CONNECTION, Db, DbConnections,
+    DbOptions, Seeder,
+};
 
 /// The database module. Global; provides and exports [`Db`],
 /// [`DbOptions`] and [`DbConnections`] (the named connections of
@@ -94,7 +98,9 @@ fn register(m: &mut ModuleBuilder, options: Option<DbOptions>) {
     m.global();
     // Each connection is also a named `Db` provider: `default` always, the
     // named ones when the options are given in code (configured ones are
-    // known only at boot; `DbConnections` reaches them).
+    // known only at boot; `DbConnections` reaches them). Transient, so a
+    // named connection still opens on first use, not at boot; every
+    // resolution hands out the same pool.
     let mut names = vec![DEFAULT_CONNECTION.to_owned()];
     if let Some(options) = &options {
         names.extend(options.connections.keys().cloned());
@@ -111,6 +117,7 @@ fn register(m: &mut ModuleBuilder, options: Option<DbOptions>) {
                 }
             })
             .named(name)
+            .scope(Scope::Transient)
             .deps(vec![ProviderKey::of::<DbConnections>()]),
         )
         .export_key(key);
@@ -216,13 +223,34 @@ fn register(m: &mut ModuleBuilder, options: Option<DbOptions>) {
             "db:seed",
             "Run the seeders ([name...] to run only some)",
             seed_command,
+        ))
+        .command(CommandSpec::new(
+            "db:monitor",
+            "Show the connections each database has open; publish db.busy above the limit ([--databases a,b] [--max <n>])",
+            monitor_command,
+        ))
+        .command(CommandSpec::new(
+            "db",
+            "Open the database's own client: psql, mysql, mariadb, sqlite3 or mongosh ([connection] [--read | --write])",
+            client_command,
         ));
 }
 
-/// Closes the pool when the app shuts down (SQLite then checkpoints its WAL).
+/// Announces the default connection once the app is up, and closes its
+/// pool when the app shuts down (SQLite then checkpoints its WAL).
 struct PoolCloser(Arc<Db>);
 
 impl Lifecycle for PoolCloser {
+    fn on_bootstrap(&self, ctx: AppContext) -> BoxFuture<'_, Result<(), BoxError>> {
+        Box::pin(async move {
+            let established = ConnectionEstablished {
+                connection: self.0.name().to_owned(),
+            };
+            publish(&ctx, ConnectionEstablished::NAME, &established).await;
+            Ok(())
+        })
+    }
+
     fn on_shutdown(&self, _ctx: AppContext) -> BoxFuture<'_, Result<(), BoxError>> {
         Box::pin(async move {
             self.0.conn().close_by_ref().await?;
@@ -303,5 +331,86 @@ async fn seed_command(ctx: AppContext, args: Vec<String>) -> Result<(), BoxError
     let ran = run_seeders(&ctx, &args).await?;
     let ran: Vec<String> = ran.into_iter().map(str::to_owned).collect();
     print_list("Seeded", &ran, "No seeders are registered.");
+    Ok(())
+}
+
+/// `db:monitor [--databases a,b] [--max <n>]`.
+async fn monitor_command(ctx: AppContext, args: Vec<String>) -> Result<(), BoxError> {
+    let mut databases = Vec::new();
+    let mut max = None;
+    let mut args = args.into_iter();
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--databases" => {
+                let list = args.next().ok_or("--databases takes a list: --databases a,b")?;
+                databases.extend(
+                    list.split(',')
+                        .map(str::trim)
+                        .filter(|name| !name.is_empty())
+                        .map(str::to_owned),
+                );
+            }
+            "--max" => {
+                let value = args.next().ok_or("--max takes a number")?;
+                max = Some(
+                    value
+                        .parse::<u64>()
+                        .map_err(|_| format!("--max takes a number, not `{value}`"))?,
+                );
+            }
+            other => return Err(format!("unknown argument `{other}`").into()),
+        }
+    }
+    let connections = ctx.get::<DbConnections>().await?;
+    for status in connections.monitor(&databases, max).await? {
+        let open = status
+            .open
+            .map_or_else(|| "n/a (no server)".to_owned(), |open| open.to_string());
+        let busy = if status.busy { "  busy" } else { "" };
+        println!("{}: {open} open{busy}", status.connection);
+    }
+    Ok(())
+}
+
+/// `db [connection] [--read | --write]`: the connection's own client with
+/// its credentials, attached to this terminal.
+async fn client_command(ctx: AppContext, args: Vec<String>) -> Result<(), BoxError> {
+    let mut connection = DEFAULT_CONNECTION.to_owned();
+    let mut read = false;
+    for arg in args {
+        match arg.as_str() {
+            "--read" => read = true,
+            "--write" => read = false,
+            other if !other.starts_with('-') => connection = other.to_owned(),
+            other => return Err(format!("unknown argument `{other}`").into()),
+        }
+    }
+    let options = ctx.get::<DbOptions>().await?;
+    let options = if connection == DEFAULT_CONNECTION {
+        DbOptions::clone(&options)
+    } else {
+        options.connections.get(&connection).cloned().ok_or_else(|| {
+            format!("no database connection named `{connection}`")
+        })?
+    };
+    let url = match options.read_urls.first() {
+        Some(replica) if read => replica,
+        _ => &options.url,
+    };
+    let client = ClientCommand::for_url(url)?;
+    let status = tokio::process::Command::new(&client.program)
+        .args(&client.args)
+        .envs(client.env.iter().map(|(name, value)| (name, value)))
+        .status()
+        .await
+        .map_err(|error| {
+            format!(
+                "could not start `{}` ({error}); is it installed and on PATH?",
+                client.program
+            )
+        })?;
+    if !status.success() {
+        return Err(format!("`{}` exited with {status}", client.program).into());
+    }
     Ok(())
 }
