@@ -9,13 +9,24 @@ use syn::punctuated::Punctuated;
 use syn::{Ident, Token};
 
 /// The lifecycle keys `#[model(..)]` takes on a struct.
-pub(crate) const KEYS: &[&str] = &["observers"];
+pub(crate) const KEYS: &[&str] = &["observers", "prunable", "mass_prunable"];
+
+/// How the model is pruned.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Prune {
+    /// `prunable`: record by record (`Prunable`).
+    Each,
+    /// `mass_prunable`: a chunk per statement (`MassPrunable`).
+    Mass,
+}
 
 /// What the lifecycle attributes say.
 #[derive(Default)]
 pub(crate) struct Lifecycle {
     /// `observers(DealObserver, ..)`: expressions building observers.
     pub(crate) observers: Vec<syn::Expr>,
+    /// `prunable` or `mass_prunable`.
+    pub(crate) prune: Option<Prune>,
 }
 
 /// Parses `meta` when it is a lifecycle key; `Ok(false)` when it is not.
@@ -30,8 +41,35 @@ pub(crate) fn parse_key(lifecycle: &mut Lifecycle, meta: &ParseNestedMeta<'_>) -
         }
         lifecycle.observers.extend(observers);
         Ok(true)
+    } else if path.is_ident("prunable") || path.is_ident("mass_prunable") {
+        let prune = if path.is_ident("prunable") {
+            Prune::Each
+        } else {
+            Prune::Mass
+        };
+        if !meta.input.is_empty() && !meta.input.peek(Token![,]) {
+            return Err(meta.error(
+                "`prunable` and `mass_prunable` take no value: implement `Prunable` / `MassPrunable` for the model",
+            ));
+        }
+        if lifecycle.prune.is_some_and(|known| known != prune) {
+            return Err(meta.error(
+                "a model is `prunable` (record by record) or `mass_prunable` (a chunk per statement), not both",
+            ));
+        }
+        lifecycle.prune = Some(prune);
+        Ok(true)
     } else {
         Ok(false)
+    }
+}
+
+/// What the lifecycle adds to the model's `ModelMeta`: how it is pruned.
+pub(crate) fn meta_additions(lifecycle: &Lifecycle, model: &Ident, krate: &TokenStream) -> TokenStream {
+    match lifecycle.prune {
+        Some(Prune::Each) => quote!(.pruned(#krate::prune::Pruning::each::<#model>())),
+        Some(Prune::Mass) => quote!(.pruned(#krate::prune::Pruning::mass::<#model>())),
+        None => quote!(),
     }
 }
 

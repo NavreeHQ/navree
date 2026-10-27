@@ -6,6 +6,7 @@ mod models;
 
 mod dispatch;
 mod observers;
+mod prune;
 mod quiet;
 mod scopes;
 mod soft_deletes;

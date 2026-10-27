@@ -341,6 +341,7 @@ pub struct ModelMeta {
     deleted_at: Option<&'static str>,
     connection: Option<&'static str>,
     per_page: u64,
+    pruning: Option<crate::prune::Pruning>,
 }
 
 impl ModelMeta {
@@ -358,7 +359,22 @@ impl ModelMeta {
             deleted_at: None,
             connection: None,
             per_page: 15,
+            pruning: None,
         }
+    }
+
+    /// How `model:prune` prunes the model (`#[model(prunable)]`,
+    /// `#[model(mass_prunable)]`).
+    pub const fn pruned(self, pruning: crate::prune::Pruning) -> Self {
+        ModelMeta {
+            pruning: Some(pruning),
+            ..self
+        }
+    }
+
+    /// How the model is pruned, when it is prunable.
+    pub const fn pruning(&self) -> Option<&crate::prune::Pruning> {
+        self.pruning.as_ref()
     }
 
     /// The key column and how it gets its value.

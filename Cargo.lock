@@ -4937,6 +4937,7 @@ dependencies = [
  "navree-config",
  "navree-contracts",
  "navree-db",
+ "navree-events",
  "navree-http",
  "navree-kernel",
  "navree-orm-macros",

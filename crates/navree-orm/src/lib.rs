@@ -106,6 +106,7 @@ mod options;
 pub mod pagination;
 mod persist;
 pub mod prelude;
+pub mod prune;
 mod query;
 mod quiet;
 mod record;

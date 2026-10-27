@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use navree_config::Config;
 use navree_kernel::{
-    BoxFuture, Factory, Injectable, Module, ModuleBuilder, ModuleId, Resolver,
+    BoxFuture, CommandSpec, Factory, Injectable, Module, ModuleBuilder, ModuleId, Resolver,
 };
 
 use crate::error::Result;
@@ -30,7 +30,8 @@ use crate::strict::{self, Strictness, Violation};
 /// - installs, at boot, the global scopes modules register
 ///   ([`ModuleBuilderOrmExt::global_scope`]);
 /// - keeps the registry of the app's models
-///   ([`ModuleBuilderOrmExt::model`]) for tooling such as `model:prune`.
+///   ([`ModuleBuilderOrmExt::model`]) for tooling;
+/// - registers the command `model:prune` (see [`prune`](crate::prune)).
 ///
 /// The ORM works without it (models need no module); add it to configure
 /// strict modes and their handlers, or let a module that registers scopes
@@ -190,7 +191,12 @@ fn register(m: &mut ModuleBuilder, options: Option<OrmOptions>, handlers: Handle
                 }))
             }
         }))
-        .exports::<OrmRuntime>();
+        .exports::<OrmRuntime>()
+        .command(CommandSpec::new(
+            "model:prune",
+            "Prune the registered prunable models ([--model M]... [--except M]... [--chunk N] [--pretend])",
+            crate::prune::prune_command,
+        ));
 }
 
 /// The app's environment: top-level `env` (`APP_ENV`), else `app.env`.
