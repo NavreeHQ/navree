@@ -1,6 +1,6 @@
 ---
 name: navree-documents
-description: "PDF and Word documents with navree-documents: the opt-in `documents` facade feature, `DocumentsModule` and the `documents` config section, `Documents::pdf(name, &data)` and `render(&Render)`, Typst templates (`.typ`, data at `/data.json`, `sys.inputs` locale and dir, bundled Noto fonts for Arabic and Devanagari, font dirs, local packages) and HTML templates printed by headless Chrome (navree-view syntax, `locale`/`dir` variables, assets from the template tree, `/_navree/fonts.css`, blocked network, `PrintOptions`, the page pool, `documents.chrome.path`/`endpoint`, `NAVREE_BROWSER_CHROME`), engine choice, right-to-left text, `Pdf` responses and `download`/`inline`, `Pdf::merge`, `stamp`, `overlay`, `text()` in tests, `Docx` (headings, paragraphs, lists, tables, images, page numbers, RTL), `save`, `queue` with `QueuedDocument` and `status`, the `documents.render` job and its `.failed` record, `m.document_files`, the `documents:render` and `documents:fonts` commands, and `DocumentsFake`. Use when generating certificates, invoices, reports or exports as PDF or DOCX, adding a document template, rendering Arabic or other right-to-left documents, stamping or merging PDFs, queueing a long export, testing a document's text, or debugging TemplateNotFound, a template error, a 503 from the Chrome engine, or tofu boxes instead of letters."
+description: "PDF and Word documents with navree-documents: the opt-in `documents` facade feature, `DocumentsModule` and the `documents` config section, `Documents::pdf(name, &data)` and `render(&Render)`, Typst templates (`.typ`, data at `/data.json`, `sys.inputs` locale and dir, bundled Noto fonts for Arabic and Devanagari, font dirs, local packages) and HTML templates printed by headless Chrome (navree-view syntax, `locale`/`dir` variables, assets from the template tree, `/_navree/fonts.css`, blocked network, `PrintOptions`, the page pool, `documents.chrome.path`/`endpoint`, `NAVREE_BROWSER_CHROME`), engine choice, right-to-left text, `Pdf` responses and `download`/`inline`, `Pdf::merge`, `stamp`, `overlay`, `text()` in tests, `Docx` (headings, paragraphs, lists, tables, images, page numbers, RTL), `save`, `queue` with `QueuedDocument` and `status`, `queue_operation` (a queued export behind a navree-queue operation users follow, `RENDER_FAILED_MESSAGE`), the `documents.render` job, its progress and its `.failed` record, `m.document_files`, the `documents:render` and `documents:fonts` commands, and `DocumentsFake`. Use when generating certificates, invoices, reports or exports as PDF or DOCX, adding a document template, rendering Arabic or other right-to-left documents, stamping or merging PDFs, queueing a long export, testing a document's text, or debugging TemplateNotFound, a template error, a 503 from the Chrome engine, or tofu boxes instead of letters."
 ---
 
 # Documents
@@ -189,6 +189,34 @@ match documents.status(&queued).await? {
   errors are recorded at once without retrying.
 - Failures are written to `<path>.failed` on the same disk; a later success
   deletes it.
+- The job reports progress (`ctx.progress`: "Rendering the document",
+  "Saving the document") and stops when its operation or batch is cancelled.
+
+### Behind an operation (what users follow)
+
+```rust
+// needs QueueModule + DatabaseModule; facade: `documents` + `queue` (in `full`)
+#[post("/audit")]
+#[authenticated]
+async fn export(&self, uow: Uow, CurrentPrincipal(me): CurrentPrincipal, Json(input): Json<ExportInput>)
+    -> Result<Json<OperationRecord>> {
+    let render = Render::template("reports/audit").data(json!({ "quarter": input.quarter }));
+    let op = self.documents
+        .queue_operation(&self.operations, &uow, Operation::new("audit.export").owner(me.user_id),
+                         render, format!("exports/audit-{}.pdf", input.quarter))
+        .await?;
+    Ok(Json(op)) // client follows GET /api/operations/{id} (or /events, or channel operations.{id})
+}
+```
+
+- Succeeded: `result = {"disk", "path", "size"}`; serve the file from your
+  own route (or a `temporary_url`).
+- Template/data error: `failed` at once with `RENDER_FAILED_MESSAGE` ("The
+  document could not be rendered."), no retries; details in logs and
+  `<path>.failed`. Engine/disk errors retry, then the queue fails it.
+- Cancel (`DELETE /api/operations/{id}`) stops it before saving.
+- Bad path: `DocumentsError::Storage`, no operation started.
+- On `navree-documents` directly this is the crate feature `operations`.
 
 ## Templates shipped by a module
 
@@ -234,6 +262,8 @@ let app = TestApp::builder()
 // ... exercise the app ...
 fake.assert_rendered_with("certificates/course", |render| render.data["name"] == "Ada");
 fake.assert_queued("reports/audit");     // queue() records, does not render
+// queue_operation() starts the operation (stays pending) and records the render;
+// fake.queued()[0].document.operation_id == Some(op.id)
 let fake = DocumentsFake::new().fail("reports/audit", "broken"); // a failing template
 ```
 
@@ -248,7 +278,7 @@ in the crate run against a mock DevTools endpoint; real-browser tests read
 - [ ] Templates under a `documents.templates` directory (or embedded with `m.document_files`).
 - [ ] HTML templates print every variable they use (undefined is an error) and link `/_navree/fonts.css` when they print Arabic or Devanagari.
 - [ ] Chrome installed in the production image (or `documents.chrome.endpoint`), `no_sandbox` when it runs as root.
-- [ ] Handlers return `pdf.download(name)` (or the `Pdf`); queued exports return the `QueuedDocument` and poll `status`.
+- [ ] Handlers return `pdf.download(name)` (or the `Pdf`); queued exports return the `OperationRecord` from `queue_operation` (or the `QueuedDocument` from `queue`, polled with `status`).
 - [ ] A test asserts on the document's text (or a `DocumentsFake` records the render).
 
 ## Gotchas
