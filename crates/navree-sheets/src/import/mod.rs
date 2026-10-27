@@ -2,10 +2,15 @@
 //! ([`ImportRow`]), and what an import looks like while it is staged and
 //! applied ([`ImportRecord`], [`ImportRowRecord`]).
 
+pub(crate) mod controller;
 pub(crate) mod de;
 pub(crate) mod decode;
+pub(crate) mod jobs;
 pub(crate) mod mapping;
 pub(crate) mod read;
+pub(crate) mod registry;
+pub(crate) mod service;
+pub(crate) mod store;
 
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashSet};
@@ -173,7 +178,7 @@ pub trait Import: Send + Sync + 'static {
     const NAME: &'static str;
 
     /// What one row is read into.
-    type Row: ImportRow + DeserializeOwned + Validate<Context = ()> + Send + 'static;
+    type Row: ImportRow + DeserializeOwned + Validate<Context = ()> + Send + Sync + 'static;
 
     /// The permission a user needs to upload and apply files of this
     /// import (default `{NAME}.import`, checked app-wide or in the import's
@@ -498,14 +503,23 @@ pub struct ImportRecord {
     pub updated_at: DateTime<Utc>,
     /// When it was applied.
     pub finished_at: Option<DateTime<Utc>>,
+    /// The disk the upload and the error file are on.
     #[serde(skip)]
     pub(crate) disk: String,
+    /// The upload's path on the disk.
     #[serde(skip)]
     pub(crate) path: String,
+    /// The error file's path on the disk.
     #[serde(skip)]
     pub(crate) error_path: Option<String>,
-    /// A mapping chosen for the next staging, to save for files with these
-    /// headers.
+    /// The locale the upload was made in (staging messages use it).
+    #[serde(skip)]
+    pub(crate) locale: Option<String>,
+    /// Whether `mapping` was chosen (with the upload or later) rather than
+    /// found.
+    #[serde(skip)]
+    pub(crate) mapping_chosen: bool,
+    /// Save the chosen mapping for files with these headers once staged.
     #[serde(skip)]
     pub(crate) save_mapping: bool,
 }

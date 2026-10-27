@@ -87,12 +87,9 @@ const NOT_SPREADSHEETS: &[(&[u8], &str)] = &[
     (b"GIF8", "a GIF image"),
 ];
 
-/// Reads `bytes` (a file named `filename`) into a table.
-pub(crate) fn read_table(
-    bytes: &[u8],
-    filename: &str,
-    options: &ReadOptions<'_>,
-) -> Result<Table, SheetsError> {
+/// Refuses, before anything else, a file that is empty or plainly not a
+/// spreadsheet (a PDF, an image).
+pub(crate) fn refuse(bytes: &[u8]) -> Result<(), SheetsError> {
     if bytes.iter().all(u8::is_ascii_whitespace) {
         return Err(SheetsError::UnsupportedFile("The file is empty.".into()));
     }
@@ -103,6 +100,16 @@ pub(crate) fn read_table(
             )));
         }
     }
+    Ok(())
+}
+
+/// Reads `bytes` (a file named `filename`) into a table.
+pub(crate) fn read_table(
+    bytes: &[u8],
+    filename: &str,
+    options: &ReadOptions<'_>,
+) -> Result<Table, SheetsError> {
+    refuse(bytes)?;
     let extension = filename
         .rsplit_once('.')
         .map(|(_, ext)| ext.to_ascii_lowercase())
@@ -134,24 +141,19 @@ fn read_text(bytes: &[u8], tab: bool, options: &ReadOptions<'_>) -> Result<Table
         .from_reader(decoded.text.as_bytes());
     let mut records = Vec::new();
     // A spreadsheet shows one row per line, blank lines included (the csv
-    // crate skips them), except that a quoted cell spanning lines is one
-    // row: the record's line, less the line breaks inside earlier cells.
-    let mut embedded = 0u64;
+    // crate skips them), and a quoted cell spanning lines in one row: the
+    // record's line as the csv crate counts it (line breaks inside quotes
+    // do not count).
     let mut previous = 0u64;
     for record in reader.records() {
         let record = record.map_err(|error| {
             SheetsError::UnsupportedFile(format!("The CSV file cannot be read: {error}"))
         })?;
-        let line = record
+        let number = record
             .position()
-            .map_or(previous + 1, |position| position.line());
-        let number = line.saturating_sub(embedded).max(previous + 1);
+            .map_or(previous + 1, |position| position.line())
+            .max(previous + 1);
         previous = number;
-        embedded += record
-            .iter()
-            .map(|field| field.matches('
-').count() as u64)
-            .sum::<u64>();
         records.push((
             number,
             record.iter().map(text_cell).collect::<Vec<_>>(),
@@ -345,20 +347,14 @@ mod tests {
     #[test]
     fn a_cell_spanning_lines_is_one_row() {
         let table = read_table(
-            b"Name,Note
-Ada,\"first
-second\"
-
-Alan,x
-",
+            b"Name,Note\nAda,\"first\nsecond\"\n\nAlan,x\n",
             "people.csv",
             &options(),
         )
         .unwrap();
         let numbers: Vec<u64> = table.rows.iter().map(|r| r.number).collect();
         assert_eq!(numbers, [2, 4]);
-        assert_eq!(table.rows[0].cells[1], Cell::Text("first
-second".into()));
+        assert_eq!(table.rows[0].cells[1], Cell::Text("first\nsecond".into()));
     }
 
     #[test]
