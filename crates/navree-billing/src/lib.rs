@@ -73,6 +73,7 @@ mod subscription;
 mod webhook;
 
 pub use billable::{AsBillable, Billable, BillableRef, USER_BILLABLE, WORKSPACE_BILLABLE};
+pub use entity::SUBSCRIPTION_SUBJECT;
 pub use billing::{Billing, UsageReportSummary};
 pub use checkout::{Checkout, CheckoutBuilder, CheckoutUrl};
 pub use config::{
