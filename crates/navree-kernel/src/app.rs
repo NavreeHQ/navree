@@ -452,10 +452,7 @@ impl AppContext {
     /// decides with it, once at boot, whether anybody listens: navree-db
     /// skips preparing change events in an app with no `dyn ChangeObserver`.
     pub fn multi_count<T: ?Sized + 'static>(&self) -> usize {
-        self.inner
-            .graph
-            .multi_of(std::any::TypeId::of::<T>())
-            .len()
+        self.inner.graph.multi_of(std::any::TypeId::of::<T>()).len()
     }
 
     /// Every value of type `C` contributed by any module, modules in dependency

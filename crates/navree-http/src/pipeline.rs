@@ -311,8 +311,7 @@ where
             ("status", status.to_string()),
         ];
         metrics::counter!("http_requests_total", &labels).increment(1);
-        metrics::histogram!("http_request_duration_seconds", &labels)
-            .record(latency.as_secs_f64());
+        metrics::histogram!("http_request_duration_seconds", &labels).record(latency.as_secs_f64());
     }
     response
 }
@@ -330,9 +329,7 @@ where
 {
     let request_id = request_id_of(&request);
     let reported = TelemetryContext::with_current(|context| {
-        context
-            .telemetry()
-            .enabled(EventKind::ExceptionReported)
+        context.telemetry().enabled(EventKind::ExceptionReported)
     })
     .unwrap_or(false);
     let request_info = reported.then(|| {

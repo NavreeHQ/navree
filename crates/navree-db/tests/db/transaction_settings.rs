@@ -50,8 +50,10 @@ fn transaction_settings_are_on_by_default() {
         serde_json::from_value(serde_json::json!({ "transaction_settings": false }))
             .expect("valid section");
     assert!(!options.transaction_settings);
-    assert!(Db::from_connection(MockDatabase::new(DbBackend::Postgres).into_connection())
-        .transaction_settings());
+    assert!(
+        Db::from_connection(MockDatabase::new(DbBackend::Postgres).into_connection())
+            .transaction_settings()
+    );
 }
 
 #[tokio::test]

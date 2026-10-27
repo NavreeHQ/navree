@@ -62,7 +62,7 @@ impl<K: Hash + Eq + Clone> RateLimiter<K> {
         let now = Instant::now();
         let checks = CHECKS.get().wrapping_add(1);
         CHECKS.set(checks);
-        if checks % SWEEP_EVERY == 0 {
+        if checks.is_multiple_of(SWEEP_EVERY) {
             self.state.retain(|_, slot| slot.tat > now);
         }
         // Holds the lock of the key's shard until the slot is updated.
@@ -137,7 +137,10 @@ mod tests {
             }
         });
         assert_eq!(allowed.into_inner(), 100);
-        assert!(limiter.check(&"another key").is_ok(), "keys are independent");
+        assert!(
+            limiter.check(&"another key").is_ok(),
+            "keys are independent"
+        );
     }
 
     #[tokio::test(start_paused = true)]

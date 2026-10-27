@@ -92,7 +92,8 @@ fn generated_request_ids_are_uuid_v7_in_time_order_without_a_shared_lock() {
         assert_eq!(uuid.get_version_num(), 7, "{id}");
     }
     assert!(
-        ids.windows(2).all(|pair| pair[0].as_str() < pair[1].as_str()),
+        ids.windows(2)
+            .all(|pair| pair[0].as_str() < pair[1].as_str()),
         "one thread's ids sort in the order they were made"
     );
     // Threads generate on their own, and never collide.
