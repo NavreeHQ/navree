@@ -44,6 +44,14 @@ fn flag_reports_misuse() {
     trybuild::TestCases::new().compile_fail("tests/ui/flag/*.rs");
 }
 
+/// `#[agent]` reports tool misuse (no doc comment, not async, an unknown
+/// option, `from` on `#[can]`, two arguments values, an access attribute on
+/// a method that is not a tool) and misplacement, before it needs navree-ai.
+#[test]
+fn agent_reports_misuse() {
+    trybuild::TestCases::new().compile_fail("tests/ui/agent/*.rs");
+}
+
 #[test]
 fn bad_duration_is_error() {
     trybuild::TestCases::new().compile_fail("tests/ui/bad_duration_is_error.rs");

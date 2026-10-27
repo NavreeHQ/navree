@@ -56,6 +56,7 @@ navree-flags = { path = "crates/navree-flags", version = "0.1.0" }
 navree-graphql = { path = "crates/navree-graphql", version = "0.1.0" }
 navree-billing = { path = "crates/navree-billing", version = "0.1.0" }
 navree-grpc = { path = "crates/navree-grpc", version = "0.1.0" }
+navree-ai = { path = "crates/navree-ai", version = "0.1.0" }
 
 # ---------------------------------------------------------------------------
 # Runtime, async and HTTP (Tokio family)

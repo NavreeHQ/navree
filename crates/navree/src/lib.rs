@@ -42,9 +42,10 @@
 //! | `grpc` | navree-grpc | `grpc` (opt-in) | `GrpcModule`: tonic services with gRPC-Web, Connect, health and reflection |
 //! | `billing` | navree-billing | `billing` (opt-in) | `BillingModule`: subscriptions, trials, usage, invoices with Stripe or Paddle |
 //! | `dock` | navree-dock | `dock` (opt-in) | Dock's `dock.toml`, the services' settings and the Compose file |
+//! | `ai` | navree-ai | `ai` (opt-in) | `AiModule`: models, structured output, streaming, agents, embeddings, vector stores |
 //!
 //! `full` (the default) turns on every module except the opt-in ones
-//! (`social`, `oauth`, `flags`, `graphql`, `grpc`, `billing`, `dock`, `otel`). A feature also turns on the features of the crates its crate
+//! (`social`, `oauth`, `flags`, `graphql`, `grpc`, `billing`, `ai`, `dock`, `otel`). A feature also turns on the features of the crates its crate
 //! builds on (`auth` turns on `access`, `db`, `http`, ...). The `postgres` feature adds
 //! navree-db's PostgreSQL driver, and the opt-in `otel` feature adds
 //! navree-observe's OTLP span exporter. `axum` is re-exported with `http`. `dock`
@@ -203,6 +204,8 @@ pub mod flags {
     /// `#[flag]`: a feature flag as a unit struct (see navree-macros).
     pub use navree_macros::flag;
 }
+#[cfg(feature = "ai")]
+pub use navree_ai as ai;
 
 // L7
 #[cfg(feature = "billing")]
