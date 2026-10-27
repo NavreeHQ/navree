@@ -345,7 +345,7 @@ Set `require` in production's environment (`APP_SCHEMA__TIMESCALEDB=require`) an
 
 ## Dumps
 
-`navree schema:dump` writes hypertables, their dimensions, compression settings, policies and continuous aggregates into the [schema dump](/docs/database/migrations/#schema-dumps) through TimescaleDB's functions, so a database loaded from the dump is a TimescaleDB database with the same hypertables.
+`navree schema:dump` writes hypertables, their dimensions, compression settings, policies and continuous aggregates into the [schema dump](/docs/database/squashing-migrations/) through TimescaleDB's functions, so a database loaded from the dump is a TimescaleDB database with the same hypertables.
 
 <LinkCards>
   <LinkCard href="/docs/database/migrations/" title="Migrations">
