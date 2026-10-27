@@ -1,0 +1,33 @@
+[package]
+name = "navree-schema"
+description = "Navree schema builder: tables, columns, indexes and foreign keys in Rust, compiled for PostgreSQL with TimescaleDB, MySQL/MariaDB and SQLite; migrations and hypertables."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = []
+## PostgreSQL driver, for the real-server tests (`NAVREE_TEST_POSTGRES_URL`).
+postgres = ["sea-orm/sqlx-postgres"]
+## MySQL and MariaDB driver, for the real-server tests (`NAVREE_TEST_MYSQL_URL`).
+mysql = ["sea-orm/sqlx-mysql"]
+
+[dependencies]
+navree-config = { workspace = true }
+sea-orm = { workspace = true }
+sea-orm-migration = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
