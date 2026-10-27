@@ -3,6 +3,7 @@
 mod fixtures;
 mod support;
 
+mod change_events;
 mod connect;
 mod http;
 mod migrations;
@@ -13,4 +14,5 @@ mod repo;
 mod seed;
 mod telemetry;
 mod text;
+mod transaction_settings;
 mod uow;

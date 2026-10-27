@@ -17,9 +17,13 @@ use serde::{Deserialize, Deserializer};
 /// max_connections = 10
 /// min_connections = 0
 /// connect_timeout_secs = 8
+/// test_before_acquire = false  # ping every connection taken from the pool (one round trip each)
+/// idle_timeout_secs = 600  # close connections idle this long (0: never)
+/// max_lifetime_secs = 1800 # replace connections this old (0: never)
 /// log_queries = false      # every statement at debug level (target navree_db::query)
 /// slow_query_ms = 200      # statements slower than this at warn level; 0 turns it off
 /// migrate_on_boot = false  # run pending migrations when the app boots
+/// transaction_settings = true  # navree.actor and navree.request_id in every unit of work
 ///
 /// [database.mysql]         # MySQL and MariaDB only
 /// strict = true            # every connection runs in strict SQL mode
@@ -62,12 +66,31 @@ pub struct DbOptions {
     pub min_connections: u32,
     /// How long to wait for a new connection, in seconds.
     pub connect_timeout_secs: u64,
+    /// Pings every connection taken from the pool before handing it out:
+    /// one more round trip per checkout. Off by default: then only a
+    /// connection that sat idle in the pool for
+    /// [`IDLE_PING_SECS`](DbOptions::IDLE_PING_SECS) or more is pinged
+    /// first, since a server, proxy or firewall may have dropped it.
+    pub test_before_acquire: bool,
+    /// Closes connections idle in the pool this long, in seconds (above
+    /// `min_connections`; 0 keeps them).
+    pub idle_timeout_secs: u64,
+    /// Replaces connections this old, in seconds (0: no limit).
+    pub max_lifetime_secs: u64,
     /// Logs every statement (SQL without bound values) at debug level.
     pub log_queries: bool,
     /// Statements slower than this are logged at warn level (0 = never).
     pub slow_query_ms: u64,
     /// Runs pending migrations when the app boots (tests and development).
     pub migrate_on_boot: bool,
+    /// Makes the actor and request id of every unit of work readable in
+    /// SQL: `navree.actor` and `navree.request_id` on PostgreSQL, the
+    /// session variables `@navree_actor` and `@navree_request_id` on MySQL
+    /// and MariaDB (see [`Uow`](crate::Uow)). On by default; turn it off
+    /// when no trigger or policy reads them, to save the statement that
+    /// sets them (and, on MySQL, the one that clears them) in every
+    /// transaction.
+    pub transaction_settings: bool,
     /// MySQL and MariaDB settings (`database.mysql`); other databases
     /// ignore them.
     pub mysql: MySqlOptions,
@@ -80,9 +103,13 @@ impl Default for DbOptions {
             max_connections: 10,
             min_connections: 0,
             connect_timeout_secs: 8,
+            test_before_acquire: false,
+            idle_timeout_secs: 600,
+            max_lifetime_secs: 1800,
             log_queries: false,
             slow_query_ms: 200,
             migrate_on_boot: false,
+            transaction_settings: true,
             mysql: MySqlOptions::default(),
         }
     }
@@ -289,6 +316,11 @@ impl<'de> Deserialize<'de> for IsolationLevel {
 }
 
 impl DbOptions {
+    /// Without [`test_before_acquire`](DbOptions::test_before_acquire), a
+    /// connection idle in the pool at least this many seconds is pinged
+    /// before it is handed out.
+    pub const IDLE_PING_SECS: u64 = 30;
+
     /// Reads the `database` section of `config` and validates it. Without
     /// `database.slow_query_ms`, the logger's `log.slow_query_ms` applies.
     pub fn from_config(config: &Config) -> Result<Self, ConfigError> {
@@ -339,9 +371,13 @@ impl fmt::Debug for DbOptions {
             .field("max_connections", &self.max_connections)
             .field("min_connections", &self.min_connections)
             .field("connect_timeout_secs", &self.connect_timeout_secs)
+            .field("test_before_acquire", &self.test_before_acquire)
+            .field("idle_timeout_secs", &self.idle_timeout_secs)
+            .field("max_lifetime_secs", &self.max_lifetime_secs)
             .field("log_queries", &self.log_queries)
             .field("slow_query_ms", &self.slow_query_ms)
             .field("migrate_on_boot", &self.migrate_on_boot)
+            .field("transaction_settings", &self.transaction_settings)
             .field("mysql", &self.mysql)
             .finish()
     }
