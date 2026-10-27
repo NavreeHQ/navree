@@ -32,7 +32,7 @@ Install the CLI from the Git repository, and let new apps depend on the reposito
 
 ### Data
 
-- **`navree-db`**: SeaORM integration with a unit of work per request (a transaction that commits when the response succeeds), `Repo` with change events, per-module migration sets, seeders, model factories, pagination and the `migrate`, `migrate:rollback`, `migrate:fresh`, `migrate:status` and `db:seed` commands. SQLite by default; PostgreSQL with the `postgres` feature.
+- **`navree-db`**: SeaORM integration with a unit of work per request (a transaction that commits when the response succeeds), `Repo` with change events, per-module migration sets, seeders, model factories, pagination and the `migrate`, `migrate:rollback`, `migrate:fresh`, `migrate:status` and `db:seed` commands. TimescaleDB is the default database (`navree new` sets it up and Dock runs it), with hypertables for Navree's own time-series tables and chunk-dropping pruning (`prune_time_series`); plain PostgreSQL with the same `postgres` feature, MySQL and MariaDB with `mysql`, and SQLite built in.
 - **`navree-cache`**: a memory cache store on moka with `remember`, tags, stale-while-revalidate and atomic locks.
 
 ### Security
@@ -78,7 +78,7 @@ Install the CLI from the Git repository, and let new apps depend on the reposito
 - **[Fleet](/docs/tools/fleet/)** (`navree-fleet`): a queue dashboard at `/_fleet` and a worker supervisor (`navree fleet`) with auto-balanced workers per queue, throughput, wait and runtime metrics, retries for failed jobs, pause and continue, and long-wait alerts.
 - **[Helm](/docs/tools/helm/)** (`navree-helm`): an admin panel at `/admin` generated from your entities, with fields, filters, actions and metrics per resource (`navree make:resource`). It respects your access rules.
 - **[Harbor](/docs/tools/harbor/)**: server provisioning and zero-downtime deployments from the CLI (`navree harbor:provision`, `navree deploy`, `navree deploy:rollback`), configured in `harbor.toml`, with health-checked atomic releases, encrypted secrets, several servers and roles, container images and push-to-deploy from GitHub Actions.
-- **[Dock](/docs/tools/dock/)**: local services for development. `navree dock up` starts PostgreSQL, Redis, Meilisearch, Mailpit, MinIO and NATS in Docker or Podman, configured in `dock.toml`.
+- **[Dock](/docs/tools/dock/)**: local services for development. `navree dock up` starts TimescaleDB (or plain PostgreSQL), Redis, Meilisearch, Mailpit, MinIO and NATS in Docker or Podman, configured in `dock.toml`.
 - **[Navigator](/docs/ai/navigator/)**: the MCP server for your coding agent (`navree mcp`). It lists routes, the module graph and providers, entity schemas, recent logs and the last error, runs read-only SQL and searches the docs for your version.
 
 ### Packages
