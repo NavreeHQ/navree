@@ -161,6 +161,7 @@ impl Renamer<'_> {
                 self.expr(expr);
                 self.expr(pattern);
             }
+            Where::IgnoreCase { expr, .. } => self.expr(expr),
             Where::DatePart { expr, value, .. } => {
                 self.expr(expr);
                 self.expr(value);

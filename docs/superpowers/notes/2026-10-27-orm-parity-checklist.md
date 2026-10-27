@@ -32,7 +32,7 @@ The docs track (`orm-docs`) and the adoption tracks (`orm-adopt-crm`, `orm-adopt
 
 ## Counts
 
-883 lines in 50 areas; 40 of them are n/a lines whose replacement is the deliverable.
+884 lines in 50 areas; 40 of them are n/a lines whose replacement is the deliverable.
 
 ### Per area
 
@@ -45,7 +45,7 @@ The docs track (`orm-docs`) and the adoption tracks (`orm-adopt-crm`, `orm-adopt
 | B1 | Casts and field types | `CST` | 31 | 4 | orm-core 9, orm-attributes 22 |
 | B2 | Accessors, mutators and appended values | `ACC` | 8 | 3 | orm-attributes 8 |
 | B3 | Serialization and visibility | `SER` | 15 | 2 | orm-attributes 14, orm-relations 1 |
-| C1 | Conditions | `QWH` | 45 | 2 | orm-core 37, mysql 2, orm-streams 6 |
+| C1 | Conditions | `QWH` | 46 | 2 | orm-core 38, mysql 2, orm-streams 6 |
 | C2 | Selects, joins, grouping, ordering, limits, unions, locks | `QCL` | 33 | 1 | orm-core 23, orm-streams 8, mysql 2 |
 | C3 | Retrieval and aggregates | `QRT` | 24 | 2 | orm-core 23, orm-streams 1 |
 | C4 | Writes through the builder | `QWR` | 25 | 1 | orm-streams 13, orm-core 11, orm-lifecycle 1 |
@@ -94,7 +94,7 @@ The docs track (`orm-docs`) and the adoption tracks (`orm-adopt-crm`, `orm-adopt
 
 | Track | Lines | of which n/a |
 |---|---:|---:|
-| `orm-core` | 277 | 17 |
+| `orm-core` | 278 | 17 |
 | `orm-relations` | 115 | 1 |
 | `orm-lifecycle` | 50 | 4 |
 | `orm-attributes` | 60 | 10 |
@@ -104,7 +104,7 @@ The docs track (`orm-docs`) and the adoption tracks (`orm-adopt-crm`, `orm-adopt
 | `mysql` | 32 | 1 |
 | `mongodb` | 28 | 0 |
 | `timescale-default` | 15 | 0 |
-| **Total** | **883** | **40** |
+| **Total** | **884** | **40** |
 
 ## Part A. Models and records
 
@@ -318,6 +318,7 @@ The docs track (`orm-docs`) and the adoption tracks (`orm-adopt-crm`, `orm-adopt
 - [ ] **QWH-043** `HAVING` family. — API: `having`, `or_having`, `having_group`, `having_null`, `having_not_null`, `having_between`, `having_not_between` (each with `or_`), `having_raw`, `or_having_raw` — Track: orm-core
 - [ ] **QWH-044** "Or" proxies that turn the next scope call into an `or` group. — API: n/a → `or_where_group(|q| q.scope(f))` — Track: orm-core
 - [ ] **QWH-045** Enums and other typed values bind as their stored representation everywhere (conditions, updates, inserts, upserts). — Track: orm-core
+- [x] **QWH-046** Text that ignores letter case beyond ASCII, the same on every database: case ignored for every letter with case forms, accents kept, the text literal (no wildcards), NULLs never matching. — API: `Column::contains_ignore_case(text)`, `Column::eq_ignore_case(text)` (`Where::IgnoreCase`) — Track: orm-core — Notes: built on navree-db's `contains_ignore_case` / `eq_ignore_case`: a `GLOB` of case variants on SQLite, `LOWER(..)` for ASCII text and a regular expression of case variants otherwise on PostgreSQL (whose `LOWER` folds ASCII only under the `C` locale), lower-cased bytes on MySQL whatever the collation; found while moving the CRM's search onto the ORM. — Tests: crates/navree-orm/tests/sql/text.rs::text_matches_ignoring_case_literally, crates/navree-orm/tests/sql/text.rs::ignoring_case_combines_with_other_conditions, crates/navree-orm/tests/orm/text.rs::contains_ignores_case_beyond_ascii_and_keeps_accents, crates/navree-orm/tests/orm/text.rs::the_text_is_taken_literally, crates/navree-orm/tests/orm/text.rs::equality_ignores_case_and_nulls_never_match, crates/navree-orm/tests/servers/main.rs::postgres_text_ignoring_case, crates/navree-orm/tests/servers/main.rs::mysql_text_ignoring_case, crates/navree-db/tests/postgres_text.rs::non_ascii_text_matches_in_any_case_but_not_without_its_accents
 
 ### C2. Selects, joins, grouping, ordering, limits, unions, locks (`QCL`)
 

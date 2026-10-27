@@ -3,7 +3,7 @@
 //! SQLite, PostgreSQL and MySQL: case is ignored, accents are not (`équipe`
 //! finds `Équipe` but not `Equipe`).
 //!
-//! The usual `LOWER(column) LIKE '%term%'` falls short on two databases:
+//! The usual `LOWER(column) LIKE '%term%'` falls short on every database:
 //!
 //! - SQLite's `LOWER`, `UPPER`, `LIKE` and `NOCASE` fold ASCII letters
 //!   only: `LOWER('Équipe')` stays `'Équipe'`, so neither `équipe` nor
@@ -17,17 +17,25 @@
 //!   (`INSTR(CAST(LOWER(name) AS BINARY), CAST(? AS BINARY)) > 0`), which
 //!   ignores case under every collation and never ignores accents. The
 //!   column must be `utf8mb4`, the connection's character set.
+//! - PostgreSQL's `LOWER` and `ILIKE` follow the database's character
+//!   type: a database created with the `C` locale (`initdb --locale=C`, a
+//!   common production setting) folds ASCII letters only, like SQLite. A
+//!   text whose cased letters are all ASCII is compared with `LOWER(..)`,
+//!   which gives the same result under every locale (and can use an index
+//!   on `LOWER(column)`); a text with other cased letters becomes a
+//!   case-sensitive regular expression whose bracket expressions list
+//!   every case variant of each letter (`"name" ~ '[Éé][qQ][uU]..'`).
 //!
-//! On PostgreSQL, whose `LOWER` follows Unicode, they keep `LOWER(..)
-//! LIKE`. The term is lower-cased letter by letter, as the databases'
-//! `LOWER` does (`ΟΔΟΣ` → `οδοσ`, where `str::to_lowercase` would end the
-//! word with `ς`).
+//! The term is lower-cased letter by letter, as the databases' `LOWER`
+//! does (`ΟΔΟΣ` → `οδοσ`, where `str::to_lowercase` would end the word
+//! with `ς`).
 
 use sea_orm::DbBackend;
 use sea_orm::sea_query::{BinOper, Expr, ExprTrait, Func, LikeExpr};
 
 /// `expr` contains `term`, ignoring case (simple Unicode case mapping).
-/// `%`, `_`, `*`, `?`, `[` and `\` in `term` match themselves. Like any
+/// Every character of `term` matches itself: `%`, `_`, `*`, `?`, `[`, `\`
+/// and the regular-expression characters are not wildcards. Like any
 /// "contains" search, it reads every row: no index helps.
 ///
 /// ```
@@ -58,6 +66,7 @@ pub fn contains_ignore_case(backend: DbBackend, expr: impl Into<Expr>, term: &st
                 .arg(bytes(Expr::val(fold_case(term)))),
         )
         .gt(0),
+        _ if folds_beyond_ascii(term) => regex(expr, regex_pattern(term)),
         _ => lower(expr).like(like_contains(term)),
     }
 }
@@ -80,6 +89,7 @@ pub fn eq_ignore_case(backend: DbBackend, expr: impl Into<Expr>, value: &str) ->
     match backend {
         DbBackend::Sqlite => glob(expr, glob_pattern(value)),
         DbBackend::MySql => bytes(lower(expr)).eq(bytes(Expr::val(fold_case(value)))),
+        _ if folds_beyond_ascii(value) => regex(expr, format!("^{}$", regex_pattern(value))),
         _ => lower(expr).eq(fold_case(value)),
     }
 }
@@ -98,6 +108,40 @@ fn lower(expr: impl Into<Expr>) -> Expr {
 /// collation.
 fn bytes(expr: impl Into<Expr>) -> Expr {
     Expr::expr(Func::cast_as(expr.into(), "BINARY"))
+}
+
+/// PostgreSQL's case-sensitive regular expression match, `expr ~ pattern`.
+fn regex(expr: impl Into<Expr>, pattern: String) -> Expr {
+    expr.into().binary(BinOper::Custom("~"), Expr::val(pattern))
+}
+
+/// Whether `text` has a letter outside ASCII with case variants: a letter
+/// PostgreSQL's `LOWER` folds under some locales only (not under `C`).
+fn folds_beyond_ascii(text: &str) -> bool {
+    text.chars()
+        .any(|c| !c.is_ascii() && case_variants(c).len() > 1)
+}
+
+/// A PostgreSQL regular expression matching exactly `text` in any letter
+/// case: a letter with case variants becomes a bracket expression of them
+/// (`[éÉ]`), and ASCII punctuation is escaped (`\.`, `\%`), so every
+/// character matches itself.
+fn regex_pattern(text: &str) -> String {
+    let mut pattern = String::with_capacity(text.len() * 4);
+    for c in text.chars() {
+        let variants = case_variants(c);
+        if variants.len() > 1 {
+            pattern.push('[');
+            pattern.extend(variants);
+            pattern.push(']');
+        } else {
+            if c.is_ascii_punctuation() {
+                pattern.push('\\');
+            }
+            pattern.push(c);
+        }
+    }
+    pattern
 }
 
 fn glob(expr: impl Into<Expr>, pattern: String) -> Expr {
@@ -217,17 +261,40 @@ mod tests {
     }
 
     #[test]
-    fn postgres_folds_the_term_letter_by_letter() {
-        let sql = Query::select()
-            .column(Alias::new("name"))
-            .from(Alias::new("t"))
-            .and_where(eq_ignore_case(
-                DbBackend::Postgres,
-                Expr::col(Alias::new("name")),
-                "ΟΔΟΣ",
-            ))
-            .to_string(PostgresQueryBuilder);
-        assert!(sql.contains(r#"LOWER("name") = 'οδοσ'"#), "{sql}");
+    fn postgres_matches_letters_beyond_ascii_with_a_regular_expression() {
+        let sql = |condition: Expr| {
+            Query::select()
+                .column(Alias::new("name"))
+                .from(Alias::new("t"))
+                .and_where(condition)
+                .to_string(PostgresQueryBuilder)
+        };
+        let col = || Expr::col(Alias::new("name"));
+        let equals = sql(eq_ignore_case(DbBackend::Postgres, col(), "ΟΔΟΣ"));
+        assert!(
+            equals.contains(r#""name" ~ '^[Οο][Δδ][Οο][Σσ]$'"#),
+            "{equals}"
+        );
+        let contains = sql(contains_ignore_case(
+            DbBackend::Postgres,
+            col(),
+            "Øl (v2.0)",
+        ));
+        // Inline, PostgreSQL's builder doubles the pattern's backslashes.
+        assert!(
+            contains.contains(r#""name" ~ E'[Øø][lL] \\([vV]2\\.0\\)'"#),
+            "{contains}"
+        );
+    }
+
+    #[test]
+    fn regular_expressions_escape_punctuation() {
+        assert_eq!(regex_pattern("Ö.b*c"), r"[Öö]\.[bB]\*[cC]");
+        assert_eq!(regex_pattern("ß 50%_"), r"ß 50\%\_");
+        assert_eq!(regex_pattern("a|b^c$"), r"[aA]\|[bB]\^[cC]\$");
+        // Only letters outside ASCII need the expression on PostgreSQL.
+        assert!(folds_beyond_ascii("Équipe"));
+        assert!(!folds_beyond_ascii("Equipe 50% ß"));
     }
 
     #[test]
@@ -284,10 +351,10 @@ mod tests {
         );
         let postgres = sql(
             DbBackend::Postgres,
-            eq_ignore_case(DbBackend::Postgres, col(), "Énergie"),
+            eq_ignore_case(DbBackend::Postgres, col(), "Ann@Example.com"),
         );
         assert!(
-            postgres.contains(r#"LOWER("name") = 'énergie'"#),
+            postgres.contains(r#"LOWER("name") = 'ann@example.com'"#),
             "{postgres}"
         );
     }
