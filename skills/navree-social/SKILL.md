@@ -241,8 +241,9 @@ Use `FixedClock` (`override_value::<dyn Clock>`) to expire states (600 s).
   to `/callback` (or a sign-in state to `/link`).
 - `return_to` must start with `/` (not `//`); anything else is 400 at the
   redirect.
-- The callback throttle shares `auth.login_throttle_per_minute`; set it to
-  `0` in request-heavy tests.
+- The callback throttle shares `auth.login_throttle_per_minute` (counted per
+  IPv4 address or IPv6 /64, `http.rate_limit_ipv6_prefix`); set it to `0` in
+  request-heavy tests.
 - An `oidc` provider whose discovery document names another issuer answers
   500 (misconfiguration); the fake skips discovery.
 - Users created by social sign-in have no password: `PATCH

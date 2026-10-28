@@ -571,7 +571,9 @@ The strategy runs after the JWT strategy, so a request with a valid bearer token
 | `issue_tokens(&user, meta)` | A new session without asking the sign-in policies (tests, seeders): an access token and the first refresh token of a new family (limited to the two-factor setup when the user [must set it up](/docs/security/account-flows/#requiring-two-factor-authentication)) |
 | `refresh(refresh_token, meta)` | Rotates a refresh token |
 | `logout(refresh_token, user_id, all)` | Ends one session, or all of them |
-| `revoke_all_refresh_tokens(user_id)` | Ends every session of a user |
+| `revoke_all_refresh_tokens(user_id)` | Ends every session of a user (refresh tokens only) |
+| `revoke_all_credentials(user_id)` | Ends every credential of a user: sessions, and what other modules issued (see [offboarding](#offboarding-a-user-or-a-domain)) |
+| `revoke_credentials_of_domain(domain)` | The same for every user of an email domain |
 | `find_user(id)`, `find_by_email(email)` | Look up users |
 | `update_password(user_id, password)` | Sets a password with the policy; sessions are left alone |
 | `present(&user)` | The user resource, with its extensions |
@@ -642,7 +644,7 @@ Tokens are signed with a shared secret, and only HS256 is supported: there are n
 
 ## The login throttle
 
-`POST /api/auth/login` allows `auth.login_throttle_per_minute` (5) failed attempts per email address and client IP address in a one-minute window. The next attempt, even with the right password, gets a 429 until the window ends:
+`POST /api/auth/login` allows `auth.login_throttle_per_minute` (5) failed attempts per email address and client in a one-minute window. A client is an IPv4 address, or an IPv6 network (the first 64 bits of the address, `http.rate_limit_ipv6_prefix`), so rotating through the addresses of one IPv6 allocation gives no fresh attempts. The next attempt, even with the right password, gets a 429 until the window ends:
 
 ```http wrap
 HTTP/1.1 429 Too Many Requests
@@ -652,7 +654,7 @@ Content-Type: application/json
 {"statusCode": 429, "message": "Too many login attempts. Please try again in 60 seconds.", "error": "Too Many Requests", "code": "too_many_login_attempts"}
 ```
 
-- The same account from another address, and other accounts from the same address, are not affected.
+- The same account from another address or network, and other accounts from the same client, are not affected.
 - Each attempt is counted **before** the password is checked, so a burst of parallel guesses can't get more through than the limit. A successful login clears the count.
 - A wrong `current_password` when changing the email or the password, or a wrong password when turning two-factor authentication off, counts against the same limit.
 - The first refusal in each window is written to the audit log as `auth.throttled` (kind `security`), with the email address in its metadata.
@@ -878,6 +880,7 @@ With an [audit log](/docs/security/audit-log/) in the app, the module records:
 | `auth.refresh` | `auth` | A refresh token was rotated; `metadata.family_id` |
 | `auth.refresh_reuse_detected` | `security` | A spent refresh token came back and its family was revoked |
 | `auth.logout` | `auth` | `metadata.all` and `metadata.revoked` (how many tokens) |
+| `auth.credentials_revoked` | `security` | [Offboarding](#offboarding-a-user-or-a-domain): `metadata.domain` (for a domain), `metadata.users`, `metadata.revoked` (the count of each kind) and `metadata.complete` |
 | `auth.platform_login` | `auth` | A platform sign-in finished; `metadata.two_factor` and `metadata.session_id` |
 | `auth.token_exchanged` | `auth` | A trusted issuer's token was accepted; `metadata.issuer` |
 | `auth.token_exchange_failed` | `security` | One was refused; `metadata.issuer` (when known) and `metadata.reason` |
@@ -968,7 +971,7 @@ A sign-in policy decides whether a sign-in may go on. Every flow that signs a pe
 | [Single sign-on](/docs/security/single-sign-on/) | `Sso { connection }` | On the identity provider's address before provisioning, and on the account before the session |
 | `POST /api/auth/platform/login` and `/platform/2fa/verify` | `Password`, audience `Platform` | At both steps; see [break-glass](#platform-administrators) |
 
-A policy implements `SignInPolicy` and is registered with `m.sign_in_policy::<P>()` (`ModuleBuilderAuthExt`). It gets a `SignInAttempt`: the email (trimmed and lower-cased), the user's id once the account is known, the method and the audience (`App` or `Platform`). Every policy must allow; the first refusal is the answer, usually `AuthError::SignInRefused { code, message }`, a 403 with that code. Refusals are audited as `auth.login_refused` with the method, the email and the code.
+A policy implements `SignInPolicy` and is registered with `m.sign_in_policy::<P>()` (`ModuleBuilderAuthExt`). It gets a `SignInAttempt`: the email (trimmed and lower-cased), the user's id once the account is known, the method and the audience (`App` or `Platform`). `attempt.domain()` is the email's domain in one canonical spelling, whatever the form, identity provider or social provider sent: lower case ASCII, without a trailing dot, international names in their `xn--` form, full-width letters and the ideographic full stop mapped (`Eve@ACME.test.` and `eve@acme。test` both give `Some("acme.test")`). Compare it with domains written that way; `navree::auth::email_domain(email)` gives the same form for other comparisons. Every policy must allow; the first refusal is the answer, usually `AuthError::SignInRefused { code, message }`, a 403 with that code. Refusals are audited as `auth.login_refused` with the method, the email and the code.
 
 ```rust title="src/modules/security/policy.rs"
 use navree::auth::{AuthError, SignInAttempt, SignInMethod, SignInPolicy};
@@ -999,7 +1002,39 @@ Register it in a module with `m.sign_in_policy::<PasskeysForContractors>()`. [Si
 
 Your own sign-in flows end with `AuthService::sign_in(&user, method, &meta)`, which asks the policies and then starts the session, or call `check_sign_in(&attempt, &meta)` first and `issue_tokens` after. `check_password_sign_in(email)` asks about `Password` without an audit entry. `issue_tokens` alone asks nothing: keep it for tests and seeders. A two-factor challenge from `two_factor_challenge(&user, &method)` remembers the method, and `POST /api/auth/2fa/verify` asks the policies about it again, so a domain that came to enforce single sign-on between the two steps is refused.
 
-Policies decide at sign-in. Sessions that started before a rule changed go on until they end: to sign everyone of a domain out at once, revoke their sessions (`revoke_all_refresh_tokens`). [Impersonation](/docs/security/impersonation/) is a support session opened by an administrator who already signed in, so it doesn't ask the policies; it has its own permission and audit trail.
+Policies decide at sign-in. Sessions and tokens that started before a rule changed go on until they end: to cut everyone of a domain off at once, [revoke their credentials](#offboarding-a-user-or-a-domain). [Impersonation](/docs/security/impersonation/) is a support session opened by an administrator who already signed in, so it doesn't ask the policies; it has its own permission and audit trail.
+
+### Offboarding a user or a domain
+
+A policy only decides at sign-in, so when a rule starts to apply (single sign-on enforcement turns on for a domain, a contractor leaves), whatever the people already hold keeps working: refresh tokens, [personal access tokens](/docs/packages/oauth-server/#personal-access-tokens), OAuth grants and their tokens. One call ends all of them:
+
+```rust
+use navree::auth::AuthService;
+
+async fn offboard(auth: &AuthService) -> Result<(), navree::auth::AuthError> {
+    // Everyone whose email is on the domain.
+    let ended = auth.revoke_credentials_of_domain("acme.com").await?;
+    tracing::info!(users = ended.users, credentials = ended.total(), "offboarded acme.com");
+
+    // Or one person: `ended.revoked("personal_access_tokens")` says how many of a kind.
+    // auth.revoke_all_credentials(user_id).await?;
+    Ok(())
+}
+```
+
+`revoke_credentials_of_domain` reads the domain the way `SignInAttempt::domain()` does (`ACME.com.` is `acme.com`) and finds users whatever the spelling of their stored email. The returned `CredentialsRevoked` has `users` and a count per kind (`revoked(kind)`, `total()`):
+
+| Kind | Issued by | Stops |
+|---|---|---|
+| `refresh_tokens` | `navree-auth` | Every sign-in session: the refresh token no longer rotates, and the user's real-time subscriptions end |
+| `personal_access_tokens` | `navree-oauth` | The token is refused at once |
+| `oauth_access_tokens`, `oauth_refresh_tokens` | `navree-oauth` | Tokens issued to apps; the refresh token no longer refreshes |
+| `oauth_codes`, `oauth_device_codes` | `navree-oauth` | Approved authorization codes and device codes that were not exchanged yet |
+| `oauth_authorizations` | `navree-oauth` | The remembered consent for each app is forgotten, so the app asks again |
+
+Modules that issue credentials take part by registering a `CredentialRevoker` (`navree::contracts::CredentialRevoker`, with `m.credential_revoker::<R>()` from `ModuleBuilderRevocationExt`); `navree-oauth` registers one, so `navree-auth` and [single sign-on](/docs/security/single-sign-on/#offboarding) don't depend on it. Your own module can end its API keys or invitations the same way: `revoke_for_users(&[Uuid])` returns the count of each kind it ended. Every revoker runs even when one fails; the first failure comes back as `AuthError::Revocation { module, .. }` after the others finish, and the call can be repeated. The call is audited as `auth.credentials_revoked`.
+
+Access tokens of `navree-auth` are signed and stateless: one a client already holds works until it expires (`auth.access_ttl_secs`, 15 minutes by default) but cannot be refreshed. OAuth access tokens and personal access tokens are looked up on every request and stop at once (other instances that cache lookups, `oauth.token_cache_secs`, may take up to that long). The scan that finds a domain's users reads every user's email in pages: it suits an offboarding, not a request.
 
 ## Limits
 
