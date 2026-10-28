@@ -220,9 +220,10 @@ pub(crate) fn from_toml(
 }
 
 /// Converts a JSON value, like [`from_toml`]. Numbers keep their kind:
-/// integers that fit `i64`, then `u64`, else floating point.
+/// integers that fit `i64`, then `u64`, else floating point. The value is
+/// borrowed, so a too-deep one is refused before anything recurses into it.
 pub(crate) fn from_json(
-    value: serde_json::Value,
+    value: &serde_json::Value,
     origin: &Origin,
     level: usize,
     max_depth: usize,
@@ -230,18 +231,18 @@ pub(crate) fn from_json(
     use serde_json::Value as Json;
     let kind = match value {
         Json::Null => Kind::Null,
-        Json::Bool(b) => Kind::Bool(b),
+        Json::Bool(b) => Kind::Bool(*b),
         Json::Number(n) => match (n.as_i64(), n.as_u64()) {
             (Some(i), _) => Kind::Int(i),
             (None, Some(u)) => Kind::UInt(u),
             (None, None) => n.as_f64().map_or(Kind::Null, Kind::Float),
         },
-        Json::String(s) => Kind::String(s),
+        Json::String(s) => Kind::String(s.clone()),
         Json::Array(items) => {
             check(level, max_depth)?;
             Kind::Array(
                 items
-                    .into_iter()
+                    .iter()
                     .map(|v| from_json(v, origin, level + 1, max_depth))
                     .collect::<Result<_, _>>()?,
             )
@@ -249,8 +250,8 @@ pub(crate) fn from_json(
         Json::Object(map) => {
             check(level, max_depth)?;
             Kind::Table(
-                map.into_iter()
-                    .map(|(k, v)| Ok((k, from_json(v, origin, level + 1, max_depth)?)))
+                map.iter()
+                    .map(|(k, v)| Ok((k.clone(), from_json(v, origin, level + 1, max_depth)?)))
                     .collect::<Result<_, _>>()?,
             )
         }
@@ -273,7 +274,7 @@ mod tests {
     use super::*;
 
     fn tree(json: serde_json::Value) -> Value {
-        from_json(json, &Origin::from("test"), 1, 64).expect("shallow enough")
+        from_json(&json, &Origin::from("test"), 1, 64).expect("shallow enough")
     }
 
     fn merged(base: serde_json::Value, layer: serde_json::Value) -> Value {
@@ -324,10 +325,10 @@ mod tests {
     #[test]
     fn the_merged_value_keeps_the_origin_of_the_layer_that_won() {
         let (first, second) = (Origin::from("first"), Origin::from("second"));
-        let mut base = from_json(json!({ "a": 1, "b": 2 }), &first, 1, 8).unwrap();
+        let mut base = from_json(&json!({ "a": 1, "b": 2 }), &first, 1, 8).unwrap();
         merge(
             &mut base,
-            from_json(json!({ "a": 3 }), &second, 1, 8).unwrap(),
+            from_json(&json!({ "a": 3 }), &second, 1, 8).unwrap(),
         );
         let Kind::Table(map) = &base.kind else {
             panic!("a table")
@@ -353,11 +354,11 @@ mod tests {
     fn conversions_refuse_containers_below_the_limit() {
         let origin = Origin::from("test");
         let deep = json!({ "a": { "b": { "c": 1 } } });
-        assert!(from_json(deep.clone(), &origin, 1, 3).is_ok());
-        assert!(from_json(deep.clone(), &origin, 1, 2).is_err());
-        assert!(from_json(deep, &origin, 2, 3).is_err());
+        assert!(from_json(&deep, &origin, 1, 3).is_ok());
+        assert!(from_json(&deep, &origin, 1, 2).is_err());
+        assert!(from_json(&deep, &origin, 2, 3).is_err());
         // Scalars are not containers: a scalar at the limit is fine.
-        assert!(from_json(json!(1), &origin, 9, 3).is_ok());
+        assert!(from_json(&json!(1), &origin, 9, 3).is_ok());
         let toml: toml::Table = "a = { b = [1, [2]] }".parse().unwrap();
         assert!(from_toml(toml::Value::Table(toml.clone()), &origin, 1, 4).is_ok());
         assert!(from_toml(toml::Value::Table(toml), &origin, 1, 3).is_err());

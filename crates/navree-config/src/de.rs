@@ -603,7 +603,7 @@ mod tests {
     use crate::value::from_json;
 
     fn tree(json: serde_json::Value) -> Value {
-        from_json(json, &Origin::from("test"), 1, 64).expect("shallow")
+        from_json(&json, &Origin::from("test"), 1, 64).expect("shallow")
     }
 
     fn read<T: de::DeserializeOwned>(json: serde_json::Value) -> std::result::Result<T, String> {
