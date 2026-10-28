@@ -193,7 +193,7 @@ Each area is one bash script, rendered from a template and sent over SSH to `bas
 | Users | A `navree` user that owns the app and runs its processes, with the keys in `ssh.authorized_keys`, and in the `systemd-journal` group so it can read the app's logs. Its `sudo` rights, in `/etc/sudoers.d/harbor-<app>`, are limited to starting, stopping and restarting the app's systemd units (and enabling or disabling the web slots), starting the database backup and reloading Caddy. |
 | SSH | Password logins off; `root` may log in by key only. The host key is recorded in `harbor.toml` as `host_key`, and every later connection checks it. |
 | Firewall | `ufw`, denying all incoming traffic except SSH, and on `web` servers ports 80 and 443 (TCP, and UDP for HTTP/3). On `postgres` and `redis` servers, ports 5432 and 6379 open to your other servers only. On a `web` server with a `private_ip`, port 8079 (the [internal entry](#the-caddy-site)) open to the private addresses of your servers that run workers or the scheduler without the `web` role. `fail2ban` watches SSH. |
-| Caddy (`web`) | Caddy 2 from Caddy's apt repository: the reverse proxy in front of your app, with a certificate from Let's Encrypt for `domain`, renewed automatically; HTTP redirected to HTTPS; HTTP/2 and HTTP/3; compression; WebSocket upgrades for [broadcasting](/docs/digging-deeper/broadcasting/). `aliases` redirect to `domain`. `/metrics` answers only the addresses in `web.metrics_allow`, and 404 to everyone else. |
+| Caddy (`web`) | Caddy 2 from Caddy's apt repository: the reverse proxy in front of your app, with a certificate from Let's Encrypt for `domain`, renewed automatically; HTTP redirected to HTTPS; HTTP/2 and HTTP/3; compression; WebSocket upgrades for [broadcasting](/docs/digging-deeper/broadcasting/). `aliases` redirect to `domain`. `/metrics` answers only the addresses in `web.metrics_allow`, and 404 to everyone else. With `[web.custom_domains]`, workspaces' verified domains too, each with its own certificate ([custom domains](#custom-domains)). |
 | PostgreSQL (`postgres`) | PostgreSQL 17 (`postgres.version`) from the PostgreSQL project's apt repository, a database and a user for the app with a generated password, `scram-sha-256` authentication, connections from your servers only, and a daily `pg_dump` (a systemd timer) kept for `postgres.backup_days` (7) in `/var/backups/postgresql/<app>`. |
 | Redis (`redis`) | Redis from Ubuntu's own packages (7.0 on 24.04 LTS, 6.0 on 22.04 LTS), a generated password, `maxmemory` (`redis.maxmemory_mb`, 256 MB) with `allkeys-lru`, listening on loopback, and on the private network when other servers use it. |
 | Node.js (`web`, with a [front end](#a-front-end-next-to-your-api)) | Node.js `frontend.node_version` (24) from NodeSource, and pnpm or Yarn through Corepack when the front end's lockfile asks for one. |
@@ -427,6 +427,49 @@ health_check = "/"
 - It runs in its own blue and green slots (`frontend.ports`, 3001 and 3002) as `crm-api-frontend@blue` and `@green`, with its own health check, and switches together with the API, so a page and the API it calls always come from the same release. Its environment has `PORT`, `HOSTNAME=127.0.0.1`, `NODE_ENV=production` and `NAVREE_API_URL`, the address of the API slot of the same release.
 - Caddy serves `domain` from the front end. The API stays on loopback, where the front end's server calls it; set `api_domain` to also serve the API publicly, for example `api.crm.example.com` for mobile clients.
 
+## Custom domains
+
+When your workspaces bring their own domains ([custom domains](/docs/packages/custom-domains/), `DomainsModule`), Caddy can serve every one of them with its own certificate, got on the domain's first visit. Turn it on:
+
+```toml title="harbor.toml"
+[web.custom_domains]
+enabled = true
+# ask_path = "/_domains/allow"   # the app's domains.ask_path
+# to = "frontend"                # with a [frontend]: the domains serve the front end
+```
+
+`harbor:provision` adds Caddy's on-demand TLS to `/etc/caddy/Caddyfile`, asking the app through the internal entry, so the question always reaches the live slot:
+
+```text title="/etc/caddy/Caddyfile"
+{
+	# Workspaces' own domains: a certificate on each one's first visit,
+	# once the app's ask endpoint allows the domain.
+	on_demand_tls {
+		ask http://127.0.0.1:8079/_domains/allow
+	}
+}
+
+import /etc/caddy/sites/*.caddy
+```
+
+and a site for any other host name to the app's site file:
+
+```text title="/etc/caddy/sites/crm-api.caddy"
+https:// {
+	tls {
+		on_demand
+	}
+	encode zstd gzip
+
+	@metrics path /metrics
+	respond @metrics 404
+
+	reverse_proxy 127.0.0.1:8081
+}
+```
+
+Caddy asks the app before it gets a certificate for a host, and the app says yes only for verified domains, so nobody can make your server request certificates for names you don't serve. Point customers' CNAME records at `domain` (or a host name of yours with the same address) and set the app's `domains.target` to it. The global options belong to the server, so one app per server serves custom domains. Run `navree harbor:provision` again after changing the section.
+
 ## Environments
 
 Each environment has its own file: `harbor.toml` for production, `harbor.staging.toml` for staging, with its own servers, settings, secrets and key (`harbor.staging.key`). Pass `--env` to any command:
@@ -635,6 +678,9 @@ Every command takes `--env <name>`. Harbor looks for `harbor.toml` in the curren
 | `ssh.authorized_keys` | the public half of `ssh.key` | Public keys allowed to log in as the deploy user. |
 | `web.metrics_allow` | `[]` | Addresses allowed to fetch `/metrics` through Caddy. |
 | `web.proxy_protocol` | `false` | Accept the PROXY protocol from the addresses in `deploy.trusted_proxies`, which it needs. |
+| `web.custom_domains.enabled` | `false` | Serve workspaces' own domains with on-demand TLS (see [custom domains](#custom-domains)). |
+| `web.custom_domains.ask_path` | `/_domains/allow` | The app's ask endpoint, `domains.ask_path`. |
+| `web.custom_domains.to` | `app` | Where the domains go: `app`, or `frontend` with a `[frontend]`. |
 | `postgres.version` | `17` | The PostgreSQL major version. |
 | `postgres.database` | the app's name with `_` | The database and user name. |
 | `postgres.backup_days` | `7` | Daily backups kept. |

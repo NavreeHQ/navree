@@ -83,7 +83,10 @@ APP_LOG__LEVEL = "info"
 
 Other tables: `[ssh]` (`user = "navree"`, `provision_user = "root"`,
 `port = 22`, `key`, `authorized_keys`), `[web]` (`metrics_allow`,
-`proxy_protocol`), `[postgres]` (`version = 17`, `database`,
+`proxy_protocol`, and `[web.custom_domains]` with `enabled`,
+`ask_path = "/_domains/allow"` and `to = "app"`/`"frontend"`: Caddy's
+on-demand TLS for workspaces' own domains, asking navree-domains' ask
+endpoint through the internal entry), `[postgres]` (`version = 17`, `database`,
 `backup_days = 7`), `[redis]` (`maxmemory_mb = 256`), `[frontend]`
 (`path`, `build`, `command`, `health_check = "/"`, `ports = [3001, 3002]`,
 `node_version = 24`) and `api_domain`. Unknown keys are errors.

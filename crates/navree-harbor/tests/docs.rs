@@ -166,6 +166,12 @@ fn the_defaults_of_the_keys_table() {
     assert_eq!(config.ssh.authorized_keys, None);
     assert!(config.web.metrics_allow.is_empty());
     assert!(!config.web.proxy_protocol);
+    assert!(!config.web.custom_domains.enabled);
+    assert_eq!(config.web.custom_domains.ask_path, "/_domains/allow");
+    assert_eq!(
+        config.web.custom_domains.to,
+        navree_harbor::config::CustomDomainsTo::App
+    );
     assert_eq!(config.postgres.version, 17);
     assert_eq!(config.database(), "crm_api");
     assert_eq!(config.postgres.backup_days, 7);
