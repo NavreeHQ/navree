@@ -129,7 +129,7 @@ async fn the_events_migration_compiles_for_timescaledb_and_runs_on_sqlite() {
 
     let dir = tempfile::tempdir().unwrap();
     let db = sqlite(&dir).await;
-    let schema = Schema::new(db.conn());
+    let schema = Schema::new(&db);
     m20261027_090000_create_events_table::Migration
         .up(&schema)
         .await
@@ -175,7 +175,7 @@ async fn tuning_navree_s_tables() {
 async fn converting_an_existing_table() {
     let dir = tempfile::tempdir().unwrap();
     let db = sqlite(&dir).await;
-    let schema = Schema::new(db.conn());
+    let schema = Schema::new(&db);
     schema
         .create("visits", |t| {
             t.uuid_primary();
@@ -216,7 +216,7 @@ async fn reading_the_time_dimension() -> SchemaResult {
     let dir = tempfile::tempdir().unwrap();
     let db = sqlite(&dir).await;
     let mut shown = Vec::new();
-    if let Some(time) = Schema::new(db.conn()).time_dimension("events").await? {
+    if let Some(time) = Schema::new(&db).time_dimension("events").await? {
         shown.push(format!(
             "{} ({}), chunks of {}",
             time.column, time.column_type, time.chunk_interval
@@ -233,7 +233,7 @@ async fn pruning_in_code() {
     let dir = tempfile::tempdir().unwrap();
     let db = sqlite(&dir).await;
     m20261027_090000_create_events_table::Migration
-        .up(&Schema::new(db.conn()))
+        .up(&Schema::new(&db))
         .await
         .unwrap();
     for days in [120, 100, 10] {
@@ -270,7 +270,7 @@ async fn pruning_in_code() {
 /// `readings`: one row every 10 minutes for an hour and a half from 08:00,
 /// at 20.0 °C and up a degree each time.
 async fn readings(db: &Db) -> DateTime<Utc> {
-    Schema::new(db.conn())
+    Schema::new(&db)
         .create_hypertable("readings", "taken_at", |t| {
             t.id();
             t.double("celsius");

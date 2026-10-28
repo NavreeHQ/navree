@@ -55,8 +55,8 @@ use crate::timescale::{Compression, ContinuousAggregate, Hypertable, RefreshPoli
 /// ```
 ///
 /// Inside a migration the schema runs on the migration's connection (its
-/// transaction); elsewhere, build one on any SeaORM connection:
-/// `Schema::new(db.conn())`.
+/// transaction); elsewhere, build one on any [`SchemaConnection`]: a
+/// navree-db `Db`, `Pool`, `Transaction` or `Uow` (`Schema::new(&db)`).
 pub struct Schema<'c> {
     conn: Option<Conn<'c>>,
     pretend: bool,
@@ -94,7 +94,8 @@ impl std::fmt::Debug for Schema<'_> {
 }
 
 impl<'c> Schema<'c> {
-    /// A schema on `conn` (a SeaORM connection, transaction or executor).
+    /// A schema on `conn` (navree-db's `Db`, `Pool`, `Transaction` or
+    /// `Uow`, or any other [`SchemaConnection`]).
     /// Inside a migration it picks up the migrator's options, and when the
     /// migrator pretends it reads through the migration context's reader
     /// and only records statements.
@@ -143,7 +144,7 @@ impl<'c> Schema<'c> {
     /// database, without making it.
     ///
     /// ```no_run
-    /// # async fn preview(conn: &sea_orm::DatabaseConnection) -> navree_schema::SchemaResult {
+    /// # async fn preview(conn: &impl navree_schema::SchemaConnection) -> navree_schema::SchemaResult {
     /// use navree_schema::Schema;
     ///
     /// let schema = Schema::new(conn).pretending();
@@ -264,10 +265,7 @@ impl<'c> Schema<'c> {
             && let Some(conn) = &self.conn
         {
             tracing::debug!(target: "navree_schema", sql = statement, "schema statement");
-            conn.get()
-                .execute(statement)
-                .await
-                .map_err(|source| SchemaError::database(statement, source))?;
+            conn.get().execute(statement).await?;
         }
         if statement == timescale::CREATE_EXTENSION {
             let mut target = self.target.lock().expect("target lock");
@@ -796,7 +794,7 @@ impl<'c> Schema<'c> {
     /// [`DumpOptions::data`] tables follow as `INSERT`s.
     ///
     /// ```no_run
-    /// # async fn dump(conn: &sea_orm::DatabaseConnection) -> navree_schema::SchemaResult {
+    /// # async fn dump(conn: &impl navree_schema::SchemaConnection) -> navree_schema::SchemaResult {
     /// use navree_schema::{DumpOptions, Schema};
     ///
     /// let script = Schema::new(conn)
@@ -852,7 +850,7 @@ impl<'c> Schema<'c> {
     /// ```
     pub async fn is_hypertable(&self, table: &str) -> SchemaResult<bool> {
         if let Some(conn) = &self.conn
-            && Dialect::of(conn.get().backend()) != Some(Dialect::Postgres)
+            && conn.get().backend() != Dialect::Postgres
         {
             return Ok(false);
         }
@@ -871,7 +869,7 @@ impl<'c> Schema<'c> {
     /// [`is_hypertable`](Schema::is_hypertable)).
     ///
     /// ```no_run
-    /// # async fn show(conn: &sea_orm::DatabaseConnection) -> navree_schema::SchemaResult {
+    /// # async fn show(conn: &impl navree_schema::SchemaConnection) -> navree_schema::SchemaResult {
     /// use navree_schema::Schema;
     ///
     /// if let Some(time) = Schema::new(conn).time_dimension("events").await? {
@@ -882,7 +880,7 @@ impl<'c> Schema<'c> {
     /// ```
     pub async fn time_dimension(&self, table: &str) -> SchemaResult<Option<TimeDimension>> {
         if let Some(conn) = &self.conn
-            && Dialect::of(conn.get().backend()) != Some(Dialect::Postgres)
+            && conn.get().backend() != Dialect::Postgres
         {
             return Ok(None);
         }

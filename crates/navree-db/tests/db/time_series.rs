@@ -17,7 +17,7 @@ fn day(n: u32) -> DateTime<Utc> {
 /// `events(kind, occurred_at)`, a hypertable on TimescaleDB, with one
 /// event a day from October 1st to 5th.
 async fn events(db: &Db) {
-    Schema::new(db.conn())
+    Schema::new(&db)
         .create_hypertable("events", "occurred_at", |t| {
             t.uuid_primary();
             t.string("kind");

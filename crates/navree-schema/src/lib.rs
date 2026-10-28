@@ -7,8 +7,9 @@
 //! - [`Schema`] creates, alters, renames and drops tables, reads the
 //!   database's structure (`has_table`, `has_column`, `columns`,
 //!   `indexes`, `foreign_keys`, ...), and manages TimescaleDB hypertables,
-//!   policies and continuous aggregates. It runs on any SeaORM connection,
-//!   [offline](Schema::offline) (recording the SQL for a given database),
+//!   policies and continuous aggregates. It runs on any
+//!   [`SchemaConnection`] (navree-db's `Db`, pools, transactions and units
+//!   of work implement it), [offline](Schema::offline) (recording the SQL for a given database),
 //!   or [pretending](Schema::pretending) (reading the database, recording
 //!   what it would change).
 //! - [`Blueprint`] describes a table: every column type, the helpers
@@ -82,9 +83,9 @@ mod value;
 
 pub use blueprint::{Blueprint, CheckDefinition, Command};
 pub use column::{ColumnBuilder, ColumnDefinition, ColumnType, FluentIndex, Identity};
-pub use connection::{BoxFuture, SchemaConnection};
+pub use connection::{BoxFuture, SchemaConnection, SchemaRow, SchemaValue};
 pub use dump::DumpOptions;
-pub use error::{SchemaError, SchemaResult};
+pub use error::{DatabaseError, SchemaError, SchemaResult};
 pub use index::{
     Columns, ForeignKeyBuilder, ForeignKeyDefinition, IndexBuilder, IndexDefinition, IndexKind,
     IndexRef, ReferentialAction,
@@ -93,7 +94,7 @@ pub use inspect::{
     ColumnInfo, ForeignKeyInfo, Generation, IndexInfo, TableInfo, TimeDimension, ViewInfo,
 };
 pub use interval::{Interval, IntervalUnit};
-pub use migration::{Migration, MigrationContext, SchemaMigration};
+pub use migration::{Migration, MigrationContext, NamedMigration, SchemaMigration};
 pub use options::{KeyStrategy, MorphKey, SchemaOptions, TimescaleMode};
 pub use schema::Schema;
 pub use script::split_statements;

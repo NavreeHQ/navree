@@ -50,7 +50,7 @@ pub async fn roundtrip(world: &World) {
         "{:?}",
         reverted.labels()
     );
-    let schema = Schema::new(db.conn());
+    let schema = Schema::new(&db);
     assert!(
         !schema
             .has_column("custom_domains", "verified_host")

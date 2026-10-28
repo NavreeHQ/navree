@@ -1,8 +1,10 @@
 //! [`SchemaError`] and [`SchemaResult`].
 
-use sea_orm::DbErr;
-
 use crate::target::Dialect;
+
+/// The error a [`SchemaConnection`](crate::SchemaConnection) reports for a
+/// statement the database rejected: the driver's own error.
+pub type DatabaseError = Box<dyn std::error::Error + Send + Sync + 'static>;
 
 /// The result of a schema operation; `Ok(())` by default, so a migration's
 /// `up` can return `SchemaResult`.
@@ -28,9 +30,10 @@ pub enum SchemaError {
     Database {
         /// The statement that failed (or the query, for introspection).
         statement: String,
-        /// The driver's error.
+        /// The driver's error (`navree_db::DbError` on navree-db's
+        /// connections: downcast it to read its kind and code).
         #[source]
-        source: DbErr,
+        source: DatabaseError,
     },
     /// The database cannot do what the blueprint asks.
     #[error("{dialect} does not support {feature}: {hint}")]
@@ -120,11 +123,20 @@ impl SchemaError {
         }
     }
 
-    /// A [`Database`](SchemaError::Database) error for `statement`.
-    pub fn database(statement: impl Into<String>, source: DbErr) -> SchemaError {
+    /// A [`Database`](SchemaError::Database) error for `statement`: what a
+    /// [`SchemaConnection`](crate::SchemaConnection) returns when the
+    /// database rejects it.
+    ///
+    /// ```
+    /// use navree_schema::SchemaError;
+    ///
+    /// let error = SchemaError::database("DROP TABLE deals", "no such table: deals");
+    /// assert_eq!(error.to_string(), "no such table: deals\n  while running: DROP TABLE deals");
+    /// ```
+    pub fn database(statement: impl Into<String>, source: impl Into<DatabaseError>) -> SchemaError {
         SchemaError::Database {
             statement: statement.into(),
-            source,
+            source: source.into(),
         }
     }
 
@@ -132,19 +144,6 @@ impl SchemaError {
     pub fn missing(message: impl Into<String>) -> SchemaError {
         SchemaError::Missing {
             message: message.into(),
-        }
-    }
-}
-
-impl From<SchemaError> for DbErr {
-    /// Inside the migrator a schema error becomes `DbErr::Migration` with
-    /// the same text.
-    fn from(error: SchemaError) -> DbErr {
-        match error {
-            SchemaError::Database { source, statement } => {
-                DbErr::Migration(format!("{source}\n  while running: {statement}"))
-            }
-            other => DbErr::Migration(other.to_string()),
         }
     }
 }

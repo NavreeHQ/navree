@@ -32,7 +32,7 @@ async fn samples_occurrences_and_aggregates_are_declared_hypertables() {
             "m20261027_000002_convert_lighthouse_events_to_hypertables"
         ]
     );
-    let schema = Schema::new(db.conn());
+    let schema = Schema::new(&db);
     for (table, time) in [
         ("lighthouse_samples", "at"),
         ("lighthouse_occurrences", "at"),

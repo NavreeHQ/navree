@@ -7,11 +7,10 @@ use std::fmt;
 use std::sync::Arc;
 
 use chrono::Utc;
-use navree_db::{Db, DbOptions, MIGRATIONS_TABLE, MigrationSet};
+use navree_db::{Db, DbOptions, MIGRATIONS_TABLE, MigrationSet, SetMigration};
 use navree_kernel::AppContext;
 use sea_orm::sea_query::{ColumnDef, Index, Query, Table};
 use sea_orm::{ConnectionTrait, DatabaseTransaction, DbErr, TransactionTrait};
-use sea_orm_migration::{MigrationTrait, SchemaManager};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
@@ -39,7 +38,7 @@ pub(crate) fn workspace_sets(ctx: &AppContext) -> Vec<Arc<WorkspaceMigrationSet>
 /// One migration in run order.
 struct Step<'a> {
     module: &'static str,
-    migration: &'a dyn MigrationTrait,
+    migration: SetMigration<'a>,
 }
 
 impl Step<'_> {
@@ -100,10 +99,7 @@ fn plan(sets: &[Arc<WorkspaceMigrationSet>]) -> Result<Vec<Step<'_>>, WorkspaceE
     let mut steps = Vec::new();
     for module in order {
         let set = by_module[module];
-        let mut migrations: Vec<&dyn MigrationTrait> =
-            set.migrations.iter().map(|m| m.as_ref()).collect();
-        migrations.sort_by(|a, b| a.name().cmp(b.name()));
-        steps.extend(migrations.into_iter().map(|migration| Step {
+        steps.extend(set.entries().into_iter().map(|migration| Step {
             module: set.module,
             migration,
         }));
@@ -149,7 +145,7 @@ async fn applied<C: ConnectionTrait>(conn: &C) -> Result<(HashSet<(String, Strin
 }
 
 async fn run_step(tx: &DatabaseTransaction, step: &Step<'_>, batch: i64) -> Result<(), DbErr> {
-    step.migration.up(&SchemaManager::new(tx)).await?;
+    step.migration.up_in(tx).await?;
     tx.execute(
         Query::insert()
             .into_table(MIGRATIONS_TABLE)

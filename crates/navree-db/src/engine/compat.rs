@@ -239,6 +239,46 @@ impl<C: ConnectionTrait + Sync + ?Sized> Executor for SeaExecutor<'_, C> {
     }
 }
 
+/// A row of SeaORM's scripted connection, by its values: each cell read as
+/// the one SeaORM value kind it holds. (A scripted row reports any cell it
+/// cannot read as the type asked for as `NULL`, so each kind is tried
+/// without `Option`; a cell no kind reads is `NULL`.)
+pub(crate) fn scripted_row(row: &sea_orm::QueryResult) -> Row {
+    fn cell<T>(row: &sea_orm::QueryResult, index: usize) -> Option<Value>
+    where
+        T: sea_orm::TryGetable + Into<Value>,
+    {
+        row.try_get_by_index::<T>(index).ok().map(Into::into)
+    }
+
+    let columns = row.column_names();
+    let values: Vec<Value> = (0..columns.len())
+        .map(|i| {
+            cell::<String>(row, i)
+                .or_else(|| cell::<i64>(row, i))
+                .or_else(|| cell::<i32>(row, i))
+                .or_else(|| cell::<i16>(row, i))
+                .or_else(|| cell::<i8>(row, i))
+                .or_else(|| cell::<u64>(row, i))
+                .or_else(|| cell::<u32>(row, i))
+                .or_else(|| cell::<bool>(row, i))
+                .or_else(|| cell::<f64>(row, i))
+                .or_else(|| cell::<f32>(row, i))
+                .or_else(|| cell::<rust_decimal::Decimal>(row, i))
+                .or_else(|| cell::<chrono::DateTime<chrono::Utc>>(row, i))
+                .or_else(|| cell::<chrono::DateTime<chrono::FixedOffset>>(row, i))
+                .or_else(|| cell::<chrono::NaiveDateTime>(row, i))
+                .or_else(|| cell::<chrono::NaiveDate>(row, i))
+                .or_else(|| cell::<chrono::NaiveTime>(row, i))
+                .or_else(|| cell::<uuid::Uuid>(row, i))
+                .or_else(|| cell::<serde_json::Value>(row, i))
+                .or_else(|| cell::<Vec<u8>>(row, i))
+                .unwrap_or(Value::Null(Kind::String))
+        })
+        .collect();
+    Row::from_values(columns.into_iter().zip(values))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

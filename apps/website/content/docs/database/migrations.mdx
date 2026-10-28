@@ -196,6 +196,18 @@ On SQLite and PostgreSQL, each migration runs in its own transaction, together w
 
 MySQL and MariaDB commit every schema change as it runs, so there a migration runs outside a transaction. A migration that fails part way keeps the statements that ran before the failure and isn't recorded, so keep one change per migration, or write `up` so it can run again (check `has_table` or `has_column` first).
 
+A data migration on MySQL can still ask for a transaction, so its `INSERT`s and `UPDATE`s roll back with its `navree_migrations` row when it fails:
+
+```rust
+impl navree::schema::Migration for Migration {
+    fn within_transaction_on_mysql(&self) -> bool {
+        true
+    }
+
+    // up and down as usual
+}
+```
+
 Some statements can't run in a transaction: PostgreSQL's `CREATE INDEX CONCURRENTLY` (an index's `.online()`), or refreshing a TimescaleDB continuous aggregate. Opt such a migration out:
 
 ```rust
@@ -212,7 +224,9 @@ On SQLite, migrations run on a connection of their own with foreign keys off, so
 
 ## SeaORM migrations
 
-A migration may also be a SeaORM migration, a type implementing `MigrationTrait` (`navree::db::sea_orm_migration`). Both kinds share sets and runners: several of Navree's own modules still ship SeaORM migrations, and an app's older ones keep running unchanged. A SeaORM migration can return `Some(true)` from `use_transaction` to run in a transaction on MySQL, which suits a data migration whose rows should roll back with its record. Write new migrations with the schema builder.
+A migration may also be a SeaORM migration, a type implementing `MigrationTrait` (`navree::db::sea_orm_migration`). `MigrationSet::migration` still takes one, and it runs beside the schema builder's in the same name order, on a SeaORM transaction over the same connection: several of Navree's own modules still ship SeaORM migrations while they move to the schema builder, and an app's older ones keep running unchanged. A SeaORM migration can return `Some(true)` from `use_transaction` to run in a transaction on MySQL. Write new migrations with the schema builder; SeaORM migrations go away once Navree's own modules no longer have any.
+
+A moved migration keeps its exact name, so the row `navree_migrations` already holds for it still counts and it doesn't run again.
 
 ## Testing migrations
 
