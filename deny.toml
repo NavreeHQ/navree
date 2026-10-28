@@ -1,0 +1,171 @@
+# cargo-deny policy for the Navree workspace. CI runs `cargo deny check` on
+# every pull request, on pushes to main and daily (.github/workflows/supply-chain.yml).
+# Run it locally with `cargo deny check` (install: `cargo install --locked cargo-deny`).
+#
+# Changes to this file need a review from the code owners (.github/CODEOWNERS).
+
+[graph]
+# Check what a build with every feature compiles, for every target. That is
+# the widest graph; a crate that only shows up on Windows or behind a feature
+# is still held to the policy.
+all-features = true
+
+[advisories]
+# Every RustSec advisory (vulnerability, unmaintained, unsound, yanked) is an
+# error. The advisory database is fetched on each run.
+version = 2
+yanked = "deny"
+unmaintained = "all"
+unsound = "all"
+# Only what osv-scanner.toml already ignores, with the same reason. cargo-deny
+# has no expiry field, so the date is in the reason: review (and drop) the
+# entry on or before it, in both files.
+ignore = [
+    { id = "GHSA-qwgh-2vcv-g2f7", reason = "Expires 2027-01-31 (same as osv-scanner.toml). block-buffer 0.10.4 is the block buffer of digest 0.10, which sha1 0.10 (axum 0.8.9's WebSocket handshake, tungstenite 0.29), sha2 0.10 (sqlx-core 0.9.0) and crc-fast 1.10 (object_store 0.14.2) still use, all at their latest releases; the fix is only in block-buffer 0.12 (digest 0.11). Not reachable: the buffer's cursor is corrupted only when its block-compression callback panics and the caller catches the panic and reuses the hasher, and here the callbacks are the SHA-1, SHA-256 and CRC block functions, which do not panic." },
+]
+
+[bans]
+# Several versions of one crate bloat the build and the audit surface, so they
+# warn. Each one that exists today is named under `skip` below with the
+# reason; a new duplicate shows up as a warning in CI and should either be
+# removed or added there with a reason.
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+highlight = "all"
+
+# C TLS and crypto stacks are not allowed: Navree uses rustls and ring, and
+# the RSA crate has an unfixed timing side channel (RUSTSEC-2023-0071).
+deny = [
+    { crate = "openssl", reason = "Use rustls. OpenSSL needs a system library and is not part of the supported TLS stack." },
+    { crate = "openssl-sys", reason = "Use rustls. OpenSSL needs a system library and is not part of the supported TLS stack." },
+    { crate = "native-tls", reason = "Use rustls. native-tls pulls in OpenSSL, Secure Transport or SChannel." },
+    { crate = "rsa", reason = "RUSTSEC-2023-0071 (Marvin timing attack) has no fix. Use ring for RSA." },
+]
+
+# Duplicate versions that exist today (cargo-deny warns about new ones).
+# The newest version of each crate stays unlisted; each older version below
+# is named with who pulls it in. Remove an entry when its parent moves on.
+skip = [
+    { crate = "aes@0.8.4", reason = "Pulled in only by pkcs5@0.7.1; the rest of the tree is on 0.9.3." },
+    { crate = "alloc-no-stdlib@2.0.4", reason = "Pulled in only by alloc-stdlib@0.2.4, brotli-decompressor@5.0.3; the rest of the tree is on 3.0.0." },
+    { crate = "alloc-stdlib@0.2.4", reason = "Pulled in only by brotli-decompressor@5.0.3; the rest of the tree is on 0.3.0." },
+    { crate = "base64@0.22.1", reason = "Pulled in only by async-graphql@7.2.1, async-nats@0.50.0, axum@0.8.9, bson@3.1.0 and 13 more; the rest of the tree is on 0.23.1." },
+    { crate = "block-buffer@0.10.4", reason = "Pulled in only by digest@0.10.7; the rest of the tree is on 0.12.1." },
+    { crate = "block-padding@0.3.3", reason = "Pulled in only by inout@0.1.4; the rest of the tree is on 0.4.2." },
+    { crate = "brotli-decompressor@5.0.3", reason = "Pulled in only by lopdf@0.46.0; the rest of the tree is on 6.0.1." },
+    { crate = "cbc@0.1.2", reason = "Pulled in only by p12-keystore@0.2.1, pkcs5@0.7.1; the rest of the tree is on 0.2.1." },
+    { crate = "cipher@0.4.4", reason = "Pulled in only by aes@0.8.4, cbc@0.1.2, des@0.8.1, rc2@0.8.1 and 1 more; the rest of the tree is on 0.5.2." },
+    { crate = "const-oid@0.9.6", reason = "Pulled in only by cms@0.2.3, der@0.7.10, pkcs12@0.1.0, x509-cert@0.2.5; the rest of the tree is on 0.10.2." },
+    { crate = "convert_case@0.6.0", reason = "Pulled in only by config@0.15.27; the rest of the tree is on 0.10.0." },
+    { crate = "core-foundation@0.9.4", reason = "Pulled in only by system-configuration@0.7.0; the rest of the tree is on 0.10.1." },
+    { crate = "cpufeatures@0.2.17", reason = "Pulled in only by aes@0.8.4, sha1@0.10.7, sha2@0.10.9; the rest of the tree is on 0.3.1." },
+    { crate = "crypto-common@0.1.6", reason = "Pulled in only by cipher@0.4.4, digest@0.10.7; the rest of the tree is on 0.2.2." },
+    { crate = "darling@0.20.11", reason = "Pulled in only by derive_builder_core@0.20.2, sea-query-derive@1.0.0; the rest of the tree is on 0.24.1." },
+    { crate = "darling@0.23.0", reason = "Pulled in only by async-graphql-derive@7.2.1; the rest of the tree is on 0.24.1." },
+    { crate = "darling_core@0.20.11", reason = "Pulled in only by darling@0.20.11, darling_macro@0.20.11; the rest of the tree is on 0.24.1." },
+    { crate = "darling_core@0.23.0", reason = "Pulled in only by darling@0.23.0, darling_macro@0.23.0; the rest of the tree is on 0.24.1." },
+    { crate = "darling_macro@0.20.11", reason = "Pulled in only by darling@0.20.11; the rest of the tree is on 0.24.1." },
+    { crate = "darling_macro@0.23.0", reason = "Pulled in only by darling@0.23.0; the rest of the tree is on 0.24.1." },
+    { crate = "dashmap@5.5.3", reason = "Pulled in only by rlibphonenumber@2.2.14; the rest of the tree is on 6.2.1." },
+    { crate = "digest@0.10.7", reason = "Pulled in only by crc-fast@1.10.0, hmac@0.12.1, pbkdf2@0.12.2, pkcs12@0.1.0 and 2 more; the rest of the tree is on 0.11.3." },
+    { crate = "flume@0.11.1", reason = "Pulled in only by rumqttc@0.25.1; the rest of the tree is on 0.12.0." },
+    { crate = "foldhash@0.1.5", reason = "Pulled in only by hashbrown@0.15.5; the rest of the tree is on 0.2.0." },
+    { crate = "font-types@0.11.3", reason = "Pulled in only by read-fonts@0.39.2, write-fonts@0.48.1; the rest of the tree is on 0.12.7." },
+    { crate = "getrandom@0.2.17", reason = "Pulled in only by const-random-macro@0.1.16, jsonwebtoken@11.1.0, ring@0.17.14; the rest of the tree is on 0.4.3." },
+    { crate = "getrandom@0.3.4", reason = "Pulled in only by ahash@0.8.12, bson@3.1.0, rand_core@0.9.5; the rest of the tree is on 0.4.3." },
+    { crate = "harfrust@0.12.0", reason = "Pulled in only by usvg@0.49.0; the rest of the tree is on 0.15.0." },
+    { crate = "hashbrown@0.14.5", reason = "Pulled in only by dashmap@5.5.3, dashmap@6.2.1; the rest of the tree is on 0.17.1." },
+    { crate = "hashbrown@0.15.5", reason = "Pulled in only by petgraph@0.8.3; the rest of the tree is on 0.17.1." },
+    { crate = "hashbrown@0.16.1", reason = "Pulled in only by hashlink@0.11.1, metrics-util@0.20.4, sqlx-core@0.9.0; the rest of the tree is on 0.17.1." },
+    { crate = "heck@0.4.1", reason = "Pulled in only by ouroboros_macro@0.18.5, sea-bae@0.2.2, sea-query-derive@1.0.0, sea-schema-derive@0.3.0; the rest of the tree is on 0.5.0." },
+    { crate = "hmac@0.12.1", reason = "Pulled in only by p12-keystore@0.2.1, pbkdf2@0.12.2; the rest of the tree is on 0.13.0." },
+    { crate = "imagesize@0.14.0", reason = "Pulled in only by krilla@0.8.2; the rest of the tree is on 0.15.0." },
+    { crate = "inout@0.1.4", reason = "Pulled in only by cipher@0.4.4; the rest of the tree is on 0.2.5." },
+    { crate = "itertools@0.14.0", reason = "Pulled in only by prost-build@0.14.4, prost-derive@0.14.4, sea-orm@2.0.4, sea-orm-macros@2.0.4 and 3 more; the rest of the tree is on 0.15.0." },
+    { crate = "logos@0.15.1", reason = "Pulled in only by protox-parse@0.9.0; the rest of the tree is on 0.16.1." },
+    { crate = "logos-codegen@0.15.1", reason = "Pulled in only by logos-derive@0.15.1; the rest of the tree is on 0.16.1." },
+    { crate = "logos-derive@0.15.1", reason = "Pulled in only by logos@0.15.1; the rest of the tree is on 0.16.1." },
+    { crate = "miniz_oxide@0.8.9", reason = "Pulled in only by png@0.18.1; the rest of the tree is on 0.9.1." },
+    { crate = "nom@7.1.3", reason = "Pulled in only by asn1-rs@0.7.2, der-parser@10.0.0, lber@0.5.1, ldap3@0.12.1 and 3 more; the rest of the tree is on 8.0.0." },
+    { crate = "ordered-float@2.10.1", reason = "Pulled in only by serde-value@0.7.0; the rest of the tree is on 5.5.1." },
+    { crate = "ordered-float@4.6.0", reason = "Pulled in only by sea-query@1.0.2; the rest of the tree is on 5.5.1." },
+    { crate = "pbkdf2@0.12.2", reason = "Pulled in only by pkcs5@0.7.1, scrypt@0.11.0; the rest of the tree is on 0.13.0." },
+    { crate = "phf@0.12.1", reason = "Pulled in only by chrono-tz@0.10.4; the rest of the tree is on 0.14.0." },
+    { crate = "phf@0.13.1", reason = "Pulled in only by csscolorparser@0.8.4; the rest of the tree is on 0.14.0." },
+    { crate = "phf_generator@0.13.1", reason = "Pulled in only by phf_macros@0.13.1; the rest of the tree is on 0.14.0." },
+    { crate = "phf_macros@0.13.1", reason = "Pulled in only by phf@0.13.1; the rest of the tree is on 0.14.0." },
+    { crate = "phf_shared@0.12.1", reason = "Pulled in only by phf@0.12.1; the rest of the tree is on 0.14.0." },
+    { crate = "phf_shared@0.13.1", reason = "Pulled in only by phf@0.13.1, phf_generator@0.13.1, phf_macros@0.13.1; the rest of the tree is on 0.14.0." },
+    { crate = "prettyplease@0.2.37", reason = "Pulled in only by prost-build@0.14.4, tonic-build@0.14.6, tonic-prost-build@0.14.6; the rest of the tree is on 0.3.0." },
+    { crate = "quick-xml@0.41.0", reason = "Pulled in only by docx-rs@0.4.22, object_store@0.14.2; the rest of the tree is on 0.42.0." },
+    { crate = "r-efi@5.3.0", reason = "Pulled in only by getrandom@0.3.4; the rest of the tree is on 6.0.0." },
+    { crate = "rand@0.9.5", reason = "Pulled in only by bson@3.1.0, metrics-util@0.20.4, mongodb@3.9.1, opentelemetry_sdk@0.33.1 and 2 more; the rest of the tree is on 0.10.3." },
+    { crate = "rand_core@0.9.5", reason = "Pulled in only by rand@0.9.5, rand_chacha@0.9.0, rand_xoshiro@0.7.0; the rest of the tree is on 0.10.1." },
+    { crate = "read-fonts@0.39.2", reason = "Pulled in only by skrifa@0.42.1, write-fonts@0.48.1; the rest of the tree is on 0.46.0." },
+    { crate = "read-fonts@0.41.0", reason = "Pulled in only by harfrust@0.12.0, skrifa@0.44.0; the rest of the tree is on 0.46.0." },
+    { crate = "roxmltree@0.20.0", reason = "Pulled in only by fontconfig-parser@0.5.8; the rest of the tree is on 0.21.2." },
+    { crate = "sha1@0.10.7", reason = "Pulled in only by axum@0.8.9, p12-keystore@0.2.1, tungstenite@0.29.0; the rest of the tree is on 0.11.0." },
+    { crate = "sha2@0.10.9", reason = "Pulled in only by p12-keystore@0.2.1, pkcs5@0.7.1, scrypt@0.11.0, sqlx-core@0.9.0; the rest of the tree is on 0.11.1." },
+    { crate = "sketches-ddsketch@0.3.1", reason = "Pulled in only by metrics-util@0.20.4; the rest of the tree is on 0.4.2." },
+    { crate = "skrifa@0.42.1", reason = "Pulled in only by krilla@0.8.2, subsetter@0.2.6; the rest of the tree is on 0.49.0." },
+    { crate = "skrifa@0.44.0", reason = "Pulled in only by usvg@0.49.0; the rest of the tree is on 0.49.0." },
+    { crate = "spin@0.9.9", reason = "Pulled in only by flume@0.11.1, flume@0.12.0, multer@3.1.0; the rest of the tree is on 0.10.1." },
+    { crate = "strum@0.26.3", reason = "Pulled in only by rlibphonenumber@2.2.14; the rest of the tree is on 0.28.0." },
+    { crate = "strum@0.27.2", reason = "Pulled in only by async-graphql-derive@7.2.1, croner@4.0.2; the rest of the tree is on 0.28.0." },
+    { crate = "strum_macros@0.26.4", reason = "Pulled in only by strum@0.26.3; the rest of the tree is on 0.27.2." },
+    { crate = "syn@2.0.119", reason = "Pulled in only by asn1-rs-derive@0.6.0, asn1-rs-impl@0.2.0, async-graphql-derive@7.2.1, async-stream-impl@0.3.6 and 48 more; the rest of the tree is on 3.0.9." },
+    { crate = "synstructure@0.13.2", reason = "Pulled in only by asn1-rs-derive@0.6.0; the rest of the tree is on 0.14.0." },
+    { crate = "thiserror@1.0.69", reason = "Pulled in only by rlibphonenumber@2.2.14 (build dep); the rest of the tree is on 2.0.21." },
+    { crate = "thiserror-impl@1.0.69", reason = "Pulled in only by thiserror@1.0.69; the rest of the tree is on 2.0.21." },
+    { crate = "tokio-tungstenite@0.29.0", reason = "Pulled in only by axum@0.8.9; the rest of the tree is on 0.30.0." },
+    { crate = "tower-http@0.6.11", reason = "Pulled in only by reqwest@0.13.5; the rest of the tree is on 0.7.1." },
+    { crate = "tungstenite@0.29.0", reason = "Pulled in only by tokio-tungstenite@0.29.0; the rest of the tree is on 0.30.0." },
+    { crate = "unicode-width@0.1.14", reason = "Pulled in only by miette@7.6.0; the rest of the tree is on 0.2.2." },
+    { crate = "weezl@0.1.12", reason = "Pulled in only by gif@0.14.2; the rest of the tree is on 0.2.1." },
+    { crate = "windows-sys@0.52.0", reason = "Pulled in only by memory-stats@1.2.0, ring@0.17.14; the rest of the tree is on 0.61.2." },
+    { crate = "windows-sys@0.59.0", reason = "Pulled in only by fs4@0.13.1; the rest of the tree is on 0.61.2." },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+# The one git dependency: docx-rs 0.4.22 needs zip 8 (RUSTSEC-2026-0367, -0368,
+# -0369, fixed in zip 9). The pinned commit moves it to zip 9.0.4
+# (bokuweb/docx-rs#944). Drop this when a docx-rs release has the fix.
+allow-git = ["https://github.com/bokuweb/docx-rs"]
+
+[licenses]
+version = 2
+# Derived from `cargo deny list`: what the tree uses today. Dual-licensed
+# crates ("A OR B") pass when either side is on this list, so self_cell
+# (Apache-2.0 OR GPL-2.0-only) and r-efi (MIT OR Apache-2.0 OR
+# LGPL-2.1-or-later) need nothing from the copyleft side.
+allow = [
+    "0BSD",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "CC0-1.0",
+    "CDLA-Permissive-2.0",
+    "ISC",
+    "MIT",
+    "MIT-0",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+]
+confidence-threshold = 0.93
+
+# MPL-2.0 is file-level copyleft: fine to depend on and link, as long as the
+# crates' own files stay unmodified and available. They come in through
+# scraper's CSS engine (selectors, cssparser) and its number formatting.
+exceptions = [
+    { crate = "cssparser", allow = ["MPL-2.0"] },
+    { crate = "cssparser-macros", allow = ["MPL-2.0"] },
+    { crate = "selectors", allow = ["MPL-2.0"] },
+    { crate = "dtoa-short", allow = ["MPL-2.0"] },
+]
