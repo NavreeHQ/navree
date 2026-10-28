@@ -29,6 +29,7 @@ use crate::controller::ControllerRegistration;
 use crate::error::ErrorFormat;
 use crate::extract::ProxyTrust;
 use crate::limiter::KeyedRateLimiter;
+use crate::network::rate_limit_key;
 use crate::pipeline::{
     self, CheckStages, ContextState, GuardStages, Requester, Stages, TimeoutOverride, X_REQUEST_ID,
 };
@@ -65,6 +66,7 @@ pub async fn build_router(ctx: &AppContext) -> Result<Router, BoxError> {
         authorizer,
         audit,
         body_limit: options.body_limit_bytes,
+        ipv6_prefix: options.rate_limit_ipv6_prefix,
     };
     let mut router = Router::new();
     for route in routes {
@@ -107,6 +109,7 @@ pub async fn build_router(ctx: &AppContext) -> Result<Router, BoxError> {
             },
             per_ip: options.per_ip_rate_limit.map(|limit| pipeline::PerIpLimit {
                 limiter: KeyedRateLimiter::<IpAddr>::new(limit, Duration::from_secs(60)),
+                ipv6_prefix: options.rate_limit_ipv6_prefix,
                 audit: shared.audit.clone(),
             }),
             authentication,
@@ -363,6 +366,7 @@ struct Shared {
     authorizer: Option<Arc<dyn RouteAuthorizer>>,
     audit: Option<Arc<dyn AuditSink>>,
     body_limit: usize,
+    ipv6_prefix: u8,
 }
 
 fn mount(router: Router, route: Mounted, shared: &Shared) -> Result<Router, RouteErrors> {
@@ -380,6 +384,7 @@ fn mount(router: Router, route: Mounted, shared: &Shared) -> Result<Router, Rout
             .and_then(|_| shared.audit.clone()),
         security: shared.audit.clone(),
         body_limit: meta.body_limit.unwrap_or(shared.body_limit),
+        ipv6_prefix: shared.ipv6_prefix,
         meta: meta.clone(),
     });
     let mut handler = route.handler;
@@ -406,6 +411,8 @@ struct RouteRuntime {
     /// Where security events go: throttling, 403s from guards and handlers.
     security: Option<Arc<dyn AuditSink>>,
     body_limit: usize,
+    /// The IPv6 prefix a guest's address is counted under.
+    ipv6_prefix: u8,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -440,7 +447,7 @@ impl RouteRuntime {
         if let Some(limiter) = &self.throttle {
             let key = match user {
                 Some(user) => ThrottleKey::User(user),
-                None => ThrottleKey::Ip(client_ip(parts)),
+                None => ThrottleKey::Ip(rate_limit_key(client_ip(parts), self.ipv6_prefix)),
             };
             if let Err(limited) = limiter.check(&key) {
                 tracing::warn!(

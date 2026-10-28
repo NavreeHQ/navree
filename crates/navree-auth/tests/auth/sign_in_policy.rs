@@ -100,6 +100,36 @@ async fn setup(
     Setup { app, seen, sink }
 }
 
+/// Another spelling of the domain (a trailing dot, full-width letters, the
+/// ideographic full stop) is the same domain to a policy.
+#[tokio::test]
+async fn a_policy_sees_one_spelling_of_the_domain() {
+    let s = setup(|b| b).await;
+    let auth = s.app.get::<AuthService>().await;
+    // Emails from an identity provider or a social provider reach the
+    // service as they were sent (the login form is stricter).
+    for email in [
+        "ada@CORP.test.",
+        "ada@\u{ff43}orp.test",
+        "ada@corp\u{3002}test",
+    ] {
+        let error = auth
+            .attempt_login(email, "wrong", &ClientMeta::default())
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(&error, AuthError::SignInRefused { code, .. } if code == "sso_required"),
+            "{email}: {error:?}"
+        );
+    }
+    assert!(
+        s.seen
+            .attempts()
+            .iter()
+            .all(|attempt| attempt.domain() == Some("corp.test"))
+    );
+}
+
 #[tokio::test]
 async fn a_policy_refuses_login_and_registration_for_its_accounts() {
     let s = setup(|b| b).await;

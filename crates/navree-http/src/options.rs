@@ -34,6 +34,14 @@ pub struct HttpOptions {
     pub body_limit_bytes: usize,
     /// Requests per minute per client IP (default `Some(600)`; `None` disables).
     pub per_ip_rate_limit: Option<u32>,
+    /// How much of an IPv6 address names a client for every per-IP limit
+    /// (this one, route throttles for guests, the sign-in throttles, the
+    /// OAuth endpoint limits): the first `rate_limit_ipv6_prefix` bits, so
+    /// all addresses of one network share one budget (default 64: one /64,
+    /// the smallest allocation a provider normally gives a customer; 1 to
+    /// 128). IPv4 clients are counted per address, and IPv4-mapped IPv6
+    /// addresses (`::ffff:192.0.2.1`) as IPv4. See [`rate_limit_key`](crate::rate_limit_key).
+    pub rate_limit_ipv6_prefix: u8,
     /// Send the default security headers (default `true`).
     pub security_headers: bool,
     /// Compress responses with gzip (default `true`). Brotli is not built in.
@@ -101,6 +109,7 @@ impl Default for HttpOptions {
             timeout_secs: 30,
             body_limit_bytes: 2 * 1024 * 1024,
             per_ip_rate_limit: Some(600),
+            rate_limit_ipv6_prefix: crate::network::DEFAULT_IPV6_PREFIX,
             security_headers: true,
             compression: true,
             maintenance_file: PathBuf::from("storage/framework/down"),
@@ -176,6 +185,12 @@ impl ConfigSection for HttpOptions {
 }
 
 impl HttpOptions {
+    /// The key a client's per-IP limits are counted under: its IPv4 address,
+    /// or the network of its IPv6 address (`rate_limit_ipv6_prefix`).
+    pub fn rate_limit_key(&self, ip: std::net::IpAddr) -> std::net::IpAddr {
+        crate::network::rate_limit_key(ip, self.rate_limit_ipv6_prefix)
+    }
+
     /// Every problem with these options (empty when valid).
     pub(crate) fn check(&self) -> Result<(), Vec<String>> {
         let mut errors = Vec::new();
@@ -193,6 +208,12 @@ impl HttpOptions {
         }
         if self.per_ip_rate_limit == Some(0) {
             errors.push("http.per_ip_rate_limit must be at least 1 (or unset)".to_owned());
+        }
+        if !(1..=128).contains(&self.rate_limit_ipv6_prefix) {
+            errors.push(format!(
+                "http.rate_limit_ipv6_prefix must be between 1 and 128 (got {})",
+                self.rate_limit_ipv6_prefix
+            ));
         }
         for proxy in &self.trusted_proxies {
             if crate::extract::IpNetwork::parse(proxy).is_none() {
@@ -287,6 +308,30 @@ mod tests {
         let errors = options.check().unwrap_err();
         assert_eq!(errors.len(), 2, "{errors:?}");
         assert!(errors[0].contains("proxy.internal"), "{errors:?}");
+    }
+
+    #[test]
+    fn the_ipv6_rate_limit_prefix_defaults_to_a_slash_64_and_is_checked() {
+        assert_eq!(HttpOptions::default().rate_limit_ipv6_prefix, 64);
+        let config = navree_config::Config::load(
+            &navree_config::ConfigSources::new()
+                .env_vars("APP_", [("APP_HTTP__RATE_LIMIT_IPV6_PREFIX", "56")]),
+        )
+        .unwrap();
+        let options = config.typed::<HttpOptions>().unwrap();
+        assert_eq!(options.rate_limit_ipv6_prefix, 56);
+        assert_eq!(
+            options.rate_limit_key("2001:db8:1:ff7f::1".parse().unwrap()),
+            "2001:db8:1:ff00::".parse::<std::net::IpAddr>().unwrap()
+        );
+        for bad in [0, 129] {
+            let options = HttpOptions {
+                rate_limit_ipv6_prefix: bad,
+                ..HttpOptions::default()
+            };
+            let errors = options.check().unwrap_err();
+            assert!(errors[0].contains("rate_limit_ipv6_prefix"), "{errors:?}");
+        }
     }
 
     #[test]

@@ -11,6 +11,7 @@ mod clients;
 mod config;
 mod grants;
 mod introspect;
+mod offboarding;
 mod oidc;
 mod openapi;
 mod orm;

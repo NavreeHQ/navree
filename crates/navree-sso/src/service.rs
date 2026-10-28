@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use chrono::{DateTime, TimeDelta, Utc};
-use navree_auth::{AuthService, ClientMeta, SignInAttempt, SignInMethod, User, user};
+use navree_auth::{AuthService, ClientMeta, SignInAttempt, SignInMethod, User, email_domain, user};
 use navree_cache::Cache;
 use navree_config::Config;
 use navree_contracts::{AuditEntry, AuditKind, AuditSink, Clock, SystemClock};
@@ -201,19 +201,6 @@ fn normalize_domain(domain: &str) -> Result<String, SsoError> {
         ));
     }
     Ok(domain)
-}
-
-/// The domain of `email` in the form verified domains are kept: lower-case
-/// ASCII (an international spelling in its `xn--` form, as mail is routed),
-/// without a trailing dot. `None` without a domain.
-pub(crate) fn email_domain(email: &str) -> Option<String> {
-    let (_, domain) = email.trim().rsplit_once('@')?;
-    let domain = match url::Host::parse(domain) {
-        Ok(url::Host::Domain(ascii)) => ascii,
-        _ => domain.to_lowercase(),
-    };
-    let domain = domain.trim_end_matches('.');
-    (!domain.is_empty()).then(|| domain.to_owned())
 }
 
 /// A slug from a name: lower-case letters, digits and dashes.
@@ -1429,7 +1416,7 @@ impl Sso {
             }
             None => {
                 let email = profile.email.clone().ok_or(SsoError::MissingEmail)?;
-                let domain = profile.email_domain().unwrap_or_default().to_owned();
+                let domain = profile.email_domain().unwrap_or_default();
                 let (verified, existing) = {
                     let tx = uow.tx().await?;
                     let verified = sso_domain::Entity::find()

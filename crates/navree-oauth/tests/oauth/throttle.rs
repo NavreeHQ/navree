@@ -148,6 +148,32 @@ async fn each_endpoint_limits_each_ip() {
     }
 }
 
+/// The per-IP limit counts an IPv6 client by its network (a /64 by
+/// default): a client with a whole allocation has one budget, not billions.
+#[tokio::test]
+async fn each_endpoint_limits_an_ipv6_network_not_each_address() {
+    let world = World::with(limits(0, 2)).await;
+    let zapier = client(&world, "Zapier").await;
+    for endpoint in ENDPOINTS {
+        let network = |host: &str| format!("2001:db8:{}:{host}", endpoint.len());
+        let first = network("1::1");
+        let second = network("1:aaaa:bbbb:cccc:dddd");
+        let third = network("1:ffff::9");
+        anonymous(&world, endpoint, &first).await.assert_status(401);
+        call(&world, endpoint, &zapier, Some(&second)).await;
+        assert_limited(call(&world, endpoint, &zapier, Some(&third)).await);
+        assert_limited(anonymous(&world, endpoint, &first).await);
+        // Another /64, and IPv4 addresses, are not limited.
+        let other = network("2::1");
+        let status = call(&world, endpoint, &zapier, Some(&other)).await.status();
+        assert_ne!(status, 429, "{endpoint}");
+        let status = call(&world, endpoint, &zapier, Some("198.51.100.9"))
+            .await
+            .status();
+        assert_ne!(status, 429, "{endpoint}");
+    }
+}
+
 #[tokio::test]
 async fn a_flood_of_unknown_clients_cannot_use_up_a_clients_budget() {
     // The per-client count starts once the client has authenticated, so

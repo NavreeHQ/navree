@@ -53,7 +53,7 @@ const ASSET_CACHE: &str = "public, max-age=31536000, immutable";
 /// The docs page's content security policy: scripts from this origin only
 /// (the vendored Scalar script), the inline styles the UI injects, API calls
 /// to this origin. Server URLs from the options are added to `connect-src`.
-const PAGE_CSP: &str = "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; font-src data:; img-src 'self' data: https:; connect-src 'self'; worker-src blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'";
+const PAGE_CSP: &str = "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; font-src data:; img-src 'self' data:; connect-src 'self'; worker-src blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'";
 
 /// The docs routes of `ApiModule` (public, under the API prefix, unversioned).
 pub(crate) struct DocsController {
@@ -253,6 +253,27 @@ mod tests {
         );
         assert!(!PAGE_CSP.contains("https://cdn"), "{PAGE_CSP}");
         assert!(PAGE_CSP.contains("script-src 'self';"), "{PAGE_CSP}");
+    }
+
+    /// The UI loads no image from another origin (its own icons are inline),
+    /// so the page cannot be made to fetch one: images come from this
+    /// origin or `data:` URIs only.
+    #[test]
+    fn the_page_loads_images_from_its_own_origin_and_data_uris_only() {
+        let images = |policy: &str| {
+            policy
+                .split(';')
+                .map(str::trim)
+                .find(|directive| directive.starts_with("img-src"))
+                .map(str::to_owned)
+        };
+        assert_eq!(images(PAGE_CSP).as_deref(), Some("img-src 'self' data:"));
+        let with_servers = page_csp(&["https://api.example.com".to_owned()]);
+        assert_eq!(
+            images(with_servers.to_str().unwrap()).as_deref(),
+            Some("img-src 'self' data:")
+        );
+        assert!(!PAGE_CSP.contains("https:"), "{PAGE_CSP}");
     }
 
     #[test]
