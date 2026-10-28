@@ -166,6 +166,8 @@ function TwoFactorCard({ enabled }: { enabled: boolean }) {
             <div
               className="w-44 rounded-md bg-white p-2"
               aria-label="QR code for your authenticator app"
+              // The API renders the QR code as SVG markup from the one-time setup URI, not from user text.
+              // nosemgrep: navree-raw-html
               dangerouslySetInnerHTML={{ __html: setup.qr_svg }}
             />
             <p className="text-xs text-fg-3">

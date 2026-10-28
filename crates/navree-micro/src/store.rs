@@ -277,6 +277,8 @@ impl Store {
         } else {
             ""
         };
+        // `limit` is a u64 and `lock` a fixed fragment; every value is a bound parameter.
+        // nosemgrep: navree-sql-built-from-strings
         let rows = conn
             .query_all_raw(statement(
                 self.backend(),

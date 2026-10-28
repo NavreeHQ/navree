@@ -1,0 +1,124 @@
+# A ratchet for the data-layer port. Navree's own ORM (navree-orm, with
+# navree-schema for migrations) is replacing sea_orm crate by crate. The crates
+# listed in `paths.exclude` below still use sea_orm; every other crate and app
+# must not start. When a crate is ported, delete it from the list in the same
+# change, so it can never go back. Nothing is added to the list: a new
+# dependency on sea_orm in a new crate is the thing this rule stops, and a
+# crate that has to start using it again needs a reason in review.
+#
+# Two rules, one for source (a `use`, a path such as `sea_orm::DbBackend`, a
+# `#[sea_orm(..)]` attribute) and one for the Cargo.toml dependency itself.
+# Comments and doc text that merely mention the name are not matched.
+rules:
+  - id: navree-sea-orm-ratchet
+    languages: [rust]
+    severity: ERROR
+    message: >-
+      sea_orm is being replaced by navree-orm. This crate does not use it yet;
+      use navree-orm (and navree-schema for migrations) instead. Crates still
+      on sea_orm are listed in .semgrep/sea-orm-ratchet.yml; ported crates are
+      removed from that list, never added to it.
+    metadata:
+      category: maintainability
+      confidence: HIGH
+    paths:
+      exclude:
+        # The crates that still use sea_orm. Remove an entry when its crate is ported.
+        - "/apps/evidence-app/"
+        - "/bench/"
+        - "/crates/navree/"
+        - "/crates/navree-access/"
+        - "/crates/navree-ai/"
+        - "/crates/navree-audit/"
+        - "/crates/navree-auth/"
+        - "/crates/navree-billing/"
+        - "/crates/navree-db/"
+        - "/crates/navree-flags/"
+        - "/crates/navree-fleet/"
+        - "/crates/navree-graphql/"
+        - "/crates/navree-grpc/"
+        - "/crates/navree-helm/"
+        - "/crates/navree-i18n/"
+        - "/crates/navree-lighthouse/"
+        - "/crates/navree-logbook/"
+        - "/crates/navree-mail/"
+        - "/crates/navree-mcp/"
+        - "/crates/navree-micro/"
+        - "/crates/navree-notify/"
+        - "/crates/navree-oauth/"
+        - "/crates/navree-orm/"
+        - "/crates/navree-queue/"
+        - "/crates/navree-schedule/"
+        - "/crates/navree-schema/"
+        - "/crates/navree-search/"
+        - "/crates/navree-session/"
+        - "/crates/navree-settings/"
+        - "/crates/navree-sheets/"
+        - "/crates/navree-social/"
+        - "/crates/navree-sso/"
+        - "/crates/navree-time/"
+        - "/crates/navree-validation/"
+        - "/crates/navree-webhooks/"
+        - "/crates/navree-workflows/"
+        - "/crates/navree-cli/"
+        - "/crates/navree-directory/"
+        - "/crates/navree-domains/"
+        - "/crates/navree-integrations/"
+        - "/crates/navree-macros/"
+        - "/crates/navree-media/"
+        - "/crates/navree-mongo/"
+        - "/crates/navree-workspace/"
+    pattern-regex: '(?m)^(?!\s*//)[^\n"]*?(?:\bsea_orm(?:_migration)?\s*::|#\[\s*sea_orm\s*[(\]])'
+
+  - id: navree-sea-orm-dependency-ratchet
+    languages: [generic]
+    severity: ERROR
+    message: >-
+      sea-orm is being replaced by navree-orm; this crate must not depend on
+      it. See .semgrep/sea-orm-ratchet.yml.
+    metadata:
+      category: maintainability
+      confidence: HIGH
+    paths:
+      include:
+        - "**/Cargo.toml"
+      exclude:
+        - "/Cargo.toml"
+        - "/apps/evidence-app/"
+        - "/bench/"
+        - "/crates/navree/"
+        - "/crates/navree-access/"
+        - "/crates/navree-ai/"
+        - "/crates/navree-audit/"
+        - "/crates/navree-auth/"
+        - "/crates/navree-billing/"
+        - "/crates/navree-db/"
+        - "/crates/navree-flags/"
+        - "/crates/navree-fleet/"
+        - "/crates/navree-graphql/"
+        - "/crates/navree-grpc/"
+        - "/crates/navree-helm/"
+        - "/crates/navree-i18n/"
+        - "/crates/navree-lighthouse/"
+        - "/crates/navree-logbook/"
+        - "/crates/navree-mail/"
+        - "/crates/navree-mcp/"
+        - "/crates/navree-micro/"
+        - "/crates/navree-notify/"
+        - "/crates/navree-oauth/"
+        - "/crates/navree-orm/"
+        - "/crates/navree-queue/"
+        - "/crates/navree-schedule/"
+        - "/crates/navree-schema/"
+        - "/crates/navree-search/"
+        - "/crates/navree-session/"
+        - "/crates/navree-settings/"
+        - "/crates/navree-sheets/"
+        - "/crates/navree-social/"
+        - "/crates/navree-sso/"
+        - "/crates/navree-time/"
+        - "/crates/navree-validation/"
+        - "/crates/navree-webhooks/"
+        - "/crates/navree-workflows/"
+        - "/crates/navree-workspace/"
+    pattern-regex: '(?m)^\s*sea-orm(?:-migration)?\s*(?:=|\.)'

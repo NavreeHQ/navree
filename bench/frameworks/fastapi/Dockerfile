@@ -23,4 +23,6 @@ EXPOSE 8080
 # One Uvicorn worker per CPU (nproc honours the container's cpuset: 8 in the
 # benchmark). Uvicorn reads WEB_CONCURRENCY as its --workers default, and the
 # app sizes its connection pool from the same variable. No access log.
+# A benchmark harness image: built and run only on a benchmarking machine, never deployed.
+# nosemgrep: dockerfile.security.missing-user.missing-user
 CMD ["sh", "-c", "export WEB_CONCURRENCY=\"${WEB_CONCURRENCY:-$(nproc)}\" && exec uvicorn app.main:app --host 0.0.0.0 --port 8080 --no-access-log"]

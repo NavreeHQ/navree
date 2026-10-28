@@ -226,6 +226,9 @@ pub(super) async fn postgres(
     let filter = only
         .map(|t| format!(" AND c.relname = {}", literal(t)))
         .unwrap_or_default();
+    // The table name goes through `literal` (quote doubling); this connection uses the simple
+    // protocol, which cannot bind parameters.
+    // nosemgrep: navree-sql-built-from-strings
     let tables: Vec<String> = conn
         .fetch_all(AssertSqlSafe(format!(
             "SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace \

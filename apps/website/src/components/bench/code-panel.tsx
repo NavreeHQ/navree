@@ -41,6 +41,9 @@ export function CodePanel({ panes, label }: { panes: CodePane[]; label: string }
                   <pre
                     className="shiki navree-night scroll-thin max-h-[30rem] overflow-y-auto"
                     tabIndex={0}
+                    // Shiki's output for a string that lives in this repository, highlighted at build time
+                    // (Shiki escapes the code it highlights).
+                    // nosemgrep: navree-raw-html
                     dangerouslySetInnerHTML={{ __html: p.html }}
                   />
                 </div>
