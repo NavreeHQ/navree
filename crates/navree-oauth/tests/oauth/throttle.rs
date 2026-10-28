@@ -27,16 +27,30 @@ async fn client(world: &World, name: &str) -> CreatedClient {
 /// A valid request to `/oauth/{endpoint}` for `client` (the answer may be
 /// an OAuth error such as `invalid_grant`: what matters is that the client
 /// authenticated), from `ip` when given.
-async fn call(world: &World, endpoint: &str, client: &CreatedClient, ip: Option<&str>) -> TestResponse {
+async fn call(
+    world: &World,
+    endpoint: &str,
+    client: &CreatedClient,
+    ip: Option<&str>,
+) -> TestResponse {
     let id = client.client.id.to_string();
     let secret = client.secret.clone().unwrap();
-    let mut form = vec![("client_id", id.as_str()), ("client_secret", secret.as_str())];
+    let mut form = vec![
+        ("client_id", id.as_str()),
+        ("client_secret", secret.as_str()),
+    ];
     match endpoint {
-        "token" => form.extend([("grant_type", "refresh_token"), ("refresh_token", "nvr_unknown")]),
+        "token" => form.extend([
+            ("grant_type", "refresh_token"),
+            ("refresh_token", "nvr_unknown"),
+        ]),
         "introspect" | "revoke" => form.push(("token", "nva_unknown")),
         _ => {}
     }
-    let mut request = world.client().post(&format!("/oauth/{endpoint}")).form(&form);
+    let mut request = world
+        .client()
+        .post(&format!("/oauth/{endpoint}"))
+        .form(&form);
     if let Some(ip) = ip {
         request = request.header("x-forwarded-for", ip);
     }
@@ -86,7 +100,10 @@ fn limits(per_client: u32, per_ip: u32) -> TestAppBuilder {
     let mut builder = support::builder().config("http.trust_proxy", true);
     for endpoint in ENDPOINTS {
         builder = builder
-            .config(&format!("oauth.rate_limits.{endpoint}.per_client"), per_client)
+            .config(
+                &format!("oauth.rate_limits.{endpoint}.per_client"),
+                per_client,
+            )
             .config(&format!("oauth.rate_limits.{endpoint}.per_ip"), per_ip);
     }
     builder
@@ -95,7 +112,10 @@ fn limits(per_client: u32, per_ip: u32) -> TestAppBuilder {
 #[tokio::test]
 async fn each_endpoint_limits_each_client() {
     let world = World::with(limits(2, 0)).await;
-    let (zapier, ifttt) = (client(&world, "Zapier").await, client(&world, "IFTTT").await);
+    let (zapier, ifttt) = (
+        client(&world, "Zapier").await,
+        client(&world, "IFTTT").await,
+    );
     for endpoint in ENDPOINTS {
         for _ in 0..2 {
             let status = call(&world, endpoint, &zapier, None).await.status();
@@ -114,7 +134,9 @@ async fn each_endpoint_limits_each_ip() {
     let zapier = client(&world, "Zapier").await;
     for endpoint in ENDPOINTS {
         // Failed client authentications count against the address too.
-        anonymous(&world, endpoint, "203.0.113.7").await.assert_status(401);
+        anonymous(&world, endpoint, "203.0.113.7")
+            .await
+            .assert_status(401);
         call(&world, endpoint, &zapier, Some("203.0.113.7")).await;
         assert_limited(call(&world, endpoint, &zapier, Some("203.0.113.7")).await);
         assert_limited(anonymous(&world, endpoint, "203.0.113.7").await);

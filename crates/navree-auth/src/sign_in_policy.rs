@@ -237,7 +237,12 @@ impl AuthService {
     }
 
     /// Audits and logs a refusal of `attempt` with `code`.
-    pub(crate) async fn audit_refusal(&self, attempt: &SignInAttempt, code: &str, meta: &ClientMeta) {
+    pub(crate) async fn audit_refusal(
+        &self,
+        attempt: &SignInAttempt,
+        code: &str,
+        meta: &ClientMeta,
+    ) {
         tracing::warn!(
             target: "navree::security",
             ip = meta.ip.as_deref().unwrap_or("-"),
@@ -276,7 +281,10 @@ mod tests {
         assert_eq!(attempt.domain(), Some("corp.test"));
         assert_eq!(attempt.audience, SignInAudience::App);
         assert_eq!(attempt.user_id, None);
-        assert_eq!(SignInAttempt::new("nobody", SignInMethod::Otp).domain(), None);
+        assert_eq!(
+            SignInAttempt::new("nobody", SignInMethod::Otp).domain(),
+            None
+        );
     }
 
     #[test]
@@ -298,7 +306,10 @@ mod tests {
             assert_eq!(method.name(), name);
             let value = serde_json::to_value(&method).unwrap();
             assert_eq!(value["method"], name);
-            assert_eq!(serde_json::from_value::<SignInMethod>(value).unwrap(), method);
+            assert_eq!(
+                serde_json::from_value::<SignInMethod>(value).unwrap(),
+                method
+            );
         }
         assert_eq!(
             SignInMethod::social("github").metadata(),

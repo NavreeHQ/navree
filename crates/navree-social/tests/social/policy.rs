@@ -126,10 +126,7 @@ async fn no_two_factor_challenge_is_handed_out_for_an_enforced_domain() {
     // Linked before the domain came to sign in elsewhere.
     let ada = create_user(&app, "Ada", "ada@corp.test").await;
     let uow = db.uow(None, None).await;
-    social
-        .link(&uow, ada.id, &github("1", None))
-        .await
-        .unwrap();
+    social.link(&uow, ada.id, &github("1", None)).await.unwrap();
     uow.commit().await.unwrap();
     two_factor_on(&app, ada.id).await;
     fake.on_code("github", "ada", github("1", None));

@@ -45,7 +45,8 @@ impl Limits {
     fn new(limit: EndpointLimit) -> Self {
         let minute = Duration::from_secs(60);
         Self {
-            per_client: (limit.per_client > 0).then(|| KeyedRateLimiter::new(limit.per_client, minute)),
+            per_client: (limit.per_client > 0)
+                .then(|| KeyedRateLimiter::new(limit.per_client, minute)),
             per_ip: (limit.per_ip > 0).then(|| KeyedRateLimiter::new(limit.per_ip, minute)),
         }
     }
@@ -115,7 +116,15 @@ impl Throttles {
         match limiter.check(&client) {
             Ok(()) => Ok(()),
             Err(limited) => {
-                refuse(core, endpoint, "per_client", Some(client), ip, limited.report).await;
+                refuse(
+                    core,
+                    endpoint,
+                    "per_client",
+                    Some(client),
+                    ip,
+                    limited.report,
+                )
+                .await;
                 Err(OAuthError::TooManyRequests {
                     retry_after: limited.retry_after,
                 })

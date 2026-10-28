@@ -29,8 +29,7 @@ use crate::token::RefreshSecret;
 use crate::two_factor::{LoginOutcome, two_factor_enabled};
 use crate::{
     AuthError, AuthOptions, JwtService, SessionClaims, SignInAttempt, SignInMethod, SignInPolicy,
-    TokenType, User,
-    UserResource, UserResourceExtension, user,
+    TokenType, User, UserResource, UserResourceExtension, user,
 };
 
 /// The `audience` of platform sessions in `refresh_tokens`.
