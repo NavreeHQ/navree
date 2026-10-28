@@ -108,9 +108,10 @@ pub fn current() -> Option<Uuid> {
         .or_else(|| Uow::current().and_then(|uow| uow.workspace()))
 }
 
-/// The current workspace for an operation running in `ctx`: the task's
-/// explicit one, else the unit of work's, else the task's unit of work's.
-fn current_in(ctx: &ExecContext) -> Option<Uuid> {
+/// The current workspace of an operation running in `ctx` (what lifecycle
+/// hooks see): the task's explicit one ([`scope`]), else the one the
+/// operation's unit of work entered, else the task's unit of work's.
+pub fn current_in(ctx: &ExecContext) -> Option<Uuid> {
     EXPLICIT
         .try_with(|workspace| *workspace)
         .ok()
