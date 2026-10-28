@@ -65,7 +65,8 @@
 //!   [`create_many`] build test records.
 //! - [`prune_time_series`] deletes the rows of a time-series table older
 //!   than a cutoff; on a TimescaleDB hypertable it drops whole chunks
-//!   instead of deleting row by row.
+//!   instead of deleting row by row ([`prune_time_series_on`] runs on
+//!   navree-db's executors).
 //! - [`PageQuery`] / [`Page`] / [`paginate`] give offset
 //!   pages (`{"data", "meta": {"current_page", "per_page", "total",
 //!   "last_page"}}`); [`CursorQuery`] / [`CursorPage`] / [`cursor_paginate`]
@@ -161,7 +162,7 @@ pub use seed::{
     seeding_without_model_events,
 };
 pub use text::{contains_ignore_case, eq_ignore_case};
-pub use time_series::{TimePoint, prune_time_series};
+pub use time_series::{TimePoint, prune_time_series, prune_time_series_on};
 pub use uow::{ChangeEvent, ChangeObserver, ChangeOp, Uow};
 
 pub use navree_schema;

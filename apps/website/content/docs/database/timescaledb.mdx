@@ -240,6 +240,8 @@ pub async fn prune_events(db: &Db, days: i64) -> Result<u64, sea_orm::DbErr> {
 
 The cutoff has the time column's type: a `DateTime<Utc>` for timestamps, an `i64` for integer time columns (`TimePoint::Integer`). Navree's own prune commands use this helper.
 
+Code that works on navree-db's executors (`Db`, a `Transaction` from `Db::begin`, a `Uow`) calls `prune_time_series_on(&executor, table, column, cutoff)`: the same pruning, returning `Result<u64, DbError>`. Run it on a `Transaction` to have the count, the dropped chunks and the delete apply together. The scheduler's run table is pruned this way.
+
 ## Reorder policies
 
 `reorder_by("events_workspace_id_occurred_at_index")` rewrites each chunk in the order of that index once it stops receiving writes, so range queries on that index read neighbouring rows. Declare the index in the same migration. On an existing hypertable: `add_reorder_policy` and `remove_reorder_policy`.
