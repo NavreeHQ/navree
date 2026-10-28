@@ -645,13 +645,7 @@ impl Engine {
         }
     }
 
-    fn report(
-        &self,
-        report: Report,
-        context: EventContext,
-        at: DateTime<Utc>,
-        now: DateTime<Utc>,
-    ) {
+    fn report(&self, report: Report, context: EventContext, at: DateTime<Utc>, now: DateTime<Utc>) {
         let exception = PendingException {
             at,
             context,
