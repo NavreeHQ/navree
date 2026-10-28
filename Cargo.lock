@@ -3468,6 +3468,8 @@ dependencies = [
  "hyper",
  "hyper-util",
  "rustls",
+ "rustls-native-certs",
+ "rustls-platform-verifier",
  "tokio",
  "tokio-rustls",
  "tower-service",
@@ -3941,6 +3943,29 @@ dependencies = [
  "serde",
  "similar",
  "tempfile",
+]
+
+[[package]]
+name = "instant-acme"
+version = "0.8.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9f05ad37c421b962354c358d347d4a6130151df9407978372d3ad7f0c8f71a64"
+dependencies = [
+ "async-trait",
+ "base64 0.22.1",
+ "bytes",
+ "http",
+ "http-body",
+ "http-body-util",
+ "httpdate",
+ "hyper-rustls",
+ "rcgen",
+ "ring",
+ "rustls-pki-types",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
 ]
 
 [[package]]
@@ -5480,6 +5505,49 @@ dependencies = [
  "unicode-bidi",
  "uuid",
  "zip",
+]
+
+[[package]]
+name = "navree-domains"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "bytes",
+ "chrono",
+ "hickory-resolver",
+ "http",
+ "http-body-util",
+ "instant-acme",
+ "moka",
+ "navree-access",
+ "navree-config",
+ "navree-contracts",
+ "navree-crypto",
+ "navree-db",
+ "navree-events",
+ "navree-http",
+ "navree-kernel",
+ "navree-lighthouse",
+ "navree-orm",
+ "navree-schedule",
+ "navree-testing",
+ "navree-workspace",
+ "rand 0.10.3",
+ "rcgen",
+ "reqwest",
+ "rustls",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-rustls",
+ "tokio-util",
+ "tracing",
+ "url",
+ "utoipa",
+ "uuid",
+ "wiremock",
+ "x509-parser",
 ]
 
 [[package]]

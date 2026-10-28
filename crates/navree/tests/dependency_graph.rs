@@ -441,6 +441,19 @@ const HIERARCHY: &[Rule] = &[
         "navree-events", "navree-db", "navree-orm", "navree-queue", "navree-schedule",
         "navree-workspace", "navree-integrations",
     ]),
+    // Custom domains: workspaces (navree-workspace, whose `domain` resolver
+    // reads what its request layer on navree-http finds) on their own
+    // domains, verified over DNS and kept as navree-orm models in
+    // navree-db; certificate and ACME account keys sealed with
+    // navree-crypto; events; `domains:verify --due` and
+    // `domains:certificates --due` on navree-schedule; with its
+    // `lighthouse` feature, certificates close to expiry reported to
+    // navree-lighthouse.
+    rule("navree-domains", 7, &[
+        "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto",
+        "navree-events", "navree-db", "navree-orm", "navree-schedule", "navree-workspace",
+        "navree-lighthouse",
+    ]),
     // L8: entry points.
     rule("navree", 8, RUNTIME_CRATES),
     // The CLI uses no runtime crate; navree-dock runs `navree dock`,
@@ -538,6 +551,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-documents",
     "navree-workflows",
     "navree-directory",
+    "navree-domains",
 ];
 
 /// Cargo dependency kind of an edge.
