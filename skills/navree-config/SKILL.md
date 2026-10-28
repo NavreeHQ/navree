@@ -1,6 +1,6 @@
 ---
 name: navree-config
-description: "Configures a Navree app: `.env`, `config/app.toml` and `APP_*` environment variables and their precedence, the application key and its rotation, typed `ConfigSection`s with validation and `Secret<T>`, reading `Config`, custom sources and configuration in tests. Use when adding a setting or a config section for a module, reading an environment variable, setting APP_KEY, keeping secrets out of logs, or when a setting doesn't take effect."
+description: "Configures a Navree app: `.env`, `config/app.toml` (or a JSON file) and `APP_*` environment variables and their precedence, how values convert to your types, the file size and nesting limits, the application key and its rotation, typed `ConfigSection`s with validation and `Secret<T>`, reading `Config`, custom sources and configuration in tests. Use when adding a setting or a config section for a module, reading an environment variable, setting APP_KEY, keeping secrets out of logs, or when a setting doesn't take effect or a boot error names a section."
 ---
 
 # Configuration
@@ -25,6 +25,14 @@ effect. Edit the TOML file, remove the key from it, or use a real
 environment variable. Paths are relative to the working directory: run the
 app from its root.
 
+Tables merge key by key; arrays, scalars and `null` replace whole; a source
+that swaps a table for a scalar (or back) replaces the whole subtree. A
+missing file is skipped; a malformed one fails the boot with file, line and
+column. `.file("x.json")` reads JSON (an object, no comments); any other name
+is TOML. Files over 1 MiB and nesting past 32 levels (files, `APP_A__B__...`
+names, `.set` keys) fail the boot; `.max_file_size(bytes)` and
+`.max_depth(levels)` change the limits.
+
 ## Naming
 
 `APP_` + section + `__` + key, upper case: `APP_DATABASE__URL` is
@@ -34,7 +42,19 @@ in the name (`APP_HTTP__PER_IP_RATE_LIMIT`). Values are strings converted by
 the section's types; settings that take a list also accept a comma-separated
 string (`APP_HTTP__TRUSTED_PROXIES=127.0.0.1,::1`). Navree reads `.env`
 itself and never copies it into the process environment, so
-`std::env::var` doesn't see `.env` entries.
+`std::env::var` doesn't see `.env` entries. Only `APP_` names are read
+(`DATABASE_URL`, `PATH` and the rest never reach the tree, in `.env` either).
+
+## How values convert
+
+The same rules for every source: integers take integers, whole floats
+(`30.0`, not `2.5`), digit strings (`"8080"`, `"+80"`, not `" 80"` or
+`"0x50"`) and `true`/`yes`/`on` as 1; `bool` takes `true`/`false`, `yes`/`no`,
+`on`/`off`, `1`/`0` in any case or a number; `String` takes any scalar;
+`Vec<T>` takes arrays only, never a string; `Option<T>` is a missing key or
+`null`, not `""`; enums match variant names exactly (case counts). Errors
+name the section, the key (`servers[1].port`) and the file or variable the
+value came from, and never a string value.
 
 ## The application key
 
@@ -99,8 +119,9 @@ Inject `Arc<navree::config::Config>`: `config.get_string("app.url")`,
 `config.get_bool("feature.x")`, `config.section::<T>("key")`,
 `config.section_or_default::<T>("key")`, `config.typed::<T>()` (a
 `ConfigSection`, validated). Its `Debug` output masks keys containing
-`password`, `secret`, `token`, `key`, `authorization` or `cookie`, and URL
-passwords: give secrets secret-looking names.
+`password`, `passwd`, `pwd`, `secret`, `token`, `key`, `authorization`,
+`cookie`, `dsn`, `credential` or `connection_string`, URL passwords and
+secret-looking URL parameters (`?token=`): give secrets secret-looking names.
 
 ## Custom sources and environments
 
@@ -120,7 +141,7 @@ pub fn sources() -> ConfigSources {
 ```
 
 `.set(key, value)` applies one value above every source;
-`.env_prefixed("MYAPP")` reads another prefix. Release builds default to
+`.env_prefixed("MYAPP")` reads another prefix (`""` would read every variable). Release builds default to
 JSON logs and no template reloading; debug builds to pretty logs and reloading.
 
 ## Framework sections
@@ -156,6 +177,10 @@ To boot the whole app, build sources with `ConfigSources::new().set(..)`
 - Secrets in `config/app.toml` (committed): use `.env` or the environment,
   and `Secret<T>` in your section.
 - A section struct without `#[serde(default)]` and a missing key: the boot fails.
+- Expecting `APP_X=a,b` to fill a `Vec<String>`: strings never become lists
+  unless the section deserializes the string itself.
+- A fractional number for an integer field (`timeout_secs = 2.5`): rejected,
+  not rounded.
 - Different `APP_KEY`s for `serve`, `queue:work` and `schedule:work`.
 - `http.per_ip_rate_limit = 0` (fails the boot): only `null` (in code or
   test config) turns it off.

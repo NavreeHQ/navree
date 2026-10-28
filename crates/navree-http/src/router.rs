@@ -14,7 +14,7 @@ use axum::Router;
 use axum::extract::{DefaultBodyLimit, Request};
 use axum::middleware::from_fn_with_state;
 use axum::response::{IntoResponse, Response};
-use http::header::{CONTENT_LENGTH, HeaderName, HeaderValue};
+use http::header::{CONTENT_LENGTH, HeaderName};
 use http::request::Parts;
 use http::{Method, StatusCode};
 use navree_config::Config;
@@ -23,7 +23,6 @@ use navree_kernel::{AppContext, BoxError, BoxFuture};
 use navree_telemetry::{EventKind, Telemetry, TracePolicy};
 use tower::{Layer, Service, ServiceExt};
 use tower_http::compression::CompressionLayer;
-use tower_http::cors::{AllowOrigin, CorsLayer};
 use uuid::Uuid;
 
 use crate::controller::ControllerRegistration;
@@ -35,8 +34,8 @@ use crate::pipeline::{
     self, CheckStages, ContextState, GuardStages, Requester, Stages, TimeoutOverride, X_REQUEST_ID,
 };
 use crate::{
-    AppError, Authenticator, ClientIp, CorsOptions, ErrorMapper, GlobalLayer, HttpOptions,
-    HttpServer, LayerSlot, RouteAuthorizer, RouteDef, RouteMeta,
+    AppError, Authenticator, ClientIp, CorsLayer, CorsOptions, ErrorMapper, GlobalLayer,
+    HttpOptions, HttpServer, LayerSlot, RouteAuthorizer, RouteDef, RouteMeta,
 };
 
 /// Builds the app's full router: every controller route behind its per-route
@@ -733,14 +732,9 @@ fn apply_slots(
 
 /// The CORS layer: exact origins, credentials, explicit headers.
 fn cors_layer(options: &CorsOptions) -> Result<Option<CorsLayer>, BoxError> {
-    if options.allowed_origins.is_empty() {
+    let Some(layer) = CorsLayer::from_options(options)? else {
         return Ok(None);
-    }
-    let origins = options
-        .allowed_origins
-        .iter()
-        .map(|origin| HeaderValue::from_str(origin.trim()))
-        .collect::<Result<Vec<_>, _>>()?;
+    };
     let allow_headers = [
         "accept",
         "accept-language",
@@ -767,9 +761,7 @@ fn cors_layer(options: &CorsOptions) -> Result<Option<CorsLayer>, BoxError> {
         HeaderName::from_static("x-navree-demo"),
     ];
     Ok(Some(
-        CorsLayer::new()
-            .allow_origin(AllowOrigin::list(origins))
-            .allow_credentials(options.allow_credentials)
+        layer
             .allow_methods([
                 Method::GET,
                 Method::HEAD,
@@ -780,8 +772,7 @@ fn cors_layer(options: &CorsOptions) -> Result<Option<CorsLayer>, BoxError> {
                 Method::OPTIONS,
             ])
             .allow_headers(allow_headers)
-            .expose_headers(expose_headers)
-            .max_age(Duration::from_secs(options.max_age_secs)),
+            .expose_headers(expose_headers),
     ))
 }
 

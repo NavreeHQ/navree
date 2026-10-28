@@ -1,35 +1,23 @@
-//! The stdio transport (`mcp:serve`), spoken to by the official SDK's
-//! client over an in-memory pipe.
+//! The stdio transport (`mcp:serve`): the process acts as one user, spoken
+//! to over an in-memory pipe.
 
 use navree_auth::{AuthModule, AuthService};
 use navree_crypto::CryptoModule;
-use navree_mcp::rmcp::ServiceExt;
-use navree_mcp::rmcp::model::{CallToolRequestParams, ReadResourceRequestParams};
 use navree_mcp::serve_stdio;
-use navree_testing::TestApp;
-use serde_json::json;
+use serde_json::{Value, json};
 use uuid::Uuid;
 
+use crate::stdio_wire::LineClient;
 use crate::support::{builder, give_role, insert_deal};
 
-/// Serves `app` over a pipe as `user`; returns the connected client and the
-/// server task.
-async fn connect(
-    app: &TestApp,
-    user: &str,
-) -> (
-    navree_mcp::rmcp::service::RunningService<navree_mcp::rmcp::RoleClient, ()>,
-    tokio::task::JoinHandle<Result<(), navree_kernel::BoxError>>,
-) {
-    let (client_side, server_side) = tokio::io::duplex(1 << 16);
-    let (server_read, server_write) = tokio::io::split(server_side);
-    let ctx = app.ctx().clone();
-    let user = user.to_owned();
-    let server =
-        tokio::spawn(async move { serve_stdio(&ctx, &user, server_read, server_write).await });
-    let (client_read, client_write) = tokio::io::split(client_side);
-    let client = ().serve((client_read, client_write)).await.expect("initialize");
-    (client, server)
+/// The tool names a stdio client sees.
+async fn tool_names(client: &mut LineClient, id: i64) -> Vec<String> {
+    client.request(id, "tools/list", json!({})).await["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|tool| tool["name"].as_str().map(str::to_owned))
+        .collect()
 }
 
 #[tokio::test]
@@ -37,50 +25,45 @@ async fn the_process_acts_as_the_user_given_by_id() {
     let app = builder().build().await;
     let rep = Uuid::now_v7();
     let deal = insert_deal(&app, rep, "Acme renewal", "lead").await;
-    let (client, server) = connect(&app, &rep.to_string()).await;
+    let mut client = LineClient::connect(&app, &rep.to_string());
 
-    let info = client.peer_info().expect("server info");
-    assert_eq!(
-        info.server_info.as_ref().map(|server| server.name.as_str()),
-        Some("navree-crm")
-    );
+    let info = client.initialize("2025-11-25").await;
+    assert_eq!(info["serverInfo"]["name"], "navree-crm");
 
-    let tools = client.list_all_tools().await.unwrap();
-    assert!(tools.iter().any(|tool| tool.name == "list_deals"));
-    assert!(tools.iter().all(|tool| tool.name != "purge_deals"));
+    let tools = tool_names(&mut client, 1).await;
+    assert!(tools.iter().any(|tool| tool == "list_deals"));
+    assert!(tools.iter().all(|tool| tool != "purge_deals"));
 
-    let arguments = json!({ "deal_id": deal.id, "title": "Renamed" });
-    let result = client
-        .call_tool(
-            CallToolRequestParams::new("rename_deal")
-                .with_arguments(arguments.as_object().unwrap().clone()),
+    let renamed = client
+        .request(
+            2,
+            "tools/call",
+            json!({ "name": "rename_deal", "arguments": { "deal_id": deal.id, "title": "Renamed" } }),
         )
-        .await
-        .unwrap();
-    assert_eq!(result.is_error, Some(false));
-    assert_eq!(result.structured_content.unwrap()["title"], "Renamed");
+        .await;
+    assert_eq!(renamed["result"]["isError"], false);
+    assert_eq!(renamed["result"]["structuredContent"]["title"], "Renamed");
 
     let whoami = client
-        .call_tool(CallToolRequestParams::new("whoami"))
-        .await
-        .unwrap();
-    let whoami = whoami.structured_content.unwrap();
+        .request(3, "tools/call", json!({ "name": "whoami" }))
+        .await;
+    let whoami = &whoami["result"]["structuredContent"];
     assert_eq!(whoami["user_id"], json!(rep));
     assert_eq!(whoami["session"], true, "the stdio session has an id");
+    assert_eq!(whoami["client"], "line-client");
 
     let read = client
-        .read_resource(ReadResourceRequestParams::new(format!(
-            "crm://deals/{}",
-            deal.id
-        )))
-        .await
-        .unwrap();
-    assert_eq!(read.contents.len(), 1);
+        .request(
+            4,
+            "resources/read",
+            json!({ "uri": format!("crm://deals/{}", deal.id) }),
+        )
+        .await;
+    assert_eq!(read["result"]["contents"].as_array().unwrap().len(), 1);
 
-    client.cancel().await.unwrap();
-    server
+    client
+        .close()
         .await
-        .unwrap()
         .expect("the server ends with the client");
 }
 
@@ -89,11 +72,11 @@ async fn roles_apply_to_the_stdio_user() {
     let app = builder().build().await;
     let admin = Uuid::now_v7();
     give_role(&app, admin, "admin", &[]).await;
-    let (client, server) = connect(&app, &admin.to_string()).await;
-    let tools = client.list_all_tools().await.unwrap();
-    assert!(tools.iter().any(|tool| tool.name == "purge_deals"));
-    client.cancel().await.unwrap();
-    server.await.unwrap().unwrap();
+    let mut client = LineClient::connect(&app, &admin.to_string());
+    client.initialize("2025-11-25").await;
+    let tools = tool_names(&mut client, 1).await;
+    assert!(tools.iter().any(|tool| tool == "purge_deals"));
+    client.close().await.unwrap();
 }
 
 #[tokio::test]
@@ -112,16 +95,14 @@ async fn the_user_may_be_named_by_email_with_auth_module() {
         .create_user("Ada", "ada@example.com", "a-long-password")
         .await
         .expect("user");
-    let (client, server) = connect(&app, "ada@example.com").await;
-    let whoami = client
-        .call_tool(CallToolRequestParams::new("whoami"))
-        .await
-        .unwrap()
-        .structured_content
-        .unwrap();
+    let mut client = LineClient::connect(&app, "ada@example.com");
+    client.initialize("2025-11-25").await;
+    let whoami: Value = client
+        .request(1, "tools/call", json!({ "name": "whoami" }))
+        .await["result"]["structuredContent"]
+        .clone();
     assert_eq!(whoami["user_id"], json!(ada.id));
-    client.cancel().await.unwrap();
-    server.await.unwrap().unwrap();
+    client.close().await.unwrap();
 
     let (_client_side, server_side) = tokio::io::duplex(1024);
     let (read, write) = tokio::io::split(server_side);

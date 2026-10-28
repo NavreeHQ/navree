@@ -1,0 +1,41 @@
+{
+  "_leading": "the prefix takes one underscore, so this is _leading",
+  "a": {
+    "b": "child wins over its parent in the same source"
+  },
+  "database": {
+    "url": "sqlite://app.db"
+  },
+  "dots.in.name": "dots stay in the name",
+  "empty": "",
+  "flag": {
+    "upper": "TRUE",
+    "yes": "yes"
+  },
+  "http": {
+    "cors": {
+      "allowed_origins": "https://a.example,https://b.example"
+    },
+    "per_ip_rate_limit": "600"
+  },
+  "log": {
+    "levels": {
+      "navree_queue": "debug"
+    }
+  },
+  "lower": {
+    "case": "prefix matches in any case"
+  },
+  "mixed": {
+    "key": {
+      "name": "segments are lower-cased"
+    }
+  },
+  "name": "Navree",
+  "negative": "-3",
+  "ratio": "0.75",
+  "spaces": "  padded  ",
+  "unicode": {
+    "été": "lower-cased as unicode"
+  }
+}

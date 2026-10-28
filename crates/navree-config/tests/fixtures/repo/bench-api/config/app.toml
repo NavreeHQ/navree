@@ -1,0 +1,35 @@
+# Navree benchmark API: production settings.
+#
+# Read from the working directory, after `.env` and before `APP_*`
+# environment variables. `main` maps the benchmark's own variables on top:
+# DATABASE_URL -> database.url, JWT_SECRET -> auth.jwt.secret,
+# JWT_ISSUER -> auth.jwt.issuer.
+
+[http]
+addr = "0.0.0.0:8080"
+api_prefix = "/api"
+# Navree's per-IP limit (600 requests per minute by default) stays in the
+# pipeline, but the load generator is a single client IP sending far more
+# than any one real client, so its budget is set out of reach.
+per_ip_rate_limit = 1000000000
+
+[database]
+# The URL comes from DATABASE_URL (see main.rs).
+max_connections = 64
+# The schema and data already exist (bench/db/init.sql).
+migrate_on_boot = false
+# No trigger or policy here reads navree.actor or navree.request_id, so
+# transactions skip the statement that sets them.
+transaction_settings = false
+
+[auth]
+# The benchmark only verifies tokens; nobody signs up.
+registration = false
+
+[auth.jwt]
+# The secret comes from JWT_SECRET (see main.rs).
+issuer = "navree"
+
+[log]
+# No per-request lines (navree::request logs at info).
+level = "warn"
