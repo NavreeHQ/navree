@@ -141,7 +141,7 @@ impl Lowerer {
             } => self.full_text(columns, query, options)?,
             // Parenthesized beside other conditions and under `NOT`, so an
             // `OR` inside it cannot regroup them.
-            Where::Raw { sql, values } => self.raw(sql, values)?,
+            Where::Raw { sql, values } => self.raw(sql.clone(), values)?,
             Where::Sql(_) => {
                 return Err(self.unsupported(
                     "a sea-query condition (`Where::Sql`; build the condition with the ORM's filters)",

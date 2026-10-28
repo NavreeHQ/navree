@@ -157,6 +157,12 @@ src/
     filter.rs       WHERE/HAVING/ON trees; dialect rules for dates, LIKE, JSON, full text, operators
     write.rs        INSERT (RETURNING, ON CONFLICT / IGNORE / ON DUPLICATE KEY), UPDATE (JSON paths, row ids, FROM), DELETE, TRUNCATE
     timescale.rs    time_bucket, first, last (native on PostgreSQL; fixed-width buckets emulated elsewhere)
+  render/           the ORM's own SQL renderer (section 6, "The renderer"); not yet what queries run through
+    mod.rs          render, render_all, render_query, render_expr; the render_* lowerings re-exported
+    ast.rs          the syntax tree: Statement, Query (WITH, compounds, order, limit, lock), Select, Source, Join, Expr, Insert, Update, Delete, Truncate
+    writer.rs       Writer: the SQL buffer, binds and placeholders, identifier quoting, string literals, raw fragments
+    grammar/        Grammar (shared SQL as default methods), precedence; postgres.rs, mysql.rs, sqlite.rs (the overrides)
+    lower/          the IR as trees, rule for rule as sql/ compiles it: select.rs, filter.rs, write.rs, text.rs, timescale.rs
 ```
 
 ## 3. Models and `#[derive(Model)]`
@@ -629,6 +635,82 @@ buckets emulated on MySQL and SQLite with TimescaleDB's origin, Monday
 path (`->>`) is compared with the JSON text of a non-string value.
 Statements run through SeaORM's `ConnectionTrait`, so navree-db's query
 log, slow-query warnings and telemetry apply.
+
+### The renderer (`render/`)
+
+`navree_orm::render` is the ORM's own SQL renderer, built to replace the
+sea-query builders `sql/` compiles through. It holds no sea-query or
+SeaORM code (a unit test reads its sources to keep it so); its values are
+`crate::value::Value` and its output `crate::sql::Statement`.
+
+- **The tree** (`ast.rs`): statements are queries (`WITH [RECURSIVE]`, a
+  body of `SELECT`s combined by `UNION`/`INTERSECT`/`EXCEPT [ALL]`, and the
+  order, limit, offset, row lock and MySQL execution-time hint of the
+  whole), inserts (rows, a query or default values; skipping or updating
+  conflicts, with a condition on the update; `RETURNING`), updates and
+  deletes over other tables (with `ORDER BY`/`LIMIT` and `RETURNING` where
+  the dialect has them) and emptying a table. Expressions cover columns,
+  bound values, literals, raw fragments with portable `?` placeholders,
+  `{}` templates, calls (a validated name, `DISTINCT`), `AND`/`OR`/`NOT`
+  lists, comparisons and arithmetic, null-safe equality, `IS NULL`, `IN`
+  (a list or a query; an empty list is `1 = 0`), `BETWEEN`, `LIKE` with
+  `ESCAPE` and three letter-case modes, `EXISTS`, `CAST` to a small set of
+  portable types or a checked custom name, subqueries, row values, `CASE`,
+  JSON paths read as text or as JSON (negative indexes from the end), the
+  upsert's proposed row and window functions. Schema-qualified names are
+  `ObjectName`s, each part quoted on its own.
+- **The grammars** (`grammar/`): `Grammar` writes the SQL the databases
+  share as default methods; `Postgres`, `MySql` and `Sqlite` override what
+  differs (`DISTINCT ON`; `LIMIT` before `OFFSET`; NULLs sorted by a
+  leading `IS NULL` key on MySQL; locks, `LOCK IN SHARE MODE` and none on
+  SQLite; `INSERT IGNORE` and `ON DUPLICATE KEY UPDATE`; compound operands
+  wrapped as derived tables on SQLite, whose compounds cannot be
+  parenthesized; a `WHERE` before an `INSERT .. SELECT`'s conflict clause on
+  SQLite; `json_extract` and `->`; `<=>`, `IS`; `CONCAT`; `LIKE BINARY` and
+  a `GLOB` of the converted pattern; date functions for date casts; two
+  statements to empty a table on SQLite). Operands are parenthesized by
+  precedence, and raw fragments and templates whenever they are an
+  operand, so a hand-written `OR` never regroups its neighbours. The
+  `Writer` numbers placeholders in writing order (`$n` on PostgreSQL, `?`
+  elsewhere), doubles quote characters in names and escapes string
+  literals per dialect (`E'..'` for a backslash on PostgreSQL, doubled
+  backslashes on MySQL). Rendering never panics: what a dialect lacks is
+  `OrmError::Unsupported`, a malformed tree `OrmError::InvalidQuery`.
+- **The lowering** (`lower/`): `render_select`, `render_aggregate`,
+  `render_exists`, `render_insert`, `render_update`, `render_update_from`,
+  `render_delete` and `render_truncate` have the signatures of
+  `sql::compile_*` and lower the IR rule for rule as `sql/` does (date
+  parts, LIKE variants, text ignoring case, JSON containment, overlaps,
+  keys and lengths, full text, group limits, time buckets, vector
+  distances, JSON path assignments, the MySQL timeout hint), with the same
+  error messages. `Where::Sql` (a sea-query condition) answers
+  `Unsupported` there; it is ported away separately.
+- **The tests**: `tests/render` pins each grammar's SQL per dialect and the
+  `sql` tests' IR rendered through the lowering. `tests/differential` runs
+  both paths on real databases (SQLite always; PostgreSQL with TimescaleDB
+  and MySQL with the `postgres` and `mysql` features and their URLs): a
+  corpus of IR statements covering every lowered feature, compiled both
+  ways and compared by result rows, rows changed and returned, and every
+  fixture table after a write, and statements built as trees (CTEs, `CASE`,
+  windows, upserts with a condition, `INTERSECT`, lateral joins) checked
+  against the rows they must return on every database. Its executor
+  (`tests/differential/exec.rs`) is the one place that touches a driver.
+  Where the renderer deliberately differs (the compiler's SQL is wrong
+  there: a JSON key holding `"` on MySQL, `main.table` on SQLite, a union
+  inside a union or a part limited per group on SQLite, a raw window order
+  with `NULLS LAST` on MySQL), the case says so and the run requires the
+  difference.
+
+**Switching over.** `sql::compile_*` is to become a thin call of the
+matching `render::render_*`: first the reads (`compile_select`,
+`compile_aggregate`, `compile_exists`), then the writes, each step with the
+whole ORM suite and the differential tests green; then `Where::Sql` moves
+to the ORM's own filters (navree-access's SQL filters build trees instead
+of sea-query conditions), `Filter::to_sql` renders through `render_expr`,
+the snapshots of `tests/sql` are replaced by those of `tests/render`, and
+`sql/`'s compiler and the sea-query dependency go. `Value` becomes
+navree-db's own value type in the same series; the renderer only binds
+values, so it does not change with it.
 
 ### Document drivers (`driver.rs`)
 

@@ -187,7 +187,7 @@ impl Lowerer {
         Ok(match expr {
             Expr::Column(column) => self.column(column),
             Expr::Value(value) => ast::Expr::Value(value.clone()),
-            Expr::Raw { sql, values } => self.raw(sql, values)?,
+            Expr::Raw { sql, values } => self.raw(sql.clone(), values)?,
             Expr::Function { name, args } => {
                 if !is_identifier(name) {
                     return Err(OrmError::invalid(format!(
@@ -280,10 +280,10 @@ impl Lowerer {
 
     /// A raw fragment, its placeholders checked against its values now
     /// (where the compiler checks them).
-    pub(crate) fn raw(&self, sql: &Cow<'static, str>, values: &[Value]) -> Result<ast::Expr> {
-        super::writer::check_raw(sql, values.len(), self.dialect)?;
+    pub(crate) fn raw(&self, sql: Cow<'static, str>, values: &[Value]) -> Result<ast::Expr> {
+        super::writer::check_raw(&sql, values.len(), self.dialect)?;
         Ok(ast::Expr::Raw {
-            sql: sql.clone(),
+            sql,
             values: values.to_vec(),
         })
     }
@@ -318,7 +318,7 @@ impl Lowerer {
                 Order::Raw { sql, values } => {
                     let (body, descending, nulls) = split_direction(sql);
                     ast::OrderBy {
-                        expr: self.raw(&Cow::Owned(body.to_owned()), values)?,
+                        expr: self.raw(Cow::Owned(body.to_owned()), values)?,
                         descending,
                         nulls,
                     }
