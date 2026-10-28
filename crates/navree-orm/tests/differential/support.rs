@@ -130,16 +130,49 @@ pub const TABLES: [(&str, &str); 9] = [
     ("scratch", "id"),
 ];
 
-/// Drops and recreates the fixture tables with their rows, so every run
-/// starts alike (identity counters included).
+/// Empties the fixture tables, restarts their identities and puts their
+/// rows back, so every run starts alike.
 pub async fn reset(exec: &Exec) {
-    exec.batch(&schema(exec.dialect()))
+    let dialect = exec.dialect();
+    let mut sql = String::new();
+    match dialect {
+        Dialect::Postgres => {
+            let tables: Vec<&str> = TABLES.iter().map(|(table, _)| *table).collect();
+            sql.push_str(&format!(
+                "TRUNCATE TABLE {} RESTART IDENTITY;\n",
+                tables.join(", ")
+            ));
+        }
+        Dialect::MySql => {
+            for (table, _) in TABLES {
+                sql.push_str(&format!(
+                    "DELETE FROM {table};\nALTER TABLE {table} AUTO_INCREMENT = 1;\n"
+                ));
+            }
+        }
+        Dialect::Sqlite => {
+            for (table, _) in TABLES {
+                sql.push_str(&format!("DELETE FROM {table};\n"));
+            }
+            sql.push_str("DELETE FROM sqlite_sequence;\n");
+        }
+    }
+    sql.push_str(&seed(dialect));
+    exec.batch(&sql)
         .await
         .unwrap_or_else(|error| panic!("resets the fixture: {error}"));
 }
 
-/// The fixture: tables and rows, written for `dialect`.
+/// The fixture: its tables (dropped first) and rows, written for
+/// `dialect`.
 pub fn schema(dialect: Dialect) -> String {
+    let mut sql = tables(dialect);
+    sql.push_str(&seed(dialect));
+    sql
+}
+
+/// The fixture's tables, dropped first.
+fn tables(dialect: Dialect) -> String {
     let mut sql = String::new();
     for (table, _) in TABLES.iter().rev() {
         sql.push_str(&format!("DROP TABLE IF EXISTS {table};\n"));
@@ -192,13 +225,27 @@ pub fn schema(dialect: Dialect) -> String {
          CREATE TABLE counters (id {id}, hits {int} NOT NULL DEFAULT 0);\n\
          CREATE TABLE scratch (id {id}, name {key_text} NOT NULL);\n"
     ));
+    sql
+}
+
+/// The fixture's rows.
+fn seed(dialect: Dialect) -> String {
+    let mut sql = String::new();
     let b = |value: bool| match (dialect, value) {
         (Dialect::Sqlite, true) => "1",
         (Dialect::Sqlite, false) => "0",
         (_, true) => "TRUE",
         (_, false) => "FALSE",
     };
-    let t = |text: &str| format!("'{}'", text.replace('\'', "''"));
+    let t = |text: &str| {
+        let text = text.replace('\'', "''");
+        // MySQL's strings read backslash escapes.
+        if dialect == Dialect::MySql {
+            format!("'{}'", text.replace('\\', "\\\\"))
+        } else {
+            format!("'{text}'")
+        }
+    };
     let at = |at: Option<&str>| match at {
         None => "NULL".to_owned(),
         Some(at) => match dialect {
@@ -247,7 +294,9 @@ pub fn schema(dialect: Dialect) -> String {
             120_000,
             "won",
             Some(r#"["vip","q1"]"#),
-            Some(r#"{"owner":{"name":"ada","email":"ada@example.com"},"items":[3,4],"status":"open"}"#),
+            Some(
+                r#"{"owner":{"name":"ada","email":"ada@example.com"},"items":[3,4],"status":"open"}"#,
+            ),
             Some("2026-10-20 09:15:00"),
             "2026-10-01 08:00:00",
             None,
@@ -331,7 +380,7 @@ pub fn schema(dialect: Dialect) -> String {
             990_000,
             "lead",
             Some(r#"["q1","q2","vip"]"#),
-            Some(r#"{"owner":{"name":"ada"},"items":[3]}"#),
+            Some(r#"{"owner":{"name":"ada"},"items":[3],"we\"ird":"x"}"#),
             None,
             "2026-10-26 18:00:00",
             None,

@@ -95,7 +95,9 @@ fn compiled(kind: &Kind, dialect: Dialect) -> Result<Vec<Statement>, OrmError> {
             sets,
             joins,
             wheres,
-        } => vec![sql::compile_update_from(table, sets, joins, wheres, dialect)?],
+        } => vec![sql::compile_update_from(
+            table, sets, joins, wheres, dialect,
+        )?],
         Kind::Delete(delete) => vec![sql::compile_delete(delete, dialect)?],
         Kind::Truncate { table, cascade } => sql::compile_truncate(table, *cascade, dialect),
     })
@@ -193,10 +195,7 @@ async fn run(exec: &Exec, case: &Case, statements: Result<Vec<Statement>, OrmErr
 /// expression is named after its text on MySQL, which differs between the
 /// paths by parentheses).
 fn plain_name(name: &str) -> bool {
-    !name.is_empty()
-        && name
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_')
+    !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
 /// The values of a row, as JSON text (for sorting and messages).
@@ -213,7 +212,11 @@ fn same_rows(left: &[Row], right: &[Row], ordered: bool) -> bool {
     }
     let names = |rows: &[Row]| -> Vec<String> {
         rows.first()
-            .map(|row| row.iter().map(|(name, _)| name.to_ascii_lowercase()).collect())
+            .map(|row| {
+                row.iter()
+                    .map(|(name, _)| name.to_ascii_lowercase())
+                    .collect()
+            })
             .unwrap_or_default()
     };
     let (left_names, right_names) = (names(left), names(right));
@@ -246,10 +249,9 @@ enum Verdict {
 fn compare(case: &Case, compiler: &Outcome, renderer: &Outcome) -> Verdict {
     match (compiler, renderer) {
         (Outcome::Refused(_), Outcome::Refused(_)) => Verdict::RefusedByBoth,
-        (
-            Outcome::Refused(_) | Outcome::Failed(_),
-            Outcome::Refused(_) | Outcome::Failed(_),
-        ) => Verdict::FailedOnBoth,
+        (Outcome::Refused(_) | Outcome::Failed(_), Outcome::Refused(_) | Outcome::Failed(_)) => {
+            Verdict::FailedOnBoth
+        }
         (Outcome::Rows(a), Outcome::Rows(b)) => {
             if same_rows(a, b, case.ordered) {
                 Verdict::SameRows
@@ -331,16 +333,52 @@ async fn compare_paths(dialect: Dialect) {
     support::run(dialect, |exec| async move {
         let mut cases = corpus::reads(dialect);
         cases.extend(corpus::writes(dialect));
-        let (mut rows, mut writes, mut refused, mut failed) = (0, 0, 0, 0);
+        let (mut rows, mut writes, mut refused, mut failed, mut differ) = (0, 0, 0, 0, 0);
+        let mut with_rows = 0;
         let mut mismatches = String::new();
         let mut failures_on_both = String::new();
+        let mut differences = String::new();
         for case in &cases {
             let compiler_sql = compiled(&case.kind, dialect);
             let renderer_sql = rendered(&case.kind, dialect);
             let compiler = run(&exec, case, clone(&compiler_sql)).await;
             let renderer = run(&exec, case, clone(&renderer_sql)).await;
-            match compare(case, &compiler, &renderer) {
-                Verdict::SameRows => rows += 1,
+            let verdict = compare(case, &compiler, &renderer);
+            let expected = case
+                .differs
+                .iter()
+                .find(|(on, _)| *on == dialect)
+                .map(|(_, why)| *why);
+            if let Some(why) = expected {
+                if matches!(verdict, Verdict::Mismatch(_)) {
+                    differ += 1;
+                    writeln!(
+                        differences,
+                        "  [{}] {why}\n    compiler: {}\n      => {}\n    renderer: {}\n      => {}",
+                        case.name,
+                        sql_of(&compiler_sql),
+                        describe(&compiler),
+                        sql_of(&renderer_sql),
+                        describe(&renderer),
+                    )
+                    .unwrap();
+                } else {
+                    writeln!(
+                        mismatches,
+                        "\n[{}] expected to differ ({why}) but the paths agree",
+                        case.name
+                    )
+                    .unwrap();
+                }
+                continue;
+            }
+            match verdict {
+                Verdict::SameRows => {
+                    rows += 1;
+                    if matches!(&renderer, Outcome::Rows(found) if !found.is_empty()) {
+                        with_rows += 1;
+                    }
+                }
                 Verdict::SameWrite => writes += 1,
                 Verdict::RefusedByBoth => refused += 1,
                 Verdict::FailedOnBoth => {
@@ -372,12 +410,15 @@ async fn compare_paths(dialect: Dialect) {
             support::reset(&exec).await;
         }
         eprintln!(
-            "differential ({dialect}): {} cases: {rows} same rows, {writes} same writes, {refused} refused by both, {failed} failed on both, {} mismatches",
+            "differential ({dialect}): {} cases: {rows} same rows ({with_rows} of them not empty), {writes} same writes, {refused} refused by both, {failed} failed on both, {differ} expected differences, {} mismatches",
             cases.len(),
-            cases.len() - rows - writes - refused - failed,
+            cases.len() - rows - writes - refused - failed - differ,
         );
         if !failures_on_both.is_empty() {
             eprintln!("failed on both ({dialect}):\n{failures_on_both}");
+        }
+        if !differences.is_empty() {
+            eprintln!("expected differences ({dialect}):\n{differences}");
         }
         assert!(
             mismatches.is_empty(),
@@ -387,9 +428,7 @@ async fn compare_paths(dialect: Dialect) {
     .await;
 }
 
-fn clone(
-    statements: &Result<Vec<Statement>, OrmError>,
-) -> Result<Vec<Statement>, OrmError> {
+fn clone(statements: &Result<Vec<Statement>, OrmError>) -> Result<Vec<Statement>, OrmError> {
     match statements {
         Ok(statements) => Ok(statements.clone()),
         Err(error) => Err(OrmError::InvalidQuery(error.to_string())),
@@ -418,7 +457,10 @@ async fn portable(dialect: Dialect) {
                 (Some(error), true) => {
                     refused += 1;
                     assert!(
-                        matches!(error, OrmError::Unsupported { .. } | OrmError::InvalidQuery(_)),
+                        matches!(
+                            error,
+                            OrmError::Unsupported { .. } | OrmError::InvalidQuery(_)
+                        ),
                         "{}: {error}",
                         portable.name
                     );

@@ -72,7 +72,12 @@ impl Exec {
     /// The rows `statement` returns, read inside a transaction of its own
     /// (row locks).
     pub async fn rows_in_transaction(&self, statement: &Statement) -> Result<Vec<Row>, String> {
-        let tx = self.db.conn().begin().await.map_err(|error| error.to_string())?;
+        let tx = self
+            .db
+            .conn()
+            .begin()
+            .await
+            .map_err(|error| error.to_string())?;
         let rows = tx
             .query_all_raw(statement.to_sea_orm())
             .await
@@ -154,16 +159,22 @@ pub fn date_time(value: DateTime<Utc>) -> Json {
 }
 
 /// A date-time without zone, read as UTC.
+// Read by the PostgreSQL and MySQL decoders.
+#[cfg_attr(not(any(feature = "postgres", feature = "mysql")), allow(dead_code))]
 pub fn naive_date_time(value: NaiveDateTime) -> Json {
     date_time(value.and_utc())
 }
 
 /// A date as `YYYY-MM-DD`.
+// Read by the PostgreSQL and MySQL decoders.
+#[cfg_attr(not(any(feature = "postgres", feature = "mysql")), allow(dead_code))]
 pub fn date(value: NaiveDate) -> Json {
     Json::String(value.format("%Y-%m-%d").to_string())
 }
 
 /// A time of day as `HH:MM:SS[.f]`.
+// Read by the PostgreSQL and MySQL decoders.
+#[cfg_attr(not(any(feature = "postgres", feature = "mysql")), allow(dead_code))]
 pub fn time(value: NaiveTime) -> Json {
     Json::String(value.format("%H:%M:%S%.f").to_string())
 }
@@ -197,6 +208,8 @@ pub fn bytes(value: Vec<u8>) -> Json {
 }
 
 /// A JSON value: kept, numbers normalized.
+// Read by the PostgreSQL and MySQL decoders.
+#[cfg_attr(not(any(feature = "postgres", feature = "mysql")), allow(dead_code))]
 pub fn json(value: Json) -> Json {
     match value {
         Json::Number(number) => match number.as_i64() {
@@ -223,7 +236,11 @@ fn parse_date_time(text: &str) -> Option<DateTime<Utc>> {
             return Some(at.with_timezone(&Utc));
         }
     }
-    for format in ["%Y-%m-%d %H:%M:%S%.f", "%Y-%m-%dT%H:%M:%S%.f", "%Y-%m-%d %H:%M"] {
+    for format in [
+        "%Y-%m-%d %H:%M:%S%.f",
+        "%Y-%m-%dT%H:%M:%S%.f",
+        "%Y-%m-%d %H:%M",
+    ] {
         if let Ok(at) = NaiveDateTime::parse_from_str(text, format) {
             return Some(at.and_utc());
         }
@@ -257,16 +274,22 @@ mod postgres {
             "INT2" => Json::from(row.try_get_unchecked::<i16, _>(i).map_err(error)?),
             "INT4" => Json::from(row.try_get_unchecked::<i32, _>(i).map_err(error)?),
             "INT8" => Json::from(row.try_get_unchecked::<i64, _>(i).map_err(error)?),
-            "FLOAT4" => number(f64::from(row.try_get_unchecked::<f32, _>(i).map_err(error)?)),
+            "FLOAT4" => number(f64::from(
+                row.try_get_unchecked::<f32, _>(i).map_err(error)?,
+            )),
             "FLOAT8" => number(row.try_get_unchecked::<f64, _>(i).map_err(error)?),
             "NUMERIC" => decimal(row.try_get_unchecked::<Decimal, _>(i).map_err(error)?),
-            "BOOL" => Json::from(i64::from(row.try_get_unchecked::<bool, _>(i).map_err(error)?)),
-            "TIMESTAMPTZ" => {
-                date_time(row.try_get_unchecked::<DateTime<Utc>, _>(i).map_err(error)?)
-            }
-            "TIMESTAMP" => {
-                naive_date_time(row.try_get_unchecked::<NaiveDateTime, _>(i).map_err(error)?)
-            }
+            "BOOL" => Json::from(i64::from(
+                row.try_get_unchecked::<bool, _>(i).map_err(error)?,
+            )),
+            "TIMESTAMPTZ" => date_time(
+                row.try_get_unchecked::<DateTime<Utc>, _>(i)
+                    .map_err(error)?,
+            ),
+            "TIMESTAMP" => naive_date_time(
+                row.try_get_unchecked::<NaiveDateTime, _>(i)
+                    .map_err(error)?,
+            ),
             "DATE" => date(row.try_get_unchecked::<NaiveDate, _>(i).map_err(error)?),
             "TIME" => time(row.try_get_unchecked::<NaiveTime, _>(i).map_err(error)?),
             "JSON" | "JSONB" => json(row.try_get_unchecked::<Json, _>(i).map_err(error)?),
@@ -304,19 +327,24 @@ mod mysql {
         let ty = raw.type_info().name().to_owned();
         let error = |error: navree_db::sea_orm::sqlx::Error| format!("{ty}: {error}");
         Ok(match ty.as_str() {
-            "BOOLEAN" => Json::from(i64::from(row.try_get_unchecked::<bool, _>(i).map_err(error)?)),
+            "BOOLEAN" => Json::from(i64::from(
+                row.try_get_unchecked::<bool, _>(i).map_err(error)?,
+            )),
             name if name.ends_with("UNSIGNED") => {
                 Json::from(row.try_get_unchecked::<u64, _>(i).map_err(error)?)
             }
             "TINYINT" | "SMALLINT" | "MEDIUMINT" | "INT" | "BIGINT" | "YEAR" => {
                 Json::from(row.try_get_unchecked::<i64, _>(i).map_err(error)?)
             }
-            "FLOAT" => number(f64::from(row.try_get_unchecked::<f32, _>(i).map_err(error)?)),
+            "FLOAT" => number(f64::from(
+                row.try_get_unchecked::<f32, _>(i).map_err(error)?,
+            )),
             "DOUBLE" => number(row.try_get_unchecked::<f64, _>(i).map_err(error)?),
             "DECIMAL" => decimal(row.try_get_unchecked::<Decimal, _>(i).map_err(error)?),
-            "DATETIME" | "TIMESTAMP" => {
-                naive_date_time(row.try_get_unchecked::<NaiveDateTime, _>(i).map_err(error)?)
-            }
+            "DATETIME" | "TIMESTAMP" => naive_date_time(
+                row.try_get_unchecked::<NaiveDateTime, _>(i)
+                    .map_err(error)?,
+            ),
             "DATE" => date(row.try_get_unchecked::<NaiveDate, _>(i).map_err(error)?),
             "TIME" => time(row.try_get_unchecked::<NaiveTime, _>(i).map_err(error)?),
             "JSON" => json(row.try_get_unchecked::<Json, _>(i).map_err(error)?),

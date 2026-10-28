@@ -42,20 +42,6 @@ pub enum Kind {
     Truncate { table: &'static str, cascade: bool },
 }
 
-impl Kind {
-    /// Whether the case changes the fixture.
-    pub fn writes(&self) -> bool {
-        matches!(
-            self,
-            Kind::Insert(_)
-                | Kind::Update(_)
-                | Kind::UpdateFrom { .. }
-                | Kind::Delete(_)
-                | Kind::Truncate { .. }
-        )
-    }
-}
-
 /// One statement, compiled by both paths.
 #[derive(Clone, Debug)]
 pub struct Case {
@@ -63,6 +49,16 @@ pub struct Case {
     pub kind: Kind,
     /// The rows come in an order the statement defines.
     pub ordered: bool,
+    /// The dialects where the renderer deliberately differs from the
+    /// compiler, and why (the compiler's SQL is wrong there).
+    pub differs: &'static [(Dialect, &'static str)],
+}
+
+impl Case {
+    fn differs(mut self, on: &'static [(Dialect, &'static str)]) -> Self {
+        self.differs = on;
+        self
+    }
 }
 
 fn case(name: &str, kind: Kind) -> Case {
@@ -70,6 +66,7 @@ fn case(name: &str, kind: Kind) -> Case {
         name: name.to_owned(),
         kind,
         ordered: false,
+        differs: &[],
     }
 }
 
@@ -114,7 +111,8 @@ pub struct Company {
 }
 
 fn at(day: u32, hour: u32, minute: u32) -> DateTime<Utc> {
-    Utc.with_ymd_and_hms(2026, 10, day, hour, minute, 0).unwrap()
+    Utc.with_ymd_and_hms(2026, 10, day, hour, minute, 0)
+        .unwrap()
 }
 
 fn count() -> Aggregate {
@@ -164,7 +162,10 @@ pub fn reads(dialect: Dialect) -> Vec<Case> {
                 .or_where_not_null("deleted_at"),
         ),
         read("in a list", deals().where_in("stage", ["lead", "lost"])),
-        read("not in a list", deals().where_not_in("company_id", [1_i64, 3])),
+        read(
+            "not in a list",
+            deals().where_not_in("company_id", [1_i64, 3]),
+        ),
         read(
             "empty lists",
             deals()
@@ -194,21 +195,29 @@ pub fn reads(dialect: Dialect) -> Vec<Case> {
                 .where_not(col("title").eq("x").or(col("title").eq("Orphan_deal")))
                 .or_where_not(col("amount_cents").lt(5))
         }),
-        read("an empty group", deals().where_(Filter::all(Vec::<Filter>::new()))),
+        read(
+            "an empty group",
+            deals().where_(Filter::all(Vec::<Filter>::new())),
+        ),
         read(
             "a negated empty group",
             deals().where_not(Filter::all(Vec::<Filter>::new())),
         ),
-        read("no alternatives", deals().where_(Filter::any(Vec::<Filter>::new()))),
+        read(
+            "no alternatives",
+            deals().where_(Filter::any(Vec::<Filter>::new())),
+        ),
         read(
             "column against column",
             deals().where_column("updated_at", ">", "created_at"),
         ),
         read(
             "correlated exists",
-            table("companies").where_exists(
-                deals().where_column("deals.company_id", "=", "companies.id"),
-            ),
+            table("companies").where_exists(deals().where_column(
+                "deals.company_id",
+                "=",
+                "companies.id",
+            )),
         ),
         read(
             "correlated not exists",
@@ -256,22 +265,27 @@ pub fn reads(dialect: Dialect) -> Vec<Case> {
         ),
         read(
             "date part: time",
-            deals().where_time(
-                "closed_at",
-                ">=",
-                NaiveTime::from_hms_opt(9, 0, 0).unwrap(),
-            ),
+            deals().where_time("closed_at", ">=", NaiveTime::from_hms_opt(9, 0, 0).unwrap()),
         ),
         read("date part: day", deals().where_day("created_at", "=", 1)),
-        read("date part: month", deals().where_month("created_at", "<", 10)),
-        read("date part: year", deals().where_year("closed_at", ">", 2025)),
+        read(
+            "date part: month",
+            deals().where_month("created_at", "<", 10),
+        ),
+        read(
+            "date part: year",
+            deals().where_year("closed_at", ">", 2025),
+        ),
         read(
             "date part: or",
             deals()
                 .where_day("created_at", "=", 5)
                 .or_where_day("created_at", "=", 26),
         ),
-        read("like ignoring case", deals().where_like("title", "%renewal%")),
+        read(
+            "like ignoring case",
+            deals().where_like("title", "%renewal%"),
+        ),
         read("not like", deals().where_not_like("title", "%renewal%")),
         read(
             "like matching case",
@@ -281,7 +295,10 @@ pub fn reads(dialect: Dialect) -> Vec<Case> {
             "like matching case with glob characters",
             deals().where_like_case_sensitive("title", "Upsell 50%"),
         ),
-        read("like with one-character wildcards", deals().where_like("title", "Orphan_deal")),
+        read(
+            "like with one-character wildcards",
+            deals().where_like("title", "Orphan_deal"),
+        ),
         read(
             "operator like",
             deals().where_(col("title").op("like", "%deal%")),
@@ -291,7 +308,10 @@ pub fn reads(dialect: Dialect) -> Vec<Case> {
             deals().where_(col("title").op("not ilike", "%DEAL%")),
         ),
         read("ilike", deals().where_(col("title").ilike("%RENEWAL%"))),
-        read("regular expression", deals().where_(col("title").regex("^[A-Z]"))),
+        read(
+            "regular expression",
+            deals().where_(col("title").regex("^[A-Z]")),
+        ),
         read(
             "regular expression mismatch",
             deals().where_(col("title").not_regex("deal$")),
@@ -312,7 +332,10 @@ pub fn reads(dialect: Dialect) -> Vec<Case> {
             "null-safe equality",
             table("companies").where_(col("country").null_safe_eq("DE")),
         ),
-        read("similar to", deals().where_(col("title").similar_to("(Renewal|Big)%"))),
+        read(
+            "similar to",
+            deals().where_(col("title").similar_to("(Renewal|Big)%")),
+        ),
         read(
             "bit operators",
             deals().where_(
@@ -397,8 +420,14 @@ pub fn reads(dialect: Dialect) -> Vec<Case> {
             "json contained by",
             deals().where_(col("tags").contained_by(["vip", "q1", "q2"])),
         ),
-        read("json has a key", deals().where_(col("meta").has_key("owner"))),
-        read("json overlaps a scalar", deals().where_(col("tags").overlaps("q1"))),
+        read(
+            "json has a key",
+            deals().where_(col("meta").has_key("owner")),
+        ),
+        read(
+            "json overlaps a scalar",
+            deals().where_(col("tags").overlaps("q1")),
+        ),
         read("full text", deals().where_full_text(["title"], "renewal")),
         read(
             "full text as a phrase",
@@ -406,11 +435,7 @@ pub fn reads(dialect: Dialect) -> Vec<Case> {
         ),
         read(
             "full text in boolean mode",
-            deals().where_full_text_with(
-                ["title", "stage"],
-                "renewal -big",
-                FullText::boolean(),
-            ),
+            deals().where_full_text_with(["title", "stage"], "renewal -big", FullText::boolean()),
         ),
         read(
             "raw fragment keeps its grouping",
@@ -426,7 +451,10 @@ pub fn reads(dialect: Dialect) -> Vec<Case> {
             "raw fragment with a literal question mark",
             deals().where_raw("meta ?? 'owner' AND title <> '?'", Vec::<Value>::new()),
         ),
-        read("raw fragment with the wrong values", deals().where_raw("id = ?", [1, 2])),
+        read(
+            "raw fragment with the wrong values",
+            deals().where_raw("id = ?", [1, 2]),
+        ),
         read(
             "raw or",
             deals()
@@ -441,13 +469,19 @@ pub fn reads(dialect: Dialect) -> Vec<Case> {
             "operator a database lacks",
             deals().where_(Filter::op_raw("title", "glob", Expr::val("*deal"))),
         ),
-        read("unknown operator", deals().where_(col("title").op("=>", "x"))),
+        read(
+            "unknown operator",
+            deals().where_(col("title").op("=>", "x")),
+        ),
         ordered(
             "selected columns and aliases",
             deals()
                 .select(["id", "title as name"])
                 .select_raw("amount_cents * ? AS doubled", [2])
-                .select_expr(Expr::coalesce([col("closed_at"), col("created_at")]), "settled")
+                .select_expr(
+                    Expr::coalesce([col("closed_at"), col("created_at")]),
+                    "settled",
+                )
                 .order_by("id"),
         ),
         ordered(
@@ -455,9 +489,11 @@ pub fn reads(dialect: Dialect) -> Vec<Case> {
             deals()
                 .select(["id"])
                 .select_sub(
-                    table("companies")
-                        .select(["name"])
-                        .where_column("companies.id", "=", "deals.company_id"),
+                    table("companies").select(["name"]).where_column(
+                        "companies.id",
+                        "=",
+                        "deals.company_id",
+                    ),
                     "company",
                 )
                 .order_by("id"),
@@ -525,10 +561,7 @@ pub fn reads(dialect: Dialect) -> Vec<Case> {
         ),
         read(
             "json elements as a table",
-            table("ignored").from_function(
-                Expr::func("json_each", [Expr::val("[1,2]")]),
-                "item",
-            ),
+            table("ignored").from_function(Expr::func("json_each", [Expr::val("[1,2]")]), "item"),
         ),
         ordered(
             "joins",
@@ -541,9 +574,12 @@ pub fn reads(dialect: Dialect) -> Vec<Case> {
         ),
         read(
             "a right join",
-            deals()
-                .select(["deals.id", "companies.name"])
-                .right_join("companies", "companies.id", "=", "deals.company_id"),
+            deals().select(["deals.id", "companies.name"]).right_join(
+                "companies",
+                "companies.id",
+                "=",
+                "deals.company_id",
+            ),
         ),
         read(
             "a cross join",
@@ -680,7 +716,11 @@ pub fn reads(dialect: Dialect) -> Vec<Case> {
             table("companies")
                 .select(["name"])
                 .where_(col("country").eq("US"))
-                .union(table("companies").select(["name"]).where_(col("country").eq("DE")))
+                .union(
+                    table("companies")
+                        .select(["name"])
+                        .where_(col("country").eq("DE")),
+                )
                 .union_all(table("users").select(["name"]))
                 .order_by_desc("name")
                 .limit(4),
@@ -786,7 +826,9 @@ pub fn reads(dialect: Dialect) -> Vec<Case> {
         ),
         ordered(
             "keys",
-            Company::query().where_key_in([1_i64, 3, 4]).order_by(Company::ID),
+            Company::query()
+                .where_key_in([1_i64, 3, 4])
+                .order_by(Company::ID),
         ),
         ordered(
             "a typed model query",
@@ -806,14 +848,17 @@ pub fn reads(dialect: Dialect) -> Vec<Case> {
     let locks = [
         ("lock for update", LockMode::Update, false, false),
         ("shared lock", LockMode::Share, false, false),
-        ("lock no key update, skip locked", LockMode::NoKeyUpdate, true, false),
+        (
+            "lock no key update, skip locked",
+            LockMode::NoKeyUpdate,
+            true,
+            false,
+        ),
         ("shared lock, no wait", LockMode::Share, false, true),
         ("key share lock", LockMode::KeyShare, false, false),
     ];
     for (name, mode, skip, no_wait) in locks {
-        let mut query = table("companies")
-            .where_(col("id").eq(1))
-            .lock(mode);
+        let mut query = table("companies").where_(col("id").eq(1)).lock(mode);
         if skip {
             query = query.skip_locked();
         }
@@ -831,14 +876,15 @@ pub fn reads(dialect: Dialect) -> Vec<Case> {
         ("count of groups", deals().group_by(["stage"]), count()),
         (
             "count of groups with a having",
-            deals()
-                .group_by(["stage"])
-                .having(Expr::count_all().gt(1)),
+            deals().group_by(["stage"]).having(Expr::count_all().gt(1)),
             count(),
         ),
         (
             "sum distinct of a limited query",
-            deals().order_by_desc("amount_cents").order_by("id").limit(4),
+            deals()
+                .order_by_desc("amount_cents")
+                .order_by("id")
+                .limit(4),
             aggregate(AggregateFunction::Sum, "amount_cents", true),
         ),
         (
@@ -905,7 +951,10 @@ pub fn reads(dialect: Dialect) -> Vec<Case> {
         Kind::Aggregate(Deal::query().latest().into_query(), count()),
     ));
     let exists = [
-        ("exists", deals().where_(col("stage").eq("won")).order_by("id")),
+        (
+            "exists",
+            deals().where_(col("stage").eq("won")).order_by("id"),
+        ),
         ("exists: none", deals().where_(col("stage").eq("unknown"))),
         (
             "exists: a union",
@@ -933,15 +982,83 @@ pub fn reads(dialect: Dialect) -> Vec<Case> {
             "has_deals",
         ),
     ));
+    // Where the compiler's SQL is wrong and the renderer's right.
+    cases.push(
+        read(
+            "a json key with a double quote",
+            deals()
+                .select(["id"])
+                .where_(col("meta->we\"ird").eq("x")),
+        )
+        .differs(&[(
+            Dialect::MySql,
+            "the compiler writes the path `$.\"we\\\"ird\"` without doubling its backslash, which MySQL's string syntax eats: an invalid JSON path",
+        )]),
+    );
+    cases.push(
+        read(
+            "a schema-qualified table",
+            table("main.scratch").select(["id"]),
+        )
+        .differs(&[(
+            Dialect::Sqlite,
+            "the compiler quotes `main.scratch` as one name; the renderer quotes each part",
+        )]),
+    );
+    cases.push(
+        read(
+            "a union inside a union keeps its grouping",
+            deals().select(["stage"]).union_all(
+                deals()
+                    .select(["stage"])
+                    .union(deals().select(["stage"])),
+            ),
+        )
+        .differs(&[(
+            Dialect::Sqlite,
+            "the compiler writes the inner union bare on SQLite, so the outer UNION ALL reads as part of a three-way union and loses its duplicates",
+        )]),
+    );
+    cases.push(
+        read(
+            "a union part limited per group",
+            table("users")
+                .select(["id"])
+                .union_all(deals().select(["id"]).group_limit(5, "stage")),
+        )
+        .differs(&[(
+            Dialect::Sqlite,
+            "the compiler leaves a part with a per-group limit (and so an ORDER BY of its own) bare on SQLite, where the ORDER BY ends the whole compound",
+        )]),
+    );
+    cases.push(
+        ordered(
+            "a window ordered by raw SQL with nulls",
+            deals()
+                .select(["id"])
+                .select_expr(
+                    IrExpr::RowNumber {
+                        partition: Vec::new(),
+                        order: vec![
+                            navree_orm::ir::Order::raw("closed_at DESC NULLS LAST", Vec::<Value>::new()),
+                            col("id").asc(),
+                        ],
+                    },
+                    "position",
+                )
+                .order_by("id"),
+        )
+        .differs(&[(
+            Dialect::MySql,
+            "the compiler writes NULLS LAST inside the window, which MySQL lacks; the renderer sorts the NULLs with a leading IS NULL key",
+        )]),
+    );
     cases.push(read(
         "a row number",
         deals().select(["id"]).select_expr(
             IrExpr::RowNumber {
                 partition: vec![IrExpr::Column(ColumnRef::parse("stage"))],
-                order: vec![
-                    col("amount_cents").desc().nulls_last(),
-                    col("id").asc(),
-                ],
+                order: vec![col("amount_cents").desc().nulls_last(), col("id").asc()],
             },
             "rank",
         ),
@@ -980,6 +1097,10 @@ pub fn writes(dialect: Dialect) -> Vec<Case> {
     cases.push(case(
         "insert default values",
         Kind::Insert(InsertIr::new("counters", Vec::new(), Vec::new())),
+    ));
+    cases.push(case(
+        "insert columns without rows",
+        Kind::Insert(InsertIr::new("scratch", names(&["name"]), Vec::new())),
     ));
     cases.push(case(
         "insert a row of the wrong length",
@@ -1136,10 +1257,7 @@ pub fn writes(dialect: Dialect) -> Vec<Case> {
             vec![],
         )),
     ));
-    cases.push(case(
-        "update nothing",
-        Kind::Update(update(vec![], vec![])),
-    ));
+    cases.push(case("update nothing", Kind::Update(update(vec![], vec![]))));
     // A model's mass update with joins: the keys in a materialized derived
     // table (MySQL refuses a subquery on the written table otherwise).
     let mut inner = deals()
@@ -1272,7 +1390,10 @@ pub fn writes(dialect: Dialect) -> Vec<Case> {
         "update from a joined table with json paths",
         Kind::UpdateFrom {
             table: TableRef::new("deals"),
-            sets: vec![(Cow::Borrowed("meta->country"), Expr::col("companies.country"))],
+            sets: vec![(
+                Cow::Borrowed("meta->country"),
+                Expr::col("companies.country"),
+            )],
             joins: vec![joined(
                 JoinKind::Inner,
                 TableRef::new("companies"),
