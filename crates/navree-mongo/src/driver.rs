@@ -627,7 +627,9 @@ impl MongoDriver {
                         let mut list = Vec::with_capacity(rows.len());
                         for row in rows {
                             let first = row.values()?.into_iter().next();
-                            list.push(Expr::Value(first.map_or(Value::Null(navree_orm::Kind::String), |(_, v)| v)));
+                            list.push(Expr::Value(
+                                first.map_or(Value::Null(navree_orm::Kind::String), |(_, v)| v),
+                            ));
                         }
                         *values = InValues::List(list);
                     }

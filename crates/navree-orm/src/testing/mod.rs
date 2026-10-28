@@ -694,10 +694,7 @@ mod tests {
             ("count", Value::I32(3)),
             ("price", Value::String("12.50".into())),
             ("meta", Value::String(r#"{"b": 2, "a": 1}"#.into())),
-            (
-                "at",
-                Value::String("2026-10-27T09:30:00+00:00".into()),
-            ),
+            ("at", Value::String("2026-10-27T09:30:00+00:00".into())),
             ("note", Value::Null(crate::Kind::String)),
         ]);
         assert!(column_matches(&stored, "active", &Value::from(true)));
@@ -720,7 +717,11 @@ mod tests {
         ));
         let at = DateTime::parse_from_rfc3339("2026-10-27T11:30:00+02:00").unwrap();
         assert!(column_matches(&stored, "at", &Value::from(at)));
-        assert!(column_matches(&stored, "note", &Value::Null(crate::Kind::String)));
+        assert!(column_matches(
+            &stored,
+            "note",
+            &Value::Null(crate::Kind::String)
+        ));
         assert!(!column_matches(&stored, "note", &Value::from("x")));
         assert!(!column_matches(&stored, "missing", &Value::from("x")));
     }

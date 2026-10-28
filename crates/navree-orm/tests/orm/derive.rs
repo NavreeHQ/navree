@@ -96,9 +96,7 @@ fn typed_columns_encode_values_as_their_fields_are_stored() {
                 score: 4
             })
             .unwrap(),
-        Value::Json(
-            serde_json::json!({"source": "web", "score": 4})
-        )
+        Value::Json(serde_json::json!({"source": "web", "score": 4}))
     );
     assert_eq!(
         Deal::CLOSED_AT.encode(&None).unwrap(),
@@ -183,10 +181,7 @@ fn values_and_set_value_round_trip() {
     let values = deal.values().unwrap();
     assert_eq!(values.len(), 15);
     assert_eq!(values[4], ("stage", Value::from("lead")));
-    assert_eq!(
-        deal.value("priority").unwrap(),
-        Some(Value::I64(2))
-    );
+    assert_eq!(deal.value("priority").unwrap(), Some(Value::I64(2)));
     assert_eq!(deal.value("scratch").unwrap(), None, "not a column");
 
     deal.set_value("stage", Value::from("closed_lost")).unwrap();
@@ -250,10 +245,7 @@ impl navree_orm::Field for ObjectId {
         Value::Null(Kind::I64)
     }
 
-    fn from_sql(
-        row: &navree_db::Row,
-        column: &str,
-    ) -> Result<Self, navree_orm::FieldError> {
+    fn from_sql(row: &navree_db::Row, column: &str) -> Result<Self, navree_orm::FieldError> {
         <u32 as navree_orm::Field>::from_sql(row, column).map(ObjectId)
     }
 

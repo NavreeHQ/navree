@@ -92,9 +92,7 @@ pub fn to_bson(value: &Value) -> Result<Bson, OrmError> {
             Bson::DateTime(bson::DateTime::from_chrono(Utc.from_utc_datetime(at)))
         }
         Value::Timestamp(at) => Bson::DateTime(bson::DateTime::from_chrono(*at)),
-        Value::TimestampTz(at) => {
-            Bson::DateTime(bson::DateTime::from_chrono(*at))
-        }
+        Value::TimestampTz(at) => Bson::DateTime(bson::DateTime::from_chrono(*at)),
         Value::Uuid(uuid) => Bson::Binary(Binary {
             subtype: BinarySubtype::Uuid,
             bytes: uuid.as_bytes().to_vec(),

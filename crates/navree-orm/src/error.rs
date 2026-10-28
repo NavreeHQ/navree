@@ -668,7 +668,13 @@ mod tests {
             postgres.to_string(),
             "the statement ran longer than its timeout of 100ms and was stopped"
         );
-        assert!(postgres.source().unwrap().downcast_ref::<DbError>().is_some());
+        assert!(
+            postgres
+                .source()
+                .unwrap()
+                .downcast_ref::<DbError>()
+                .is_some()
+        );
         assert!(postgres.db_error().is_some());
         let mysql = db(
             ErrorKind::Database,

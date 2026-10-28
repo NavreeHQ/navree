@@ -94,17 +94,23 @@ impl SeaConn<'_> {
         );
         Ok(match self {
             SeaConn::Pool(conn) => Guarded::new(
-                conn.stream_raw(statement).await?.map(|row| row.map(DbRow::from)),
+                conn.stream_raw(statement)
+                    .await?
+                    .map(|row| row.map(DbRow::from)),
                 None,
             )
             .boxed(),
             SeaConn::Owned(conn) => Guarded::new(
-                conn.stream_raw(statement).await?.map(|row| row.map(DbRow::from)),
+                conn.stream_raw(statement)
+                    .await?
+                    .map(|row| row.map(DbRow::from)),
                 None,
             )
             .boxed(),
             SeaConn::Tx(tx) => Guarded::new(
-                tx.stream_raw(statement).await?.map(|row| row.map(DbRow::from)),
+                tx.stream_raw(statement)
+                    .await?
+                    .map(|row| row.map(DbRow::from)),
                 transaction,
             )
             .boxed(),

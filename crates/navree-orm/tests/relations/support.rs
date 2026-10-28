@@ -137,9 +137,11 @@ impl Module for Boxed {
 
 /// Counts the rows of `table` directly.
 pub async fn count_rows(db: &Db, table: &str) -> i64 {
-    db.fetch_scalar::<i64>(&Statement::text(format!("SELECT COUNT(*) AS n FROM {table}")))
-        .await
-        .unwrap()
+    db.fetch_scalar::<i64>(&Statement::text(format!(
+        "SELECT COUNT(*) AS n FROM {table}"
+    )))
+    .await
+    .unwrap()
 }
 
 /// Runs `sql` directly.
