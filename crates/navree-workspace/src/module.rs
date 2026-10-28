@@ -16,6 +16,8 @@ use navree_kernel::{
     AppContext, BoxError, BoxFuture, Factory, Injectable, Lifecycle, Module, ModuleBuilder,
     ModuleId, ProviderKey, Resolver,
 };
+use navree_orm::ModuleBuilderOrmExt;
+use navree_orm::hooks::ModelHook;
 use navree_schedule::ModuleBuilderScheduleExt;
 use sea_orm::{DbBackend, EntityTrait, IntoActiveModel};
 use serde::Serialize;
@@ -33,6 +35,7 @@ use crate::entity::{
 };
 use crate::error::map_workspace_error;
 use crate::isolation::{IsolationDriver, WorkspaceScoped};
+use crate::library::{Library, LibraryGuard, LibraryVisibility};
 use crate::migration::migrations;
 use crate::org_controller::OrganizationController;
 use crate::permission_check::WorkspacePermissionCheck;
@@ -472,6 +475,23 @@ pub trait ModuleBuilderWorkspaceExt {
     /// Classifies `E` as a global entity: one set of rows shared by every
     /// workspace (countries, plans, the app's own settings).
     fn global_entity<E: EntityTrait>(&mut self) -> &mut Self;
+
+    /// Registers library model `M` (see [`library`](crate::library)): its
+    /// queries see what the current workspace sees
+    /// ([`LibraryVisibility`](crate::library::LibraryVisibility)), its
+    /// writes inside a workspace keep to the workspace's own items
+    /// ([`LibraryGuard`](crate::library::LibraryGuard), a model hook), and
+    /// `navree check` classifies its table as a library. Also registers the
+    /// model with navree-orm (`m.model::<M>()`).
+    ///
+    /// ```ignore
+    /// impl Module for TemplatesModule {
+    ///     fn register(&self, m: &mut ModuleBuilder) {
+    ///         m.library::<Template>();
+    ///     }
+    /// }
+    /// ```
+    fn library<M: Library>(&mut self) -> &mut Self;
     /// Registers demo seeder `S` (a `dyn DemoSeeder` multi-binding): it
     /// fills every demo workspace when [`DemoWorkspaces`] creates or
     /// resets one.
@@ -508,5 +528,14 @@ impl ModuleBuilderWorkspaceExt for ModuleBuilder {
 
     fn global_entity<E: EntityTrait>(&mut self) -> &mut Self {
         self.contribute(EntityClass::global::<E>())
+    }
+
+    fn library<M: Library>(&mut self) -> &mut Self {
+        self.model::<M>()
+            .global_scope_of::<M>(LibraryVisibility)
+            .multi(Factory::<dyn ModelHook<M>>::new(|_| async {
+                Ok(Arc::new(LibraryGuard) as Arc<dyn ModelHook<M>>)
+            }))
+            .contribute(EntityClass::library(M::meta().table()))
     }
 }

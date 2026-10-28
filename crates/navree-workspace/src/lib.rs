@@ -44,6 +44,14 @@
 //!   all or some of them; [`CurrentPartition`] (`X-Partition`) and
 //!   [`PartitionScope`] keep a request to the partitions it may touch, with
 //!   [`PartitionRepo`] and, on PostgreSQL, `navree.partition`.
+//! - **Shared libraries** ([`library`]). Tables of content (templates,
+//!   courses, badges) whose rows are global, an organization's or a
+//!   workspace's ([`LibraryScope`], kept consistent by a `CHECK`
+//!   constraint): `m.library::<Template>()` scopes the model's queries to
+//!   what the current workspace sees and keeps its writes to the
+//!   workspace's own items; [`LibraryRepo`] reads a viewer's library,
+//!   seeds the global items and clones an item into a workspace
+//!   (`cloned_from_id`, [`events::LibraryItemCloned`]).
 //! - **Time zones.** Each workspace and organization has an optional
 //!   `timezone` and `country` ([`Workspaces::set_time_zone`],
 //!   [`Organizations::update`]); the module registers [`WorkspaceZones`]
@@ -98,6 +106,7 @@
 
 pub mod entity;
 pub mod events;
+pub mod library;
 #[cfg(feature = "testing")]
 pub mod testing;
 
@@ -156,7 +165,8 @@ pub use entity::{
     ORG_MEMBER_SUBJECT, ORGANIZATION_SUBJECT, OrgMember, Organization, PARTITION_SUBJECT,
     Partition, WORKSPACE_SUBJECT, Workspace, WorkspaceKind,
 };
-pub use error::{DEMO_READ_ONLY, WorkspaceError};
+pub use error::{DEMO_READ_ONLY, LIBRARY_READ_ONLY, WorkspaceError};
+pub use library::{Library, LibraryOwner, LibraryRepo, LibraryScope, LibraryViewer};
 pub use invitations::{AcceptedInvitation, Invitations, SentInvitation, TOKEN_LEN};
 pub use isolation::{RlsPolicy, WorkspaceRepo, WorkspaceScoped, rls_policy_sql};
 pub use members::{MemberInfo, Members};
