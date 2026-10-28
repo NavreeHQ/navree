@@ -51,6 +51,7 @@ mod hasher;
 pub mod jose;
 mod key;
 mod module;
+pub mod qr;
 mod tokens;
 pub mod webpush;
 
