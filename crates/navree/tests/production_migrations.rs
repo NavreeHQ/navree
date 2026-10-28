@@ -21,9 +21,19 @@ use navree::config::{ConfigModule, ConfigSources};
 use navree::db::{DatabaseModule, Db, DbOptions, Executor, ExecutorExt, Migrator, Pool, Statement};
 use navree::kernel::{App, AppBuilder, Navree};
 
-/// Every module with production migrations, as an app adds it.
-fn modules(app: AppBuilder) -> AppBuilder {
+/// Whether `url` is a MySQL or MariaDB database, which navree-search does
+/// not support (it needs PostgreSQL's or SQLite's full-text search).
+fn is_mysql(url: &str) -> bool {
+    url.starts_with("mysql") || url.starts_with("mariadb")
+}
+
+/// Every module with production migrations, as an app adds it (search not
+/// on MySQL).
+fn modules(app: AppBuilder, url: &str) -> AppBuilder {
     let app = app
+        .module(navree::crypto::CryptoModule::from_config())
+        .module(navree::view::ViewModule::from_config())
+        .module(navree::storage::StorageModule::from_config())
         .module(navree::access::AccessModule::for_root(
             navree::access::AccessOptions::default(),
         ))
@@ -60,14 +70,19 @@ fn modules(app: AppBuilder) -> AppBuilder {
     #[cfg(feature = "oauth")]
     let app = app.module(navree::oauth::OAuthServerModule::from_config());
     #[cfg(feature = "search")]
-    let app = app.module(navree::search::SearchModule::from_config());
+    let app = if is_mysql(url) {
+        app
+    } else {
+        app.module(navree::search::SearchModule::from_config())
+    };
+    let _ = url;
     #[cfg(feature = "social")]
     let app = app.module(navree::social::SocialModule::from_config());
     app
 }
 
 /// The modules whose migration sets the app must run.
-fn expected_modules() -> BTreeSet<&'static str> {
+fn expected_modules(url: &str) -> BTreeSet<&'static str> {
     let mut modules = BTreeSet::from([
         "access",
         "audit",
@@ -97,7 +112,7 @@ fn expected_modules() -> BTreeSet<&'static str> {
         (cfg!(feature = "media"), "media"),
         (cfg!(feature = "micro"), "micro"),
         (cfg!(feature = "oauth"), "oauth"),
-        (cfg!(feature = "search"), "search"),
+        (cfg!(feature = "search") && !is_mysql(url), "search"),
         (cfg!(feature = "social"), "social"),
     ] {
         if on {
@@ -111,11 +126,23 @@ fn expected_modules() -> BTreeSet<&'static str> {
 async fn app(url: &str) -> App {
     let sources = ConfigSources::new()
         .set("database.url", url)
-        .set("database.max_connections", 4);
+        .set("database.max_connections", 4)
+        .set("app.key", navree::crypto::generate_key())
+        .set("billing.provider", "fake")
+        .set("billing.routes", false)
+        .set("micro.transport", "memory")
+        .set("social.redirect_base", "https://app.example.com/auth/callback")
+        .set("ai.fake", true)
+        .set("search.sync", "inline")
+        // Lighthouse records nothing while its tables come and go (a flush
+        // racing a down migration would add a chunk to a hypertable being
+        // dropped).
+        .set("lighthouse.enabled", false);
     modules(
         Navree::app()
             .module(ConfigModule::for_root(sources))
             .module(DatabaseModule::from_config()),
+        url,
     )
     .boot()
     .await
@@ -148,6 +175,7 @@ async fn pool_of(app: &App) -> Pool {
 
 /// What one database showed.
 #[derive(Debug)]
+#[allow(dead_code)]
 struct Outcome {
     modules: usize,
     migrations: usize,
@@ -164,7 +192,7 @@ async fn every_migration(url: &str) -> Outcome {
     assert_eq!(applied.len(), status.len(), "every registered migration ran");
     assert!(status.iter().all(|s| s.applied && s.batch == Some(1)));
     let modules: BTreeSet<&str> = status.iter().map(|s| s.module.as_str()).collect();
-    for module in expected_modules() {
+    for module in expected_modules(url) {
         assert!(modules.contains(module), "the `{module}` migrations ran");
     }
     let pool = pool_of(&app).await;
@@ -300,10 +328,52 @@ fn urls(variable: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// Migrates the databases of `NAVREE_MIGRATE_ONLY` and keeps them.
+/// Creates the database of server URL `url` afresh, through the admin URL
+/// of its server's test variable.
+async fn recreate(url: &str) {
+    let variable = if url.starts_with("postgres") {
+        "NAVREE_TEST_POSTGRES_URL"
+    } else {
+        "NAVREE_TEST_MYSQL_URL"
+    };
+    let admin_url = std::env::var(variable).expect("the server's admin URL");
+    let name = url
+        .split('?')
+        .next()
+        .and_then(|base| base.rsplit('/').next())
+        .expect("a database name")
+        .to_owned();
+    let admin = Pool::connect(&DbOptions {
+        url: admin_url,
+        max_connections: 1,
+        ..DbOptions::default()
+    })
+    .await
+    .expect("the admin URL connects");
+    let force = if url.starts_with("postgres") {
+        " WITH (FORCE)"
+    } else {
+        ""
+    };
+    admin
+        .execute_script(&format!("DROP DATABASE IF EXISTS {name}{force}"))
+        .await
+        .expect("drops the database");
+    admin
+        .execute_script(&format!("CREATE DATABASE {name}"))
+        .await
+        .expect("creates the database");
+    admin.close().await;
+}
+
+/// Migrates the databases of `NAVREE_MIGRATE_ONLY` (server databases
+/// created afresh) and keeps them.
 #[tokio::test]
 async fn migrate_only() {
     for url in urls("NAVREE_MIGRATE_ONLY") {
+        if !url.starts_with("sqlite") {
+            recreate(&url).await;
+        }
         let app = app(&url).await;
         let applied = Migrator::up(app.ctx()).await.expect("migrates");
         eprintln!("{url}: {} migrations applied", applied.len());
