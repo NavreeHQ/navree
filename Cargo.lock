@@ -6619,6 +6619,7 @@ name = "navree-schedule"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "chrono-tz",
  "croner",
  "futures-util",
  "navree-config",
@@ -6628,6 +6629,7 @@ dependencies = [
  "navree-telemetry",
  "navree-testing",
  "navree-time",
+ "proptest",
  "sea-orm",
  "sea-orm-migration",
  "serde",
