@@ -1,390 +1,257 @@
-<img src="assets/icon.svg" width="64" height="64" alt="">
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/readme/logo-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="assets/readme/logo-light.png">
+    <img src="assets/readme/logo-light.png" alt="Navree" width="250">
+  </picture>
+</p>
 
-# navree
+<h3 align="center">The complete backend framework for Rust.</h3>
 
-Created in [T3 Code](https://t3.codes).
+<p align="center">
+  Modular, API-first and AI-native. Auth, workspaces, an ORM, queues, search,<br>
+  real time, monitoring and deployment are already in the box,<br>
+  so you build the product, not the plumbing.
+</p>
 
-**The complete backend framework for Rust.** Modular, API-first and
-AI-native. Everything your backend needs, checked by the compiler.
+<p align="center">
+  <a href="https://navree.com/docs/prologue/introduction/"><b>Documentation</b></a>
+  &nbsp;·&nbsp;
+  <a href="https://navree.com/docs/getting-started/installation/"><b>Get started</b></a>
+  &nbsp;·&nbsp;
+  <a href="https://navree.com/ecosystem/"><b>Ecosystem</b></a>
+  &nbsp;·&nbsp;
+  <a href="https://navree.com/showcase/crm/"><b>Showcase</b></a>
+  &nbsp;·&nbsp;
+  <a href="https://navree.com/ai/"><b>Navree for AI</b></a>
+</p>
 
-Navree is a framework for building efficient, secure and scalable
-server-side applications in Rust. It gives you an application architecture
-out of the box: features live in modules, modules declare what they import
-and export, and a dependency-injection container wires them together when
-the app boots, refusing to start if anything is missing. Around that
-structure sits a complete standard library for backends, from routing and
-validation to workspaces, queues, monitoring and AI, designed together,
-documented together and released together. The result is code that stays
-easy to test, easy to change and easy to hand to a new teammate, or to an
-AI agent.
+<p align="center">
+  <img alt="Rust 1.95 or newer" src="https://img.shields.io/badge/rust-1.95%2B-3dff8f?style=flat-square&logo=rust&logoColor=white&labelColor=0b0f0c">
+  <img alt="Version 0.1" src="https://img.shields.io/badge/version-0.1-3dff8f?style=flat-square&labelColor=0b0f0c">
+  <img alt="License: MIT or Apache-2.0" src="https://img.shields.io/badge/license-MIT%20or%20Apache--2.0-3dff8f?style=flat-square&labelColor=0b0f0c">
+  <a href="https://navree.com/llms.txt"><img alt="Docs for AI agents: llms.txt" src="https://img.shields.io/badge/docs%20for%20agents-llms.txt-3dff8f?style=flat-square&labelColor=0b0f0c"></a>
+</p>
 
-- **Modular by design.** Every feature is a module that declares what it
-  imports, provides and exports.
-- **Dependency injection.** A type-keyed container wires services at boot
-  and refuses to start with a missing or private dependency, naming the
-  module and the type.
+<br>
+
+<a href="https://navree.com"><img src="assets/readme/hero.jpg" alt="Navree: the complete backend framework for Rust" width="100%"></a>
+
+## Why Navree
+
+Every Navree backend has the same clear structure. Features live in modules
+that declare what they import, provide and export, and a dependency-injection
+container wires them together when the app boots, refusing to start if
+anything is missing. Around that structure sits a complete standard library
+for backends, designed, documented and released together.
+
+- **Modular by design.** An app is a set of modules with checked
+  boundaries. Nothing is global, so the code stays easy to test, to change
+  and to hand to a new teammate or a coding agent.
 - **API-first.** Versioned routes, validated input, one JSON error shape
-  (`{ "statusCode", "message", "error", "code" }`, with stable codes a
-  front end translates) and an OpenAPI 3.1 document generated from your
-  code.
+  with stable codes your front end can translate, and an OpenAPI 3.1
+  document generated from your code.
 - **Secure by default.** Routes deny until you allow them. Rotating refresh
-  tokens, two-factor, Argon2id, encrypted cookies, CSRF, rate limits,
-  security headers, an audit log and an SSRF guard ship on.
-- **Workspaces built in.** Multi-tenancy at the workspace level: members,
-  roles, invitations, and isolation by row, schema or database.
+  tokens, two-factor, passkeys, Argon2id, encrypted cookies, rate limits,
+  security headers, an audit log and an SSRF guard are on from the start.
+- **Multi-tenant from the first commit.** Workspaces and organizations with
+  members, roles and invitations, isolated by row, schema or database.
 - **AI-native.** Agent skills, an MCP server for your coding agent, docs
-  written for models as well as people, and an AI SDK for the product
-  itself.
-- **One binary**, built on Tokio, Axum, Hyper, Tower, SeaORM, sqlx,
-  garde, rustls and Argon2.
+  written for models as well as people, and an AI SDK for your product.
+- **One binary.** Web server, queue workers and scheduler ship as one
+  release, built on Tokio, Axum, Hyper, Tower and rustls.
+
+## Get started
 
 ```sh
 cargo install --git https://github.com/NavreeHQ/navree navree-cli
-navree new blog
-cd blog
-navree key:generate     # then set APP_KEY in .env
-navree dev              # http://127.0.0.1:8080/api/docs
+
+navree new acme --kit saas     # API and Next.js app: sign-in, workspaces, billing, admin
+cd acme
+navree dock up                 # TimescaleDB and Mailpit
+navree key:generate            # then set APP_KEY in .env
+navree migrate:fresh --seed    # tables and a demo workspace
+pnpm --dir web install
+navree dev                     # API on :8080, web app on :3000
 ```
 
-**Documentation:** [navree.com/docs](https://navree.com/docs/prologue/introduction/).
-The docs are also published for AI agents as
-[`llms.txt`](https://navree.com/llms.txt) and as Markdown, page by page.
+Three starter kits come with the CLI: `saas` (an API with a Next.js front
+end), `api` (the API on its own) and `micro` (a microservice). `navree new
+blog` starts from a minimal app instead. The
+[installation guide](https://navree.com/docs/getting-started/installation/)
+and the [starter kits](https://navree.com/docs/getting-started/starter-kits/)
+walk through each one.
+
+## Every app reads the same way
+
+A module states its boundaries, and `main.rs` lists the modules:
+
+```rust
+use navree::prelude::*;
+
+/// The sales pipeline: its routes, its service, and what
+/// other modules may use.
+#[module(
+    imports = [CrmCoreModule],
+    providers = [DealService],
+    controllers = [DealsController],
+    exports = [DealService],
+    register = Self::wire,
+)]
+pub struct DealsModule;
+
+impl DealsModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        // A queue worker tells owners about their deals.
+        m.listen::<DealAssigned, NotifyDealOwner>()
+            .on::<DealWon, NotifyDealOwner>();
+    }
+}
+
+fn main() -> Result<(), BoxError> {
+    Navree::app()
+        .module(ConfigModule::for_root(ConfigSources::defaults()))
+        .module(HttpModule::from_config())
+        .module(DatabaseModule::from_config())
+        .module(QueueModule::from_config())
+        .module(AuthModule::from_config())
+        // ... mail, access and the rest of the platform
+        .module(DealsModule)
+        .run()
+}
+```
+
+Models are structs the compiler checks, with a typed constant per column:
+
+```rust
+/// A deal: the `deals` table, one typed column constant per field.
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(timestamps, soft_deletes)]
+pub struct Deal {
+    pub id: Uuid,
+    pub company_id: Uuid,
+    pub title: String,
+    pub amount_cents: i64,
+    #[model(cast = "string_enum")]
+    pub stage: Stage,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub deleted_at: Option<DateTime<Utc>>,
+}
+
+// Won deals over $1,000, newest first, with their companies:
+// one query for the page's companies, however long the page.
+let won = Deal::query()
+    .where_(Deal::STAGE.eq(Stage::Won))
+    .where_(Deal::AMOUNT_CENTS.gte(100_000))
+    .with("company")
+    .latest()
+    .paginate(&uow, page)
+    .await?;
+```
+
+## Everything in the box
+
+| | |
+|---|---|
+| **Data** | An ORM with relations, eager loading, scopes, casts, lifecycle events and factories; a schema builder and migrations; PostgreSQL, TimescaleDB (the default), MySQL, SQLite and MongoDB |
+| **Identity** | JWT with rotating refresh tokens, two-factor, passkeys, magic links, sessions, impersonation, single sign-on (SAML and OpenID Connect), social sign-in and an OAuth 2.1 server |
+| **Tenancy** | Workspaces and organizations, roles and abilities, invitations, row, schema or database isolation, custom domains with automatic TLS and SCIM directory sync |
+| **APIs** | Versioned REST routes, validation, OpenAPI 3.1, GraphQL, gRPC, microservices over NATS, Kafka or RabbitMQ, and signed webhooks in both directions |
+| **Background work** | Queues with retries and batches, scheduling in any time zone, events, and durable workflows with end-user automations |
+| **Messaging** | Mail (SMTP, SES, Postmark and more) in and out, notifications over Slack, Microsoft Teams, SMS, WhatsApp and web push with per-user preferences, and real time over WebSockets |
+| **Files** | Storage on S3, Google Cloud and Azure, media with image conversions, PDF and DOCX documents, and CSV and Excel imports and exports |
+| **Product** | Billing with Stripe and Paddle, feature flags, typed settings with inheritance, full-text and vector search, localization and time zones |
+| **AI** | An AI SDK for Anthropic, OpenAI, Gemini, Mistral, Ollama and Bedrock, agents with typed tools, embeddings and vector stores, and MCP servers |
+| **Operations** | Monitoring, a debugging timeline, a queue supervisor, an admin panel, zero-downtime deploys, health checks, metrics and tracing |
+
+## Multi-tenant from the first commit
+
+Workspaces are a core module, on by default: members, roles, invitations
+and workspace-scoped permissions come with them. The workspace is resolved
+from the subdomain, a header, the path or a token claim, and every query
+knows which one it runs in.
+
+<a href="https://navree.com/docs/workspaces/introduction/"><img src="assets/readme/workspaces.jpg" alt="Workspaces: a workspace switcher, members and roles, and row, schema or database isolation" width="100%"></a>
 
 ## The ecosystem
 
-Everything a production backend needs beyond the framework is first-party,
-open source and free, documented on the
-[ecosystem page](https://navree.com/ecosystem/):
+Monitoring, queue supervision, deployment, an admin panel, a debugger and an
+MCP server for your agent ship with Navree, next to libraries for search,
+billing, OAuth, AI and more. All first-party, open source and self-hosted.
 
-- **Tools:** Lighthouse (application monitoring), Logbook (a local
-  debugging timeline), Fleet (queue dashboard and worker supervisor), Helm
-  (an admin panel generated from your entities), Harbor (servers and
-  zero-downtime deployments), Dock (local services for development) and
-  Navigator (the MCP server for your coding agent).
-- **Packages:** search, the AI SDK, MCP servers, microservices, gRPC,
-  GraphQL, an OAuth 2.1 server, social sign-in, billing, feature flags,
-  settings with inheritance, webhooks, CSV and Excel imports and exports,
-  localization and browser testing.
-- **Starter kits:** `navree new <name> --kit saas|api|micro`.
-- **Agent skills** for every common task, in [`skills/`](skills/).
+<a href="https://navree.com/ecosystem/"><img src="assets/readme/ecosystem.jpg" alt="The Navree ecosystem: Lighthouse, Fleet, Harbor, Helm, Logbook and Navigator" width="100%"></a>
 
-The ecosystem build plan in
-[`docs/superpowers/plans/`](docs/superpowers/plans/) tracks how each
-package lands in this repository.
+| Tool | What it does |
+|---|---|
+| **Lighthouse** | Application monitoring inside your app: issues, slow requests and queries, failed jobs and alerts |
+| **Logbook** | A local debugging timeline of every request, with its queries, events, jobs and mail |
+| **Fleet** | A queue dashboard and a supervisor for your workers |
+| **Helm** | An admin panel generated from your models, checked against your access rules |
+| **Harbor** | Server provisioning and zero-downtime, blue-green deployments with automatic rollback |
+| **Dock** | Local services for development: databases, mail, search and object storage |
+| **Navigator** | The MCP server that shows your coding agent the running app |
 
-## This repository
+## Built for developers and their agents
 
-The repository is a Cargo workspace of small module crates, plus a reference
-CRM built on top of them and the website:
+Every Navree app has one predictable shape, so a coding agent finds its way
+the first time. Navree hands it the steps for each task and a view of the
+running app, and gives your product AI models behind one typed service.
 
-- `apps/crm-api`: the Navree CRM API, a Navree application.
-- `apps/crm-web`: the CRM front end (Next.js 16). Its server is a
-  backend-for-frontend (BFF) that holds the API tokens in httpOnly cookies.
-- `packages/js`: the front-end npm packages (`@navree/client`, `@navree/bff`,
-  `@navree/next`, `@navree/nuxt`, `@navree/theme`), a pnpm workspace.
-- `apps/website`: navree.com and the documentation (Next.js, MDX).
-  [`apps/website/AUTHORING.md`](apps/website/AUTHORING.md) is the guide for
-  writing docs pages.
+<a href="https://navree.com/ai/"><img src="assets/readme/ai.jpg" alt="A coding agent fixing a failing request through the Navree MCP server" width="100%"></a>
 
-Documents:
+- **Agent skills**, one per common task, installed with `navree skills:install`.
+- **Navigator** (`navree mcp`) gives your agent the routes, the schema, the logs and the last error of the running app.
+- **Docs for models**: [`llms.txt`](https://navree.com/llms.txt) and every page as Markdown.
+- **AGENTS.md** in every new app.
 
-- Product requirements: [`docs/prd/navree-prd.md`](docs/prd/navree-prd.md)
-- Build design (crate hierarchy, decisions, CRM API contract):
-  [`docs/superpowers/specs/2026-10-25-navree-framework-design.md`](docs/superpowers/specs/2026-10-25-navree-framework-design.md)
-- Implementation plan:
-  [`docs/superpowers/plans/2026-10-25-navree-framework.md`](docs/superpowers/plans/2026-10-25-navree-framework.md)
-- Framework notes and known open issues:
-  [`docs/superpowers/notes/`](docs/superpowers/notes/)
+## A real CRM, built on Navree
 
-## Crate hierarchy
+The repository includes a complete CRM: a Navree API with companies,
+contacts, a deals pipeline, tasks, an activity timeline, roles and an audit
+log, and two front ends on the same API, one in Next.js and one in Nuxt.
 
-The crates form layers (spec §3): the framework from L0 to L5, ecosystem
-libraries at L6, packages built on them at L7, and the facade and CLI at L8.
-A crate may depend only on crates in lower layers, dev-dependencies included,
-and its runtime dependencies must also match the spec's table of allowed
-edges. Cross-cutting needs (audit,
-events, broadcasting, sessions, health checks, jobs, the current principal)
-go through traits in `navree-contracts`, so modules don't depend on each
-other sideways. `crates/navree/tests/dependency_graph.rs` checks every edge on
-each test run.
+<a href="https://navree.com/showcase/crm/"><img src="apps/website/public/images/crm/next/pipeline.webp" alt="The CRM's deals pipeline" width="100%"></a>
 
-```
-L9+ apps/crm-api (Navree app)                   apps/crm-web (Next.js 16)
-L8  navree (facade: re-exports + prelude)       navree-cli (binary `navree`; no runtime navree deps, uses navree-dock, navree-harbor and navree-navigator)
-L7  navree-billing  navree-search  navree-lighthouse  navree-logbook  navree-fleet  navree-helm  navree-workflows  navree-media  navree-directory  navree-domains (packages built on other packages)
-L6  navree-social  navree-sso  navree-webhooks  navree-integrations  navree-sheets  navree-oauth  navree-flags  navree-settings  navree-graphql  navree-grpc  navree-mcp  navree-ai  navree-micro  navree-i18n  navree-documents (ecosystem libraries)
-L5  navree-auth  navree-workspace  navree-redis  navree-mongo
-L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access  navree-schedule  navree-notify  navree-ui  navree-orm  navree-browser
-L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage  navree-time
-L2  navree-http  navree-log  navree-crypto  navree-events  navree-view  navree-cache  navree-http-client  navree-schema  navree-navigator (dev tool)
-L1  navree-contracts  navree-config  navree-telemetry
-L0  navree-kernel                                navree-macros  navree-orm-macros  navree-i18n-macros (proc-macros; no runtime navree deps)   navree-dock, navree-harbor (tools; no navree deps)
-```
+<table>
+  <tr>
+    <td width="50%"><img src="apps/website/public/images/crm/next/dashboard.webp" alt="The CRM dashboard (Next.js)"></td>
+    <td width="50%"><img src="apps/website/public/images/crm/nuxt/deal.webp" alt="A deal with its timeline (Nuxt)"></td>
+  </tr>
+</table>
 
-| Layer | Crate | What it provides |
-|---|---|---|
-| L0 | `navree-kernel` | Module graph, type-keyed DI container, lifecycle, command runner |
-| L0 | `navree-macros` | `#[module]`, `#[injectable]`, `#[controller]`, `#[resolver]`, route and access attributes |
-| L0 | `navree-orm-macros` | `#[derive(Model)]` and `#[scopes]` (re-exported by `navree-orm`) |
-| L0 | `navree-i18n-macros` | `embed_locales!`: Fluent files embedded in the binary, their syntax checked at compile time (used through navree-i18n) |
-| L0 | `navree-dock` | Dock: `dock.toml`, local PostgreSQL, Redis, Meilisearch, Mailpit, MinIO and NATS through `docker compose` or `podman compose`, the app's `.env` settings (behind `navree dock`; opt-in facade feature `dock`) |
-| L0 | `navree-harbor` | Harbor: `harbor.toml`, Ubuntu provisioning over SSH (Caddy with TLS, PostgreSQL, Redis, ufw, a deploy user, systemd units), blue-green releases with health checks and automatic rollback, AES-256-GCM secrets, several servers and roles, `build:image` and a GitHub Actions workflow (behind `navree harbor:*`, `navree deploy*` and `navree build:image`; opt-in facade feature `harbor`) |
-| L1 | `navree-contracts` | Shared traits and types: `Secret<T>`, `RequestId`, `Principal`, `AuthState`, sinks, `Broadcaster`, jobs with progress and cancellation, permission checks, `Clock`, conformity checks (`conformity:check`) |
-| L1 | `navree-config` | Typed configuration from `.env`, TOML files and `APP_*` variables |
-| L1 | `navree-telemetry` | Typed telemetry events (requests, queries, jobs, scheduled tasks, mail, notifications, cache, outgoing HTTP, exceptions, log lines, app events) delivered to registered sinks, `TelemetryRecorder`, W3C trace context |
-| L2 | `navree-http` | Axum integration, default Tower layers, JSON errors, controllers, rate limits, trusted proxies |
-| L2 | `navree-log` | tracing subscriber, JSON or pretty output, redaction, rotating files |
-| L2 | `navree-crypto` | AES-256-GCM encrypter with key rotation, Argon2id hasher, token helpers, JOSE helpers (JWS, JWK, PKCS#8 on `ring`) |
-| L2 | `navree-events` | Typed event bus with sync and queued listeners |
-| L2 | `navree-view` | MiniJinja templates (mail and other text) |
-| L2 | `navree-cache` | Cache stores (memory on moka; Redis with navree-redis), remember, tags, locks |
-| L2 | `navree-http-client` | Outgoing HTTP with retries, timeouts, an SSRF policy and fakes |
-| L2 | `navree-schema` | The schema builder: tables, columns, indexes, foreign keys and check constraints in Rust for PostgreSQL, MySQL/MariaDB and SQLite (SQLite alterations by table rebuild); TimescaleDB hypertables, compression, retention, reorder policies and continuous aggregates with fallbacks on other databases; introspection; schema dumps; migration files (`navree::schema`) |
-| L2 | `navree-navigator` | Navigator, the MCP server for coding agents behind `navree mcp`: routes, the module graph and providers, the schema, read-only SQL, logs and the last error, redacted configuration and the docs of the app's Navree version; and the agent skills of `navree skills:install` (a dev tool; opt-in facade feature `navigator`) |
-| L3 | `navree-db` | SeaORM integration, per-request unit of work, migrations (schema and SeaORM, batches, steps, rollback, reset, refresh, fresh, `--pretend`, `schema:dump`), seeders, factories, pagination |
-| L3 | `navree-testing` | `TestApp`, an in-process `TestClient`, fakes, cross-tenant isolation suites generated from a module's routes |
-| L3 | `navree-observe` | Health checks, readiness, Prometheus metrics, tracing (spans from telemetry events, `SpanRecorder`, OTLP export behind the opt-in facade feature `otel`) |
-| L3 | `navree-api` | OpenAPI 3.1 from route metadata, docs UI, API resources, `api.require_docs` and the `api.docs` check |
-| L3 | `navree-mail` | Mailables from templates with CSS inlined; SMTP (DKIM-signed), SES, Mailgun, Postmark, Resend, log, array and failover transports; queued sending; tenant transports, a delivery log fed by provider webhooks, suppressions, hold for approval, open and click tracking, SPF/DKIM/DMARC checks; inbound mail (feature `inbound`, facade `mail-inbound`, in `full`): messages parsed with mail-parser, SES (SNS and S3), Mailgun, Postmark and raw MIME sources, mailboxes routed by address (`m.mailbox("reply+{token}@...", handler)`), signed reply tokens, raw `.eml` files on a storage disk and `InboundMailReceived` |
-| L3 | `navree-realtime` | Pusher-protocol WebSocket server (public, private, presence channels), a signed relay for other processes, and a backplane (Redis with navree-redis) for several serving processes |
-| L3 | `navree-storage` | Named disks on object_store (local, memory, S3 and S3-compatible stores, Google Cloud Storage, Azure; facade features `storage-s3`, in `full`, and opt-in `storage-gcs`, `storage-azure`), streaming, provider-signed temporary URLs, direct browser uploads, upload checks, `storage:sync` |
-| L3 | `navree-time` | Time zones: checked IANA zones with PostgreSQL-safe names, the request's zone (user, workspace, organization, default), local days and report windows, send windows, public holidays, `AT TIME ZONE` with a checked zone, `time:zones` |
-| L4 | `navree-session` | Encrypted session cookies, memory, database and Redis stores, CSRF (optional; the CRM doesn't use it) |
-| L4 | `navree-validation` | `Valid<T>` extractors on garde, field-level messages, async unique/exists rules, international input (E.164 `Phone`, `SafeHtml`, names and digits in any script, `Country`, `Locale`) |
-| L4 | `navree-queue` | Database, memory and Redis job queues (the `QueueStore` driver trait), workers, retries with backoff, unique and delayed jobs; job batches with callbacks; operations with progress, an SSE stream, cancel and a watchdog |
-| L4 | `navree-audit` | Audit trail of data changes, sign-ins, permission changes and denials |
-| L4 | `navree-access` | Roles, permissions and abilities (shared with front ends as CASL JSON), record checks, SQL list filters |
-| L4 | `navree-schedule` | Cron schedules in UTC, a zone or each workspace's local time, overlap prevention, single-node runs |
-| L4 | `navree-notify` | Notifications over mail, database, broadcast, Slack (webhooks, bot tokens), Microsoft Teams (webhooks, proactive bot messages), SMS (Twilio, Vonage, Amazon SNS; E.164 numbers, STOP opt-outs), WhatsApp (Twilio, the Cloud API) and web push (VAPID ES256 on `ring`, RFC 8291 encryption), with read state, a delivery log updated from provider callbacks, push subscriptions and a fake per channel; preferences per category and channel (people and workspaces), digests, quiet hours and send windows on the recipient's clock, held deliveries released by `notify:release`, per-workspace template overrides and `#[notification]` |
-| L4 | `navree-ui` | The UI kit of the server-rendered tools: the app shell (collapsible sidebar, top bar, command palette), components as MiniJinja macros, embedded and versioned CSS, JS and fonts (facade feature `ui`) |
-| L4 | `navree-orm` | The ORM: `#[derive(Model)]` models with typed columns and keys (integers, UUID v7, ULID), a query builder with every where variant, joins, groups, subqueries, unions, locks and TimescaleDB's `time_bucket`/`first`/`last`, records with dirty tracking, casts, scopes, lifecycle hooks, collections and offset, simple and cursor pagination, on PostgreSQL/TimescaleDB, MySQL and SQLite through the unit of work, and a document-driver interface (facade feature `orm`) |
-| L4 | `navree-browser` | Browser testing: Chrome, Chromium or Edge over the DevTools Protocol, actions and assertions that wait, failure screenshots, `TestServer` on a real port and `FrontEnd` sessions (a dev-dependency; opt-in facade feature `browser`; `navree browser:install` downloads Chrome for Testing) |
-| L5 | `navree-auth` | JWT auth: rotating refresh tokens, strategies, accounts, 2FA and two-factor policy, sessions, step-up, impersonation, magic links and email codes, platform sign-in, token exchange, passkeys |
-| L5 | `navree-workspace` | Workspaces: members, roles, invitations, time zones and countries, row, schema or database isolation; organizations above workspaces and partitions inside them; shared libraries of global, organization and workspace content cloned on use; entity classification and isolation checks, workspace isolation suites (feature `testing`); demo workspaces seeded from fixtures, read-only or reset nightly |
-| L5 | `navree-redis` | Redis: shared connections (lazy, reconnecting, TLS), Redis drivers for the cache and locks, the queue, sessions and the real-time backplane, shared rate limits (facade feature `redis`, opt-in) |
-| L5 | `navree-mongo` | MongoDB on the official driver: `MongoModule` (connections from `[database.mongodb]`, pools, readiness), the ORM's document driver (filters, aggregation pipelines, `$lookup` joins and subqueries, time buckets, ObjectId keys, bulk writes), sessions and units of work with change events, the schema builder on collections (JSON-schema validators, indexes, time-series collections) and migrations (facade feature `mongo` or `mongodb`, opt-in) |
-| L6 | `navree-social` | Social sign-in: Google, GitHub, Apple, Microsoft, GitLab, Slack, LinkedIn, Discord, X and OpenID Connect, linked to Navree users (facade feature `social`, opt-in) |
-| L6 | `navree-sso` | Single sign-on: SAML 2.0 and OpenID Connect connections per organization or workspace, verified email domains that route sign-in and can refuse passwords, just-in-time provisioning with group to role mapping; XML signatures verified on `ring` |
-| L6 | `navree-webhooks` | Webhooks: signed outgoing deliveries with queue-backed retries and a delivery log, verified incoming webhooks (Stripe, GitHub, Paddle, Standard Webhooks, AWS SNS, Google Pub/Sub, Microsoft Graph, Twilio, Slack, Mailgun, Postmark, Vonage, Meta) with their handshakes answered, and the notification channels' provider callbacks (feature `notify`) |
-| L6 | `navree-integrations` | Integrations: workspace and organization connections to Microsoft 365 (admin consent, app-only tokens), Google Workspace (service-account keys with domain-wide delegation, RS256 signed on `ring`), Slack, any OAuth 2.0 API and API keys; credentials encrypted in `integration_connections` (a navree-orm model), token refresh under a lock, least-privilege scope sets, the scheduled `integrations:check` with `ConnectionUnhealthy`, typed clients (`Connection<MicrosoftGraph>`, `graph.get("/users")`), `IntegrationsFake`, connection tokens for notification bot routes (feature `notify`), and Microsoft 365 and Gmail mailboxes watched for new mail (feature `mail`: Graph subscriptions, Gmail push, `integrations:mailboxes`) (facade feature `integrations`, in `full`) |
-| L6 | `navree-sheets` | CSV and Excel: `#[derive(Exportable)]` rows, downloads with a byte-order mark and formula escaping, XLSX with typed cells, named exports streamed or queued to a disk with a signed link; imports with encoding detection (UTF-16, Windows-1256 and the rest), CSV, XLSX, XLS and ODS reading, automatic and saved header mappings, garde validation per row, a staging preview, duplicate modes, batched apply with progress and error files |
-| L6 | `navree-oauth` | OAuth 2.1 and OpenID Connect provider: PKCE, client credentials, device and refresh grants, scopes mapped to permissions, personal access tokens (facade feature `oauth`, opt-in) |
-| L6 | `navree-flags` | Feature flags: `#[flag]` types, checks per user, workspace, plan or percentage with stable hashing, a kill switch, `#[requires_flag]` routes, database storage with a cache (facade feature `flags`, opt-in) |
-| L6 | `navree-settings` | Typed settings: `#[derive(Settings)]` types stored per global, organization, workspace or user level and inherited field by field, with the source of every value; validated, audited and cached writes, `GET`/`PATCH /api/settings/{key}`, the `Setting<T>` extractor, `settings:*` commands, a Helm screen and `SettingsFake`; with `notify`, the `notification-templates` group restyles notification mail per workspace (facade feature `settings`, in `full`) |
-| L6 | `navree-graphql` | GraphQL on async-graphql: `#[resolver]` fields in modules with route-style access, per-request dataloaders, subscriptions over WebSockets, GraphiQL, `graphql:schema` (facade feature `graphql`, opt-in) |
-| L6 | `navree-grpc` | gRPC on tonic: `#[grpc_service]` services in modules with DI, guards, access rules and the unit of work; gRPC-Web, Connect, health, reflection, named client channels (facade feature `grpc`, opt-in) |
-| L6 | `navree-mcp` | MCP servers: `#[mcp_server]` tools, resources and prompts over streamable HTTP at `/mcp` and stdio (`mcp:serve`), behind the app's authenticators and per-tool access checks (opt-in facade feature `mcp`) |
-| L6 | `navree-ai` | AI SDK: text, typed structured output and SSE streams from Anthropic, OpenAI, Gemini, Mistral, Ollama and Bedrock, failover, token budgets, agents with `#[tool]` methods run as the user, conversation memory, embeddings, vector stores (memory, pgvector, Qdrant) and `AiFake` (facade feature `ai`, opt-in) |
-| L6 | `navree-micro` | Microservices: `#[message_pattern]` and `#[event_pattern]` handlers with the same guards, access, validation and unit of work as routes, `ServiceClient` (`send` with deadlines, `emit`), retries, dead letters, an outbox and an inbox, `MicroFake`; TCP and in-memory transports, NATS, Kafka, RabbitMQ, Redis Streams and MQTT behind features (facade features `micro`, `micro-nats`, ..., opt-in) |
-| L6 | `navree-i18n` | Localization: Fluent files per locale with plurals, variables and fallbacks, `t!`, the request's `Locale` negotiated from the query, the user's and workspace's saved locale, a cookie and `Accept-Language`, ICU4X number, money and date formatting, translated validation messages (seven languages shipped), `t()` in templates, notifications in the recipient's locale, `i18n:check` (facade feature `i18n`, opt-in) |
-| L6 | `navree-documents` | Documents: PDF from HTML templates or documents built in code, laid out by a native engine (shaping, bidirectional text, tagged PDF, bundled Noto fonts with Arabic, Hebrew and Devanagari) or printed by headless Chrome with a page pool; DOCX; merge, stamps and overlays; text extraction in reading order; queued renders to a storage disk; a fake (facade feature `documents`, opt-in) |
-| L7 | `navree-billing` | Billing for users or workspaces: Stripe and Paddle clients, plans, trials, seats, metered usage, invoices, the portal, verified webhooks on the queue, a fake (facade feature `billing`, opt-in) |
-| L7 | `navree-search` | Full-text and vector search: `#[derive(Searchable)]`, PostgreSQL/SQLite, Meilisearch, Typesense, Tantivy and memory engines, synced through the queue (facade feature `search`, opt-in) |
-| L7 | `navree-lighthouse` | Application monitoring inside the app: a telemetry sink grouping exceptions, slow requests and queries, failed jobs and failing outgoing calls into issues, per-minute aggregates and sampled traces in the app's database, alerts (mail, Slack, signed webhooks, your own channels) through the queue, the `/_lighthouse` dashboard and its JSON API, MCP tools for agents (with `mcp`), `lighthouse:prune` (facade feature `lighthouse`, in `full`) |
-| L7 | `navree-logbook` | Logbook: a local debugging timeline at `/_logbook` of every request with its queries, events, jobs, mail, cache calls and log lines; filters by tag and user, duplicate-query detection, request replay, a bounded SQLite or memory store (facade feature `logbook`, in `full`; off in release builds) |
-| L7 | `navree-fleet` | Fleet: a supervisor of queue worker processes (`fleet`) with auto-balancing, recycling and graceful restarts; throughput, wait and runtime metrics; failed jobs; pause and continue; long-wait alerts; a dashboard at `/_fleet` (facade feature `fleet`, in `full`) |
-| L7 | `navree-helm` | Helm: the admin panel at `/admin` generated from your entities (resources with fields, filters, search, actions and metrics), checked against your access rules, audited, server-rendered with an embedded stylesheet and script, plus its JSON API |
-| L7 | `navree-workflows` | Durable workflows in code: `#[workflow]` async functions whose steps are stored and replayed on resume, durable sleeps for minutes or months, event waits with timeouts, versions, cancellation, retries and leases that survive crashes (`workflow_runs`, `workflow_steps`); end-user automations: `#[trigger]`, `#[condition]` and `#[action]` blocks with JSON Schemas for the editor, versioned definitions per workspace validated against the catalog, enrollments with policies, simulation, templates, the `/api/workflows` and `/api/automations` routes and `WorkflowsFake` (facade feature `workflows`, in `full`) |
-| L7 | `navree-media` | Media: files attached to models (`impl HasMedia`) in collections that check types and sizes and keep one or the latest few files, rows in `media` (a navree-orm model), bytes on storage disks; image conversions (resize, crop, WebP, JPEG, PNG, greyscale, blur, responsive variants with `srcset`, SVG through resvg) with EXIF stripped, queued as `media.conversions` and regenerated with `media:regenerate`; remote files through the SSRF guard; zip archives with zip-slip and size-bomb guards; text from PDF, DOCX and HTML; video and audio through an FFmpeg sidecar (`media-ffmpeg`); `MediaFake` (facade feature `media`, opt-in) |
-| L7 | `navree-directory` | Directory sync: a SCIM 2.0 server (`/scim/v2/Users`, `/Groups`, `/ServiceProviderConfig`, `/ResourceTypes`, `/Schemas`; the full filter language, PATCH as identity providers send it, paging, projection; a bearer token per connection kept as a SHA-256 hash) and pull connectors for Microsoft Graph (delta queries), Google Workspace and Okta (through navree-integrations connections, scope set `directory`) and LDAP or Active Directory (ldap3 with rustls, paged searches); a normalized `DirectoryUser` and `DirectoryGroup` per connection (navree-orm models), mapped into your model with `impl DirectorySink`; runs that stage, diff and apply in chunks, with dry runs, a deactivation limit that holds a run for approval, progress on navree-queue operations and recorded changes; events `DirectoryUserCreated`, `Updated`, `Deactivated`, `DirectorySyncFinished`; commands `directory:sync` and `directory:runs`; `DirectoryFake` (facade feature `directory`, in `full`) |
-| L7 | `navree-domains` | Custom domains: workspaces on their own domains (`Domains::add` answers with the TXT and CNAME records to create; reserved, taken and per-workspace limits), verified through DNS (hickory-resolver; `domains:verify --due` every minute, giving up after 72 hours, daily routing rechecks); automatic TLS through an on-demand proxy's ask endpoint (`GET /_domains/allow?domain=`, which Harbor's Caddy calls) or ACME certificates the app gets itself (instant-acme on ring, HTTP-01 answers served from the database, keys sealed, renewals, a rustls certificate resolver and an HTTPS listener); the `domain` workspace resolver and the `CurrentDomain` extractor; managed Cloudflare zones; certificate expiry probes and reports (an event, and a Lighthouse issue with the `lighthouse` feature); routes under `/api/domains`; `DnsFake`, `AcmeFake`, `ProbeFake`, `DnsProviderFake` (facade feature `domains`, in `full`) |
-| L8 | `navree` | The facade: re-exports every module crate (one Cargo feature each, `full` by default) and the macros |
-| L8 | `navree-cli` | The `navree` binary: `navree new` (with the starter kits: `--kit saas`, `api` or `micro`), `navree make:*`, `navree dev`, `navree dock`, `navree check`, `navree gate`, `navree harbor:*`, `navree deploy`, `navree build:image`, `navree mcp`, `navree skills:install`, `navree browser:install`, `navree openapi:client` |
+## Front ends
 
-The front-end packages are npm packages in `packages/js/` (a pnpm workspace):
+Navree is API-first and works with any front end. For web apps, the npm
+packages in [`packages/js`](packages/js) add a typed client generated from
+your OpenAPI document, a backend-for-frontend that keeps tokens in httpOnly
+cookies, Next.js and Nuxt integrations, and the navree.com theme.
 
 | Package | What it does |
 |---|---|
-| `@navree/client` | A typed client on openapi-fetch and the schema `navree openapi:client` generates: cookie or bearer mode, `X-Workspace`, request ids, `NavreeError` with the error `code`, list queries, page helpers, query keys, operations over SSE, locale helpers; abilities (`@casl/ability`) and real time (`pusher-js`) as separate entry points |
-| `@navree/bff` | The backend-for-frontend on web-standard `Request` and `Response`: httpOnly token cookies, single-flight refresh, two-factor sign-in, the Origin check, a streaming proxy, `ensureSession` for server rendering, test helpers (`fakeNavree`, `serveFakeNavree`) |
-| `@navree/next` | Next.js: route handlers, `auth()` and `client()` for server components, the proxy, `DataTable` and `useListQuery`, `useOperation`, workspaces, form errors; `AbilityProvider`/`Can`, `RealtimeProvider`/`useChannel` |
-| `@navree/nuxt` | A Nuxt module: the BFF as Nitro routes, a session gate, auto-imported composables (`useNavreeAuth`, `useWorkspace`, `useNavreeClient`, `useListQuery`, `useOperation`, `useChannel`, `useAbility`) and `<NavreeDataTable>` |
-| `@navree/theme` | navree.com's dark theme: Tailwind CSS 4 tokens, shadcn/ui and shadcn-vue colors, self-hosted fonts, the tokens as data, a shadcn registry theme |
+| `@navree/client` | A typed API client with workspaces, pagination, abilities and real time |
+| `@navree/bff` | Token cookies, refresh, two-factor sign-in and a streaming proxy |
+| `@navree/next` | Route handlers, server components, data tables and real-time hooks for Next.js |
+| `@navree/nuxt` | The same for Nuxt, as a module with auto-imported composables |
+| `@navree/theme` | The navree.com dark theme for Tailwind CSS 4, shadcn/ui and shadcn-vue |
 
-The CRM API is split the same way: `crm-core` (models, factories,
-migrations, abilities, platform modules), `crm-companies` (companies and contacts),
-`crm-deals`, `crm-activities` (activities and the dashboard), `crm-users`,
-`crm-testkit` (a booted CRM for feature tests) and the `crm-api` binary.
+## Learn more
 
-## Requirements
+- [Documentation](https://navree.com/docs/prologue/introduction/): guides
+  and reference for every module.
+- [The ecosystem](https://navree.com/ecosystem/): every first-party tool and
+  package.
+- [The CRM showcase](https://navree.com/showcase/crm/): screenshots and a
+  tour of the reference app.
+- [Agent skills](skills/): one per common task, for your coding agent.
 
-- Rust 1.95 or newer (edition 2024; the build machine uses 1.99.1). On
-  Windows, the MSVC build tools (SQLite is compiled from source through the
-  bundled `libsqlite3-sys`).
-- Optional: [sccache](https://github.com/mozilla/sccache), to share compiled
-  dependencies between target directories. The repository doesn't set a
-  compiler wrapper; set `RUSTC_WRAPPER=sccache`, or `rustc-wrapper =
-  "sccache"` under `[build]` in a Cargo config outside the repository (for
-  example `~/.cargo/config.toml`).
-- For the web app: Node.js 20.9 or newer (the build machine uses 24) and
-  pnpm 11.
+## Contributing
 
-No OpenSSL, CMake or NASM is needed: TLS is rustls with the `ring` provider
-everywhere. No database server is needed either: tests and development use
-SQLite.
+[`CONTRIBUTING.md`](CONTRIBUTING.md) explains how this repository is laid
+out and how to build and test it.
 
-## Running the tests
+## License
 
-### Rust (framework and CRM API)
-
-```sh
-cargo test --workspace
-cargo clippy --workspace --all-targets -- -D warnings
-cargo fmt --all -- --check
-```
-
-`cargo test --workspace` runs every crate's unit and integration tests,
-including the CRM API's feature tests and the dependency-graph test. Each
-test that touches a database gets its own temporary SQLite file.
-
-Several builds (people, CI jobs or agents) often run at the same time. Cargo
-locks the target directory, so give each one its own (and, if you use it, let
-sccache share the compiled dependencies):
-
-```sh
-CARGO_TARGET_DIR=target/agents/<label> cargo test -p <crate>
-```
-
-For example `CARGO_TARGET_DIR=target/agents/http cargo test -p navree-http`.
-Use `-p <crate>` while working on one crate, and keep `CARGO_BUILD_JOBS`
-moderate when memory is tight.
-
-### Web (crm-web)
-
-```sh
-cd apps/crm-web
-pnpm install
-pnpm lint        # ESLint
-pnpm typecheck   # tsc --noEmit
-pnpm test        # Vitest: BFF route handlers, API client, CASL, audit actions, mock API
-pnpm build       # production build
-```
-
-### Front-end packages (packages/js)
-
-```sh
-cd packages/js
-pnpm install
-pnpm check       # build, typecheck and Vitest for every package
-pnpm smoke       # builds a Next.js and a Nuxt app on the packages and checks the running servers
-```
-
-### End to end (Playwright, the whole system)
-
-```sh
-cd apps/crm-web
-pnpm exec playwright install chromium   # once
-E2E_REAL_API=1 pnpm e2e
-```
-
-This needs cargo and nothing listening on ports 8080 or 3000. Playwright
-starts crm-api on a fresh, seeded database of its own
-(`apps/crm-api/storage/e2e.db`; `migrate:fresh`, `db:seed crm-demo`, then
-`serve`, built into `target/agents/crm-e2e`) and the production build of
-crm-web (`pnpm build && pnpm start`), then runs every spec in a real
-Chromium against them, one spec at a time. The first run compiles the API,
-which takes several minutes. Without `E2E_REAL_API=1`, `pnpm e2e` only runs
-the smoke tests against the in-browser mock API. See
-[`apps/crm-web/README.md`](apps/crm-web/README.md) for the details.
-
-## Running the CRM
-
-Run each long-running command in its own terminal.
-
-**1. The API** (from `apps/crm-api`; it reads `.env` and `config/app.toml`
-from the working directory):
-
-```sh
-cd apps/crm-api
-cargo run -p crm-api -- key:generate            # prints base64:...; put it in .env as APP_KEY=base64:...
-cargo run -p crm-api -- migrate:fresh --seed    # schema + demo data in storage/crm.db
-cargo run -p crm-api -- serve                   # REST API and Pusher WebSocket on http://127.0.0.1:8080
-cargo run -p crm-api -- queue:work              # optional: deal notifications and mail (mail goes to the log)
-cargo run -p crm-api -- schedule:work           # optional: 08:00 UTC task reminders, daily audit pruning
-```
-
-Without an `APP_KEY` the API signs tokens with a random key per process, so
-every restart signs everyone out. `.env.example` lists the other settings
-(database URL, trusted proxies, SMTP, the realtime relay). Workers hand
-their broadcasts to `serve` through `realtime.relay_url` (`auto` = the
-`http.addr` of `serve`), signed with a key derived from `APP_KEY`, so all
-processes need the same `.env`. `cargo run -p crm-api -- list` shows every
-command. The OpenAPI document is at
-http://127.0.0.1:8080/api/openapi.json.
-
-**2. The web app** (from `apps/crm-web`):
-
-```sh
-cd apps/crm-web
-pnpm install
-pnpm dev                                        # http://localhost:3000
-```
-
-It talks to the API at `NAVREE_API_URL` (default `http://127.0.0.1:8080`).
-`pnpm dev:mock` runs the web app alone against an in-browser mock of the
-API, with the same demo accounts.
-
-**Demo accounts** (all with password `password123`):
-
-| Email | Role | Can |
-|---|---|---|
-| `admin@navree.test` | admin | Everything, including users, roles and the audit log |
-| `manager@navree.test` | manager | All customer records, reassign deals, export contacts, reopen won/lost deals (only admin deletes them) |
-| `rep1@navree.test` | rep | Read everything; create records; edit and delete only their own; can't delete or reopen won/lost deals |
-| `rep2@navree.test` | rep | Same as rep1 (a second owner, to see ownership rules and live updates) |
-
-The seed also creates about 20 companies, 50 contacts, 30 deals across the
-pipeline stages and 60 activities. Open the deals board as two users in two
-browsers to see moves arrive over the WebSocket.
-
-## Design decisions
-
-The build covers the PRD's foundation and the modules the CRM needs (spec
-§2); spec §10 records the decisions taken during the build.
-
-- **Token authentication.** Stateless JWT access tokens (HS256, 15 minutes)
-  plus opaque rotating refresh tokens (30 days, SHA-256 at rest; reusing
-  one revokes its whole family), a pluggable `Strategy` trait, a global
-  guard with a `#[public]` opt-out and a `CurrentUser` extractor.
-  `navree-session` (cookie sessions and CSRF) is a separate, optional
-  module, and the CRM doesn't use it.
-- **The browser never holds tokens.** The Next.js server is a BFF that keeps
-  them in httpOnly cookies and forwards `Authorization: Bearer`.
-- **One error shape.** Every error is `{statusCode, message, error, code}`,
-  with validation failures as 400 plus `errors: {field: [..]}`; the web app
-  branches on `code`, never on the English message. Statuses 422 and
-  419 are not used. The PRD text still mentions problem+json, 422 and 419
-  in places; spec §10 overrides it.
-- **PostgreSQL.** The PostgreSQL-only paths (`FOR UPDATE`, `SKIP LOCKED`,
-  advisory locks) are written behind `DbBackend` checks and the `postgres`
-  feature, and the performance harness in `bench/` runs on PostgreSQL;
-  every test runs on SQLite, the PRD's development and test database.
-- **Real time is in-process.** Navree ships a Pusher-protocol WebSocket
-  server, so pusher-js and any Pusher client connects. Processes that don't
-  serve the sockets, such as queue workers, send their broadcasts to the
-  serving process over a signed HTTP relay.
-- **Framework crates implement `Module`, `Injectable` and `Controller` by
-  hand** (the PRD's escape hatch) instead of using `navree-macros`, so
-  every crate could be built before the macros existed. Apps and the
-  facade's tests use the macros.
-
-## Layout
-
-| Path | What |
-|---|---|
-| `crates/navree` | Facade: re-exports every module crate and the macros; holds the full-stack and dependency-graph tests |
-| `crates/navree-*` | One crate per module (see [Crate hierarchy](#crate-hierarchy)) |
-| `apps/crm-api` | The CRM API, a Navree application (`src/`), its feature crates (`crates/`) and system tests (`tests/`) |
-| `apps/crm-web` | The CRM front end (Next.js), with Vitest unit tests and Playwright specs in `e2e/` |
-| `apps/website` | navree.com and the documentation |
-| `packages/js` | The front-end npm packages: `@navree/client`, `@navree/bff`, `@navree/next`, `@navree/nuxt`, `@navree/theme` |
-| `skills/` | The agent skills, one `SKILL.md` per directory |
-| `bench/` | The performance harness behind navree.com/performance |
-| `docs/` | PRD, build design, implementation plan, notes |
-
-### Features and drivers
-
-- Databases: SQLite (bundled) by default; enable PostgreSQL with the
-  `postgres` feature of `navree` (or `navree-db`).
-- External versions live only in the root `[workspace.dependencies]`; crates
-  use `dep = { workspace = true }`.
+Navree is free and open source under either of the
+[MIT license](LICENSE-MIT) or the [Apache License 2.0](LICENSE-APACHE), at
+your option.
