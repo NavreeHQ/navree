@@ -33,8 +33,9 @@ impl Domains {
             ));
         }
         let host = normalize_host(host).map_err(DomainsError::InvalidDomain)?;
+        // Only the verified domain owns the host (and its certificate).
         let domain = models::Domain::query()
-            .where_(models::Domain::HOST.eq(host.clone()))
+            .where_(models::Domain::VERIFIED_HOST.eq(host.clone()))
             .first(&*rt.db)
             .await?;
         let own = rt
@@ -44,12 +45,16 @@ impl Domains {
             .iter()
             .filter_map(|own| normalize_host(own).ok())
             .any(|own| own == host);
-        match &domain {
-            Some(row) if DomainStatus::parse(&row.status) != DomainStatus::Verified => {
-                return Err(DomainsError::NotVerified(host));
-            }
-            None if !own => return Err(DomainsError::DomainNotFound),
-            _ => {}
+        if domain.is_none() && !own {
+            let claimed = models::Domain::query()
+                .where_(models::Domain::HOST.eq(host.clone()))
+                .exists(&*rt.db)
+                .await?;
+            return Err(if claimed {
+                DomainsError::NotVerified(host)
+            } else {
+                DomainsError::DomainNotFound
+            });
         }
         // The key must be sealable before a certificate is ordered.
         rt.seal(&host)?;
@@ -238,7 +243,7 @@ impl Domains {
             .order_by(models::Domain::HOST);
         if let Some(host) = host {
             let host = normalize_host(host).map_err(DomainsError::InvalidDomain)?;
-            query = query.where_(models::Domain::HOST.eq(host));
+            query = query.where_(models::Domain::VERIFIED_HOST.eq(host));
         }
         let rows = query.get(&*rt.db).await?.into_models();
         for row in rows {
@@ -259,7 +264,7 @@ impl Domains {
         }
         for (host, expires_at) in run.expiring.clone() {
             let domain_id = models::Domain::query()
-                .where_(models::Domain::HOST.eq(host.clone()))
+                .where_(models::Domain::VERIFIED_HOST.eq(host.clone()))
                 .first(&*rt.db)
                 .await?
                 .map(|row| row.id);

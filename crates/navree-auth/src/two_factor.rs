@@ -32,7 +32,10 @@ use uuid::Uuid;
 
 use crate::account::update_user;
 use crate::service::entry;
-use crate::{AuthError, AuthService, ClientMeta, LEEWAY_SECS, TokenPair, TokenType, User, user};
+use crate::{
+    AuthError, AuthService, ClientMeta, LEEWAY_SECS, SignInAttempt, SignInMethod, TokenPair,
+    TokenType, User, user,
+};
 
 /// Characters per half of a recovery code (`xxxxxxxxxx-xxxxxxxxxx`).
 const RECOVERY_HALF_LEN: usize = 10;
@@ -285,7 +288,10 @@ impl AuthService {
     /// Finishes a two-factor login (`POST /auth/2fa/verify`): checks the
     /// challenge token from [`attempt_login`](AuthService::attempt_login)
     /// ([`AuthError::InvalidToken`] / [`AuthError::TokenExpired`]; a
-    /// challenge is accepted once), then `proof`, and issues a token pair.
+    /// challenge is accepted once), asks the [`SignInPolicy`](crate::SignInPolicy)s
+    /// again about the method of the first step (a domain may have come to
+    /// enforce single sign-on since), then checks `proof` and issues a
+    /// token pair.
     /// A wrong or reused code is [`AuthError::InvalidTwoFactorCode`]
     /// (audited as `auth.two_factor_failed`); after
     /// `auth.two_factor.max_attempts_per_minute` of them the user's
@@ -298,6 +304,16 @@ impl AuthService {
         proof: TwoFactorProof,
         meta: &ClientMeta,
     ) -> Result<(User, TokenPair), AuthError> {
+        let claims = self
+            .jwt
+            .verify(challenge_token, TokenType::TwoFactorChallenge)?;
+        let user = self
+            .find_user(claims.sub)
+            .await?
+            .ok_or(AuthError::InvalidToken)?;
+        let method = claims.sign_in.unwrap_or(SignInMethod::Password);
+        self.check_sign_in(&SignInAttempt::of(&user, method), meta)
+            .await?;
         let user = self
             .verify_challenge(challenge_token, TokenType::TwoFactorChallenge, &proof, meta)
             .await?;
@@ -434,12 +450,18 @@ impl AuthService {
         Ok(())
     }
 
-    /// The challenge token of a two-factor login for `user`.
-    pub(crate) fn sign_challenge(&self, user: &User) -> Result<String, AuthError> {
-        self.jwt.sign(
+    /// The challenge token of a two-factor login for `user` signing in
+    /// with `method`.
+    pub(crate) fn sign_challenge(
+        &self,
+        user: &User,
+        method: &SignInMethod,
+    ) -> Result<String, AuthError> {
+        self.jwt.sign_challenge(
             user.id,
             TokenType::TwoFactorChallenge,
             Duration::from_secs(self.options.two_factor.challenge_ttl_secs),
+            method,
         )
     }
 

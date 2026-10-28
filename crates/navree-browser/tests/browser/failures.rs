@@ -156,3 +156,42 @@ async fn failures_go_under_the_default_artifacts_folder() {
             .starts_with(&dir)
     );
 }
+
+#[tokio::test]
+async fn a_failure_on_a_background_page_still_saves_its_screenshot() {
+    if !has_chrome("a_failure_on_a_background_page_still_saves_its_screenshot") {
+        return;
+    }
+    let site = Fixture::start().await;
+    let artifacts = tempfile::tempdir().unwrap();
+    let browser = Browser::builder()
+        .artifacts(artifacts.path())
+        .timeout(Duration::from_millis(300))
+        .launch()
+        .await
+        .unwrap();
+    let first = browser.visit(site.url("/second")).await.unwrap();
+    // A second page in the same browser covers the first.
+    let second = browser.visit(site.url("/second")).await.unwrap();
+
+    // Chrome renders no frames for a page that is not in front, so the
+    // capture used to wait out its whole timeout and give up.
+    let started = std::time::Instant::now();
+    let error = first.assert_see("Not here").await.unwrap_err();
+    let screenshot = error
+        .files()
+        .and_then(|files| files.screenshot.clone())
+        .expect("a screenshot of the background page");
+    assert_eq!(png_size(&screenshot), (1440, 900));
+    assert!(
+        started.elapsed() < Duration::from_secs(4),
+        "the capture took {:?}",
+        started.elapsed()
+    );
+
+    // The same for the newest page, and for an explicit screenshot of the
+    // first one afterwards.
+    let error = second.assert_see("Not here").await.unwrap_err();
+    assert!(error.files().unwrap().screenshot.is_some());
+    first.screenshot("again").await.unwrap();
+}

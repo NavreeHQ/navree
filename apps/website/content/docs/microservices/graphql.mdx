@@ -56,7 +56,7 @@ complexity_limit = 500
 |---|---|---|
 | `graphql.path` | `/graphql` | The endpoint. Absolute: `http.api_prefix` doesn't apply. |
 | `graphql.graphiql` | `true` in debug builds | Serve GraphiQL to browsers that open the endpoint. |
-| `graphql.introspection` | `true` in debug builds | Answer introspection queries. When it's off, `__schema` and `__type` resolve to `null`. |
+| `graphql.introspection` | `true` in debug builds | Answer introspection queries. When it's off, `__schema` and `__type` resolve to `null`. The schema introspection shows is the public one: the internal types Navree builds the root fields from never appear, so tools that validate it (GraphiQL's docs, codegen) accept it. |
 | `graphql.depth_limit` | `16` | The deepest selection a query may nest. |
 | `graphql.complexity_limit` | `1000` | The highest complexity score a query may have (each field counts 1 unless it says otherwise). |
 | `graphql.batching` | `false` | Accept a JSON array of operations in one request. |
@@ -403,7 +403,7 @@ In development, open `http://localhost:8080/graphql` in a browser to get GraphiQ
 { "Authorization": "Bearer eyJhbGciOiJIUzI1NiIs..." }
 ```
 
-GraphiQL sends it with every query, and in the `connection_init` payload of its subscriptions. The page loads GraphiQL from unpkg.
+GraphiQL sends it with every query, and in the `connection_init` payload of its subscriptions. The page loads nothing from a third party: GraphiQL 3.8.3, React 18.3.1 and React DOM 18.3.1 are embedded in your binary with their MIT licenses and served by the app at `/graphql/assets/`, cached for a year. Its `Content-Security-Policy` allows scripts from your own origin only (even the page's start-up code is a file, not an inline script).
 
 GraphiQL is served only when `graphql.graphiql` is on (debug builds by default) and only to requests that accept HTML. Any other `GET` on the endpoint answers 405, and so does every `GET` in release builds: queries are always `POST`s with a JSON body, so a link or an image tag on another site can't run one, and the [CSRF protection](/docs/basics/sessions-and-csrf/) of cookie sessions applies to them like any other `POST`.
 

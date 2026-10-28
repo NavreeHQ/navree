@@ -175,6 +175,21 @@ fn the_saas_kit_writes_the_api_and_the_web_app() {
     assert!(package["devDependencies"].get("shadcn").is_none());
     assert!(!read(&root, "web/pnpm-lock.yaml").contains("shadcn"));
     assert!(read(&root, "web/app/globals.css").contains("@import \"./shadcn-tailwind.css\";"));
+    // Tailwind scans only the web app's own source folders, never
+    // node_modules, whether or not a Git repository surrounds the app.
+    let css = read(&root, "web/app/globals.css");
+    assert!(
+        css.contains("@import \"tailwindcss\" source(none);"),
+        "{css}"
+    );
+    for folder in ["app", "components", "hooks", "lib"] {
+        assert!(
+            css.contains(&format!("@source \"../{folder}\";")),
+            "{folder}"
+        );
+        assert!(root.join("web").join(folder).is_dir(), "web/{folder}");
+    }
+    assert!(!css.contains("@source \"../node_modules"), "{css}");
     assert!(read(&root, "web/app/shadcn-tailwind.css").contains("@custom-variant data-open"));
     // The browser reaches the API through the backend-for-frontend; the
     // web app's local settings start as a copy of the example.
@@ -207,6 +222,43 @@ fn the_saas_kit_writes_the_api_and_the_web_app() {
     let schema = read(&root, "web/lib/api/schema.d.ts");
     assert!(schema.contains("\"/api/v1/projects\""));
     assert!(schema.contains("ProjectPage: {"));
+}
+
+#[test]
+fn the_saas_kit_names_the_browser_to_the_api_through_exactly_the_bff_hop() {
+    let (_dir, root) = generate("acme", Kit::Saas);
+    // The API believes X-Forwarded-For from loopback, where the web app's
+    // backend-for-frontend calls from, and from no other peer.
+    let config = toml(&root, "config/app.toml");
+    let trusted: Vec<_> = config["http"]["trusted_proxies"]
+        .as_array()
+        .expect("http.trusted_proxies")
+        .iter()
+        .map(|entry| entry.as_str().unwrap())
+        .collect();
+    assert_eq!(trusted, ["127.0.0.1", "::1"]);
+    assert!(config["http"].get("trust_proxy").is_none());
+    // ... and it is a setting: the API's environment moves it, the web
+    // app's names the proxies and the header it believes.
+    assert!(read(&root, ".env.example").contains("# APP_HTTP__TRUSTED_PROXIES=127.0.0.1,::1"));
+    let web_env = read(&root, "web/.env.example");
+    assert!(web_env.contains("# NAVREE_TRUSTED_PROXY_HOPS=1"));
+    assert!(web_env.contains("# NAVREE_CLIENT_IP_HEADER=x-real-ip"));
+    // The backend-for-frontend reads both and forwards the client address.
+    let server = read(&root, "web/lib/bff/server.ts");
+    assert!(server.contains("process.env.NAVREE_TRUSTED_PROXY_HOPS"));
+    assert!(server.contains("process.env.NAVREE_CLIENT_IP_HEADER"));
+    let bff = read(&root, "web/lib/bff/bff.ts");
+    assert!(bff.contains("clientIpHeader"));
+    assert!(bff.contains("\"x-forwarded-for\": address"));
+    // The API kit has no web app, so no proxy to trust.
+    let (_dir2, api) = generate("acme", Kit::Api);
+    assert!(
+        toml(&api, "config/app.toml")["http"]
+            .get("trusted_proxies")
+            .is_none()
+    );
+    assert!(!read(&api, ".env.example").contains("APP_HTTP__TRUSTED_PROXIES"));
 }
 
 #[test]

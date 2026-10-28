@@ -10,9 +10,10 @@ use navree_db::navree_schema::{
 pub const DOMAINS_MIGRATIONS: &str = "domains";
 
 /// The domains module's migration set: domains, certificates, challenges
-/// and ACME accounts. Domains are not tied to `workspaces` by a foreign
-/// key (the module removes a deleted workspace's domains itself), so the
-/// set runs before or after the workspace set.
+/// and ACME accounts, and the change that lets several workspaces claim
+/// one host (only a verified claim owns it). Domains are not tied to
+/// `workspaces` by a foreign key (the module removes a deleted workspace's
+/// domains itself), so the set runs before or after the workspace set.
 pub(crate) fn migrations() -> MigrationSet {
     MigrationSet::new(DOMAINS_MIGRATIONS)
         .migration(SchemaMigration::new(
@@ -31,6 +32,63 @@ pub(crate) fn migrations() -> MigrationSet {
             "m20261028_100004_create_custom_domain_acme_accounts_table",
             Create("custom_domain_acme_accounts", accounts),
         ))
+        .migration(SchemaMigration::new(
+            "m20261028_100005_claim_domains_by_proof",
+            ClaimByProof,
+        ))
+}
+
+/// Lets several workspaces claim one host: `host` stops being unique, and
+/// `verified_host` (the host while the claim is verified, `NULL`
+/// otherwise) is, so the database lets exactly one claim own a host. A
+/// workspace still has one row per host. `transfer` marks the claims made
+/// by `Domains::transfer`.
+struct ClaimByProof;
+
+impl Migration for ClaimByProof {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema
+            .table("custom_domains", |t| {
+                t.string("verified_host").length(253).nullable();
+                t.boolean("transfer").default(false);
+            })
+            .await?;
+        // Every host was unique, so each verified row owns its host.
+        schema
+            .statement("UPDATE custom_domains SET verified_host = host WHERE status = 'verified'")
+            .await?;
+        schema
+            .table("custom_domains", |t| {
+                t.drop_unique(["host"]);
+                t.index(["host"]).name("custom_domains_host_index");
+                t.unique(["verified_host"])
+                    .name("custom_domains_verified_host_unique");
+                t.unique(["workspace_id", "host"])
+                    .name("custom_domains_workspace_host_unique");
+            })
+            .await
+    }
+
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        // A host had one row: claims that are not verified go, verified
+        // domains stay (each owns its host, so `host` can be unique again).
+        schema
+            .statement("DELETE FROM custom_domains WHERE status <> 'verified'")
+            .await?;
+        schema
+            .table("custom_domains", |t| {
+                t.drop_unique("custom_domains_workspace_host_unique");
+                t.drop_unique("custom_domains_verified_host_unique");
+                t.drop_index("custom_domains_host_index");
+                t.unique(["host"]);
+            })
+            .await?;
+        schema
+            .table("custom_domains", |t| {
+                t.drop_column(["verified_host", "transfer"]);
+            })
+            .await
+    }
 }
 
 /// Creates table `.0` with the columns `.1` adds (given whether the

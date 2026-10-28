@@ -213,7 +213,12 @@ assert_eq!(fake.calls()[0].program, "ssh");
 - **Values with newlines** can't go into `harbor:secrets export` (an env
   file). Deploys carry any value, since the env file travels base64-encoded.
 - **`harbor:ci github`** never overwrites an existing workflow, and needs
-  the CI key's public half in `ssh.authorized_keys` plus a re-provision.
+  the CI key's public half in `ssh.authorized_keys` plus a re-provision. It
+  writes at the repository root, except when that repository ignores the
+  app's directory: then the app's own `.github/workflows`.
+- **A kit's `harbor.toml` without `harbor.key`**: `navree new` writes the
+  key; otherwise `navree harbor:init` writes just the key (not when the file
+  has encrypted `[secrets]`).
 
 ## Docs
 

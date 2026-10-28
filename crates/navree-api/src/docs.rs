@@ -1,10 +1,17 @@
-//! The routes serving the document: `GET {api_prefix}/openapi.json` and the
-//! Scalar docs UI at `GET {api_prefix}/docs`.
+//! The routes serving the document: `GET {api_prefix}/openapi.json`, the
+//! Scalar docs UI at `GET {api_prefix}/docs` and the UI's own script at
+//! `GET {api_prefix}/docs/assets/{file}`.
+//!
+//! The script is vendored (embedded in the binary, pinned to one version,
+//! with its license file) and served by the app itself, so the page loads
+//! nothing from a third party and its policy allows scripts from `'self'`
+//! only.
 
 use std::sync::Arc;
 
 use axum::body::Bytes;
-use axum::http::header::{CONTENT_SECURITY_POLICY, CONTENT_TYPE};
+use axum::extract::Path;
+use axum::http::header::{CACHE_CONTROL, CONTENT_SECURITY_POLICY, CONTENT_TYPE};
 use axum::http::{HeaderValue, Method};
 use axum::response::{IntoResponse, Response};
 use navree_http::{AppError, Controller, HttpOptions, RouteDef};
@@ -13,13 +20,40 @@ use utoipa_scalar::Scalar;
 
 use crate::ApiDocs;
 
-/// The Scalar UI script (major version 1, from the CDN the page's CSP allows).
-const SCALAR_SCRIPT: &str = "https://cdn.jsdelivr.net/npm/@scalar/api-reference@1";
+/// One vendored file, served under `{api_prefix}/docs/assets/{path}`. The
+/// file names carry the version, so a response is cached for a year.
+struct Asset {
+    path: &'static str,
+    content_type: &'static str,
+    bytes: &'static [u8],
+}
 
-/// The docs page's content security policy: the Scalar script from its CDN,
-/// the inline styles and fonts it injects, API calls to this origin. Server
-/// URLs from the options are added to `connect-src`.
-const PAGE_CSP: &str = "default-src 'none'; script-src https://cdn.jsdelivr.net; style-src 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.scalar.com; font-src data: https://cdn.jsdelivr.net https://fonts.scalar.com; img-src 'self' data: https:; connect-src 'self'; worker-src blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'";
+/// The Scalar UI script: the `@scalar/api-reference` 1.74.0 standalone
+/// build from npm (`dist/browser/standalone.js`, MIT, unmodified), and its
+/// license. Updating means replacing both files and the names here.
+const ASSETS: &[Asset] = &[
+    Asset {
+        path: SCALAR_SCRIPT,
+        content_type: "text/javascript; charset=utf-8",
+        bytes: include_bytes!("../assets/scalar-api-reference-1.74.0.js"),
+    },
+    Asset {
+        path: "scalar-api-reference-1.74.0.LICENSE.txt",
+        content_type: "text/plain; charset=utf-8",
+        bytes: include_bytes!("../assets/scalar-api-reference-1.74.0.LICENSE.txt"),
+    },
+];
+
+/// The vendored script's file name (the version is part of it).
+const SCALAR_SCRIPT: &str = "scalar-api-reference-1.74.0.js";
+
+/// The cache policy of the versioned files.
+const ASSET_CACHE: &str = "public, max-age=31536000, immutable";
+
+/// The docs page's content security policy: scripts from this origin only
+/// (the vendored Scalar script), the inline styles the UI injects, API calls
+/// to this origin. Server URLs from the options are added to `connect-src`.
+const PAGE_CSP: &str = "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; font-src data:; img-src 'self' data: https:; connect-src 'self'; worker-src blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'";
 
 /// The docs routes of `ApiModule` (public, under the API prefix, unversioned).
 pub(crate) struct DocsController {
@@ -47,9 +81,11 @@ impl Injectable for DocsController {
             let docs = r.get::<ApiDocs>().await?;
             let http = r.get::<HttpOptions>().await?;
             let page = docs.options().docs_ui.then(|| {
-                let url = format!("{}/openapi.json", http.api_prefix.trim_end_matches('/'));
+                let prefix = http.api_prefix.trim_end_matches('/');
+                let url = format!("{prefix}/openapi.json");
+                let script = format!("{prefix}/docs/assets/{SCALAR_SCRIPT}");
                 DocsPage {
-                    html: Bytes::from(render_page(&docs.options().title, &url)),
+                    html: Bytes::from(render_page(&docs.options().title, &url, &script)),
                     csp: page_csp(&docs.options().servers),
                 }
             });
@@ -94,9 +130,33 @@ impl Controller for DocsController {
                 .name("api.docs")
                 .public(),
             );
+            routes.push(
+                RouteDef::on(
+                    Method::GET,
+                    "/docs/assets/{file}",
+                    |Path(file): Path<String>| async move { serve_asset(&file) },
+                )
+                .name("api.docs.assets")
+                .public(),
+            );
         }
         routes
     }
+}
+
+/// `GET {api_prefix}/docs/assets/{file}`: a vendored file.
+fn serve_asset(file: &str) -> Response {
+    let Some(asset) = ASSETS.iter().find(|asset| asset.path == file) else {
+        return AppError::not_found().into_response();
+    };
+    (
+        [
+            (CONTENT_TYPE, HeaderValue::from_static(asset.content_type)),
+            (CACHE_CONTROL, HeaderValue::from_static(ASSET_CACHE)),
+        ],
+        Bytes::from_static(asset.bytes),
+    )
+        .into_response()
 }
 
 async fn openapi_json(docs: &ApiDocs) -> Response {
@@ -107,8 +167,10 @@ async fn openapi_json(docs: &ApiDocs) -> Response {
 }
 
 /// The Scalar page: it loads the document from `url` (rather than embedding
-/// it), so no document text ends up inside the HTML.
-fn render_page(title: &str, url: &str) -> String {
+/// it), so no document text ends up inside the HTML, and the script from
+/// `script`, a path on this origin. The UI's own web fonts (a third-party
+/// stylesheet) are off.
+fn render_page(title: &str, url: &str, script: &str) -> String {
     let template = format!(
         r#"<!doctype html>
 <html>
@@ -118,12 +180,13 @@ fn render_page(title: &str, url: &str) -> String {
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
 </head>
 <body>
-<script id="api-reference" data-url="{url}"></script>
-<script src="{SCALAR_SCRIPT}"></script>
+<script id="api-reference" data-url="{url}" data-configuration='{{"withDefaultFonts":false}}'></script>
+<script src="{script}"></script>
 </body>
 </html>
 "#,
         url = escape_html(url),
+        script = escape_html(script),
     );
     Scalar::new(serde_json::Value::Null)
         .custom_html(template)
@@ -172,11 +235,41 @@ mod tests {
 
     #[test]
     fn page_escapes_title_and_url() {
-        let html = render_page("A & <B>", "/api\"/openapi.json");
+        let html = render_page("A & <B>", "/api\"/openapi.json", "/api/docs/assets/x.js");
         assert!(html.contains("<title>A &amp; &lt;B&gt;</title>"), "{html}");
         assert!(
             html.contains(r#"data-url="/api&quot;/openapi.json""#),
             "{html}"
+        );
+    }
+
+    #[test]
+    fn the_page_loads_only_its_own_script() {
+        let html = render_page("API", "/api/openapi.json", "/api/docs/assets/s.js");
+        assert!(html.contains(r#"<script src="/api/docs/assets/s.js"></script>"#));
+        assert!(
+            !html.contains("jsdelivr") && !html.contains("unpkg"),
+            "{html}"
+        );
+        assert!(!PAGE_CSP.contains("https://cdn"), "{PAGE_CSP}");
+        assert!(PAGE_CSP.contains("script-src 'self';"), "{PAGE_CSP}");
+    }
+
+    #[test]
+    fn the_vendored_files_are_there_and_carry_their_version() {
+        for asset in ASSETS {
+            assert!(!asset.bytes.is_empty(), "{}", asset.path);
+            assert!(asset.path.contains("1.74.0"), "{}", asset.path);
+        }
+        assert!(ASSETS.iter().any(|a| a.path == SCALAR_SCRIPT));
+        let license = ASSETS
+            .iter()
+            .find(|a| a.path.ends_with("LICENSE.txt"))
+            .unwrap();
+        assert!(
+            std::str::from_utf8(license.bytes)
+                .unwrap()
+                .contains("MIT License")
         );
     }
 

@@ -565,6 +565,10 @@ impl Scope {
     }
 
     async fn png(&self, full_page: bool) -> Result<Vec<u8>, Fail> {
+        // Chrome produces no frames for a page another page of the context
+        // covers, and `Page.captureScreenshot` waits for one until it times
+        // out: bring this page to the front first.
+        self.cdp("Page.bringToFront", json!({})).await?;
         let mut params = json!({ "format": "png" });
         if full_page {
             let metrics = self.cdp("Page.getLayoutMetrics", json!({})).await?;

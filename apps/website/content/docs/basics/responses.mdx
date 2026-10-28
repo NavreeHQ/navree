@@ -44,7 +44,7 @@ async fn stats(&self) -> Json<Value> {
 
 Other types work too: a `String` or `&'static str` is a `200` with `text/plain; charset=utf-8`, and a bare `StatusCode` is an empty response with that status (an error status gets the [error format](/docs/basics/errors/) body).
 
-Responses are compressed with gzip or brotli when the client accepts it (`Accept-Encoding`), except `text/event-stream`, images, gRPC and bodies under 32 bytes (tower-http's defaults). Turn compression off with `http.compression = false`.
+Responses are compressed with gzip when the client accepts it (`Accept-Encoding`), except `text/event-stream`, images, gRPC and bodies under 32 bytes (tower-http's defaults). Turn compression off with `http.compression = false`.
 
 ## Status codes
 

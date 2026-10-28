@@ -5,11 +5,21 @@
 //!
 //! - **Adding a domain** ([`Domains::add`], `POST /api/domains`): the
 //!   domain is checked ([`normalize_host`]), refused when it is reserved
-//!   (your own domains), taken or over the workspace's limit, and stored
-//!   pending with a verification token. The answer lists the DNS records
+//!   (your own domains), verified for another workspace already or over
+//!   the workspace's limit, and stored as a pending claim with a
+//!   verification token of its own. The answer lists the DNS records
 //!   to create ([`DnsInstruction`]): a TXT record at
 //!   `_domain-verification.<domain>` and a CNAME to `domains.target` (A and
 //!   AAAA records for an apex domain).
+//! - **Proof of control, not first come first served.** Any number of
+//!   workspaces may hold a pending claim on one host; the claim whose TXT
+//!   record is found first becomes verified, atomically (a unique index on
+//!   the verified host), and the others are closed with a
+//!   [`DomainClaimedElsewhere`] event. Failed claims never block anyone
+//!   and are deleted after `domains.verification.failed_retention_hours`.
+//!   A verified domain moves to another workspace only through
+//!   [`Domains::transfer`] (`domains:transfer`), which needs a fresh TXT
+//!   proof of the workspace that takes it.
 //! - **Verification** through DNS (hickory-resolver, [`DnsLookup`]):
 //!   `domains:verify --due` runs every minute and checks pending domains
 //!   every `domains.verification.interval_mins` until their TXT record,
@@ -35,9 +45,10 @@
 //!   [`DomainCertificateExpiring`] event and, with the `lighthouse`
 //!   feature, a Lighthouse issue.
 //! - **Events** [`DomainAdded`], [`DomainVerified`],
-//!   [`DomainVerificationFailed`], [`DomainRemoved`],
-//!   [`DomainCertificateIssued`], [`DomainCertificateExpiring`]; commands
-//!   `domains:list`, `domains:verify` and `domains:certificates`.
+//!   [`DomainVerificationFailed`], [`DomainClaimedElsewhere`],
+//!   [`DomainRemoved`], [`DomainCertificateIssued`],
+//!   [`DomainCertificateExpiring`]; commands `domains:list`,
+//!   `domains:verify`, `domains:transfer` and `domains:certificates`.
 //! - **Tests** use [`DnsFake`], [`AcmeFake`], [`ProbeFake`] and
 //!   [`DnsProviderFake`].
 //!
@@ -89,8 +100,8 @@ pub use current::CurrentDomain;
 pub use dns::{DnsFake, DnsLookup, SystemDns};
 pub use error::DomainsError;
 pub use events::{
-    DomainAdded, DomainCertificateExpiring, DomainCertificateIssued, DomainRemoved,
-    DomainVerificationFailed, DomainVerified,
+    DomainAdded, DomainCertificateExpiring, DomainCertificateIssued, DomainClaimedElsewhere,
+    DomainRemoved, DomainVerificationFailed, DomainVerified,
 };
 pub use host::{normalize_host, request_host};
 pub use migration::DOMAINS_MIGRATIONS;
