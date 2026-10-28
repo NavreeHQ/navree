@@ -261,11 +261,6 @@ opentelemetry-otlp = { version = "0.33.1", default-features = false, features = 
 opentelemetry-proto = { version = "0.33.1", default-features = false, features = ["gen-tonic-messages", "trace"] }
 
 # ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
-config = { version = "0.15.27", default-features = false, features = ["convert-case", "json", "toml"] }
-
-# ---------------------------------------------------------------------------
 # Database (SeaORM 2 on SQLx 0.9; SQLite bundled, rustls+ring for Postgres)
 # ---------------------------------------------------------------------------
 sea-orm = { version = "2.0.4", default-features = false, features = [

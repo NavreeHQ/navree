@@ -54,10 +54,14 @@
 #![forbid(unsafe_code)]
 
 mod config;
+mod de;
 mod dotenv;
 mod error;
+mod layers;
 mod module;
+mod redact;
 mod sources;
+mod value;
 
 pub use config::Config;
 pub use dotenv::parse_dotenv;
