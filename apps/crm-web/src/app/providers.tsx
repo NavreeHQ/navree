@@ -67,7 +67,14 @@ function MockApiGate({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!env.mocks) return;
     let cancelled = false;
-    import("@/mocks/browser")
+    // msw 3 resolves `msw/browser` only for browsers (its "node" export is null). Effects
+    // never run on the server; the `typeof window` check lets the bundler drop the import
+    // from the server build.
+    const mockApi =
+      typeof window === "undefined"
+        ? Promise.reject(new Error("the mock API runs in the browser"))
+        : import("@/mocks/browser");
+    mockApi
       .then(({ startMockApi }) => startMockApi())
       .then(() => !cancelled && setReady(true))
       .catch((error: unknown) => {
