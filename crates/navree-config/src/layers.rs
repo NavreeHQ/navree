@@ -98,8 +98,8 @@ fn set_layer(
     }
     let origin = Origin::from(SET);
     // The value sits below the root and the tables of `path`.
-    let value = from_json(value.clone(), &origin, path.len() + 1, limits.max_depth)
-        .map_err(|_| too_deep())?;
+    let value =
+        from_json(value, &origin, path.len() + 1, limits.max_depth).map_err(|_| too_deep())?;
     let mut layer = Value::empty_table();
     insert_at(&mut layer, &path, value);
     Ok(layer.is_table().then_some(layer))
@@ -212,7 +212,7 @@ fn json_layer(path: &Path, src: &str, limits: &Limits) -> Result<Value, ConfigEr
         ));
     }
     let origin = Origin::from(path.display().to_string());
-    from_json(json, &origin, 1, limits.max_depth).map_err(|_| ConfigError::TooDeep {
+    from_json(&json, &origin, 1, limits.max_depth).map_err(|_| ConfigError::TooDeep {
         what: format!("configuration file `{}`", path.display()),
         limit: limits.max_depth,
     })
@@ -526,14 +526,14 @@ mod tests {
     #[test]
     fn merging_never_deepens_the_tree() {
         let a = from_json(
-            serde_json::json!({ "x": { "y": 1 } }),
+            &serde_json::json!({ "x": { "y": 1 } }),
             &Origin::from("a"),
             1,
             8,
         )
         .unwrap();
         let b = from_json(
-            serde_json::json!({ "x": { "z": { "w": 1 } } }),
+            &serde_json::json!({ "x": { "z": { "w": 1 } } }),
             &Origin::from("b"),
             1,
             8,
