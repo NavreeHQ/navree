@@ -4,7 +4,10 @@ use std::path::{Path, PathBuf};
 
 use navree_cli::clock::Timestamp;
 use navree_cli::names::AppName;
-use navree_cli::new_app::{Database, NavreeSource, NewApp, Ui, create_app, created_message};
+use navree_cli::new_app::{
+    Database, NavreeSource, NewApp, Repository, Ui, create_app, created_message, init_repository,
+    write_harbor_key,
+};
 use navree_dock::{DockFile, ServiceOptions};
 
 fn now() -> Timestamp {
@@ -520,6 +523,85 @@ fn refuses_a_directory_that_is_not_empty() {
         std::fs::read_to_string(dir.path().join("blog").join("notes.txt")).unwrap(),
         "keep me"
     );
+}
+
+fn git_available() -> bool {
+    std::process::Command::new("git")
+        .arg("--version")
+        .output()
+        .is_ok_and(|o| o.status.success())
+}
+
+#[test]
+fn a_new_app_outside_a_repository_gets_one() {
+    if !git_available() {
+        println!("SKIPPED: git is not available");
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let root = create_app(dir.path(), &app("blog", Ui::None), now()).unwrap();
+    assert_eq!(init_repository(&root), Repository::Created);
+    assert!(root.join(".git").exists());
+    // The files are for the first commit: nothing is committed for the user.
+    let log = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&root)
+        .args(["rev-parse", "--verify", "-q", "HEAD"])
+        .output()
+        .unwrap();
+    assert!(!log.status.success());
+    // Running it again keeps the repository.
+    assert_eq!(init_repository(&root), Repository::Inside);
+}
+
+#[test]
+fn a_new_app_inside_a_repository_leaves_it_alone() {
+    if !git_available() {
+        println!("SKIPPED: git is not available");
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    assert!(
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(dir.path())
+            .args(["init", "-q"])
+            .status()
+            .unwrap()
+            .success()
+    );
+    let root = create_app(dir.path(), &app("blog", Ui::None), now()).unwrap();
+    assert_eq!(init_repository(&root), Repository::Inside);
+    assert!(!root.join(".git").exists());
+}
+
+#[test]
+fn a_kit_gets_its_harbor_key_and_an_app_without_one_does_not() {
+    let dir = tempfile::tempdir().unwrap();
+    let kit = NewApp {
+        kit: Some(navree_cli::kits::Kit::Api),
+        ..app("crm", Ui::None)
+    };
+    let root = create_app(dir.path(), &kit, now()).unwrap();
+    assert!(!root.join("harbor.key").exists());
+    write_harbor_key(&root).unwrap();
+    let key = read(&root, "harbor.key");
+    assert!(key.starts_with("base64:"), "{key}");
+    assert!(
+        read(&root, ".gitignore")
+            .lines()
+            .any(|line| line == "harbor*.key")
+    );
+    // `harbor:secrets` can use it, and a second run keeps it.
+    let project =
+        navree_harbor::Project::load(&root, navree_harbor::Environment::production()).unwrap();
+    assert!(project.key(None).is_ok());
+    write_harbor_key(&root).unwrap();
+    assert_eq!(read(&root, "harbor.key"), key);
+
+    let plain = create_app(dir.path(), &app("blog", Ui::None), now()).unwrap();
+    write_harbor_key(&plain).unwrap();
+    assert!(!plain.join("harbor.key").exists());
 }
 
 #[test]
