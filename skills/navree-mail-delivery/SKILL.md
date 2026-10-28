@@ -76,7 +76,15 @@ networks. Also `get`, `list`, `config(id)`, `set_enabled`, `remove`,
   automatically.
 - Hold: `TemplateMail::new(..).hold("reason")` (`Mailable::hold`) or
   `Message::hold`; `Outbox::list/find/message/release(id, by)/discard(id, by)`;
-  release or discard of a non-held message is `MailError::Conflict` (409).
+  release or discard of a non-held message is `MailError::Conflict` (409);
+  concurrent releases: exactly one wins, the message goes out once.
+- Read the tables directly with the records of `navree::mail::entity`
+  (`TransportRow`, `DeliveryRow`, `EventRow`, `SuppressionRow`, `OutboxRow`;
+  navree-db records): `DeliveryRow::select().eq("status", "bounced").count(&*db)`
+  (`use navree::db::Record as _`). Change them only through the services.
+- `MailError::Store` wraps the database error: `error.db_error()` gives the
+  `DbError` (`kind()`, `is_retryable()`).
+
 - Admin routes (permission `mail.manage`): `/api/mail/deliveries`,
   `/deliveries/{id}`, `/suppressions` (GET, POST, DELETE `{id}`), `/outbox`,
   `/outbox/{id}/release`, `/outbox/{id}/discard`, `/transports/usable`.
