@@ -14,8 +14,10 @@
 //!   releases its lock when dropped, and every lock expires after its TTL.
 //! - Backends are trait objects: [`CacheStore`] (bytes with TTLs, atomic
 //!   `add` and `increment`) and [`LockStore`]. The built-in
-//!   [`MemoryStore`] (moka) and [`MemoryLockStore`] keep data in process and
-//!   follow Tokio's clock, so `tokio::time::pause` drives expiry in tests.
+//!   [`MemoryStore`] (bounded: at most [`DEFAULT_MAX_ENTRIES`] entries unless
+//!   built with [`MemoryStore::with_capacity`]) and [`MemoryLockStore`] keep
+//!   data in process and follow Tokio's clock, so `tokio::time::pause`
+//!   drives expiry in tests.
 //!   `store = "redis"` ([`CacheStoreKind::Redis`]) uses the stores
 //!   navree-redis's `RedisModule` registers under the name `redis`; any
 //!   other store implements the same traits.
@@ -84,7 +86,7 @@ mod tags;
 pub use cache::{Cache, DEFAULT_TTL, Ttl};
 pub use error::CacheError;
 pub use lock::{Lock, LockGuard, LockStore, Locks, MemoryLockStore};
-pub use memory::MemoryStore;
+pub use memory::{DEFAULT_MAX_ENTRIES, MemoryStore};
 pub use module::{CacheModule, CacheOptions, CacheStoreKind};
 pub use store::CacheStore;
 pub use tags::TaggedCache;

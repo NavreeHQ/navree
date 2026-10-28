@@ -30,7 +30,7 @@ http-body-util = { workspace = true }
 # ACME orders (Let's Encrypt or any RFC 8555 CA) on ring.
 instant-acme = { workspace = true }
 # Host lookups are cached for `domains.cache_secs`.
-moka = { workspace = true }
+navree-bounded = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 # Certificate private keys and ACME account keys are sealed with the
