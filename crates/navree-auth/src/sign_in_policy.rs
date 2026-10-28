@@ -122,6 +122,32 @@ pub struct SignInAttempt {
     pub method: SignInMethod,
     /// Where the sign-in leads.
     pub audience: SignInAudience,
+    /// The email's domain in its normalized form ([`email_domain`]).
+    domain: Option<String>,
+}
+
+/// The domain of `email` in one canonical spelling: lower-case ASCII (an
+/// international name in its `xn--` form, as mail is routed; full-width
+/// letters and the ideographic full stop are mapped), without a trailing
+/// dot. `None` when there is no domain.
+///
+/// [`SignInAttempt::domain`] returns this, so a [`SignInPolicy`] compares
+/// one spelling whatever an identity provider, social provider or form
+/// sent (`Eve@ACME.test.` is `acme.test`). Use it for any other comparison
+/// of an email domain (navree-sso keeps its verified domains in this form).
+///
+/// ```
+/// assert_eq!(navree_auth::email_domain("Eve@ACME.test.").as_deref(), Some("acme.test"));
+/// assert_eq!(navree_auth::email_domain("eve"), None);
+/// ```
+pub fn email_domain(email: &str) -> Option<String> {
+    let (_, domain) = email.trim().rsplit_once('@')?;
+    let domain = match url::Host::parse(domain) {
+        Ok(url::Host::Domain(ascii)) => ascii,
+        _ => domain.to_lowercase(),
+    };
+    let domain = domain.trim_end_matches('.');
+    (!domain.is_empty()).then(|| domain.to_owned())
 }
 
 impl SignInAttempt {
@@ -130,6 +156,7 @@ impl SignInAttempt {
     pub fn new(email: &str, method: SignInMethod) -> Self {
         Self {
             email: normalize_email(email),
+            domain: email_domain(email),
             user_id: None,
             method,
             audience: SignInAudience::App,
@@ -153,9 +180,10 @@ impl SignInAttempt {
         self
     }
 
-    /// The email's domain (after the last `@`), if it has one.
+    /// The email's domain (after the last `@`) in its normalized form
+    /// ([`email_domain`]: lower-case ASCII, no trailing dot), if it has one.
     pub fn domain(&self) -> Option<&str> {
-        self.email.rsplit_once('@').map(|(_, domain)| domain)
+        self.domain.as_deref()
     }
 }
 
@@ -285,6 +313,33 @@ mod tests {
             SignInAttempt::new("nobody", SignInMethod::Otp).domain(),
             None
         );
+    }
+
+    /// A policy that compares the domain must see one spelling of it: lower
+    /// case ASCII, without a trailing dot (an international name in its
+    /// `xn--` form, as mail is routed).
+    #[test]
+    fn domains_are_normalized_for_policies() {
+        for email in [
+            "ann@acme.test",
+            "Eve@ACME.test.",
+            " Eve@Acme.Test ",
+            "eve@\u{ff41}\u{ff43}\u{ff4d}\u{ff45}.test",
+            "eve@acme\u{3002}test",
+            "eve@acme\u{ff0e}test\u{3002}",
+        ] {
+            let attempt = SignInAttempt::new(email, SignInMethod::Otp);
+            assert_eq!(attempt.domain(), Some("acme.test"), "{email}");
+            assert_eq!(email_domain(email).as_deref(), Some("acme.test"), "{email}");
+        }
+        assert_eq!(
+            SignInAttempt::new("ann@bücher.example", SignInMethod::Otp).domain(),
+            Some("xn--bcher-kva.example")
+        );
+        assert_eq!(email_domain("ann"), None);
+        assert_eq!(email_domain("ann@"), None);
+        assert_eq!(email_domain("ann@."), None);
+        assert_eq!(SignInAttempt::new("ann@", SignInMethod::Otp).domain(), None);
     }
 
     #[test]
