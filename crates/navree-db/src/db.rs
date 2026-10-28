@@ -871,7 +871,7 @@ async fn open_pool(
 }
 
 /// The SeaORM connection on the connections of `pool`.
-fn sea_view(pool: &DriverPool) -> DatabaseConnection {
+pub(crate) fn sea_view(pool: &DriverPool) -> DatabaseConnection {
     match pool {
         #[cfg(feature = "postgres")]
         DriverPool::Postgres(pool) => {

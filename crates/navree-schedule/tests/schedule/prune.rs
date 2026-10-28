@@ -89,7 +89,7 @@ async fn the_runs_are_declared_a_hypertable() {
             "m20261027_000001_convert_schedule_runs_to_hypertable"
         ]
     );
-    let schema = Schema::new(pool.conn());
+    let schema = Schema::new(&pool);
     assert!(!schema.is_hypertable("schedule_runs").await.unwrap());
     assert!(
         schema

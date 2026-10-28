@@ -140,11 +140,14 @@ async fn time_dimension<C>(conn: &C, table: &str) -> Result<Option<TimeDimension
 where
     C: ConnectionTrait + Send + Sync,
 {
-    Schema::new(conn)
+    Schema::new(&crate::compat::SeaExecutor::new(conn))
         .time_dimension(table)
         .await
         .map_err(|error| match error {
-            SchemaError::Database { source, .. } => source,
+            SchemaError::Database { source, .. } => match source.downcast::<crate::DbError>() {
+                Ok(error) => DbErr::from(*error),
+                Err(other) => DbErr::Custom(other.to_string()),
+            },
             other => DbErr::Custom(format!(
                 "cannot read the time dimension of `{table}`: {other}"
             )),

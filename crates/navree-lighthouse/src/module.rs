@@ -229,7 +229,7 @@ async fn build(app: &AppContext, options: Arc<LighthouseOptions>) -> Result<Ligh
                 Some(config) => config.typed::<SchemaOptions>()?,
                 None => SchemaOptions::default(),
             };
-            convert_time_series_at_boot(&Schema::new(db.conn()).with_options(schema_options))
+            convert_time_series_at_boot(&Schema::new(&db).with_options(schema_options))
                 .await
                 .map_err(|error| format!("lighthouse.database_url: {error}"))?;
             db

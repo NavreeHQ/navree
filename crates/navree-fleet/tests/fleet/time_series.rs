@@ -31,7 +31,7 @@ async fn the_job_history_and_metrics_are_declared_hypertables() {
             "m20261027_000002_convert_fleet_history_to_hypertables"
         ]
     );
-    let schema = Schema::new(db.conn());
+    let schema = Schema::new(&db);
     for (table, time) in [("fleet_jobs", "finished_at"), ("fleet_metrics", "at")] {
         assert!(!schema.is_hypertable(table).await.unwrap());
         assert!(

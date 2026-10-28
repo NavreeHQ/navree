@@ -12,63 +12,23 @@ use navree_kernel::{AppContext, BoxError};
 use navree_schema::{
     Dialect, DumpOptions, MigrationContext, Schema, SchemaConnection, SchemaError, SchemaOptions,
 };
-use sea_orm::sea_query::{Expr, ExprTrait, Query};
-use sea_orm::{
-    ConnectOptions, ConnectionTrait, Database, DatabaseConnection, DbBackend, DbErr, Statement,
-    TransactionTrait,
-};
-use sea_orm_migration::{MigrationTrait, SchemaManager};
+use sea_orm_migration::SchemaManager;
 
+use super::conn::{Conn, Tx};
 use super::pretend::{STATEMENT_LIMIT, record_into, recording_connection};
 use super::report::{
     FreshOptions, LoadedDump, MigrateOptions, MigrationReport, MigrationRun, RollbackOptions,
 };
 use super::{
-    Applied, MIGRATIONS_TABLE, MigrationError, MigrationSet, MigrationStatus, Step, applied_rows,
-    drop_all_tables, ensure_table, plan, sets_of,
+    Applied, Body, MIGRATIONS_TABLE, MigrationError, MigrationSet, MigrationStatus, Step,
+    applied_rows, delete_sql, drop_all_tables, ensure_table, insert_sql, plan, sets_of,
 };
-use crate::{Db, DbOptions};
-
-/// How long a migration connection waits for SQLite's write lock.
-const SQLITE_BUSY_TIMEOUT: Duration = Duration::from_millis(5000);
-
-/// Whether `migration` runs in a transaction on `backend`: as it asks, else
-/// everywhere DDL is transactional (PostgreSQL, SQLite; not MySQL).
-pub(super) fn transactional(backend: DbBackend, migration: &dyn MigrationTrait) -> bool {
-    migration
-        .use_transaction()
-        .unwrap_or(backend != DbBackend::MySql)
-}
+use crate::{Backend, Db, DbError, DbOptions, Executor, Statement, Value};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Direction {
     Up,
     Down,
-}
-
-/// The connection migrations run on.
-struct Session {
-    conn: DatabaseConnection,
-    /// A SQLite connection of its own, opened with foreign keys off and
-    /// closed afterwards: rebuilding a table drops it, and with foreign
-    /// keys on that would run the ON DELETE actions of the tables that
-    /// reference it. Each migration's rows are checked
-    /// (`PRAGMA foreign_key_check`) before it commits instead.
-    dedicated: bool,
-}
-
-impl Session {
-    fn dialect(&self) -> Dialect {
-        Dialect::of(self.conn.get_database_backend()).unwrap_or(Dialect::Sqlite)
-    }
-
-    async fn close(self) {
-        if self.dedicated
-            && let Err(error) = self.conn.close().await
-        {
-            tracing::warn!(target: "navree_db::migrate", %error, "closing the migration connection failed");
-        }
-    }
 }
 
 /// Runs the migrations of a set of modules against one database.
@@ -121,35 +81,20 @@ impl Runner {
         }
     }
 
-    /// The database dialect.
-    pub(crate) fn dialect(&self) -> Dialect {
-        Dialect::of(self.db.backend()).unwrap_or(Dialect::Sqlite)
+    /// The database's connections.
+    fn conn(&self) -> Conn {
+        Conn::of(&self.db)
     }
 
-    async fn session(&self) -> Result<Session, DbErr> {
-        let sqlite = self.db.backend() == DbBackend::Sqlite;
+    /// The connection migrations run on: on SQLite (a file), one of their
+    /// own with foreign keys off; elsewhere the database's.
+    async fn session(&self) -> Result<Conn, DbError> {
+        let conn = self.conn();
         match self.url.as_deref() {
-            Some(url) if sqlite && !url.contains("memory") => {
-                let mut options = ConnectOptions::new(url.to_owned());
-                options
-                    .max_connections(1)
-                    .min_connections(1)
-                    .acquire_timeout(SQLITE_BUSY_TIMEOUT * 2)
-                    .sqlx_logging(false)
-                    .map_sqlx_sqlite_opts(|o| {
-                        o.journal_mode(sea_orm::sqlx::sqlite::SqliteJournalMode::Wal)
-                            .busy_timeout(SQLITE_BUSY_TIMEOUT)
-                            .foreign_keys(false)
-                    });
-                Ok(Session {
-                    conn: Database::connect(options).await?,
-                    dedicated: true,
-                })
+            Some(url) if conn.dialect() == Dialect::Sqlite && !url.contains("memory") => {
+                Conn::sqlite(url).await
             }
-            _ => Ok(Session {
-                conn: self.db.conn().clone(),
-                dedicated: false,
-            }),
+            _ => Ok(conn),
         }
     }
 
@@ -157,15 +102,10 @@ impl Runner {
     /// created first, otherwise a missing table means none.
     async fn recorded(
         &self,
-        conn: &DatabaseConnection,
+        conn: &Conn,
         create: bool,
     ) -> Result<HashMap<(String, String), Applied>, MigrationError> {
-        if !create
-            && !Schema::new(conn)
-                .has_table(MIGRATIONS_TABLE)
-                .await
-                .map_err(schema_error)?
-        {
+        if !create && !Schema::new(conn).has_table(MIGRATIONS_TABLE).await? {
             return Ok(HashMap::new());
         }
         Ok(applied_rows(conn).await?)
@@ -173,7 +113,7 @@ impl Runner {
 
     /// Creates the migrations table (`migrate:install`).
     pub(crate) async fn install(&self) -> Result<(), MigrationError> {
-        Ok(ensure_table(self.db.conn()).await?)
+        Ok(ensure_table(&self.conn()).await?)
     }
 
     /// Runs the pending migrations as one batch (or one batch each with
@@ -191,7 +131,7 @@ impl Runner {
 
     async fn up_on(
         &self,
-        session: &Session,
+        session: &Conn,
         steps: &[Step<'_>],
         options: &MigrateOptions,
     ) -> Result<MigrationReport, MigrationError> {
@@ -201,7 +141,7 @@ impl Runner {
                 .load_dump_if_empty(session, options.schema_path.as_deref())
                 .await?;
         }
-        let applied = self.recorded(&session.conn, !options.pretend).await?;
+        let applied = self.recorded(session, !options.pretend).await?;
         let mut batch = applied.values().map(|a| a.batch).max().unwrap_or(0) + 1;
         for step in steps {
             if applied.contains_key(&(step.module.to_owned(), step.name().to_owned())) {
@@ -230,7 +170,7 @@ impl Runner {
         let steps = plan(&self.sets)?;
         let session = self.session().await?;
         let result = async {
-            let applied = self.recorded(&session.conn, false).await?;
+            let applied = self.recorded(&session, false).await?;
             let order = newest_first(&steps, &applied);
             let chosen: Vec<&((String, String), i64)> = match (options.step, options.batch) {
                 (Some(n), _) => order.iter().take(n as usize).collect(),
@@ -253,7 +193,7 @@ impl Runner {
         let steps = plan(&self.sets)?;
         let session = self.session().await?;
         let result = async {
-            let applied = self.recorded(&session.conn, false).await?;
+            let applied = self.recorded(&session, false).await?;
             let order = newest_first(&steps, &applied);
             let chosen: Vec<&((String, String), i64)> = order.iter().collect();
             self.revert(&session, &steps, &chosen, pretend).await
@@ -265,7 +205,7 @@ impl Runner {
 
     async fn revert(
         &self,
-        session: &Session,
+        session: &Conn,
         steps: &[Step<'_>],
         chosen: &[&((String, String), i64)],
         pretend: bool,
@@ -301,19 +241,20 @@ impl Runner {
         options: &FreshOptions,
     ) -> Result<MigrationReport, MigrationError> {
         plan(&self.sets)?;
-        let dialect = self.dialect();
+        let conn = self.conn();
+        let dialect = conn.dialect();
         if options.drop_types && dialect != Dialect::Postgres {
             return Err(MigrationError::Unsupported {
                 message: format!("--drop-types drops PostgreSQL types; this database is {dialect}"),
             });
         }
-        drop_all_tables(self.db.conn()).await?;
-        let schema = Schema::new(self.db.conn());
+        drop_all_tables(&conn).await?;
+        let schema = Schema::new(&conn);
         if options.drop_views {
-            schema.drop_all_views().await.map_err(schema_error)?;
+            schema.drop_all_views().await?;
         }
         if options.drop_types {
-            schema.drop_all_types().await.map_err(schema_error)?;
+            schema.drop_all_types().await?;
         }
         self.up(&options.migrate).await
     }
@@ -321,7 +262,7 @@ impl Runner {
     /// Every registered migration in run order, with its state.
     pub(crate) async fn status(&self) -> Result<Vec<MigrationStatus>, MigrationError> {
         let steps = plan(&self.sets)?;
-        let applied = self.recorded(self.db.conn(), true).await?;
+        let applied = self.recorded(&self.conn(), true).await?;
         Ok(steps
             .iter()
             .map(|step| {
@@ -340,8 +281,9 @@ impl Runner {
     /// Writes the schema dump, with the migrations table's rows, to `path`
     /// (or `{schema.dump_path}/{driver}-schema.sql`); returns where.
     pub(crate) async fn dump(&self, path: Option<&Path>) -> Result<PathBuf, MigrationError> {
-        let path = path.map_or_else(|| self.options.dump_file(self.dialect()), Path::to_path_buf);
-        let script = Schema::new(self.db.conn())
+        let conn = self.conn();
+        let path = path.map_or_else(|| self.options.dump_file(conn.dialect()), Path::to_path_buf);
+        let script = Schema::new(&conn)
             .with_options(self.options.clone())
             .dump(&DumpOptions::default().with_data(MIGRATIONS_TABLE))
             .await
@@ -367,7 +309,7 @@ impl Runner {
     /// must exist.
     async fn load_dump_if_empty(
         &self,
-        session: &Session,
+        session: &Conn,
         path: Option<&Path>,
     ) -> Result<Option<LoadedDump>, MigrationError> {
         let explicit = path.is_some();
@@ -387,17 +329,17 @@ impl Runner {
             }
             return Ok(None);
         }
-        let schema = Schema::new(&session.conn);
-        let tables = schema.table_listing().await.map_err(schema_error)?;
+        let schema = Schema::new(session);
+        let tables = schema.table_listing().await?;
         let only_migrations = tables.len() == 1 && tables[0] == MIGRATIONS_TABLE;
         if !(tables.is_empty() || only_migrations) {
             return Ok(None);
         }
         if only_migrations {
-            if !self.recorded(&session.conn, false).await?.is_empty() {
+            if !self.recorded(session, false).await?.is_empty() {
                 return Ok(None);
             }
-            schema.drop(MIGRATIONS_TABLE).await.map_err(schema_error)?;
+            schema.drop(MIGRATIONS_TABLE).await?;
         }
         let script = std::fs::read_to_string(&path).map_err(|error| {
             dump_error(SchemaError::Dump {
@@ -405,7 +347,7 @@ impl Runner {
             })
         })?;
         tracing::info!(target: "navree_db::migrate", path = %path.display(), "loading the schema dump");
-        let tx = session.conn.begin().await?;
+        let tx = session.begin().await?;
         match Schema::new(&tx).load(&script).await {
             Ok(statements) => {
                 tx.commit().await?;
@@ -424,36 +366,37 @@ impl Runner {
     /// atomically when the step is transactional.
     async fn apply(
         &self,
-        session: &Session,
+        session: &Conn,
         step: &Step<'_>,
         direction: Direction,
         batch: i64,
     ) -> Result<MigrationRun, MigrationError> {
-        let failed = |source| MigrationError::Failed {
+        let failed = |source: BoxError| MigrationError::Failed {
             migration: step.label(),
             source,
         };
         let context = MigrationContext::new(step.label(), self.options.clone());
         let started = Instant::now();
-        let check = session.dedicated;
-        if transactional(session.conn.get_database_backend(), step.migration) {
-            let tx = session.conn.begin().await?;
+        let check = session.is_dedicated();
+        if step.transactional(session.dialect()) {
+            let tx = match step.body {
+                Body::Schema(_) => session.begin().await,
+                Body::SeaOrm(_) => session.begin_sea().await,
+            }
+            .map_err(|error| failed(error.into()))?;
             let result = context
                 .clone()
                 .scope(async {
-                    let manager = SchemaManager::new(&tx);
-                    match direction {
-                        Direction::Up => step.migration.up(&manager).await?,
-                        Direction::Down => step.migration.down(&manager).await?,
-                    }
+                    run_in_transaction(step, direction, &tx).await?;
                     if check {
                         foreign_key_check(&tx).await?;
                     }
-                    bookkeeping(&tx, step, direction, batch).await
+                    bookkeeping(&tx, step, direction, batch).await?;
+                    Ok::<(), BoxError>(())
                 })
                 .await;
             match result {
-                Ok(()) => tx.commit().await.map_err(failed)?,
+                Ok(()) => tx.commit().await.map_err(|error| failed(error.into()))?,
                 Err(error) => {
                     if let Err(rollback) = tx.rollback().await {
                         tracing::warn!(target: "navree_db::migrate", migration = %step.label(), error = %rollback, "rollback failed");
@@ -464,71 +407,135 @@ impl Runner {
         } else {
             context
                 .clone()
-                .scope(async {
-                    let manager = SchemaManager::new(&session.conn);
-                    match direction {
-                        Direction::Up => step.migration.up(&manager).await,
-                        Direction::Down => step.migration.down(&manager).await,
-                    }
-                })
+                .scope(run_on_connection(step, direction, session))
                 .await
                 .map_err(failed)?;
             if check {
-                foreign_key_check(&session.conn).await.map_err(failed)?;
+                foreign_key_check(session)
+                    .await
+                    .map_err(|error| failed(error.into()))?;
             }
-            bookkeeping(&session.conn, step, direction, batch)
+            bookkeeping(session, step, direction, batch)
                 .await
-                .map_err(failed)?;
+                .map_err(|error| failed(error.into()))?;
         }
         Ok(run_of(step, batch, &context, started.elapsed()))
     }
 
-    /// Runs one migration step against a connection that records instead
-    /// of running; schema migrations read the database through the
-    /// session.
+    /// Runs one migration step without changing anything and records what
+    /// it would run: a schema-builder migration reads the real database
+    /// through the session and records its statements
+    /// ([`MigrationContext::pretending`]); a SeaORM migration runs against
+    /// a connection that keeps its statements and answers no reads.
     async fn pretend(
         &self,
-        session: &Session,
+        session: &Conn,
         step: &Step<'_>,
         direction: Direction,
         batch: i64,
     ) -> Result<MigrationRun, MigrationError> {
-        let failed = |source| MigrationError::Failed {
+        let failed = |source: BoxError| MigrationError::Failed {
             migration: step.label(),
             source,
         };
-        let reader: Arc<dyn SchemaConnection> = Arc::new(session.conn.clone());
+        let reader: Arc<dyn SchemaConnection> = Arc::new(session.clone());
         let context = MigrationContext::pretending(step.label(), self.options.clone(), reader);
-        let recording = recording_connection(session.conn.get_database_backend());
         let started = Instant::now();
-        let result = context
-            .clone()
-            .scope(async {
-                let manager = SchemaManager::new(&recording);
-                match direction {
-                    Direction::Up => step.migration.up(&manager).await,
-                    Direction::Down => step.migration.down(&manager).await,
-                }
-            })
-            .await;
-        record_into(recording, &context);
-        result.map_err(|error| {
-            let message = error.to_string();
-            failed(if message.contains("`exec_results` buffer is empty") {
-                DbErr::Migration(format!(
-                    "it runs more than {STATEMENT_LIMIT} statements, more than pretending keeps"
-                ))
-            } else if message.contains("`query_results` buffer is empty") {
-                DbErr::Migration(
-                    "it reads the database, which a SeaORM migration cannot do while the migrator pretends (write it with the schema builder, which reads the real database when pretending)"
-                        .to_owned(),
-                )
-            } else {
-                error
-            })
-        })?;
+        match step.body {
+            Body::Schema(migration) => {
+                context
+                    .clone()
+                    .scope(async {
+                        let schema = Schema::new(session);
+                        match direction {
+                            Direction::Up => migration.up(&schema).await,
+                            Direction::Down => migration.down(&schema).await,
+                        }
+                    })
+                    .await
+                    .map_err(|error| failed(error.into()))?;
+            }
+            Body::SeaOrm(migration) => {
+                let recording = recording_connection(session.sea().get_database_backend());
+                let result = context
+                    .clone()
+                    .scope(async {
+                        let manager = SchemaManager::new(&recording);
+                        match direction {
+                            Direction::Up => migration.up(&manager).await,
+                            Direction::Down => migration.down(&manager).await,
+                        }
+                    })
+                    .await;
+                record_into(recording, &context);
+                result.map_err(|error| {
+                    let message = error.to_string();
+                    failed(if message.contains("`exec_results` buffer is empty") {
+                        format!(
+                            "it runs more than {STATEMENT_LIMIT} statements, more than pretending keeps"
+                        )
+                        .into()
+                    } else if message.contains("`query_results` buffer is empty") {
+                        "it reads the database, which a SeaORM migration cannot do while the migrator pretends (write it with the schema builder, which reads the real database when pretending)"
+                            .into()
+                    } else {
+                        error.into()
+                    })
+                })?;
+            }
+        }
         Ok(run_of(step, batch, &context, started.elapsed()))
     }
+}
+
+/// Runs a transactional step in `tx`: a schema-builder migration on
+/// navree-db's transaction, a SeaORM migration on SeaORM's.
+async fn run_in_transaction(step: &Step<'_>, direction: Direction, tx: &Tx) -> Result<(), BoxError> {
+    match step.body {
+        Body::Schema(migration) => {
+            let schema = Schema::new(tx);
+            match direction {
+                Direction::Up => migration.up(&schema).await?,
+                Direction::Down => migration.down(&schema).await?,
+            }
+        }
+        Body::SeaOrm(migration) => {
+            let manager = match tx.sea() {
+                Some(sea) => SchemaManager::new(sea),
+                None => return Err("a SeaORM migration needs a SeaORM transaction".into()),
+            };
+            match direction {
+                Direction::Up => migration.up(&manager).await?,
+                Direction::Down => migration.down(&manager).await?,
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Runs a step outside a transaction, on the session's connection.
+async fn run_on_connection(
+    step: &Step<'_>,
+    direction: Direction,
+    session: &Conn,
+) -> Result<(), BoxError> {
+    match step.body {
+        Body::Schema(migration) => {
+            let schema = Schema::new(session);
+            match direction {
+                Direction::Up => migration.up(&schema).await?,
+                Direction::Down => migration.down(&schema).await?,
+            }
+        }
+        Body::SeaOrm(migration) => {
+            let manager = SchemaManager::new(session.sea());
+            match direction {
+                Direction::Up => migration.up(&manager).await?,
+                Direction::Down => migration.down(&manager).await?,
+            }
+        }
+    }
+    Ok(())
 }
 
 fn run_of(
@@ -578,49 +585,38 @@ fn newest_first(
 }
 
 /// Records (up) or removes (down) the migration's row.
-async fn bookkeeping<C: ConnectionTrait>(
-    conn: &C,
+async fn bookkeeping(
+    conn: &dyn Executor,
     step: &Step<'_>,
     direction: Direction,
     batch: i64,
-) -> Result<(), DbErr> {
-    match direction {
-        Direction::Up => {
-            conn.execute(
-                Query::insert()
-                    .into_table(MIGRATIONS_TABLE)
-                    .columns(["module", "name", "batch", "applied_at"])
-                    .values([
-                        step.module.into(),
-                        step.name().into(),
-                        batch.into(),
-                        chrono::Utc::now().into(),
-                    ])
-                    .map_err(|e| DbErr::Custom(e.to_string()))?,
-            )
-            .await?;
-        }
-        Direction::Down => {
-            conn.execute(
-                Query::delete()
-                    .from_table(MIGRATIONS_TABLE)
-                    .and_where(Expr::col("module").eq(step.module))
-                    .and_where(Expr::col("name").eq(step.name())),
-            )
-            .await?;
-        }
-    }
-    Ok(())
+) -> Result<(), DbError> {
+    let backend = conn.backend();
+    let statement = match direction {
+        Direction::Up => Statement::new(
+            backend,
+            insert_sql(backend),
+            [
+                Value::from(step.module),
+                Value::from(step.name()),
+                Value::I64(batch),
+                Value::from(chrono::Utc::now()),
+            ],
+        ),
+        Direction::Down => Statement::new(
+            backend,
+            delete_sql(backend),
+            [Value::from(step.module), Value::from(step.name())],
+        ),
+    };
+    conn.execute(&statement).await.map(drop)
 }
 
 /// Fails when rows reference rows that do not exist (SQLite migrations run
 /// with foreign keys off).
-async fn foreign_key_check<C: ConnectionTrait>(conn: &C) -> Result<(), DbErr> {
+async fn foreign_key_check(conn: &dyn Executor) -> Result<(), BoxError> {
     let rows = conn
-        .query_all_raw(Statement::from_string(
-            DbBackend::Sqlite,
-            "PRAGMA foreign_key_check",
-        ))
+        .fetch_all(&Statement::new(Backend::Sqlite, "PRAGMA foreign_key_check", []))
         .await?;
     if rows.is_empty() {
         return Ok(());
@@ -628,9 +624,9 @@ async fn foreign_key_check<C: ConnectionTrait>(conn: &C) -> Result<(), DbErr> {
     let mut seen = HashSet::new();
     let mut problems = Vec::new();
     for row in &rows {
-        let table: String = row.try_get_by_index(0).unwrap_or_default();
-        let rowid: Option<i64> = row.try_get_by_index(1).ok().flatten();
-        let parent: String = row.try_get_by_index(2).unwrap_or_default();
+        let table: String = row.get(0).unwrap_or_default();
+        let rowid: Option<i64> = row.get(1).ok().flatten();
+        let parent: String = row.get(2).unwrap_or_default();
         let problem = match rowid {
             Some(rowid) => format!("`{table}` row {rowid} references `{parent}`"),
             None => format!("a `{table}` row references `{parent}`"),
@@ -640,7 +636,7 @@ async fn foreign_key_check<C: ConnectionTrait>(conn: &C) -> Result<(), DbErr> {
         }
     }
     let more = rows.len().saturating_sub(problems.len());
-    Err(DbErr::Migration(format!(
+    Err(format!(
         "the migration leaves {} row{} whose foreign key points nowhere: {}{}",
         rows.len(),
         if rows.len() == 1 { "" } else { "s" },
@@ -650,32 +646,41 @@ async fn foreign_key_check<C: ConnectionTrait>(conn: &C) -> Result<(), DbErr> {
         } else {
             String::new()
         }
-    )))
-}
-
-fn schema_error(error: SchemaError) -> MigrationError {
-    MigrationError::Db(DbErr::from(error))
+    )
+    .into())
 }
 
 #[cfg(test)]
 mod tests {
-    use sea_orm_migration::MigrationName;
-    use sea_orm_migration::async_trait::async_trait;
+    use navree_schema::{NamedMigration, SchemaMigration, SchemaResult};
 
     use super::*;
 
-    struct Named(&'static str);
+    struct Empty;
 
-    impl MigrationName for Named {
-        fn name(&self) -> &str {
-            self.0
+    impl navree_schema::Migration for Empty {
+        async fn up(&self, _schema: &Schema<'_>) -> SchemaResult {
+            Ok(())
+        }
+
+        async fn down(&self, _schema: &Schema<'_>) -> SchemaResult {
+            Ok(())
         }
     }
 
-    #[async_trait]
-    impl MigrationTrait for Named {
-        async fn up(&self, _manager: &SchemaManager) -> Result<(), DbErr> {
+    struct OnMySql;
+
+    impl navree_schema::Migration for OnMySql {
+        async fn up(&self, _schema: &Schema<'_>) -> SchemaResult {
             Ok(())
+        }
+
+        async fn down(&self, _schema: &Schema<'_>) -> SchemaResult {
+            Ok(())
+        }
+
+        fn within_transaction_on_mysql(&self) -> bool {
+            true
         }
     }
 
@@ -693,13 +698,21 @@ mod tests {
             .collect()
     }
 
+    fn step(migration: &dyn NamedMigration) -> Step<'_> {
+        Step {
+            module: "crm",
+            body: Body::Schema(migration),
+        }
+    }
+
     #[test]
     fn rollbacks_go_newest_first_by_batch_then_run_order() {
-        let (a, b, c) = (Named("m1_a"), Named("m2_b"), Named("m3_c"));
-        let steps = [&a, &b, &c].map(|migration| Step {
-            module: "crm",
-            migration,
-        });
+        let (a, b, c) = (
+            SchemaMigration::new("m1_a", Empty),
+            SchemaMigration::new("m2_b", Empty),
+            SchemaMigration::new("m3_c", Empty),
+        );
+        let steps = [step(&a), step(&b), step(&c)];
         let order = newest_first(
             &steps,
             &applied(&[("m1_a", 1), ("m2_b", 2), ("m3_c", 2), ("m9_gone", 2)]),
@@ -717,9 +730,11 @@ mod tests {
 
     #[test]
     fn transactions_follow_the_database_unless_the_migration_says() {
-        let plain = Named("m1");
-        assert!(transactional(DbBackend::Postgres, &plain));
-        assert!(transactional(DbBackend::Sqlite, &plain));
-        assert!(!transactional(DbBackend::MySql, &plain));
+        let plain = SchemaMigration::new("m1", Empty);
+        assert!(step(&plain).transactional(Dialect::Postgres));
+        assert!(step(&plain).transactional(Dialect::Sqlite));
+        assert!(!step(&plain).transactional(Dialect::MySql));
+        let asks = SchemaMigration::new("m2", OnMySql);
+        assert!(step(&asks).transactional(Dialect::MySql));
     }
 }

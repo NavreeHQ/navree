@@ -43,7 +43,7 @@ async fn the_delivery_log_is_declared_time_series() {
             "m20261027_000001_convert_webhook_deliveries_to_hypertables"
         ]
     );
-    let schema = Schema::new(db.conn());
+    let schema = Schema::new(&db);
     let foreign_keys = schema.foreign_keys("webhook_attempts").await.unwrap();
     assert_eq!(foreign_keys.len(), 1, "{foreign_keys:?}");
     assert_eq!(foreign_keys[0].columns, ["endpoint_id"]);
