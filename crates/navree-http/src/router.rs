@@ -28,7 +28,7 @@ use uuid::Uuid;
 use crate::controller::ControllerRegistration;
 use crate::error::ErrorFormat;
 use crate::extract::ProxyTrust;
-use crate::limiter::RateLimiter;
+use crate::limiter::KeyedRateLimiter;
 use crate::pipeline::{
     self, CheckStages, ContextState, GuardStages, Requester, Stages, TimeoutOverride, X_REQUEST_ID,
 };
@@ -106,7 +106,7 @@ pub async fn build_router(ctx: &AppContext) -> Result<Router, BoxError> {
                 except: options.maintenance_except.clone(),
             },
             per_ip: options.per_ip_rate_limit.map(|limit| pipeline::PerIpLimit {
-                limiter: RateLimiter::<IpAddr>::new(limit, Duration::from_secs(60)),
+                limiter: KeyedRateLimiter::<IpAddr>::new(limit, Duration::from_secs(60)),
                 audit: shared.audit.clone(),
             }),
             authentication,
@@ -368,7 +368,7 @@ struct Shared {
 fn mount(router: Router, route: Mounted, shared: &Shared) -> Result<Router, RouteErrors> {
     let meta = Arc::new(route.meta);
     let runtime = Arc::new(RouteRuntime {
-        throttle: meta.throttle.map(|t| RateLimiter::new(t.limit, t.per)),
+        throttle: meta.throttle.map(|t| KeyedRateLimiter::new(t.limit, t.per)),
         authorizer: if meta.access.needs_authorizer() {
             shared.authorizer.clone()
         } else {
@@ -399,7 +399,7 @@ fn mount(router: Router, route: Mounted, shared: &Shared) -> Result<Router, Rout
 /// The per-route state: metadata, throttle, authorizer, audit sink.
 struct RouteRuntime {
     meta: Arc<RouteMeta>,
-    throttle: Option<RateLimiter<ThrottleKey>>,
+    throttle: Option<KeyedRateLimiter<ThrottleKey>>,
     authorizer: Option<Arc<dyn RouteAuthorizer>>,
     /// Where the route's audit action goes (only with an audit action).
     audit: Option<Arc<dyn AuditSink>>,

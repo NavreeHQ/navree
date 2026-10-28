@@ -135,11 +135,7 @@ impl Ssh {
         port: u16,
         identity: Identity,
     ) -> Result<Ssh> {
-        let file = tempfile::Builder::new()
-            .prefix("navree-harbor-known-hosts-")
-            .tempfile()
-            .map_err(|e| HarborError::io(std::env::temp_dir(), e))?;
-        let known_hosts = file.into_temp_path();
+        let known_hosts = known_hosts_file()?;
         let pinned = server.host_key.is_some();
         if let Some(key) = &server.host_key {
             let line = format!("{} {}\n", alias(&server.name), key.trim());
@@ -184,7 +180,7 @@ impl Ssh {
             "-o".to_owned(),
             format!("HostKeyAlias={}", alias(&self.server)),
             "-o".to_owned(),
-            format!("UserKnownHostsFile=\"{}\"", slash_path(&self.known_hosts)),
+            known_hosts_option(&self.known_hosts),
             "-o".to_owned(),
             "HashKnownHosts=no".to_owned(),
             "-o".to_owned(),
@@ -309,6 +305,53 @@ impl Ssh {
     }
 }
 
+/// A new empty file for the connection's known hosts. SSH splits a
+/// `UserKnownHostsFile` value at spaces, so a path with one needs quotes in
+/// the option, and on Windows the quotes do not survive: Rust escapes them
+/// as `\"`, which the `ssh.exe` of Git for Windows (an MSYS program) does
+/// not unescape ("command-line line 0: invalid quotes"). So the file goes
+/// in a directory whose path has no whitespace when there is one.
+fn known_hosts_file() -> Result<TempPath> {
+    let mut dirs = vec![std::env::temp_dir()];
+    if cfg!(windows) {
+        dirs.extend(std::env::var_os("ProgramData").map(PathBuf::from));
+        dirs.push(PathBuf::from("C:/Users/Public"));
+    }
+    let plain = |dir: &PathBuf| !slash_path(dir).contains(char::is_whitespace);
+    // The first directory that works and has a plain path; else the first
+    // that works (the option is then quoted).
+    let mut fallback = None;
+    for dir in dirs.iter().filter(|dir| plain(dir)).chain(dirs.iter()) {
+        let made = tempfile::Builder::new()
+            .prefix("navree-harbor-known-hosts-")
+            .tempfile_in(dir);
+        if let Ok(file) = made {
+            let path = file.into_temp_path();
+            if plain(&path.to_path_buf()) {
+                return Ok(path);
+            }
+            fallback.get_or_insert(path);
+        }
+    }
+    fallback.ok_or_else(|| {
+        HarborError::io(
+            std::env::temp_dir(),
+            std::io::Error::other("cannot create a known-hosts file"),
+        )
+    })
+}
+
+/// The `-o` value naming the known-hosts file: the path with `/`
+/// separators, and quotes only when it has whitespace.
+fn known_hosts_option(path: &Path) -> String {
+    let path = slash_path(path);
+    if path.contains(char::is_whitespace) {
+        format!("UserKnownHostsFile=\"{path}\"")
+    } else {
+        format!("UserKnownHostsFile={path}")
+    }
+}
+
 /// What `bash -s` reads: strict mode, then the script in one brace group
 /// with standard input from `/dev/null`. Bash parses the whole group before
 /// running it, so no command in the script (apt-get, psql) can read the rest
@@ -348,6 +391,39 @@ mod tests {
             identity,
         )
         .unwrap()
+    }
+
+    #[test]
+    fn the_known_hosts_option_has_no_quotes_unless_the_path_has_spaces() {
+        assert_eq!(
+            known_hosts_option(Path::new(r"C:\Users\amrit\AppData\Local\Temp\kh-1")),
+            "UserKnownHostsFile=C:/Users/amrit/AppData/Local/Temp/kh-1"
+        );
+        assert_eq!(
+            known_hosts_option(Path::new("/tmp/a b/kh-1")),
+            "UserKnownHostsFile=\"/tmp/a b/kh-1\""
+        );
+    }
+
+    #[test]
+    fn connections_pass_no_quote_characters_to_ssh() {
+        // Quotes inside an argument break the `ssh.exe` of Git for Windows
+        // ("command-line line 0: invalid quotes"): with a plain temp
+        // directory the options carry none.
+        if std::env::temp_dir().to_string_lossy().contains(' ') && !cfg!(windows) {
+            return;
+        }
+        let fake = FakeExecutor::default();
+        let ssh = ssh(&fake, Some("ssh-ed25519 AAAAPINNED"), Identity::agent());
+        ssh.script("status", "uptime").unwrap();
+        let args = &fake.calls()[0].args;
+        let known_hosts = args
+            .iter()
+            .find(|a| a.starts_with("UserKnownHostsFile="))
+            .unwrap();
+        assert!(!known_hosts.contains('"'), "{known_hosts}");
+        assert!(args.iter().all(|a| !a.contains('"')), "{args:?}");
+        assert!(!slash_path(ssh.known_hosts_path()).contains(char::is_whitespace));
     }
 
     #[test]

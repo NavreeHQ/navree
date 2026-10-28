@@ -1,6 +1,16 @@
-@import "tailwindcss";
+/*
+ * Tailwind reads the class names it generates from the folders listed in
+ * `@source` only. Without `source(none)` it scans everything below the web app
+ * that .gitignore does not exclude, and with no Git repository around the app
+ * that includes node_modules, so the first compile never finishes.
+ */
+@import "tailwindcss" source(none);
 @import "tw-animate-css";
 @import "./shadcn-tailwind.css";
+@source "../app";
+@source "../components";
+@source "../hooks";
+@source "../lib";
 
 /* Dark only, in Navree's colors: `dark:` utilities (used by shadcn/ui) always apply. Change the tokens below to restyle the app. */
 @custom-variant dark (&:where(.dark, .dark *));

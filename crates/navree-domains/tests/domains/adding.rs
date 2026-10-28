@@ -119,12 +119,16 @@ async fn reserved_taken_and_invalid_domains_are_refused() {
         .unwrap_err();
     assert!(matches!(bad_purpose, DomainsError::InvalidDomain(_)));
 
+    // Another workspace's pending claim is not in the way (it is a claim
+    // of its own), a verified domain is.
     world.add(acme, "crm.acme-corp.test").await;
+    world.add(globex, "CRM.acme-corp.test").await;
+    world.verified(globex, "globex.test").await;
     let taken = domains
-        .add(globex, NewDomain::new("CRM.acme-corp.test"))
+        .add(acme, NewDomain::new("GLOBEX.test"))
         .await
         .unwrap_err();
-    assert!(matches!(taken, DomainsError::Taken(host) if host == "crm.acme-corp.test"));
+    assert!(matches!(taken, DomainsError::Taken(host) if host == "globex.test"));
     let links = domains
         .add(acme, NewDomain::new("go.acme-corp.test").purpose("links"))
         .await
@@ -136,7 +140,8 @@ async fn reserved_taken_and_invalid_domains_are_refused() {
         .unwrap_err();
     assert!(matches!(full, DomainsError::LimitReached(2)));
     // The limit is per workspace.
-    world.add(globex, "globex.test").await;
+    let initech = world.workspace(Uuid::now_v7(), "Initech").await;
+    world.add(initech, "initech.test").await;
 }
 
 #[tokio::test]

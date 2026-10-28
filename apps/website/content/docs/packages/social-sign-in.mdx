@@ -167,6 +167,7 @@ What can go wrong:
 | 403 | `sign_in_not_allowed` | Another Google Workspace or Slack workspace, or an email outside `allowed_email_domains` |
 | 403 `Registration is closed` | `registration_closed` | No matching user, and registration is off |
 | 409 | `email_taken` | The email belongs to a user and linking doesn't apply (see below) |
+| 403 | `sso_required` | The address or the account belongs to a domain that enforces [single sign-on](/docs/security/single-sign-on/#enforcement) (or another [sign-in policy](/docs/security/authentication/#sign-in-policies) refused it) |
 | 429 | `too_many_login_attempts` | Too many callbacks from this address (`auth.login_throttle_per_minute`, with `Retry-After`) |
 | 502 | `provider_unavailable` | The provider couldn't be reached |
 
@@ -190,6 +191,10 @@ With registration off and no matching user, the answer is 403 `Registration is c
 ### Two-factor authentication
 
 A user with [two-factor authentication](/docs/security/account-flows/#two-factor-authentication) gets the same challenge from the callback as from a password login (`two_factor_required`, `challenge_token`, `expires_in`), and finishes with `POST /api/auth/2fa/verify`. Set `social.two_factor = "skip"` to trust the provider's own second factor instead.
+
+### Single sign-on and sign-in policies
+
+A social sign-in asks navree-auth's [sign-in policies](/docs/security/authentication/#sign-in-policies) twice, with the method `Social { provider }`: about the address the provider reported, before any account is created or linked, and about the account, before the session or the two-factor challenge. When an organization [enforces single sign-on](/docs/security/single-sign-on/#enforcement) for `acme.com`, a Google or GitHub sign-in as `ada@acme.com` answers 403 `sso_required`, creates nothing, and a provider account linked earlier to an `@acme.com` user no longer signs them in. The refusal is audited as `auth.login_refused` with `metadata.provider`.
 
 ### Connecting and disconnecting providers
 

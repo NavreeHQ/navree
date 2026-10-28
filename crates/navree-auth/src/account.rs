@@ -268,7 +268,9 @@ impl AuthService {
     /// client's IP) and the password policy, sets the new password, revokes
     /// every refresh token of the user (signing out every other session),
     /// cancels a pending password reset and returns a fresh token pair for
-    /// the caller. Audited as `auth.password_changed`.
+    /// the caller. An account a [`SignInPolicy`](crate::SignInPolicy)
+    /// keeps off passwords gets its refusal before anything changes.
+    /// Audited as `auth.password_changed`.
     pub async fn change_password(
         &self,
         user_id: Uuid,
@@ -280,6 +282,11 @@ impl AuthService {
             .find_user(user_id)
             .await?
             .ok_or(AuthError::UserNotFound)?;
+        self.check_sign_in(
+            &crate::SignInAttempt::of(&user, crate::SignInMethod::Password),
+            &meta,
+        )
+        .await?;
         self.confirm_password(&user, current_password, "current_password", &meta)
             .await?;
         self.check_password(new_password)?;

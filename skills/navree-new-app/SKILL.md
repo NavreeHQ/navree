@@ -86,6 +86,11 @@ navree dev                     # API on :8080, web app on :3000
 - The kits run on TimescaleDB (the default) or, with `--database postgres`,
   plain PostgreSQL (`timescaledb = false` in `dock.toml`); `mysql` and
   `sqlite` are for the minimal app.
+- `navree new` runs `git init` (no commit) when git is installed and the
+  directory is not inside a repository, and writes a git-ignored
+  `harbor.key` for a kit. The saas kit's `web/app/globals.css` lists the
+  Tailwind sources (`source(none)` plus `@source` per folder): new web
+  folders that hold class names need their own `@source` line.
 - The kit is recorded in `Cargo.toml`: `[package.metadata.navree] kit`
   and `kit_version` (`[workspace.metadata.navree]` for `micro`). Compare
   with a fresh `navree new acme-latest --kit saas` to adopt template fixes.

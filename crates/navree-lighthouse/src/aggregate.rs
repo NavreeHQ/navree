@@ -32,6 +32,9 @@ pub(crate) mod kind {
     pub(crate) const EXCEPTION: &str = "exception";
     /// Occurrences per issue fingerprint (sparklines and spikes).
     pub(crate) const ISSUE: &str = "issue";
+    /// Details (traces, occurrences) dropped because the write queue was
+    /// full (key `all`).
+    pub(crate) const SAMPLED_OUT: &str = "sampled_out";
 }
 
 /// A slow outgoing call kept in an `outgoing` row's detail.
@@ -185,6 +188,22 @@ impl Aggregates {
         }
     }
 
+    /// Adds `n` to the count of `kind`/`key` at `now` (minute and hour),
+    /// without a duration.
+    pub(crate) fn add(&mut self, now: DateTime<Utc>, kind: &'static str, key: &str, n: u64) {
+        for resolution in [MINUTE, HOUR] {
+            let row = RowKey {
+                resolution,
+                bucket: bucket_start(now, resolution),
+                kind,
+                key: key.to_owned(),
+            };
+            let (values, dirty) = self.rows.entry(row).or_default();
+            *dirty = true;
+            values.count += i64::try_from(n).unwrap_or(i64::MAX);
+        }
+    }
+
     /// The rows changed since the last call, marked clean.
     pub(crate) fn take_dirty(&mut self) -> Vec<Row> {
         self.rows
@@ -201,9 +220,9 @@ impl Aggregates {
     }
 
     /// Marks rows dirty again (their write failed).
-    pub(crate) fn mark_dirty(&mut self, rows: &[Row]) {
-        for row in rows {
-            if let Some((_, dirty)) = self.rows.get_mut(&row.key) {
+    pub(crate) fn mark_dirty(&mut self, keys: &[RowKey]) {
+        for key in keys {
+            if let Some((_, dirty)) = self.rows.get_mut(key) {
                 *dirty = true;
             }
         }

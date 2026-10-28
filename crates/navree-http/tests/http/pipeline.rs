@@ -282,6 +282,27 @@ async fn compression_skipped_for_event_stream() {
     let json = app.send(gzip("/api/big")).await;
     assert_eq!(json.header("content-encoding"), Some("gzip"));
 
+    // Brotli is not built in: a client that accepts both gets gzip, and one
+    // that accepts only brotli gets the body as is.
+    let both = app
+        .send(
+            Request::get("/api/big")
+                .header("accept-encoding", "br, gzip")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+    assert_eq!(both.header("content-encoding"), Some("gzip"));
+    let brotli = app
+        .send(
+            Request::get("/api/big")
+                .header("accept-encoding", "br")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+    assert_eq!(brotli.header("content-encoding"), None);
+
     let events = app.send(gzip("/api/events")).await;
     assert_eq!(events.status, StatusCode::OK);
     assert_eq!(events.header("content-encoding"), None, "SSE must stream");

@@ -48,12 +48,9 @@ deny = [
 # is named with who pulls it in. Remove an entry when its parent moves on.
 skip = [
     { crate = "aes@0.8.4", reason = "Pulled in only by pkcs5@0.7.1; the rest of the tree is on 0.9.3." },
-    { crate = "alloc-no-stdlib@2.0.4", reason = "Pulled in only by alloc-stdlib@0.2.4, brotli-decompressor@5.0.3; the rest of the tree is on 3.0.0." },
-    { crate = "alloc-stdlib@0.2.4", reason = "Pulled in only by brotli-decompressor@5.0.3; the rest of the tree is on 0.3.0." },
     { crate = "base64@0.22.1", reason = "Pulled in only by async-graphql@7.2.1, async-nats@0.50.0, axum@0.8.9, bson@3.1.0 and 13 more; the rest of the tree is on 0.23.1." },
     { crate = "block-buffer@0.10.4", reason = "Pulled in only by digest@0.10.7; the rest of the tree is on 0.12.1." },
     { crate = "block-padding@0.3.3", reason = "Pulled in only by inout@0.1.4; the rest of the tree is on 0.4.2." },
-    { crate = "brotli-decompressor@5.0.3", reason = "Pulled in only by lopdf@0.46.0; the rest of the tree is on 6.0.1." },
     { crate = "cbc@0.1.2", reason = "Pulled in only by p12-keystore@0.2.1, pkcs5@0.7.1; the rest of the tree is on 0.2.1." },
     { crate = "cipher@0.4.4", reason = "Pulled in only by aes@0.8.4, cbc@0.1.2, des@0.8.1, rc2@0.8.1 and 1 more; the rest of the tree is on 0.5.2." },
     { crate = "const-oid@0.9.6", reason = "Pulled in only by cms@0.2.3, der@0.7.10, pkcs12@0.1.0, x509-cert@0.2.5; the rest of the tree is on 0.10.2." },
@@ -119,7 +116,6 @@ skip = [
     { crate = "thiserror@1.0.69", reason = "Pulled in only by rlibphonenumber@2.2.14 (build dep); the rest of the tree is on 2.0.21." },
     { crate = "thiserror-impl@1.0.69", reason = "Pulled in only by thiserror@1.0.69; the rest of the tree is on 2.0.21." },
     { crate = "tokio-tungstenite@0.29.0", reason = "Pulled in only by axum@0.8.9; the rest of the tree is on 0.30.0." },
-    { crate = "tower-http@0.6.11", reason = "Pulled in only by reqwest@0.13.5; the rest of the tree is on 0.7.1." },
     { crate = "tungstenite@0.29.0", reason = "Pulled in only by tokio-tungstenite@0.29.0; the rest of the tree is on 0.30.0." },
     { crate = "unicode-width@0.1.14", reason = "Pulled in only by miette@7.6.0; the rest of the tree is on 0.2.2." },
     { crate = "weezl@0.1.12", reason = "Pulled in only by gif@0.14.2; the rest of the tree is on 0.2.1." },

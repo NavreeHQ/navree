@@ -10,6 +10,7 @@
   <div class="card figure"><div class="label">p95 latency</div><div class="value" id="fig-p95">{{ overview.p95_ms|round|int }} ms</div></div>
   <div class="card figure"><div class="label">Failed jobs</div><div class="value{% if overview.failed_jobs %} bad{% endif %}" id="fig-failed-jobs">{{ overview.failed_jobs }}</div></div>
   <div class="card figure"><div class="label">Open issues</div><div class="value" id="fig-open-issues">{{ overview.open_issues }}</div></div>
+  <div class="card figure" title="Traces and occurrences dropped because the write queue was full. Counts are never dropped."><div class="label">Sampled out</div><div class="value" id="fig-sampled-out">{{ overview.sampled_out }}</div></div>
 </div>
 <div class="card">
   <h2>Requests and exceptions</h2>

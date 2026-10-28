@@ -54,6 +54,12 @@ impl MeilisearchEngine {
 
     /// Waits for the task an answer names (`taskUid`) to finish.
     async fn wait(&self, answer: Value) -> Result<(), SearchError> {
+        self.wait_unless(answer, None).await
+    }
+
+    /// [`wait`](Self::wait), except that a task failing with the error
+    /// code `tolerated` counts as done.
+    async fn wait_unless(&self, answer: Value, tolerated: Option<&str>) -> Result<(), SearchError> {
         let Some(uid) = answer.get("taskUid").and_then(Value::as_u64) else {
             return Ok(());
         };
@@ -67,6 +73,10 @@ impl MeilisearchEngine {
             match task.get("status").and_then(Value::as_str) {
                 Some("succeeded") => return Ok(()),
                 Some("failed" | "canceled") => {
+                    let code = task.pointer("/error/code").and_then(Value::as_str);
+                    if tolerated.is_some() && code == tolerated {
+                        return Ok(());
+                    }
                     let message = task
                         .pointer("/error/message")
                         .and_then(Value::as_str)
@@ -301,7 +311,9 @@ impl SearchEngine for MeilisearchEngine {
                 return Ok(());
             }
             let answer = self.api.decode(&response)?;
-            self.wait(answer).await
+            // Meilisearch v1 enqueues the delete of a missing index and
+            // fails the task with `index_not_found`: nothing to drop.
+            self.wait_unless(answer, Some("index_not_found")).await
         })
     }
 
