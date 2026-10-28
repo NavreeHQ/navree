@@ -17,7 +17,6 @@ use uuid::Uuid;
 
 use crate::password_reset_token::Model as PasswordResetToken;
 use crate::service::{entry, invalid, normalize_email, record, revoke_user};
-use crate::throttle::LoginThrottle;
 use crate::{AuthError, AuthService, ClientMeta, TokenPair, USER_SUBJECT, User, mail, user};
 
 /// Random characters in a password reset token (about 380 bits).
@@ -469,7 +468,7 @@ impl AuthService {
         field: &'static str,
         meta: &ClientMeta,
     ) -> Result<(), AuthError> {
-        let key = LoginThrottle::key(&user.email, meta.ip.as_deref());
+        let key = self.throttle.key(&user.email, meta.ip.as_deref());
         // Counted before the (slow) check, so parallel guesses cannot all
         // pass; a correct password gives the slot back.
         self.throttle_attempt(
