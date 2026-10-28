@@ -59,6 +59,20 @@ CI workflow fails when the committed file no longer matches the code.
 {% if web %}
 `pnpm --dir web gen:api` does both: it exports the document and
 regenerates the web app's types in `web/lib/api/schema.d.ts`.
+
+## UI components
+
+The front end's primitives in `web/components/ui` are shadcn/ui components
+restyled to the theme in `web/app/globals.css`. Add another with the
+shadcn CLI, without installing it:
+
+```sh
+cd web
+pnpm dlx shadcn@latest add <component>
+```
+
+The app does not depend on the `shadcn` package; the one stylesheet it
+used from it is vendored as `web/app/shadcn-tailwind.css`.
 {% endif %}
 
 ## Tests

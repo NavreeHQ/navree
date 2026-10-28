@@ -8,3 +8,5 @@ playwright-report
 test-results
 AGENTS.md
 openapi.json
+# Vendored from the shadcn package as published; keep it byte for byte.
+src/app/shadcn-tailwind.css
