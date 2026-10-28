@@ -7,7 +7,7 @@ description: "Expose your app's tools, resources and prompts to Claude, ChatGPT,
 
 <Badge feature="mcp" /> The [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) is how AI clients reach outside themselves. With an MCP server in your app, a sales rep can ask Claude "Log a call with Dana on the Acme deal: she approved the budget" and the call lands in your CRM, written by your own service, checked by your own access rules and recorded in your audit log.
 
-`navree-mcp` turns methods on your services into an MCP server. It is built on the official Rust MCP SDK ([rmcp](https://docs.rs/rmcp)), behind Navree's own macros:
+`navree-mcp` turns methods on your services into an MCP server. The protocol layer is Navree's own: JSON-RPC, the protocol versions, both transports and their security checks live in `navree-mcp`, so a fix lands in your app's next Navree release. You write the server with Navree's macros:
 
 ```rust
 #[mcp_server]
@@ -247,11 +247,15 @@ A tool that returns `Err` answers with a tool result marked `isError`, whose tex
 {"statusCode": 403, "message": "Forbidden", "error": "Forbidden", "code": "forbidden"}
 ```
 
-The app's error mappers apply, as they do on a response. Server errors (5xx) read `"Internal server error"`; their details go to the log with the request id. Protocol problems are JSON-RPC errors: an unknown tool (or one the user may not see) is `-32602` `Unknown tool: <name>`, and a malformed message is refused by the SDK. Failed resource reads and prompts are JSON-RPC errors too, with Navree's error body as `data`: a 404 is `-32002` (resource not found), a 400 is `-32602` (invalid params) and anything else `-32603`.
+The app's error mappers apply, as they do on a response. Server errors (5xx) read `"Internal server error"`, and a tool that panics answers the same way; their details go to the log with the request id, never to the client. To show the model a message, return a client error such as `AppError::conflict("The quarter is closed")`. Protocol problems are JSON-RPC errors: an unknown tool (or one the user may not see) is `-32602` `Unknown tool: <name>`, an unknown method `-32601`, invalid JSON `-32700` and a malformed message `-32600`. Failed resource reads and prompts are JSON-RPC errors too, with Navree's error body as `data`: a 404 is `-32002` (resource not found; `-32602` on the stateless protocol), a 400 is `-32602` (invalid params) and anything else `-32603`.
 
 ### Long-running tools
 
-`cx.progress(done, total, message)` (`f64`, `Option<f64>`, text) sends a progress notification when the client asked for them with a progress token, and does nothing otherwise (`cx.wants_progress()` tells you which). Over HTTP, the first notification turns the response into an SSE stream that carries the notifications and then the result. Anything longer than a minute belongs in a [queued job](/docs/digging-deeper/queues/): start it, return its id, and offer a tool or resource that reports its status.
+`cx.progress(done, total, message)` (`f64`, `Option<f64>`, text) sends a progress notification when the client asked for them with a progress token, and does nothing otherwise (`cx.wants_progress()` tells you which). Over HTTP, the first notification turns the response into an SSE stream that carries the notifications and then the result. A client that stops reading misses progress notifications rather than holding the call up.
+
+A client can cancel a call: `notifications/cancelled` on a session or over stdio, or closing the connection of a stateless request. The call's future is dropped at its next `.await` and its unit of work rolls back; a loop that does not await can check `cx.is_cancelled()`. (In an app with `DatabaseModule`, a stateless request whose client disconnects before its answer starts runs to completion, like every Navree request.)
+
+Anything longer than a minute belongs in a [queued job](/docs/digging-deeper/queues/): start it, return its id, and offer a tool or resource that reports its status.
 
 ## Resources
 
@@ -359,7 +363,7 @@ Every tool, resource and prompt declares who may use it, with the same attribute
 
 What runs inside a tool is your service code, so the rest of your security model applies as it is: list filters through `cx.accessible`, writes in the call's own unit of work (committed when the tool returns `Ok`, rolled back on `Err`), audit entries with the user as the actor, and jobs and events queued only on commit.
 
-`McpContext` has the same helpers as an agent's [`AgentRun`](/docs/ai/agents-and-tools/#the-run): `user()` (loaded through `AuthService`), `user_id()`, `access()`, `ability()`, `accessible::<E, A>()`, `authorize::<E, A>(id)`, `uow()` and `now()`, plus `principal()`, `session_id()`, `client()` (the client's name and version), `request_id()`, `app()`, `wants_progress()` and `progress(..)`.
+`McpContext` has the same helpers as an agent's [`AgentRun`](/docs/ai/agents-and-tools/#the-run): `user()` (loaded through `AuthService`), `user_id()`, `access()`, `ability()`, `accessible::<E, A>()`, `authorize::<E, A>(id)`, `uow()` and `now()`, plus `principal()`, `session_id()`, `client()` (the client's name and version), `request_id()`, `app()`, `wants_progress()`, `progress(..)` and `is_cancelled()`.
 
 ## Transports
 
@@ -375,9 +379,23 @@ The HTTP transport is mounted at `mcp.path` on your app's own server, as three a
 
 With `mcp.auth = "oauth"`, the metadata routes are `mcp.metadata` and `mcp.metadata.endpoint`. All of them appear in the [OpenAPI document](/docs/digging-deeper/openapi/) under the tag `MCP`, with their names as operation ids.
 
-The first `initialize` call creates a session; its id comes back in the `Mcp-Session-Id` header, and the client sends it with every later request. A session belongs to the user who opened it: another user sending its id gets a 404. With `CacheModule`, sessions live in the app's cache, so any process behind your load balancer can serve the next request; without it, in the process. Requests go through the whole HTTP stack: request ids, the per-IP rate limit, the app's CORS settings, logs and metrics, plus the `Origin` check against `mcp.allowed_origins`.
+The first `initialize` call creates a session; its id (256 bits from the operating system's random number generator) comes back in the `Mcp-Session-Id` header, and the client sends it with every later request. A session belongs to the user who opened it: another user sending its id gets a 404, on `POST`, `GET` and `DELETE` alike. A session ends with `DELETE` or after `mcp.session_ttl_secs` without a request. With `CacheModule`, sessions live in the app's cache, so any process behind your load balancer can serve the next request; without it, in the process. Requests go through the whole HTTP stack: request ids, the per-IP rate limit, the app's CORS settings, logs and metrics, plus the `Origin` check against `mcp.allowed_origins`.
 
-Sessions are how protocol `2025-11-25` and earlier work. Clients on the stateless protocol, `2026-07-28`, skip the handshake: they ask `server/discover` for the server's versions and capabilities, send no session id, and put the protocol version, client info and capabilities in every request's `_meta` (a request without its protocol version gets a 400 with `-32602`). Each request is authenticated and checked on its own, and resource updates and list changes reach them on a `subscriptions/listen` stream instead of `GET /mcp`. The endpoint serves both protocols; you configure nothing.
+#### Protocol versions
+
+| Version | Lifecycle |
+|---|---|
+| `2024-11-05`, `2025-03-26`, `2025-06-18`, `2025-11-25` | `initialize` opens a session. The server agrees to the version the client asks for, or to `2025-11-25` when it asks for one it does not know. Requests after the handshake send `MCP-Protocol-Version`; an unknown version gets a 400. |
+| `2026-07-28` | Stateless: no handshake and no session. |
+
+Clients on the stateless protocol skip the handshake: they ask `server/discover` for the server's versions and capabilities, send no session id, and put the protocol version, client info and capabilities in every request's `_meta` (a request without them gets a 400 with `-32602`, and an unsupported version a 400 with `-32022`). The `Mcp-Method` header, and `Mcp-Name` for a tool, prompt or resource, must match the body (`-32020` otherwise). Each request is authenticated and checked on its own, and resource updates and list changes reach them on a `subscriptions/listen` stream instead of `GET /mcp`. The endpoint serves every version; you configure nothing.
+
+#### Limits and checks
+
+- **Origin.** A browser page may call only from an origin in `mcp.allowed_origins`; any other `Origin` gets a 403 on every method. This is what stops a DNS-rebinding page from reaching an endpoint on `localhost`.
+- **Size and depth.** A body over `mcp.max_request_bytes` gets a 413, and JSON nested deeper than 64 arrays or objects is refused (`-32600`) before it is parsed.
+- **Batches.** JSON-RPC batches are accepted only on a `2025-03-26` session, the one version that allows them; anywhere else they get a 400 with `-32600`.
+- **Slow clients.** At most 64 messages wait for a client that reads slowly. Beyond that, notifications are dropped (they tell the client to look again, so it misses a hint, not data) and answers wait for room, so a client that stops reading cannot grow the server's memory.
 
 ### stdio
 
@@ -387,7 +405,7 @@ The `mcp:serve` command serves the same tools over standard input and output, fo
 ./target/release/crm-api mcp:serve --user ada@example.com
 ```
 
-It reads JSON-RPC messages on stdin, writes them on stdout and logs to stderr (`LoggerModule` writes there while a command owns stdout). There is no token: the process acts as the user named by `--user`, an email address (which needs `AuthModule`) or a user id, with that user's roles and permissions. Give it to people who already have shell access to a machine that can reach the database. A client configures it as a command:
+It reads JSON-RPC messages on stdin, one per line, writes them on stdout and logs to stderr (`LoggerModule` writes there while a command owns stdout). A line longer than `mcp.max_request_bytes` is refused without being kept in memory; the stateless protocol works here too. There is no token: the process acts as the user named by `--user`, an email address (which needs `AuthModule`) or a user id, with that user's roles and permissions. Give it to people who already have shell access to a machine that can reach the database. A client configures it as a command:
 
 ```json title="Client configuration"
 {
@@ -512,6 +530,8 @@ async fn reps_log_activity_but_cannot_move_others_deals() {
 
 Test the access rules of each tool the way you test routes: one user who may, one who may not, and the list each of them sees.
 
+Navree itself checks its server against the official MCP TypeScript SDK's client, over stdio and streamable HTTP: `npm ci --prefix e2e/mcp-sdk`, then `cargo test -p navree-mcp --test sdk_conformance -- --ignored`.
+
 ## Reference
 
 | Name | |
@@ -529,7 +549,7 @@ Test the access rules of each tool the way you test routes: one user who may, on
 | `mcp:serve --user <email or id>` | The stdio transport (`serve_stdio` in code). |
 | `navree make:mcp <module> <name>` | Generates a server. |
 | `navree::mcp::testing::McpTestClient` | The test client. |
-| `navree::mcp::rmcp` | The MCP SDK, for protocol types such as `rmcp::model::Tool`. |
+| `navree::mcp::protocol` | The protocol's types (`Tool`, `Resource`, `ResourceTemplate`, `Prompt`) and constants (`SUPPORTED_VERSIONS`, `MAX_JSON_DEPTH`). |
 
 <LinkCards>
   <LinkCard href="/docs/ai/agents-and-tools/" title="Agents and tools">
