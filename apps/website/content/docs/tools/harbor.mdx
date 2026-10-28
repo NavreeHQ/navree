@@ -424,7 +424,7 @@ health_check = "/"
 ```
 
 - Harbor builds it during the deploy's build step (natively, or in a `node:<frontend.node_version>-bookworm` container when the binary builds in one), uploads it with the binary into the release, and installs Node.js (`frontend.node_version`, 24) on `web` servers when it provisions them. Without `build` and `command`, Harbor picks npm, pnpm or Yarn from the lockfile.
-- It runs in its own blue and green slots (`frontend.ports`, 3001 and 3002) as `crm-api-frontend@blue` and `@green`, with its own health check, and switches together with the API, so a page and the API it calls always come from the same release. Its environment has `PORT`, `HOSTNAME=127.0.0.1`, `NODE_ENV=production` and `NAVREE_API_URL`, the address of the API slot of the same release.
+- It runs in its own blue and green slots (`frontend.ports`, 3001 and 3002) as `crm-api-frontend@blue` and `@green`, with its own health check, and switches together with the API, so a page and the API it calls always come from the same release. Its environment has `PORT`, `HOSTNAME=127.0.0.1`, `NODE_ENV=production`, `NAVREE_API_URL`, the address of the API slot of the same release, and `NAVREE_TRUSTED_PROXY_HOPS=1`: Caddy is the one proxy in front of it, and it replaces any `X-Forwarded-For` a browser sent with the address it saw. The front end's BFF passes that address on, and the API, which trusts loopback through `APP_HTTP__TRUSTED_PROXIES`, believes it, so every browser has its own rate limit and sign-in throttle.
 - Caddy serves `domain` from the front end. The API stays on loopback, where the front end's server calls it; set `api_domain` to also serve the API publicly, for example `api.crm.example.com` for mobile clients.
 
 ## Custom domains
