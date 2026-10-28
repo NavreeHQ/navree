@@ -6,8 +6,21 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use http::header::{AUTHORIZATION, HOST};
 use http::request::Parts;
 use navree_contracts::AuthState;
+use uuid::Uuid;
 
 use crate::{OrganizationOptions, PartitionOptions, ResolverKind, WorkspaceConfig};
+
+/// The workspace a request's host belongs to: a request extension that
+/// navree-domains' `DomainsModule` sets for a request to a workspace's
+/// verified custom domain (`crm.acme-corp.com`). The `domain` resolver
+/// (`workspace.resolvers = ["domain", ...]`) reads it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DomainWorkspace {
+    /// The workspace the domain belongs to.
+    pub workspace_id: Uuid,
+    /// The host the request came in on, lower-case, without a port.
+    pub host: String,
+}
 
 /// The settings of one level's resolvers.
 #[derive(Clone, Debug)]
@@ -65,6 +78,12 @@ impl<'a> Lookup<'a> {
                     .and_then(|base| from_subdomain(host(parts)?, base)),
                 ResolverKind::Path => from_path(parts.uri.path(), &self.path),
                 ResolverKind::Claim => from_claim(parts, self.claim),
+                // Custom domains name workspaces only (the configuration
+                // check keeps `domain` out of the other levels' lists).
+                ResolverKind::Domain => parts
+                    .extensions
+                    .get::<DomainWorkspace>()
+                    .map(|domain| domain.workspace_id.to_string()),
             };
             found.map(|identifier| (*kind, identifier))
         })
@@ -306,6 +325,42 @@ mod tests {
         assert_eq!(identifier(&WorkspaceConfig::default(), &bare), None);
         let empty_header = parts("/api/deals", &[("x-workspace", "  ")], true);
         assert_eq!(identifier(&WorkspaceConfig::default(), &empty_header), None);
+    }
+
+    #[test]
+    fn custom_domains_name_workspaces_through_the_request_extension() {
+        let workspace = Uuid::now_v7();
+        let mut request = parts(
+            "/api/deals",
+            &[("host", "crm.acme-corp.test"), ("x-workspace", "from-header")],
+            true,
+        );
+        let config = WorkspaceConfig {
+            resolvers: vec![ResolverKind::Domain, ResolverKind::Header],
+            ..WorkspaceConfig::default()
+        };
+        // No custom domain matched the host: the next resolver answers.
+        assert_eq!(
+            identifier(&config, &request),
+            Some((ResolverKind::Header, "from-header".to_owned()))
+        );
+        request.extensions.insert(DomainWorkspace {
+            workspace_id: workspace,
+            host: "crm.acme-corp.test".to_owned(),
+        });
+        assert_eq!(
+            identifier(&config, &request),
+            Some((ResolverKind::Domain, workspace.to_string()))
+        );
+        assert_eq!(
+            requested_workspace(&config, &request),
+            Some((ResolverKind::Domain, workspace.to_string()))
+        );
+        // Without `domain` in the list, the extension is ignored.
+        assert_eq!(
+            identifier(&WorkspaceConfig::default(), &request).map(|(kind, _)| kind),
+            Some(ResolverKind::Header)
+        );
     }
 
     #[test]
