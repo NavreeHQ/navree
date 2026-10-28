@@ -627,7 +627,7 @@ impl MongoDriver {
                         let mut list = Vec::with_capacity(rows.len());
                         for row in rows {
                             let first = row.values()?.into_iter().next();
-                            list.push(Expr::Value(first.map_or(Value::Null(Kind::String), |(_, v)| v)));
+                            list.push(Expr::Value(first.map_or(Value::Null(navree_orm::Kind::String), |(_, v)| v)));
                         }
                         *values = InValues::List(list);
                     }
@@ -722,7 +722,7 @@ impl DocumentDriver for MongoDriver {
             let nothing = if counts {
                 Value::I64(0)
             } else {
-                Value::Null(Kind::String)
+                Value::Null(navree_orm::Kind::String)
             };
             if query.limit == Some(0) {
                 query.check()?;

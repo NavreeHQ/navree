@@ -140,7 +140,7 @@ pub fn from_bson(bson: Bson) -> Value {
         Bson::Double(v) => Value::F64(v),
         Bson::String(s) | Bson::Symbol(s) => Value::String(s),
         Bson::Boolean(b) => Value::Bool(b),
-        Bson::Null | Bson::Undefined => Value::Null(Kind::String),
+        Bson::Null | Bson::Undefined => Value::Null(navree_orm::Kind::String),
         Bson::Int32(v) => Value::I32(v),
         Bson::Int64(v) => Value::I64(v),
         Bson::ObjectId(id) => ObjectId::from(id).to_value(),
@@ -196,7 +196,7 @@ pub fn document_row(mut document: Document, columns: Option<&[String]>) -> Row {
                 .map(|column| {
                     let value = document
                         .remove(column.as_str())
-                        .map_or(Value::Null(Kind::String), from_bson);
+                        .map_or(Value::Null(navree_orm::Kind::String), from_bson);
                     (column.clone(), value)
                 })
                 .collect(),
