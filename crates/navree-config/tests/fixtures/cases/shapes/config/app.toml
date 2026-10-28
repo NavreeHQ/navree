@@ -1,0 +1,16 @@
+scalar_then_table = "was a string"
+table_then_scalar = { a = 1, b = { c = 2 } }
+array_then_array = [1, 2, 3]
+array_then_scalar = ["x"]
+scalar_then_array = "single"
+table_in_array = [{ name = "one", port = 1 }, { name = "two", port = 2 }]
+
+[deep]
+keep = "from app.toml"
+
+[deep.inner]
+a = 1
+b = 2
+
+[untouched]
+value = "only in app.toml"

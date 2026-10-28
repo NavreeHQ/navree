@@ -1,0 +1,7 @@
+{
+  "sources": [
+    "file:config/app.toml",
+    "file:config/local.toml",
+    "env"
+  ]
+}
