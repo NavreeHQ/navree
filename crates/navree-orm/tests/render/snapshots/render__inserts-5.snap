@@ -1,0 +1,7 @@
+---
+source: crates/navree-orm/tests/render/main.rs
+expression: "statement(Insert::values(\"companies\", [\"name\"], Vec::new()))"
+---
+PostgreSQL: error: invalid query: an insert into `companies` has no rows
+MySQL: error: invalid query: an insert into `companies` has no rows
+SQLite: error: invalid query: an insert into `companies` has no rows

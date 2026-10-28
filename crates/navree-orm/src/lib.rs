@@ -145,6 +145,7 @@ mod quiet;
 mod raw;
 mod record;
 pub mod relations;
+pub mod render;
 mod row;
 mod scope;
 pub mod show;

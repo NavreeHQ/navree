@@ -1,0 +1,7 @@
+---
+source: crates/navree-orm/tests/render/main.rs
+expression: "query(Query::from(Select::from_source(Source::Function\n{ call: Box::new(col(\"not_a_call\")), alias: None })))"
+---
+PostgreSQL: error: invalid query: a table function must be a function call, not Column(ColumnName { table: None, name: Ident("not_a_call") })
+MySQL: error: invalid query: a table function must be a function call, not Column(ColumnName { table: None, name: Ident("not_a_call") })
+SQLite: error: invalid query: a table function must be a function call, not Column(ColumnName { table: None, name: Ident("not_a_call") })

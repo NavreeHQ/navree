@@ -1,0 +1,7 @@
+---
+source: crates/navree-orm/tests/render/main.rs
+expression: "query(Query::from(Select::from_source(Source::aliased(ObjectName(vec![Ident::new(\"my\\\"schema\"),\nIdent::new(\"we`ird table\")]),\n\"a.b\")).column_as(Expr::qualified(ObjectName::single(\"a.b\"), \"col\\\"umn\"),\n\"it's\").filter(col(\"x\").eq(Expr::string(\"it's a \\\\ backslash\")))))"
+---
+PostgreSQL: SELECT "a.b"."col""umn" AS "it's" FROM "my""schema"."we`ird table" AS "a.b" WHERE "x" = E'it''s a \\ backslash'
+MySQL: SELECT `a.b`.`col"umn` AS `it's` FROM `my"schema`.`we``ird table` AS `a.b` WHERE `x` = 'it''s a \\ backslash'
+SQLite: SELECT "a.b"."col""umn" AS "it's" FROM "my""schema"."we`ird table" AS "a.b" WHERE "x" = 'it''s a \ backslash'

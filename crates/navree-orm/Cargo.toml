@@ -31,6 +31,10 @@ testing = ["dep:navree-testing"]
 ## `validation::exists`) for navree-validation's `ValidAsync`. The facade
 ## turns it on when both `orm` and `validation` are on.
 validation = ["dep:navree-validation"]
+## Test-only, never in builds: `sql::compile_*` run the renderer
+## (`render::render_*`) instead, so the whole ORM suite can run through it
+## (`cargo test -p navree-orm --features render-sql-for-tests`).
+render-sql-for-tests = []
 
 [dependencies]
 # PHC-string parsing for hashed attributes (hashing itself is navree-crypto's).

@@ -1516,13 +1516,13 @@ impl<R: Resource> ErasedResource for Handle<R> {
                 }
             );
             if let Some(cache) = &cx.core.metrics
-                && let Some(hit) = cache.get(&key).await
+                && let Some(hit) = cache.get(&key)
             {
                 return Ok((*hit).clone());
             }
             let result = self.compute(cx, metric, range).await?;
             if let Some(cache) = &cx.core.metrics {
-                cache.insert(key, Arc::new(result.clone())).await;
+                cache.insert(key, Arc::new(result.clone()));
             }
             Ok(result)
         })

@@ -627,7 +627,7 @@ impl Grants {
         {
             row.revoked_at = Some(now);
             row.save(&*tx).await?;
-            self.core.forget([hash]).await;
+            self.core.forget([hash]);
         }
         Ok(())
     }
@@ -735,12 +735,12 @@ impl Grants {
     pub(crate) async fn lookup(&self, token: &str) -> Result<Option<CachedToken>, OAuthError> {
         let hash = digest(token);
         let found = match &self.core.cache {
-            Some(cache) => match cache.get(&hash).await {
+            Some(cache) => match cache.get(&hash) {
                 Some(found) => Some(found),
                 None => {
                     let loaded = self.load(token, &hash).await?;
                     if let Some(found) = &loaded {
-                        cache.insert(hash.clone(), found.clone()).await;
+                        cache.insert(hash.clone(), found.clone());
                     }
                     loaded
                 }

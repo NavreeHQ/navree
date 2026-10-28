@@ -1,16 +1,25 @@
 //! # navree-db
 //!
-//! `DatabaseModule`: SeaORM integration, the request unit of work,
-//! module-owned migrations, seeders, factories and pagination.
+//! `DatabaseModule`: Navree's own data layer on SQLx, the request unit of
+//! work, module-owned migrations, seeders, factories and pagination.
 //!
+//! - The engine: [`Pool`]s of navree-db's own connections, [`Statement`]s
+//!   (SQL and bound [`Value`]s; portable `?` placeholders), [`Row`]s read
+//!   as any [`FromValue`] type, classified [`DbError`]s, [`Transaction`]s
+//!   with savepoints, and the [`Executor`] they share with [`Db`] and
+//!   [`Uow`]. Statements are timed and reported like everything else below.
+//!   SeaORM still runs on the same connections ([`Db::conn`] is a view over
+//!   the writer's pool) while crates move off it; [`compat`] bridges the
+//!   two (see `docs/superpowers/specs/2026-10-28-navree-data-layer-on-sqlx.md`).
 //! - [`DatabaseModule`] is global: it connects the pool at boot and exports
 //!   [`Db`] and [`DbOptions`] (section `database`). TimescaleDB, Navree's
 //!   default database, and plain PostgreSQL are behind the `postgres`
-//!   feature; SQLite is built in (its connections use WAL,
-//!   `busy_timeout = 5000` and `foreign_keys = ON`); MySQL and MariaDB are
-//!   behind the `mysql` feature (`mysql://` or `mariadb://` URLs; connections in
-//!   UTC, `utf8mb4` and strict SQL mode over TLS when the server offers
-//!   it, see [`MySqlOptions`]). It registers the `database` health check
+//!   feature; SQLite is behind the `sqlite` feature, on by default (its
+//!   connections use WAL, `busy_timeout = 5000` and `foreign_keys = ON`);
+//!   MySQL and MariaDB are behind the `mysql` feature (`mysql://` or
+//!   `mariadb://` URLs; connections in UTC, `utf8mb4` and strict SQL mode
+//!   over TLS when the server offers it, see [`MySqlOptions`]). It
+//!   registers the `database` health check
 //!   and the commands `migrate`, `migrate:install`, `migrate:rollback`,
 //!   `migrate:reset`, `migrate:refresh`, `migrate:fresh`, `migrate:status`,
 //!   `schema:dump`, `db:seed`, `db:monitor` and `db`.
@@ -106,6 +115,7 @@
 mod client;
 mod connections;
 mod db;
+mod engine;
 mod events;
 mod http;
 mod migrate;
@@ -124,6 +134,11 @@ mod uow;
 pub use client::ClientCommand;
 pub use connections::DbConnections;
 pub use db::{DEFAULT_CONNECTION, Db, PoolStats};
+pub use engine::compat;
+pub use engine::{
+    Backend, ColumnIndex, DbError, ErrorKind, Executed, Executor, ExecutorExt, FromValue, HasKind,
+    Kind, Pool, Row, RowStream, Statement, Transaction, TxOptions, Value, ValueError,
+};
 pub use events::{ConnectionEstablished, DatabaseBusy, DatabaseStatus};
 pub use http::map_db_error;
 pub use migrate::{
