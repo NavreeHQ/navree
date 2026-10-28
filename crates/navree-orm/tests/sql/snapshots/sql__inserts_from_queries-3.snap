@@ -1,6 +1,6 @@
 ---
 source: crates/navree-orm/tests/sql/main.rs
-expression: "per_dialect(|d| compile_insert(&mismatch, d))"
+expression: "per_dialect(|d| render_insert(&mismatch, d))"
 ---
 PostgreSQL: error: invalid query: an insert into `archived_deals` fills 1 columns but its query selects 2
 MySQL: error: invalid query: an insert into `archived_deals` fills 1 columns but its query selects 2

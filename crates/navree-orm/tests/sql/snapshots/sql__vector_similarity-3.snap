@@ -1,8 +1,9 @@
 ---
 source: crates/navree-orm/tests/sql/main.rs
+assertion_line: 610
 expression: "rows(table(\"documents\").select_expr(Expr::vector_distance_by(Expr::col(\"embedding\"),\n&embedding, navree_orm::VectorMetric::Euclidean), \"l2\"))"
 ---
-PostgreSQL: SELECT ("embedding" <-> CAST($1 AS vector)) AS "l2" FROM "documents"
+PostgreSQL: SELECT "embedding" <-> CAST($1 AS vector) AS "l2" FROM "documents"
   values: [String(Some("[0.25,-1.5,3]"))]
 MySQL: SELECT VEC_DISTANCE_EUCLIDEAN(`embedding`, VEC_FromText(?)) AS `l2` FROM `documents`
   values: [String(Some("[0.25,-1.5,3]"))]

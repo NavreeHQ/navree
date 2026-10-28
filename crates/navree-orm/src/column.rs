@@ -497,10 +497,10 @@ fn json_suffix(column: &ColumnRef) -> String {
 /// A condition for `where_`, `having` and join clauses.
 ///
 /// Built from columns (`Deal::STAGE.eq(Stage::Won)`, `col("x").gt(5)`),
-/// expressions (`Expr::count_all().gt(3)`), raw SQL ([`Filter::raw`]), or a
-/// sea-query condition (navree-access SQL filters, navree-db's
-/// `contains_ignore_case`), and combined with [`and`](Filter::and),
-/// [`or`](Filter::or) and [`not`](Filter::not).
+/// expressions (`Expr::count_all().gt(3)`), raw SQL ([`Filter::raw`]), a
+/// [render-tree](crate::render::ast) condition, or a sea-query condition
+/// (navree-db's `contains_ignore_case`), and combined with
+/// [`and`](Filter::and), [`or`](Filter::or) and [`not`](Filter::not).
 #[derive(Clone, Debug)]
 pub struct Filter(pub(crate) Where);
 
@@ -634,13 +634,28 @@ impl Filter {
 
     /// The condition as SQL for `dialect` (for tests and debugging).
     pub fn to_sql(&self, dialect: crate::Dialect) -> Result<crate::Statement, crate::OrmError> {
-        crate::sql::compile_filter(&self.0, dialect)
+        crate::sql::render_filter(&self.0, dialect)
     }
 }
 
 impl From<Where> for Filter {
     fn from(filter: Where) -> Self {
         Filter(filter)
+    }
+}
+
+/// A render-tree condition, written for each SQL dialect by the renderer.
+///
+/// ```
+/// use navree_orm::render::ast::Expr;
+/// use navree_orm::{Dialect, Filter};
+///
+/// let filter = Filter::from(Expr::col("closed_at").is_null().or(Expr::col("won").eq(Expr::bool(true))));
+/// assert_eq!(filter.to_sql(Dialect::MySql).unwrap().sql, "`closed_at` IS NULL OR `won` = TRUE");
+/// ```
+impl From<crate::render::ast::Expr> for Filter {
+    fn from(condition: crate::render::ast::Expr) -> Self {
+        Filter(Where::Tree(Box::new(condition)))
     }
 }
 

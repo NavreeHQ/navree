@@ -8,7 +8,7 @@ use chrono::{DateTime, TimeZone, Utc};
 use navree_orm::attributes::CastContext;
 use navree_orm::cast::{CastError, InboundCast};
 use navree_orm::ir::{Expr as IrExpr, InsertIr};
-use navree_orm::sql::compile_insert;
+use navree_orm::sql::render_insert;
 use navree_orm::{Decimal, Dialect, Model, Ulid};
 use serde::Serialize;
 use uuid::Uuid;
@@ -74,7 +74,7 @@ fn insert(ledger: &Ledger, dialect: Dialect) -> navree_orm::Result<navree_orm::S
         .filter(|(column, _)| *column == "embedding")
         .map(|(column, value)| (Cow::Borrowed(column), IrExpr::Value(value)))
         .unzip();
-    compile_insert(
+    render_insert(
         &InsertIr::new(Cow::Borrowed("ledgers"), columns, vec![row]),
         dialect,
     )

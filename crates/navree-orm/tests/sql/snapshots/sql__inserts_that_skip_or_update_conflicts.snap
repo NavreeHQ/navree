@@ -1,6 +1,6 @@
 ---
 source: crates/navree-orm/tests/sql/main.rs
-expression: "per_dialect(|d|\ncompile_insert(&base().on_conflict(OnConflict::Ignore { target: vec![] }), d))"
+expression: "per_dialect(|d|\nrender_insert(&base().on_conflict(OnConflict::Ignore { target: vec![] }), d))"
 ---
 PostgreSQL: INSERT INTO "tags" ("name", "color") VALUES ($1, $2) ON CONFLICT DO NOTHING
   values: [String(Some("vip")), String(Some("gold"))]

@@ -1,10 +1,11 @@
 ---
 source: crates/navree-orm/tests/sql/text.rs
+assertion_line: 21
 expression: "query(Company::query().where_(Company::ID.gt(3_i64)).where_(Company::NAME.contains_ignore_case(\"acme\").or(Company::COUNTRY.contains_ignore_case(\"acme\"))).where_not(Company::NAME.eq_ignore_case(\"ACME Holdings\")))"
 ---
-PostgreSQL: SELECT "companies"."id", "companies"."name", "companies"."country" FROM "companies" WHERE "companies"."id" > $1 AND (LOWER("companies"."name") LIKE $2 ESCAPE E'\\' OR LOWER("companies"."country") LIKE $3 ESCAPE E'\\') AND (NOT LOWER("companies"."name") = $4)
+PostgreSQL: SELECT "companies"."id", "companies"."name", "companies"."country" FROM "companies" WHERE "companies"."id" > $1 AND (LOWER("companies"."name") LIKE $2 ESCAPE E'\\' OR LOWER("companies"."country") LIKE $3 ESCAPE E'\\') AND NOT (LOWER("companies"."name") = $4)
   values: [BigInt(Some(3)), String(Some("%acme%")), String(Some("%acme%")), String(Some("acme holdings"))]
-MySQL: SELECT `companies`.`id`, `companies`.`name`, `companies`.`country` FROM `companies` WHERE `companies`.`id` > ? AND (INSTR(CAST(LOWER(`companies`.`name`) AS BINARY), CAST(? AS BINARY)) > ? OR INSTR(CAST(LOWER(`companies`.`country`) AS BINARY), CAST(? AS BINARY)) > ?) AND (NOT CAST(LOWER(`companies`.`name`) AS BINARY) = CAST(? AS BINARY))
-  values: [BigInt(Some(3)), String(Some("acme")), Int(Some(0)), String(Some("acme")), Int(Some(0)), String(Some("acme holdings"))]
-SQLite: SELECT "companies"."id", "companies"."name", "companies"."country" FROM "companies" WHERE "companies"."id" > ? AND (("companies"."name" GLOB ?) OR ("companies"."country" GLOB ?)) AND (NOT ("companies"."name" GLOB ?))
+MySQL: SELECT `companies`.`id`, `companies`.`name`, `companies`.`country` FROM `companies` WHERE `companies`.`id` > ? AND (INSTR(CAST(LOWER(`companies`.`name`) AS BINARY), CAST(? AS BINARY)) > 0 OR INSTR(CAST(LOWER(`companies`.`country`) AS BINARY), CAST(? AS BINARY)) > 0) AND NOT (CAST(LOWER(`companies`.`name`) AS BINARY) = CAST(? AS BINARY))
+  values: [BigInt(Some(3)), String(Some("acme")), String(Some("acme")), String(Some("acme holdings"))]
+SQLite: SELECT "companies"."id", "companies"."name", "companies"."country" FROM "companies" WHERE "companies"."id" > ? AND ("companies"."name" GLOB ? OR "companies"."country" GLOB ?) AND NOT ("companies"."name" GLOB ?)
   values: [BigInt(Some(3)), String(Some("*[aA][cC][mM][eE]*")), String(Some("*[aA][cC][mM][eE]*")), String(Some("[Aa][Cc][Mm][Ee] [Hh][oO][lL][dD][iI][nN][gG][sS]"))]

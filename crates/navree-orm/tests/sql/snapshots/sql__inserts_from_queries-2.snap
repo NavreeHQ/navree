@@ -1,7 +1,8 @@
 ---
 source: crates/navree-orm/tests/sql/main.rs
-expression: "per_dialect(|d| compile_insert(&ignore, d))"
+assertion_line: 813
+expression: "per_dialect(|d| render_insert(&ignore, d))"
 ---
 PostgreSQL: INSERT INTO "archived_deals" ("id", "title") SELECT "id", "title" FROM "deals" ON CONFLICT DO NOTHING
 MySQL: INSERT IGNORE INTO `archived_deals` (`id`, `title`) SELECT `id`, `title` FROM `deals`
-SQLite: INSERT INTO "archived_deals" ("id", "title") SELECT "id", "title" FROM "deals" WHERE true ON CONFLICT DO NOTHING
+SQLite: INSERT INTO "archived_deals" ("id", "title") SELECT "id", "title" FROM "deals" WHERE TRUE ON CONFLICT DO NOTHING
