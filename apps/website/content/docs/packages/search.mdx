@@ -112,11 +112,12 @@ engine = "postgres"
 [search.postgres]
 language = "english"   # the text search configuration
 trigram = true         # typo tolerance with pg_trgm
+typo_threshold = 0.4   # how close a word must be to match, above 0 to 1
 ```
 
-The module contributes a migration set named `search` that creates one table, `search_documents`, holding each document's fields (`jsonb`) and a weighted `tsvector` with a GIN index. Field boosts map to the four `tsvector` weights (5 and up `A`, 3 and 4 `B`, 2 `C`, 1 `D`). Your own tables are not changed. With `trigram = true` the engine enables the `pg_trgm` extension and adds a trigram index on the text the first time it runs. Each word of the query then matches either the `tsvector` or, by trigram word similarity, the text, so a misspelled word ("ada lovlace") still finds its record while the other words keep narrowing the results. Queries run on the app's connection pool, or inside the request's transaction when it already wrote.
+The module contributes a migration set named `search` that creates one table, `search_documents`, holding each document's fields (`jsonb`) and a weighted `tsvector` with a GIN index. Field boosts map to the four `tsvector` weights (5 and up `A`, 3 and 4 `B`, 2 `C`, 1 `D`). Your own tables are not changed. With `trigram = true` the engine enables the `pg_trgm` extension and adds a trigram index on the text the first time it runs. Each word of the query then matches either the `tsvector` or, by trigram word similarity, the text, so a misspelled word ("ada lovlace") still finds its record while the other words keep narrowing the results. How close a word must be is `typo_threshold` (default 0.4): the engine sets `pg_trgm.word_similarity_threshold` to it for each query, inside a transaction, because PostgreSQL's own default of 0.6 rejects a one-letter typo in a longer word ("lovlace" scores 0.55 against "Lovelace"). Raise it for fewer, closer matches; lower it for more forgiving ones. The trigram index is created before the first typo-tolerant query even when no import ran. Queries run on the app's connection pool, or inside the request's transaction when it already wrote.
 
-On SQLite, in development and tests, the same engine uses an FTS5 table, `search_documents_fts`, that the migration creates next to `search_documents`: one column per boost, ranked with BM25. Prefixes match there; misspellings don't.
+On SQLite, in development and tests, the same engine uses an FTS5 table, `search_documents_fts`, that the migration creates next to `search_documents`: one column per boost, ranked with BM25. Each FTS row carries the rowid of its document, so replacing or deleting a document finds its row through the primary key and an import stays linear. Prefixes match there; misspellings don't.
 
 The migration set is part of the module whatever the engine; with another engine its table stays empty.
 
@@ -623,6 +624,7 @@ Every engine implements the `SearchEngine` trait, which you can implement for an
 | `search.timeout_secs` | `5` | Time allowed for one engine request |
 | `search.postgres.language` | `english` | The text search configuration |
 | `search.postgres.trigram` | `false` | Typo tolerance with `pg_trgm` |
+| `search.postgres.typo_threshold` | `0.4` | How similar a word must be to match with `trigram`, above 0 and at most 1 |
 | `search.tantivy.path` | `storage/search` | Index directory |
 | `search.tantivy.memory_budget_mb` | `64` | Writer buffer in MB (less than 15 counts as 15) |
 | `search.vectors.store` | none | `pgvector`, `qdrant` or `memory`; vector search is off without it |
