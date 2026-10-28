@@ -47,8 +47,8 @@ use crate::error::{OrmError, Result};
 use crate::exec::{Access, Executor, SqlTarget, Target};
 use crate::ir::{Expr, SelectItem};
 use crate::query::IntoSelect;
-use crate::row::{Row, decode_error};
 use crate::render::Writer;
+use crate::row::{Row, decode_error};
 use crate::sql::{Dialect, Statement};
 use crate::value::{Field, Value};
 

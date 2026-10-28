@@ -17,13 +17,13 @@ use crate::value::Value;
 
 mod query_builder;
 
-pub(crate) use query_builder::condition_fragment;
-pub use crate::render::{
-    render_aggregate, render_delete, render_exists, render_insert, render_select,
-    render_truncate, render_update, render_update_from,
-};
 pub(crate) use crate::render::grammar::is_identifier;
 pub(crate) use crate::render::lower::timeout_millis;
+pub use crate::render::{
+    render_aggregate, render_delete, render_exists, render_insert, render_select, render_truncate,
+    render_update, render_update_from,
+};
+pub(crate) use query_builder::condition_fragment;
 
 /// An SQL dialect.
 ///
