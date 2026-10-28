@@ -100,7 +100,13 @@ impl navree::schema::Migration for Migration {
 - Commands in `table` run in the order written: `rename_column(from, to)`,
   `drop_column(["a", "b"])`, `drop_index(["stage", "created_at"])`,
   `drop_unique("name")`, `drop_foreign(["company_id"])`,
-  `drop_constrained_foreign_id("owner_id")`, `rename_index(from, to)`.
+  `drop_constrained_foreign_id("owner_id")`, `rename_index(from, to)`,
+  `drop_check("deals_amount_check")`.
+- Check constraints: `t.check("deals_amount_check", "amount >= 0")` (raw
+  SQL, may name several columns; name it `<table>_..`, MySQL wants names
+  unique per database). `ALTER TABLE .. ADD CONSTRAINT` on PostgreSQL and
+  MySQL (enforced from 8.0.16; older ones get a notice), inside `CREATE
+  TABLE` on SQLite, where adding or dropping one later rebuilds the table.
 - `change()` replaces the column's definition: a default or `nullable` left
   out is removed.
 - SQLite can't alter most things in place: the builder **rebuilds** the

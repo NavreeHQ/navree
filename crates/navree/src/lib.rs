@@ -40,7 +40,7 @@
 //! | `ui` | navree-ui | `ui` | `UiModule`: the app shell and components for server-rendered tools, embedded assets |
 //! | `orm` | navree-orm | `orm` | `#[derive(Model)]` models, the query builder, records, collections, pagination |
 //! | `auth` | navree-auth | `auth` | `AuthModule`: JWT access and refresh tokens, users, sessions, impersonation, passwordless, passkeys |
-//! | `workspace` | navree-workspace | `workspace` | `WorkspaceModule`: workspaces, members, roles, invitations, isolation, organizations, partitions, demo workspaces |
+//! | `workspace` | navree-workspace | `workspace` | `WorkspaceModule`: workspaces, members, roles, invitations, isolation, organizations, partitions, shared libraries, demo workspaces |
 //! | `mongo` | navree-mongo | `mongo` or `mongodb` (opt-in) | `MongoModule`: MongoDB connections and readiness; ORM models on collections, sessions and units of work; the schema builder, migrations and time-series collections on MongoDB |
 //! | `redis` | navree-redis | `redis` (opt-in) | `RedisModule`: shared Redis connections; Redis cache, locks, queue, sessions, rate limits and real-time backplane |
 //! | `webhooks` | navree-webhooks | `webhooks` | `WebhooksModule`: signed outgoing webhooks with retries, verified incoming ones |
