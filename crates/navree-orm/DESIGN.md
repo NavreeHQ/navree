@@ -701,6 +701,11 @@ SeaORM code (a unit test reads its sources to keep it so); its values are
   with `NULLS LAST` on MySQL), the case says so and the run requires the
   difference.
 
+The test-only feature `render-sql-for-tests` (never on in builds) makes
+`sql::compile_*` the renderer's `render_*`, so the whole ORM suite runs
+through it: `cargo test -p navree-orm --features render-sql-for-tests`
+(the `sql` snapshots then show the renderer's text, by design).
+
 **Switching over.** `sql::compile_*` is to become a thin call of the
 matching `render::render_*`: first the reads (`compile_select`,
 `compile_aggregate`, `compile_exists`), then the writes, each step with the

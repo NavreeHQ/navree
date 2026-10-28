@@ -135,6 +135,9 @@ fn deals() -> navree_orm::TableBuilder {
     table("deals")
 }
 
+/// Why the renderer refuses `Where::Sql` for now.
+const QUERY_BUILDER_CONDITION: &str = "the renderer refuses `Where::Sql` (a sea-query condition) until navree-access builds its SQL filters as trees";
+
 /// The read cases.
 pub fn reads(dialect: Dialect) -> Vec<Case> {
     let _ = dialect;
@@ -982,6 +985,28 @@ pub fn reads(dialect: Dialect) -> Vec<Case> {
             "has_deals",
         ),
     ));
+    // A condition in a document store's own language: refused by both.
+    cases.push(read(
+        "a document filter",
+        table("companies").where_(Filter::from(Where::Native(
+            navree_orm::ir::NativeFilter::new("mongodb", "{ status: 'open' }"),
+        ))),
+    ));
+    // A condition built with the query builder the renderer replaces: the
+    // renderer refuses it until such conditions are built as trees.
+    cases.push(
+        read(
+            "a condition built with the query builder",
+            table("companies").where_(Filter::from(
+                sea_query::Condition::all().add(sea_query::Expr::cust("1 = 1")),
+            )),
+        )
+        .differs(&[
+            (Dialect::Postgres, QUERY_BUILDER_CONDITION),
+            (Dialect::MySql, QUERY_BUILDER_CONDITION),
+            (Dialect::Sqlite, QUERY_BUILDER_CONDITION),
+        ]),
+    );
     // Where the compiler's SQL is wrong and the renderer's right.
     cases.push(
         read(
