@@ -1,0 +1,7 @@
+---
+source: crates/navree-orm/tests/render/main.rs
+expression: "statement(Update::new(\"deals\", Vec::new()))"
+---
+PostgreSQL: error: invalid query: an update of `deals` sets no column
+MySQL: error: invalid query: an update of `deals` sets no column
+SQLite: error: invalid query: an update of `deals` sets no column

@@ -1,0 +1,7 @@
+---
+source: crates/navree-orm/tests/render/lowering.rs
+expression: "query(Deal::query().where_(Deal::TITLE.op(\"=>\", \"x\")))"
+---
+PostgreSQL: error: invalid query: `=>` is not a known operator (use =, <>, <, <=, >, >=, like, not like, ilike, not ilike, <=>, &, |, ^, <<, >>, regexp, not regexp)
+MySQL: error: invalid query: `=>` is not a known operator (use =, <>, <, <=, >, >=, like, not like, ilike, not ilike, <=>, &, |, ^, <<, >>, regexp, not regexp)
+SQLite: error: invalid query: `=>` is not a known operator (use =, <>, <, <=, >, >=, like, not like, ilike, not ilike, <=>, &, |, ^, <<, >>, regexp, not regexp)

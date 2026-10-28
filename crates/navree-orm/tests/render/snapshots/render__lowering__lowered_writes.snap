@@ -1,0 +1,10 @@
+---
+source: crates/navree-orm/tests/render/lowering.rs
+expression: "per_dialect(|d| render_insert(&insert, d))"
+---
+PostgreSQL: INSERT INTO "companies" ("name", "country") VALUES ($1, $2), ($3, $4) RETURNING "id"
+  values: [String(Some("Acme")), String(None), String(Some("Globex")), String(Some("DE"))]
+MySQL: INSERT INTO `companies` (`name`, `country`) VALUES (?, ?), (?, ?)
+  values: [String(Some("Acme")), String(None), String(Some("Globex")), String(Some("DE"))]
+SQLite: INSERT INTO "companies" ("name", "country") VALUES (?, ?), (?, ?) RETURNING "id"
+  values: [String(Some("Acme")), String(None), String(Some("Globex")), String(Some("DE"))]
