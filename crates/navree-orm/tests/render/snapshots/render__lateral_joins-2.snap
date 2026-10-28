@@ -1,0 +1,9 @@
+---
+source: crates/navree-orm/tests/render/main.rs
+expression: "query(Query::from(Select::from_table(\"companies\").join(Join\n{\n    kind: JoinKind::Left, source: Source::lateral(latest(), \"latest\"), on:\n    Some(Expr::bool(true)),\n})))"
+---
+PostgreSQL: SELECT * FROM "companies" LEFT JOIN LATERAL (SELECT "deals"."title" FROM "deals" WHERE "deals"."company_id" = "companies"."id" ORDER BY "deals"."created_at" DESC LIMIT $1) AS "latest" ON TRUE
+  values: [BigUnsigned(Some(2))]
+MySQL: SELECT * FROM `companies` LEFT JOIN LATERAL (SELECT `deals`.`title` FROM `deals` WHERE `deals`.`company_id` = `companies`.`id` ORDER BY `deals`.`created_at` DESC LIMIT ?) AS `latest` ON TRUE
+  values: [BigUnsigned(Some(2))]
+SQLite: error: a lateral join is not supported on SQLite

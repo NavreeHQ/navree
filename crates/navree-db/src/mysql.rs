@@ -2,8 +2,9 @@
 //! with, the unit of work's session variables, and dropping every table.
 //!
 //! The statements are plain text so they are the same with the SQLx driver
-//! (the `mysql` feature) and with a scripted connection in tests; only the
-//! connection hook needs the driver.
+//! (the `mysql` feature) and with a scripted connection in tests; the
+//! connection hook that runs them is navree-db's MySQL driver's
+//! (`engine::driver::mysql`).
 
 #[cfg(any(feature = "mysql", test))]
 use crate::MySqlOptions;
@@ -99,33 +100,6 @@ pub(crate) fn quote(identifier: &str) -> String {
 pub(crate) fn drop_tables(tables: &[String]) -> String {
     let names: Vec<String> = tables.iter().map(|table| quote(table)).collect();
     format!("DROP TABLE IF EXISTS {}", names.join(", "))
-}
-
-/// Installs [`session_statements`] as SQLx's `after_connect` hook: they run
-/// once on every connection the pool opens, after SQLx's own session
-/// settings (time zone, character set, `PIPES_AS_CONCAT`).
-#[cfg(feature = "mysql")]
-pub(crate) fn configure(connect: &mut sea_orm::ConnectOptions, options: &MySqlOptions) {
-    use std::sync::Arc;
-
-    use sea_orm::sqlx::{AssertSqlSafe, raw_sql};
-
-    let statements: Arc<[String]> = session_statements(options).into();
-    connect.map_sqlx_mysql_pool_opts(move |pool| {
-        let statements = Arc::clone(&statements);
-        pool.after_connect(move |conn, _meta| {
-            let statements = Arc::clone(&statements);
-            Box::pin(async move {
-                for statement in statements.iter() {
-                    // Built from validated options (see `session_statements`).
-                    raw_sql(AssertSqlSafe(statement.clone()))
-                        .execute(&mut *conn)
-                        .await?;
-                }
-                Ok(())
-            })
-        })
-    });
 }
 
 #[cfg(test)]

@@ -16,9 +16,9 @@ base64 = { workspace = true }
 chrono = { workspace = true }
 form_urlencoded = { workspace = true }
 http = { workspace = true }
-moka = { workspace = true }
 navree-access = { workspace = true }
 navree-auth = { workspace = true }
+navree-bounded = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 # Token digests, and `jose`: Ed25519 (EdDSA) ID tokens and the JWKS.

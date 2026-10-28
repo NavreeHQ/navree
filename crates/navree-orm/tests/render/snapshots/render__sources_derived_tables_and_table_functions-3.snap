@@ -1,0 +1,7 @@
+---
+source: crates/navree-orm/tests/render/main.rs
+expression: "query(Query::from(Select::from_table(ObjectName::parse(\"audit.events\")).column(Expr::qualified(ObjectName::parse(\"audit.events\"),\n\"id\"))))"
+---
+PostgreSQL: SELECT "audit"."events"."id" FROM "audit"."events"
+MySQL: SELECT `audit`.`events`.`id` FROM `audit`.`events`
+SQLite: SELECT "audit"."events"."id" FROM "audit"."events"

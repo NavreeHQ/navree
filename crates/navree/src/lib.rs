@@ -8,6 +8,7 @@
 //! | Module | Crate | Feature | What it brings |
 //! |---|---|---|---|
 //! | [`kernel`] | navree-kernel | always | module graph, DI container, lifecycle, commands |
+//! | [`bounded`] | navree-bounded | always | the bounded in-process `Cache`: strict capacity, SIEVE eviction, TTL and TTI, single-flight loading |
 //! | [`contracts`] | navree-contracts | always | cross-module traits: `Principal`, `Job`, `Clock`, `AuditSink`, ... |
 //! | [`config`] | navree-config | always | `ConfigModule`, `.env`, TOML and `APP_*` sources |
 //! | `telemetry` | navree-telemetry | `telemetry` | typed telemetry events, sinks, W3C trace context |
@@ -157,6 +158,7 @@
 pub mod prelude;
 
 // L0-L1: always present.
+pub use navree_bounded as bounded;
 pub use navree_config as config;
 pub use navree_contracts as contracts;
 pub use navree_kernel as kernel;

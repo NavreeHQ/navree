@@ -1,0 +1,7 @@
+---
+source: crates/navree-orm/tests/render/main.rs
+expression: "query(Query::from(Select\n{\n    distinct: Distinct::On(vec![col(\"company_id\")]),\n    ..deals().column(col(\"company_id\")).column(col(\"title\"))\n}).order_by(col(\"company_id\").asc()).order_by(col(\"created_at\").desc()))"
+---
+PostgreSQL: SELECT DISTINCT ON ("company_id") "company_id", "title" FROM "deals" ORDER BY "company_id" ASC, "created_at" DESC
+MySQL: error: DISTINCT ON is not supported on MySQL
+SQLite: error: DISTINCT ON is not supported on SQLite

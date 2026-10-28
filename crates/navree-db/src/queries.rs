@@ -36,22 +36,6 @@ pub struct LoggedQuery {
 }
 
 impl LoggedQuery {
-    fn from_info(info: &Info<'_>, connection: Arc<str>) -> Self {
-        LoggedQuery {
-            sql: info.statement.sql.clone(),
-            values: info
-                .statement
-                .values
-                .as_ref()
-                .map(|values| values.0.clone())
-                .unwrap_or_default(),
-            duration: info.elapsed,
-            failed: info.failed,
-            connection,
-            backend: info.statement.db_backend,
-        }
-    }
-
     /// The statement with its values written in, for reading (logs, test
     /// output); run statements with their values bound instead.
     ///
@@ -215,14 +199,46 @@ impl Watchers {
         }
     }
 
-    /// Sees a statement the pool timed: the task's captures, the
-    /// listeners, and the statistics and duration handlers of the task's
-    /// unit of work when it runs on this connection.
+    /// Sees a statement SeaORM timed (see [`observe_statement`](Self::observe_statement)).
     pub(crate) fn observe(self: &Arc<Self>, info: &Info<'_>) {
+        self.observe_statement(
+            &info.statement.sql,
+            || {
+                info.statement
+                    .values
+                    .as_ref()
+                    .map(|values| values.0.clone())
+                    .unwrap_or_default()
+            },
+            info.statement.db_backend,
+            info.elapsed,
+            info.failed,
+        );
+    }
+
+    /// Sees a statement that ran on this connection: the task's captures,
+    /// the listeners (`values` is called only when one of them is there),
+    /// and the statistics and duration handlers of the task's unit of work
+    /// when it runs on this connection.
+    pub(crate) fn observe_statement(
+        self: &Arc<Self>,
+        sql: &str,
+        values: impl FnOnce() -> Vec<sea_orm::Value>,
+        backend: DbBackend,
+        elapsed: Duration,
+        failed: bool,
+    ) {
         let capture = CAPTURE.try_with(Arc::clone).ok();
         let listeners = read(&self.listeners).clone();
         if capture.is_some() || !listeners.is_empty() {
-            let logged = LoggedQuery::from_info(info, self.name.clone());
+            let logged = LoggedQuery {
+                sql: sql.to_owned(),
+                values: values(),
+                duration: elapsed,
+                failed,
+                connection: self.name.clone(),
+                backend,
+            };
             let mut next = capture;
             while let Some(capture) = next {
                 lock(&capture.queries).push(logged.clone());
@@ -233,7 +249,7 @@ impl Watchers {
             }
         }
         if let Some(uow) = Uow::current().filter(|uow| uow.db().is_watched_by(self)) {
-            let total = uow.count_query(&info.statement.sql, info.elapsed);
+            let total = uow.count_query(sql, elapsed);
             let handlers = read(&self.duration_handlers).clone();
             for handler in handlers {
                 if total > handler.threshold && uow.claim_duration_handler(handler.id) {
