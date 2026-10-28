@@ -301,7 +301,7 @@ ORM methods return `navree::orm::Result<T>`, whose error is `OrmError`. A handle
 | A unique or foreign-key violation | 409, as for every database error ([database errors](/docs/database/getting-started/#database-errors)) |
 | Anything else | 500, logged with its details |
 
-Messages name the model, the column and the operation, and say how to fix the problem: "cannot read column `amount_cents` of Deal as i64: ...", "no Deal found for key 0199a7a0-...". No SQL or value reaches the client. `is_not_found()`, `is_unique_violation()`, `is_timeout()` and `is_lost_connection()` classify an error when you handle it yourself.
+Messages name the model, the column and the operation, and say how to fix the problem: "cannot read column `amount_cents` of Deal as i64: ...", "no Deal found for key 0199a7a0-...". No SQL or value reaches the client. `is_not_found()`, `is_unique_violation()`, `is_foreign_key_violation()`, `is_timeout()` and `is_lost_connection()` classify an error when you handle it yourself. A database's own error is navree-db's `DbError` (`OrmError::Db`, and the source of `ModelNotFound` and `Timeout`; `db_error()` returns it): its `kind()` names the failure the same way on every database (`ErrorKind::UniqueViolation`, `Deadlock`, `LockUnavailable`, ...), `code()` and `constraint()` carry the server's own details.
 
 ## Inspecting models
 
@@ -332,7 +332,7 @@ Below the columns it lists the factory's relationships, the global scopes and th
 
 ## The ORM and SeaORM entities
 
-The ORM and SeaORM share the pool, the unit of work and the values they bind, so SeaORM [entities and `Repo`](/docs/database/entities-and-repositories/) keep working next to models, in the same transaction. Several of Navree's own modules still use SeaORM entities. For new code, use models.
+The ORM runs on navree-db's own engine: its values (`navree::orm::Value` is navree-db's `Value`), rows, pools, transactions and errors. SeaORM [entities and `Repo`](/docs/database/entities-and-repositories/) share the pool and the unit of work, so they keep working next to models, in the same transaction. Several of Navree's own modules still use SeaORM entities while they move to models. For new code, use models.
 
 <LinkCards>
   <LinkCard href="/docs/orm/models/" title="Models">

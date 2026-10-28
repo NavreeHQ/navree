@@ -6,10 +6,6 @@
 //!
 //! `cargo test -p navree-orm --features postgres,mysql --test servers`
 
-// The scenario futures nest deeply (every model operation awaits
-// navree-db's executor inside the ORM's own).
-#![recursion_limit = "256"]
-
 mod attributes;
 mod databases;
 mod lifecycle;
