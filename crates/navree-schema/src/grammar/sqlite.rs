@@ -42,7 +42,9 @@ pub(crate) fn needs_state(blueprint: &Blueprint, commands: &[Command]) -> bool {
             Command::Foreign(_)
             | Command::DropForeign { .. }
             | Command::DropColumn(_)
-            | Command::RenameIndex { .. } => true,
+            | Command::RenameIndex { .. }
+            | Command::Check(_)
+            | Command::DropCheck(_) => true,
             _ => false,
         })
 }
@@ -92,6 +94,11 @@ fn create(
     if let Some(primary) = &primary {
         body.push(format!("PRIMARY KEY ({})", columnize(D, &primary.columns)));
     }
+    for command in commands {
+        if let Command::Check(check) = command {
+            body.push(check_clause(check));
+        }
+    }
     out.push(format!(
         "CREATE {}TABLE {}{} ({})",
         if blueprint.temporary {
@@ -111,7 +118,7 @@ fn create(
         match command {
             Command::Index(index) if index.kind == IndexKind::Primary => {}
             Command::Index(index) => out.push(index_statement(name, index)?),
-            Command::Foreign(_) | Command::Comment(_) => {}
+            Command::Foreign(_) | Command::Comment(_) | Command::Check(_) => {}
             Command::Drop => out.push(format!("DROP TABLE {}", table(D, name))),
             Command::DropIfExists => out.push(format!("DROP TABLE IF EXISTS {}", table(D, name))),
             other => {
@@ -446,6 +453,25 @@ impl<'a> Alter<'a> {
                 self.in_place(statement)?;
             }
             Command::Comment(_) => {}
+            Command::Check(check) => {
+                let state = self.state(&format!("adding CHECK constraint `{}`", check.name))?;
+                state.constraints.push(check_clause(check));
+                self.rebuild_needed();
+            }
+            Command::DropCheck(name) => {
+                let table_name = self.table.clone();
+                let state = self.state(&format!("dropping CHECK constraint `{name}`"))?;
+                let before = state.constraints.len();
+                state
+                    .constraints
+                    .retain(|constraint| !is_named_check(constraint, name));
+                if state.constraints.len() == before {
+                    return Err(SchemaError::missing(format!(
+                        "`{table_name}` has no CHECK constraint `{name}`"
+                    )));
+                }
+                self.rebuild_needed();
+            }
         }
         Ok(())
     }
@@ -572,6 +598,74 @@ fn rebuild_statements(
     }
     statements.extend(state.triggers.iter().cloned());
     Ok(statements)
+}
+
+/// `CONSTRAINT "name" CHECK (expression)`, a table constraint.
+fn check_clause(check: &crate::blueprint::CheckDefinition) -> String {
+    format!(
+        "CONSTRAINT {} CHECK ({})",
+        ident(D, &check.name),
+        check.expression.trim()
+    )
+}
+
+/// Whether `constraint` (a table constraint as written) is the `CHECK`
+/// constraint `name`: `CONSTRAINT <name> CHECK (..)`, the name bare or
+/// quoted with `"`, `` ` `` or `[]`, compared without case.
+fn is_named_check(constraint: &str, name: &str) -> bool {
+    let text = constraint.trim_start();
+    let Some(rest) = strip_keyword(text, "CONSTRAINT") else {
+        return false;
+    };
+    let rest = rest.trim_start();
+    let (found, rest) = match rest.chars().next() {
+        Some(quote @ ('"' | '`' | '[')) => {
+            let close = if quote == '[' { ']' } else { quote };
+            let body = &rest[1..];
+            let mut found = String::new();
+            let mut chars = body.char_indices().peekable();
+            let mut end = None;
+            while let Some((at, c)) = chars.next() {
+                if c == close {
+                    // A doubled quote is a quote inside the name.
+                    if close != ']' && chars.peek().is_some_and(|(_, next)| *next == close) {
+                        found.push(c);
+                        chars.next();
+                        continue;
+                    }
+                    end = Some(at + c.len_utf8());
+                    break;
+                }
+                found.push(c);
+            }
+            let Some(end) = end else {
+                return false;
+            };
+            (found, &body[end..])
+        }
+        Some(_) => {
+            let end = rest
+                .find(|c: char| c.is_whitespace() || c == '(')
+                .unwrap_or(rest.len());
+            (rest[..end].to_owned(), &rest[end..])
+        }
+        None => return false,
+    };
+    found.eq_ignore_ascii_case(name) && strip_keyword(rest.trim_start(), "CHECK").is_some()
+}
+
+/// `text` after its leading keyword `keyword` (any case), when it starts
+/// with it as a whole word.
+fn strip_keyword<'a>(text: &'a str, keyword: &str) -> Option<&'a str> {
+    let head = text.get(..keyword.len())?;
+    if !head.eq_ignore_ascii_case(keyword) {
+        return None;
+    }
+    let rest = &text[keyword.len()..];
+    match rest.chars().next() {
+        Some(c) if c.is_alphanumeric() || c == '_' => None,
+        _ => Some(rest),
+    }
 }
 
 fn state_foreign_clause(foreign: &StateForeign) -> String {
@@ -759,4 +853,42 @@ pub(crate) fn type_sql(column: &ColumnDefinition) -> SchemaResult<String> {
         }
         ColumnType::Raw { definition } => definition.clone(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn check_constraints_are_found_by_name() {
+        for written in [
+            "CONSTRAINT \"templates_owner_check\" CHECK (scope IN ('a'))",
+            "constraint templates_owner_check check(scope IN ('a'))",
+            "CONSTRAINT `Templates_Owner_Check` CHECK (1)",
+            "CONSTRAINT [templates_owner_check] CHECK (1)",
+        ] {
+            assert!(is_named_check(written, "templates_owner_check"), "{written}");
+        }
+        for other in [
+            "CONSTRAINT \"templates_owner_check_2\" CHECK (1)",
+            "CONSTRAINT \"templates_owner_check\" UNIQUE (scope)",
+            "CHECK (templates_owner_check > 0)",
+            "UNIQUE (\"a\", \"b\")",
+            "CONSTRAINTS x CHECK (1)",
+            "CONSTRAINT \"unterminated CHECK (1)",
+        ] {
+            assert!(!is_named_check(other, "templates_owner_check"), "{other}");
+        }
+        assert!(is_named_check(
+            "CONSTRAINT \"we\"\"ird\" CHECK (1)",
+            "we\"ird"
+        ));
+        assert_eq!(
+            check_clause(&crate::blueprint::CheckDefinition {
+                name: "t_check".into(),
+                expression: " a > 0 ".into(),
+            }),
+            "CONSTRAINT \"t_check\" CHECK (a > 0)"
+        );
+    }
 }

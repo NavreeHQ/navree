@@ -1,0 +1,21 @@
+---
+source: crates/navree-schema/tests/schema/checks.rs
+expression: sql
+---
+-- postgres
+CREATE TABLE "templates" ("id" UUID NOT NULL, "scope" VARCHAR(16) NOT NULL, "workspace_id" UUID NULL, "position" INTEGER NOT NULL DEFAULT 0, PRIMARY KEY ("id"));
+ALTER TABLE "templates" ADD CONSTRAINT "templates_owner_check" CHECK ((scope = 'global' AND workspace_id IS NULL) OR (scope = 'workspace' AND workspace_id IS NOT NULL));
+ALTER TABLE "templates" ADD CONSTRAINT "templates_position_check" CHECK (position >= 0);
+
+-- mysql
+CREATE TABLE `templates` (`id` CHAR(36) NOT NULL, `scope` VARCHAR(16) NOT NULL, `workspace_id` CHAR(36) NULL, `position` INT NOT NULL DEFAULT 0, PRIMARY KEY (`id`)) DEFAULT CHARACTER SET utf8mb4;
+ALTER TABLE `templates` ADD CONSTRAINT `templates_owner_check` CHECK ((scope = 'global' AND workspace_id IS NULL) OR (scope = 'workspace' AND workspace_id IS NOT NULL));
+ALTER TABLE `templates` ADD CONSTRAINT `templates_position_check` CHECK (position >= 0);
+
+-- mariadb
+CREATE TABLE `templates` (`id` UUID NOT NULL, `scope` VARCHAR(16) NOT NULL, `workspace_id` UUID NULL, `position` INT NOT NULL DEFAULT 0, PRIMARY KEY (`id`)) DEFAULT CHARACTER SET utf8mb4;
+ALTER TABLE `templates` ADD CONSTRAINT `templates_owner_check` CHECK ((scope = 'global' AND workspace_id IS NULL) OR (scope = 'workspace' AND workspace_id IS NOT NULL));
+ALTER TABLE `templates` ADD CONSTRAINT `templates_position_check` CHECK (position >= 0);
+
+-- sqlite
+CREATE TABLE "templates" ("id" VARCHAR NOT NULL, "scope" VARCHAR NOT NULL, "workspace_id" VARCHAR, "position" INTEGER NOT NULL DEFAULT 0, PRIMARY KEY ("id"), CONSTRAINT "templates_owner_check" CHECK ((scope = 'global' AND workspace_id IS NULL) OR (scope = 'workspace' AND workspace_id IS NOT NULL)), CONSTRAINT "templates_position_check" CHECK (position >= 0));

@@ -526,6 +526,117 @@ async fn rebuilding_a_referenced_table_with_foreign_keys_on_is_refused() {
     );
 }
 
+/// CHECK constraints: created with the table, then added and dropped by
+/// rebuilds that keep the rows.
+#[tokio::test]
+async fn check_constraints_are_enforced_and_rebuilt() {
+    let db = TempSqlite::new();
+    let conn = db.connect().await;
+    let schema = Schema::new(&conn);
+    schema
+        .create("templates", |t| {
+            t.id();
+            t.string("scope");
+            t.integer("workspace_id").nullable();
+            t.integer("position").default(0);
+            t.check(
+                "templates_owner_check",
+                "(scope = 'global' AND workspace_id IS NULL) OR (scope = 'workspace' AND workspace_id IS NOT NULL)",
+            );
+        })
+        .await
+        .unwrap();
+    assert!(
+        table_sql(&conn, "templates")
+            .await
+            .contains("CONSTRAINT \"templates_owner_check\" CHECK ((scope = 'global'"),
+        "{}",
+        table_sql(&conn, "templates").await
+    );
+    exec(
+        &conn,
+        "INSERT INTO templates (scope, workspace_id, position) VALUES ('global', NULL, 1), ('workspace', 7, -1)",
+    )
+    .await;
+    let refused = conn
+        .execute_unprepared("INSERT INTO templates (scope, workspace_id) VALUES ('global', 7)")
+        .await;
+    assert!(
+        refused
+            .unwrap_err()
+            .to_string()
+            .contains("CHECK constraint failed"),
+        "a global row with a workspace is refused"
+    );
+
+    // Adding a check rebuilds the table: the rows and the first check stay.
+    // A row that violates it fails the rebuild (in the migration's
+    // transaction, which rolls back).
+    let tx = sea_orm::TransactionTrait::begin(&conn).await.unwrap();
+    let refused = Schema::new(&tx)
+        .table("templates", |t| {
+            t.check("templates_position_check", "position >= 0");
+        })
+        .await;
+    assert!(
+        refused.is_err(),
+        "the existing row with position -1 violates the new check"
+    );
+    tx.rollback().await.unwrap();
+    exec(&conn, "UPDATE templates SET position = 0 WHERE position < 0").await;
+    schema
+        .table("templates", |t| {
+            t.check("templates_position_check", "position >= 0");
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        texts(rows(&conn, "SELECT scope, workspace_id, position FROM templates ORDER BY id").await),
+        [["global", "NULL", "1"], ["workspace", "7", "0"]]
+    );
+    for (sql, check) in [
+        (
+            "INSERT INTO templates (scope, workspace_id, position) VALUES ('global', NULL, -5)",
+            "templates_position_check",
+        ),
+        (
+            "INSERT INTO templates (scope, workspace_id, position) VALUES ('workspace', NULL, 0)",
+            "templates_owner_check",
+        ),
+    ] {
+        let error = conn.execute_unprepared(sql).await.unwrap_err().to_string();
+        assert!(error.contains("CHECK constraint failed"), "{check}: {error}");
+    }
+
+    // Dropping one keeps the other.
+    schema
+        .table("templates", |t| t.drop_check("templates_owner_check"))
+        .await
+        .unwrap();
+    exec(
+        &conn,
+        "INSERT INTO templates (scope, workspace_id, position) VALUES ('global', 9, 0)",
+    )
+    .await;
+    assert!(
+        conn.execute_unprepared(
+            "INSERT INTO templates (scope, workspace_id, position) VALUES ('global', NULL, -1)"
+        )
+        .await
+        .is_err()
+    );
+    let missing = schema
+        .table("templates", |t| t.drop_check("templates_owner_check"))
+        .await
+        .unwrap_err();
+    assert!(
+        missing
+            .to_string()
+            .contains("`templates` has no CHECK constraint `templates_owner_check`"),
+        "{missing}"
+    );
+}
+
 #[tokio::test]
 async fn renames_drops_and_indexes() {
     let db = TempSqlite::new();

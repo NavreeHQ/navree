@@ -5,6 +5,7 @@
 mod support;
 
 mod alter;
+mod checks;
 mod columns;
 mod create;
 mod errors;
