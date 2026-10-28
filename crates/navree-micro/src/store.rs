@@ -5,11 +5,8 @@ use std::collections::BTreeMap;
 
 use bytes::Bytes;
 use chrono::{DateTime, TimeZone, Utc};
-use navree_db::{Db, MigrationSet, Uow};
-use sea_orm::sea_query::{ColumnDef, Index, Table};
-use sea_orm::{ConnectionTrait, DbBackend, DbErr, QueryResult, Statement, Value};
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
+use navree_db::navree_schema::{Migration, Schema, SchemaMigration, SchemaResult};
+use navree_db::{Db, DbError, Executor, MigrationSet, Row, Statement, Uow};
 use serde::de::DeserializeOwned;
 
 use crate::envelope::now_millis;
@@ -27,100 +24,64 @@ pub const DEAD_LETTERS_TABLE: &str = "micro_dead_letters";
 /// The migrations `MicroModule` contributes when the app has
 /// `DatabaseModule` (set `micro`).
 pub(crate) fn migrations() -> MigrationSet {
-    MigrationSet::new("micro").migration(CreateMicroTables)
+    MigrationSet::new("micro").migration(SchemaMigration::new(
+        "m20261026_000001_create_micro_tables",
+        CreateMicroTables,
+    ))
 }
 
+/// Creates the outbox, the inbox and the dead letters, each with the index
+/// its cleanup reads.
 struct CreateMicroTables;
 
-impl MigrationName for CreateMicroTables {
-    fn name(&self) -> &str {
-        "m20261026_000001_create_micro_tables"
-    }
-}
-
-#[async_trait]
-impl MigrationTrait for CreateMicroTables {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table(OUTBOX_TABLE)
-                    .col(ColumnDef::new("id").string().not_null().primary_key())
-                    .col(ColumnDef::new("pattern").string().not_null())
-                    .col(ColumnDef::new("headers").text().not_null())
-                    .col(ColumnDef::new("payload").blob().not_null())
-                    .col(ColumnDef::new("seq").big_integer().not_null())
-                    .col(ColumnDef::new("created_at").big_integer().not_null())
-                    .to_owned(),
-            )
+impl Migration for CreateMicroTables {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema
+            .create(OUTBOX_TABLE, |t| {
+                t.string("id").primary();
+                t.string("pattern");
+                t.text("headers");
+                t.binary("payload");
+                t.big_integer("seq");
+                t.big_integer("created_at");
+                t.index(["created_at"])
+                    .name("micro_outbox_created_at_index");
+            })
             .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("micro_outbox_created_at_index")
-                    .table(OUTBOX_TABLE)
-                    .col("created_at")
-                    .to_owned(),
-            )
+        schema
+            .create(INBOX_TABLE, |t| {
+                t.string("id").primary();
+                t.string("message_id");
+                t.string("consumer");
+                t.string("pattern");
+                t.integer("reply_status").nullable();
+                t.string("reply_content_type").nullable();
+                t.binary("reply").nullable();
+                t.big_integer("created_at");
+                t.index(["created_at"]).name("micro_inbox_created_at_index");
+            })
             .await?;
-        manager
-            .create_table(
-                Table::create()
-                    .table(INBOX_TABLE)
-                    .col(ColumnDef::new("id").string().not_null().primary_key())
-                    .col(ColumnDef::new("message_id").string().not_null())
-                    .col(ColumnDef::new("consumer").string().not_null())
-                    .col(ColumnDef::new("pattern").string().not_null())
-                    .col(ColumnDef::new("reply_status").integer().null())
-                    .col(ColumnDef::new("reply_content_type").string().null())
-                    .col(ColumnDef::new("reply").blob().null())
-                    .col(ColumnDef::new("created_at").big_integer().not_null())
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("micro_inbox_created_at_index")
-                    .table(INBOX_TABLE)
-                    .col("created_at")
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_table(
-                Table::create()
-                    .table(DEAD_LETTERS_TABLE)
-                    .col(ColumnDef::new("id").string().not_null().primary_key())
-                    .col(ColumnDef::new("service").string().not_null())
-                    .col(ColumnDef::new("pattern").string().not_null())
-                    .col(ColumnDef::new("handler_pattern").string().not_null())
-                    .col(ColumnDef::new("message_id").string().not_null())
-                    .col(ColumnDef::new("headers").text().not_null())
-                    .col(ColumnDef::new("payload").blob().not_null())
-                    .col(ColumnDef::new("attempts").big_integer().not_null())
-                    .col(ColumnDef::new("error").text().not_null())
-                    .col(ColumnDef::new("failed_at").big_integer().not_null())
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("micro_dead_letters_service_index")
-                    .table(DEAD_LETTERS_TABLE)
-                    .col("service")
-                    .col("failed_at")
-                    .to_owned(),
-            )
+        schema
+            .create(DEAD_LETTERS_TABLE, |t| {
+                t.string("id").primary();
+                t.string("service");
+                t.string("pattern");
+                t.string("handler_pattern");
+                t.string("message_id");
+                t.text("headers");
+                t.binary("payload");
+                t.big_integer("attempts");
+                t.text("error");
+                t.big_integer("failed_at");
+                t.index(["service", "failed_at"])
+                    .name("micro_dead_letters_service_index");
+            })
             .await
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
         for table in [DEAD_LETTERS_TABLE, INBOX_TABLE, OUTBOX_TABLE] {
-            manager
-                .drop_table(Table::drop().table(table).to_owned())
-                .await?;
+            schema.drop_if_exists(table).await?;
         }
         Ok(())
     }
@@ -200,7 +161,7 @@ pub(crate) struct OutboxRow {
     pub(crate) envelope: Envelope,
 }
 
-/// SQL on the micro tables, for SQLite and PostgreSQL.
+/// SQL on the micro tables, on SQLite, PostgreSQL and MySQL.
 #[derive(Clone, Debug)]
 pub(crate) struct Store {
     db: Db,
@@ -215,8 +176,15 @@ impl Store {
         &self.db
     }
 
-    fn backend(&self) -> DbBackend {
-        self.db.backend()
+    /// What the store's own statements run on: the writer's pool, outside
+    /// the units of work of the handlers (the relay and the after-commit
+    /// cleanups are their own transactions), or the connection itself when
+    /// it has no pool.
+    fn pool(&self) -> &dyn Executor {
+        match self.db.pool() {
+            Some(pool) => pool,
+            None => &self.db,
+        }
     }
 
     /// Writes `envelope` to the outbox in the transaction of `uow`.
@@ -225,20 +193,18 @@ impl Store {
         uow: &Uow,
         envelope: &Envelope,
         seq: i64,
-    ) -> Result<String, DbErr> {
+    ) -> Result<String, DbError> {
         let id = envelope
             .message_id()
             .map_or_else(|| uuid::Uuid::now_v7().to_string(), str::to_owned);
         let headers = serde_json::to_string(envelope.headers())
-            .map_err(|error| DbErr::Custom(error.to_string()))?;
-        let tx = uow.tx().await?;
-        tx.execute_raw(statement(
-            self.backend(),
-            &format!(
+            .map_err(|error| DbError::invalid(error.to_string()))?;
+        uow.execute(&Statement::portable(
+            format!(
                 "INSERT INTO {OUTBOX_TABLE} (id, pattern, headers, payload, seq, created_at) \
                  VALUES (?, ?, ?, ?, ?, ?)"
             ),
-            vec![
+            [
                 id.clone().into(),
                 envelope.pattern().into(),
                 headers.into(),
@@ -252,64 +218,56 @@ impl Store {
     }
 
     /// Removes an event the relay published.
-    pub(crate) async fn outbox_delete(&self, id: &str) -> Result<(), DbErr> {
-        self.db
-            .conn()
-            .execute_raw(statement(
-                self.backend(),
-                &format!("DELETE FROM {OUTBOX_TABLE} WHERE id = ?"),
-                vec![id.into()],
-            ))
-            .await?;
-        Ok(())
+    pub(crate) async fn outbox_delete(&self, id: &str) -> Result<(), DbError> {
+        self.outbox_delete_on(self.pool(), id).await
     }
 
     /// Outbox rows older than `before` (Unix ms), oldest first, claimed in
-    /// `tx` (`FOR UPDATE SKIP LOCKED` on PostgreSQL).
-    pub(crate) async fn outbox_due<C: ConnectionTrait>(
+    /// the transaction `executor` is (`FOR UPDATE SKIP LOCKED` on PostgreSQL
+    /// and MySQL).
+    pub(crate) async fn outbox_due<E: Executor + ?Sized>(
         &self,
-        conn: &C,
+        executor: &E,
         before: i64,
         limit: u64,
-    ) -> Result<Vec<OutboxRow>, DbErr> {
-        let lock = if self.backend() == DbBackend::Postgres {
+    ) -> Result<Vec<OutboxRow>, DbError> {
+        let lock = if executor.backend().supports_row_locks() {
             " FOR UPDATE SKIP LOCKED"
         } else {
             ""
         };
         // `limit` is a u64 and `lock` a fixed fragment; every value is a bound parameter.
         // nosemgrep: navree-sql-built-from-strings
-        let rows = conn
-            .query_all_raw(statement(
-                self.backend(),
-                &format!(
+        let rows = executor
+            .fetch_all(&Statement::portable(
+                format!(
                     "SELECT id, pattern, headers, payload FROM {OUTBOX_TABLE} \
                      WHERE created_at < ? ORDER BY created_at, seq, id LIMIT {limit}{lock}"
                 ),
-                vec![before.into()],
+                [before.into()],
             ))
             .await?;
         rows.iter()
             .map(|row| {
-                let id: String = row.try_get("", "id")?;
+                let id: String = row.get("id")?;
                 let envelope = envelope_of(row)?;
                 Ok(OutboxRow { id, envelope })
             })
             .collect()
     }
 
-    /// Deletes outbox row `id` through `conn`.
-    pub(crate) async fn outbox_delete_on<C: ConnectionTrait>(
+    /// Deletes outbox row `id` through `executor`.
+    pub(crate) async fn outbox_delete_on<E: Executor + ?Sized>(
         &self,
-        conn: &C,
+        executor: &E,
         id: &str,
-    ) -> Result<(), DbErr> {
-        conn.execute_raw(statement(
-            self.backend(),
-            &format!("DELETE FROM {OUTBOX_TABLE} WHERE id = ?"),
-            vec![id.into()],
-        ))
-        .await?;
+    ) -> Result<(), DbError> {
+        executor
+            .execute(&Statement::portable(
+                format!("DELETE FROM {OUTBOX_TABLE} WHERE id = ?"),
+                [id.into()],
+            ))
+            .await?;
         Ok(())
     }
 
@@ -319,21 +277,19 @@ impl Store {
         uow: &Uow,
         consumer: &str,
         message_id: &str,
-    ) -> Result<Option<InboxEntry>, DbErr> {
-        let tx = uow.tx().await?;
-        let row = tx
-            .query_one_raw(statement(
-                self.backend(),
-                &format!(
+    ) -> Result<Option<InboxEntry>, DbError> {
+        let row = uow
+            .fetch_optional(&Statement::portable(
+                format!(
                     "SELECT reply_status, reply_content_type, reply FROM {INBOX_TABLE} WHERE id = ?"
                 ),
-                vec![inbox_id(consumer, message_id).into()],
+                [inbox_id(consumer, message_id).into()],
             ))
             .await?;
         row.map(|row| {
-            let status: Option<i32> = row.try_get("", "reply_status")?;
-            let content_type: Option<String> = row.try_get("", "reply_content_type")?;
-            let body: Option<Vec<u8>> = row.try_get("", "reply")?;
+            let status: Option<i32> = row.get("reply_status")?;
+            let content_type: Option<String> = row.get("reply_content_type")?;
+            let body: Option<Vec<u8>> = row.get("reply")?;
             let reply = match (status, body) {
                 (Some(status), Some(body)) => Some(StoredReply {
                     status: u16::try_from(status).unwrap_or(200),
@@ -356,16 +312,14 @@ impl Store {
         message_id: &str,
         pattern: &str,
         reply: Option<&StoredReply>,
-    ) -> Result<(), DbErr> {
-        let tx = uow.tx().await?;
-        tx.execute_raw(statement(
-            self.backend(),
-            &format!(
+    ) -> Result<(), DbError> {
+        uow.execute(&Statement::portable(
+            format!(
                 "INSERT INTO {INBOX_TABLE} \
                  (id, message_id, consumer, pattern, reply_status, reply_content_type, reply, created_at) \
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
             ),
-            vec![
+            [
                 inbox_id(consumer, message_id).into(),
                 message_id.into(),
                 consumer.into(),
@@ -381,33 +335,29 @@ impl Store {
     }
 
     /// Deletes inbox rows created before `before` (Unix ms).
-    pub(crate) async fn inbox_prune(&self, before: i64) -> Result<u64, DbErr> {
+    pub(crate) async fn inbox_prune(&self, before: i64) -> Result<u64, DbError> {
         Ok(self
-            .db
-            .conn()
-            .execute_raw(statement(
-                self.backend(),
-                &format!("DELETE FROM {INBOX_TABLE} WHERE created_at < ?"),
-                vec![before.into()],
+            .pool()
+            .execute(&Statement::portable(
+                format!("DELETE FROM {INBOX_TABLE} WHERE created_at < ?"),
+                [before.into()],
             ))
             .await?
-            .rows_affected())
+            .rows_affected)
     }
 
     /// Stores a dead letter.
-    pub(crate) async fn dead_insert(&self, letter: &DeadLetter) -> Result<(), DbErr> {
+    pub(crate) async fn dead_insert(&self, letter: &DeadLetter) -> Result<(), DbError> {
         let headers = serde_json::to_string(&letter.headers)
-            .map_err(|error| DbErr::Custom(error.to_string()))?;
-        self.db
-            .conn()
-            .execute_raw(statement(
-                self.backend(),
-                &format!(
+            .map_err(|error| DbError::invalid(error.to_string()))?;
+        self.pool()
+            .execute(&Statement::portable(
+                format!(
                     "INSERT INTO {DEAD_LETTERS_TABLE} \
                      (id, service, pattern, handler_pattern, message_id, headers, payload, attempts, error, failed_at) \
                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
                 ),
-                vec![
+                [
                     letter.id.clone().into(),
                     letter.service.clone().into(),
                     letter.pattern.clone().into(),
@@ -425,16 +375,14 @@ impl Store {
     }
 
     /// The dead letters of `service`, oldest first.
-    pub(crate) async fn dead_list(&self, service: &str) -> Result<Vec<DeadLetter>, DbErr> {
+    pub(crate) async fn dead_list(&self, service: &str) -> Result<Vec<DeadLetter>, DbError> {
         let rows = self
-            .db
-            .conn()
-            .query_all_raw(statement(
-                self.backend(),
-                &format!(
+            .pool()
+            .fetch_all(&Statement::portable(
+                format!(
                     "SELECT * FROM {DEAD_LETTERS_TABLE} WHERE service = ? ORDER BY failed_at, id"
                 ),
-                vec![service.into()],
+                [service.into()],
             ))
             .await?;
         rows.iter().map(dead_letter_of).collect()
@@ -445,46 +393,40 @@ impl Store {
         &self,
         service: &str,
         id: &str,
-    ) -> Result<Option<DeadLetter>, DbErr> {
+    ) -> Result<Option<DeadLetter>, DbError> {
         let row = self
-            .db
-            .conn()
-            .query_one_raw(statement(
-                self.backend(),
-                &format!("SELECT * FROM {DEAD_LETTERS_TABLE} WHERE service = ? AND id = ?"),
-                vec![service.into(), id.into()],
+            .pool()
+            .fetch_optional(&Statement::portable(
+                format!("SELECT * FROM {DEAD_LETTERS_TABLE} WHERE service = ? AND id = ?"),
+                [service.into(), id.into()],
             ))
             .await?;
         row.as_ref().map(dead_letter_of).transpose()
     }
 
     /// Deletes dead letter `id`; whether it existed.
-    pub(crate) async fn dead_delete(&self, id: &str) -> Result<bool, DbErr> {
+    pub(crate) async fn dead_delete(&self, id: &str) -> Result<bool, DbError> {
         Ok(self
-            .db
-            .conn()
-            .execute_raw(statement(
-                self.backend(),
-                &format!("DELETE FROM {DEAD_LETTERS_TABLE} WHERE id = ?"),
-                vec![id.into()],
+            .pool()
+            .execute(&Statement::portable(
+                format!("DELETE FROM {DEAD_LETTERS_TABLE} WHERE id = ?"),
+                [id.into()],
             ))
             .await?
-            .rows_affected()
+            .rows_affected
             == 1)
     }
 
     /// Deletes every dead letter of `service`.
-    pub(crate) async fn dead_flush(&self, service: &str) -> Result<u64, DbErr> {
+    pub(crate) async fn dead_flush(&self, service: &str) -> Result<u64, DbError> {
         Ok(self
-            .db
-            .conn()
-            .execute_raw(statement(
-                self.backend(),
-                &format!("DELETE FROM {DEAD_LETTERS_TABLE} WHERE service = ?"),
-                vec![service.into()],
+            .pool()
+            .execute(&Statement::portable(
+                format!("DELETE FROM {DEAD_LETTERS_TABLE} WHERE service = ?"),
+                [service.into()],
             ))
             .await?
-            .rows_affected())
+            .rows_affected)
     }
 }
 
@@ -494,12 +436,12 @@ fn inbox_id(consumer: &str, message_id: &str) -> String {
     format!("{consumer}|{message_id}")
 }
 
-fn envelope_of(row: &QueryResult) -> Result<Envelope, DbErr> {
-    let pattern: String = row.try_get("", "pattern")?;
-    let headers: String = row.try_get("", "headers")?;
-    let payload: Vec<u8> = row.try_get("", "payload")?;
+fn envelope_of(row: &Row) -> Result<Envelope, DbError> {
+    let pattern: String = row.get("pattern")?;
+    let headers: String = row.get("headers")?;
+    let payload: Vec<u8> = row.get("payload")?;
     let headers: BTreeMap<String, String> =
-        serde_json::from_str(&headers).map_err(|error| DbErr::Custom(error.to_string()))?;
+        serde_json::from_str(&headers).map_err(|error| DbError::invalid(error.to_string()))?;
     let mut envelope = Envelope::new(pattern, payload);
     for (name, value) in headers {
         envelope.set_header(&name, value);
@@ -507,22 +449,22 @@ fn envelope_of(row: &QueryResult) -> Result<Envelope, DbErr> {
     Ok(envelope)
 }
 
-fn dead_letter_of(row: &QueryResult) -> Result<DeadLetter, DbErr> {
-    let headers: String = row.try_get("", "headers")?;
-    let payload: Vec<u8> = row.try_get("", "payload")?;
-    let attempts: i64 = row.try_get("", "attempts")?;
-    let failed_at: i64 = row.try_get("", "failed_at")?;
+fn dead_letter_of(row: &Row) -> Result<DeadLetter, DbError> {
+    let headers: String = row.get("headers")?;
+    let payload: Vec<u8> = row.get("payload")?;
+    let attempts: i64 = row.get("attempts")?;
+    let failed_at: i64 = row.get("failed_at")?;
     Ok(DeadLetter {
-        id: row.try_get("", "id")?,
-        service: row.try_get("", "service")?,
-        pattern: row.try_get("", "pattern")?,
-        handler_pattern: row.try_get("", "handler_pattern")?,
-        message_id: row.try_get("", "message_id")?,
+        id: row.get("id")?,
+        service: row.get("service")?,
+        pattern: row.get("pattern")?,
+        handler_pattern: row.get("handler_pattern")?,
+        message_id: row.get("message_id")?,
         headers: serde_json::from_str(&headers)
-            .map_err(|error| DbErr::Custom(error.to_string()))?,
+            .map_err(|error| DbError::invalid(error.to_string()))?,
         payload: payload.into(),
         attempts: u32::try_from(attempts).unwrap_or(u32::MAX),
-        error: row.try_get("", "error")?,
+        error: row.get("error")?,
         failed_at: Utc
             .timestamp_millis_opt(failed_at)
             .single()
@@ -530,42 +472,9 @@ fn dead_letter_of(row: &QueryResult) -> Result<DeadLetter, DbErr> {
     })
 }
 
-/// `?` placeholders, numbered for PostgreSQL.
-pub(crate) fn statement(backend: DbBackend, sql: &str, values: Vec<Value>) -> Statement {
-    let sql = if backend == DbBackend::Postgres {
-        let mut numbered = String::with_capacity(sql.len() + 8);
-        let mut n = 0;
-        for c in sql.chars() {
-            if c == '?' {
-                n += 1;
-                numbered.push('$');
-                numbered.push_str(&n.to_string());
-            } else {
-                numbered.push(c);
-            }
-        }
-        numbered
-    } else {
-        sql.to_owned()
-    };
-    Statement::from_sql_and_values(backend, sql, values)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn postgres_placeholders_are_numbered() {
-        let statement = statement(
-            DbBackend::Postgres,
-            "a = ? AND b = ?",
-            vec![1.into(), 2.into()],
-        );
-        assert_eq!(statement.sql, "a = $1 AND b = $2");
-        let sqlite = super::statement(DbBackend::Sqlite, "a = ?", vec![1.into()]);
-        assert_eq!(sqlite.sql, "a = ?");
-    }
 
     #[test]
     fn dead_letters_rebuild_their_envelope() {
