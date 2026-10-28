@@ -317,16 +317,12 @@ struct Users;
 
 impl navree_kernel::Module for Users {
     fn register(&self, m: &mut navree_kernel::ModuleBuilder) {
-        use navree_db::{MigrationSet, ModuleBuilderDbExt};
+        use navree_db::ModuleBuilderDbExt;
 
-        m.migrations(MigrationSet {
-            module: "users",
-            after: vec![],
-            migrations: vec![crate::fixtures::CreateTable::boxed(
+        m.migrations(crate::fixtures::set("users", [], vec![crate::fixtures::CreateTable::boxed(
                 "m0001_create_users",
                 "users",
-            )],
-        });
+            )]));
     }
 }
 

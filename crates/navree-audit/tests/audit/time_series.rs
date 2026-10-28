@@ -31,7 +31,7 @@ async fn the_audit_log_is_declared_a_hypertable() {
             "m20261027_000002_convert_audit_logs_to_hypertable"
         ]
     );
-    let schema = Schema::new(db.conn());
+    let schema = Schema::new(&db);
     assert!(!schema.is_hypertable("audit_logs").await.unwrap());
     assert!(
         schema

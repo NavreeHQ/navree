@@ -172,7 +172,7 @@ async fn crm_migrations_revert_and_run_again() {
     };
     let db = core.app.get::<navree::db::Db>().await;
     let listing = || async {
-        navree::schema::Schema::new(db.conn())
+        navree::schema::Schema::new(&db)
             .table_listing()
             .await
             .expect("tables")
