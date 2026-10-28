@@ -200,24 +200,19 @@ fn docx_text(xml: &str) -> Result<String, MediaError> {
             .read_event()
             .map_err(|error| MediaError::text(format!("DOCX: {error}")))?;
         match event {
-            Event::Start(tag) if tag.local_name().as_ref() == b"t" => in_text = true,
-            Event::End(tag) => match tag.local_name().as_ref() {
-                b"t" => in_text = false,
-                b"p" => out.push('\n'),
+            Event::Start(tag) if tag.local_name().into_inner() == "t" => in_text = true,
+            Event::End(tag) => match tag.local_name().into_inner() {
+                "t" => in_text = false,
+                "p" => out.push('\n'),
                 _ => {}
             },
-            Event::Empty(tag) => match tag.local_name().as_ref() {
-                b"tab" => out.push('\t'),
-                b"br" | b"cr" => out.push('\n'),
-                b"p" => out.push('\n'),
+            Event::Empty(tag) => match tag.local_name().into_inner() {
+                "tab" => out.push('\t'),
+                "br" | "cr" => out.push('\n'),
+                "p" => out.push('\n'),
                 _ => {}
             },
-            Event::Text(text) if in_text => {
-                let text = text
-                    .decode()
-                    .map_err(|error| MediaError::text(format!("DOCX: {error}")))?;
-                out.push_str(&text);
-            }
+            Event::Text(text) if in_text => out.push_str(&text),
             Event::GeneralRef(reference) if in_text => push_reference(&mut out, &reference),
             Event::Eof => break,
             _ => {}
@@ -237,8 +232,7 @@ fn push_reference(out: &mut String, reference: &quick_xml::events::BytesRef<'_>)
         out.push(c);
         return;
     }
-    let name = reference.decode().unwrap_or_default();
-    out.push_str(match name.as_ref() {
+    out.push_str(match &**reference {
         "amp" => "&",
         "lt" => "<",
         "gt" => ">",
@@ -254,9 +248,9 @@ fn docx_title(xml: &str) -> Option<String> {
     let mut title = String::new();
     loop {
         match reader.read_event().ok()? {
-            Event::Start(tag) if tag.local_name().as_ref() == b"title" => in_title = true,
-            Event::End(tag) if tag.local_name().as_ref() == b"title" => break,
-            Event::Text(text) if in_title => title.push_str(&text.decode().ok()?),
+            Event::Start(tag) if tag.local_name().into_inner() == "title" => in_title = true,
+            Event::End(tag) if tag.local_name().into_inner() == "title" => break,
+            Event::Text(text) if in_title => title.push_str(&text),
             Event::GeneralRef(reference) if in_title => push_reference(&mut title, &reference),
             Event::Eof => break,
             _ => {}

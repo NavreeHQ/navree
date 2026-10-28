@@ -14,7 +14,7 @@ export function startMockApi(): Promise<void> {
   started ??= worker
     .start({
       // Only API traffic is mocked; Next.js assets, HMR and fonts pass through.
-      onUnhandledRequest: "bypass",
+      onUnhandledFrame: "bypass",
       quiet: true,
       serviceWorker: { url: "/mockServiceWorker.js" },
     })
