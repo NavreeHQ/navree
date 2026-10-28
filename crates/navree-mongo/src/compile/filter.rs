@@ -329,7 +329,6 @@ fn field_path_of(
 fn text(value: &Value, what: &str) -> Result<String, OrmError> {
     match value {
         Value::String(text) => Ok(text.clone()),
-        Value::Char(Some(c)) => Ok(c.to_string()),
         other => Err(invalid(format!(
             "{what} must be text, not {}",
             navree_orm::to_json(other)
@@ -984,11 +983,11 @@ mod tests {
             doc! { "stage": { "$ne": "won" } }
         );
         assert_eq!(
-            compile(cmp("closed_at", "=", Value::Null(Kind::String))).unwrap(),
+            compile(cmp("closed_at", "=", Value::Null(navree_orm::Kind::String))).unwrap(),
             doc! { "closed_at": Bson::Null }
         );
         assert_eq!(
-            compile(cmp("amount", ">", Value::Null(Kind::I64))).unwrap(),
+            compile(cmp("amount", ">", Value::Null(navree_orm::Kind::I64))).unwrap(),
             nothing()
         );
         assert_eq!(

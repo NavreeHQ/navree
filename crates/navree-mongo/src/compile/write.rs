@@ -233,7 +233,7 @@ mod tests {
                     right: Box::new(Expr::Value(Value::from(5_i64))),
                 },
             ),
-            ("closed_at", Expr::Value(Value::Null(Kind::String))),
+            ("closed_at", Expr::Value(Value::Null(navree_orm::Kind::String))),
             ("meta->status", Expr::Value(Value::from("won"))),
         ]))
         .unwrap();
