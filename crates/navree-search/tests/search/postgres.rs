@@ -105,6 +105,122 @@ async fn postgres_engine_conforms_with_and_without_trigrams() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_typo_threshold_applies_per_query_and_the_trigram_index_exists() {
+    use navree_search::{Document, EngineQuery, Filter, IndexSettings, SearchEngine};
+
+    let Some(scratch) =
+        Scratch::new("the_typo_threshold_applies_per_query_and_the_trigram_index_exists").await
+    else {
+        return;
+    };
+    {
+        let app = builder(&scratch, "off").build().await;
+        let db = app.get::<Db>().await;
+        let settings = IndexSettings::new("Contact", "contacts").text("name", 1);
+        let found = async |engine: &DatabaseEngine, text: &str| {
+            let filter = Filter::Const(true);
+            engine
+                .search(
+                    "contacts",
+                    EngineQuery {
+                        settings: &settings,
+                        text,
+                        filter: &filter,
+                        sort: &[],
+                        offset: 0,
+                        limit: 10,
+                        highlight: None,
+                        with_title: false,
+                    },
+                )
+                .await
+                .unwrap()
+                .total
+        };
+        let engine = |typo_threshold| {
+            DatabaseEngine::new(
+                (*db).clone(),
+                PostgresOptions {
+                    trigram: true,
+                    typo_threshold,
+                    ..PostgresOptions::default()
+                },
+            )
+        };
+        let loose = engine(0.4);
+        loose.prepare("contacts", &settings).await.unwrap();
+        loose
+            .upsert(
+                "contacts",
+                &settings,
+                vec![
+                    Document::new("1").field("name", "Ada Lovelace"),
+                    Document::new("2").field("name", "Grace Hopper"),
+                ],
+            )
+            .await
+            .unwrap();
+
+        // "lovlace" is 0.55 similar to "Lovelace": above 0.4, below the
+        // PostgreSQL default of 0.6.
+        assert_eq!(found(&loose, "lovlace").await, 1);
+        assert_eq!(found(&loose, "ada lovlace").await, 1);
+        assert_eq!(found(&loose, "zzzzzz").await, 0);
+        // A stricter threshold is honoured, so it is set on every query.
+        assert_eq!(found(&engine(0.9), "lovlace").await, 0);
+        assert_eq!(found(&loose, "lovlace").await, 1);
+
+        // The setting stayed local to the queries.
+        let shown = db
+            .conn()
+            .query_one_raw(sea_orm::Statement::from_string(
+                sea_orm::DbBackend::Postgres,
+                "SELECT current_setting('pg_trgm.word_similarity_threshold') AS value",
+            ))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(shown.try_get::<String>("", "value").unwrap(), "0.6");
+
+        // And inside a unit of work's transaction, which gets it back.
+        support::in_uow(&db, async |_uow| {
+            assert_eq!(found(&loose, "lovlace").await, 1);
+            let shown = db
+                .reader()
+                .await
+                .query_one_raw(sea_orm::Statement::from_string(
+                    sea_orm::DbBackend::Postgres,
+                    "SELECT current_setting('pg_trgm.word_similarity_threshold') AS value",
+                ))
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(shown.try_get::<String>("", "value").unwrap(), "0.6");
+        })
+        .await;
+
+        let indexes = db
+            .conn()
+            .query_all_raw(sea_orm::Statement::from_string(
+                sea_orm::DbBackend::Postgres,
+                "SELECT indexdef FROM pg_indexes WHERE tablename = 'search_documents'",
+            ))
+            .await
+            .unwrap();
+        let defs: Vec<String> = indexes
+            .iter()
+            .map(|row| row.try_get("", "indexdef").unwrap())
+            .collect();
+        assert!(
+            defs.iter()
+                .any(|d| d.contains("USING gin") && d.contains("gin_trgm_ops")),
+            "{defs:?}"
+        );
+    }
+    scratch.drop().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn an_app_on_postgres_syncs_through_the_database_queue() {
     let Some(scratch) = Scratch::new("an_app_on_postgres_syncs_through_the_database_queue").await
     else {

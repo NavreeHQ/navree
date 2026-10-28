@@ -88,16 +88,19 @@ pub async fn vector_suite(store: Arc<dyn VectorStore>) {
         ["3"]
     );
 
-    // A record's vector comes back.
+    // A record's vector comes back. A cosine store may return it
+    // normalized (Qdrant does), so compare its direction.
     let vector = store
         .get(index, "2")
         .await
         .unwrap()
         .expect("record 2 is stored");
     assert_eq!(vector.len(), 3);
-    for (got, want) in vector.iter().zip([0.8f32, 0.3, 0.0]) {
-        assert!((got - want).abs() < 1e-5, "{vector:?}");
-    }
+    let want = [0.8f32, 0.3, 0.0];
+    let dot: f32 = vector.iter().zip(want).map(|(a, b)| a * b).sum();
+    let length = |v: &[f32]| v.iter().map(|x| x * x).sum::<f32>().sqrt();
+    let cosine = dot / (length(&vector) * length(&want));
+    assert!((cosine - 1.0).abs() < 1e-5, "{vector:?} points elsewhere");
     assert_eq!(store.get(index, "9").await.unwrap(), None);
 
     // Upserts replace; deletes remove; flush empties.
