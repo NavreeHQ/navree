@@ -8,11 +8,11 @@ use std::time::Duration;
 use chrono::Utc;
 use navree_db::Db;
 use navree_lighthouse::{IssueFilter, IssueKind, Period};
-use sea_orm::{ConnectionTrait, Statement};
 use navree_telemetry::{
     EventContext, ExceptionReported, QueryExecuted, RequestHandled, Telemetry, TelemetryEvent,
     TelemetryRecord,
 };
+use sea_orm::{ConnectionTrait, Statement};
 
 use crate::support::{builder, flushed, lighthouse};
 
@@ -188,7 +188,9 @@ async fn by_default_errors_and_slow_requests_keep_their_traces_and_a_tenth_of_th
             let row = conn
                 .query_one_raw(Statement::from_string(
                     conn.get_database_backend(),
-                    format!("SELECT COUNT(*) AS n FROM lighthouse_samples WHERE name = '{endpoint}'"),
+                    format!(
+                        "SELECT COUNT(*) AS n FROM lighthouse_samples WHERE name = '{endpoint}'"
+                    ),
                 ))
                 .await
                 .unwrap()
@@ -199,7 +201,11 @@ async fn by_default_errors_and_slow_requests_keep_their_traces_and_a_tenth_of_th
     let ok = traces("GET /api/v1/ok").await;
     assert!((60..=140).contains(&ok), "about a tenth kept: {ok}");
     assert_eq!(traces("GET /api/v1/err").await, 20, "every error is kept");
-    assert_eq!(traces("GET /api/v1/slow").await, 20, "every slow one is kept");
+    assert_eq!(
+        traces("GET /api/v1/slow").await,
+        20,
+        "every slow one is kept"
+    );
     assert_eq!(lighthouse.sampled_out(), 0);
     app.shutdown().await.unwrap();
 }

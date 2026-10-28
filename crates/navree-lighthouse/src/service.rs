@@ -18,9 +18,7 @@ use uuid::Uuid;
 
 use crate::alert::Alert;
 use crate::dispatch::{Alerter, ChannelResult};
-use crate::engine::{
-    Batch, BatchWriter, EngineHandle, INTERNAL_UNIT, Input, Labels, UnitKey,
-};
+use crate::engine::{Batch, BatchWriter, EngineHandle, INTERNAL_UNIT, Input, Labels, UnitKey};
 use crate::fake::FakeState;
 use crate::options::LighthouseOptions;
 use crate::report::{AsError, Report};
@@ -234,7 +232,9 @@ impl Lighthouse {
     /// failed. Every process adds its own to the `sampled_out` figure of
     /// the overview.
     pub fn sampled_out(&self) -> u64 {
-        self.engine.as_ref().map_or(0, |engine| engine.sampled_out())
+        self.engine
+            .as_ref()
+            .map_or(0, |engine| engine.sampled_out())
     }
 
     /// Delivers a stored alert (the `lighthouse.alert` job).
@@ -297,9 +297,11 @@ impl Lighthouse {
         if let Some(alerter) = &self.alerter {
             alerter.init(ctx).await?;
         }
-        let (Some(engine), Some(store), Some(alerter)) =
-            (self.engine.clone(), self.store.clone(), self.alerter.clone())
-        else {
+        let (Some(engine), Some(store), Some(alerter)) = (
+            self.engine.clone(),
+            self.store.clone(),
+            self.alerter.clone(),
+        ) else {
             return Ok(());
         };
         let mut runtime = self
@@ -341,9 +343,7 @@ impl Lighthouse {
         };
         // The writer panicked or is stuck: what it held is still in the
         // engine, so write it from here.
-        if !finished
-            && let (Some(engine), Some(writer)) = (&self.engine, self.writer.get())
-        {
+        if !finished && let (Some(engine), Some(writer)) = (&self.engine, self.writer.get()) {
             let _ = tokio::time::timeout(
                 Duration::from_secs(5),
                 internal(engine.flush(writer.as_ref())),

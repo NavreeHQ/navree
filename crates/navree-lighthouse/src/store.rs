@@ -1729,8 +1729,7 @@ async fn count_existing(
                 }
             }
             StatusChange::IgnoreRemaining(left) => {
-                update =
-                    update.col_expr(issue::Column::IgnoreRemaining, Expr::value(left));
+                update = update.col_expr(issue::Column::IgnoreRemaining, Expr::value(left));
             }
         }
         if update.exec(txn).await?.rows_affected > 0 {
@@ -1775,7 +1774,12 @@ enum StatusChange {
 }
 
 /// The status change `n` hits at `last_at` in `release` make to `issue`.
-fn status_change(issue: &issue::Model, n: i64, last_at: DateTime<Utc>, release: &str) -> StatusChange {
+fn status_change(
+    issue: &issue::Model,
+    n: i64,
+    last_at: DateTime<Utc>,
+    release: &str,
+) -> StatusChange {
     match IssueStatus::parse(&issue.status).unwrap_or(IssueStatus::Open) {
         IssueStatus::Open => StatusChange::None,
         IssueStatus::Resolved => StatusChange::Reopen { regression: true },
