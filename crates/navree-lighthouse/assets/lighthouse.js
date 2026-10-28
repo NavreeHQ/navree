@@ -111,6 +111,7 @@
         set("fig-p95", Math.round(data.p95_ms) + " ms");
         set("fig-failed-jobs", String(data.failed_jobs));
         set("fig-open-issues", String(data.open_issues));
+        set("fig-sampled-out", String(data.sampled_out));
         if (!feed) return;
         var empty = feed.querySelector(".empty");
         data.feed.slice().reverse().forEach(function (item) {

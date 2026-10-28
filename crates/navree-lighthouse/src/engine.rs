@@ -1,18 +1,32 @@
-//! The engine: one background task that turns telemetry records and
-//! reports into issue hits, occurrences, samples (traces) and aggregates,
-//! and writes them in batches.
+//! The engine: turns telemetry records and reports into issue hits,
+//! occurrences, samples (traces) and aggregates, and writes them in
+//! batches.
 //!
-//! The sink and [`Lighthouse::capture`](crate::Lighthouse::capture) only
-//! copy a record into a bounded channel. The task groups the events of one
-//! request or job (a *unit*: its queries, outgoing calls, cache calls,
-//! exceptions, tags and captured headers) until the unit ends, then
-//! decides what to keep. Counts are always exact; details (samples first,
-//! occurrences last) are dropped when more than `lighthouse.buffer` wait to
-//! be written.
+//! Recording happens on the thread that reports, and never waits on I/O:
+//!
+//! - **Counts are never queued.** Every request, query, job attempt,
+//!   outgoing call, exception and issue hit is added at once to this
+//!   process's per-minute and per-hour aggregates, held in memory behind
+//!   [`SHARDS`] locks (by kind and key), so a burst of any size is counted
+//!   exactly. The events of one request or job (a *unit*: its queries,
+//!   outgoing calls, cache calls, exceptions, tags and captured headers)
+//!   are grouped the same way until the unit ends.
+//! - **Details go through a bounded queue.** A finished unit decides what
+//!   to keep (errors, failures and slow work always; a sampled fraction of
+//!   the rest) and queues its trace and occurrences. When
+//!   `lighthouse.buffer` details already wait, the new detail is dropped
+//!   (samples before occurrences) and counted as *sampled out*: in
+//!   [`Engine::sampled_out`], the `lighthouse_sampled_out_total` metric
+//!   and the `sampled_out` aggregate the dashboard shows.
+//!
+//! One writer task takes everything every second (sooner when
+//! [`FLUSH_AT`] details wait) and writes it in one transaction.
 
+use std::collections::hash_map::DefaultHasher;
 use std::collections::{BTreeMap, HashMap};
-use std::sync::Arc;
+use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
 use bytes::Bytes;
@@ -24,7 +38,7 @@ use navree_telemetry::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::Notify;
 use uuid::Uuid;
 
 use crate::aggregate::{Aggregates, Observation, SlowCall, kind};
@@ -50,13 +64,17 @@ pub(crate) const INTERNAL_UNIT: &str = "lighthouse:internal";
 /// At most this many spans per trace.
 const MAX_SPANS: usize = 200;
 /// At most this many requests and jobs followed at once.
-const MAX_UNITS: usize = 10_000;
+const MAX_UNITS: usize = 32_768;
+/// How many locks the aggregates and the units are spread over.
+const SHARDS: usize = 64;
 /// A unit not finished after this long is dropped.
 const STALE_AFTER: Duration = Duration::from_secs(600);
 /// Occurrences of one issue stored per hour before sampling applies.
 const OCCURRENCES_PER_HOUR: u32 = 100;
 /// Flush as soon as this many details wait.
 const FLUSH_AT: usize = 500;
+/// Issue hits kept for the next write while the database is unreachable.
+const MAX_RETRY_HITS: usize = 100_000;
 
 /// What the engine receives.
 pub(crate) enum Input {
@@ -68,8 +86,6 @@ pub(crate) enum Input {
     Tag(UnitKey, String, String),
     /// The headers (and body) of a request, from the HTTP layer.
     Capture(String, Box<RequestCapture>),
-    /// Write everything now, then answer.
-    Flush(oneshot::Sender<()>),
 }
 
 /// What the HTTP layer captured of a request.
@@ -289,97 +305,173 @@ pub(crate) trait BatchWriter: Send + Sync + 'static {
     ) -> navree_kernel::BoxFuture<'a, Result<(), navree_kernel::BoxError>>;
 }
 
-/// The handle the sink, the service and the HTTP layer send through.
-#[derive(Clone)]
-pub(crate) struct EngineHandle {
-    tx: mpsc::Sender<Input>,
-    dropped: Arc<AtomicU64>,
+/// The handle the sink, the service and the HTTP layer record through.
+pub(crate) type EngineHandle = Arc<Engine>;
+
+/// A value spread over [`SHARDS`] locks by hash, so callers on different
+/// threads rarely meet on the same lock.
+struct Sharded<T> {
+    shards: Box<[Mutex<T>]>,
 }
 
-impl EngineHandle {
-    /// A handle and the receiver the engine task reads.
-    pub(crate) fn new(capacity: usize) -> (EngineHandle, mpsc::Receiver<Input>) {
-        let (tx, rx) = mpsc::channel(capacity.max(1024));
-        (
-            EngineHandle {
-                tx,
-                dropped: Arc::new(AtomicU64::new(0)),
-            },
-            rx,
-        )
-    }
-
-    /// Queues `input`; counts it as dropped when the channel is full.
-    pub(crate) fn send(&self, input: Input) {
-        if self.tx.try_send(input).is_err() {
-            self.count_dropped(1);
+impl<T: Default> Sharded<T> {
+    fn new() -> Sharded<T> {
+        Sharded {
+            shards: (0..SHARDS).map(|_| Mutex::new(T::default())).collect(),
         }
     }
 
-    /// Writes everything received so far and waits for it.
-    pub(crate) async fn flush(&self) {
-        let (tx, rx) = oneshot::channel();
-        if self.tx.send(Input::Flush(tx)).await.is_ok() {
-            let _ = rx.await;
+    /// The shard of `key`, locked.
+    fn of<K: Hash + ?Sized>(&self, key: &K) -> MutexGuard<'_, T> {
+        let mut hasher = DefaultHasher::new();
+        key.hash(&mut hasher);
+        lock(&self.shards[(hasher.finish() as usize) % self.shards.len()])
+    }
+
+    /// Runs `f` on every shard, one lock at a time.
+    fn each(&self, mut f: impl FnMut(&mut T)) {
+        for shard in &*self.shards {
+            f(&mut lock(shard));
         }
-    }
-
-    /// Details dropped by this process so far.
-    pub(crate) fn dropped(&self) -> u64 {
-        self.dropped.load(Ordering::Relaxed)
-    }
-
-    fn count_dropped(&self, n: u64) {
-        self.dropped.fetch_add(n, Ordering::Relaxed);
-        metrics::counter!("lighthouse_dropped_total").increment(n);
     }
 }
 
-/// The engine's state, owned by its task.
-pub(crate) struct Processor {
+/// Locks `mutex`, also after a panic elsewhere poisoned it (the data is
+/// counters and queues, consistent between statements).
+fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// The per-minute and per-hour aggregates of this process, updated by the
+/// thread that records (never queued, so never dropped) and spread over
+/// shards by kind and key.
+struct Counts {
+    shards: Sharded<Aggregates>,
+}
+
+impl Counts {
+    fn new() -> Counts {
+        Counts {
+            shards: Sharded::new(),
+        }
+    }
+
+    fn observe(
+        &self,
+        now: DateTime<Utc>,
+        kind: &'static str,
+        key: &str,
+        observation: &Observation,
+    ) {
+        self.shards
+            .of(&(kind, key))
+            .observe(now, kind, key, observation);
+    }
+
+    fn add(&self, now: DateTime<Utc>, kind: &'static str, key: &str, n: u64) {
+        self.shards.of(&(kind, key)).add(now, kind, key, n);
+    }
+
+    fn take_dirty(&self) -> Vec<crate::aggregate::Row> {
+        let mut rows = Vec::new();
+        self.shards
+            .each(|aggregates| rows.extend(aggregates.take_dirty()));
+        rows
+    }
+
+    fn mark_dirty(&self, keys: &[crate::aggregate::RowKey]) {
+        for key in keys {
+            self.shards
+                .of(&(key.kind, key.key.as_str()))
+                .mark_dirty(std::slice::from_ref(key));
+        }
+    }
+
+    fn evict(&self, now: DateTime<Utc>) {
+        self.shards.each(|aggregates| aggregates.evict(now));
+    }
+}
+
+/// The details waiting to be written: the bounded queue. Hits are always
+/// kept (they are counts); their occurrences and the samples take room.
+#[derive(Default)]
+struct Pending {
+    hits: Vec<Hit>,
+    samples: Vec<NewSample>,
+    occurrences: usize,
+}
+
+impl Pending {
+    fn details(&self) -> usize {
+        self.samples.len() + self.occurrences
+    }
+}
+
+/// The engine: the state the recording threads share and the writer
+/// flushes.
+pub(crate) struct Engine {
     options: Arc<LighthouseOptions>,
     labels: Labels,
     redactor: Redactor,
-    handle: EngineHandle,
-    units: HashMap<UnitKey, Unit>,
-    aggregates: Aggregates,
-    hits: Vec<Hit>,
-    samples: Vec<NewSample>,
-    stored_occurrences: usize,
-    budgets: HashMap<String, (i64, u32)>,
     ignored_paths: Vec<String>,
+    units: Sharded<HashMap<UnitKey, Unit>>,
+    counts: Counts,
+    pending: Mutex<Pending>,
+    budgets: Mutex<HashMap<String, (i64, u32)>>,
+    sampled_out: AtomicU64,
+    wake: Notify,
+    flushing: tokio::sync::Mutex<()>,
 }
 
-impl Processor {
+impl Engine {
     pub(crate) fn new(
         options: Arc<LighthouseOptions>,
         labels: Labels,
         redactor: Redactor,
-        handle: EngineHandle,
-    ) -> Processor {
+    ) -> EngineHandle {
         let mut ignored_paths = options.ignore.routes.clone();
         ignored_paths.push(options.mount_path().to_owned());
         ignored_paths.push(format!("{}/*", options.mount_path()));
-        Processor {
+        Arc::new(Engine {
             options,
             labels,
             redactor,
-            handle,
-            units: HashMap::new(),
-            aggregates: Aggregates::default(),
-            hits: Vec::new(),
-            samples: Vec::new(),
-            stored_occurrences: 0,
-            budgets: HashMap::new(),
             ignored_paths,
-        }
+            units: Sharded::new(),
+            counts: Counts::new(),
+            pending: Mutex::new(Pending::default()),
+            budgets: Mutex::new(HashMap::new()),
+            sampled_out: AtomicU64::new(0),
+            wake: Notify::new(),
+            flushing: tokio::sync::Mutex::new(()),
+        })
     }
 
-    /// Runs until the receiver closes or `stop` resolves, then writes what
-    /// it holds.
+    /// Records `input` now, on the caller's thread: counts and aggregates
+    /// at once, details into the bounded queue. Never waits on I/O.
+    pub(crate) fn send(&self, input: Input) {
+        self.handle(input, Utc::now());
+    }
+
+    /// Details this process sampled out because the queue was full (or
+    /// their write failed).
+    pub(crate) fn sampled_out(&self) -> u64 {
+        self.sampled_out.load(Ordering::Relaxed)
+    }
+
+    fn count_sampled_out(&self, n: u64, now: DateTime<Utc>) {
+        if n == 0 {
+            return;
+        }
+        self.sampled_out.fetch_add(n, Ordering::Relaxed);
+        metrics::counter!("lighthouse_sampled_out_total").increment(n);
+        self.counts.add(now, kind::SAMPLED_OUT, "all", n);
+    }
+
+    /// Writes every second, as soon as [`FLUSH_AT`] details wait, and once
+    /// more when `stop` resolves.
     pub(crate) async fn run(
-        mut self,
-        mut rx: mpsc::Receiver<Input>,
+        self: Arc<Self>,
         writer: Arc<dyn BatchWriter>,
         stop: impl std::future::Future<Output = ()>,
     ) {
@@ -388,80 +480,79 @@ impl Processor {
         tokio::pin!(stop);
         loop {
             tokio::select! {
-                input = rx.recv() => match input {
-                    Some(Input::Flush(done)) => {
-                        self.flush(writer.as_ref()).await;
-                        let _ = done.send(());
-                    }
-                    Some(input) => {
-                        self.handle(input, Utc::now());
-                        if self.details() >= FLUSH_AT {
-                            self.flush(writer.as_ref()).await;
-                        }
-                    }
-                    None => break,
-                },
                 _ = tick.tick() => self.flush(writer.as_ref()).await,
-                () = &mut stop => {
-                    while let Ok(input) = rx.try_recv() {
-                        match input {
-                            Input::Flush(done) => { let _ = done.send(()); }
-                            input => self.handle(input, Utc::now()),
-                        }
-                    }
-                    break;
-                }
+                () = self.wake.notified() => self.flush(writer.as_ref()).await,
+                () = &mut stop => break,
             }
         }
         self.flush(writer.as_ref()).await;
     }
 
-    /// Details waiting to be written.
-    pub(crate) fn details(&self) -> usize {
-        self.samples.len() + self.stored_occurrences
-    }
-
-    /// Writes what is pending.
-    pub(crate) async fn flush(&mut self, writer: &dyn BatchWriter) {
+    /// Writes what is pending; one flush at a time, so a process's rows
+    /// are written in order.
+    pub(crate) async fn flush(&self, writer: &dyn BatchWriter) {
+        let _flushing = self.flushing.lock().await;
         let now = Utc::now();
         self.sweep(now);
-        let batch = Batch {
-            hits: std::mem::take(&mut self.hits),
-            samples: std::mem::take(&mut self.samples),
-            rows: self.aggregates.take_dirty(),
+        let (hits, samples) = {
+            let mut pending = lock(&self.pending);
+            pending.occurrences = 0;
+            (
+                std::mem::take(&mut pending.hits),
+                std::mem::take(&mut pending.samples),
+            )
         };
-        self.stored_occurrences = 0;
-        if batch.hits.is_empty() && batch.samples.is_empty() && batch.rows.is_empty() {
+        let rows = self.counts.take_dirty();
+        if hits.is_empty() && samples.is_empty() && rows.is_empty() {
             return;
         }
-        let rows = batch.rows.clone();
-        let details = batch.samples.len()
-            + batch
-                .hits
-                .iter()
-                .filter(|hit| hit.occurrence.is_some())
-                .count();
+        let keys: Vec<_> = rows.iter().map(|row| row.key.clone()).collect();
+        let details = samples.len() + hits.iter().filter(|hit| hit.occurrence.is_some()).count();
+        // Kept to write again when this write fails: a hit is a count.
+        let counted: Vec<Hit> = hits
+            .iter()
+            .map(|hit| Hit {
+                occurrence: None,
+                ..hit.clone()
+            })
+            .collect();
+        let batch = Batch {
+            hits,
+            samples,
+            rows,
+        };
         if let Err(error) = writer.write(batch, &self.labels).await {
-            tracing::warn!(target: "navree::lighthouse", %error, "could not write monitoring data");
-            self.aggregates.mark_dirty(&rows);
-            self.handle.count_dropped(details as u64);
+            tracing::warn!(target: "navree::lighthouse", %error, "could not write monitoring data; counts are kept for the next write");
+            self.counts.mark_dirty(&keys);
+            let mut pending = lock(&self.pending);
+            let room = MAX_RETRY_HITS.saturating_sub(pending.hits.len());
+            let lost = counted.len().saturating_sub(room);
+            let mut hits: Vec<Hit> = counted.into_iter().take(room).collect();
+            hits.append(&mut pending.hits);
+            pending.hits = hits;
+            drop(pending);
+            if lost > 0 {
+                tracing::error!(target: "navree::lighthouse", lost, "the database has been unreachable too long: issue hits dropped");
+            }
+            self.count_sampled_out(details as u64, now);
         }
-        self.aggregates.evict(now);
+        self.counts.evict(now);
     }
 
     /// Drops units that never ended and old occurrence budgets.
-    fn sweep(&mut self, now: DateTime<Utc>) {
-        self.units.retain(|_, unit| {
-            unit.created
-                .is_none_or(|created| created.elapsed() < STALE_AFTER)
+    fn sweep(&self, now: DateTime<Utc>) {
+        self.units.each(|units| {
+            units.retain(|_, unit| {
+                unit.created
+                    .is_none_or(|created| created.elapsed() < STALE_AFTER)
+            });
         });
         let hour = now.timestamp() / 3600;
-        self.budgets
-            .retain(|_, (budget_hour, _)| *budget_hour >= hour - 1);
+        lock(&self.budgets).retain(|_, (budget_hour, _)| *budget_hour >= hour - 1);
     }
 
     /// Handles one input.
-    pub(crate) fn handle(&mut self, input: Input, now: DateTime<Utc>) {
+    pub(crate) fn handle(&self, input: Input, now: DateTime<Utc>) {
         match input {
             Input::Record(record) => self.record(*record, now),
             Input::Report(report) => {
@@ -469,28 +560,25 @@ impl Processor {
                 self.report(report, context, at, now);
             }
             Input::Tag(key, name, value) => {
-                if let Some(unit) = self.unit(&key) {
-                    unit.tags.insert(name, value);
-                }
+                self.with_unit(&key, |unit| unit.tags.insert(name, value));
             }
             Input::Capture(request_id, capture) => {
-                if let Some(unit) = self.unit(&UnitKey::Request(request_id)) {
+                self.with_unit(&UnitKey::Request(request_id), |unit| {
                     unit.capture = Some(*capture);
-                }
-            }
-            Input::Flush(done) => {
-                let _ = done.send(());
+                });
             }
         }
     }
 
-    /// The unit for `key`, created on first use (none past the limit).
-    fn unit(&mut self, key: &UnitKey) -> Option<&mut Unit> {
-        if !self.units.contains_key(key) {
-            if self.units.len() >= MAX_UNITS {
+    /// Runs `f` on the unit for `key`, created on first use (none past the
+    /// limit).
+    fn with_unit<R>(&self, key: &UnitKey, f: impl FnOnce(&mut Unit) -> R) -> Option<R> {
+        let mut units = self.units.of(key);
+        if !units.contains_key(key) {
+            if units.len() >= MAX_UNITS / SHARDS {
                 return None;
             }
-            self.units.insert(
+            units.insert(
                 key.clone(),
                 Unit {
                     created: Some(Instant::now()),
@@ -498,10 +586,15 @@ impl Processor {
                 },
             );
         }
-        self.units.get_mut(key)
+        units.get_mut(key).map(f)
     }
 
-    fn record(&mut self, record: TelemetryRecord, now: DateTime<Utc>) {
+    /// Removes the unit for `key` (its request or job ended).
+    fn take_unit(&self, key: &UnitKey) -> Unit {
+        self.units.of(key).remove(key).unwrap_or_default()
+    }
+
+    fn record(&self, record: TelemetryRecord, now: DateTime<Utc>) {
         let TelemetryRecord { at, context, event } = record;
         if context.job_id.as_deref() == Some(INTERNAL_UNIT) {
             return;
@@ -519,28 +612,28 @@ impl Processor {
             TelemetryEvent::QueryExecuted(query) => self.query(at, context, &query, now),
             TelemetryEvent::HttpClientRequest(call) => self.call(at, context, call, now),
             TelemetryEvent::Cache(cache) => {
-                if let Some(key) = UnitKey::of(&context)
-                    && let Some(unit) = self.unit(&key)
-                {
-                    unit.push_span(RawSpan {
-                        kind: "cache",
-                        label: format!("{} {}", cache.operation.as_str(), cache.key),
-                        end: at,
-                        duration_ms: 0.0,
-                        failed: false,
+                if let Some(key) = UnitKey::of(&context) {
+                    self.with_unit(&key, |unit| {
+                        unit.push_span(RawSpan {
+                            kind: "cache",
+                            label: format!("{} {}", cache.operation.as_str(), cache.key),
+                            end: at,
+                            duration_ms: 0.0,
+                            failed: false,
+                        });
                     });
                 }
             }
             TelemetryEvent::MailSent(mail) => {
-                if let Some(key) = UnitKey::of(&context)
-                    && let Some(unit) = self.unit(&key)
-                {
-                    unit.push_span(RawSpan {
-                        kind: "mail",
-                        label: truncate(&mail.subject, 120),
-                        end: at,
-                        duration_ms: millis(mail.duration),
-                        failed: false,
+                if let Some(key) = UnitKey::of(&context) {
+                    self.with_unit(&key, |unit| {
+                        unit.push_span(RawSpan {
+                            kind: "mail",
+                            label: truncate(&mail.subject, 120),
+                            end: at,
+                            duration_ms: millis(mail.duration),
+                            failed: false,
+                        });
                     });
                 }
             }
@@ -553,7 +646,7 @@ impl Processor {
     }
 
     fn report(
-        &mut self,
+        &self,
         report: Report,
         context: EventContext,
         at: DateTime<Utc>,
@@ -578,7 +671,7 @@ impl Processor {
     }
 
     fn exception(
-        &mut self,
+        &self,
         at: DateTime<Utc>,
         context: EventContext,
         exception: ExceptionReported,
@@ -603,19 +696,20 @@ impl Processor {
     }
 
     /// Keeps an exception for its unit, or records it now outside one.
-    fn pend_exception(&mut self, exception: PendingException, now: DateTime<Utc>) {
-        if let Some(key) = UnitKey::of(&exception.context)
-            && let Some(unit) = self.unit(&key)
-        {
-            unit.exceptions.push(exception);
-            return;
+    fn pend_exception(&self, exception: PendingException, now: DateTime<Utc>) {
+        let mut exception = Some(exception);
+        if let Some(key) = exception.as_ref().and_then(|e| UnitKey::of(&e.context)) {
+            self.with_unit(&key, |unit| unit.exceptions.extend(exception.take()));
         }
+        let Some(exception) = exception else {
+            return;
+        };
         let culprit = self.labels.process.clone();
         self.exception_hit(exception, &culprit, &Origin::default(), None, now);
     }
 
     fn query(
-        &mut self,
+        &self,
         at: DateTime<Utc>,
         context: EventContext,
         query: &QueryExecuted,
@@ -629,25 +723,28 @@ impl Processor {
             failed: query.failed,
             context: context.clone(),
         };
-        if let Some(key) = UnitKey::of(&context)
-            && let Some(unit) = self.unit(&key)
-        {
-            unit.push_span(RawSpan {
-                kind: "db",
-                label: truncate(query.sql.trim(), 500),
-                end: at,
-                duration_ms,
-                failed: query.failed,
+        let mut pending = Some(pending);
+        if let Some(key) = UnitKey::of(&context) {
+            self.with_unit(&key, |unit| {
+                unit.push_span(RawSpan {
+                    kind: "db",
+                    label: truncate(query.sql.trim(), 500),
+                    end: at,
+                    duration_ms,
+                    failed: query.failed,
+                });
+                unit.queries.extend(pending.take());
             });
-            unit.queries.push(pending);
-            return;
         }
+        let Some(pending) = pending else {
+            return;
+        };
         let origin = self.labels.process.clone();
         self.query_done(pending, &origin, &Origin::default(), now);
     }
 
     fn call(
-        &mut self,
+        &self,
         at: DateTime<Utc>,
         context: EventContext,
         call: HttpClientRequest,
@@ -658,26 +755,31 @@ impl Processor {
             context: context.clone(),
             call,
         };
-        if let Some(key) = UnitKey::of(&context)
-            && let Some(unit) = self.unit(&key)
-        {
-            let call = &pending.call;
-            unit.push_span(RawSpan {
-                kind: "http",
-                label: format!("{} {}", call.method, call.url),
-                end: at,
-                duration_ms: millis(call.duration),
-                failed: call.error.is_some() || call.status.is_some_and(|s| s >= 500),
+        let mut pending = Some(pending);
+        if let Some(key) = UnitKey::of(&context) {
+            self.with_unit(&key, |unit| {
+                if let Some(pending) = pending.take() {
+                    let call = &pending.call;
+                    unit.push_span(RawSpan {
+                        kind: "http",
+                        label: format!("{} {}", call.method, call.url),
+                        end: at,
+                        duration_ms: millis(call.duration),
+                        failed: call.error.is_some() || call.status.is_some_and(|s| s >= 500),
+                    });
+                    unit.calls.push(pending);
+                }
             });
-            unit.calls.push(pending);
-            return;
         }
+        let Some(pending) = pending else {
+            return;
+        };
         let culprit = self.labels.process.clone();
         self.call_done(pending, &culprit, &Origin::default(), now);
     }
 
     fn scheduled(
-        &mut self,
+        &self,
         at: DateTime<Utc>,
         context: &EventContext,
         task: &ScheduledTaskRan,
@@ -717,16 +819,13 @@ impl Processor {
     }
 
     fn finish_request(
-        &mut self,
+        &self,
         at: DateTime<Utc>,
         context: &EventContext,
         request: &RequestHandled,
         now: DateTime<Utc>,
     ) {
-        let unit = self
-            .units
-            .remove(&UnitKey::Request(request.request_id.clone()))
-            .unwrap_or_default();
+        let unit = self.take_unit(&UnitKey::Request(request.request_id.clone()));
         if self.ignored_path(&request.path) {
             return;
         }
@@ -736,7 +835,7 @@ impl Processor {
             request.route.as_deref().unwrap_or("unmatched")
         );
         let duration_ms = millis(request.duration);
-        self.aggregates.observe(
+        self.counts.observe(
             now,
             kind::REQUEST,
             &endpoint,
@@ -866,22 +965,19 @@ impl Processor {
     }
 
     fn finish_job(
-        &mut self,
+        &self,
         at: DateTime<Utc>,
         context: &EventContext,
         job: JobEnd,
         now: DateTime<Utc>,
     ) {
-        let unit = self
-            .units
-            .remove(&UnitKey::Job(job.job_id.clone()))
-            .unwrap_or_default();
+        let unit = self.take_unit(&UnitKey::Job(job.job_id.clone()));
         if job.job_type == ALERT_JOB || self.options.ignore.jobs.contains(&job.job_type) {
             return;
         }
         let failed = job.error.is_some();
         let moved_to_failed = failed && !job.will_retry;
-        self.aggregates.observe(
+        self.counts.observe(
             now,
             kind::JOB,
             &job.job_type,
@@ -977,7 +1073,7 @@ impl Processor {
     }
 
     /// The queries, calls and exceptions of a finished unit.
-    fn finish_children(&mut self, unit: &Unit, culprit: &str, origin: &Origin, now: DateTime<Utc>) {
+    fn finish_children(&self, unit: &Unit, culprit: &str, origin: &Origin, now: DateTime<Utc>) {
         for query in &unit.queries {
             self.query_done(query.clone(), culprit, origin, now);
         }
@@ -997,13 +1093,13 @@ impl Processor {
     }
 
     fn query_done(
-        &mut self,
+        &self,
         query: PendingQuery,
         origin_name: &str,
         origin: &Origin,
         now: DateTime<Utc>,
     ) {
-        self.aggregates.observe(
+        self.counts.observe(
             now,
             kind::QUERY,
             &query.statement,
@@ -1049,7 +1145,7 @@ impl Processor {
     }
 
     fn call_done(
-        &mut self,
+        &self,
         pending: PendingCall,
         origin_name: &str,
         origin: &Origin,
@@ -1060,7 +1156,7 @@ impl Processor {
         let duration_ms = millis(call.duration);
         let failed = call.error.is_some() || call.status.is_some_and(|status| status >= 500);
         let slow = duration_ms >= self.options.thresholds.slow_outgoing_ms as f64;
-        self.aggregates.observe(
+        self.counts.observe(
             now,
             kind::OUTGOING,
             &host,
@@ -1142,7 +1238,7 @@ impl Processor {
     }
 
     fn exception_hit(
-        &mut self,
+        &self,
         exception: PendingException,
         culprit: &str,
         origin: &Origin,
@@ -1197,7 +1293,7 @@ impl Processor {
             occurrence.backtrace.clone_from(&exception.backtrace);
             occurrence.location.clone_from(&exception.location);
         }
-        self.aggregates
+        self.counts
             .observe(now, kind::EXCEPTION, "all", &Observation::default());
         self.push_hit(
             Hit {
@@ -1222,7 +1318,7 @@ impl Processor {
     /// sampling or the buffer leaves it out.
     #[allow(clippy::too_many_arguments)]
     fn occurrence(
-        &mut self,
+        &self,
         fingerprint: &str,
         at: DateTime<Utc>,
         context: &EventContext,
@@ -1234,31 +1330,19 @@ impl Processor {
     ) -> Option<NewOccurrence> {
         let id = Uuid::now_v7();
         let hour = at.timestamp() / 3600;
-        let budget = self
-            .budgets
-            .entry(fingerprint.to_owned())
-            .or_insert((hour, 0));
-        if budget.0 != hour {
-            *budget = (hour, 0);
-        }
-        let keep = if budget.1 < OCCURRENCES_PER_HOUR {
-            true
-        } else {
-            sampled(&id.to_string(), self.options.sample.exceptions)
-        };
-        if !keep {
-            return None;
-        }
-        budget.1 += 1;
-        if self.details() >= self.options.buffer {
-            if self.samples.pop().is_some() {
-                self.handle.count_dropped(1);
-            } else {
-                self.handle.count_dropped(1);
+        {
+            let mut budgets = lock(&self.budgets);
+            let budget = budgets.entry(fingerprint.to_owned()).or_insert((hour, 0));
+            if budget.0 != hour {
+                *budget = (hour, 0);
+            }
+            let keep = budget.1 < OCCURRENCES_PER_HOUR
+                || sampled(&id.to_string(), self.options.sample.exceptions);
+            if !keep {
                 return None;
             }
+            budget.1 += 1;
         }
-        self.stored_occurrences += 1;
         let mut details = match &origin.details {
             Value::Object(map) => map.clone(),
             _ => Map::new(),
@@ -1294,18 +1378,51 @@ impl Processor {
         })
     }
 
-    fn push_hit(&mut self, hit: Hit, now: DateTime<Utc>) {
-        self.aggregates
+    /// Queues a hit. The hit itself (a count) is always kept; when the
+    /// queue is full its occurrence takes the place of a sample, or is
+    /// sampled out when there is none.
+    fn push_hit(&self, mut hit: Hit, now: DateTime<Utc>) {
+        self.counts
             .observe(now, kind::ISSUE, &hit.fingerprint, &Observation::default());
-        self.hits.push(hit);
+        let mut sampled_out = 0;
+        let wake = {
+            let mut pending = lock(&self.pending);
+            if hit.occurrence.is_some() {
+                if pending.details() >= self.options.buffer {
+                    sampled_out += 1;
+                    if pending.samples.pop().is_none() {
+                        hit.occurrence = None;
+                    }
+                }
+                if hit.occurrence.is_some() {
+                    pending.occurrences += 1;
+                }
+            }
+            pending.hits.push(hit);
+            pending.details() >= FLUSH_AT || pending.hits.len() >= FLUSH_AT
+        };
+        self.count_sampled_out(sampled_out, now);
+        if wake {
+            self.wake.notify_one();
+        }
     }
 
-    fn push_sample(&mut self, sample: NewSample) {
-        if self.details() >= self.options.buffer {
-            self.handle.count_dropped(1);
-            return;
+    /// Queues a sample, or samples it out when the queue is full.
+    fn push_sample(&self, sample: NewSample) {
+        let wake = {
+            let mut pending = lock(&self.pending);
+            if pending.details() >= self.options.buffer {
+                None
+            } else {
+                pending.samples.push(sample);
+                Some(pending.details() >= FLUSH_AT)
+            }
+        };
+        match wake {
+            None => self.count_sampled_out(1, Utc::now()),
+            Some(true) => self.wake.notify_one(),
+            Some(false) => {}
         }
-        self.samples.push(sample);
     }
 
     fn ignored_path(&self, path: &str) -> bool {
@@ -1316,14 +1433,34 @@ impl Processor {
 
     /// The hits waiting (for tests).
     #[cfg(test)]
-    pub(crate) fn pending_hits(&self) -> &[Hit] {
-        &self.hits
+    pub(crate) fn pending_hits(&self) -> Vec<Hit> {
+        lock(&self.pending).hits.clone()
     }
 
     /// The samples waiting (for tests).
     #[cfg(test)]
-    pub(crate) fn pending_samples(&self) -> &[NewSample] {
-        &self.samples
+    pub(crate) fn pending_samples(&self) -> Vec<NewSample> {
+        lock(&self.pending).samples.clone()
+    }
+
+    /// The aggregate rows changed since the last call (for tests).
+    #[cfg(test)]
+    pub(crate) fn take_rows(&self) -> Vec<crate::aggregate::Row> {
+        self.counts.take_dirty()
+    }
+
+    /// The units being followed (for tests).
+    #[cfg(test)]
+    pub(crate) fn unit_count(&self) -> usize {
+        let mut n = 0;
+        self.units.each(|units| n += units.len());
+        n
+    }
+
+    /// Occurrences waiting (for tests).
+    #[cfg(test)]
+    pub(crate) fn pending_occurrences(&self) -> usize {
+        lock(&self.pending).occurrences
     }
 }
 
@@ -1421,9 +1558,8 @@ mod tests {
 
     use super::*;
 
-    fn processor(options: LighthouseOptions) -> Processor {
-        let (handle, _rx) = EngineHandle::new(10);
-        Processor::new(
+    fn processor(options: LighthouseOptions) -> EngineHandle {
+        Engine::new(
             Arc::new(options),
             Labels {
                 environment: "test".into(),
@@ -1433,7 +1569,6 @@ mod tests {
                 process_key: "host/serve/x".into(),
             },
             Redactor::new(&[]),
-            handle,
         )
     }
 
@@ -1488,7 +1623,7 @@ mod tests {
 
     #[test]
     fn a_slow_request_keeps_its_trace_and_its_slow_queries() {
-        let mut p = processor(LighthouseOptions::default());
+        let p = processor(LighthouseOptions::default());
         let now = Utc::now();
         for _ in 0..3 {
             p.handle(
@@ -1539,12 +1674,12 @@ mod tests {
             p.pending_hits()[3].occurrence.as_ref().unwrap().sample_id,
             Some(sample.id)
         );
-        assert!(p.units.is_empty());
+        assert_eq!(p.unit_count(), 0);
     }
 
     #[test]
     fn exceptions_take_the_route_of_their_request() {
-        let mut p = processor(LighthouseOptions::default());
+        let p = processor(LighthouseOptions::default());
         let now = Utc::now();
         p.handle(
             record(in_request("r2"), exception("deal 42 not found")),
@@ -1569,7 +1704,7 @@ mod tests {
 
     #[test]
     fn ignored_routes_and_the_dashboard_are_left_out() {
-        let mut p = processor(LighthouseOptions::default());
+        let p = processor(LighthouseOptions::default());
         let now = Utc::now();
         p.handle(record(in_request("a"), exception("boom")), now);
         p.handle(
@@ -1585,21 +1720,21 @@ mod tests {
         );
         assert!(p.pending_hits().is_empty());
         assert!(p.pending_samples().is_empty());
-        assert!(p.aggregates.take_dirty().is_empty());
+        assert!(p.take_rows().is_empty());
     }
 
     #[test]
     fn sampling_keeps_counts_exact() {
         let mut options = LighthouseOptions::default();
         options.sample.requests = 0.0;
-        let mut p = processor(options);
+        let p = processor(options);
         let now = Utc::now();
         for i in 0..50 {
             let id = format!("q{i}");
             p.handle(record(in_request(&id), request(&id, "/x", 200, 3)), now);
         }
         assert!(p.pending_samples().is_empty());
-        let rows = p.aggregates.take_dirty();
+        let rows = p.take_rows();
         let minute = rows
             .iter()
             .find(|row| row.key.kind == kind::REQUEST && row.key.resolution == 60)
@@ -1611,7 +1746,7 @@ mod tests {
     fn the_first_hundred_occurrences_per_hour_are_kept() {
         let mut options = LighthouseOptions::default();
         options.sample.exceptions = 0.0;
-        let mut p = processor(options);
+        let p = processor(options);
         let now = Utc::now();
         for _ in 0..150 {
             p.handle(record(EventContext::default(), exception("disk full")), now);
@@ -1628,8 +1763,12 @@ mod tests {
 
     #[test]
     fn a_full_buffer_drops_samples_before_occurrences() {
-        let mut p = processor(LighthouseOptions {
+        let p = processor(LighthouseOptions {
             buffer: 100,
+            sample: crate::options::SampleRates {
+                requests: 1.0,
+                ..crate::options::SampleRates::default()
+            },
             ..LighthouseOptions::default()
         });
         let now = Utc::now();
@@ -1642,13 +1781,13 @@ mod tests {
             p.handle(record(EventContext::default(), exception("boom")), now);
         }
         assert_eq!(p.pending_samples().len(), 90, "samples made room");
-        assert_eq!(p.stored_occurrences, 10);
-        assert_eq!(p.handle.dropped(), 10);
+        assert_eq!(p.pending_occurrences(), 10);
+        assert_eq!(p.sampled_out(), 10);
     }
 
     #[test]
     fn jobs_record_failures_and_failed_jobs() {
-        let mut p = processor(LighthouseOptions::default());
+        let p = processor(LighthouseOptions::default());
         let now = Utc::now();
         let in_job = EventContext {
             job_id: Some("j1".into()),
@@ -1704,7 +1843,7 @@ mod tests {
 
     #[test]
     fn internal_work_is_not_recorded() {
-        let mut p = processor(LighthouseOptions::default());
+        let p = processor(LighthouseOptions::default());
         let internal = EventContext {
             job_id: Some(INTERNAL_UNIT.into()),
             ..EventContext::default()
@@ -1714,7 +1853,89 @@ mod tests {
             Utc::now(),
         );
         assert!(p.pending_hits().is_empty());
-        assert!(p.aggregates.take_dirty().is_empty());
+        assert!(p.take_rows().is_empty());
+    }
+
+    #[test]
+    fn a_burst_through_a_tiny_queue_keeps_every_count() {
+        let p = processor(LighthouseOptions {
+            buffer: 100,
+            sample: crate::options::SampleRates {
+                requests: 1.0,
+                ..crate::options::SampleRates::default()
+            },
+            ..LighthouseOptions::default()
+        });
+        let now = Utc::now();
+        for i in 0..100_000 {
+            let id = format!("b{i}");
+            p.handle(record(in_request(&id), query("SELECT 1", 1)), now);
+            p.handle(record(in_request(&id), request(&id, "/x", 200, 3)), now);
+        }
+        let rows = p.take_rows();
+        let minute = |kind: &str| {
+            rows.iter()
+                .find(|row| row.key.kind == kind && row.key.resolution == 60)
+                .map_or(0, |row| row.values.count)
+        };
+        assert_eq!(minute(kind::REQUEST), 100_000);
+        assert_eq!(minute(kind::QUERY), 100_000);
+        assert_eq!(p.pending_samples().len(), 100, "the queue is bounded");
+        assert_eq!(p.sampled_out(), 99_900);
+        assert_eq!(minute(kind::SAMPLED_OUT), 99_900);
+        assert_eq!(p.unit_count(), 0);
+    }
+
+    /// Fails its first write, then keeps what it is given.
+    struct FlakyWriter {
+        failed: std::sync::atomic::AtomicBool,
+        written: Mutex<Vec<Batch>>,
+    }
+
+    impl BatchWriter for FlakyWriter {
+        fn write<'a>(
+            &'a self,
+            batch: Batch,
+            _labels: &'a Labels,
+        ) -> navree_kernel::BoxFuture<'a, Result<(), navree_kernel::BoxError>> {
+            Box::pin(async move {
+                if !self.failed.swap(true, Ordering::SeqCst) {
+                    return Err("database unreachable".into());
+                }
+                lock(&self.written).push(batch);
+                Ok(())
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn a_failed_write_keeps_counts_and_hits_for_the_next() {
+        let p = processor(LighthouseOptions::default());
+        let writer = FlakyWriter {
+            failed: std::sync::atomic::AtomicBool::new(false),
+            written: Mutex::new(Vec::new()),
+        };
+        let now = Utc::now();
+        for i in 0..10 {
+            let id = format!("f{i}");
+            p.handle(record(in_request(&id), exception("boom")), now);
+            p.handle(record(in_request(&id), request(&id, "/x", 500, 3)), now);
+        }
+        p.flush(&writer).await;
+        assert!(lock(&writer.written).is_empty(), "the first write failed");
+        assert_eq!(p.sampled_out(), 20, "its traces and occurrences are lost");
+        p.flush(&writer).await;
+        let written = lock(&writer.written);
+        let batch = &written[0];
+        assert_eq!(batch.hits.len(), 10, "every hit is written again");
+        assert!(batch.hits.iter().all(|hit| hit.occurrence.is_none()));
+        let requests = batch
+            .rows
+            .iter()
+            .find(|row| row.key.kind == kind::REQUEST && row.key.resolution == 60)
+            .unwrap();
+        assert_eq!(requests.values.count, 10);
+        assert_eq!(requests.values.extra, 10);
     }
 
     #[test]
