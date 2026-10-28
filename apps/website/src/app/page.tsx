@@ -51,5 +51,5 @@ export default function Home() {
 
 /** The hairline between sections, for the sections other workers own. */
 function Divided({ children }: { children: ReactNode }) {
-  return <div className="border-t border-line">{children}</div>;
+  return <div className="cv-auto border-t border-line">{children}</div>;
 }

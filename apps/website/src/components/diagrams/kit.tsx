@@ -2,7 +2,6 @@ import type { CSSProperties, ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
-import styles from "./diagram.module.css";
 import { Glyph, type GlyphName } from "./glyphs";
 
 /*
@@ -542,8 +541,8 @@ export function DiagramSvg({
             }) as CSSProperties;
           return (
             <g key={i}>
-              <path d={e.d} className={cn(styles.pulse, "stroke-accent/25")} strokeWidth={5} style={vars(34)} />
-              <path d={e.d} className={cn(styles.pulse, "stroke-accent")} strokeWidth={1.75} style={vars(12)} />
+              <path d={e.d} className="diagram-pulse stroke-accent/25" strokeWidth={5} style={vars(34)} />
+              <path d={e.d} className="diagram-pulse stroke-accent" strokeWidth={1.75} style={vars(12)} />
             </g>
           );
         })}
