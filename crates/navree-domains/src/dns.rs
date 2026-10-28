@@ -88,11 +88,17 @@ impl DnsLookup for SystemDns {
     fn cname<'a>(&'a self, name: &'a str) -> BoxFuture<'a, Result<Option<String>, DomainsError>> {
         Box::pin(async move {
             let resolver = self.resolver(name).await?;
-            match resolver.lookup(fqdn(name).as_str(), RecordType::CNAME).await {
-                Ok(lookup) => Ok(lookup.answers().iter().find_map(|record| match &record.data {
-                    RData::CNAME(target) => Some(normal_name(&target.to_string())),
-                    _ => None,
-                })),
+            match resolver
+                .lookup(fqdn(name).as_str(), RecordType::CNAME)
+                .await
+            {
+                Ok(lookup) => Ok(lookup
+                    .answers()
+                    .iter()
+                    .find_map(|record| match &record.data {
+                        RData::CNAME(target) => Some(normal_name(&target.to_string())),
+                        _ => None,
+                    })),
                 Err(error) if error.is_no_records_found() || error.is_nx_domain() => Ok(None),
                 Err(error) => Err(DomainsError::dns(name, error.to_string())),
             }

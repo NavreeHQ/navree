@@ -188,7 +188,10 @@ async fn the_landing_page_the_link_and_the_listener_work() {
     let workspace = uuid::Uuid::now_v7();
     add_a_domain(app.ctx().clone(), workspace).await.unwrap();
     let domains = app.get::<Domains>().await;
-    assert_eq!(link(&domains, workspace).await.unwrap(), "https://app.example.com");
+    assert_eq!(
+        link(&domains, workspace).await.unwrap(),
+        "https://app.example.com"
+    );
 
     let domain = domains.find("crm.acme-corp.com").await.unwrap().unwrap();
     dns.set_txt(&domain.dns_records[0].name, &domain.dns_records[0].value);

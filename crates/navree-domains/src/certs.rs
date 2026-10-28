@@ -76,7 +76,12 @@ impl DomainCertificates {
 
     /// Serves `chain_pem` (leaf first) with `key_pem` for `host`, replacing
     /// its previous certificate.
-    pub fn insert_pem(&self, host: &str, chain_pem: &str, key_pem: &str) -> Result<(), DomainsError> {
+    pub fn insert_pem(
+        &self,
+        host: &str,
+        chain_pem: &str,
+        key_pem: &str,
+    ) -> Result<(), DomainsError> {
         let key = certified_key(chain_pem, key_pem)?;
         let validity = validity(chain_pem)?;
         self.keys
@@ -167,9 +172,9 @@ pub(crate) fn validity_der(der: &[u8]) -> Result<Validity, DomainsError> {
         .map_err(|error| DomainsError::Certificate(format!("the certificate: {error}")))?;
     let validity = cert.validity();
     let at = |seconds: i64| {
-        Utc.timestamp_opt(seconds, 0)
-            .single()
-            .ok_or_else(|| DomainsError::Certificate("a certificate date is out of range".to_owned()))
+        Utc.timestamp_opt(seconds, 0).single().ok_or_else(|| {
+            DomainsError::Certificate("a certificate date is out of range".to_owned())
+        })
     };
     Ok(Validity {
         not_before: at(validity.not_before.timestamp())?,
@@ -209,7 +214,10 @@ mod tests {
         ) -> navree_kernel::BoxFuture<'a, Result<(), DomainsError>> {
             Box::pin(async { Ok(()) })
         }
-        fn withdraw<'a>(&'a self, _: &'a str) -> navree_kernel::BoxFuture<'a, Result<(), DomainsError>> {
+        fn withdraw<'a>(
+            &'a self,
+            _: &'a str,
+        ) -> navree_kernel::BoxFuture<'a, Result<(), DomainsError>> {
             Box::pin(async { Ok(()) })
         }
     }
@@ -244,9 +252,7 @@ mod tests {
         assert!(certificates.contains("shop.acme.test"));
         assert_eq!(certificates.hosts(), ["shop.acme.test"]);
         assert_eq!(
-            certificates
-                .expires_at("shop.acme.test")
-                .map(|at| at.day()),
+            certificates.expires_at("shop.acme.test").map(|at| at.day()),
             Some(expires.day())
         );
         certificates.server_config().unwrap();

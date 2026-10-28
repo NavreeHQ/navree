@@ -77,7 +77,9 @@ pub(crate) async fn check(
             .iter()
             .any(|value| value.trim().trim_matches('"') == token);
         if !found {
-            missing.push(format!("TXT record {name} with the value {token} not found"));
+            missing.push(format!(
+                "TXT record {name} with the value {token} not found"
+            ));
         }
         found
     } else {

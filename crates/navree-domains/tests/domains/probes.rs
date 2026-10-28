@@ -33,9 +33,19 @@ async fn certificates_of_verified_domains_are_probed_daily() {
     assert_eq!(domain.certificate_expires_at, Some(expires));
     assert_eq!(domain.tls, TlsStatus::Active);
     // Due again a day later.
-    assert!(domains.check_certificates(None).await.unwrap().probed.is_empty());
+    assert!(
+        domains
+            .check_certificates(None)
+            .await
+            .unwrap()
+            .probed
+            .is_empty()
+    );
     world.advance(DAY);
-    assert_eq!(domains.check_certificates(None).await.unwrap().probed.len(), 1);
+    assert_eq!(
+        domains.check_certificates(None).await.unwrap().probed.len(),
+        1
+    );
     // A host given by name is probed now.
     assert_eq!(
         domains
@@ -60,7 +70,12 @@ async fn certificates_close_to_expiry_are_reported() {
         .probe
         .expires("crm.acme-corp.test", world.now() + TimeDelta::days(5));
     let mut events = world.events(&["domains.certificate_expiring"]).await;
-    let run = world.domains().await.check_certificates(None).await.unwrap();
+    let run = world
+        .domains()
+        .await
+        .check_certificates(None)
+        .await
+        .unwrap();
     assert_eq!(run.expiring.len(), 1);
     let expiring = events.drain();
     assert_eq!(expiring[0].1["host"], json!("crm.acme-corp.test"));
@@ -89,10 +104,10 @@ async fn a_failed_probe_is_recorded() {
     let world = World::new().await;
     let workspace = world.workspace(Uuid::now_v7(), "Acme").await;
     let domain = world.verified(workspace, "crm.acme-corp.test").await;
-    world
-        .fakes
-        .probe
-        .fail("crm.acme-corp.test", "the TLS handshake failed: unrecognised name");
+    world.fakes.probe.fail(
+        "crm.acme-corp.test",
+        "the TLS handshake failed: unrecognised name",
+    );
     let domains = world.domains().await;
     let run = domains.check_certificates(None).await.unwrap();
     assert_eq!(run.failed.len(), 1);
@@ -106,7 +121,12 @@ async fn probes_can_be_turned_off() {
     let world = World::with(|builder| builder.config("domains.certificates.probe", false)).await;
     let workspace = world.workspace(Uuid::now_v7(), "Acme").await;
     world.verified(workspace, "crm.acme-corp.test").await;
-    let run = world.domains().await.check_certificates(None).await.unwrap();
+    let run = world
+        .domains()
+        .await
+        .check_certificates(None)
+        .await
+        .unwrap();
     assert!(run.probed.is_empty() && run.failed.is_empty());
     assert!(world.fakes.probe.probed().is_empty());
 }

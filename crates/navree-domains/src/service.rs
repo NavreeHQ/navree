@@ -117,7 +117,11 @@ impl Domains {
     /// one (`domain_not_allowed`), one another workspace has
     /// (`domain_taken`), or a workspace at `domains.max_per_workspace`
     /// (`domain_limit_reached`).
-    pub async fn add(&self, workspace: Uuid, input: NewDomain) -> Result<CustomDomain, DomainsError> {
+    pub async fn add(
+        &self,
+        workspace: Uuid,
+        input: NewDomain,
+    ) -> Result<CustomDomain, DomainsError> {
         let rt = self.rt.clone();
         let host = normalize_host(&input.host).map_err(DomainsError::InvalidDomain)?;
         let purpose = input
@@ -128,7 +132,12 @@ impl Domains {
             .unwrap_or("app")
             .to_owned();
         check_purpose(&purpose)?;
-        let zone = rt.options.dns.zone.as_deref().and_then(|zone| normalize_host(zone).ok());
+        let zone = rt
+            .options
+            .dns
+            .zone
+            .as_deref()
+            .and_then(|zone| normalize_host(zone).ok());
         let managed = zone
             .as_deref()
             .is_some_and(|zone| host != zone && is_within(&host, zone));
@@ -175,7 +184,11 @@ impl Domains {
             points_to_app: managed.then_some(true),
             check_attempts: 0,
             last_checked_at: None,
-            next_check_at: if managed { self.recheck_at(now) } else { Some(now) },
+            next_check_at: if managed {
+                self.recheck_at(now)
+            } else {
+                Some(now)
+            },
             verified_at: managed.then_some(now),
             last_error: None,
             tls_status: self.tls_after(status).as_str().to_owned(),
@@ -196,9 +209,12 @@ impl Domains {
                 uow.mark_modified();
                 drop(tx);
                 runtime
-                    .emit_after_commit(&uow, DomainAdded {
-                        domain: event.clone(),
-                    })
+                    .emit_after_commit(
+                        &uow,
+                        DomainAdded {
+                            domain: event.clone(),
+                        },
+                    )
                     .await;
                 if managed {
                     runtime
@@ -236,12 +252,15 @@ impl Domains {
                 "a managed domain needs domains.target or domains.addresses".to_owned(),
             ));
         }
-        let to_strings = |ips: Vec<&std::net::IpAddr>| ips.iter().map(ToString::to_string).collect::<Vec<_>>();
+        let to_strings =
+            |ips: Vec<&std::net::IpAddr>| ips.iter().map(ToString::to_string).collect::<Vec<_>>();
         if !v4.is_empty() {
             provider.set(RecordKind::A, host, &to_strings(v4)).await?;
         }
         if !v6.is_empty() {
-            provider.set(RecordKind::Aaaa, host, &to_strings(v6)).await?;
+            provider
+                .set(RecordKind::Aaaa, host, &to_strings(v6))
+                .await?;
         }
         Ok(())
     }
@@ -272,7 +291,10 @@ impl Domains {
     }
 
     /// Every domain, by host, optionally only those with `status`.
-    pub async fn all(&self, status: Option<DomainStatus>) -> Result<Vec<CustomDomain>, DomainsError> {
+    pub async fn all(
+        &self,
+        status: Option<DomainStatus>,
+    ) -> Result<Vec<CustomDomain>, DomainsError> {
         let mut query = models::Domain::query().order_by(models::Domain::HOST);
         if let Some(status) = status {
             query = query.where_(models::Domain::STATUS.eq(status.as_str()));
@@ -508,7 +530,11 @@ impl Domains {
         Ok(checked)
     }
 
-    async fn check(&self, row: models::Domain, scheduled: bool) -> Result<CustomDomain, DomainsError> {
+    async fn check(
+        &self,
+        row: models::Domain,
+        scheduled: bool,
+    ) -> Result<CustomDomain, DomainsError> {
         let rt = self.rt.clone();
         let routing = Routing {
             target: rt.options.target.as_deref(),
@@ -560,7 +586,9 @@ impl Domains {
                     _ => {
                         row.check_attempts = row.check_attempts.saturating_add(1);
                         let deadline = row.created_at
-                            + TimeDelta::hours(i64::from(rt.options.verification.give_up_after_hours));
+                            + TimeDelta::hours(i64::from(
+                                rt.options.verification.give_up_after_hours,
+                            ));
                         if scheduled && was == DomainStatus::Pending && now >= deadline {
                             row.status = DomainStatus::Failed.as_str().to_owned();
                             row.next_check_at = None;
@@ -589,10 +617,18 @@ impl Domains {
             uow.mark_modified();
             drop(tx);
             if verified {
-                runtime.emit_after_commit(&uow, DomainVerified { domain: event }).await;
+                runtime
+                    .emit_after_commit(&uow, DomainVerified { domain: event })
+                    .await;
             } else if let Some(reason) = gave_up_reason {
                 runtime
-                    .emit_after_commit(&uow, DomainVerificationFailed { domain: event, reason })
+                    .emit_after_commit(
+                        &uow,
+                        DomainVerificationFailed {
+                            domain: event,
+                            reason,
+                        },
+                    )
                     .await;
             }
             Ok(())
@@ -697,7 +733,10 @@ mod tests {
         let b = new_token();
         assert_eq!(a.len(), TOKEN_LEN);
         assert_ne!(a, b);
-        assert!(a.bytes().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()));
+        assert!(
+            a.bytes()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+        );
     }
 
     #[test]

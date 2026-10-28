@@ -101,7 +101,10 @@ impl AcmeOrder {
 /// Where an [`AcmeOrder`] keeps accounts and challenge answers (the
 /// module's tables).
 pub(crate) trait AcmeStore: Send + Sync + 'static {
-    fn account<'a>(&'a self, directory: &'a str) -> BoxFuture<'a, Result<Option<String>, DomainsError>>;
+    fn account<'a>(
+        &'a self,
+        directory: &'a str,
+    ) -> BoxFuture<'a, Result<Option<String>, DomainsError>>;
     fn save_account<'a>(
         &'a self,
         directory: &'a str,
@@ -138,7 +141,10 @@ impl fmt::Debug for IssuedCertificate {
 /// for example with an [`AcmeFake`] in tests.
 pub trait AcmeClient: Send + Sync + 'static {
     /// A certificate for `order.host()`.
-    fn issue<'a>(&'a self, order: &'a AcmeOrder) -> BoxFuture<'a, Result<IssuedCertificate, DomainsError>>;
+    fn issue<'a>(
+        &'a self,
+        order: &'a AcmeOrder,
+    ) -> BoxFuture<'a, Result<IssuedCertificate, DomainsError>>;
 }
 
 // -- instant-acme --------------------------------------------------------------
@@ -187,9 +193,9 @@ impl InstantAcme {
         if !roots.is_empty() {
             builder = builder.tls_certs_merge(roots);
         }
-        let client = builder
-            .build()
-            .map_err(|error| DomainsError::Config(format!("cannot build the HTTP client: {error}")))?;
+        let client = builder.build().map_err(|error| {
+            DomainsError::Config(format!("cannot build the HTTP client: {error}"))
+        })?;
         Ok(InstantAcme {
             http: AcmeHttp(client),
             retry: RetryPolicy::new()
@@ -211,9 +217,12 @@ impl InstantAcme {
             DomainsError::acme(&order.host, format!("the ACME account: {error}"))
         };
         if let Some(stored) = order.account().await? {
-            let credentials: AccountCredentials = serde_json::from_str(&stored).map_err(|error| {
-                DomainsError::Config(format!("the stored ACME account is not readable: {error}"))
-            })?;
+            let credentials: AccountCredentials =
+                serde_json::from_str(&stored).map_err(|error| {
+                    DomainsError::Config(format!(
+                        "the stored ACME account is not readable: {error}"
+                    ))
+                })?;
             return Account::builder_with_http(Box::new(self.http.clone()))
                 .from_credentials(credentials)
                 .await
@@ -239,7 +248,11 @@ impl InstantAcme {
         Ok(account)
     }
 
-    async fn run(&self, order: &AcmeOrder, published: &mut Vec<String>) -> Result<IssuedCertificate, DomainsError> {
+    async fn run(
+        &self,
+        order: &AcmeOrder,
+        published: &mut Vec<String>,
+    ) -> Result<IssuedCertificate, DomainsError> {
         let host = order.host.clone();
         let failed = |error: instant_acme::Error| DomainsError::acme(&host, error.to_string());
         let account = self.account(order).await?;
@@ -262,9 +275,12 @@ impl InstantAcme {
                         ));
                     }
                 }
-                let mut challenge = authorization
-                    .challenge(ChallengeType::Http01)
-                    .ok_or_else(|| DomainsError::acme(&order.host, "the CA offers no HTTP-01 challenge"))?;
+                let mut challenge =
+                    authorization
+                        .challenge(ChallengeType::Http01)
+                        .ok_or_else(|| {
+                            DomainsError::acme(&order.host, "the CA offers no HTTP-01 challenge")
+                        })?;
                 let token = challenge.token.clone();
                 let answer = challenge.key_authorization();
                 order.publish_challenge(&token, answer.as_str()).await?;
@@ -292,7 +308,10 @@ impl InstantAcme {
 }
 
 impl AcmeClient for InstantAcme {
-    fn issue<'a>(&'a self, order: &'a AcmeOrder) -> BoxFuture<'a, Result<IssuedCertificate, DomainsError>> {
+    fn issue<'a>(
+        &'a self,
+        order: &'a AcmeOrder,
+    ) -> BoxFuture<'a, Result<IssuedCertificate, DomainsError>> {
         Box::pin(async move {
             let mut published = Vec::new();
             let result = self.run(order, &mut published).await;
@@ -317,7 +336,8 @@ impl HttpClient for AcmeHttp {
     ) -> Pin<Box<dyn Future<Output = Result<BytesResponse, instant_acme::Error>> + Send>> {
         let client = self.0.clone();
         Box::pin(async move {
-            let other = |error: Box<dyn std::error::Error + Send + Sync>| instant_acme::Error::Other(error);
+            let other =
+                |error: Box<dyn std::error::Error + Send + Sync>| instant_acme::Error::Other(error);
             let (parts, body) = request.into_parts();
             let body = match body.collect().await {
                 Ok(collected) => collected.to_bytes(),
@@ -327,7 +347,11 @@ impl HttpClient for AcmeHttp {
             for (name, value) in &parts.headers {
                 outgoing = outgoing.header(name, value);
             }
-            let response = outgoing.body(body).send().await.map_err(|e| other(Box::new(e)))?;
+            let response = outgoing
+                .body(body)
+                .send()
+                .await
+                .map_err(|e| other(Box::new(e)))?;
             let mut builder = http::Response::builder().status(response.status());
             for (name, value) in response.headers() {
                 builder = builder.header(name, value);
@@ -451,8 +475,8 @@ impl AcmeFake {
 
     fn sign(&self, host: &str, not_after: DateTime<Utc>) -> Result<IssuedCertificate, String> {
         let key = rcgen::KeyPair::generate().map_err(|error| error.to_string())?;
-        let mut params =
-            rcgen::CertificateParams::new(vec![host.to_owned()]).map_err(|error| error.to_string())?;
+        let mut params = rcgen::CertificateParams::new(vec![host.to_owned()])
+            .map_err(|error| error.to_string())?;
         let not_before = not_after - TimeDelta::days(90);
         let (year, month, day) = ymd(not_before);
         params.not_before = rcgen::date_time_ymd(year, month, day);
@@ -479,7 +503,10 @@ fn ymd(at: DateTime<Utc>) -> (i32, u8, u8) {
 }
 
 impl AcmeClient for AcmeFake {
-    fn issue<'a>(&'a self, order: &'a AcmeOrder) -> BoxFuture<'a, Result<IssuedCertificate, DomainsError>> {
+    fn issue<'a>(
+        &'a self,
+        order: &'a AcmeOrder,
+    ) -> BoxFuture<'a, Result<IssuedCertificate, DomainsError>> {
         Box::pin(async move {
             let host = order.host().to_owned();
             let (failure, keep, number) = self.with(|ca| {
@@ -490,7 +517,10 @@ impl AcmeClient for AcmeFake {
             let token = format!("fake-token-{number}");
             let answer = format!("{token}.fake-thumbprint");
             order.publish_challenge(&token, &answer).await?;
-            self.with(|ca| ca.published.push((host.clone(), token.clone(), answer.clone())));
+            self.with(|ca| {
+                ca.published
+                    .push((host.clone(), token.clone(), answer.clone()))
+            });
             if !keep {
                 order.withdraw_challenge(&token).await?;
             }

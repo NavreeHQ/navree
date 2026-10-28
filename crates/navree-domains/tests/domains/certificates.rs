@@ -57,7 +57,12 @@ async fn verified_domains_get_certificates() {
     assert!(stored.chain_pem.contains("BEGIN CERTIFICATE"));
     assert!(!stored.private_key.contains("PRIVATE KEY"));
     assert!(!format!("{stored:?}").contains(&stored.private_key));
-    assert!(serde_json::to_value(&*stored).unwrap().get("private_key").is_none());
+    assert!(
+        serde_json::to_value(&*stored)
+            .unwrap()
+            .get("private_key")
+            .is_none()
+    );
     let issued = events.drain();
     assert_eq!(issued[0].1["host"], json!("crm.acme-corp.test"));
     assert_eq!(issued[0].1["renewal"], json!(false));
@@ -106,7 +111,10 @@ async fn a_refused_order_is_recorded_on_the_domain() {
     let world = World::with(acme).await;
     let workspace = world.workspace(Uuid::now_v7(), "Acme").await;
     let domain = world.verified(workspace, "crm.acme-corp.test").await;
-    world.fakes.ca.fail_next("too many certificates already issued");
+    world
+        .fakes
+        .ca
+        .fail_next("too many certificates already issued");
     let domains = world.domains().await;
     let run = domains.check_certificates(None).await.unwrap();
     assert_eq!(run.failed.len(), 1);
@@ -115,14 +123,18 @@ async fn a_refused_order_is_recorded_on_the_domain() {
     assert_eq!(domain.tls, TlsStatus::Failed);
     assert!(domain.tls_error.unwrap().contains("too many certificates"));
     // Retried once it is due again (check_hours, 24 by default).
-    assert!(domains.check_certificates(None).await.unwrap().failed.is_empty());
+    assert!(
+        domains
+            .check_certificates(None)
+            .await
+            .unwrap()
+            .failed
+            .is_empty()
+    );
     world.advance(DAY);
     let run = domains.check_certificates(None).await.unwrap();
     assert_eq!(run.issued, ["crm.acme-corp.test"]);
-    assert_eq!(
-        domains.get(domain.id).await.unwrap().tls,
-        TlsStatus::Active
-    );
+    assert_eq!(domains.get(domain.id).await.unwrap().tls, TlsStatus::Active);
 }
 
 #[tokio::test]
@@ -245,7 +257,14 @@ async fn the_apps_own_hosts_get_certificates_too() {
         .unwrap();
     assert_eq!(stored.domain_id, None);
     // Not due again until it is close to expiry.
-    assert!(domains.check_certificates(None).await.unwrap().issued.is_empty());
+    assert!(
+        domains
+            .check_certificates(None)
+            .await
+            .unwrap()
+            .issued
+            .is_empty()
+    );
     assert_eq!(world.fakes.ca.orders(), ["app.example.com"]);
 }
 
@@ -255,7 +274,10 @@ async fn stored_certificates_are_loaded_by_every_server() {
     let workspace = world.workspace(Uuid::now_v7(), "Acme").await;
     let domain = world.verified(workspace, "crm.acme-corp.test").await;
     let domains = world.domains().await;
-    domains.issue_certificate("crm.acme-corp.test").await.unwrap();
+    domains
+        .issue_certificate("crm.acme-corp.test")
+        .await
+        .unwrap();
     // Another server: nothing in memory, everything in the database.
     domains.certificates().remove("crm.acme-corp.test");
     assert!(domains.certificates().hosts().is_empty());

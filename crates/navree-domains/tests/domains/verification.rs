@@ -35,10 +35,15 @@ async fn a_domain_is_verified_once_its_records_appear() {
         )
     );
     assert_eq!(checked.last_checked_at, Some(world.now()));
-    assert_eq!(checked.next_check_at, Some(world.now() + chrono::TimeDelta::minutes(5)));
+    assert_eq!(
+        checked.next_check_at,
+        Some(world.now() + chrono::TimeDelta::minutes(5))
+    );
 
     // The TXT record alone is not enough while routing is required.
-    world.dns().set_txt(&format!("{PREFIX}.crm.acme-corp.test"), token);
+    world
+        .dns()
+        .set_txt(&format!("{PREFIX}.crm.acme-corp.test"), token);
     let checked = domains.verify(domain.id).await.unwrap();
     assert_eq!(checked.status, DomainStatus::Pending);
     assert!(checked.last_error.unwrap().contains("does not point at"));
@@ -59,7 +64,11 @@ async fn a_domain_is_verified_once_its_records_appear() {
     let names = events.drain();
     assert_eq!(names.len(), 1);
     assert_eq!(names[0].1["domain"]["status"], json!("verified"));
-    let resolved = domains.resolve("CRM.acme-corp.test:443").await.unwrap().unwrap();
+    let resolved = domains
+        .resolve("CRM.acme-corp.test:443")
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(resolved.workspace_id, workspace);
     assert_eq!(resolved.id, domain.id);
     assert_eq!(resolved.purpose, "app");
@@ -67,8 +76,8 @@ async fn a_domain_is_verified_once_its_records_appear() {
 
 #[tokio::test]
 async fn routing_is_optional_when_configured_so() {
-    let world = World::with(|builder| builder.config("domains.verification.require_routing", false))
-        .await;
+    let world =
+        World::with(|builder| builder.config("domains.verification.require_routing", false)).await;
     let workspace = world.workspace(Uuid::now_v7(), "Acme").await;
     let domain = world.add(workspace, "crm.acme-corp.test").await;
     world
@@ -121,7 +130,12 @@ async fn the_scheduler_checks_due_domains_until_it_gives_up() {
     assert_eq!(checked[0].next_check_at, None);
     let failed = events.drain();
     assert_eq!(failed.len(), 1);
-    assert!(failed[0].1["reason"].as_str().unwrap().contains("TXT record"));
+    assert!(
+        failed[0].1["reason"]
+            .as_str()
+            .unwrap()
+            .contains("TXT record")
+    );
     world.advance(HOUR);
     assert!(domains.verify_due().await.unwrap().is_empty());
 
@@ -145,7 +159,10 @@ async fn a_resolver_failure_is_recorded_and_returned() {
     let stored = domains.get(domain.id).await.unwrap();
     assert_eq!(stored.status, DomainStatus::Pending);
     assert!(stored.last_error.unwrap().contains("SERVFAIL"));
-    assert_eq!(stored.next_check_at, Some(world.now() + chrono::TimeDelta::minutes(5)));
+    assert_eq!(
+        stored.next_check_at,
+        Some(world.now() + chrono::TimeDelta::minutes(5))
+    );
     // The scheduler logs a failure and goes on with the others.
     let other = world.add(workspace, "go.acme-corp.test").await;
     world.publish(&other);
@@ -193,7 +210,8 @@ async fn verified_domains_are_rechecked_for_their_routing() {
 
 #[tokio::test]
 async fn rechecks_can_be_turned_off() {
-    let world = World::with(|builder| builder.config("domains.verification.recheck_hours", 0)).await;
+    let world =
+        World::with(|builder| builder.config("domains.verification.recheck_hours", 0)).await;
     let workspace = world.workspace(Uuid::now_v7(), "Acme").await;
     let domain = world.verified(workspace, "crm.acme-corp.test").await;
     assert_eq!(domain.next_check_at, None);

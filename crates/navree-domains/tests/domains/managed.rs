@@ -25,7 +25,10 @@ async fn hosts_inside_the_zone_are_created_and_verified_at_once() {
     let mut events = world.events(&["domains.added", "domains.verified"]).await;
     let domains = world.domains().await;
     let domain = domains
-        .add(workspace, NewDomain::new("acme.links.example.com").purpose("links"))
+        .add(
+            workspace,
+            NewDomain::new("acme.links.example.com").purpose("links"),
+        )
         .await
         .unwrap();
     assert!(domain.managed);
@@ -60,7 +63,10 @@ async fn without_a_target_the_zone_gets_address_records() {
     let workspace = world.workspace(Uuid::now_v7(), "Acme").await;
     world.add(workspace, "acme.links.example.com").await;
     assert_eq!(
-        world.fakes.zone.records(RecordKind::A, "acme.links.example.com"),
+        world
+            .fakes
+            .zone
+            .records(RecordKind::A, "acme.links.example.com"),
         [ADDRESS]
     );
     assert_eq!(

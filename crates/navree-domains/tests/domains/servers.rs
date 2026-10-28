@@ -107,12 +107,16 @@ async fn flow(scratch: &Scratch) {
     let crm = world.add(acme, "crm.acme-corp.test").await;
     assert_eq!(crm.created_at, world.now());
     assert!(matches!(
-        domains.add(globex, NewDomain::new("crm.acme-corp.test")).await,
+        domains
+            .add(globex, NewDomain::new("crm.acme-corp.test"))
+            .await,
         Err(DomainsError::Taken(_))
     ));
     let go = world.add(acme, "go.acme-corp.test").await;
     assert!(matches!(
-        domains.add(acme, NewDomain::new("help.acme-corp.test")).await,
+        domains
+            .add(acme, NewDomain::new("help.acme-corp.test"))
+            .await,
         Err(DomainsError::LimitReached(2))
     ));
 
@@ -132,7 +136,11 @@ async fn flow(scratch: &Scratch) {
     assert_eq!(domains.verify_due().await.unwrap().len(), 1);
 
     // Resolution, the cache-less lookup and the ask query.
-    let resolved = domains.resolve("crm.acme-corp.test").await.unwrap().unwrap();
+    let resolved = domains
+        .resolve("crm.acme-corp.test")
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(resolved.workspace_id, acme);
     world
         .as_user(owner)
@@ -152,7 +160,10 @@ async fn flow(scratch: &Scratch) {
     let issued = domains.issue_pending().await.unwrap();
     assert_eq!(issued, ["crm.acme-corp.test"]);
     let (_, token, answer) = world.fakes.ca.challenges().remove(0);
-    assert_eq!(domains.challenge_answer(&token).await.unwrap(), Some(answer));
+    assert_eq!(
+        domains.challenge_answer(&token).await.unwrap(),
+        Some(answer)
+    );
     assert_eq!(domains.get(crm.id).await.unwrap().tls, TlsStatus::Active);
     domains.certificates().remove("crm.acme-corp.test");
     assert_eq!(domains.reload_certificates().await.unwrap(), 1);

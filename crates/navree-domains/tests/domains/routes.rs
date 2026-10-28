@@ -67,7 +67,12 @@ async fn owners_manage_their_workspace_domains() {
         .await
         .assert_status(200)
         .assert_json_path("status", json!("pending"));
-    let domain = world.domains().await.get(id.parse().unwrap()).await.unwrap();
+    let domain = world
+        .domains()
+        .await
+        .get(id.parse().unwrap())
+        .await
+        .unwrap();
     world.publish(&domain);
     client
         .post(&format!("/api/domains/{id}/verify"))
@@ -128,11 +133,23 @@ async fn refusals_carry_their_codes() {
             .header("x-workspace", ws.as_str())
             .json(&json!({ "host": host }))
     };
-    add("https://crm.acme-corp.test/").send().await.assert_error_code(400, "invalid_domain");
-    add("app.example.com").send().await.assert_error_code(400, "domain_not_allowed");
-    add("globex.test").send().await.assert_error_code(409, "domain_taken");
+    add("https://crm.acme-corp.test/")
+        .send()
+        .await
+        .assert_error_code(400, "invalid_domain");
+    add("app.example.com")
+        .send()
+        .await
+        .assert_error_code(400, "domain_not_allowed");
+    add("globex.test")
+        .send()
+        .await
+        .assert_error_code(409, "domain_taken");
     add("crm.acme-corp.test").send().await.assert_status(201);
-    add("go.acme-corp.test").send().await.assert_error_code(409, "domain_limit_reached");
+    add("go.acme-corp.test")
+        .send()
+        .await
+        .assert_error_code(409, "domain_limit_reached");
     // Another workspace's domain does not exist here.
     client
         .get(&format!("/api/domains/{}", theirs.id))
@@ -234,7 +251,10 @@ async fn the_ask_path_is_configurable_and_off_without_on_demand_tls() {
     let off = World::with(|builder| builder.config("domains.tls", "off")).await;
     let acme = off.workspace(Uuid::now_v7(), "Acme").await;
     let domain = off.verified(acme, "crm.acme-corp.test").await;
-    assert_eq!(serde_json::to_value(domain.tls).unwrap(), Value::from("off"));
+    assert_eq!(
+        serde_json::to_value(domain.tls).unwrap(),
+        Value::from("off")
+    );
     off.app
         .client()
         .get("/_domains/allow?domain=crm.acme-corp.test")

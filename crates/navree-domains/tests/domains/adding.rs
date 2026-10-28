@@ -111,7 +111,10 @@ async fn reserved_taken_and_invalid_domains_are_refused() {
         DomainsError::InvalidDomain(_)
     ));
     let bad_purpose = domains
-        .add(acme, NewDomain::new("crm.acme-corp.test").purpose("Landing Pages"))
+        .add(
+            acme,
+            NewDomain::new("crm.acme-corp.test").purpose("Landing Pages"),
+        )
         .await
         .unwrap_err();
     assert!(matches!(bad_purpose, DomainsError::InvalidDomain(_)));
@@ -142,7 +145,13 @@ async fn removing_a_domain_forgets_it() {
     let workspace = world.workspace(Uuid::now_v7(), "Acme").await;
     let domain = world.verified(workspace, "crm.acme-corp.test").await;
     let domains = world.domains().await;
-    assert!(domains.resolve("crm.acme-corp.test").await.unwrap().is_some());
+    assert!(
+        domains
+            .resolve("crm.acme-corp.test")
+            .await
+            .unwrap()
+            .is_some()
+    );
     let mut events = world.events(&["domains.removed"]).await;
     domains.remove(domain.id).await.unwrap();
     assert_eq!(domains.find("crm.acme-corp.test").await.unwrap(), None);
@@ -156,7 +165,12 @@ async fn removing_a_domain_forgets_it() {
         Err(DomainsError::DomainNotFound)
     ));
     // The host can be added again, by anyone.
-    world.add(world.workspace(Uuid::now_v7(), "Globex").await, "crm.acme-corp.test").await;
+    world
+        .add(
+            world.workspace(Uuid::now_v7(), "Globex").await,
+            "crm.acme-corp.test",
+        )
+        .await;
 }
 
 #[tokio::test]

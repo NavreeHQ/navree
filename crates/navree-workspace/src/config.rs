@@ -927,10 +927,9 @@ mod tests {
 
     #[test]
     fn custom_domains_name_workspaces_only() {
-        let config = load(ConfigSources::new().env_vars(
-            "APP_",
-            [("APP_WORKSPACE__RESOLVERS", "domain,header")],
-        ))
+        let config = load(
+            ConfigSources::new().env_vars("APP_", [("APP_WORKSPACE__RESOLVERS", "domain,header")]),
+        )
         .unwrap();
         assert_eq!(
             config.resolvers,
@@ -945,7 +944,10 @@ mod tests {
             let error = load(ConfigSources::new().set(key, json!(["domain", "header"])))
                 .unwrap_err()
                 .to_string();
-            assert!(error.contains(&format!("{key} can't use `domain`")), "{error}");
+            assert!(
+                error.contains(&format!("{key} can't use `domain`")),
+                "{error}"
+            );
         }
     }
 

@@ -181,7 +181,12 @@ mod tests {
     #[test]
     fn refusals_map_to_the_documented_answers() {
         let cases = [
-            (DomainsError::DomainNotFound, 404, "domain_not_found", "Domain not found"),
+            (
+                DomainsError::DomainNotFound,
+                404,
+                "domain_not_found",
+                "Domain not found",
+            ),
             (
                 DomainsError::InvalidDomain("give the domain without a port".into()),
                 400,
@@ -242,7 +247,9 @@ mod tests {
 
     #[test]
     fn internal_errors_stay_500_without_details() {
-        let body = body(DomainsError::Config("no application key for the private keys".into()));
+        let body = body(DomainsError::Config(
+            "no application key for the private keys".into(),
+        ));
         assert_eq!(body["statusCode"], json!(500));
         assert!(!body.to_string().contains("private"));
         assert!(DomainsError::NotBound.to_app_error().is_none());
