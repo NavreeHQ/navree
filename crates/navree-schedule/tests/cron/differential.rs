@@ -16,20 +16,56 @@ const TABLE: &str = include_str!("../data/croner_next_runs.txt");
 
 /// Expressions whose acceptance differs from croner's on purpose.
 const PARSE_DIFFERENCES: &[(&str, &str)] = &[
-    ("MON * * * *", "croner replaces names in every field; names belong to the month and day-of-week fields"),
-    ("* MON * * *", "croner replaces names in every field; names belong to the month and day-of-week fields"),
-    ("* * MON * *", "croner replaces names in every field; names belong to the month and day-of-week fields"),
+    (
+        "MON * * * *",
+        "croner replaces names in every field; names belong to the month and day-of-week fields",
+    ),
+    (
+        "* MON * * *",
+        "croner replaces names in every field; names belong to the month and day-of-week fields",
+    ),
+    (
+        "* * MON * *",
+        "croner replaces names in every field; names belong to the month and day-of-week fields",
+    ),
     ("* * * MON *", "a weekday name is not a month"),
-    ("JAN * * * *", "croner replaces names in every field; names belong to the month and day-of-week fields"),
-    ("* * JAN * *", "croner replaces names in every field; names belong to the month and day-of-week fields"),
-    ("1,,2 * * * *", "an empty list item is a typo; croner skips it"),
-    ("1, * * * *", "an empty list item is a typo; croner skips it"),
-    (",1 * * * *", "an empty list item is a typo; croner skips it"),
+    (
+        "JAN * * * *",
+        "croner replaces names in every field; names belong to the month and day-of-week fields",
+    ),
+    (
+        "* * JAN * *",
+        "croner replaces names in every field; names belong to the month and day-of-week fields",
+    ),
+    (
+        "1,,2 * * * *",
+        "an empty list item is a typo; croner skips it",
+    ),
+    (
+        "1, * * * *",
+        "an empty list item is a typo; croner skips it",
+    ),
+    (
+        ",1 * * * *",
+        "an empty list item is a typo; croner skips it",
+    ),
     (", * * * *", "a list of nothing never matches in croner"),
-    ("* * * * L", "a lone L in the day of week is accepted by croner and never matches"),
-    ("* * * * 1-5#2", "croner accepts #n on a range, with a meaning nobody documents"),
-    ("* * * * +", "an empty day of week after + is accepted by croner and never matches"),
-    ("0 0 ?/5 * *", "croner turns every ? into *; here ? stands alone"),
+    (
+        "* * * * L",
+        "a lone L in the day of week is accepted by croner and never matches",
+    ),
+    (
+        "* * * * 1-5#2",
+        "croner accepts #n on a range, with a meaning nobody documents",
+    ),
+    (
+        "* * * * +",
+        "an empty day of week after + is accepted by croner and never matches",
+    ),
+    (
+        "0 0 ?/5 * *",
+        "croner turns every ? into *; here ? stands alone",
+    ),
 ];
 
 /// Rows (`zone | start | expression | kinds`) whose runs differ from croner's
@@ -92,7 +128,9 @@ fn parse_verdicts_match_croner() {
         }
         match PARSE_DIFFERENCES.iter().find(|(known, _)| *known == text) {
             Some((_, reason)) => {
-                explained.push(format!("{text:?} (croner accepts: {croner_accepts}): {reason}"));
+                explained.push(format!(
+                    "{text:?} (croner accepts: {croner_accepts}): {reason}"
+                ));
             }
             None => unexplained.push(format!("{text:?}: croner accepts {croner_accepts}")),
         }
@@ -155,7 +193,12 @@ fn kind(cron: &CronExpression, zone: Tz, minute: i64, croner_has_it: bool) -> &'
         LocalResult::Ambiguous(first, _) if first.to_utc() != at
     );
     let after_gap = local(at - TimeDelta::minutes(1)) + TimeDelta::minutes(1) < now;
-    match (croner_has_it, second_pass, after_gap, cron.matches_local(now)) {
+    match (
+        croner_has_it,
+        second_pass,
+        after_gap,
+        cron.matches_local(now),
+    ) {
         (true, true, _, _) => "croner runs a repeated local time a second time",
         (true, false, true, false) => "croner runs a time before the gap again when the gap ends",
         (false, false, true, _) => "croner skips a skipped local time",
@@ -210,10 +253,17 @@ fn next_runs_match_croner() {
             .min(row.runs.last().copied())
             .unwrap_or(i64::MAX);
         let mut kinds = Vec::new();
-        for &m in row.runs.iter().filter(|m| **m <= window && !ours.contains(m)) {
+        for &m in row
+            .runs
+            .iter()
+            .filter(|m| **m <= window && !ours.contains(m))
+        {
             kinds.push(kind(&cron, zone, m, true));
         }
-        for &m in ours.iter().filter(|m| **m <= window && !row.runs.contains(m)) {
+        for &m in ours
+            .iter()
+            .filter(|m| **m <= window && !row.runs.contains(m))
+        {
             kinds.push(kind(&cron, zone, m, false));
         }
         kinds.sort_unstable();
@@ -231,7 +281,10 @@ fn next_runs_match_croner() {
                 utc(row.start)
             ));
         }
-        differing.push(format!("{} | {} | {} | {kinds}", row.zone, row.start, row.expr));
+        differing.push(format!(
+            "{} | {} | {} | {kinds}",
+            row.zone, row.start, row.expr
+        ));
     }
     println!(
         "{} rows compared, {} differ from croner",

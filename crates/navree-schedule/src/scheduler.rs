@@ -178,8 +178,8 @@ impl Scheduler {
                 if let Some(reason) = &def.invalid {
                     return Err(invalid(reason.clone()));
                 }
-                let cron = CronExpression::parse(&def.expr)
-                    .map_err(|error| invalid(error.to_string()))?;
+                let cron =
+                    CronExpression::parse(&def.expr).map_err(|error| invalid(error.to_string()))?;
                 let zone = match &def.zone {
                     ZoneChoice::Utc => TaskZone::Utc,
                     ZoneChoice::Named(name) => {

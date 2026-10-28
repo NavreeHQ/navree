@@ -30,8 +30,11 @@ fn numeric(min: u32, max: u32) -> impl Strategy<Value = String> {
         (1..=max).prop_map(|step| format!("*/{step}")),
         (min..=max).prop_map(|v| v.to_string()),
         (min..=max, min..=max).prop_map(|(a, b)| format!("{}-{}", a.min(b), a.max(b))),
-        (min..=max, min..=max, 1_u32..10)
-            .prop_map(|(a, b, step)| format!("{}-{}/{step}", a.min(b), a.max(b))),
+        (min..=max, min..=max, 1_u32..10).prop_map(|(a, b, step)| format!(
+            "{}-{}/{step}",
+            a.min(b),
+            a.max(b)
+        )),
         prop::collection::vec(min..=max, 1..5).prop_map(|values| {
             values
                 .iter()
