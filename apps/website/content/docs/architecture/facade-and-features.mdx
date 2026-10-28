@@ -109,6 +109,7 @@ Every module crate is re-exported whole, as a module of the facade. `navree::db:
 | `navree::helm` | navree-helm | `helm` | `HelmModule`: [Helm](/docs/tools/helm/), the admin panel generated from your entities |
 | `navree::workflows` | navree-workflows, plus `#[workflow]`, `#[trigger]`, `#[condition]` and `#[action]` | `workflows` | `WorkflowsModule`: [durable workflows](/docs/packages/workflows/) and [end-user automations](/docs/packages/automations/) |
 | `navree::directory` | navree-directory | `directory` | `DirectoryModule`: [directory sync](/docs/packages/directory-sync/), a SCIM 2.0 server and pull connectors for Microsoft Graph, Google Workspace, Okta, LDAP and Active Directory |
+| `navree::domains` | navree-domains | `domains` | `DomainsModule`: [custom domains](/docs/packages/custom-domains/), workspaces on their own domains with DNS verification, automatic TLS and the `domain` workspace resolver |
 
 The facade's root also has:
 
@@ -153,6 +154,7 @@ The facade's root also has:
 | Helm (`helm`) | `HelmModule`, and its builder extension, so `m.resource::<R>()` and `m.helm_page(..)` work |
 | Workflows (`workflows`) | `WorkflowsModule` (and `m.workflow::<W>()`, `m.workflow_event::<E>()`, `m.trigger::<T>()`, `m.condition::<C>()`, `m.action::<A>()` through `ModuleBuilderWorkflowsExt`) |
 | Directory sync (`directory`) | `DirectoryModule` (and `m.directory_sink::<S>()`, `m.directory_source(name, source)` through `ModuleBuilderDirectoryExt`) |
+| Custom domains (`domains`) | `DomainsModule` and the `CurrentDomain` extractor |
 
 It also imports every `ModuleBuilder` extension trait anonymously (`as _`), so methods such as `m.config::<T>()`, `m.controller::<C>()`, `m.migrations(..)`, `m.job::<J>()`, `m.listen::<E, L>()`, `m.templates(..)`, `m.schedule(..)` and, with `graphql`, `m.resolver::<R>()` and `m.dataloader::<L>()`, and with `micro`, `m.message_handlers::<T>()` and `m.forward_event::<E>()`, work without naming the traits.
 
@@ -216,6 +218,7 @@ navree = { git = "https://github.com/NavreeHQ/navree", default-features = false,
 | `helm` | `http`, `view`, `db`, `crypto`, `storage`, `validation`, `audit`, `access`, `auth` |
 | `workflows` | `http`, `db`, `events`, `schedule`, `workspace` |
 | `directory` | `http`, `crypto`, `events`, `db`, `orm`, `queue`, `schedule`, `workspace`, `integrations` |
+| `domains` | `http`, `crypto`, `events`, `db`, `orm`, `schedule`, `workspace` (with `lighthouse` on too, certificates close to expiry are reported to Lighthouse) |
 | `postgres` | `db`, and navree-db's PostgreSQL driver |
 | `mysql` | `db`, and navree-db's MySQL and MariaDB driver |
 | `validation-phone` | `validation`, and navree-validation's `Phone` (E.164 numbers, on the rlibphonenumber crate) |

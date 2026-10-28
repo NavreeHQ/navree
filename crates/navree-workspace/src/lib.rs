@@ -16,8 +16,9 @@
 //!   strings that navree-access evaluates.
 //! - **Resolution.** [`CurrentWorkspace`] (an extractor) and [`InWorkspace`]
 //!   (a route guard) find the request's workspace from a header
-//!   (`X-Workspace`), a subdomain, a path prefix (`/w/acme/...`) or a JWT
-//!   claim, in the configured order, and check that the signed-in user is a
+//!   (`X-Workspace`), a subdomain, a path prefix (`/w/acme/...`), a JWT
+//!   claim or the workspace's own custom domain ([`DomainWorkspace`], set
+//!   by navree-domains), in the configured order, and check that the signed-in user is a
 //!   member: 400 when none is named, 404 for an unknown workspace, 403 for a
 //!   non-member. Behind the guard, route `roles`, `permissions` and `can`
 //!   checks use the member's role in that workspace.
@@ -172,7 +173,7 @@ pub use org_members::{OrgMemberInfo, OrgMembers};
 pub use org_role::{OrgRole, OrgRoleTable, PartitionSelector, Selector, WorkspaceSelector};
 pub use organizations::{NewOrganization, OrgMembership, OrganizationChanges, Organizations};
 pub use partitions::{NewPartition, Partitions};
-pub use resolve::requested_workspace;
+pub use resolve::{DomainWorkspace, requested_workspace};
 pub use role::{ADMIN, MEMBER, OWNER, RoleTable, VIEWER, WorkspaceRole};
 pub use scoped::{OrgRepo, PartitionRepo, PartitionScoped};
 pub use tenant::WorkspaceDatabases;

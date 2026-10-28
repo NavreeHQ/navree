@@ -1,0 +1,484 @@
+---
+title: "Custom domains"
+description: "Workspaces on their own domains: DNS verification, automatic TLS through an on-demand proxy or certificates the app gets itself over ACME, the `domain` workspace resolver, managed DNS zones and certificate expiry reports."
+---
+
+## Introduction
+
+<Badge feature="domains" /> A workspace of your app lives at `acme.app.example.com`, or under `/w/acme`. Many customers want it on a domain of their own: `crm.acme-corp.com` for their team, `go.acme-corp.com` for the links they send, `book.acme-corp.com` for a public booking page. That takes three things: proof that the domain is theirs, a certificate for it, and a way for each request to find its workspace from the host name.
+
+`navree-domains` does all three:
+
+- **Domains per workspace.** `Domains::add` checks the domain, refuses your own domains and ones another workspace has, and answers with the DNS records to create: a TXT record that proves ownership, and a CNAME (A records for an apex domain) that points the domain at your app.
+- **DNS verification.** A scheduled command looks the records up with [hickory-resolver](https://docs.rs/hickory-resolver) until they appear, then marks the domain verified. Verified domains are checked again every day.
+- **Automatic TLS, two ways.** With an on-demand TLS proxy in front of the app (Caddy, which [Harbor](/docs/tools/harbor/#custom-domains) sets up), the app answers the proxy's ask endpoint, `GET /_domains/allow?domain=`, and the proxy gets each certificate on the domain's first visit. Without a proxy, the app gets certificates from an ACME CA such as Let's Encrypt itself ([instant-acme](https://docs.rs/instant-acme) on ring), renews them, and serves them over HTTPS with a rustls certificate resolver.
+- **Requests on a domain.** With `domain` in `workspace.resolvers`, a request to a verified domain names its workspace for `CurrentWorkspace`. Public pages take `CurrentDomain` instead, with no sign-in.
+- **Managed zones.** With a Cloudflare API token, domains under a zone you own (`acme.links.example.com`) get their record from the app and are verified at once.
+- **Expiry reports.** Certificates that come close to expiry are logged, emitted as an event and, with [Lighthouse](/docs/tools/lighthouse/), reported as an issue.
+
+## Installation
+
+Turn on the `domains` feature of the `navree` facade. It is part of the default `full` feature.
+
+```toml title="Cargo.toml"
+[dependencies]
+navree = { git = "https://github.com/NavreeHQ/navree", features = ["domains"] }
+```
+
+Add `DomainsModule` to your app:
+
+```rust title="src/app.rs"
+Navree::app()
+    .module(ConfigModule::for_root(sources))
+    .module(CryptoModule::from_config())          // seals certificate keys (tls = "acme")
+    .module(HttpModule::from_config())
+    .module(DatabaseModule::from_config())
+    .module(EventsModule::for_root())
+    .module(ScheduleModule::for_root())           // runs domains:verify --due
+    .module(AccessModule::for_root(access))       // the routes' permission
+    .module(AuthModule::from_config())
+    .module(WorkspaceModule::from_config())       // domains belong to workspaces
+    .module(DomainsModule::from_config())         // section `domains`
+    // ...
+```
+
+Only `ConfigModule` and `DatabaseModule` are required. `WorkspaceModule` is needed for the routes and the `domain` resolver, `CryptoModule` with an application key for certificates the app gets itself, `ScheduleModule` for the checks to run on their own, and `EventsModule` for the [events](#events).
+
+The module contributes the migration set `domains`, which creates four tables: `custom_domains` (the domains, their status and certificate dates), `custom_domain_certificates` (certificates obtained over ACME, their private keys sealed), `custom_domain_challenges` (open ACME challenge answers) and `custom_domain_acme_accounts` (the ACME account of each directory, sealed). They run on PostgreSQL (with or without TimescaleDB), MySQL, MariaDB and SQLite.
+
+## Configuration
+
+Tell customers where to point their domains: a host name of yours for CNAME records, and the addresses for apex domains, which can't have a CNAME.
+
+```toml title="config/app.toml"
+[domains]
+target = "domains.example.com"             # the CNAME customers create
+addresses = ["203.0.113.10"]               # A records for apex domains
+tls = "on_demand"                          # on_demand | acme | off
+
+[domains.verification]
+prefix = "_example-verification"           # TXT record at <prefix>.<domain>
+```
+
+Name the verification record after your product: a customer of `example.com` sees `_example-verification.crm.acme-corp.com`. Every key also comes from the environment: `APP_DOMAINS__TARGET=domains.example.com`, `APP_DOMAINS__ADDRESSES=203.0.113.10,2001:db8::10`. A target that is not a host name, an address that is not an IP address, an ask path without a leading `/`, or `tls = "acme"` without `domains.acme.terms_agreed = true` fails the boot, naming the key. `DomainsModule::for_root(DomainsOptions { .. })` takes the same options in code. The [reference](#reference) lists every key.
+
+## Adding a domain
+
+Workspace admins add domains from your settings page through the [routes](#routes), or you add them in code:
+
+```rust
+let domains = ctx.get::<Domains>().await?;
+let domain = domains
+    .add(workspace_id, NewDomain::new("crm.acme-corp.com"))
+    .await?;
+for record in &domain.dns_records {
+    println!("{} {} {}", record.kind, record.name, record.value);
+}
+```
+
+```text
+TXT _example-verification.crm.acme-corp.com 3k9w2m1x7q8v0z5r4t6y1u3i8o2p7a9s
+CNAME crm.acme-corp.com domains.example.com
+```
+
+The host is stored in its normal form: lower case, without a trailing dot, an international name as its `xn--` form (`bücher.example` is `xn--bcher-kva.example`). The domain starts `pending`, with a random 32-character verification token. `NewDomain::new(host).purpose("links")` labels what the workspace uses it for (`app` by default), which [`CurrentDomain`](#public-pages) passes on to your handlers.
+
+An apex domain (`acme-corp.com`) gets A and AAAA records of `domains.addresses` instead of the CNAME. With neither `target` nor `addresses` set, only the TXT record is asked for and checked.
+
+`add` refuses:
+
+| Refusal | Code | When |
+|---|---|---|
+| Not a domain | `invalid_domain` (400) | A URL, a port, a path, a wildcard, an IP address, a single label, a purpose that is not 1 to 32 lower-case letters, digits, `-` or `_` |
+| Reserved | `domain_not_allowed` (400) | The host of `app.url`, `workspace.base_domain`, `domains.target`, an entry of `domains.reserved`, or a subdomain of one: a workspace can't claim `admin.app.example.com` |
+| Taken | `domain_taken` (409) | Another workspace (or this one) has the host |
+| Too many | `domain_limit_reached` (409) | The workspace has `domains.max_per_workspace` domains (default 10; 0 for no limit) |
+
+`remove(id)` deletes a domain, its certificate and, in a managed zone, its record. When a workspace is deleted, its domains go with it.
+
+## Verification
+
+The scheduler runs `domains:verify --due` every minute. It checks each domain whose next check is due:
+
+1. **Ownership:** a TXT record at `{domains.verification.prefix}.{host}` holds the domain's token.
+2. **Routing:** the domain points at the app: a CNAME to `domains.target`, or an address that `domains.target` or `domains.addresses` has. Nothing is checked while both are unset; `domains.verification.require_routing = false` verifies on the TXT record alone.
+
+A domain that passes becomes `verified` and [`DomainVerified`](#events) is emitted. One that doesn't stays `pending`, with what is missing in `last_error`, and is checked again `domains.verification.interval_mins` later (default 5):
+
+```text
+TXT record _example-verification.crm.acme-corp.com with the value 3k9w2m1x7q8v0z5r4t6y1u3i8o2p7a9s not found; crm.acme-corp.com does not point at domains.example.com, 203.0.113.10
+```
+
+A domain still pending `domains.verification.give_up_after_hours` after it was added (default 72) becomes `failed`, `DomainVerificationFailed` is emitted, and the scheduler stops checking it. `verify(id)` checks a domain now, whatever its status, which is what a "Check now" button calls (`POST /api/domains/{id}/verify`); a failed domain whose records are in place becomes verified.
+
+A resolver failure (a timeout, `SERVFAIL`) is not a missing record: it is recorded in `last_error`, the domain is checked again at the next interval, and `verify` returns it as a 502 `dns_lookup_failed`.
+
+Verified domains are checked again every `domains.verification.recheck_hours` (default 24; 0 never). A domain that no longer points at the app stays verified, so its workspace keeps working through a DNS change, but `points_to_app` turns `false`, `last_error` says why, and a warning is logged.
+
+`resolve(host)` answers which verified domain a host is, from memory for `domains.cache_secs` (default 60). Adding, verifying and removing a domain clear its cached answer on that server; other servers see the change within `cache_secs`.
+
+## Requests on a custom domain
+
+### The workspace resolver
+
+Put `domain` first in `workspace.resolvers`, so a request to a verified domain names that domain's workspace:
+
+```toml title="config/app.toml"
+[workspace]
+resolvers = ["domain", "header"]
+```
+
+`CurrentWorkspace`, `InWorkspace` and every route behind them then work on `https://crm.acme-corp.com/api/...` with no `X-Workspace` header, and the membership check still applies. Requests to your app's own host fall through to the next resolver. See [resolving the workspace](/docs/workspaces/resolution/#custom-domain).
+
+### Public pages
+
+A landing page or a booking form on a workspace's domain has no signed-in user. Take `CurrentDomain`, which needs none:
+
+```rust
+async fn landing(domain: CurrentDomain) -> Result<Json<serde_json::Value>> {
+    Ok(Json(json!({
+        "workspace": domain.workspace_id,
+        "host": domain.host,
+        "purpose": domain.purpose,
+    })))
+}
+```
+
+It answers 404 `domain_not_found` for any host that is not a verified domain; `Option<CurrentDomain>` gives `None` instead. It carries the domain's `id`, `workspace_id`, `host` and `purpose`.
+
+### Links to the workspace
+
+`make_primary(id)` marks a verified domain as its workspace's primary domain (the previous one stops being primary; an unverified domain is a 409 `domain_not_verified`). `primary_url(workspace)` gives `https://` and that host, for links in mail and pages:
+
+```rust
+let base = domains
+    .primary_url(workspace_id)
+    .await?
+    .unwrap_or_else(|| "https://app.example.com".to_owned());
+```
+
+## Automatic TLS
+
+`domains.tls` says how domains get certificates.
+
+### On-demand TLS (the default)
+
+A proxy in front of the app gets each domain's certificate when the domain is first visited, after asking the app whether the domain is one of yours. The app answers at `domains.ask_path` (default `/_domains/allow`), outside the API prefix, without authentication:
+
+```http
+GET /_domains/allow?domain=crm.acme-corp.com HTTP/1.1
+```
+
+```json title="200 OK"
+{ "domain": "crm.acme-corp.com" }
+```
+
+Any other domain is a 404 `domain_not_found`, so the proxy never gets a certificate for a domain nobody verified. With [Harbor](/docs/tools/harbor/#custom-domains), turn on `[web.custom_domains]` and Caddy is set up for you. For a Caddy of your own, ask through its local address:
+
+```text title="Caddyfile"
+{
+	on_demand_tls {
+		ask http://127.0.0.1:8080/_domains/allow
+	}
+}
+
+https:// {
+	tls {
+		on_demand
+	}
+	reverse_proxy 127.0.0.1:8080
+}
+```
+
+Verified domains show `tls: "active"`. To learn when the proxy's certificates expire, the module reads them over TLS: see [certificate expiry](#certificate-expiry).
+
+### Certificates the app gets itself
+
+Without a proxy, the app gets certificates from an ACME CA (RFC 8555; Let's Encrypt by default) and serves HTTPS itself:
+
+```toml title="config/app.toml"
+[domains]
+tls = "acme"
+
+[domains.acme]
+contact = ["ops@example.com"]
+terms_agreed = true                        # you agree to the CA's terms of service
+https_addr = "0.0.0.0:443"                 # serve HTTPS next to `serve`
+hosts = ["app.example.com"]                # your own hosts get certificates too
+```
+
+- **Issuing.** `domains:verify --due` orders a certificate for each newly verified domain right after its check. The CA validates the domain with an HTTP-01 challenge: the app serves the answer at `/.well-known/acme-challenge/{token}` on `http.addr` (port 80 in production) from the `custom_domain_challenges` table, so whichever of your servers the CA reaches can answer. The key and signing request are made by instant-acme with rcgen, on ring.
+- **Storing.** The certificate chain and its private key go to `custom_domain_certificates`, the key sealed with the application key (`app.key`); a missing key fails the issuance before anything is ordered. The ACME account is created on the first order and stored, sealed, per directory.
+- **Serving.** With `domains.acme.https_addr` set, `serve` also listens for HTTPS there: the same router, every layer and route, behind rustls with the certificate of the server name each client asks for. It loads the certificates from the database at start and every `domains.acme.reload_secs` (default 60), so a renewal made by one server reaches the others. A name with no certificate gets no handshake.
+- **Renewing.** `domains:certificates --due` (hourly) renews each certificate within `domains.acme.renew_days` of expiry (default 30), checking each domain every `domains.certificates.check_hours` (default 24).
+- **Failures.** A refused order sets the domain's `tls` to `failed` with the CA's answer in `tls_error`, and is tried again a day later. `issue_certificate(host)` orders one now (502 `certificate_not_issued` when the CA refuses).
+
+Try the setup against Let's Encrypt's staging directory first (`directory_url = "https://acme-staging-v02.api.letsencrypt.org/directory"`, the constant `LETS_ENCRYPT_STAGING`). A private CA, or a test CA, goes in `directory_url` with its root in `domains.acme.ca_file`.
+
+To serve HTTPS from a server of your own, leave `https_addr` unset and hand it the certificates: `domains.certificates()` is a `DomainCertificates`, a rustls `ResolvesServerCert`, and `server_config()` builds a `rustls::ServerConfig` around it (ring, TLS 1.2 and 1.3, ALPN `h2` and `http/1.1`). `HttpsServer::bind(&ctx, addr)` and `serve()` run the module's listener yourself.
+
+### Off
+
+`tls = "off"`: something else terminates TLS. Domains are still verified and resolve their workspace; no ask endpoint and no challenge route are mounted.
+
+## Certificate expiry
+
+`domains:certificates --due` runs hourly. Besides ACME renewals, with `tls = "on_demand"` it reads each verified domain's certificate over TLS on port 443 (`TlsProbe`: it connects, says the domain's name, and reads the dates of the certificate presented, which is read, not trusted) and records its expiry in `certificate_expires_at`. A domain that can't be read gets `tls: "failed"` and the reason in `tls_error`. Customers control their domains' DNS, so a domain that resolves only to loopback, private, link-local or shared addresses is not connected to: its probe fails with that reason. `domains.certificates.probe = false` turns the probes off.
+
+A certificate that expires within `domains.certificates.warn_days` (default 14) is reported once per check:
+
+- a warning in the log;
+- the event [`DomainCertificateExpiring`](#events), for a mail to the workspace's admins;
+- with the `lighthouse` feature (on when both `domains` and `lighthouse` are) and `LighthouseModule` in the app, a Lighthouse warning, `The certificate for crm.acme-corp.com expires in 9 days`, tagged with the domain and grouped into one issue per domain.
+
+## Managed zones
+
+Domains under a zone you own, such as `acme.links.example.com` for each workspace's tracked links, need no customer DNS work. Give the module a DNS provider and the zone:
+
+```toml title="config/app.toml"
+[domains.dns]
+provider = "cloudflare"
+zone = "links.example.com"
+
+[domains.dns.cloudflare]
+api_token = "..."                          # Zone.DNS:Edit on the zone
+zone_id = "023e105f4ecef8ad9ca31a8372d0c353"
+```
+
+Keep the token in the environment: `APP_DOMAINS__DNS__CLOUDFLARE__API_TOKEN`. A domain added inside the zone gets its CNAME to `domains.target` (or A and AAAA records of `domains.addresses`) through the Cloudflare API and is verified at once, with no TXT record to check (`managed: true`). Removing it deletes the record. The zone itself can't be added, and a provider failure (502 `dns_provider_failed`) adds nothing. `domains.dns.cloudflare.proxied` proxies the records through Cloudflare; `ttl` sets their TTL (1 is automatic).
+
+A provider of your own implements `DnsProvider` (`set(kind, name, values)` and `delete(kind, name)`) and replaces Cloudflare's with `override_value::<dyn DnsProvider>(..)`.
+
+## Routes
+
+With `domains.routes` on (the default), the module mounts a workspace's domain settings under `{http.api_prefix}/domains`. Each route acts on the request's workspace (the `InWorkspace` guard) and requires the permission `domains.manage`, which the workspace `owner` role has through `all.*`; give it to other roles under `workspace.roles`.
+
+| Route | Answer |
+|---|---|
+| `GET /api/domains` | `{data: [CustomDomain]}` |
+| `POST /api/domains` `{host, purpose?}` | 201 `CustomDomain` with its `dns_records` |
+| `GET /api/domains/{id}` | `CustomDomain` |
+| `POST /api/domains/{id}/verify` | `CustomDomain` after a DNS check |
+| `POST /api/domains/{id}/primary` | `CustomDomain`, now the primary domain |
+| `DELETE /api/domains/{id}` | 204 |
+
+```json title="201 Created"
+{
+  "id": "0199a4c2-7c1e-7b6a-9e0d-5f3b2a1c0d9e",
+  "workspace_id": "0199a4c2-1f00-7d2e-8a11-0b9c3e4f5a6b",
+  "host": "crm.acme-corp.com",
+  "purpose": "app",
+  "status": "pending",
+  "primary": false,
+  "managed": false,
+  "points_to_app": null,
+  "tls": "pending",
+  "certificate_expires_at": null,
+  "tls_error": null,
+  "last_error": null,
+  "last_checked_at": null,
+  "next_check_at": "2026-10-28T09:00:00Z",
+  "verified_at": null,
+  "dns_records": [
+    { "type": "TXT", "name": "_example-verification.crm.acme-corp.com", "value": "3k9w2m1x7q8v0z5r4t6y1u3i8o2p7a9s", "purpose": "verification" },
+    { "type": "CNAME", "name": "crm.acme-corp.com", "value": "domains.example.com", "purpose": "routing" }
+  ],
+  "created_by": "0199a4c1-55aa-7c3d-9b8e-1a2b3c4d5e6f",
+  "created_at": "2026-10-28T09:00:00Z",
+  "updated_at": "2026-10-28T09:00:00Z"
+}
+```
+
+`status` is `pending`, `verified` or `failed`; `tls` is `pending`, `active`, `failed` or `off`. Another workspace's domain is a 404 `domain_not_found`.
+
+## Events
+
+Each is emitted after its change commits, when the app has `EventsModule`:
+
+| Event | Name | Payload |
+|---|---|---|
+| `DomainAdded` | `domains.added` | `domain` (a `CustomDomain`) |
+| `DomainVerified` | `domains.verified` | `domain` |
+| `DomainVerificationFailed` | `domains.verification_failed` | `domain`, `reason` |
+| `DomainRemoved` | `domains.removed` | `domain_id`, `workspace_id`, `host` |
+| `DomainCertificateIssued` | `domains.certificate_issued` | `host`, `domain_id`, `expires_at`, `renewal` |
+| `DomainCertificateExpiring` | `domains.certificate_expiring` | `host`, `domain_id`, `expires_at`, `days_left` |
+
+```rust
+#[injectable]
+pub struct DomainLog;
+
+impl Listener<DomainVerified> for DomainLog {
+    fn handle<'a>(
+        &'a self,
+        event: &'a DomainVerified,
+        _ctx: &'a AppContext,
+    ) -> BoxFuture<'a, Result<(), BoxError>> {
+        Box::pin(async move {
+            tracing::info!(
+                host = %event.domain.host,
+                workspace = %event.domain.workspace_id,
+                "the workspace's domain is live"
+            );
+            Ok(())
+        })
+    }
+}
+```
+
+Register it with `m.listen::<DomainVerified, DomainLog>()` in your module.
+
+## Errors
+
+| Code | Status | When |
+|---|---|---|
+| `invalid_domain` | 400 | The input is not a domain, or the ask endpoint got no `?domain=` |
+| `domain_not_allowed` | 400 | The domain is reserved |
+| `domain_not_found` | 404 | No such domain (or another workspace's); a host that is not a verified domain |
+| `domain_taken` | 409 | Another workspace has the domain |
+| `domain_limit_reached` | 409 | The workspace has `domains.max_per_workspace` domains |
+| `domain_not_verified` | 409 | Making an unverified domain primary, or ordering its certificate |
+| `dns_lookup_failed` | 502 | The resolver failed (not a missing record) |
+| `dns_provider_failed` | 502 | The DNS provider refused a change |
+| `certificate_not_issued` | 502 | The ACME CA refused the order |
+
+## Commands
+
+```sh
+navree domains:list                        # every domain: host, status, tls, expiry, workspace
+navree domains:list --status pending --workspace 0199a4c2-1f00-7d2e-8a11-0b9c3e4f5a6b
+navree domains:verify crm.acme-corp.com    # check one domain now (host or id)
+navree domains:verify --due                # what the scheduler runs every minute
+navree domains:certificates --due          # issue, renew or probe; report expiring certificates
+navree domains:certificates crm.acme-corp.com
+```
+
+The scheduler runs `domains:verify --due` every minute and `domains:certificates --due` hourly, without overlapping, when `ScheduleModule` is in the app.
+
+## Testing
+
+Replace the drivers with the module's fakes: `DnsFake` answers lookups from records you set, `AcmeFake` issues certificates from a test root without checking challenges, `ProbeFake` says what each host's certificate is, and `DnsProviderFake` is a zone in memory.
+
+```rust title="tests/domains.rs"
+use std::sync::Arc;
+
+use navree::domains::{
+    AcmeClient, AcmeFake, CertificateProbe, DnsFake, DnsLookup, DomainStatus, Domains,
+    DomainsModule, NewDomain, ProbeFake,
+};
+use navree::prelude::*;
+use navree::testing::TestApp;
+
+#[tokio::test]
+async fn a_customer_brings_their_domain() {
+    let dns = DnsFake::new().with_address("domains.example.com", "203.0.113.10");
+    let app = TestApp::builder()
+        .temp_database()
+        .config("domains.target", "domains.example.com")
+        .config("domains.routes", false)
+        .config("workspace.routes", false)
+        .config("workspace.users_table", "")
+        .module(DatabaseModule::from_config())
+        .module(WorkspaceModule::from_config())
+        .module(DomainsModule::from_config())
+        .override_value::<dyn DnsLookup>(Arc::new(dns.clone()))
+        .override_value::<dyn AcmeClient>(Arc::new(AcmeFake::new()))
+        .override_value::<dyn CertificateProbe>(Arc::new(ProbeFake::new()))
+        .build()
+        .await;
+    let domains = app.get::<Domains>().await;
+    let workspace = uuid::Uuid::now_v7();
+
+    let domain = domains
+        .add(workspace, NewDomain::new("crm.acme-corp.com"))
+        .await
+        .unwrap();
+    assert_eq!(domain.status, DomainStatus::Pending);
+
+    // The customer creates the records.
+    dns.set_txt(&domain.dns_records[0].name, &domain.dns_records[0].value);
+    dns.set_cname("crm.acme-corp.com", "domains.example.com");
+    let domain = domains.verify(domain.id).await.unwrap();
+    assert_eq!(domain.status, DomainStatus::Verified);
+
+    app.client()
+        .get("/_domains/allow?domain=crm.acme-corp.com")
+        .send()
+        .await
+        .assert_status(200);
+}
+```
+
+| Fake | Does |
+|---|---|
+| `DnsFake` | `with_txt`, `with_cname`, `with_address` (builders); `set_txt`, `set_cname`, `set_address`, `remove(name)` after boot; `fail(name, reason)` makes lookups of a name fail; `lookups()` lists them. Addresses follow CNAMEs |
+| `AcmeFake` | Issues certificates signed by its own root (`ca_pem()`, to trust in a TLS client); `expire_at(at)`, `fail_next(reason)`, `keep_challenges()` (leave the answer published, to fetch it from the app), `orders()`, `challenges()` |
+| `ProbeFake` | `expires(host, at)`, `fail(host, reason)`, `probed()` |
+| `DnsProviderFake` | `records(kind, name)`, `all()`, `fail_next(message)` |
+
+Use a `FixedClock` (`override_value::<dyn Clock>(..)`) and `clock.advance(..)` to walk through the schedule: the five-minute retries, giving up after 72 hours, daily rechecks and renewals. `HttpsServer::bind(app.ctx(), "127.0.0.1:0")` serves the app over TLS in a test, with `AcmeFake`'s certificates.
+
+`InstantAcme` itself is tested against Pebble, Let's Encrypt's test CA, when `NAVREE_TEST_PEBBLE_URL` and `NAVREE_TEST_PEBBLE_CA` are set (CI runs it).
+
+## Reference
+
+| Key | Default | Meaning |
+|---|---|---|
+| `domains.routes` | `true` | Mounts the `/api/domains` routes |
+| `domains.tls` | `on_demand` | `on_demand`, `acme` or `off` |
+| `domains.ask_path` | `/_domains/allow` | The ask endpoint (`tls = "on_demand"`) |
+| `domains.target` | none | The host name customers point a CNAME at |
+| `domains.addresses` | `[]` | The addresses apex domains point at (a list, or a comma-separated string) |
+| `domains.reserved` | `[]` | Domains no workspace may add, with their subdomains |
+| `domains.max_per_workspace` | `10` | Domains per workspace (0: no limit) |
+| `domains.cache_secs` | `60` | How long a host lookup is kept in memory (0: never) |
+| `domains.verification.prefix` | `_domain-verification` | The label of the TXT record in front of the domain |
+| `domains.verification.interval_mins` | `5` | Minutes between checks of a pending domain |
+| `domains.verification.give_up_after_hours` | `72` | A domain still pending this long fails |
+| `domains.verification.recheck_hours` | `24` | Hours between routing checks of verified domains (0: never) |
+| `domains.verification.require_routing` | `true` | A domain must point at the app to be verified |
+| `domains.certificates.warn_days` | `14` | Report certificates that expire within this many days |
+| `domains.certificates.check_hours` | `24` | Hours between certificate checks of a domain |
+| `domains.certificates.probe` | `true` | Read on-demand certificates over TLS |
+| `domains.acme.directory_url` | Let's Encrypt | The ACME directory |
+| `domains.acme.contact` | `[]` | The account's contact addresses |
+| `domains.acme.terms_agreed` | `false` | You agree to the CA's terms (required with `tls = "acme"`) |
+| `domains.acme.https_addr` | none | Where `serve` also listens for HTTPS |
+| `domains.acme.renew_days` | `30` | Renew this many days before expiry |
+| `domains.acme.hosts` | `[]` | Your own hosts that get certificates too |
+| `domains.acme.ca_file` | none | A PEM root for the directory's HTTPS (a private or test CA) |
+| `domains.acme.reload_secs` | `60` | Seconds between certificate reloads of the HTTPS listener |
+| `domains.dns.provider` | none | `cloudflare` |
+| `domains.dns.zone` | none | The zone the provider manages |
+| `domains.dns.cloudflare.api_token` | none | An API token with `Zone.DNS:Edit` |
+| `domains.dns.cloudflare.zone_id` | none | The zone's id |
+| `domains.dns.cloudflare.api_url` | `https://api.cloudflare.com/client/v4` | The API |
+| `domains.dns.cloudflare.proxied` | `false` | Proxy the records through Cloudflare |
+| `domains.dns.cloudflare.ttl` | `1` | The records' TTL (1: automatic) |
+
+| Type | What it is |
+|---|---|
+| `Domains` | The service: `add`, `list`, `all`, `get`, `get_for`, `find`, `resolve`, `allows`, `verify`, `verify_due`, `make_primary`, `primary`, `primary_url`, `remove`, `remove_workspace`, `issue_certificate`, `issue_pending`, `check_certificates`, `reload_certificates`, `challenge_answer`, `certificates`, `dns_records` |
+| `DomainsModule` | `for_root`, `from_config` |
+| `CustomDomain`, `DnsInstruction`, `DomainStatus`, `TlsStatus`, `NewDomain`, `CertificateRun` | What the service takes and returns |
+| `CurrentDomain` | The extractor of public pages |
+| `DomainWorkspace` | The request extension the `domain` resolver reads |
+| `DnsLookup`, `SystemDns` | DNS lookups (hickory-resolver) |
+| `AcmeClient`, `InstantAcme`, `AcmeOrder`, `IssuedCertificate` | ACME orders |
+| `DomainCertificates`, `HttpsServer` | Serving certificates |
+| `CertificateProbe`, `TlsProbe`, `ProbedCertificate` | Reading a host's certificate |
+| `DnsProvider`, `CloudflareDns`, `RecordKind` | Managed zones |
+| `models::{Domain, Certificate, Challenge, AcmeAccount}` | The tables as navree-orm models, to read |
+| `normalize_host`, `request_host` | Host names |
+
+<LinkCards>
+  <LinkCard href="/docs/workspaces/resolution/" title="Resolving the workspace">
+    The `domain` resolver next to the header, path, subdomain and claim.
+  </LinkCard>
+  <LinkCard href="/docs/tools/harbor/#custom-domains" title="Harbor">
+    Caddy with on-demand TLS, set up by `harbor:provision`.
+  </LinkCard>
+  <LinkCard href="/docs/tools/lighthouse/" title="Lighthouse">
+    Where certificates close to expiry show up.
+  </LinkCard>
+</LinkCards>
