@@ -268,6 +268,41 @@ async fn counts_stay_exact_when_no_trace_is_sampled() {
 }
 
 #[tokio::test]
+async fn made_up_request_methods_do_not_make_routes_of_their_own() {
+    let app = builder().build().await;
+    let client = app.client();
+    // Any token is a method to HTTP: each made-up one would otherwise be a
+    // route kept in memory for an hour, and a row in the database.
+    for n in 0..40 {
+        let method = http::Method::from_bytes(format!("PROBE{n}").as_bytes()).unwrap();
+        client.request(method, "/api/demo/ok").send().await;
+        let method = http::Method::from_bytes(format!("SCAN{n}").as_bytes()).unwrap();
+        client.request(method, "/nowhere").send().await;
+    }
+    client.get("/api/demo/ok").send().await.assert_status(200);
+    let store = flushed(&app).await;
+    let mut endpoints: Vec<String> = store
+        .routes(Period::Hour)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|route| route.endpoint)
+        .collect();
+    endpoints.sort();
+    assert!(endpoints.len() <= 3, "{endpoints:?}");
+    assert!(
+        endpoints.iter().all(|endpoint| !endpoint.contains("PROBE")
+            && !endpoint.contains("SCAN")),
+        "{endpoints:?}"
+    );
+    assert!(
+        endpoints.contains(&"GET /api/demo/ok".to_owned()),
+        "{endpoints:?}"
+    );
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
 async fn ignored_routes_and_the_dashboard_itself_are_not_recorded() {
     let app = builder()
         .config("lighthouse.ignore.routes", "/api/demo/*")
