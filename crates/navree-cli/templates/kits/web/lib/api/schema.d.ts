@@ -308,6 +308,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["helm.settings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/settings/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["helm.settings.show"];
+        put?: never;
+        post: operations["helm.settings.save"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/settings/{key}/inherit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["helm.settings.inherit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/access/roles": {
         parameters: {
             query?: never;
@@ -997,6 +1045,60 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/notifications/preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The signed-in user's notification preferences, with their workspace's defaults */
+        get: operations["notifications.preferences.show"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Change the signed-in user's notification preferences (a JSON merge patch) */
+        patch: operations["notifications.preferences.update"];
+        trace?: never;
+    };
+    "/api/notifications/preferences/workspace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The notification preferences the request's workspace gives its members */
+        get: operations["notifications.preferences.workspace.show"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Change the notification preferences the request's workspace gives its members */
+        patch: operations["notifications.preferences.workspace.update"];
+        trace?: never;
+    };
+    "/api/notifications/push-subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Save a browser push subscription for the signed-in user */
+        post: operations["notifications.push_subscriptions.store"];
+        /** Delete one of the signed-in user's push subscriptions */
+        delete: operations["notifications.push_subscriptions.destroy"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2497,6 +2599,16 @@ export interface components {
              */
             workspace_id: string;
         };
+        /** @description A browser push subscription, as `PushSubscription.toJSON()` gives it. */
+        NewPushSubscription: {
+            /** Format: uri */
+            endpoint: string;
+            expirationTime?: number | null;
+            keys: {
+                auth: string;
+                p256dh: string;
+            };
+        };
         /** @description A notification stored by the database channel. */
         Notification: {
             /** Format: date-time */
@@ -2523,6 +2635,96 @@ export interface components {
                 per_page: number;
                 /** Format: int64 */
                 total: number;
+            };
+        };
+        /** @description Notification preferences with the workspace's defaults and the effective value of each category. */
+        NotificationPreferences: {
+            categories: {
+                category: string;
+                channels: {
+                    [key: string]: boolean;
+                };
+                /** @enum {string} */
+                digest: "off" | "hourly" | "daily" | "weekly";
+                required: boolean;
+                types: string[];
+            }[];
+            channels: string[];
+            /** @description Notification preferences: every field is optional and inherited when left out. */
+            data: {
+                categories?: {
+                    [key: string]: {
+                        /** @description Channel switches (mail, database, slack, teams, sms, whatsapp, web_push). */
+                        channels?: {
+                            [key: string]: boolean;
+                        };
+                        /** @enum {string} */
+                        digest?: "off" | "hourly" | "daily" | "weekly";
+                    };
+                };
+                /** @description Channel switches (mail, database, slack, teams, sms, whatsapp, web_push). */
+                channels?: {
+                    [key: string]: boolean;
+                };
+                /** @enum {string} */
+                digest?: "off" | "hourly" | "daily" | "weekly";
+                quiet_hours?: {
+                    /** @example 07:00 */
+                    end: string;
+                    /** @example 22:00 */
+                    start: string;
+                };
+            };
+            /** @example Asia/Kolkata */
+            time_zone: string;
+            workspace: {
+                categories?: {
+                    [key: string]: {
+                        /** @description Channel switches (mail, database, slack, teams, sms, whatsapp, web_push). */
+                        channels?: {
+                            [key: string]: boolean;
+                        };
+                        /** @enum {string} */
+                        digest?: "off" | "hourly" | "daily" | "weekly";
+                    };
+                };
+                /** @description Channel switches (mail, database, slack, teams, sms, whatsapp, web_push). */
+                channels?: {
+                    [key: string]: boolean;
+                };
+                /** @enum {string} */
+                digest?: "off" | "hourly" | "daily" | "weekly";
+                quiet_hours?: {
+                    /** @example 07:00 */
+                    end: string;
+                    /** @example 22:00 */
+                    start: string;
+                };
+            } | null;
+        };
+        /** @description A JSON merge patch of the preferences: objects merge, null removes a choice. */
+        NotificationPreferencesPatch: {
+            categories?: {
+                [key: string]: {
+                    /** @description Channel switches (mail, database, slack, teams, sms, whatsapp, web_push). */
+                    channels?: {
+                        [key: string]: boolean;
+                    };
+                    /** @enum {string} */
+                    digest?: "off" | "hourly" | "daily" | "weekly";
+                };
+            };
+            /** @description Channel switches (mail, database, slack, teams, sms, whatsapp, web_push). */
+            channels?: {
+                [key: string]: boolean;
+            };
+            /** @enum {string} */
+            digest?: "off" | "hourly" | "daily" | "weekly";
+            quiet_hours?: {
+                /** @example 07:00 */
+                end: string;
+                /** @example 22:00 */
+                start: string;
             };
         };
         /** @description A member's notification preferences in the current workspace. */
@@ -2717,6 +2919,24 @@ export interface components {
             key: string;
             /** @description The display name (`GitHub`). */
             name: string;
+        };
+        /** @description A saved push subscription. */
+        PushSubscription: {
+            /** Format: date-time */
+            created_at: string;
+            /** Format: uri */
+            endpoint: string;
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            last_used_at: string | null;
+            notifiable_id: string;
+            notifiable_type: string;
+            user_agent: string | null;
+        };
+        PushUnsubscribe: {
+            /** Format: uri */
+            endpoint: string;
         };
         /**
          * @description The recovery codes, shown once (`POST /auth/2fa/confirm`, `POST
@@ -3109,6 +3329,15 @@ export interface components {
             /** @description Always true: the event is stored (or was before). */
             received: boolean;
         };
+        /**
+         * @description What a workspace holds: a team's own data, or a demo seeded from
+         *     fixtures by the app's [`DemoSeeder`](crate::DemoSeeder)s.
+         *
+         *     Stored in `workspaces.kind` as `live` or `demo`; the API returns it as
+         *     `kind`, so a front end can offer a Live/Demo switch.
+         * @enum {string}
+         */
+        WorkspaceKind: "live" | "demo";
         /** @description A workspace as the API returns it, with the caller's role. */
         WorkspaceResource: {
             /**
@@ -3128,6 +3357,11 @@ export interface components {
              * @description The id.
              */
             id: string;
+            /**
+             * @description `live` or `demo` (a demo workspace, for a front end's Live/Demo
+             *     switch).
+             */
+            kind: components["schemas"]["WorkspaceKind"];
             /** @description The display name. */
             name: string;
             /**
@@ -4015,6 +4249,156 @@ export interface operations {
             path: {
                 resource: string;
                 id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+        };
+    };
+    "helm.settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+        };
+    };
+    "helm.settings.show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+        };
+    };
+    "helm.settings.save": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+        };
+    };
+    "helm.settings.inherit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
             };
             cookie?: never;
         };
@@ -6057,6 +6441,266 @@ export interface operations {
             };
             /** @description Unauthorized */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+        };
+    };
+    "notifications.preferences.show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPreferences"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+        };
+    };
+    "notifications.preferences.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationPreferencesPatch"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPreferences"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+        };
+    };
+    "notifications.preferences.workspace.show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPreferences"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+        };
+    };
+    "notifications.preferences.workspace.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationPreferencesPatch"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPreferences"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+        };
+    };
+    "notifications.push_subscriptions.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewPushSubscription"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PushSubscription"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+        };
+    };
+    "notifications.push_subscriptions.destroy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PushUnsubscribe"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
