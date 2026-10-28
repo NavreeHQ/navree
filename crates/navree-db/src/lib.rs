@@ -141,7 +141,7 @@ pub use engine::{
     Kind, Pool, Row, RowStream, Statement, Transaction, TxOptions, Value, ValueError,
 };
 pub use events::{ConnectionEstablished, DatabaseBusy, DatabaseStatus};
-pub use http::map_db_error;
+pub use http::{MappedDbError, map_db_error};
 pub use migrate::{
     FreshOptions, IntoMigration, LoadedDump, MIGRATIONS_TABLE, MigrateOptions, MigrationError,
     MigrationReport, MigrationRun, MigrationSet, MigrationStatus, Migrator, Refreshed,

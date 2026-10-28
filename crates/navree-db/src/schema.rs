@@ -48,6 +48,8 @@ pub(crate) fn schema_value(value: Value) -> SchemaValue {
         Value::DateTime(v) => SchemaValue::Text(v.to_string()),
         Value::Timestamp(v) => SchemaValue::Text(v.to_rfc3339()),
         Value::TimestampTz(v) => SchemaValue::Text(v.to_rfc3339()),
+        Value::Enum { value, .. } => SchemaValue::Text(value),
+        vector @ Value::Vector(_) => SchemaValue::Text(vector.to_json().to_string()),
     }
 }
 

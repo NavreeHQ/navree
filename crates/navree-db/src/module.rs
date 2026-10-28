@@ -182,6 +182,7 @@ fn register(m: &mut ModuleBuilder, options: Option<DbOptions>) {
         )
         .http_layer(uow_layer())
         .map_error::<DbErr>(map_db_error)
+        .map_error::<crate::DbError>(map_db_error)
         .command(CommandSpec::new(
             "migrate",
             "Run every pending migration ([--pretend] [--step] [--seed] [--schema-path <path>])",

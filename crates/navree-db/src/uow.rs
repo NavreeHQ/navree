@@ -1087,7 +1087,18 @@ impl Executor for Uow {
     ) -> BoxFuture<'a, Result<RowStream, DbError>> {
         Box::pin(async move {
             let tx = self.transaction().await?;
-            tx.executor().get().fetch(statement).await
+            match &tx {
+                // SeaORM's own stream, so rows arrive as the database sends
+                // them on either transaction.
+                UowTx::Sea(sea) => {
+                    let statement = SeaExecutor::new(&**sea).statement(statement)?;
+                    Ok(crate::engine::compat::stream_on_transaction(
+                        Arc::clone(sea),
+                        statement,
+                    ))
+                }
+                UowTx::Native(_) => tx.executor().get().fetch(statement).await,
+            }
         })
     }
 

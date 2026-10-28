@@ -50,6 +50,36 @@ fn bind(args: &mut PgArguments, value: &Value) -> Result<(), sqlx::error::BoxDyn
         Value::DateTime(v) => args.add(*v),
         Value::Timestamp(v) => args.add(*v),
         Value::TimestampTz(v) => args.add(*v),
+        // The text; the statement casts it to its type.
+        Value::Enum { value, .. } => args.add(value.as_str()),
+        Value::Vector(v) => args.add(PgVector(Some(v))),
+    }
+}
+
+/// A pgvector `vector` parameter (binary form: dimensions, an unused word,
+/// then big-endian `f32`s); `None` binds a NULL `vector`.
+struct PgVector<'a>(Option<&'a [f32]>);
+
+impl sqlx::Type<Postgres> for PgVector<'_> {
+    fn type_info() -> sqlx::postgres::PgTypeInfo {
+        sqlx::postgres::PgTypeInfo::with_name("vector")
+    }
+}
+
+impl sqlx::Encode<'_, Postgres> for PgVector<'_> {
+    fn encode_by_ref(
+        &self,
+        buf: &mut sqlx::postgres::PgArgumentBuffer,
+    ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
+        let Some(items) = self.0 else {
+            return Ok(sqlx::encode::IsNull::Yes);
+        };
+        buf.extend_from_slice(&u16::try_from(items.len())?.to_be_bytes());
+        buf.extend_from_slice(&0_u16.to_be_bytes());
+        for item in items {
+            buf.extend_from_slice(&item.to_be_bytes());
+        }
+        Ok(sqlx::encode::IsNull::No)
     }
 }
 
@@ -71,6 +101,8 @@ fn bind_null(args: &mut PgArguments, kind: Kind) -> Result<(), sqlx::error::BoxD
         Kind::DateTime => args.add(None::<chrono::NaiveDateTime>),
         Kind::Timestamp => args.add(None::<chrono::DateTime<chrono::Utc>>),
         Kind::TimestampTz => args.add(None::<chrono::DateTime<chrono::FixedOffset>>),
+        Kind::Enum => args.add(None::<String>),
+        Kind::Vector => args.add(PgVector(None)),
     }
 }
 
@@ -151,7 +183,7 @@ fn decode(raw: PgValueRef<'_>, type_name: &str) -> Result<Value, sqlx::error::Bo
 }
 
 /// A pgvector `vector` (binary form: dimensions, an unused word, then
-/// big-endian `f32`s) as a JSON array of numbers.
+/// big-endian `f32`s).
 fn vector(raw: PgValueRef<'_>) -> Result<Value, sqlx::error::BoxDynError> {
     let bytes = raw.as_bytes()?;
     let dims = usize::from(u16::from_be_bytes(
@@ -166,9 +198,9 @@ fn vector(raw: PgValueRef<'_>) -> Result<Value, sqlx::error::BoxDynError> {
                 .ok_or("a vector too short")?
                 .try_into()?,
         );
-        items.push(Value::F32(float).to_json());
+        items.push(float);
     }
-    Ok(Value::Json(serde_json::Value::Array(items)))
+    Ok(Value::Vector(items))
 }
 
 /// The kind of a column of PostgreSQL type `type_name` (for its NULLs).
@@ -190,6 +222,7 @@ fn kind_of(type_name: &str) -> Kind {
         "TIME" => Kind::Time,
         "TIMESTAMP" => Kind::DateTime,
         "TIMESTAMPTZ" => Kind::Timestamp,
+        "vector" | "VECTOR" => Kind::Vector,
         name if name.ends_with("[]") => Kind::Json,
         _ => Kind::String,
     }

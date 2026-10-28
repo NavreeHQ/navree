@@ -993,6 +993,23 @@ impl Db {
         Some(&replicas[at])
     }
 
+    /// The pool the running task reads from outside a transaction, as
+    /// [`reader`](Db::reader) picks it: the writer when the task reads from
+    /// the writer ([`Db::using_writer`]) or, with `sticky`, once its unit of
+    /// work on this pool wrote ([`Uow::has_modified_records`]); else
+    /// [`read_pool`](Db::read_pool).
+    pub fn task_read_pool(&self) -> Option<&Pool> {
+        if self.inner.sticky
+            && self
+                .current_uow()
+                .as_ref()
+                .is_some_and(Uow::has_modified_records)
+        {
+            return self.pool();
+        }
+        self.read_pool()
+    }
+
     /// The writer's pool, or the error of a `Db` without one.
     fn writer_pool(&self) -> Result<&Pool, DbError> {
         self.pool().ok_or_else(|| {
