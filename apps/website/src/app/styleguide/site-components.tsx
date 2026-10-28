@@ -25,7 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 import { BeamDemo } from "./beam-demo";
 
@@ -87,14 +87,16 @@ export function SiteComponents() {
           <Badge variant="mono">navree-workspace</Badge>
           <Badge variant="warning">Warning</Badge>
           <PlannedBadge />
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="outline" size="sm">
-                Hover me
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Tooltips sit on ink-3 with a hairline.</TooltipContent>
-          </Tooltip>
+          <TooltipProvider delayDuration={150}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="outline" size="sm">
+                  Hover me
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Tooltips sit on ink-3 with a hairline.</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
       </Demo>
 

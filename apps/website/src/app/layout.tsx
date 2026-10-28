@@ -1,10 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 
-import { SearchDialog } from "@/components/search/search-dialog";
+import { SearchLauncher } from "@/components/search/search-launcher";
 import { SiteFooter } from "@/components/site/site-footer";
 import { SiteHeader } from "@/components/site/site-header";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import { ogImage } from "@/lib/metadata";
 import { JsonLd, siteGraph } from "@/lib/structured-data";
 import { site } from "@site";
@@ -48,14 +47,12 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <a href="#main" className="skip-link">
           Skip to content
         </a>
-        <TooltipProvider delayDuration={150}>
-          <SiteHeader />
-          <main id="main" className="flex flex-1 flex-col outline-none" tabIndex={-1}>
-            {children}
-          </main>
-          <SiteFooter />
-        </TooltipProvider>
-        <SearchDialog />
+        <SiteHeader />
+        <main id="main" className="flex flex-1 flex-col outline-none" tabIndex={-1}>
+          {children}
+        </main>
+        <SiteFooter />
+        <SearchLauncher />
         <JsonLd data={siteGraph()} />
       </body>
     </html>
