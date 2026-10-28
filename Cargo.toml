@@ -293,6 +293,9 @@ sea-query = { version = "1.0.2", default-features = false, features = [
     "with-uuid",
 ] }
 sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "sqlite-bundled"] }
+# The transaction manager trait navree-db's transactions drive (SQLx does
+# not re-export it).
+sqlx-core = { version = "0.9.0", default-features = false }
 # Navigator's read-only query guard: parses a statement before it is sent.
 sqlparser = { version = "0.63.0", features = ["visitor"] }
 
