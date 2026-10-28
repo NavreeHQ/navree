@@ -177,7 +177,7 @@ function CategorySection({ index, id }: { index: number; id: EcosystemCategory }
   const tools = items.filter((e) => e.slug in blocks);
   const cards = items.filter((e) => !(e.slug in blocks));
   return (
-    <section id={id} aria-labelledby={`${id}-heading`} className="scroll-mt-[calc(var(--header-h)+3.25rem)] border-b border-line">
+    <section id={id} aria-labelledby={`${id}-heading`} className="cv-auto scroll-mt-[calc(var(--header-h)+3.25rem)] border-b border-line">
       <div className="container-site section-y">
         <header className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:items-end lg:gap-12">
           <div className="lg:col-span-7">
@@ -217,7 +217,7 @@ function CategorySection({ index, id }: { index: number; id: EcosystemCategory }
 function Closing() {
   const commands = [site.install.cli, "navree new acme --kit saas"];
   return (
-    <section aria-labelledby="ecosystem-start" className="relative isolate overflow-hidden">
+    <section aria-labelledby="ecosystem-start" className="cv-auto relative isolate overflow-hidden">
       <FlickeringGrid
         className="absolute inset-0 -z-10 [mask-image:radial-gradient(ellipse_60%_70%_at_50%_100%,black,transparent_75%)]"
         squareSize={3}
