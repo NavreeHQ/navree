@@ -818,3 +818,74 @@ async fn a_transport_without_its_feature_names_the_feature() {
         .to_string();
     assert!(error.contains("needs the `micro-nats` feature"), "{error}");
 }
+
+// ---------------------------------------------------------------------------
+// Boot waits for the subscriptions
+
+/// A memory broker whose subscriptions take a while to reach the broker,
+/// like a NATS server reading them off the wire.
+#[derive(Clone)]
+struct SlowToSubscribe {
+    broker: MemoryTransport,
+    confirmed: Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl MicroTransport for SlowToSubscribe {
+    fn name(&self) -> &'static str {
+        "slow"
+    }
+
+    fn request(&self, envelope: Envelope) -> BoxFuture<'_, Result<Envelope, MicroError>> {
+        self.broker.request(envelope)
+    }
+
+    fn publish(&self, envelope: Envelope) -> BoxFuture<'_, Result<(), MicroError>> {
+        self.broker.publish(envelope)
+    }
+
+    fn listen(
+        &self,
+        subscriptions: Vec<Subscription>,
+        deliveries: mpsc::Sender<Delivery>,
+    ) -> BoxFuture<'_, Result<(), MicroError>> {
+        self.broker.listen(subscriptions, deliveries)
+    }
+
+    fn listen_subscribed(
+        &self,
+        subscriptions: Vec<Subscription>,
+        deliveries: mpsc::Sender<Delivery>,
+        subscribed: navree_micro::Subscribed,
+    ) -> BoxFuture<'_, Result<(), MicroError>> {
+        let confirmed = self.confirmed.clone();
+        let listening = self.broker.listen(subscriptions, deliveries);
+        Box::pin(async move {
+            tokio::time::sleep(Duration::from_millis(300)).await;
+            confirmed.store(true, std::sync::atomic::Ordering::SeqCst);
+            subscribed.signal();
+            listening.await
+        })
+    }
+
+    fn listens_at_boot(&self) -> bool {
+        true
+    }
+}
+
+#[tokio::test]
+async fn the_app_boots_once_the_transport_confirms_its_subscriptions() {
+    let confirmed = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let app = TestApp::builder()
+        .module(MicroModule::for_root(Transport::custom(SlowToSubscribe {
+            broker: MemoryTransport::new(),
+            confirmed: confirmed.clone(),
+        })))
+        .module(handlers::<EchoAgain>())
+        .build()
+        .await;
+    assert!(
+        confirmed.load(std::sync::atomic::Ordering::SeqCst),
+        "the app finished booting before the transport confirmed the subscriptions"
+    );
+    app.shutdown().await.unwrap();
+}
