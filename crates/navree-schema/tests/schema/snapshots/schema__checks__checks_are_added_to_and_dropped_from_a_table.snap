@@ -1,0 +1,15 @@
+---
+source: crates/navree-schema/tests/schema/checks.rs
+expression: sql
+---
+-- postgres
+ALTER TABLE "templates" ADD CONSTRAINT "templates_position_check" CHECK (position >= 0);
+ALTER TABLE "templates" DROP CONSTRAINT "templates_owner_check";
+
+-- mysql
+ALTER TABLE `templates` ADD CONSTRAINT `templates_position_check` CHECK (position >= 0);
+ALTER TABLE `templates` DROP CHECK `templates_owner_check`;
+
+-- mariadb
+ALTER TABLE `templates` ADD CONSTRAINT `templates_position_check` CHECK (position >= 0);
+ALTER TABLE `templates` DROP CONSTRAINT `templates_owner_check`;

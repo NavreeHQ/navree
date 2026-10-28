@@ -514,3 +514,14 @@ async fn without_timescaledb_hypertables_are_regular_tables() {
     conn.close().await.unwrap();
     db.drop().await;
 }
+
+#[tokio::test]
+async fn check_constraints_are_enforced() {
+    let Some(db) = ScratchDb::postgres().await else {
+        return;
+    };
+    let conn = db.connect().await;
+    crate::support::checks_are_enforced(&conn).await;
+    conn.close().await.unwrap();
+    db.drop().await;
+}

@@ -136,6 +136,15 @@ fn compile_command(
         Command::Comment(comment) => {
             out.push(format!("COMMENT ON TABLE {t} IS {}", string(D, comment)))
         }
+        Command::Check(check) => out.push(format!(
+            "ALTER TABLE {t} ADD CONSTRAINT {} CHECK ({})",
+            ident(D, &check.name),
+            check.expression.trim()
+        )),
+        Command::DropCheck(check) => out.push(format!(
+            "ALTER TABLE {t} DROP CONSTRAINT {}",
+            ident(D, check)
+        )),
     }
     Ok(())
 }
