@@ -971,9 +971,10 @@ A policy implements `SignInPolicy` and is registered with `m.sign_in_policy::<P>
 
 ```rust title="src/modules/security/policy.rs"
 use navree::auth::{AuthError, SignInAttempt, SignInMethod, SignInPolicy};
-use navree::kernel::BoxFuture;
+use navree::prelude::*;
 
 /// Contractors sign in with a passkey only.
+#[injectable]
 pub struct PasskeysForContractors;
 
 impl SignInPolicy for PasskeysForContractors {
@@ -993,7 +994,7 @@ impl SignInPolicy for PasskeysForContractors {
 }
 ```
 
-[Single sign-on](/docs/security/single-sign-on/#enforcement) registers the policy that sends the verified domains of an enforcing connection through that connection only (`sso_required`).
+Register it in a module with `m.sign_in_policy::<PasskeysForContractors>()`. [Single sign-on](/docs/security/single-sign-on/#enforcement) registers the policy that sends the verified domains of an enforcing connection through that connection only (`sso_required`).
 
 Your own sign-in flows end with `AuthService::sign_in(&user, method, &meta)`, which asks the policies and then starts the session, or call `check_sign_in(&attempt, &meta)` first and `issue_tokens` after. `check_password_sign_in(email)` asks about `Password` without an audit entry. `issue_tokens` alone asks nothing: keep it for tests and seeders. A two-factor challenge from `two_factor_challenge(&user, &method)` remembers the method, and `POST /api/auth/2fa/verify` asks the policies about it again, so a domain that came to enforce single sign-on between the two steps is refused.
 
