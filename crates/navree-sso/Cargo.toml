@@ -47,7 +47,11 @@ uuid = { workspace = true }
 [dev-dependencies]
 navree-access = { workspace = true }
 navree-api = { workspace = true }
+# The enforcement tests read magic links and sign-in codes from the array
+# mail transport (MailModule needs ViewModule).
+navree-mail = { workspace = true }
 navree-testing = { workspace = true }
+navree-view = { workspace = true }
 # The tests check real SHA-1 signatures (refused by the verifier) to prove
 # the canonical form matches other signers'.
 ring = { workspace = true }
@@ -55,4 +59,6 @@ ring = { workspace = true }
 # digests (which the verifier itself refuses).
 sha1 = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
+# Codes for the two-factor sign-ins of the enforcement tests.
+totp-rs = { workspace = true }
 wiremock = { workspace = true }

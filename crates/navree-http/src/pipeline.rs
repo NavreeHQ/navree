@@ -39,7 +39,7 @@ use uuid::Uuid;
 use crate::codes;
 use crate::error::{ErrorFormat, PendingError};
 use crate::extract::ProxyTrust;
-use crate::limiter::RateLimiter;
+use crate::limiter::KeyedRateLimiter;
 use crate::maintenance::MaintenanceMode;
 use crate::{AppError, Authenticator, ClientIp, ErrorMapper, RouteMeta};
 
@@ -641,7 +641,7 @@ where
 
 /// The per-IP limit and where its refusals are audited.
 pub(crate) struct PerIpLimit {
-    pub(crate) limiter: RateLimiter<IpAddr>,
+    pub(crate) limiter: KeyedRateLimiter<IpAddr>,
     pub(crate) audit: Option<Arc<dyn AuditSink>>,
 }
 

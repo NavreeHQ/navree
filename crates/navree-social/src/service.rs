@@ -5,7 +5,9 @@ use std::future::Future;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
-use navree_auth::{ClientMeta, LoginOutcome, TokenType, User, two_factor_enabled, user};
+use navree_auth::{
+    ClientMeta, LoginOutcome, SignInAttempt, SignInMethod, User, two_factor_enabled, user,
+};
 use navree_contracts::{AuditEntry, AuditKind, Secret};
 use navree_db::{Repo, Uow};
 use navree_kernel::{AppContext, BoxError, BoxFuture, Lifecycle};
@@ -234,6 +236,11 @@ impl Social {
     /// and linking does not apply, [`SocialError::RegistrationClosed`] (403)
     /// when nobody matches and registration is off,
     /// [`SocialError::NotAllowed`] (403) outside `allowed_email_domains`.
+    /// The navree-auth sign-in policies are asked
+    /// ([`SignInMethod::Social`]) about the provider's address before any
+    /// account is created or linked, and about the account before the
+    /// session starts: an address whose domain enforces single sign-on is
+    /// refused (403 `sso_required`).
     /// Audited as `auth.login` (or `auth.two_factor_challenge`), with
     /// `metadata.provider`; a new user also as `auth.register`.
     pub async fn sign_in(
@@ -244,6 +251,12 @@ impl Social {
         let rt = self.rt()?;
         let entry = rt.provider(&social_user.provider)?;
         check_email_domains(rt, entry, social_user)?;
+        let method = SignInMethod::social(entry.key.clone());
+        if let Some(email) = &social_user.email {
+            rt.auth
+                .check_sign_in(&SignInAttempt::new(email, method.clone()), meta)
+                .await?;
+        }
         let request_id = meta.request_id.clone();
         let user = self
             .write(rt, request_id, |uow| async move {
@@ -252,11 +265,10 @@ impl Social {
             .await?;
         let metadata = json!({ "provider": entry.key });
         if two_factor_enabled(&user) && rt.options.two_factor == TwoFactorPolicy::Require {
-            let ttl = Duration::from_secs(rt.auth_options.two_factor.challenge_ttl_secs);
-            let challenge_token =
-                rt.auth
-                    .jwt()
-                    .sign(user.id, TokenType::TwoFactorChallenge, ttl)?;
+            rt.auth
+                .check_sign_in(&SignInAttempt::of(&user, method.clone()), meta)
+                .await?;
+            let challenge_token = rt.auth.two_factor_challenge(&user, &method)?;
             rt.audit(
                 entry_for(AuditKind::Auth, "auth.two_factor_challenge", meta)
                     .actor(user.id)
@@ -268,7 +280,7 @@ impl Social {
                 challenge_token,
             });
         }
-        let tokens = rt.auth.issue_tokens(&user, meta.clone()).await?;
+        let tokens = rt.auth.sign_in(&user, method, meta).await?;
         rt.audit(
             entry_for(AuditKind::Auth, "auth.login", meta)
                 .actor(user.id)

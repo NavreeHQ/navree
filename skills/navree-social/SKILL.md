@@ -97,6 +97,13 @@ its own `code` in the error body (`invalid_state`, `provider_refused`,
 translate the code, never the message. `two_factor = "require"` (default) gives
 2FA users the login challenge; `"skip"` trusts the provider.
 
+Sign-in policies: `Social::sign_in` asks navree-auth's `SignInPolicy`s
+(`SignInMethod::Social { provider }`) on the provider's email before
+resolving (nothing is created or linked when refused) and on the account
+before the session or challenge (`AuthService::sign_in`,
+`two_factor_challenge`). A domain enforcing single sign-on answers 403
+`sso_required`.
+
 ## Your own routes: the Social service
 
 ```rust

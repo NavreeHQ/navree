@@ -119,12 +119,107 @@ async fn a_new_primary_domain_replaces_the_old_one() {
 }
 
 #[tokio::test]
+async fn a_squatter_typing_a_domain_first_does_not_block_its_owner() {
+    let world = World::new().await;
+    let squatter_user = Uuid::now_v7();
+    let owner_user = Uuid::now_v7();
+    let squatter = world.workspace(squatter_user, "Squatter").await.to_string();
+    let owner = world.workspace(owner_user, "Acme").await.to_string();
+    let host = json!({ "host": "crm.acme-corp.test" });
+    let squat = world
+        .as_user(squatter_user)
+        .post("/api/domains")
+        .header("x-workspace", squatter.as_str())
+        .json(&host)
+        .send()
+        .await
+        .assert_status(201)
+        .json_value();
+    // Not refused: the owner's claim has a token of its own.
+    let claim = world
+        .as_user(owner_user)
+        .post("/api/domains")
+        .header("x-workspace", owner.as_str())
+        .json(&host)
+        .send()
+        .await
+        .assert_status(201)
+        .json_value();
+    assert_ne!(
+        squat["dns_records"][0]["value"],
+        claim["dns_records"][0]["value"]
+    );
+
+    // The owner publishes their records and checks: they win.
+    let domain = world
+        .domains()
+        .await
+        .get(claim["id"].as_str().unwrap().parse().unwrap())
+        .await
+        .unwrap();
+    world.publish(&domain);
+    let id = claim["id"].as_str().unwrap();
+    world
+        .as_user(owner_user)
+        .post(&format!("/api/domains/{id}/verify"))
+        .header("x-workspace", owner.as_str())
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("status", json!("verified"));
+
+    // The squatter's claim is closed and says why; checking it again
+    // changes nothing.
+    let squat_id = squat["id"].as_str().unwrap();
+    let closed = world
+        .as_user(squatter_user)
+        .get(&format!("/api/domains/{squat_id}"))
+        .header("x-workspace", squatter.as_str())
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("status", json!("failed"))
+        .json_value();
+    assert!(
+        closed["last_error"]
+            .as_str()
+            .unwrap()
+            .contains("another workspace")
+    );
+    world
+        .as_user(squatter_user)
+        .post(&format!("/api/domains/{squat_id}/verify"))
+        .header("x-workspace", squatter.as_str())
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("status", json!("failed"));
+    // And now the host is taken for everyone else, with the usual code.
+    world
+        .as_user(squatter_user)
+        .delete(&format!("/api/domains/{squat_id}"))
+        .header("x-workspace", squatter.as_str())
+        .send()
+        .await
+        .assert_status(204);
+    world
+        .as_user(squatter_user)
+        .post("/api/domains")
+        .header("x-workspace", squatter.as_str())
+        .json(&host)
+        .send()
+        .await
+        .assert_error_code(409, "domain_taken");
+}
+
+#[tokio::test]
 async fn refusals_carry_their_codes() {
     let world = World::with(|builder| builder.config("domains.max_per_workspace", 1)).await;
     let owner = Uuid::now_v7();
     let acme = world.workspace(owner, "Acme").await;
     let globex = world.workspace(Uuid::now_v7(), "Globex").await;
-    let theirs = world.add(globex, "globex.test").await;
+    // Verified: another workspace's pending claim would not refuse it.
+    let theirs = world.verified(globex, "globex.test").await;
     let client = world.as_user(owner);
     let ws = acme.to_string();
     let add = |host: &str| {
@@ -165,7 +260,7 @@ async fn refusals_carry_their_codes() {
         .assert_error_code(404, "domain_not_found");
     assert_eq!(
         world.domains().await.get(theirs.id).await.unwrap().status,
-        DomainStatus::Pending
+        DomainStatus::Verified
     );
 }
 

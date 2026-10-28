@@ -13,7 +13,7 @@ use navree_kernel::{Factory, Module, ModuleBuilder, ModuleId, ProviderKey, Resol
 use crate::controller::SsoController;
 use crate::error::map_sso_error;
 use crate::migration::migrations;
-use crate::policy::SsoPasswordPolicy;
+use crate::policy::SsoSignInPolicy;
 use crate::{DohResolver, Sso, SsoError, SsoOptions, TxtResolver};
 
 /// Single sign-on. Global; provides and exports [`Sso`], [`SsoOptions`]
@@ -27,8 +27,9 @@ use crate::{DohResolver, Sso, SsoError, SsoOptions, TxtResolver};
 ///   `connections` and `domains` (permission `sso.manage`);
 /// - the `sso` migration set (`sso_connections`, `sso_domains`,
 ///   `sso_identities`, after `auth`);
-/// - a navree-auth `PasswordSignInPolicy` that keeps the emails of
-///   enforcing connections' verified domains off passwords;
+/// - a navree-auth `SignInPolicy` that lets the emails of enforcing
+///   connections' verified domains sign in through that connection only
+///   (every other method answers 403 `sso_required`);
 /// - the mapping of [`SsoError`]s returned from handlers to error
 ///   responses.
 ///
@@ -150,7 +151,7 @@ fn register(m: &mut ModuleBuilder, options: Option<SsoOptions>) {
             ]),
         )
         .exports::<Sso>()
-        .password_sign_in_policy::<SsoPasswordPolicy>()
+        .sign_in_policy::<SsoSignInPolicy>()
         .controller::<SsoController>()
         .migrations(migrations())
         .map_error::<SsoError>(map_sso_error);

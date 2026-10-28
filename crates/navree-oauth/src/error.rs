@@ -2,9 +2,10 @@
 //! on the protocol endpoints and in Navree's error shape elsewhere.
 
 use std::collections::BTreeMap;
+use std::time::Duration;
 
 use axum::response::{IntoResponse, Response};
-use http::header::{CACHE_CONTROL, CONTENT_TYPE, PRAGMA, WWW_AUTHENTICATE};
+use http::header::{CACHE_CONTROL, CONTENT_TYPE, PRAGMA, RETRY_AFTER, WWW_AUTHENTICATE};
 use http::{HeaderValue, StatusCode};
 use navree_http::AppError;
 use navree_kernel::BoxError;
@@ -38,6 +39,7 @@ use serde_json::json;
 /// | `Expired` | | 410 |
 /// | `Forbidden` | | 403 |
 /// | `Unavailable` | `temporarily_unavailable` | 503 |
+/// | `TooManyRequests` | `too_many_requests` | 429, with `Retry-After` |
 /// | `Db`, `Other` | `server_error` | 500 (404/409 for database errors navree-db maps) |
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
@@ -98,6 +100,12 @@ pub enum OAuthError {
     /// The server is missing configuration for this flow.
     #[error("{0}")]
     Unavailable(String),
+    /// A rate limit of the endpoint (`oauth.rate_limits`) was reached.
+    #[error("too many requests; retry in {} seconds", retry_after_secs(*retry_after))]
+    TooManyRequests {
+        /// When the client may send again.
+        retry_after: Duration,
+    },
     /// A database error.
     #[error("oauth database error: {0}")]
     Db(#[from] DbErr),
@@ -133,6 +141,7 @@ impl OAuthError {
             OAuthError::NotFound(_) | OAuthError::Expired(_) => "invalid_request",
             OAuthError::Forbidden(_) => "access_denied",
             OAuthError::Unavailable(_) => "temporarily_unavailable",
+            OAuthError::TooManyRequests { .. } => "too_many_requests",
             OAuthError::Db(_) | OAuthError::Other(_) => "server_error",
         }
     }
@@ -157,6 +166,10 @@ impl OAuthError {
             }
             OAuthError::SlowDown => "Poll less often".to_owned(),
             OAuthError::ExpiredToken => "The device code has expired".to_owned(),
+            OAuthError::TooManyRequests { retry_after } => format!(
+                "Too many requests; retry in {} seconds",
+                retry_after_secs(*retry_after)
+            ),
             OAuthError::NotFound(message) | OAuthError::Expired(message) => (*message).to_owned(),
             OAuthError::Db(_) | OAuthError::Other(_) => "Internal server error".to_owned(),
         }
@@ -169,6 +182,7 @@ impl OAuthError {
             OAuthError::NotFound(_) => StatusCode::NOT_FOUND,
             OAuthError::Forbidden(_) => StatusCode::FORBIDDEN,
             OAuthError::Unavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
+            OAuthError::TooManyRequests { .. } => StatusCode::TOO_MANY_REQUESTS,
             OAuthError::Db(_) | OAuthError::Other(_) => StatusCode::INTERNAL_SERVER_ERROR,
             _ => StatusCode::BAD_REQUEST,
         }
@@ -188,6 +202,12 @@ impl OAuthError {
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
         headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
         headers.insert(PRAGMA, HeaderValue::from_static("no-cache"));
+        if let OAuthError::TooManyRequests { retry_after } = self {
+            headers.insert(
+                RETRY_AFTER,
+                HeaderValue::from(retry_after_secs(*retry_after)),
+            );
+        }
         if basic_auth && matches!(self, OAuthError::InvalidClient(_)) {
             headers.insert(
                 WWW_AUTHENTICATE,
@@ -226,10 +246,22 @@ pub(crate) fn map_oauth_error(error: &OAuthError) -> Option<AppError> {
             AppError::unauthenticated().with_detail(message.clone())
         }
         OAuthError::Unavailable(message) => AppError::service_unavailable(message.clone()),
+        OAuthError::TooManyRequests { retry_after } => AppError::too_many_requests(*retry_after),
         OAuthError::Db(db) => return navree_db::map_db_error(db),
         OAuthError::Other(_) => return None,
         other => AppError::bad_request(other.description()),
     })
+}
+
+/// Whole seconds until `retry_after`, at least one (`Retry-After`).
+fn retry_after_secs(retry_after: Duration) -> u64 {
+    let secs = retry_after.as_secs();
+    let rounded = if retry_after.subsec_nanos() > 0 {
+        secs.saturating_add(1)
+    } else {
+        secs
+    };
+    rounded.max(1)
 }
 
 /// The server's ORM operations fail as database errors
@@ -277,6 +309,16 @@ mod tests {
         let response = OAuthError::Other("boom".into()).protocol_response(false);
         assert_eq!(response.status(), 500);
         assert_eq!(body(response).await["error"], "server_error");
+        let response = OAuthError::TooManyRequests {
+            retry_after: Duration::from_millis(1500),
+        }
+        .protocol_response(false);
+        assert_eq!(response.status(), 429);
+        assert_eq!(response.headers()[RETRY_AFTER], "2");
+        assert_eq!(
+            body(response).await,
+            json!({"error": "too_many_requests", "error_description": "Too many requests; retry in 2 seconds"})
+        );
     }
 
     #[test]
@@ -295,6 +337,12 @@ mod tests {
             (OAuthError::Forbidden("no".into()), 403),
             (OAuthError::InvalidClient("no".into()), 401),
             (OAuthError::Unavailable("not configured".into()), 503),
+            (
+                OAuthError::TooManyRequests {
+                    retry_after: Duration::ZERO,
+                },
+                429,
+            ),
             (OAuthError::Db(DbErr::RecordNotFound("x".into())), 404),
             (OAuthError::Other("boom".into()), 500),
         ];

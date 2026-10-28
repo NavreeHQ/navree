@@ -66,7 +66,7 @@ permissions = ["contacts.read", "companies.read"]
 
 `openid`, `profile`, `email` and `offline_access` are built in, grant no permissions and can't be redefined. A scope's `permissions` use the same strings as [roles and permissions](/docs/security/authorization/): `deals.read`, `deals.*`, or `*` for everything the user may do.
 
-Every key comes from the environment with the `APP_` prefix: `APP_OAUTH__CONSENT_URL`, `APP_OAUTH__ACCESS_TOKEN_TTL_SECS=1800`. `OAuthServerModule::for_root(OAuthOptions { .. })` takes the options in code, with `.scope(name, ScopeOptions::new(description, permissions))` to add scopes. A scope without a description, a permission string that doesn't parse, a `consent_url` that isn't absolute or a signing key that doesn't parse fails the boot. Without `oauth.issuer` and `app.url`, the issuer is `http://localhost` and the boot logs a warning.
+Every key comes from the environment with the `APP_` prefix: `APP_OAUTH__CONSENT_URL`, `APP_OAUTH__ACCESS_TOKEN_TTL_SECS=1800`, `APP_OAUTH__RATE_LIMITS__TOKEN__PER_IP=300` (see [Rate limits](#rate-limits)). `OAuthServerModule::for_root(OAuthOptions { .. })` takes the options in code, with `.scope(name, ScopeOptions::new(description, permissions))` to add scopes. A scope without a description, a permission string that doesn't parse, a `consent_url` that isn't absolute or a signing key that doesn't parse fails the boot. Without `oauth.issuer` and `app.url`, the issuer is `http://localhost` and the boot logs a warning.
 
 ### Signing keys
 
@@ -358,6 +358,41 @@ Content-Type: application/json
 
 The answer is 201 with `client_id` (and `client_secret` with `client_secret_expires_at: 0` unless `token_endpoint_auth_method` is `none`), `client_name`, `redirect_uris`, `grant_types`, `token_endpoint_auth_method` and `scope`. A registered client may ask for the scopes it names in `scope` (every scope when absent), uses the authorization code grant and may add the device grant; it is never trusted, never introspects and never uses client credentials. Invalid metadata answers 400 `invalid_client_metadata` or `invalid_redirect_uri`. Registration is off by default; turn it on only when you want any app to be able to ask your users for access.
 
+## Rate limits
+
+The endpoints that take client credentials are rate-limited per client and per client IP address, with Navree's [rate limiter](/docs/basics/rate-limiting/) (one-minute windows, counted on each instance):
+
+| Endpoint | Per client | Per IP |
+|---|---|---|
+| `POST /oauth/token` | 300 | 120 |
+| `POST /oauth/introspect` | 1200 | 600 |
+| `POST /oauth/revoke` | 300 | 60 |
+| `POST /oauth/device_authorization` | 60 | 30 |
+
+- The per-IP count comes first, before the body is read, so failed client authentications count against the address that sends them.
+- The per-client count starts once the client has authenticated: requests that name a client with a wrong secret can't use up its budget.
+- Each endpoint has its own budget, as has each client and each address.
+- Change a limit under `oauth.rate_limits.<endpoint>`; `0` turns it off:
+
+```toml title="config/app.toml"
+[oauth.rate_limits]
+token = { per_client = 600, per_ip = 300 }
+introspect = { per_client = 0, per_ip = 0 }   # only our own resource servers call it
+```
+
+From the environment: `APP_OAUTH__RATE_LIMITS__TOKEN__PER_IP=300`. Behind a reverse proxy, list it in `http.trusted_proxies`, or every client shares the proxy's address. A request over a limit gets 429 with `Retry-After` (seconds) in the OAuth format:
+
+```http wrap
+HTTP/1.1 429 Too Many Requests
+Retry-After: 12
+Content-Type: application/json
+Cache-Control: no-store
+
+{"error": "too_many_requests", "error_description": "Too many requests; retry in 12 seconds"}
+```
+
+The first refusal of each window is audited as `oauth.rate_limited` (kind `security`) with `metadata.endpoint`, `metadata.limit` (`per_client` or `per_ip`) and `metadata.client_id`, and every refusal is logged under `navree::security`. These limits come on top of navree-http's per-IP limit for every route (`http.per_ip_rate_limit`).
+
 ## Errors
 
 The protocol endpoints (`/oauth/token`, `/oauth/revoke`, `/oauth/introspect`, `/oauth/device_authorization` and `/oauth/register`) answer errors in the OAuth format, because OAuth client libraries read it:
@@ -366,7 +401,7 @@ The protocol endpoints (`/oauth/token`, `/oauth/revoke`, `/oauth/introspect`, `/
 { "error": "invalid_grant", "error_description": "The authorization code has expired" }
 ```
 
-Client authentication failures are 401 `invalid_client` (with `WWW-Authenticate: Basic` when the client used HTTP Basic), a missing flow page is 503 `temporarily_unavailable`, and everything else is a 400. `GET /oauth/authorize` reports errors to the client by redirecting to its `redirect_uri` with `error`, `error_description`, `state` and `iss` when the client and redirect URI are valid. Every `/api/oauth/*` route uses Navree's own error shape, `{ "statusCode", "message", "error", "code" }`, and `OAuthError` returned from your own handlers renders in it too.
+Client authentication failures are 401 `invalid_client` (with `WWW-Authenticate: Basic` when the client used HTTP Basic), a missing flow page is 503 `temporarily_unavailable`, a [rate limit](#rate-limits) is 429 `too_many_requests`, and everything else is a 400. `GET /oauth/authorize` reports errors to the client by redirecting to its `redirect_uri` with `error`, `error_description`, `state` and `iss` when the client and redirect URI are valid. Every `/api/oauth/*` route uses Navree's own error shape, `{ "statusCode", "message", "error", "code" }`, and `OAuthError` returned from your own handlers renders in it too.
 
 ## Audit entries
 
@@ -377,6 +412,7 @@ Client authentication failures are 401 `invalid_client` (with `WWW-Authenticate:
 | `oauth.revoked` | A user revoked a client's access |
 | `oauth.refresh_reuse_detected` | A used refresh token came back; its family was revoked |
 | `oauth.pat_created`, `oauth.pat_revoked` | A personal access token was created or revoked |
+| `oauth.rate_limited` | The first request over a [rate limit](#rate-limits) in a window; `metadata.endpoint`, `metadata.limit`, `metadata.client_id` |
 
 The entries go to the `dyn AuditSink` ([`AuditModule`](/docs/security/audit-log/)) when the app has one. Requests made with OAuth tokens are audited like any other request, under the token's user.
 
@@ -444,6 +480,10 @@ To test the whole authorization code flow, `navree::oauth::testing` has `pkce_pa
 | `oauth.personal_access_tokens.enabled` | `true` | Mounts the personal access token routes |
 | `oauth.personal_access_tokens.max_days` | `365` | Longest lifetime; `0` = no limit |
 | `oauth.dynamic_registration` | `false` | Mounts `POST {oauth.path}/register` (RFC 7591) |
+| `oauth.rate_limits.token` | `{ per_client = 300, per_ip = 120 }` | Requests a minute to `/oauth/token`; `0` = off |
+| `oauth.rate_limits.introspect` | `{ per_client = 1200, per_ip = 600 }` | Requests a minute to `/oauth/introspect` |
+| `oauth.rate_limits.revoke` | `{ per_client = 300, per_ip = 60 }` | Requests a minute to `/oauth/revoke` |
+| `oauth.rate_limits.device_authorization` | `{ per_client = 60, per_ip = 30 }` | Requests a minute to `/oauth/device_authorization` |
 
 | Command | What it does |
 |---|---|

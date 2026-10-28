@@ -25,7 +25,7 @@ Compose v2 and bash.
 | `docker/Dockerfile` | The evidence app's image: cargo-chef dependency layer, release build, Debian slim runtime, non-root, tini, health check |
 | `docker/evidence.env` | The app's settings inside the compose network |
 | `load/lib/` | The k6 library: `config.js` (environment), `auth.js` (sign-in, the workspace header, a session pool), `http.js` (tagged requests), `profiles.js` (smoke, load, spike and thresholds), `summary.js` (the files a run reads) |
-| `load/scenarios/` | One file per package: `auth.js`, `tasks.js` (ORM and workspaces), `reports.js` (queue), `search.js`, `realtime.js`, and `baseline.js`, which mixes them |
+| `load/scenarios/` | One file per package: `auth.js`, `tasks.js` (ORM and workspaces), `reports.js` (queue), `search.js`, `realtime.js`, `lighthouse.js` (Lighthouse's counts against k6's), and `baseline.js`, which mixes them |
 | `load/checks/http.js` | Runs the rows of `checks/http.json` |
 | `checks/http.json` | HTTP smoke rows: method, path, expected status, per package |
 | `browser/` | Playwright screenshots of every UI tool in `browser/tools.json` at 1440 and 390 pixels wide |
@@ -64,7 +64,10 @@ supervising `fleet:work` children, visible at `/_fleet`) and
    `/health/ready`.
 5. **checks**: the HTTP rows (`checks/http.json`).
 6. **k6: \<scenario\>**: each scenario under the profile (`--scenarios`,
-   default `checks,baseline`), with `docker stats` sampled every 2 s.
+   default `checks,baseline`), with `docker stats` sampled every 2 s. After
+   the `lighthouse` scenario, **lighthouse: request count matches k6**
+   compares the requests Lighthouse recorded during the run with the
+   requests k6 sent (within 1 %).
 7. **browser: screenshots**: every tool at both widths.
 8. **app: \<process\> survived**: no restart, no OOM kill.
 
@@ -215,6 +218,26 @@ averaged 4 cores and peaked at 961 MB; PostgreSQL averaged 2.6 cores.
 The spike profile on the same build (`--load-profile spike`: 10 VUs, a
 jump to 200 for 30 s, back to 10) served 116,719 requests with no error,
 p95 97.2 ms and p99 110.1 ms, and every process survived.
+
+## Lighthouse's counts under load
+
+`e2e/run.sh --scenarios checks,lighthouse --load-profile load --vus 200 --duration 2m`
+sends a mix of cheap requests (signed-in reads, task writes, 401s, 404s on a
+route and on no route) with no think time, then compares the requests
+Lighthouse recorded during the run (`GET /_lighthouse/api/overview`, read
+before and after until it stops moving) with the requests k6 sent. The
+check fails above a 1 % difference. On the host above:
+
+| Run | Settings | k6 requests | Lighthouse | Missing | Sampled out | RPS | p95 |
+|---|---|---|---|---|---|---|---|
+| `lighthouse-ingest-default` | defaults (`buffer` 10000, `sample.requests` 0.1), 200 VUs | 454,520 | 454,520 | 0 | 0 | 2,697 | 121.6 ms |
+| `lighthouse-ingest-stress` | `E2E_LIGHTHOUSE_BUFFER=100 E2E_LIGHTHOUSE_SAMPLE_REQUESTS=1.0`, 300 VUs | 418,375 | 418,375 | 0 | 2,609 | 2,480 | 205.2 ms |
+
+The stress run keeps every trace through a 100-entry queue, so the writer
+falls behind and drops traces, each one counted as sampled out on the
+dashboard, while every request is still counted. `E2E_LIGHTHOUSE_BUFFER` and
+`E2E_LIGHTHOUSE_SAMPLE_REQUESTS` set the app's `lighthouse.buffer` and
+`lighthouse.sample.requests`.
 
 ## Known limits
 

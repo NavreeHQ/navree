@@ -16,5 +16,6 @@ mod openapi;
 mod orm;
 mod pats;
 mod registration;
+mod throttle;
 mod tokens;
 mod workspace;

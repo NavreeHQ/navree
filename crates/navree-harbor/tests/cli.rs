@@ -116,9 +116,8 @@ fn step_of(cmd: &Cmd) -> String {
 /// The known-hosts file an `ssh` command uses.
 fn known_hosts(cmd: &Cmd) -> Option<PathBuf> {
     cmd.args.iter().find_map(|a| {
-        a.strip_prefix("UserKnownHostsFile=\"")
-            .and_then(|p| p.strip_suffix('"'))
-            .map(PathBuf::from)
+        a.strip_prefix("UserKnownHostsFile=")
+            .map(|p| PathBuf::from(p.trim_matches('"')))
     })
 }
 

@@ -470,6 +470,54 @@ pub fn created_message(app: &NewApp, root: &Path) -> String {
     out
 }
 
+/// What [`init_repository`] found or did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Repository {
+    /// `git init` made the app a repository of its own.
+    Created,
+    /// The app is already inside a repository (its own or an enclosing
+    /// one).
+    Inside,
+    /// Git is not available (or could not initialize the directory).
+    NoGit,
+}
+
+/// Makes the app at `root` a Git repository unless it is inside one
+/// already, or Git is missing. Tools that read `.gitignore` need a
+/// repository to do it: Tailwind CSS 4 scans every file below the app,
+/// `node_modules` included, when there is none. Nothing is committed.
+pub fn init_repository(root: &Path) -> Repository {
+    use std::process::{Command, Stdio};
+    let git = |args: &[&str]| {
+        Command::new("git")
+            .arg("-C")
+            .arg(root)
+            .args(args)
+            .stdin(Stdio::null())
+            .stderr(Stdio::null())
+            .output()
+    };
+    match git(&["rev-parse", "--is-inside-work-tree"]) {
+        Err(_) => Repository::NoGit,
+        Ok(out) if out.status.success() && out.stdout.starts_with(b"true") => Repository::Inside,
+        Ok(_) => match git(&["init", "-q"]) {
+            Ok(out) if out.status.success() => Repository::Created,
+            _ => Repository::NoGit,
+        },
+    }
+}
+
+/// Writes the Harbor secrets key of an app that ships a `harbor.toml` (the
+/// starter kits), so `navree harbor:secrets` works right away, and keeps it
+/// out of Git. An app without `harbor.toml` is left alone.
+pub fn write_harbor_key(root: &Path) -> anyhow::Result<()> {
+    if root.join("harbor.toml").is_file() {
+        navree_harbor::init::ensure_key(root, &navree_harbor::Environment::production())
+            .context("cannot write harbor.key")?;
+    }
+    Ok(())
+}
+
 /// Creates the app in `parent/<name>` and returns its directory. The
 /// directory must not exist or be empty.
 pub fn create_app(parent: &Path, app: &NewApp, now: Timestamp) -> anyhow::Result<PathBuf> {

@@ -26,20 +26,30 @@ pub enum SyncMode {
 }
 
 /// Options of the `postgres` engine (`search.postgres`).
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct PostgresOptions {
     /// The text search configuration (default `english`).
     pub language: String,
     /// Typo tolerance with `pg_trgm` (default false).
     pub trigram: bool,
+    /// The `pg_trgm.word_similarity_threshold` of a query with `trigram`:
+    /// how close a query word must be to a word of the text to match, above
+    /// 0 and at most 1 (default 0.4). PostgreSQL's own default of 0.6 misses
+    /// a one-letter typo in a longer word ("lovlace" scores 0.55 against
+    /// "Lovelace"), so the engine sets this value per query.
+    pub typo_threshold: f64,
 }
+
+/// The default `search.postgres.typo_threshold`.
+pub const DEFAULT_TYPO_THRESHOLD: f64 = 0.4;
 
 impl Default for PostgresOptions {
     fn default() -> Self {
         Self {
             language: "english".to_owned(),
             trigram: false,
+            typo_threshold: DEFAULT_TYPO_THRESHOLD,
         }
     }
 }
@@ -403,6 +413,11 @@ impl SearchOptions {
                             .to_owned(),
                     );
                 }
+                if !(options.typo_threshold > 0.0 && options.typo_threshold <= 1.0) {
+                    return Err(
+                        "`search.postgres.typo_threshold` must be above 0 and at most 1".to_owned(),
+                    );
+                }
             }
             Engine::Memory | Engine::Custom(_) => {}
         }
@@ -608,6 +623,20 @@ mod tests {
             panic!()
         };
         assert_eq!((pg.language.as_str(), pg.trigram), ("english", false));
+        assert_eq!(pg.typo_threshold, 0.4);
+    }
+
+    #[test]
+    fn the_typo_threshold_is_configurable_and_checked() {
+        let options = parse(json!({"postgres": {"trigram": true, "typo_threshold": 0.3}})).unwrap();
+        let Engine::Postgres(pg) = &options.engine else {
+            panic!()
+        };
+        assert_eq!(pg.typo_threshold, 0.3);
+        for bad in [0.0, -0.1, 1.5] {
+            let err = parse(json!({"postgres": {"typo_threshold": bad}})).unwrap_err();
+            assert!(err.contains("typo_threshold"), "{err}");
+        }
     }
 
     #[test]

@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use chrono::{DateTime, TimeDelta, Utc};
-use navree_auth::{AuthService, ClientMeta, User, user};
+use navree_auth::{AuthService, ClientMeta, SignInAttempt, SignInMethod, User, user};
 use navree_cache::Cache;
 use navree_config::Config;
 use navree_contracts::{AuditEntry, AuditKind, AuditSink, Clock, SystemClock};
@@ -950,11 +950,13 @@ impl Sso {
         })
     }
 
-    /// The connection that keeps `email` off passwords, if any.
+    /// The connection (its id and name) that `email` must sign in
+    /// through, if any: the enabled, enforcing connection of a verified
+    /// domain.
     pub(crate) async fn enforcing_connection(
         &self,
         email: &str,
-    ) -> Result<Option<String>, SsoError> {
+    ) -> Result<Option<(Uuid, String)>, SsoError> {
         let Some((_, domain)) = email.rsplit_once('@') else {
             return Ok(None);
         };
@@ -962,7 +964,7 @@ impl Sso {
             .connection_for_domain(domain)
             .await?
             .filter(|loaded| self.enforced(loaded))
-            .map(|loaded| loaded.model.name))
+            .map(|loaded| (loaded.model.id, loaded.model.name)))
     }
 
     // -- sign-in -------------------------------------------------------------
@@ -1345,10 +1347,21 @@ impl Sso {
         if profile.subject.trim().is_empty() {
             return Err(SamlError::Invalid("the identity has no subject".to_owned()).into());
         }
+        let method = SignInMethod::sso(loaded.model.id);
+        // The identity provider's address first, so no account of a domain
+        // that signs in elsewhere is created or linked through this one.
+        if let Some(email) = &profile.email {
+            self.auth
+                .check_sign_in(&SignInAttempt::new(email, method.clone()), meta)
+                .await?;
+        }
         let (user, created) = self
             .own(meta.request_id.clone(), |uow| async move {
                 self.provision(&uow, loaded, &profile, meta).await
             })
+            .await?;
+        self.auth
+            .check_sign_in(&SignInAttempt::of(&user, method), meta)
             .await?;
         self.audit(
             entry_for(AuditKind::Auth, "sso.login", meta)
@@ -1654,7 +1667,10 @@ impl Sso {
             .find_user(pending.user_id)
             .await?
             .ok_or(SsoError::InvalidCode)?;
-        let tokens = self.auth.issue_tokens(&user, meta.clone()).await?;
+        let tokens = self
+            .auth
+            .sign_in(&user, SignInMethod::sso(pending.connection_id), meta)
+            .await?;
         Ok((user, tokens, pending.return_to))
     }
 
@@ -1682,7 +1698,14 @@ impl Sso {
         sign_in: &SsoSignIn,
         meta: &ClientMeta,
     ) -> Result<Value, SsoError> {
-        let tokens = self.auth.issue_tokens(&sign_in.user, meta.clone()).await?;
+        let tokens = self
+            .auth
+            .sign_in(
+                &sign_in.user,
+                SignInMethod::sso(sign_in.connection_id),
+                meta,
+            )
+            .await?;
         self.login_body(&sign_in.user, &tokens, sign_in.return_to.clone())
             .await
     }

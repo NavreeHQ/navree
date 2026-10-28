@@ -2,8 +2,8 @@
 
 #![allow(dead_code)]
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, OnceLock};
 
 use axum::Router;
 use axum::body::{Body, Bytes};
@@ -122,6 +122,30 @@ impl Authenticator for HeaderAuthenticator {
     }
 }
 
+/// Captures this thread's log events for the rest of the test.
+pub fn capture_logs<S>(subscriber: S) -> tracing::subscriber::DefaultGuard
+where
+    S: tracing::Subscriber + Send + Sync + 'static,
+{
+    share_log_interest();
+    tracing::subscriber::set_default(subscriber)
+}
+
+/// Makes tracing ask every live subscriber whether a log statement is wanted.
+///
+/// tracing caches that answer per statement. While only one subscriber is
+/// registered, the answer comes from whichever thread reaches the statement
+/// first, so a test running without a subscriber could switch a statement off
+/// for a test that captures it. Two idle subscribers that live for the whole
+/// run keep more than one registered.
+pub fn share_log_interest() {
+    static IDLE: OnceLock<[tracing::Dispatch; 2]> = OnceLock::new();
+    IDLE.get_or_init(|| {
+        let idle = || tracing::Dispatch::new(tracing::subscriber::NoSubscriber::default());
+        [idle(), idle()]
+    });
+}
+
 /// Builds a test app: `HttpModule::for_root(options)`, a [`TestModule`] with
 /// the routes, optional extra registrations and extra root modules.
 pub struct Setup {
@@ -135,6 +159,7 @@ pub struct Setup {
 
 impl Setup {
     pub fn new(routes: Vec<RouteDef>) -> Self {
+        share_log_interest();
         Self {
             options: options(),
             list: RouteList {

@@ -43,8 +43,8 @@ use crate::{Domains, DomainsError};
 ///   ([`DomainsPublicController`](crate::DomainsPublicController));
 /// - a request layer that marks requests to a verified domain for the
 ///   `domain` workspace resolver (with `domain` in `workspace.resolvers`);
-/// - the commands `domains:list`, `domains:verify` and
-///   `domains:certificates`; `domains:verify --due` every minute and
+/// - the commands `domains:list`, `domains:verify`, `domains:transfer`
+///   and `domains:certificates`; `domains:verify --due` every minute and
 ///   `domains:certificates --due` hourly;
 /// - with `tls = "acme"` and `domains.acme.https_addr`, an HTTPS listener
 ///   next to `serve` ([`HttpsServer`](crate::HttpsServer));

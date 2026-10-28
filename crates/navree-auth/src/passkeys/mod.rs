@@ -18,7 +18,9 @@
 //!   does not grow is refused as a possibly cloned authenticator). A
 //!   passkey with user verification is two factors: the session starts
 //!   directly; without it, a user with two-factor authentication gets the
-//!   usual challenge.
+//!   usual challenge. The [`SignInPolicy`](crate::SignInPolicy)s are
+//!   asked first ([`SignInMethod::Passkey`]): an account whose domain
+//!   enforces single sign-on gets 403 `sso_required`.
 //! - `GET /auth/passkeys` lists the user's passkeys and `DELETE
 //!   /auth/passkeys/{id}` removes one.
 //! - [`VirtualAuthenticator`](crate::testing::VirtualAuthenticator) plays
@@ -46,7 +48,10 @@ use self::webauthn::{
 };
 use crate::service::entry;
 use crate::two_factor::two_factor_enabled;
-use crate::{AuthError, AuthService, ClientMeta, LoginOutcome, Passkey, USER_SUBJECT, User};
+use crate::{
+    AuthError, AuthService, ClientMeta, LoginOutcome, Passkey, SignInAttempt, SignInMethod,
+    USER_SUBJECT, User,
+};
 
 /// Random characters in a ceremony challenge (about 285 bits).
 const CHALLENGE_LEN: usize = 48;
@@ -389,8 +394,10 @@ impl AuthService {
     ) -> Result<LoginOutcome, AuthError> {
         match self.check_assertion(credential).await {
             Ok((user, verified)) => {
+                self.check_sign_in(&SignInAttempt::of(&user, SignInMethod::Passkey), meta)
+                    .await?;
                 if two_factor_enabled(&user) && !verified {
-                    let challenge_token = self.sign_challenge(&user)?;
+                    let challenge_token = self.sign_challenge(&user, &SignInMethod::Passkey)?;
                     self.audit(
                         entry(AuditKind::Auth, "auth.two_factor_challenge", meta)
                             .actor(user.id)

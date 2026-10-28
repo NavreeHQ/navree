@@ -17,6 +17,7 @@ function flag(value: string | undefined): boolean | undefined {
  * | `NAVREE_COOKIE_SECURE` | `0`/`1`: the `Secure` flag (default: on in production) |
  * | `APP_ORIGINS` | Extra origins allowed to send non-GET requests, comma-separated |
  * | `NAVREE_TRUSTED_PROXY_HOPS` | Reverse proxies in front of the app that append the client to `X-Forwarded-For` |
+ * | `NAVREE_CLIENT_IP_HEADER` | A header the proxy in front of the app sets to the bare client address (e.g. `x-real-ip`) |
  * | `NAVREE_WORKSPACE_HEADER` | The API's `workspace.header` (default `X-Workspace`) |
  */
 export function bffOptionsFromEnv(env: Env = process.env, defaults: Partial<BffOptions> = {}): BffOptions {
@@ -32,6 +33,7 @@ export function bffOptionsFromEnv(env: Env = process.env, defaults: Partial<BffO
     .map((origin) => origin.trim())
     .filter(Boolean);
   if (origins.length > 0) options.allowedOrigins = origins;
+  if (env.NAVREE_CLIENT_IP_HEADER) options.clientIpHeader = env.NAVREE_CLIENT_IP_HEADER;
   if (env.NAVREE_WORKSPACE_HEADER) options.workspaceHeader = env.NAVREE_WORKSPACE_HEADER;
   return options;
 }

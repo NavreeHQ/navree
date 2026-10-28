@@ -95,14 +95,16 @@ pub struct ResolverParts {
     pub fields: Vec<FieldSpec>,
 }
 
-/// The GraphQL type name of a resolver's part: unique per resolver type
-/// (the part never shows in the schema; its fields move to the root).
+/// The GraphQL type name of a resolver's part: unique per resolver type.
+/// The part never shows in the schema (its fields move to the root and the
+/// roots take the part out of the registry), and the name is a valid
+/// GraphQL name (the `__` prefix is reserved for introspection).
 pub fn part_type_name<R: ?Sized>(kind: &str) -> Cow<'static, str> {
     let rust: String = std::any::type_name::<R>()
         .chars()
         .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
         .collect();
-    Cow::Owned(format!("__Navree_{rust}_{kind}"))
+    Cow::Owned(format!("NavreePart_{rust}_{kind}"))
 }
 
 /// The text of an argument, for `can(.., from = "x")`.
@@ -331,9 +333,10 @@ mod tests {
     #[test]
     fn part_names_are_valid_graphql_names() {
         let name = part_type_name::<Vec<u8>>("Query");
-        assert!(name.starts_with("__Navree_"), "{name}");
+        assert!(name.starts_with("NavreePart_"), "{name}");
         assert!(name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'));
         assert!(name.ends_with("_Query"));
+        assert!(!name.starts_with("__"), "{name}");
     }
 
     #[test]

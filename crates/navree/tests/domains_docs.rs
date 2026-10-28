@@ -52,6 +52,27 @@ pub async fn add_a_domain(ctx: AppContext, workspace_id: uuid::Uuid) -> Result<(
 }
 
 // ---------------------------------------------------------------------------
+// "Who owns a domain": moving a verified domain.
+
+pub async fn transfer_a_domain(
+    domains: &Domains,
+    new_workspace_id: uuid::Uuid,
+) -> Result<(), BoxError> {
+    let claim = domains
+        .transfer("crm.acme-corp.com", new_workspace_id)
+        .await?;
+    if claim.is_verified() {
+        println!("{} now belongs to {}", claim.host, claim.workspace_id);
+    } else {
+        // Publish these; the scheduler moves the domain when it finds them.
+        for record in &claim.dns_records {
+            println!("{} {} {}", record.kind, record.name, record.value);
+        }
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // "Public pages".
 
 async fn landing(domain: CurrentDomain) -> Result<Json<serde_json::Value>> {
@@ -160,6 +181,81 @@ async fn a_customer_brings_their_domain() {
         .send()
         .await
         .assert_status(200);
+}
+
+/// The page's second test: adding someone else's domain first does not
+/// block the owner. Then `transfer` moves the verified domain.
+#[tokio::test]
+async fn a_squatter_does_not_block_the_owner() {
+    let dns = DnsFake::new().with_address("domains.example.com", "203.0.113.10");
+    let app = TestApp::builder()
+        .temp_database()
+        .config("domains.target", "domains.example.com")
+        .config("domains.routes", false)
+        .config("workspace.routes", false)
+        .config("workspace.users_table", "")
+        .module(DatabaseModule::from_config())
+        .module(WorkspaceModule::from_config())
+        .module(DomainsModule::from_config())
+        .override_value::<dyn DnsLookup>(Arc::new(dns.clone()))
+        .override_value::<dyn AcmeClient>(Arc::new(AcmeFake::new()))
+        .override_value::<dyn CertificateProbe>(Arc::new(ProbeFake::new()))
+        .build()
+        .await;
+    let domains = app.get::<Domains>().await;
+    let squatter = uuid::Uuid::now_v7();
+    let owner = uuid::Uuid::now_v7();
+
+    let squat = domains
+        .add(squatter, NewDomain::new("crm.acme-corp.com"))
+        .await
+        .unwrap();
+    let claim = domains
+        .add(owner, NewDomain::new("crm.acme-corp.com")) // not refused
+        .await
+        .unwrap();
+
+    // Only the owner controls the DNS, so only their token is published.
+    dns.set_txt(&claim.dns_records[0].name, &claim.dns_records[0].value);
+    dns.set_cname("crm.acme-corp.com", "domains.example.com");
+    let claim = domains.verify(claim.id).await.unwrap();
+    assert_eq!(claim.status, DomainStatus::Verified);
+    assert_eq!(
+        domains.get(squat.id).await.unwrap().status,
+        DomainStatus::Failed
+    );
+
+    // The page's transfer example: the new workspace is asked for its own
+    // records, and the domain moves once they exist.
+    let acquirer = uuid::Uuid::now_v7();
+    transfer_a_domain(&domains, acquirer).await.unwrap();
+    assert_eq!(
+        domains
+            .resolve("crm.acme-corp.com")
+            .await
+            .unwrap()
+            .unwrap()
+            .workspace_id,
+        owner
+    );
+    let pending = domains
+        .claims("crm.acme-corp.com")
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|domain| domain.workspace_id == acquirer)
+        .unwrap();
+    dns.set_txt(&pending.dns_records[0].name, &pending.dns_records[0].value);
+    transfer_a_domain(&domains, acquirer).await.unwrap();
+    assert_eq!(
+        domains
+            .resolve("crm.acme-corp.com")
+            .await
+            .unwrap()
+            .unwrap()
+            .workspace_id,
+        acquirer
+    );
 }
 
 // ---------------------------------------------------------------------------

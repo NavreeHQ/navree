@@ -66,6 +66,7 @@ pub const MIN_SECRET_LEN: usize = 32;
 /// login_throttle_per_minute = 3
 /// access_ttl_secs = 900
 /// session_ttl_secs = 28800        # platform sessions end after 8 hours
+/// break_glass = true              # sign-in policies can't lock administrators out (audited)
 ///
 /// [auth.trusted_issuers.legacy]   # POST /auth/exchange
 /// issuer = "https://legacy.example.com"
@@ -537,6 +538,14 @@ pub struct PlatformOptions {
     /// How long a platform session lasts, in seconds (refreshing does not
     /// extend it).
     pub session_ttl_secs: u64,
+    /// Break-glass: whether a platform administrator (password, role and
+    /// second factor checked) still signs in to the platform console when
+    /// a [`SignInPolicy`](crate::SignInPolicy) refuses them (single sign-on
+    /// enforced for their domain, with the identity provider down, say).
+    /// Every such sign-in is audited as `auth.break_glass` and logged under
+    /// `navree::security`. `false` makes platform sign-ins obey the
+    /// policies like any other. App sign-ins never break glass.
+    pub break_glass: bool,
 }
 
 impl Default for PlatformOptions {
@@ -547,6 +556,7 @@ impl Default for PlatformOptions {
             login_throttle_per_minute: 3,
             access_ttl_secs: 900,
             session_ttl_secs: 28_800,
+            break_glass: true,
         }
     }
 }

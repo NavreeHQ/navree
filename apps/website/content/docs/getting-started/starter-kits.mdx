@@ -64,7 +64,7 @@ Next steps:
 </Step>
 </Steps>
 
-`navree new` takes the same options with every kit: `--navree-path <path>` depends on a local Navree checkout, and `--database postgres` runs plain PostgreSQL instead of TimescaleDB (`timescaledb = false` in `dock.toml`; the kits run on PostgreSQL, so `mysql` and `sqlite` are for the minimal app). A kit brings its own front end or none: `--kit saas --ui next` is the same as `--kit saas`, and `--ui next` with `api` or `micro` is an error. The name may use lower-case letters, digits, `-` and `_`, and the target directory must be empty or missing. When `rustfmt` is installed, the generated Rust is formatted with it.
+`navree new` takes the same options with every kit: `--navree-path <path>` depends on a local Navree checkout, and `--database postgres` runs plain PostgreSQL instead of TimescaleDB (`timescaledb = false` in `dock.toml`; the kits run on PostgreSQL, so `mysql` and `sqlite` are for the minimal app). A kit brings its own front end or none: `--kit saas --ui next` is the same as `--kit saas`, and `--ui next` with `api` or `micro` is an error. The name may use lower-case letters, digits, `-` and `_`, and the target directory must be empty or missing. When `rustfmt` is installed, the generated Rust is formatted with it. When `git` is installed and the directory is not inside a repository, `navree new` runs `git init` in it (nothing is committed), because tools read `.gitignore` through a repository. Every kit also gets a `harbor.key` next to its `harbor.toml`, ignored by git, so `navree harbor:secrets set APP_KEY --generate` works right away. The saas kit's stylesheet lists the web app's source folders for Tailwind CSS (`@import "tailwindcss" source(none)` and an `@source` line per folder), so it never scans `node_modules`, with or without a repository.
 
 ## The SaaS kit
 
@@ -226,6 +226,9 @@ Everything the kit needs is in `config/app.toml` and `.env`. The settings you wi
 | `billing.plans.*` | `starter`, `pro` | Your plans, their trials and the provider's price ids |
 | `social.providers.*` | none | Social sign-in providers; each one adds a button |
 | `mail.transport` | Mailpit over SMTP, from `.env` | Your mail provider in production |
+| `http.trusted_proxies` | `["127.0.0.1", "::1"]` (SaaS kit) | The one peer whose `X-Forwarded-For` the API believes: the web app's BFF, which calls from loopback. When the web app runs on another host or in a container, set `APP_HTTP__TRUSTED_PROXIES` in `.env` to its address |
+
+Each browser has its own rate limit and sign-in throttle because the web app's BFF names the browser to the API in `X-Forwarded-For`. It does that when `web/.env` says which proxy to believe: `NAVREE_TRUSTED_PROXY_HOPS` (the number of reverse proxies in front of the web app) or `NAVREE_CLIENT_IP_HEADER` (a header the proxy sets to the bare client address). `navree deploy` sets the hop count to 1 for its Caddy. Locally there is no proxy, so every browser is `127.0.0.1`.
 
 Secrets go in `.env`, never in the TOML file: `APP_KEY`, `APP_BILLING__STRIPE__SECRET_KEY`, `APP_BILLING__STRIPE__WEBHOOK_SECRET` and each social provider's client secret (`APP_SOCIAL__PROVIDERS__GITHUB__CLIENT_SECRET`).
 
