@@ -388,9 +388,8 @@ impl AuthService {
                 // domain that enforces single sign-on, or take an address
                 // of one.
                 for address in [user.email.as_str(), email.as_str()] {
-                    let attempt =
-                        crate::SignInAttempt::new(address, crate::SignInMethod::Password)
-                            .user(user.id);
+                    let attempt = crate::SignInAttempt::new(address, crate::SignInMethod::Password)
+                        .user(user.id);
                     self.check_sign_in(&attempt, meta).await?;
                 }
                 old.insert("email".to_owned(), json!(user.email));
