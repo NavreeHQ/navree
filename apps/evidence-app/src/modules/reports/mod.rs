@@ -199,7 +199,6 @@ impl ReportsController {
 /// Reports: the model, the job and the routes.
 #[module(
     imports = [AccessModule::for_feature::<Report>()],
-    providers = [ReportEvents],
     controllers = [ReportsController],
     register = Self::wire,
 )]

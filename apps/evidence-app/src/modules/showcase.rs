@@ -165,7 +165,6 @@ pub struct TaskExport;
 /// The showcase surfaces.
 #[module(
     imports = [FlagsModule::for_feature::<BoardView>(), FlagsModule::for_feature::<TaskExport>()],
-    providers = [EvidenceResolver, EvidenceMcp],
     register = Self::wire,
 )]
 pub struct ShowcaseModule;

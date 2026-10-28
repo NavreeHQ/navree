@@ -22,7 +22,8 @@ export const delivered = new Rate('realtime_delivered');
 export function publishStep(session) {
   const res = post(session, '/v1/live/publish', 'POST /api/v1/live/publish', {
     event: 'load.ping',
-    data: { vu: __VU, iter: __ITER, at: Date.now() },
+    // __ITER does not exist in setup().
+    data: { vu: __VU, iter: typeof __ITER === 'undefined' ? -1 : __ITER, at: Date.now() },
   });
   check(res, { 'publish: 200': (r) => r.status === 200 });
   return json(res, 'channel');

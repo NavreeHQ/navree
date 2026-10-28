@@ -12,6 +12,9 @@
 #
 # Exit status: 0 when every check passed, 1 otherwise.
 set -uo pipefail
+# Git Bash on Windows rewrites arguments that look like paths (/scripts/..)
+# into Windows paths; container paths must stay as they are.
+export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL="*"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPOSE_FILE="$ROOT/e2e/docker/compose.yml"
@@ -183,7 +186,7 @@ docker image inspect "$IMAGE" --format '{{.Size}}' > "$OUT/image-size.txt" 2>/de
 step "stack: services healthy" compose up -d --wait "${SERVICES[@]}" || { teardown; exit 1; }
 
 # 3. Schema and seed data (a one-off container from the app image).
-step "app: migrate and seed" compose run --rm --no-deps web migrate:fresh --seed || { teardown; exit 1; }
+step "app: migrate and seed" compose run --rm --no-deps web migrate:fresh --seed --force || { teardown; exit 1; }
 
 # 4. The app: web, worker, scheduler.
 step "app: web, worker and scheduler up" compose up -d --wait web worker scheduler || { teardown; exit 1; }
