@@ -245,12 +245,16 @@ impl SqliteStore {
     ) -> Result<u64, LogbookError> {
         let mut tx = self.pool.begin().await?;
         let doomed_old = "SELECT DISTINCT batch_key FROM logbook_entries WHERE at < ?";
+        // A fixed subquery held in a local &str; the value is bound.
+        // nosemgrep: navree-sql-built-from-strings
         sqlx::query(AssertSqlSafe(format!(
             "DELETE FROM logbook_tags WHERE batch_key IN ({doomed_old})"
         )))
         .bind(micros(older_than))
         .execute(&mut *tx)
         .await?;
+        // A fixed subquery held in a local &str; the value is bound.
+        // nosemgrep: navree-sql-built-from-strings
         let mut deleted = sqlx::query(AssertSqlSafe(format!(
             "DELETE FROM logbook_entries WHERE batch_key IN ({doomed_old})"
         )))
@@ -266,12 +270,16 @@ impl SqliteStore {
         .await?;
         if let Some(cutoff) = cutoff {
             let doomed = "SELECT DISTINCT batch_key FROM logbook_entries WHERE seq <= ?";
+            // A fixed subquery held in a local &str; the value is bound.
+            // nosemgrep: navree-sql-built-from-strings
             sqlx::query(AssertSqlSafe(format!(
                 "DELETE FROM logbook_tags WHERE batch_key IN ({doomed})"
             )))
             .bind(cutoff)
             .execute(&mut *tx)
             .await?;
+            // A fixed subquery held in a local &str; the value is bound.
+            // nosemgrep: navree-sql-built-from-strings
             deleted += sqlx::query(AssertSqlSafe(format!(
                 "DELETE FROM logbook_entries WHERE batch_key IN ({doomed})"
             )))
