@@ -777,10 +777,6 @@ criteria = "safe-to-deploy"
 version = "0.3.5"
 criteria = "safe-to-deploy"
 
-[[exemptions.dyn-clone]]
-version = "1.0.20"
-criteria = "safe-to-deploy"
-
 [[exemptions.ecb]]
 version = "0.2.1"
 criteria = "safe-to-deploy"
@@ -1865,10 +1861,6 @@ criteria = "safe-to-deploy"
 version = "0.10.1"
 criteria = "safe-to-deploy"
 
-[[exemptions.process-wrap]]
-version = "10.0.1"
-criteria = "safe-to-deploy"
-
 [[exemptions.proptest]]
 version = "1.12.0"
 criteria = "safe-to-run"
@@ -2025,14 +2017,6 @@ criteria = "safe-to-deploy"
 version = "0.5.18"
 criteria = "safe-to-deploy"
 
-[[exemptions.ref-cast]]
-version = "1.0.27"
-criteria = "safe-to-deploy"
-
-[[exemptions.ref-cast-impl]]
-version = "1.0.27"
-criteria = "safe-to-deploy"
-
 [[exemptions.regex]]
 version = "1.13.1"
 criteria = "safe-to-deploy"
@@ -2071,10 +2055,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.rlibphonenumber_macro]]
 version = "0.2.1"
-criteria = "safe-to-deploy"
-
-[[exemptions.rmcp]]
-version = "3.7.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.roxmltree]]
@@ -2173,14 +2153,6 @@ criteria = "safe-to-deploy"
 version = "0.1.30"
 criteria = "safe-to-deploy"
 
-[[exemptions.schemars]]
-version = "1.2.3"
-criteria = "safe-to-deploy"
-
-[[exemptions.schemars_derive]]
-version = "1.2.3"
-criteria = "safe-to-deploy"
-
 [[exemptions.scoped-tls]]
 version = "1.0.1"
 criteria = "safe-to-deploy"
@@ -2267,10 +2239,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.serde_derive]]
 version = "1.0.229"
-criteria = "safe-to-deploy"
-
-[[exemptions.serde_derive_internals]]
-version = "0.30.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.serde_json]]
@@ -2427,10 +2395,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.sqlx-sqlite]]
 version = "0.9.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.sse-stream]]
-version = "0.2.6"
 criteria = "safe-to-deploy"
 
 [[exemptions.stable_deref_trait]]
@@ -2933,20 +2897,8 @@ criteria = "safe-to-deploy"
 version = "0.4.0"
 criteria = "safe-to-deploy"
 
-[[exemptions.windows]]
-version = "0.62.2"
-criteria = "safe-to-deploy"
-
-[[exemptions.windows-collections]]
-version = "0.3.2"
-criteria = "safe-to-deploy"
-
 [[exemptions.windows-core]]
 version = "0.62.2"
-criteria = "safe-to-deploy"
-
-[[exemptions.windows-future]]
-version = "0.3.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.windows-implement]]
@@ -2955,10 +2907,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.windows-interface]]
 version = "0.59.3"
-criteria = "safe-to-deploy"
-
-[[exemptions.windows-numerics]]
-version = "0.3.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.windows-registry]]
@@ -2987,10 +2935,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.windows-targets]]
 version = "0.52.6"
-criteria = "safe-to-deploy"
-
-[[exemptions.windows-threading]]
-version = "0.2.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.windows_aarch64_gnullvm]]

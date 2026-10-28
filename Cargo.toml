@@ -399,13 +399,6 @@ memory-stats = "1.2.0"
 async-graphql = { version = "7.2.1", default-features = false, features = ["chrono", "uuid"] }
 # Line diffs for `graphql:schema --check` (the version insta already uses).
 similar = "3.2.1"
-# The official Rust MCP SDK (navree-mcp): the server, stdio and the
-# streamable HTTP transport. Never its `reqwest-native-tls` or `auth` features.
-rmcp = { version = "3.7.0", default-features = false, features = [
-    "server",
-    "transport-io",
-    "transport-streamable-http-server",
-] }
 async-trait = "0.1.92"
 # Media (navree-media), all pure Rust: image codecs without AVIF (rav1e and
 # dav1d need NASM or C), SIMD resizing, SVG rendering on tiny-skia, PDF text
