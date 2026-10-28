@@ -746,7 +746,7 @@ Every advanced Laravel capability can be built on maintained crates, but several
 | --- | --- | --- | --- | --- |
 | Queues and jobs | Queues: dispatch, delay, retries, backoff, chains, batches, unique jobs, failed-jobs table | `navree-queue`: `#[job]` structs, `dispatch()`, `.delay()`, `.on_queue()`, batches, chains, middleware, failed-job store | [apalis](https://docs.rs/crate/apalis/latest) 1.0.0 (12 Oct 2026, after release candidates since Dec 2025) with Redis, Postgres, SQLite, MySQL and AMQP backends; [graphile\_worker](https://docs.rs/graphile_worker) 0.14.1 (Postgres-only alternative) | apalis 1.0.0 is only weeks old. Navree pins it behind its own API and keeps a native Postgres `SKIP LOCKED` driver as fallback |
 | Queue dashboard | Horizon | `navree-queue` dashboard data as JSON endpoints, shown as screens in the Next.js and Nuxt kits | [apalis-board](https://docs.rs/crate/apalis-board/latest) 1.0.0 (Oct 2026): queues, job status, workers, retry and cancel | Its own Leptos UI is not used (API-first); works only with apalis drivers |
-| Scheduler | Task scheduler: cron, overlap prevention, run on one server | `navree-schedule`: `schedule.job(X).daily_at("02:00").without_overlapping().on_one_server()` | [croner](https://docs.rs/croner) 4.0.2 (Oct 2026) for cron parsing; own Tokio loop; Postgres advisory lock, or a Redis lock with lease renewal, for single-node runs; each run is recorded in a schedule\_runs table | [tokio-cron-scheduler](https://gittrend.io/repo/mvniekerk/tokio-cron-scheduler) 0.15.1 had no release for \~12 months, so it is not used |
+| Scheduler | Task scheduler: cron, overlap prevention, run on one server | `navree-schedule`: `schedule.job(X).daily_at("02:00").without_overlapping().on_one_server()` | own cron parser (five fields, names, nicknames, `L`/`W`/`#`, defined daylight saving time rules); own Tokio loop; Postgres advisory lock, or a Redis lock with lease renewal, for single-node runs; each run is recorded in a schedule\_runs table | [tokio-cron-scheduler](https://gittrend.io/repo/mvniekerk/tokio-cron-scheduler) 0.15.1 had no release for \~12 months, so it is not used |
 | Cache | Cache: remember, tags, atomic locks, stale-while-revalidate | `navree-cache`: `cache.remember(key, ttl, f)`, tags, locks, `flexible()` | [moka](https://docs.rs/crate/moka/latest) 0.12.16 (in-memory); [redis](https://docs.rs/crate/redis/1.7.0) 1.8.0 (Oct 2026) + [deadpool-redis](https://docs.rs/deadpool-redis) 0.23.1 | [fred](https://docs.rs/crate/fred/9.0.1) is stale (last release Feb 2025); use redis 1.x |
 | Events and listeners | Events, listeners, model observers, queued listeners | `navree-events`: typed events, sync and queued listeners, ORM model hooks | tokio broadcast/mpsc channels; queued listeners via `navree-queue` | Built by Navree |
 | Mail | Mailables, Markdown mail, SMTP/SES/Postmark/Mailgun/Resend, failover | `navree-mail`: mailables rendered from templates, queued sending, failover transport | [lettre](https://docs.rs/crate/lettre/0.8.1) 0.11.23 (SMTP); [mrml](https://docs.rs/crate/mrml/latest) 6.0.1 (MJML to responsive HTML); [mail-send](https://docs.rs/mail-send) 0.6.2 (DKIM signing) | API providers (SES, Postmark, Mailgun, Resend) are thin HTTP drivers written by Navree |
@@ -976,7 +976,7 @@ Approach: **Adopt** = use a crate directly · **Wrap** = Navree module around a 
 | 6 | Logging (request and error logs on by default; query and job logs arrive with their modules) | `navree-log` | tracing 0.1.44, tracing-appender 0.2.5 | Wrap | High | 0 | Not started |
 | 7 | Exception handling (problem+json errors) | `navree-http` | thiserror 2.0.21 | Build | High | 0 | Not started |
 | 8 | Artisan console and generators | `navree-cli` | clap 4.6.7 | Build | High | 0 | Not started |
-| 9 | CORS and security headers | `navree-http` | tower-http 0.7.1 | Adopt | High | 0 | Not started |
+| 9 | CORS and security headers | `navree-http` | own `CorsLayer` (Fetch standard); tower-http 0.7.1 for the other layers | Build | High | 0 | Not started |
 | 10 | Maintenance mode | `navree-http` | Navree-built | Build | High | 2 | Not started |
 | 11 | Validation and form requests | `navree-validation` | garde 0.23.0 | Wrap | Medium | 1 | Not started |
 | 12 | Validation errors as 422 JSON for Next.js and Nuxt forms (replaces redirect-back, old input and flash) | `navree-validation` | Navree-built | Build | Medium | 1 | Not started |
@@ -1011,7 +1011,7 @@ Approach: **Adopt** = use a crate directly · **Wrap** = Navree module around a 
 | 41 | Roles and permissions with CASL-style abilities (spatie/laravel-permission package) | `navree-access` | Navree-built, CASL rule format | Build | Low | 1 | Not started |
 | 42 | Audit and activity log (spatie/laravel-activitylog package) | `navree-audit` | Navree-built on tracing and the ORM | Build | Medium | 1 | Not started |
 | 43 | Horizon (queue dashboard) | `navree-queue` | apalis-board 1.0.0 | Adopt | Medium | 2 | Not started |
-| 44 | Task scheduler | `navree-schedule` | croner 4.0.2 | Build | Medium | 2 | Not started |
+| 44 | Task scheduler | `navree-schedule` | own cron parser | Build | Medium | 2 | Not started |
 | 45 | File storage | `navree-storage` | object\_store 0.14.2 | Wrap | High | 2 | Not started |
 | 46 | File uploads | `navree-http` | axum multipart, multer 3.1.0 | Adopt | High | 2 | Not started |
 | 47 | Notifications: mail, database, broadcast | `navree-notify` | Navree-built | Build | Medium | 2 | Not started |
@@ -1129,7 +1129,7 @@ Versions and dates were checked on 25 October 2026, mainly against docs.rs relea
 
 **Advanced stack**
 
-- Jobs: [apalis](https://docs.rs/crate/apalis/latest) · [apalis-board](https://docs.rs/crate/apalis-board/latest) · [graphile\_worker](https://docs.rs/graphile_worker) · [croner](https://docs.rs/croner)
+- Jobs: [apalis](https://docs.rs/crate/apalis/latest) · [apalis-board](https://docs.rs/crate/apalis-board/latest) · [graphile\_worker](https://docs.rs/graphile_worker)
 - Cache and mail: [moka](https://docs.rs/crate/moka/latest) · [deadpool-redis](https://docs.rs/deadpool-redis) · [mail-send](https://docs.rs/mail-send) · [mrml](https://docs.rs/crate/mrml/latest)
 - Storage and real-time: [object\_store](https://docs.rs/object_store/latest) · [opendal](https://docs.rs/crate/opendal/0.59.0) · [socketioxide](https://github.com/Totodore/socketioxide) · [Sockudo with Laravel Echo](https://sockudo.io/integrations/laravel-echo)
 - Messaging and search: [async-nats](https://docs.rs/crate/async-nats/0.50.0) · [lapin](https://docs.rs/crate/lapin/latest) · [rdkafka](https://docs.rs/crate/rdkafka/latest) · [meilisearch-sdk](https://docs.rs/crate/meilisearch-sdk) · [tantivy](https://docs.rs/tantivy) · [qdrant-client](https://docs.rs/qdrant-client) · [pgvector](https://docs.rs/crate/pgvector/latest)

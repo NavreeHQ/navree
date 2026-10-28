@@ -219,6 +219,21 @@ s.job_with(|run: &LocalRun| SendDigest { workspace_id: run.owner.unwrap_or_defau
     .per_workspace_local(); // one run per workspace, at 09:00 on its clock
 ```
 
+Cron language (Navree's own parser; anything else fails the boot, naming
+the field and the token): five fields `minute hour day-of-month month
+day-of-week`, or `@yearly` `@annually` `@monthly` `@weekly` `@daily`
+`@hourly`. Each field takes `*`, values, ranges `a-b`, steps `*/s` or
+`a-b/s`, and comma lists; `JAN`-`DEC` and `SUN`-`SAT` (any case) in the
+month and day-of-week fields; day of week 0-7 (0 and 7 Sunday). Day of
+month also `L`, `LW` (last weekday), `15W` (nearest weekday); day of week
+also `5L` (last Friday), `5#2` (second Friday), `?` for `*`. Day of month
+OR day of week matches unless one is `*`; `+MON` asks for both. No seconds
+or year field, no wrapping ranges, no `5/15`, no empty list items, at most
+256 bytes. A never-matching expression (`0 0 30 2 *`) boots and lists as
+`never`. Clocks forward: a skipped local time runs once, at the first minute
+after the gap. Clocks back: a repeated local time runs once, the first time
+(so a `* * * * *` task pauses during the repeated hour).
+
 Per-workspace runs are claimed as `<task>@<workspace id>` (names at most
 154 bytes); `LocalRun::current()` gives the owner and zone inside a run.
 Task names must be unique (`.name("..")` renames). A failed task is logged
