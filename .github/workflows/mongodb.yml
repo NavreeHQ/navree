@@ -52,7 +52,7 @@ jobs:
       # Fail instead of skipping when the server is missing.
       NAVREE_TEST_REQUIRE_SERVICES: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Start MongoDB 8.0 as a single-node replica set
         run: |
