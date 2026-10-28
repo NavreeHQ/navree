@@ -9,6 +9,7 @@ mod cloudflare;
 mod commands;
 mod https;
 mod managed;
+mod migration;
 mod pebble;
 mod probes;
 mod resolution;

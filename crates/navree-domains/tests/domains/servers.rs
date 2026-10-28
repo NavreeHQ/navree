@@ -103,15 +103,20 @@ async fn flow(scratch: &Scratch) {
     let acme = world.workspace(owner, "Acme").await;
     let globex = world.workspace(Uuid::now_v7(), "Globex").await;
 
-    // Adding: the unique host and the per-workspace count.
+    // Adding: a claim of another workspace on the same host is no
+    // obstacle, a workspace has one row per host, and the per-workspace
+    // count.
     let crm = world.add(acme, "crm.acme-corp.test").await;
     assert_eq!(crm.created_at, world.now());
+    let rival = domains
+        .add(globex, NewDomain::new("crm.acme-corp.test"))
+        .await
+        .unwrap();
     assert!(matches!(
-        domains
-            .add(globex, NewDomain::new("crm.acme-corp.test"))
-            .await,
+        domains.add(globex, NewDomain::new("crm.acme-corp.test")).await,
         Err(DomainsError::Taken(_))
     ));
+    domains.remove(rival.id).await.unwrap();
     let go = world.add(acme, "go.acme-corp.test").await;
     assert!(matches!(
         domains
@@ -189,6 +194,114 @@ async fn flow(scratch: &Scratch) {
     world.app.shutdown().await.unwrap();
 }
 
+/// Claims on a real server: the migration both ways, claims racing for
+/// one host in separate connections (the unique index decides, nobody
+/// gets a database error), the same through the routes (a request's unit
+/// of work survives losing), and a transfer.
+async fn claims(scratch: &Scratch) {
+    let world = World::with(|builder| {
+        builder
+            .config("database.url", scratch.url.as_str())
+            .config("database.migrate_on_boot", true)
+            .config("domains.tls", "acme")
+            .config("domains.acme.terms_agreed", true)
+    })
+    .await;
+    crate::migration::roundtrip(&world).await;
+    let domains = world.domains().await;
+
+    // Four claims prove control at once, three times.
+    for round in 0..3 {
+        let host = format!("race{round}.acme-corp.test");
+        let mut ids = Vec::new();
+        for n in 0..4 {
+            let workspace = world.workspace(Uuid::now_v7(), &format!("W{round}{n}")).await;
+            let claim = world.add(workspace, &host).await;
+            world.publish(&claim);
+            ids.push(claim.id);
+        }
+        let mut tasks = Vec::new();
+        for id in &ids {
+            let domains = domains.clone();
+            let id = *id;
+            tasks.push(tokio::spawn(async move { domains.verify(id).await }));
+        }
+        for task in tasks {
+            task.await.unwrap().unwrap();
+        }
+        let mut verified = 0;
+        for id in &ids {
+            match domains.get(*id).await.unwrap().status {
+                DomainStatus::Verified => verified += 1,
+                other => assert_eq!(other, DomainStatus::Failed, "{host}"),
+            }
+        }
+        assert_eq!(verified, 1, "{host}");
+        assert!(domains.resolve(&host).await.unwrap().is_some());
+    }
+
+    // The same through the routes: each request has a unit of work.
+    let (user_a, user_b) = (Uuid::now_v7(), Uuid::now_v7());
+    let a = world.workspace(user_a, "RouteA").await;
+    let b = world.workspace(user_b, "RouteB").await;
+    let host = "routes.acme-corp.test";
+    let claim_a = world.add(a, host).await;
+    let claim_b = world.add(b, host).await;
+    world.publish(&claim_a);
+    world.publish(&claim_b);
+    let (a, b) = (a.to_string(), b.to_string());
+    let (client_a, client_b) = (world.as_user(user_a), world.as_user(user_b));
+    let path_a = format!("/api/domains/{}/verify", claim_a.id);
+    let path_b = format!("/api/domains/{}/verify", claim_b.id);
+    let (first, second) = tokio::join!(
+        client_a
+            .post(&path_a)
+            .header("x-workspace", a.as_str())
+            .send(),
+        client_b
+            .post(&path_b)
+            .header("x-workspace", b.as_str())
+            .send()
+    );
+    let statuses: Vec<String> = [first, second]
+        .into_iter()
+        .map(|response| {
+            let body = response.assert_status(200).json_value();
+            body["status"].as_str().unwrap().to_owned()
+        })
+        .collect();
+    assert!(
+        statuses.contains(&"verified".to_owned()) && statuses.contains(&"failed".to_owned()),
+        "{statuses:?}"
+    );
+
+    // A transfer needs the new owner's fresh token.
+    let (old, new) = (
+        world.workspace(Uuid::now_v7(), "Old").await,
+        world.workspace(Uuid::now_v7(), "New").await,
+    );
+    let held = world.verified(old, "moved.acme-corp.test").await;
+    domains.issue_pending().await.unwrap();
+    let claim = domains.transfer("moved.acme-corp.test", new).await.unwrap();
+    assert_eq!(claim.status, DomainStatus::Pending);
+    assert_eq!(
+        domains.resolve("moved.acme-corp.test").await.unwrap().unwrap().id,
+        held.id
+    );
+    world.publish(&claim);
+    let moved = domains.transfer("moved.acme-corp.test", new).await.unwrap();
+    assert_eq!(moved.status, DomainStatus::Verified);
+    assert!(matches!(
+        domains.get(held.id).await,
+        Err(DomainsError::DomainNotFound)
+    ));
+    assert_eq!(
+        domains.resolve("moved.acme-corp.test").await.unwrap().unwrap().workspace_id,
+        new
+    );
+    world.app.shutdown().await.unwrap();
+}
+
 #[cfg(feature = "postgres")]
 #[tokio::test]
 async fn domains_work_on_postgres() {
@@ -199,6 +312,17 @@ async fn domains_work_on_postgres() {
     scratch.drop().await;
 }
 
+#[cfg(feature = "postgres")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn claims_work_on_postgres() {
+    let Some(scratch) = Scratch::new("NAVREE_TEST_POSTGRES_URL", "postgres-claims", false).await
+    else {
+        return;
+    };
+    claims(&scratch).await;
+    scratch.drop().await;
+}
+
 #[cfg(feature = "mysql")]
 #[tokio::test]
 async fn domains_work_on_mysql() {
@@ -206,5 +330,15 @@ async fn domains_work_on_mysql() {
         return;
     };
     flow(&scratch).await;
+    scratch.drop().await;
+}
+
+#[cfg(feature = "mysql")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn claims_work_on_mysql() {
+    let Some(scratch) = Scratch::new("NAVREE_TEST_MYSQL_URL", "mysql-claims", true).await else {
+        return;
+    };
+    claims(&scratch).await;
     scratch.drop().await;
 }
