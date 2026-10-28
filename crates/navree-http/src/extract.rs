@@ -166,8 +166,9 @@ fn forwarded_ip(headers: &HeaderMap, trust: &ProxyTrust) -> Option<IpAddr> {
         else {
             break;
         };
-        chain.insert(0, ip.to_canonical());
+        chain.push(ip.to_canonical());
     }
+    chain.reverse();
     let forwarded = if trust.any {
         chain.last().copied()
     } else {
