@@ -291,8 +291,9 @@ async fn made_up_request_methods_do_not_make_routes_of_their_own() {
     endpoints.sort();
     assert!(endpoints.len() <= 3, "{endpoints:?}");
     assert!(
-        endpoints.iter().all(|endpoint| !endpoint.contains("PROBE")
-            && !endpoint.contains("SCAN")),
+        endpoints
+            .iter()
+            .all(|endpoint| !endpoint.contains("PROBE") && !endpoint.contains("SCAN")),
         "{endpoints:?}"
     );
     assert!(
