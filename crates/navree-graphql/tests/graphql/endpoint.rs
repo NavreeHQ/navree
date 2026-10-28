@@ -43,6 +43,60 @@ async fn graphiql_is_served_to_browsers_when_it_is_on() {
     app.shutdown().await.unwrap();
 }
 
+/// GraphiQL may open WebSockets to the host it was served from, not to any.
+#[tokio::test]
+async fn graphiql_allows_websockets_to_its_own_host_only() {
+    let (app, _audit) = app().await;
+    let csp_for = |host: Option<&'static str>| {
+        let app = &app;
+        async move {
+            let mut request = app
+                .client()
+                .get("/graphql")
+                .header("accept", "text/html,application/xhtml+xml");
+            if let Some(host) = host {
+                request = request.header("host", host);
+            }
+            let response = request.send().await.assert_status(200);
+            response
+                .header("content-security-policy")
+                .unwrap()
+                .to_owned()
+        }
+    };
+
+    let csp = csp_for(Some("api.example.test")).await;
+    assert!(
+        csp.contains("connect-src 'self' ws://api.example.test wss://api.example.test;"),
+        "{csp}"
+    );
+    let csp = csp_for(Some("localhost:8080")).await;
+    assert!(
+        csp.contains("connect-src 'self' ws://localhost:8080 wss://localhost:8080;"),
+        "{csp}"
+    );
+    // No scheme-wide WebSocket sources, and nothing a client can smuggle in.
+    for host in [
+        None,
+        Some("api.example.test; script-src *"),
+        Some("evil.test wss://other.test"),
+        Some("*.example.test"),
+    ] {
+        let csp = csp_for(host).await;
+        assert!(csp.contains("connect-src 'self';"), "{host:?}: {csp}");
+    }
+    for host in [Some("api.example.test"), None] {
+        let csp = csp_for(host).await;
+        assert!(
+            !csp.split_whitespace()
+                .any(|token| matches!(token.trim_end_matches(';'), "ws:" | "wss:")),
+            "{host:?}: {csp}"
+        );
+        assert!(csp.contains("script-src 'self';"), "{csp}");
+    }
+    app.shutdown().await.unwrap();
+}
+
 #[tokio::test]
 async fn graphiql_loads_only_files_the_app_serves() {
     let (app, _audit) = app().await;

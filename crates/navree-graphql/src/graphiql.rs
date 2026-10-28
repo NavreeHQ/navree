@@ -88,12 +88,40 @@ pub(crate) fn assets_path(path: &str) -> String {
     format!("{}/assets", path.trim_end_matches('/'))
 }
 
-/// The page's content security policy: scripts from this origin only (no
-/// inline script), the inline styles GraphiQL's components set, and
-/// requests to this origin (and its WebSocket) only.
-pub(crate) const CSP: &str = "default-src 'none'; script-src 'self'; style-src 'self' \
-     'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' ws: \
-     wss:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'";
+/// The page's content security policy before `connect-src` is added: scripts
+/// from this origin only (no inline script), the inline styles GraphiQL's
+/// components set, nothing framed or submitted.
+const CSP_BEFORE_CONNECT: &str = "default-src 'none'; script-src 'self'; style-src 'self' \
+     'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; ";
+const CSP_AFTER_CONNECT: &str = "; frame-ancestors 'none'; base-uri 'none'; form-action 'none'";
+
+/// The page's content security policy: besides the scripts and styles
+/// above, requests to this origin, and WebSockets (subscriptions) to the
+/// host the page was requested from (`ws://host` and `wss://host`), not to
+/// any host. `host` is the request's `Host`; one that is not a plain host
+/// name, address or `host:port` is left out, leaving `'self'` alone.
+pub(crate) fn csp(host: Option<&str>) -> String {
+    let sockets = match host.filter(|host| is_plain_host(host)) {
+        Some(host) => format!(" ws://{host} wss://{host}"),
+        None => String::new(),
+    };
+    format!("{CSP_BEFORE_CONNECT}connect-src 'self'{sockets}{CSP_AFTER_CONNECT}")
+}
+
+/// Whether `host` is safe to put in a policy: a DNS name, an IPv4 address
+/// or a bracketed IPv6 address, with an optional port, and nothing else
+/// (no spaces, semicolons, wildcards or userinfo).
+fn is_plain_host(host: &str) -> bool {
+    host.len() <= 255
+        && host
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | ':' | '[' | ']'))
+        && host.parse::<http::uri::Authority>().is_ok_and(|authority| {
+            !authority.host().is_empty()
+                && (authority.as_str().len() == authority.host().len()
+                    || authority.port_u16().is_some())
+        })
+}
 
 /// The page for the endpoint `path` (and the subscriptions endpoint, when
 /// subscriptions are on). The `Authorization` header from GraphiQL's
@@ -164,12 +192,49 @@ mod tests {
         for script in html.split("<script").skip(1) {
             assert!(script.starts_with(" src=\""), "inline script: {script}");
         }
-        let scripts = CSP
+        let policy = csp(Some("api.example.test"));
+        let scripts = policy
             .split(';')
             .find(|directive| directive.trim().starts_with("script-src"))
             .unwrap();
         assert_eq!(scripts.trim(), "script-src 'self'");
-        assert!(!CSP.contains("http"), "{CSP}");
+        assert!(!policy.contains("http"), "{policy}");
+    }
+
+    #[test]
+    fn websockets_are_allowed_to_the_request_host_only() {
+        assert!(csp(Some("api.example.test")).contains(
+            "connect-src 'self' ws://api.example.test wss://api.example.test; frame-ancestors"
+        ));
+        assert!(csp(Some("localhost:8080")).contains("ws://localhost:8080 wss://localhost:8080;"));
+        assert!(csp(Some("[::1]:8080")).contains("ws://[::1]:8080 wss://[::1]:8080;"));
+        assert!(csp(Some("192.0.2.1")).contains("ws://192.0.2.1 wss://192.0.2.1;"));
+        for bad in [
+            "",
+            "a b",
+            "a.test;b",
+            "a.test,b.test",
+            "*.a.test",
+            "user@a.test",
+            "a.test/path",
+            "a.test:port",
+            "ws:",
+        ] {
+            assert!(
+                csp(Some(bad)).contains("connect-src 'self';"),
+                "{bad:?}: {}",
+                csp(Some(bad))
+            );
+        }
+        assert!(csp(None).contains("connect-src 'self';"));
+        for policy in [csp(None), csp(Some("a.test"))] {
+            assert!(
+                !policy
+                    .split_whitespace()
+                    .any(|token| matches!(token.trim_end_matches(';'), "ws:" | "wss:")),
+                "{policy}"
+            );
+        }
     }
 
     #[test]
