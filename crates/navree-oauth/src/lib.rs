@@ -63,6 +63,7 @@ mod grants;
 mod keys;
 mod migration;
 mod module;
+mod offboarding;
 mod pats;
 mod protocol;
 mod requests;

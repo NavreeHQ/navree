@@ -17,7 +17,9 @@ use crate::envelope::now_millis;
 use crate::options::DeadLetterMode;
 use crate::pipeline::{MessageRouter, Outcome, Registered};
 use crate::runtime::MicroRuntime;
-use crate::{DeadLetter, Delivery, DeliveryActions, Envelope, Group, PatternKind, Subscription};
+use crate::{
+    DeadLetter, Delivery, DeliveryActions, Envelope, Group, PatternKind, Subscribed, Subscription,
+};
 
 /// Outbox rows younger than this are left to the after-commit hook that
 /// publishes them; the relay takes the older ones.
@@ -137,11 +139,13 @@ pub(crate) async fn run(
     let concurrency = runtime.options.concurrency.max(1);
     let (sender, mut deliveries) = mpsc::channel::<Delivery>(concurrency);
     let transport = runtime.transport.clone();
-    let (subscribed, is_subscribed) = oneshot::channel::<()>();
+    // Boot goes on once the transport says the broker has registered the
+    // subscriptions (or its listen ended without saying so).
+    let (subscribed, is_subscribed) = Subscribed::channel();
     let listening = tokio::spawn(async move {
-        let listening = transport.listen(subscriptions, sender);
-        let _ = subscribed.send(());
-        listening.await
+        transport
+            .listen_subscribed(subscriptions, sender, subscribed)
+            .await
     });
     let _ = is_subscribed.await;
     let _ = started.send(());

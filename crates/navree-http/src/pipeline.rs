@@ -41,6 +41,7 @@ use crate::error::{ErrorFormat, PendingError};
 use crate::extract::ProxyTrust;
 use crate::limiter::KeyedRateLimiter;
 use crate::maintenance::MaintenanceMode;
+use crate::network::rate_limit_key;
 use crate::{AppError, Authenticator, ClientIp, ErrorMapper, RouteMeta};
 
 /// The request id header.
@@ -662,6 +663,8 @@ where
 /// The per-IP limit and where its refusals are audited.
 pub(crate) struct PerIpLimit {
     pub(crate) limiter: KeyedRateLimiter<IpAddr>,
+    /// `http.rate_limit_ipv6_prefix`: IPv6 clients are counted by network.
+    pub(crate) ipv6_prefix: u8,
     pub(crate) audit: Option<Arc<dyn AuditSink>>,
 }
 
@@ -677,7 +680,10 @@ where
         .unwrap_or_else(|| {
             ClientIp::resolve(request.headers(), request.extensions(), &ProxyTrust::none())
         });
-    match limit.limiter.check(&ip.0) {
+    match limit
+        .limiter
+        .check(&rate_limit_key(ip.0, limit.ipv6_prefix))
+    {
         Ok(()) => next(request).await,
         Err(limited) => {
             tracing::warn!(target: "navree::security", ip = %ip.0, "per-IP rate limit exceeded");

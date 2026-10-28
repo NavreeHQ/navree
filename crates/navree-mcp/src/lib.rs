@@ -3,8 +3,11 @@
 //! `McpModule`: the app's own MCP server. Methods on services become the
 //! tools, resources and prompts AI clients (Claude, ChatGPT, Cursor, any
 //! MCP client) use, served over **streamable HTTP** at `/mcp` on the app's
-//! server and over **stdio** (`mcp:serve --user <email>`), built on the
-//! official Rust MCP SDK ([`rmcp`]).
+//! server and over **stdio** (`mcp:serve --user <email>`). The protocol
+//! layer is Navree's own ([`protocol`]): JSON-RPC 2.0, the lifecycle and
+//! version negotiation (protocols `2024-11-05` to `2025-11-25` with the
+//! `initialize` handshake, and the stateless `2026-07-28`), and both
+//! transports.
 //!
 //! - An MCP server is an injectable whose `impl` block is marked
 //!   `#[mcp_server]` (navree-macros); its methods marked `#[mcp_tool]`,
@@ -30,6 +33,11 @@
 //!   is Navree's error body.
 //! - [`McpNotifier`] tells subscribed sessions that a resource changed and
 //!   every session that a list changed.
+//! - The HTTP transport refuses browser origins not in
+//!   `mcp.allowed_origins` (DNS rebinding), binds each session (256 random
+//!   bits) to the user who opened it, caps bodies at `mcp.max_request_bytes`
+//!   and JSON nesting at [`protocol::MAX_JSON_DEPTH`], and queues at most a
+//!   few dozen messages for a client that reads slowly.
 //! - [`testing::McpTestClient`] speaks the protocol to a `TestApp` in
 //!   process, as whoever its `TestClient` acts as.
 //!
@@ -89,8 +97,10 @@ mod module;
 mod notifier;
 mod observe;
 mod options;
+pub mod protocol;
 mod registry;
 mod schema;
+mod session;
 mod sessions;
 mod stdio;
 mod uri;
@@ -112,7 +122,3 @@ pub use options::{McpAuth, McpOAuthOptions, McpOptions, McpSettings, OAuthSettin
 pub use registry::McpRegistry;
 pub use schema::{PromptArgument, input_schema};
 pub use stdio::serve_stdio;
-
-/// The official Rust MCP SDK the transports are built on, for protocol
-/// types (`rmcp::model::Tool`, ...).
-pub use rmcp;

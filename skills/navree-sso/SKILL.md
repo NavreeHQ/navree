@@ -96,8 +96,13 @@ enforce_for_verified_domains = true                     # refuse passwords for v
   connections (checked on the IdP's email before provisioning, and on the
   account). The email's domain is compared IDNA-mapped, lower-case,
   without a trailing dot (`eve@ACME.test.` is `acme.test`). Refusals are audited `auth.login_refused` with
-  `metadata.method`. Existing sessions are not ended
-  (`revoke_all_refresh_tokens` when turning enforcement on). Break-glass:
+  `metadata.method`. Existing sessions and tokens are not ended: when
+  turning enforcement on call
+  `AuthService::revoke_credentials_of_domain(domain)` (sessions, personal
+  access tokens, OAuth grants and tokens; not
+  `revoke_all_refresh_tokens`, which leaves the last two working).
+  `SignInAttempt::domain()` and `SsoProfile::email_domain()` (a `String`)
+  give the normalized form (`navree::auth::email_domain`). Break-glass:
   platform administrators still reach the platform console
   (`auth.platform.break_glass`, default true, audited `auth.break_glass`),
   never the app. `enforce: Some(false)` on a connection opts out;

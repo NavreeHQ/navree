@@ -12,12 +12,15 @@ use navree_contracts::{Clock, Principal};
 use navree_db::Uow;
 use navree_http::AppError;
 use navree_kernel::AppContext;
-use rmcp::model::{ProgressNotificationParam, ProgressToken};
-use rmcp::{Peer, RoleServer};
+use serde_json::{Value, json};
+use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
+use crate::protocol::jsonrpc;
+use crate::protocol::outlet::Outlet;
+
 /// The client that called: its name and version from the `initialize`
-/// handshake.
+/// handshake (or, on the stateless protocol, the request's `_meta`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct McpClient {
     /// The client's name (`claude-code`, `cursor`, ...).
@@ -47,8 +50,9 @@ struct Inner {
     session_id: Option<String>,
     client: Option<McpClient>,
     request_id: String,
-    progress: Option<(Peer<RoleServer>, ProgressToken)>,
+    progress: Option<(Outlet, Value)>,
     clock: Option<Arc<dyn Clock>>,
+    cancel: CancellationToken,
 }
 
 /// What a context is built from.
@@ -60,8 +64,9 @@ pub(crate) struct ContextParts {
     pub(crate) session_id: Option<String>,
     pub(crate) client: Option<McpClient>,
     pub(crate) request_id: String,
-    pub(crate) progress: Option<(Peer<RoleServer>, ProgressToken)>,
+    pub(crate) progress: Option<(Outlet, Value)>,
     pub(crate) clock: Option<Arc<dyn Clock>>,
+    pub(crate) cancel: CancellationToken,
 }
 
 impl McpContext {
@@ -76,6 +81,7 @@ impl McpContext {
             request_id,
             progress,
             clock,
+            cancel,
         } = parts;
         Self {
             inner: Arc::new(Inner {
@@ -88,6 +94,7 @@ impl McpContext {
                 request_id,
                 progress,
                 clock,
+                cancel,
             }),
         }
     }
@@ -204,22 +211,32 @@ impl McpContext {
     /// Reports progress of a long-running call (`done` of `total`, with a
     /// message) when the client asked for it; does nothing otherwise. Over
     /// HTTP the response becomes an SSE stream carrying the notifications
-    /// before the result.
+    /// before the result. A client that stops reading misses progress
+    /// rather than holding the call up.
     pub async fn progress(&self, done: f64, total: Option<f64>, message: impl Into<String>) {
-        let Some((peer, token)) = &self.inner.progress else {
+        let Some((outlet, token)) = &self.inner.progress else {
             return;
         };
-        let mut param = ProgressNotificationParam::new(token.clone(), done);
+        let mut params = json!({ "progressToken": token, "progress": done });
         if let Some(total) = total {
-            param = param.with_total(total);
+            params["total"] = json!(total);
         }
         let message = message.into();
         if !message.is_empty() {
-            param = param.with_message(message);
+            params["message"] = json!(message);
         }
-        if let Err(error) = peer.notify_progress(param).await {
+        let notification = jsonrpc::notification("notifications/progress", Some(params));
+        if let Err(error) = outlet.notify(notification) {
             tracing::debug!(target: "navree::mcp", %error, "could not send a progress notification");
         }
+    }
+
+    /// Whether the client cancelled the call (`notifications/cancelled`, or
+    /// a stateless request's connection closed). The call's future is
+    /// dropped at its next `.await` anyway; a loop that does not await can
+    /// check this to stop early.
+    pub fn is_cancelled(&self) -> bool {
+        self.inner.cancel.is_cancelled()
     }
 }
 

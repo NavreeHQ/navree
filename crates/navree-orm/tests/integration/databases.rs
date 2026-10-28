@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use http::Method;
 use navree_db::sea_orm::ConnectionTrait;
-use navree_db::{DatabaseModule, Db};
+use navree_db::{DatabaseModule, Db, DbOptions};
 use navree_http::{Controller, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use navree_orm::binding::Bound;
@@ -251,15 +251,34 @@ async fn a_transaction_per_test_keeps_nothing_but_runs_after_commit_hooks() {
     assert_eq!(left, 0);
 }
 
+/// Whether this test binary has navree-db's driver for `url`'s scheme: what
+/// `TestDb` checks before it uses a configured server. The `postgres` and
+/// `mysql` features of navree-orm do not say, because another crate of a
+/// workspace build can turn a driver on through feature unification. The
+/// probe address refuses connections; a missing driver is reported first.
+async fn has_driver(url: &str) -> bool {
+    let probe = Db::connect(&DbOptions {
+        url: url.to_owned(),
+        max_connections: 1,
+        connect_timeout_secs: 1,
+        ..DbOptions::default()
+    })
+    .await;
+    match probe {
+        Ok(_) => true,
+        Err(error) => !error.to_string().contains("no supporting driver"),
+    }
+}
+
 #[tokio::test]
 async fn servers_are_skipped_without_their_driver() {
-    // Built without the drivers, server databases are skipped (with a
-    // notice), configured or not.
-    if !cfg!(feature = "postgres") {
+    // Built without a driver, server databases are skipped (with a notice),
+    // configured or not.
+    if !has_driver("postgres://127.0.0.1:1/probe").await {
         assert!(TestDb::postgres().await.unwrap().is_none());
         assert!(ORM.postgres().await.unwrap().is_none());
     }
-    if !cfg!(feature = "mysql") {
+    if !has_driver("mysql://127.0.0.1:1/probe").await {
         assert!(TestDb::mysql().await.unwrap().is_none());
         assert!(ORM.mysql().await.unwrap().is_none());
     }

@@ -26,7 +26,9 @@ use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
 use crate::envelope::headers;
-use crate::{Delivery, Envelope, Group, MicroError, MicroTransport, PatternKind, Subscription};
+use crate::{
+    Delivery, Envelope, Group, MicroError, MicroTransport, PatternKind, Subscribed, Subscription,
+};
 
 /// What a transport can do; checks that need something it lacks are
 /// skipped.
@@ -87,8 +89,15 @@ impl Listening {
         subscriptions: Vec<Subscription>,
     ) -> Listening {
         let (sender, deliveries) = mpsc::channel(64);
-        let task = tokio::spawn(async move { transport.listen(subscriptions, sender).await });
-        // Give network transports a moment to subscribe.
+        let (subscribed, is_subscribed) = Subscribed::channel();
+        let task = tokio::spawn(async move {
+            transport
+                .listen_subscribed(subscriptions, sender, subscribed)
+                .await
+        });
+        // The transport says when the broker has the subscriptions; the
+        // pause covers transports that start consuming a moment later.
+        let _ = tokio::time::timeout(WAIT, is_subscribed).await;
         tokio::time::sleep(Duration::from_millis(50)).await;
         Listening { deliveries, task }
     }

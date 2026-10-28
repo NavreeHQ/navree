@@ -3,8 +3,8 @@
 
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
-use rmcp::model as mcp;
 use serde::Serialize;
+use serde_json::{Value, json};
 
 /// One message of a prompt: what the user picks in the client starts the
 /// conversation with these.
@@ -91,18 +91,22 @@ impl PromptMessage {
 
     /// The protocol message, with `embedded` as the contents of a resource
     /// message.
-    pub(crate) fn into_mcp(self, embedded: Option<mcp::ResourceContents>) -> mcp::PromptMessage {
-        let role = match self.role {
-            Role::User => mcp::Role::User,
-            Role::Assistant => mcp::Role::Assistant,
-        };
+    pub(crate) fn into_mcp(self, embedded: Option<Value>) -> Value {
+        let role = self.role();
         let content = match (self.body, embedded) {
-            (MessageBody::Text(text), _) => mcp::ContentBlock::text(text),
-            (MessageBody::Resource(_), Some(contents)) => mcp::ContentBlock::resource(contents),
-            (MessageBody::Resource(uri), None) => mcp::ContentBlock::text(uri),
+            (MessageBody::Text(text), _) => text_block(text),
+            (MessageBody::Resource(_), Some(contents)) => {
+                json!({ "type": "resource", "resource": contents })
+            }
+            (MessageBody::Resource(uri), None) => text_block(uri),
         };
-        mcp::PromptMessage::new(role, content)
+        json!({ "role": role, "content": content })
     }
+}
+
+/// A text content block.
+pub(crate) fn text_block(text: impl Into<String>) -> Value {
+    json!({ "type": "text", "text": text.into() })
 }
 
 /// Contents of a resource: text with a MIME type, or binary data such as a
@@ -178,20 +182,14 @@ impl ResourceContents {
     }
 
     /// The protocol contents of the resource at `uri`.
-    pub(crate) fn into_mcp(self, uri: &str) -> mcp::ResourceContents {
+    pub(crate) fn into_mcp(self, uri: &str) -> Value {
         match self.body {
-            ContentsBody::Text(text) => mcp::ResourceContents::TextResourceContents {
-                uri: uri.to_owned(),
-                mime_type: Some(self.mime_type),
-                text,
-                meta: None,
-            },
-            ContentsBody::Blob(bytes) => mcp::ResourceContents::BlobResourceContents {
-                uri: uri.to_owned(),
-                mime_type: Some(self.mime_type),
-                blob: STANDARD.encode(bytes),
-                meta: None,
-            },
+            ContentsBody::Text(text) => {
+                json!({ "uri": uri, "mimeType": self.mime_type, "text": text })
+            }
+            ContentsBody::Blob(bytes) => {
+                json!({ "uri": uri, "mimeType": self.mime_type, "blob": STANDARD.encode(bytes) })
+            }
         }
     }
 }
@@ -199,24 +197,18 @@ impl ResourceContents {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     #[test]
     fn messages_render_as_protocol_messages() {
-        let user = serde_json::to_value(PromptMessage::user("hi").into_mcp(None)).unwrap();
+        let user = PromptMessage::user("hi").into_mcp(None);
         assert_eq!(
             user,
             json!({ "role": "user", "content": { "type": "text", "text": "hi" } })
         );
         let assistant = PromptMessage::assistant("sure").into_mcp(None);
-        assert_eq!(
-            serde_json::to_value(assistant).unwrap()["role"],
-            "assistant"
-        );
+        assert_eq!(assistant["role"], "assistant");
         let contents = ResourceContents::text("{}", "application/json").into_mcp("crm://x");
-        let embedded =
-            serde_json::to_value(PromptMessage::resource("crm://x").into_mcp(Some(contents)))
-                .unwrap();
+        let embedded = PromptMessage::resource("crm://x").into_mcp(Some(contents));
         assert_eq!(
             embedded["content"],
             json!({
@@ -231,7 +223,7 @@ mod tests {
         let contents =
             ResourceContents::blob(b"%PDF".to_vec(), "application/pdf").into_mcp("x://doc");
         assert_eq!(
-            serde_json::to_value(contents).unwrap(),
+            contents,
             json!({ "uri": "x://doc", "mimeType": "application/pdf", "blob": "JVBERg==" })
         );
         let json = ResourceContents::json(&json!({ "a": 1 })).unwrap();

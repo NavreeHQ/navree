@@ -8,7 +8,8 @@ description: "The application key, AES-256-GCM encryption with key rotation, Arg
 - `Encrypter` encrypts values with the application key (AES-256-GCM), and still decrypts them after you rotate the key;
 - `Hasher` hashes passwords with Argon2id, off the async worker threads;
 - helpers make random tokens, digests and signatures, and derive keys for other purposes from the application key;
-- `navree::crypto::jose` signs and verifies JSON Web Signatures and reads and publishes JSON Web Keys, for tokens that cross the boundary of your app. [Signatures and keys](/docs/security/signatures-and-keys/) covers it.
+- `navree::crypto::jose` signs and verifies JSON Web Signatures and reads and publishes JSON Web Keys, for tokens that cross the boundary of your app. [Signatures and keys](/docs/security/signatures-and-keys/) covers it;
+- `navree::crypto::totp` makes and checks time-based one-time passwords (RFC 6238) and writes `otpauth://` URLs, and `navree::crypto::qr` encodes any text as a QR code (ISO/IEC 18004) with SVG output: the two-factor flows of [authentication](/docs/security/account-flows/#codes-and-qr-codes-in-your-own-code) use them.
 
 Keys, plaintexts and passwords never appear in `Debug` output or in error messages, so both are safe to log.
 

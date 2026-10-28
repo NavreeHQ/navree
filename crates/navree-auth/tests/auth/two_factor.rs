@@ -10,29 +10,26 @@ use navree_auth::{
     two_factor_enabled, user,
 };
 use navree_contracts::{AuditSink, Clock, FixedClock};
+use navree_crypto::totp::{Secret, Totp};
 use navree_db::Db;
 use navree_testing::{TestApp, TestClient, TestResponse};
 use sea_orm::EntityTrait;
 use serde_json::{Value, json};
-use totp_rs::{Builder, Secret};
 
 use crate::support::{self, PASSWORD, RecordingSink, login, signed_in, tokens};
 
 /// The TOTP code of `secret` (base32) at `clock`'s time.
 fn code_at(secret: &str, clock: &FixedClock) -> String {
-    Builder::new()
-        .with_secret(Secret::try_from_base32(secret).expect("a base32 secret"))
+    Totp::builder(Secret::from_base32(secret).expect("a base32 secret"))
         .build()
         .expect("a valid TOTP")
         .generate(u64::try_from(clock.now().timestamp()).unwrap())
-        .to_string()
 }
 
 /// A six-digit code that is not valid at `clock`'s time (nor one step
 /// before or after).
 fn wrong_code(secret: &str, clock: &FixedClock) -> String {
-    let totp = Builder::new()
-        .with_secret(Secret::try_from_base32(secret).unwrap())
+    let totp = Totp::builder(Secret::from_base32(secret).unwrap())
         .build()
         .unwrap();
     let now = u64::try_from(clock.now().timestamp()).unwrap();
@@ -143,7 +140,7 @@ async fn two_factor_enable_confirm_and_login_challenge_flow() {
         .assert_status(200)
         .json_value();
     let secret = setup["secret"].as_str().unwrap().to_owned();
-    assert!(Secret::try_from_base32(&secret).is_ok(), "{setup}");
+    assert!(Secret::from_base32(&secret).is_ok(), "{setup}");
     let url = setup["otpauth_url"].as_str().unwrap();
     assert!(
         url.starts_with("otpauth://totp/Navree:ada%40example.com?secret="),

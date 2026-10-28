@@ -11,6 +11,11 @@ updates:
     directory: /
     schedule: { interval: weekly }
     open-pull-requests-limit: 5
+    ignore:
+      # reqwest 0.13 is built on tower-http 0.6 and the workspace keeps one
+      # version of each crate; move both together when reqwest does.
+      - dependency-name: tower-http
+        versions: [">= 0.7"]
     groups:
       rust-minor-and-patch:
         update-types: [minor, patch]
@@ -52,6 +57,13 @@ updates:
       # updates already land in the group above; this one takes the majors.
       tanstack-table:
         patterns: ["@tanstack/*-table"]
+
+  # The official MCP SDK client that drives navree-mcp's conformance test
+  # (e2e/mcp-sdk); following its releases keeps the test current.
+  - package-ecosystem: npm
+    directory: /e2e/mcp-sdk
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 2
 
   - package-ecosystem: github-actions
     directory: /

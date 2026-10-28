@@ -435,3 +435,52 @@ async fn the_passkey_testing_example_runs() {
         .await
         .assert_status(200);
 }
+
+// ---------------------------------------------------------------------------
+// Two-factor: "Codes and QR codes in your own code", as the page writes it.
+
+mod codes_in_your_own_code {
+    use navree::crypto::qr::{EcLevel, QrCode};
+    use navree::crypto::totp::{Secret, Totp};
+
+    /// The base32 secret to type in, the `otpauth://` URL and the QR code as SVG.
+    pub fn setup(
+        issuer: &str,
+        email: &str,
+    ) -> Result<(String, String, String), Box<dyn std::error::Error>> {
+        let totp = Totp::builder(Secret::generate()?)
+            .issuer(issuer)
+            .account(email)
+            .build()?;
+        let url = totp.to_url()?;
+        let svg = QrCode::encode(url.as_bytes(), EcLevel::M)?.to_svg(200);
+        Ok((totp.secret().to_base32(), url, svg))
+    }
+
+    /// Checks a code against the stored secret.
+    pub fn accept(totp: &Totp, code: &str, now: u64, last_step: u64) -> Option<u64> {
+        totp.check(code, now).filter(|step| *step > last_step)
+    }
+}
+
+#[test]
+fn the_totp_and_qr_example_sets_up_and_accepts_a_code_once() {
+    use codes_in_your_own_code::{accept, setup};
+    use navree::crypto::totp::{Secret, Totp};
+
+    let (secret, url, svg) = setup("Acme", "ada@example.com").unwrap();
+    assert!(url.starts_with("otpauth://totp/Acme:ada%40example.com?secret="));
+    assert!(url.contains(&secret) && url.ends_with("&issuer=Acme"));
+    assert!(svg.starts_with("<?xml") && svg.contains("<svg") && svg.contains("viewBox"));
+
+    // The app has the secret from the URL; the server has it from storage.
+    let totp = Totp::builder(Secret::from_base32(&secret).unwrap())
+        .build()
+        .unwrap();
+    let from_url = Totp::from_url(&url).unwrap();
+    let now = 1_792_929_600;
+    let code = from_url.generate(now);
+    assert_eq!(accept(&totp, &code, now, 0), Some(now / 30));
+    // The same code again, once its step is the last one accepted.
+    assert_eq!(accept(&totp, &code, now + 5, now / 30), None);
+}

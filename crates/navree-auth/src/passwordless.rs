@@ -33,7 +33,6 @@ use uuid::Uuid;
 use crate::account::{after, send_after_commit};
 use crate::login_token::Model as LoginToken;
 use crate::service::{entry, normalize_email};
-use crate::throttle::LoginThrottle;
 use crate::token::RefreshSecret;
 use crate::two_factor::two_factor_enabled;
 use crate::{
@@ -187,7 +186,7 @@ impl AuthService {
         if !options.enabled {
             return Err(AuthError::Disabled("sign-in codes"));
         }
-        let key = LoginThrottle::key(email, meta.ip.as_deref());
+        let key = self.throttle.key(email, meta.ip.as_deref());
         self.throttle_attempt(
             &self.throttle,
             &key,

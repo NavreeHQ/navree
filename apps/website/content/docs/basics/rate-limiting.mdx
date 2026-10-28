@@ -1,6 +1,6 @@
 ---
 title: "Rate limiting"
-description: "The per-IP limit every app gets, throttles on single routes, the login throttle, limits shared by every process with Redis, and how client addresses work behind proxies."
+description: "The per-IP limit every app gets, IPv6 clients counted by network, throttles on single routes, the login throttle, limits shared by every process with Redis, and how client addresses work behind proxies."
 ---
 
 Navree limits how fast clients can call your API at two levels. Every app has a **per-IP limit**, 600 requests a minute by default, that runs before routing. On top of it, any route can declare its own **throttle**, counted per user. Both answer `429 Too Many Requests` with a `Retry-After` header. The auth module adds a **login throttle** for failed sign-ins.
@@ -18,7 +18,9 @@ per_ip_rate_limit = 600   # requests per minute per client IP
 APP_HTTP__PER_IP_RATE_LIMIT=1200
 ```
 
-The limit allows a burst: a client can send its whole minute's allowance at once, then gets one more request every `60 / limit` seconds (every 100 ms at 600). Technically it's the generic cell rate algorithm with one timestamp per address. A refused request doesn't use up any allowance.
+The limit allows a burst: a client can send its whole minute's allowance at once, then gets one more request every `60 / limit` seconds (every 100 ms at 600). Technically it's the generic cell rate algorithm with one timestamp per client. A refused request doesn't use up any allowance.
+
+A **client** is an IPv4 address, or an IPv6 **network**: anyone with an IPv6 allocation (the smallest a provider normally hands out is a /64) can send from billions of addresses, so counting single addresses would limit nobody. Every per-IP limit in Navree, including the route throttles for guests, the login throttle, the social sign-in callback throttle and the OAuth endpoint limits, counts IPv6 clients by their first 64 bits. IPv4-mapped IPv6 addresses (`::ffff:192.0.2.1`) count as IPv4. [Change the prefix](#ipv6-clients) in one place.
 
 When a client goes over, it gets:
 
@@ -145,7 +147,7 @@ The [OAuth server](/docs/packages/oauth-server/#rate-limits) limits its token, i
 
 ## The login throttle
 
-`POST /api/auth/login` has its own protection against password guessing, separate from the limits above: after `auth.login_throttle_per_minute` failed attempts (5 by default) for the same email from the same client IP, further attempts get a 429 for the rest of the minute:
+`POST /api/auth/login` has its own protection against password guessing, separate from the limits above: after `auth.login_throttle_per_minute` failed attempts (5 by default) for the same email from the same client (an IPv4 address, or an IPv6 network: see [IPv6 clients](#ipv6-clients)), further attempts get a 429 for the rest of the minute:
 
 ```json title="429 Too Many Requests"
 {
@@ -182,6 +184,41 @@ Entries are IP addresses or CIDR blocks; anything else fails the boot. For a req
 The CRM trusts the loopback addresses by default, so that its Next.js server, which calls the API from the same machine, can name the browser in `X-Forwarded-For`. The Next.js server only sends that header when `NAVREE_TRUSTED_PROXY_HOPS` says how many reverse proxies sit in front of it. That setting is 0 by default, because without a proxy Next.js can't tell the browser's address from a header the browser made up. So out of the box, every browser shares the Next.js server's per-IP limit and login throttle; put a proxy in front of Next.js and set `NAVREE_TRUSTED_PROXY_HOPS` to make them per browser.
 
 `http.trust_proxy = true` believes the headers from **any** peer, taking the right-most `X-Forwarded-For` entry. Use it only when every request is guaranteed to come through a proxy that sets the header; prefer `trusted_proxies`. When `trusted_proxies` is set, `trust_proxy` is ignored.
+
+### IPv6 clients
+
+Limits count an IPv6 client by network, not by address. The prefix is `http.rate_limit_ipv6_prefix`, 64 by default (1 to 128; the boot fails outside that range):
+
+```toml title="config/app.toml"
+[http]
+rate_limit_ipv6_prefix = 64   # all addresses of one /64 share a budget
+```
+
+```env title=".env"
+APP_HTTP__RATE_LIMIT_IPV6_PREFIX=56
+```
+
+Use a shorter prefix (48, 56) when the users of your app typically get larger allocations, such as business connections; 128 counts single addresses. The one setting governs the per-IP limit, `#[throttle]` for guests, the [login throttle](#the-login-throttle) (per email and network), the callback throttle of [social sign-in](/docs/packages/social-sign-in/) and the per-IP limits of the [OAuth server](/docs/packages/oauth-server/#rate-limits). Logs and audit entries still carry the client's full address.
+
+Limits you write yourself should key by the same network. `navree::http::rate_limit_key(ip, prefix)` returns the key (the IPv4 address, or the IPv6 address with the bits after `prefix` cleared) and `HttpOptions::rate_limit_key(ip)` applies the configured prefix:
+
+```rust
+use std::net::IpAddr;
+use std::time::Duration;
+
+use navree::http::{AppError, HttpOptions, KeyedRateLimiter};
+
+// `options` is the app's `HttpOptions`; `ip` comes from the `ClientIp` extractor.
+fn check(
+    limiter: &KeyedRateLimiter<IpAddr>,
+    options: &HttpOptions,
+    ip: IpAddr,
+) -> Result<(), AppError> {
+    limiter
+        .check(&options.rate_limit_key(ip))
+        .map_err(|limited| AppError::too_many_requests(limited.retry_after))
+}
+```
 
 ### Reading the client IP
 
@@ -235,7 +272,7 @@ impl ReportsController {
 }
 ```
 
-`AppError::too_many_requests(retry_after)` answers the same `429` with `Retry-After` as the built-in limits. `hit` returns `RateLimit::Allowed { remaining }` or `RateLimit::Limited { retry_after }`, a refused request doesn't count, and `reset(key)` forgets a key's requests. The window is measured on the Redis server's clock, so instances whose clocks drift still agree. The per-IP limit and `#[throttle]` stay in memory: they run on every request, before routing, where a network round trip would cost every request. See [Redis](/docs/digging-deeper/redis/#shared-rate-limits) for the details.
+When a key is a client address, build it with `rate_limit_key` (see [IPv6 clients](#ipv6-clients)), so a whole IPv6 network shares one budget. `AppError::too_many_requests(retry_after)` answers the same `429` with `Retry-After` as the built-in limits. `hit` returns `RateLimit::Allowed { remaining }` or `RateLimit::Limited { retry_after }`, a refused request doesn't count, and `reset(key)` forgets a key's requests. The window is measured on the Redis server's clock, so instances whose clocks drift still agree. The per-IP limit and `#[throttle]` stay in memory: they run on every request, before routing, where a network round trip would cost every request. See [Redis](/docs/digging-deeper/redis/#shared-rate-limits) for the details.
 
 ## Testing
 

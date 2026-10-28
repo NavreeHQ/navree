@@ -12,7 +12,7 @@ error format and pagination.
 | HTTP | navree-http on Axum 0.8.9, hyper 1.12.0, tower-http 0.7.1 |
 | Workers | One process. `AppBuilder::run` builds Tokio's (1.54.1) default multi-thread runtime: one worker per CPU, 8 under the benchmark's cpuset. The `serve` command runs `axum::serve` on `0.0.0.0:8080` |
 | Database | navree-db `DatabaseModule`: SeaORM 2.0.4 on sqlx 0.9.0 (PostgreSQL), one pool of 64 connections (`database.max_connections = 64`, `migrate_on_boot = false`) |
-| JWT | navree-auth `AuthModule`: its `JwtStrategy` (jsonwebtoken 11.1.0 with navree-auth's HMAC-only crypto provider on RustCrypto `hmac`/`sha2` (the measured run used jsonwebtoken's `rust_crypto` backend, which signs HS256 with the same crates); HS256, signature, `exp`, `iss = navree`, token type `access`), then the `CurrentUser` extractor loads the `users` row (navree-auth's `user` entity) |
+| JWT | navree-auth `AuthModule`: its `JwtStrategy` (HS256 on `navree_crypto::jose`, with HMAC from RustCrypto `hmac`/`sha2` in navree-crypto; the measured run predates that and used jsonwebtoken 11.1.0 with the same HMAC crates; HS256, signature, `exp`, `iss = navree`, token type `access`), then the `CurrentUser` extractor loads the `users` row (navree-auth's `user` entity) |
 | Validation | navree-validation `Valid<Query<T>>` and `Valid<Json<T>>` on garde 0.23.0; failures are 400s in Navree's error format |
 
 Configuration: `config/app.toml` (Navree's conventional file) plus the

@@ -1,0 +1,71 @@
+{
+  "Mixed_Case": {
+    "Key": "keys keep their case"
+  },
+  "big": 9223372036854775807,
+  "empty": "",
+  "exp": 1000.0,
+  "falsehood": false,
+  "float": 3.14,
+  "hex": 3735928559,
+  "inf": null,
+  "inline": {
+    "a": 1,
+    "b": {
+      "c": [
+        1,
+        2
+      ]
+    }
+  },
+  "integer": 42,
+  "ints": [
+    1,
+    2,
+    3
+  ],
+  "ld": "1979-05-27",
+  "ldt": "1979-05-27T07:32:00",
+  "literal": "C:\\Users\\navree",
+  "lt": "07:32:00",
+  "mixed": [
+    1,
+    "two",
+    3.0,
+    true
+  ],
+  "multiline": "first\nsecond",
+  "negative": -17,
+  "nested": [
+    [
+      1,
+      2
+    ],
+    [
+      3
+    ]
+  ],
+  "odt": "1979-05-27T07:32:00Z",
+  "products": [
+    {
+      "name": "Hammer",
+      "sku": 738594937
+    },
+    {
+      "color": "gray",
+      "name": "Nail",
+      "sku": 284758393
+    }
+  ],
+  "quoted.key": "stays one key",
+  "table": {
+    "key": "value",
+    "sub": {
+      "deep": "value"
+    }
+  },
+  "title": "TOML types",
+  "truth": true,
+  "whole_float": 2.0,
+  "üñí": "unicode key"
+}

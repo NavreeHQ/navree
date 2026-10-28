@@ -250,12 +250,11 @@ impl Issuer {
 
 /// The current TOTP code of `secret`.
 fn totp(secret: &str) -> String {
-    totp_rs::Builder::new()
-        .with_secret(totp_rs::Secret::try_from_base32(secret).expect("a base32 secret"))
+    use navree_crypto::totp::{Secret, Totp};
+    Totp::builder(Secret::from_base32(secret).expect("a base32 secret"))
         .build()
         .expect("a valid TOTP")
         .generate(u64::try_from(chrono::Utc::now().timestamp()).unwrap())
-        .to_string()
 }
 
 /// Turns two-factor authentication on for `user`; a recovery code.

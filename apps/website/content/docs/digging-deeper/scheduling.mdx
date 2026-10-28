@@ -152,11 +152,56 @@ A task without a frequency runs every minute. The helpers build cron expressions
 | `.daily_at("08:00")` | every day at 08:00 | `0 8 * * *` |
 | `.weekly()` | every Sunday at midnight | `0 0 * * 0` |
 
-A cron expression has five fields: minute, hour, day of month, month and day of week. Expressions are parsed by [croner](https://docs.rs/croner), which also accepts names such as `MON-FRI` and the nicknames `@hourly`, `@daily`, `@weekly`, `@monthly` and `@yearly`. A seconds field isn't allowed.
+A cron expression has five fields: minute, hour, day of month, month and day of week. Navree parses them itself; [Cron expressions](#cron-expressions) lists everything it accepts. A seconds field isn't allowed.
 
 An invalid expression, an `hourly_at` minute over 59 or a `daily_at` time that isn't a 24-hour `HH:MM` fails the boot with the task, its module and the reason. The last frequency you set wins.
 
 For any other rhythm, write the cron expression, for example `.cron("0 9 * * MON-FRI")` for weekdays at nine.
+
+### Cron expressions
+
+Five fields, separated by spaces or tabs, or one nickname. Case doesn't matter.
+
+| Field | Values | Names |
+|---|---|---|
+| minute | 0-59 | |
+| hour | 0-23 | |
+| day of month | 1-31 | |
+| month | 1-12 | `JAN` to `DEC` |
+| day of week | 0-7 (0 and 7 are Sunday) | `SUN` to `SAT` |
+
+Every field takes:
+
+- `*`: every value.
+- A value: `30`, `MAR`, `FRI`.
+- A range: `9-17`, `MON-FRI`. A range can't wrap around; write `22-23,0-2` for the night.
+- A step: `*/15`, or `10-40/10` over a range. Steps count from the start of the range, so `*/15` in the day of month is the 1st, 16th and 31st. A step needs `*` or a range in front of it: `5/15` is rejected.
+- A comma list of these: `0,15,30,45`, `1,15`, `JAN,JUL`, `*/20,5`.
+
+Two fields take more:
+
+| Field | Form | Means |
+|---|---|---|
+| day of month | `L` | the last day of the month |
+| day of month | `LW` | the last weekday (Monday to Friday) of the month |
+| day of month | `15W` | the weekday nearest the 15th, without leaving the month: a Saturday 15th runs on Friday the 14th, and a Saturday 1st runs on Monday the 3rd. A day the month doesn't have (`31W` in April) doesn't run. |
+| day of week | `5L`, `FRIL` | the last Friday of the month |
+| day of week | `5#2`, `FRI#2` | the second Friday; the number is 1 to 5, and `5#L` is the last one |
+| day of month, day of week | `?` | the same as `*`; it stands alone in the field |
+
+When both the day of month and the day of week are set (neither is `*`), a day matches if **either** matches: `0 0 1 * MON` runs on the 1st and on every Monday. Put `+` in front of the day of week to ask for both: `0 0 1-7 * +MON` runs on the first Monday of the month. A `*` field is ignored, so `0 0 * * MON` is every Monday.
+
+The nicknames are `@yearly` and `@annually` (`0 0 1 1 *`), `@monthly` (`0 0 1 * *`), `@weekly` (`0 0 * * SUN`), `@daily` (`0 0 * * *`) and `@hourly` (`0 * * * *`).
+
+Anything else fails the boot, naming the task, its module, the field and the bad token:
+
+```text
+scheduled task `report` (module `ReportsModule`) has an invalid schedule `61 * * * *`: minute field: `61` is out of range, use 0 to 59
+```
+
+That covers a seconds or year field, names in the wrong field (`MON` as a minute), `@reboot` and `@midnight`, empty list items (`1,,2`), ranges that run backwards (`10-5`), a lone `L` in the day of week (write `5L`) and an expression over 256 bytes.
+
+An expression that can never match, such as `0 0 30 2 *`, is accepted: the search for its next run looks 400 years ahead (the calendar repeats every 400 years, so a longer search couldn't find more) and then gives up. `schedule:list` shows `never` for it, and it never runs.
 
 ## Time zones
 
@@ -171,7 +216,20 @@ m.schedule(|s| {
 });
 ```
 
-`in_zone` takes any IANA name (legacy names such as `Asia/Calcutta` work); an unknown zone fails the boot. When clocks change, a local time that is skipped (02:30 on the night clocks jump from 02:00 to 03:00) runs at the first minute after the gap, and a local time that happens twice runs once, the first time.
+`in_zone` takes any IANA name (legacy names such as `Asia/Calcutta` work); an unknown zone fails the boot.
+
+### When clocks change
+
+A cron expression is read on the wall clock of its zone. Which rule covers the nights the clock changes depends on the expression:
+
+- **Fixed-time expressions** have no `*` in the minute or the hour field (`*/n` counts as a `*`): `30 2 * * *`, `0,30 1-3 * * *`, `0 0 1 * *`, and `@daily`, `@weekly`, `@monthly` and `@yearly`. Each local time runs **once**:
+  - When clocks go forward, a skipped local time runs at the first minute after the gap. On the night clocks in New York jump from 02:00 to 03:00, `30 2 * * *` runs at 03:00. Several skipped times (`0,15,30,45 2 * * *`) run once together, and if 03:00 matches too it still runs once.
+  - When clocks go back, a local time that happens twice runs the first time only. When clocks in New York fall from 02:00 back to 01:00, `30 1 * * *` runs at the first 01:30 and not at the second.
+- **Wildcard expressions** have a `*` in the minute or the hour field: `* * * * *`, `*/15 * * * *`, `0 * * * *`, `*/20 1-3 * * *`, and `@hourly`. They follow the wall clock as it happens, so they never pause:
+  - When clocks go back, they run in both passes through the repeated hour. `* * * * *` still runs every real minute, and `0 * * * *` every real hour: 00:00, 01:00, 01:00 again, 02:00.
+  - When clocks go forward, nothing is caught up for the skipped times, which don't exist. `30 * * * *` runs at 01:30 and then at 03:30, with no extra run at 03:00.
+
+The same rules apply to `list`, which shows the next run as an instant in UTC, so `schedule:list` and the real runs never disagree.
 
 ### Once per workspace, in its local time
 

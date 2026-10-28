@@ -5,5 +5,7 @@ mod encrypter;
 mod hasher;
 mod jose;
 mod module;
+mod qr;
 mod tokens;
+mod totp;
 mod webpush;

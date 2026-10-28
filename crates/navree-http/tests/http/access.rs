@@ -13,13 +13,13 @@ use http::request::Parts;
 use http::{Method, StatusCode};
 use navree_contracts::{AuditEntry, AuditKind, AuditSink, AuthState};
 use navree_http::{
-    AppError, CurrentPrincipal, GlobalLayer, Guard, LayerSlot, ModuleBuilderHttpExt,
+    AppError, CurrentPrincipal, GlobalLayer, Guard, HttpOptions, LayerSlot, ModuleBuilderHttpExt,
     RouteAuthorizer, RouteDef, RouteMeta,
 };
 use navree_kernel::{BoxError, BoxFuture, Module, ModuleBuilder};
 use uuid::Uuid;
 
-use crate::support::{Counter, Setup};
+use crate::support::{Counter, Setup, options};
 
 const ALICE: &str = "0192f0c1-0000-7000-8000-00000000000a";
 const BOB: &str = "0192f0c1-0000-7000-8000-00000000000b";
@@ -412,6 +412,45 @@ async fn per_user_throttle() {
     // Guests are throttled by client IP.
     assert_eq!(app.get("/api/public-limited").await.status, StatusCode::OK);
     app.get("/api/public-limited").await.assert_error(429);
+}
+
+/// A guest's route throttle counts IPv6 clients by network (a /64 by default).
+#[tokio::test]
+async fn guest_throttle_counts_ipv6_clients_by_network() {
+    let app = Setup::new(vec![
+        ok_route(Method::GET, "/public-limited")
+            .public()
+            .throttle(1, Duration::from_secs(60)),
+    ])
+    .options(HttpOptions {
+        trust_proxy: true,
+        ..options()
+    })
+    .boot()
+    .await;
+    let from = |ip: &str| {
+        http::Request::get("/api/public-limited")
+            .header("x-forwarded-for", ip.to_owned())
+            .body(Body::empty())
+            .unwrap()
+    };
+
+    assert_eq!(
+        app.send(from("2001:db8:5:5::1")).await.status,
+        StatusCode::OK
+    );
+    app.send(from("2001:db8:5:5:1:2:3:4"))
+        .await
+        .assert_error(429);
+    assert_eq!(
+        app.send(from("2001:db8:5:6::1")).await.status,
+        StatusCode::OK
+    );
+    assert_eq!(
+        app.send(from("::ffff:192.0.2.7")).await.status,
+        StatusCode::OK
+    );
+    app.send(from("192.0.2.7")).await.assert_error(429);
 }
 
 // ---------------------------------------------------------------------------
