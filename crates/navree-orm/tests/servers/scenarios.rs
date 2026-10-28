@@ -1373,43 +1373,50 @@ pub async fn timeouts(db: Db, server: Server) {
         ["Acme"]
     );
 
-    let uow = db.uow(None, None).await;
-    Company::create(
-        &uow,
-        Company {
-            name: "Globex".into(),
-            ..Company::default()
-        },
-    )
-    .await
-    .unwrap();
-    let error = slow().get(&uow).await.unwrap_err();
-    assert!(error.is_timeout(), "{error:?}");
-    assert_eq!(
-        Company::query()
-            .timeout(StdDuration::from_secs(10))
-            .count(&uow)
-            .await
-            .unwrap(),
-        2,
-        "the unit of work goes on"
-    );
-    if server == Server::Postgres {
-        let setting: Option<String> = navree_orm::scalar(
+    // Units of work on SeaORM's transaction (the default) and on
+    // navree-db's own.
+    for (round, db) in [db.clone(), db.with_native_units_of_work(true)]
+        .into_iter()
+        .enumerate()
+    {
+        let uow = db.uow(None, None).await;
+        Company::create(
             &uow,
-            navree_orm::raw(
-                "SELECT current_setting('statement_timeout')",
-                Vec::<Value>::new(),
-            ),
+            Company {
+                name: format!("Globex {round}"),
+                ..Company::default()
+            },
         )
         .await
         .unwrap();
+        let error = slow().get(&uow).await.unwrap_err();
+        assert!(error.is_timeout(), "{error:?}");
         assert_eq!(
-            setting.as_deref(),
-            Some("0"),
-            "the transaction's own timeout is back"
+            Company::query()
+                .timeout(StdDuration::from_secs(10))
+                .count(&uow)
+                .await
+                .unwrap(),
+            2 + round as u64,
+            "the unit of work goes on"
         );
+        if server == Server::Postgres {
+            let setting: Option<String> = navree_orm::scalar(
+                &uow,
+                navree_orm::raw(
+                    "SELECT current_setting('statement_timeout')",
+                    Vec::<Value>::new(),
+                ),
+            )
+            .await
+            .unwrap();
+            assert_eq!(
+                setting.as_deref(),
+                Some("0"),
+                "the transaction's own timeout is back"
+            );
+        }
+        uow.commit().await.unwrap();
+        assert_eq!(Company::query().count(&db).await.unwrap(), 2 + round as u64);
     }
-    uow.commit().await.unwrap();
-    assert_eq!(Company::query().count(&db).await.unwrap(), 2);
 }
