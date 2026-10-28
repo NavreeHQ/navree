@@ -144,13 +144,17 @@ pub fn slot_env(port: u16, release: &str) -> EnvFile {
 }
 
 /// `/etc/<app>/frontend-<slot>.env`: the front end's port, and the API slot
-/// of the same release it calls.
+/// of the same release it calls. Caddy is the one reverse proxy in front of
+/// the front end (it replaces any `X-Forwarded-For` the browser sent with the
+/// address it saw), so the backend-for-frontend trusts exactly one hop and
+/// names the browser to the API, which trusts the loopback peer.
 pub fn frontend_env(port: u16, api_port: u16) -> EnvFile {
     let mut env = EnvFile::new();
     env.set("PORT", port.to_string());
     env.set("HOSTNAME", "127.0.0.1");
     env.set("NODE_ENV", "production");
     env.set("NAVREE_API_URL", format!("http://127.0.0.1:{api_port}"));
+    env.set("NAVREE_TRUSTED_PROXY_HOPS", "1");
     env
 }
 
@@ -264,5 +268,7 @@ roles = ["worker"]
         let env = frontend_env(3002, 8082);
         assert_eq!(env.get("PORT"), Some("3002"));
         assert_eq!(env.get("NAVREE_API_URL"), Some("http://127.0.0.1:8082"));
+        // Caddy is the one proxy in front of the front end.
+        assert_eq!(env.get("NAVREE_TRUSTED_PROXY_HOPS"), Some("1"));
     }
 }

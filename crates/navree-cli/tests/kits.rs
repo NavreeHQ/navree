@@ -210,6 +210,43 @@ fn the_saas_kit_writes_the_api_and_the_web_app() {
 }
 
 #[test]
+fn the_saas_kit_names_the_browser_to_the_api_through_exactly_the_bff_hop() {
+    let (_dir, root) = generate("acme", Kit::Saas);
+    // The API believes X-Forwarded-For from loopback, where the web app's
+    // backend-for-frontend calls from, and from no other peer.
+    let config = toml(&root, "config/app.toml");
+    let trusted: Vec<_> = config["http"]["trusted_proxies"]
+        .as_array()
+        .expect("http.trusted_proxies")
+        .iter()
+        .map(|entry| entry.as_str().unwrap())
+        .collect();
+    assert_eq!(trusted, ["127.0.0.1", "::1"]);
+    assert!(config["http"].get("trust_proxy").is_none());
+    // ... and it is a setting: the API's environment moves it, the web
+    // app's names the proxies and the header it believes.
+    assert!(read(&root, ".env.example").contains("# APP_HTTP__TRUSTED_PROXIES=127.0.0.1,::1"));
+    let web_env = read(&root, "web/.env.example");
+    assert!(web_env.contains("# NAVREE_TRUSTED_PROXY_HOPS=1"));
+    assert!(web_env.contains("# NAVREE_CLIENT_IP_HEADER=x-real-ip"));
+    // The backend-for-frontend reads both and forwards the client address.
+    let server = read(&root, "web/lib/bff/server.ts");
+    assert!(server.contains("process.env.NAVREE_TRUSTED_PROXY_HOPS"));
+    assert!(server.contains("process.env.NAVREE_CLIENT_IP_HEADER"));
+    let bff = read(&root, "web/lib/bff/bff.ts");
+    assert!(bff.contains("clientIpHeader"));
+    assert!(bff.contains("\"x-forwarded-for\": address"));
+    // The API kit has no web app, so no proxy to trust.
+    let (_dir2, api) = generate("acme", Kit::Api);
+    assert!(
+        toml(&api, "config/app.toml")["http"]
+            .get("trusted_proxies")
+            .is_none()
+    );
+    assert!(!read(&api, ".env.example").contains("APP_HTTP__TRUSTED_PROXIES"));
+}
+
+#[test]
 fn saas_and_api_kits_ship_their_openapi_document() {
     for kit in [Kit::Saas, Kit::Api] {
         let (_dir, root) = generate("acme-cloud", kit);
