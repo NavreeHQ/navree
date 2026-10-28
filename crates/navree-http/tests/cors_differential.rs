@@ -14,8 +14,10 @@
 //! 2. **A preflight is `OPTIONS` with `Origin` and
 //!    `Access-Control-Request-Method`.** tower-http answers every `OPTIONS`
 //!    request itself. We pass the others to the handler.
-//! 3. **Preflight `Vary`.** tower-http varies only with `Origin`; a
-//!    preflight response also varies with the request method and headers.
+//! 3. **`Vary`.** tower-http 0.6 (the version in the tree) varies every
+//!    response with `Origin`, `Access-Control-Request-Method` and
+//!    `Access-Control-Request-Headers`. We vary ordinary responses with
+//!    `Origin` and preflight responses with all three.
 //!
 //! A request with two `Origin` headers is a fourth case: tower-http reads
 //! the first, we treat it as a disallowed origin (rule 1 then applies).
@@ -322,15 +324,16 @@ async fn standard(config: &Config, case: &Case) -> Vec<String> {
     if !allowed {
         lines.retain(|line| !line.starts_with("access-control-"));
     }
-    // Rule 3: a preflight response varies with the request method and
-    // headers too.
-    if preflight {
-        for line in &mut lines {
-            if line == "vary: origin" {
-                *line =
-                    "vary: origin, access-control-request-method, access-control-request-headers"
-                        .to_owned();
-            }
+    // Rule 3: `Vary` is `Origin`, and on a preflight also the request
+    // method and headers. tower-http 0.6 sends all three on every response.
+    let vary = if preflight {
+        "vary: origin, access-control-request-method, access-control-request-headers"
+    } else {
+        "vary: origin"
+    };
+    for line in &mut lines {
+        if line.starts_with("vary: origin") {
+            *line = vary.to_owned();
         }
     }
     lines.sort();
@@ -372,21 +375,14 @@ async fn our_layer_equals_tower_http_apart_from_the_standard_rules() {
 
 #[tokio::test]
 async fn an_allowed_simple_request_and_preflight_are_identical_to_tower_http() {
-    // The cases the browser-facing protocol is about: no rule applies to
-    // the simple request, and a preflight differs only in `Vary`.
+    // The cases the browser-facing protocol is about: apart from `Vary`,
+    // no rule applies to an allowed simple request or preflight.
     let config = &CONFIGS[2];
-    let simple = &CASES[0];
-    assert_eq!(
-        run_ours(config, &simple.method, simple.headers).await,
-        run_theirs(config, &simple.method, simple.headers).await
-    );
-    let preflight = &CASES[8];
-    let mut ours = run_ours(config, &preflight.method, preflight.headers).await;
-    let theirs = run_theirs(config, &preflight.method, preflight.headers).await;
-    ours.retain(|line| !line.starts_with("vary:"));
-    let theirs: Vec<_> = theirs
-        .into_iter()
-        .filter(|line| !line.starts_with("vary:"))
-        .collect();
-    assert_eq!(ours, theirs);
+    for case in [&CASES[0], &CASES[8]] {
+        let mut ours = run_ours(config, &case.method, case.headers).await;
+        let mut theirs = run_theirs(config, &case.method, case.headers).await;
+        ours.retain(|line| !line.starts_with("vary: origin"));
+        theirs.retain(|line| !line.starts_with("vary: origin"));
+        assert_eq!(ours, theirs, "{}", case.name);
+    }
 }
