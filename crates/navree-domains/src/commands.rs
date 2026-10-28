@@ -1,4 +1,4 @@
-//! The commands `domains:list`, `domains:verify` and
+//! The commands `domains:list`, `domains:verify`, `domains:transfer` and
 //! `domains:certificates`.
 
 use navree_kernel::{AppContext, BoxError, CommandSpec};
@@ -19,6 +19,11 @@ pub(crate) fn commands() -> Vec<CommandSpec> {
             "domains:verify",
             "Check custom domains' DNS: <host-or-id> | --due | --all",
             verify,
+        ),
+        CommandSpec::new(
+            "domains:transfer",
+            "Move a verified domain to another workspace by a fresh TXT proof: <host> --to <workspace-id>",
+            transfer,
         ),
         CommandSpec::new(
             "domains:certificates",
@@ -122,17 +127,17 @@ async fn verify(ctx: AppContext, args: Vec<String>) -> Result<(), BoxError> {
         let Some(target) = args.iter().find(|arg| !arg.starts_with("--")) else {
             return Err("name a domain (host or id), or pass --due or --all".into());
         };
-        let id = match target.parse::<Uuid>() {
-            Ok(id) => id,
+        match target.parse::<Uuid>() {
+            Ok(id) => vec![id],
             Err(_) => {
-                domains
-                    .find(target)
-                    .await?
-                    .ok_or_else(|| format!("no custom domain `{target}`"))?
-                    .id
+                // Every claim on the host: each has its own token.
+                let claims = domains.claims(target).await?;
+                if claims.is_empty() {
+                    return Err(format!("no custom domain `{target}`").into());
+                }
+                claims.into_iter().map(|domain| domain.id).collect()
             }
-        };
-        vec![id]
+        }
     };
     let mut failed = false;
     for id in targets {
@@ -147,6 +152,48 @@ async fn verify(ctx: AppContext, args: Vec<String>) -> Result<(), BoxError> {
     }
     if failed {
         return Err("a DNS lookup failed".into());
+    }
+    Ok(())
+}
+
+/// `domains:transfer <host> --to <workspace-id>`.
+///
+/// The first run makes the workspace's claim and prints the records it
+/// must create (a TXT record with a token of its own); once they are in
+/// place, the scheduler moves the domain, or run the command again.
+async fn transfer(ctx: AppContext, args: Vec<String>) -> Result<(), BoxError> {
+    let domains = ctx.get::<Domains>().await?;
+    let Some(to) = value(&args, "--to")? else {
+        return Err("name the workspace that takes the domain: --to <workspace-id>".into());
+    };
+    let to: Uuid = to
+        .parse()
+        .map_err(|_| format!("`{to}` is not a workspace id"))?;
+    let host = args
+        .iter()
+        .enumerate()
+        .find(|(at, arg)| {
+            !arg.starts_with("--") && (*at == 0 || args[*at - 1] != "--to")
+        })
+        .map(|(_, arg)| arg.as_str());
+    let Some(host) = host else {
+        return Err("name the domain to move: <host> --to <workspace-id>".into());
+    };
+    let domain = domains.transfer(host, to).await?;
+    if domain.is_verified() {
+        println!("{}", line(&domain));
+        return Ok(());
+    }
+    println!(
+        "{} moves to workspace {to} once these records are in place (checked every {} minutes, or run this command again):",
+        domain.host,
+        domains.options().verification.interval_mins
+    );
+    for record in &domain.dns_records {
+        println!("{} {} {}", record.kind, record.name, record.value);
+    }
+    if let Some(error) = &domain.last_error {
+        println!("{error}");
     }
     Ok(())
 }

@@ -115,7 +115,8 @@ async fn the_claim_that_proves_control_wins_and_the_others_are_closed() {
         domains.resolve(HOST).await.unwrap().unwrap().workspace_id,
         owner
     );
-    assert!(events.names().is_empty() || events.names() == ["domains.claimed_elsewhere"]);
+    // Nothing more is announced for a claim that was closed already.
+    assert!(events.names().is_empty());
 }
 
 #[tokio::test]
