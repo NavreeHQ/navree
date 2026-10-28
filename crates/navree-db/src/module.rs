@@ -440,6 +440,9 @@ async fn client_command(ctx: AppContext, args: Vec<String>) -> Result<(), BoxErr
         _ => &options.url,
     };
     let client = ClientCommand::for_url(url)?;
+    // The `db` console command: runs the connection's own client (psql, mysql, sqlite3, chosen by
+    // the URL scheme, never by input) attached to this terminal.
+    // nosemgrep: navree-process-outside-tooling
     let status = tokio::process::Command::new(&client.program)
         .args(&client.args)
         .envs(client.env.iter().map(|(name, value)| (name, value)))

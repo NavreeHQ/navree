@@ -12,4 +12,6 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 FROM debian:bookworm-slim
 COPY --from=build /usr/local/bin/bench-axum /usr/local/bin/bench-axum
 EXPOSE 8080
+# A benchmark harness image: built and run only on a benchmarking machine, never deployed.
+# nosemgrep: dockerfile.security.missing-user.missing-user
 CMD ["bench-axum"]

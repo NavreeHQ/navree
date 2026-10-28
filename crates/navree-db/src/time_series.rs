@@ -236,6 +236,9 @@ fn drop_chunks(
     } else {
         format!("CAST($2 AS {column_type})")
     };
+    // The cast type is a catalog type name checked against the types pruning knows (above);
+    // the cutoff itself is a bound parameter.
+    // nosemgrep: navree-sql-built-from-strings
     Ok(Statement::from_sql_and_values(
         DbBackend::Postgres,
         format!("SELECT drop_chunks(CAST($1 AS regclass), older_than => {cutoff})"),

@@ -1,0 +1,50 @@
+# Turning certificate verification off makes TLS decorative: anyone on the
+# path can impersonate the server. Navree's clients verify certificates by
+# default and there is no setting that disables it.
+#
+# The rules match the reqwest, hyper and native-TLS switches by name, rustls's
+# custom-verifier hook (the only way to install a custom certificate
+# verifier), and the Node equivalents. A verifier that really must accept
+# unverified certificates (for example, a probe that only reads what a host
+# presents and never sends data) is suppressed at the line, with the reason:
+# `// nosemgrep: navree-tls-verification-disabled`.
+rules:
+  - id: navree-tls-verification-disabled
+    languages: [rust]
+    severity: ERROR
+    message: >-
+      TLS certificate verification is turned off. Verify certificates; if this
+      is a read-only probe that never sends data, suppress this line with
+      `// nosemgrep: navree-tls-verification-disabled` and say why.
+    metadata:
+      category: security
+      cwe: "CWE-295: Improper Certificate Validation"
+      confidence: HIGH
+    pattern-either:
+      - pattern: $B.danger_accept_invalid_certs(true)
+      - pattern: $B.danger_accept_invalid_hostnames(true)
+      - pattern: $B.danger_accept_invalid_certs($X)
+      - pattern: $B.danger_accept_invalid_hostnames($X)
+      - pattern: $B.with_custom_certificate_verifier(...)
+      - pattern: $B.set_certificate_verifier(...)
+      - pattern: $B.set_verify(SslVerifyMode::NONE)
+      - pattern: $B.set_verify_callback(...)
+
+  - id: navree-tls-verification-disabled-js
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      TLS certificate verification is turned off. Remove `rejectUnauthorized:
+      false` / NODE_TLS_REJECT_UNAUTHORIZED=0; trust a private CA with the
+      `ca` option instead.
+    metadata:
+      category: security
+      cwe: "CWE-295: Improper Certificate Validation"
+      confidence: HIGH
+    pattern-either:
+      - pattern: |
+          { ..., rejectUnauthorized: false, ... }
+      - pattern: process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
+      - pattern: process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0
+      - pattern: |
+          $ENV["NODE_TLS_REJECT_UNAUTHORIZED"] = "0"
