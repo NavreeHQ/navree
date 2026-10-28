@@ -175,6 +175,15 @@ fn the_saas_kit_writes_the_api_and_the_web_app() {
     assert!(package["devDependencies"].get("shadcn").is_none());
     assert!(!read(&root, "web/pnpm-lock.yaml").contains("shadcn"));
     assert!(read(&root, "web/app/globals.css").contains("@import \"./shadcn-tailwind.css\";"));
+    // Tailwind scans only the web app's own source folders, never
+    // node_modules, whether or not a Git repository surrounds the app.
+    let css = read(&root, "web/app/globals.css");
+    assert!(css.contains("@import \"tailwindcss\" source(none);"), "{css}");
+    for folder in ["app", "components", "hooks", "lib"] {
+        assert!(css.contains(&format!("@source \"../{folder}\";")), "{folder}");
+        assert!(root.join("web").join(folder).is_dir(), "web/{folder}");
+    }
+    assert!(!css.contains("@source \"../node_modules"), "{css}");
     assert!(read(&root, "web/app/shadcn-tailwind.css").contains("@custom-variant data-open"));
     // The browser reaches the API through the backend-for-frontend; the
     // web app's local settings start as a copy of the example.

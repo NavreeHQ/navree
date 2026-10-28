@@ -16,7 +16,7 @@ Everything lives in one file, `harbor.toml`, in your repository: the servers and
 - **The CLI**: `cargo install --git https://github.com/NavreeHQ/navree navree-cli`.
 - **One or more servers running Ubuntu 22.04 or 24.04 LTS**, on x86-64 or ARM64, from any provider, with SSH access as `root` using a key. A server with 1 GB of memory runs a small app with its database; 2 GB or more is comfortable.
 - **A domain** whose DNS `A` (and `AAAA`) record points at the server that takes web traffic, so Caddy can get a certificate.
-- **An OpenSSH client** (`ssh`) on the machine you deploy from. macOS, Linux and Windows 10 or later include one. Harbor runs it for every connection, so your `~/.ssh` keys and agent work as usual.
+- **An OpenSSH client** (`ssh`) on the machine you deploy from. macOS, Linux and Windows 10 or later include one, and the `ssh` that comes with Git for Windows works too. Harbor runs it for every connection, so your `~/.ssh` keys and agent work as usual.
 - **To build on macOS or Windows**, Docker or Podman: Harbor builds the Linux binary in a container. On Linux it can build natively.
 
 ## Getting started
@@ -35,6 +35,8 @@ navree harbor:init
   created  harbor.key        # the secrets key: never commit it
   updated  .gitignore        # ignores harbor.key
 ```
+
+A [starter kit](/docs/getting-started/starter-kits/) already has a `harbor.toml`, and `navree new` writes its `harbor.key`. If you have the file but not the key, `navree harbor:init` leaves `harbor.toml` alone and writes just the key (it refuses when the file holds encrypted secrets, because a new key could not decrypt them).
 
 </Step>
 <Step title="Describe your server">
@@ -579,7 +581,7 @@ Set it up once:
 1. Create a key pair for CI (`ssh-keygen -t ed25519 -f ci-deploy -N ""`), add `ci-deploy.pub` to `ssh.authorized_keys`, and run `navree harbor:provision` so the servers accept it.
 2. In the repository's settings, add two secrets: `NAVREE_HARBOR_KEY`, the contents of `harbor.key`, and `NAVREE_HARBOR_SSH_KEY`, the contents of `ci-deploy`.
 
-The runner verifies each server against the `host_key` in `harbor.toml`, so it needs no `known_hosts` file. The `concurrency` group makes deploys queue one after another instead of overlapping, and a failing test stops the deploy before anything is built. When `harbor.toml` sits in a package directory below the repository root, the workflow is written at the root with a `working-directory` for the deploy step. Harbor won't overwrite an existing workflow file.
+The runner verifies each server against the `host_key` in `harbor.toml`, so it needs no `known_hosts` file. The `concurrency` group makes deploys queue one after another instead of overlapping, and a failing test stops the deploy before anything is built. When `harbor.toml` sits in a package directory below the repository root, the workflow is written at the root with a `working-directory` for the deploy step. When the surrounding repository ignores the app's directory (an app generated under a `target/` folder, say), that repository is not the app's, and the workflow goes into the app's own `.github/workflows`. Harbor won't overwrite an existing workflow file.
 
 ## Security
 
@@ -622,7 +624,7 @@ Every program Harbor runs (`ssh`, `cargo`, `git`, `docker` or `podman`) goes thr
 
 | Command | What it does |
 |---|---|
-| `navree harbor:init` | Writes `harbor.toml` and `harbor.key`, and ignores the key in Git. |
+| `navree harbor:init` | Writes `harbor.toml` and `harbor.key`, and ignores the key in Git. With a `harbor.toml` and no key (a starter kit's), writes only the key. |
 | `navree harbor:provision [server]` | Prepares every server, or one, for its roles. Safe to run again. |
 | `navree harbor:secrets set <NAME> [--generate] [--stdin]` | Encrypts and stores a secret. `--generate` makes an application key. |
 | `navree harbor:secrets list`, `reveal <NAME>`, `unset <NAME>` | Lists names, prints one value, removes one. |
