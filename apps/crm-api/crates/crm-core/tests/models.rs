@@ -483,7 +483,7 @@ async fn the_activity_timeline_is_a_time_series() {
         ]
     );
     // SQLite has no TimescaleDB: a regular table with its time index.
-    let schema = Schema::new(core.db.conn());
+    let schema = Schema::new(&core.db);
     assert!(!schema.is_hypertable("activities").await.unwrap());
     let indexes = schema.indexes("activities").await.unwrap();
     assert!(

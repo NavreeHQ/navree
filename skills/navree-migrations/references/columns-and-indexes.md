@@ -96,7 +96,7 @@ t.foreign("currency").references("code").on("currencies").restrict_on_delete();
 `drop_columns(table, [..])`, `create_hypertable(table, time_column, |t| ..)`,
 `statement(sql)`. Inside `create`: `t.if_not_exists()`, `t.temporary()`,
 `t.comment(..)`, `t.engine("InnoDB")`, `t.charset(..)`, `t.collation(..)`.
-Outside migrations: `Schema::new(db.conn())`.
+Outside migrations: `Schema::new(&db)` (also a `Pool`, `Transaction` or `Uow`: anything implementing `SchemaConnection`).
 
 Docs: https://navree.com/docs/database/columns/,
 https://navree.com/docs/database/indexes-and-foreign-keys/,

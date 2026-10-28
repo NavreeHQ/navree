@@ -194,7 +194,7 @@ TimescaleDB's default chunk spans 7 days. Size chunks so the indexes of the most
 `schema.time_dimension("events")` reads a hypertable's time column, its type and its chunk interval from TimescaleDB's catalog, and gives `None` for a regular table:
 
 ```rust
-if let Some(time) = Schema::new(db.conn()).time_dimension("events").await? {
+if let Some(time) = Schema::new(&db).time_dimension("events").await? {
     println!("{} ({}), chunks of {}", time.column, time.column_type, time.chunk_interval);
 }
 ```

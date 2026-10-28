@@ -16,9 +16,9 @@ default = ["sqlite"]
 ## turn it on themselves (docs/superpowers/specs/2026-10-28-navree-data-layer-on-sqlx.md, §5).
 sqlite = ["sqlx/sqlite-bundled"]
 ## PostgreSQL and TimescaleDB driver (`postgres://` and `postgresql://` URLs).
-postgres = ["sqlx/postgres", "sea-orm/sqlx-postgres", "sea-orm-migration/sqlx-postgres", "navree-schema/postgres"]
+postgres = ["sqlx/postgres", "sea-orm/sqlx-postgres", "sea-orm-migration/sqlx-postgres"]
 ## MySQL and MariaDB driver (`mysql://` and `mariadb://` URLs).
-mysql = ["sqlx/mysql", "sea-orm/sqlx-mysql", "sea-orm-migration/sqlx-mysql", "navree-schema/mysql"]
+mysql = ["sqlx/mysql", "sea-orm/sqlx-mysql", "sea-orm-migration/sqlx-mysql"]
 
 [dependencies]
 axum = { workspace = true }

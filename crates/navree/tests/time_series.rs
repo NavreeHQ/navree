@@ -82,7 +82,7 @@ async fn conversions_applied(db: &Db) -> Vec<String> {
 
 /// Every table is a regular table, indexed by its time column.
 async fn assert_regular_tables(db: &Db) {
-    let schema = Schema::new(db.conn());
+    let schema = Schema::new(&db);
     for (table, time) in TIME_SERIES {
         assert!(!schema.is_hypertable(table).await.unwrap(), "{table}");
         assert!(
@@ -95,7 +95,7 @@ async fn assert_regular_tables(db: &Db) {
 /// Attempts reference their endpoint (with `ON DELETE CASCADE`), not their
 /// delivery.
 async fn assert_attempts_reference_endpoints(db: &Db) {
-    let keys = Schema::new(db.conn())
+    let keys = Schema::new(&db)
         .foreign_keys("webhook_attempts")
         .await
         .unwrap();
@@ -251,7 +251,7 @@ INSERT INTO "webhook_attempts" VALUES
             .build()
             .await;
         let db = before.get::<Db>().await;
-        if Schema::new(db.conn())
+        if Schema::new(&db)
             .target()
             .await
             .unwrap()
@@ -276,7 +276,7 @@ INSERT INTO "webhook_attempts" VALUES
             .await;
         let db = app.get::<Db>().await;
         let attempt_keys = || async {
-            Schema::new(db.conn())
+            Schema::new(&db)
                 .foreign_keys("webhook_attempts")
                 .await
                 .unwrap()
@@ -291,7 +291,7 @@ INSERT INTO "webhook_attempts" VALUES
             "pretending changes nothing"
         );
         assert!(
-            !Schema::new(db.conn())
+            !Schema::new(&db)
                 .is_hypertable("webhook_attempts")
                 .await
                 .unwrap()
@@ -306,7 +306,7 @@ INSERT INTO "webhook_attempts" VALUES
         app.run_command("migrate", &[]).await.unwrap();
         assert_eq!(conversions_applied(&db).await, CONVERSIONS);
         assert_eq!(attempt_keys().await, ["webhook_endpoints"]);
-        let schema = Schema::new(db.conn());
+        let schema = Schema::new(&db);
         for table in ["webhook_deliveries", "webhook_attempts"] {
             assert!(schema.is_hypertable(table).await.unwrap(), "{table}");
         }
@@ -353,7 +353,7 @@ INSERT INTO "webhook_attempts" VALUES
         })
         .await
         .unwrap();
-        let target = Schema::new(lighthouse_db.conn()).target().await.unwrap();
+        let target = Schema::new(&lighthouse_db).target().await.unwrap();
         if target.timescaledb().is_none() && target.timescaledb_installable().is_none() {
             eprintln!("TimescaleDB is not available on this server: skipping");
             app_db.drop().await;
@@ -365,7 +365,7 @@ INSERT INTO "webhook_attempts" VALUES
             .config("lighthouse.database_url", monitoring.url.clone())
             .build()
             .await;
-        let schema = Schema::new(lighthouse_db.conn());
+        let schema = Schema::new(&lighthouse_db);
         for (table, column) in [
             ("lighthouse_samples", "at"),
             ("lighthouse_occurrences", "at"),
@@ -418,7 +418,7 @@ INSERT INTO "webhook_attempts" VALUES
         })
         .await
         .unwrap();
-        let schema = Schema::new(db.conn());
+        let schema = Schema::new(&db);
         let target = schema.target().await.unwrap();
         if target.timescaledb().is_none() && target.timescaledb_installable().is_none() {
             eprintln!("TimescaleDB is not available on this server: skipping");
@@ -504,7 +504,7 @@ INSERT INTO "webhook_attempts" VALUES
             .build()
             .await;
         let db = app.get::<Db>().await;
-        let schema = Schema::new(db.conn());
+        let schema = Schema::new(&db);
         let target = schema.target().await.unwrap();
         if target.timescaledb().is_none() {
             eprintln!("TimescaleDB is not available on this server: skipping");
