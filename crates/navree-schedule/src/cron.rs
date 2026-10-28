@@ -323,7 +323,9 @@ fn items<'a>(field: &Field, text: &'a str) -> Result<impl Iterator<Item = &'a st
     if text.contains(',') && text.split(',').any(|item| item == "*" || item == "?") {
         return Err(CronError::new(
             field.name,
-            text.split(',').find(|i| *i == "*" || *i == "?").unwrap_or("*"),
+            text.split(',')
+                .find(|i| *i == "*" || *i == "?")
+                .unwrap_or("*"),
             "cannot be in a list, `*` already means every value",
         ));
     }
@@ -569,7 +571,8 @@ impl CronExpression {
         let dom = &self.dom;
         let dom_matches = dom.days >> day & 1 == 1
             || (dom.last && day == month_length)
-            || (dom.last_weekday && day == last_weekday_of(date.year(), date.month(), month_length))
+            || (dom.last_weekday
+                && day == last_weekday_of(date.year(), date.month(), month_length))
             || (dom.nearest_weekday != 0
                 && (day.saturating_sub(2).max(1)..=(day + 2).min(month_length)).any(|pattern| {
                     dom.nearest_weekday >> pattern & 1 == 1

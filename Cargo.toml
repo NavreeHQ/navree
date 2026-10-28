@@ -107,7 +107,6 @@ tower-http = { version = "0.7.1", features = [
     "catch-panic",
     "compression-br",
     "compression-gzip",
-    "cors",
     "limit",
     "map-request-body",
     "map-response-body",
