@@ -10,6 +10,11 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+## Entry points for the fuzz targets in `fuzz/` (`navree_sso::fuzzing`). Not
+## part of the API.
+fuzzing = []
+
 [dependencies]
 axum = { workspace = true }
 base64 = { workspace = true }

@@ -1,0 +1,2 @@
+# The image only installs a toolchain: nothing of the checkout goes into it.
+*

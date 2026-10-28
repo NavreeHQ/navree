@@ -1,0 +1,8 @@
+ APP_NAME=from-dotenv
+APP_LAYER=dotenv
+APP_ONLY__DOTENV=yes
+APP_DATABASE__URL=sqlite://dotenv.db
+APP_DATABASE__POOL=2
+APP_DATABASE__TIMEOUT=30
+APP_SERVER__HOST=dotenv-host
+UNPREFIXED=ignored

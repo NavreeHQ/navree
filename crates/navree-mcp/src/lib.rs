@@ -90,6 +90,9 @@ extern crate self as navree_mcp;
 
 mod content;
 mod context;
+#[cfg(feature = "fuzzing")]
+#[doc(hidden)]
+pub mod fuzzing;
 mod handler;
 mod http;
 mod item;

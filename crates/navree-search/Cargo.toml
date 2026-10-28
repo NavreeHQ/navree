@@ -16,6 +16,9 @@ default = []
 tantivy = ["dep:tantivy"]
 ## PostgreSQL driver for navree-db (the `postgres` engine and `pgvector`).
 postgres = ["navree-db/postgres", "navree-workspace/postgres"]
+## Entry points for the fuzz targets in `fuzz/` (`navree_search::fuzzing`). Not
+## part of the API.
+fuzzing = []
 
 [dependencies]
 chrono = { workspace = true }

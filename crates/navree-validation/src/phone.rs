@@ -15,6 +15,11 @@ use crate::{Country, context, fold_digits};
 /// Longer input is not a phone number (the limit of the reference library).
 const MAX_INPUT: usize = 250;
 
+/// The longest E.164 number: `+` and 15 digits (ITU-T E.164). The reference
+/// library's numbering plans allow more for a few countries, but a longer
+/// number is not E.164 and no SMS or voice provider takes it.
+const MAX_E164_LEN: usize = 16;
+
 /// A valid phone number, kept in E.164 form (`+447400123456`).
 ///
 /// It deserializes from what people type: spaces, dashes, brackets,
@@ -79,10 +84,11 @@ impl Phone {
                 .filter(PhoneNumber::is_valid)
         }));
         let number = parsed.ok().flatten().ok_or_else(invalid)?;
-        Ok(Phone {
-            e164: number.format_as(PhoneNumberFormat::E164).into_owned(),
-            number,
-        })
+        let e164 = number.format_as(PhoneNumberFormat::E164).into_owned();
+        if e164.len() > MAX_E164_LEN {
+            return Err(invalid());
+        }
+        Ok(Phone { e164, number })
     }
 
     /// The E.164 form (`"+447400123456"`).
@@ -268,6 +274,22 @@ mod tests {
             let phone = Phone::parse(input, None).unwrap_or_else(|e| panic!("{e}"));
             assert_eq!(phone.as_str(), e164, "{input}");
             assert_eq!(phone, input.parse::<Phone>().unwrap());
+        }
+    }
+
+    #[test]
+    fn a_number_longer_than_e164_allows_is_invalid() {
+        // Found by fuzzing: the reference library allows 15-digit national
+        // numbers in some countries, which makes 17 digits with the country
+        // code; E.164 stops at 15.
+        for input in ["+49917834278342582", "+49 917 834 278 342 582"] {
+            assert!(Phone::parse(input, None).is_err(), "{input}");
+        }
+        // Whatever is accepted is `+` and at most 15 digits.
+        for input in ["+4991783427834258", "+496912345678901", "+12015550123"] {
+            if let Ok(phone) = Phone::parse(input, None) {
+                assert!(phone.as_str().len() <= MAX_E164_LEN, "{input}: {phone}");
+            }
         }
     }
 

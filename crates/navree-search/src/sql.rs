@@ -50,9 +50,15 @@ impl Sql {
         Statement::from_sql_and_values(self.backend, self.text, self.values)
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "fuzzing"))]
     pub(crate) fn text(&self) -> &str {
         &self.text
+    }
+
+    /// How many values are bound so far.
+    #[cfg(feature = "fuzzing")]
+    pub(crate) fn bound(&self) -> usize {
+        self.values.len()
     }
 
     /// Appends `filter` (normalized) on the JSON document fields in
