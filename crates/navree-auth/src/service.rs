@@ -28,7 +28,8 @@ use crate::throttle::{Attempt, LoginThrottle};
 use crate::token::RefreshSecret;
 use crate::two_factor::{LoginOutcome, two_factor_enabled};
 use crate::{
-    AuthError, AuthOptions, JwtService, PasswordSignInPolicy, SessionClaims, TokenType, User,
+    AuthError, AuthOptions, JwtService, SessionClaims, SignInAttempt, SignInMethod, SignInPolicy,
+    TokenType, User,
     UserResource, UserResourceExtension, user,
 };
 
@@ -202,7 +203,7 @@ pub struct AuthService {
     pub(crate) app: WeakAppContext,
     dummy_hash: OnceCell<String>,
     extensions: OnceCell<Vec<Arc<dyn UserResourceExtension>>>,
-    password_policies: OnceCell<Vec<Arc<dyn PasswordSignInPolicy>>>,
+    sign_in_policies: OnceCell<Vec<Arc<dyn SignInPolicy>>>,
     pub(crate) policies: Policies,
     pub(crate) exchange: crate::exchange::KeyCache,
 }
@@ -262,7 +263,7 @@ impl Injectable for AuthService {
                 app: app.downgrade(),
                 dummy_hash: OnceCell::new(),
                 extensions: OnceCell::new(),
-                password_policies: OnceCell::new(),
+                sign_in_policies: OnceCell::new(),
                 policies: Policies::default(),
                 exchange: crate::exchange::KeyCache::default(),
             })
@@ -288,8 +289,8 @@ impl AuthService {
     /// checks the name, the email (unique, case-insensitively) and the
     /// password length (`auth.password_min_length`), then stores the
     /// Argon2id hash. [`AuthError::EmailTaken`] or [`AuthError::Invalid`]
-    /// otherwise, and the refusal of a [`PasswordSignInPolicy`] for an
-    /// email that may not use a password. Writes an `auth.register` audit
+    /// otherwise, and the refusal of a [`SignInPolicy`] for an email that
+    /// may not use a password ([`SignInMethod::Password`]). Writes an `auth.register` audit
     /// entry after the commit.
     pub async fn register(&self, uow: &Uow, input: NewUser) -> Result<User, AuthError> {
         self.check_password_sign_in(&input.email).await?;
@@ -350,8 +351,8 @@ impl AuthService {
         }
     }
 
-    /// The login flow behind `POST /auth/login`: the
-    /// [`PasswordSignInPolicy`]s (a refusal is audited as
+    /// The login flow behind `POST /auth/login`: the [`SignInPolicy`]s
+    /// for [`SignInMethod::Password`] (a refusal is audited as
     /// `auth.login_refused`), the per email and IP throttle ([`AuthError::TooManyAttempts`] once
     /// `auth.login_throttle_per_minute` failures are counted; a successful
     /// login resets it), [`validate_user`](AuthService::validate_user),
@@ -366,14 +367,8 @@ impl AuthService {
         password: &str,
         meta: &ClientMeta,
     ) -> Result<LoginOutcome, AuthError> {
-        if let Err(refused) = self.check_password_sign_in(email).await {
-            self.audit(
-                entry(AuditKind::Security, "auth.login_refused", meta)
-                    .metadata(json!({ "email": normalize_email(email) })),
-            )
-            .await;
-            return Err(refused);
-        }
+        self.check_sign_in(&SignInAttempt::new(email, SignInMethod::Password), meta)
+            .await?;
         let key = LoginThrottle::key(email, meta.ip.as_deref());
         // Counted before the (slow) password check, so parallel guesses
         // cannot all pass while the counter is still low.
@@ -391,7 +386,7 @@ impl AuthService {
                     tracing::warn!(target: "navree::auth", %error, "could not reset the login throttle");
                 }
                 if two_factor_enabled(&user) {
-                    let challenge_token = self.sign_challenge(&user)?;
+                    let challenge_token = self.sign_challenge(&user, &SignInMethod::Password)?;
                     self.audit(
                         entry(AuditKind::Auth, "auth.two_factor_challenge", meta).actor(user.id),
                     )
@@ -432,6 +427,10 @@ impl AuthService {
     /// ([`two_factor_required`](AuthService::two_factor_required) without
     /// it enabled), the access token is limited to the setup routes and
     /// the pair says so (`two_factor_setup_required`).
+    ///
+    /// It asks no [`SignInPolicy`]: it is for tests, seeders and flows
+    /// that already did. A sign-in flow ends with
+    /// [`sign_in`](AuthService::sign_in) instead.
     pub async fn issue_tokens(
         &self,
         user: &User,
@@ -707,19 +706,6 @@ impl AuthService {
         Ok(Value::Object(fields))
     }
 
-    /// Whether `email` may use a password: `Ok(())`, or the first refusal
-    /// of a registered [`PasswordSignInPolicy`] (single sign-on enforced for
-    /// its domain, say). [`attempt_login`](AuthService::attempt_login) and
-    /// [`register`](AuthService::register) call it; call it from your own
-    /// password flows too.
-    pub async fn check_password_sign_in(&self, email: &str) -> Result<(), AuthError> {
-        let email = normalize_email(email);
-        for policy in self.password_policies().await? {
-            policy.check(&email).await?;
-        }
-        Ok(())
-    }
-
     /// The [`JwtService`] signing the access tokens.
     pub fn jwt(&self) -> &JwtService {
         &self.jwt
@@ -987,13 +973,13 @@ impl AuthService {
         Ok(hash)
     }
 
-    async fn password_policies(&self) -> Result<&[Arc<dyn PasswordSignInPolicy>], AuthError> {
+    pub(crate) async fn sign_in_policies(&self) -> Result<&[Arc<dyn SignInPolicy>], AuthError> {
         let policies = self
-            .password_policies
+            .sign_in_policies
             .get_or_try_init(|| async {
                 match self.app.upgrade() {
                     Some(app) => app
-                        .get_all::<dyn PasswordSignInPolicy>()
+                        .get_all::<dyn SignInPolicy>()
                         .await
                         .map_err(AuthError::Kernel),
                     None => Ok(Vec::new()),

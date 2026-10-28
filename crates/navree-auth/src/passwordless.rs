@@ -12,6 +12,11 @@
 //! - Verifying counts against the login throttle of the address and the
 //!   client IP; a code is burned after `auth.otp.max_attempts` wrong
 //!   guesses.
+//! - Requesting and using a link or code both ask the
+//!   [`SignInPolicy`](crate::SignInPolicy)s ([`SignInMethod::MagicLink`],
+//!   [`SignInMethod::Otp`]): an address whose domain enforces single
+//!   sign-on gets 403 `sso_required` and no mail, and a link mailed before
+//!   the domain came to enforce it no longer signs in.
 //! - A verified link or code proves the address: an unverified one becomes
 //!   verified. The sign-in then continues like a password login: a
 //!   two-factor challenge when the user has two-factor authentication on,
@@ -31,7 +36,9 @@ use crate::service::{entry, normalize_email};
 use crate::throttle::LoginThrottle;
 use crate::token::RefreshSecret;
 use crate::two_factor::two_factor_enabled;
-use crate::{AuthError, AuthService, ClientMeta, LoginOutcome, User, mail, user};
+use crate::{
+    AuthError, AuthService, ClientMeta, LoginOutcome, SignInAttempt, SignInMethod, User, mail, user,
+};
 
 /// `login_tokens.kind` of magic links.
 pub(crate) const MAGIC_LINK: &str = "magic_link";
@@ -46,12 +53,16 @@ impl AuthService {
     /// registered, once the unit of work commits: `{auth.magic_link.url}?token=..`,
     /// or the token alone without a URL. Unknown addresses and requests
     /// within `auth.magic_link.throttle_secs` of the last link do nothing.
-    /// Audited as `auth.magic_link_sent`.
+    /// An address the [`SignInPolicy`](crate::SignInPolicy)s refuse magic
+    /// links gets the refusal (whether it is registered or not). Audited
+    /// as `auth.magic_link_sent`.
     pub async fn send_magic_link(&self, email: &str, meta: &ClientMeta) -> Result<(), AuthError> {
         let options = &self.options.magic_link;
         if !options.enabled {
             return Err(AuthError::Disabled("magic links"));
         }
+        self.check_sign_in(&SignInAttempt::new(email, SignInMethod::MagicLink), meta)
+            .await?;
         let Some(user) = self
             .passwordless_user(email, MAGIC_LINK, options.throttle_secs)
             .await?
@@ -117,18 +128,23 @@ impl AuthService {
             .find_user(row.user_id)
             .await?
             .ok_or(AuthError::InvalidLoginToken)?;
-        self.finish_passwordless(user, MAGIC_LINK, meta, now).await
+        self.finish_passwordless(user, SignInMethod::MagicLink, meta, now)
+            .await
     }
 
     /// Mails a sign-in code to `email` (`POST /auth/otp`) when it is
     /// registered: `auth.otp.length` digits, valid `auth.otp.ttl_secs`.
     /// Unknown addresses and requests within `auth.otp.throttle_secs` of
-    /// the last code do nothing. Audited as `auth.otp_sent`.
+    /// the last code do nothing. An address the
+    /// [`SignInPolicy`](crate::SignInPolicy)s refuse codes gets the refusal
+    /// (whether it is registered or not). Audited as `auth.otp_sent`.
     pub async fn send_login_code(&self, email: &str, meta: &ClientMeta) -> Result<(), AuthError> {
         let options = &self.options.otp;
         if !options.enabled {
             return Err(AuthError::Disabled("sign-in codes"));
         }
+        self.check_sign_in(&SignInAttempt::new(email, SignInMethod::Otp), meta)
+            .await?;
         let Some(user) = self
             .passwordless_user(email, OTP, options.throttle_secs)
             .await?
@@ -220,7 +236,8 @@ impl AuthService {
         if let Err(error) = self.throttle.clear(&key).await {
             tracing::warn!(target: "navree::auth", %error, "could not reset the login throttle");
         }
-        self.finish_passwordless(user, OTP, meta, now).await
+        self.finish_passwordless(user, SignInMethod::Otp, meta, now)
+            .await
     }
 
     // -- internals ----------------------------------------------------------
@@ -349,15 +366,18 @@ impl AuthService {
         .await
     }
 
-    /// Verifies the address when it is not yet, then signs in like a
-    /// password login (a challenge with two-factor authentication on).
+    /// Asks the sign-in policies, verifies the address when it is not yet,
+    /// then signs in like a password login (a challenge with two-factor
+    /// authentication on).
     async fn finish_passwordless(
         &self,
         mut user: User,
-        method: &'static str,
+        method: SignInMethod,
         meta: &ClientMeta,
         now: DateTime<Utc>,
     ) -> Result<LoginOutcome, AuthError> {
+        self.check_sign_in(&SignInAttempt::of(&user, method.clone()), meta)
+            .await?;
         if user.email_verified_at.is_none() {
             let row = user::ActiveModel {
                 id: sea_orm::Unchanged(user.id),
@@ -372,11 +392,11 @@ impl AuthService {
                 .await?;
         }
         if two_factor_enabled(&user) {
-            let challenge_token = self.sign_challenge(&user)?;
+            let challenge_token = self.sign_challenge(&user, &method)?;
             self.audit(
                 entry(AuditKind::Auth, "auth.two_factor_challenge", meta)
                     .actor(user.id)
-                    .metadata(json!({ "method": method })),
+                    .metadata(json!({ "method": method.name() })),
             )
             .await;
             return Ok(LoginOutcome::TwoFactorRequired {
@@ -388,7 +408,7 @@ impl AuthService {
         self.audit(
             entry(AuditKind::Auth, "auth.login", meta)
                 .actor(user.id)
-                .metadata(json!({ "method": method })),
+                .metadata(json!({ "method": method.name() })),
         )
         .await;
         Ok(LoginOutcome::Authenticated { user, tokens })

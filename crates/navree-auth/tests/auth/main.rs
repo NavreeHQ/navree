@@ -13,7 +13,7 @@ mod logout;
 mod module;
 mod orm;
 mod passkeys;
-mod password_policy;
+mod sign_in_policy;
 mod password_reset;
 mod passwordless;
 mod platform;
