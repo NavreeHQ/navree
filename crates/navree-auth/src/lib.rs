@@ -170,6 +170,7 @@ mod jwt;
 mod mail;
 mod migration;
 mod module;
+mod offboarding;
 mod options;
 mod passkeys;
 mod passwordless;
@@ -205,6 +206,7 @@ pub use jwt::{
 };
 pub use migration::AUTH_MIGRATIONS;
 pub use module::{AuthModule, ModuleBuilderAuthExt};
+pub use offboarding::CredentialsRevoked;
 pub use options::{
     AuthOptions, ImpersonationOptions, JwtOptions, MAX_RECOVERY_CODES, MIN_SECRET_LEN,
     MagicLinkOptions, OtpOptions, PasskeyOptions, PasswordResetOptions, PlatformOptions,
@@ -224,6 +226,6 @@ pub use session_controller::{
     PasswordlessInput, SessionList,
 };
 pub use sessions::{ConfirmProof, ConfirmedToken, SessionResource};
-pub use sign_in_policy::{SignInAttempt, SignInAudience, SignInMethod, SignInPolicy};
+pub use sign_in_policy::{SignInAttempt, SignInAudience, SignInMethod, SignInPolicy, email_domain};
 pub use strategy::{JwtStrategy, Strategy, StrategyAuthenticator};
 pub use two_factor::{LoginOutcome, TwoFactorProof, TwoFactorSetup, two_factor_enabled};

@@ -10,6 +10,7 @@ use navree_cache::Cache;
 use navree_contracts::{AuditEntry, AuditKind, AuditSink, Clock, SystemClock};
 use navree_crypto::{CryptoError, Encrypter, Hasher, constant_time_eq, random_token};
 use navree_db::{Db, Repo, Uow};
+use navree_http::HttpOptions;
 use navree_kernel::{
     AppContext, BoxFuture, Injectable, KernelError, ProviderKey, Resolver, WeakAppContext,
 };
@@ -233,20 +234,29 @@ impl Injectable for AuthService {
                 None => Cache::memory(),
             };
             let clock = clock_of(&app).await;
+            // Failures are counted per email and client network
+            // (`http.rate_limit_ipv6_prefix`; a /64 by default).
+            let ipv6_prefix = match app.try_get::<HttpOptions>().await {
+                Some(options) => options.rate_limit_ipv6_prefix,
+                None => navree_http::DEFAULT_IPV6_PREFIX,
+            };
             let throttle = LoginThrottle::new(
                 cache.clone(),
                 options.login_throttle_per_minute,
                 clock.clone(),
+                ipv6_prefix,
             );
             let two_factor_throttle = LoginThrottle::new(
                 cache.clone(),
                 options.two_factor.max_attempts_per_minute,
                 clock.clone(),
+                ipv6_prefix,
             );
             let platform_throttle = LoginThrottle::new(
                 cache.clone(),
                 options.platform.login_throttle_per_minute,
                 clock.clone(),
+                ipv6_prefix,
             );
             Ok(AuthService {
                 db,
@@ -368,7 +378,7 @@ impl AuthService {
     ) -> Result<LoginOutcome, AuthError> {
         self.check_sign_in(&SignInAttempt::new(email, SignInMethod::Password), meta)
             .await?;
-        let key = LoginThrottle::key(email, meta.ip.as_deref());
+        let key = self.throttle.key(email, meta.ip.as_deref());
         // Counted before the (slow) password check, so parallel guesses
         // cannot all pass while the counter is still low.
         self.throttle_attempt(

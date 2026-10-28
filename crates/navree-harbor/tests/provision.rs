@@ -246,6 +246,70 @@ fn the_proxy_protocol_and_custom_domains_share_the_global_options() {
     assert_eq!(global.matches("\n{\n").count(), 1, "{caddy}");
 }
 
+/// Behind an HTTP load balancer (no PROXY protocol) Caddy would replace
+/// `X-Forwarded-For` with the balancer's address, and every client would
+/// share one address and one rate-limit budget. `deploy.trusted_proxies`
+/// is what Caddy's `trusted_proxies` takes, so it keeps the header.
+#[test]
+fn caddy_trusts_the_load_balancers_forwarded_for() {
+    let base = SINGLE.replace(
+        "[deploy]\n",
+        "[deploy]\ntrusted_proxies = [\"10.0.0.0/24\", \"2001:db8:aa::/48\", \"192.0.2.7\"]\n",
+    );
+    let balancer = |extra: &str| format!("{base}{extra}");
+    let planned = steps(&balancer(""), "app-1", &plain(), 1987);
+    let caddy = &step(&planned, "caddy").script;
+    insta::assert_snapshot!("http_load_balancer_caddy_script", caddy);
+    let global = caddy
+        .split("import /etc/caddy/sites/*.caddy")
+        .next()
+        .unwrap();
+    assert!(
+        global.contains(
+            "\tservers {\n\t\ttrusted_proxies static 10.0.0.0/24 2001:db8:aa::/48 192.0.2.7\n\t}\n}"
+        ),
+        "{caddy}"
+    );
+    assert!(!global.contains("proxy_protocol"), "{caddy}");
+    assert_bash_syntax("caddy", caddy);
+
+    // Custom domains share the one global options block.
+    let planned = steps(
+        &balancer("\n[web.custom_domains]\nenabled = true\n"),
+        "app-1",
+        &plain(),
+        1987,
+    );
+    let global = step(&planned, "caddy")
+        .script
+        .split("import /etc/caddy/sites/*.caddy")
+        .next()
+        .unwrap()
+        .to_owned();
+    assert!(global.contains("on_demand_tls {"), "{global}");
+    assert!(
+        global.contains("trusted_proxies static 10.0.0.0/24"),
+        "{global}"
+    );
+    assert_eq!(global.matches("\n{\n").count(), 1, "{global}");
+
+    // Without trusted proxies Caddy keeps its defaults (it believes no
+    // forwarded header), and with the PROXY protocol the client address is
+    // already the connection's.
+    let planned = steps(SINGLE, "app-1", &plain(), 1987);
+    assert!(
+        !step(&planned, "caddy").script.contains("trusted_proxies"),
+        "{}",
+        step(&planned, "caddy").script
+    );
+    let planned = steps(MULTI, "web-1", &plain(), 4096);
+    assert!(
+        !step(&planned, "caddy").script.contains("trusted_proxies"),
+        "{}",
+        step(&planned, "caddy").script
+    );
+}
+
 fn frontend() -> AppInfo {
     AppInfo {
         h2c: false,

@@ -31,7 +31,6 @@ use serde_json::json;
 use uuid::Uuid;
 
 use crate::service::{SessionKind, entry, normalize_email};
-use crate::throttle::LoginThrottle;
 use crate::two_factor::two_factor_enabled;
 use crate::{
     AccessClaims, AuthError, AuthService, ClientMeta, SignInAttempt, SignInAudience, SignInMethod,
@@ -69,7 +68,11 @@ impl AuthService {
         if !self.options.platform.enabled {
             return Err(AuthError::Disabled("platform sign-in"));
         }
-        let key = platform_throttle_key(email, meta.ip.as_deref());
+        // Apart from the app's login throttle.
+        let key = format!(
+            "{}:platform",
+            self.platform_throttle.key(email, meta.ip.as_deref())
+        );
         self.throttle_attempt(
             &self.platform_throttle,
             &key,
@@ -205,11 +208,6 @@ impl AuthService {
         }
         Ok(())
     }
-}
-
-/// The platform throttle's key: apart from the app's login throttle.
-fn platform_throttle_key(email: &str, ip: Option<&str>) -> String {
-    format!("{}:platform", LoginThrottle::key(email, ip))
 }
 
 /// The signed-in platform administrator, as a handler argument: the request

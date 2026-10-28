@@ -438,6 +438,91 @@ async fn per_ip_rate_limit_returns_429_with_retry_after() {
     assert_eq!(response.header("access-control-allow-origin"), Some(ORIGIN));
 }
 
+fn forwarded(ip: &str) -> Request<Body> {
+    Request::get("/api/ok")
+        .header("x-forwarded-for", ip)
+        .body(Body::empty())
+        .unwrap()
+}
+
+/// Anyone with a /64 can pick billions of addresses: the per-IP limit counts
+/// IPv6 clients by network, IPv4 clients (and IPv4-mapped ones) by address.
+#[tokio::test]
+async fn per_ip_rate_limit_counts_ipv6_clients_by_network() {
+    let app = Setup::new(vec![
+        RouteDef::new(Method::GET, "/ok", get(|| async { "ok" })).public(),
+    ])
+    .options(HttpOptions {
+        per_ip_rate_limit: Some(2),
+        trust_proxy: true,
+        ..options()
+    })
+    .boot()
+    .await;
+
+    assert_eq!(
+        app.send(forwarded("2001:db8:1:2::1")).await.status,
+        StatusCode::OK
+    );
+    assert_eq!(
+        app.send(forwarded("2001:db8:1:2:ffff::9")).await.status,
+        StatusCode::OK
+    );
+    app.send(forwarded("2001:db8:1:2:aaaa:bbbb:cccc:dddd"))
+        .await
+        .assert_error(429);
+    // Another /64, and IPv4 clients, have their own budgets.
+    assert_eq!(
+        app.send(forwarded("2001:db8:1:3::1")).await.status,
+        StatusCode::OK
+    );
+    assert_eq!(
+        app.send(forwarded("192.0.2.1")).await.status,
+        StatusCode::OK
+    );
+    assert_eq!(
+        app.send(forwarded("192.0.2.2")).await.status,
+        StatusCode::OK
+    );
+    assert_eq!(
+        app.send(forwarded("192.0.2.1")).await.status,
+        StatusCode::OK
+    );
+    app.send(forwarded("192.0.2.1")).await.assert_error(429);
+    assert_eq!(
+        app.send(forwarded("192.0.2.3")).await.status,
+        StatusCode::OK
+    );
+}
+
+#[tokio::test]
+async fn per_ip_rate_limit_prefix_is_configurable() {
+    let app = Setup::new(vec![
+        RouteDef::new(Method::GET, "/ok", get(|| async { "ok" })).public(),
+    ])
+    .options(HttpOptions {
+        per_ip_rate_limit: Some(1),
+        trust_proxy: true,
+        rate_limit_ipv6_prefix: 48,
+        ..options()
+    })
+    .boot()
+    .await;
+
+    assert_eq!(
+        app.send(forwarded("2001:db8:1:2::1")).await.status,
+        StatusCode::OK
+    );
+    // The same /48, another /64.
+    app.send(forwarded("2001:db8:1:9::1"))
+        .await
+        .assert_error(429);
+    assert_eq!(
+        app.send(forwarded("2001:db8:2::1")).await.status,
+        StatusCode::OK
+    );
+}
+
 #[tokio::test]
 async fn body_limit_returns_413() {
     let app = Setup::new(vec![

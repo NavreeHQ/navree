@@ -8,7 +8,8 @@
 //! [`JobMonitor`]), permission checks outside routes ([`PermissionCheck`],
 //! [`permitted`]), [`Clock`], the zone sources ([`ZoneSource`]), and the
 //! conformity checks behind `navree check` ([`ConformityCheck`],
-//! [`ConformityModule`]).
+//! [`ConformityModule`]), and ending a user's tokens and grants
+//! ([`CredentialRevoker`]).
 //!
 //! A module that needs, say, auditing resolves `Arc<dyn AuditSink>` (usually
 //! with `AppContext::try_get`) instead of depending on navree-audit.
@@ -24,6 +25,7 @@ mod jobs;
 mod permissions;
 mod principal;
 mod request_id;
+mod revocation;
 mod secret;
 mod session;
 mod zone;
@@ -46,6 +48,7 @@ pub use navree_kernel::{BoxError, BoxFuture};
 pub use permissions::{PermissionCheck, permitted};
 pub use principal::{AuthState, AuthVia, Impersonator, Principal};
 pub use request_id::RequestId;
+pub use revocation::{CredentialRevoker, ModuleBuilderRevocationExt, RevokedByKind};
 pub use secret::Secret;
 pub use session::{SessionRecord, SessionStore};
 pub use zone::{ZoneLevel, ZoneOwner, ZoneRequest, ZoneSource};

@@ -61,7 +61,7 @@ use navree::api::ApiOptions;
 
 <Callout type="note" title="The docs page loads nothing from a third party">
 
-`/api/docs` is a small HTML page. Its script, Scalar 1.74.0, is embedded in your binary (with its MIT license) and served by the app at `/api/docs/assets/`, cached for a year, so the browser viewing it needs no internet access and no CDN can change what runs. The page's `Content-Security-Policy` allows scripts from your own origin only, and Scalar's web fonts are off. The version moves only when Navree does. To remove the page and its assets, set `api.docs_ui = false`; the JSON document stays available.
+`/api/docs` is a small HTML page. Its script, Scalar 1.74.0, is embedded in your binary (with its MIT license) and served by the app at `/api/docs/assets/`, cached for a year, so the browser viewing it needs no internet access and no CDN can change what runs. The page's `Content-Security-Policy` allows scripts from your own origin only, and Scalar's web fonts are off. Images come from your own origin or `data:` URIs only: Scalar needs no other, so a remote image in a route's description (a logo, a badge) is not shown. Serve such images from the app, or inline them as `data:` URIs. The "try it" client may call your own origin and the absolute URLs in `api.servers`. The version moves only when Navree does. To remove the page and its assets, set `api.docs_ui = false`; the JSON document stays available.
 
 </Callout>
 

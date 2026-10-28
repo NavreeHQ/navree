@@ -60,7 +60,7 @@ health_timeout_secs = 60
 # include = ["config", "resources"]   # shipped with the binary
 # shared = ["storage"]                # kept across releases
 # ports = [8081, 8082]                # blue and green
-# trusted_proxies = ["10.0.0.0/24"]   # a load balancer's network
+# trusted_proxies = ["10.0.0.0/24"]   # a load balancer's network: Caddy's trusted_proxies (keeps its X-Forwarded-For) and the app's http.trusted_proxies
 
 [processes]
 web = { command = "serve" }
@@ -83,7 +83,8 @@ APP_LOG__LEVEL = "info"
 
 Other tables: `[ssh]` (`user = "navree"`, `provision_user = "root"`,
 `port = 22`, `key`, `authorized_keys`), `[web]` (`metrics_allow`,
-`proxy_protocol`, and `[web.custom_domains]` with `enabled`,
+`proxy_protocol` (PROXY protocol from `deploy.trusted_proxies`), and
+`[web.custom_domains]` with `enabled`,
 `ask_path = "/_domains/allow"` and `to = "app"`/`"frontend"`: Caddy's
 on-demand TLS for workspaces' own domains, asking navree-domains' ask
 endpoint through the internal entry), `[postgres]` (`version = 17`, `database`,
@@ -95,6 +96,15 @@ Roles: `web` (Caddy and the `web` process in blue/green slots), `worker`,
 `scheduler`, `postgres`, `redis`. A server without `roles` gets
 `["web", "worker", "scheduler"]`. At most one `postgres` and one `redis`
 server.
+
+Behind a load balancer, list its addresses or ranges in
+`deploy.trusted_proxies`, or every client shares the balancer's address (one
+rate-limit budget, one login throttle). For an HTTP balancer (no
+`proxy_protocol`) the Caddyfile gets `servers { trusted_proxies static ... }`
+so Caddy keeps the balancer's `X-Forwarded-For` and appends its address, and
+the app's `APP_HTTP__TRUSTED_PROXIES` lists the same ranges, so the app finds
+the client. With a PROXY-protocol balancer set `web.proxy_protocol = true`
+too; no header is needed. Re-run `harbor:provision` after changing the list.
 
 ## Commands
 

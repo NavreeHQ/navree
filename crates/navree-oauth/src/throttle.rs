@@ -7,7 +7,7 @@ use std::net::IpAddr;
 use std::time::Duration;
 
 use navree_contracts::{AuditEntry, AuditKind};
-use navree_http::KeyedRateLimiter;
+use navree_http::{KeyedRateLimiter, rate_limit_key};
 use serde_json::json;
 use uuid::Uuid;
 
@@ -59,11 +59,14 @@ pub(crate) struct Throttles {
     introspect: Limits,
     revoke: Limits,
     device_authorization: Limits,
+    /// `http.rate_limit_ipv6_prefix`: IPv6 clients are counted by network.
+    ipv6_prefix: u8,
 }
 
 impl Throttles {
-    pub(crate) fn new(options: &RateLimitOptions) -> Self {
+    pub(crate) fn new(options: &RateLimitOptions, ipv6_prefix: u8) -> Self {
         Self {
+            ipv6_prefix,
             token: Limits::new(options.token),
             introspect: Limits::new(options.introspect),
             revoke: Limits::new(options.revoke),
@@ -91,7 +94,7 @@ impl Throttles {
         let Some(limiter) = &self.limits(endpoint).per_ip else {
             return Ok(());
         };
-        match limiter.check(&ip) {
+        match limiter.check(&rate_limit_key(ip, self.ipv6_prefix)) {
             Ok(()) => Ok(()),
             Err(limited) => {
                 refuse(core, endpoint, "per_ip", None, ip, limited.report).await;

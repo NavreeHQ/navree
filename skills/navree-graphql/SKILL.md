@@ -222,7 +222,10 @@ builds), `depth_limit` (16), `complexity_limit` (1000), `batching` (false),
 `keep_alive_secs` (15, 0 = off). Introspection lists only the public schema (the
 per-resolver part types are removed at build, nothing starts with `__` but the
 spec's own types). GraphiQL, React and React DOM are embedded and served at
-`<path>/assets/` with `script-src 'self'`; no CDN. In code:
+`<path>/assets/` with `script-src 'self'`; no CDN. The page's CSP allows
+WebSockets only to the request's own host: `connect-src 'self'
+ws://<Host> wss://<Host>` (never bare `ws:`/`wss:`; a `Host` that isn't a
+plain name or `name:port` leaves `'self'`), so a proxy must forward `Host`. In code:
 `GraphqlModule::for_root(GraphqlOptions { depth_limit: 12, ..GraphqlOptions::default() })`.
 
 ## Errors

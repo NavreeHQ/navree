@@ -141,6 +141,15 @@ pub enum AuthError {
     /// A [`UserResourceExtension`](crate::UserResourceExtension) failed.
     #[error("user resource extension failed: {0}")]
     Extension(BoxError),
+    /// A module could not revoke the credentials it issued to offboarded
+    /// users ([`CredentialRevoker`](navree_contracts::CredentialRevoker)).
+    #[error("{module} could not revoke credentials: {source}")]
+    Revocation {
+        /// The module's name (`oauth`).
+        module: &'static str,
+        /// What went wrong.
+        source: BoxError,
+    },
     /// The user must set up two-factor authentication before doing anything
     /// else (`auth.two_factor.required_for` or a `TwoFactorPolicy`), or a
     /// platform administrator has none.
@@ -308,6 +317,7 @@ impl AuthError {
             | AuthError::Crypto(_)
             | AuthError::Cache(_)
             | AuthError::Extension(_)
+            | AuthError::Revocation { .. }
             | AuthError::TwoFactor(_)
             | AuthError::Mail(_)
             | AuthError::Kernel(_)
