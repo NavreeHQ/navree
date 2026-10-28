@@ -965,9 +965,7 @@ fn statement_timeouts() {
     writeln!(
         out,
         "union: {}",
-        render_select(&union.into_ir(), Dialect::MySql)
-            .unwrap()
-            .sql
+        render_select(&union.into_ir(), Dialect::MySql).unwrap().sql
     )
     .unwrap();
     insta::assert_snapshot!(out);

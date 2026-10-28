@@ -269,8 +269,11 @@ impl<M: Model> ModelColumns<M> {
             Cond::Gte(v) => column.gte(value(v)),
             Cond::In(items) => {
                 let (has_null, values) = self.listed(field, items);
-                let listed = (!values.is_empty())
-                    .then(|| column.clone().in_list(values.into_iter().map(value).collect()));
+                let listed = (!values.is_empty()).then(|| {
+                    column
+                        .clone()
+                        .in_list(values.into_iter().map(value).collect())
+                });
                 match (listed, has_null) {
                     (Some(listed), true) => SqlExpr::Or(vec![listed, column.is_null()]),
                     (Some(listed), false) => listed,
@@ -280,8 +283,11 @@ impl<M: Model> ModelColumns<M> {
             }
             Cond::Nin(items) => {
                 let (has_null, values) = self.listed(field, items);
-                let unlisted = (!values.is_empty())
-                    .then(|| column.clone().not_in_list(values.into_iter().map(value).collect()));
+                let unlisted = (!values.is_empty()).then(|| {
+                    column
+                        .clone()
+                        .not_in_list(values.into_iter().map(value).collect())
+                });
                 match (unlisted, has_null) {
                     (Some(unlisted), true) => SqlExpr::And(vec![column.is_not_null(), unlisted]),
                     (Some(unlisted), false) => SqlExpr::Or(vec![column.is_null(), unlisted]),

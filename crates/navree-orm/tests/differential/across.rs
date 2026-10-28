@@ -772,15 +772,13 @@ pub fn statements() -> Vec<Portable> {
         // `null` matches NULL, `$nin` keeps NULL.
         query(
             "an access-control filter",
-            Query::from(
-                from("deals")
-                    .column(col("id"))
-                    .filter(navree_orm::access::ModelColumns::<crate::corpus::Deal>::new().filter(
-                        &deal_rules(),
-                        "read",
-                        "Deal",
-                    )),
-            )
+            Query::from(from("deals").column(col("id")).filter(
+                navree_orm::access::ModelColumns::<crate::corpus::Deal>::new().filter(
+                    &deal_rules(),
+                    "read",
+                    "Deal",
+                ),
+            ))
             .order_by(col("id").asc()),
             json!([[1], [4], [5], [7], [8]]),
         ),

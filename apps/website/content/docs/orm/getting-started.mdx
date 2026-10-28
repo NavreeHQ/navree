@@ -31,7 +31,7 @@ use navree::orm::prelude::*; // Model, Record, Collection, Builder, the relation
 
 `navree::prelude` brings the everyday ones too: `Model` (the trait and the derive), `Record`, `Collection`, `Builder`, `OrmModule`, `Attributes`, `attrs!` and `#[accessors]`.
 
-Models need `serde`'s `Serialize`, so your app depends on `serde` with its `derive` feature, as an app made by `navree new` does. The ORM needs no other crate: SQL is generated with sea-query and runs through SeaORM's connections, both of which come with `navree`.
+Models need `serde`'s `Serialize`, so your app depends on `serde` with its `derive` feature, as an app made by `navree new` does. The ORM needs no other crate: it writes its SQL itself, for the database it runs on, and runs it through the connections `navree` opens.
 
 ## Configuration
 

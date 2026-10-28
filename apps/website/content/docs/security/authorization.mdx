@@ -503,7 +503,7 @@ CASE WHEN ("deals"."stage" IN ('won', 'lost')) THEN FALSE
 An unconditional rule turns into the `ELSE` (a rep reads every deal, so their read filter is `TRUE`), and an action with no rules into `FALSE`. The filter never yields `NULL`, so it is safe to negate.
 
 - Columns are qualified with the entity's table, and values are bound with the column's type, so UUID and timestamp columns compare like the stored values. A rule field that isn't a column of the entity is SQL `NULL`, as it is `null` in a record check.
-- The SQL is written for PostgreSQL and for SQLite 3.39 or newer. The tests run it on SQLite and only check the PostgreSQL form as generated text. String comparisons agree with record checks under binary collation: SQLite's default, and `COLLATE "C"` on PostgreSQL.
+- The SQL is written for PostgreSQL and for SQLite 3.39 or newer. The tests run it on SQLite and only check the PostgreSQL form as generated text. ORM models' `accessible` filters are written by the ORM for each database, MySQL included, and run on all three in its tests. String comparisons agree with record checks under binary collation: SQLite's default, and `COLLATE "C"` on PostgreSQL.
 - `Accessible::condition()` returns the expression for queries you build yourself, and `ability.sql_filter_with(action, subject, &columns)` takes your own `SqlColumns` mapping (for joins or renamed columns). `ability.sql_filter(action, subject)` uses bare column names.
 
 ## Abilities in the front end
