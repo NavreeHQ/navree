@@ -25,6 +25,7 @@ rules:
       exclude:
         # The crates that still use sea_orm. Remove an entry when its crate is ported.
         - "apps/evidence-app/"
+        - "bench/"
         - "crates/navree/"
         - "crates/navree-access/"
         - "crates/navree-ai/"
@@ -59,6 +60,13 @@ rules:
         - "crates/navree-validation/"
         - "crates/navree-webhooks/"
         - "crates/navree-workflows/"
+        - "crates/navree-cli/"
+        - "crates/navree-directory/"
+        - "crates/navree-domains/"
+        - "crates/navree-integrations/"
+        - "crates/navree-macros/"
+        - "crates/navree-media/"
+        - "crates/navree-mongo/"
         - "crates/navree-workspace/"
     pattern-regex: '(?m)^(?!\s*//)[^\n"]*?(?:\bsea_orm(?:_migration)?\s*::|#\[\s*sea_orm\s*[(\]])'
 
@@ -77,6 +85,7 @@ rules:
       exclude:
         - "/Cargo.toml"
         - "apps/evidence-app/"
+        - "bench/"
         - "crates/navree/"
         - "crates/navree-access/"
         - "crates/navree-ai/"

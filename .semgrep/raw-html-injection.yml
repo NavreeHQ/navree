@@ -31,14 +31,18 @@ rules:
         - "**/*.spec.ts"
         - "**/*.spec.tsx"
         - "**/e2e/**"
-    pattern-either:
-      # React: the `{ __html: .. }` object that dangerouslySetInnerHTML takes.
-      - pattern: '{ __html: $X }'
-      - pattern: $E.innerHTML = $X
-      - pattern: $E.outerHTML = $X
-      - pattern: $E.insertAdjacentHTML(...)
-      - pattern: document.write(...)
-      - pattern: document.writeln(...)
+    patterns:
+      - pattern-either:
+          # React: the `{ __html: .. }` object that dangerouslySetInnerHTML takes.
+          - pattern: '{ __html: $X }'
+          - pattern: $E.innerHTML = $X
+          - pattern: $E.outerHTML = $X
+          - pattern: $E.insertAdjacentHTML(...)
+          - pattern: document.write(...)
+          - pattern: document.writeln(...)
+      # Emptying an element is not injecting anything.
+      - pattern-not: $E.innerHTML = ""
+      - pattern-not: $E.innerHTML = ''
 
   - id: navree-raw-html-vue
     languages: [generic]

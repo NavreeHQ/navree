@@ -9,7 +9,7 @@
 # 2. navree-process-outside-tooling: a library or server crate has no business
 #    starting processes. The crates that do (the CLI, deploy tooling, container
 #    and browser drivers, media and document converters, the worker fleet, the
-#    test kit) are exempt by path (clap's own `Command` builder lives in
+#    agent-facing Navigator, the test kit) are exempt by path (clap's own `Command` builder lives in
 #    navree-cli, so a bare `Command::new` outside it is a process). A new
 #    spawn anywhere else should be a conscious decision, so it needs a
 #    `// nosemgrep: navree-process-outside-tooling` with the reason (for
@@ -47,7 +47,7 @@ rules:
     message: >-
       A process is spawned outside the crates that own process spawning
       (navree-cli, navree-harbor, navree-dock, navree-browser, navree-documents,
-      navree-media, navree-fleet, navree-testing). Move it there, or suppress
+      navree-media, navree-fleet, navree-navigator, navree-testing). Move it there, or suppress
       this line with `// nosemgrep: navree-process-outside-tooling` and the
       reason.
     metadata:
@@ -63,6 +63,7 @@ rules:
         - "crates/navree-documents/"
         - "crates/navree-media/"
         - "crates/navree-fleet/"
+        - "crates/navree-navigator/"
         - "crates/navree-testing/"
         - "**/tests/**"
         - "**/benches/**"

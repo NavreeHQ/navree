@@ -29,7 +29,14 @@ function CodeFrame({ file, html }: { file: string; html: string }) {
         <span className={isFile ? "code-block-title" : "code-block-lang font-mono text-[0.8125rem]"}>{file}</span>
         <CopyButton />
       </figcaption>
-      <pre className="shiki navree-night scroll-thin" tabIndex={0} dangerouslySetInnerHTML={{ __html: html }} />
+      <pre
+        className="shiki navree-night scroll-thin"
+        tabIndex={0}
+        // Shiki's output for a string that lives in this repository, highlighted at build time
+        // (Shiki escapes the code it highlights).
+        // nosemgrep: navree-raw-html
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
     </figure>
   );
 }
