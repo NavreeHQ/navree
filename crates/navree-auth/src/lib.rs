@@ -168,6 +168,7 @@ mod jwt;
 mod mail;
 mod migration;
 mod module;
+mod offboarding;
 mod options;
 mod passkeys;
 mod passwordless;
@@ -201,6 +202,7 @@ pub use impersonation::MAX_IMPERSONATION_REASON;
 pub use jwt::{ActorClaim, Claims, JwtService, LEEWAY_SECS, SessionClaims, TokenType};
 pub use migration::AUTH_MIGRATIONS;
 pub use module::{AuthModule, ModuleBuilderAuthExt};
+pub use offboarding::CredentialsRevoked;
 pub use options::{
     AuthOptions, ImpersonationOptions, JwtOptions, MAX_RECOVERY_CODES, MIN_SECRET_LEN,
     MagicLinkOptions, OtpOptions, PasskeyOptions, PasswordResetOptions, PlatformOptions,

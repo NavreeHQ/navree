@@ -11,6 +11,7 @@ mod impersonation;
 mod login;
 mod logout;
 mod module;
+mod offboarding;
 mod orm;
 mod passkeys;
 mod password_reset;
