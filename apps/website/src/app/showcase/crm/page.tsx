@@ -27,7 +27,7 @@ function Section({ id, children, className }: { id: string; children: ReactNode;
     <section
       id={id}
       aria-labelledby={`${id}-heading`}
-      className={cn("scroll-mt-(--header-h) border-t border-line", className)}
+      className={cn("cv-auto scroll-mt-(--header-h) border-t border-line", className)}
     >
       <div className="container-site section-y">{children}</div>
     </section>

@@ -89,7 +89,7 @@ function Section({ id, className, children }: { id: string; className?: string; 
     <section
       id={id}
       aria-labelledby={`${id}-heading`}
-      className={`scroll-mt-12 border-t border-line first-of-type:border-t-0 ${className ?? ""}`}
+      className={`cv-auto scroll-mt-12 border-t border-line first-of-type:border-t-0 ${className ?? ""}`}
     >
       <div className="container-site section-y">{children}</div>
     </section>
@@ -1018,7 +1018,7 @@ export default async function PerformancePage() {
       </Section>
 
       {/* ----------------------------------------------------------- close */}
-      <section aria-labelledby="perf-cta" className="relative overflow-hidden border-t border-line">
+      <section aria-labelledby="perf-cta" className="cv-auto relative overflow-hidden border-t border-line">
         <GridPattern
           width={48}
           height={48}

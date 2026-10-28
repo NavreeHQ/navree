@@ -12,15 +12,13 @@ import {
   SettingsIcon,
   TagIcon,
 } from "lucide-react";
-import { AnimatePresence } from "motion/react";
-
-import { AnimatedListItem } from "@/components/magicui/animated-list";
 import { cn } from "@/lib/utils";
 
 import { AppShell, Card, Segmented, StatusDot, TopBar, type SidebarSpec } from "./app-shell";
 import { Sparkline } from "./charts";
 import { MockFrame } from "./frame";
 import { issueKinds, lighthouseFeed, lighthouseFigures, lighthouseIssues, lighthouseTimeline, type IssueKind } from "./mock-data";
+import { useFlipList } from "./use-flip";
 import { useSteps } from "./use-steps";
 
 const toneText = { danger: "text-danger", amber: "text-amber" } as const;
@@ -47,28 +45,27 @@ export function LiveFeed({ rows = 5, interval = 2400, className, dense = false }
   const n = lighthouseFeed.length;
   const { ref, step } = useSteps(n, { interval, hold: interval, still: 0 });
   const items = Array.from({ length: rows }, (_, i) => lighthouseFeed[(step - i + n * 4) % n]!);
+  useFlipList(ref, [step]);
   return (
     <div ref={ref} className={cn("flex flex-col gap-2 overflow-hidden", className)}>
-      <AnimatePresence initial={false}>
-        {items.map((item, i) => (
-          <AnimatedListItem key={item.id}>
-            <div
-              className={cn(
-                "rounded-md border transition-colors duration-700",
-                dense ? "px-3 py-2.5" : "px-3 py-2.5",
-                i === 0 ? "border-line-2 bg-ink-2" : "border-line bg-ink-1",
-              )}
-            >
-              <div className="flex items-center justify-between gap-3">
-                <KindLabel kind={item.kind} />
-                <span className="text-xs text-fg-3 tabular-nums">{ages[i]}</span>
-              </div>
-              <div className="mt-1.5 truncate font-mono text-[0.8125rem] leading-5 text-fg-1">{item.title}</div>
-              {dense ? null : <div className="truncate font-mono text-xs leading-5 text-fg-3">{item.culprit}</div>}
+      {items.map((item, i) => (
+        <div key={item.id} data-key={item.id} className="mx-auto w-full">
+          <div
+            className={cn(
+              "rounded-md border transition-colors duration-700",
+              dense ? "px-3 py-2.5" : "px-3 py-2.5",
+              i === 0 ? "border-line-2 bg-ink-2" : "border-line bg-ink-1",
+            )}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <KindLabel kind={item.kind} />
+              <span className="text-xs text-fg-3 tabular-nums">{ages[i]}</span>
             </div>
-          </AnimatedListItem>
-        ))}
-      </AnimatePresence>
+            <div className="mt-1.5 truncate font-mono text-[0.8125rem] leading-5 text-fg-1">{item.title}</div>
+            {dense ? null : <div className="truncate font-mono text-xs leading-5 text-fg-3">{item.culprit}</div>}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

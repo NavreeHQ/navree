@@ -149,7 +149,7 @@ all work in the static export. Client components are marked `"use client"`.
 | `shine-border` | `ShineBorder` | A slow sheen on one frame | Still |
 | `marquee` | `Marquee` | The ecosystem strip (`[--duration:40s] [--gap:1rem]`) | Still; pauses on hover/focus |
 | `number-ticker` | `NumberTicker` | Performance numbers (HTML holds the real value) | Final value |
-| `dot-pattern` | `DotPattern` | Background texture (`glow` for a few green pulses) | Static dots |
+| `dot-pattern`, `dot-pattern-glow` | `DotPattern` (static, no JavaScript), `DotPatternGlow` | Background texture (`DotPatternGlow glow` for a few green pulses) | Static dots |
 | `grid-pattern` | `GridPattern` | Hairline grid background, `squares` to light cells | Static |
 | `flickering-grid` | `FlickeringGrid` | Status-light field behind one hero or CTA | One still frame |
 | `animated-list` | `AnimatedList` | The Lighthouse issue feed | Whole list |

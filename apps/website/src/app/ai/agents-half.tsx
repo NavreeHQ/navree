@@ -379,7 +379,7 @@ function SetupRail() {
 
 export function AgentsHalf() {
   return (
-    <section id="agents" aria-labelledby="agents-title" className="border-t border-line">
+    <section id="agents" aria-labelledby="agents-title" className="cv-auto border-t border-line">
       <div className="container-site section-y">
         <HalfHeading
           id="agents-title"
