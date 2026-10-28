@@ -37,6 +37,8 @@ pub(crate) struct Runtime {
     pub(crate) auth_options: Arc<AuthOptions>,
     pub(crate) db: Arc<Db>,
     pub(crate) cache: Cache,
+    /// `http.rate_limit_ipv6_prefix`: callbacks are counted per client network.
+    pub(crate) ipv6_prefix: u8,
     pub(crate) clock: Arc<dyn Clock>,
     pub(crate) http: HttpClient,
     pub(crate) jwks: JwksCache,
@@ -79,6 +81,10 @@ impl Runtime {
             auth_options: app.get::<AuthOptions>().await?,
             db: app.get::<Db>().await?,
             cache,
+            ipv6_prefix: match app.try_get::<navree_http::HttpOptions>().await {
+                Some(options) => options.rate_limit_ipv6_prefix,
+                None => navree_http::DEFAULT_IPV6_PREFIX,
+            },
             clock,
             http,
             jwks: JwksCache::default(),

@@ -508,7 +508,12 @@ impl Social {
         }
         let now = rt.now().timestamp();
         let window = now.div_euclid(THROTTLE_WINDOW_SECS);
-        let digest = navree_crypto::sha256_hex(ip.unwrap_or("-").as_bytes());
+        // An IPv6 client is its network (`http.rate_limit_ipv6_prefix`).
+        let client = match ip.and_then(|ip| ip.parse::<std::net::IpAddr>().ok()) {
+            Some(addr) => navree_http::rate_limit_key(addr, rt.ipv6_prefix).to_string(),
+            None => ip.unwrap_or("-").to_owned(),
+        };
+        let digest = navree_crypto::sha256_hex(client.as_bytes());
         let key = format!("navree-social:callback:{digest}:{window}");
         // Each window has its own counter, so one that outlives its window
         // is never read again.
