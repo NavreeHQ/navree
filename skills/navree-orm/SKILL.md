@@ -299,6 +299,12 @@ navree model:prune           # deletes what prunable models select
 - Mass updates and deletes (`query.update`, `query.delete`, bulk inserts)
   run no model events and record no audit changes: save records one by one
   when observers or the audit log matter.
+- Refusing a write from an observer or hook with `OrmError::Hook` (a 500):
+  return `OrmError::refused("Deal", MyError)` instead; `MyError` stays the
+  source, so its `m.map_error::<MyError>(..)` (or a workspace error) sets
+  the status. A rule that must hold even inside `without_events` is a
+  `ModelHook` (a behavior, `m.multi(Factory::<dyn ModelHook<M>>..)`), not
+  an observer; `navree::orm::workspace::current_in(ctx)` is its workspace.
 - `navree::prelude::ModelFactory` is navree-db's entity factory; ORM
   factories implement `navree::orm::factory::ModelFactory`.
 - A MySQL table made with `uuid_primary()` (`CHAR(36)`): inserting a model

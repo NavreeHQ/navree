@@ -1,6 +1,6 @@
 [package]
 name = "navree-workspace"
-description = "Navree WorkspaceModule: multi-tenancy at the workspace level, with members, roles, invitations, row, schema or database isolation, organizations above workspaces, partitions inside them and demo workspaces."
+description = "Navree WorkspaceModule: multi-tenancy at the workspace level, with members, roles, invitations, row, schema or database isolation, organizations above workspaces, partitions inside them, shared libraries and demo workspaces."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
