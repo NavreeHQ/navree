@@ -37,7 +37,10 @@ async fn certificates_come_from_a_real_acme_server() {
             .config("domains.tls", "acme")
             .config("domains.acme.terms_agreed", true)
             .config("domains.acme.directory_url", url.as_str())
-            .config("domains.acme.contact", serde_json::json!(["ops@example.com"]))
+            .config(
+                "domains.acme.contact",
+                serde_json::json!(["ops@example.com"]),
+            )
             .override_value::<dyn AcmeClient>(Arc::new(client))
     })
     .await;
@@ -45,7 +48,10 @@ async fn certificates_come_from_a_real_acme_server() {
     let domain = world.verified(workspace, "crm.acme-corp.test").await;
     let domains = world.domains().await;
 
-    let expires = domains.issue_certificate("crm.acme-corp.test").await.unwrap();
+    let expires = domains
+        .issue_certificate("crm.acme-corp.test")
+        .await
+        .unwrap();
     assert!(expires > chrono::Utc::now());
     let domain = domains.get(domain.id).await.unwrap();
     assert_eq!(domain.tls, TlsStatus::Active);
@@ -63,7 +69,10 @@ async fn certificates_come_from_a_real_acme_server() {
     assert_eq!(models::Challenge::query().count(&*db).await.unwrap(), 0);
 
     // A renewal reuses the stored account.
-    domains.issue_certificate("crm.acme-corp.test").await.unwrap();
+    domains
+        .issue_certificate("crm.acme-corp.test")
+        .await
+        .unwrap();
     assert_eq!(models::AcmeAccount::query().count(&*db).await.unwrap(), 1);
     world.app.shutdown().await.unwrap();
 }

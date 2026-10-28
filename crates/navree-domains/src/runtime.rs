@@ -89,7 +89,8 @@ impl Runtime {
             Some(provider) => Some(provider),
             None => match options.dns.provider.as_deref().map(str::trim) {
                 Some("cloudflare") => {
-                    Some(Arc::new(CloudflareDns::new(&options.dns.cloudflare)?) as Arc<dyn DnsProvider>)
+                    Some(Arc::new(CloudflareDns::new(&options.dns.cloudflare)?)
+                        as Arc<dyn DnsProvider>)
                 }
                 _ => None,
             },
@@ -184,7 +185,11 @@ impl Runtime {
 
     /// Runs `f` in the task's unfinished unit of work (a request's), or else
     /// in a new one committed when `f` succeeds.
-    pub(crate) async fn write<T, F, Fut>(&self, actor: Option<uuid::Uuid>, f: F) -> Result<T, DomainsError>
+    pub(crate) async fn write<T, F, Fut>(
+        &self,
+        actor: Option<uuid::Uuid>,
+        f: F,
+    ) -> Result<T, DomainsError>
     where
         F: FnOnce(Uow) -> Fut,
         Fut: Future<Output = Result<T, DomainsError>>,

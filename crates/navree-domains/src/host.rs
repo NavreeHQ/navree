@@ -129,8 +129,14 @@ mod tests {
 
     #[test]
     fn hosts_are_kept_lower_case_without_a_trailing_dot() {
-        assert_eq!(normalize_host("crm.acme-corp.com").unwrap(), "crm.acme-corp.com");
-        assert_eq!(normalize_host("CRM.ACME-corp.COM.").unwrap(), "crm.acme-corp.com");
+        assert_eq!(
+            normalize_host("crm.acme-corp.com").unwrap(),
+            "crm.acme-corp.com"
+        );
+        assert_eq!(
+            normalize_host("CRM.ACME-corp.COM.").unwrap(),
+            "crm.acme-corp.com"
+        );
         assert_eq!(normalize_host("acme.co.uk").unwrap(), "acme.co.uk");
         assert_eq!(
             normalize_host("xn--bcher-kva.example").unwrap(),

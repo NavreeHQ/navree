@@ -178,7 +178,10 @@ impl Controller for DomainsController {
                 .name("domains.primary")
                 .api(ApiMeta {
                     response: Some(schema_fn::<CustomDomain>),
-                    ..api("Make a domain the workspace's primary domain", &[401, 403, 404, 409])
+                    ..api(
+                        "Make a domain the workspace's primary domain",
+                        &[401, 403, 404, 409],
+                    )
                 }),
             route(RouteDef::on(Method::DELETE, "/{id}", destroy))
                 .name("domains.destroy")

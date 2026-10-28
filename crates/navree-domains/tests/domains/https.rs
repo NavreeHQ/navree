@@ -60,14 +60,20 @@ async fn the_app_is_served_over_https_with_each_domains_certificate() {
     assert_eq!(domains.issue_pending().await.unwrap().len(), 2);
     let ca = world.fakes.ca.ca_pem();
 
-    let server = HttpsServer::bind(world.app.ctx(), "127.0.0.1:0").await.unwrap();
+    let server = HttpsServer::bind(world.app.ctx(), "127.0.0.1:0")
+        .await
+        .unwrap();
     let addr = server.local_addr();
     tokio::spawn(server.serve());
 
-    let response = get(addr, "crm.acme-corp.test", "/landing", &ca).await.unwrap();
+    let response = get(addr, "crm.acme-corp.test", "/landing", &ca)
+        .await
+        .unwrap();
     assert!(response.starts_with("HTTP/1.1 200"), "{response}");
     assert!(response.contains(&json!(acme).to_string()), "{response}");
-    let response = get(addr, "portal.globex.test", "/landing", &ca).await.unwrap();
+    let response = get(addr, "portal.globex.test", "/landing", &ca)
+        .await
+        .unwrap();
     assert!(response.contains(&json!(globex).to_string()), "{response}");
     // A name without a certificate gets no handshake.
     assert!(get(addr, "unknown.test", "/landing", &ca).await.is_err());

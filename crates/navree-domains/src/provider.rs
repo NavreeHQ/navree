@@ -63,7 +63,11 @@ pub trait DnsProvider: Send + Sync + 'static {
 
     /// Deletes every record of type `kind` at `name` (none is not an
     /// error).
-    fn delete<'a>(&'a self, kind: RecordKind, name: &'a str) -> BoxFuture<'a, Result<(), DomainsError>>;
+    fn delete<'a>(
+        &'a self,
+        kind: RecordKind,
+        name: &'a str,
+    ) -> BoxFuture<'a, Result<(), DomainsError>>;
 }
 
 /// The Cloudflare DNS API (`/zones/{zone_id}/dns_records`) with an API
@@ -132,7 +136,9 @@ impl CloudflareDns {
             .timeout(Duration::from_secs(30))
             .no_proxy()
             .build()
-            .map_err(|error| DomainsError::Config(format!("cannot build the HTTP client: {error}")))?;
+            .map_err(|error| {
+                DomainsError::Config(format!("cannot build the HTTP client: {error}"))
+            })?;
         Ok(CloudflareDns {
             http,
             api_url: options.api_url.trim_end_matches('/').to_owned(),
@@ -162,7 +168,10 @@ impl CloudflareDns {
             .await
             .map_err(|error| DomainsError::DnsProvider(format!("Cloudflare: {error}")))?;
         let envelope: Envelope<T> = serde_json::from_slice(&body).map_err(|_| {
-            DomainsError::DnsProvider(format!("Cloudflare answered {} without JSON", status.as_u16()))
+            DomainsError::DnsProvider(format!(
+                "Cloudflare answered {} without JSON",
+                status.as_u16()
+            ))
         })?;
         if !status.is_success() || !envelope.success {
             let message = envelope
@@ -181,7 +190,10 @@ impl CloudflareDns {
             ("name", name),
             ("per_page", "100"),
         ]);
-        Ok(self.call::<Vec<ApiRecord>>(request).await?.unwrap_or_default())
+        Ok(self
+            .call::<Vec<ApiRecord>>(request)
+            .await?
+            .unwrap_or_default())
     }
 
     async fn remove(&self, id: &str) -> Result<(), DomainsError> {
@@ -239,7 +251,11 @@ impl DnsProvider for CloudflareDns {
         })
     }
 
-    fn delete<'a>(&'a self, kind: RecordKind, name: &'a str) -> BoxFuture<'a, Result<(), DomainsError>> {
+    fn delete<'a>(
+        &'a self,
+        kind: RecordKind,
+        name: &'a str,
+    ) -> BoxFuture<'a, Result<(), DomainsError>> {
         Box::pin(async move {
             for record in self.list(kind, name).await? {
                 self.remove(&record.id).await?;
@@ -338,7 +354,11 @@ impl DnsProvider for DnsProviderFake {
         Box::pin(async move { result })
     }
 
-    fn delete<'a>(&'a self, kind: RecordKind, name: &'a str) -> BoxFuture<'a, Result<(), DomainsError>> {
+    fn delete<'a>(
+        &'a self,
+        kind: RecordKind,
+        name: &'a str,
+    ) -> BoxFuture<'a, Result<(), DomainsError>> {
         let result = self.take_failure().map(|()| {
             self.with(|zone| {
                 zone.records.remove(&(kind, normal_name(name)));

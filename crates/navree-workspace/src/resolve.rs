@@ -332,7 +332,10 @@ mod tests {
         let workspace = Uuid::now_v7();
         let mut request = parts(
             "/api/deals",
-            &[("host", "crm.acme-corp.test"), ("x-workspace", "from-header")],
+            &[
+                ("host", "crm.acme-corp.test"),
+                ("x-workspace", "from-header"),
+            ],
             true,
         );
         let config = WorkspaceConfig {

@@ -122,7 +122,8 @@ impl Domains {
                             [
                                 models::Domain::TLS_STATUS.set(TlsStatus::Active.as_str()),
                                 models::Domain::TLS_ERROR.set(None::<String>),
-                                models::Domain::CERTIFICATE_EXPIRES_AT.set(Some(validity.not_after)),
+                                models::Domain::CERTIFICATE_EXPIRES_AT
+                                    .set(Some(validity.not_after)),
                                 models::Domain::CERTIFICATE_CHECKED_AT.set(Some(now)),
                                 models::Domain::UPDATED_AT.set(now),
                             ],
@@ -221,7 +222,10 @@ impl Domains {
     ///   feature and navree-lighthouse in the app, an issue.
     ///
     /// A domain is due every `domains.certificates.check_hours`.
-    pub async fn check_certificates(&self, host: Option<&str>) -> Result<CertificateRun, DomainsError> {
+    pub async fn check_certificates(
+        &self,
+        host: Option<&str>,
+    ) -> Result<CertificateRun, DomainsError> {
         let rt = self.rt.clone();
         let mut run = CertificateRun::default();
         if rt.options.tls == TlsMode::Off {
@@ -264,7 +268,11 @@ impl Domains {
         Ok(run)
     }
 
-    async fn acme_due(&self, row: &models::Domain, run: &mut CertificateRun) -> Result<(), DomainsError> {
+    async fn acme_due(
+        &self,
+        row: &models::Domain,
+        run: &mut CertificateRun,
+    ) -> Result<(), DomainsError> {
         let rt = &self.rt;
         let now = rt.now();
         let stored = models::Certificate::query()
@@ -338,7 +346,11 @@ impl Domains {
         Ok(())
     }
 
-    async fn probe_due(&self, row: &models::Domain, run: &mut CertificateRun) -> Result<(), DomainsError> {
+    async fn probe_due(
+        &self,
+        row: &models::Domain,
+        run: &mut CertificateRun,
+    ) -> Result<(), DomainsError> {
         let rt = &self.rt;
         if !rt.options.certificates.probe {
             return Ok(());
@@ -404,7 +416,12 @@ impl Domains {
 
 /// Logs, emits and (with Lighthouse) reports a certificate close to
 /// expiry.
-async fn report_expiring(rt: &Runtime, host: &str, domain_id: Option<Uuid>, expires_at: DateTime<Utc>) {
+async fn report_expiring(
+    rt: &Runtime,
+    host: &str,
+    domain_id: Option<Uuid>,
+    expires_at: DateTime<Utc>,
+) {
     let days_left = (expires_at - rt.now()).num_days().max(0);
     tracing::warn!(target: "navree::domains", host, %expires_at, days_left, "a certificate expires soon");
     rt.emit(DomainCertificateExpiring {
@@ -435,7 +452,10 @@ async fn report_expiring(rt: &Runtime, host: &str, domain_id: Option<Uuid>, expi
 struct Store(Arc<Runtime>);
 
 impl AcmeStore for Store {
-    fn account<'a>(&'a self, directory: &'a str) -> BoxFuture<'a, Result<Option<String>, DomainsError>> {
+    fn account<'a>(
+        &'a self,
+        directory: &'a str,
+    ) -> BoxFuture<'a, Result<Option<String>, DomainsError>> {
         Box::pin(async move {
             let row = models::AcmeAccount::query()
                 .where_(models::AcmeAccount::DIRECTORY_URL.eq(directory))

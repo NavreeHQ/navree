@@ -240,7 +240,8 @@ impl Controller for TestRoutes {
 
     fn routes(self: std::sync::Arc<Self>) -> Vec<RouteDef> {
         let landing = |domain: CurrentDomain| async move { Json(domain) };
-        let maybe = |domain: Option<CurrentDomain>| async move { Json(json!({ "domain": domain })) };
+        let maybe =
+            |domain: Option<CurrentDomain>| async move { Json(json!({ "domain": domain })) };
         let whoami = |workspace: CurrentWorkspace| async move {
             Ok::<_, AppError>(Json(json!({ "workspace": workspace.id() })))
         };

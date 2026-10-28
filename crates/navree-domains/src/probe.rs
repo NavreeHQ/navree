@@ -34,7 +34,8 @@ pub struct ProbedCertificate {
 /// for example with a [`ProbeFake`] in tests.
 pub trait CertificateProbe: Send + Sync + 'static {
     /// The leaf certificate `host` presents for its own name.
-    fn probe<'a>(&'a self, host: &'a str) -> BoxFuture<'a, Result<ProbedCertificate, DomainsError>>;
+    fn probe<'a>(&'a self, host: &'a str)
+    -> BoxFuture<'a, Result<ProbedCertificate, DomainsError>>;
 }
 
 /// Connects to `host` on port 443, says its name (SNI), and reads the dates
@@ -109,7 +110,8 @@ impl TlsProbe {
             .dangerous()
             .with_custom_certificate_verifier(Arc::new(ReadOnly(provider)))
             .with_no_client_auth();
-        let name = ServerName::try_from(host.to_owned()).map_err(|error| failed(error.to_string()))?;
+        let name =
+            ServerName::try_from(host.to_owned()).map_err(|error| failed(error.to_string()))?;
         let tls = tokio_rustls::TlsConnector::from(Arc::new(config))
             .connect(name, stream)
             .await
@@ -128,7 +130,10 @@ impl TlsProbe {
 }
 
 impl CertificateProbe for TlsProbe {
-    fn probe<'a>(&'a self, host: &'a str) -> BoxFuture<'a, Result<ProbedCertificate, DomainsError>> {
+    fn probe<'a>(
+        &'a self,
+        host: &'a str,
+    ) -> BoxFuture<'a, Result<ProbedCertificate, DomainsError>> {
         Box::pin(async move {
             tokio::time::timeout(self.timeout, self.run(host))
                 .await
@@ -160,7 +165,12 @@ impl ServerCertVerifier for ReadOnly {
         cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, rustls::Error> {
-        verify_tls12_signature(message, cert, dss, &self.0.signature_verification_algorithms)
+        verify_tls12_signature(
+            message,
+            cert,
+            dss,
+            &self.0.signature_verification_algorithms,
+        )
     }
 
     fn verify_tls13_signature(
@@ -169,13 +179,16 @@ impl ServerCertVerifier for ReadOnly {
         cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, rustls::Error> {
-        verify_tls13_signature(message, cert, dss, &self.0.signature_verification_algorithms)
+        verify_tls13_signature(
+            message,
+            cert,
+            dss,
+            &self.0.signature_verification_algorithms,
+        )
     }
 
     fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
-        self.0
-            .signature_verification_algorithms
-            .supported_schemes()
+        self.0.signature_verification_algorithms.supported_schemes()
     }
 }
 
@@ -238,7 +251,10 @@ impl ProbeFake {
 }
 
 impl CertificateProbe for ProbeFake {
-    fn probe<'a>(&'a self, host: &'a str) -> BoxFuture<'a, Result<ProbedCertificate, DomainsError>> {
+    fn probe<'a>(
+        &'a self,
+        host: &'a str,
+    ) -> BoxFuture<'a, Result<ProbedCertificate, DomainsError>> {
         let host = host.to_ascii_lowercase();
         let answer = self.with(|probes| {
             probes.probed.push(host.clone());

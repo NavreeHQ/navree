@@ -104,6 +104,4 @@ pub use probe::{CertificateProbe, ProbeFake, ProbedCertificate, TlsProbe};
 pub use provider::{CloudflareDns, DnsProvider, DnsProviderFake, RecordKind};
 pub use service::Domains;
 pub use tls::HttpsServer;
-pub use types::{
-    CertificateRun, CustomDomain, DnsInstruction, DomainStatus, NewDomain, TlsStatus,
-};
+pub use types::{CertificateRun, CustomDomain, DnsInstruction, DomainStatus, NewDomain, TlsStatus};

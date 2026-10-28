@@ -143,10 +143,16 @@ fn statuses_events_codes_and_names() {
     }
     assert_eq!(DomainAdded::NAME, "domains.added");
     assert_eq!(DomainVerified::NAME, "domains.verified");
-    assert_eq!(DomainVerificationFailed::NAME, "domains.verification_failed");
+    assert_eq!(
+        DomainVerificationFailed::NAME,
+        "domains.verification_failed"
+    );
     assert_eq!(DomainRemoved::NAME, "domains.removed");
     assert_eq!(DomainCertificateIssued::NAME, "domains.certificate_issued");
-    assert_eq!(DomainCertificateExpiring::NAME, "domains.certificate_expiring");
+    assert_eq!(
+        DomainCertificateExpiring::NAME,
+        "domains.certificate_expiring"
+    );
     assert_eq!(MANAGE_PERMISSION, "domains.manage");
     assert_eq!(DOMAINS_MIGRATIONS, "domains");
     for (kind, name) in [
@@ -316,7 +322,10 @@ fn the_public_shapes_have_their_documented_fields() {
 
 #[test]
 fn hosts_tables_and_models() {
-    assert_eq!(normalize_host("CRM.Acme-Corp.com.").unwrap(), "crm.acme-corp.com");
+    assert_eq!(
+        normalize_host("CRM.Acme-Corp.com.").unwrap(),
+        "crm.acme-corp.com"
+    );
     assert_eq!(
         normalize_host("bücher.example").unwrap(),
         "xn--bcher-kva.example"
@@ -432,6 +441,10 @@ async fn the_drivers_fakes_and_services_exist() {
         AcmeOrder::publish_challenge,
         AcmeOrder::withdraw_challenge,
     );
-    let _ = (HttpsServer::bind, HttpsServer::local_addr, HttpsServer::serve);
+    let _ = (
+        HttpsServer::bind,
+        HttpsServer::local_addr,
+        HttpsServer::serve,
+    );
     let _ = (InstantAcme::with_root_pem, InstantAcme::timeout);
 }

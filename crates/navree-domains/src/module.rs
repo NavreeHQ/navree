@@ -175,9 +175,11 @@ fn register(m: &mut ModuleBuilder, options: Option<DomainsOptions>) {
         .lifecycle::<HttpsLauncher>()
         .controller::<DomainsController>()
         .controller::<DomainsPublicController>()
-        .http_layer(GlobalLayer::new(LayerSlot::Context, "domains-host", |_ctx, router| {
-            Ok(router.layer(from_fn(mark_domain)))
-        }))
+        .http_layer(GlobalLayer::new(
+            LayerSlot::Context,
+            "domains-host",
+            |_ctx, router| Ok(router.layer(from_fn(mark_domain))),
+        ))
         .migrations(migrations())
         .map_error::<DomainsError>(map_domains_error)
         .listen::<WorkspaceDeleted, RemoveDeletedWorkspaces>()
