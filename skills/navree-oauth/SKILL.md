@@ -109,7 +109,8 @@ let created = clients
   per minute, per instance, `0` = off): `token` 300/120, `introspect`
   1200/600, `revoke` 300/60, `device_authorization` 60/30. Per IP is counted
   first (failed client auth included); per client only after the client
-  authenticates (a wrong secret can't burn a client's budget). Over a
+  authenticates (a wrong secret can't burn a client's budget); public
+  clients are counted per IP only (anyone can name one). Over a
   limit: 429, `Retry-After`, `{"error": "too_many_requests",
   "error_description": "Too many requests; retry in N seconds"}`, audited
   `oauth.rate_limited` once per window. Env:

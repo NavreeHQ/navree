@@ -164,7 +164,7 @@ readinessProbe:
 | `http_requests_total` | counter | `method`, `route`, `status` |
 | `http_request_duration_seconds` | histogram | `method`, `route`, `status` |
 
-`route` is the route's template (`/api/v1/deals/{id}`), not the request path, so the number of series stays small; requests that match no route are labelled `unmatched`. Histograms whose name ends in `_seconds` use the buckets 5 ms, 10 ms, 25 ms, 50 ms, 100 ms, 250 ms, 500 ms, 1 s, 2.5 s, 5 s and 10 s.
+`route` is the route's template (`/api/v1/deals/{id}`), not the request path, so the number of series stays small; requests that match no route are labelled `unmatched`. `method` is one of the methods HTTP defines, or `OTHER` for any made-up one a client sends. Histograms whose name ends in `_seconds` use the buckets 5 ms, 10 ms, 25 ms, 50 ms, 100 ms, 250 ms, 500 ms, 1 s, 2.5 s, 5 s and 10 s.
 
 ```text title="GET /metrics"
 # HELP http_requests_total HTTP requests by method, route template and status.
