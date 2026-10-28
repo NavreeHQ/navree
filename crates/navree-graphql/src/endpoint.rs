@@ -1,13 +1,15 @@
 //! The HTTP endpoint: `POST <path>` executes operations, `GET <path>`
-//! serves GraphiQL (or answers 405), `GET <path>/ws` serves subscriptions.
+//! serves GraphiQL (or answers 405), `GET <path>/assets/{file}` serves the
+//! files GraphiQL loads, `GET <path>/ws` serves subscriptions.
 
 use std::sync::Arc;
 
 use async_graphql::{BatchRequest, BatchResponse, Response};
 use axum::body::{Body, Bytes};
+use axum::extract::Path;
 use axum::extract::ws::WebSocketUpgrade;
 use axum::response::{IntoResponse, Response as HttpResponse};
-use http::header::{ACCEPT, ALLOW, CONTENT_SECURITY_POLICY, CONTENT_TYPE};
+use http::header::{ACCEPT, ALLOW, CACHE_CONTROL, CONTENT_SECURITY_POLICY, CONTENT_TYPE};
 use http::request::Parts;
 use http::{HeaderMap, HeaderValue, Method, StatusCode};
 use navree_contracts::AuthState;
@@ -63,6 +65,17 @@ impl Controller for GraphqlController {
             .name("graphql.graphiql")
             .public(),
         ];
+        if options.graphiql {
+            routes.push(
+                RouteDef::on(
+                    Method::GET,
+                    format!("!{}/{{file}}", graphiql::assets_path(&options.path)),
+                    |Path(file): Path<String>| async move { graphiql_asset(&file) },
+                )
+                .name("graphql.graphiql.assets")
+                .public(),
+            );
+        }
         if options.subscriptions {
             let socket = self.schema.clone();
             routes.push(
@@ -198,6 +211,25 @@ fn graphiql_page(schema: &GraphqlSchema, headers: &HeaderMap) -> HttpResponse {
     AppError::from_status(StatusCode::METHOD_NOT_ALLOWED)
         .with_detail("Send GraphQL operations as POST requests with a JSON body")
         .with_header(ALLOW, HeaderValue::from_static("POST"))
+        .into_response()
+}
+
+/// `GET <path>/assets/{file}`: a vendored GraphiQL file, cached for a year
+/// (its name carries the version).
+fn graphiql_asset(file: &str) -> HttpResponse {
+    let Some(asset) = graphiql::asset(file) else {
+        return AppError::not_found().into_response();
+    };
+    (
+        [
+            (CONTENT_TYPE, HeaderValue::from_static(asset.content_type)),
+            (
+                CACHE_CONTROL,
+                HeaderValue::from_static(graphiql::ASSET_CACHE),
+            ),
+        ],
+        Bytes::from_static(asset.bytes),
+    )
         .into_response()
 }
 

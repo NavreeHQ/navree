@@ -126,6 +126,16 @@ fn building() -> Building {
     BUILDING.with(|cell| cell.borrow().clone().unwrap_or_default())
 }
 
+/// Takes the resolvers' part types out of the registry: their fields move
+/// to the root, so introspection must not list them.
+fn hide_parts(registry: &mut Registry, metas: &[MetaType]) {
+    for meta in metas {
+        if let MetaType::Object { name, .. } = meta {
+            registry.types.remove(name);
+        }
+    }
+}
+
 /// An object type named `name` with every field of `metas`.
 fn object(
     name: &str,
@@ -182,11 +192,12 @@ macro_rules! object_root {
 
             fn create_type_info(registry: &mut Registry) -> String {
                 registry.create_output_type::<Self, _>(MetaTypeId::Object, |registry| {
-                    let metas = building()
+                    let metas: Vec<MetaType> = building()
                         .$slot
                         .iter()
                         .map(|part| part.meta(registry))
                         .collect();
+                    hide_parts(registry, &metas);
                     object($name, metas, std::any::type_name::<Self>(), false)
                 })
             }
@@ -227,11 +238,12 @@ impl SubscriptionType for RootSubscription {
 
     fn create_type_info(registry: &mut Registry) -> String {
         registry.create_subscription_type::<Self, _>(|registry| {
-            let metas = building()
+            let metas: Vec<MetaType> = building()
                 .subscription
                 .iter()
                 .map(|part| part.meta(registry))
                 .collect();
+            hide_parts(registry, &metas);
             object("Subscription", metas, std::any::type_name::<Self>(), true)
         })
     }

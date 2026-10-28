@@ -9,9 +9,11 @@ describe("bffOptionsFromEnv", () => {
         NAVREE_COOKIE_SECURE: "0",
         APP_ORIGINS: "https://crm.example.com, https://www.crm.example.com,",
         NAVREE_TRUSTED_PROXY_HOPS: "2",
+        NAVREE_CLIENT_IP_HEADER: "x-real-ip",
         NAVREE_WORKSPACE_HEADER: "X-Team",
       }),
     ).toEqual({
+      clientIpHeader: "x-real-ip",
       apiUrl: "http://127.0.0.1:9000",
       secureCookies: false,
       allowedOrigins: ["https://crm.example.com", "https://www.crm.example.com"],
