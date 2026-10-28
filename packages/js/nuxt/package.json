@@ -39,12 +39,13 @@
     "test": "vitest run",
     "smoke": "node test/smoke.mjs"
   },
+  "//": "h3 stays on ^1: the server handlers run inside Nitro and must use the h3 it provides. Nuxt 4.6 runs nitropack 2.13, which is on h3 ^1.15; move to h3 2 together with the Nuxt and Nitro release built on it.",
   "dependencies": {
     "@navree/bff": "workspace:*",
     "@navree/client": "workspace:*",
     "@nuxt/kit": "^4.6.2",
     "@nuxt/schema": "^4.6.2",
-    "@tanstack/vue-table": "^8.21.3",
+    "@tanstack/vue-table": "^9.3.1",
     "defu": "^6.1.7",
     "h3": "^1.15.11"
   },

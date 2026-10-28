@@ -9,14 +9,31 @@
  */
 import { pageRange, sortDirection, toggleSort, toSorting, withPage, type ListQuery, type PageMeta } from "@navree/client";
 import {
-  flexRender,
-  getCoreRowModel,
-  useReactTable,
+  columnVisibilityFeature,
+  FlexRender,
+  rowPaginationFeature,
+  rowSortingFeature,
+  tableFeatures,
+  useTable,
   type ColumnDef,
   type Header,
-  type Table,
+  type ReactTable,
+  type RowData,
 } from "@tanstack/react-table";
 import type { ReactNode } from "react";
+
+/**
+ * The TanStack Table features the table registers: sorting and paging state
+ * (both done on the server) and column visibility. Rows come from the core row
+ * model as the server sent them.
+ */
+const features = tableFeatures({ columnVisibilityFeature, rowSortingFeature, rowPaginationFeature });
+
+/** The table's TanStack Table feature set, for TanStack types (`createColumnHelper<NavreeTableFeatures, Deal>()`). */
+export type NavreeTableFeatures = typeof features;
+
+/** A column of the table: TanStack Table's `ColumnDef` for the table's features. */
+export type NavreeColumnDef<T extends RowData, V = any> = ColumnDef<NavreeTableFeatures, T, V>;
 
 /** What a column's `meta` can say. */
 export interface NavreeColumnMeta {
@@ -47,8 +64,8 @@ export const defaultLabels: DataTableLabels = {
   range: (from, to, total) => `${from}–${to} of ${total}`,
 };
 
-export interface UseDataTableOptions<T> {
-  columns: ColumnDef<T, any>[];
+export interface UseDataTableOptions<T extends RowData> {
+  columns: NavreeColumnDef<T>[];
   data: T[] | undefined;
   /** The current list query (its `sort` and `page` drive the table). */
   query: ListQuery;
@@ -59,24 +76,24 @@ export interface UseDataTableOptions<T> {
   getRowId?: (row: T, index: number) => string;
 }
 
-export type NavreeTable<T> = Table<T> & {
+export type NavreeTable<T extends RowData> = ReactTable<NavreeTableFeatures, T> & {
   /** Sorts by a column's `meta.sortField` (ascending, descending, off; shift for several). */
-  toggleColumnSort: (header: Header<T, unknown>, multi?: boolean) => void;
+  toggleColumnSort: (header: Header<NavreeTableFeatures, T, unknown>, multi?: boolean) => void;
   /** The column's sort direction, if the list is sorted by it. */
-  columnSort: (header: Header<T, unknown>) => "asc" | "desc" | undefined;
+  columnSort: (header: Header<NavreeTableFeatures, T, unknown>) => "asc" | "desc" | undefined;
   goToPage: (page: number) => void;
 };
 
-function columnMeta<T>(header: Header<T, unknown>): NavreeColumnMeta {
+function columnMeta<T extends RowData>(header: Header<NavreeTableFeatures, T, unknown>): NavreeColumnMeta {
   return (header.column.columnDef.meta ?? {}) as NavreeColumnMeta;
 }
 
 /** The table without markup: TanStack Table with server-side sorting and paging from the list query. */
-export function useDataTable<T>({ columns, data, query, onQueryChange, meta, getRowId }: UseDataTableOptions<T>): NavreeTable<T> {
-  const table = useReactTable<T>({
+export function useDataTable<T extends RowData>({ columns, data, query, onQueryChange, meta, getRowId }: UseDataTableOptions<T>): NavreeTable<T> {
+  const table = useTable<NavreeTableFeatures, T>({
+    features,
     columns,
     data: data ?? [],
-    getCoreRowModel: getCoreRowModel(),
     manualSorting: true,
     manualPagination: true,
     enableSorting: false,
@@ -88,7 +105,7 @@ export function useDataTable<T>({ columns, data, query, onQueryChange, meta, get
     ...(getRowId ? { getRowId } : {}),
   });
 
-  const toggleColumnSort = (header: Header<T, unknown>, multi = false) => {
+  const toggleColumnSort = (header: Header<NavreeTableFeatures, T, unknown>, multi = false) => {
     const field = columnMeta(header).sortField;
     if (!field) return;
     const { page: _page, cursor: _cursor, ...rest } = query;
@@ -102,7 +119,7 @@ export function useDataTable<T>({ columns, data, query, onQueryChange, meta, get
 
   return Object.assign(table, {
     toggleColumnSort,
-    columnSort: (header: Header<T, unknown>) => {
+    columnSort: (header: Header<NavreeTableFeatures, T, unknown>) => {
       const field = columnMeta(header).sortField;
       return field ? sortDirection(query.sort, field) : undefined;
     },
@@ -110,7 +127,7 @@ export function useDataTable<T>({ columns, data, query, onQueryChange, meta, get
   });
 }
 
-export interface DataTableProps<T> extends UseDataTableOptions<T> {
+export interface DataTableProps<T extends RowData> extends UseDataTableOptions<T> {
   /** Shows placeholder rows instead of the data. */
   loading?: boolean;
   /** Makes rows clickable (open a record). */
@@ -134,7 +151,7 @@ function SortMark({ direction }: { direction: "asc" | "desc" | undefined }) {
 }
 
 /** The table, its loading and empty states, and the pagination bar. */
-export function DataTable<T>(props: DataTableProps<T>) {
+export function DataTable<T extends RowData>(props: DataTableProps<T>) {
   const { loading = false, onRowClick, empty, className, loadingRows = 5, meta } = props;
   const labels = { ...defaultLabels, ...props.labels };
   const table = useDataTable(props);
@@ -151,7 +168,7 @@ export function DataTable<T>(props: DataTableProps<T>) {
                 {group.headers.map((header) => {
                   const m = columnMeta(header);
                   const direction = table.columnSort(header);
-                  const label = header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext());
+                  const label = header.isPlaceholder ? null : <FlexRender header={header} />;
                   return (
                     <th
                       key={header.id}
@@ -205,7 +222,7 @@ export function DataTable<T>(props: DataTableProps<T>) {
                     const m = (cell.column.columnDef.meta ?? {}) as NavreeColumnMeta;
                     return (
                       <td key={cell.id} className={["px-3 text-fg-1", ALIGN[m.align ?? "start"], m.className].filter(Boolean).join(" ")}>
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        <FlexRender cell={cell} />
                       </td>
                     );
                   })}

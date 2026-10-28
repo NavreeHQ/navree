@@ -1,13 +1,12 @@
 "use client";
 
-import { DataTable, useListQuery, type NavreeColumnMeta } from "@navree/next";
+import { DataTable, useListQuery, type NavreeColumnDef, type NavreeColumnMeta } from "@navree/next";
 import { AbilityProvider, Can } from "@navree/next/abilities";
 import { RealtimeProvider, useChannel } from "@navree/next/realtime";
-import type { ColumnDef } from "@tanstack/react-table";
 
 type Deal = { id: string; title: string };
 
-const columns: ColumnDef<Deal, unknown>[] = [
+const columns: NavreeColumnDef<Deal, unknown>[] = [
   { accessorKey: "title", header: "Title", meta: { sortField: "title" } satisfies NavreeColumnMeta },
 ];
 

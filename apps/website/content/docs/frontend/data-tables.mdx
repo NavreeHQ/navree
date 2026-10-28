@@ -32,15 +32,14 @@ In Next.js the hook uses `next/navigation`, so the component must sit under a `<
 "use client";
 
 import { unwrap } from "@navree/client";
-import { DataTable, useListQuery, type NavreeColumnMeta } from "@navree/next";
+import { DataTable, useListQuery, type NavreeColumnDef, type NavreeColumnMeta } from "@navree/next";
 import { useQuery } from "@tanstack/react-query";
-import type { ColumnDef } from "@tanstack/react-table";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api/client";
 import { deals as keys } from "@/lib/api/keys";
 import type { Deal } from "@/lib/api/types";
 
-const columns: ColumnDef<Deal, any>[] = [
+const columns: NavreeColumnDef<Deal>[] = [
   { accessorKey: "title", header: "Deal", meta: { sortField: "title" } satisfies NavreeColumnMeta },
   { accessorKey: "stage", header: "Stage", cell: ({ row }) => <StageBadge stage={row.original.stage} /> },
   {
@@ -108,7 +107,7 @@ A heading click sends `sort` and drops `page` and `cursor`; shift-click adds the
 
 ```html title="web/app/pages/deals/index.vue"
 <script setup lang="ts">
-import type { ColumnDef } from "@tanstack/vue-table";
+import type { NavreeColumnDef } from "@navree/nuxt/vue";
 import type { Deal, paths } from "~/lib/api/types";
 
 const api = useNavreeClient<paths>();
@@ -117,7 +116,7 @@ const { data, pending } = await useAsyncData("deals", () => unwrap(api.GET("/api
   watch: [list.query],
 });
 
-const columns: ColumnDef<Deal, any>[] = [
+const columns: NavreeColumnDef<Deal>[] = [
   { accessorKey: "title", header: "Deal", meta: { sortField: "title" } },
   { accessorKey: "amount_cents", header: "Amount", meta: { sortField: "amount_cents", align: "end" } },
 ];

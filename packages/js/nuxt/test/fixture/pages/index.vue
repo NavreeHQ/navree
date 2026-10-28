@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ColumnDef } from "@tanstack/vue-table";
+import type { NavreeColumnDef } from "@navree/nuxt/vue";
 
 type Deal = { id: string; title: string };
 
@@ -10,7 +10,7 @@ const ability = useAbility();
 const state = useRealtimeState();
 useChannel("crm.deals", "deal.updated", () => undefined);
 const { operation } = useOperation(null);
-const columns: ColumnDef<Deal, any>[] = [{ accessorKey: "title", header: "Title", meta: { sortField: "title" } }];
+const columns: NavreeColumnDef<Deal>[] = [{ accessorKey: "title", header: "Title", meta: { sortField: "title" } }];
 const deals: Deal[] = [{ id: "d1", title: "Acme renewal" }];
 
 // Server-side rendering calls the BFF in-process with the browser's cookies.

@@ -1,12 +1,11 @@
 import type { ListQuery, PageMeta } from "@navree/client";
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import type { ColumnDef } from "@tanstack/react-table";
+import { fireEvent, render, renderHook, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { DataTable, type NavreeColumnMeta } from "./data-table.js";
+import { DataTable, useDataTable, type NavreeColumnDef, type NavreeColumnMeta } from "./data-table.js";
 
 type Deal = { id: string; title: string; stage: string; amount: number };
 
-const columns: ColumnDef<Deal, any>[] = [
+const columns: NavreeColumnDef<Deal>[] = [
   { accessorKey: "title", header: "Title", meta: { sortField: "title" } satisfies NavreeColumnMeta },
   { accessorKey: "stage", header: "Stage", meta: { className: "hidden md:table-cell" } satisfies NavreeColumnMeta },
   {
@@ -113,5 +112,22 @@ describe("DataTable", () => {
     renderTable({}, { onRowClick });
     fireEvent.click(screen.getByText("Globex pilot"));
     expect(onRowClick).toHaveBeenCalledWith(deals[1]);
+  });
+});
+
+describe("useDataTable", () => {
+  it("gives TanStack Table the list query's sort and the page, and keeps the server's row order", () => {
+    const { result, rerender } = renderHook(
+      ({ query }: { query: ListQuery }) => useDataTable<Deal>({ columns, data: deals, meta, query, onQueryChange: vi.fn() }),
+      { initialProps: { query: { sort: ["-amount_cents"], page: 2 } as ListQuery } },
+    );
+    expect(result.current.state.sorting).toEqual([{ id: "amount_cents", desc: true }]);
+    expect(result.current.state.pagination).toEqual({ pageIndex: 1, pageSize: 2 });
+    expect(result.current.getPageCount()).toBe(3);
+    expect(result.current.getCanNextPage()).toBe(true);
+    expect(result.current.getRowModel().rows.map((row) => row.original.id)).toEqual(["d1", "d2"]);
+
+    rerender({ query: { sort: ["title"] } });
+    expect(result.current.state.sorting).toEqual([{ id: "title", desc: false }]);
   });
 });

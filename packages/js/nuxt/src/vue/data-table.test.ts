@@ -1,12 +1,12 @@
 import type { ListQuery, PageMeta } from "@navree/client";
-import type { ColumnDef } from "@tanstack/vue-table";
 import { mount } from "@vue/test-utils";
+import { effectScope, nextTick, ref } from "vue";
 import { describe, expect, it } from "vitest";
-import { NavreeDataTable, type NavreeColumnMeta } from "./data-table.js";
+import { NavreeDataTable, useDataTable, type NavreeColumnDef, type NavreeColumnMeta } from "./data-table.js";
 
 type Deal = { id: string; title: string; stage: string; amount: number };
 
-const columns: ColumnDef<Deal, any>[] = [
+const columns: NavreeColumnDef<Deal>[] = [
   { accessorKey: "title", header: "Title", meta: { sortField: "title" } satisfies NavreeColumnMeta },
   { accessorKey: "stage", header: "Stage", meta: { className: "hidden md:table-cell" } satisfies NavreeColumnMeta },
   { accessorKey: "amount", header: "Amount", cell: (ctx) => `$${ctx.getValue()}`, meta: { sortField: "amount_cents", align: "end" } satisfies NavreeColumnMeta },
@@ -74,5 +74,29 @@ describe("NavreeDataTable", () => {
     const clickable = table({ clickable: true });
     await clickable.findAll("tbody tr")[1]!.trigger("click");
     expect(clickable.emitted("row-click")![0]).toEqual([deals[1]]);
+  });
+});
+
+describe("useDataTable", () => {
+  it("gives TanStack Table the list query's sort and the page count, and keeps the server's row order", async () => {
+    const query = ref<ListQuery>({ sort: ["-amount_cents"] });
+    const scope = effectScope();
+    const navree = scope.run(() =>
+      useDataTable<Deal>({
+        columns: () => columns,
+        data: () => deals,
+        query: () => query.value,
+        meta: () => meta,
+        onQueryChange: () => undefined,
+      }),
+    )!;
+    expect(navree.table.atoms.sorting.get()).toEqual([{ id: "amount_cents", desc: true }]);
+    expect(navree.table.getPageCount()).toBe(3);
+    expect(navree.table.getRowModel().rows.map((row) => row.original.id)).toEqual(["d1", "d2"]);
+
+    query.value = { sort: ["title"] };
+    await nextTick();
+    expect(navree.table.atoms.sorting.get()).toEqual([{ id: "title", desc: false }]);
+    scope.stop();
   });
 });
