@@ -145,6 +145,11 @@ async fn the_commands_are_registered() {
     names.sort_unstable();
     assert_eq!(
         names,
-        ["domains:certificates", "domains:list", "domains:verify"]
+        [
+            "domains:certificates",
+            "domains:list",
+            "domains:transfer",
+            "domains:verify"
+        ]
     );
 }

@@ -124,7 +124,8 @@ async fn refusals_carry_their_codes() {
     let owner = Uuid::now_v7();
     let acme = world.workspace(owner, "Acme").await;
     let globex = world.workspace(Uuid::now_v7(), "Globex").await;
-    let theirs = world.add(globex, "globex.test").await;
+    // Verified: another workspace's pending claim would not refuse it.
+    let theirs = world.verified(globex, "globex.test").await;
     let client = world.as_user(owner);
     let ws = acme.to_string();
     let add = |host: &str| {
@@ -165,7 +166,7 @@ async fn refusals_carry_their_codes() {
         .assert_error_code(404, "domain_not_found");
     assert_eq!(
         world.domains().await.get(theirs.id).await.unwrap().status,
-        DomainStatus::Pending
+        DomainStatus::Verified
     );
 }
 

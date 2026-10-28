@@ -89,8 +89,8 @@ pub use current::CurrentDomain;
 pub use dns::{DnsFake, DnsLookup, SystemDns};
 pub use error::DomainsError;
 pub use events::{
-    DomainAdded, DomainCertificateExpiring, DomainCertificateIssued, DomainRemoved,
-    DomainVerificationFailed, DomainVerified,
+    DomainAdded, DomainCertificateExpiring, DomainCertificateIssued, DomainClaimedElsewhere,
+    DomainRemoved, DomainVerificationFailed, DomainVerified,
 };
 pub use host::{normalize_host, request_host};
 pub use migration::DOMAINS_MIGRATIONS;

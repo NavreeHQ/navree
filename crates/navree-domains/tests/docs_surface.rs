@@ -14,7 +14,7 @@ use navree_domains::{
     CertificateRun, CloudflareDns, CloudflareOptions, CurrentDomain, CustomDomain,
     DOMAINS_MIGRATIONS, DnsFake, DnsInstruction, DnsLookup, DnsOptions, DnsProvider,
     DnsProviderFake, DomainAdded, DomainCertificateExpiring, DomainCertificateIssued,
-    DomainCertificates, DomainRemoved, DomainStatus, DomainVerificationFailed, DomainVerified,
+    DomainCertificates, DomainClaimedElsewhere, DomainRemoved, DomainStatus, DomainVerificationFailed, DomainVerified,
     DomainWorkspace, Domains, DomainsController, DomainsError, DomainsModule, DomainsOptions,
     DomainsPublicController, HttpsServer, InstantAcme, IssuedCertificate, LETS_ENCRYPT,
     LETS_ENCRYPT_STAGING, MANAGE_PERMISSION, NewDomain, ProbeFake, ProbedCertificate, RecordKind,
@@ -53,12 +53,14 @@ fn the_configuration_keys_have_their_documented_defaults() {
         prefix,
         interval_mins,
         give_up_after_hours,
+        failed_retention_hours,
         recheck_hours,
         require_routing,
     } = verification;
     assert_eq!(prefix, "_domain-verification");
     assert_eq!(interval_mins, 5);
     assert_eq!(give_up_after_hours, 72);
+    assert_eq!(failed_retention_hours, 168);
     assert_eq!(recheck_hours, 24);
     assert!(require_routing);
     let CertificateOptions {
@@ -147,6 +149,7 @@ fn statuses_events_codes_and_names() {
         DomainVerificationFailed::NAME,
         "domains.verification_failed"
     );
+    assert_eq!(DomainClaimedElsewhere::NAME, "domains.claimed_elsewhere");
     assert_eq!(DomainRemoved::NAME, "domains.removed");
     assert_eq!(DomainCertificateIssued::NAME, "domains.certificate_issued");
     assert_eq!(
@@ -301,6 +304,10 @@ fn the_public_shapes_have_their_documented_fields() {
         DomainVerified {
             domain: domain.clone(),
         },
+        DomainClaimedElsewhere {
+            domain: domain.clone(),
+            claimed_by: id,
+        },
         DomainVerificationFailed {
             domain,
             reason: String::new(),
@@ -411,6 +418,8 @@ async fn the_drivers_fakes_and_services_exist() {
         Domains::get,
         Domains::get_for,
         Domains::find,
+        Domains::claims,
+        Domains::transfer,
         Domains::resolve,
         Domains::allows,
         Domains::verify,
