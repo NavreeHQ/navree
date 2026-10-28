@@ -108,7 +108,8 @@ const { data, pending } = await useAsyncData("deals", () => unwrap(api.GET("/api
   come back; upstream calls use `cache: "no-store"`.
 - **Client address.** The browser's `X-Forwarded-For` never reaches Navree.
   Behind N trusted reverse proxies set `NAVREE_TRUSTED_PROXY_HOPS=N`; the BFF
-  sends the address the outermost proxy saw.
+  sends the address the outermost proxy saw. Or set `NAVREE_CLIENT_IP_HEADER`
+  to a header the proxy overwrites with the bare client address.
 - **Workspaces.** `X-Workspace` is forwarded (else the `navree_workspace`
   cookie); server-sent events stream through too.
 - **Its own errors:** `session_expired`, `two_factor_expired`,

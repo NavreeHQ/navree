@@ -226,6 +226,9 @@ Everything the kit needs is in `config/app.toml` and `.env`. The settings you wi
 | `billing.plans.*` | `starter`, `pro` | Your plans, their trials and the provider's price ids |
 | `social.providers.*` | none | Social sign-in providers; each one adds a button |
 | `mail.transport` | Mailpit over SMTP, from `.env` | Your mail provider in production |
+| `http.trusted_proxies` | `["127.0.0.1", "::1"]` (SaaS kit) | The one peer whose `X-Forwarded-For` the API believes: the web app's BFF, which calls from loopback. When the web app runs on another host or in a container, set `APP_HTTP__TRUSTED_PROXIES` in `.env` to its address |
+
+Each browser has its own rate limit and sign-in throttle because the web app's BFF names the browser to the API in `X-Forwarded-For`. It does that when `web/.env` says which proxy to believe: `NAVREE_TRUSTED_PROXY_HOPS` (the number of reverse proxies in front of the web app) or `NAVREE_CLIENT_IP_HEADER` (a header the proxy sets to the bare client address). `navree deploy` sets the hop count to 1 for its Caddy. Locally there is no proxy, so every browser is `127.0.0.1`.
 
 Secrets go in `.env`, never in the TOML file: `APP_KEY`, `APP_BILLING__STRIPE__SECRET_KEY`, `APP_BILLING__STRIPE__WEBHOOK_SECRET` and each social provider's client secret (`APP_SOCIAL__PROVIDERS__GITHUB__CLIENT_SECRET`).
 
