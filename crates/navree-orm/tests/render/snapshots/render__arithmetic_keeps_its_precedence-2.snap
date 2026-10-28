@@ -1,0 +1,7 @@
+---
+source: crates/navree-orm/tests/render/main.rs
+expression: "expr(Expr::Tuple(vec![col(\"flags\").binary(BinaryOp::BitAnd, Expr::int(4)),\ncol(\"flags\").binary(BinaryOp::BitOr, col(\"a\").add(col(\"b\"))),\ncol(\"a\").binary(BinaryOp::BitXor, col(\"b\")),\ncol(\"a\").binary(BinaryOp::ShiftLeft, Expr::int(2)),\ncol(\"a\").binary(BinaryOp::Mod, Expr::int(7)),\ncol(\"first\").binary(BinaryOp::Concat, col(\"last\")),]))"
+---
+PostgreSQL: ("flags" & 4, "flags" | ("a" + "b"), "a" # "b", "a" << 2, "a" % 7, "first" || "last")
+MySQL: (`flags` & 4, `flags` | (`a` + `b`), `a` ^ `b`, `a` << 2, `a` % 7, CONCAT(`first`, `last`))
+SQLite: ("flags" & 4, "flags" | ("a" + "b"), (("a" | "b") - ("a" & "b")), "a" << 2, "a" % 7, "first" || "last")

@@ -1,0 +1,7 @@
+---
+source: crates/navree-orm/tests/render/main.rs
+expression: statement(union)
+---
+PostgreSQL: INSERT INTO "archived_deals" ("id", "title") SELECT "id", "title" FROM "deals" UNION ALL SELECT "id", "title" FROM "old_deals" ON CONFLICT DO NOTHING
+MySQL: INSERT IGNORE INTO `archived_deals` (`id`, `title`) SELECT `id`, `title` FROM `deals` UNION ALL SELECT `id`, `title` FROM `old_deals`
+SQLite: INSERT INTO "archived_deals" ("id", "title") SELECT * FROM (SELECT "id", "title" FROM "deals" UNION ALL SELECT "id", "title" FROM "old_deals") AS "navree_rows_1" WHERE TRUE ON CONFLICT DO NOTHING

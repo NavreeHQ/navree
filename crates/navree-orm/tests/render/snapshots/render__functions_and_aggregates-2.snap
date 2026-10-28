@@ -1,0 +1,7 @@
+---
+source: crates/navree-orm/tests/render/main.rs
+expression: "expr(Expr::func(\"drop table x; --\", vec![]))"
+---
+PostgreSQL: error: invalid query: `drop table x; --` is not a valid SQL function name
+MySQL: error: invalid query: `drop table x; --` is not a valid SQL function name
+SQLite: error: invalid query: `drop table x; --` is not a valid SQL function name

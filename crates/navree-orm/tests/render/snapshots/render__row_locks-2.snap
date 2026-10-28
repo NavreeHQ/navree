@@ -1,0 +1,10 @@
+---
+source: crates/navree-orm/tests/render/main.rs
+expression: "locked(Lock\n{\n    strength: LockStrength::NoKeyUpdate, of: Vec::new(), wait:\n    LockWait::SkipLocked,\n})"
+---
+PostgreSQL: SELECT * FROM "deals" WHERE "id" = $1 LIMIT $2 FOR NO KEY UPDATE SKIP LOCKED
+  values: [BigInt(Some(1)), BigUnsigned(Some(1))]
+MySQL: SELECT * FROM `deals` WHERE `id` = ? LIMIT ? FOR UPDATE SKIP LOCKED
+  values: [BigInt(Some(1)), BigUnsigned(Some(1))]
+SQLite: SELECT * FROM "deals" WHERE "id" = ? LIMIT ?
+  values: [BigInt(Some(1)), BigUnsigned(Some(1))]
