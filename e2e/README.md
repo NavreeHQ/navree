@@ -31,6 +31,7 @@ Compose v2 and bash.
 | `browser/` | Playwright screenshots of every UI tool in `browser/tools.json` at 1440 and 390 pixels wide |
 | `tools/summarize.mjs` | Builds `summary.json` and `summary.md` from a run's files |
 | `run.sh`, `run.ps1` | The harness |
+| `mcp-sdk/` | Not part of the harness: the official MCP TypeScript SDK's client (pinned in `package.json`) against navree-mcp over stdio and Streamable HTTP. Run `npm ci --prefix e2e/mcp-sdk`, then `cargo test -p navree-mcp --test sdk_conformance -- --ignored --nocapture` |
 
 The app is `apps/evidence-app`: a Navree application that wires the
 framework's packages and tools (`src/platform.rs`), with domain models and
