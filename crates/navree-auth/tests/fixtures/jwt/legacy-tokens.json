@@ -1,0 +1,77 @@
+{
+  "about": "Tokens minted by navree-auth on jsonwebtoken 11 (HS256) before the move to navree_crypto::jose. Every token must keep verifying.",
+  "auth_time": 1792929540,
+  "cases": [
+    {
+      "name": "access",
+      "service": "default",
+      "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIwMTk5YzBkZS0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJpYXQiOjE3OTI5Mjk2MDAsImV4cCI6MTc5MjkzMDUwMCwiaXNzIjoibmF2cmVlIiwianRpIjoiMDFhMTgyNDRmNmMwNzA3NTkzMTJjZjA1N2MyZDQyMTciLCJ0eXAiOiJhY2Nlc3MifQ.b4PAVj2NfRMHGuf65WfURji6E23Qi5ezGz8kUFEKyOM"
+    },
+    {
+      "name": "access_session",
+      "service": "default",
+      "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIwMTk5YzBkZS0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJpYXQiOjE3OTI5Mjk2MDAsImV4cCI6MTc5MjkzMDUwMCwiaXNzIjoibmF2cmVlIiwianRpIjoiMDFhMTgyNDRmNmMwNzA3NTkzMTJjZjA2NTdlNTFhMGYiLCJ0eXAiOiJhY2Nlc3MiLCJzaWQiOiIwMTk5YzBkZS0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDMiLCJhdXRoX3RpbWUiOjE3OTI5Mjk1NDB9.3--NJngmzNbnU3VX8-wTO1smZgRnXOjKhVU1yLyFkP8"
+    },
+    {
+      "name": "access_impersonation",
+      "service": "default",
+      "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIwMTk5YzBkZS0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJpYXQiOjE3OTI5Mjk2MDAsImV4cCI6MTc5MjkzMDUwMCwiaXNzIjoibmF2cmVlIiwianRpIjoiMDFhMTgyNDRmNmMwNzA3NTkzMTJjZjA3YTViNWU4NzgiLCJ0eXAiOiJhY2Nlc3MiLCJzaWQiOiIwMTk5YzBkZS0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDMiLCJhY3QiOnsic3ViIjoiMDE5OWMwZGUtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDAyIn19.44fcVcTJZflOu388AiGaBNFXjPBk-6sZByvaihAFk4E"
+    },
+    {
+      "name": "two_factor_setup",
+      "service": "default",
+      "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIwMTk5YzBkZS0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJpYXQiOjE3OTI5Mjk2MDAsImV4cCI6MTc5MjkzMDUwMCwiaXNzIjoibmF2cmVlIiwianRpIjoiMDFhMTgyNDRmNmMwNzA3NTkzMTJjZjA4MWFjZWQxZTQiLCJ0eXAiOiJ0d29fZmFjdG9yX3NldHVwIn0.mUfK5k_koqwdn1tod_tEGeKgbwvSLcDezugz1RkPQ3U"
+    },
+    {
+      "name": "platform",
+      "service": "default",
+      "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIwMTk5YzBkZS0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJpYXQiOjE3OTI5Mjk2MDAsImV4cCI6MTc5MjkzMDUwMCwiaXNzIjoibmF2cmVlIiwianRpIjoiMDFhMTgyNDRmNmMwNzA3NTkzMTJjZjA5NWNkYmNjMjAiLCJ0eXAiOiJwbGF0Zm9ybSJ9.vzJqWnhm4BQ9cyPV8Ge7vjnUm-KqtjdlzVvfDGmoiJE"
+    },
+    {
+      "name": "challenge_password",
+      "service": "default",
+      "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIwMTk5YzBkZS0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJpYXQiOjE3OTI5Mjk2MDAsImV4cCI6MTc5MjkzMDUwMCwiaXNzIjoibmF2cmVlIiwianRpIjoiMDFhMTgyNDRmNmMwNzA3NTkzMTJjZjBhMTI2MzRlZTYiLCJ0eXAiOiJ0d29fZmFjdG9yX2NoYWxsZW5nZSIsInNpZ25faW4iOnsibWV0aG9kIjoicGFzc3dvcmQifX0.mSyNbEnRZSAXbc60q_SGqfNTEGa7i0cfOMFkFfdODkA"
+    },
+    {
+      "name": "challenge_magic_link",
+      "service": "default",
+      "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIwMTk5YzBkZS0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJpYXQiOjE3OTI5Mjk2MDAsImV4cCI6MTc5MjkzMDUwMCwiaXNzIjoibmF2cmVlIiwianRpIjoiMDFhMTgyNDRmNmMwNzA3NTkzMTJjZjBiNjdlOTJkMzMiLCJ0eXAiOiJ0d29fZmFjdG9yX2NoYWxsZW5nZSIsInNpZ25faW4iOnsibWV0aG9kIjoibWFnaWNfbGluayJ9fQ.-pOsNPatb7TQCPZCGSUL_9MdxxexcPnhH-DXZTqJeEo"
+    },
+    {
+      "name": "challenge_passkey",
+      "service": "default",
+      "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIwMTk5YzBkZS0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJpYXQiOjE3OTI5Mjk2MDAsImV4cCI6MTc5MjkzMDUwMCwiaXNzIjoibmF2cmVlIiwianRpIjoiMDFhMTgyNDRmNmMwNzA3NTkzMTJjZjBjMjZkYzM3YmQiLCJ0eXAiOiJ0d29fZmFjdG9yX2NoYWxsZW5nZSIsInNpZ25faW4iOnsibWV0aG9kIjoicGFzc2tleSJ9fQ.AfJoYxJNHxD6cXGtBeQfllneMb5kHFzL-mCH4hZSJZc"
+    },
+    {
+      "name": "challenge_social",
+      "service": "default",
+      "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIwMTk5YzBkZS0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJpYXQiOjE3OTI5Mjk2MDAsImV4cCI6MTc5MjkzMDUwMCwiaXNzIjoibmF2cmVlIiwianRpIjoiMDFhMTgyNDRmNmMwNzA3NTkzMTJjZjBkMGIyZWVhYWYiLCJ0eXAiOiJ0d29fZmFjdG9yX2NoYWxsZW5nZSIsInNpZ25faW4iOnsibWV0aG9kIjoic29jaWFsIiwicHJvdmlkZXIiOiJnaXRodWIifX0.kvtc61Hq_QMagfw1ANR70Fy1Bzl8G52T1bSkuKHrd74"
+    },
+    {
+      "name": "challenge_sso",
+      "service": "default",
+      "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIwMTk5YzBkZS0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJpYXQiOjE3OTI5Mjk2MDAsImV4cCI6MTc5MjkzMDUwMCwiaXNzIjoibmF2cmVlIiwianRpIjoiMDFhMTgyNDRmNmMwNzA3NTkzMTJjZjBlYzFlOGQ0ZWUiLCJ0eXAiOiJ0d29fZmFjdG9yX2NoYWxsZW5nZSIsInNpZ25faW4iOnsibWV0aG9kIjoic3NvIiwiY29ubmVjdGlvbiI6ImFjbWUtb2t0YSJ9fQ.UDanPpt7CrKuWpe6J_QjjCN370cTChDBuAvW90Hs5JU"
+    },
+    {
+      "name": "challenge_exchange",
+      "service": "default",
+      "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIwMTk5YzBkZS0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJpYXQiOjE3OTI5Mjk2MDAsImV4cCI6MTc5MjkzMDUwMCwiaXNzIjoibmF2cmVlIiwianRpIjoiMDFhMTgyNDRmNmMwNzA3NTkzMTJjZjBmYmVmMjNmNGYiLCJ0eXAiOiJ0d29fZmFjdG9yX2NoYWxsZW5nZSIsInNpZ25faW4iOnsibWV0aG9kIjoidG9rZW5fZXhjaGFuZ2UiLCJpc3N1ZXIiOiJwYXJ0bmVyIn19.k8rZyFX0561Nz7Fm2pPhwcwXo8pYseVluCSW9QoiCCc"
+    },
+    {
+      "name": "platform_challenge",
+      "service": "default",
+      "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIwMTk5YzBkZS0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJpYXQiOjE3OTI5Mjk2MDAsImV4cCI6MTc5MjkzMDUwMCwiaXNzIjoibmF2cmVlIiwianRpIjoiMDFhMTgyNDRmNmMwNzA3NTkzMTJjZjEwMWVjMjE2OTgiLCJ0eXAiOiJwbGF0Zm9ybV9jaGFsbGVuZ2UiLCJzaWduX2luIjp7Im1ldGhvZCI6InBhc3N3b3JkIn19.F-AisQYwSNWiZXVGSHHRyj5MgF86yY1jEPDG0zrAQis"
+    },
+    {
+      "name": "access_audience",
+      "service": "crm",
+      "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIwMTk5YzBkZS0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJpYXQiOjE3OTI5Mjk2MDAsImV4cCI6MTc5MjkzMDUwMCwiaXNzIjoiY3JtIiwiYXVkIjoiY3JtLXdlYiIsImp0aSI6IjAxYTE4MjQ0ZjZjMDcwNzU5MzEyY2YxMTVhNjVkN2I4IiwidHlwIjoiYWNjZXNzIn0.r0cgSti4dK268hPnrs0H9m0e40phVISf19x-t5pEAA0"
+    }
+  ],
+  "impersonator": "0199c0de-0000-7000-8000-000000000002",
+  "issued_at": 1792929600,
+  "secret": "navree-legacy-jwt-fixture-secret-0123456789",
+  "session": "0199c0de-0000-7000-8000-000000000003",
+  "ttl_secs": 900,
+  "user": "0199c0de-0000-7000-8000-000000000001"
+}
