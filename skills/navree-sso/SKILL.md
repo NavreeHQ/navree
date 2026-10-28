@@ -86,10 +86,24 @@ enforce_for_verified_domains = true                     # refuse passwords for v
 - **Writes** of a sign-in (user, identity, membership) run in their own
   transaction: a refused sign-in writes nothing, even when answered with a
   redirect.
-- **Password enforcement** is a navree-auth `PasswordSignInPolicy`:
-  `POST /auth/login` and `/auth/register` get 403 `sso_required`
-  ("Sign in with {connection name}"). `enforce: Some(false)` on a
-  connection opts out; `follow_default_enforcement: true` resets.
+- **Enforcement** is one navree-auth `SignInPolicy` (`SsoSignInPolicy`):
+  for a verified domain of an enabled, enforcing connection, every sign-in
+  but that connection's own gets 403 `sso_required` ("Sign in with
+  {connection name}"): password login, register and password change,
+  magic link and emailed code (request and use), passkey, social sign-in
+  (before any account is created or linked), token exchange,
+  `POST /auth/2fa/verify` of a challenge started earlier, and other
+  connections (checked on the IdP's email before provisioning, and on the
+  account). Refusals are audited `auth.login_refused` with
+  `metadata.method`. Existing sessions are not ended
+  (`revoke_all_refresh_tokens` when turning enforcement on). Break-glass:
+  platform administrators still reach the platform console
+  (`auth.platform.break_glass`, default true, audited `auth.break_glass`),
+  never the app. `enforce: Some(false)` on a connection opts out;
+  `follow_default_enforcement: true` resets; a disabled connection
+  enforces nothing. A sign-in flow you write ends with
+  `AuthService::sign_in(&user, SignInMethod::sso(connection_id), &meta)`,
+  never bare `issue_tokens`.
 - **SAML checks** (`saml::validate_response`): success status, exactly one
   unencrypted assertion child of the response, response and/or assertion
   signed by a metadata certificate (every present signature must verify;
