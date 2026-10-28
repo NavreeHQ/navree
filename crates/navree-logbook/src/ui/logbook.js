@@ -52,6 +52,8 @@
           var latest = response.headers.get("X-Logbook-Latest");
           return response.text().then(function (html) {
             if (html.trim()) {
+              // Rows rendered and escaped by this logbook's own endpoint (same origin), not user markup.
+              // nosemgrep: navree-raw-html
               rows.insertAdjacentHTML("afterbegin", html);
               var empty = document.querySelector(".empty");
               if (empty) empty.remove();

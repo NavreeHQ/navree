@@ -18,4 +18,6 @@ RUN cd /src/wrk/src \
 FROM debian:bookworm-slim
 COPY --from=build /src/wrk/wrk /usr/local/bin/wrk
 COPY scripts /scripts
+# A benchmark harness image: built and run only on a benchmarking machine, never deployed.
+# nosemgrep: dockerfile.security.missing-user-entrypoint.missing-user-entrypoint
 ENTRYPOINT ["wrk"]

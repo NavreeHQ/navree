@@ -34,7 +34,13 @@ function CodeFrame({ file, html, className }: { file: string; html: string; clas
         <span className={isFile ? "code-block-title" : "code-block-lang font-mono"}>{file}</span>
         <CopyButton />
       </figcaption>
-      <div className="[&_pre]:scroll-thin" dangerouslySetInnerHTML={{ __html: html }} />
+      <div
+        className="[&_pre]:scroll-thin"
+        // Shiki's output for a string that lives in this repository, highlighted at build time
+        // (Shiki escapes the code it highlights).
+        // nosemgrep: navree-raw-html
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
     </figure>
   );
 }
