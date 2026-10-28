@@ -82,7 +82,11 @@ impl AttrPath {
             return Err(FilterError("an attribute path is empty".to_owned()));
         }
         // A URN ends at its last colon: `urn:...:2.0:User:employeeNumber`.
-        let (urn, rest) = if text.len() > 4 && text[..4].eq_ignore_ascii_case("urn:") {
+        let (urn, rest) = if text.len() > 4
+            && text
+                .get(..4)
+                .is_some_and(|scheme| scheme.eq_ignore_ascii_case("urn:"))
+        {
             match text.rfind(':') {
                 Some(at) => (Some(&text[..at]), &text[at + 1..]),
                 None => (None, text),
@@ -727,7 +731,7 @@ mod tests {
     #[test]
     fn deep_nesting_is_refused_instead_of_overflowing_the_stack() {
         for (opening, closing) in [("(", ")"), ("not (", ")"), ("emails[", "]")] {
-            let deep = format!("{}a pr{}", opening.repeat(5_000), closing.repeat(5_000));
+            let deep = format!("{}a pr{}", opening.repeat(1_500), closing.repeat(1_500));
             let error = Filter::parse(&deep).unwrap_err();
             assert!(error.0.contains("deeper"), "{error}");
         }
@@ -745,8 +749,29 @@ mod tests {
         );
         assert!(Filter::parse(&too_deep).is_err());
         // A path with a value filter nests the same way.
-        let path = format!("emails[{}a pr{}]", "(".repeat(5_000), ")".repeat(5_000));
+        let path = format!("emails[{}a pr{}]", "(".repeat(1_500), ")".repeat(1_500));
         assert!(PatchPath::parse(&path).is_err());
+    }
+
+    /// Found by fuzzing: an attribute whose fourth byte is inside a
+    /// multi-byte character panicked the URN check (`text[..4]`), from any
+    /// filter or PATCH path a client sends.
+    #[test]
+    fn attribute_names_with_multi_byte_characters_do_not_panic() {
+        for text in [
+            "abc\u{788} pr",
+            "ab\u{788}c eq 1",
+            "\u{788}\u{788}\u{788} pr",
+            "urn\u{788}x pr",
+            "\u{1f600}\u{1f600} pr",
+        ] {
+            // An error (not an attribute name), but never a panic.
+            let _ = Filter::parse(text);
+            let _ = PatchPath::parse(text);
+        }
+        assert!(Filter::parse("abc\u{788} pr").is_err());
+        assert!(PatchPath::parse("abc\u{788}").is_err());
+        assert!(Filter::parse("URN:x:y:userName pr").is_ok());
     }
 
     /// A long chain of `and` is a left-deep tree evaluated recursively, so

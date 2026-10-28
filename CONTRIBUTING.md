@@ -300,6 +300,64 @@ cargo vet                                     # every crate audited or exempted 
 - Report a vulnerability to security@navree.com, never in a public issue; see
   [`SECURITY.md`](SECURITY.md).
 
+### Fuzzing
+
+Every parser that reads untrusted bytes has a libFuzzer target in `fuzz/` (its
+own workspace: it needs a nightly compiler). A target checks that its parser
+does not panic, hang (`-timeout`) or use unbounded memory (`-rss_limit_mb`),
+and, where it can, an invariant: print and parse give the same value, a signed
+token's claims read back, a rendered query holds only the user's words.
+
+| Target | What it feeds |
+|---|---|
+| `jose_token`, `jose_keys` | compact JWS verification against fixed keys and key sets; PEM, DER, certificates and JWKs |
+| `auth_jwt` | the bearer-token check of `JwtService`, against an oracle for each claim |
+| `mcp_protocol`, `mcp_server` | JSON-RPC parsing and stdio framing; a booted MCP server over HTTP and stdio |
+| `http_client_ip`, `http_cors` | `X-Forwarded-For`, `X-Real-IP`, trusted proxies, the rate-limit key; CORS origins; signed URLs |
+| `host_names` | email domains, custom-domain normalization, the `Host` header |
+| `sso_saml_response`, `sso_saml_metadata`, `sso_xml` | SAML responses, identity provider metadata, XML and Canonical XML |
+| `webhooks_signatures` | the signature headers and bodies of every incoming webhook verifier |
+| `validation_international` | E.164 phone numbers, names, countries, locales, sanitized HTML |
+| `search_query` | query text and filter values rendered for each search engine |
+| `schedule_cron` | cron expressions: `parse`, `next_after`, `is_due` |
+| `config_sources` | the `.env` parser, TOML and JSON files, environment merging |
+| `qr_roundtrip`, `totp_uri` | QR encode then decode with `rqrr`; `otpauth://` URIs and base32 secrets |
+| `scim_filter`, `mail_inbound`, `micro_envelope`, `time_parse` | SCIM filters and paths; raw MIME messages; broker envelopes; zone names, days and send windows |
+| `small_parsers` | the logbook search box, OAuth `scope`, `X-Request-ID`, the app key, Web Push keys |
+
+Run them in Docker, so the nightly toolchain and cargo-fuzz are the pinned
+ones (`fuzz/Dockerfile`) and nothing is built inside the checkout. The script
+builds the image, mounts the repository and keeps build output, the cargo
+registry and the working corpora in named volumes:
+
+```sh
+fuzz/docker.sh list                                  # the targets
+fuzz/docker.sh build                                 # build every target
+fuzz/docker.sh run jose_token -- -max_total_time=300 -timeout=10 -rss_limit_mb=2048 -max_len=8192
+```
+
+Without the script, the same thing by hand (one line):
+
+```sh
+docker build -t navree-fuzz fuzz && docker run --rm -v "$PWD:/work" -v navree-fuzz-target:/fuzz-target -v navree-fuzz-registry:/usr/local/cargo/registry -v navree-fuzz-corpus:/corpus navree-fuzz cargo fuzz run jose_token /corpus/jose_token /work/fuzz/seeds/jose_token -- -max_total_time=300
+```
+
+- Seeds (test fixtures and documentation examples) are in `fuzz/seeds/<target>/`
+  and always read; what a run finds goes to the corpus volume.
+- A crash is written to `fuzz/artifacts/<target>/crash-*`. Reproduce it with
+  `fuzz/docker.sh run <target> artifacts/<target>/crash-...`, minimize it
+  with `fuzz/docker.sh tmin <target> artifacts/<target>/crash-...`, then fix the
+  parser and add a regression test to **the crate's own tests** (not only to `fuzz/`).
+- A new parser of untrusted input gets a target: add
+  `fuzz/fuzz_targets/<name>.rs`, a `[[bin]]` entry in `fuzz/Cargo.toml`, seeds,
+  a line in the table above and the name in the matrix of
+  `.github/workflows/fuzz.yml`. Internals a target needs are exposed through a
+  hidden `fuzzing` feature of the crate (`navree_mcp::fuzzing`, for example),
+  never through the public API.
+- CI (`.github/workflows/fuzz.yml`) runs every target for 60 seconds on pushes
+  to main that touch a fuzzed crate and for 10 minutes every night, caching the
+  corpora between runs and uploading the inputs that crashed.
+
 ## Design decisions
 
 - **Token authentication.** Stateless JWT access tokens (HS256, 15 minutes)

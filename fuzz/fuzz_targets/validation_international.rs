@@ -7,10 +7,10 @@
 //! a NUL, the `rel` to set on links.
 //!
 //! Invariants: a parsed phone number is `+` and at most 15 digits, reads
-//! back from its own E.164, international and national forms to the same
-//! number; digit folding is idempotent; a locale or country normalizes to
-//! a value that parses to itself; sanitized HTML never keeps a script,
-//! style or frame element, and text-only output has no raw `<`.
+//! back from its own E.164 and international forms to the same number; digit
+//! folding is idempotent; a locale or country normalizes to a value that
+//! parses to itself; sanitized HTML never keeps a script, style or frame
+//! element, and text-only output has no raw `<`.
 #![no_main]
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -31,24 +31,23 @@ fn phone(text: &str, region: u8) {
         "{e164} is not E.164"
     );
     assert!(!number.international().is_empty());
-    for (name, form, from) in [
-        ("e164", e164.to_owned(), None),
-        ("international", number.international(), None),
-        ("national", number.national(), number.region()),
+    for (name, form) in [
+        ("e164", e164.to_owned()),
+        ("international", number.international()),
     ] {
-        match Phone::parse(&form, from) {
-            Ok(again) => assert_eq!(
-                again.as_str(),
-                e164,
-                "{name} form {form:?} reads as another number"
-            ),
-            // A national form without a region cannot be read back.
-            Err(_) => assert!(
-                name == "national" && number.region().is_none(),
-                "{name} {form:?}"
-            ),
-        }
+        let again = Phone::parse(&form, None)
+            .unwrap_or_else(|_| panic!("{name} form {form:?} does not read back"));
+        assert_eq!(
+            again.as_str(),
+            e164,
+            "{name} form {form:?} reads as another number"
+        );
     }
+    // The national form is for display: for a few countries (Gabon's
+    // `+2415555267` prints as `05 55 52 67`, which is another number) the
+    // reference library's own formats do not read back, so it is only
+    // required not to panic.
+    let _ = Phone::parse(&number.national(), number.region());
 }
 
 fn names_and_tags(text: &str) {
@@ -93,9 +92,8 @@ fn html(text: &str, policy: Option<(&str, &str, &str)>) {
     check_safe(&HtmlPolicy::default().clean(text));
 
     if let Some((tags, schemes, rel)) = policy {
-        let list = |text: &str| -> BTreeSet<String> {
-            text.split(',').map(str::to_owned).collect()
-        };
+        let list =
+            |text: &str| -> BTreeSet<String> { text.split(',').map(str::to_owned).collect() };
         let tags = list(tags);
         let policy = HtmlPolicy {
             tag_attributes: tags

@@ -32,9 +32,11 @@ navree-directory = { path = "../crates/navree-directory" }
 navree-domains = { path = "../crates/navree-domains" }
 navree-http = { path = "../crates/navree-http" }
 navree-kernel = { path = "../crates/navree-kernel" }
+navree-logbook = { path = "../crates/navree-logbook" }
 navree-mail = { path = "../crates/navree-mail", features = ["inbound"] }
 navree-mcp = { path = "../crates/navree-mcp", features = ["fuzzing"] }
 navree-micro = { path = "../crates/navree-micro" }
+navree-oauth = { path = "../crates/navree-oauth" }
 navree-schedule = { path = "../crates/navree-schedule" }
 navree-search = { path = "../crates/navree-search", features = ["fuzzing"] }
 navree-sso = { path = "../crates/navree-sso", features = ["fuzzing"] }
@@ -162,6 +164,13 @@ bench = false
 [[bin]]
 name = "search_query"
 path = "fuzz_targets/search_query.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "small_parsers"
+path = "fuzz_targets/small_parsers.rs"
 test = false
 doc = false
 bench = false

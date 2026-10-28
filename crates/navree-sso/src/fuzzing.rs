@@ -8,10 +8,7 @@ use crate::xml::{Document, NodeId};
 
 /// [`validate_response`](crate::saml::validate_response) for XML text,
 /// minus the signature checks.
-pub fn validate_unsigned(
-    xml: &str,
-    check: &ResponseCheck<'_>,
-) -> Result<SamlAssertion, SamlError> {
+pub fn validate_unsigned(xml: &str, check: &ResponseCheck<'_>) -> Result<SamlAssertion, SamlError> {
     crate::saml::validate_xml_unsigned(xml, check)
 }
 

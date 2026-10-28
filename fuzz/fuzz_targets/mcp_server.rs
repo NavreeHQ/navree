@@ -97,7 +97,10 @@ impl McpServer for FuzzServer {
                 PromptDef::new("greet").input::<Greet>().authenticated(),
                 |call: Call| async move {
                     let args: Greet = call.args().await?;
-                    Ok::<_, AppError>(McpOutput::Json(json!(format!("Say hello to {}.", args.name))))
+                    Ok::<_, AppError>(McpOutput::Json(json!(format!(
+                        "Say hello to {}.",
+                        args.name
+                    ))))
                 },
             ),
         ]
@@ -199,7 +202,11 @@ async fn http(version: usize, session: bool, messages: &[&[u8]]) {
         }
         let response = request.send().await;
         let status = response.status().as_u16();
-        assert!(status < 500, "HTTP {status} for {:?}", String::from_utf8_lossy(message));
+        assert!(
+            status < 500,
+            "HTTP {status} for {:?}",
+            String::from_utf8_lossy(message)
+        );
         let is_json = response
             .header("content-type")
             .is_some_and(|kind| kind.starts_with("application/json"));

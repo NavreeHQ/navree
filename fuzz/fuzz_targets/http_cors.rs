@@ -115,8 +115,8 @@ fn signed_url(input: &Input) {
     let later = now + chrono::TimeDelta::hours(1);
     // A URL we signed verifies, and no longer once it has expired. `sign`
     // takes a path and query as they go on the wire: no fragment.
-    if let Ok(path) = format!("/files/{}", String::from_utf8_lossy(&input.uri))
-        .parse::<http::uri::PathAndQuery>()
+    if let Ok(path) =
+        format!("/files/{}", String::from_utf8_lossy(&input.uri)).parse::<http::uri::PathAndQuery>()
     {
         let signed = signer.sign(path.as_str(), later);
         if let Ok(uri) = signed.parse::<Uri>() {

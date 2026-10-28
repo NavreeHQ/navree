@@ -55,8 +55,14 @@ fuzz_target!(|data: &[u8]| {
     let Some(after) = after else { return };
 
     if let Some(next) = cron.next_after(after, &zone) {
-        assert!(next > after, "{cron} on {zone}: {next} is not after {after}");
-        assert!(cron.is_due(next, &zone), "{cron} on {zone}: {next} is not due");
+        assert!(
+            next > after,
+            "{cron} on {zone}: {next} is not after {after}"
+        );
+        assert!(
+            cron.is_due(next, &zone),
+            "{cron} on {zone}: {next} is not due"
+        );
     }
     if let Some(next) = cron.next_after(after, &Utc) {
         assert!(next > after);

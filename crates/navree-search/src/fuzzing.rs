@@ -14,8 +14,8 @@ use crate::engine::typesense::filter_by;
 use crate::filter::{CmpOp, Filter};
 use crate::sql::Sql;
 use crate::text::{
-    HighlightTags, QueryTerms, distance_within, escape_html, from_marked, highlight,
-    match_quality, term_match, tokenize,
+    HighlightTags, QueryTerms, distance_within, escape_html, from_marked, highlight, match_quality,
+    term_match, tokenize,
 };
 
 /// Reads `text` as a user's search query and renders it for the SQL engines
@@ -112,8 +112,7 @@ pub fn filters(value: &Value) {
         _ => None,
     };
     let probes = probe.as_ref().map(shapes);
-    let fields: BTreeMap<String, Value> =
-        BTreeMap::from([("status".to_owned(), value.clone())]);
+    let fields: BTreeMap<String, Value> = BTreeMap::from([("status".to_owned(), value.clone())]);
     for (n, filter) in filters.into_iter().enumerate() {
         let _ = filter.fields();
         let _ = filter.matches(&fields);
@@ -157,11 +156,16 @@ pub fn filters(value: &Value) {
             let mut sql = Sql::new(backend);
             sql.filter(&filter, "fields");
             let placeholders = match backend {
-                DbBackend::Postgres => (1..=sql.bound())
-                    .all(|n| sql.text().contains(&format!("${n}"))),
+                DbBackend::Postgres => {
+                    (1..=sql.bound()).all(|n| sql.text().contains(&format!("${n}")))
+                }
                 _ => sql.text().matches('?').count() == sql.bound(),
             };
-            assert!(placeholders, "placeholders and values differ: {}", sql.text());
+            assert!(
+                placeholders,
+                "placeholders and values differ: {}",
+                sql.text()
+            );
             if let Some(probes) = &probes {
                 let mut expected = Sql::new(backend);
                 expected.filter(&probes[n].clone().normalized(), "fields");

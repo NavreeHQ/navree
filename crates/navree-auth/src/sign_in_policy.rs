@@ -142,13 +142,17 @@ pub struct SignInAttempt {
 /// ```
 pub fn email_domain(email: &str) -> Option<String> {
     let (_, domain) = email.trim().rsplit_once('@')?;
-    // Blanks around the domain or after its trailing dot are no part of it.
-    let domain = domain.trim();
+    // Blanks around the domain and dots after it are no part of it. They go
+    // first: a name `url` refuses because of what follows it (`erü.test.\r`)
+    // must be spelled as the same name without it.
+    let blank_or_dot = |c: char| c == '.' || c.is_whitespace();
+    let domain = domain.trim_start().trim_end_matches(blank_or_dot);
     let domain = match url::Host::parse(domain) {
         Ok(url::Host::Domain(ascii)) => ascii,
         _ => domain.to_lowercase(),
     };
-    let domain = domain.trim_end_matches(|c: char| c == '.' || c.is_whitespace());
+    // An ideographic full stop at the end became a dot just now.
+    let domain = domain.trim_end_matches(blank_or_dot);
     (!domain.is_empty()).then(|| domain.to_owned())
 }
 
@@ -349,17 +353,29 @@ mod tests {
     /// again. One spelling, whatever the input.
     #[test]
     fn blanks_around_a_domain_are_not_part_of_it() {
-        assert_eq!(email_domain("ann@acme.test. ").as_deref(), Some("acme.test"));
-        assert_eq!(email_domain("ann@acme.test .").as_deref(), Some("acme.test"));
+        assert_eq!(
+            email_domain("ann@acme.test. ").as_deref(),
+            Some("acme.test")
+        );
+        assert_eq!(
+            email_domain("ann@acme.test .").as_deref(),
+            Some("acme.test")
+        );
         assert_eq!(email_domain("ann@ acme.test").as_deref(), Some("acme.test"));
         for email in [
             " CRAEvA@E.tcM.me-Corpp.com:84/3.comes. .",
             "a@b c . .",
             "a@ . x . ",
             "a@x\t.\t",
+            "Eve@er\u{fc}3.h.n.er\u{fc}.\r\r\r\r\r.\r\r\r\r",
+            "eve@er\u{fc}.test.\r",
+            "eve@er\u{fc}.test\u{3002}\u{3002} ",
         ] {
             if let Some(domain) = email_domain(email) {
-                assert!(!domain.ends_with(|c: char| c == '.' || c.is_whitespace()), "{email}");
+                assert!(
+                    !domain.ends_with(|c: char| c == '.' || c.is_whitespace()),
+                    "{email}"
+                );
                 assert_eq!(
                     email_domain(&format!("someone@{domain}")).as_deref(),
                     Some(domain.as_str()),

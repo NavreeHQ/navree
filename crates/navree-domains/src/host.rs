@@ -212,8 +212,20 @@ mod tests {
             Some("shop.acme.test")
         );
         // Found by fuzzing: a second dot or a stray colon is no host name.
-        for malformed in ["ez..", "crm.acme-corp.com..", ".", "..", "a:b", "a:b:8080", "a.b:c"] {
-            assert_eq!(request_host(&parts(Some(malformed), "/")), None, "{malformed}");
+        for malformed in [
+            "ez..",
+            "crm.acme-corp.com..",
+            ".",
+            "..",
+            "a:b",
+            "a:b:8080",
+            "a.b:c",
+        ] {
+            assert_eq!(
+                request_host(&parts(Some(malformed), "/")),
+                None,
+                "{malformed}"
+            );
         }
         assert_eq!(request_host(&parts(Some("127.0.0.1:8080"), "/")), None);
         assert_eq!(request_host(&parts(Some("[::1]:8080"), "/")), None);
