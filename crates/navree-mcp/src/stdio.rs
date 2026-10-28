@@ -312,9 +312,17 @@ impl Connection {
                             pending.push(async move {
                                 let _guard = guard;
                                 let answering = handler.answer(&scope, &prepared, request);
-                                let draining = async { while discarded.recv().await.is_some() {} };
-                                let (answer, ()) = tokio::join!(answering, draining);
-                                answer
+                                tokio::pin!(answering);
+                                loop {
+                                    tokio::select! {
+                                        answer = &mut answering => break answer,
+                                        message = discarded.recv() => {
+                                            if message.is_none() {
+                                                break answering.await;
+                                            }
+                                        }
+                                    }
+                                }
                             });
                         }
                     }

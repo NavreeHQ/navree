@@ -10,6 +10,7 @@ mod notifications;
 mod observability;
 mod prompts;
 mod resources;
+mod security;
 mod stateless;
 mod stdio;
 mod stdio_wire;
