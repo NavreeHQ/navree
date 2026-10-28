@@ -134,8 +134,9 @@ impl CacheStore for MemoryStore {
             let mut result = Ok(0);
             self.entries.compute(key, |existing| {
                 let next = match existing {
-                    Some(value) => parse_integer(key, value)
-                        .and_then(|current| add_checked(key, current, by)),
+                    Some(value) => {
+                        parse_integer(key, value).and_then(|current| add_checked(key, current, by))
+                    }
                     None => add_checked(key, 0, by),
                 };
                 match next {

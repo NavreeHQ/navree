@@ -57,7 +57,10 @@ struct Config {
     tti: Option<u16>,
 }
 
-fn config(capacity: impl Strategy<Value = usize>, shards: [usize; 3]) -> impl Strategy<Value = Config> {
+fn config(
+    capacity: impl Strategy<Value = usize>,
+    shards: [usize; 3],
+) -> impl Strategy<Value = Config> {
     (
         capacity,
         proptest::sample::select(shards.to_vec()),
@@ -275,12 +278,20 @@ fn run(config: Config, evicting: bool, ops: Vec<Op>) {
                 Op::Sweep => {
                     cache.sweep(usize::MAX);
                     let resident = (0..KEYS).filter(|k| cache.contains_key(k)).count();
-                    assert_eq!(cache.len(), resident, "after a full sweep only live entries remain");
+                    assert_eq!(
+                        cache.len(),
+                        resident,
+                        "after a full sweep only live entries remain"
+                    );
                 }
             }
 
             // The bound holds after every operation.
-            assert!(cache.len() <= config.capacity, "len {} over capacity", cache.len());
+            assert!(
+                cache.len() <= config.capacity,
+                "len {} over capacity",
+                cache.len()
+            );
 
             // Compare contents (without touching anything).
             let mut dropped = 0;
@@ -289,13 +300,19 @@ fn run(config: Config, evicting: bool, ops: Vec<Op>) {
                 let in_model = model.live(key).is_some();
                 if evicting {
                     if in_cache {
-                        assert!(in_model, "{key} is cached but the model has it expired or absent");
+                        assert!(
+                            in_model,
+                            "{key} is cached but the model has it expired or absent"
+                        );
                     } else if in_model {
                         dropped += 1;
                         model.entries.remove(&key);
                     }
                 } else {
-                    assert_eq!(in_cache, in_model, "contents differ at key {key} after {op:?}");
+                    assert_eq!(
+                        in_cache, in_model,
+                        "contents differ at key {key} after {op:?}"
+                    );
                 }
             }
             if evicting {
@@ -311,7 +328,11 @@ fn run(config: Config, evicting: bool, ops: Vec<Op>) {
             // Compare values (reads are uses on both sides).
             for key in 0..KEYS {
                 if model.live(key).is_some() {
-                    assert_eq!(cache.get(&key), model.get(key), "value of {key} after {op:?}");
+                    assert_eq!(
+                        cache.get(&key),
+                        model.get(key),
+                        "value of {key} after {op:?}"
+                    );
                 }
             }
         }

@@ -24,7 +24,11 @@ async fn an_entry_lives_for_exactly_its_ttl() {
     let cache = ttl_cache(60 * SECOND);
     cache.insert("a".into(), 1);
     advance(60 * SECOND - ms(1)).await;
-    assert_eq!(cache.get("a"), Some(1), "one millisecond before the deadline");
+    assert_eq!(
+        cache.get("a"),
+        Some(1),
+        "one millisecond before the deadline"
+    );
     advance(ms(1)).await;
     assert_eq!(cache.get("a"), None, "at the deadline");
 }
@@ -48,7 +52,11 @@ async fn replacing_restarts_the_ttl() {
     advance(8 * SECOND).await;
     cache.insert("a".into(), 2);
     advance(8 * SECOND).await;
-    assert_eq!(cache.get("a"), Some(2), "16s after the first insert, 8s after the second");
+    assert_eq!(
+        cache.get("a"),
+        Some(2),
+        "16s after the first insert, 8s after the second"
+    );
     advance(2 * SECOND).await;
     assert_eq!(cache.get("a"), None);
 }
@@ -74,7 +82,10 @@ async fn contains_key_is_not_a_use() {
     advance(6 * SECOND).await;
     assert!(cache.contains_key("a"));
     advance(4 * SECOND).await;
-    assert!(!cache.contains_key("a"), "contains_key at 6s did not restart the idle clock");
+    assert!(
+        !cache.contains_key("a"),
+        "contains_key at 6s did not restart the idle clock"
+    );
 }
 
 #[tokio::test(start_paused = true)]
@@ -111,7 +122,11 @@ async fn an_entry_ttl_overrides_the_default() {
     assert_eq!(cache.get("long"), Some(2));
     advance(3_600 * SECOND).await;
     assert_eq!(cache.get("long"), None);
-    assert_eq!(cache.get("forever"), Some(3), "None never expires, whatever the default");
+    assert_eq!(
+        cache.get("forever"),
+        Some(3),
+        "None never expires, whatever the default"
+    );
 }
 
 #[tokio::test(start_paused = true)]
@@ -186,7 +201,10 @@ async fn a_sweep_is_bounded_and_resumes() {
     advance(10 * SECOND).await;
     assert_eq!(cache.sweep(0), 0);
     let first = cache.sweep(10);
-    assert!(first <= 10, "a budget of 10 slots removes at most 10, removed {first}");
+    assert!(
+        first <= 10,
+        "a budget of 10 slots removes at most 10, removed {first}"
+    );
     assert_eq!(cache.len(), 100 - first);
     let mut total = first;
     for _ in 0..20 {
@@ -223,7 +241,11 @@ async fn inserting_new_keys_sweeps_a_few_expired_ones_each_time() {
     for i in 0..40 {
         cache.insert_with_ttl(format!("new{i}"), i, None);
     }
-    assert_eq!(cache.len(), 40, "the old entries were reclaimed by the inserts alone");
+    assert_eq!(
+        cache.len(),
+        40,
+        "the old entries were reclaimed by the inserts alone"
+    );
     for i in 0..40 {
         assert_eq!(cache.get(&format!("new{i}")), Some(i));
     }
@@ -274,7 +296,11 @@ async fn a_loaded_value_expires_and_loads_again() {
     advance(9 * SECOND).await;
     assert_eq!(cache.get_with("a".into(), load()).await, 1, "still fresh");
     advance(SECOND).await;
-    assert_eq!(cache.get_with("a".into(), load()).await, 2, "expired: loaded again");
+    assert_eq!(
+        cache.get_with("a".into(), load()).await,
+        2,
+        "expired: loaded again"
+    );
     assert_eq!(loads.load(SeqCst), 2);
 }
 

@@ -81,7 +81,10 @@ pub(crate) enum Slot<K, V> {
 }
 
 /// What a shard removed or replaced, to be dropped outside its lock.
-#[allow(dead_code, reason = "held only to be dropped after the lock is released")]
+#[allow(
+    dead_code,
+    reason = "held only to be dropped after the lock is released"
+)]
 pub(crate) enum Dead<K, V> {
     Node(Node<K, V>),
     Value(V),
@@ -214,8 +217,7 @@ where
     {
         self.find(hash, key).is_some_and(|index| {
             let node = self.node(index);
-            node.deadline == NEVER && self.tti == NEVER
-                || !node.is_expired(clock.now(), self.tti)
+            node.deadline == NEVER && self.tti == NEVER || !node.is_expired(clock.now(), self.tti)
         })
     }
 
@@ -476,10 +478,11 @@ where
         self.head = index;
         self.len += 1;
         let slots = &self.slots;
-        self.table.insert_unique(hash, index, |&at| match &slots[at as usize] {
-            Slot::Occupied(node) => node.hash,
-            Slot::Vacant(_) => 0,
-        });
+        self.table
+            .insert_unique(hash, index, |&at| match &slots[at as usize] {
+                Slot::Occupied(node) => node.hash,
+                Slot::Vacant(_) => 0,
+            });
     }
 
     /// Unindexes, unlinks and frees the entry at `index`.
@@ -520,7 +523,11 @@ where
         if self.len == 0 {
             return None;
         }
-        let mut at = if self.hand != NIL { self.hand } else { self.tail };
+        let mut at = if self.hand != NIL {
+            self.hand
+        } else {
+            self.tail
+        };
         let tti = self.tti;
         loop {
             let node = self.node_mut(at);
