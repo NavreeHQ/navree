@@ -520,7 +520,10 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(error.contains("provider"), "{error}");
-        assert!(error.contains("braintree"), "{error}");
+        assert!(error.contains("`stripe`"), "{error}");
+        // Configured values never appear in errors; the key and the
+        // accepted values do.
+        assert!(!error.contains("braintree"), "{error}");
     }
 
     #[test]
