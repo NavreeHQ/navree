@@ -398,7 +398,7 @@ memory-stats = "1.2.0"
 # RUSTSEC-2026-0253; async-graphql still requires lru 0.16).
 async-graphql = { version = "7.2.1", default-features = false, features = ["chrono", "uuid"] }
 # Line diffs for `graphql:schema --check` (the version insta already uses).
-similar = "2.7.0"
+similar = "3.2.1"
 # The official Rust MCP SDK (navree-mcp): the server, stdio and the
 # streamable HTTP transport. Never its `reqwest-native-tls` or `auth` features.
 rmcp = { version = "3.7.0", default-features = false, features = [
