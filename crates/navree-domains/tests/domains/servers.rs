@@ -113,7 +113,9 @@ async fn flow(scratch: &Scratch) {
         .await
         .unwrap();
     assert!(matches!(
-        domains.add(globex, NewDomain::new("crm.acme-corp.test")).await,
+        domains
+            .add(globex, NewDomain::new("crm.acme-corp.test"))
+            .await,
         Err(DomainsError::Taken(_))
     ));
     domains.remove(rival.id).await.unwrap();
@@ -215,7 +217,9 @@ async fn claims(scratch: &Scratch) {
         let host = format!("race{round}.acme-corp.test");
         let mut ids = Vec::new();
         for n in 0..4 {
-            let workspace = world.workspace(Uuid::now_v7(), &format!("W{round}{n}")).await;
+            let workspace = world
+                .workspace(Uuid::now_v7(), &format!("W{round}{n}"))
+                .await;
             let claim = world.add(workspace, &host).await;
             world.publish(&claim);
             ids.push(claim.id);
@@ -285,7 +289,12 @@ async fn claims(scratch: &Scratch) {
     let claim = domains.transfer("moved.acme-corp.test", new).await.unwrap();
     assert_eq!(claim.status, DomainStatus::Pending);
     assert_eq!(
-        domains.resolve("moved.acme-corp.test").await.unwrap().unwrap().id,
+        domains
+            .resolve("moved.acme-corp.test")
+            .await
+            .unwrap()
+            .unwrap()
+            .id,
         held.id
     );
     world.publish(&claim);
@@ -296,7 +305,12 @@ async fn claims(scratch: &Scratch) {
         Err(DomainsError::DomainNotFound)
     ));
     assert_eq!(
-        domains.resolve("moved.acme-corp.test").await.unwrap().unwrap().workspace_id,
+        domains
+            .resolve("moved.acme-corp.test")
+            .await
+            .unwrap()
+            .unwrap()
+            .workspace_id,
         new
     );
     world.app.shutdown().await.unwrap();

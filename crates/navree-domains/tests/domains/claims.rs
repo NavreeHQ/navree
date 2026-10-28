@@ -157,7 +157,9 @@ async fn workspaces_proving_control_at_once_leave_exactly_one_winner() {
         let host = format!("crm{round}.acme-corp.test");
         let mut claims = Vec::new();
         for n in 0..4 {
-            let workspace = world.workspace(Uuid::now_v7(), &format!("W{round}{n}")).await;
+            let workspace = world
+                .workspace(Uuid::now_v7(), &format!("W{round}{n}"))
+                .await;
             let claim = world.add(workspace, &host).await;
             // Everyone's token is in the DNS: all four prove control now.
             world.publish(&claim);
@@ -196,7 +198,9 @@ async fn workspaces_proving_control_at_once_leave_exactly_one_winner() {
     // closed twice.
     let seen = events.names();
     assert_eq!(
-        seen.iter().filter(|name| *name == "domains.verified").count(),
+        seen.iter()
+            .filter(|name| *name == "domains.verified")
+            .count(),
         6
     );
     assert_eq!(
@@ -270,10 +274,7 @@ async fn a_failed_claim_never_blocks_and_is_cleaned_up() {
 
     // The owner was never blocked, before or after.
     let mine = world.verified(owner, HOST).await;
-    assert_eq!(
-        domains.resolve(HOST).await.unwrap().unwrap().id,
-        mine.id
-    );
+    assert_eq!(domains.resolve(HOST).await.unwrap().unwrap().id, mine.id);
 
     // The failed claim stays visible for a week, then is deleted.
     world.advance(24 * HOUR);
@@ -341,7 +342,9 @@ async fn failed_claims_do_not_count_against_the_workspace_limit() {
     let domains = world.domains().await;
     world.add(workspace, HOST).await;
     assert!(matches!(
-        domains.add(workspace, NewDomain::new("go.acme-corp.test")).await,
+        domains
+            .add(workspace, NewDomain::new("go.acme-corp.test"))
+            .await,
         Err(DomainsError::LimitReached(1))
     ));
     world.advance(72 * HOUR);
@@ -383,4 +386,3 @@ async fn closing_or_removing_a_claim_keeps_the_owners_certificate() {
         owner
     );
 }
-
