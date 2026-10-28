@@ -1,0 +1,44 @@
+# Generates a CycloneDX software bill of materials for the whole workspace
+# (one JSON document per workspace crate, every feature on, every target) and
+# uploads it as a workflow artifact. Runs on version tags and on manual
+# dispatch. The artifact is kept for 90 days; attach it to the release by
+# downloading it from the run.
+name: SBOM
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cyclonedx:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
+        with:
+          tool: cargo-cyclonedx@0.5.9
+      - name: Generate CycloneDX SBOMs
+        run: cargo cyclonedx --format json --spec-version 1.5 --all-features --target all
+      - name: Collect the SBOMs
+        run: |
+          mkdir sbom
+          find . -name '*.cdx.json' -not -path './sbom/*' -not -path '*/node_modules/*' \
+            -exec cp {} sbom/ \;
+          count=$(find sbom -name '*.cdx.json' | wc -l)
+          echo "Collected $count SBOM files"
+          test "$count" -gt 0
+          test -f sbom/navree.cdx.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: navree-sbom-${{ github.sha }}
+          path: sbom/
+          if-no-files-found: error
+          retention-days: 90
