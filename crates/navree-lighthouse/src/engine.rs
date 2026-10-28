@@ -71,7 +71,7 @@ const SHARDS: usize = 64;
 const STALE_AFTER: Duration = Duration::from_secs(600);
 /// Occurrences of one issue stored per hour before sampling applies.
 const OCCURRENCES_PER_HOUR: u32 = 100;
-/// Flush as soon as this many details wait.
+/// Flush as soon as this many details wait (or `lighthouse.buffer`, when smaller).
 const FLUSH_AT: usize = 500;
 /// Issue hits kept for the next write while the database is unreachable.
 const MAX_RETRY_HITS: usize = 100_000;
@@ -1393,12 +1393,17 @@ impl Engine {
                 }
             }
             pending.hits.push(hit);
-            pending.details() >= FLUSH_AT || pending.hits.len() >= FLUSH_AT
+            pending.details() >= self.flush_at() || pending.hits.len() >= FLUSH_AT
         };
         self.count_sampled_out(sampled_out, now);
         if wake {
             self.wake.notify_one();
         }
+    }
+
+    /// How many waiting details wake the writer.
+    fn flush_at(&self) -> usize {
+        FLUSH_AT.min(self.options.buffer)
     }
 
     /// Queues a sample, or samples it out when the queue is full.
@@ -1409,7 +1414,7 @@ impl Engine {
                 None
             } else {
                 pending.samples.push(sample);
-                Some(pending.details() >= FLUSH_AT)
+                Some(pending.details() >= self.flush_at())
             }
         };
         match wake {
