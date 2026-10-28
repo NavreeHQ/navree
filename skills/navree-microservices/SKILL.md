@@ -296,4 +296,7 @@ Handler errors reply with the error's status and JSON body; 5xx bodies say
   `observe.tracing.enabled = false` messages carry no `traceparent`.
 - **Custom transports** implement `MicroTransport` (and `DeliveryActions`
   for each received message) and should pass
-  `navree::micro::conformance::run(&harness)`.
+  `navree::micro::conformance::run(&harness)`. Boot finishes when the
+  transport calls `Subscribed::signal` from `listen_subscribed` (default:
+  at once); override it when the broker drops messages sent before it has
+  registered the subscriptions, as core NATS does.
