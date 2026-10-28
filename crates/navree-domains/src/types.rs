@@ -18,7 +18,10 @@ pub enum DomainStatus {
     /// required): it resolves workspaces and gets certificates.
     Verified,
     /// Still pending `domains.verification.give_up_after_hours` after it
-    /// was added; no longer checked on a schedule.
+    /// was added, or closed because another workspace proved control of
+    /// the host first (`last_error` says which); no longer checked on a
+    /// schedule, never in the way of another workspace, and deleted
+    /// after `domains.verification.failed_retention_hours`.
     Failed,
 }
 

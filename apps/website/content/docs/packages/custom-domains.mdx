@@ -9,7 +9,8 @@ description: "Workspaces on their own domains: DNS verification, automatic TLS t
 
 `navree-domains` does all three:
 
-- **Domains per workspace.** `Domains::add` checks the domain, refuses your own domains and ones another workspace has, and answers with the DNS records to create: a TXT record that proves ownership, and a CNAME (A records for an apex domain) that points the domain at your app.
+- **Domains per workspace.** `Domains::add` checks the domain, refuses your own domains and ones another workspace has verified, and answers with the DNS records to create: a TXT record that proves ownership, and a CNAME (A records for an apex domain) that points the domain at your app.
+- **Proof of control.** Typing a domain claims nothing. Any number of workspaces can add the same domain, each with a token of its own, and the one whose TXT record is found first owns it. Nobody can block a domain's real owner by adding it first, and a verified domain moves to another workspace only through a [fresh TXT proof](#moving-a-verified-domain).
 - **DNS verification.** A scheduled command looks the records up with [hickory-resolver](https://docs.rs/hickory-resolver) until they appear, then marks the domain verified. Verified domains are checked again every day.
 - **Automatic TLS, two ways.** With an on-demand TLS proxy in front of the app (Caddy, which [Harbor](/docs/tools/harbor/#custom-domains) sets up), the app answers the proxy's ask endpoint, `GET /_domains/allow?domain=`, and the proxy gets each certificate on the domain's first visit. Without a proxy, the app gets certificates from an ACME CA such as Let's Encrypt itself ([instant-acme](https://docs.rs/instant-acme) on ring), renews them, and serves them over HTTPS with a rustls certificate resolver.
 - **Requests on a domain.** With `domain` in `workspace.resolvers`, a request to a verified domain names its workspace for `CurrentWorkspace`. Public pages take `CurrentDomain` instead, with no sign-in.
@@ -45,6 +46,8 @@ Navree::app()
 Only `ConfigModule` and `DatabaseModule` are required. `WorkspaceModule` is needed for the routes and the `domain` resolver, `CryptoModule` with an application key for certificates the app gets itself, `ScheduleModule` for the checks to run on their own, and `EventsModule` for the [events](#events).
 
 The module contributes the migration set `domains`, which creates four tables: `custom_domains` (the domains, their status and certificate dates), `custom_domain_certificates` (certificates obtained over ACME, their private keys sealed), `custom_domain_challenges` (open ACME challenge answers) and `custom_domain_acme_accounts` (the ACME account of each directory, sealed). They run on PostgreSQL (with or without TimescaleDB), MySQL, MariaDB and SQLite.
+
+A host can have one row in `custom_domains` for each workspace that claims it. Only a verified row owns the host: its `verified_host` column holds the host (and is `NULL` for pending and failed rows), and a unique index on that column is what makes the first proof win, on every database. The last migration of the set, `claim_domains_by_proof`, adds the column to an existing table and fills it from the domains that are verified; rolling it back keeps verified domains and drops the claims.
 
 ## Configuration
 
@@ -91,10 +94,60 @@ An apex domain (`acme-corp.com`) gets A and AAAA records of `domains.addresses` 
 |---|---|---|
 | Not a domain | `invalid_domain` (400) | A URL, a port, a path, a wildcard, an IP address, a single label, a purpose that is not 1 to 32 lower-case letters, digits, `-` or `_` |
 | Reserved | `domain_not_allowed` (400) | The host of `app.url`, `workspace.base_domain`, `domains.target`, an entry of `domains.reserved`, or a subdomain of one: a workspace can't claim `admin.app.example.com` |
-| Taken | `domain_taken` (409) | Another workspace (or this one) has the host |
-| Too many | `domain_limit_reached` (409) | The workspace has `domains.max_per_workspace` domains (default 10; 0 for no limit) |
+| Taken | `domain_taken` (409) | The host is verified for a workspace already, or this workspace has a claim on it. Another workspace's pending or failed claim never causes it |
+| Too many | `domain_limit_reached` (409) | The workspace has `domains.max_per_workspace` domains (default 10; 0 for no limit; failed claims don't count) |
 
-`remove(id)` deletes a domain, its certificate and, in a managed zone, its record. When a workspace is deleted, its domains go with it.
+A workspace whose claim on a host failed replaces it by adding the host again, with a new token.
+
+`remove(id)` deletes a domain and, when it was the verified domain of its host, its certificate and, in a managed zone, its record. Removing a pending or failed claim never touches the owner's certificate. When a workspace is deleted, its domains go with it.
+
+## Who owns a domain
+
+Control of a domain is proved with DNS, never claimed by typing. That decides what happens when two workspaces want the same host, and it is the reason a customer's domain can't be taken from them by adding it first.
+
+### Claims
+
+`add` stores a claim. A pending claim owns nothing: the host resolves no workspace, the ask endpoint answers 404 for it, and no certificate is ordered. Several workspaces can hold a pending claim on one host at the same time, each with its own random token, so each is proved by its own TXT record. A workspace has one claim per host.
+
+Say a stranger adds `crm.acme-corp.com` before Acme does. Acme's `add` is not refused: it returns Acme's own claim and its own token, and only Acme, who controls the DNS, can publish that record.
+
+### The first proof wins
+
+When a claim's records are found, it becomes `verified` and owns the host. The database decides, not the application: only one row can hold a host in `verified_host`, so when two claims are proved in the same moment exactly one commits and the other finds the host taken. The loser is never an error. Every other pending claim on the host is closed too: its status becomes `failed`, `last_error` says another workspace proved control first, and [`DomainClaimedElsewhere`](#events) is emitted once for each, so you can tell that workspace.
+
+A verified host is protected from then on. `add` refuses it for other workspaces (`domain_taken`), and a claim that is proved later, such as one added in the same moment as the winner, is closed the same way. The only way a verified domain changes workspace is a transfer.
+
+### Failed claims
+
+A claim that gave up (pending for `domains.verification.give_up_after_hours`) or lost its host is `failed`. It never blocks anyone: the unique index covers verified rows only, so the real owner can add and verify the host before, during and after. A failed claim stays visible to its workspace for `domains.verification.failed_retention_hours` (default 168, a week) so the page can show why, then `domains:verify --due` deletes it (0 keeps failed claims until their workspace removes them). Failed claims don't count toward `domains.max_per_workspace`.
+
+### Moving a verified domain
+
+A domain changes workspace when the workspace that takes it proves control with a fresh TXT record: the one Acme published for its old workspace proves nothing for the new one. `transfer` makes the new workspace's claim, marked as a transfer, with a new token, and checks the DNS now:
+
+```rust
+let claim = domains
+    .transfer("crm.acme-corp.com", new_workspace_id)
+    .await?;
+if claim.is_verified() {
+    println!("{} now belongs to {}", claim.host, claim.workspace_id);
+} else {
+    // Publish these; the scheduler moves the domain when it finds them.
+    for record in &claim.dns_records {
+        println!("{} {} {}", record.kind, record.name, record.value);
+    }
+}
+```
+
+With the record in place the domain moves at once: in one transaction the old workspace's domain and certificate are deleted and the new claim becomes the owner, and the old workspace gets `DomainClaimedElsewhere` (its snapshot still says `verified`). Without it, the old workspace keeps the domain. The claim stays pending with the same token until the scheduler finds the record, or `transfer` is called again. A host nobody has verified is a 404 `domain_not_found` (add it instead), a reserved or managed host a 400 `domain_not_allowed`, and a workspace at its limit a 409 `domain_limit_reached`.
+
+`transfer` is for your own code and operators; the module mounts no route for it. From the command line:
+
+```sh
+navree domains:transfer crm.acme-corp.com --to 0199a4c2-1f00-7d2e-8a11-0b9c3e4f5a6b
+```
+
+The first run prints the records the new workspace must create. Run it again, or wait for the scheduler, once they are in place.
 
 ## Verification
 
@@ -103,13 +156,13 @@ The scheduler runs `domains:verify --due` every minute. It checks each domain wh
 1. **Ownership:** a TXT record at `{domains.verification.prefix}.{host}` holds the domain's token.
 2. **Routing:** the domain points at the app: a CNAME to `domains.target`, or an address that `domains.target` or `domains.addresses` has. Nothing is checked while both are unset; `domains.verification.require_routing = false` verifies on the TXT record alone.
 
-A domain that passes becomes `verified` and [`DomainVerified`](#events) is emitted. One that doesn't stays `pending`, with what is missing in `last_error`, and is checked again `domains.verification.interval_mins` later (default 5):
+A domain that passes becomes `verified`, owns its host (see [who owns a domain](#who-owns-a-domain)) and [`DomainVerified`](#events) is emitted. One that doesn't stays `pending`, with what is missing in `last_error`, and is checked again `domains.verification.interval_mins` later (default 5):
 
 ```text
 TXT record _example-verification.crm.acme-corp.com with the value 3k9w2m1x7q8v0z5r4t6y1u3i8o2p7a9s not found; crm.acme-corp.com does not point at domains.example.com, 203.0.113.10
 ```
 
-A domain still pending `domains.verification.give_up_after_hours` after it was added (default 72) becomes `failed`, `DomainVerificationFailed` is emitted, and the scheduler stops checking it. `verify(id)` checks a domain now, whatever its status, which is what a "Check now" button calls (`POST /api/domains/{id}/verify`); a failed domain whose records are in place becomes verified.
+A domain still pending `domains.verification.give_up_after_hours` after it was added (default 72) becomes `failed`, `DomainVerificationFailed` is emitted, and the scheduler stops checking it; the failed claim is deleted `domains.verification.failed_retention_hours` later (default 168). `verify(id)` checks a domain now, whatever its status, which is what a "Check now" button calls (`POST /api/domains/{id}/verify`); a failed domain whose records are in place becomes verified, unless another workspace owns the host by then (it then stays `failed`, and the answer is still a 200).
 
 A resolver failure (a timeout, `SERVFAIL`) is not a missing record: it is recorded in `last_error`, the domain is checked again at the next interval, and `verify` returns it as a 502 `dns_lookup_failed`.
 
@@ -300,6 +353,7 @@ Each is emitted after its change commits, when the app has `EventsModule`:
 | `DomainAdded` | `domains.added` | `domain` (a `CustomDomain`) |
 | `DomainVerified` | `domains.verified` | `domain` |
 | `DomainVerificationFailed` | `domains.verification_failed` | `domain`, `reason` |
+| `DomainClaimedElsewhere` | `domains.claimed_elsewhere` | `domain` (the claim that was closed), `claimed_by` (the workspace that proved control) |
 | `DomainRemoved` | `domains.removed` | `domain_id`, `workspace_id`, `host` |
 | `DomainCertificateIssued` | `domains.certificate_issued` | `host`, `domain_id`, `expires_at`, `renewal` |
 | `DomainCertificateExpiring` | `domains.certificate_expiring` | `host`, `domain_id`, `expires_at`, `days_left` |
@@ -335,7 +389,7 @@ Register it with `m.listen::<DomainVerified, DomainLog>()` in your module.
 | `invalid_domain` | 400 | The input is not a domain, or the ask endpoint got no `?domain=` |
 | `domain_not_allowed` | 400 | The domain is reserved |
 | `domain_not_found` | 404 | No such domain (or another workspace's); a host that is not a verified domain |
-| `domain_taken` | 409 | Another workspace has the domain |
+| `domain_taken` | 409 | The domain is verified for a workspace already, or this workspace has a claim on it |
 | `domain_limit_reached` | 409 | The workspace has `domains.max_per_workspace` domains |
 | `domain_not_verified` | 409 | Making an unverified domain primary, or ordering its certificate |
 | `dns_lookup_failed` | 502 | The resolver failed (not a missing record) |
@@ -347,8 +401,10 @@ Register it with `m.listen::<DomainVerified, DomainLog>()` in your module.
 ```sh
 navree domains:list                        # every domain: host, status, tls, expiry, workspace
 navree domains:list --status pending --workspace 0199a4c2-1f00-7d2e-8a11-0b9c3e4f5a6b
-navree domains:verify crm.acme-corp.com    # check one domain now (host or id)
+navree domains:verify crm.acme-corp.com    # check every claim on a host now (or one by id)
 navree domains:verify --due                # what the scheduler runs every minute
+navree domains:transfer crm.acme-corp.com --to 0199a4c2-1f00-7d2e-8a11-0b9c3e4f5a6b
+                                           # move a verified domain, once the new workspace proves control
 navree domains:certificates --due          # issue, renew or probe; report expiring certificates
 navree domains:certificates crm.acme-corp.com
 ```
@@ -409,6 +465,33 @@ async fn a_customer_brings_their_domain() {
 }
 ```
 
+The property customers ask about, that adding someone else's domain first doesn't block them, is a short test on the same `app`, `dns` and `domains`:
+
+```rust title="tests/domains.rs"
+#[tokio::test]
+async fn a_squatter_does_not_block_the_owner() {
+    // ...the app and `dns` as above...
+    let squatter = uuid::Uuid::now_v7();
+    let owner = uuid::Uuid::now_v7();
+
+    let squat = domains
+        .add(squatter, NewDomain::new("crm.acme-corp.com"))
+        .await
+        .unwrap();
+    let claim = domains
+        .add(owner, NewDomain::new("crm.acme-corp.com")) // not refused
+        .await
+        .unwrap();
+
+    // Only the owner controls the DNS, so only their token is published.
+    dns.set_txt(&claim.dns_records[0].name, &claim.dns_records[0].value);
+    dns.set_cname("crm.acme-corp.com", "domains.example.com");
+    let claim = domains.verify(claim.id).await.unwrap();
+    assert_eq!(claim.status, DomainStatus::Verified);
+    assert_eq!(domains.get(squat.id).await.unwrap().status, DomainStatus::Failed);
+}
+```
+
 | Fake | Does |
 |---|---|
 | `DnsFake` | `with_txt`, `with_cname`, `with_address` (builders); `set_txt`, `set_cname`, `set_address`, `remove(name)` after boot; `fail(name, reason)` makes lookups of a name fail; `lookups()` lists them. Addresses follow CNAMEs |
@@ -435,6 +518,7 @@ Use a `FixedClock` (`override_value::<dyn Clock>(..)`) and `clock.advance(..)` t
 | `domains.verification.prefix` | `_domain-verification` | The label of the TXT record in front of the domain |
 | `domains.verification.interval_mins` | `5` | Minutes between checks of a pending domain |
 | `domains.verification.give_up_after_hours` | `72` | A domain still pending this long fails |
+| `domains.verification.failed_retention_hours` | `168` | A failed claim is deleted this long after it last changed (0: kept until its workspace removes it) |
 | `domains.verification.recheck_hours` | `24` | Hours between routing checks of verified domains (0: never) |
 | `domains.verification.require_routing` | `true` | A domain must point at the app to be verified |
 | `domains.certificates.warn_days` | `14` | Report certificates that expire within this many days |
@@ -458,7 +542,7 @@ Use a `FixedClock` (`override_value::<dyn Clock>(..)`) and `clock.advance(..)` t
 
 | Type | What it is |
 |---|---|
-| `Domains` | The service: `add`, `list`, `all`, `get`, `get_for`, `find`, `resolve`, `allows`, `verify`, `verify_due`, `make_primary`, `primary`, `primary_url`, `remove`, `remove_workspace`, `issue_certificate`, `issue_pending`, `check_certificates`, `reload_certificates`, `challenge_answer`, `certificates`, `dns_records` |
+| `Domains` | The service: `add`, `transfer`, `list`, `all`, `get`, `get_for`, `find`, `claims`, `resolve`, `allows`, `verify`, `verify_due`, `make_primary`, `primary`, `primary_url`, `remove`, `remove_workspace`, `issue_certificate`, `issue_pending`, `check_certificates`, `reload_certificates`, `challenge_answer`, `certificates`, `dns_records` |
 | `DomainsModule` | `for_root`, `from_config` |
 | `CustomDomain`, `DnsInstruction`, `DomainStatus`, `TlsStatus`, `NewDomain`, `CertificateRun` | What the service takes and returns |
 | `CurrentDomain` | The extractor of public pages |

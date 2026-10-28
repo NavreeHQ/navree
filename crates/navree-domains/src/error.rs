@@ -2,7 +2,8 @@
 
 use http::StatusCode;
 use navree_crypto::CryptoError;
-use navree_db::sea_orm::DbErr;
+use navree_db::sea_orm::sqlx::error::ErrorKind;
+use navree_db::sea_orm::{DbErr, RuntimeErr, SqlErr};
 use navree_http::AppError;
 use navree_kernel::KernelError;
 use navree_orm::OrmError;
@@ -27,7 +28,9 @@ pub enum DomainsError {
     /// subdomains).
     #[error("`{0}` can't be added")]
     NotAllowed(String),
-    /// Another workspace has the domain.
+    /// The domain is verified for another workspace (it moves only
+    /// through `Domains::transfer`), or this workspace already has it.
+    /// Pending and failed claims of other workspaces never cause it.
     #[error("`{0}` is already in use")]
     Taken(String),
     /// The workspace has `domains.max_per_workspace` domains.
@@ -89,6 +92,25 @@ impl DomainsError {
         DomainsError::Acme {
             host: host.into(),
             reason: reason.into(),
+        }
+    }
+
+    /// Whether the database refused a write because it repeats a value of
+    /// a unique index (a second claim on a host, a second row of a
+    /// workspace for one host).
+    pub(crate) fn is_unique_violation(&self) -> bool {
+        let DomainsError::Db(error) = self else {
+            return false;
+        };
+        if matches!(error.sql_err(), Some(SqlErr::UniqueConstraintViolation(_))) {
+            return true;
+        }
+        match error {
+            DbErr::Exec(RuntimeErr::SqlxError(error))
+            | DbErr::Query(RuntimeErr::SqlxError(error)) => error
+                .as_database_error()
+                .is_some_and(|error| matches!(error.kind(), ErrorKind::UniqueViolation)),
+            _ => false,
         }
     }
 

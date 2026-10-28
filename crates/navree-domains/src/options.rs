@@ -136,6 +136,11 @@ pub struct VerificationOptions {
     /// A domain still pending this many hours after it was added fails
     /// (default 72); verifying it by hand still works.
     pub give_up_after_hours: u32,
+    /// A failed domain (one that gave up, or lost its host to the
+    /// workspace that proved control) is deleted this many hours after it
+    /// last changed (default 168, a week; 0 keeps it until its workspace
+    /// removes it). A failed domain never blocks another workspace.
+    pub failed_retention_hours: u32,
     /// Hours between checks that a verified domain still points at the app
     /// (default 24; 0 never checks again).
     pub recheck_hours: u32,
@@ -150,6 +155,7 @@ impl Default for VerificationOptions {
             prefix: "_domain-verification".to_owned(),
             interval_mins: 5,
             give_up_after_hours: 72,
+            failed_retention_hours: 168,
             recheck_hours: 24,
             require_routing: true,
         }
