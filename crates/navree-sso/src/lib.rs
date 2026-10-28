@@ -10,9 +10,10 @@
 //!   client id and secret). [`Sso`] creates, changes and deletes them.
 //! - **Verified domains** ([`SsoDomain`]): a TXT record proves a domain
 //!   belongs to a connection. `POST /api/sso/discover {email}` then routes
-//!   its emails to the connection, and an enforcing connection keeps them
-//!   off passwords (a navree-auth `PasswordSignInPolicy`, code
-//!   `sso_required`).
+//!   its emails to the connection, and an enforcing connection makes it
+//!   their only way in: passwords, magic links, emailed codes, passkeys,
+//!   social sign-in, token exchange and other connections are refused (a
+//!   navree-auth `SignInPolicy`, code `sso_required`).
 //! - **Sign-in**: `GET /api/sso/{connection}/login` sends the browser to
 //!   the identity provider; `POST /api/sso/saml/{connection}/acs` or
 //!   `GET /api/sso/oidc/{connection}/callback` checks the answer, finds,

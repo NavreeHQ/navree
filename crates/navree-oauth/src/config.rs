@@ -59,6 +59,62 @@ impl Default for PersonalAccessTokenOptions {
     }
 }
 
+/// The limits of one protocol endpoint (`oauth.rate_limits.<endpoint>`),
+/// in requests per minute; `0` turns a limit off.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct EndpointLimit {
+    /// Requests per minute of one client, counted once it has
+    /// authenticated (so requests naming a client with a wrong secret
+    /// can't use up its budget).
+    pub per_client: u32,
+    /// Requests per minute from one client IP address, counted before
+    /// anything is checked (failed client authentications included).
+    pub per_ip: u32,
+}
+
+impl EndpointLimit {
+    /// `per_client` and `per_ip` requests per minute.
+    pub const fn new(per_client: u32, per_ip: u32) -> Self {
+        Self { per_client, per_ip }
+    }
+}
+
+impl Default for EndpointLimit {
+    fn default() -> Self {
+        Self::new(0, 0)
+    }
+}
+
+/// Rate limits of the protocol endpoints that take client credentials
+/// (`oauth.rate_limits`). Each instance of the app counts on its own. A
+/// request over a limit gets 429 with `Retry-After` and the OAuth error
+/// `too_many_requests`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RateLimitOptions {
+    /// `POST {path}/token`: 300 per client, 120 per IP.
+    pub token: EndpointLimit,
+    /// `POST {path}/introspect`: 1200 per client, 600 per IP (resource
+    /// servers introspect on every request they don't cache).
+    pub introspect: EndpointLimit,
+    /// `POST {path}/revoke`: 300 per client, 60 per IP.
+    pub revoke: EndpointLimit,
+    /// `POST {path}/device_authorization`: 60 per client, 30 per IP.
+    pub device_authorization: EndpointLimit,
+}
+
+impl Default for RateLimitOptions {
+    fn default() -> Self {
+        Self {
+            token: EndpointLimit::new(300, 120),
+            introspect: EndpointLimit::new(1200, 600),
+            revoke: EndpointLimit::new(300, 60),
+            device_authorization: EndpointLimit::new(60, 30),
+        }
+    }
+}
+
 /// Options of the OAuth server (configuration section `oauth`).
 ///
 /// ```toml
@@ -80,14 +136,21 @@ impl Default for PersonalAccessTokenOptions {
 /// enabled = true
 /// max_days = 365                                      # 0 = no limit
 ///
+/// [oauth.rate_limits]                                 # requests per minute; 0 = off
+/// token = { per_client = 300, per_ip = 120 }
+/// introspect = { per_client = 1200, per_ip = 600 }
+/// revoke = { per_client = 300, per_ip = 60 }
+/// device_authorization = { per_client = 60, per_ip = 30 }
+///
 /// [oauth.scopes."deals:read"]
 /// description = "Read your deals"
 /// permissions = ["deals.read"]
 /// ```
 ///
 /// Environment variables map as usual: `APP_OAUTH__CONSENT_URL` →
-/// `oauth.consent_url`, `APP_OAUTH__ACCESS_TOKEN_TTL_SECS=1800`; lists also
-/// accept a comma-separated string.
+/// `oauth.consent_url`, `APP_OAUTH__ACCESS_TOKEN_TTL_SECS=1800`,
+/// `APP_OAUTH__RATE_LIMITS__TOKEN__PER_IP=600`; lists also accept a
+/// comma-separated string.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(default)]
 pub struct OAuthOptions {
@@ -129,6 +192,9 @@ pub struct OAuthOptions {
     /// Whether clients may register themselves (`POST {path}/register`,
     /// RFC 7591). Off by default.
     pub dynamic_registration: bool,
+    /// Rate limits of the token, introspection, revocation and device
+    /// authorization endpoints, per client and per client IP.
+    pub rate_limits: RateLimitOptions,
 }
 
 impl Default for OAuthOptions {
@@ -148,6 +214,7 @@ impl Default for OAuthOptions {
             previous_signing_keys: Vec::new(),
             personal_access_tokens: PersonalAccessTokenOptions::default(),
             dynamic_registration: false,
+            rate_limits: RateLimitOptions::default(),
         }
     }
 }

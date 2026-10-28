@@ -125,6 +125,24 @@ Limits are declared per route, with a fixed number per period. They can't depend
 
 </Callout>
 
+### Keyed limits in a handler
+
+When the key is something only the handler knows, such as the client of an OAuth request after it authenticates, `navree::http::KeyedRateLimiter` is the same in-memory limiter the route throttles use, keyed by anything hashable. `check(&key)` counts a request and answers `Limited { retry_after, report }` when the key is over its limit; `report` is true for the first refusal of a window, so a flood is audited once.
+
+```rust
+use std::time::Duration;
+
+use navree::http::{AppError, KeyedRateLimiter};
+use uuid::Uuid;
+
+let per_client = KeyedRateLimiter::<Uuid>::new(300, Duration::from_secs(60));
+if let Err(limited) = per_client.check(&client_id) {
+    return Err(AppError::too_many_requests(limited.retry_after));
+}
+```
+
+The [OAuth server](/docs/packages/oauth-server/#rate-limits) limits its token, introspection, revocation and device authorization endpoints this way, per client and per client IP.
+
 ## The login throttle
 
 `POST /api/auth/login` has its own protection against password guessing, separate from the limits above: after `auth.login_throttle_per_minute` failed attempts (5 by default) for the same email from the same client IP, further attempts get a 429 for the rest of the minute:
