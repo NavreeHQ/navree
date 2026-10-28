@@ -173,10 +173,11 @@ macro_rules! fetch {
                 SchemaValue::Bool(v) => query.bind(*v),
             };
         }
-        query
-            .fetch_all($executor)
-            .await
-            .map(|rows| rows.iter().map(|row| decode!(row, $other)).collect::<Vec<_>>())
+        query.fetch_all($executor).await.map(|rows| {
+            rows.iter()
+                .map(|row| decode!(row, $other))
+                .collect::<Vec<_>>()
+        })
     }};
 }
 
@@ -293,7 +294,9 @@ impl SchemaConnection for TestConn {
             match self {
                 TestConn::Sqlite(pool) => fetch!(sqlx::Sqlite, pool, sql, params, sqlite_other),
                 #[cfg(feature = "postgres")]
-                TestConn::Postgres(pool) => fetch!(sqlx::Postgres, pool, sql, params, postgres_other),
+                TestConn::Postgres(pool) => {
+                    fetch!(sqlx::Postgres, pool, sql, params, postgres_other)
+                }
                 #[cfg(feature = "mysql")]
                 TestConn::MySql(pool) => fetch!(sqlx::MySql, pool, sql, params, mysql_other),
             }

@@ -4,11 +4,11 @@
 
 use std::sync::Arc;
 
+use crate::support::{TempSqlite, TestConn};
 use navree_schema::{
     ContinuousAggregate, DumpOptions, Hypertable, IndexKind, MigrationContext, ReferentialAction,
     Schema, SchemaConnection, SchemaError, SchemaOptions, raw,
 };
-use crate::support::{TempSqlite, TestConn};
 
 async fn exec(conn: &TestConn, sql: &str) {
     conn.execute_unprepared(sql)

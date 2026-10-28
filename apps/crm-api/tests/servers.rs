@@ -126,10 +126,7 @@ async fn timescaledb_answers_as_sqlite_does() {
     let crm = crm(Some(database.url())).await;
     let db = crm.get::<Db>().await;
     assert!(
-        Schema::new(&db)
-            .is_hypertable("activities")
-            .await
-            .unwrap(),
+        Schema::new(&db).is_hypertable("activities").await.unwrap(),
         "the activity timeline is a hypertable"
     );
     let answers = day_of_work(&crm).await;

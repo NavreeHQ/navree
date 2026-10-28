@@ -21,7 +21,6 @@ mod mysql;
 mod postgres;
 mod sqlite;
 
-
 use crate::connection::{SchemaConnection, SchemaRow};
 use crate::error::SchemaResult;
 use crate::grammar::{columnize, ident, table};

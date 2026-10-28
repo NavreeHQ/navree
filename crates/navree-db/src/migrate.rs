@@ -173,7 +173,11 @@ impl MigrationSet {
             .migrations
             .iter()
             .map(|m| SetMigration::Schema(m.as_ref()))
-            .chain(self.sea_orm.iter().map(|m| SetMigration::SeaOrm(m.as_ref())))
+            .chain(
+                self.sea_orm
+                    .iter()
+                    .map(|m| SetMigration::SeaOrm(m.as_ref())),
+            )
             .collect();
         entries.sort_by(|a, b| a.name().cmp(b.name()));
         entries
@@ -645,7 +649,9 @@ fn delete_sql(backend: Backend) -> &'static str {
             "DELETE FROM \"navree_migrations\" WHERE \"module\" = $1 AND \"name\" = $2"
         }
         Backend::MySql => "DELETE FROM `navree_migrations` WHERE `module` = ? AND `name` = ?",
-        Backend::Sqlite => "DELETE FROM \"navree_migrations\" WHERE \"module\" = ? AND \"name\" = ?",
+        Backend::Sqlite => {
+            "DELETE FROM \"navree_migrations\" WHERE \"module\" = ? AND \"name\" = ?"
+        }
     }
 }
 
@@ -656,9 +662,7 @@ async fn ensure_table(conn: &dyn Executor) -> Result<(), DbError> {
         .map(drop)
 }
 
-async fn applied_rows(
-    conn: &dyn Executor,
-) -> Result<HashMap<(String, String), Applied>, DbError> {
+async fn applied_rows(conn: &dyn Executor) -> Result<HashMap<(String, String), Applied>, DbError> {
     ensure_table(conn).await?;
     let backend = conn.backend();
     let rows = conn

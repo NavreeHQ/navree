@@ -224,11 +224,9 @@ impl Executor for Conn {
     ) -> BoxFuture<'a, Result<Option<Row>, DbError>> {
         match &self.pool {
             Some(pool) => pool.fetch_optional(statement),
-            None => Box::pin(async move {
-                SeaExecutor::new(&self.sea)
-                    .fetch_optional(statement)
-                    .await
-            }),
+            None => {
+                Box::pin(async move { SeaExecutor::new(&self.sea).fetch_optional(statement).await })
+            }
         }
     }
 

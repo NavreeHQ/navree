@@ -488,7 +488,11 @@ impl Runner {
 
 /// Runs a transactional step in `tx`: a schema-builder migration on
 /// navree-db's transaction, a SeaORM migration on SeaORM's.
-async fn run_in_transaction(step: &Step<'_>, direction: Direction, tx: &Tx) -> Result<(), BoxError> {
+async fn run_in_transaction(
+    step: &Step<'_>,
+    direction: Direction,
+    tx: &Tx,
+) -> Result<(), BoxError> {
     match step.body {
         SetMigration::Schema(migration) => {
             let schema = Schema::new(tx);
@@ -614,7 +618,11 @@ async fn bookkeeping(
 /// with foreign keys off).
 async fn foreign_key_check(conn: &dyn Executor) -> Result<(), BoxError> {
     let rows = conn
-        .fetch_all(&Statement::new(Backend::Sqlite, "PRAGMA foreign_key_check", []))
+        .fetch_all(&Statement::new(
+            Backend::Sqlite,
+            "PRAGMA foreign_key_check",
+            [],
+        ))
         .await?;
     if rows.is_empty() {
         return Ok(());

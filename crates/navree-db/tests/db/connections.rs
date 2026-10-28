@@ -319,10 +319,14 @@ impl navree_kernel::Module for Users {
     fn register(&self, m: &mut navree_kernel::ModuleBuilder) {
         use navree_db::ModuleBuilderDbExt;
 
-        m.migrations(crate::fixtures::set("users", [], vec![crate::fixtures::CreateTable::boxed(
+        m.migrations(crate::fixtures::set(
+            "users",
+            [],
+            vec![crate::fixtures::CreateTable::boxed(
                 "m0001_create_users",
                 "users",
-            )]));
+            )],
+        ));
     }
 }
 

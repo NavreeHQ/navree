@@ -32,7 +32,9 @@ pub(crate) fn schema_value(value: Value) -> SchemaValue {
         Value::U8(v) => SchemaValue::Int(i64::from(v)),
         Value::U16(v) => SchemaValue::Int(i64::from(v)),
         Value::U32(v) => SchemaValue::Int(i64::from(v)),
-        Value::U64(v) => i64::try_from(v).map_or_else(|_| SchemaValue::Text(v.to_string()), SchemaValue::Int),
+        Value::U64(v) => {
+            i64::try_from(v).map_or_else(|_| SchemaValue::Text(v.to_string()), SchemaValue::Int)
+        }
         Value::F32(v) => SchemaValue::Float(f64::from(v)),
         Value::F64(v) => SchemaValue::Float(v),
         Value::Decimal(v) => SchemaValue::Text(v.to_string()),
@@ -174,7 +176,10 @@ mod tests {
             schema_value(Value::Decimal(rust_decimal::Decimal::new(1250, 2))),
             SchemaValue::Text("12.50".into())
         );
-        assert_eq!(bound_value(&SchemaValue::Text("t".into())), Value::from("t"));
+        assert_eq!(
+            bound_value(&SchemaValue::Text("t".into())),
+            Value::from("t")
+        );
         assert_eq!(dialect(Backend::MySql), Dialect::MySql);
     }
 }

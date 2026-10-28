@@ -174,7 +174,9 @@ async fn database_errors_name_the_statement_and_keep_the_driver_error() {
         "the connection's own error stays reachable: {source:?}"
     );
     assert!(
-        error.to_string().ends_with("\n  while running: DROP TABLE \"missing\""),
+        error
+            .to_string()
+            .ends_with("\n  while running: DROP TABLE \"missing\""),
         "{error}"
     );
 }
