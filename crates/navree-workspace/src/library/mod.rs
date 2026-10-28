@@ -78,6 +78,7 @@ use navree_db::Uow;
 use navree_kernel::BoxFuture;
 use navree_orm::{Field, FieldError, FieldKind, Model, OrmError, Record, Value};
 use sea_orm::QueryResult;
+use sea_orm::sea_query::StringLen;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -90,9 +91,11 @@ use crate::{CurrentOrganization, CurrentWorkspace, Workspace, WorkspaceError};
 
 /// The level a library item belongs to: the `scope` column.
 ///
-/// Stored as `global`, `organization` or `workspace`. A model field of
-/// this type needs no cast; it defaults to `Workspace`, so an item created
-/// inside a workspace request belongs to that workspace.
+/// Stored as `global`, `organization` or `workspace`. A navree-orm model
+/// field of this type needs no cast, and a SeaORM entity takes it as a
+/// column too (it is an active enum), so one struct can derive both. It
+/// defaults to `Workspace`: an item created inside a workspace request
+/// belongs to that workspace.
 #[derive(
     Clone,
     Copy,
@@ -106,16 +109,22 @@ use crate::{CurrentOrganization, CurrentWorkspace, Workspace, WorkspaceError};
     Serialize,
     Deserialize,
     utoipa::ToSchema,
+    sea_orm::EnumIter,
+    sea_orm::DeriveActiveEnum,
 )]
 #[serde(rename_all = "snake_case")]
+#[sea_orm(rs_type = "String", db_type = "String(StringLen::N(16))")]
 pub enum LibraryScope {
     /// The app's own items, seen by everyone (seeders and Helm place them).
+    #[sea_orm(string_value = "global")]
     Global,
     /// An organization's items, seen by the organization and its
     /// workspaces.
+    #[sea_orm(string_value = "organization")]
     Organization,
     /// A workspace's own items (its clones among them).
     #[default]
+    #[sea_orm(string_value = "workspace")]
     Workspace,
 }
 
@@ -547,7 +556,10 @@ mod tests {
                 serde_json::to_value(scope).unwrap(),
                 serde_json::json!(scope.as_str())
             );
-            assert_eq!(LibraryScope::from_value(scope.to_value()), Ok(scope));
+            assert_eq!(
+                LibraryScope::from_value(Field::to_value(&scope)),
+                Ok(scope)
+            );
         }
         assert_eq!(LibraryScope::default(), LibraryScope::Workspace);
         assert!(
@@ -564,6 +576,19 @@ mod tests {
             LibraryScope::from_value(Value::String(None)),
             Err(FieldError::Null)
         );
+        // A SeaORM column too, stored under the same names.
+        use sea_orm::{ActiveEnum, Iterable};
+        assert_eq!(
+            LibraryScope::iter().collect::<Vec<_>>(),
+            LibraryScope::ALL
+        );
+        for scope in LibraryScope::ALL {
+            assert_eq!(ActiveEnum::to_value(&scope), scope.as_str());
+            assert_eq!(
+                <LibraryScope as ActiveEnum>::try_from_value(&scope.as_str().to_owned()).unwrap(),
+                scope
+            );
+        }
     }
 
     #[test]
