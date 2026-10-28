@@ -1058,7 +1058,7 @@ pub enum Expr {
     Random,
     /// `DEFAULT`, the column's default (in `VALUES` and `SET`; SQLite has
     /// none in `VALUES`).
-    Default,
+    DefaultValue,
 }
 
 /// A column reference.

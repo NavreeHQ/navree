@@ -1,8 +1,8 @@
 //! Runs statements on a test database and reads rows back as normalized
-//! JSON: the one place these tests touch a driver. Today it runs through
-//! navree-db's connection (SeaORM's `ConnectionTrait`, the rows read as
-//! sqlx rows); swapping it for navree-db's own executor changes this file
-//! only.
+//! JSON: the one place these tests touch a driver. Statements run through
+//! navree-db's own engine on SQLx (its pools, transactions and statements),
+//! and rows are read as navree-db `Value`s, so every case also exercises
+//! the data layer the renderer's output will run on.
 //!
 //! Normalized values compare across databases: integers as integers,
 //! decimals and floats as numbers (whole ones as integers, others rounded
@@ -12,8 +12,7 @@
 //! holding a JSON object or array too), bytes as text when they are UTF-8.
 
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, SecondsFormat, Utc};
-use navree_db::sea_orm::{ConnectionTrait, QueryResult, TransactionTrait};
-use navree_db::{Db, DbOptions};
+use navree_db::{Backend, Db, DbOptions, Executor, Value};
 use navree_orm::{Decimal, Dialect, Statement};
 use serde_json::Value as Json;
 
@@ -50,8 +49,7 @@ impl Exec {
     pub async fn batch(&self, sql: &str) -> Result<(), String> {
         for statement in sql.split(";\n").map(str::trim).filter(|s| !s.is_empty()) {
             self.db
-                .conn()
-                .execute_unprepared(statement)
+                .execute_script(statement)
                 .await
                 .map_err(|error| format!("{statement}: {error}"))?;
         }
@@ -62,37 +60,30 @@ impl Exec {
     pub async fn rows(&self, statement: &Statement) -> Result<Vec<Row>, String> {
         let rows = self
             .db
-            .conn()
-            .query_all_raw(statement.to_sea_orm())
+            .fetch_all(&engine_statement(statement)?)
             .await
             .map_err(|error| error.to_string())?;
-        rows.iter().map(|row| self.row(row)).collect()
+        rows.iter().map(row).collect()
     }
 
     /// The rows `statement` returns, read inside a transaction of its own
     /// (row locks).
     pub async fn rows_in_transaction(&self, statement: &Statement) -> Result<Vec<Row>, String> {
-        let tx = self
-            .db
-            .conn()
-            .begin()
-            .await
-            .map_err(|error| error.to_string())?;
+        let tx = self.db.begin().await.map_err(|error| error.to_string())?;
         let rows = tx
-            .query_all_raw(statement.to_sea_orm())
+            .fetch_all(&engine_statement(statement)?)
             .await
             .map_err(|error| error.to_string());
         tx.commit().await.map_err(|error| error.to_string())?;
-        rows?.iter().map(|row| self.row(row)).collect()
+        rows?.iter().map(row).collect()
     }
 
     /// Runs `statement`; the number of rows it changed.
     pub async fn execute(&self, statement: &Statement) -> Result<u64, String> {
         self.db
-            .conn()
-            .execute_raw(statement.to_sea_orm())
+            .execute(&engine_statement(statement)?)
             .await
-            .map(|result| result.rows_affected())
+            .map(|done| done.rows_affected)
             .map_err(|error| error.to_string())
     }
 
@@ -108,22 +99,70 @@ impl Exec {
 
     /// Closes the connection pool.
     pub async fn close(self) {
-        let _ = self.db.conn().clone().close().await;
+        let _ = self.db.close().await;
     }
+}
 
-    fn row(&self, row: &QueryResult) -> Result<Row, String> {
-        #[cfg(feature = "postgres")]
-        if let Some(row) = row.try_as_pg_row() {
-            return postgres::row(row);
-        }
-        #[cfg(feature = "mysql")]
-        if let Some(row) = row.try_as_mysql_row() {
-            return mysql::row(row);
-        }
-        if let Some(row) = row.try_as_sqlite_row() {
-            return sqlite::row(row);
-        }
-        Err("a row of an unexpected driver".to_owned())
+/// The ORM's statement as navree-db runs it (its SQL is already in the
+/// backend's placeholders).
+fn engine_statement(statement: &Statement) -> Result<navree_db::Statement, String> {
+    let backend = match statement.dialect {
+        Dialect::Postgres => Backend::Postgres,
+        Dialect::MySql => Backend::MySql,
+        Dialect::Sqlite => Backend::Sqlite,
+    };
+    let values = statement
+        .values
+        .iter()
+        .cloned()
+        .map(navree_db::compat::from_sea_value)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())?;
+    Ok(navree_db::Statement::new(
+        backend,
+        statement.sql.clone(),
+        values,
+    ))
+}
+
+/// A row, normalized.
+fn row(row: &navree_db::Row) -> Result<Row, String> {
+    row.columns()
+        .into_iter()
+        .enumerate()
+        .map(|(index, name)| {
+            let value = row.value(index).map_err(|error| error.to_string())?;
+            Ok((name, normalize(value)))
+        })
+        .collect()
+}
+
+/// A value, normalized.
+fn normalize(value: Value) -> Json {
+    match value {
+        Value::Null(_) => Json::Null,
+        Value::Bool(b) => Json::from(i64::from(b)),
+        Value::I8(n) => Json::from(n),
+        Value::I16(n) => Json::from(n),
+        Value::I32(n) => Json::from(n),
+        Value::I64(n) => Json::from(n),
+        Value::U8(n) => Json::from(n),
+        Value::U16(n) => Json::from(n),
+        Value::U32(n) => Json::from(n),
+        Value::U64(n) => Json::from(n),
+        Value::F32(n) => number(f64::from(n)),
+        Value::F64(n) => number(n),
+        Value::Decimal(d) => decimal(d),
+        Value::String(s) => text(s),
+        Value::Bytes(b) => bytes(b),
+        Value::Json(j) => json(j),
+        Value::Uuid(id) => Json::String(id.to_string()),
+        Value::Date(d) => date(d),
+        Value::Time(t) => time(t),
+        Value::DateTime(at) => naive_date_time(at),
+        Value::Timestamp(at) => date_time(at),
+        Value::TimestampTz(at) => date_time(at.with_timezone(&Utc)),
+        other => Json::String(format!("{other:?}")),
     }
 }
 
@@ -159,22 +198,16 @@ pub fn date_time(value: DateTime<Utc>) -> Json {
 }
 
 /// A date-time without zone, read as UTC.
-// Read by the PostgreSQL and MySQL decoders.
-#[cfg_attr(not(any(feature = "postgres", feature = "mysql")), allow(dead_code))]
 pub fn naive_date_time(value: NaiveDateTime) -> Json {
     date_time(value.and_utc())
 }
 
 /// A date as `YYYY-MM-DD`.
-// Read by the PostgreSQL and MySQL decoders.
-#[cfg_attr(not(any(feature = "postgres", feature = "mysql")), allow(dead_code))]
 pub fn date(value: NaiveDate) -> Json {
     Json::String(value.format("%Y-%m-%d").to_string())
 }
 
 /// A time of day as `HH:MM:SS[.f]`.
-// Read by the PostgreSQL and MySQL decoders.
-#[cfg_attr(not(any(feature = "postgres", feature = "mysql")), allow(dead_code))]
 pub fn time(value: NaiveTime) -> Json {
     Json::String(value.format("%H:%M:%S%.f").to_string())
 }
@@ -208,8 +241,6 @@ pub fn bytes(value: Vec<u8>) -> Json {
 }
 
 /// A JSON value: kept, numbers normalized.
-// Read by the PostgreSQL and MySQL decoders.
-#[cfg_attr(not(any(feature = "postgres", feature = "mysql")), allow(dead_code))]
 pub fn json(value: Json) -> Json {
     match value {
         Json::Number(number) => match number.as_i64() {
@@ -246,148 +277,6 @@ fn parse_date_time(text: &str) -> Option<DateTime<Utc>> {
         }
     }
     None
-}
-
-#[cfg(feature = "postgres")]
-mod postgres {
-    use navree_db::sea_orm::sqlx::postgres::PgRow;
-    use navree_db::sea_orm::sqlx::{Column, Row as _, TypeInfo, ValueRef};
-
-    use super::*;
-
-    pub fn row(row: &PgRow) -> Result<Row, String> {
-        let mut out = Vec::with_capacity(row.columns().len());
-        for (i, column) in row.columns().iter().enumerate() {
-            out.push((column.name().to_owned(), value(row, i)?));
-        }
-        Ok(out)
-    }
-
-    fn value(row: &PgRow, i: usize) -> Result<Json, String> {
-        let raw = row.try_get_raw(i).map_err(|error| error.to_string())?;
-        if raw.is_null() {
-            return Ok(Json::Null);
-        }
-        let ty = raw.type_info().name().to_owned();
-        let error = |error: navree_db::sea_orm::sqlx::Error| format!("{ty}: {error}");
-        Ok(match ty.as_str() {
-            "INT2" => Json::from(row.try_get_unchecked::<i16, _>(i).map_err(error)?),
-            "INT4" => Json::from(row.try_get_unchecked::<i32, _>(i).map_err(error)?),
-            "INT8" => Json::from(row.try_get_unchecked::<i64, _>(i).map_err(error)?),
-            "FLOAT4" => number(f64::from(
-                row.try_get_unchecked::<f32, _>(i).map_err(error)?,
-            )),
-            "FLOAT8" => number(row.try_get_unchecked::<f64, _>(i).map_err(error)?),
-            "NUMERIC" => decimal(row.try_get_unchecked::<Decimal, _>(i).map_err(error)?),
-            "BOOL" => Json::from(i64::from(
-                row.try_get_unchecked::<bool, _>(i).map_err(error)?,
-            )),
-            "TIMESTAMPTZ" => date_time(
-                row.try_get_unchecked::<DateTime<Utc>, _>(i)
-                    .map_err(error)?,
-            ),
-            "TIMESTAMP" => naive_date_time(
-                row.try_get_unchecked::<NaiveDateTime, _>(i)
-                    .map_err(error)?,
-            ),
-            "DATE" => date(row.try_get_unchecked::<NaiveDate, _>(i).map_err(error)?),
-            "TIME" => time(row.try_get_unchecked::<NaiveTime, _>(i).map_err(error)?),
-            "JSON" | "JSONB" => json(row.try_get_unchecked::<Json, _>(i).map_err(error)?),
-            "UUID" => Json::String(
-                row.try_get_unchecked::<uuid::Uuid, _>(i)
-                    .map_err(error)?
-                    .to_string(),
-            ),
-            "BYTEA" => bytes(row.try_get_unchecked::<Vec<u8>, _>(i).map_err(error)?),
-            _ => text(row.try_get_unchecked::<String, _>(i).map_err(error)?),
-        })
-    }
-}
-
-#[cfg(feature = "mysql")]
-mod mysql {
-    use navree_db::sea_orm::sqlx::mysql::MySqlRow;
-    use navree_db::sea_orm::sqlx::{Column, Row as _, TypeInfo, ValueRef};
-
-    use super::*;
-
-    pub fn row(row: &MySqlRow) -> Result<Row, String> {
-        let mut out = Vec::with_capacity(row.columns().len());
-        for (i, column) in row.columns().iter().enumerate() {
-            out.push((column.name().to_owned(), value(row, i)?));
-        }
-        Ok(out)
-    }
-
-    fn value(row: &MySqlRow, i: usize) -> Result<Json, String> {
-        let raw = row.try_get_raw(i).map_err(|error| error.to_string())?;
-        if raw.is_null() {
-            return Ok(Json::Null);
-        }
-        let ty = raw.type_info().name().to_owned();
-        let error = |error: navree_db::sea_orm::sqlx::Error| format!("{ty}: {error}");
-        Ok(match ty.as_str() {
-            "BOOLEAN" => Json::from(i64::from(
-                row.try_get_unchecked::<bool, _>(i).map_err(error)?,
-            )),
-            name if name.ends_with("UNSIGNED") => {
-                Json::from(row.try_get_unchecked::<u64, _>(i).map_err(error)?)
-            }
-            "TINYINT" | "SMALLINT" | "MEDIUMINT" | "INT" | "BIGINT" | "YEAR" => {
-                Json::from(row.try_get_unchecked::<i64, _>(i).map_err(error)?)
-            }
-            "FLOAT" => number(f64::from(
-                row.try_get_unchecked::<f32, _>(i).map_err(error)?,
-            )),
-            "DOUBLE" => number(row.try_get_unchecked::<f64, _>(i).map_err(error)?),
-            "DECIMAL" => decimal(row.try_get_unchecked::<Decimal, _>(i).map_err(error)?),
-            "DATETIME" | "TIMESTAMP" => naive_date_time(
-                row.try_get_unchecked::<NaiveDateTime, _>(i)
-                    .map_err(error)?,
-            ),
-            "DATE" => date(row.try_get_unchecked::<NaiveDate, _>(i).map_err(error)?),
-            "TIME" => time(row.try_get_unchecked::<NaiveTime, _>(i).map_err(error)?),
-            "JSON" => json(row.try_get_unchecked::<Json, _>(i).map_err(error)?),
-            "BINARY" | "VARBINARY" | "TINYBLOB" | "BLOB" | "MEDIUMBLOB" | "LONGBLOB" | "BIT" => {
-                bytes(row.try_get_unchecked::<Vec<u8>, _>(i).map_err(error)?)
-            }
-            _ => text(row.try_get_unchecked::<String, _>(i).map_err(error)?),
-        })
-    }
-}
-
-mod sqlite {
-    use navree_db::sea_orm::sqlx::sqlite::SqliteRow;
-    use navree_db::sea_orm::sqlx::{Column, Row as _, TypeInfo, ValueRef};
-
-    use super::*;
-
-    pub fn row(row: &SqliteRow) -> Result<Row, String> {
-        let mut out = Vec::with_capacity(row.columns().len());
-        for (i, column) in row.columns().iter().enumerate() {
-            out.push((column.name().to_owned(), value(row, i)?));
-        }
-        Ok(out)
-    }
-
-    /// SQLite's values carry their own storage class, whatever the
-    /// column's declared type.
-    fn value(row: &SqliteRow, i: usize) -> Result<Json, String> {
-        let raw = row.try_get_raw(i).map_err(|error| error.to_string())?;
-        if raw.is_null() {
-            return Ok(Json::Null);
-        }
-        let ty = raw.type_info().name().to_owned();
-        let error = |error: navree_db::sea_orm::sqlx::Error| format!("{ty}: {error}");
-        Ok(match ty.as_str() {
-            "INTEGER" | "BOOLEAN" | "INT8" => {
-                Json::from(row.try_get_unchecked::<i64, _>(i).map_err(error)?)
-            }
-            "REAL" => number(row.try_get_unchecked::<f64, _>(i).map_err(error)?),
-            "BLOB" => bytes(row.try_get_unchecked::<Vec<u8>, _>(i).map_err(error)?),
-            _ => text(row.try_get_unchecked::<String, _>(i).map_err(error)?),
-        })
-    }
 }
 
 #[test]
