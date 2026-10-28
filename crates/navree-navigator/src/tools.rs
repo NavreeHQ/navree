@@ -199,7 +199,7 @@ pub fn tools() -> Vec<ToolDef> {
             title: "Read configuration",
             description: "The merged configuration the app sees (`.env`, `config/app.toml`, `APP_*` variables \
                 and dock.toml's settings), secrets redacted like `Config::redacted()`: keys containing \
-                password, secret, token, key, authorization or cookie, and passwords in URLs. With `key`, one \
+                password, secret, token, key, authorization, cookie, dsn or credential, and passwords in URLs. With `key`, one \
                 section (`queue`, `database.url`).",
             input_schema: object(json!({
                 "key": string("A dotted key or section (`database`, `log.file`)."),

@@ -201,7 +201,8 @@ async fn export(&self) -> Response {
 Return `Response` (not `impl IntoResponse`) from controller methods. Stream
 a large body with `navree::axum::body::Body::from_stream(stream)` (a storage
 disk's `get_stream` gives one). Navree adds `X-Request-Id`, the security
-headers and CORS headers to every response; a header you set wins.
+headers to every response, and CORS headers when the request's `Origin` is in
+`http.cors.allowed_origins` (other origins get none); a header you set wins.
 
 ## API resources
 

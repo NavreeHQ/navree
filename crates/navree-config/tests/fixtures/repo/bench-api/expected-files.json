@@ -1,0 +1,21 @@
+{
+  "auth": {
+    "jwt": {
+      "issuer": "navree"
+    },
+    "registration": false
+  },
+  "database": {
+    "max_connections": 64,
+    "migrate_on_boot": false,
+    "transaction_settings": false
+  },
+  "http": {
+    "addr": "0.0.0.0:8080",
+    "api_prefix": "/api",
+    "per_ip_rate_limit": 1000000000
+  },
+  "log": {
+    "level": "warn"
+  }
+}

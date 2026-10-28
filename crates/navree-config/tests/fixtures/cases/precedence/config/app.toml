@@ -1,0 +1,13 @@
+name = "from-app-toml"
+layer = "app.toml"
+
+[database]
+url = "sqlite://app.db"
+replicas = ["a", "b", "c"]
+
+[server]
+host = "app-host"
+port = 80
+
+[only]
+file = true

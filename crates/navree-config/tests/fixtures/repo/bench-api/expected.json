@@ -1,0 +1,23 @@
+{
+  "auth": {
+    "jwt": {
+      "issuer": "bench",
+      "secret": "bench-jwt-secret"
+    },
+    "registration": false
+  },
+  "database": {
+    "max_connections": "16",
+    "migrate_on_boot": false,
+    "transaction_settings": false,
+    "url": "postgres://bench:bench@db:5432/bench"
+  },
+  "http": {
+    "addr": "0.0.0.0:8080",
+    "api_prefix": "/api",
+    "per_ip_rate_limit": 1000000000
+  },
+  "log": {
+    "level": "warn"
+  }
+}

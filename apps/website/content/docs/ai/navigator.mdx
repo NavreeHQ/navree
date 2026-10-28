@@ -188,7 +188,7 @@ Navigator reads `log.file.path` from your configuration, so a different path wor
 
 ### read_config
 
-The configuration tree your app sees, merged from `.env`, `config/app.toml` and `APP_*` variables (plus your `dock.toml` services' settings), with secrets redacted the way `Config::redacted()` does it: any key containing `password`, `secret`, `token`, `key`, `authorization` or `cookie`, and the password in any URL. A `key` argument returns one section or value (`queue`, `database.url`).
+The configuration tree your app sees, merged from `.env`, `config/app.toml` and `APP_*` variables (plus your `dock.toml` services' settings), with secrets redacted the way `Config::redacted()` does it: any key containing `password`, `secret`, `token`, `key`, `authorization`, `cookie`, `dsn` or `credential` (the [full list](/docs/getting-started/configuration/#keeping-secrets-out-of-logs) has a few more spellings), and the password in any URL. A `key` argument returns one section or value (`queue`, `database.url`).
 
 ### search_docs and read_doc
 
