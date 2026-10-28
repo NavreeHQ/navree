@@ -116,10 +116,24 @@ pub enum MailError {
     },
 }
 
-impl From<sea_orm::DbErr> for MailError {
-    fn from(error: sea_orm::DbErr) -> Self {
+impl From<navree_db::DbError> for MailError {
+    fn from(error: navree_db::DbError) -> Self {
         MailError::Store {
             source: Box::new(error),
+        }
+    }
+}
+
+impl MailError {
+    /// The database error behind a [`Store`](MailError::Store) error, if
+    /// that is what failed: its [`ErrorKind`](navree_db::ErrorKind) tells a
+    /// lost connection or a deadlock (worth a retry,
+    /// [`DbError::is_retryable`](navree_db::DbError::is_retryable)) from a
+    /// constraint the data broke.
+    pub fn db_error(&self) -> Option<&navree_db::DbError> {
+        match self {
+            MailError::Store { source } => source.downcast_ref::<navree_db::DbError>(),
+            _ => None,
         }
     }
 }

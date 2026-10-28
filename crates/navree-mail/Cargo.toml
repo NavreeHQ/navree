@@ -16,6 +16,11 @@ workspace = true
 ## MIME), mailboxes routed by address, signed reply tokens and the raw
 ## `.eml` stored on a navree-storage disk.
 inbound = ["dep:mail-parser", "dep:navree-storage", "dep:regex"]
+## navree-db's PostgreSQL driver (the delivery tables on PostgreSQL and
+## TimescaleDB; the `servers` tests with `NAVREE_TEST_POSTGRES_URL`).
+postgres = ["navree-db/postgres"]
+## navree-db's MySQL driver (the `servers` tests with `NAVREE_TEST_MYSQL_URL`).
+mysql = ["navree-db/mysql"]
 
 [dependencies]
 axum = { workspace = true }
@@ -46,8 +51,6 @@ navree-view = { workspace = true }
 percent-encoding = { workspace = true }
 # Feature `inbound`: mailbox address patterns.
 regex = { workspace = true, optional = true }
-sea-orm = { workspace = true }
-sea-orm-migration = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
@@ -60,6 +63,8 @@ utoipa = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
+# The server scenarios catch a failing scenario to drop its database.
+futures-util = { workspace = true }
 base64 = { workspace = true }
 # The inbound tests run with the feature on.
 navree-mail = { workspace = true, features = ["inbound"] }

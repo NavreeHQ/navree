@@ -3,12 +3,11 @@
 use std::any::Any;
 use std::sync::Arc;
 
-use navree_mail::entity::transport;
+use navree_mail::entity::TransportRow;
 use navree_mail::{
     ArrayTransport, DeliveryStatus, MailError, MailScope, MailTransport, Message, TransportConfig,
     TransportOwner, TransportResolver, TransportTier,
 };
-use sea_orm::EntityTrait as _;
 use serde_json::json;
 use uuid::Uuid;
 
@@ -191,8 +190,7 @@ async fn settings_are_stored_encrypted_and_replaced_in_place() {
     let stored = resolver.get(&owner).await.unwrap().unwrap();
 
     let db = mail.get::<navree_db::Db>().await;
-    let model = transport::Entity::find_by_id(stored.id)
-        .one(db.conn())
+    let model = navree_db::record::find::<TransportRow, _>(&*db, stored.id)
         .await
         .unwrap()
         .unwrap();
