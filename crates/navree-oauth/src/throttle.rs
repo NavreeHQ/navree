@@ -1,13 +1,13 @@
 //! Rate limits of the protocol endpoints that take client credentials
 //! (`oauth.rate_limits`): per client IP before anything is checked, per
 //! client once it has authenticated. Navree's GCRA limiter
-//! ([`navree_http::RateLimiter`]), one window a minute, kept per instance.
+//! ([`navree_http::KeyedRateLimiter`]), one window a minute, kept per instance.
 
 use std::net::IpAddr;
 use std::time::Duration;
 
 use navree_contracts::{AuditEntry, AuditKind};
-use navree_http::RateLimiter;
+use navree_http::KeyedRateLimiter;
 use serde_json::json;
 use uuid::Uuid;
 
@@ -37,16 +37,16 @@ impl Endpoint {
 
 /// The limiters of one endpoint (`None`: that limit is off).
 struct Limits {
-    per_client: Option<RateLimiter<Uuid>>,
-    per_ip: Option<RateLimiter<IpAddr>>,
+    per_client: Option<KeyedRateLimiter<Uuid>>,
+    per_ip: Option<KeyedRateLimiter<IpAddr>>,
 }
 
 impl Limits {
     fn new(limit: EndpointLimit) -> Self {
         let minute = Duration::from_secs(60);
         Self {
-            per_client: (limit.per_client > 0).then(|| RateLimiter::new(limit.per_client, minute)),
-            per_ip: (limit.per_ip > 0).then(|| RateLimiter::new(limit.per_ip, minute)),
+            per_client: (limit.per_client > 0).then(|| KeyedRateLimiter::new(limit.per_client, minute)),
+            per_ip: (limit.per_ip > 0).then(|| KeyedRateLimiter::new(limit.per_ip, minute)),
         }
     }
 }

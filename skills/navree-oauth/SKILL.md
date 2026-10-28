@@ -105,6 +105,15 @@ let created = clients
   (only with `dynamic_registration`).
 - ID tokens: EdDSA (Ed25519) JWT, `iss`, `sub`, `aud` (client id), `exp`,
   `iat`, `nonce`, `name` (profile), `email` + `email_verified` (email).
+- Rate limits (`oauth.rate_limits.<endpoint> = { per_client, per_ip }`,
+  per minute, per instance, `0` = off): `token` 300/120, `introspect`
+  1200/600, `revoke` 300/60, `device_authorization` 60/30. Per IP is counted
+  first (failed client auth included); per client only after the client
+  authenticates (a wrong secret can't burn a client's budget). Over a
+  limit: 429, `Retry-After`, `{"error": "too_many_requests",
+  "error_description": "Too many requests; retry in N seconds"}`, audited
+  `oauth.rate_limited` once per window. Env:
+  `APP_OAUTH__RATE_LIMITS__TOKEN__PER_IP=300`.
 
 ## Using tokens in handlers
 
@@ -183,6 +192,9 @@ entries with `override_value::<dyn AuditSink>(..)`.
   ID tokens issued before stop verifying.
 - `dynamic_registration` lets any app register and ask users for consent;
   leave it off unless you need it (MCP OAuth mode).
+- 429 `too_many_requests` from `/oauth/*`: a rate limit. Behind a proxy set
+  `http.trusted_proxies`, or every client shares the proxy's per-IP budget;
+  in tests that hammer an endpoint, set the limit to `0`.
 - Audit actions: `oauth.client_created`, `oauth.client_revoked`,
   `oauth.authorized`, `oauth.denied`, `oauth.revoked`,
   `oauth.refresh_reuse_detected`, `oauth.pat_created`, `oauth.pat_revoked`.

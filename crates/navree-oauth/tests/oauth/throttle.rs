@@ -2,7 +2,7 @@
 //! token, introspection, revocation and device authorization, per client
 //! and per client IP (`oauth.rate_limits`).
 
-use navree_oauth::{CreatedClient, NewClient};
+use navree_oauth::{CreatedClient, EndpointLimit, NewClient, OAuthOptions};
 use navree_testing::{TestAppBuilder, TestResponse};
 use serde_json::{Value, json};
 
@@ -190,4 +190,22 @@ async fn the_defaults_apply_without_configuration() {
             .assert_status(200);
     }
     assert_limited(call(&world, "device_authorization", &tv, None).await);
+}
+
+#[test]
+fn the_defaults_limit_every_endpoint() {
+    let limits = OAuthOptions::default().rate_limits;
+    for (name, limit) in [
+        ("token", limits.token),
+        ("introspect", limits.introspect),
+        ("revoke", limits.revoke),
+        ("device_authorization", limits.device_authorization),
+    ] {
+        assert!(limit.per_client > 0, "{name}");
+        assert!(limit.per_ip > 0, "{name}");
+    }
+    assert_eq!(limits.token, EndpointLimit::new(300, 120));
+    assert_eq!(limits.introspect, EndpointLimit::new(1200, 600));
+    assert_eq!(limits.revoke, EndpointLimit::new(300, 60));
+    assert_eq!(limits.device_authorization, EndpointLimit::new(60, 30));
 }
