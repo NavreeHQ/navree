@@ -3,12 +3,16 @@
 use std::sync::Arc;
 
 use chrono::{DateTime, TimeDelta, Utc};
+use navree_db::Uow;
+use navree_db::sea_orm::TransactionTrait as _;
 use navree_kernel::AppContext;
-use navree_orm::{Model as _, Record};
+use navree_orm::{Assignment, Model as _, Record};
 use rand::RngExt as _;
 use uuid::Uuid;
 
-use crate::events::{DomainAdded, DomainRemoved, DomainVerificationFailed, DomainVerified};
+use crate::events::{
+    DomainAdded, DomainClaimedElsewhere, DomainRemoved, DomainVerificationFailed, DomainVerified,
+};
 use crate::host::{is_within, normalize_host};
 use crate::options::{DomainsOptions, TlsMode};
 use crate::provider::RecordKind;
@@ -25,6 +29,15 @@ use crate::{CurrentDomain, DomainCertificates, DomainsError, models};
 /// TXT record, and whether it points at the app, until it is verified or
 /// gives up. A verified domain names its workspace (the `domain`
 /// resolver, [`CurrentDomain`]) and gets a certificate.
+///
+/// Control of a domain is proved, not claimed. Typing a host adds a claim
+/// that owns nothing, so any number of workspaces may hold a pending claim
+/// on one host, each with a token of its own. The claim whose TXT record is
+/// found first becomes verified, atomically (the database lets only one
+/// claim own a host), and the other claims are closed with a
+/// [`DomainClaimedElsewhere`] event. A verified domain moves to another
+/// workspace only through [`transfer`](Domains::transfer), which needs a
+/// fresh TXT proof of the workspace that takes it.
 ///
 /// ```no_run
 /// # async fn demo(ctx: navree_kernel::AppContext, workspace: uuid::Uuid) -> Result<(), navree_kernel::BoxError> {
@@ -63,6 +76,31 @@ fn new_token() -> String {
     (0..TOKEN_LEN)
         .map(|_| char::from(ALPHABET[rng.random_range(0..ALPHABET.len())]))
         .collect()
+}
+
+/// How a claim's try at owning its host ended.
+enum Promotion {
+    /// It owns the host now.
+    Won,
+    /// Another claim of the same domain verified it first.
+    Already,
+    /// Another claim owns the host: the database refused a second owner.
+    Lost,
+}
+
+/// The columns a DNS check writes, and nothing else: a primary flag or a
+/// certificate written meanwhile stays.
+fn check_columns(row: &models::Domain) -> Vec<Assignment> {
+    vec![
+        models::Domain::STATUS.set(row.status.clone()),
+        models::Domain::POINTS_TO_APP.set(row.points_to_app),
+        models::Domain::CHECK_ATTEMPTS.set(row.check_attempts),
+        models::Domain::LAST_CHECKED_AT.set(row.last_checked_at),
+        models::Domain::NEXT_CHECK_AT.set(row.next_check_at),
+        models::Domain::VERIFIED_AT.set(row.verified_at),
+        models::Domain::LAST_ERROR.set(row.last_error.clone()),
+        models::Domain::UPDATED_AT.set(row.updated_at),
+    ]
 }
 
 /// A purpose: lower-case letters, digits, `-` and `_`, 1 to 32.
@@ -108,15 +146,20 @@ impl Domains {
 
     // -- adding ----------------------------------------------------------------
 
-    /// Adds `input.host` to `workspace`. It is pending until its TXT
-    /// record (and, when required, its routing) is found; a host inside
-    /// `domains.dns.zone` gets its record from the DNS provider and is
-    /// verified at once.
+    /// Adds a claim on `input.host` for `workspace`. It is pending, with a
+    /// verification token of its own, until its TXT record (and, when
+    /// required, its routing) is found; a host inside `domains.dns.zone`
+    /// gets its record from the DNS provider and is verified at once.
+    ///
+    /// Other workspaces' pending and failed claims on the host never get
+    /// in the way: the claim that proves control wins. A workspace that
+    /// had a failed claim on the host replaces it with this one.
     ///
     /// Refused: a host that is not a domain (`invalid_domain`), a reserved
-    /// one (`domain_not_allowed`), one another workspace has
-    /// (`domain_taken`), or a workspace at `domains.max_per_workspace`
-    /// (`domain_limit_reached`).
+    /// one (`domain_not_allowed`), one that is verified for a workspace
+    /// already, or that this workspace has claimed (`domain_taken`), or a
+    /// workspace at `domains.max_per_workspace` (`domain_limit_reached`;
+    /// failed claims don't count).
     pub async fn add(
         &self,
         workspace: Uuid,
@@ -132,36 +175,17 @@ impl Domains {
             .unwrap_or("app")
             .to_owned();
         check_purpose(&purpose)?;
-        let zone = rt
-            .options
-            .dns
-            .zone
-            .as_deref()
-            .and_then(|zone| normalize_host(zone).ok());
-        let managed = zone
-            .as_deref()
-            .is_some_and(|zone| host != zone && is_within(&host, zone));
-        if !managed
-            && (rt.reserved.iter().any(|zone| is_within(&host, zone))
-                || zone.as_deref() == Some(host.as_str()))
-        {
-            return Err(DomainsError::NotAllowed(host));
-        }
-        if rt.options.max_per_workspace > 0 {
-            let count = models::Domain::query()
-                .where_(models::Domain::WORKSPACE_ID.eq(workspace))
-                .count(&*rt.db)
-                .await?;
-            if count >= u64::from(rt.options.max_per_workspace) {
-                return Err(DomainsError::LimitReached(rt.options.max_per_workspace));
-            }
-        }
-        if models::Domain::query()
-            .where_(models::Domain::HOST.eq(host.clone()))
-            .exists(&*rt.db)
-            .await?
-        {
+        let managed = self.admit(&host)?;
+        self.check_limit(workspace).await?;
+        if self.verified_row(&host).await?.is_some() {
             return Err(DomainsError::Taken(host));
+        }
+        let mut replaced = None;
+        if let Some(mine) = self.claim_row(workspace, &host).await? {
+            if DomainStatus::parse(&mine.status) != DomainStatus::Failed {
+                return Err(DomainsError::Taken(host));
+            }
+            replaced = Some(mine.id);
         }
         if managed {
             self.set_managed_records(&host).await?;
@@ -178,7 +202,9 @@ impl Domains {
             host: host.clone(),
             purpose,
             status: status.as_str().to_owned(),
+            verified_host: managed.then(|| host.clone()),
             verification_token: new_token(),
+            transfer: false,
             managed,
             is_primary: false,
             points_to_app: managed.then_some(true),
@@ -205,6 +231,12 @@ impl Domains {
         let inserted = rt
             .write(input.created_by, |uow| async move {
                 let tx = uow.tx().await?;
+                if let Some(old) = replaced {
+                    models::Domain::query()
+                        .where_(models::Domain::ID.eq(old))
+                        .delete(&*tx)
+                        .await?;
+                }
                 Record::new(row).save(&*tx).await?;
                 uow.mark_modified();
                 drop(tx);
@@ -218,13 +250,25 @@ impl Domains {
                     .await;
                 if managed {
                     runtime
-                        .emit_after_commit(&uow, DomainVerified { domain: event })
+                        .emit_after_commit(
+                            &uow,
+                            DomainVerified {
+                                domain: event.clone(),
+                            },
+                        )
                         .await;
+                    Domains::close_claims_after_commit(&runtime, &uow, event);
                 }
                 Ok(())
             })
             .await;
         if let Err(error) = inserted {
+            // Another claim of this workspace, or another workspace's
+            // managed domain, got there first. The DNS records are theirs
+            // too (the same host, the same target): leave them.
+            if error.is_unique_violation() {
+                return Err(DomainsError::Taken(host));
+            }
             if managed {
                 self.delete_managed_records(&host).await;
             }
@@ -232,6 +276,217 @@ impl Domains {
         }
         rt.forget(&host).await;
         Ok(view)
+    }
+
+    /// Moves the verified domain `host` to workspace `to`, once `to` proves
+    /// control of it with a fresh TXT record.
+    ///
+    /// A verified domain never moves on a claim alone, and the TXT record
+    /// its current workspace published proves nothing for `to`. This
+    /// makes `to` a claim of its own, marked as a transfer, with a new
+    /// token (the same one when called again, until it is verified), and
+    /// checks the DNS now: with the record in place the domain moves at
+    /// once, and the old workspace's domain and certificate are removed
+    /// (it gets a [`DomainClaimedElsewhere`] event). Without it, the
+    /// returned claim is pending, with the records to create in
+    /// `dns_records`; the scheduler completes the move when it finds them.
+    ///
+    /// Refused: a host that is not a domain (`invalid_domain`), a reserved
+    /// or managed one (`domain_not_allowed`), one nobody has verified
+    /// (`domain_not_found`: add it instead), or a workspace at its limit
+    /// (`domain_limit_reached`). A host `to` holds already is returned as
+    /// it is. A resolver failure is `dns_lookup_failed`.
+    pub async fn transfer(&self, host: &str, to: Uuid) -> Result<CustomDomain, DomainsError> {
+        let host = normalize_host(host).map_err(DomainsError::InvalidDomain)?;
+        if self.admit(&host)? {
+            // A managed domain has no proof to give: remove it and add it.
+            return Err(DomainsError::NotAllowed(host));
+        }
+        let Some(holder) = self.verified_row(&host).await? else {
+            return Err(DomainsError::DomainNotFound);
+        };
+        if holder.workspace_id == to {
+            return Ok(self.view(&holder));
+        }
+        let existing = self.claim_row(to, &host).await?;
+        let reusable = existing.as_ref().is_some_and(|row| {
+            row.transfer && DomainStatus::parse(&row.status) == DomainStatus::Pending
+        });
+        let claim = match existing {
+            Some(row) if reusable => row,
+            existing => {
+                if existing
+                    .as_ref()
+                    .is_none_or(|row| DomainStatus::parse(&row.status) == DomainStatus::Failed)
+                {
+                    self.check_limit(to).await?;
+                }
+                self.start_transfer(to, &host, existing).await?
+            }
+        };
+        self.check(claim, false).await
+    }
+
+    /// Stores `to`'s transfer claim on `host`: a new row, or `existing`
+    /// started over with a fresh token.
+    async fn start_transfer(
+        &self,
+        to: Uuid,
+        host: &str,
+        existing: Option<models::Domain>,
+    ) -> Result<models::Domain, DomainsError> {
+        let rt = self.rt.clone();
+        let now = rt.now();
+        let created = existing.is_none();
+        let mut row = existing.unwrap_or_else(|| models::Domain {
+            id: Uuid::now_v7(),
+            workspace_id: to,
+            host: host.to_owned(),
+            purpose: "app".to_owned(),
+            ..models::Domain::default()
+        });
+        row.status = DomainStatus::Pending.as_str().to_owned();
+        row.verified_host = None;
+        row.verification_token = new_token();
+        row.transfer = true;
+        row.managed = false;
+        row.points_to_app = None;
+        row.check_attempts = 0;
+        row.last_checked_at = None;
+        row.next_check_at = Some(now);
+        row.verified_at = None;
+        row.last_error = None;
+        row.tls_status = self.tls_after(DomainStatus::Pending).as_str().to_owned();
+        row.created_at = now;
+        row.updated_at = now;
+        let saved = row.clone();
+        let event = self.view(&row);
+        let runtime = rt.clone();
+        let stored = rt
+            .write(None, |uow| async move {
+                let tx = uow.tx().await?;
+                if created {
+                    Record::new(saved).save(&*tx).await?;
+                } else {
+                    models::Domain::query()
+                        .where_(models::Domain::ID.eq(saved.id))
+                        .update(
+                            &*tx,
+                            [
+                                models::Domain::STATUS.set(saved.status),
+                                models::Domain::VERIFICATION_TOKEN.set(saved.verification_token),
+                                models::Domain::TRANSFER.set(true),
+                                models::Domain::POINTS_TO_APP.set(None::<bool>),
+                                models::Domain::CHECK_ATTEMPTS.set(0),
+                                models::Domain::LAST_CHECKED_AT.set(None::<DateTime<Utc>>),
+                                models::Domain::NEXT_CHECK_AT.set(saved.next_check_at),
+                                models::Domain::LAST_ERROR.set(None::<String>),
+                                models::Domain::TLS_STATUS.set(saved.tls_status),
+                                models::Domain::CREATED_AT.set(saved.created_at),
+                                models::Domain::UPDATED_AT.set(saved.updated_at),
+                            ],
+                        )
+                        .await?;
+                }
+                uow.mark_modified();
+                drop(tx);
+                if created {
+                    runtime
+                        .emit_after_commit(&uow, DomainAdded { domain: event })
+                        .await;
+                }
+                Ok(())
+            })
+            .await;
+        match stored {
+            Ok(()) => Ok(row),
+            Err(error) if error.is_unique_violation() => Err(DomainsError::Taken(row.host)),
+            Err(error) => Err(error),
+        }
+    }
+
+    /// Whether `host` is inside the managed zone (`true`); `NotAllowed`
+    /// when it is reserved: the app's own domains and their subdomains.
+    fn admit(&self, host: &str) -> Result<bool, DomainsError> {
+        let rt = &self.rt;
+        let zone = rt
+            .options
+            .dns
+            .zone
+            .as_deref()
+            .and_then(|zone| normalize_host(zone).ok());
+        let managed = zone
+            .as_deref()
+            .is_some_and(|zone| host != zone && is_within(host, zone));
+        if !managed
+            && (rt.reserved.iter().any(|zone| is_within(host, zone))
+                || zone.as_deref() == Some(host))
+        {
+            return Err(DomainsError::NotAllowed(host.to_owned()));
+        }
+        Ok(managed)
+    }
+
+    /// `LimitReached` when `workspace` has `domains.max_per_workspace`
+    /// domains. Failed claims are not counted: they own nothing.
+    async fn check_limit(&self, workspace: Uuid) -> Result<(), DomainsError> {
+        let rt = &self.rt;
+        if rt.options.max_per_workspace == 0 {
+            return Ok(());
+        }
+        let count = models::Domain::query()
+            .where_(models::Domain::WORKSPACE_ID.eq(workspace))
+            .where_(models::Domain::STATUS.ne(DomainStatus::Failed.as_str()))
+            .count(&*rt.db)
+            .await?;
+        if count >= u64::from(rt.options.max_per_workspace) {
+            return Err(DomainsError::LimitReached(rt.options.max_per_workspace));
+        }
+        Ok(())
+    }
+
+    /// The verified domain that owns `host`, if any.
+    async fn verified_row(&self, host: &str) -> Result<Option<models::Domain>, DomainsError> {
+        Ok(models::Domain::query()
+            .where_(models::Domain::VERIFIED_HOST.eq(host))
+            .first(&*self.rt.db)
+            .await?
+            .map(Record::into_inner))
+    }
+
+    /// `workspace`'s claim on `host`, in any status.
+    async fn claim_row(
+        &self,
+        workspace: Uuid,
+        host: &str,
+    ) -> Result<Option<models::Domain>, DomainsError> {
+        Ok(models::Domain::query()
+            .where_(models::Domain::WORKSPACE_ID.eq(workspace))
+            .where_(models::Domain::HOST.eq(host))
+            .first(&*self.rt.db)
+            .await?
+            .map(Record::into_inner))
+    }
+
+    /// Every claim on `host`: the verified one first, then the pending
+    /// ones, then the failed ones, the newest first among equals.
+    async fn claim_rows(&self, host: &str) -> Result<Vec<models::Domain>, DomainsError> {
+        let mut rows: Vec<models::Domain> = models::Domain::query()
+            .where_(models::Domain::HOST.eq(host))
+            .get(&*self.rt.db)
+            .await?
+            .into_models();
+        let rank = |row: &models::Domain| match DomainStatus::parse(&row.status) {
+            DomainStatus::Verified => 0,
+            DomainStatus::Pending => 1,
+            DomainStatus::Failed => 2,
+        };
+        rows.sort_by(|a, b| {
+            rank(a)
+                .cmp(&rank(b))
+                .then_with(|| b.created_at.cmp(&a.created_at))
+        });
+        Ok(rows)
     }
 
     /// The records a managed host gets: a CNAME to `domains.target`, or A
@@ -319,16 +574,22 @@ impl Domains {
         }
     }
 
-    /// The domain with host `host` (any status).
+    /// The domain that holds `host`: its verified domain, or else the
+    /// newest pending claim, or else the newest failed one. `None` for a
+    /// host nobody has claimed. [`claims`](Domains::claims) lists them all.
     pub async fn find(&self, host: &str) -> Result<Option<CustomDomain>, DomainsError> {
+        Ok(self.claims(host).await?.into_iter().next())
+    }
+
+    /// Every claim on `host`, in any status: the verified domain first,
+    /// then the pending claims, then the failed ones. Empty for a host
+    /// that is not a domain.
+    pub async fn claims(&self, host: &str) -> Result<Vec<CustomDomain>, DomainsError> {
         let Ok(host) = normalize_host(host) else {
-            return Ok(None);
+            return Ok(Vec::new());
         };
-        let row = models::Domain::query()
-            .where_(models::Domain::HOST.eq(host))
-            .first(&*self.rt.db)
-            .await?;
-        Ok(row.as_ref().map(|row| self.view(row)))
+        let rows = self.claim_rows(&host).await?;
+        Ok(rows.iter().map(|row| self.view(row)).collect())
     }
 
     /// The verified domain `host` names, from the cache when it is fresh
@@ -350,12 +611,9 @@ impl Domains {
     }
 
     async fn lookup(&self, host: &str) -> Result<Option<CurrentDomain>, DomainsError> {
-        let row = models::Domain::query()
-            .where_(models::Domain::HOST.eq(host))
-            .where_(models::Domain::STATUS.eq(DomainStatus::Verified.as_str()))
-            .first(&*self.rt.db)
-            .await?;
-        Ok(row.map(Record::into_inner).map(|row| CurrentDomain {
+        // Only a verified domain owns its host.
+        let row = self.verified_row(host).await?;
+        Ok(row.map(|row| CurrentDomain {
             id: row.id,
             workspace_id: row.workspace_id,
             host: row.host,
@@ -440,10 +698,13 @@ impl Domains {
         self.get(id).await
     }
 
-    /// Removes domain `id`: its row, its certificate, and (managed) its DNS
-    /// records.
+    /// Removes domain `id`: its row and, when it was the verified domain
+    /// of its host, its certificate and (managed) its DNS records. A
+    /// pending or failed claim owns neither: removing it leaves the
+    /// verified domain's certificate alone.
     pub async fn remove(&self, id: Uuid) -> Result<(), DomainsError> {
         let row = self.row(id).await?;
+        let held = DomainStatus::parse(&row.status) == DomainStatus::Verified;
         let runtime = self.rt.clone();
         let host = row.host.clone();
         let event = DomainRemoved {
@@ -458,20 +719,24 @@ impl Domains {
                     .where_(models::Domain::ID.eq(id))
                     .delete(&*tx)
                     .await?;
-                models::Certificate::query()
-                    .where_(models::Certificate::HOST.eq(host))
-                    .delete(&*tx)
-                    .await?;
+                if held {
+                    models::Certificate::query()
+                        .where_(models::Certificate::HOST.eq(host))
+                        .delete(&*tx)
+                        .await?;
+                }
                 uow.mark_modified();
                 drop(tx);
                 runtime.emit_after_commit(&uow, event).await;
                 Ok(())
             })
             .await?;
-        if row.managed {
-            self.delete_managed_records(&row.host).await;
+        if held {
+            if row.managed {
+                self.delete_managed_records(&row.host).await;
+            }
+            self.rt.certificates.remove(&row.host);
         }
-        self.rt.certificates.remove(&row.host);
         self.rt.forget(&row.host).await;
         Ok(())
     }
@@ -506,8 +771,11 @@ impl Domains {
 
     /// Checks every domain whose next check is due (what
     /// `domains:verify --due` runs every minute); returns the domains
-    /// checked. One domain's failure does not stop the others.
+    /// checked. One domain's failure does not stop the others. Failed
+    /// claims older than `domains.verification.failed_retention_hours` are
+    /// deleted first.
     pub async fn verify_due(&self) -> Result<Vec<CustomDomain>, DomainsError> {
+        self.purge_failed().await?;
         let now = self.rt.now();
         let rows = models::Domain::query()
             .where_(models::Domain::NEXT_CHECK_AT.lte(Some(now)))
@@ -600,6 +868,10 @@ impl Domains {
                 }
             }
         }
+        if verified {
+            // A domain that proves control competes for its host.
+            return self.promote(row).await;
+        }
         let view = self.view(&row);
         let runtime = rt.clone();
         let event = view.clone();
@@ -609,33 +881,16 @@ impl Domains {
             let tx = uow.tx().await?;
             // Only the check's columns: a primary flag or a certificate
             // written meanwhile stays.
-            let mut columns = vec![
-                models::Domain::STATUS.set(saved.status),
-                models::Domain::POINTS_TO_APP.set(saved.points_to_app),
-                models::Domain::CHECK_ATTEMPTS.set(saved.check_attempts),
-                models::Domain::LAST_CHECKED_AT.set(saved.last_checked_at),
-                models::Domain::NEXT_CHECK_AT.set(saved.next_check_at),
-                models::Domain::VERIFIED_AT.set(saved.verified_at),
-                models::Domain::LAST_ERROR.set(saved.last_error),
-                models::Domain::UPDATED_AT.set(saved.updated_at),
-            ];
-            if verified {
-                columns.push(models::Domain::TLS_STATUS.set(saved.tls_status));
-            }
             let updated = models::Domain::query()
                 .where_(models::Domain::ID.eq(saved.id))
-                .update(&*tx, columns)
+                .update(&*tx, check_columns(&saved))
                 .await?;
             if updated == 0 {
                 return Err(DomainsError::DomainNotFound);
             }
             uow.mark_modified();
             drop(tx);
-            if verified {
-                runtime
-                    .emit_after_commit(&uow, DomainVerified { domain: event })
-                    .await;
-            } else if let Some(reason) = gave_up_reason {
+            if let Some(reason) = gave_up_reason {
                 runtime
                     .emit_after_commit(
                         &uow,
@@ -649,10 +904,255 @@ impl Domains {
             Ok(())
         })
         .await?;
-        if verified || gave_up.is_some() {
+        if gave_up.is_some() {
             rt.forget(&row.host).await;
         }
         result.map(|_| view)
+    }
+
+    /// Makes `row`, a pending or failed claim whose proof was just found
+    /// (it carries its verified state), the owner of its host.
+    ///
+    /// The database decides: only one claim can set `verified_host`, so of
+    /// two claims proving control at once exactly one commits and the other
+    /// finds the host taken. The winner closes the other pending claims
+    /// once it has committed. A host another workspace already owns stays
+    /// with it, unless `row` is a transfer: then the proof moves the host,
+    /// and the old domain and its certificate go in the same transaction.
+    async fn promote(&self, row: models::Domain) -> Result<CustomDomain, DomainsError> {
+        let rt = self.rt.clone();
+        let mut superseded = None;
+        if let Some(holder) = self.verified_row(&row.host).await? {
+            if holder.id == row.id {
+                // Verified meanwhile, by another check of the same claim.
+                return Ok(self.view(&holder));
+            }
+            if !row.transfer {
+                return self.lose(row.id, holder.workspace_id).await;
+            }
+            superseded = Some(holder);
+        }
+        let view = self.view(&row);
+        let moved_from = superseded.as_ref().map(|old| self.view(old));
+        let old_id = superseded.as_ref().map(|old| old.id);
+        let claimed_by = row.workspace_id;
+        let runtime = rt.clone();
+        let event = view.clone();
+        let saved = row.clone();
+        let outcome = rt
+            .write(None, |uow| async move {
+                let tx = uow.tx().await?;
+                // A savepoint, so that losing the race leaves the unit of
+                // work (a request's, perhaps) usable on PostgreSQL.
+                let attempt = tx.begin().await?;
+                if let Some(old) = old_id {
+                    models::Domain::query()
+                        .where_(models::Domain::ID.eq(old))
+                        .delete(&attempt)
+                        .await?;
+                    models::Certificate::query()
+                        .where_(models::Certificate::HOST.eq(saved.host.clone()))
+                        .delete(&attempt)
+                        .await?;
+                }
+                let mut columns = check_columns(&saved);
+                columns.push(models::Domain::TLS_STATUS.set(saved.tls_status.clone()));
+                columns.push(models::Domain::VERIFIED_HOST.set(Some(saved.host.clone())));
+                columns.push(models::Domain::TRANSFER.set(false));
+                let claimed = models::Domain::query()
+                    .where_(models::Domain::ID.eq(saved.id))
+                    .where_(models::Domain::STATUS.ne(DomainStatus::Verified.as_str()))
+                    .update(&attempt, columns)
+                    .await;
+                match claimed {
+                    Ok(0) => {
+                        attempt.rollback().await?;
+                        Ok(Promotion::Already)
+                    }
+                    Ok(_) => {
+                        attempt.commit().await?;
+                        uow.mark_modified();
+                        drop(tx);
+                        runtime
+                            .emit_after_commit(
+                                &uow,
+                                DomainVerified {
+                                    domain: event.clone(),
+                                },
+                            )
+                            .await;
+                        if let Some(old) = moved_from {
+                            runtime
+                                .emit_after_commit(
+                                    &uow,
+                                    DomainClaimedElsewhere {
+                                        domain: old,
+                                        claimed_by,
+                                    },
+                                )
+                                .await;
+                        }
+                        Domains::close_claims_after_commit(&runtime, &uow, event);
+                        Ok(Promotion::Won)
+                    }
+                    Err(error) => {
+                        attempt.rollback().await?;
+                        let error = DomainsError::from(error);
+                        if error.is_unique_violation() {
+                            Ok(Promotion::Lost)
+                        } else {
+                            Err(error)
+                        }
+                    }
+                }
+            })
+            .await?;
+        rt.forget(&row.host).await;
+        match outcome {
+            Promotion::Won => {
+                if old_id.is_some() {
+                    rt.certificates.remove(&row.host);
+                }
+                Ok(view)
+            }
+            Promotion::Already => self.get(row.id).await,
+            Promotion::Lost => {
+                let holder = self.verified_row(&row.host).await?;
+                match holder {
+                    Some(holder) => self.lose(row.id, holder.workspace_id).await,
+                    // The winner went away again meanwhile: try next time.
+                    None => self.get(row.id).await,
+                }
+            }
+        }
+    }
+
+    /// Closes claim `id`, which lost its host to `claimed_by`.
+    async fn lose(&self, id: Uuid, claimed_by: Uuid) -> Result<CustomDomain, DomainsError> {
+        let row = self.row(id).await?;
+        self.close_claim(row, claimed_by).await
+    }
+
+    /// Closes the pending claim `row` as failed, with the reason in its
+    /// `last_error` and a [`DomainClaimedElsewhere`] event (once: when it
+    /// was already closed, nothing is emitted). Returns the claim as it is
+    /// now.
+    async fn close_claim(
+        &self,
+        row: models::Domain,
+        claimed_by: Uuid,
+    ) -> Result<CustomDomain, DomainsError> {
+        let rt = self.rt.clone();
+        let now = rt.now();
+        let reason = format!(
+            "{} is verified for another workspace: its owner proved control of it first",
+            row.host
+        );
+        let mut closed = row;
+        closed.status = DomainStatus::Failed.as_str().to_owned();
+        closed.next_check_at = None;
+        closed.last_error = Some(reason.clone());
+        closed.updated_at = now;
+        let view = self.view(&closed);
+        let runtime = rt.clone();
+        let event = view.clone();
+        let id = closed.id;
+        rt.write(None, |uow| async move {
+            let tx = uow.tx().await?;
+            let updated = models::Domain::query()
+                .where_(models::Domain::ID.eq(id))
+                .where_(models::Domain::STATUS.eq(DomainStatus::Pending.as_str()))
+                .update(
+                    &*tx,
+                    [
+                        models::Domain::STATUS.set(DomainStatus::Failed.as_str()),
+                        models::Domain::NEXT_CHECK_AT.set(None::<DateTime<Utc>>),
+                        models::Domain::LAST_ERROR.set(Some(reason.clone())),
+                        models::Domain::UPDATED_AT.set(now),
+                    ],
+                )
+                .await?;
+            if updated == 0 {
+                // Failed before (or already closed by the winner): say why.
+                models::Domain::query()
+                    .where_(models::Domain::ID.eq(id))
+                    .where_(models::Domain::STATUS.eq(DomainStatus::Failed.as_str()))
+                    .update(&*tx, [models::Domain::LAST_ERROR.set(Some(reason))])
+                    .await?;
+            } else {
+                runtime
+                    .emit_after_commit(
+                        &uow,
+                        DomainClaimedElsewhere {
+                            domain: event,
+                            claimed_by,
+                        },
+                    )
+                    .await;
+            }
+            uow.mark_modified();
+            Ok(())
+        })
+        .await?;
+        self.get(id).await.or(Ok(view))
+    }
+
+    /// Closes the other pending claims on `winner`'s host (see
+    /// [`Domains::close_claims`]) once `uow` commits: while the winner's
+    /// transaction is open, a claim being verified at the same time would
+    /// wait on it, and the winner on the claim.
+    fn close_claims_after_commit(rt: &Arc<Runtime>, uow: &Uow, winner: CustomDomain) {
+        let rt = rt.clone();
+        uow.after_commit(move || {
+            Box::pin(async move {
+                let domains = Domains { rt };
+                if let Err(error) = domains.close_claims(&winner).await {
+                    tracing::warn!(target: "navree::domains", host = winner.host, %error, "the other claims on a verified host could not be closed");
+                }
+            })
+        });
+    }
+
+    /// Closes every pending claim on `winner`'s host except `winner`.
+    async fn close_claims(&self, winner: &CustomDomain) -> Result<(), DomainsError> {
+        let others: Vec<models::Domain> = models::Domain::query()
+            .where_(models::Domain::HOST.eq(winner.host.clone()))
+            .where_(models::Domain::ID.ne(winner.id))
+            .where_(models::Domain::STATUS.eq(DomainStatus::Pending.as_str()))
+            .get(&*self.rt.db)
+            .await?
+            .into_models();
+        for row in others {
+            self.close_claim(row, winner.workspace_id).await?;
+        }
+        Ok(())
+    }
+
+    /// Deletes the failed claims that last changed more than
+    /// `domains.verification.failed_retention_hours` ago; returns how many.
+    async fn purge_failed(&self) -> Result<u64, DomainsError> {
+        let rt = &self.rt;
+        let hours = rt.options.verification.failed_retention_hours;
+        if hours == 0 {
+            return Ok(0);
+        }
+        let before = rt.now() - TimeDelta::hours(i64::from(hours));
+        let stale = || {
+            models::Domain::query()
+                .where_(models::Domain::STATUS.eq(DomainStatus::Failed.as_str()))
+                .where_(models::Domain::UPDATED_AT.lte(before))
+        };
+        // The usual minute has nothing to delete: don't open a transaction.
+        if !stale().exists(&*rt.db).await? {
+            return Ok(0);
+        }
+        rt.write(None, |uow| async move {
+            let tx = uow.tx().await?;
+            let deleted = stale().delete(&*tx).await?;
+            uow.mark_modified();
+            Ok(deleted)
+        })
+        .await
     }
 
     /// When a pending domain is checked next.

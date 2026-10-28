@@ -19,14 +19,23 @@ pub struct Domain {
     pub id: Uuid,
     /// The workspace.
     pub workspace_id: Uuid,
-    /// The host, lower-case ASCII (unique).
+    /// The host, lower-case ASCII. Not unique: several workspaces may
+    /// claim one host, each with a row (and a token) of its own; a
+    /// workspace has one row per host.
     pub host: String,
     /// What the workspace uses it for (`app`, `links`, `landing`).
     pub purpose: String,
     /// `pending`, `verified` or `failed`.
     pub status: String,
+    /// The host while the domain is verified, `None` otherwise. It is
+    /// unique, so the database lets only one claim own a host: the first
+    /// to prove control wins, atomically.
+    pub verified_host: Option<String>,
     /// The value of the verification TXT record.
     pub verification_token: String,
+    /// The claim was made by `Domains::transfer`: proving control moves
+    /// the host from the workspace that holds it. Only `transfer` sets it.
+    pub transfer: bool,
     /// Whether the DNS provider created its record (a host inside
     /// `domains.dns.zone`).
     pub managed: bool,

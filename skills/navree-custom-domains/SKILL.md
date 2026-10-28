@@ -1,6 +1,6 @@
 ---
 name: navree-custom-domains
-description: "Custom domains with navree-domains: `DomainsModule` and the `domains` config section, `Domains::add` with `NewDomain` and the DNS records it returns (TXT at `_domain-verification.<host>`, CNAME to `domains.target`, A/AAAA for apex domains), verification (`verify`, `verify_due`, `domains:verify --due`, giving up, rechecks), the `domain` workspace resolver (`workspace.resolvers = [\"domain\", ...]`, `DomainWorkspace`) and the `CurrentDomain` extractor, automatic TLS (`tls = \"on_demand\"` with the ask endpoint `/_domains/allow` and Harbor's `[web.custom_domains]`, or `tls = \"acme\"` with `InstantAcme`, HTTP-01 answers, sealed keys, `DomainCertificates` and `HttpsServer`), managed Cloudflare zones, certificate expiry reports (`domains:certificates`, `DomainCertificateExpiring`, Lighthouse), the `/api/domains` routes, and tests with `DnsFake`, `AcmeFake`, `ProbeFake` and `DnsProviderFake`. Use when a workspace needs its own domain, when a domain stays pending, or when certificates for customers' domains fail."
+description: "Custom domains with navree-domains: `DomainsModule` and the `domains` config section, `Domains::add` with `NewDomain` and the DNS records it returns (TXT at `_domain-verification.<host>`, CNAME to `domains.target`, A/AAAA for apex domains), proof of control (several pending claims on one host, each with its own token; the first TXT proof wins atomically; `DomainClaimedElsewhere`; failed claims never block and are deleted; `Domains::transfer` and `domains:transfer` move a verified domain by a fresh proof), verification (`verify`, `verify_due`, `domains:verify --due`, giving up, rechecks), the `domain` workspace resolver (`workspace.resolvers = [\"domain\", ...]`, `DomainWorkspace`) and the `CurrentDomain` extractor, automatic TLS (`tls = \"on_demand\"` with the ask endpoint `/_domains/allow` and Harbor's `[web.custom_domains]`, or `tls = \"acme\"` with `InstantAcme`, HTTP-01 answers, sealed keys, `DomainCertificates` and `HttpsServer`), managed Cloudflare zones, certificate expiry reports (`domains:certificates`, `DomainCertificateExpiring`, Lighthouse), the `/api/domains` routes, and tests with `DnsFake`, `AcmeFake`, `ProbeFake` and `DnsProviderFake`. Use when a workspace needs its own domain, when a domain stays pending, or when certificates for customers' domains fail."
 ---
 
 # Custom domains
@@ -10,7 +10,9 @@ puts workspaces on their own domains: it hands out the DNS records to
 create, verifies them on a schedule, gets certificates, and resolves the
 workspace from the request's host. Everything below is in the code; when in
 doubt read `crates/navree-domains/src` and the tests in
-`crates/navree-domains/tests/domains/` (`adding.rs`, `verification.rs`,
+`crates/navree-domains/tests/domains/` (`adding.rs`, `claims.rs` and
+`transfer.rs` for proof of control, `migration.rs` for the claims
+migration, `verification.rs`,
 `resolution.rs`, `routes.rs`, `certificates.rs` and `https.rs` for ACME
 with the fake CA and a real TLS handshake, `probes.rs`, `managed.rs`,
 `cloudflare.rs` on wiremock, `servers.rs` on PostgreSQL and MySQL,
@@ -83,9 +85,10 @@ resolvers = ["domain", "header"]   # a verified domain names its workspace
 
 - `add` normalizes the host (`normalize_host`), refuses reserved hosts
   (`app.url`'s host, `workspace.base_domain`, `domains.target`,
-  `domains.reserved`, and their subdomains: `domain_not_allowed`), taken
-  ones (`domain_taken`) and full workspaces (`domain_limit_reached`,
-  `domains.max_per_workspace`, default 10).
+  `domains.reserved`, and their subdomains: `domain_not_allowed`), hosts
+  that are verified for a workspace already or that this workspace has
+  claimed (`domain_taken`) and full workspaces (`domain_limit_reached`,
+  `domains.max_per_workspace`, default 10; failed claims don't count).
 - `verify_due` checks due domains: the TXT record holds the token, and
   (with `target` or `addresses` set and `require_routing`, the default)
   the host has a CNAME to the target or an address of the target or of
@@ -97,6 +100,42 @@ resolvers = ["domain", "header"]   # a verified domain names its workspace
   `dns_lookup_failed`; it is not a missing record.
 - `resolve(host)` (what the resolver layer and `CurrentDomain` use) is
   cached for `cache_secs` (60). Writes clear the entry on this server only.
+
+## Who owns a host: proof of control
+
+- `add` makes a claim, not an owner. Any number of workspaces may hold a
+  pending claim on one host, each with a token of its own (a workspace has
+  one claim per host: `custom_domains` is unique on
+  `(workspace_id, host)`). Pending and failed claims resolve nothing, the
+  ask endpoint answers 404 for them, and they never block another
+  workspace: do not add "is this host taken" checks of your own.
+- Only the verified claim owns the host: `verified_host` holds the host for
+  verified rows and is `NULL` otherwise, and it is unique, so two claims
+  proved at once leave exactly one winner whatever the database (the loser
+  gets its closed claim back from `verify`, not an error). The winner
+  closes the other pending claims: `failed`, a reason in `last_error`, and
+  one `DomainClaimedElsewhere { domain, claimed_by }` (`domains.claimed_elsewhere`)
+  each.
+- Read the tables by `verified_host`, never by `host`, when you mean the
+  owner (`resolve`, the certificates, the ask endpoint do). `host` has one
+  row per claiming workspace. `find(host)` is the verified domain, else the
+  newest claim; `claims(host)` lists them all.
+- Failed claims (gave up after `give_up_after_hours`, or lost the host) are
+  deleted `domains.verification.failed_retention_hours` (168; 0 keeps them)
+  after they last changed, by `verify_due`. Adding a host again replaces
+  the workspace's failed claim.
+- A verified domain moves only by `Domains::transfer(host, to_workspace)`
+  (command `domains:transfer <host> --to <workspace-id>`): it makes `to`'s
+  claim, flagged `transfer`, with a fresh token, and checks the DNS now.
+  The old workspace's TXT proves nothing. With the record found, the old
+  row and its certificate are deleted and the claim becomes the owner in
+  one transaction (old workspace: `DomainClaimedElsewhere`, snapshot still
+  `verified`); without it the claim stays pending and the scheduler
+  completes the move when the record appears. Nothing else (no route, no
+  ordinary claim) can take a verified host; managed hosts can't be
+  transferred (remove and add).
+- Removing a pending or failed claim leaves the owner's certificate and
+  records alone; only the verified domain's removal deletes them.
 
 ## Certificates
 
@@ -157,6 +196,11 @@ let app = TestApp::builder()
   the boot.
 - A custom domain only resolves once verified; a pending domain gives 400
   "names no workspace" through `CurrentWorkspace`.
+- Claims race in tests with `tokio::test(flavor = "multi_thread")` and
+  `tokio::spawn(async move { domains.verify(id).await })`; publish every
+  claim's token (`DnsFake::set_txt` adds a value, it doesn't replace one).
+  Existing databases get the claims migration
+  (`m20261028_100005_claim_domains_by_proof`) with `navree migrate`.
 - Caddy's `on_demand_tls` is a server-wide option: one app per server
   serves custom domains.
 - `domains.tls = "acme"` needs port 80 reachable for HTTP-01 and the app
