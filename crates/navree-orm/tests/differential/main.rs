@@ -64,7 +64,8 @@ async fn mysql_runs_the_portable_statements() {
 }
 
 /// What a path did with a case.
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 enum Outcome {
     /// It would not compile the case.
     Refused(String),
@@ -338,10 +339,20 @@ async fn compare_paths(dialect: Dialect) {
         let mut mismatches = String::new();
         let mut failures_on_both = String::new();
         let mut differences = String::new();
+        let mut recorded = String::new();
         for case in &cases {
             let compiler_sql = compiled(&case.kind, dialect);
             let renderer_sql = rendered(&case.kind, dialect);
             let compiler = run(&exec, case, clone(&compiler_sql)).await;
+            recorded.push_str(
+                &serde_json::to_string(&serde_json::json!({
+                    "case": case.name,
+                    "sql": sql_of(&compiler_sql),
+                    "outcome": &compiler,
+                }))
+                .unwrap(),
+            );
+            recorded.push('\n');
             let renderer = run(&exec, case, clone(&renderer_sql)).await;
             let verdict = compare(case, &compiler, &renderer);
             let expected = case
@@ -408,6 +419,18 @@ async fn compare_paths(dialect: Dialect) {
         }
         if writes > 0 {
             support::reset(&exec).await;
+        }
+        if std::env::var_os("NAVREE_RECORD_COMPILER").is_some() {
+            let name = match dialect {
+                Dialect::Postgres => "postgres",
+                Dialect::MySql => "mysql",
+                Dialect::Sqlite => "sqlite",
+            };
+            let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/differential/compiler")
+                .join(format!("{name}.jsonl"));
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, &recorded).unwrap();
         }
         eprintln!(
             "differential ({dialect}): {} cases: {rows} same rows ({with_rows} of them not empty), {writes} same writes, {refused} refused by both, {failed} failed on both, {differ} expected differences, {} mismatches",
