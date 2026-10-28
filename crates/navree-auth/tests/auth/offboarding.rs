@@ -183,14 +183,15 @@ async fn every_registered_revoker_is_asked_even_when_one_fails() {
     );
     // The sessions were revoked and the other revoker ran.
     assert_eq!(refresh(&app, &session).await, 401);
-    let asked = asked.0.lock().unwrap_or_else(PoisonError::into_inner);
-    assert_eq!(asked.len(), 2, "both revokers were asked: {asked:?}");
-    let mut users = asked[0].clone();
-    users.sort();
-    let mut expected = vec![ann.id, ned.id];
-    expected.sort();
-    assert_eq!(users, expected);
-    drop(asked);
+    {
+        let asked = asked.0.lock().unwrap_or_else(PoisonError::into_inner);
+        assert_eq!(asked.len(), 2, "both revokers were asked: {asked:?}");
+        let mut users = asked[0].clone();
+        users.sort();
+        let mut expected = vec![ann.id, ned.id];
+        expected.sort();
+        assert_eq!(users, expected);
+    }
 
     let report = auth.revoke_all_credentials(ann.id).await;
     assert!(matches!(report, Err(AuthError::Revocation { .. })));

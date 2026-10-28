@@ -40,8 +40,8 @@ use crate::codes;
 use crate::error::{ErrorFormat, PendingError};
 use crate::extract::ProxyTrust;
 use crate::limiter::KeyedRateLimiter;
-use crate::network::rate_limit_key;
 use crate::maintenance::MaintenanceMode;
+use crate::network::rate_limit_key;
 use crate::{AppError, Authenticator, ClientIp, ErrorMapper, RouteMeta};
 
 /// The request id header.
