@@ -1,6 +1,6 @@
 //! Navigator's tools against a fixture app: a SQLite database, a log file,
 //! configuration, the embedded docs, and the app binary through a fake
-//! process runner; then the MCP protocol with rmcp's client.
+//! process runner; then the MCP protocol as raw JSON-RPC lines.
 
 mod support;
 

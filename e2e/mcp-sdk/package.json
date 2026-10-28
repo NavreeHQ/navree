@@ -1,0 +1,12 @@
+{
+  "name": "navree-mcp-sdk-conformance",
+  "private": true,
+  "type": "module",
+  "description": "Drives navree-mcp's server with the official MCP TypeScript SDK client over stdio and Streamable HTTP (run by `cargo test -p navree-mcp --test sdk_conformance -- --ignored`).",
+  "scripts": {
+    "test": "cargo test -p navree-mcp --test sdk_conformance -- --ignored --nocapture"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1"
+  }
+}
