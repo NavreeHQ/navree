@@ -1,0 +1,25 @@
+From: a@b.test
+To: c@d.test
+Subject: =?UTF-8?B?w6TDtsO8?=
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary=XX
+
+--XX
+Content-Type: multipart/alternative; boundary=YY
+
+--YY
+Content-Type: text/plain
+
+plain
+--YY
+Content-Type: text/html
+
+<p>html</p>
+--YY--
+--XX
+Content-Type: application/pdf; name=a.pdf
+Content-Disposition: attachment; filename=a.pdf
+Content-Transfer-Encoding: base64
+
+JVBERi0xLjQK
+--XX--

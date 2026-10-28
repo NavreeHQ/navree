@@ -1,5 +1,10 @@
 # Rust build output (each agent builds into target/agents/<label>)
 target/
+# Fuzzing: working corpora, crashes and coverage stay out of the repository
+# (the seeds in fuzz/seeds are committed).
+/fuzz/corpus/
+/fuzz/artifacts/
+/fuzz/coverage/
 # trybuild writes failing UI test output next to the crate (accept reviewed
 # snapshots with TRYBUILD=overwrite)
 /crates/*/wip/

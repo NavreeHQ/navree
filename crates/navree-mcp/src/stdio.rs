@@ -120,7 +120,8 @@ struct Connection {
 }
 
 /// One line read from the client.
-enum Line {
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum Line {
     Message(Vec<u8>),
     /// Longer than the limit (skipped up to its end).
     TooLong,
@@ -129,7 +130,7 @@ enum Line {
 
 /// Reads one line of at most `max` bytes; a longer one is skipped without
 /// being kept in memory.
-async fn read_line<R: AsyncRead + Unpin>(
+pub(crate) async fn read_line<R: AsyncRead + Unpin>(
     reader: &mut BufReader<R>,
     max: usize,
 ) -> std::io::Result<Line> {
