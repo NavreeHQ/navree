@@ -13,7 +13,7 @@ use minijinja::{AutoEscape, Environment, UndefinedBehavior};
 use serde::Serialize;
 use serde_json::{Value, json};
 
-use crate::config::{HarborConfig, Role, Server};
+use crate::config::{CustomDomainsTo, HarborConfig, Role, Server};
 use crate::error::{HarborError, Result};
 use crate::layout::{Layout, Slot};
 
@@ -236,6 +236,15 @@ pub fn context(config: &HarborConfig, server: &Server, info: &AppInfo) -> Value 
         "internal_bind": internal_bind(config, server),
         "metrics_allow": config.web.metrics_allow,
         "proxy_protocol": config.web.proxy_protocol,
+        "custom_domains": {
+            "enabled": config.web.custom_domains.enabled,
+            "ask_path": config.web.custom_domains.ask_path,
+            // Caddy asks the live slot through its internal entry.
+            "ask_url": format!(
+                "http://127.0.0.1:{}{}",
+                config.deploy.internal_port, config.web.custom_domains.ask_path
+            ),
+        },
         "trusted_proxies": config.deploy.trusted_proxies,
         "frontend": info.frontend,
         "commands": {
@@ -275,13 +284,20 @@ pub fn site(config: &HarborConfig, server: &Server, info: &AppInfo, slot: Slot) 
     let port = config.deploy.ports[slot.index()];
     let scheme = if info.h2c { "h2c://" } else { "" };
     let frontend_port = info.frontend.as_ref().map(|f| f.ports[slot.index()]);
+    let upstream = format!("{scheme}127.0.0.1:{port}");
+    // Workspaces' own domains go to the app, or to the front end.
+    let custom_upstream = match (config.web.custom_domains.to, frontend_port) {
+        (CustomDomainsTo::Frontend, Some(port)) => format!("127.0.0.1:{port}"),
+        _ => upstream.clone(),
+    };
     render(
         "files/site.caddy",
         with(
             context(config, server, info),
             json!({
                 "slot": slot.as_str(),
-                "upstream": format!("{scheme}127.0.0.1:{port}"),
+                "upstream": upstream,
+                "custom_upstream": custom_upstream,
                 "frontend_port": frontend_port,
             }),
         ),
