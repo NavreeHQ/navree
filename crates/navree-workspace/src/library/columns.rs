@@ -129,7 +129,10 @@ impl LibraryColumns {
             KeyColumn::Uuid => self.uuid(t, self.cloned_from).nullable().index(),
             KeyColumn::BigInteger => t.big_integer(self.cloned_from).nullable().index(),
         };
-        t.check(format!("{table}_library_owner_check"), self.check_expression());
+        t.check(
+            format!("{table}_library_owner_check"),
+            self.check_expression(),
+        );
     }
 
     /// The `CHECK` constraint's condition.

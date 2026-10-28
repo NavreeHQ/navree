@@ -166,9 +166,9 @@ pub use entity::{
     Partition, WORKSPACE_SUBJECT, Workspace, WorkspaceKind,
 };
 pub use error::{DEMO_READ_ONLY, LIBRARY_READ_ONLY, WorkspaceError};
-pub use library::{Library, LibraryOwner, LibraryRepo, LibraryScope, LibraryViewer};
 pub use invitations::{AcceptedInvitation, Invitations, SentInvitation, TOKEN_LEN};
 pub use isolation::{RlsPolicy, WorkspaceRepo, WorkspaceScoped, rls_policy_sql};
+pub use library::{Library, LibraryOwner, LibraryRepo, LibraryScope, LibraryViewer};
 pub use members::{MemberInfo, Members};
 pub use migration::WORKSPACE_MIGRATIONS;
 pub use module::{ModuleBuilderWorkspaceExt, WorkspaceModule};
