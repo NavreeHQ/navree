@@ -10,11 +10,11 @@ use navree_auth::{
     two_factor_enabled, user,
 };
 use navree_contracts::{AuditSink, Clock, FixedClock};
+use navree_crypto::totp::{Secret, Totp};
 use navree_db::Db;
 use navree_testing::{TestApp, TestClient, TestResponse};
 use sea_orm::EntityTrait;
 use serde_json::{Value, json};
-use navree_crypto::totp::{Secret, Totp};
 
 use crate::support::{self, PASSWORD, RecordingSink, login, signed_in, tokens};
 

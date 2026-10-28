@@ -111,13 +111,29 @@ fn base32_follows_rfc_4648() {
     ] {
         let secret = Secret::from_bytes(text);
         assert_eq!(secret.to_base32(), encoded);
-        assert_eq!(Secret::from_base32(encoded).unwrap().as_bytes(), text.as_bytes());
+        assert_eq!(
+            Secret::from_base32(encoded).unwrap().as_bytes(),
+            text.as_bytes()
+        );
         // Lower case and padding are read too.
-        let padded = format!("{}{}", encoded.to_lowercase(), "=".repeat((8 - encoded.len() % 8) % 8));
-        assert_eq!(Secret::from_base32(&padded).unwrap().as_bytes(), text.as_bytes());
+        let padded = format!(
+            "{}{}",
+            encoded.to_lowercase(),
+            "=".repeat((8 - encoded.len() % 8) % 8)
+        );
+        assert_eq!(
+            Secret::from_base32(&padded).unwrap().as_bytes(),
+            text.as_bytes()
+        );
     }
-    for bad in ["M", "MZX", "MZXW6Y", "MZ XQ", "MZ1Q", "MZXQ!", "MZXQ-", "M=Y"] {
-        assert_eq!(Secret::from_base32(bad), Err(TotpError::InvalidBase32), "{bad}");
+    for bad in [
+        "M", "MZX", "MZXW6Y", "MZ XQ", "MZ1Q", "MZXQ!", "MZXQ-", "M=Y",
+    ] {
+        assert_eq!(
+            Secret::from_base32(bad),
+            Err(TotpError::InvalidBase32),
+            "{bad}"
+        );
     }
 }
 
@@ -135,7 +151,11 @@ fn secrets_urls_and_codes_from_totp_rs_still_work() {
         let period = case["period"].as_u64().unwrap();
         let secret = Secret::from_base32(case["secret"].as_str().unwrap()).unwrap();
         // The secret re-encodes to the same text.
-        assert_eq!(secret.to_base32(), case["secret"].as_str().unwrap(), "{name}");
+        assert_eq!(
+            secret.to_base32(),
+            case["secret"].as_str().unwrap(),
+            "{name}"
+        );
 
         let built = Totp::builder(secret)
             .algorithm(algorithm)
@@ -177,7 +197,12 @@ fn the_window_is_one_step_either_side_by_default() {
     let step = 1_000_000_u64;
     let code = totp.generate(step * 30);
     // The step's own 30 seconds, and the step before and after.
-    for time in [(step - 1) * 30, step * 30, step * 30 + 29, (step + 2) * 30 - 1] {
+    for time in [
+        (step - 1) * 30,
+        step * 30,
+        step * 30 + 29,
+        (step + 2) * 30 - 1,
+    ] {
         assert_eq!(totp.check(&code, time), Some(step), "{time}");
     }
     // One second outside either edge.
@@ -228,7 +253,10 @@ fn the_window_does_not_underflow_at_the_start_of_time() {
     let _ = totp.check("123456", u64::MAX);
     let one_second = self::totp(b"12345678901234567890", Algorithm::Sha1, 6, 1);
     let _ = one_second.check("123456", u64::MAX);
-    assert_eq!(one_second.check(&one_second.generate(u64::MAX), u64::MAX), Some(u64::MAX));
+    assert_eq!(
+        one_second.check(&one_second.generate(u64::MAX), u64::MAX),
+        Some(u64::MAX)
+    );
 }
 
 #[test]
@@ -295,7 +323,10 @@ fn secrets_are_wiped_and_never_printed() {
     fn wiped_on_drop<T: zeroize::ZeroizeOnDrop>() {}
     wiped_on_drop::<Secret>();
     let secret = Secret::from_bytes(b"12345678901234567890");
-    let printed = format!("{secret:?} {:?}", Totp::builder(secret.clone()).build().unwrap());
+    let printed = format!(
+        "{secret:?} {:?}",
+        Totp::builder(secret.clone()).build().unwrap()
+    );
     assert!(!printed.contains("GEZDGNBVGY"), "{printed}");
     assert!(!printed.contains("1234567890"), "{printed}");
 }
@@ -305,7 +336,9 @@ fn settings_are_checked() {
     let secret = || Secret::from_bytes([7_u8; MIN_SECRET_LEN]);
     assert!(Totp::builder(secret()).build().is_ok());
     assert_eq!(
-        Totp::builder(Secret::from_bytes([7_u8; MIN_SECRET_LEN - 1])).build().unwrap_err(),
+        Totp::builder(Secret::from_bytes([7_u8; MIN_SECRET_LEN - 1]))
+            .build()
+            .unwrap_err(),
         TotpError::SecretTooShort { bits: 120 }
     );
     for digits in [0, 5, 9, 10] {
@@ -341,13 +374,23 @@ fn settings_are_checked() {
 fn urls_read_what_apps_and_services_write() {
     let secret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
     // %3A and a literal colon both separate issuer and account.
-    for label in ["Navree:ada%40example.com", "Navree%3Aada%40example.com", "Navree%3aada@example.com"] {
-        let totp = Totp::from_url(&format!("otpauth://totp/{label}?secret={secret}&issuer=Navree")).unwrap();
+    for label in [
+        "Navree:ada%40example.com",
+        "Navree%3Aada%40example.com",
+        "Navree%3aada@example.com",
+    ] {
+        let totp = Totp::from_url(&format!(
+            "otpauth://totp/{label}?secret={secret}&issuer=Navree"
+        ))
+        .unwrap();
         assert_eq!(totp.issuer(), Some("Navree"));
         assert_eq!(totp.account(), "ada@example.com");
     }
     // The issuer from the parameter only, spaces as %20 or +.
-    let totp = Totp::from_url(&format!("otpauth://totp/ada?secret={secret}&issuer=My+App%20Co")).unwrap();
+    let totp = Totp::from_url(&format!(
+        "otpauth://totp/ada?secret={secret}&issuer=My+App%20Co"
+    ))
+    .unwrap();
     assert_eq!(totp.issuer(), Some("My App Co"));
     assert_eq!(totp.account(), "ada");
     // Upper-case scheme and type, lower-case secret, parameters in any
@@ -357,7 +400,10 @@ fn urls_read_what_apps_and_services_write() {
         secret.to_lowercase()
     ))
     .unwrap();
-    assert_eq!((totp.digits(), totp.period(), totp.algorithm()), (8, 60, Algorithm::Sha256));
+    assert_eq!(
+        (totp.digits(), totp.period(), totp.algorithm()),
+        (8, 60, Algorithm::Sha256)
+    );
     // A percent-escape in the account is decoded once.
     let totp = Totp::from_url(&format!("otpauth://totp/Acme:100%2525?secret={secret}")).unwrap();
     assert_eq!(totp.account(), "100%25");

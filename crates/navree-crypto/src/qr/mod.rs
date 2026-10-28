@@ -259,7 +259,11 @@ fn interleave(data: &[u8], version: usize, level: EcLevel) -> Vec<u8> {
         ecc_blocks.push(reed_solomon::remainder(block, &divisor));
         data_blocks.push(block);
     }
-    let longest = data_blocks.iter().map(|block| block.len()).max().unwrap_or(0);
+    let longest = data_blocks
+        .iter()
+        .map(|block| block.len())
+        .max()
+        .unwrap_or(0);
     let mut result = Vec::with_capacity(total);
     for column in 0..longest {
         for block in &data_blocks {
@@ -387,12 +391,32 @@ mod tests {
 
     #[test]
     fn codeword_totals_match_the_standard() {
-        for (version, total) in [(1, 26), (2, 44), (7, 196), (10, 346), (21, 1156), (40, 3706)] {
+        for (version, total) in [
+            (1, 26),
+            (2, 44),
+            (7, 196),
+            (10, 346),
+            (21, 1156),
+            (40, 3706),
+        ] {
             assert_eq!(total_codewords(version), total, "version {version}");
         }
         // Remainder bits after the codewords (Table 1).
-        for (version, remainder) in [(1, 0), (2, 7), (6, 7), (7, 0), (14, 3), (21, 4), (28, 3), (35, 0)] {
-            assert_eq!(raw_data_modules(version) % 8, remainder, "version {version}");
+        for (version, remainder) in [
+            (1, 0),
+            (2, 7),
+            (6, 7),
+            (7, 0),
+            (14, 3),
+            (21, 4),
+            (28, 3),
+            (35, 0),
+        ] {
+            assert_eq!(
+                raw_data_modules(version) % 8,
+                remainder,
+                "version {version}"
+            );
         }
     }
 
@@ -449,7 +473,9 @@ mod tests {
         let data = pad(segment::write(&segments, 1), 1, EcLevel::M);
         assert_eq!(
             data,
-            [16, 32, 12, 86, 97, 128, 236, 17, 236, 17, 236, 17, 236, 17, 236, 17]
+            [
+                16, 32, 12, 86, 97, 128, 236, 17, 236, 17, 236, 17, 236, 17, 236, 17
+            ]
         );
         let all = interleave(&data, 1, EcLevel::M);
         assert_eq!(all[16..], [165, 36, 212, 193, 237, 54, 199, 135, 44, 85]);
@@ -460,7 +486,10 @@ mod tests {
         // The "HELLO WORLD" example of version 1-Q (alphanumeric).
         let segments = segment(b"HELLO WORLD", 1);
         let data = pad(segment::write(&segments, 1), 1, EcLevel::Q);
-        assert_eq!(data, [32, 91, 11, 120, 209, 114, 220, 77, 67, 64, 236, 17, 236]);
+        assert_eq!(
+            data,
+            [32, 91, 11, 120, 209, 114, 220, 77, 67, 64, 236, 17, 236]
+        );
         let all = interleave(&data, 1, EcLevel::Q);
         assert_eq!(
             all[13..],
@@ -501,10 +530,23 @@ mod tests {
         assert_eq!(QrCode::encode(&long, EcLevel::L), Err(QrError::TooLong));
         assert!(QrCode::encode(&long[..2953], EcLevel::L).is_ok());
         for options in [
-            Options { min_version: 0, ..Options::default() },
-            Options { max_version: 41, ..Options::default() },
-            Options { min_version: 5, max_version: 4, ..Options::default() },
-            Options { mask: Some(8), ..Options::default() },
+            Options {
+                min_version: 0,
+                ..Options::default()
+            },
+            Options {
+                max_version: 41,
+                ..Options::default()
+            },
+            Options {
+                min_version: 5,
+                max_version: 4,
+                ..Options::default()
+            },
+            Options {
+                mask: Some(8),
+                ..Options::default()
+            },
         ] {
             assert_eq!(
                 QrCode::encode_with(b"x", EcLevel::M, options),

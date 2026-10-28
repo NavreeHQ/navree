@@ -37,7 +37,7 @@
 //!   | `POST /auth/platform/login`, `POST /auth/platform/2fa/verify` | public; when `auth.platform.enabled` | a challenge; 200 a platform session |
 //!   | `POST /auth/exchange` `{token}` | public; when `auth.trusted_issuers` is set | 200 like login for a trusted issuer's JWT |
 //!
-//! - **Access tokens** are HS256 JWTs ([`Claims`]: `sub`, `iat`, `exp`,
+//! - **Access tokens** are HS256 JWTs on `navree_crypto::jose` ([`Claims`]: `sub`, `iat`, `exp`,
 //!   `iss`, `aud`, `jti`, `typ`, and the session claims `sid`, `auth_time`
 //!   and, for impersonation, `act`), 15 minutes by default, signed with
 //!   `auth.jwt.secret` or a key derived from the application key. They are
@@ -80,7 +80,9 @@
 //!   `auth.verification.base_url`, and the bodies with navree-view templates
 //!   (`auth.password_reset.mail_template`, `auth.verification.mail_template`);
 //!   see [`AuthOptions`].
-//! - **Two-factor authentication** is TOTP (totp-rs; SHA-1, 6 digits, 30 s):
+//! - **Two-factor authentication** is TOTP (`navree_crypto::totp`; SHA-1,
+//!   6 digits, 30 s, one step of drift; the setup QR code is
+//!   `navree_crypto::qr`):
 //!   the secret is encrypted with navree-crypto's `Encrypter`, recovery codes
 //!   are stored as encrypted SHA-256 digests and work once, a code is
 //!   accepted once, and the login challenge is a 5-minute JWT of type

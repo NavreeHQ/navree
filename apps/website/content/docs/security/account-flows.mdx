@@ -37,7 +37,7 @@ HTTP/1.1 201 Created
 Content-Type: application/json
 
 {
-  "access_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "expires_in": 900,
   "refresh_token": "01a17748-e212-70fb-ac25-60104e263312.THWKdps4upOnINDZb8lc23vO35ZtAqWxmhmc6h2LkCCswPkz",
   "token_type": "Bearer",
@@ -166,7 +166,7 @@ A signed-in user asks for a link:
 
 ```http
 POST /api/auth/email/verification HTTP/1.1
-Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
 ```http
@@ -216,7 +216,7 @@ Navree records verification but enforces nothing with it: unverified users sign 
 
 ```http
 PATCH /api/auth/me HTTP/1.1
-Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 Content-Type: application/json
 
 {"email": "ada@lovelace.dev", "current_password": "correct horse battery"}
@@ -253,7 +253,7 @@ The audit entry `auth.profile_updated` records the old and new values of the fie
 
 ```http
 PATCH /api/auth/me/password HTTP/1.1
-Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 Content-Type: application/json
 
 {"current_password": "a new password", "password": "another password"}
@@ -261,7 +261,7 @@ Content-Type: application/json
 
 ```json
 {
-  "access_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "expires_in": 900,
   "refresh_token": "01a17749-d34b-7580-ac3e-73a1972c0379.NycZAJC0SikyvUAw5DFox5GakXgjH8MMq9ISNItAgJcSGD4D",
   "token_type": "Bearer"
@@ -274,7 +274,7 @@ Changing the password revokes every refresh token of the account and returns a *
 
 ## Two-factor authentication
 
-Two-factor authentication adds a time-based one-time password (TOTP, RFC 6238) to the sign-in: a six-digit code from an authenticator app such as Google Authenticator, 1Password or Authy. Codes use SHA-1 and 30-second steps, and the code of the step before or after the current one is accepted too.
+Two-factor authentication adds a time-based one-time password (TOTP, RFC 6238) to the sign-in: a six-digit code from an authenticator app such as Google Authenticator, 1Password or Authy. Codes use HMAC-SHA-1 and 30-second steps, which every authenticator app supports, and the code of the step before or after the current one is accepted too. The codes, the secret and the QR code come from `navree-crypto` (`navree::crypto::totp` and `navree::crypto::qr`), not from a third-party crate; see [Codes and QR codes in your own code](#codes-and-qr-codes-in-your-own-code).
 
 The secret is 160 random bits, stored encrypted with the app's `Encrypter` in `users.two_factor_secret`. The recovery codes are stored as SHA-256 digests, also encrypted. Both depend on the application key: when you rotate `APP_KEY`, keep the old key in `app.previous_keys`, or two-factor sign-ins stop working (see [Key rotation](/docs/security/encryption-and-hashing/#rotating-keys)).
 
@@ -287,7 +287,7 @@ Setup takes two requests, so that the user proves their app works before it is r
 
 ```http
 POST /api/auth/2fa/enable HTTP/1.1
-Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
 ```json wrap
@@ -298,14 +298,14 @@ Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
 }
 ```
 
-Show `qr_svg` (an SVG document of the `otpauth://` URL) for the user to scan, and `secret` for typing in by hand. The issuer is `auth.two_factor.issuer`. Nothing is active yet: logins don't ask for a code until the setup is confirmed. Calling it again replaces an unconfirmed secret; once two-factor authentication is on, it answers `409 Conflict`.
+Show `qr_svg` (an SVG document of the `otpauth://` URL, black on white with a four-module quiet zone, at least 200 pixels wide, with a `viewBox`: put it in the page as it is and size it with CSS) for the user to scan, and `secret` for typing in by hand. The issuer is `auth.two_factor.issuer`. Nothing is active yet: logins don't ask for a code until the setup is confirmed. Calling it again replaces an unconfirmed secret; once two-factor authentication is on, it answers `409 Conflict`.
 
 </Step>
 <Step title="Confirm with a code">
 
 ```http
 POST /api/auth/2fa/confirm HTTP/1.1
-Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 Content-Type: application/json
 
 {"code": "492817"}
@@ -337,7 +337,7 @@ When the account has two-factor authentication, a correct password at `POST /api
 
 ```json
 {
-  "challenge_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIwMWExNzc0OS1kMmM1...",
+  "challenge_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwMWExNzc0OS1kMmM1...",
   "expires_in": 300,
   "two_factor_required": true
 }
@@ -349,7 +349,7 @@ The client asks for a code and sends it with the challenge token:
 POST /api/auth/2fa/verify HTTP/1.1
 Content-Type: application/json
 
-{"challenge_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIwMWExNzc0OS1kMmM1...", "code": "492817"}
+{"challenge_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwMWExNzc0OS1kMmM1...", "code": "492817"}
 ```
 
 A correct code gets the same answer as a login: the user and a token pair. To use a recovery code, send `recovery_code` instead of `code`; send exactly one of them, or the answer is a 400 field error on `code` (`code should not be empty when recovery_code is missing`, or `code must be empty when recovery_code is given`).
@@ -362,7 +362,7 @@ A correct code gets the same answer as a login: the user and a token pair. To us
 | Any attempt after `auth.two_factor.max_attempts_per_minute` (5) wrong codes for the user within a minute | `429 Too Many Requests` |
 
 - The challenge token is a JWT of type `two_factor_challenge`. It is accepted once and never works as an access token.
-- A TOTP code is accepted once: after a code is used, codes of the same or an earlier 30-second step are refused.
+- A TOTP code is accepted once: after a code is used, codes of the same or an earlier 30-second step are refused. Codes are compared in constant time.
 - Wrong codes are counted per user, before the code is checked, so parallel guesses can't get past the limit. A correct code clears the count.
 
 The CRM's BFF keeps the challenge token in an httpOnly cookie scoped to `/api/auth/2fa`, so the browser only ever sends the code (see [the BFF pattern](/docs/security/authentication/#browser-apps-the-bff-pattern)).
@@ -377,7 +377,7 @@ A recovery code replaces a code from the app when the user has lost their phone.
 
 ```http
 POST /api/auth/2fa/disable HTTP/1.1
-Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 Content-Type: application/json
 
 {"password": "another password"}
@@ -408,7 +408,7 @@ A user who holds one of these roles and hasn't turned two-factor authentication 
 
 ```json
 {
-  "access_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "expires_in": 900,
   "refresh_token": "01a17b6d-d101-70d8-acae-37a74feaa4bf.YWP7DMg3LhmzNDIto4oUF2Z4BhLYGkQ69WvVowxrn8DQMuSq",
   "token_type": "Bearer",
@@ -475,6 +475,48 @@ impl Module for SecurityModule {
 `workspace_security` stands for a table of your own. Policies run in module dependency order, when a session starts and at every refresh; keep them to one query. With no roles in `required_for` and no policy registered, nothing is checked and no user is loaded at refresh. `AuthService::two_factor_required(&user)` evaluates the same rules from your own code.
 
 Platform administrators always need two-factor authentication, whatever these rules say: see [Platform administrators](/docs/security/authentication/#platform-administrators).
+
+### Codes and QR codes in your own code
+
+The TOTP and the QR encoder behind these routes are public in `navree-crypto`, for a screen or a flow of your own (a second authenticator for an admin tool, a code for a device). Nothing in them needs the database or the app.
+
+```rust
+use navree::crypto::qr::{EcLevel, QrCode};
+use navree::crypto::totp::{Secret, Totp};
+
+/// The base32 secret to type in, the `otpauth://` URL and the QR code as SVG.
+fn setup(issuer: &str, email: &str) -> Result<(String, String, String), Box<dyn std::error::Error>> {
+    let totp = Totp::builder(Secret::generate()?)
+        .issuer(issuer)
+        .account(email)
+        .build()?;
+    let url = totp.to_url()?;
+    let svg = QrCode::encode(url.as_bytes(), EcLevel::M)?.to_svg(200);
+    Ok((totp.secret().to_base32(), url, svg))
+}
+
+/// Checks a code against the stored secret. `last_step` is the step of the
+/// last code you accepted for this user (keep it in a cache or a column).
+fn accept(totp: &Totp, code: &str, now: u64, last_step: u64) -> Option<u64> {
+    // `check` says which 30-second step the code belongs to; a step that is
+    // not newer than the last one was used already (RFC 6238 section 5.2).
+    totp.check(code, now).filter(|step| *step > last_step)
+}
+```
+
+A `Secret` is wiped from memory when it is dropped and never shows in `Debug` output. `Totp::builder` takes the settings that authenticator apps accept:
+
+| Setting | Default | |
+|---|---|---|
+| `algorithm` | `Algorithm::Sha1` | `Sha256` and `Sha512` too; some apps ignore them and compute SHA-1 codes |
+| `digits` | 6 | 6 to 8 |
+| `period` | 30 | Seconds per step |
+| `skew` | 1 | Steps of clock drift accepted either side of the current one |
+| `issuer`, `account` | none | Shown by the app; neither may contain `:`. The URL needs an account |
+
+`Secret::generate()` is 160 random bits; a secret under 128 bits is refused. `Totp::check` computes and compares the codes of the whole drift window in constant time, so how long it takes says nothing about how close a wrong code was, and it never matches a code that is not exactly `digits` ASCII digits (strip spaces yourself). `Totp::from_url` reads the URLs that apps and services write, as well as the ones `to_url` writes. The codes follow RFC 6238 (the appendix B vectors for SHA-1, SHA-256 and SHA-512 are in the crate's tests) and the URL format is the `otpauth://` key URI of the authenticator apps.
+
+`QrCode::encode` picks the smallest version (1 to 40) that holds the message at the error-correction level you name: `L`, `M`, `Q` or `H` recover about 7%, 15%, 25% or 30% of the symbol if it is scratched or covered. `M` is what the setup screen uses. It splits the message into numeric, alphanumeric and byte segments, whichever are shortest, and chooses the mask pattern with the lowest penalty by the standard's rules. `to_svg(min_size)` returns a standalone SVG at least that many pixels wide, in whole pixels per module, black on white with a four-module quiet zone, and `is_dark(x, y)` reads the modules for another renderer. A message that does not fit even version 40 (2,953 bytes at `L`) is `QrError::TooLong`.
 
 ## Using the flows from code
 
@@ -647,7 +689,7 @@ let sent = app.get::<Mailer>().await.array_transport().expect("the array transpo
 let text = sent[0].text.clone().unwrap(); // holds the reset link
 ```
 
-`MailModule` needs `ViewModule` in the app. For two-factor tests, compute codes from the `secret` that `2fa/enable` returns with the `totp-rs` crate, as `navree-auth`'s own tests do, and move a `FixedClock` to the next 30-second step between codes. See [Fakes](/docs/testing/fakes/).
+`MailModule` needs `ViewModule` in the app. For two-factor tests, compute codes from the `secret` that `2fa/enable` returns with `navree::crypto::totp`, as `navree-auth`'s own tests do (`Totp::builder(Secret::from_base32(&secret)?).build()?.generate(now)`), and move a `FixedClock` to the next 30-second step between codes. See [Fakes](/docs/testing/fakes/).
 
 <LinkCards>
   <LinkCard href="/docs/security/authentication/" title="Authentication">

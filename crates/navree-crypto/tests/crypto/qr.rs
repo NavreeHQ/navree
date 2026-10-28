@@ -32,7 +32,8 @@ impl Rng {
 
 const DIGITS: &[u8] = b"0123456789";
 const ALPHANUMERIC: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:";
-const URL_SAFE: &[u8] = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~%:/?&=@";
+const URL_SAFE: &[u8] =
+    b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~%:/?&=@";
 
 /// The two bits that rqrr reports for a level.
 fn format_bits(level: EcLevel) -> u16 {
@@ -193,7 +194,8 @@ fn every_version_decodes_at_every_level_full_and_nearly_empty() {
             };
             // The longest byte payload that fits, then almost nothing (the
             // rest of the symbol is pad codewords).
-            let fits = |length: usize| QrCode::encode_with(&vec![0x80; length], level, options).is_ok();
+            let fits =
+                |length: usize| QrCode::encode_with(&vec![0x80; length], level, options).is_ok();
             let (mut capacity, mut too_long) = (0, 2954);
             while too_long - capacity > 1 {
                 let middle = (capacity + too_long) / 2;
@@ -429,11 +431,14 @@ fn a_scanner_reads_the_svg() {
                 continue;
             };
             let raster = rasterize(&code.to_svg(200));
-            let mut image = rqrr::PreparedImage::prepare_from_greyscale(
-                raster.side,
-                raster.side,
-                |x, y| if raster.dark[y * raster.side + x] { 0 } else { 255 },
-            );
+            let mut image =
+                rqrr::PreparedImage::prepare_from_greyscale(raster.side, raster.side, |x, y| {
+                    if raster.dark[y * raster.side + x] {
+                        0
+                    } else {
+                        255
+                    }
+                });
             let grids = image.detect_grids();
             assert_eq!(grids.len(), 1, "version {} {level:?}", code.version());
             let mut out = Vec::new();

@@ -135,8 +135,7 @@ impl AuthService {
         if two_factor_enabled(&user) {
             return Err(AuthError::TwoFactorAlreadyEnabled);
         }
-        let secret =
-            Secret::generate().map_err(|error| AuthError::TwoFactor(error.to_string()))?;
+        let secret = Secret::generate().map_err(|error| AuthError::TwoFactor(error.to_string()))?;
         let encoded = secret.to_base32();
         let totp = self.totp(&user, secret)?;
         let otpauth_url = totp

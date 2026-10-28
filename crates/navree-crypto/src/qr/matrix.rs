@@ -66,7 +66,8 @@ impl Matrix {
         let last = positions.len().saturating_sub(1);
         for (i, &cy) in positions.iter().enumerate() {
             for (j, &cx) in positions.iter().enumerate() {
-                let on_finder = (i == 0 && j == 0) || (i == 0 && j == last) || (i == last && j == 0);
+                let on_finder =
+                    (i == 0 && j == 0) || (i == 0 && j == last) || (i == last && j == 0);
                 if !on_finder {
                     self.draw_alignment(cx, cy);
                 }
@@ -161,7 +162,11 @@ impl Matrix {
                 for j in 0..2 {
                     let x = (right - j) as usize;
                     let upward = ((right + 1) & 2) == 0;
-                    let y = if upward { size - 1 - vertical } else { vertical };
+                    let y = if upward {
+                        size - 1 - vertical
+                    } else {
+                        vertical
+                    };
                     if !self.function[y * size + x] && index < codewords.len() * 8 {
                         let byte = codewords[index >> 3];
                         self.modules[y * size + x] = (byte >> (7 - (index & 7))) & 1 == 1;

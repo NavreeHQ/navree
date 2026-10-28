@@ -129,7 +129,9 @@ impl FromStr for Algorithm {
             "SHA1" => Ok(Algorithm::Sha1),
             "SHA256" => Ok(Algorithm::Sha256),
             "SHA512" => Ok(Algorithm::Sha512),
-            _ => Err(TotpError::InvalidUri("the algorithm is not SHA1, SHA256 or SHA512")),
+            _ => Err(TotpError::InvalidUri(
+                "the algorithm is not SHA1, SHA256 or SHA512",
+            )),
         }
     }
 }
@@ -164,7 +166,9 @@ impl Secret {
     /// A secret from its base32 text (RFC 4648): upper or lower case,
     /// without padding or with it.
     pub fn from_base32(text: &str) -> Result<Self, TotpError> {
-        base32_decode(text).map(Self).ok_or(TotpError::InvalidBase32)
+        base32_decode(text)
+            .map(Self)
+            .ok_or(TotpError::InvalidBase32)
     }
 
     /// The secret as base32 without padding, for typing in by hand and for
@@ -277,7 +281,11 @@ impl TotpBuilder {
         if self.period == 0 {
             return Err(TotpError::InvalidPeriod);
         }
-        if self.issuer.as_deref().is_some_and(|issuer| issuer.contains(':')) {
+        if self
+            .issuer
+            .as_deref()
+            .is_some_and(|issuer| issuer.contains(':'))
+        {
             return Err(TotpError::InvalidIssuer);
         }
         if self.account.contains(':') {
@@ -603,7 +611,9 @@ fn split_label(label: &str) -> (Option<&str>, &str) {
         }
         if bytes[i] == b'%'
             && bytes.get(i + 1) == Some(&b'3')
-            && bytes.get(i + 2).is_some_and(|c| c.eq_ignore_ascii_case(&b'A'))
+            && bytes
+                .get(i + 2)
+                .is_some_and(|c| c.eq_ignore_ascii_case(&b'A'))
         {
             return (Some(&label[..i]), &label[i + 3..]);
         }
