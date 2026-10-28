@@ -49,6 +49,7 @@ pub const SCIM_TOKEN_PREFIX: &str = "nvscim_";
 /// assert_eq!(ldap.sync_interval_mins, Some(30));
 /// ```
 #[derive(Clone, Default, PartialEq, Deserialize, ToSchema)]
+#[schema(as = DirectoryNewConnection)]
 pub struct NewConnection {
     /// Its name, for people.
     pub name: String,
@@ -125,6 +126,7 @@ impl fmt::Debug for NewConnection {
 /// A change to a connection ([`Directory::update_connection`]); `None`
 /// leaves a field as it is.
 #[derive(Clone, Default, PartialEq, Deserialize, ToSchema)]
+#[schema(as = DirectoryConnectionUpdate)]
 pub struct ConnectionUpdate {
     /// A new name.
     pub name: Option<String>,

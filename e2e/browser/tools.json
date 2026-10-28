@@ -1,0 +1,25 @@
+[
+  {
+    "name": "helm",
+    "package": "navree-helm",
+    "pages": ["/admin", "/admin/resources/projects"],
+    "expect": "Projects"
+  },
+  {
+    "name": "lighthouse",
+    "package": "navree-lighthouse",
+    "pages": ["/_lighthouse"]
+  },
+  {
+    "name": "fleet",
+    "package": "navree-fleet",
+    "pages": ["/_fleet"],
+    "expect": "Overview"
+  },
+  {
+    "name": "api-docs",
+    "package": "navree-api",
+    "pages": ["/api/docs"],
+    "settle_ms": 2000
+  }
+]

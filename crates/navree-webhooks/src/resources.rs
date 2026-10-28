@@ -214,6 +214,7 @@ impl fmt::Debug for CreatedEndpoint {
 /// Where a delivery stands.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
+#[schema(as = WebhookDeliveryStatus)]
 pub enum DeliveryStatus {
     /// Waiting for its next attempt.
     Pending,
@@ -252,6 +253,7 @@ impl fmt::Display for DeliveryStatus {
 
 /// One message to one endpoint, with where it stands.
 #[derive(Clone, Debug, PartialEq, Serialize, ToSchema)]
+#[schema(as = WebhookDelivery)]
 pub struct Delivery {
     /// The id.
     pub id: Uuid,
