@@ -220,7 +220,7 @@ work (the app needs `DatabaseModule`). Table and column names must match
 with one value: it can't add `deleted_at IS NULL`, so check soft-deleted
 references in the service. Outside a request: `rule.passes(&executor).await`
 on a `Db`, `Transaction` or `Uow` (any navree-db `Executor`); a failed query
-is `RuleError::Database` holding a `DbError`.
+is `RuleError::Database` holding a boxed `DbError`.
 
 ## Validating in a service
 
