@@ -21,7 +21,7 @@ use crate::api::LighthouseApiController;
 use crate::commands::commands;
 use crate::dashboard::LighthouseDashboardController;
 use crate::dispatch::Alerter;
-use crate::engine::{EngineHandle, Labels, Processor};
+use crate::engine::{Engine, Labels};
 use crate::migration::{convert_time_series_at_boot, create_tables, migrations};
 use crate::options::{LighthouseOptions, StoreKind, parse_hh_mm};
 use crate::redact::{DEFAULT_FRAGMENTS, Redactor};
@@ -275,14 +275,11 @@ async fn build(app: &AppContext, options: Arc<LighthouseOptions>) -> Result<Ligh
         };
         let mut fragments = log_redact(config.as_deref());
         fragments.extend(options.redact.iter().cloned());
-        let (handle, rx) = EngineHandle::new(options.buffer);
-        let processor = Processor::new(
+        Some(Engine::new(
             options.clone(),
             labels,
             Redactor::new(&fragments),
-            handle.clone(),
-        );
-        Some((handle, processor, rx))
+        ))
     } else {
         None
     };

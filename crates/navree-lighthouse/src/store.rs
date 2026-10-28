@@ -306,6 +306,9 @@ pub struct Overview {
     pub feed: Vec<FeedItem>,
     /// Details this process dropped because the buffer was full.
     pub dropped: u64,
+    /// Details (traces and occurrences) every process dropped in the period
+    /// because the write queue was full.
+    pub sampled_out: i64,
 }
 
 /// A route's figures.
@@ -510,6 +513,9 @@ pub(crate) struct Candidate {
 }
 
 const CHUNK: usize = 100;
+/// Times a status change is tried again after another process changed
+/// the issue first.
+const STATUS_ATTEMPTS: usize = 5;
 
 /// Aggregate rows of one key merged over a period: the key, the summed
 /// values, and (count, errors) per bucket.
@@ -601,7 +607,6 @@ impl LighthouseStore {
             let last_at = hits.iter().map(|hit| hit.at).max().unwrap_or(now);
             let level = hits.iter().map(|hit| hit.level).max().unwrap_or_default();
             let failed_job = hits.iter().any(|hit| hit.failed_job);
-            let latest = hits.last().expect("a group has a hit");
             let mut row = match existing.get(fingerprint) {
                 Some(row) => Some(row.clone()),
                 None => {
@@ -674,108 +679,12 @@ impl LighthouseStore {
                     }
                 }
             };
-            let Some(mut current) = row.take() else {
+            let Some(current) = row.take() else {
                 continue;
             };
-            // An existing issue: count, status transitions, alerts.
-            let status = IssueStatus::parse(&current.status).unwrap_or(IssueStatus::Open);
-            let mut reopened = false;
-            let mut regression = false;
-            let mut ignore_remaining = current.ignore_remaining;
-            match status {
-                IssueStatus::Open => {}
-                IssueStatus::Resolved => {
-                    reopened = true;
-                    regression = true;
-                }
-                IssueStatus::ResolvedInNextRelease => {
-                    if current.resolved_in_release.as_deref() != Some(labels.release.as_str()) {
-                        reopened = true;
-                        regression = true;
-                    }
-                }
-                IssueStatus::Ignored => {
-                    if current.ignored_until.is_some_and(|until| last_at >= until) {
-                        reopened = true;
-                    }
-                    if let Some(remaining) = current.ignore_remaining {
-                        let left = remaining - n;
-                        if left <= 0 {
-                            reopened = true;
-                        } else {
-                            ignore_remaining = Some(left);
-                        }
-                    }
-                }
-            }
-            let new_level = Level::parse(&current.level).unwrap_or_default().max(level);
-            let mut update = issue::Entity::update_many()
-                .col_expr(
-                    issue::Column::Count,
-                    sea_orm::sea_query::ExprTrait::add(Expr::col(issue::Column::Count), n),
-                )
-                .col_expr(
-                    issue::Column::LastSeen,
-                    Expr::value(current.last_seen.max(last_at)),
-                )
-                .col_expr(issue::Column::Level, Expr::value(new_level.as_str()))
-                .col_expr(
-                    issue::Column::LastRelease,
-                    Expr::value(labels.release.clone()),
-                )
-                .col_expr(
-                    issue::Column::Environment,
-                    Expr::value(labels.environment.clone()),
-                )
-                .col_expr(issue::Column::UpdatedAt, Expr::value(now));
-            if reopened {
-                update = update
-                    .col_expr(
-                        issue::Column::Status,
-                        Expr::value(IssueStatus::Open.as_str()),
-                    )
-                    .col_expr(
-                        issue::Column::ResolvedAt,
-                        Expr::value(Option::<DateTime<Utc>>::None),
-                    )
-                    .col_expr(
-                        issue::Column::ResolvedInRelease,
-                        Expr::value(Option::<String>::None),
-                    )
-                    .col_expr(
-                        issue::Column::IgnoredUntil,
-                        Expr::value(Option::<DateTime<Utc>>::None),
-                    )
-                    .col_expr(
-                        issue::Column::IgnoreRemaining,
-                        Expr::value(Option::<i64>::None),
-                    );
-                if regression {
-                    update = update.col_expr(issue::Column::RegressedAt, Expr::value(now));
-                }
-            } else if ignore_remaining != current.ignore_remaining {
-                update = update.col_expr(
-                    issue::Column::IgnoreRemaining,
-                    Expr::value(ignore_remaining),
-                );
-            }
-            update
-                .filter(issue::Column::Id.eq(current.id))
-                .exec(&txn)
-                .await?;
-            current.count += n;
-            current.last_seen = current.last_seen.max(last_at);
-            current.level = new_level.as_str().to_owned();
-            current.last_release = Some(labels.release.clone());
-            if reopened {
-                current.status = IssueStatus::Open.as_str().to_owned();
-                current.resolved_at = None;
-                current.resolved_in_release = None;
-                current.ignored_until = None;
-                current.ignore_remaining = None;
-            } else {
-                current.ignore_remaining = ignore_remaining;
-            }
+            let (current, regression) =
+                count_existing(&txn, current, n, last_at, level, labels, now).await?;
+            let new_level = Level::parse(&current.level).unwrap_or_default();
             let alerting = current.status == IssueStatus::Open.as_str() && new_level > Level::Info;
             if alerting && regression {
                 candidates.push(Candidate {
@@ -789,7 +698,6 @@ impl LighthouseStore {
                     issue: current.clone(),
                 });
             }
-            let _ = latest;
             touched.push(current.clone());
             for hit in hits {
                 if let Some(occurrence) = &hit.occurrence {
@@ -855,7 +763,15 @@ impl LighthouseStore {
                 now - TimeDelta::minutes(i64::from(spike.minutes) - 1),
                 MINUTE,
             );
-            let count = self.issue_count_since(&row.fingerprint, since).await?;
+            // Written already: a failed read here must not make the
+            // caller write the batch again.
+            let count = match self.issue_count_since(&row.fingerprint, since).await {
+                Ok(count) => count,
+                Err(error) => {
+                    tracing::warn!(target: "navree::lighthouse", %error, "could not check for a spike");
+                    continue;
+                }
+            };
             if count >= spike.occurrences as i64 {
                 candidates.push(Candidate {
                     kind: AlertKind::Spike,
@@ -1380,6 +1296,12 @@ impl LighthouseStore {
         let requests = self.merged(kind::REQUEST, period, None).await?;
         let exceptions = self.merged(kind::EXCEPTION, period, None).await?;
         let jobs = self.merged(kind::JOB, period, None).await?;
+        let sampled_out: i64 = self
+            .merged(kind::SAMPLED_OUT, period, None)
+            .await?
+            .iter()
+            .map(|(_, values, _)| values.count)
+            .sum();
         let mut all = Values::default();
         for (_, values, _) in &requests {
             all.merge(values);
@@ -1421,6 +1343,7 @@ impl LighthouseStore {
             timeline,
             feed,
             dropped: 0,
+            sampled_out,
         })
     }
 
@@ -1707,6 +1630,179 @@ impl LighthouseStore {
     }
 }
 
+/// Adds `n` hits (the latest at `last_at`, the highest level `level`) to
+/// the existing issue `current` (as read at the start of the write) and
+/// makes the status change they cause. Returns the issue as it now is and
+/// whether this write reopened it as a regression.
+async fn count_existing(
+    txn: &sea_orm::DatabaseTransaction,
+    mut current: issue::Model,
+    n: i64,
+    last_at: DateTime<Utc>,
+    level: Level,
+    labels: &Labels,
+    now: DateTime<Utc>,
+) -> Result<(issue::Model, bool), DbErr> {
+    // An existing issue. The counts are one relative statement, so
+    // processes writing at once never lose each other's hits.
+    let read_level = Level::parse(&current.level).unwrap_or_default();
+    let mut counts = issue::Entity::update_many()
+        .col_expr(
+            issue::Column::Count,
+            sea_orm::sea_query::ExprTrait::add(Expr::col(issue::Column::Count), n),
+        )
+        .col_expr(
+            issue::Column::LastRelease,
+            Expr::value(labels.release.clone()),
+        )
+        .col_expr(
+            issue::Column::Environment,
+            Expr::value(labels.environment.clone()),
+        )
+        .col_expr(issue::Column::UpdatedAt, Expr::value(now));
+    if level > read_level {
+        counts = counts.col_expr(issue::Column::Level, Expr::value(level.as_str()));
+    }
+    counts
+        .filter(issue::Column::Id.eq(current.id))
+        .exec(txn)
+        .await?;
+    issue::Entity::update_many()
+        .col_expr(issue::Column::LastSeen, Expr::value(last_at))
+        .filter(issue::Column::Id.eq(current.id))
+        .filter(issue::Column::LastSeen.lt(last_at))
+        .exec(txn)
+        .await?;
+    current.count += n;
+    current.last_seen = current.last_seen.max(last_at);
+    current.last_release = Some(labels.release.clone());
+    if level > read_level {
+        current.level = level.as_str().to_owned();
+    }
+    // The status: changed only if it is still what the decision was
+    // made from (compare and set). When another process changed it
+    // first, read it again and decide again: only one of them
+    // reopens a resolved issue, sets `regressed_at` and alerts.
+    let mut regression = false;
+    for _ in 0..STATUS_ATTEMPTS {
+        let change = status_change(&current, n, last_at, &labels.release);
+        if change == StatusChange::None {
+            break;
+        }
+        let mut update = issue::Entity::update_many()
+            .filter(issue::Column::Id.eq(current.id))
+            .filter(issue::Column::Status.eq(current.status.clone()))
+            .filter(match current.ignore_remaining {
+                Some(remaining) => issue::Column::IgnoreRemaining.eq(remaining),
+                None => issue::Column::IgnoreRemaining.is_null(),
+            })
+            .filter(match &current.resolved_in_release {
+                Some(release) => issue::Column::ResolvedInRelease.eq(release.clone()),
+                None => issue::Column::ResolvedInRelease.is_null(),
+            });
+        match change {
+            StatusChange::None => {}
+            StatusChange::Reopen { regression } => {
+                update = update
+                    .col_expr(
+                        issue::Column::Status,
+                        Expr::value(IssueStatus::Open.as_str()),
+                    )
+                    .col_expr(
+                        issue::Column::ResolvedAt,
+                        Expr::value(Option::<DateTime<Utc>>::None),
+                    )
+                    .col_expr(
+                        issue::Column::ResolvedInRelease,
+                        Expr::value(Option::<String>::None),
+                    )
+                    .col_expr(
+                        issue::Column::IgnoredUntil,
+                        Expr::value(Option::<DateTime<Utc>>::None),
+                    )
+                    .col_expr(
+                        issue::Column::IgnoreRemaining,
+                        Expr::value(Option::<i64>::None),
+                    );
+                if regression {
+                    update = update.col_expr(issue::Column::RegressedAt, Expr::value(now));
+                }
+            }
+            StatusChange::IgnoreRemaining(left) => {
+                update = update.col_expr(issue::Column::IgnoreRemaining, Expr::value(left));
+            }
+        }
+        if update.exec(txn).await?.rows_affected > 0 {
+            match change {
+                StatusChange::None => {}
+                StatusChange::Reopen {
+                    regression: regressed,
+                } => {
+                    regression = regressed;
+                    current.status = IssueStatus::Open.as_str().to_owned();
+                    current.resolved_at = None;
+                    current.resolved_in_release = None;
+                    current.ignored_until = None;
+                    current.ignore_remaining = None;
+                    if regressed {
+                        current.regressed_at = Some(now);
+                    }
+                }
+                StatusChange::IgnoreRemaining(left) => {
+                    current.ignore_remaining = Some(left);
+                }
+            }
+            break;
+        }
+        match issue::Entity::find_by_id(current.id).one(txn).await? {
+            Some(fresh) => current = fresh,
+            None => break,
+        }
+    }
+    Ok((current, regression))
+}
+
+/// What `n` new hits at `last_at` do to an issue's status.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum StatusChange {
+    /// Nothing (open, or still ignored with no count to lower).
+    None,
+    /// Back to open; a regression when it was resolved.
+    Reopen { regression: bool },
+    /// Still ignored, with this many occurrences left.
+    IgnoreRemaining(i64),
+}
+
+/// The status change `n` hits at `last_at` in `release` make to `issue`.
+fn status_change(
+    issue: &issue::Model,
+    n: i64,
+    last_at: DateTime<Utc>,
+    release: &str,
+) -> StatusChange {
+    match IssueStatus::parse(&issue.status).unwrap_or(IssueStatus::Open) {
+        IssueStatus::Open => StatusChange::None,
+        IssueStatus::Resolved => StatusChange::Reopen { regression: true },
+        IssueStatus::ResolvedInNextRelease => {
+            if issue.resolved_in_release.as_deref() == Some(release) {
+                StatusChange::None
+            } else {
+                StatusChange::Reopen { regression: true }
+            }
+        }
+        IssueStatus::Ignored => {
+            if issue.ignored_until.is_some_and(|until| last_at >= until) {
+                return StatusChange::Reopen { regression: false };
+            }
+            match issue.ignore_remaining {
+                Some(remaining) if remaining - n <= 0 => StatusChange::Reopen { regression: false },
+                Some(remaining) => StatusChange::IgnoreRemaining(remaining - n),
+                None => StatusChange::None,
+            }
+        }
+    }
+}
+
 fn non_empty(value: &Option<String>) -> Option<&str> {
     value
         .as_deref()
@@ -1906,3 +2002,154 @@ fn sample_summary(row: &sample::Model) -> SampleSummary {
 /// The current UTC time on `ConnectionTrait` (keeps the import used).
 #[allow(dead_code)]
 fn _assert_connection<C: ConnectionTrait>(_c: &C) {}
+
+#[cfg(test)]
+mod tests {
+    use sea_orm::{ActiveModelTrait, IntoActiveModel, TransactionTrait};
+    use sea_orm_migration::SchemaManager;
+
+    use super::*;
+
+    fn labels() -> Labels {
+        Labels {
+            environment: "test".into(),
+            release: "r1".into(),
+            server: "host".into(),
+            process: "serve".into(),
+            process_key: "host/serve/x".into(),
+        }
+    }
+
+    async fn database() -> (Db, navree_testing::TempDirGuard) {
+        let (url, guard) = navree_testing::temp_sqlite_url();
+        let db = Db::connect(&navree_db::DbOptions {
+            url,
+            ..navree_db::DbOptions::default()
+        })
+        .await
+        .unwrap();
+        crate::migration::create_tables(&SchemaManager::new(db.conn()))
+            .await
+            .unwrap();
+        (db, guard)
+    }
+
+    async fn issue_with(db: &Db, status: IssueStatus, remaining: Option<i64>) -> issue::Model {
+        let at = Utc::now() - TimeDelta::hours(1);
+        issue::ActiveModel {
+            id: Set(Uuid::now_v7()),
+            fingerprint: Set(format!("fp-{}", Uuid::now_v7())),
+            kind: Set(IssueKind::Exception.as_str().to_owned()),
+            level: Set(Level::Error.as_str().to_owned()),
+            status: Set(status.as_str().to_owned()),
+            title: Set("boom".into()),
+            culprit: Set("GET /x".into()),
+            message: Set("boom".into()),
+            chain: Set("[]".into()),
+            location: Set(None),
+            error_type: Set(None),
+            count: Set(10),
+            first_seen: Set(at),
+            last_seen: Set(at),
+            first_release: Set(Some("r1".into())),
+            last_release: Set(Some("r1".into())),
+            environment: Set(Some("test".into())),
+            resolved_at: Set((status == IssueStatus::Resolved).then_some(at)),
+            resolved_in_release: Set(None),
+            ignored_until: Set(None),
+            ignore_remaining: Set(remaining),
+            regressed_at: Set(None),
+            comment: Set(None),
+            created_at: Set(at),
+            updated_at: Set(at),
+        }
+        .insert(db.conn())
+        .await
+        .unwrap()
+    }
+
+    /// Adds `n` hits at `level` to `read` (a possibly stale read) in one
+    /// transaction.
+    async fn hits(db: &Db, read: &issue::Model, n: i64, level: Level) -> (issue::Model, bool) {
+        let txn = db.conn().begin().await.unwrap();
+        let result = count_existing(
+            &txn,
+            read.clone(),
+            n,
+            Utc::now(),
+            level,
+            &labels(),
+            Utc::now(),
+        )
+        .await
+        .unwrap();
+        txn.commit().await.unwrap();
+        result
+    }
+
+    async fn stored(db: &Db, id: Uuid) -> issue::Model {
+        issue::Entity::find_by_id(id)
+            .one(db.conn())
+            .await
+            .unwrap()
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn a_regression_is_raised_once_when_another_process_reopened_first() {
+        let (db, _guard) = database().await;
+        let read = issue_with(&db, IssueStatus::Resolved, None).await;
+        // Another process saw the same resolved issue, reopened it as a
+        // regression and committed, after this one read it.
+        let earlier = Utc::now() - TimeDelta::minutes(1);
+        let mut other = read.clone().into_active_model();
+        other.status = Set(IssueStatus::Open.as_str().to_owned());
+        other.resolved_at = Set(None);
+        other.regressed_at = Set(Some(earlier));
+        other.count = Set(11);
+        other.update(db.conn()).await.unwrap();
+
+        let (now_row, regression) = hits(&db, &read, 2, Level::Error).await;
+        assert!(!regression, "the other process raised it");
+        assert_eq!(now_row.status, "open");
+        let row = stored(&db, read.id).await;
+        assert_eq!(row.count, 13, "both processes' hits are counted");
+        assert_eq!(
+            row.regressed_at.map(|at| at.timestamp()),
+            Some(earlier.timestamp()),
+            "regressed_at is not moved"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_resolved_issue_reopens_as_a_regression_once() {
+        let (db, _guard) = database().await;
+        let read = issue_with(&db, IssueStatus::Resolved, None).await;
+        let (row, regression) = hits(&db, &read, 1, Level::Warning).await;
+        assert!(regression);
+        assert_eq!(row.status, "open");
+        assert!(row.regressed_at.is_some());
+        assert_eq!(row.level, "error", "a lower level does not lower it");
+        let (_, again) = hits(&db, &read, 1, Level::Error).await;
+        assert!(!again, "the same stale read raises no second regression");
+        assert_eq!(stored(&db, read.id).await.count, 12);
+    }
+
+    #[tokio::test]
+    async fn ignore_counters_are_not_lost_between_processes() {
+        let (db, _guard) = database().await;
+        let read = issue_with(&db, IssueStatus::Ignored, Some(10)).await;
+        // Two processes read `ignore_remaining = 10`; each adds 3 hits.
+        hits(&db, &read, 3, Level::Error).await;
+        hits(&db, &read, 3, Level::Error).await;
+        let row = stored(&db, read.id).await;
+        assert_eq!(row.ignore_remaining, Some(4));
+        assert_eq!(row.status, "ignored");
+        assert_eq!(row.count, 16);
+        // The next 4 reopen it, without a regression.
+        let (row, regression) = hits(&db, &read, 4, Level::Error).await;
+        assert!(!regression);
+        assert_eq!(row.status, "open");
+        assert_eq!(row.ignore_remaining, None);
+    }
+}
