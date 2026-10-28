@@ -1,0 +1,22 @@
+[
+  { "name": "health: live", "package": "navree-observe", "method": "GET", "path": "/health/live", "expect": 200 },
+  { "name": "health: ready", "package": "navree-observe", "method": "GET", "path": "/health/ready", "expect": 200 },
+  { "name": "metrics", "package": "navree-observe", "method": "GET", "path": "/metrics", "expect": 200 },
+  { "name": "openapi document", "package": "navree-api", "method": "GET", "path": "/api/openapi.json", "expect": 200 },
+  { "name": "me without a token", "package": "navree-auth", "method": "GET", "path": "/api/auth/me", "expect": 401 },
+  { "name": "me", "package": "navree-auth", "method": "GET", "path": "/api/auth/me", "auth": true, "expect": 200 },
+  { "name": "abilities", "package": "navree-access", "method": "GET", "path": "/api/me/abilities", "auth": true, "expect": 200 },
+  { "name": "my workspaces", "package": "navree-workspace", "method": "GET", "path": "/api/workspaces", "auth": true, "expect": 200 },
+  { "name": "projects without a workspace", "package": "navree-workspace", "method": "GET", "path": "/api/v1/projects", "auth": true, "expect": [400, 403, 404] },
+  { "name": "projects", "package": "navree-workspace", "method": "GET", "path": "/api/v1/projects", "auth": true, "workspace": true, "expect": 200, "json_path": "data.0.id" },
+  { "name": "tasks", "package": "navree-orm", "method": "GET", "path": "/api/v1/tasks", "auth": true, "workspace": true, "expect": 200, "json_path": "data.0.id" },
+  { "name": "search", "package": "navree-search", "method": "GET", "path": "/api/v1/projects/search?q=launch", "auth": true, "workspace": true, "expect": 200, "json_path": "data.0.id" },
+  { "name": "another workspace's task is hidden", "package": "navree-workspace", "method": "GET", "path": "/api/v1/tasks/00000000-0000-7000-8000-000000000000", "auth": true, "workspace": true, "expect": 404 },
+  { "name": "billing plans", "package": "navree-billing", "method": "GET", "path": "/api/billing/plans", "auth": true, "workspace": true, "expect": 200 },
+  { "name": "helm sign-in page", "package": "navree-helm", "method": "GET", "path": "/admin", "headers": { "Accept": "text/html" }, "expect": [200, 302, 303] },
+  { "name": "lighthouse sign-in page", "package": "navree-lighthouse", "method": "GET", "path": "/_lighthouse", "headers": { "Accept": "text/html" }, "expect": [200, 302, 303] },
+  { "name": "fleet page", "package": "navree-fleet", "method": "GET", "path": "/_fleet", "expect": 200 },
+  { "name": "graphql: task counts", "package": "navree-graphql", "method": "POST", "path": "/graphql", "auth": true, "workspace": true, "body": { "query": "{ taskCounts { todo doing done } }" }, "expect": 200, "json_path": "data.taskCounts.todo" },
+  { "name": "flags exposed to the front end", "package": "navree-flags", "method": "GET", "path": "/api/flags", "auth": true, "workspace": true, "expect": 200 },
+  { "name": "mcp: initialize", "package": "navree-mcp", "method": "POST", "path": "/mcp", "auth": true, "headers": { "Accept": "application/json, text/event-stream" }, "body": { "jsonrpc": "2.0", "id": 1, "method": "initialize", "params": { "protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": { "name": "evidence-checks", "version": "1.0.0" } } }, "expect": 200 }
+]

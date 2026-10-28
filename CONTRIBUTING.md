@@ -15,6 +15,9 @@ The repository is a Cargo workspace of small module crates, plus a reference
 CRM built on top of them and the website:
 
 - `apps/crm-api`: the Navree CRM API, a Navree application.
+- `apps/evidence-app`: the evidence app, one Navree application that wires
+  every package and tool, built into a Docker image and run under load by
+  the evidence harness in `e2e/` (see [`e2e/README.md`](e2e/README.md)).
 - `apps/crm-web`: the CRM front end (Next.js 16). Its server is a
   backend-for-frontend (BFF) that holds the API tokens in httpOnly cookies.
 - `apps/crm-nuxt`: the same CRM front end in Nuxt 4, with its BFF in Nitro
@@ -38,7 +41,7 @@ other sideways. `crates/navree/tests/dependency_graph.rs` checks every edge on
 each test run.
 
 ```
-L9+ apps/crm-api (Navree app)                   apps/crm-web (Next.js 16)
+L9+ apps/crm-api (Navree app)  apps/evidence-app (Navree app, e2e)  apps/crm-web (Next.js 16)
 L8  navree (facade: re-exports + prelude)       navree-cli (binary `navree`; no runtime navree deps, uses navree-dock, navree-harbor and navree-navigator)
 L7  navree-billing  navree-search  navree-lighthouse  navree-logbook  navree-fleet  navree-helm  navree-workflows  navree-media  navree-directory  navree-domains (packages built on other packages)
 L6  navree-social  navree-sso  navree-webhooks  navree-integrations  navree-sheets  navree-oauth  navree-flags  navree-settings  navree-graphql  navree-grpc  navree-mcp  navree-ai  navree-micro  navree-i18n  navree-documents (ecosystem libraries)
@@ -303,6 +306,8 @@ browsers to see moves arrive over the WebSocket.
 | `crates/navree-*` | One crate per module (see [Crate hierarchy](#crate-hierarchy)) |
 | `apps/crm-api` | The CRM API, a Navree application (`src/`), its feature crates (`crates/`) and system tests (`tests/`) |
 | `apps/crm-web` | The CRM front end (Next.js), with Vitest unit tests and Playwright specs in `e2e/` |
+| `apps/evidence-app` | The evidence app: a Navree application wiring every package and tool, with domain models and seeders, for the Docker evidence harness |
+| `e2e/` | The evidence harness: the compose stack (`docker/`), the evidence app's Dockerfile, k6 load profiles and scenarios (`load/`), HTTP check rows (`checks/`), browser screenshots (`browser/`) and `run.sh`, which writes `target/evidence/<run-id>/` |
 | `apps/website` | navree.com and the documentation |
 | `packages/js` | The front-end npm packages: `@navree/client`, `@navree/bff`, `@navree/next`, `@navree/nuxt`, `@navree/theme` |
 | `skills/` | The agent skills, one `SKILL.md` per directory |

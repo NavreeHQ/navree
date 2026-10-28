@@ -12,7 +12,7 @@ This keeps the framework honest: the kernel knows nothing about HTTP, HTTP knows
 ## The layers
 
 ```text
-L9+ apps/crm-api (Navree app)                    apps/crm-web (Next.js 16)
+L9+ apps/crm-api (Navree app)  apps/evidence-app (Navree app, e2e)  apps/crm-web (Next.js 16)
 L8  navree (facade: re-exports + prelude)        navree-cli (binary `navree`; no runtime navree deps, uses navree-dock)
 L7  navree-billing  navree-search  navree-lighthouse  navree-logbook  navree-helm  navree-workflows  navree-media  navree-directory  navree-domains (packages built on other packages)
 L6  navree-social  navree-sso  navree-webhooks  navree-integrations  navree-sheets  navree-flags  navree-mcp  navree-ai  navree-i18n  navree-documents (ecosystem libraries)
@@ -225,7 +225,7 @@ crate hierarchy violations (spec §3):
   navree-http (L2) -> navree-crypto (L2) (Normal) is not an allowed edge; navree-http may depend on: [navree-kernel, navree-contracts, navree-config]
 ```
 
-The CRM is in the table too: `crm-core` at L9, `crm-testkit` at L10, the feature crates (`crm-users`, `crm-companies`, `crm-deals`, `crm-activities`) at L11 and the `crm-api` binary at L12. They may depend only on the `navree` facade and the CRM crates below them.
+The CRM is in the table too: `crm-core` at L9, `crm-testkit` at L10, the feature crates (`crm-users`, `crm-companies`, `crm-deals`, `crm-activities`) at L11 and the `crm-api` binary at L12. They may depend only on the `navree` facade and the CRM crates below them. The `evidence-app` binary, which the Docker evidence harness in `e2e/` runs under load, is at L9 and depends only on the facade.
 
 Two more tests in `crates/navree/tests/facade.rs` keep the facade's [features](/docs/architecture/facade-and-features/) in step with the hierarchy.
 

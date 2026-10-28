@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/*", "apps/crm-api", "apps/crm-api/crates/*"]
+members = ["crates/*", "apps/crm-api", "apps/crm-api/crates/*", "apps/evidence-app"]
 # The benchmark apps (Navree's and other Rust frameworks') are separate projects.
 exclude = ["bench"]
 
