@@ -1,0 +1,23 @@
+# Reviews are requested automatically from these owners. Pair this with a
+# branch-protection rule that requires code owner review on main.
+
+# CI, release and repository automation
+/.github/                    @boparaiamrit
+
+# Supply-chain policy: dependency, license, ban and audit configuration
+/deny.toml                   @boparaiamrit
+/supply-chain/               @boparaiamrit
+/osv-scanner.toml            @boparaiamrit
+/SECURITY.md                 @boparaiamrit
+
+# Security-critical crates
+/crates/navree-auth/         @boparaiamrit
+/crates/navree-crypto/       @boparaiamrit
+/crates/navree-sso/          @boparaiamrit
+/crates/navree-oauth/        @boparaiamrit
+/crates/navree-session/      @boparaiamrit
+/crates/navree-access/       @boparaiamrit
+/crates/navree-orm/          @boparaiamrit
+/crates/navree-schema/       @boparaiamrit
+/crates/navree-db/           @boparaiamrit
+/crates/navree-http/         @boparaiamrit
