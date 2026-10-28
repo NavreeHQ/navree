@@ -497,10 +497,6 @@ criteria = "safe-to-deploy"
 version = "2.5.0"
 criteria = "safe-to-deploy"
 
-[[exemptions.config]]
-version = "0.15.27"
-criteria = "safe-to-deploy"
-
 [[exemptions.console]]
 version = "0.16.6"
 criteria = "safe-to-run"
@@ -523,10 +519,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.constant_time_eq]]
 version = "0.4.2"
-criteria = "safe-to-deploy"
-
-[[exemptions.convert_case]]
-version = "0.6.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.convert_case]]
@@ -1699,10 +1691,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.password-hash]]
 version = "0.6.1"
-criteria = "safe-to-deploy"
-
-[[exemptions.pathdiff]]
-version = "0.2.3"
 criteria = "safe-to-deploy"
 
 [[exemptions.pbkdf2]]

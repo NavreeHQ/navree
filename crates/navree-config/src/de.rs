@@ -240,6 +240,22 @@ impl Value {
         }
     }
 
+    /// An unsigned integer up to `u128::MAX`.
+    fn to_u128(&self) -> Result<u128> {
+        if let Kind::String(s) = &self.kind
+            && !matches!(
+                s.to_lowercase().as_str(),
+                "true" | "on" | "yes" | "false" | "off" | "no"
+            )
+        {
+            return s
+                .parse::<u128>()
+                .map_err(|_| self.type_error(Unexpected::Str, "an integer"));
+        }
+        u128::try_from(self.to_i128()?)
+            .map_err(|_| self.type_error(self.unexpected(), "an unsigned 128 bit or less integer"))
+    }
+
     fn to_i64(&self) -> Result<i64> {
         i64::try_from(self.to_i128()?)
             .map_err(|_| self.type_error(self.unexpected(), "a signed 64 bit or less integer"))
@@ -284,7 +300,7 @@ impl Value {
 /// `f` as an integer when it is one exactly (`2.0`, not `2.5`, `NaN` or `1e30`).
 fn integral(f: f64) -> Option<i128> {
     // Every f64 below 2^127 in magnitude converts exactly.
-    (f.is_finite() && f.fract() == 0.0 && f.abs() < 2f64.powi(127)).then(|| f as i128)
+    (f.is_finite() && f.fract() == 0.0 && f.abs() < 2f64.powi(127)).then_some(f as i128)
 }
 
 /// `value` as a `$ty`, through `$to` (`to_i64` or `to_u64`).
@@ -352,10 +368,7 @@ impl<'de> de::Deserializer<'de> for Value {
     }
 
     fn deserialize_u128<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
-        let unsigned = u128::try_from(self.to_i128()?).map_err(|_| {
-            self.type_error(self.unexpected(), "an unsigned 128 bit or less integer")
-        })?;
-        visitor.visit_u128(unsigned)
+        visitor.visit_u128(self.to_u128()?)
     }
 
     fn deserialize_f32<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value> {
