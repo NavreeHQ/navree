@@ -42,20 +42,25 @@ impl InitReport {
 /// The `.gitignore` line that keeps every Harbor key out of Git.
 pub const IGNORE_LINE: &str = "harbor*.key";
 
-/// Writes the environment's `harbor.toml` and key in `dir`.
+/// Writes the environment's `harbor.toml` and key in `dir`. When
+/// `harbor.toml` is already there (a starter kit ships one) but its key is
+/// not, only the key is written: see [`ensure_key`].
 pub fn init(dir: &Path, env: &Environment) -> Result<InitReport> {
+    let config_file = env.config_file();
+    let key_file = env.key_file();
+    let config_path = dir.join(&config_file);
+    if config_path.exists() {
+        if dir.join(&key_file).exists() {
+            return Err(HarborError::msg(format!("{config_file} already exists")));
+        }
+        return ensure_key(dir, env);
+    }
     let app = package_name(dir).ok_or_else(|| {
         HarborError::msg(format!(
             "{} has no Cargo.toml with a [package]; run harbor:init in your app's directory",
             dir.display()
         ))
     })?;
-    let config_file = env.config_file();
-    let key_file = env.key_file();
-    let config_path = dir.join(&config_file);
-    if config_path.exists() {
-        return Err(HarborError::msg(format!("{config_file} already exists")));
-    }
     let mut report = InitReport::default();
     let toml = render::render(
         "init/harbor.toml",
@@ -70,6 +75,47 @@ pub fn init(dir: &Path, env: &Environment) -> Result<InitReport> {
     std::fs::write(&config_path, toml).map_err(|e| HarborError::io(&config_path, e))?;
     report.push("created", &config_file, "");
 
+    write_key(dir, env, &mut report)?;
+    Ok(report)
+}
+
+/// Writes the secrets key of an environment whose `harbor.toml` exists (a
+/// starter kit ships the file without a key, which `harbor:secrets` then
+/// cannot use), and keeps it out of Git. Does nothing to an existing key.
+/// Refuses when the file holds encrypted secrets: a new key could not
+/// decrypt them, so the original key has to come back.
+pub fn ensure_key(dir: &Path, env: &Environment) -> Result<InitReport> {
+    let config_file = env.config_file();
+    let key_file = env.key_file();
+    let config_path = dir.join(&config_file);
+    let text =
+        std::fs::read_to_string(&config_path).map_err(|e| HarborError::io(&config_path, e))?;
+    let mut report = InitReport::default();
+    report.push("kept", &config_file, "");
+    if !dir.join(&key_file).exists() {
+        let encrypted = text
+            .parse::<toml::Table>()
+            .ok()
+            .and_then(|table| {
+                table
+                    .get("secrets")
+                    .and_then(|s| s.as_table().map(|t| !t.is_empty()))
+            })
+            .unwrap_or(false);
+        if encrypted {
+            return Err(HarborError::msg(format!(
+                "{config_file} has encrypted secrets but {key_file} is missing: put the key back (a new one cannot decrypt them)"
+            )));
+        }
+    }
+    write_key(dir, env, &mut report)?;
+    Ok(report)
+}
+
+/// Writes `env`'s key unless it exists, and the `.gitignore` line covering
+/// it, noting both in `report`.
+fn write_key(dir: &Path, env: &Environment, report: &mut InitReport) -> Result<()> {
+    let key_file = env.key_file();
     let key_path = dir.join(&key_file);
     if key_path.exists() {
         report.push("kept", &key_file, "the existing key");
@@ -99,7 +145,7 @@ pub fn init(dir: &Path, env: &Environment) -> Result<InitReport> {
         };
         report.push(verb, ".gitignore", &format!("ignores {key_file}"));
     }
-    Ok(report)
+    Ok(())
 }
 
 #[cfg(test)]
@@ -165,6 +211,52 @@ mod tests {
             "{text}"
         );
         assert!(Project::load(dir.path(), staging).is_ok());
+    }
+
+    #[test]
+    fn init_adds_the_missing_key_to_a_harbor_toml_a_kit_shipped() {
+        let dir = app_dir();
+        std::fs::write(
+            dir.path().join("harbor.toml"),
+            "app = \"crm-api\"\ndomain = \"crm-api.example.com\"\n\n[servers.app-1]\nhost = \"203.0.113.10\"\nroles = [\"web\"]\n",
+        )
+        .unwrap();
+        let report = init(dir.path(), &Environment::production()).unwrap();
+        assert_eq!(
+            report.render(),
+            [
+                "  kept     harbor.toml",
+                "  created  harbor.key         # the secrets key: never commit it",
+                "  created  .gitignore         # ignores harbor.key",
+            ]
+        );
+        // The file is untouched, and `harbor:secrets` has its key.
+        assert!(
+            std::fs::read_to_string(dir.path().join("harbor.toml"))
+                .unwrap()
+                .starts_with("app = \"crm-api\"\n")
+        );
+        let project = Project::load(dir.path(), Environment::production()).unwrap();
+        assert!(project.key(None).is_ok());
+        // With both files there is nothing left to do.
+        let error = init(dir.path(), &Environment::production()).unwrap_err();
+        assert_eq!(error.to_string(), "harbor.toml already exists");
+    }
+
+    #[test]
+    fn a_missing_key_is_not_replaced_when_secrets_need_it() {
+        let dir = app_dir();
+        std::fs::write(
+            dir.path().join("harbor.toml"),
+            "app = \"crm-api\"\n\n[secrets]\nAPP_KEY = \"harbor:v1:abc\"\n",
+        )
+        .unwrap();
+        let error = init(dir.path(), &Environment::production()).unwrap_err();
+        assert!(
+            error.to_string().contains("has encrypted secrets"),
+            "{error}"
+        );
+        assert!(!dir.path().join("harbor.key").exists());
     }
 
     #[test]

@@ -125,12 +125,31 @@ let found = auth.find_by_email("ada@example.com").await?;
 auth.revoke_all_refresh_tokens(user.id).await?;
 ```
 
-Also: `attempt_login`, `issue_tokens`, `refresh`, `logout`, `find_user`,
+Also: `attempt_login`, `sign_in`, `check_sign_in`, `two_factor_challenge`,
+`issue_tokens` (no sign-in policy: tests and seeders), `refresh`, `logout`, `find_user`,
 `update_password`, `present(&user)`, the account-flow methods, and
 `sessions`, `revoke_session`, `confirm`, `impersonate`, `stop_impersonating`,
 `two_factor_required`, `send_magic_link`, `login_with_magic_link`,
 `send_login_code`, `login_with_code`, the passkey methods,
 `is_platform_admin`, `platform_login` and `exchange_token`.
+
+## Sign-in policies (one rule for every path)
+
+A `SignInPolicy` (registered with `m.sign_in_policy::<P>()`) gets a
+`SignInAttempt { email, user_id, method, audience }` and answers `Ok(())` or
+`AuthError::SignInRefused { code, message }` (403 with that code, audited
+`auth.login_refused`). Every flow asks it before issuing anything:
+password login/register/password change (`Password`), magic link and email
+code at request and use (`MagicLink`, `Otp`), passkeys (`Passkey`), token
+exchange (`TokenExchange { issuer }`), `POST /auth/2fa/verify` (the first
+step's method, carried in the challenge's `sign_in` claim), social
+(`Social { provider }`), SSO (`Sso { connection }`), platform sign-in
+(audience `Platform`; `auth.platform.break_glass = true` lets
+administrators past a refusal, audited `auth.break_glass`). navree-sso's
+enforcement is such a policy. Your own sign-in flow ends with
+`auth.sign_in(&user, method, &meta)`; a two-factor challenge you hand out
+comes from `auth.two_factor_challenge(&user, &method)`. Impersonation and
+refresh don't ask (support sessions; existing sessions).
 
 ## Require two-factor authentication
 

@@ -47,6 +47,22 @@ impl Event for DomainVerificationFailed {
     const NAME: &'static str = "domains.verification_failed";
 }
 
+/// Another workspace proved control of a host, so this workspace's claim
+/// on it was closed: a pending claim becomes `failed` (with the reason in
+/// `last_error`), and a verified domain that moved through
+/// `Domains::transfer` is deleted (its snapshot is still `verified`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DomainClaimedElsewhere {
+    /// The claim that was closed, as it was when it closed.
+    pub domain: CustomDomain,
+    /// The workspace that proved control and now owns the host.
+    pub claimed_by: Uuid,
+}
+
+impl Event for DomainClaimedElsewhere {
+    const NAME: &'static str = "domains.claimed_elsewhere";
+}
+
 /// A domain was removed (by its workspace, or with the workspace).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DomainRemoved {

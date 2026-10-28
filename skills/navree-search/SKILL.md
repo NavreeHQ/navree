@@ -242,7 +242,9 @@ search.assert_indexed::<Contact>(ada.id).await;
 - `search` is opt-in; `use navree::search::..` fails to resolve without the
   feature. `tantivy` also needs `search-tantivy`.
 - The `postgres` engine on SQLite (tests) matches prefixes but not typos;
-  PostgreSQL needs `search.postgres.trigram = true` for typos.
+  PostgreSQL needs `search.postgres.trigram = true` for typos;
+  `search.postgres.typo_threshold` (default 0.4) sets how close a word must
+  be, per query.
 - Filtering or sorting on a field not marked `filter`/`sort` is a 400
   (`NotFilterable` / `NotSortable`), before the engine is called.
 - The derive stores filter and sort fields as the database holds them (the

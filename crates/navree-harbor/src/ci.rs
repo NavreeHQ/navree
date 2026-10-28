@@ -10,11 +10,35 @@ use crate::config::Environment;
 use crate::error::{HarborError, Result};
 use crate::render;
 
-/// The repository containing `dir`: the nearest directory with `.git`.
+/// The repository `dir` belongs to: the nearest directory with `.git`,
+/// unless that repository ignores `dir` (an app generated under a build
+/// directory such as `target/` is not part of the repository around it, and
+/// a workflow written there would land in someone else's checkout).
 pub fn repository_root(dir: &Path) -> Option<PathBuf> {
-    dir.ancestors()
-        .find(|d| d.join(".git").exists())
-        .map(Path::to_path_buf)
+    let root = dir.ancestors().find(|d| d.join(".git").exists())?;
+    if root != dir && ignored_by(root, dir) {
+        return None;
+    }
+    Some(root.to_path_buf())
+}
+
+/// Whether the repository at `root` ignores `path` (or a directory above
+/// it). `false` when Git is not available or `root` is not a working
+/// repository.
+fn ignored_by(root: &Path, path: &Path) -> bool {
+    let Ok(relative) = path.strip_prefix(root) else {
+        return false;
+    };
+    std::process::Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(["check-ignore", "-q", "--"])
+        .arg(relative)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_ok_and(|status| status.success())
 }
 
 /// The workflow's path and contents.
@@ -105,6 +129,53 @@ mod tests {
         ");
         write_workflow(&workflow).unwrap();
         assert!(write_workflow(&workflow).is_err());
+    }
+
+    fn git(dir: &Path, args: &[&str]) -> bool {
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args(args)
+            .output()
+            .is_ok_and(|o| o.status.success())
+    }
+
+    #[test]
+    fn an_app_ignored_by_the_repository_around_it_gets_its_own_workflow() {
+        let repo = tempfile::tempdir().unwrap();
+        if !git(repo.path(), &["init", "-q"]) {
+            println!("SKIPPED: git is not available");
+            return;
+        }
+        std::fs::write(repo.path().join(".gitignore"), "target/\n").unwrap();
+        let app = repo.path().join("target").join("audit").join("app");
+        std::fs::create_dir_all(&app).unwrap();
+        assert_eq!(repository_root(&app), None);
+        let workflow = github_workflow(&app, &Environment::production(), "main").unwrap();
+        assert_eq!(workflow.path, app.join(".github/workflows/deploy.yml"));
+        // The same repository still owns a service that it tracks.
+        let service = repo.path().join("services").join("billing");
+        std::fs::create_dir_all(&service).unwrap();
+        assert_eq!(repository_root(&service).as_deref(), Some(repo.path()));
+        let workflow = github_workflow(&service, &Environment::production(), "main").unwrap();
+        assert_eq!(
+            workflow.path,
+            repo.path().join(".github/workflows/deploy.yml")
+        );
+    }
+
+    #[test]
+    fn an_app_with_a_repository_of_its_own_uses_it() {
+        let outer = tempfile::tempdir().unwrap();
+        let app = outer.path().join("app");
+        std::fs::create_dir_all(&app).unwrap();
+        if !git(&app, &["init", "-q"]) {
+            println!("SKIPPED: git is not available");
+            return;
+        }
+        std::fs::write(outer.path().join(".gitignore"), "app/\n").unwrap();
+        assert!(git(outer.path(), &["init", "-q"]));
+        assert_eq!(repository_root(&app).as_deref(), Some(app.as_path()));
     }
 
     #[test]

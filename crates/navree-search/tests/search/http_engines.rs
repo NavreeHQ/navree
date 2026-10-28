@@ -110,6 +110,50 @@ async fn meilisearch_creates_indexes_and_pushes_settings() {
 }
 
 #[tokio::test]
+async fn meilisearch_drop_index_of_a_missing_index_succeeds() {
+    // Meilisearch v1 answers the delete of a missing index with 202 and a
+    // task that later fails with `index_not_found`: the index is gone, as
+    // wanted. Any other failure still fails the drop.
+    let server = MockServer::start().await;
+    Mock::given(method("DELETE"))
+        .and(path("/indexes/missing"))
+        .respond_with(task(3))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/tasks/3"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "status": "failed",
+            "error": { "message": "Index `missing` not found.", "code": "index_not_found" }
+        })))
+        .mount(&server)
+        .await;
+    Mock::given(method("DELETE"))
+        .and(path("/indexes/locked"))
+        .respond_with(task(4))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/tasks/4"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "status": "failed",
+            "error": { "message": "disk full", "code": "no_space_left_on_device" }
+        })))
+        .mount(&server)
+        .await;
+    Mock::given(method("DELETE"))
+        .and(path("/indexes/gone"))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&server)
+        .await;
+    let engine = MeilisearchEngine::new(&server.uri(), None, Duration::from_secs(5)).unwrap();
+    engine.drop_index("missing").await.unwrap();
+    engine.drop_index("gone").await.unwrap();
+    let error = engine.drop_index("locked").await.unwrap_err();
+    assert!(matches!(error, SearchError::Engine { ref message, .. } if message == "disk full"));
+}
+
+#[tokio::test]
 async fn meilisearch_writes_wait_for_their_task() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))

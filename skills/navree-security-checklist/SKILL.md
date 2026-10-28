@@ -73,6 +73,11 @@ Go through it in order; each item says how to check.
 - [ ] Features that need a verified email check `user.email_verified_at`.
 - [ ] Custom strategies (API keys) store digests (`sha256_hex`), return
   `Err` for unknown credentials (never a guest) and set `token_abilities`.
+- [ ] Every sign-in flow the app adds ends with `AuthService::sign_in`
+  (or `check_sign_in` before `issue_tokens`), so sign-in policies such as
+  single sign-on enforcement hold on it; `rg "issue_tokens" src` finds
+  the ones that don't. Platform break-glass (`auth.platform.break_glass`)
+  is a deliberate choice, and `auth.break_glass` entries are reviewed.
 - [ ] Tokens other services sign (ID tokens, partner callbacks) are verified
   with `navree::crypto::jose` against a configured key or the provider's
   JWKS, never a key the token itself names, and their `exp`, `aud` and
@@ -87,6 +92,8 @@ Go through it in order; each item says how to check.
   `http.trust_proxy = true` unless nothing reaches the app directly.
 - [ ] `auth.login_throttle_per_minute` (5) and
   `auth.two_factor.max_attempts_per_minute` (5) are not 0.
+- [ ] With the OAuth server: `oauth.rate_limits` (token, introspect,
+  revoke, device_authorization; per client and per IP) are not 0.
 - [ ] Know the limits: counters are per process (multiply by instances).
 
 ## 6. Browser-facing headers

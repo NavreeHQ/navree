@@ -703,6 +703,32 @@ describe("BFF client address for Navree's per-IP limits (X-Forwarded-For)", () =
       expect(navree.calls[0].headers.get("x-forwarded-for"), `${trustedProxyHops} hop(s), ${forwardedFor}`).toBeNull();
     }
   });
+
+  it("takes the client from the configured platform header on every route, even with no hop count", async () => {
+    const navree = everyRoute();
+    await callEverything(createBff({ apiUrl: API, fetch: navree.fetch, clientIpHeader: "X-Real-IP" }), {
+      "x-forwarded-for": "6.6.6.6",
+      "x-real-ip": "203.0.113.9",
+    });
+    expect(navree.calls).toHaveLength(6);
+    for (const call of navree.calls) {
+      expect(call.headers.get("x-forwarded-for")).toBe("203.0.113.9");
+      expect(call.headers.get("x-real-ip")).toBeNull();
+    }
+  });
+
+  it("ignores a platform header that is missing or not an IP address", async () => {
+    for (const value of [undefined, "not-an-ip", "6.6.6.6, 7.7.7.7"]) {
+      const navree = fakeNavree({ "GET /api/v1/me": () => Response.json({ id: "u1" }) });
+      const headers: Record<string, string> = { "x-forwarded-for": "6.6.6.6" };
+      if (value !== undefined) headers["cf-connecting-ip"] = value;
+      await createBff({ apiUrl: API, fetch: navree.fetch, clientIpHeader: "cf-connecting-ip" }).proxy(
+        request("/api/v1/me", { headers }),
+        "/api/v1/me",
+      );
+      expect(navree.calls[0].headers.get("x-forwarded-for"), String(value)).toBeNull();
+    }
+  });
 });
 
 describe("BFF workspaces", () => {
