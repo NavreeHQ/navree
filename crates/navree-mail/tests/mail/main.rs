@@ -7,6 +7,7 @@ mod delivery;
 mod dkim;
 mod domains;
 mod harness;
+mod inbound;
 mod ingest;
 mod log;
 mod mailer;

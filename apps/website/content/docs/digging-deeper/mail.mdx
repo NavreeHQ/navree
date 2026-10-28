@@ -19,6 +19,8 @@ description: "Mailables rendered from MiniJinja templates, with CSS inlined and 
 
 Products that send mail for their customers need more: a transport per customer domain, a log of every message with the provider's bounces and complaints, suppression lists, mail held for approval, tracking and sending-domain checks. [Mail delivery](/docs/digging-deeper/mail-delivery/) covers those.
 
+Receiving mail (replies to your notifications, a support address, messages forwarded to a reporting mailbox) is [inbound mail](/docs/digging-deeper/inbound-mail/): the same `MailModule` parses each message and routes it to a mailbox by address.
+
 ## Configuration
 
 `MailModule` renders templates with `ViewModule`, so the app needs both:
@@ -418,6 +420,9 @@ async fn mails(crm: &TestCrm) -> Vec<Message> {
 <LinkCards>
   <LinkCard href="/docs/digging-deeper/mail-delivery/" title="Mail delivery">
     Email APIs, tenant transports, the delivery log, suppressions and tracking.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/inbound-mail/" title="Inbound mail">
+    Received mail parsed and routed to mailboxes, with signed reply addresses.
   </LinkCard>
   <LinkCard href="/docs/digging-deeper/views/" title="Views and templates">
     Template files, embedding, escaping and filters.

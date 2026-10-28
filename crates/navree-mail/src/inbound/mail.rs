@@ -1,0 +1,723 @@
+//! [`InboundMail`]: a received message parsed with mail-parser, and
+//! [`Incoming`], what a source hands to the pipeline.
+
+use std::fmt;
+
+use bytes::Bytes;
+use chrono::{DateTime, TimeZone, Utc};
+use mail_parser::{Address as ParsedAddress, HeaderValue, MessageParser, MimeHeaders, PartType};
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use uuid::Uuid;
+
+use super::compose::Compose;
+use super::error::InboundError;
+
+/// A mailbox address of a received message: `Ada Lovelace <ada@example.com>`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Address {
+    /// The display name, decoded (`Ada Lovelace`), when the header has one.
+    pub name: Option<String>,
+    /// The address (`ada@example.com`), as written.
+    pub email: String,
+}
+
+impl Address {
+    /// An address without a display name.
+    pub fn new(email: impl Into<String>) -> Self {
+        Self {
+            name: None,
+            email: email.into(),
+        }
+    }
+
+    /// The address in lower case, as mailbox patterns compare it.
+    pub fn normalized(&self) -> String {
+        self.email.trim().to_ascii_lowercase()
+    }
+}
+
+impl fmt::Display for Address {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.name.as_deref().filter(|name| !name.is_empty()) {
+            Some(name) => write!(f, "{name} <{}>", self.email),
+            None => f.write_str(&self.email),
+        }
+    }
+}
+
+/// A part of a received message that is not its text or HTML body: a file,
+/// an inline image, or a forwarded message (`message/rfc822`).
+#[derive(Clone, PartialEq, Eq)]
+pub struct Attachment {
+    /// The file name, from `Content-Disposition` or `Content-Type`.
+    pub filename: Option<String>,
+    /// The media type in lower case (`application/pdf`, `message/rfc822`).
+    pub content_type: String,
+    /// The `Content-ID`, without angle brackets (an inline image's `cid:`).
+    pub content_id: Option<String>,
+    /// Whether the part is shown inline (`Content-Disposition: inline`).
+    pub inline: bool,
+    /// The decoded content. A forwarded message is its raw MIME.
+    pub content: Bytes,
+}
+
+impl Attachment {
+    /// The size of the decoded content, in bytes.
+    pub fn size(&self) -> usize {
+        self.content.len()
+    }
+
+    /// Whether the part is a whole message (`message/rfc822`): a message a
+    /// user forwarded as an attachment.
+    pub fn is_message(&self) -> bool {
+        self.content_type == "message/rfc822" || self.content_type == "message/global"
+    }
+
+    /// The forwarded message, parsed.
+    ///
+    /// # Errors
+    ///
+    /// [`InboundError::Unparseable`] when the part is not a message.
+    pub fn as_mail(&self) -> Result<InboundMail, InboundError> {
+        if !self.is_message() {
+            return Err(InboundError::Unparseable(format!(
+                "the attachment is {}, not a message",
+                self.content_type
+            )));
+        }
+        InboundMail::parse(self.content.clone())
+    }
+}
+
+impl fmt::Debug for Attachment {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Attachment")
+            .field("filename", &self.filename)
+            .field("content_type", &self.content_type)
+            .field("content_id", &self.content_id)
+            .field("inline", &self.inline)
+            .field("size", &self.content.len())
+            .finish()
+    }
+}
+
+/// The SMTP envelope as the provider reports it: who the mail server
+/// accepted the message from and for. Recipients here include `Bcc` and
+/// forwarding addresses that the headers never show.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Envelope {
+    /// The envelope sender (`MAIL FROM`), when reported.
+    pub sender: Option<String>,
+    /// The envelope recipients (`RCPT TO`) the message was accepted for.
+    pub recipients: Vec<String>,
+}
+
+/// A verdict of the receiving provider's checks.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Verdict {
+    /// The check passed (not spam, no virus, SPF, DKIM or DMARC aligned).
+    Pass,
+    /// The check failed (spam, a virus, a failed SPF, DKIM or DMARC check).
+    Fail,
+    /// The check could not decide.
+    Gray,
+    /// The provider could not run the check.
+    ProcessingFailed,
+    /// The check is turned off for the domain.
+    Disabled,
+}
+
+impl Verdict {
+    /// Reads a provider's status (`PASS`, `FAIL`, `GRAY`,
+    /// `PROCESSING_FAILED`, `DISABLED`, `yes`/`no` for spam flags).
+    pub fn parse(status: &str) -> Option<Self> {
+        match status
+            .trim()
+            .to_ascii_lowercase()
+            .replace('-', "_")
+            .as_str()
+        {
+            "pass" | "passed" => Some(Verdict::Pass),
+            "fail" | "failed" | "hardfail" | "softfail" => Some(Verdict::Fail),
+            "gray" | "grey" | "neutral" | "none" => Some(Verdict::Gray),
+            "processing_failed" | "temperror" | "permerror" => Some(Verdict::ProcessingFailed),
+            "disabled" => Some(Verdict::Disabled),
+            _ => None,
+        }
+    }
+}
+
+/// What the receiving provider concluded about the message, when it says
+/// (Amazon SES reports all five; Mailgun and Postmark some).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Verdicts {
+    /// Spam: [`Verdict::Fail`] means the provider thinks it is spam.
+    pub spam: Option<Verdict>,
+    /// Viruses: [`Verdict::Fail`] means a virus was found.
+    pub virus: Option<Verdict>,
+    /// SPF of the envelope sender.
+    pub spf: Option<Verdict>,
+    /// DKIM signatures.
+    pub dkim: Option<Verdict>,
+    /// DMARC alignment.
+    pub dmarc: Option<Verdict>,
+}
+
+impl Verdicts {
+    /// Whether the provider flagged the message as spam or found a virus.
+    pub fn is_flagged(&self) -> bool {
+        self.spam == Some(Verdict::Fail) || self.virus == Some(Verdict::Fail)
+    }
+}
+
+/// Where the raw message (`.eml`) is kept on a navree-storage disk.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StoredMail {
+    /// The disk name.
+    pub disk: String,
+    /// The path on the disk.
+    pub path: String,
+}
+
+/// One header of a received message: its name as written and its value
+/// unfolded (continuation lines joined), not decoded.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Header {
+    /// The name as written (`X-Mailer`).
+    pub name: String,
+    /// The value, unfolded and trimmed.
+    pub value: String,
+}
+
+/// What a source hands to [`Inbound::receive`](super::Inbound::receive):
+/// the raw MIME message and what the provider said about it.
+///
+/// Sources build one from their payloads ([`Incoming::from_postmark`],
+/// [`Incoming::from_mailgun`], the SES notification); tests build one with
+/// [`Incoming::compose`].
+#[derive(Clone, PartialEq, Eq)]
+pub struct Incoming {
+    /// The raw message (RFC 5322 with MIME).
+    pub raw: Bytes,
+    /// The source: `ses`, `mailgun`, `postmark`, `raw`, `gmail`, `graph`,
+    /// `test`, or your own.
+    pub source: String,
+    /// The provider's id for the message (SES `messageId`, Postmark
+    /// `MessageID`, the Gmail or Graph message id).
+    pub provider_id: Option<String>,
+    /// The SMTP envelope, when the provider reports it.
+    pub envelope: Envelope,
+    /// The provider's verdicts.
+    pub verdicts: Verdicts,
+    /// Where the raw message already is (SES's S3 action): the pipeline
+    /// does not store it again.
+    pub stored: Option<StoredMail>,
+}
+
+impl Incoming {
+    /// A raw message from `source`.
+    pub fn new(source: impl Into<String>, raw: impl Into<Bytes>) -> Self {
+        Self {
+            raw: raw.into(),
+            source: source.into(),
+            provider_id: None,
+            envelope: Envelope::default(),
+            verdicts: Verdicts::default(),
+            stored: None,
+        }
+    }
+
+    /// A message built field by field (for tests and for providers that
+    /// post the message parsed): see [`Compose`].
+    pub fn compose() -> Compose {
+        Compose::new()
+    }
+
+    /// Adds an envelope recipient.
+    #[must_use]
+    pub fn recipient(mut self, address: impl Into<String>) -> Self {
+        self.envelope.recipients.push(address.into());
+        self
+    }
+
+    /// Sets the envelope sender.
+    #[must_use]
+    pub fn sender(mut self, address: impl Into<String>) -> Self {
+        self.envelope.sender = Some(address.into());
+        self
+    }
+
+    /// Sets the provider's message id.
+    #[must_use]
+    pub fn provider_id(mut self, id: impl Into<String>) -> Self {
+        self.provider_id = Some(id.into());
+        self
+    }
+
+    /// Sets the provider's verdicts.
+    #[must_use]
+    pub fn verdicts(mut self, verdicts: Verdicts) -> Self {
+        self.verdicts = verdicts;
+        self
+    }
+
+    /// Says where the raw message is already stored.
+    #[must_use]
+    pub fn stored(mut self, stored: StoredMail) -> Self {
+        self.stored = Some(stored);
+        self
+    }
+
+    /// Parses the message, received now.
+    ///
+    /// # Errors
+    ///
+    /// [`InboundError::Unparseable`] when the bytes are not a message.
+    pub fn parse(self) -> Result<InboundMail, InboundError> {
+        self.parse_at(Utc::now())
+    }
+
+    /// Parses the message, received at `received_at`.
+    pub(crate) fn parse_at(self, received_at: DateTime<Utc>) -> Result<InboundMail, InboundError> {
+        let mut mail = InboundMail::parse(self.raw)?;
+        mail.source = self.source;
+        mail.provider_id = self.provider_id.filter(|id| !id.is_empty());
+        mail.envelope = self.envelope;
+        mail.verdicts = self.verdicts;
+        mail.stored = self.stored;
+        mail.received_at = received_at;
+        Ok(mail)
+    }
+}
+
+impl fmt::Debug for Incoming {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Incoming")
+            .field("source", &self.source)
+            .field("provider_id", &self.provider_id)
+            .field("envelope", &self.envelope)
+            .field("verdicts", &self.verdicts)
+            .field("stored", &self.stored)
+            .field("size", &self.raw.len())
+            .finish()
+    }
+}
+
+/// A received message, parsed with mail-parser: headers, addresses, the
+/// text and HTML bodies and the attachments, every charset decoded to
+/// UTF-8. The raw bytes stay available ([`raw`](InboundMail::raw)) and are
+/// stored as an `.eml` file when `mail.inbound.disk` is set.
+///
+/// Mailboxes ([`ModuleBuilderMailExt::mailbox`](super::ModuleBuilderMailExt::mailbox))
+/// receive one per message.
+#[derive(Clone)]
+pub struct InboundMail {
+    /// This receipt's id (a UUID v7).
+    pub id: Uuid,
+    /// The source that received it (`ses`, `mailgun`, `postmark`, `raw`,
+    /// `gmail`, `graph`, `test`).
+    pub source: String,
+    /// The provider's id for the message.
+    pub provider_id: Option<String>,
+    /// The SMTP envelope, when the provider reports it.
+    pub envelope: Envelope,
+    /// The provider's spam, virus, SPF, DKIM and DMARC verdicts.
+    pub verdicts: Verdicts,
+    /// `Message-ID`, without angle brackets.
+    pub message_id: Option<String>,
+    /// `In-Reply-To`: the message this one answers, without angle brackets.
+    pub in_reply_to: Option<String>,
+    /// `References`, oldest first, without angle brackets.
+    pub references: Vec<String>,
+    /// `From`.
+    pub from: Option<Address>,
+    /// `Reply-To`.
+    pub reply_to: Vec<Address>,
+    /// `To`.
+    pub to: Vec<Address>,
+    /// `Cc`.
+    pub cc: Vec<Address>,
+    /// `Subject`, decoded.
+    pub subject: Option<String>,
+    /// `Date`, in UTC.
+    pub date: Option<DateTime<Utc>>,
+    /// The plain-text body (from the HTML when the message has no text
+    /// part).
+    pub text: Option<String>,
+    /// The HTML body, when the message has one.
+    pub html: Option<String>,
+    /// Every header, in order.
+    pub headers: Vec<Header>,
+    /// The attachments, inline parts and forwarded messages, in order.
+    pub attachments: Vec<Attachment>,
+    /// The size of the raw message, in bytes.
+    pub size: usize,
+    /// The SHA-256 of the raw message, in hex: the same bytes always give
+    /// the same fingerprint, so a provider's retry can be recognized.
+    pub fingerprint: String,
+    /// Where the raw message is stored, once it is.
+    pub stored: Option<StoredMail>,
+    /// When it was received.
+    pub received_at: DateTime<Utc>,
+    raw: Bytes,
+}
+
+impl InboundMail {
+    /// Parses a raw message (RFC 5322 with MIME) received now, from source
+    /// `raw`.
+    ///
+    /// # Errors
+    ///
+    /// [`InboundError::Unparseable`] when the bytes hold no message
+    /// headers.
+    pub fn parse(raw: impl Into<Bytes>) -> Result<Self, InboundError> {
+        let raw: Bytes = raw.into();
+        let parsed = MessageParser::default()
+            .parse(raw.as_ref())
+            .filter(|message| !message.headers().is_empty())
+            .ok_or_else(|| InboundError::Unparseable("no message headers found".to_owned()))?;
+
+        let mut text = None;
+        let mut html = None;
+        for part in parsed.text_bodies() {
+            if let PartType::Text(body) = &part.body {
+                text = Some(body.to_string());
+                break;
+            }
+        }
+        for part in parsed.html_bodies() {
+            if let PartType::Html(body) = &part.body {
+                html = Some(body.to_string());
+                break;
+            }
+        }
+        if text.is_none() {
+            text = parsed.body_text(0).map(|body| body.into_owned());
+        }
+
+        let attachments = parsed
+            .attachments()
+            .map(|part| {
+                let content_type = part.content_type().map_or_else(
+                    || {
+                        if matches!(part.body, PartType::Message(_)) {
+                            "message/rfc822".to_owned()
+                        } else {
+                            "application/octet-stream".to_owned()
+                        }
+                    },
+                    |ct| match ct.subtype() {
+                        Some(sub) => format!("{}/{}", ct.ctype(), sub).to_ascii_lowercase(),
+                        None => ct.ctype().to_ascii_lowercase(),
+                    },
+                );
+                let inline = part
+                    .content_disposition()
+                    .is_some_and(|cd| cd.ctype().eq_ignore_ascii_case("inline"));
+                Attachment {
+                    filename: part.attachment_name().map(str::to_owned),
+                    content_type,
+                    content_id: part.content_id().map(|id| strip_angles(id).to_owned()),
+                    inline,
+                    content: Bytes::copy_from_slice(part.contents()),
+                }
+            })
+            .collect();
+
+        let headers = parsed
+            .headers_raw()
+            .map(|(name, value)| Header {
+                name: name.to_owned(),
+                value: unfold(value),
+            })
+            .collect();
+
+        let mail = InboundMail {
+            id: Uuid::now_v7(),
+            source: "raw".to_owned(),
+            provider_id: None,
+            envelope: Envelope::default(),
+            verdicts: Verdicts::default(),
+            message_id: parsed.message_id().map(|id| strip_angles(id).to_owned()),
+            in_reply_to: ids(parsed.in_reply_to()).into_iter().next(),
+            references: ids(parsed.references()),
+            from: parsed.from().and_then(|a| addresses(a).into_iter().next()),
+            reply_to: parsed.reply_to().map(addresses).unwrap_or_default(),
+            to: parsed.to().map(addresses).unwrap_or_default(),
+            cc: parsed.cc().map(addresses).unwrap_or_default(),
+            subject: parsed.subject().map(str::to_owned),
+            date: parsed
+                .date()
+                .and_then(|date| Utc.timestamp_opt(date.to_timestamp(), 0).single()),
+            text,
+            html,
+            headers,
+            attachments,
+            size: raw.len(),
+            fingerprint: hex::encode(Sha256::digest(&raw)),
+            stored: None,
+            received_at: Utc::now(),
+            raw: Bytes::new(),
+        };
+        Ok(InboundMail { raw, ..mail })
+    }
+
+    /// The raw message, as received.
+    pub fn raw(&self) -> &Bytes {
+        &self.raw
+    }
+
+    /// The first header named `name` (any case), unfolded.
+    pub fn header(&self, name: &str) -> Option<&str> {
+        self.headers
+            .iter()
+            .find(|header| header.name.eq_ignore_ascii_case(name))
+            .map(|header| header.value.as_str())
+    }
+
+    /// Every header named `name` (any case), in order.
+    pub fn header_all(&self, name: &str) -> Vec<&str> {
+        self.headers
+            .iter()
+            .filter(|header| header.name.eq_ignore_ascii_case(name))
+            .map(|header| header.value.as_str())
+            .collect()
+    }
+
+    /// The addresses the message was delivered for, in lower case and
+    /// without duplicates, in the order mailboxes try them: the envelope
+    /// recipients, then `Delivered-To`, `X-Original-To`, `To` and `Cc`.
+    pub fn recipients(&self) -> Vec<String> {
+        let mut all: Vec<String> = Vec::new();
+        let mut push = |address: &str| {
+            let address = address.trim().trim_matches(['<', '>']).to_ascii_lowercase();
+            if !address.is_empty() && !all.contains(&address) {
+                all.push(address);
+            }
+        };
+        for recipient in &self.envelope.recipients {
+            push(recipient);
+        }
+        for name in ["Delivered-To", "X-Original-To"] {
+            for value in self.header_all(name) {
+                push(value);
+            }
+        }
+        for address in self.to.iter().chain(&self.cc) {
+            push(&address.email);
+        }
+        all
+    }
+
+    /// Whether the message was sent by a machine in answer to another one:
+    /// an out-of-office reply, a delivery report, or bulk mail
+    /// (`Auto-Submitted` other than `no`, `X-Autoreply`,
+    /// `X-Autorespond`, `Precedence: auto_reply`, `bulk`, `junk` or `list`,
+    /// a `multipart/report`). Answering such a message risks a mail loop.
+    pub fn is_auto_reply(&self) -> bool {
+        if self
+            .header("Auto-Submitted")
+            .is_some_and(|value| !value.trim().eq_ignore_ascii_case("no"))
+        {
+            return true;
+        }
+        if self.header("X-Autoreply").is_some()
+            || self.header("X-Autorespond").is_some()
+            || self
+                .header("X-Auto-Response-Suppress")
+                .is_some_and(|value| {
+                    value.split(',').any(|item| {
+                        matches!(item.trim().to_ascii_lowercase().as_str(), "all" | "oof")
+                    })
+                })
+        {
+            return true;
+        }
+        if self.header("Precedence").is_some_and(|value| {
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "auto_reply" | "bulk" | "junk" | "list"
+            )
+        }) {
+            return true;
+        }
+        self.header("Content-Type").is_some_and(|value| {
+            value
+                .trim_start()
+                .to_ascii_lowercase()
+                .starts_with("multipart/report")
+        })
+    }
+
+    /// The new text of a reply: the plain-text body up to the quoted
+    /// message (`On ... wrote:`, `-----Original Message-----`, a line of
+    /// `>` quotes or a `From:` block), trimmed. The whole text when nothing
+    /// is quoted.
+    pub fn reply_text(&self) -> Option<String> {
+        let text = self.text.as_deref()?;
+        let mut kept: Vec<&str> = Vec::new();
+        let lines: Vec<&str> = text.lines().collect();
+        let mut index = 0;
+        while index < lines.len() {
+            let line = lines[index];
+            let trimmed = line.trim();
+            if trimmed.starts_with('>')
+                || is_original_marker(trimmed)
+                || is_wrote_line(trimmed, lines.get(index + 1).copied())
+            {
+                break;
+            }
+            kept.push(line);
+            index += 1;
+        }
+        let reply = kept.join("\n").trim().to_owned();
+        Some(reply)
+    }
+}
+
+impl fmt::Debug for InboundMail {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("InboundMail")
+            .field("id", &self.id)
+            .field("source", &self.source)
+            .field("provider_id", &self.provider_id)
+            .field("message_id", &self.message_id)
+            .field("from", &self.from.as_ref().map(|a| a.email.as_str()))
+            .field("recipients", &self.recipients())
+            .field("subject", &self.subject)
+            .field("attachments", &self.attachments.len())
+            .field("size", &self.size)
+            .field("stored", &self.stored)
+            .finish_non_exhaustive()
+    }
+}
+
+/// `-----Original Message-----` and the like.
+fn is_original_marker(line: &str) -> bool {
+    let lower = line.to_ascii_lowercase();
+    (lower.starts_with("-----") && lower.contains("original message"))
+        || lower.starts_with("________________________________")
+        || (lower.starts_with("from:") && lower.contains('@') && !lower.starts_with("from: http"))
+}
+
+/// `On Mon, 26 Oct 2026 at 18:02, Ada <ada@example.com> wrote:`, also
+/// wrapped onto the next line.
+fn is_wrote_line(line: &str, next: Option<&str>) -> bool {
+    let lower = line.to_ascii_lowercase();
+    if !lower.starts_with("on ") {
+        return false;
+    }
+    if lower.ends_with("wrote:") {
+        return true;
+    }
+    next.is_some_and(|next| next.trim().to_ascii_lowercase().ends_with("wrote:"))
+}
+
+/// `<id@host>` -> `id@host`.
+fn strip_angles(id: &str) -> &str {
+    id.trim().trim_start_matches('<').trim_end_matches('>')
+}
+
+/// Message ids from an `In-Reply-To` or `References` value.
+fn ids(value: &HeaderValue<'_>) -> Vec<String> {
+    match value {
+        HeaderValue::Text(id) => id
+            .split_whitespace()
+            .map(|id| strip_angles(id).to_owned())
+            .filter(|id| !id.is_empty())
+            .collect(),
+        HeaderValue::TextList(list) => list
+            .iter()
+            .map(|id| strip_angles(id).to_owned())
+            .filter(|id| !id.is_empty())
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// The addresses of an address header, groups flattened.
+fn addresses(address: &ParsedAddress<'_>) -> Vec<Address> {
+    address
+        .iter()
+        .filter_map(|addr| {
+            let email = addr.address()?.trim();
+            if email.is_empty() {
+                return None;
+            }
+            Some(Address {
+                name: addr
+                    .name()
+                    .map(str::trim)
+                    .filter(|name| !name.is_empty())
+                    .map(str::to_owned),
+                email: email.to_owned(),
+            })
+        })
+        .collect()
+}
+
+/// Joins continuation lines and trims.
+pub(crate) fn unfold(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    let mut pending_space = false;
+    for line in value.split('\n') {
+        let line = line.trim_end_matches('\r');
+        let piece = if out.is_empty() {
+            line.trim()
+        } else {
+            line.trim_start()
+        };
+        if piece.is_empty() {
+            continue;
+        }
+        if pending_space {
+            out.push(' ');
+        }
+        out.push_str(piece.trim_end());
+        pending_space = true;
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unfold_joins_continuation_lines() {
+        assert_eq!(unfold(" a\r\n\tb\r\n  c \r\n"), "a b c");
+        assert_eq!(unfold("plain"), "plain");
+    }
+
+    #[test]
+    fn verdicts_read_provider_statuses() {
+        assert_eq!(Verdict::parse("PASS"), Some(Verdict::Pass));
+        assert_eq!(
+            Verdict::parse("PROCESSING_FAILED"),
+            Some(Verdict::ProcessingFailed)
+        );
+        assert_eq!(Verdict::parse("softfail"), Some(Verdict::Fail));
+        assert_eq!(Verdict::parse("maybe"), None);
+        assert!(
+            Verdicts {
+                virus: Some(Verdict::Fail),
+                ..Verdicts::default()
+            }
+            .is_flagged()
+        );
+        assert!(!Verdicts::default().is_flagged());
+    }
+
+    #[test]
+    fn addresses_display_with_their_name() {
+        let ada = Address {
+            name: Some("Ada".into()),
+            email: "Ada@Example.com".into(),
+        };
+        assert_eq!(ada.to_string(), "Ada <Ada@Example.com>");
+        assert_eq!(ada.normalized(), "ada@example.com");
+        assert_eq!(Address::new("x@y.test").to_string(), "x@y.test");
+    }
+}

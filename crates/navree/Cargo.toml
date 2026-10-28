@@ -34,6 +34,7 @@ full = [
     "log",
     "logbook",
     "mail",
+    "mail-inbound",
     "notify",
     "observe",
     "orm",
@@ -91,6 +92,12 @@ api = ["dep:navree-api", "http"]
 ## tenant transports, a delivery log with provider events, suppressions,
 ## hold for approval, tracking, DKIM signing and sending-domain checks.
 mail = ["dep:navree-mail", "view", "telemetry", "http", "crypto", "events", "http-client", "db"]
+## Inbound mail: received messages parsed with mail-parser (pure Rust),
+## Amazon SES (SNS and S3), Mailgun, Postmark and raw MIME sources,
+## mailboxes routed by address, signed reply tokens and raw `.eml` files on
+## a `storage` disk (in `full`). With `integrations` on too, Gmail and
+## Microsoft 365 mailboxes watched through their connections.
+mail-inbound = ["mail", "storage", "navree-mail/inbound", "navree-integrations?/mail"]
 realtime = ["dep:navree-realtime", "http", "crypto"]
 storage = ["dep:navree-storage", "http", "crypto"]
 ## S3 and S3-compatible disks (AWS, MinIO, Cloudflare R2, DigitalOcean

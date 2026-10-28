@@ -39,6 +39,8 @@ pub struct MailFake {
 struct State {
     sent: Vec<(String, Message)>,
     events: Vec<ProviderEvent>,
+    #[cfg(feature = "inbound")]
+    received: Vec<crate::inbound::Received>,
 }
 
 impl MailFake {
@@ -194,6 +196,38 @@ impl MailFake {
                 source: Box::new(error),
             })?;
         deliveries.record(event).await
+    }
+
+    /// Plays a provider delivering `incoming` to the app (crate feature
+    /// `inbound`): runs it through the app's [`Inbound`](crate::Inbound),
+    /// as a provider's webhook would, and keeps what became of it for
+    /// [`received`](MailFake::received).
+    ///
+    /// # Errors
+    ///
+    /// [`InboundError::Config`](crate::InboundError::Config) when the app
+    /// has no `MailModule`, and the errors of
+    /// [`Inbound::receive`](crate::Inbound::receive).
+    #[cfg(feature = "inbound")]
+    pub async fn receive(
+        &self,
+        app: &AppContext,
+        incoming: crate::Incoming,
+    ) -> Result<crate::Received, crate::InboundError> {
+        let inbound = app
+            .get::<crate::Inbound>()
+            .await
+            .map_err(|error| crate::InboundError::Config(error.to_string()))?;
+        let received = inbound.receive(incoming).await?;
+        self.state().received.push(received.clone());
+        Ok(received)
+    }
+
+    /// What became of every message [`receive`](MailFake::receive)
+    /// delivered, oldest first (crate feature `inbound`).
+    #[cfg(feature = "inbound")]
+    pub fn received(&self) -> Vec<crate::Received> {
+        self.state().received.clone()
     }
 
     fn state(&self) -> MutexGuard<'_, State> {
