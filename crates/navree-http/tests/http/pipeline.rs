@@ -476,11 +476,23 @@ async fn per_ip_rate_limit_counts_ipv6_clients_by_network() {
         app.send(forwarded("2001:db8:1:3::1")).await.status,
         StatusCode::OK
     );
-    assert_eq!(app.send(forwarded("192.0.2.1")).await.status, StatusCode::OK);
-    assert_eq!(app.send(forwarded("192.0.2.2")).await.status, StatusCode::OK);
-    assert_eq!(app.send(forwarded("192.0.2.1")).await.status, StatusCode::OK);
+    assert_eq!(
+        app.send(forwarded("192.0.2.1")).await.status,
+        StatusCode::OK
+    );
+    assert_eq!(
+        app.send(forwarded("192.0.2.2")).await.status,
+        StatusCode::OK
+    );
+    assert_eq!(
+        app.send(forwarded("192.0.2.1")).await.status,
+        StatusCode::OK
+    );
     app.send(forwarded("192.0.2.1")).await.assert_error(429);
-    assert_eq!(app.send(forwarded("192.0.2.3")).await.status, StatusCode::OK);
+    assert_eq!(
+        app.send(forwarded("192.0.2.3")).await.status,
+        StatusCode::OK
+    );
 }
 
 #[tokio::test]
