@@ -24,4 +24,10 @@ fn good(token: &str, user: &User, tokens: usize) {
     warn!("rejected {}", user.id);
     // ok: navree-secret-in-log
     let _ = format!("{}", token);
+    // A count of credentials is not a credential.
+    // ok: navree-secret-in-log
+    info!(credentials = tokens, "revoked");
+    // ok: navree-secret-in-log
+    /// tracing::info!(token = %token, "a doc example is not a log call");
+    let _ = 0;
 }

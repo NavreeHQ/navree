@@ -4,14 +4,23 @@
 # CI (.github/workflows/sast.yml) and a local run use this same script, so a
 # run on your machine means what it means in CI.
 #
-#   scripts/sast.sh semgrep           scan the repository with Semgrep
 #   scripts/sast.sh semgrep-test      check the custom rules against their fixtures
-#   scripts/sast.sh gitleaks          scan the history, then the working tree
-#   scripts/sast.sh all               semgrep-test, semgrep, gitleaks
+#   scripts/sast.sh semgrep           scan the repository with Semgrep
+#   scripts/sast.sh secrets           scan the git history, then the working tree
+#   scripts/sast.sh secrets-history   the git history only (every branch)
+#   scripts/sast.sh secrets-tree      the working tree only
+#   scripts/sast.sh all               semgrep-test, semgrep, secrets
 #
-# Needs Docker. Reports (SARIF and text) land in sast-reports/ (git-ignored);
-# set SAST_REPORTS to put them elsewhere. Set SEMGREP_BASELINE to a commit to
-# report only findings introduced since it (CI does this on pull requests).
+# Needs Docker. Every command exits non-zero when it finds something.
+#
+# Reports (SARIF and text) land in sast-reports/ (git-ignored); set
+# SAST_REPORTS to put them elsewhere. Other knobs:
+#   SEMGREP_BASELINE=<commit>   report only Semgrep findings introduced since it
+#                               (CI does this on pull requests)
+#   SAST_CUSTOM_ONLY=1          run only the rules in .semgrep/, skipping the
+#                               registry rulesets (fast, and works offline)
+#   GITLEAKS_LOG_OPTS=<range>   which commits to scan, as `git log` options;
+#                               default is --all (CI narrows it on pull requests)
 #
 # The images are pinned by digest so a new scanner release cannot change the
 # result without a change here. To update a pin, pull the new tag, copy its
@@ -23,8 +32,12 @@ SEMGREP_IMAGE="semgrep/semgrep@sha256:3db5c7af55eb1f512eac0abf0ab69a97b52c74b5e9
 GITLEAKS_IMAGE="zricethezav/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f" # 8.30
 
 # The registry rulesets (https://semgrep.dev/explore). Navree's own rules are
-# .semgrep/*.yml.
+# in .semgrep/.
 REGISTRY_RULESETS=(p/rust p/typescript p/javascript p/react p/github-actions p/dockerfile)
+
+# The repository is owned by the CI user, not the container's root, and git
+# refuses to read such a repository unless it is told it is safe.
+GIT_SAFE=(-e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e "GIT_CONFIG_VALUE_0=*")
 
 # Bind mounts need host paths the Docker daemon understands (Git Bash on
 # Windows needs Windows-style paths and must not rewrite the container side).
@@ -50,63 +63,75 @@ semgrep_test() {
 
 semgrep_scan() {
   echo "== semgrep: scanning the repository"
+  # Warnings and errors fail the run; INFO-level registry findings (for
+  # example "this reads the temp directory") are advice, not defects.
   local args=(--metrics=off --disable-version-check
     --config .semgrep --exclude .semgrep
     --severity ERROR --severity WARNING
     --error
     --sarif-output=/reports/semgrep.sarif
     --text-output=/reports/semgrep.txt)
-  for ruleset in "${REGISTRY_RULESETS[@]}"; do args+=(--config "$ruleset"); done
+  if [ -z "${SAST_CUSTOM_ONLY:-}" ]; then
+    for ruleset in "${REGISTRY_RULESETS[@]}"; do args+=(--config "$ruleset"); done
+  fi
   if [ -n "${SEMGREP_BASELINE:-}" ]; then
     echo "   diff-aware: only findings introduced since ${SEMGREP_BASELINE}"
     args+=(--baseline-commit "$SEMGREP_BASELINE")
   fi
-  docker run --rm -v "$src_mount:/src" -v "$reports_mount:/reports" -w /src "$SEMGREP_IMAGE" \
-    semgrep scan "${args[@]}" .
+  docker run --rm "${GIT_SAFE[@]}" -v "$src_mount:/src" -v "$reports_mount:/reports" -w /src \
+    "$SEMGREP_IMAGE" semgrep scan "${args[@]}" .
 }
 
 # Gitleaks reads history through git, which cannot follow a linked worktree's
 # .git file from inside a container; scan a bare clone of it instead.
+# $1 is "history", "tree" or "both".
 gitleaks_scan() {
-  local repo="$root" tmp=""
-  if [ -f "$root/.git" ]; then
-    tmp="$(mktemp -d)"
-    git clone --quiet --bare "$root" "$tmp/repo.git"
-    repo="$tmp/repo.git"
+  local what="${1:-both}" history=0 tree=0
+
+  if [ "$what" != tree ]; then
+    local repo="$root" tmp=""
+    if [ -f "$root/.git" ]; then
+      tmp="$(mktemp -d)"
+      git clone --quiet --bare "$src_mount" "$(host_path "$tmp")/repo.git"
+      repo="$tmp/repo.git"
+    fi
+    echo "== gitleaks: the git history (${GITLEAKS_LOG_OPTS:---all})"
+    docker run --rm "${GIT_SAFE[@]}" -v "$(host_path "$repo"):/repo" \
+      -v "$src_mount/.gitleaks.toml:/config/.gitleaks.toml:ro" -v "$reports_mount:/reports" \
+      "$GITLEAKS_IMAGE" \
+      git --config /config/.gitleaks.toml --redact --no-banner --verbose --exit-code 1 \
+      --log-opts="${GITLEAKS_LOG_OPTS:---all}" \
+      --report-format sarif --report-path /reports/gitleaks-history.sarif /repo \
+      2>&1 | tee "$reports/gitleaks-history.txt" || history=$?
+    [ -z "$tmp" ] || rm -rf "$tmp"
   fi
-  local repo_mount
-  repo_mount="$(host_path "$repo")"
 
-  local history=0 tree=0
-  echo "== gitleaks: every commit on every branch"
-  docker run --rm -v "$repo_mount:/repo" -v "$src_mount/.gitleaks.toml:/config/.gitleaks.toml:ro" \
-    -v "$reports_mount:/reports" "$GITLEAKS_IMAGE" \
-    git --config /config/.gitleaks.toml --redact --no-banner --exit-code 1 \
-    --log-opts="--all" \
-    --report-format sarif --report-path /reports/gitleaks-history.sarif /repo || history=$?
+  if [ "$what" != history ]; then
+    echo "== gitleaks: the working tree"
+    docker run --rm -v "$src_mount:/repo:ro" -v "$reports_mount:/reports" "$GITLEAKS_IMAGE" \
+      dir --config /repo/.gitleaks.toml --redact --no-banner --verbose --exit-code 1 \
+      --report-format sarif --report-path /reports/gitleaks-tree.sarif /repo \
+      2>&1 | tee "$reports/gitleaks-tree.txt" || tree=$?
+  fi
 
-  echo "== gitleaks: the working tree"
-  docker run --rm -v "$src_mount:/repo:ro" -v "$reports_mount:/reports" "$GITLEAKS_IMAGE" \
-    dir --config /repo/.gitleaks.toml --redact --no-banner --exit-code 1 \
-    --report-format sarif --report-path /reports/gitleaks-tree.sarif /repo || tree=$?
-
-  [ -z "$tmp" ] || rm -rf "$tmp"
   return $((history | tree))
 }
 
 case "${1:-all}" in
   semgrep) semgrep_scan ;;
   semgrep-test) semgrep_test ;;
-  gitleaks) gitleaks_scan ;;
+  secrets | gitleaks) gitleaks_scan both ;;
+  secrets-history) gitleaks_scan history ;;
+  secrets-tree) gitleaks_scan tree ;;
   all)
     status=0
     semgrep_test || status=1
     semgrep_scan || status=1
-    gitleaks_scan || status=1
+    gitleaks_scan both || status=1
     exit "$status"
     ;;
   *)
-    echo "usage: scripts/sast.sh [semgrep|semgrep-test|gitleaks|all]" >&2
+    echo "usage: scripts/sast.sh [semgrep-test|semgrep|secrets|secrets-history|secrets-tree|all]" >&2
     exit 2
     ;;
 esac

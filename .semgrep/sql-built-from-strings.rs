@@ -18,6 +18,14 @@ async fn good(conn: Conn, name: String, table: &str) {
     // ok: navree-sql-built-from-strings
     conn.execute_unprepared(&format!("DROP TABLE IF EXISTS {table} CASCADE")).await;
 
+    // A constant table name is not input.
+    // ok: navree-sql-built-from-strings
+    conn.execute_unprepared(&format!("DELETE FROM {JOBS_TABLE} WHERE id = 1")).await;
+
+    // Escaped braces are literal text, not a placeholder.
+    // ok: navree-sql-built-from-strings
+    conn.execute_unprepared(&format!("INSERT INTO t (doc) VALUES ('{{}}')")).await;
+
     // A format! that is not SQL.
     // ok: navree-sql-built-from-strings
     conn.execute_unprepared(&format!("{table}")).await;

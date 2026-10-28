@@ -24,4 +24,6 @@ COPY crm ./crm
 RUN python -m compileall -q benchsite crm gunicorn.conf.py
 EXPOSE 8080
 # Settings in gunicorn.conf.py: gthread, (2 x CPUs) + 1 workers, 3 threads each, no access log.
+# A benchmark harness image: built and run only on a benchmarking machine, never deployed.
+# nosemgrep: dockerfile.security.missing-user.missing-user
 CMD ["gunicorn"]

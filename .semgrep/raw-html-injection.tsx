@@ -26,4 +26,6 @@ export function imperative(el: HTMLElement, user: string) {
   document.write(user);
   // ok: navree-raw-html
   el.textContent = user;
+  // ok: navree-raw-html
+  el.innerHTML = "";
 }

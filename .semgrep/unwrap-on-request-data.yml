@@ -26,6 +26,7 @@ rules:
     paths:
       exclude:
         - "**/tests/**"
+        - "**/tests.rs"
         - "**/benches/**"
         - "**/examples/**"
     pattern-sources:

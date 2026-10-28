@@ -576,6 +576,9 @@
     item.className = `ui-toast ui-toast--${kind}`;
     item.setAttribute("role", kind === "error" ? "alert" : "status");
     item.dataset.duration = String(duration);
+    // Static icon markup and a whitelisted variant; the title and description are set with
+    // textContent below, never as HTML.
+    // nosemgrep: navree-raw-html
     item.innerHTML = `${svg(kind)}<div><p class="ui-toast__title"></p><p class="ui-toast__desc"></p></div><button type="button" class="ui-btn ui-btn--ghost ui-btn--icon ui-btn--sm ui-toast__close" data-ui-toast-close aria-label="Dismiss">${svg("close")}</button>`;
     $(".ui-toast__title", item).textContent = title || "";
     const desc = $(".ui-toast__desc", item);
