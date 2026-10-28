@@ -162,9 +162,11 @@ Dark only (`class="dark"`). Green (`accent`, `#3dff8f`) for the primary
 action, focus rings and positive data only; navigation, selection and hover
 use the ink steps (`hover:bg-ink-2`, current `bg-ink-3`). 4px corners on
 controls (`rounded-md`), 6px on surfaces (`rounded-xl`); no pills, no glows
-except `shadow-float`. After `shadcn add`, replace `hover:bg-accent` and
-`focus:bg-accent` with `hover:bg-ink-2`/`bg-ink-3`. Full rules:
-`apps/website/DESIGN.md` section 9.
+except `shadow-float`. Add components with `pnpm dlx shadcn@latest add
+<component>` (run it, don't install it: keep the `shadcn` package out of
+`package.json`; its `tailwind.css` is vendored as `shadcn-tailwind.css` next
+to `globals.css`), then replace `hover:bg-accent` and `focus:bg-accent` with
+`hover:bg-ink-2`/`bg-ink-3`. Full rules: `apps/website/DESIGN.md` section 9.
 
 ## Checks
 

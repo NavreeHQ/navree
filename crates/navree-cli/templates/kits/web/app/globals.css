@@ -1,6 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import "shadcn/tailwind.css";
+@import "./shadcn-tailwind.css";
 
 /* Dark only, in Navree's colors: `dark:` utilities (used by shadcn/ui) always apply. Change the tokens below to restyle the app. */
 @custom-variant dark (&:where(.dark, .dark *));

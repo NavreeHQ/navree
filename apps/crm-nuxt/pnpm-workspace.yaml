@@ -13,3 +13,11 @@ overrides:
   # listhen (nuxt dev's HTTPS certificates) asks for node-forge ^1.4.0;
   # 1.4.0 accepts forged RSA PKCS#1 v1.5 signatures (GHSA-86w9-cpqp-85rv).
   node-forge: 1.4.2
+
+patchedDependencies:
+  # Nitro's bundler (@rollup/plugin-node-resolve 16.0.3) uses deepmerge 4.3.1, the
+  # latest release, whose mergeObject lets a `__proto__` key set the merged object's
+  # prototype (GHSA-gcqx-w48m-w2h4, no fixed release). The patch skips the
+  # `__proto__`, `constructor` and `prototype` keys; tests/unit/deepmerge-patch.test.ts
+  # checks it is applied. Drop it once deepmerge ships a fix.
+  deepmerge@4.3.1: patches/deepmerge@4.3.1.patch
