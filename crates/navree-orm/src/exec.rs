@@ -869,23 +869,26 @@ impl<'a> SqlTarget<'a> {
 
     /// A transaction for work that must happen as a whole: a savepoint of
     /// the transaction the target runs in, or a new transaction on its pool.
-    async fn begin_atomic(&self) -> Result<OwnTransaction, OrmError> {
-        ensure_free(self.conn.transaction_id())?;
-        let tx = match &self.conn {
-            SqlConn::Pool(pool) => OwnTx::Native(pool.begin().await?),
-            SqlConn::Uow(uow) if uow.db().native_units_of_work() => {
-                OwnTx::Native(uow.savepoint().await?)
-            }
-            SqlConn::Uow(uow) => OwnTx::Sea(sea::SeaTransaction::savepoint_of(uow).await?),
-            SqlConn::Tx(tx) => OwnTx::Native(tx.savepoint().await?),
-            SqlConn::Sea(sea) => {
-                if !sea.in_transaction() {
-                    self.announce_transaction();
+    /// (Boxed: the futures of the operations awaiting it stay shallow.)
+    fn begin_atomic(&self) -> BoxFuture<'_, Result<OwnTransaction, OrmError>> {
+        Box::pin(async move {
+            ensure_free(self.conn.transaction_id())?;
+            let tx = match &self.conn {
+                SqlConn::Pool(pool) => OwnTx::Native(pool.begin().await?),
+                SqlConn::Uow(uow) if uow.db().native_units_of_work() => {
+                    OwnTx::Native(uow.savepoint().await?)
                 }
-                OwnTx::Sea(sea.begin().await?)
-            }
-        };
-        Ok(OwnTransaction(tx))
+                SqlConn::Uow(uow) => OwnTx::Sea(sea::SeaTransaction::savepoint_of(uow).await?),
+                SqlConn::Tx(tx) => OwnTx::Native(tx.savepoint().await?),
+                SqlConn::Sea(sea) => {
+                    if !sea.in_transaction() {
+                        self.announce_transaction();
+                    }
+                    OwnTx::Sea(sea.begin().await?)
+                }
+            };
+            Ok(OwnTransaction(tx))
+        })
     }
 
     /// [`query_all`](Self::query_all), stopped by the database after
