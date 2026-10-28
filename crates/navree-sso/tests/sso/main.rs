@@ -3,6 +3,7 @@
 mod support;
 
 mod domains;
+mod enforcement;
 mod module;
 mod oidc_flow;
 mod provisioning;
