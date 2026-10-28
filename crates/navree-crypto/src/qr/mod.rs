@@ -43,6 +43,10 @@ use tables::{block_count, data_codewords, ecc_per_block, total_codewords};
 /// The pad codewords that fill the data capacity (§7.4.10).
 const PAD: [u8; 2] = [0xEC, 0x11];
 
+/// The most characters any symbol holds (digits at version 40-L). A longer
+/// message is refused before it is segmented.
+const MAX_CHARS: usize = 7089;
+
 /// How much of a symbol may be damaged and still be read.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum EcLevel {
@@ -127,6 +131,9 @@ impl QrCode {
             || options.mask.is_some_and(|mask| mask > 7)
         {
             return Err(QrError::InvalidOptions);
+        }
+        if data.len() > MAX_CHARS {
+            return Err(QrError::TooLong);
         }
         // Segmentations depend on the width of the count indicators, which
         // change at versions 10 and 27.
@@ -528,6 +535,16 @@ mod tests {
     fn too_long_and_invalid_requests_fail() {
         let long = vec![b'x'; 2954];
         assert_eq!(QrCode::encode(&long, EcLevel::L), Err(QrError::TooLong));
+        for level in EcLevel::ALL {
+            assert_eq!(
+                QrCode::encode(&vec![b'7'; 7090], level),
+                Err(QrError::TooLong)
+            );
+            assert_eq!(
+                QrCode::encode(&vec![0; 1 << 20], level),
+                Err(QrError::TooLong)
+            );
+        }
         assert!(QrCode::encode(&long[..2953], EcLevel::L).is_ok());
         for options in [
             Options {
