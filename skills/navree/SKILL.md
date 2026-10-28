@@ -137,6 +137,7 @@ navree list                                 # every command of the app
 | Sending webhooks to customers' URLs, receiving Stripe, GitHub, Paddle or other signed webhooks | `navree-webhooks` |
 | Connecting a customer's Microsoft 365, Google Workspace, Slack, an OAuth API or an API key to their workspace or organization; calling Graph, the Google Admin SDK or Slack on a tenant's behalf; least-privilege scopes, token refresh, unhealthy connections | `navree-integrations` |
 | Provisioning a customer's employees: SCIM from Entra ID or Okta, syncing from Microsoft Graph, Google Workspace, Okta, LDAP or Active Directory into your own model; dry runs, held runs, deactivating leavers | `navree-directory` |
+| A workspace on its own domain (`crm.acme-corp.com`): DNS verification, certificates (Caddy on-demand TLS or ACME in the app), resolving the workspace from the host, public pages on a customer's domain | `navree-custom-domains` |
 | Feature flags: hiding a feature until it is released, gradual rollouts, a kill switch, flags for the front end | `navree-flags` |
 | Settings an app, organization, workspace or user can change, inherited down that chain; showing where a value comes from; settings screens and resets | `navree-settings` |
 | Search box, command palette, indexes, Meilisearch/Typesense/Tantivy, vector search | `navree-search` |

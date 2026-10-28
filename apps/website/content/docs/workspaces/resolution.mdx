@@ -1,6 +1,6 @@
 ---
 title: "Resolving the workspace"
-description: "Find the current workspace from a header, a subdomain, a path prefix or a token claim, and check that the user belongs to it."
+description: "Find the current workspace from a header, a subdomain, a path prefix, a token claim or the workspace's own domain, and check that the user belongs to it."
 ---
 
 Every workspace request names its workspace somewhere: in a header, in the host name, in the URL or inside the access token. Navree's resolvers read those places in the order you configure, load the workspace and check that the signed-in user may enter it before your handler runs: as a member or, with [organizations](/docs/workspaces/organizations/) on, through the organization the workspace belongs to. Handlers then take a `CurrentWorkspace`.
@@ -15,6 +15,7 @@ A resolver finds an identifier: the workspace's slug (`acme`) or its id (a UUID)
 | `path` | The path segment after `workspace.path_prefix` (default `/w`) | `/api/w/acme/deals` |
 | `subdomain` | The first label of the host under `workspace.base_domain` | `acme.app.example.com` |
 | `claim` | The claim `workspace.claim` (default `workspace`) of the request's bearer JWT | `{"sub": "...", "workspace": "acme"}` |
+| `domain` | The workspace's own verified domain ([custom domains](/docs/packages/custom-domains/)) | `crm.acme-corp.com` |
 
 ### Header
 
@@ -65,6 +66,17 @@ The claim resolver reads a claim from the payload of the request's `Authorizatio
 
 Navree's own access tokens carry a fixed set of claims (`sub`, `iat`, `exp`, `iss`, `aud`, `jti`, `typ`), with no workspace claim. Use this resolver with tokens issued by an identity provider or a custom authentication strategy that adds one. Whatever the resolver finds, the membership check still applies, so a claim can only select a workspace the user belongs to.
 
+### Custom domain
+
+<Badge feature="domains" /> A workspace can bring its own domain: `crm.acme-corp.com` instead of `acme.app.example.com`. [Custom domains](/docs/packages/custom-domains/) (`DomainsModule`) verify the domain through DNS; with `domain` in the list, a request to a verified domain names that domain's workspace. Put it first, so a domain always names its own workspace:
+
+```toml title="config/app.toml"
+[workspace]
+resolvers = ["domain", "header"]
+```
+
+`DomainsModule` looks the request's host up (cached for `domains.cache_secs`) and marks the request with a `DomainWorkspace { workspace_id, host }`, which the resolver reads. A host that is not a verified domain, such as your app's own, falls through to the next resolver. Without `DomainsModule` the resolver finds nothing. Custom domains name workspaces only: `domain` in `workspace.organizations.resolvers` or `workspace.partitions.resolvers` fails the boot.
+
 ## Order
 
 `workspace.resolvers` lists the resolvers to try, in order. The first one that finds an identifier wins, and the rest are not consulted:
@@ -109,7 +121,7 @@ async fn show(&self, ws: CurrentWorkspace) -> Json<serde_json::Value> {
 | `authorize(permission)` | `Ok(())`, or a 403 |
 | `scope(select)` | `select` limited to this workspace's rows (row isolation) |
 | `isolation()` | The configured `Isolation` |
-| `resolver()` | The resolver that found the workspace (`None` when a path parameter did) |
+| `resolver()` | The resolver that found the workspace (`ResolverKind::Domain` for a custom domain; `None` when a path parameter did) |
 
 The workspace is resolved once per request: the guard, `CurrentWorkspace`, `WorkspaceUow` and later extractors share the result.
 
