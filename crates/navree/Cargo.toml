@@ -24,6 +24,7 @@ full = [
     "crypto",
     "db",
     "directory",
+    "domains",
     "events",
     "fleet",
     "helm",
@@ -459,6 +460,8 @@ lighthouse = [
     "access",
     "auth",
     "orm",
+    # With `domains` on too, certificates close to expiry become issues.
+    "navree-domains?/lighthouse",
 ]
 ## L7 (in `full`)
 ## Logbook: the local debugging timeline at `/_logbook` (requests, queries,
@@ -548,6 +551,21 @@ directory = [
     "workspace",
     "integrations",
 ]
+## Custom domains: workspaces on their own domains, verified through DNS
+## (hickory-resolver), with automatic TLS through an on-demand proxy's ask
+## endpoint or in-process ACME certificates (instant-acme on ring, served
+## by a rustls resolver), the `domain` workspace resolver and a Cloudflare
+## DNS driver (pure Rust; in `full`).
+domains = [
+    "dep:navree-domains",
+    "http",
+    "crypto",
+    "events",
+    "db",
+    "orm",
+    "schedule",
+    "workspace",
+]
 ## PostgreSQL driver for navree-db.
 postgres = ["db", "navree-db/postgres"]
 ## MySQL and MariaDB driver for navree-db (`mysql://` and `mariadb://` URLs).
@@ -600,6 +618,7 @@ navree-crypto = { workspace = true, optional = true }
 navree-db = { workspace = true, optional = true }
 navree-directory = { workspace = true, optional = true }
 navree-dock = { workspace = true, optional = true }
+navree-domains = { workspace = true, optional = true }
 navree-documents = { workspace = true, optional = true }
 navree-navigator = { workspace = true, optional = true }
 navree-events = { workspace = true, optional = true }

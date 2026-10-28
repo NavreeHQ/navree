@@ -159,6 +159,8 @@ pub use navree_integrations::{IntegrationsModule, ModuleBuilderIntegrationsExt a
 
 #[cfg(feature = "directory")]
 pub use navree_directory::{DirectoryModule, ModuleBuilderDirectoryExt as _};
+#[cfg(feature = "domains")]
+pub use navree_domains::{CurrentDomain, DomainsModule};
 #[cfg(feature = "settings")]
 pub use navree_settings::{ModuleBuilderSettingsExt as _, Setting, SettingsModule};
 #[cfg(feature = "sheets")]
