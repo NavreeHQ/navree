@@ -54,9 +54,10 @@ function snippet(text: string, terms: string[]): ReactNode {
 /**
  * The docs search (⌘K / Ctrl K, or "/"). The index is built by
  * `scripts/prebuild.ts` and fetched the first time the dialog opens; the
- * search itself runs in the browser.
+ * search itself runs in the browser. `SearchLauncher` loads this component
+ * the first time someone asks for search, and it mounts open.
  */
-export function SearchDialog() {
+export function SearchDialog({ openOnMount = false }: { openOnMount?: boolean }) {
   const router = useRouter();
   const dialog = useRef<HTMLDialogElement>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -82,6 +83,10 @@ export function SearchDialog() {
   }, []);
 
   const close = useCallback(() => dialog.current?.close(), []);
+
+  useEffect(() => {
+    if (openOnMount) open();
+  }, [openOnMount, open]);
 
   useEffect(() => {
     function onKey(event: globalThis.KeyboardEvent) {
