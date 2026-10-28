@@ -128,7 +128,11 @@ fn decode(raw: MySqlValueRef<'_>, type_name: &str) -> Result<Value, sqlx::error:
         "BINARY" | "VARBINARY" | "TINYBLOB" | "BLOB" | "MEDIUMBLOB" | "LONGBLOB" | "GEOMETRY" => {
             Value::Bytes(d(raw)?)
         }
-        _ => Value::String(d(raw)?),
+        // Text, or what is not text (MySQL 9's binary `VECTOR`).
+        _ => match d::<String>(raw.clone()) {
+            Ok(text) => Value::String(text),
+            Err(_) => Value::Bytes(d(raw)?),
+        },
     })
 }
 

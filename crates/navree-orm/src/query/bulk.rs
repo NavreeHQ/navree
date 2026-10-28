@@ -274,7 +274,7 @@ async fn run_each(target: &Target<'_>, inserts: &[InsertIr]) -> Result<InsertOut
 }
 
 /// Commits `tx` after `result`, or rolls it back.
-async fn finish<T>(tx: sea_orm::DatabaseTransaction, result: Result<T>) -> Result<T> {
+async fn finish<T>(tx: crate::exec::OwnTransaction, result: Result<T>) -> Result<T> {
     match result {
         Ok(value) => {
             tx.commit().await?;
@@ -362,7 +362,7 @@ fn returned_key<K: Field>(outcome: &InsertOutcome, table: &str, column: &str) ->
             .map_err(|error| decode_error(table.to_owned(), column, K::type_name(), &error));
     }
     match outcome.last_insert_id {
-        Some(id) if outcome.rows_affected > 0 => K::from_value(Value::BigUnsigned(Some(id)))
+        Some(id) if outcome.rows_affected > 0 => K::from_value(Value::U64(id))
             .map_err(|error| decode_error(table.to_owned(), column, K::type_name(), &error)),
         _ => Err(OrmError::invalid(format!(
             "the database did not return the `{column}` of the row inserted into `{table}`"
@@ -867,7 +867,7 @@ async fn update_from_on(
         &query.wheres,
         sql.dialect(),
     )?;
-    Ok(sql.execute(&statement).await?.rows_affected())
+    Ok(sql.execute(&statement).await?.rows_affected)
 }
 
 // ---------------------------------------------------------------------------

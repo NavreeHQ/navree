@@ -43,7 +43,7 @@ use crate::model::Model;
 use crate::query::Builder;
 use crate::record::Record;
 use crate::render::ast::{BinaryOp, Expr as SqlExpr};
-use crate::value::{Decimal, Value, to_json};
+use crate::value::{Decimal, Kind, Value, to_json};
 
 /// The column mapping of ability conditions on model `M`: rule fields are
 /// `M`'s columns, qualified with its table, and operands are bound with the
@@ -310,11 +310,11 @@ impl<M: Model> ModelColumns<M> {
 }
 
 /// A JSON operand as a value without a column type: booleans as `Bool`,
-/// integers as `BigInt`, other numbers as `Double`, strings as text (arrays
+/// integers as `I64`, other numbers as `F64`, strings as text (arrays
 /// and objects, which conditions never hold, as their JSON text).
 fn json_operand(value: &Json) -> Value {
     match value {
-        Json::Null => Value::String(None),
+        Json::Null => Value::Null(Kind::String),
         Json::Bool(b) => Value::from(*b),
         Json::Number(n) => match (n.as_i64(), n.as_f64()) {
             (Some(i), _) => Value::from(i),
@@ -356,18 +356,17 @@ pub fn model_json<M: Model>(model: &M) -> Json {
 fn condition_json(value: &Value) -> Json {
     let micros = |at: DateTime<Utc>| Json::String(at.to_rfc3339_opts(SecondsFormat::Micros, true));
     match value {
-        Value::Uuid(Some(uuid)) => Json::String(uuid.hyphenated().to_string()),
-        Value::ChronoDateTimeUtc(Some(at)) => micros(*at),
-        Value::ChronoDateTimeLocal(Some(at)) => micros(at.with_timezone(&Utc)),
-        Value::ChronoDateTimeWithTimeZone(Some(at)) => micros(at.with_timezone(&Utc)),
-        Value::ChronoDateTime(Some(at)) => micros(NaiveDateTime::and_utc(at)),
-        Value::ChronoDate(Some(date)) => Json::String(date.format("%Y-%m-%d").to_string()),
-        Value::ChronoTime(Some(time)) => Json::String(time.format("%H:%M:%S%.f").to_string()),
+        Value::Uuid(uuid) => Json::String(uuid.hyphenated().to_string()),
+        Value::Timestamp(at) => micros(*at),
+        Value::TimestampTz(at) => micros(at.with_timezone(&Utc)),
+        Value::DateTime(at) => micros(NaiveDateTime::and_utc(at)),
+        Value::Date(date) => Json::String(date.format("%Y-%m-%d").to_string()),
+        Value::Time(time) => Json::String(time.format("%H:%M:%S%.f").to_string()),
         // Binary columns have no condition form (and may not be UTF-8).
         Value::Bytes(_) => Json::Null,
         // Decimals are numbers to conditions (equality on them is exact
         // only as strings, which the SQL filter binds as decimals).
-        Value::Decimal(Some(decimal)) => decimal.to_f64().map_or(Json::Null, Json::from),
+        Value::Decimal(decimal) => decimal.to_f64().map_or(Json::Null, Json::from),
         other => to_json(other),
     }
 }

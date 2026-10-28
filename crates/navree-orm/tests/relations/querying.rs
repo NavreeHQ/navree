@@ -357,7 +357,7 @@ fn relation_keys_and_names() {
     assert_eq!(company.qualified_foreign_key_name(), "deals.company_id");
     assert_eq!(company.owner_key_name(), "id");
     assert_eq!(company.qualified_owner_key_name(), "companies.id");
-    assert_eq!(company.parent_key(), Some(Value::BigInt(Some(3))));
+    assert_eq!(company.parent_key(), Some(Value::I64(3)));
     assert_eq!(company.related_table(), "companies");
     assert_eq!(company.relation_name(), "company");
 
@@ -368,7 +368,7 @@ fn relation_keys_and_names() {
         "activities.deal_id"
     );
     assert_eq!(activities.local_key_name(), "id");
-    assert_eq!(activities.parent_key(), Some(Value::BigInt(Some(7))));
+    assert_eq!(activities.parent_key(), Some(Value::I64(7)));
     assert_eq!(activities.morph_type(), None);
 
     let notes = deal.notes();

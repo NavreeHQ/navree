@@ -491,7 +491,7 @@ mod tests {
     fn encode_and_decode_through_a_cast() {
         assert_eq!(
             encode::<AsJson, Point>(&Point { x: 3 }).unwrap(),
-            Value::Json(Some(Box::new(serde_json::json!({"x": 3}))))
+            Value::Json(serde_json::json!({"x": 3}))
         );
         let row = Row::from_values(vec![(
             "point".into(),
@@ -520,7 +520,7 @@ mod tests {
     fn json_text_is_stored_as_text_and_compared_as_json() {
         assert_eq!(
             encode::<JsonText, Point>(&Point { x: 3 }).unwrap(),
-            Value::String(Some(r#"{"x":3}"#.to_owned()))
+            Value::String(r#"{"x":3}"#.to_owned())
         );
         let row = Row::from_values(vec![("point".into(), Value::from(r#"{ "x": 5 }"#))]);
         assert_eq!(

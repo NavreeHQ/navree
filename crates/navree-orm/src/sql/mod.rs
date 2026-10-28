@@ -9,7 +9,7 @@
 
 use std::fmt;
 
-use sea_orm::DbBackend;
+use navree_db::Backend;
 
 use crate::error::OrmError;
 use crate::ir::Where;
@@ -40,22 +40,12 @@ pub enum Dialect {
 }
 
 impl Dialect {
-    /// The dialect of a SeaORM backend.
-    pub fn from_backend(backend: DbBackend) -> Result<Self, OrmError> {
-        match backend {
-            DbBackend::Postgres => Ok(Dialect::Postgres),
-            DbBackend::MySql => Ok(Dialect::MySql),
-            DbBackend::Sqlite => Ok(Dialect::Sqlite),
-            other => Err(OrmError::unsupported("the ORM", format!("{other:?}"))),
-        }
-    }
-
-    /// The SeaORM backend of this dialect.
-    pub fn backend(self) -> DbBackend {
+    /// navree-db's backend of this dialect.
+    pub fn backend(self) -> Backend {
         match self {
-            Dialect::Postgres => DbBackend::Postgres,
-            Dialect::MySql => DbBackend::MySql,
-            Dialect::Sqlite => DbBackend::Sqlite,
+            Dialect::Postgres => Backend::Postgres,
+            Dialect::MySql => Backend::MySql,
+            Dialect::Sqlite => Backend::Sqlite,
         }
     }
 
@@ -112,6 +102,31 @@ pub(crate) fn quote_identifier(name: &str, dialect: Dialect) -> String {
         .join(".")
 }
 
+/// The dialect a navree-db backend speaks.
+///
+/// ```
+/// use navree_db::Backend;
+/// use navree_orm::Dialect;
+///
+/// assert_eq!(Dialect::from(Backend::MySql), Dialect::MySql);
+/// assert_eq!(Dialect::Postgres.backend(), Backend::Postgres);
+/// ```
+impl From<Backend> for Dialect {
+    fn from(backend: Backend) -> Self {
+        match backend {
+            Backend::Postgres => Dialect::Postgres,
+            Backend::MySql => Dialect::MySql,
+            Backend::Sqlite => Dialect::Sqlite,
+        }
+    }
+}
+
+impl From<Dialect> for Backend {
+    fn from(dialect: Dialect) -> Self {
+        dialect.backend()
+    }
+}
+
 impl fmt::Display for Dialect {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.name())
@@ -130,23 +145,23 @@ pub struct Statement {
     pub dialect: Dialect,
 }
 
-// The ORM runs its statements on SeaORM's connections until it executes
-// through navree-db's own engine (data-layer port, step 3); then these
-// SeaORM conversions go.
 impl Statement {
-    /// The statement as SeaORM runs it.
-    pub fn to_sea_orm(&self) -> sea_orm::Statement {
-        sea_orm::Statement::from_sql_and_values(
-            self.dialect.backend(),
-            self.sql.clone(),
-            self.values.clone(),
-        )
+    /// The statement as navree-db runs it (its SQL, written in the
+    /// dialect's own placeholders, and its values).
+    pub fn to_db(&self) -> navree_db::Statement {
+        navree_db::Statement::new(self.dialect.backend(), self.sql.clone(), self.values.clone())
+    }
+}
+
+impl From<Statement> for navree_db::Statement {
+    fn from(statement: Statement) -> Self {
+        navree_db::Statement::new(statement.dialect.backend(), statement.sql, statement.values)
     }
 }
 
 impl fmt::Display for Statement {
     /// The SQL followed by the values, one statement per line:
-    /// `SELECT ... WHERE "id" = $1 -- [BigInt(Some(1))]`.
+    /// `SELECT ... WHERE "id" = $1 -- [I64(1)]`.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.sql)?;
         if !self.values.is_empty() {

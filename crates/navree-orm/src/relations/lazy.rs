@@ -30,7 +30,7 @@ use crate::relations::pivot::Pivot;
 use crate::relations::registry::{self, DynRelation};
 use crate::relations::store::{RelationValue, Relations};
 use crate::strict::{Strictness, Violation};
-use crate::value::{Field, Value};
+use crate::value::{Field, Kind, Value};
 
 /// What a record knows about lazy loading: whether it came from a result
 /// of several records while lazy loading is prevented, and the group of
@@ -1062,7 +1062,7 @@ impl<M: Model, R: Model> Dissociate<M> for BelongsTo<M, R> {
     fn dissociate_from(&self, child: &mut Record<M>) -> Result<()> {
         child
             .model
-            .set_value(&self.foreign_key, Value::String(None))?;
+            .set_value(&self.foreign_key, Value::Null(Kind::String))?;
         child
             .relations
             .set_relation(self.core.name.to_string(), None::<Record<R>>);
@@ -1092,10 +1092,10 @@ impl<M: Model> Dissociate<M> for MorphTo<M> {
     fn dissociate_from(&self, child: &mut Record<M>) -> Result<()> {
         child
             .model
-            .set_value(&self.id_column, Value::String(None))?;
+            .set_value(&self.id_column, Value::Null(Kind::String))?;
         child
             .model
-            .set_value(&self.type_column, Value::String(None))?;
+            .set_value(&self.type_column, Value::Null(Kind::String))?;
         child
             .relations
             .set_relation(self.name.to_string(), None::<AnyRecord>);

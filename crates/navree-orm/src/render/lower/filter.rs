@@ -14,7 +14,7 @@ use crate::ir::{
 };
 use crate::render::ast::{self, BinaryOp, LikeCase, SqlType};
 use crate::sql::Dialect;
-use crate::value::{Field, Value, to_json};
+use crate::value::{Field, Kind, Value, to_json};
 
 /// An `EXISTS` subquery selects `1`: its columns do not matter (unless a
 /// union needs them to line up).
@@ -35,7 +35,7 @@ pub(crate) fn exists_select_list(query: &mut QueryIr) {
 fn json_text_of(value: &Value) -> Value {
     match to_json(value) {
         serde_json::Value::String(text) => Value::from(text),
-        serde_json::Value::Null => Value::String(None),
+        serde_json::Value::Null => Value::Null(Kind::String),
         other => Value::from(other.to_string()),
     }
 }
@@ -309,7 +309,7 @@ impl Lowerer {
                 // SQLite's LIKE ignores ASCII case; GLOB matches case, with
                 // its own wildcards: a pattern given as text is converted
                 // here, any other in SQL.
-                Expr::Value(Value::String(Some(text))) => left.binary(
+                Expr::Value(Value::String(text)) => left.binary(
                     BinaryOp::Custom(Cow::Borrowed(if not { "NOT GLOB" } else { "GLOB" })),
                     ast::Expr::Value(Value::from(like_to_glob(text))),
                 ),
@@ -393,17 +393,17 @@ impl Lowerer {
         let normalized = match part {
             DatePart::Day | DatePart::Month | DatePart::Year => {
                 let number = match value {
-                    Value::ChronoDate(Some(date)) => i64::from(match part {
+                    Value::Date(date) => i64::from(match part {
                         DatePart::Day => date.day() as i32,
                         DatePart::Month => date.month() as i32,
                         _ => date.year(),
                     }),
-                    Value::ChronoDateTime(Some(at)) => i64::from(match part {
+                    Value::DateTime(at) => i64::from(match part {
                         DatePart::Day => at.day() as i32,
                         DatePart::Month => at.month() as i32,
                         _ => at.year(),
                     }),
-                    Value::ChronoDateTimeUtc(Some(at)) => i64::from(match part {
+                    Value::Timestamp(at) => i64::from(match part {
                         DatePart::Day => at.day() as i32,
                         DatePart::Month => at.month() as i32,
                         _ => at.year(),
@@ -421,19 +421,19 @@ impl Lowerer {
                 }
             }
             DatePart::Date => match (self.dialect, value) {
-                (Dialect::Sqlite, Value::ChronoDate(Some(date))) => {
+                (Dialect::Sqlite, Value::Date(date)) => {
                     Value::from(date.format("%Y-%m-%d").to_string())
                 }
-                (Dialect::Sqlite, Value::ChronoDateTime(Some(at))) => {
+                (Dialect::Sqlite, Value::DateTime(at)) => {
                     Value::from(at.format("%Y-%m-%d").to_string())
                 }
-                (Dialect::Sqlite, Value::ChronoDateTimeUtc(Some(at))) => {
+                (Dialect::Sqlite, Value::Timestamp(at)) => {
                     Value::from(at.format("%Y-%m-%d").to_string())
                 }
                 _ => value.clone(),
             },
             DatePart::Time => match (self.dialect, value) {
-                (Dialect::Sqlite, Value::ChronoTime(Some(time))) => Value::from(format!(
+                (Dialect::Sqlite, Value::Time(time)) => Value::from(format!(
                     "{:02}:{:02}:{:02}",
                     time.hour(),
                     time.minute(),
@@ -449,7 +449,7 @@ impl Lowerer {
         Ok(match self.dialect {
             Dialect::Postgres => self.json_value(column).cast(SqlType::Json).binary(
                 BinaryOp::Custom(Cow::Borrowed("@>")),
-                ast::Expr::Value(Value::Json(Some(Box::new(value.clone())))),
+                ast::Expr::Value(Value::Json(value.clone())),
             ),
             Dialect::MySql => {
                 let mut args = vec![
@@ -469,7 +469,7 @@ impl Lowerer {
                         Some(int) => Value::from(int),
                         None => Value::from(number.as_f64().unwrap_or_default()),
                     },
-                    serde_json::Value::Null => Value::String(None),
+                    serde_json::Value::Null => Value::Null(Kind::String),
                     _ => {
                         return Err(self
                             .unsupported("a JSON containment check for an object or array value"));
@@ -499,7 +499,7 @@ impl Lowerer {
         Ok(match self.dialect {
             Dialect::Postgres => self.json_value(column).cast(SqlType::Json).binary(
                 BinaryOp::Custom(Cow::Borrowed("<@")),
-                ast::Expr::Value(Value::Json(Some(Box::new(value.clone())))),
+                ast::Expr::Value(Value::Json(value.clone())),
             ),
             Dialect::MySql => ast::Expr::func(
                 "json_contains",
@@ -526,7 +526,7 @@ impl Lowerer {
                 let candidates = ast::Select::from_source(ast::Source::function(
                     ast::Expr::func(
                         "jsonb_array_elements",
-                        vec![ast::Expr::Value(Value::Json(Some(Box::new(elements))))],
+                        vec![ast::Expr::Value(Value::Json(elements))],
                     ),
                     "navree_candidate",
                 ))

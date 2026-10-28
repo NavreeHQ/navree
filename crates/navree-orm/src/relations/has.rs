@@ -74,9 +74,9 @@ pub(crate) fn limit_per_parent<R: Model>(query: Builder<R>, partition: Expr) -> 
         outer = outer.where_(Filter::from(Where::Compare {
             left: row.clone(),
             op: Operator::Gt,
-            right: Expr::Value(Value::BigInt(Some(
+            right: Expr::Value(Value::I64(
                 i64::try_from(offset).unwrap_or(i64::MAX),
-            ))),
+            )),
         }));
     }
     if let Some(limit) = limit {
@@ -84,7 +84,7 @@ pub(crate) fn limit_per_parent<R: Model>(query: Builder<R>, partition: Expr) -> 
         outer = outer.where_(Filter::from(Where::Compare {
             left: row.clone(),
             op: Operator::Lte,
-            right: Expr::Value(Value::BigInt(Some(i64::try_from(last).unwrap_or(i64::MAX)))),
+            right: Expr::Value(Value::I64(i64::try_from(last).unwrap_or(i64::MAX))),
         }));
     }
     outer.ir.orders = vec![Order::asc(row)];

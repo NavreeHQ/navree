@@ -5,11 +5,10 @@ use std::fmt;
 use std::str::FromStr;
 
 use chrono::{DateTime, Utc};
-use sea_orm::QueryResult;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use uuid::Uuid;
 
-use crate::value::{Field, FieldError, FieldKind, Value, sql_get};
+use crate::value::{Field, FieldError, FieldKind, Kind, Value};
 
 /// Crockford's base32 alphabet (no I, L, O or U).
 const ALPHABET: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
@@ -169,7 +168,7 @@ impl<'de> Deserialize<'de> for Ulid {
 
 impl From<Ulid> for Value {
     fn from(ulid: Ulid) -> Self {
-        Value::String(Some(ulid.to_string()))
+        Value::String(ulid.to_string())
     }
 }
 
@@ -181,18 +180,12 @@ impl Field for Ulid {
     }
 
     fn null() -> Value {
-        Value::String(None)
-    }
-
-    fn from_sql(row: &QueryResult, column: &str) -> Result<Self, FieldError> {
-        let text = sql_get::<String>(row, column)?;
-        text.parse()
-            .map_err(|error: UlidError| FieldError::Invalid(error.to_string()))
+        Value::Null(Kind::String)
     }
 
     fn from_value(value: Value) -> Result<Self, FieldError> {
         match value {
-            Value::Uuid(Some(uuid)) => Ok(Ulid(uuid.as_u128())),
+            Value::Uuid(uuid) => Ok(Ulid(uuid.as_u128())),
             other => String::from_value(other)?
                 .parse()
                 .map_err(|error: UlidError| FieldError::Invalid(error.to_string())),
@@ -254,10 +247,10 @@ mod tests {
         let json = serde_json::to_string(&id).unwrap();
         assert_eq!(json, format!("\"{id}\""));
         assert_eq!(serde_json::from_str::<Ulid>(&json).unwrap(), id);
-        assert_eq!(id.to_value(), Value::String(Some(id.to_string())));
+        assert_eq!(id.to_value(), Value::String(id.to_string()));
         assert_eq!(Ulid::from_value(id.to_value()).unwrap(), id);
         assert_eq!(
-            Ulid::from_value(Value::Uuid(Some(id.to_uuid()))).unwrap(),
+            Ulid::from_value(Value::Uuid(id.to_uuid())).unwrap(),
             id
         );
     }

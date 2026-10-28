@@ -143,10 +143,10 @@ impl From<Filter> for Conditions {
 /// use navree_orm::testing::json_value;
 ///
 /// let expected = json_value(serde_json::json!({"source": "web", "score": 3}));
-/// assert!(matches!(expected, navree_orm::Value::Json(Some(_))));
+/// assert!(matches!(expected, navree_orm::Value::Json(_)));
 /// ```
 pub fn json_value(value: serde_json::Value) -> Value {
-    Value::Json(Some(Box::new(value)))
+    Value::Json(value)
 }
 
 /// Asserts that a row of `table` matches `conditions`.
@@ -605,24 +605,21 @@ fn value_matches(actual: &Value, expected: &Value, decode: impl Fn(Kind) -> Opti
     }
     let kind = match expected {
         Value::Bool(_) => Kind::Bool,
-        Value::TinyInt(_)
-        | Value::SmallInt(_)
-        | Value::Int(_)
-        | Value::BigInt(_)
-        | Value::TinyUnsigned(_)
-        | Value::SmallUnsigned(_)
-        | Value::Unsigned(_)
-        | Value::BigUnsigned(_) => Kind::Integer,
-        Value::Float(_) | Value::Double(_) => Kind::Float,
+        Value::I8(_)
+        | Value::I16(_)
+        | Value::I32(_)
+        | Value::I64(_)
+        | Value::U8(_)
+        | Value::U16(_)
+        | Value::U32(_)
+        | Value::U64(_) => Kind::Integer,
+        Value::F32(_) | Value::F64(_) => Kind::Float,
         Value::Decimal(_) => Kind::Decimal,
-        Value::String(_) | Value::Char(_) => Kind::Text,
+        Value::String(_) | Value::Enum { .. } => Kind::Text,
         Value::Uuid(_) => Kind::Uuid,
-        Value::ChronoDateTimeUtc(_)
-        | Value::ChronoDateTimeLocal(_)
-        | Value::ChronoDateTimeWithTimeZone(_)
-        | Value::ChronoDateTime(_) => Kind::DateTime,
-        Value::ChronoDate(_) => Kind::Date,
-        Value::ChronoTime(_) => Kind::Time,
+        Value::Timestamp(_) | Value::TimestampTz(_) | Value::DateTime(_) => Kind::DateTime,
+        Value::Date(_) => Kind::Date,
+        Value::Time(_) => Kind::Time,
         Value::Json(_) => Kind::Json,
         _ => return false,
     };
@@ -645,7 +642,7 @@ fn normalize(value: Value, kind: Kind) -> Value {
         Kind::Integer => convert::<i64>(value),
         Kind::Float => convert::<f64>(value),
         Kind::DateTime => match value {
-            Value::ChronoDateTime(Some(naive)) => Value::from(naive.and_utc()),
+            Value::DateTime(naive) => Value::from(naive.and_utc()),
             other => match DateTime::<FixedOffset>::from_value(other.clone()) {
                 Ok(at) => Value::from(at.with_timezone(&Utc)),
                 Err(_) => convert::<NaiveDateTime>(other),
@@ -693,15 +690,15 @@ mod tests {
     #[test]
     fn values_compare_as_the_column_stores_them() {
         let stored = row(vec![
-            ("active", Value::BigInt(Some(1))),
-            ("count", Value::Int(Some(3))),
-            ("price", Value::String(Some("12.50".into()))),
-            ("meta", Value::String(Some(r#"{"b": 2, "a": 1}"#.into()))),
+            ("active", Value::I64(1)),
+            ("count", Value::I32(3)),
+            ("price", Value::String("12.50".into())),
+            ("meta", Value::String(r#"{"b": 2, "a": 1}"#.into())),
             (
                 "at",
-                Value::String(Some("2026-10-27T09:30:00+00:00".into())),
+                Value::String("2026-10-27T09:30:00+00:00".into()),
             ),
-            ("note", Value::String(None)),
+            ("note", Value::Null(crate::Kind::String)),
         ]);
         assert!(column_matches(&stored, "active", &Value::from(true)));
         assert!(!column_matches(&stored, "active", &Value::from(false)));
@@ -723,7 +720,7 @@ mod tests {
         ));
         let at = DateTime::parse_from_rfc3339("2026-10-27T11:30:00+02:00").unwrap();
         assert!(column_matches(&stored, "at", &Value::from(at)));
-        assert!(column_matches(&stored, "note", &Value::String(None)));
+        assert!(column_matches(&stored, "note", &Value::Null(crate::Kind::String)));
         assert!(!column_matches(&stored, "note", &Value::from("x")));
         assert!(!column_matches(&stored, "missing", &Value::from("x")));
     }

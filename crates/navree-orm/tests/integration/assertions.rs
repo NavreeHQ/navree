@@ -10,7 +10,7 @@ use navree_orm::testing::{
     assert_model_exists, assert_model_missing, assert_not_soft_deleted, assert_not_soft_deleted_in,
     assert_soft_deleted, assert_soft_deleted_in, count_queries, expect_query_count, json_value,
 };
-use navree_orm::{Model, Value};
+use navree_orm::{Kind, Model, Value};
 
 use crate::models::{Company, Deal, DealFactory, Stage, Tag};
 use crate::support::sqlite;
@@ -94,7 +94,7 @@ async fn values_compare_as_columns_store_them() {
         [("profile", json_value(serde_json::json!({"tier": "gold"})))],
     )
     .await;
-    assert_database_has(db, "companies", [("country", Value::String(None))]).await;
+    assert_database_has(db, "companies", [("country", Value::Null(Kind::String))]).await;
     assert_database_missing(db, "companies", [("verified", Value::from(false))]).await;
 }
 

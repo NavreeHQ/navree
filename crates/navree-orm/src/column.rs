@@ -43,7 +43,7 @@ pub struct Untyped;
 /// let filter: Filter = AMOUNT.gte(10_000).and(col("stage").eq("won"));
 /// let sql = filter.to_sql(Dialect::Postgres).unwrap();
 /// assert_eq!(sql.sql, r#""deals"."amount_cents" >= $1 AND "stage" = $2"#);
-/// assert_eq!(sql.values, [Value::BigInt(Some(10_000)), Value::from("won")]);
+/// assert_eq!(sql.values, [Value::I64(10_000), Value::from("won")]);
 /// ```
 pub struct Column<M, T> {
     table: Option<Cow<'static, str>>,

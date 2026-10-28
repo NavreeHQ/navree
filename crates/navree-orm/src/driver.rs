@@ -40,7 +40,7 @@
 //!         Box::pin(async { Ok(Vec::new()) })
 //!     }
 //!     fn aggregate<'a>(&'a self, _q: &'a QueryIr, _a: &'a Aggregate) -> BoxFuture<'a, Result<Value, OrmError>> {
-//!         Box::pin(async { Ok(Value::BigInt(Some(0))) })
+//!         Box::pin(async { Ok(Value::I64(0)) })
 //!     }
 //!     fn insert<'a>(&'a self, insert: &'a InsertIr) -> BoxFuture<'a, Result<InsertOutcome, OrmError>> {
 //!         Box::pin(async move { Ok(InsertOutcome::affected(insert.rows.len() as u64)) })

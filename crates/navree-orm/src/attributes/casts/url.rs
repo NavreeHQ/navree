@@ -2,10 +2,9 @@
 
 use std::borrow::Cow;
 
-use sea_orm::QueryResult;
 use url::Url;
 
-use crate::value::{Field, FieldError, FieldKind, Value, sql_get};
+use crate::value::{Field, FieldError, FieldKind, Kind, Value};
 
 fn parse(text: &str) -> Result<Url, FieldError> {
     Url::parse(text.trim())
@@ -28,15 +27,11 @@ impl Field for Url {
     const KIND: FieldKind = FieldKind::Url;
 
     fn to_value(&self) -> Value {
-        Value::String(Some(self.as_str().to_owned()))
+        Value::String(self.as_str().to_owned())
     }
 
     fn null() -> Value {
-        Value::String(None)
-    }
-
-    fn from_sql(row: &QueryResult, column: &str) -> Result<Self, FieldError> {
-        sql_get::<String>(row, column).and_then(|text| parse(&text))
+        Value::Null(Kind::String)
     }
 
     fn from_value(value: Value) -> Result<Self, FieldError> {

@@ -216,15 +216,15 @@ fn object_id(value: Value) -> Result<ObjectId, FieldError> {
         Value::Enum(OptionEnum::Some(id)) => {
             ObjectId::parse(&id.value).map_err(|error| FieldError::Invalid(error.to_string()))
         }
-        Value::String(Some(text)) => {
+        Value::String(text) => {
             ObjectId::parse(&text).map_err(|error| FieldError::Invalid(error.to_string()))
         }
-        Value::Bytes(Some(bytes)) => <[u8; 12]>::try_from(bytes.as_slice())
+        Value::Bytes(bytes) => <[u8; 12]>::try_from(bytes.as_slice())
             .map(ObjectId)
             .map_err(|_| {
                 FieldError::Invalid(format!("{} bytes are not an ObjectId (12)", bytes.len()))
             }),
-        Value::Json(Some(json)) => serde_json::from_value::<ObjectId>(*json)
+        Value::Json(json) => serde_json::from_value::<ObjectId>(*json)
             .map_err(|error| FieldError::Invalid(error.to_string())),
         _ => Err(FieldError::Invalid(
             "expected an ObjectId, found a value of another type".to_owned(),
@@ -245,10 +245,10 @@ impl Field for ObjectId {
 
     fn from_sql(row: &QueryResult, column: &str) -> Result<Self, FieldError> {
         match <Option<String> as Field>::from_sql(row, column) {
-            Ok(Some(text)) => object_id(Value::String(Some(text))),
+            Ok(Some(text)) => object_id(Value::String(text)),
             Ok(None) => Err(FieldError::Null),
             Err(FieldError::Invalid(first)) => match <Vec<u8> as Field>::from_sql(row, column) {
-                Ok(bytes) => object_id(Value::Bytes(Some(bytes))),
+                Ok(bytes) => object_id(Value::Bytes(bytes)),
                 Err(_) => Err(FieldError::Invalid(first)),
             },
             Err(other) => Err(other),
@@ -308,10 +308,10 @@ mod tests {
     fn values_read_leniently() {
         let id = ObjectId::new();
         for value in [
-            Value::String(Some(id.to_hex())),
-            Value::Bytes(Some(id.bytes().to_vec())),
-            Value::Json(Some(Box::new(serde_json::json!({ "$oid": id.to_hex() })))),
-            Value::Json(Some(Box::new(serde_json::json!(id.to_hex())))),
+            Value::String(id.to_hex()),
+            Value::Bytes(id.bytes().to_vec()),
+            Value::Json(serde_json::json!({ "$oid": id.to_hex() })),
+            Value::Json(serde_json::json!(id.to_hex())),
         ] {
             assert_eq!(<ObjectId as Field>::from_value(value).unwrap(), id);
         }

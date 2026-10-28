@@ -328,7 +328,7 @@ pub fn reads(dialect: Dialect) -> Vec<Case> {
         ),
         read(
             "null-safe equality with a null",
-            table("companies").where_(col("country").null_safe_eq(Value::String(None))),
+            table("companies").where_(col("country").null_safe_eq(Value::Null(navree_orm::Kind::String))),
         ),
         read(
             "null-safe equality",
@@ -1102,7 +1102,7 @@ pub fn writes(dialect: Dialect) -> Vec<Case> {
         "companies",
         names(&["name", "country", "active"]),
         vec![
-            vec![val("Hooli"), val(Value::String(None)), val(true)],
+            vec![val("Hooli"), val(Value::Null(navree_orm::Kind::String)), val(true)],
             vec![val("Pied Piper"), val("US"), val(false)],
         ],
     );
@@ -1237,7 +1237,7 @@ pub fn writes(dialect: Dialect) -> Vec<Case> {
     ));
     cases.push(case(
         "update every row",
-        Kind::Update(update(vec![("owner_id", val(Value::BigInt(None)))], vec![])),
+        Kind::Update(update(vec![("owner_id", val(Value::Null(navree_orm::Kind::I64)))], vec![])),
     ));
     cases.push(case(
         "update json paths",

@@ -47,7 +47,7 @@ use crate::ir::{Boolean, ColumnRef, Direction, Expr, Operator, Order, Where, Whe
 use crate::model::Model;
 use crate::query::Builder;
 use crate::record::Record;
-use crate::value::{Decimal, Value};
+use crate::value::{Decimal, Kind, Value};
 
 /// Which page [`paginate`](Builder::paginate) and
 /// [`simple_paginate`](Builder::simple_paginate) load: a page number (with
@@ -314,41 +314,29 @@ impl Cursor {
 
 /// A value with its type: `["i64", 42]`, `["utc", "2026-10-27T08:30:00Z"]`.
 fn tag(value: &Value) -> serde_json::Value {
-    fn text<T: ToString>(name: &str, value: &Option<T>) -> serde_json::Value {
-        match value {
-            Some(value) => json!([name, value.to_string()]),
-            None => json!(["null"]),
-        }
-    }
     match value {
-        Value::Bool(v) => v.map_or(json!(["null"]), |v| json!(["b", v])),
-        Value::TinyInt(v) => v.map_or(json!(["null"]), |v| json!(["i8", v])),
-        Value::SmallInt(v) => v.map_or(json!(["null"]), |v| json!(["i16", v])),
-        Value::Int(v) => v.map_or(json!(["null"]), |v| json!(["i32", v])),
-        Value::BigInt(v) => v.map_or(json!(["null"]), |v| json!(["i64", v])),
-        Value::TinyUnsigned(v) => v.map_or(json!(["null"]), |v| json!(["u8", v])),
-        Value::SmallUnsigned(v) => v.map_or(json!(["null"]), |v| json!(["u16", v])),
-        Value::Unsigned(v) => v.map_or(json!(["null"]), |v| json!(["u32", v])),
-        Value::BigUnsigned(v) => v.map_or(json!(["null"]), |v| json!(["u64", v])),
-        Value::Float(v) => v.map_or(json!(["null"]), |v| json!(["f32", v])),
-        Value::Double(v) => v.map_or(json!(["null"]), |v| json!(["f64", v])),
-        Value::String(v) => text("s", v),
-        Value::Char(v) => text("s", v),
-        Value::ChronoDate(v) => text("date", v),
-        Value::ChronoTime(v) => text("time", v),
-        Value::ChronoDateTime(v) => text("naive", &v.map(|v| v.format("%Y-%m-%dT%H:%M:%S%.f"))),
-        Value::ChronoDateTimeUtc(v) => text("utc", &v.map(|v| v.to_rfc3339())),
-        Value::ChronoDateTimeLocal(v) => {
-            text("utc", &v.map(|v| v.with_timezone(&Utc).to_rfc3339()))
-        }
-        Value::ChronoDateTimeWithTimeZone(v) => text("tz", &v.map(|v| v.to_rfc3339())),
-        Value::Uuid(v) => text("uuid", v),
-        Value::Decimal(v) => text("dec", v),
+        Value::Null(_) => json!(["null"]),
+        Value::Bool(v) => json!(["b", v]),
+        Value::I8(v) => json!(["i8", v]),
+        Value::I16(v) => json!(["i16", v]),
+        Value::I32(v) => json!(["i32", v]),
+        Value::I64(v) => json!(["i64", v]),
+        Value::U8(v) => json!(["u8", v]),
+        Value::U16(v) => json!(["u16", v]),
+        Value::U32(v) => json!(["u32", v]),
+        Value::U64(v) => json!(["u64", v]),
+        Value::F32(v) => json!(["f32", v]),
+        Value::F64(v) => json!(["f64", v]),
+        Value::String(v) => json!(["s", v]),
+        Value::Date(v) => json!(["date", v.to_string()]),
+        Value::Time(v) => json!(["time", v.to_string()]),
+        Value::DateTime(v) => json!(["naive", v.format("%Y-%m-%dT%H:%M:%S%.f").to_string()]),
+        Value::Timestamp(v) => json!(["utc", v.to_rfc3339()]),
+        Value::TimestampTz(v) => json!(["tz", v.to_rfc3339()]),
+        Value::Uuid(v) => json!(["uuid", v.to_string()]),
+        Value::Decimal(v) => json!(["dec", v.to_string()]),
         // A driver's typed text (a MongoDB ObjectId): its type and text.
-        Value::Enum(sea_query::OptionEnum::Some(value)) => {
-            json!(["enum", &*value.type_name, value.value])
-        }
-        Value::Enum(sea_query::OptionEnum::None(_)) => json!(["null"]),
+        Value::Enum { type_name, value } => json!(["enum", type_name, value]),
         other => json!(["s", crate::value::to_json(other).to_string()]),
     }
 }
@@ -362,52 +350,52 @@ fn untag(tagged: &serde_json::Value) -> Result<Value> {
         .and_then(serde_json::Value::as_str)
         .ok_or_else(invalid)?;
     if name == "null" {
-        return Ok(Value::String(None));
+        return Ok(Value::Null(Kind::String));
     }
     let raw = parts.get(1).ok_or_else(invalid)?;
     let int = || raw.as_i64().ok_or_else(invalid);
     let unsigned = || raw.as_u64().ok_or_else(invalid);
     let text = || raw.as_str().ok_or_else(invalid);
     Ok(match name {
-        "b" => Value::Bool(Some(raw.as_bool().ok_or_else(invalid)?)),
-        "i8" => Value::TinyInt(Some(i8::try_from(int()?).map_err(|_| invalid())?)),
-        "i16" => Value::SmallInt(Some(i16::try_from(int()?).map_err(|_| invalid())?)),
-        "i32" => Value::Int(Some(i32::try_from(int()?).map_err(|_| invalid())?)),
-        "i64" => Value::BigInt(Some(int()?)),
-        "u8" => Value::TinyUnsigned(Some(u8::try_from(unsigned()?).map_err(|_| invalid())?)),
-        "u16" => Value::SmallUnsigned(Some(u16::try_from(unsigned()?).map_err(|_| invalid())?)),
-        "u32" => Value::Unsigned(Some(u32::try_from(unsigned()?).map_err(|_| invalid())?)),
-        "u64" => Value::BigUnsigned(Some(unsigned()?)),
+        "b" => Value::Bool(raw.as_bool().ok_or_else(invalid)?),
+        "i8" => Value::I8(i8::try_from(int()?).map_err(|_| invalid())?),
+        "i16" => Value::I16(i16::try_from(int()?).map_err(|_| invalid())?),
+        "i32" => Value::I32(i32::try_from(int()?).map_err(|_| invalid())?),
+        "i64" => Value::I64(int()?),
+        "u8" => Value::U8(u8::try_from(unsigned()?).map_err(|_| invalid())?),
+        "u16" => Value::U16(u16::try_from(unsigned()?).map_err(|_| invalid())?),
+        "u32" => Value::U32(u32::try_from(unsigned()?).map_err(|_| invalid())?),
+        "u64" => Value::U64(unsigned()?),
         // Narrowing back to the precision the value was written with.
         #[allow(clippy::cast_possible_truncation)]
-        "f32" => Value::Float(Some(raw.as_f64().ok_or_else(invalid)? as f32)),
-        "f64" => Value::Double(Some(raw.as_f64().ok_or_else(invalid)?)),
-        "s" => Value::String(Some(text()?.to_owned())),
-        "date" => Value::ChronoDate(Some(text()?.parse::<NaiveDate>().map_err(|_| invalid())?)),
-        "time" => Value::ChronoTime(Some(text()?.parse::<NaiveTime>().map_err(|_| invalid())?)),
-        "naive" => Value::ChronoDateTime(Some(
+        "f32" => Value::F32(raw.as_f64().ok_or_else(invalid)? as f32),
+        "f64" => Value::F64(raw.as_f64().ok_or_else(invalid)?),
+        "s" => Value::String(text()?.to_owned()),
+        "date" => Value::Date(text()?.parse::<NaiveDate>().map_err(|_| invalid())?),
+        "time" => Value::Time(text()?.parse::<NaiveTime>().map_err(|_| invalid())?),
+        "naive" => Value::DateTime(
             NaiveDateTime::parse_from_str(text()?, "%Y-%m-%dT%H:%M:%S%.f")
                 .map_err(|_| invalid())?,
-        )),
-        "utc" => Value::ChronoDateTimeUtc(Some(
+        ),
+        "utc" => Value::Timestamp(
             DateTime::parse_from_rfc3339(text()?)
                 .map_err(|_| invalid())?
                 .with_timezone(&Utc),
-        )),
-        "tz" => Value::ChronoDateTimeWithTimeZone(Some(
+        ),
+        "tz" => Value::TimestampTz(
             DateTime::<FixedOffset>::parse_from_rfc3339(text()?).map_err(|_| invalid())?,
-        )),
-        "uuid" => Value::Uuid(Some(Uuid::parse_str(text()?).map_err(|_| invalid())?)),
-        "dec" => Value::Decimal(Some(text()?.parse::<Decimal>().map_err(|_| invalid())?)),
+        ),
+        "uuid" => Value::Uuid(Uuid::parse_str(text()?).map_err(|_| invalid())?),
+        "dec" => Value::Decimal(text()?.parse::<Decimal>().map_err(|_| invalid())?),
         "enum" => {
             let value = parts
                 .get(2)
                 .and_then(serde_json::Value::as_str)
                 .ok_or_else(invalid)?;
-            Value::Enum(sea_query::OptionEnum::Some(Box::new(sea_query::Enum {
-                type_name: text()?.into(),
-                value: value.to_owned().into(),
-            })))
+            Value::Enum {
+                type_name: text()?.to_owned(),
+                value: value.to_owned(),
+            }
         }
         _ => return Err(invalid()),
     })
@@ -654,10 +642,10 @@ mod tests {
                 "amount".into(),
             ],
             values: vec![
-                Value::ChronoDateTimeUtc(Some(at)),
-                Value::Uuid(Some(Uuid::nil())),
-                Value::Double(Some(2.5)),
-                Value::Decimal(Some(Decimal::new(1250, 2))),
+                Value::Timestamp(at),
+                Value::Uuid(Uuid::nil()),
+                Value::F64(2.5),
+                Value::Decimal(Decimal::new(1250, 2)),
             ],
         };
         let text = cursor.encode();
@@ -673,16 +661,13 @@ mod tests {
     /// like.
     #[test]
     fn cursors_keep_enum_values() {
-        let object_id = Value::Enum(sea_query::OptionEnum::Some(Box::new(sea_query::Enum {
-            type_name: "ObjectId".into(),
-            value: "65f1c0ffee0000000000002a".into(),
-        })));
+        let object_id = Value::enumeration("ObjectId", "65f1c0ffee0000000000002a");
         let cursor = Cursor {
             towards: Towards::Next,
             columns: vec!["_id".into(), "kind".into()],
             values: vec![
                 object_id,
-                Value::Enum(sea_query::OptionEnum::None("ObjectId".into())),
+                Value::Null(Kind::Enum),
             ],
         };
         let decoded = Cursor::decode(&cursor.encode()).unwrap();

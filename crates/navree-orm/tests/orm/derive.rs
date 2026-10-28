@@ -2,7 +2,7 @@
 //! and writing columns.
 
 use chrono::{TimeZone, Utc};
-use navree_orm::{KeyKind, Model, OrmError, Row, Ulid, Value};
+use navree_orm::{KeyKind, Kind, Model, OrmError, Row, Ulid, Value};
 use uuid::Uuid;
 
 use crate::models::{
@@ -87,7 +87,7 @@ fn typed_columns_encode_values_as_their_fields_are_stored() {
     );
     assert_eq!(
         Deal::PRIORITY.encode(&Priority::High).unwrap(),
-        Value::BigInt(Some(3))
+        Value::I64(3)
     );
     assert_eq!(
         Deal::META
@@ -96,34 +96,34 @@ fn typed_columns_encode_values_as_their_fields_are_stored() {
                 score: 4
             })
             .unwrap(),
-        Value::Json(Some(Box::new(
+        Value::Json(
             serde_json::json!({"source": "web", "score": 4})
-        )))
+        )
     );
     assert_eq!(
         Deal::CLOSED_AT.encode(&None).unwrap(),
-        Value::ChronoDateTimeUtc(None)
+        Value::Null(Kind::Timestamp)
     );
 }
 
 fn deal_row(stage: &str) -> Row {
     let at = Utc.with_ymd_and_hms(2026, 1, 2, 3, 4, 5).unwrap();
     Row::from_values(vec![
-        ("id".into(), Value::Uuid(Some(Uuid::nil()))),
-        ("company_id".into(), Value::BigInt(None)),
+        ("id".into(), Value::Uuid(Uuid::nil())),
+        ("company_id".into(), Value::Null(Kind::I64)),
         ("title".into(), Value::from("Renewal")),
-        ("amount_cents".into(), Value::BigInt(Some(1200))),
+        ("amount_cents".into(), Value::I64(1200)),
         ("stage".into(), Value::from(stage)),
-        ("priority".into(), Value::BigInt(Some(2))),
+        ("priority".into(), Value::I64(2)),
         ("meta".into(), Value::from(r#"{"source":"ads","score":7}"#)),
         ("tags".into(), Value::from(r#"["vip","q4"]"#)),
-        ("probability".into(), Value::Double(Some(0.5))),
+        ("probability".into(), Value::F64(0.5)),
         ("value".into(), Value::from("10.25")),
         ("closes_on".into(), Value::from("2026-12-31")),
-        ("closed_at".into(), Value::ChronoDateTimeUtc(None)),
-        ("created_at".into(), Value::ChronoDateTimeUtc(Some(at))),
+        ("closed_at".into(), Value::Null(Kind::Timestamp)),
+        ("created_at".into(), Value::Timestamp(at)),
         ("updated_at".into(), Value::from("2026-01-02 03:04:05")),
-        ("deleted_at".into(), Value::String(None)),
+        ("deleted_at".into(), Value::Null(Kind::String)),
     ])
 }
 
@@ -151,7 +151,7 @@ fn decoding_errors_name_the_model_the_column_and_the_cause() {
         "cannot cast column `stage` of Deal: `won` is not a variant of Stage"
     );
 
-    let partial = Row::from_values(vec![("id".into(), Value::BigInt(Some(1)))]);
+    let partial = Row::from_values(vec![("id".into(), Value::I64(1))]);
     let error = Company::from_row(&partial).unwrap_err().to_string();
     assert!(error.starts_with("cannot read column `name` of Company as String: the row has no such column (it has: id)"), "{error}");
     assert!(
@@ -163,7 +163,7 @@ fn decoding_errors_name_the_model_the_column_and_the_cause() {
 #[test]
 fn defaulted_fields_read_their_default_when_the_row_lacks_them() {
     let row = Row::from_values(vec![
-        ("account_id".into(), Value::Int(Some(4))),
+        ("account_id".into(), Value::I32(4)),
         ("display_name".into(), Value::from("Ada")),
     ]);
     let account = Account::from_row(&row).unwrap();
@@ -185,15 +185,15 @@ fn values_and_set_value_round_trip() {
     assert_eq!(values[4], ("stage", Value::from("lead")));
     assert_eq!(
         deal.value("priority").unwrap(),
-        Some(Value::BigInt(Some(2)))
+        Some(Value::I64(2))
     );
     assert_eq!(deal.value("scratch").unwrap(), None, "not a column");
 
     deal.set_value("stage", Value::from("closed_lost")).unwrap();
-    deal.set_value("amount_cents", Value::Int(Some(7))).unwrap();
+    deal.set_value("amount_cents", Value::I32(7)).unwrap();
     assert_eq!(deal.stage, Stage::ClosedLost);
     assert_eq!(deal.amount_cents, 7);
-    let error = deal.set_value("nope", Value::Int(Some(1))).unwrap_err();
+    let error = deal.set_value("nope", Value::I32(1)).unwrap_err();
     assert_eq!(
         error.to_string(),
         "invalid query: Deal has no column `nope`"
@@ -225,7 +225,7 @@ fn keys_and_timestamps_are_reachable_by_column() {
     assert!(deal.timestamp_is_empty("created_at"));
     assert_eq!(
         Deal::timestamp_value("deleted_at", now),
-        Some(Value::ChronoDateTimeUtc(Some(now)))
+        Some(Value::Timestamp(now))
     );
     assert_eq!(Deal::timestamp_value("title", now), None);
 }
@@ -243,15 +243,15 @@ struct ObjectId(u32);
 
 impl navree_orm::Field for ObjectId {
     fn to_value(&self) -> Value {
-        Value::BigInt(Some(i64::from(self.0)))
+        Value::I64(i64::from(self.0))
     }
 
     fn null() -> Value {
-        Value::BigInt(None)
+        Value::Null(Kind::I64)
     }
 
     fn from_sql(
-        row: &navree_db::sea_orm::QueryResult,
+        row: &navree_db::Row,
         column: &str,
     ) -> Result<Self, navree_orm::FieldError> {
         <u32 as navree_orm::Field>::from_sql(row, column).map(ObjectId)

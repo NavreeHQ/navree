@@ -72,7 +72,7 @@ impl navree_orm::Field for Email {
     }
 
     fn from_sql(
-        row: &navree_db::sea_orm::QueryResult,
+        row: &navree_db::Row,
         column: &str,
     ) -> Result<Self, navree_orm::FieldError> {
         <String as navree_orm::Field>::from_sql(row, column).map(|text| Email::new(&text))
@@ -507,7 +507,7 @@ async fn fields_across_columns_track_each_column() {
 
     let mut stored = stored;
     stored
-        .set_value("total_cents", navree_orm::Value::BigInt(Some(1)))
+        .set_value("total_cents", navree_orm::Value::I64(1))
         .unwrap();
     assert_eq!(stored.total.cents, 1);
     stored

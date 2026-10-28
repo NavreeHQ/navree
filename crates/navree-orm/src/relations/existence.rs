@@ -277,9 +277,9 @@ pub(crate) fn has_filter<M: Model>(
         Where::Compare {
             left: Expr::Subquery(Box::new(query)),
             op,
-            right: Expr::Value(Value::BigInt(Some(
+            right: Expr::Value(Value::I64(
                 i64::try_from(count).unwrap_or(i64::MAX),
-            ))),
+            )),
         }
     })
 }
