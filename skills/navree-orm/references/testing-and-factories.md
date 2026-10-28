@@ -70,7 +70,7 @@ use navree::schema::Schema;
 /// The tables, built once per test binary; every test gets a copy.
 static DATABASE: Template = Template::new("deals", |template| {
     Box::pin(async move {
-        let schema = Schema::new(template.db().conn());
+        let schema = Schema::new(template.db());
         schema
             .create("companies", |t| {
                 t.uuid_primary();
