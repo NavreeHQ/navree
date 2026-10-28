@@ -265,7 +265,7 @@ With `micro.outbox` on (the default with `DatabaseModule`), `emit` inside a unit
 
 1. The handler or request commits: the deal and the outbox row are stored together, or neither is.
 2. Right after the commit, the outbox relay publishes the row and deletes it.
-3. If the process dies between the two, a relay in any instance finds the row on its next sweep (every `micro.outbox_poll_ms`, 1000 by default) and publishes it. On PostgreSQL, relays claim rows with `FOR UPDATE SKIP LOCKED`, so several instances never publish the same row at once.
+3. If the process dies between the two, a relay in any instance finds the row on its next sweep (every `micro.outbox_poll_ms`, 1000 by default) and publishes it. On PostgreSQL and MySQL, relays claim rows with `FOR UPDATE SKIP LOCKED`, so several instances never publish the same row at once.
 
 So a committed change always publishes its events, and a rolled-back one never does. In the crash window an event can be published twice, which the inbox on the receiving side absorbs.
 
