@@ -580,6 +580,16 @@ impl Uow {
         Ok(())
     }
 
+    /// [`record_with`](Uow::record_with) for navree-db's own errors (the
+    /// record statements of [`crate::record`]).
+    pub(crate) fn record_lazily(
+        &self,
+        prepare: impl Fn() -> Result<Option<ChangeEvent>, DbError> + Send + Sync + 'static,
+    ) -> Result<(), DbError> {
+        self.record_with(Box::new(move || prepare().map_err(DbErr::from)))
+            .map_err(DbError::from)
+    }
+
     /// The changes recorded so far (cleared by commit and rollback). A
     /// deferred event that cannot be prepared (its record does not
     /// serialize) is left out, with a warning.

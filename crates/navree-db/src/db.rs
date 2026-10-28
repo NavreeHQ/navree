@@ -1033,6 +1033,52 @@ impl Db {
         }
     }
 
+    /// Whether `self` and `other` are handles to the same database (the
+    /// same pools): a unit of work of one can run the other's statements.
+    pub fn same_as(&self, other: &Db) -> bool {
+        Arc::ptr_eq(&self.inner.conn, &other.inner.conn)
+    }
+
+    /// Where a read of navree-db's statements goes, as
+    /// [`reader`](Db::reader) decides for SeaORM's: the task's unit of
+    /// work on this database when its transaction is open (it sees its own
+    /// writes, and on SQLite a second connection would wait for the lock
+    /// it holds); else the writer when the task reads from it
+    /// ([`Db::using_writer`]) or, with `sticky`, its unit of work has
+    /// written; else the next read replica in turn ([`Db::read_pool`]).
+    ///
+    /// ```no_run
+    /// # async fn demo(db: navree_db::Db) -> Result<(), navree_db::DbError> {
+    /// use navree_db::{ExecutorExt, Statement};
+    ///
+    /// let open: i64 = db
+    ///     .read_executor()
+    ///     .await
+    ///     .fetch_scalar(&Statement::text("SELECT COUNT(*) FROM deals"))
+    ///     .await?;
+    /// # let _ = open;
+    /// # Ok(()) }
+    /// ```
+    pub async fn read_executor(&self) -> ReadExecutor<'_> {
+        let current = self.current_uow();
+        if let Some(uow) = &current
+            && !uow.is_finished().await
+            && uow.has_open_transaction().await
+        {
+            return ReadExecutor(Route::Uow(uow.clone()));
+        }
+        let writer = self.inner.sticky && current.as_ref().is_some_and(Uow::has_modified_records);
+        let pool = if writer {
+            self.pool()
+        } else {
+            self.read_pool()
+        };
+        ReadExecutor(match pool {
+            Some(pool) => Route::Pool(pool),
+            None => Route::Sea(SeaExecutor::new(&*self.inner.conn)),
+        })
+    }
+
     /// The task's current unit of work, when it works on this pool and is
     /// not finished.
     fn current_uow(&self) -> Option<Uow> {
@@ -1071,6 +1117,58 @@ impl Route<'_> {
             Route::Pool(pool) => *pool,
             Route::Sea(sea) => sea,
         }
+    }
+}
+
+/// The [`Executor`] of [`Db::read_executor`]: the open unit of work, the
+/// writer or a read replica, chosen when it was made.
+pub struct ReadExecutor<'a>(Route<'a>);
+
+impl fmt::Debug for ReadExecutor<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match &self.0 {
+            Route::Uow(_) => "ReadExecutor(unit of work)",
+            Route::Pool(_) => "ReadExecutor(pool)",
+            Route::Sea(_) => "ReadExecutor(scripted connection)",
+        })
+    }
+}
+
+impl Executor for ReadExecutor<'_> {
+    fn backend(&self) -> Backend {
+        self.0.executor().backend()
+    }
+
+    fn execute<'a>(
+        &'a self,
+        statement: &'a crate::Statement,
+    ) -> BoxFuture<'a, Result<Executed, DbError>> {
+        self.0.executor().execute(statement)
+    }
+
+    fn fetch_all<'a>(
+        &'a self,
+        statement: &'a crate::Statement,
+    ) -> BoxFuture<'a, Result<Vec<Row>, DbError>> {
+        self.0.executor().fetch_all(statement)
+    }
+
+    fn fetch_optional<'a>(
+        &'a self,
+        statement: &'a crate::Statement,
+    ) -> BoxFuture<'a, Result<Option<Row>, DbError>> {
+        self.0.executor().fetch_optional(statement)
+    }
+
+    fn fetch<'a>(
+        &'a self,
+        statement: &'a crate::Statement,
+    ) -> BoxFuture<'a, Result<RowStream, DbError>> {
+        self.0.executor().fetch(statement)
+    }
+
+    fn execute_script<'a>(&'a self, sql: &'a str) -> BoxFuture<'a, Result<Executed, DbError>> {
+        self.0.executor().execute_script(sql)
     }
 }
 

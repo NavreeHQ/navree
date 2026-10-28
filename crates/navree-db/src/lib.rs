@@ -54,6 +54,12 @@
 //!   durable.
 //! - [`Repo`] writes entities through a unit of work and records the
 //!   change events (old and new values) automatically.
+//! - [`Record`]s are typed rows on navree-db's statements alone, for the
+//!   crates below navree-orm: one declaration ([`record!`]) lists the
+//!   columns, and [`record`](mod@record)'s selects ([`Filter`], pages, `FOR UPDATE`),
+//!   inserts, updates, upserts and deletes are built from it (with change
+//!   events through a [`Uow`]). [`Db::read_executor`] reads where
+//!   [`Db::reader`] would.
 //! - [`MigrationSet`]s are contributed per module and run by the
 //!   [`Migrator`] in dependency order (`after`), recorded in
 //!   `navree_migrations` by batch; each migration runs in a transaction
@@ -125,6 +131,7 @@ mod options;
 mod paginate;
 mod queries;
 mod reader;
+pub mod record;
 mod repo;
 mod schema;
 mod seed;
@@ -134,7 +141,7 @@ mod uow;
 
 pub use client::ClientCommand;
 pub use connections::DbConnections;
-pub use db::{DEFAULT_CONNECTION, Db, PoolStats};
+pub use db::{DEFAULT_CONNECTION, Db, PoolStats, ReadExecutor};
 pub use engine::compat;
 pub use engine::{
     Backend, ColumnIndex, DbError, ErrorKind, Executed, Executor, ExecutorExt, FromValue, HasKind,
@@ -155,6 +162,7 @@ pub use paginate::{
 };
 pub use queries::{LoggedQuery, QueryLog, QueryStats, RepeatedQuery};
 pub use reader::Reader;
+pub use record::{Compare, Delete, Filter, Record, Select, Update};
 pub use repo::Repo;
 pub use seed::{
     Factory, SeedOptions, Seeder, SeederCalls, create, create_many, run_seeders, run_seeders_with,
