@@ -27,13 +27,84 @@ async fn graphiql_is_served_to_browsers_when_it_is_on() {
         .assert_status(200);
     let html = response.text();
     assert!(html.contains("GraphiQL"));
-    assert!(html.contains("const ws = '/graphql/ws';"));
+    assert!(html.contains(r#"data-subscriptions="/graphql/ws""#));
+    let csp = response.header("content-security-policy").unwrap();
+    assert!(csp.contains("script-src 'self';"), "{csp}");
+    assert!(
+        !csp.contains("unpkg") && !csp.contains("unsafe-eval"),
+        "{csp}"
+    );
 
     // Non-browsers get the 405 queries always get on GET.
     app.client().get("/graphql").send().await.assert_error(
         405,
         "Send GraphQL operations as POST requests with a JSON body",
     );
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn graphiql_loads_only_files_the_app_serves() {
+    let (app, _audit) = app().await;
+    let html = app
+        .client()
+        .get("/graphql")
+        .header("accept", "text/html")
+        .send()
+        .await
+        .assert_status(200)
+        .text();
+    let mut references = Vec::new();
+    for attribute in ["src=\"", "href=\""] {
+        for part in html.split(attribute).skip(1) {
+            references.push(part.split('"').next().unwrap().to_owned());
+        }
+    }
+    // GraphiQL, its stylesheet, React, React DOM and the bootstrap.
+    assert_eq!(references.len(), 5, "{references:?}");
+    for reference in &references {
+        assert!(
+            reference.starts_with("/graphql/assets/"),
+            "{reference} is not served by the app"
+        );
+        let response = app.client().get(reference).send().await.assert_status(200);
+        assert_eq!(
+            response.header("cache-control"),
+            Some("public, max-age=31536000, immutable"),
+            "{reference}"
+        );
+        assert!(!response.bytes().is_empty(), "{reference}");
+    }
+    let script = app
+        .client()
+        .get("/graphql/assets/graphiql-3.8.3.min.js")
+        .send()
+        .await;
+    assert_eq!(
+        script.header("content-type"),
+        Some("text/javascript; charset=utf-8")
+    );
+    assert!(script.bytes().len() > 1_000_000, "GraphiQL is embedded");
+    // Each library's license is served beside it; nothing else is.
+    for license in [
+        "graphiql-3.8.3.LICENSE.txt",
+        "react-18.3.1.LICENSE.txt",
+        "react-dom-18.3.1.LICENSE.txt",
+    ] {
+        let text = app
+            .client()
+            .get(&format!("/graphql/assets/{license}"))
+            .send()
+            .await
+            .assert_status(200)
+            .text();
+        assert!(text.contains("MIT License"), "{license}");
+    }
+    app.client()
+        .get("/graphql/assets/missing.js")
+        .send()
+        .await
+        .assert_status(404);
     app.shutdown().await.unwrap();
 }
 
@@ -48,6 +119,12 @@ async fn without_graphiql_a_get_is_a_405() {
         .await
         .assert_error(405, None);
     assert_eq!(response.header("allow"), Some("POST"));
+    // ... and its files are not served either.
+    app.client()
+        .get("/graphql/assets/graphiql-3.8.3.min.js")
+        .send()
+        .await
+        .assert_status(404);
     app.shutdown().await.unwrap();
 }
 
