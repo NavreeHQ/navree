@@ -90,11 +90,12 @@ enforce_for_verified_domains = true                     # refuse passwords for v
   for a verified domain of an enabled, enforcing connection, every sign-in
   but that connection's own gets 403 `sso_required` ("Sign in with
   {connection name}"): password login, register and password change,
-  magic link and emailed code (request and use), passkey, social sign-in
+  an email change out of or into the domain (`PATCH /auth/me`), magic link and emailed code (request and use), passkey, social sign-in
   (before any account is created or linked), token exchange,
   `POST /auth/2fa/verify` of a challenge started earlier, and other
   connections (checked on the IdP's email before provisioning, and on the
-  account). Refusals are audited `auth.login_refused` with
+  account). The email's domain is compared IDNA-mapped, lower-case,
+  without a trailing dot (`eve@ACME.test.` is `acme.test`). Refusals are audited `auth.login_refused` with
   `metadata.method`. Existing sessions are not ended
   (`revoke_all_refresh_tokens` when turning enforcement on). Break-glass:
   platform administrators still reach the platform console

@@ -333,7 +333,7 @@ impl Controller for OAuthProtocolController {
                     let grant_type = form.require("grant_type")?.to_owned();
                     let client = clients.authenticate(&credentials).await?;
                     throttles
-                        .per_client(&core, Endpoint::Token, client.id, ip)
+                        .per_client(&core, Endpoint::Token, &client, ip)
                         .await?;
                     let grants = Grants { core: core.clone() };
                     in_own_uow(&core, &extensions, |uow| async move {
@@ -406,7 +406,7 @@ impl Controller for OAuthProtocolController {
                     basic = credentials.basic;
                     let client = clients.authenticate(&credentials).await?;
                     throttles
-                        .per_client(&core, Endpoint::DeviceAuthorization, client.id, ip)
+                        .per_client(&core, Endpoint::DeviceAuthorization, &client, ip)
                         .await?;
                     let requests = Requests { core: core.clone() };
                     in_own_uow(&core, &extensions, |uow| async move {
@@ -445,7 +445,7 @@ impl Controller for OAuthProtocolController {
                     let token = form.require("token")?.to_owned();
                     let client = clients.authenticate(&credentials).await?;
                     throttles
-                        .per_client(&core, Endpoint::Revoke, client.id, ip)
+                        .per_client(&core, Endpoint::Revoke, &client, ip)
                         .await?;
                     let grants = Grants { core: core.clone() };
                     in_own_uow(&core, &extensions, |uow| async move {
@@ -479,7 +479,7 @@ impl Controller for OAuthProtocolController {
                     let token = form.require("token")?.to_owned();
                     let client = clients.authenticate(&credentials).await?;
                     throttles
-                        .per_client(&core, Endpoint::Introspect, client.id, ip)
+                        .per_client(&core, Endpoint::Introspect, &client, ip)
                         .await?;
                     if client.is_public() || !client.introspect {
                         return Err(OAuthError::InvalidClient(

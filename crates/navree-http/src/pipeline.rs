@@ -283,8 +283,11 @@ where
     let route = matched.map_or("unmatched", |meta| meta.full_path.as_str());
     let user = response.extensions().get::<LoggedUser>().map(|u| u.0);
     let status = response.status().as_u16();
+    // Counted by method: any token is a method to HTTP, so made-up ones
+    // share one name rather than each making a series of its own.
+    let counted_method = method_name(&method);
     let event = path.map(|path| RequestHandled {
-        method: method.to_string(),
+        method: counted_method.to_owned(),
         route: matched.map(|meta| meta.full_path.clone()),
         path,
         status,
@@ -318,7 +321,7 @@ where
     });
     if metrics_recorder_installed() {
         let labels = [
-            ("method", method.to_string()),
+            ("method", counted_method.to_owned()),
             ("route", route.to_owned()),
             ("status", status.to_string()),
         ];
@@ -326,6 +329,23 @@ where
         metrics::histogram!("http_request_duration_seconds", &labels).record(latency.as_secs_f64());
     }
     response
+}
+
+/// The name a request is counted under: one of the methods HTTP defines,
+/// or `OTHER`.
+fn method_name(method: &Method) -> &'static str {
+    match *method {
+        Method::GET => "GET",
+        Method::HEAD => "HEAD",
+        Method::POST => "POST",
+        Method::PUT => "PUT",
+        Method::PATCH => "PATCH",
+        Method::DELETE => "DELETE",
+        Method::OPTIONS => "OPTIONS",
+        Method::CONNECT => "CONNECT",
+        Method::TRACE => "TRACE",
+        _ => "OTHER",
+    }
 }
 
 // ---------------------------------------------------------------------------
