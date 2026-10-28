@@ -218,6 +218,26 @@ The spike profile on the same build (`--load-profile spike`: 10 VUs, a
 jump to 200 for 30 s, back to 10) served 116,719 requests with no error,
 p95 97.2 ms and p99 110.1 ms, and every process survived.
 
+## Lighthouse's counts under load
+
+`e2e/run.sh --scenarios checks,lighthouse --load-profile load --vus 200 --duration 2m`
+sends a mix of cheap requests (signed-in reads, task writes, 401s, 404s on a
+route and on no route) with no think time, then compares the requests
+Lighthouse recorded during the run (`GET /_lighthouse/api/overview`, read
+before and after until it stops moving) with the requests k6 sent. The
+check fails above a 1 % difference. On the host above:
+
+| Run | Settings | k6 requests | Lighthouse | Missing | Sampled out | RPS | p95 |
+|---|---|---|---|---|---|---|---|
+| `lighthouse-ingest-default` | defaults (`buffer` 10000, `sample.requests` 0.1), 200 VUs | 454,520 | 454,520 | 0 | 0 | 2,697 | 121.6 ms |
+| `lighthouse-ingest-stress` | `E2E_LIGHTHOUSE_BUFFER=100 E2E_LIGHTHOUSE_SAMPLE_REQUESTS=1.0`, 300 VUs | 418,375 | 418,375 | 0 | 2,609 | 2,480 | 205.2 ms |
+
+The stress run keeps every trace through a 100-entry queue, so the writer
+falls behind and drops traces, each one counted as sampled out on the
+dashboard, while every request is still counted. `E2E_LIGHTHOUSE_BUFFER` and
+`E2E_LIGHTHOUSE_SAMPLE_REQUESTS` set the app's `lighthouse.buffer` and
+`lighthouse.sample.requests`.
+
 ## Known limits
 
 - Typesense (profile `typesense`) exits with a segfault before printing
