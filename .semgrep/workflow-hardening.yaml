@@ -1,0 +1,61 @@
+# Two invariants for .github/workflows (the registry's github-actions ruleset
+# covers script injection and similar; these are Navree's own).
+#
+# 1. navree-workflow-pull-request-target: `pull_request_target` runs workflow
+#    code from the base branch with a write token and secrets, but is triggered
+#    by a pull request from anywhere. The moment it checks out or runs the
+#    pull request's code, a stranger has the repository's secrets. Navree's
+#    workflows use `pull_request`, which gets a read-only token and no secrets
+#    for fork PRs. If a workflow really needs the trigger (labelling, say, with
+#    no checkout of PR code), suppress it with
+#    `# nosemgrep: navree-workflow-pull-request-target` and the reason.
+#
+# 2. navree-workflow-unpinned-action: a tag or branch can be moved by whoever
+#    controls the action's repository; a commit SHA cannot. Every third-party
+#    action is pinned to the full 40-character commit SHA, with the version in
+#    a trailing comment (`uses: owner/action@<sha> # v1.2.3`), which Dependabot
+#    keeps current. Local actions (`./.github/actions/x`) and `docker://`
+#    references pinned by digest are fine.
+rules:
+  - id: navree-workflow-pull-request-target
+    languages: [generic]
+    severity: ERROR
+    message: >-
+      `pull_request_target` gives pull requests from forks a write token and
+      the repository's secrets. Use `pull_request`, or suppress this line with
+      `# nosemgrep: navree-workflow-pull-request-target` and say why it never
+      runs the pull request's code.
+    metadata:
+      category: security
+      cwe: "CWE-94: Improper Control of Generation of Code"
+      confidence: HIGH
+    paths:
+      include:
+        - "*.yml"
+        - "*.yaml"
+    pattern-regex: '(?m)^[ \t]*(?:on:[ \t]*(?:\[[^\]\n]*)?|-[ \t]*)?\bpull_request_target\b'
+
+  - id: navree-workflow-unpinned-action
+    languages: [generic]
+    severity: ERROR
+    message: >-
+      This action is not pinned to a full commit SHA. Pin it
+      (`uses: owner/action@<40-hex sha> # vX.Y.Z`); tags and branches can be
+      moved after review.
+    metadata:
+      category: security
+      cwe: "CWE-829: Inclusion of Functionality from Untrusted Control Sphere"
+      confidence: HIGH
+    paths:
+      include:
+        - ".github/workflows/*.yml"
+        - ".github/workflows/*.yaml"
+        - ".github/actions/**/*.yml"
+        - ".github/actions/**/*.yaml"
+        # The rule's own test fixture.
+        - "*.test.yaml"
+    pattern-either:
+      # uses: owner/repo[/path]@ref where ref is not a 40-hex commit
+      - pattern-regex: '(?m)^[ \t]*(?:-[ \t]*)?uses:[ \t]*["'']?(?!\./|docker://)[^\s@#"'']+@(?![0-9a-f]{40}["'']?(?:[ \t]|$))[^\s#]*'
+      # uses: docker://image without a digest
+      - pattern-regex: '(?m)^[ \t]*(?:-[ \t]*)?uses:[ \t]*["'']?docker://(?![^\s#"'']*@sha256:[0-9a-f]{64})[^\s#"'']*'

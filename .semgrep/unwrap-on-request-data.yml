@@ -1,0 +1,81 @@
+# A panic in a request handler is a request-triggered denial of service: the
+# task dies, the connection drops, and a client that can repeat the request
+# can repeat the crash. Anything that came from the request (headers, path and
+# query parameters, the body) is attacker-controlled, so `.unwrap()` and
+# `.expect()` on a value derived from it is a bug waiting for the wrong input.
+#
+# This is a taint rule limited to what can be detected reliably: the sources
+# are the parameters of a function that takes a request extractor (Json, Path,
+# Query, Form, Valid, HeaderMap, Bytes, Request, Parts) and the sinks are
+# `.unwrap()` / `.expect(..)` on a value derived from one. Return a typed error
+# instead (`?` with an AppError, or `.ok_or_else(|| AppError::bad_request(..))`).
+#
+# `unwrap_or`, `unwrap_or_else`, `unwrap_or_default` are fine and not matched.
+rules:
+  - id: navree-unwrap-on-request-data
+    languages: [rust]
+    severity: ERROR
+    mode: taint
+    message: >-
+      `.unwrap()` / `.expect()` on a value derived from request data panics on
+      bad input. Return a typed error (a 4xx AppError) instead.
+    metadata:
+      category: security
+      cwe: "CWE-248: Uncaught Exception"
+      confidence: MEDIUM
+    paths:
+      exclude:
+        - "**/tests/**"
+        - "**/benches/**"
+        - "**/examples/**"
+    pattern-sources:
+      - patterns:
+          - pattern: $P
+          - pattern-either:
+              - pattern-inside: |
+                  fn $F(..., $P: HeaderMap, ...) { ... }
+              - pattern-inside: |
+                  fn $F(..., $P: &HeaderMap, ...) { ... }
+              - pattern-inside: |
+                  fn $F(..., $P: Bytes, ...) { ... }
+              - pattern-inside: |
+                  fn $F(..., $P: Request, ...) { ... }
+              - pattern-inside: |
+                  fn $F(..., $P: &Request, ...) { ... }
+              - pattern-inside: |
+                  fn $F(..., $P: Parts, ...) { ... }
+              - pattern-inside: |
+                  fn $F(..., $P: &Parts, ...) { ... }
+              - pattern-inside: |
+                  fn $F(..., $P: Json<$T>, ...) { ... }
+              - pattern-inside: |
+                  fn $F(..., $P: Path<$T>, ...) { ... }
+              - pattern-inside: |
+                  fn $F(..., $P: Query<$T>, ...) { ... }
+              - pattern-inside: |
+                  fn $F(..., $P: Form<$T>, ...) { ... }
+              - pattern-inside: |
+                  fn $F(..., $P: Valid<$T>, ...) { ... }
+              - pattern-inside: |
+                  fn $F(..., $P: PageQuery, ...) { ... }
+          - focus-metavariable: $P
+      - patterns:
+          - pattern: $X
+          - pattern-either:
+              - pattern-inside: |
+                  fn $F(..., Json($X): Json<$T>, ...) { ... }
+              - pattern-inside: |
+                  fn $F(..., Path($X): Path<$T>, ...) { ... }
+              - pattern-inside: |
+                  fn $F(..., Query($X): Query<$T>, ...) { ... }
+              - pattern-inside: |
+                  fn $F(..., Form($X): Form<$T>, ...) { ... }
+              - pattern-inside: |
+                  fn $F(..., Valid(Json($X)): Valid<Json<$T>>, ...) { ... }
+          - focus-metavariable: $X
+    pattern-sinks:
+      - pattern-either:
+          - pattern: $V.unwrap()
+          - pattern: $V.expect(...)
+          - pattern: $V.unwrap_err()
+          - pattern: $V.expect_err(...)
