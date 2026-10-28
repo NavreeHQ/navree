@@ -228,7 +228,7 @@ impl Db {
             Settings {
                 observed: false,
                 transaction_settings: options.transaction_settings,
-                native_units_of_work: false,
+                native_units_of_work: options.native_units_of_work,
             },
         ))
     }

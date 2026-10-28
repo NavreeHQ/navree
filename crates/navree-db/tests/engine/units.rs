@@ -41,7 +41,16 @@ async fn titles(db: &impl Executor) -> Vec<String> {
 /// A unit of work on navree-db's own transaction: lazy, the actor and
 /// request id set for SQL, commit and rollback, after-commit hooks.
 pub async fn native_units_of_work(scratch: Scratch) {
-    let db = scratch.db().await.with_native_units_of_work(true);
+    // From the `database` section, as an app turns it on.
+    let options: navree_db::DbOptions = serde_json::from_value(serde_json::json!({
+        "url": scratch.options.url,
+        "native_units_of_work": true,
+        "postgres": { "search_path": scratch.options.postgres.search_path },
+    }))
+    .expect("a valid section");
+    let db = Db::connect(&options).await.unwrap();
+    assert!(db.native_units_of_work());
+    assert!(!scratch.db().await.native_units_of_work(), "off by default");
     let backend = scratch.server.backend();
     tables(&db, backend).await;
 
