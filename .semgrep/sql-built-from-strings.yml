@@ -26,7 +26,7 @@ rules:
         - "**/examples/**"
         - "**/testing/**"
         - "**/testing.rs"
-        - "crates/navree-testing/"
+        - "/crates/navree-testing/"
     message: >-
       SQL text is built with format! and passed to a statement-running API.
       Bind values as parameters instead. If the interpolated parts are

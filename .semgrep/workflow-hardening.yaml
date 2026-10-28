@@ -48,10 +48,10 @@ rules:
       confidence: HIGH
     paths:
       include:
-        - ".github/workflows/*.yml"
-        - ".github/workflows/*.yaml"
-        - ".github/actions/**/*.yml"
-        - ".github/actions/**/*.yaml"
+        - "/.github/workflows/*.yml"
+        - "/.github/workflows/*.yaml"
+        - "/.github/actions/**/*.yml"
+        - "/.github/actions/**/*.yaml"
         # The rule's own test fixture.
         - "*.test.yaml"
     pattern-either:

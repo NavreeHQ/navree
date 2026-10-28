@@ -24,9 +24,10 @@ description = """
 Test fixtures: key pairs generated for the tests (RSA, EC, Ed25519, Apple .p8,
 DKIM), the RFC 7515/7520/6238 test vectors, JWTs signed with throwaway
 secrets, provider sample payloads (Slack, HubSpot, Google, Microsoft, SNS) and
-the configuration loader's fixture apps with their .env files. Nothing under a
-tests/fixtures directory is deployed or trusted."""
-paths = ['''(^|/)tests/fixtures/''']
+the configuration loader's fixture apps with their .env files. Fuzzing seed
+corpora (fuzz/seeds) are copies of these fixtures. Nothing in either is
+deployed or trusted."""
+paths = ['''(^|/)(tests/fixtures|fuzz/seeds)/''']
 
 [[allowlists]]
 description = """
@@ -110,3 +111,10 @@ is base64 for the word SECRET): malformed keys on purpose, to test the error
 path and that errors never echo the input."""
 targetRules = ["private-key"]
 paths = ['''(^|/)crates/navree-crypto/tests/crypto/jose/keys\.rs$''']
+
+[[allowlists]]
+description = """
+The scanners' own output: the reports that scripts/sast.sh writes to
+sast-reports/ (git-ignored) hold commit hashes and redacted findings, and the
+working-tree scan would otherwise read the history report back in."""
+paths = ['''(^|/)sast-reports/''']
