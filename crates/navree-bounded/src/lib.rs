@@ -81,6 +81,11 @@
 //!   entries, but each pass clears a flag that a hit set, so the total work
 //!   is bounded by the number of hits.
 //!
+//! Like any policy that ranks by recency, SIEVE cannot hold a working set
+//! larger than the cache that is read in a repeating loop: a loop over
+//! slightly more keys than fit evicts each key just before it is needed
+//! again. Size a cache to its working set.
+//!
 //! Capacity is divided evenly over the shards, so a cache that is exactly
 //! full of keys that hash unevenly can evict a little early: the default
 //! shard count keeps at least 256 entries in a shard to keep that skew
