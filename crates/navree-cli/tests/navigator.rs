@@ -1,19 +1,16 @@
 //! `navree mcp` and `navree skills:install` through the binary: Navigator
-//! spoken to by rmcp's client over the child process's stdio, against the
+//! spoken to as JSON-RPC lines over the child process's stdio, against the
 //! fixture app in `tests/fixtures/navigator-app`.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::str::FromStr;
 
-use rmcp::RoleClient;
-use rmcp::ServiceExt;
-use rmcp::model::CallToolRequestParams;
-use rmcp::service::RunningService;
-use rmcp::transport::{ConfigureCommandExt, TokioChildProcess};
 use serde_json::{Value, json};
 use sqlx::sqlite::SqliteConnectOptions;
 use sqlx::{ConnectOptions, Executor};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::process::{Child, ChildStdin, ChildStdout};
 
 fn workspace() -> PathBuf {
     std::path::absolute(Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..")).unwrap()
@@ -69,10 +66,54 @@ async fn create_database(app: &Path) {
     sqlx::Connection::close(conn).await.unwrap();
 }
 
-/// `navree mcp <args>` as a child process, connected. With `own_target`,
+/// `navree mcp`, spoken to as JSON-RPC lines over its stdio.
+struct Navigator {
+    child: Child,
+    stdin: ChildStdin,
+    stdout: BufReader<ChildStdout>,
+    next_id: i64,
+}
+
+impl Navigator {
+    /// Sends request `method` and waits for its answer.
+    async fn request(&mut self, method: &str, params: Value) -> Value {
+        self.next_id += 1;
+        let id = self.next_id;
+        let message = json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params });
+        self.send(&message).await;
+        loop {
+            let mut line = String::new();
+            let read = self.stdout.read_line(&mut line).await.unwrap();
+            assert!(read > 0, "navree mcp closed its stdout");
+            let answer: Value = serde_json::from_str(&line).unwrap();
+            if answer["id"] == id {
+                return answer;
+            }
+        }
+    }
+
+    async fn send(&mut self, message: &Value) {
+        let mut line = message.to_string();
+        line.push('\n');
+        self.stdin.write_all(line.as_bytes()).await.unwrap();
+        self.stdin.flush().await.unwrap();
+    }
+
+    /// Closes stdin and waits for the server to exit.
+    async fn close(mut self) {
+        drop(self.stdin);
+        let status = tokio::time::timeout(std::time::Duration::from_secs(30), self.child.wait())
+            .await
+            .expect("navree mcp exits when its client goes")
+            .unwrap();
+        assert!(status.success(), "{status}");
+    }
+}
+
+/// `navree mcp <args>` as a child process, initialized. With `own_target`,
 /// the app builds into its own `target/` instead of the shared
 /// `CARGO_TARGET_DIR`, so no earlier build is found.
-async fn navigator(app: &Path, extra: &[&str], own_target: bool) -> RunningService<RoleClient, ()> {
+async fn navigator(app: &Path, extra: &[&str], own_target: bool) -> (Navigator, Value) {
     let mut args = vec![
         "mcp".to_owned(),
         "--path".to_owned(),
@@ -80,53 +121,73 @@ async fn navigator(app: &Path, extra: &[&str], own_target: bool) -> RunningServi
     ];
     args.extend(extra.iter().map(|a| (*a).to_owned()));
     let home = app.join(".navree-home");
-    let transport = TokioChildProcess::new(
-        tokio::process::Command::new(env!("CARGO_BIN_EXE_navree")).configure(|command| {
-            command.args(&args).env("NAVREE_HOME", &home);
-            if own_target {
-                command.env("CARGO_TARGET_DIR", app.join("target"));
-            }
-        }),
-    )
-    .expect("navree mcp starts");
-    ().serve(transport).await.expect("initialize")
+    let mut command = tokio::process::Command::new(env!("CARGO_BIN_EXE_navree"));
+    command
+        .args(&args)
+        .env("NAVREE_HOME", &home)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::inherit())
+        .kill_on_drop(true);
+    if own_target {
+        command.env("CARGO_TARGET_DIR", app.join("target"));
+    }
+    let mut child = command.spawn().expect("navree mcp starts");
+    let stdin = child.stdin.take().unwrap();
+    let stdout = BufReader::new(child.stdout.take().unwrap());
+    let mut navigator = Navigator {
+        child,
+        stdin,
+        stdout,
+        next_id: 0,
+    };
+    let info = navigator
+        .request(
+            "initialize",
+            json!({
+                "protocolVersion": "2025-11-25",
+                "capabilities": {},
+                "clientInfo": { "name": "navigator-test", "version": "1" },
+            }),
+        )
+        .await["result"]
+        .clone();
+    navigator
+        .send(&json!({ "jsonrpc": "2.0", "method": "notifications/initialized" }))
+        .await;
+    (navigator, info)
 }
 
-async fn call(client: &RunningService<RoleClient, ()>, tool: &str, args: Value) -> (bool, String) {
-    let mut params = CallToolRequestParams::new(tool.to_owned());
-    if let Value::Object(map) = args {
-        params = params.with_arguments(map);
-    }
-    let result = client
-        .call_tool(params)
-        .await
-        .expect("the call is answered");
-    let text = result.content[0].as_text().expect("text").text.clone();
-    (result.is_error == Some(true), text)
+async fn call(client: &mut Navigator, tool: &str, args: Value) -> (bool, String) {
+    let answer = client
+        .request("tools/call", json!({ "name": tool, "arguments": args }))
+        .await;
+    let result = &answer["result"];
+    let text = result["content"][0]["text"]
+        .as_str()
+        .unwrap_or_else(|| panic!("a text answer: {answer}"))
+        .to_owned();
+    (result["isError"] == true, text)
 }
 
 #[tokio::test]
 async fn navree_mcp_serves_the_tools_over_stdio() {
     let app = fixture_app();
     create_database(app.path()).await;
-    let client = navigator(app.path(), &["--no-build", "--docs-offline"], true).await;
+    let (mut client, info) = navigator(app.path(), &["--no-build", "--docs-offline"], true).await;
 
-    let info = client.peer_info().expect("server info");
-    assert_eq!(
-        info.server_info.as_ref().map(|s| s.name.as_str()),
-        Some("navree")
-    );
-    let tools = client.list_all_tools().await.unwrap();
-    assert_eq!(tools.len(), 12);
+    assert_eq!(info["serverInfo"]["name"], "navree");
+    let tools = client.request("tools/list", json!({})).await;
+    assert_eq!(tools["result"]["tools"].as_array().unwrap().len(), 12);
 
-    let (error, text) = call(&client, "read_config", json!({})).await;
+    let (error, text) = call(&mut client, "read_config", json!({})).await;
     assert!(!error, "{text}");
     let config: Value = serde_json::from_str(&text).unwrap();
     assert_eq!(config["app"]["name"], "navigator-app");
     assert_eq!(config["mail"]["password"], "[redacted]");
 
     let (error, text) = call(
-        &client,
+        &mut client,
         "query_database",
         json!({"sql": "SELECT id, title, api_token FROM notes ORDER BY id"}),
     )
@@ -139,21 +200,21 @@ async fn navree_mcp_serves_the_tools_over_stdio() {
     );
 
     let (error, text) = call(
-        &client,
+        &mut client,
         "query_database",
         json!({"sql": "DELETE FROM notes"}),
     )
     .await;
     assert!(error && text.contains("not read-only"), "{text}");
 
-    let (error, text) = call(&client, "last_error", json!({})).await;
+    let (error, text) = call(&mut client, "last_error", json!({})).await;
     assert!(!error, "{text}");
     let last: Value = serde_json::from_str(&text).unwrap();
     assert_eq!(last["request_id"], "0199c4b1-aaaa");
     assert_eq!(last["request"]["status"], 500);
 
     let (error, text) = call(
-        &client,
+        &mut client,
         "search_docs",
         json!({"query": "agent skills install"}),
     )
@@ -162,10 +223,10 @@ async fn navree_mcp_serves_the_tools_over_stdio() {
     assert!(text.contains("ai/agent-skills"), "{text}");
 
     // Nothing is built, and --no-build never builds: the app tools say so.
-    let (error, text) = call(&client, "list_routes", json!({})).await;
+    let (error, text) = call(&mut client, "list_routes", json!({})).await;
     assert!(error && text.contains("--no-build"), "{text}");
 
-    client.cancel().await.unwrap();
+    client.close().await;
 }
 
 #[test]
@@ -217,9 +278,9 @@ fn skills_install_writes_every_skill_into_both_folders() {
 #[ignore = "builds a Navree app; run with --ignored"]
 async fn navree_mcp_asks_a_built_app() {
     let app = fixture_app();
-    let client = navigator(app.path(), &["--docs-offline"], false).await;
+    let (mut client, _) = navigator(app.path(), &["--docs-offline"], false).await;
 
-    let (error, text) = call(&client, "list_routes", json!({"path": "/api/notes"})).await;
+    let (error, text) = call(&mut client, "list_routes", json!({"path": "/api/notes"})).await;
     assert!(!error, "{text}");
     let routes: Value = serde_json::from_str(&text).unwrap();
     assert_eq!(routes[0]["method"], "GET");
@@ -227,7 +288,7 @@ async fn navree_mcp_asks_a_built_app() {
     assert_eq!(routes[0]["module"], "NotesModule");
     assert_eq!(routes[0]["handler"], "NotesController::index");
 
-    let (error, text) = call(&client, "module_graph", json!({"module": "NotesModule"})).await;
+    let (error, text) = call(&mut client, "module_graph", json!({"module": "NotesModule"})).await;
     assert!(!error, "{text}");
     let notes: Value = serde_json::from_str(&text).unwrap();
     assert!(
@@ -235,14 +296,14 @@ async fn navree_mcp_asks_a_built_app() {
         "{notes}"
     );
 
-    let (error, text) = call(&client, "list_commands", json!({})).await;
+    let (error, text) = call(&mut client, "list_commands", json!({})).await;
     assert!(!error, "{text}");
     assert!(
         text.contains("notes:prune") && text.contains("migrate:status"),
         "{text}"
     );
 
-    let (error, text) = call(&client, "app_info", json!({})).await;
+    let (error, text) = call(&mut client, "app_info", json!({})).await;
     assert!(!error, "{text}");
     let info: Value = serde_json::from_str(&text).unwrap();
     assert!(
@@ -254,5 +315,5 @@ async fn navree_mcp_asks_a_built_app() {
         "{info}"
     );
 
-    client.cancel().await.unwrap();
+    client.close().await;
 }
