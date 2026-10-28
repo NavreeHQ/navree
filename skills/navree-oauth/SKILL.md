@@ -108,7 +108,8 @@ let created = clients
 - Rate limits (`oauth.rate_limits.<endpoint> = { per_client, per_ip }`,
   per minute, per instance, `0` = off): `token` 300/120, `introspect`
   1200/600, `revoke` 300/60, `device_authorization` 60/30. Per IP is counted
-  first (failed client auth included); per client only after the client
+  first (failed client auth included; an IPv6 client is its network, a /64 by
+  default: `http.rate_limit_ipv6_prefix`); per client only after the client
   authenticates (a wrong secret can't burn a client's budget); public
   clients are counted per IP only (anyone can name one). Over a
   limit: 429, `Retry-After`, `{"error": "too_many_requests",
@@ -193,6 +194,12 @@ entries with `override_value::<dyn AuditSink>(..)`.
   ID tokens issued before stop verifying.
 - `dynamic_registration` lets any app register and ask users for consent;
   leave it off unless you need it (MCP OAuth mode).
+- Offboarding: the module registers a `CredentialRevoker`, so
+  `AuthService::revoke_credentials_of_domain("acme.com")` /
+  `revoke_all_credentials(user_id)` also revokes personal access tokens, OAuth
+  access and refresh tokens, unexchanged codes and device codes, and the
+  remembered consent (`oauth_authorizations`) of those users. Revoked tokens
+  stop at once here, within `oauth.token_cache_secs` on other instances.
 - 429 `too_many_requests` from `/oauth/*`: a rate limit. Behind a proxy set
   `http.trusted_proxies`, or every client shares the proxy's per-IP budget;
   in tests that hammer an endpoint, set the limit to `0`.

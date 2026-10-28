@@ -126,7 +126,8 @@ JSON logs and no template reloading; debug builds to pretty logs and reloading.
 ## Framework sections
 
 `app` (`key`, `previous_keys`, `url`), `http` (`addr`, `api_prefix`,
-`trusted_proxies`, `per_ip_rate_limit`, `body_limit_bytes`, `timeout_secs`,
+`trusted_proxies`, `per_ip_rate_limit`, `rate_limit_ipv6_prefix` (64: IPv6
+clients share a limit per /64), `body_limit_bytes`, `timeout_secs`,
 `cors.allowed_origins`, `security_headers`), `log`, `hashing`, `validation`,
 `database`, `auth`, `audit`, `cache`, `queue`, `mail`, `notify`, `storage`,
 `http_client`, `realtime`, `view`, `api`, `observe`, `session`. Each
