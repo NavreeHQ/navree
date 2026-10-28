@@ -1,0 +1,74 @@
+# Two rules about spawning processes.
+#
+# 1. navree-shell-command-string: running `sh -c`, `bash -c`, `cmd /C` or
+#    `powershell -Command` hands a string to a shell, so any interpolated value
+#    is a command-injection hole. Spawn the program directly and pass each
+#    argument with .arg(); no shell is involved and nothing needs escaping.
+#    Test code is exempt.
+#
+# 2. navree-process-outside-tooling: a library or server crate has no business
+#    starting processes. The crates that do (the CLI, deploy tooling, container
+#    and browser drivers, media and document converters, the worker fleet, the
+#    test kit) are exempt by path (clap's own `Command` builder lives in
+#    navree-cli, so a bare `Command::new` outside it is a process). A new
+#    spawn anywhere else should be a conscious decision, so it needs a
+#    `// nosemgrep: navree-process-outside-tooling` with the reason (for
+#    example, a CLI command that lives next to its module), or a move into one
+#    of the tooling crates.
+rules:
+  - id: navree-shell-command-string
+    languages: [rust]
+    severity: ERROR
+    message: >-
+      A command string is handed to a shell. Spawn the program directly and
+      pass arguments with .arg(); do not build shell text.
+    metadata:
+      category: security
+      cwe: "CWE-78: OS Command Injection"
+      confidence: HIGH
+    paths:
+      exclude:
+        - "**/tests/**"
+        - "**/benches/**"
+        - "**/examples/**"
+        - "**/build.rs"
+    patterns:
+      - pattern-either:
+          - pattern: Command::new($SHELL).$M(...)
+          - pattern: std::process::Command::new($SHELL).$M(...)
+          - pattern: tokio::process::Command::new($SHELL).$M(...)
+      - metavariable-regex:
+          metavariable: $SHELL
+          regex: '^"(sh|bash|zsh|dash|cmd|cmd\.exe|powershell|powershell\.exe|pwsh)"$'
+
+  - id: navree-process-outside-tooling
+    languages: [rust]
+    severity: WARNING
+    message: >-
+      A process is spawned outside the crates that own process spawning
+      (navree-cli, navree-harbor, navree-dock, navree-browser, navree-documents,
+      navree-media, navree-fleet, navree-testing). Move it there, or suppress
+      this line with `// nosemgrep: navree-process-outside-tooling` and the
+      reason.
+    metadata:
+      category: security
+      cwe: "CWE-78: OS Command Injection"
+      confidence: MEDIUM
+    paths:
+      exclude:
+        - "crates/navree-cli/"
+        - "crates/navree-harbor/"
+        - "crates/navree-dock/"
+        - "crates/navree-browser/"
+        - "crates/navree-documents/"
+        - "crates/navree-media/"
+        - "crates/navree-fleet/"
+        - "crates/navree-testing/"
+        - "**/tests/**"
+        - "**/benches/**"
+        - "**/examples/**"
+        - "**/build.rs"
+    pattern-either:
+      - pattern: Command::new(...)
+      - pattern: std::process::Command::new(...)
+      - pattern: tokio::process::Command::new(...)
