@@ -669,8 +669,10 @@ impl FromValue for Vec<f32> {
                 .and_then(from_json)
                 .ok_or_else(|| ValueError::new("Vec<f32>", &value)),
             Value::Bytes(bytes) if bytes.len() % 4 == 0 => Ok(bytes
-                .chunks_exact(4)
-                .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|chunk| f32::from_le_bytes(*chunk))
                 .collect()),
             _ => Err(ValueError::new("Vec<f32>", &value)),
         }
