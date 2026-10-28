@@ -7,8 +7,8 @@ use navree_orm::Dialect;
 use navree_orm::ir::JsonSegment;
 use navree_orm::render::ast::{
     Assignment, BinaryOp, ConflictAction, Cte, Delete, Expr, Ident, Insert, InsertSource, Join,
-    LikeCase, Lock, LockStrength, ObjectName, OnConflict, Query, Select, SelectItem, SqlType,
-    Source, Statement, Truncate, Update,
+    LikeCase, Lock, LockStrength, ObjectName, OnConflict, Query, Select, SelectItem, Source,
+    SqlType, Statement, Truncate, Update,
 };
 use serde_json::{Value as Json, json};
 
@@ -107,18 +107,19 @@ pub fn statements() -> Vec<Portable> {
         ),
         query(
             "case",
-            Query::from(
-                from("deals").column(col("id")).column_as(
-                    Expr::case(
-                        vec![
-                            (col("amount_cents").gte(val(100_000_i64)), Expr::string("big")),
-                            (col("amount_cents").gt(val(0_i64)), Expr::string("small")),
-                        ],
-                        Some(Expr::string("none")),
-                    ),
-                    "size",
+            Query::from(from("deals").column(col("id")).column_as(
+                Expr::case(
+                    vec![
+                        (
+                            col("amount_cents").gte(val(100_000_i64)),
+                            Expr::string("big"),
+                        ),
+                        (col("amount_cents").gt(val(0_i64)), Expr::string("small")),
+                    ],
+                    Some(Expr::string("none")),
                 ),
-            )
+                "size",
+            ))
             .order_by(col("id").asc()),
             json!([
                 [1, "big"],
@@ -133,45 +134,56 @@ pub fn statements() -> Vec<Portable> {
         ),
         query(
             "a simple case",
-            Query::from(
-                from("deals").column(col("id")).column_as(
-                    Expr::Case {
-                        operand: Some(Box::new(col("stage"))),
-                        whens: vec![(val("won"), Expr::int(1)), (val("lost"), Expr::int(-1))],
-                        otherwise: Some(Box::new(Expr::int(0))),
-                    },
-                    "score",
-                ),
-            )
+            Query::from(from("deals").column(col("id")).column_as(
+                Expr::Case {
+                    operand: Some(Box::new(col("stage"))),
+                    whens: vec![(val("won"), Expr::int(1)), (val("lost"), Expr::int(-1))],
+                    otherwise: Some(Box::new(Expr::int(0))),
+                },
+                "score",
+            ))
             .order_by(col("id").asc())
             .limit(4),
             json!([[1, 1], [2, 0], [3, -1], [4, 0]]),
         ),
         query(
             "a window function",
-            Query::from(
-                from("deals").column(col("id")).column_as(
-                    Expr::row_number()
-                        .over(vec![col("stage")], vec![col("amount_cents").desc()]),
-                    "rank",
-                ),
-            )
+            Query::from(from("deals").column(col("id")).column_as(
+                Expr::row_number().over(vec![col("stage")], vec![col("amount_cents").desc()]),
+                "rank",
+            ))
             .order_by(col("id").asc()),
-            json!([[1, 2], [2, 2], [3, 1], [4, 3], [5, 1], [6, 2], [7, 3], [8, 1]]),
+            json!([
+                [1, 2],
+                [2, 2],
+                [3, 1],
+                [4, 3],
+                [5, 1],
+                [6, 2],
+                [7, 3],
+                [8, 1]
+            ]),
         ),
         query(
             "a window ordered with nulls last",
-            Query::from(
-                from("deals").column(col("id")).column_as(
-                    Expr::row_number().over(Vec::new(), vec![
-                        col("closed_at").desc().nulls_last(),
-                        col("id").asc(),
-                    ]),
-                    "position",
+            Query::from(from("deals").column(col("id")).column_as(
+                Expr::row_number().over(
+                    Vec::new(),
+                    vec![col("closed_at").desc().nulls_last(), col("id").asc()],
                 ),
-            )
+                "position",
+            ))
             .order_by(col("id").asc()),
-            json!([[1, 2], [2, 5], [3, 3], [4, 6], [5, 1], [6, 4], [7, 7], [8, 8]]),
+            json!([
+                [1, 2],
+                [2, 5],
+                [3, 3],
+                [4, 6],
+                [5, 1],
+                [6, 4],
+                [7, 7],
+                [8, 8]
+            ]),
         ),
         query(
             "nulls last, descending",
@@ -253,7 +265,11 @@ pub fn statements() -> Vec<Portable> {
                     .column(col("hits")),
             )
             .order_by(col("name").asc()),
-            json!([["fresh", "blue", 1], ["spam", "grey", 0], ["vip", "gold", 5]]),
+            json!([
+                ["fresh", "blue", 1],
+                ["spam", "grey", 0],
+                ["vip", "gold", 5]
+            ]),
         ),
         write(
             "an insert skipping conflicts",
@@ -581,11 +597,9 @@ pub fn statements() -> Vec<Portable> {
         ),
         query(
             "null-safe equality with a null",
-            Query::from(
-                from("companies").column(col("id")).filter(
-                    col("country").binary(BinaryOp::NullSafeEq, val(navree_orm::Value::String(None))),
-                ),
-            ),
+            Query::from(from("companies").column(col("id")).filter(
+                col("country").binary(BinaryOp::NullSafeEq, val(navree_orm::Value::String(None))),
+            )),
             json!([[3]]),
         ),
         query(
@@ -610,14 +624,12 @@ pub fn statements() -> Vec<Portable> {
         ),
         query(
             "row values in a list",
-            Query::from(
-                from("deals").column(col("id")).filter(
-                    Expr::Tuple(vec![col("company_id"), col("stage")]).in_list(vec![
-                        Expr::Tuple(vec![val(1_i64), val("won")]),
-                        Expr::Tuple(vec![val(2_i64), val("lost")]),
-                    ]),
-                ),
-            )
+            Query::from(from("deals").column(col("id")).filter(
+                Expr::Tuple(vec![col("company_id"), col("stage")]).in_list(vec![
+                    Expr::Tuple(vec![val(1_i64), val("won")]),
+                    Expr::Tuple(vec![val(2_i64), val("lost")]),
+                ]),
+            ))
             .order_by(col("id").asc()),
             json!([[1], [3]]),
         ),
@@ -633,7 +645,10 @@ pub fn statements() -> Vec<Portable> {
                         col("amount_cents").sub(Expr::int(50).sub(Expr::int(10))),
                         "b",
                     )
-                    .column_as(Expr::Neg(Box::new(col("amount_cents").sub(Expr::int(500)))), "c")
+                    .column_as(
+                        Expr::Neg(Box::new(col("amount_cents").sub(Expr::int(500)))),
+                        "c",
+                    )
                     .filter(col("id").eq(val(2_i64))),
             ),
             json!([[9200, 4460, -4000]]),
@@ -662,7 +677,11 @@ pub fn statements() -> Vec<Portable> {
                         }),
                 )
                 .order_by(col("c.id").asc()),
-                json!([[1, "Big renewal"], [2, "Draft deal"], [3, "Équipe expansion"]]),
+                json!([
+                    [1, "Big renewal"],
+                    [2, "Draft deal"],
+                    [3, "Équipe expansion"]
+                ]),
             ),
             &[Dialect::Sqlite],
         ),
@@ -720,8 +739,12 @@ pub fn statements() -> Vec<Portable> {
             locked: true,
             ..query(
                 "a locking read",
-                Query::from(from("companies").column(col("id")).filter(col("id").eq(val(1_i64))))
-                    .lock(Lock::new(LockStrength::Update)),
+                Query::from(
+                    from("companies")
+                        .column(col("id"))
+                        .filter(col("id").eq(val(1_i64))),
+                )
+                .lock(Lock::new(LockStrength::Update)),
                 json!([[1]]),
             )
         },
@@ -731,8 +754,15 @@ pub fn statements() -> Vec<Portable> {
                 from("deals")
                     .column(col("id"))
                     .column_as(Expr::template("UPPER({})", vec![col("stage")]), "loud")
-                    .filter(Expr::raw("amount_cents BETWEEN ? AND ?", [1_000_i64, 5_000]))
-                    .filter(col("stage").eq(val("lead")).or(Expr::raw("1 = 1", Vec::<i64>::new()))),
+                    .filter(Expr::raw(
+                        "amount_cents BETWEEN ? AND ?",
+                        [1_000_i64, 5_000],
+                    ))
+                    .filter(
+                        col("stage")
+                            .eq(val("lead"))
+                            .or(Expr::raw("1 = 1", Vec::<i64>::new())),
+                    ),
             )
             .order_by(col("id").asc()),
             json!([[2, "LEAD"], [6, "LOST"]]),
