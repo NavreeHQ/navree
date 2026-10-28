@@ -8,46 +8,17 @@ use navree_schema::{
     ContinuousAggregate, DumpOptions, Hypertable, IndexKind, MigrationContext, ReferentialAction,
     Schema, SchemaConnection, SchemaError, SchemaOptions, raw,
 };
-use sea_orm::{ConnectionTrait, DatabaseConnection, Statement};
+use crate::support::{TempSqlite, TestConn};
 
-use crate::support::TempSqlite;
-
-async fn exec(conn: &DatabaseConnection, sql: &str) {
+async fn exec(conn: &TestConn, sql: &str) {
     conn.execute_unprepared(sql)
         .await
         .unwrap_or_else(|e| panic!("{sql}: {e}"));
 }
 
 /// Every row of `sql`, each column read as text (`NULL` as `None`).
-async fn rows(conn: &DatabaseConnection, sql: &str) -> Vec<Vec<Option<String>>> {
-    let found = conn
-        .query_all_raw(Statement::from_string(conn.get_database_backend(), sql))
-        .await
-        .unwrap_or_else(|e| panic!("{sql}: {e}"));
-    found
-        .iter()
-        .map(|row| {
-            (0..row.column_names().len())
-                .map(|i| {
-                    row.try_get_by_index::<Option<String>>(i)
-                        .ok()
-                        .flatten()
-                        .or_else(|| {
-                            row.try_get_by_index::<Option<i64>>(i)
-                                .ok()
-                                .flatten()
-                                .map(|n| n.to_string())
-                        })
-                        .or_else(|| {
-                            row.try_get_by_index::<Option<f64>>(i)
-                                .ok()
-                                .flatten()
-                                .map(|n| n.to_string())
-                        })
-                })
-                .collect()
-        })
-        .collect()
+async fn rows(conn: &TestConn, sql: &str) -> Vec<Vec<Option<String>>> {
+    crate::support::text_rows(conn, sql).await
 }
 
 fn texts(rows: Vec<Vec<Option<String>>>) -> Vec<Vec<String>> {
@@ -60,7 +31,7 @@ fn texts(rows: Vec<Vec<Option<String>>>) -> Vec<Vec<String>> {
         .collect()
 }
 
-async fn table_sql(conn: &DatabaseConnection, table: &str) -> String {
+async fn table_sql(conn: &TestConn, table: &str) -> String {
     rows(
         conn,
         &format!("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = '{table}'"),
@@ -572,7 +543,7 @@ async fn check_constraints_are_enforced_and_rebuilt() {
     // Adding a check rebuilds the table: the rows and the first check stay.
     // A row that violates it fails the rebuild (in the migration's
     // transaction, which rolls back).
-    let tx = sea_orm::TransactionTrait::begin(&conn).await.unwrap();
+    let tx = conn.begin().await.unwrap();
     let refused = Schema::new(&tx)
         .table("templates", |t| {
             t.check("templates_position_check", "position >= 0");
