@@ -146,3 +146,13 @@ device_url = "http://localhost:47080/oauth/device"
 # records every request's bodies, which is development tooling, not
 # something to measure under load.
 enabled = false
+
+# The worker process type runs Fleet's master (`evidence-app fleet`): it
+# supervises `fleet:work` children per queue, and `/_fleet` shows them.
+[fleet.supervisors.default]
+queues = ["default", "search", "mail", "notifications"]
+balance = "auto"
+min_processes = 1
+max_processes = 8
+max_jobs = 10000
+max_memory_mb = 512

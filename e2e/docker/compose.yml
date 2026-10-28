@@ -207,7 +207,7 @@ services:
 
   worker:
     <<: *app
-    command: ["queue:work"]
+    command: ["fleet"]
     depends_on:
       web: { condition: service_healthy }
     healthcheck:
@@ -241,10 +241,15 @@ services:
       context: ../browser
     image: navree-evidence-browser:local
     profiles: ["browser"]
+    # In the web container's network namespace: the browser opens the app
+    # on localhost, as a person does in development. The tools' session
+    # cookies are `Secure` on every host but loopback, so on http://web:8080
+    # the browser would drop them.
+    network_mode: "service:web"
     volumes:
       - ${E2E_OUT_DIR:-../../target/evidence/adhoc}:/out
     environment:
-      BASE_URL: http://web:8080
+      BASE_URL: http://localhost:8080
       OUT_DIR: /out/screenshots
 
 volumes:

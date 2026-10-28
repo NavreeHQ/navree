@@ -18,6 +18,8 @@ pub fn app(sources: ConfigSources) -> AppBuilder {
         .module(modules::live::LiveModule)
         // GraphQL fields and MCP tools over the evidence data.
         .module(modules::showcase::ShowcaseModule)
+        // Helm resources: users, workspaces, projects.
+        .module(modules::admin::AdminModule)
         // `db:seed evidence`: accounts, workspaces, projects, tasks.
         .module(seed::SeedModule)
 }
