@@ -334,7 +334,7 @@ The code is yours from the first commit, so change it the way you change any Nav
 
 - **Add features** with `navree make:module`, then copy the shape of `projects/`: a workspace-scoped entity, the `InWorkspace` guard and `CurrentWorkspace` in the controller, an access subject and a page in `web/app/(app)/w/[workspace]/`. In the `micro` kit, run the generators in `crates/<service>`.
 - **Remove what you don't need.** Delete the module and its line in `src/app.rs`; for billing, also remove `BillingModule` from `platform.rs`, the billing screens under `web/app/(app)/w/[workspace]/settings/billing/` and the billing tests. `navree check` tells you if anything still depends on it.
-- **Restyle the front end.** The colors, radius and fonts are CSS variables in `web/app/globals.css`, and the components in `web/components/ui/` are shadcn/ui source files you edit directly.
+- **Restyle the front end.** The colors, radius and fonts are CSS variables in `web/app/globals.css`, and the components in `web/components/ui/` are shadcn/ui source files you edit directly. Add more with `pnpm dlx shadcn@latest add <component>` in `web/`: the app runs the shadcn CLI without depending on it, and the one stylesheet it used from the `shadcn` package is vendored as `web/app/shadcn-tailwind.css`.
 - **Change roles and permissions** in `config/app.toml` (`[workspace.roles.*]`) and `src/abilities.rs`. The front end reads the rules from `GET /api/me/abilities` and `GET /api/v1/settings/abilities`, so buttons follow the API's rules without front-end changes.
 
 ## Updating
