@@ -98,7 +98,9 @@ sources and tests are in `packages/js/` (`client`, `bff`, `next`, `theme`);
 - Non-GET requests from another origin: `403 invalid_origin` (CSRF).
 - `X-Workspace` forwarded, else the `navree_workspace` cookie; `Last-Event-ID`
   forwarded; bodies stream (CSV, SSE); the browser's `X-Forwarded-For` never
-  reaches the API (`NAVREE_TRUSTED_PROXY_HOPS` behind proxies).
+  reaches the API (`NAVREE_TRUSTED_PROXY_HOPS` behind proxies, or
+  `NAVREE_CLIENT_IP_HEADER` for a header the proxy overwrites; Harbor sets
+  the hop count to 1; the API trusts the BFF peer through `http.trusted_proxies`).
 - Its own errors: `401 session_expired`, `401 two_factor_expired`,
   `403 invalid_origin`, `502 api_unreachable`, `502 unexpected_response`.
 
@@ -154,6 +156,7 @@ const { data, isPending } = useQuery({
 | `NAVREE_COOKIE_SECURE` | on in production | `0` for a production build over plain http |
 | `APP_ORIGINS` | none | Extra origins allowed to send non-GET requests |
 | `NAVREE_TRUSTED_PROXY_HOPS` | `0` | Proxies that append the client to `X-Forwarded-For` |
+| `NAVREE_CLIENT_IP_HEADER` | none | Header the proxy sets to the bare client address |
 | `NAVREE_WORKSPACE_HEADER` | `X-Workspace` | The API's `workspace.header` |
 
 ## Theme rules

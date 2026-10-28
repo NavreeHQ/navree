@@ -16,7 +16,7 @@ use crate::passkeys::controller::PasskeyController;
 use crate::service::clock_of;
 use crate::session_controller::SessionController;
 use crate::{
-    AuthError, AuthOptions, AuthService, JwtService, JwtStrategy, PasswordSignInPolicy, Strategy,
+    AuthError, AuthOptions, AuthService, JwtService, JwtStrategy, SignInPolicy, Strategy,
     StrategyAuthenticator, TwoFactorPolicy, UserResourceExtension, migration,
 };
 
@@ -232,8 +232,9 @@ pub trait ModuleBuilderAuthExt {
     /// Registers `E` as a `dyn UserResourceExtension` multi-binding.
     fn user_resource_extension<E: UserResourceExtension + Injectable>(&mut self) -> &mut Self;
 
-    /// Registers `P` as a `dyn PasswordSignInPolicy` multi-binding.
-    fn password_sign_in_policy<P: PasswordSignInPolicy + Injectable>(&mut self) -> &mut Self;
+    /// Registers `P` as a `dyn SignInPolicy` multi-binding: every sign-in
+    /// flow asks it before it issues a session.
+    fn sign_in_policy<P: SignInPolicy + Injectable>(&mut self) -> &mut Self;
     /// Registers `P` as a `dyn TwoFactorPolicy` multi-binding: users it
     /// requires two-factor authentication of must set it up first.
     fn two_factor_policy<P: TwoFactorPolicy + Injectable>(&mut self) -> &mut Self;
@@ -258,10 +259,10 @@ impl ModuleBuilderAuthExt for ModuleBuilder {
         )
     }
 
-    fn password_sign_in_policy<P: PasswordSignInPolicy + Injectable>(&mut self) -> &mut Self {
+    fn sign_in_policy<P: SignInPolicy + Injectable>(&mut self) -> &mut Self {
         self.multi(
-            Factory::<dyn PasswordSignInPolicy>::new(|r: Resolver| async move {
-                Ok(Arc::new(P::construct(r).await?) as Arc<dyn PasswordSignInPolicy>)
+            Factory::<dyn SignInPolicy>::new(|r: Resolver| async move {
+                Ok(Arc::new(P::construct(r).await?) as Arc<dyn SignInPolicy>)
             })
             .deps(P::dependencies()),
         )

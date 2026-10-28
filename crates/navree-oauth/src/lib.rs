@@ -68,6 +68,7 @@ mod protocol;
 mod requests;
 mod scope;
 mod strategy;
+mod throttle;
 mod token;
 
 pub use api::{CreatePersonalAccessTokenInput, DataList, OAuthApiController};
@@ -75,7 +76,9 @@ pub use clients::{
     CreatedClient, GRANT_AUTHORIZATION_CODE, GRANT_CLIENT_CREDENTIALS, GRANT_DEVICE_CODE,
     GRANT_REFRESH_TOKEN, MAX_CLIENT_NAME_LEN, NewClient, OAuthClients,
 };
-pub use config::{OAuthOptions, PersonalAccessTokenOptions, ScopeOptions};
+pub use config::{
+    EndpointLimit, OAuthOptions, PersonalAccessTokenOptions, RateLimitOptions, ScopeOptions,
+};
 pub use entity::{Authorization, Client, PersonalAccessToken};
 pub use error::OAuthError;
 pub use grants::{Grant, TokenResponse};

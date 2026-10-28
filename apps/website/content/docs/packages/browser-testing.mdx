@@ -257,7 +257,7 @@ Error: assert_see("Deal saved") failed after 5s: the text is not visible on http
   console:    target/navree-browser/a_rep_moves_a_deal_to_won/03-console.log
 ```
 
-Paths inside the current directory are shown relative to it, others in full. The console log holds the page's console messages, uncaught exceptions, dialogs and failed network requests, which usually explain a blank page faster than the screenshot. Files are numbered in the order a test saves them; a test in a module gets a folder per module (`target/navree-browser/deals/a_rep_moves_a_deal/`), and each run starts the test's folder afresh. Take screenshots on purpose with `page.screenshot("board-after-move").await?`, and full-page ones with `page.screenshot_full_page(..)`; both return the file's path.
+Paths inside the current directory are shown relative to it, others in full. The console log holds the page's console messages, uncaught exceptions, dialogs and failed network requests, which usually explain a blank page faster than the screenshot. Files are numbered in the order a test saves them; a test in a module gets a folder per module (`target/navree-browser/deals/a_rep_moves_a_deal/`), and each run starts the test's folder afresh. Take screenshots on purpose with `page.screenshot("board-after-move").await?`, and full-page ones with `page.screenshot_full_page(..)`; both return the file's path. A screenshot brings its page to the front of the window first, so a test with several pages open gets the picture of the page that failed, not a timeout.
 
 To watch a test run, show the window and slow it down:
 

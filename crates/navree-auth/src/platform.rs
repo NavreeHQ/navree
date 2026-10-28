@@ -11,6 +11,11 @@
 //! - `POST /auth/platform/2fa/verify` finishes it with a code or a
 //!   recovery code: a platform session (`auth.platform.session_ttl_secs`,
 //!   not extended by refreshing; each refresh checks the role again).
+//! - Both steps ask the [`SignInPolicy`](crate::SignInPolicy)s
+//!   ([`SignInAudience::Platform`]). With `auth.platform.break_glass` (the
+//!   default) a refusal doesn't stop an administrator whose password, role
+//!   and second factor check out: the sign-in goes on and is audited as
+//!   `auth.break_glass`. Without it, the refusal is the answer.
 //! - Platform consoles guard their routes with
 //!   [`platform_session`](crate::platform_session) or take a
 //!   [`PlatformAdmin`].
@@ -29,7 +34,8 @@ use crate::service::{SessionKind, entry, normalize_email};
 use crate::throttle::LoginThrottle;
 use crate::two_factor::two_factor_enabled;
 use crate::{
-    AccessClaims, AuthError, AuthService, ClientMeta, TokenPair, TokenType, TwoFactorProof, User,
+    AccessClaims, AuthError, AuthService, ClientMeta, SignInAttempt, SignInAudience, SignInMethod,
+    TokenPair, TokenType, TwoFactorProof, User,
 };
 
 impl AuthService {
@@ -97,6 +103,7 @@ impl AuthService {
         if let Err(error) = self.platform_throttle.clear(&key).await {
             tracing::warn!(target: "navree::auth", %error, "could not reset the platform throttle");
         }
+        self.platform_sign_in_policy(&user, meta, false).await?;
         if !two_factor_enabled(&user) {
             self.audit(
                 entry(AuditKind::Security, "auth.login_failed", meta)
@@ -106,10 +113,11 @@ impl AuthService {
             .await;
             return Err(AuthError::TwoFactorSetupRequired);
         }
-        let challenge = self.jwt.sign(
+        let challenge = self.jwt.sign_challenge(
             user.id,
             TokenType::PlatformChallenge,
             Duration::from_secs(self.options.two_factor.challenge_ttl_secs),
+            &SignInMethod::Password,
         )?;
         self.audit(
             entry(AuditKind::Auth, "auth.two_factor_challenge", meta)
@@ -140,6 +148,7 @@ impl AuthService {
         if !self.is_platform_admin(user.id).await? {
             return Err(AuthError::InvalidToken);
         }
+        self.platform_sign_in_policy(&user, meta, true).await?;
         let (tokens, session_id) = self
             .open_session(&user, meta.clone(), SessionKind::Platform)
             .await?;
@@ -150,6 +159,51 @@ impl AuthService {
         )
         .await;
         Ok((user, tokens))
+    }
+}
+
+impl AuthService {
+    /// Asks the sign-in policies about a platform sign-in of `user`, an
+    /// administrator whose credentials checked out. A refusal stands
+    /// without `auth.platform.break_glass`; with it the sign-in goes on,
+    /// audited as `auth.break_glass` once the session starts (`finishing`).
+    async fn platform_sign_in_policy(
+        &self,
+        user: &User,
+        meta: &ClientMeta,
+        finishing: bool,
+    ) -> Result<(), AuthError> {
+        let attempt =
+            SignInAttempt::of(user, SignInMethod::Password).audience(SignInAudience::Platform);
+        let (code, message) = match self.evaluate_sign_in(&attempt).await {
+            Ok(()) => return Ok(()),
+            Err(AuthError::SignInRefused { code, message }) => (code, message),
+            Err(error) => return Err(error),
+        };
+        if !self.options.platform.break_glass {
+            self.audit_refusal(&attempt, &code, meta).await;
+            return Err(AuthError::SignInRefused { code, message });
+        }
+        if finishing {
+            tracing::warn!(
+                target: "navree::security",
+                user_id = %user.id,
+                ip = meta.ip.as_deref().unwrap_or("-"),
+                code = code.as_str(),
+                "break-glass platform sign-in past a sign-in policy"
+            );
+            self.audit(
+                entry(AuditKind::Security, "auth.break_glass", meta)
+                    .actor(user.id)
+                    .metadata(json!({
+                        "flow": "platform",
+                        "email": attempt.email,
+                        "refused_code": code,
+                    })),
+            )
+            .await;
+        }
+        Ok(())
     }
 }
 

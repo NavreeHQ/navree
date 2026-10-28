@@ -4,14 +4,17 @@
 
 mod adding;
 mod certificates;
+mod claims;
 mod cloudflare;
 mod commands;
 mod https;
 mod managed;
+mod migration;
 mod pebble;
 mod probes;
 mod resolution;
 mod routes;
 mod servers;
 mod support;
+mod transfer;
 mod verification;

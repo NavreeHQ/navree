@@ -264,6 +264,7 @@ onError: (error) => applyFieldErrors(error, form.setError, ["email", "name"]) ||
 | `NAVREE_COOKIE_SECURE` | server | on in production | `0` to serve a production build over plain http. |
 | `APP_ORIGINS` | server | none | Extra origins allowed to send non-GET requests. |
 | `NAVREE_TRUSTED_PROXY_HOPS` | server | `0` | Reverse proxies that append the client to `X-Forwarded-For`. |
+| `NAVREE_CLIENT_IP_HEADER` | server | none | A header the proxy sets to the bare client address (`x-real-ip`), read before `X-Forwarded-For`. |
 | `NAVREE_WORKSPACE_HEADER` | server | `X-Workspace` | The API's `workspace.header`. |
 | `NEXT_PUBLIC_PUSHER_KEY`, `NEXT_PUBLIC_WS_HOST`, `NEXT_PUBLIC_WS_PORT` | build | none | The API's real-time server, if you pass them to `RealtimeProvider`. |
 

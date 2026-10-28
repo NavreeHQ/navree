@@ -11,7 +11,7 @@ use tracing::field::{Field, Visit};
 use tracing::{Event, Subscriber};
 use tracing_subscriber::layer::{Context, Layer, SubscriberExt};
 
-use crate::support::Setup;
+use crate::support::{Setup, capture_logs};
 
 /// One captured event: its target and fields (`message` included).
 type Captured = (String, BTreeMap<String, String>);
@@ -62,8 +62,7 @@ const ALICE: &str = "0192f0c1-0000-7000-8000-00000000000a";
 #[tokio::test]
 async fn request_log_line_has_route_status_user_and_request_id() {
     let capture = Capture::default();
-    let _guard =
-        tracing::subscriber::set_default(tracing_subscriber::registry().with(capture.clone()));
+    let _guard = capture_logs(tracing_subscriber::registry().with(capture.clone()));
     let app = Setup::new(vec![
         RouteDef::on(Method::GET, "/deals/{id}", || async { "deal" }).authenticated(),
     ])
@@ -107,8 +106,7 @@ async fn request_log_line_has_route_status_user_and_request_id() {
 #[tokio::test]
 async fn server_errors_are_logged_with_their_cause() {
     let capture = Capture::default();
-    let _guard =
-        tracing::subscriber::set_default(tracing_subscriber::registry().with(capture.clone()));
+    let _guard = capture_logs(tracing_subscriber::registry().with(capture.clone()));
     let app = Setup::new(vec![
         RouteDef::on(Method::GET, "/broken", || async {
             Err::<(), AppError>(std::io::Error::other("connection reset by database").into())
@@ -204,8 +202,7 @@ where
 #[tokio::test]
 async fn handler_logs_carry_the_request_id_and_user_id() {
     let capture = RequestSpanFields::default();
-    let _guard =
-        tracing::subscriber::set_default(tracing_subscriber::registry().with(capture.clone()));
+    let _guard = capture_logs(tracing_subscriber::registry().with(capture.clone()));
     let app = Setup::new(vec![
         RouteDef::on(Method::GET, "/work", || async {
             tracing::info!(target: "test::handler", "working");

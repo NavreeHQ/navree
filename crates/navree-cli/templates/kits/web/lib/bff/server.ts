@@ -18,5 +18,8 @@ export const bff = createBff({
     .filter(Boolean),
   // Reverse proxies in front of this server that append the client to X-Forwarded-For (default 0: the
   // browser's own header is never passed on, and Navree sees every web user at the BFF's address).
+  // `navree harbor` sets this to 1 for the Caddy in front of the app. A deploy of your own sets it to
+  // the number of such proxies, or names a header the proxy overwrites with the bare client address.
   trustedProxyHops: Number.parseInt(process.env.NAVREE_TRUSTED_PROXY_HOPS ?? "0", 10) || 0,
+  clientIpHeader: process.env.NAVREE_CLIENT_IP_HEADER || undefined,
 });

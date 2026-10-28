@@ -130,7 +130,7 @@ pub struct NotePage {
 title = "My App API"
 version = "1.0.0"                     # your API's version
 servers = ["https://api.example.com"]
-docs_ui = true                        # false removes /api/docs (it loads Scalar from a CDN)
+docs_ui = true                        # false removes /api/docs and its embedded Scalar script (/api/docs/assets/)
 ```
 
 ## Export and typed clients
