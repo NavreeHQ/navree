@@ -1,5 +1,6 @@
 //! An in-memory keyed rate limiter (GCRA), used for the per-IP limit and
-//! per-route throttles.
+//! per-route throttles, and public for limits a route can't declare (per
+//! OAuth client, per API key).
 
 use std::cell::Cell;
 use std::hash::Hash;
@@ -21,8 +22,23 @@ thread_local! {
 /// request every `per / limit` (generic cell rate algorithm: one timestamp
 /// per key). The keys are sharded, so concurrent requests from different
 /// keys rarely wait for each other.
+///
+/// Each instance of the app keeps its own counts, like the route throttles
+/// ([`RouteDef::throttle`](crate::RouteDef::throttle)).
+///
+/// ```
+/// use std::time::Duration;
+/// use navree_http::RateLimiter;
+///
+/// let limiter = RateLimiter::new(2, Duration::from_secs(60));
+/// assert!(limiter.check(&"client-a").is_ok());
+/// assert!(limiter.check(&"client-a").is_ok());
+/// let limited = limiter.check(&"client-a").unwrap_err();
+/// assert!(limited.retry_after > Duration::ZERO);
+/// assert!(limiter.check(&"client-b").is_ok());
+/// ```
 #[derive(Debug)]
-pub(crate) struct RateLimiter<K: Hash + Eq> {
+pub struct RateLimiter<K: Hash + Eq> {
     interval: Duration,
     period: Duration,
     state: DashMap<K, Slot>,
@@ -39,17 +55,18 @@ struct Slot {
 
 /// A refused request.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct Limited {
+#[non_exhaustive]
+pub struct Limited {
     /// When the key may send again.
-    pub(crate) retry_after: Duration,
+    pub retry_after: Duration,
     /// Whether this refusal should be reported (audited): the first one for
     /// the key in a window of `per`, so a flood is reported once a window.
-    pub(crate) report: bool,
+    pub report: bool,
 }
 
 impl<K: Hash + Eq + Clone> RateLimiter<K> {
     /// `limit` requests per `per` (a `limit` of 0 is treated as 1).
-    pub(crate) fn new(limit: u32, per: Duration) -> Self {
+    pub fn new(limit: u32, per: Duration) -> Self {
         Self {
             interval: per / limit.max(1),
             period: per,
@@ -58,7 +75,7 @@ impl<K: Hash + Eq + Clone> RateLimiter<K> {
     }
 
     /// Counts a request for `key`: [`Limited`] when over the limit.
-    pub(crate) fn check(&self, key: &K) -> Result<(), Limited> {
+    pub fn check(&self, key: &K) -> Result<(), Limited> {
         let now = Instant::now();
         let checks = CHECKS.get().wrapping_add(1);
         CHECKS.set(checks);
