@@ -353,13 +353,15 @@ docker build -t navree-fuzz fuzz && docker run --rm -v "$PWD:/work" -v navree-fu
   parser and add a regression test to **the crate's own tests** (not only to `fuzz/`).
 - A new parser of untrusted input gets a target: add
   `fuzz/fuzz_targets/<name>.rs`, a `[[bin]]` entry in `fuzz/Cargo.toml`, seeds,
-  a line in the table above and the name in the matrix of
-  `.github/workflows/fuzz.yml`. Internals a target needs are exposed through a
+  and a line in the table above (CI runs every target `cargo fuzz list`
+  prints). Internals a target needs are exposed through a
   hidden `fuzzing` feature of the crate (`navree_mcp::fuzzing`, for example),
   never through the public API.
-- CI (`.github/workflows/fuzz.yml`) runs every target for 60 seconds on pushes
-  to main that touch a fuzzed crate and for 10 minutes every night, caching the
-  corpora between runs and uploading the inputs that crashed.
+- CI (`.github/workflows/fuzz.yml`) builds the targets once and runs them one
+  after another in a single job: 15 seconds each on pushes to main that change
+  `fuzz/`, 5 minutes each every Sunday, and as long as you ask when you run the
+  workflow by hand. It caches the corpora between runs and uploads the inputs
+  that crashed.
 
 ## Static analysis
 
