@@ -5,6 +5,8 @@ import { SearchDialog } from "@/components/search/search-dialog";
 import { SiteFooter } from "@/components/site/site-footer";
 import { SiteHeader } from "@/components/site/site-header";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { ogImage } from "@/lib/metadata";
+import { JsonLd, siteGraph } from "@/lib/structured-data";
 import { site } from "@site";
 
 import { fontVariables } from "./fonts";
@@ -18,16 +20,20 @@ export const metadata: Metadata = {
   },
   description: site.description,
   applicationName: site.name,
+  // Pages set their own canonical URL and social tags (`pageMetadata` in
+  // src/lib/metadata.ts); these are the defaults. The icons and the web app
+  // manifest come from the file conventions in this folder: favicon.ico,
+  // icon.svg, apple-icon.png and manifest.ts (made by scripts/icons.ts).
   openGraph: {
     type: "website",
     siteName: site.name,
-    url: site.url,
+    locale: "en_US",
+    url: "/",
     title: `${site.name}: ${site.headline}`,
     description: site.tagline,
-    images: [{ url: "/og.png", width: 1200, height: 630, alt: `${site.name}: ${site.headline} ${site.tagline}` }],
+    images: [ogImage],
   },
-  twitter: { card: "summary_large_image", images: ["/og.png"] },
-  icons: { apple: "/apple-touch-icon.png" },
+  twitter: { card: "summary_large_image", images: [{ url: ogImage.url, alt: ogImage.alt }] },
 };
 
 export const viewport: Viewport = {
@@ -50,6 +56,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <SiteFooter />
         </TooltipProvider>
         <SearchDialog />
+        <JsonLd data={siteGraph()} />
       </body>
     </html>
   );
