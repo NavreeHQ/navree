@@ -33,6 +33,7 @@ pub struct DiscoverInput {
 
 /// `POST /sso/exchange`.
 #[derive(Debug, Deserialize, ToSchema)]
+#[schema(as = SsoExchangeInput)]
 pub struct ExchangeInput {
     /// The one-time code from the `complete_url` redirect.
     pub code: String,

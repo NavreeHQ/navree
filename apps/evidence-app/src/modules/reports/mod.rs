@@ -1,7 +1,10 @@
 //! Reports: `POST /api/v1/reports` stores a `queued` report and queues the
 //! `reports.generate` job in the same unit of work; a worker counts the
-//! workspace's tasks by status and marks the report `done`. The load
-//! profiles poll `GET /api/v1/reports/{id}` to prove the queue drains.
+//! workspace's tasks by status, marks the report `computed` and emits the
+//! `report.computed` event over NATS JetStream (navree-micro); the event
+//! handler, in the `serve` process, marks it `done`. The load profiles poll
+//! `GET /api/v1/reports/{id}` until it is `done`, which proves the queue and
+//! the broker both deliver under load.
 
 mod migrations;
 
@@ -10,6 +13,7 @@ use navree::contracts::{Job, JobContext, JobOptions};
 use navree::db::Db;
 use navree::orm::prelude::*;
 use navree::prelude::*;
+use navree::micro::ServiceClient;
 use navree::queue::Queue;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -27,7 +31,8 @@ pub struct Report {
     pub workspace_id: Uuid,
     /// `task-summary`.
     pub kind: String,
-    /// `queued`, `done` or `failed`.
+    /// `queued`, `computed` (by the worker) or `done` (once the
+    /// `report.computed` event came back over NATS).
     pub status: String,
     /// The result, once done.
     pub result: Option<serde_json::Value>,
@@ -64,7 +69,12 @@ impl Job for GenerateReport {
 
     async fn handle(self, ctx: JobContext) -> Result<(), BoxError> {
         let db = ctx.app.get::<Db>().await?;
+        let client = ctx.app.get::<ServiceClient>().await?;
         let attempt = ctx.attempt;
+        let event = ReportComputed {
+            report_id: self.report_id,
+            workspace_id: self.workspace_id,
+        };
         navree::orm::workspace::scope(self.workspace_id, async move {
             let Some(mut report) = Report::find(&db, self.report_id).await? else {
                 // Deleted since: nothing to do.
@@ -80,13 +90,60 @@ impl Job for GenerateReport {
             }
             report
                 .update(&db, |report| {
-                    report.status = "done".to_owned();
+                    report.status = "computed".to_owned();
                     report.result = Some(json!({ "tasks": counts }));
                     report.attempts = i32::try_from(attempt).unwrap_or(i32::MAX);
-                    report.finished_at = Some(Utc::now());
                 })
                 .await?;
             Ok::<_, BoxError>(())
+        })
+        .await?;
+        client
+            .emit(REPORT_COMPUTED, &event)
+            .key(event.report_id)
+            .await?;
+        Ok(())
+    }
+}
+
+/// The event a computed report is announced with, on NATS JetStream.
+pub const REPORT_COMPUTED: &str = "report.computed";
+
+/// `report.computed`: which report, in which workspace.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ReportComputed {
+    /// The report.
+    pub report_id: Uuid,
+    /// Its workspace.
+    pub workspace_id: Uuid,
+}
+
+/// The `report.computed` handler: marks the report `done`.
+#[injectable]
+pub struct ReportEvents {
+    db: Arc<Db>,
+}
+
+#[message_handlers]
+impl ReportEvents {
+    /// Marks the report `done` (idempotent: a redelivered event changes
+    /// nothing).
+    #[event_pattern("report.computed")]
+    async fn computed(&self, Payload(event): Payload<ReportComputed>) -> Result<()> {
+        let db = self.db.clone();
+        navree::orm::workspace::scope(event.workspace_id, async move {
+            let Some(mut report) = Report::find(&*db, event.report_id).await? else {
+                return Ok(());
+            };
+            if report.status != "done" {
+                report
+                    .update(&*db, |report| {
+                        report.status = "done".to_owned();
+                        report.finished_at = Some(Utc::now());
+                    })
+                    .await?;
+            }
+            Ok(())
         })
         .await
     }
@@ -142,6 +199,7 @@ impl ReportsController {
 /// Reports: the model, the job and the routes.
 #[module(
     imports = [AccessModule::for_feature::<Report>()],
+    providers = [ReportEvents],
     controllers = [ReportsController],
     register = Self::wire,
 )]
@@ -152,5 +210,6 @@ impl ReportsModule {
         m.migrations(migrations::migrations());
         m.model::<Report>();
         m.job::<GenerateReport>();
+        m.message_handlers::<ReportEvents>();
     }
 }

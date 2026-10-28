@@ -4,7 +4,8 @@
 // row (`checks-smoke.json`, read into summary.json).
 //
 // A row: { name, package, method, path, expect: 200 | [200, 302],
-//          auth?: true, workspace?: true, body?: {..}, json_path?: "data.0.id" }
+//          auth?: true, workspace?: true, headers?: {..}, body?: {..},
+//          json_path?: "data.0.id" }
 
 import http from 'k6/http';
 import { check } from 'k6';
@@ -31,6 +32,7 @@ export default function (data) {
     if (row.auth) headers.Authorization = `Bearer ${data.token}`;
     if (row.workspace) headers['X-Workspace'] = WORKSPACE;
     if (row.body) headers['Content-Type'] = 'application/json';
+    Object.assign(headers, row.headers || {});
     const res = http.request(row.method || 'GET', BASE_URL + row.path, row.body ? JSON.stringify(row.body) : null, {
       headers,
       redirects: 0,
