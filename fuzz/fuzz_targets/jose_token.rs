@@ -96,9 +96,15 @@ fn round_trip(data: &[u8]) {
     jws.verify(&signer.verifying_key())
         .expect("a token verifies with its own key");
     assert_eq!(jws.header().alg, signer.algorithm());
+    // The signed payload is the claims as JSON text, and reads back as
+    // what that text says. (A float in the claims may read back one ulp
+    // away from the value it was first read as: serde_json's default
+    // float parser is not exact, which is not the token's doing.)
+    let text = serde_json::to_vec(&claims).expect("claims print");
+    assert_eq!(jws.payload(), text.as_slice(), "the payload is the claims");
     assert_eq!(
         jws.claims::<Value>().expect("the claims read back"),
-        claims,
+        serde_json::from_slice::<Value>(&text).expect("printed claims read"),
         "the claims round-trip"
     );
     let own = signer.verifying_key().to_jwk();

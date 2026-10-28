@@ -278,6 +278,8 @@ fuzz_target!(|data: &[u8]| {
         return;
     };
     let messages: Vec<&[u8]> = rest.split(|byte| *byte == 0).take(8).collect();
+    // Boot the server outside the runtime that drives the requests.
+    let _ = fixture();
     let version = usize::from(mode >> 2);
     block_on(async {
         let run = async {

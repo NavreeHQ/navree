@@ -88,7 +88,7 @@ impl AsyncRead for Chunked<'_> {
 /// `max`.
 fn lines(data: &[u8], max: usize, chunk: usize) -> Vec<Option<Vec<u8>>> {
     futures::executor::block_on(async {
-        let mut reader = BufReader::with_capacity(chunk.max(1), Chunked { data, chunk });
+        let mut reader = BufReader::with_capacity(chunk.clamp(1, 1 << 16), Chunked { data, chunk });
         let mut out = Vec::new();
         loop {
             match read_line(&mut reader, max).await.expect("memory reads") {

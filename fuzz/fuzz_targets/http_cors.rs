@@ -113,12 +113,16 @@ fn signed_url(input: &Input) {
     let signer = UrlSigner::new(b"fuzzing-signing-key-0123456789abc");
     let now = chrono::DateTime::from_timestamp(1_792_929_600, 0).expect("a time");
     let later = now + chrono::TimeDelta::hours(1);
-    // A URL we signed verifies, and the same URL with a changed tail does not.
-    let path = format!("/files/{}", String::from_utf8_lossy(&input.uri));
-    let signed = signer.sign(&path, later);
-    if let Ok(uri) = signed.parse::<Uri>() {
-        assert!(signer.verify(&uri, now), "a signed URL verifies: {signed}");
-        assert!(!signer.verify(&uri, later + chrono::TimeDelta::seconds(1)));
+    // A URL we signed verifies, and no longer once it has expired. `sign`
+    // takes a path and query as they go on the wire: no fragment.
+    if let Ok(path) = format!("/files/{}", String::from_utf8_lossy(&input.uri))
+        .parse::<http::uri::PathAndQuery>()
+    {
+        let signed = signer.sign(path.as_str(), later);
+        if let Ok(uri) = signed.parse::<Uri>() {
+            assert!(signer.verify(&uri, now), "a signed URL verifies: {signed}");
+            assert!(!signer.verify(&uri, later + chrono::TimeDelta::seconds(1)));
+        }
     }
     // Whatever arrives on the wire.
     let wire = format!("/files?{}", String::from_utf8_lossy(&input.query));
