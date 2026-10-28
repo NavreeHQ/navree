@@ -203,6 +203,19 @@ fn normalize_domain(domain: &str) -> Result<String, SsoError> {
     Ok(domain)
 }
 
+/// The domain of `email` in the form verified domains are kept: lower-case
+/// ASCII (an international spelling in its `xn--` form, as mail is routed),
+/// without a trailing dot. `None` without a domain.
+pub(crate) fn email_domain(email: &str) -> Option<String> {
+    let (_, domain) = email.trim().rsplit_once('@')?;
+    let domain = match url::Host::parse(domain) {
+        Ok(url::Host::Domain(ascii)) => ascii,
+        _ => domain.to_lowercase(),
+    };
+    let domain = domain.trim_end_matches('.');
+    (!domain.is_empty()).then(|| domain.to_owned())
+}
+
 /// A slug from a name: lower-case letters, digits and dashes.
 fn slugify(name: &str) -> String {
     let mut slug = String::new();
@@ -923,12 +936,9 @@ impl Sso {
     /// Where `email` signs in: the enabled connection of its verified
     /// domain, if any, and whether a password is still allowed.
     pub async fn discover(&self, email: &str) -> Result<SsoDiscovery, SsoError> {
-        let email = email.trim().to_lowercase();
-        let domain = email.rsplit_once('@').map(|(_, d)| d).unwrap_or_default();
-        let found = if domain.is_empty() {
-            None
-        } else {
-            self.connection_for_domain(domain).await?
+        let found = match email_domain(email) {
+            Some(domain) => self.connection_for_domain(&domain).await?,
+            None => None,
         };
         Ok(match found {
             Some(loaded) => SsoDiscovery {
@@ -957,11 +967,11 @@ impl Sso {
         &self,
         email: &str,
     ) -> Result<Option<(Uuid, String)>, SsoError> {
-        let Some((_, domain)) = email.rsplit_once('@') else {
+        let Some(domain) = email_domain(email) else {
             return Ok(None);
         };
         Ok(self
-            .connection_for_domain(domain)
+            .connection_for_domain(&domain)
             .await?
             .filter(|loaded| self.enforced(loaded))
             .map(|loaded| (loaded.model.id, loaded.model.name)))
@@ -1841,6 +1851,25 @@ mod tests {
         ] {
             assert!(normalize_domain(bad).is_err(), "{bad}");
         }
+    }
+
+    #[test]
+    fn email_domains_take_the_form_verified_domains_are_kept_in() {
+        for email in [
+            "ann@acme.com",
+            " Ann@ACME.com ",
+            "ann@acme.com.",
+            "ann@\u{ff41}\u{ff43}\u{ff4d}\u{ff45}.com",
+            "ann@acme\u{3002}com",
+        ] {
+            assert_eq!(email_domain(email).as_deref(), Some("acme.com"), "{email}");
+        }
+        assert_eq!(
+            email_domain("ann@bücher.example").as_deref(),
+            Some("xn--bcher-kva.example")
+        );
+        assert_eq!(email_domain("ann"), None);
+        assert_eq!(email_domain("ann@"), None);
     }
 
     #[test]
