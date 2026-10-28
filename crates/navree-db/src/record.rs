@@ -8,7 +8,9 @@
 //! - reads: [`find`], [`Record::select`] with [`Filter`]s, ordering,
 //!   limits, `FOR UPDATE`, [`Select::count`] and [`Select::page`];
 //! - writes on any [`Executor`]: [`insert`], [`update`] (every column by
-//!   key), [`upsert`], [`delete`], and [`Record::update_where`] /
+//!   key), [`insert_returning`] / [`update_returning`] (the row as stored,
+//!   timestamps rounded by the database), [`upsert`], [`delete`], and
+//!   [`Record::update_where`] /
 //!   [`Record::delete_where`] for set-based changes (a claim:
 //!   `UPDATE .. SET status = 'released' WHERE id = ? AND status = 'held'`);
 //! - writes through a [`Uow`] that also record [`ChangeEvent`](crate::ChangeEvent)s
@@ -880,39 +882,58 @@ fn json<T: Serialize>(value: &T) -> Result<serde_json::Value, DbError> {
     serde_json::to_value(value).map_err(|error| DbError::invalid(format!("a record does not serialize: {error}")))
 }
 
-/// [`insert`] through `uow`, recording a `created` change event with the
-/// record as JSON (its `Serialize` form: fields skipped there, such as
-/// secrets, stay out of audit trails).
-pub async fn insert_recorded<R: Record + Serialize + Clone>(uow: &Uow, record: &R) -> Result<(), DbError> {
-    insert(uow, record).await?;
-    let created = record.clone();
-    uow.record_lazily(move || {
-        Ok(Some(ChangeEvent {
-            entity: R::TABLE.to_owned(),
-            id: key_string(&created.key()),
-            op: ChangeOp::Created,
-            old: None,
-            new: Some(json(&created)?),
-        }))
+/// The row with `record`'s key as stored, or `NotFound`.
+async fn stored<R: Record, E: Executor + ?Sized>(exec: &E, record: &R) -> Result<R, DbError> {
+    let key = record.key();
+    find::<R, _>(exec, key.clone()).await?.ok_or_else(|| {
+        DbError::not_found(format!("{} {}", R::TABLE, key_string(&key)))
     })
 }
 
-/// [`update`] of `new` through `uow`, recording an `updated` change event
-/// with the fields that differ from `old` (none: no event); `NotFound` when
-/// no row has its key.
+/// [`insert`], then the row as the database stored it: its rounding of
+/// timestamps (microseconds on PostgreSQL, the column's precision on
+/// MySQL) and decimals. Read back by key on the same executor, so through
+/// a unit of work it is read in its transaction.
+pub async fn insert_returning<R: Record, E: Executor + ?Sized>(exec: &E, record: &R) -> Result<R, DbError> {
+    insert(exec, record).await?;
+    stored(exec, record).await
+}
+
+/// [`update`], then the row as the database stored it; `NotFound` when no
+/// row has `record`'s key.
+pub async fn update_returning<R: Record, E: Executor + ?Sized>(exec: &E, record: &R) -> Result<R, DbError> {
+    update(exec, record).await?;
+    stored(exec, record).await
+}
+
+/// [`insert_returning`] through `uow`, recording a `created` change event
+/// with the stored record as JSON (its `Serialize` form: fields skipped
+/// there, such as secrets, stay out of audit trails).
+pub async fn insert_recorded<R: Record + Serialize + Clone>(uow: &Uow, record: &R) -> Result<R, DbError> {
+    let created = insert_returning(uow, record).await?;
+    let event = created.clone();
+    uow.record_lazily(move || {
+        Ok(Some(ChangeEvent {
+            entity: R::TABLE.to_owned(),
+            id: key_string(&event.key()),
+            op: ChangeOp::Created,
+            old: None,
+            new: Some(json(&event)?),
+        }))
+    })?;
+    Ok(created)
+}
+
+/// [`update_returning`] of `new` through `uow`, recording an `updated`
+/// change event with the fields that differ from `old` (none: no event);
+/// `NotFound` when no row has its key.
 pub async fn update_recorded<R: Record + Serialize + Clone>(
     uow: &Uow,
     old: &R,
     new: &R,
-) -> Result<(), DbError> {
-    if update(uow, new).await? == 0 && find::<R, _>(uow, new.key()).await?.is_none() {
-        return Err(DbError::not_found(format!(
-            "{} {}",
-            R::TABLE,
-            key_string(&new.key())
-        )));
-    }
-    let (old, new) = (old.clone(), new.clone());
+) -> Result<R, DbError> {
+    let updated = update_returning(uow, new).await?;
+    let (old, new) = (old.clone(), updated.clone());
     uow.record_lazily(move || {
         let (before, after) = diff(json(&old)?, json(&new)?);
         Ok((!after.is_empty()).then(|| ChangeEvent {
@@ -922,7 +943,8 @@ pub async fn update_recorded<R: Record + Serialize + Clone>(
             old: Some(before.into()),
             new: Some(after.into()),
         }))
-    })
+    })?;
+    Ok(updated)
 }
 
 /// [`delete`] through `uow`, recording a `deleted` change event with the

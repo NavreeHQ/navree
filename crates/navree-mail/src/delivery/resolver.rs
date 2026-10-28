@@ -6,16 +6,15 @@ use std::fmt;
 use std::sync::{Arc, Mutex, PoisonError};
 
 use chrono::{DateTime, Utc};
-use navree_db::{Repo, Uow};
+use navree_db::record::{self, Filter};
+use navree_db::{Record as _, Uow};
 use navree_http_client::{HttpClient, HttpClientError, HttpClientOptions};
-use sea_orm::ActiveValue::{Set, Unchanged};
-use sea_orm::{ColumnTrait as _, Condition, EntityTrait as _, QueryFilter as _, QueryOrder as _};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::Store;
-use super::entity::transport;
+use super::entity::TransportRow;
 use crate::{MailError, MailScope, MailTransport, TransportConfig, TransportTier};
 
 /// Who a stored transport belongs to: its tier and key.
@@ -115,21 +114,13 @@ impl TransportOwner {
     }
 
     /// The row filter for this owner.
-    fn condition(&self) -> Condition {
+    fn filter(&self) -> Filter {
         let (workspace, organization, domain) = self.columns();
-        let mut condition = Condition::all().add(transport::Column::Tier.eq(self.tier().as_str()));
-        condition = condition.add(match workspace {
-            Some(id) => transport::Column::WorkspaceId.eq(id),
-            None => transport::Column::WorkspaceId.is_null(),
-        });
-        condition = condition.add(match organization {
-            Some(id) => transport::Column::OrganizationId.eq(id),
-            None => transport::Column::OrganizationId.is_null(),
-        });
-        condition.add(match domain {
-            Some(domain) => transport::Column::Domain.eq(domain),
-            None => transport::Column::Domain.is_null(),
-        })
+        Filter::all()
+            .eq("tier", self.tier().as_str())
+            .eq("workspace_id", workspace)
+            .eq("organization_id", organization)
+            .eq("domain", domain)
     }
 }
 
@@ -162,19 +153,19 @@ pub struct StoredTransport {
     pub updated_at: DateTime<Utc>,
 }
 
-impl From<&transport::Model> for StoredTransport {
-    fn from(model: &transport::Model) -> Self {
+impl From<&TransportRow> for StoredTransport {
+    fn from(row: &TransportRow) -> Self {
         Self {
-            id: model.id,
-            tier: model.tier.parse().unwrap_or(TransportTier::Platform),
-            workspace_id: model.workspace_id,
-            organization_id: model.organization_id,
-            domain: model.domain.clone(),
-            kind: model.kind.clone(),
-            enabled: model.enabled,
-            checked_at: model.checked_at,
-            created_at: model.created_at,
-            updated_at: model.updated_at,
+            id: row.id,
+            tier: row.tier.parse().unwrap_or(TransportTier::Platform),
+            workspace_id: row.workspace_id,
+            organization_id: row.organization_id,
+            domain: row.domain.clone(),
+            kind: row.kind.clone(),
+            enabled: row.enabled,
+            checked_at: row.checked_at,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
         }
     }
 }
@@ -265,81 +256,71 @@ impl TransportResolver {
         }
         let sealed = self.store.seal(&config.to_json().to_string()).await?;
         let now = self.store.now().await;
-        let tx = uow.tx().await?;
-        let existing = transport::Entity::find()
-            .filter(owner.condition())
-            .one(&*tx)
+        let existing = TransportRow::select()
+            .filter(owner.filter())
+            .for_update()
+            .one(uow)
             .await?;
-        drop(tx);
-        let model = match existing {
+        let row = match existing {
             Some(existing) => {
-                Repo::<transport::Entity>::update(
-                    uow,
-                    transport::ActiveModel {
-                        id: Unchanged(existing.id),
-                        kind: Set(config.kind().to_owned()),
-                        config: Set(sealed),
-                        enabled: Set(true),
-                        checked_at: Set(None),
-                        updated_at: Set(now),
-                        ..Default::default()
-                    },
-                )
-                .await?
+                let row = TransportRow {
+                    kind: config.kind().to_owned(),
+                    config: sealed,
+                    enabled: true,
+                    checked_at: None,
+                    updated_at: now,
+                    ..existing.clone()
+                };
+                record::update_recorded(uow, &existing, &row).await?
             }
             None => {
                 let (workspace_id, organization_id, domain) = owner.columns();
-                Repo::<transport::Entity>::insert(
-                    uow,
-                    transport::ActiveModel {
-                        id: Set(Uuid::now_v7()),
-                        tier: Set(owner.tier().as_str().to_owned()),
-                        workspace_id: Set(workspace_id),
-                        organization_id: Set(organization_id),
-                        domain: Set(domain),
-                        kind: Set(config.kind().to_owned()),
-                        config: Set(sealed),
-                        enabled: Set(true),
-                        checked_at: Set(None),
-                        created_at: Set(now),
-                        updated_at: Set(now),
-                    },
-                )
-                .await?
+                let row = TransportRow {
+                    id: Uuid::now_v7(),
+                    tier: owner.tier().as_str().to_owned(),
+                    workspace_id,
+                    organization_id,
+                    domain,
+                    kind: config.kind().to_owned(),
+                    config: sealed,
+                    enabled: true,
+                    checked_at: None,
+                    created_at: now,
+                    updated_at: now,
+                };
+                record::insert_recorded(uow, &row).await?
             }
         };
-        self.forget(model.id);
-        Ok(StoredTransport::from(&model))
+        self.forget(row.id);
+        Ok(StoredTransport::from(&row))
     }
 
     /// `owner`'s stored transport.
     pub async fn get(&self, owner: &TransportOwner) -> Result<Option<StoredTransport>, MailError> {
         let db = self.store.db().await?;
-        Ok(transport::Entity::find()
-            .filter(owner.condition())
-            .one(&db.reader().await)
+        Ok(TransportRow::select()
+            .filter(owner.filter())
+            .one(&db.read_executor().await)
             .await?
-            .map(|model| StoredTransport::from(&model)))
+            .map(|row| StoredTransport::from(&row)))
     }
 
     /// The decrypted settings of the stored transport `id`.
     pub async fn config(&self, id: Uuid) -> Result<TransportConfig, MailError> {
-        let model = self.model(id).await?;
-        self.decrypt(&model).await
+        let row = self.row(id).await?;
+        self.decrypt(&row).await
     }
 
     /// Removes `owner`'s transport; returns whether there was one.
     pub async fn remove(&self, uow: &Uow, owner: &TransportOwner) -> Result<bool, MailError> {
-        let tx = uow.tx().await?;
-        let existing = transport::Entity::find()
-            .filter(owner.condition())
-            .one(&*tx)
+        let existing = TransportRow::select()
+            .filter(owner.filter())
+            .one(uow)
             .await?;
-        drop(tx);
         match existing {
-            Some(model) => {
-                self.forget(model.id);
-                Repo::<transport::Entity>::delete(uow, model).await?;
+            Some(row) => {
+                self.forget(row.id);
+                record::delete_recorded(uow, &row).await?;
                 Ok(true)
             }
             None => Ok(false),
@@ -354,22 +335,20 @@ impl TransportResolver {
         id: Uuid,
         enabled: bool,
     ) -> Result<StoredTransport, MailError> {
-        Repo::<transport::Entity>::find(uow, id)
+        let existing = TransportRow::select()
+            .eq("id", id)
+            .for_update()
+            .one(uow)
             .await?
             .ok_or(MailError::NotFound("mail transport"))?;
-        let now = self.store.now().await;
-        let model = Repo::<transport::Entity>::update(
-            uow,
-            transport::ActiveModel {
-                id: Unchanged(id),
-                enabled: Set(enabled),
-                updated_at: Set(now),
-                ..Default::default()
-            },
-        )
-        .await?;
+        let row = TransportRow {
+            enabled,
+            updated_at: self.store.now().await,
+            ..existing.clone()
+        };
+        let row = record::update_recorded(uow, &existing, &row).await?;
         self.forget(id);
-        Ok(StoredTransport::from(&model))
+        Ok(StoredTransport::from(&row))
     }
 
     /// Every stored transport (of `tier`, when given), oldest first.
@@ -378,13 +357,14 @@ impl TransportResolver {
         tier: Option<TransportTier>,
     ) -> Result<Vec<StoredTransport>, MailError> {
         let db = self.store.db().await?;
-        let mut select = transport::Entity::find();
+        let mut select = TransportRow::select();
         if let Some(tier) = tier {
-            select = select.filter(transport::Column::Tier.eq(tier.as_str()));
+            select = select.eq("tier", tier.as_str());
         }
         Ok(select
-            .order_by_asc(transport::Column::CreatedAt)
-            .all(&db.reader().await)
+            .order_by("created_at")
+            .order_by("id")
+            .all(&db.read_executor().await)
             .await?
             .iter()
             .map(StoredTransport::from)
@@ -404,25 +384,27 @@ impl TransportResolver {
     /// Runs [`usable`](TransportResolver::usable) on the stored transport
     /// `id` and, when it passes, records the time in `checked_at`.
     pub async fn check_stored(&self, id: Uuid) -> Result<StoredTransport, MailError> {
-        let model = self.model(id).await?;
-        let config = self.decrypt(&model).await?;
-        if model.tier != TransportTier::Platform.as_str() {
+        let row = self.row(id).await?;
+        let config = self.decrypt(&row).await?;
+        if row.tier != TransportTier::Platform.as_str() {
             self.check_tenant(&config).await?;
         }
         config.build()?.check().await?;
         let now = self.store.now().await;
         self.store
             .in_uow(|uow| async move {
-                let updated = Repo::<transport::Entity>::update(
-                    &uow,
-                    transport::ActiveModel {
-                        id: Unchanged(id),
-                        checked_at: Set(Some(now)),
-                        ..Default::default()
-                    },
-                )
-                .await?;
-                Ok(StoredTransport::from(&updated))
+                let existing = TransportRow::select()
+                    .eq("id", id)
+                    .for_update()
+                    .one(&uow)
+                    .await?
+                    .ok_or(MailError::NotFound("mail transport"))?;
+                let checked = TransportRow {
+                    checked_at: Some(now),
+                    ..existing.clone()
+                };
+                let checked = record::update_recorded(&uow, &existing, &checked).await?;
+                Ok(StoredTransport::from(&checked))
             })
             .await
     }
@@ -436,35 +418,34 @@ impl TransportResolver {
         sender_domain: Option<&str>,
     ) -> Result<Option<ResolvedTransport>, MailError> {
         let db = self.store.db().await?;
-        let mut any =
-            Condition::any().add(transport::Column::Tier.eq(TransportTier::Platform.as_str()));
+        let mut any = Filter::any().eq("tier", TransportTier::Platform.as_str());
         if let Some(domain) = sender_domain {
             any = any.add(
-                Condition::all()
-                    .add(transport::Column::Tier.eq(TransportTier::Domain.as_str()))
-                    .add(transport::Column::Domain.eq(normalize_domain(domain))),
+                Filter::all()
+                    .eq("tier", TransportTier::Domain.as_str())
+                    .eq("domain", normalize_domain(domain)),
             );
         }
         if let Some(workspace) = scope.workspace_id {
             any = any.add(
-                Condition::all()
-                    .add(transport::Column::Tier.eq(TransportTier::Workspace.as_str()))
-                    .add(transport::Column::WorkspaceId.eq(workspace)),
+                Filter::all()
+                    .eq("tier", TransportTier::Workspace.as_str())
+                    .eq("workspace_id", workspace),
             );
         }
         if let Some(organization) = scope.organization_id {
             any = any.add(
-                Condition::all()
-                    .add(transport::Column::Tier.eq(TransportTier::Organization.as_str()))
-                    .add(transport::Column::OrganizationId.eq(organization)),
+                Filter::all()
+                    .eq("tier", TransportTier::Organization.as_str())
+                    .eq("organization_id", organization),
             );
         }
-        let rows = transport::Entity::find()
-            .filter(transport::Column::Enabled.eq(true))
+        let rows = TransportRow::select()
+            .eq("enabled", true)
             .filter(any)
-            .all(&db.reader().await)
+            .all(&db.read_executor().await)
             .await?;
-        let applies = |row: &transport::Model| -> bool {
+        let applies = |row: &TransportRow| -> bool {
             if row.tier != TransportTier::Domain.as_str() {
                 return true;
             }
@@ -482,7 +463,7 @@ impl TransportResolver {
             TransportTier::Platform,
         ] {
             // A domain owned by the workspace wins over one owned by nobody.
-            let mut candidates: Vec<&transport::Model> = rows
+            let mut candidates: Vec<&TransportRow> = rows
                 .iter()
                 .filter(|row| row.tier == tier.as_str() && applies(row))
                 .collect();
@@ -502,7 +483,7 @@ impl TransportResolver {
 
     /// The built transport of `row`, from the cache when `row` has not
     /// changed.
-    async fn built(&self, row: &transport::Model) -> Result<Arc<dyn MailTransport>, MailError> {
+    async fn built(&self, row: &TransportRow) -> Result<Arc<dyn MailTransport>, MailError> {
         if let Some((updated_at, transport)) = self.cache().get(&row.id)
             && *updated_at == row.updated_at
         {
@@ -523,17 +504,16 @@ impl TransportResolver {
         self.cache().remove(&id);
     }
 
-    async fn decrypt(&self, model: &transport::Model) -> Result<TransportConfig, MailError> {
-        let json = self.store.open(&model.config).await?;
+    async fn decrypt(&self, row: &TransportRow) -> Result<TransportConfig, MailError> {
+        let json = self.store.open(&row.config).await?;
         serde_json::from_str(&json).map_err(|error| MailError::Store {
             source: Box::new(error),
         })
     }
 
-    async fn model(&self, id: Uuid) -> Result<transport::Model, MailError> {
+    async fn row(&self, id: Uuid) -> Result<TransportRow, MailError> {
         let db = self.store.db().await?;
-        transport::Entity::find_by_id(id)
-            .one(&db.reader().await)
+        record::find::<TransportRow, _>(&db.read_executor().await, id)
             .await?
             .ok_or(MailError::NotFound("mail transport"))
     }
