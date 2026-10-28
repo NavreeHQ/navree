@@ -1,6 +1,6 @@
 ---
 title: "Indexes and foreign keys"
-description: "Primary keys, unique, plain, partial, expression, full-text and spatial indexes with their options per database, foreign keys with their actions, conventional names, and dropping and renaming them."
+description: "Primary keys, unique, plain, partial, expression, full-text and spatial indexes with their options per database, foreign keys with their actions, check constraints, conventional names, and dropping and renaming them."
 ---
 
 Indexes make queries fast and keep values unique; foreign keys keep references between tables valid. Both are declared on the blueprint, in `schema.create` or `schema.table`, next to the [columns](/docs/database/columns/) they cover.
@@ -109,6 +109,29 @@ A foreign key needs the referenced table, so order the [migration sets](/docs/da
 
 Foreign key violations answer 409 over HTTP, like unique violations ([database errors](/docs/database/getting-started/#database-errors)).
 
+## Check constraints
+
+A check constraint is a rule every row must meet, enforced by the database whatever writes the row. `t.check(name, expression)` adds one; the expression is SQL and may name several columns:
+
+```rust
+schema
+    .create("discounts", |t| {
+        t.id();
+        t.integer("percent");
+        t.date("starts_on");
+        t.date("ends_on").nullable();
+        t.check("discounts_percent_check", "percent BETWEEN 1 AND 100");
+        t.check("discounts_period_check", "ends_on IS NULL OR ends_on >= starts_on");
+    })
+    .await?;
+```
+
+```sql title="PostgreSQL"
+ALTER TABLE "discounts" ADD CONSTRAINT "discounts_percent_check" CHECK (percent BETWEEN 1 AND 100)
+```
+
+PostgreSQL, MySQL and MariaDB add the constraint with `ALTER TABLE`, in `schema.create` and `schema.table` alike. SQLite writes it into `CREATE TABLE`; adding one to an existing table, or dropping one, rebuilds the table with its rows. Adding a check that existing rows break fails, and so does a write that breaks one. MySQL parses checks before 8.0.16 without enforcing them, and the migration says so in a notice. Name each check after its table: MySQL wants constraint names unique in the whole database. [Shared libraries](/docs/workspaces/shared-libraries/) use one to keep their owner columns consistent.
+
 ## Dropping and renaming
 
 ```rust
@@ -119,11 +142,12 @@ schema
         t.drop_foreign(["company_id"]);
         t.drop_constrained_foreign_id("owner_id");   // the foreign key and its column
         t.rename_index("deals_title_index", "deals_by_title");
+        t.drop_check("deals_amount_check");          // by name
     })
     .await?;
 ```
 
-Drops take a name or the columns, which give the conventional name: `drop_index`, `drop_unique`, `drop_fulltext`, `drop_spatial_index`, `drop_foreign`, `drop_primary()` (the conventional primary key) and `drop_primary_named(name)`. `drop_constrained_foreign_id` drops a foreign key and then its column. To check before dropping, `schema.has_index(table, name_or_columns, kind)` and `schema.has_foreign_key(table, ..)` read the live schema.
+Drops take a name or the columns, which give the conventional name: `drop_index`, `drop_unique`, `drop_fulltext`, `drop_spatial_index`, `drop_foreign`, `drop_primary()` (the conventional primary key) and `drop_primary_named(name)`. `drop_constrained_foreign_id` drops a foreign key and then its column. `drop_check` takes the check's name. To check before dropping, `schema.has_index(table, name_or_columns, kind)` and `schema.has_foreign_key(table, ..)` read the live schema.
 
 <LinkCards>
   <LinkCard href="/docs/database/columns/" title="Columns">

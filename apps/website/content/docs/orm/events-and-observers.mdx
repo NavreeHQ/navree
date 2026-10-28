@@ -41,7 +41,25 @@ impl Observer<Deal> for DealObserver {
 
 A new record runs `saving`, `creating`, the `INSERT`, `created`, `saved`; a changed one `saving`, `updating`, the `UPDATE`, `updated`, `saved`. A soft delete runs `deleting`, `trashed`, `deleted`.
 
-The `-ing` events run before the database is touched. Their listeners may change the record (fill a column, normalize a value) or cancel the operation by returning `Flow::Cancel`: `save` and `delete` then return `false` and write nothing. An error from an `-ing` listener stops the operation with that error.
+The `-ing` events run before the database is touched. Their listeners may change the record (fill a column, normalize a value) or cancel the operation by returning `Flow::Cancel`: `save` and `delete` then return `false` and write nothing. An error from an `-ing` listener stops the operation with that error. To refuse a write with an error of your own, return `OrmError::refused(model, error)`. The error stays the source of the `OrmError::Refused` the operation returns, so the [error mapping](/docs/basics/errors/) registered for it answers when a handler's `?` passes it on:
+
+```rust
+#[derive(Debug, thiserror::Error)]
+#[error("won deals are kept")]
+pub struct WonDealsAreKept;
+
+impl Observer<Deal> for DealObserver {
+    async fn deleting(&self, deal: &mut Record<Deal>, _ctx: &ExecContext) -> Result<Flow> {
+        if deal.stage == Stage::Won {
+            return Err(OrmError::refused("Deal", WonDealsAreKept));
+        }
+        Ok(Flow::Continue)
+    }
+}
+
+// In the module: a 409 instead of a 500.
+m.map_error::<WonDealsAreKept>(|_| Some(AppError::conflict("Won deals are kept.")));
+```
 
 ### Inside a unit of work
 
@@ -188,7 +206,7 @@ Observers, closure listeners, application events and broadcasts hear nothing; th
 
 ## Behaviors
 
-A type that implements `ModelHook<M>` directly, with `before` and `after` methods taking the event, is a **behavior**: it runs at once for every event, in quiet operations too. The ORM's own features are behaviors (touching parents, filling a [workspace](/docs/orm/workspaces-and-access/#workspace-scoping) column), so they hold however a write happens. Write one when a rule must never be skipped; write an observer otherwise.
+A type that implements `ModelHook<M>` directly, with `before` and `after` methods taking the event, is a **behavior**: it runs at once for every event, in quiet operations too. The ORM's own features are behaviors (touching parents, filling a [workspace](/docs/orm/workspaces-and-access/#workspace-scoping) column), so they hold however a write happens, and so is the guard of [shared libraries](/docs/workspaces/shared-libraries/). Write one when a rule must never be skipped; write an observer otherwise. A behavior learns the operation's current workspace from `navree::orm::workspace::current_in(ctx)`.
 
 ## Custom events
 

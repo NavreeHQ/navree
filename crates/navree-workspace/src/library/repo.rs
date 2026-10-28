@@ -10,7 +10,7 @@ use navree_events::EventBus;
 use navree_orm::{Builder, Executor, Field, Model as _, OrmError, PrimaryKey, Record, col};
 use uuid::Uuid;
 
-use super::visibility::{owner_filter, viewer_filter};
+use super::visibility::{organization_source_filter, owner_filter, viewer_filter};
 use super::{Library, LibraryOwner, LibraryViewer, LibraryVisibility};
 use crate::WorkspaceError;
 use crate::entity::{Organization, Workspace};
@@ -233,32 +233,36 @@ impl<M: Library> LibraryRepo<M> {
         Self::clone_to(uow, key, LibraryOwner::Workspace(workspace)).await
     }
 
-    /// Clones item `key` into the library of `owner`, who must see it: a
-    /// workspace (see [`clone_into`](Self::clone_into)), an organization
-    /// (a global item, or one of its own) or the global library (a global
-    /// item). Inside a workspace request, cloning for another owner is
-    /// refused unless it runs in [`unguarded`](super::unguarded).
+    /// Clones item `key` into the library of `owner`: a workspace (an item
+    /// it sees, see [`clone_into`](Self::clone_into)), an organization (a
+    /// global item, one of its own, or one of its workspaces' items, which
+    /// publishes it to the organization) or the global library (a global
+    /// item). Anything else is a 404. Inside a workspace request, cloning
+    /// for another owner is refused unless it runs in
+    /// [`unguarded`](super::unguarded).
     pub async fn clone_to(
         uow: &Uow,
         key: impl Into<M::Key>,
         owner: LibraryOwner,
     ) -> Result<Record<M>, WorkspaceError> {
-        let viewer = match owner {
-            LibraryOwner::Global => LibraryViewer::global(),
+        let sources = match owner {
+            LibraryOwner::Global => Self::global(),
             LibraryOwner::Organization(id) => {
                 Organization::find(uow, id)
                     .await?
                     .ok_or_else(|| WorkspaceError::OrganizationNotFound(id.to_string()))?;
-                LibraryViewer::organization(id)
+                M::query()
+                    .without_global_scope::<LibraryVisibility>()
+                    .where_(organization_source_filter::<M>(id))
             }
             LibraryOwner::Workspace(id) => {
                 let workspace = Workspace::find(uow, id)
                     .await?
                     .ok_or_else(|| WorkspaceError::WorkspaceNotFound(id.to_string()))?;
-                LibraryViewer::from(workspace.model())
+                Self::visible_to(workspace.model())
             }
         };
-        let source = Self::find_visible_or_fail(uow, viewer, key).await?;
+        let source = sources.find_or_fail(uow, key).await?;
         let source_owner = source.model().library_owner()?;
         let mut copy = source.replicate();
         copy.model_mut().set_library_owner(owner)?;

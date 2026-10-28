@@ -56,6 +56,22 @@ pub(crate) fn viewer_filter<M: Library>(viewer: &LibraryViewer) -> Filter {
     Filter::any(owners.iter().map(owner_filter::<M>))
 }
 
+/// The rows organization `organization` may clone into its library: the
+/// global items, its own, and its workspaces' (published to it); the
+/// workspaces read from `workspaces` in the same statement.
+pub(crate) fn organization_source_filter<M: Library>(organization: Uuid) -> Filter {
+    let workspaces = Workspace::query()
+        .select([Workspace::ID])
+        .where_(Workspace::ORGANIZATION_ID.eq(organization));
+    Filter::any([
+        owner_filter::<M>(&LibraryOwner::Global),
+        owner_filter::<M>(&LibraryOwner::Organization(organization)),
+        column::<M>(M::SCOPE_COLUMN)
+            .eq(LibraryScope::Workspace.as_str())
+            .and(column::<M>(M::WORKSPACE_COLUMN).in_subquery(workspaces)),
+    ])
+}
+
 /// The rows workspace `workspace` sees, its organization read from
 /// `workspaces` in the same statement.
 fn current_workspace_filter<M: Library>(workspace: Uuid) -> Filter {
