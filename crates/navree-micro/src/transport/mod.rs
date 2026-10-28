@@ -8,7 +8,7 @@ use std::time::Duration;
 use navree_kernel::BoxFuture;
 use serde::de::{self, Deserializer};
 use serde::{Deserialize, Serialize};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 
 use crate::{DeadLetter, Envelope, MicroError};
 
@@ -105,6 +105,26 @@ pub trait MicroTransport: Send + Sync + 'static {
         subscriptions: Vec<Subscription>,
         deliveries: mpsc::Sender<Delivery>,
     ) -> BoxFuture<'_, Result<(), MicroError>>;
+
+    /// [`listen`](Self::listen) that also tells Navree when the broker has
+    /// registered every subscription, by calling
+    /// [`subscribed.signal()`](Subscribed::signal). The app finishes
+    /// booting (and a test's `start_listener` returns) only then, so a
+    /// request sent right after boot is not lost on a transport that drops
+    /// messages nobody has subscribed to. Override it when subscribing
+    /// takes a round trip to the broker; signal once the broker has
+    /// confirmed. The default signals at once and calls `listen`, which is
+    /// right for a transport that keeps messages for a subscriber that has
+    /// not arrived yet.
+    fn listen_subscribed(
+        &self,
+        subscriptions: Vec<Subscription>,
+        deliveries: mpsc::Sender<Delivery>,
+        subscribed: Subscribed,
+    ) -> BoxFuture<'_, Result<(), MicroError>> {
+        subscribed.signal();
+        self.listen(subscriptions, deliveries)
+    }
 
     /// Declares the streams, topics, queues and consumers `subscriptions`
     /// need (`micro:setup`, and `micro.auto_setup` when the listener
@@ -207,6 +227,32 @@ impl Group {
     pub fn name(&self) -> &str {
         match self {
             Group::Service(name) | Group::Instance(name) => name,
+        }
+    }
+}
+
+/// Tells Navree that the broker has registered a listener's subscriptions
+/// (see [`MicroTransport::listen_subscribed`]). Dropping it unsignalled
+/// also lets the app go on, so a failed listen never holds the boot.
+#[derive(Debug)]
+pub struct Subscribed(Option<oneshot::Sender<()>>);
+
+impl Subscribed {
+    /// A signal and the future that completes when it fires (or is dropped).
+    pub(crate) fn channel() -> (Subscribed, oneshot::Receiver<()>) {
+        let (sender, receiver) = oneshot::channel();
+        (Subscribed(Some(sender)), receiver)
+    }
+
+    /// A signal nobody waits for.
+    pub fn detached() -> Subscribed {
+        Subscribed(None)
+    }
+
+    /// Every subscription is registered on the broker.
+    pub fn signal(mut self) {
+        if let Some(sender) = self.0.take() {
+            let _ = sender.send(());
         }
     }
 }
