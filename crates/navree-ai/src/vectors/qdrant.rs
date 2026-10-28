@@ -110,9 +110,8 @@ fn condition(filter: &Filter) -> Value {
     let key = |field: &str| format!("metadata.{field}");
     // The REST API takes numbers and RFC 3339 datetime strings in `range`
     // alike (`datetime_range` exists only in gRPC).
-    let range = |field: &str, op: &str, value: &Value| {
-        json!({ "key": key(field), "range": { op: value } })
-    };
+    let range =
+        |field: &str, op: &str, value: &Value| json!({ "key": key(field), "range": { op: value } });
     match filter {
         Filter::Eq(field, value) => json!({ "key": key(field), "match": { "value": value } }),
         Filter::AnyOf(field, values) => json!({ "key": key(field), "match": { "any": values } }),

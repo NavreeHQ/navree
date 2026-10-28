@@ -106,12 +106,20 @@ async fn fts_rows_are_keyed_by_the_documents_rowid() {
         .await
         .unwrap();
     for (id, doc, fts) in rowids(&db).await {
-        assert_eq!(Some(doc), fts, "document {id} and its FTS row share a rowid");
+        assert_eq!(
+            Some(doc),
+            fts,
+            "document {id} and its FTS row share a rowid"
+        );
     }
     assert_eq!(fts_rows(&db).await, 3);
 
     engine.delete("notes", &["a".to_owned()]).await.unwrap();
-    assert_eq!(fts_rows(&db).await, 2, "deleting a document deletes its FTS row");
+    assert_eq!(
+        fts_rows(&db).await,
+        2,
+        "deleting a document deletes its FTS row"
+    );
 
     // Swapping a staged index in replaces the live one, FTS rows included.
     engine
