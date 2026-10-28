@@ -1,14 +1,13 @@
-//! The ORM's IR ([`crate::ir`]) as [syntax trees](super::ast), rule for rule
-//! as the compiler in [`crate::sql`] builds statements today: the same
-//! dialect rules (date parts, LIKE variants, JSON paths and containment,
-//! full text, upserts, group limits, time buckets, vector distances, the
-//! MySQL timeout hint), the same errors, the same results. The `render_*`
-//! functions lower and render in one step, with the signatures of
-//! `compile_*`.
+//! The ORM's IR ([`crate::ir`]) as [syntax trees](super::ast), with the
+//! dialect rules of each database (date parts, LIKE variants, JSON paths
+//! and containment, full text, upserts, group limits, time buckets, vector
+//! distances, the MySQL timeout hint). The `render_*` functions lower and
+//! render in one step; they write every statement the ORM runs.
 //!
-//! [`Where::Sql`](crate::ir::Where::Sql) (a condition built by the query
-//! builder this replaces) answers `Unsupported` here; it is moved away
-//! separately.
+//! [`Where::Sql`](crate::ir::Where::Sql) (a condition built by another
+//! query builder) is written by that builder and embedded as a raw
+//! fragment; [`Where::Tree`](crate::ir::Where::Tree) is a render-tree
+//! condition, embedded as it is.
 //!
 //! ```
 //! use navree_orm::Dialect;
@@ -42,18 +41,19 @@ mod text;
 mod timescale;
 mod write;
 
+pub(crate) use select::timeout_millis;
 pub use select::{aggregate, exists, select};
 pub use write::{delete, insert, truncate, update, update_from};
 
-/// The SQL of a read query, as [`compile_select`](crate::sql::compile_select)
-/// builds it.
+/// The SQL of a read query.
 pub fn render_select(query: &crate::ir::QueryIr, dialect: Dialect) -> Result<Statement> {
     super::render_query(&select(query, dialect)?, dialect)
 }
 
 /// The SQL of an aggregate over a query's rows, in a column named
-/// `aggregate`, as [`compile_aggregate`](crate::sql::compile_aggregate)
-/// builds it.
+/// `aggregate`. Queries with groups, `HAVING`, `DISTINCT`, unions, a limit
+/// or an offset are aggregated as a subquery, so the result counts what the
+/// query returns; others replace the select list (and drop the order).
 pub fn render_aggregate(
     query: &crate::ir::QueryIr,
     aggregate: &crate::ir::Aggregate,
@@ -62,14 +62,12 @@ pub fn render_aggregate(
     super::render_query(&select::aggregate(query, aggregate, dialect)?, dialect)
 }
 
-/// `SELECT EXISTS(query) AS "exists"`, as
-/// [`compile_exists`](crate::sql::compile_exists) builds it.
+/// `SELECT EXISTS(query) AS "exists"`.
 pub fn render_exists(query: &crate::ir::QueryIr, dialect: Dialect) -> Result<Statement> {
     super::render_query(&select::exists(query, dialect)?, dialect)
 }
 
-/// The SQL of an insert, as [`compile_insert`](crate::sql::compile_insert)
-/// builds it (`RETURNING` on PostgreSQL and SQLite only; MySQL reads
+/// The SQL of an insert (`RETURNING` on PostgreSQL and SQLite only; MySQL reads
 /// `last_insert_id`).
 ///
 /// ```
@@ -96,8 +94,7 @@ pub fn render_insert(insert: &crate::ir::InsertIr, dialect: Dialect) -> Result<S
     )
 }
 
-/// The SQL of an update, as [`compile_update`](crate::sql::compile_update)
-/// builds it (JSON path assignments folded per column).
+/// The SQL of an update (JSON path assignments folded per column).
 pub fn render_update(update: &crate::ir::UpdateIr, dialect: Dialect) -> Result<Statement> {
     super::render(
         &ast::Statement::from(write::update(update, dialect)?),
@@ -106,8 +103,7 @@ pub fn render_update(update: &crate::ir::UpdateIr, dialect: Dialect) -> Result<S
 }
 
 /// `UPDATE table SET .. FROM joined .. WHERE ..` (MySQL: `UPDATE table,
-/// joined SET ..`), as [`compile_update_from`](crate::sql::compile_update_from)
-/// builds it.
+/// joined SET ..`, for one joined table).
 pub fn render_update_from(
     table: &crate::ir::TableRef,
     sets: &[(Cow<'static, str>, Expr)],
@@ -119,8 +115,7 @@ pub fn render_update_from(
     super::render(&ast::Statement::from(update), dialect)
 }
 
-/// The SQL of a delete, as [`compile_delete`](crate::sql::compile_delete)
-/// builds it.
+/// The SQL of a delete.
 pub fn render_delete(delete: &crate::ir::DeleteIr, dialect: Dialect) -> Result<Statement> {
     super::render(
         &ast::Statement::from(write::delete(delete, dialect)?),
@@ -128,8 +123,10 @@ pub fn render_delete(delete: &crate::ir::DeleteIr, dialect: Dialect) -> Result<S
     )
 }
 
-/// The statements that empty `table` and reset its identity, as
-/// [`compile_truncate`](crate::sql::compile_truncate) builds them.
+/// The statements that empty `table` and reset its identity: `TRUNCATE ..
+/// RESTART IDENTITY` on PostgreSQL (`CASCADE` also empties the tables whose
+/// foreign keys point at it), `TRUNCATE` on MySQL, and on SQLite a delete
+/// of its rows after resetting its `sqlite_sequence` entry.
 pub fn render_truncate(table: &str, cascade: bool, dialect: Dialect) -> Vec<Statement> {
     super::grammar::for_dialect(dialect).truncate(&write::truncate(table, cascade))
 }
@@ -280,7 +277,7 @@ impl Lowerer {
     }
 
     /// A raw fragment, its placeholders checked against its values now
-    /// (where the compiler checks them).
+    /// (so a mismatch fails while lowering, before any SQL is written).
     pub(crate) fn raw(&self, sql: Cow<'static, str>, values: &[Value]) -> Result<ast::Expr> {
         super::writer::check_raw(&sql, values.len(), self.dialect)?;
         Ok(ast::Expr::Raw {

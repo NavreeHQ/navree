@@ -67,7 +67,7 @@ use crate::ir::{DeleteIr, Expr, InsertIr, OnConflict, TableRef};
 use crate::model::{KeyKind, Model, PrimaryKey};
 use crate::query::{Builder, TableBuilder};
 use crate::row::{Row, decode_error};
-use crate::sql::{Dialect, Statement, compile_truncate, compile_update_from};
+use crate::sql::{Dialect, Statement, render_truncate, render_update_from};
 use crate::value::{Field, Value};
 
 /// What an [`upsert`](TableBuilder::upsert) sets on a row that already
@@ -370,7 +370,7 @@ fn returned_key<K: Field>(outcome: &InsertOutcome, table: &str, column: &str) ->
     }
 }
 
-/// Empties `table` on `target` (see [`compile_truncate`]).
+/// Empties `table` on `target` (see [`render_truncate`]).
 async fn truncate_table(target: &Target<'_>, table: &str, cascade: bool) -> Result<()> {
     let sql = match target {
         Target::Sql(sql) => sql,
@@ -385,7 +385,7 @@ async fn truncate_table(target: &Target<'_>, table: &str, cascade: bool) -> Resu
         }
     };
     let dialect = sql.dialect();
-    let statements = compile_truncate(table, cascade, dialect);
+    let statements = render_truncate(table, cascade, dialect);
     if dialect != Dialect::Sqlite {
         for statement in &statements {
             sql.execute(statement).await?;
@@ -819,7 +819,7 @@ impl TableBuilder {
         update_from_on(&target, self.into_ir(), sets).await
     }
 
-    /// Empties the table and restarts its identity (see [`compile_truncate`]
+    /// Empties the table and restarts its identity (see [`render_truncate`]
     /// per database); on MySQL this commits the open transaction.
     pub async fn truncate<E: Executor + ?Sized>(self, exec: &E) -> Result<()> {
         let table = self.insert_table("truncate")?;
@@ -860,7 +860,7 @@ async fn update_from_on(
             query.table.qualifier()
         )));
     }
-    let statement = compile_update_from(
+    let statement = render_update_from(
         &query.table,
         &sets,
         &query.joins,

@@ -47,8 +47,9 @@ use crate::error::{OrmError, Result};
 use crate::exec::{Access, Executor, SqlTarget, Target};
 use crate::ir::{Expr, SelectItem};
 use crate::query::IntoSelect;
+use crate::render::Writer;
 use crate::row::{Row, decode_error};
-use crate::sql::{Dialect, Statement, raw_sql};
+use crate::sql::{Dialect, Statement};
 use crate::value::{Field, Value};
 
 /// Raw SQL with portable `?` placeholders and the values bound to them: a
@@ -114,11 +115,9 @@ impl Raw {
     /// The statement for `dialect`: placeholders rewritten for it (`$n` on
     /// PostgreSQL) and their number checked against the values.
     pub fn to_statement(&self, dialect: Dialect) -> Result<Statement> {
-        Ok(Statement {
-            sql: raw_sql(&self.sql, self.values.len(), dialect)?,
-            values: self.values.clone(),
-            dialect,
-        })
+        let mut w = Writer::new(dialect);
+        w.raw(&self.sql, &self.values)?;
+        Ok(w.finish())
     }
 }
 
@@ -256,7 +255,7 @@ pub async fn unprepared<E: Executor + ?Sized>(exec: &E, sql: &str) -> Result<()>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sql::compile_select;
+    use crate::sql::render_select;
 
     #[test]
     fn raw_fragments_are_expressions_conditions_and_select_items() {
@@ -267,7 +266,7 @@ mod tests {
         query.wheres.push(crate::ir::WhereClause::and(
             Filter::from(raw("a = ?", [1])).into_where(),
         ));
-        let statement = compile_select(&query, Dialect::Postgres).unwrap();
+        let statement = render_select(&query, Dialect::Postgres).unwrap();
         assert_eq!(
             statement.sql,
             r#"SELECT count(*) AS n FROM "deals" WHERE a = $1"#

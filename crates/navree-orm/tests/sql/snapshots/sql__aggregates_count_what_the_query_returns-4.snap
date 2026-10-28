@@ -1,10 +1,11 @@
 ---
 source: crates/navree-orm/tests/sql/main.rs
-expression: "per_dialect(|d| compile_exists(&plain.clone().into_ir(), d))"
+assertion_line: 470
+expression: "per_dialect(|d| render_exists(&plain.clone().into_ir(), d))"
 ---
-PostgreSQL: SELECT EXISTS(SELECT 1 FROM "deals" WHERE "deals"."stage" = $1 AND "deals"."deleted_at" IS NULL) AS "exists"
+PostgreSQL: SELECT EXISTS (SELECT 1 FROM "deals" WHERE "deals"."stage" = $1 AND "deals"."deleted_at" IS NULL) AS "exists"
   values: [String(Some("won"))]
-MySQL: SELECT EXISTS(SELECT 1 FROM `deals` WHERE `deals`.`stage` = ? AND `deals`.`deleted_at` IS NULL) AS `exists`
+MySQL: SELECT EXISTS (SELECT 1 FROM `deals` WHERE `deals`.`stage` = ? AND `deals`.`deleted_at` IS NULL) AS `exists`
   values: [String(Some("won"))]
-SQLite: SELECT EXISTS(SELECT 1 FROM "deals" WHERE "deals"."stage" = ? AND "deals"."deleted_at" IS NULL) AS "exists"
+SQLite: SELECT EXISTS (SELECT 1 FROM "deals" WHERE "deals"."stage" = ? AND "deals"."deleted_at" IS NULL) AS "exists"
   values: [String(Some("won"))]

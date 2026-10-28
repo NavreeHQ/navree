@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use navree_contracts::{Clock, FixedClock};
 use navree_kernel::{AppContext, BoxFuture, Navree};
 use navree_orm::ir::{Aggregate, DeleteIr, InsertIr, QueryIr, UpdateIr};
-use navree_orm::sql::{compile_delete, compile_update};
+use navree_orm::sql::{render_delete, render_update};
 use navree_orm::{
     Access, DocumentDriver, DocumentTarget, Executor, InsertOutcome, Model, OrmError, Row, Target,
     Value,
@@ -106,7 +106,7 @@ async fn mass_restores_clear_the_column_of_trashed_matches_only() {
         .await
         .unwrap();
     let update = exec.driver.updates.lock().unwrap().remove(0);
-    insta::assert_snapshot!(per_dialect(|dialect| compile_update(&update, dialect)));
+    insta::assert_snapshot!(per_dialect(|dialect| render_update(&update, dialect)));
 }
 
 #[tokio::test]
@@ -125,6 +125,6 @@ async fn mass_force_deletes_remove_trashed_rows_too() {
         .await
         .unwrap();
     let deletes = std::mem::take(&mut *exec.driver.deletes.lock().unwrap());
-    insta::assert_snapshot!(per_dialect(|dialect| compile_delete(&deletes[0], dialect)));
-    insta::assert_snapshot!(per_dialect(|dialect| compile_delete(&deletes[1], dialect)));
+    insta::assert_snapshot!(per_dialect(|dialect| render_delete(&deletes[0], dialect)));
+    insta::assert_snapshot!(per_dialect(|dialect| render_delete(&deletes[1], dialect)));
 }

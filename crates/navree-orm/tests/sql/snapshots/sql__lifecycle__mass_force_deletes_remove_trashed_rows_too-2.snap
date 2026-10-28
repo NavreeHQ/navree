@@ -1,6 +1,6 @@
 ---
 source: crates/navree-orm/tests/sql/lifecycle.rs
-expression: "per_dialect(|dialect| compile_delete(&deletes[1], dialect))"
+expression: "per_dialect(|dialect| render_delete(&deletes[1], dialect))"
 ---
 PostgreSQL: DELETE FROM "deals" WHERE "deals"."id" IN (SELECT "navree_keys"."id" FROM (SELECT "deals"."id" FROM "deals" WHERE "deals"."deleted_at" IS NOT NULL ORDER BY "deals"."created_at" DESC LIMIT $1) AS "navree_keys")
   values: [BigUnsigned(Some(10))]

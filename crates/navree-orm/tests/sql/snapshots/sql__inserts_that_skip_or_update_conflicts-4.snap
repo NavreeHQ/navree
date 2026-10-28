@@ -1,6 +1,6 @@
 ---
 source: crates/navree-orm/tests/sql/main.rs
-expression: "per_dialect(|d|\ncompile_insert(&base().on_conflict(OnConflict::Update\n{\n    target: vec![], sets:\n    vec![(Cow::Borrowed(\"color\"), Expr::excluded(\"color\"))],\n}), d))"
+expression: "per_dialect(|d|\nrender_insert(&base().on_conflict(OnConflict::Update\n{\n    target: vec![], sets:\n    vec![(Cow::Borrowed(\"color\"), Expr::excluded(\"color\"))],\n}), d))"
 ---
 PostgreSQL: error: invalid query: an upsert into `tags` on PostgreSQL needs the unique columns its rows conflict on
 MySQL: INSERT INTO `tags` (`name`, `color`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `color` = VALUES(`color`)
