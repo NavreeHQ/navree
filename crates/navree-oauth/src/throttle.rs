@@ -11,6 +11,7 @@ use navree_http::KeyedRateLimiter;
 use serde_json::json;
 use uuid::Uuid;
 
+use crate::Client;
 use crate::config::{EndpointLimit, RateLimitOptions};
 use crate::core::Core;
 use crate::error::OAuthError;
@@ -102,17 +103,23 @@ impl Throttles {
     }
 
     /// Counts a request to `endpoint` of `client`, once it has
-    /// authenticated.
+    /// authenticated. Public clients are not counted: they have no secret,
+    /// so anyone could name one and use up the budget of every user of the
+    /// app (the per-IP limit still applies).
     pub(crate) async fn per_client(
         &self,
         core: &Core,
         endpoint: Endpoint,
-        client: Uuid,
+        client: &Client,
         ip: IpAddr,
     ) -> Result<(), OAuthError> {
         let Some(limiter) = &self.limits(endpoint).per_client else {
             return Ok(());
         };
+        if client.is_public() {
+            return Ok(());
+        }
+        let client = client.id;
         match limiter.check(&client) {
             Ok(()) => Ok(()),
             Err(limited) => {

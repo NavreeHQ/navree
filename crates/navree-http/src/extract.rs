@@ -145,16 +145,30 @@ impl IpNetwork {
 /// The client in `X-Forwarded-For`: walking from the right (the entry our
 /// proxy added), the first address that is not itself a trusted proxy (the
 /// left-most when all are; the right-most when every peer is trusted).
-/// Else `X-Real-IP`.
+/// Else `X-Real-IP`. An entry may carry a port (`203.0.113.7:51234`); an
+/// entry that is no address ends the walk, so nothing the client wrote left
+/// of it is believed.
 fn forwarded_ip(headers: &HeaderMap, trust: &ProxyTrust) -> Option<IpAddr> {
-    let chain: Vec<IpAddr> = headers
+    let mut chain: Vec<IpAddr> = Vec::new();
+    let entries: Vec<&str> = headers
         .get_all("x-forwarded-for")
         .iter()
         .filter_map(|v| v.to_str().ok())
         .flat_map(|v| v.split(','))
-        .filter_map(|entry| entry.trim().parse::<IpAddr>().ok())
-        .map(|ip| ip.to_canonical())
+        .map(str::trim)
+        .filter(|entry| !entry.is_empty())
         .collect();
+    for entry in entries.iter().rev() {
+        let Some(ip) = entry
+            .parse::<IpAddr>()
+            .ok()
+            .or_else(|| entry.parse::<SocketAddr>().ok().map(|addr| addr.ip()))
+        else {
+            break;
+        };
+        chain.push(ip.to_canonical());
+    }
+    chain.reverse();
     let forwarded = if trust.any {
         chain.last().copied()
     } else {
@@ -165,6 +179,10 @@ fn forwarded_ip(headers: &HeaderMap, trust: &ProxyTrust) -> Option<IpAddr> {
             .or(chain.first())
             .copied()
     };
+    if forwarded.is_none() && !entries.is_empty() {
+        // The proxy's own entry is unreadable: the client is unknown.
+        return None;
+    }
     forwarded.or_else(|| {
         headers
             .get("x-real-ip")
@@ -366,6 +384,45 @@ mod tests {
         assert_eq!(
             ClientIp::resolve(&headers, &peer([198, 51, 100, 9]), &both).0,
             IpAddr::from([198, 51, 100, 9])
+        );
+    }
+
+    /// Some proxies write the client with its port. The entry still names
+    /// the client, and an entry that is no address at all ends the walk:
+    /// what the client wrote left of it is never believed.
+    #[test]
+    fn entries_with_a_port_or_no_address_never_hand_the_client_its_choice() {
+        let trust = ProxyTrust::new(false, &["10.0.0.0/8".to_owned()]);
+        let via = |value: &'static str| {
+            ClientIp::resolve(&forwarded_for(value), &peer([10, 0, 0, 1]), &trust).0
+        };
+        assert_eq!(
+            via("6.6.6.6, 203.0.113.7:51234"),
+            IpAddr::from([203, 0, 113, 7])
+        );
+        assert_eq!(
+            via("6.6.6.6, [2001:db8::7]:443, 10.0.0.2"),
+            "2001:db8::7".parse::<IpAddr>().unwrap()
+        );
+        assert_eq!(via("6.6.6.6, unknown"), IpAddr::from([10, 0, 0, 1]));
+        let any = ProxyTrust::new(true, &[]);
+        assert_eq!(
+            ClientIp::resolve(
+                &forwarded_for("6.6.6.6, 203.0.113.7:51234"),
+                &peer([10, 0, 0, 1]),
+                &any
+            )
+            .0,
+            IpAddr::from([203, 0, 113, 7])
+        );
+        assert_eq!(
+            ClientIp::resolve(
+                &forwarded_for("6.6.6.6, unknown"),
+                &peer([10, 0, 0, 1]),
+                &any
+            )
+            .0,
+            IpAddr::from([10, 0, 0, 1])
         );
     }
 
