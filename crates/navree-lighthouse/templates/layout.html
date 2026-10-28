@@ -61,7 +61,7 @@
       </div>
       {% endif %}
     </header>
-    {% if dropped %}<div class="banner">This process dropped {{ dropped }} records because the buffer was full: the database is not keeping up. Counts stay exact; some traces and occurrences are missing.</div>{% endif %}
+    {% if dropped %}<div class="banner">This process sampled out {{ dropped }} traces and occurrences because the write queue was full: the database is not keeping up. Counts stay exact; only details are missing.</div>{% endif %}
     <div class="content">
 {% block content %}{% endblock %}
     </div>

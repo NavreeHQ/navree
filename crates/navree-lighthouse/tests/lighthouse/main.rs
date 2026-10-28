@@ -8,6 +8,7 @@ mod alerts;
 mod commands;
 mod dashboard;
 mod fake;
+mod ingest;
 #[cfg(feature = "mcp")]
 mod mcp;
 mod module;

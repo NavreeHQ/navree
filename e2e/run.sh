@@ -161,6 +161,26 @@ stop_stats() {
   STATS_PID=""
 }
 
+# lighthouse_count_check <file>: the requests Lighthouse recorded during
+# the lighthouse scenario against the requests k6 sent (within 1 %), from
+# the file the scenario's handleSummary writes.
+lighthouse_count_check() {
+  local file="$1" name="lighthouse: request count matches k6"
+  if [ ! -s "$file" ]; then
+    record "$name" fail 0 "no $file (the scenario did not finish)"
+    return
+  fi
+  local body field detail
+  body="$(cat "$file")"
+  field() { printf '%s' "$body" | sed -n "s/.*\"$1\":\([^,}]*\).*/\1/p"; }
+  detail="k6 $(field k6_requests), lighthouse $(field lighthouse_requests), missing $(field missing), difference $(field difference_percent)% (tolerance $(field tolerance_percent)%), sampled out $(field sampled_out), $(field rps) req/s"
+  if [ "$(field passed)" = "true" ]; then
+    record "$name" pass 0 "$detail"
+  else
+    record "$name" fail 0 "$detail"
+  fi
+}
+
 collect_logs() {
   for svc in $(compose ps -a --services 2>/dev/null); do
     compose logs --no-color --timestamps "$svc" > "$OUT/logs/$svc.log" 2>&1
@@ -218,6 +238,9 @@ for scenario in "${scenario_list[@]}"; do
   start_stats "${scenario}-${LOAD_PROFILE}"
   step "$label" compose run --rm --no-deps k6 run --quiet "${env[@]}" "$script"
   stop_stats
+  if [ "$scenario" = "lighthouse" ]; then
+    lighthouse_count_check "$OUT/k6/lighthouse-${LOAD_PROFILE}.count.json"
+  fi
 done
 
 # 6. Screenshots of the UI tools at 1440 and 390.
