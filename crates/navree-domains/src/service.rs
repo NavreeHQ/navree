@@ -274,7 +274,7 @@ impl Domains {
             }
             return Err(error);
         }
-        rt.forget(&host).await;
+        rt.forget(&host);
         Ok(view)
     }
 
@@ -737,7 +737,7 @@ impl Domains {
             }
             self.rt.certificates.remove(&row.host);
         }
-        self.rt.forget(&row.host).await;
+        self.rt.forget(&row.host);
         Ok(())
     }
 
@@ -905,7 +905,7 @@ impl Domains {
         })
         .await?;
         if gave_up.is_some() {
-            rt.forget(&row.host).await;
+            rt.forget(&row.host);
         }
         result.map(|_| view)
     }
@@ -1007,7 +1007,7 @@ impl Domains {
                 }
             })
             .await?;
-        rt.forget(&row.host).await;
+        rt.forget(&row.host);
         match outcome {
             Promotion::Won => {
                 if old_id.is_some() {

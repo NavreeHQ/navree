@@ -4743,13 +4743,10 @@ version = "0.12.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4293f18e7567a1caf3c584855554377025c65e0aa445344d04171f5ad63d19b9"
 dependencies = [
- "async-lock",
  "crossbeam-channel",
  "crossbeam-epoch",
  "crossbeam-utils",
  "equivalent",
- "event-listener",
- "futures-util",
  "parking_lot",
  "portable-atomic",
  "smallvec",
@@ -4896,6 +4893,7 @@ dependencies = [
  "navree-audit",
  "navree-auth",
  "navree-billing",
+ "navree-bounded",
  "navree-browser",
  "navree-cache",
  "navree-config",
@@ -4978,7 +4976,7 @@ dependencies = [
  "chrono",
  "http",
  "insta",
- "moka",
+ "navree-bounded",
  "navree-contracts",
  "navree-db",
  "navree-http",
@@ -5173,6 +5171,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "navree-bounded"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "hashbrown 0.17.1",
+ "proptest",
+ "tokio",
+]
+
+[[package]]
 name = "navree-browser"
 version = "0.1.0"
 dependencies = [
@@ -5201,7 +5209,7 @@ name = "navree-cache"
 version = "0.1.0"
 dependencies = [
  "bytes",
- "moka",
+ "navree-bounded",
  "navree-config",
  "navree-contracts",
  "navree-kernel",
@@ -5432,8 +5440,8 @@ dependencies = [
  "http",
  "http-body-util",
  "instant-acme",
- "moka",
  "navree-access",
+ "navree-bounded",
  "navree-config",
  "navree-contracts",
  "navree-crypto",
@@ -5676,10 +5684,10 @@ dependencies = [
  "form_urlencoded",
  "garde",
  "http",
- "moka",
  "navree-access",
  "navree-audit",
  "navree-auth",
+ "navree-bounded",
  "navree-config",
  "navree-contracts",
  "navree-crypto",
@@ -6284,10 +6292,10 @@ dependencies = [
  "form_urlencoded",
  "http",
  "http-body-util",
- "moka",
  "navree-access",
  "navree-api",
  "navree-auth",
+ "navree-bounded",
  "navree-config",
  "navree-contracts",
  "navree-crypto",
