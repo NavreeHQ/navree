@@ -544,7 +544,7 @@ pub async fn all_deals(app: &TestApp) -> Vec<deal::Model> {
 }
 
 /// Tool names, sorted.
-pub fn names(tools: &[navree_mcp::rmcp::model::Tool]) -> Vec<String> {
+pub fn names(tools: &[navree_mcp::protocol::Tool]) -> Vec<String> {
     let mut names: Vec<String> = tools.iter().map(|tool| tool.name.to_string()).collect();
     names.sort();
     names

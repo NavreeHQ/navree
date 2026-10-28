@@ -1,6 +1,6 @@
 //! navree-mcp integration tests: `#[mcp_server]` servers in a `TestApp`,
-//! spoken to through the full HTTP pipeline with `McpTestClient`, and over
-//! stdio with the official SDK's client.
+//! spoken to through the full HTTP pipeline with `McpTestClient`, as raw
+//! JSON-RPC over HTTP and stdio, and through the security requirements.
 
 mod support;
 
