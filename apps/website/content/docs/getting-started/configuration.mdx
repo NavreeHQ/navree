@@ -1,11 +1,11 @@
 ---
 title: "Configuration"
-description: "Typed configuration from `.env`, `config/app.toml` and `APP_*` environment variables: precedence, nesting, the application key and your own sections."
+description: "Typed configuration from `.env`, `config/app.toml` and `APP_*` environment variables: precedence, nesting, value conversion, limits, the application key and your own sections."
 ---
 
 Every setting of a Navree app lives in one configuration tree. The app builds it at boot from a `.env` file, `config/app.toml` and `APP_*` environment variables, and each module reads its own section of it as a typed Rust struct. A missing setting falls back to the module's default, and a setting of the wrong type, or one its module rejects, stops the boot with a message that names the section.
 
-`navree-config` does the loading, and `ConfigModule` makes the result available to every other module.
+`navree-config` does the loading, and `ConfigModule` makes the result available to every other module. The loader is Navree's own: the `toml` and `serde_json` crates parse the files, and everything after parsing is Navree's code (merging, the environment mapping, the conversion of values to your types, the limits and the error messages).
 
 ## Where settings come from
 
@@ -26,7 +26,11 @@ fn main() -> Result<(), navree::kernel::BoxError> {
 2. `config/app.toml`
 3. the process's `APP_*` environment variables
 
-**Later sources win.** Tables merge key by key, so a later source only replaces the keys it sets; any other value (a string, a number, an array) is replaced whole. The paths are relative to the working directory, so run the app from its root. A missing file is skipped, and a malformed one fails the boot with the file name and line (and column, for TOML).
+**Later sources win.** Tables merge key by key, so a later source only replaces the keys it sets; any other value (a string, a number, an array) is replaced whole. The paths are relative to the working directory, so run the app from its root. A missing file is skipped, and a malformed one fails the boot with the file name and line (and column, for TOML and JSON).
+
+A file whose name ends in `.json` is read as JSON instead of TOML (an object at the top level, no comments), so `.file("config/app.json")` works like `.file("config/app.toml")`. A JSON `null` is a value: it replaces whatever an earlier source set at that key, and a section reads it as `None`.
+
+A source that turns a table into a scalar or an array, or back, replaces the whole subtree, and the replacement forgets what it replaced. With `x = { p = 1 }` in one source, `x = 5` in the next and `x = { q = 2 }` in the third, `x` ends as `{ q = 2 }`, not `{ p = 1, q = 2 }`. Merging is associative as long as the sources agree on which keys are tables, and sources are always merged left to right, so this only matters if you merge trees yourself in another order.
 
 <Callout type="warning" title="`.env` doesn't override `config/app.toml`">
 
@@ -46,7 +50,9 @@ Variables that start with `APP_` map onto the tree. Navree strips the prefix, sp
 | `APP_APP__URL` | `app.url` |
 | `APP_KEY` | `key` |
 
-A single underscore stays part of the name: `APP_HTTP__PER_IP_RATE_LIMIT` is `http.per_ip_rate_limit`. The prefix is matched case-insensitively, as Windows treats variable names. A variable with an empty part, such as `APP_HTTP____ADDR`, is ignored.
+A single underscore stays part of the name: `APP_HTTP__PER_IP_RATE_LIMIT` is `http.per_ip_rate_limit`. The prefix is matched case-insensitively, as Windows treats variable names. A variable with an empty part, such as `APP_HTTP____ADDR`, is ignored. When two names map to the same key (`APP_X` and `app_x`, which Linux allows), the one that sorts last wins, the same on every run. If `APP_A` and `APP_A__B` both exist, `a` is the table holding `b` and the scalar is dropped.
+
+Only variables under the prefix are read. `PATH`, `DATABASE_URL` and every other variable are never converted, stored, logged or mapped, and `.env` entries without the prefix are ignored the same way. A variable under the prefix whose value isn't valid Unicode is skipped, with a warning that names it.
 
 Environment values are strings. Typed sections convert them when they read the tree, so `APP_DATABASE__MAX_CONNECTIONS=20` fills a `u32`, and `true`, `yes`, `on` and `1` fill a `bool`. Lists can't be written as environment variables directly, so the settings that take one also accept a comma-separated string, for example `APP_HTTP__TRUSTED_PROXIES=127.0.0.1,::1`. Each module's page says which of its settings do.
 
@@ -228,7 +234,7 @@ impl BillingModule {
 `m.config::<T>()` registers `T` as a singleton of this module (not exported), built when the app boots:
 
 - A missing section deserializes from an empty table, so `#[serde(default)]` fields take their defaults. Without `#[serde(default)]`, a missing required field fails the boot.
-- A value of the wrong type fails the boot, naming the section. The message never quotes the value, since it may be a secret.
+- A value of the wrong type fails the boot, naming the section, the key and the file or variable the value came from. The message never quotes a string value, since it may be a secret.
 - `validate` runs next, and an error stops the boot too, with a message like this one:
 
 ```text wrap
@@ -236,6 +242,30 @@ failed to construct `planner::modules::billing::config::BillingConfig`: configur
 ```
 
 Wrap secrets in `Secret<T>`. It deserializes like `T`, prints `[redacted]` in `Debug` and `Display`, and has no `Serialize` impl, so it can't leak into a response or a log line. Read the value with `.expose()`.
+
+### How values convert
+
+Environment variables and `.env` entries are strings, and TOML and JSON have their own number and boolean types, so a field accepts more than its exact type. The same rules apply to every source:
+
+| A field of type | Takes |
+|---|---|
+| Integers (`u16`, `i32`, `u128`, ...) | An integer, a whole float (`30.0`), a string of digits with an optional sign (`"8080"`, `"+80"`), or `true`/`false`, `yes`/`no`, `on`/`off` as 1 and 0. Not `2.5`, `" 80"`, `"8.0"` or `"0x50"`, and not a number outside the type's range. |
+| `bool` | `true`/`false`, `yes`/`no`, `on`/`off`, `1`/`0` in any case, or a number (zero is `false`). |
+| `f32`, `f64` | A number, a boolean, or a string such as `"0.25"` or `"1e3"`. |
+| `String` | Any scalar, formatted: `8080` reads as `"8080"`. Not a table or an array. |
+| `Vec<T>`, tuples | An array, element by element. Never a string. |
+| `Option<T>` | A missing key, or a JSON `null`. An empty string is not `None`. |
+| `char` | A one-character string. |
+| Enums | A unit variant by its exact name (case counts), or a table with one key for a variant that carries data. |
+| Structs and maps | A table. Keys convert like values, so `HashMap<u16, _>` works. |
+
+TOML datetimes read as strings. An integer above `i64::MAX` can only come from JSON.
+
+An error names the section, the key below it (`servers[1].port`) and the file or variable the value came from, and shows a number but never a string:
+
+```text wrap
+configuration section `server` is invalid: invalid type: string [redacted], expected an integer for key `port` in environment
+```
 
 ### Reading values directly
 
@@ -278,11 +308,13 @@ impl LinkBuilder {
 | Method | Adds |
 |---|---|
 | `.dotenv(path)` | A `.env`-format file, mapped with the `APP_` prefix. |
-| `.file(path)` | A TOML file. |
+| `.file(path)` | A TOML file, or a JSON file when the name ends in `.json`. |
 | `.env()` | The process's `APP_*` variables, read at boot. |
 | `.env_prefixed("MYAPP")` | Variables with another prefix (`MYAPP_` and `MYAPP` are the same). |
 | `.env_vars(prefix, pairs)` | A fixed list of variables, for tests. |
 | `.set(key, value)` | One value, applied above every source whatever the call order. An object merges into the existing table. |
+| `.max_file_size(bytes)` | The largest file to read (default 1 MiB). See [Limits](#limits). |
+| `.max_depth(levels)` | The deepest nesting to accept (default 32). See [Limits](#limits). |
 
 The app behind Navree's [performance](/performance/) measurements, for example, maps the load harness's own variables on top of the defaults:
 
@@ -330,11 +362,24 @@ pub fn sources() -> ConfigSources {
 }
 ```
 
-A missing `config/<env>.toml` is skipped like any missing file. `APP_ENV` here is read from the process environment, not from `.env`, and it also lands in the tree as the top-level key `env`, which nothing uses.
+A missing `config/<env>.toml` is skipped like any missing file, and `config/<env>.json` works the same way. `APP_ENV` here is read from the process environment, not from `.env`, and it also lands in the tree as the top-level key `env`, which nothing uses.
+
+## Limits
+
+A load refuses input that is too big or too deep, so a broken or hostile file can't exhaust memory or the stack:
+
+- **File size.** A `.env`, TOML or JSON file larger than 1 MiB fails the boot with `configuration file ... is larger than the limit of 1048576 bytes`. The file is never read whole. `.max_file_size(bytes)` changes the limit.
+- **Nesting.** Tables and arrays can nest 32 levels deep, counting the root (`a.b.c = 1` is three). A deeper file, environment variable name (`APP_A__B__C__...`) or `.set` key fails the boot with `... nests deeper than the limit of 32 levels`, naming the file, variable or key. `.max_depth(levels)` changes the limit, up to 128.
+
+```rust
+let sources = ConfigSources::defaults().max_file_size(4 * 1024 * 1024);
+```
 
 ## Keeping secrets out of logs
 
-`Config`'s `Debug` output, and `Config::redacted()`, print the tree with secrets masked. A value is replaced by `[redacted]` when its key contains `password`, `secret`, `token`, `key`, `authorization` or `cookie` (in any case), and the password of any `scheme://user:password@host` URL is masked. Other values are shown as they are, so give secrets secret-looking names. Configuration errors never include values.
+`Config`'s `Debug` output, and `Config::redacted()`, print the tree with secrets masked. A value is replaced by `[redacted]` when its key contains `password`, `passwd`, `pwd`, `secret`, `token`, `key`, `authorization`, `cookie`, `dsn`, `credential` or `connection_string` (in any case). In every other string, the password of a `scheme://user:password@host` URL is masked, and so is the value of a query parameter with a secret-looking name (`?token=...`). Other values are shown as they are, so give secrets secret-looking names.
+
+Configuration errors name files, lines, keys and variables, never values. A string a value is rejected with is shown as `[redacted]`; a number is shown unless its key looks secret; a name a value fails to match (an unknown enum variant) isn't quoted; and when your own `Deserialize` implementation echoes a rejected value in its message, the secrets of the section are scrubbed from it.
 
 ## The framework's sections
 

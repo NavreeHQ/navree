@@ -54,7 +54,6 @@ skip = [
     { crate = "cbc@0.1.2", reason = "Pulled in only by p12-keystore@0.2.1, pkcs5@0.7.1; the rest of the tree is on 0.2.1." },
     { crate = "cipher@0.4.4", reason = "Pulled in only by aes@0.8.4, cbc@0.1.2, des@0.8.1, rc2@0.8.1 and 1 more; the rest of the tree is on 0.5.2." },
     { crate = "const-oid@0.9.6", reason = "Pulled in only by cms@0.2.3, der@0.7.10, pkcs12@0.1.0, x509-cert@0.2.5; the rest of the tree is on 0.10.2." },
-    { crate = "convert_case@0.6.0", reason = "Pulled in only by config@0.15.27; the rest of the tree is on 0.10.0." },
     { crate = "core-foundation@0.9.4", reason = "Pulled in only by system-configuration@0.7.0; the rest of the tree is on 0.10.1." },
     { crate = "cpufeatures@0.2.17", reason = "Pulled in only by aes@0.8.4, sha1@0.10.7, sha2@0.10.9; the rest of the tree is on 0.3.1." },
     { crate = "crypto-common@0.1.6", reason = "Pulled in only by cipher@0.4.4, digest@0.10.7; the rest of the tree is on 0.2.2." },

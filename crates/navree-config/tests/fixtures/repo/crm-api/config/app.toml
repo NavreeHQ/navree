@@ -1,0 +1,71 @@
+# Navree CRM API: development settings.
+#
+# Read from the working directory (run the API from apps/crm-api), after
+# `.env` and before `APP_*` environment variables, which override any key:
+# `APP_DATABASE__URL` -> database.url. Secrets (APP_KEY, the JWT secret,
+# SMTP passwords) belong in `.env`, never here; see `.env.example`.
+
+[app]
+# crm-web, the browser-facing app (mail links, email verification).
+url = "http://localhost:3000"
+
+[http]
+addr = "127.0.0.1:8080"
+api_prefix = "/api"
+# crm-web's BFF calls from here for every browser and names the browser in
+# X-Forwarded-For, so rate limits and the login throttle are per browser.
+# (Also the CRM's built-in default; list the BFF's address in production.)
+trusted_proxies = ["127.0.0.1", "::1"]
+
+[http.cors]
+# crm-web's BFF calls the API server-side; the dev origin is allowed for
+# tools and direct calls.
+allowed_origins = ["http://localhost:3000"]
+
+[database]
+url = "sqlite://storage/crm.db?mode=rwc"
+# Development convenience: pending migrations run when the app boots.
+migrate_on_boot = true
+
+[mail]
+from = "Navree CRM <crm@navree.test>"
+# Mails are written to the log in development.
+transport = "log"
+
+[queue]
+driver = "database"
+
+[auth]
+# Accounts are created by admins (POST /api/v1/users); no public sign-up.
+registration = false
+
+[auth.password_reset]
+url = "http://localhost:3000/reset-password"
+
+[realtime]
+# ws://127.0.0.1:8080/app/navree-crm-key
+key = "navree-crm-key"
+allowed_origins = ["http://localhost:3000"]
+# queue:work and schedule:work hand their broadcasts (deal notifications,
+# task reminders) to `serve`, which holds the sockets: `auto` posts them to
+# http.addr. Signed with a key derived from APP_KEY (or realtime.secret), so
+# every process needs the same one.
+relay_url = "auto"
+
+[api]
+title = "Navree CRM API"
+
+[mcp]
+# The MCP server at /mcp (and `crm-api mcp:serve --user <email>` for stdio
+# clients): the deals and activities tools, resources and prompts. Clients
+# send `Authorization: Bearer <access token>`.
+name = "navree-crm"
+title = "Navree CRM"
+instructions = """
+Tools for the Navree CRM. Deals move through the stages lead, qualified, \
+proposal, negotiation, won and lost. Amounts are in cents.\
+"""
+auth = "bearer"
+
+[log]
+level = "info"
