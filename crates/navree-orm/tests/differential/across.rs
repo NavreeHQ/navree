@@ -767,7 +767,41 @@ pub fn statements() -> Vec<Portable> {
             .order_by(col("id").asc()),
             json!([[2, "LEAD"], [6, "LOST"]]),
         ),
+        // An access-control filter as `Builder::accessible` builds it: last
+        // match wins, `$ne` is null-safe (deal 4 has no owner), `$in` with
+        // `null` matches NULL, `$nin` keeps NULL.
+        query(
+            "an access-control filter",
+            Query::from(
+                from("deals")
+                    .column(col("id"))
+                    .filter(navree_orm::access::ModelColumns::<crate::corpus::Deal>::new().filter(
+                        &deal_rules(),
+                        "read",
+                        "Deal",
+                    )),
+            )
+            .order_by(col("id").asc()),
+            json!([[1], [4], [5], [7], [8]]),
+        ),
     ]
+}
+
+/// Who may read which deal: anyone's but owner 2's, never a lost (or
+/// stageless) one, and any big one that is not won.
+fn deal_rules() -> navree_access::Ability {
+    use navree_access::{READ, Rules, field};
+    let mut rules = Rules::new();
+    rules.can(READ, "Deal").when(field("owner_id").ne(2));
+    rules
+        .cannot(READ, "Deal")
+        .when(field("stage").is_in(vec![json!("lost"), Json::Null]));
+    rules.can(READ, "Deal").when(
+        field("amount_cents")
+            .gte(900_000)
+            .and(field("stage").not_in(vec!["won"])),
+    );
+    rules.try_build().expect("the rules build")
 }
 
 impl Portable {

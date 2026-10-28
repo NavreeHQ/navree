@@ -576,7 +576,7 @@ macro_rules! clauses {
         /// # let embedding = vec![0.1_f32, 0.7, 0.2];
         /// let similar = Deal::query().where_vector_similar_to("embedding", &embedding, 0.8).limit(5);
         /// assert!(similar.to_sql(Dialect::Postgres)?.sql.ends_with(
-        ///     r#"WHERE (("embedding" <=> CAST($1 AS vector))) <= $2 ORDER BY ("embedding" <=> CAST($3 AS vector)) ASC LIMIT $4"#
+        ///     r#"WHERE "embedding" <=> CAST($1 AS vector) <= $2 ORDER BY "embedding" <=> CAST($3 AS vector) ASC LIMIT $4"#
         /// ));
         /// # Ok::<(), navree_orm::OrmError>(())
         /// ```
