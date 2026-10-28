@@ -216,13 +216,13 @@ Integration
 
 ## 3b. Definition of done: full parity, not a subset
 
-- `C:/Users/bopar/.t3/projects/keel/docs/superpowers/notes/2026-10-27-orm-parity-checklist.md`
+- `docs/superpowers/notes/2026-10-27-orm-parity-checklist.md`
   (written from the reference source, feature by feature) is the checklist
   every ORM track works through. Each line is implemented and tested, or
   marked not applicable with the reason (for example a PHP-only idiom
   replaced by a typed Rust equivalent). A final audit checks every line.
 - Real database servers for integration tests: when
-  `C:/Users/bopar/.t3/projects/keel/target/test-databases.env` exists, source
+  `target/test-databases.env` (in the repository root) exists, source
   it (it sets `NAVREE_TEST_POSTGRES_URL` (TimescaleDB), `NAVREE_TEST_MYSQL_URL`
   and `NAVREE_TEST_MONGODB_URL`) and run the gated tests for real.
 
