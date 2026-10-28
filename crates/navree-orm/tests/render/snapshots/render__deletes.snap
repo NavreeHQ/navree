@@ -1,0 +1,10 @@
+---
+source: crates/navree-orm/tests/render/main.rs
+expression: "statement(Delete::new(\"deals\").filter(col(\"amount_cents\").lt(val(0_i64))))"
+---
+PostgreSQL: DELETE FROM "deals" WHERE "amount_cents" < $1
+  values: [BigInt(Some(0))]
+MySQL: DELETE FROM `deals` WHERE `amount_cents` < ?
+  values: [BigInt(Some(0))]
+SQLite: DELETE FROM "deals" WHERE "amount_cents" < ?
+  values: [BigInt(Some(0))]

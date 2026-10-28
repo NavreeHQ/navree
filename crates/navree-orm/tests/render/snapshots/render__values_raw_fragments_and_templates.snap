@@ -1,0 +1,10 @@
+---
+source: crates/navree-orm/tests/render/main.rs
+expression: "expr(col(\"a\").eq(val(1_i64)).and(Expr::raw(\"data ?? 'k' AND note <> '?' AND price > ?\",\n[5_i64])).and(Expr::template(\"COALESCE({}, '{}', {})\",\nvec![col(\"meta\"), val(\"x\")])))"
+---
+PostgreSQL: "a" = $1 AND (data ? 'k' AND note <> '?' AND price > $2) AND (COALESCE("meta", '{}', $3))
+  values: [BigInt(Some(1)), BigInt(Some(5)), String(Some("x"))]
+MySQL: `a` = ? AND (data ? 'k' AND note <> '?' AND price > ?) AND (COALESCE(`meta`, '{}', ?))
+  values: [BigInt(Some(1)), BigInt(Some(5)), String(Some("x"))]
+SQLite: "a" = ? AND (data ? 'k' AND note <> '?' AND price > ?) AND (COALESCE("meta", '{}', ?))
+  values: [BigInt(Some(1)), BigInt(Some(5)), String(Some("x"))]

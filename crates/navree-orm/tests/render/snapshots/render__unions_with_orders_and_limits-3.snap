@@ -1,0 +1,10 @@
+---
+source: crates/navree-orm/tests/render/main.rs
+expression: "query(Query::new(SetExpr::Operation\n{\n    op: SetOperator::Union, all: false, left:\n    Box::new(part(\"DE\").into_set_expr()), right:\n    Box::new(part(\"US\").union(part(\"FR\"), true).into_set_expr()),\n}))"
+---
+PostgreSQL: SELECT "name" FROM "companies" WHERE "country" = $1 UNION (SELECT "name" FROM "companies" WHERE "country" = $2 UNION ALL SELECT "name" FROM "companies" WHERE "country" = $3)
+  values: [String(Some("DE")), String(Some("US")), String(Some("FR"))]
+MySQL: SELECT `name` FROM `companies` WHERE `country` = ? UNION (SELECT `name` FROM `companies` WHERE `country` = ? UNION ALL SELECT `name` FROM `companies` WHERE `country` = ?)
+  values: [String(Some("DE")), String(Some("US")), String(Some("FR"))]
+SQLite: SELECT "name" FROM "companies" WHERE "country" = ? UNION SELECT * FROM (SELECT "name" FROM "companies" WHERE "country" = ? UNION ALL SELECT "name" FROM "companies" WHERE "country" = ?) AS "navree_union_1"
+  values: [String(Some("DE")), String(Some("US")), String(Some("FR"))]

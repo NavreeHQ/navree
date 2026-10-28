@@ -1,0 +1,10 @@
+---
+source: crates/navree-orm/tests/render/lowering.rs
+expression: "query(Company::query().where_key(1_i64).shared_lock())"
+---
+PostgreSQL: SELECT "companies"."id", "companies"."name", "companies"."country" FROM "companies" WHERE "companies"."id" = $1 FOR SHARE
+  values: [BigInt(Some(1))]
+MySQL: SELECT `companies`.`id`, `companies`.`name`, `companies`.`country` FROM `companies` WHERE `companies`.`id` = ? LOCK IN SHARE MODE
+  values: [BigInt(Some(1))]
+SQLite: SELECT "companies"."id", "companies"."name", "companies"."country" FROM "companies" WHERE "companies"."id" = ?
+  values: [BigInt(Some(1))]
