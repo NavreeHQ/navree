@@ -5,11 +5,7 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::Instant;
 
-use chrono::{
-    DateTime, DurationRound, LocalResult, NaiveDateTime, TimeDelta, TimeZone, Timelike, Utc,
-};
-use croner::Cron;
-use croner::parser::{CronParser, Seconds};
+use chrono::{DateTime, DurationRound, TimeDelta, Timelike, Utc};
 use futures_util::future::join_all;
 use navree_contracts::{Clock, ZoneLevel};
 use navree_db::Db;
@@ -23,6 +19,7 @@ use tokio::task::JoinError;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
+use crate::cron::CronExpression;
 use crate::schedule::{Schedule, TaskFn, TaskKind, ZoneChoice};
 use crate::{LocalRun, ScheduleError, store};
 
@@ -114,7 +111,7 @@ struct Task {
     name: String,
     module: &'static str,
     expr: String,
-    cron: Cron,
+    cron: CronExpression,
     body: Body,
     zone: TaskZone,
     without_overlapping: bool,
@@ -153,7 +150,6 @@ impl Scheduler {
         clock: Arc<dyn Clock>,
         zones: Option<Arc<Zones>>,
     ) -> Result<Self, ScheduleError> {
-        let parser = CronParser::builder().seconds(Seconds::Disallowed).build();
         let mut tasks = Vec::new();
         let mut owners: HashMap<String, &'static str> = HashMap::new();
         let commands = app.commands();
@@ -182,8 +178,7 @@ impl Scheduler {
                 if let Some(reason) = &def.invalid {
                     return Err(invalid(reason.clone()));
                 }
-                let cron = parser
-                    .parse(&def.expr)
+                let cron = CronExpression::parse(&def.expr)
                     .map_err(|error| invalid(error.to_string()))?;
                 let zone = match &def.zone {
                     ZoneChoice::Utc => TaskZone::Utc,
@@ -276,12 +271,12 @@ impl Scheduler {
         for task in &self.tasks {
             match task.zone {
                 TaskZone::Utc => {
-                    if task.cron.is_time_matching(&tick).unwrap_or(false) {
+                    if task.cron.is_due(tick, &Utc) {
                         due.push((task.clone(), self.run(task, tick, None, Zone::UTC)));
                     }
                 }
                 TaskZone::Fixed(zone) => {
-                    if due_on_local_clock(&task.cron, tick, zone) {
+                    if task.cron.is_due(tick, &zone.tz()) {
                         due.push((task.clone(), self.run(task, tick, None, zone)));
                     }
                 }
@@ -290,7 +285,7 @@ impl Scheduler {
                         continue;
                     };
                     for (owner, zone) in list {
-                        if due_on_local_clock(&task.cron, tick, zone) {
+                        if task.cron.is_due(tick, &zone.tz()) {
                             due.push((
                                 task.clone(),
                                 self.run(task, tick, Some((level, owner)), zone),
@@ -401,15 +396,9 @@ impl Scheduler {
             .iter()
             .map(|task| {
                 let (next_run, zone) = match task.zone {
-                    TaskZone::Utc => (
-                        task.cron.find_next_occurrence(&now, false).ok(),
-                        "UTC".to_owned(),
-                    ),
+                    TaskZone::Utc => (task.cron.next_after(now, &Utc), "UTC".to_owned()),
                     TaskZone::Fixed(zone) => (
-                        task.cron
-                            .find_next_occurrence(&zone.local(now), false)
-                            .ok()
-                            .map(|next| next.with_timezone(&Utc)),
+                        task.cron.next_after(now, &zone.tz()),
                         zone.name().to_owned(),
                     ),
                     TaskZone::PerOwner(level) => (None, format!("per {level} (local)")),
@@ -555,36 +544,6 @@ async fn execute(
         Body::Run(f) => f(app, format!("{name}@{}", tick.to_rfc3339())).await,
         Body::Command(run, args) => run(app, args.clone()).await,
     }
-}
-
-/// Whether `cron` is due at `tick` on `zone`'s clock.
-///
-/// A wall-clock time that happens twice (clocks going back) is due only
-/// the first time; one that is skipped (clocks going forward) is due at
-/// the first minute after the gap.
-fn due_on_local_clock(cron: &Cron, tick: DateTime<Utc>, zone: Zone) -> bool {
-    let local = zone.local(tick).naive_local();
-    if matches_wall_clock(cron, local) {
-        return match zone.tz().from_local_datetime(&local) {
-            LocalResult::Ambiguous(earliest, _) => earliest.with_timezone(&Utc) == tick,
-            _ => true,
-        };
-    }
-    let previous = zone.local(tick - TimeDelta::minutes(1)).naive_local();
-    let mut skipped = previous + TimeDelta::minutes(1);
-    while skipped < local {
-        if matches_wall_clock(cron, skipped) {
-            return true;
-        }
-        skipped += TimeDelta::minutes(1);
-    }
-    false
-}
-
-/// Whether `cron` matches the wall-clock time `local`.
-fn matches_wall_clock(cron: &Cron, local: NaiveDateTime) -> bool {
-    cron.is_time_matching(&Utc.from_utc_datetime(&local))
-        .unwrap_or(false)
 }
 
 /// `schedule_runs` rows are kept this long (pruned at the top of each hour).

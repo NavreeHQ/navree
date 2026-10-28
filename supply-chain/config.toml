@@ -581,10 +581,6 @@ criteria = "safe-to-run"
 version = "1.2.0"
 criteria = "safe-to-deploy"
 
-[[exemptions.croner]]
-version = "4.0.2"
-criteria = "safe-to-deploy"
-
 [[exemptions.crossbeam-channel]]
 version = "0.5.17"
 criteria = "safe-to-deploy"
@@ -719,18 +715,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.derive-where]]
 version = "1.7.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.derive_builder]]
-version = "0.20.2"
-criteria = "safe-to-deploy"
-
-[[exemptions.derive_builder_core]]
-version = "0.20.2"
-criteria = "safe-to-deploy"
-
-[[exemptions.derive_builder_macro]]
-version = "0.20.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.derive_more]]

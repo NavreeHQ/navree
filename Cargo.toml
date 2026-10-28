@@ -367,7 +367,6 @@ x509-parser = { version = "0.18.1", default-features = false }
 # messages, headers, parts and attachments, every charset through
 # encoding_rs (pure Rust; already in the tree).
 mail-parser = { version = "0.11.9", features = ["full_encoding"] }
-croner = "4.0.2"
 moka = { version = "0.12.16", features = ["future"] }
 dashmap = "6.2.1"
 wildmatch = "2.7.0"

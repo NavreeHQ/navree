@@ -1,8 +1,8 @@
 //! The cron parser against the table recorded from croner 4.0.2
 //! (`tests/data/croner_next_runs.txt`, made by `examples/croner_table.rs`
-//! while croner was still a dependency).
+//! of commit aeee6ac9, while croner was still a dependency).
 //!
-//! Every row must match, except the rows listed in [`RUN_DIFFERENCES`] and
+//! Every row must match, except the rows listed in `DIFFERENCES` and
 //! [`PARSE_DIFFERENCES`], where croner is wrong or looser than the
 //! documented language. Each carries its reason.
 
