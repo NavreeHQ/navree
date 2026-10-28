@@ -6,7 +6,7 @@ import { AnimatedList } from "@/components/magicui/animated-list";
 import { BentoCard, BentoGrid } from "@/components/magicui/bento-grid";
 import { BlurFade } from "@/components/magicui/blur-fade";
 import { BorderBeam } from "@/components/magicui/border-beam";
-import { DotPattern } from "@/components/magicui/dot-pattern";
+import { DotPatternGlow } from "@/components/magicui/dot-pattern-glow";
 import { FlickeringGrid } from "@/components/magicui/flickering-grid";
 import { GridPattern } from "@/components/magicui/grid-pattern";
 import { MagicCard } from "@/components/magicui/magic-card";
@@ -25,7 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 import { BeamDemo } from "./beam-demo";
 
@@ -87,14 +87,16 @@ export function SiteComponents() {
           <Badge variant="mono">navree-workspace</Badge>
           <Badge variant="warning">Warning</Badge>
           <PlannedBadge />
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="outline" size="sm">
-                Hover me
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Tooltips sit on ink-3 with a hairline.</TooltipContent>
-          </Tooltip>
+          <TooltipProvider delayDuration={150}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="outline" size="sm">
+                  Hover me
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Tooltips sit on ink-3 with a hairline.</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
       </Demo>
 
@@ -245,7 +247,7 @@ export function SiteComponents() {
       <Demo name="Dot pattern, Grid pattern, Flickering grid" file="magicui/dot-pattern, grid-pattern, flickering-grid">
         <div className="grid gap-4 md:grid-cols-3">
           <div className="relative h-40 overflow-hidden rounded-2xl border border-line">
-            <DotPattern glow className="[mask-image:radial-gradient(ellipse_at_center,black,transparent_75%)]" />
+            <DotPatternGlow glow className="[mask-image:radial-gradient(ellipse_at_center,black,transparent_75%)]" />
           </div>
           <div className="relative h-40 overflow-hidden rounded-2xl border border-line">
             <GridPattern width={32} height={32} squares={[[1, 1], [3, 2], [6, 1]]} className="[mask-image:radial-gradient(ellipse_at_center,black,transparent_80%)]" />

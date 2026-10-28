@@ -29,18 +29,19 @@ import {
   worstTailRatio,
 } from "@/lib/bench";
 import { highlight } from "@/lib/mdx";
+import { pageMetadata } from "@/lib/metadata";
 import { repoBlob, repoTree, site } from "@site";
 
 const r = perf.results;
 const s = perf.settings;
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Performance",
   description: `${site.name}'s own measurements on a CRM-style API: ${fmtInt(r.deals_list.rps)} authenticated, paginated lists and ${fmtInt(
     r.deals_create.rps,
   )} validated inserts a second on ${s.app.count} CPUs, ${mb(perf.peakMemMb)} MB at peak, ready in ${perf.startupMs} ms. The workload, the method and how to reproduce it.`,
-  alternates: { canonical: "/performance/" },
-};
+  path: "/performance/",
+});
 
 const sections = [
   { id: "results", label: "Results" },
@@ -88,7 +89,7 @@ function Section({ id, className, children }: { id: string; className?: string; 
     <section
       id={id}
       aria-labelledby={`${id}-heading`}
-      className={`scroll-mt-12 border-t border-line first-of-type:border-t-0 ${className ?? ""}`}
+      className={`cv-auto scroll-mt-12 border-t border-line first-of-type:border-t-0 ${className ?? ""}`}
     >
       <div className="container-site section-y">{children}</div>
     </section>
@@ -1017,7 +1018,7 @@ export default async function PerformancePage() {
       </Section>
 
       {/* ----------------------------------------------------------- close */}
-      <section aria-labelledby="perf-cta" className="relative overflow-hidden border-t border-line">
+      <section aria-labelledby="perf-cta" className="cv-auto relative overflow-hidden border-t border-line">
         <GridPattern
           width={48}
           height={48}

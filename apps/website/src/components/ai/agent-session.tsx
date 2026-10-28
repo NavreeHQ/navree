@@ -1,6 +1,5 @@
 "use client";
 
-import { useInView, useReducedMotion } from "motion/react";
 import {
   useCallback,
   useEffect,
@@ -13,6 +12,8 @@ import {
   type ReactNode,
 } from "react";
 
+import { useInView } from "@/lib/use-in-view";
+import { useReducedMotion } from "@/lib/use-reduced-motion";
 import { cn } from "@/lib/utils";
 
 /*

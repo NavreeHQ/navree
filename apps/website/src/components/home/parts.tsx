@@ -20,7 +20,7 @@ export function HomeSection({
   inner?: string;
 }) {
   return (
-    <section aria-labelledby={id} className={cn("relative border-t border-line", className)}>
+    <section aria-labelledby={id} className={cn("cv-auto relative border-t border-line", className)}>
       <div className={cn("container-site section-y relative", inner)}>{children}</div>
     </section>
   );
