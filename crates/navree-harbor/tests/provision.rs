@@ -266,7 +266,7 @@ fn caddy_trusts_the_load_balancers_forwarded_for() {
         .unwrap();
     assert!(
         global.contains(
-            "{\n\tservers {\n\t\ttrusted_proxies static 10.0.0.0/24 2001:db8:aa::/48 192.0.2.7\n\t}\n}"
+            "\tservers {\n\t\ttrusted_proxies static 10.0.0.0/24 2001:db8:aa::/48 192.0.2.7\n\t}\n}"
         ),
         "{caddy}"
     );
