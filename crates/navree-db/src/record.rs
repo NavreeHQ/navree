@@ -65,7 +65,9 @@ use std::marker::PhantomData;
 use serde::Serialize;
 
 use crate::paginate::{Page, PageQuery};
-use crate::{Backend, ChangeEvent, ChangeOp, DbError, Executor, ExecutorExt, Row, Statement, Uow, Value};
+use crate::{
+    Backend, ChangeEvent, ChangeOp, DbError, Executor, ExecutorExt, Row, Statement, Uow, Value,
+};
 
 /// A table's typed row: its table, its columns (in the order of
 /// [`values`](Record::values)), its key, and how a row reads into it.
@@ -238,7 +240,7 @@ enum Part {
 }
 
 /// A `WHERE` condition: parts joined with `AND` ([`Filter::all`]) or `OR`
-/// ([`Filter::any`]), nested with [`Filter::add`]. An empty `all` matches
+/// ([`Filter::any`]), nested with [`Filter::group`]. An empty `all` matches
 /// every row, an empty `any` none.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Filter {
@@ -304,16 +306,26 @@ impl Filter {
 
     /// `column IN (values)`; no values matches no row.
     #[must_use]
-    pub fn is_in<V: Into<Value>>(mut self, column: &'static str, values: impl IntoIterator<Item = V>) -> Filter {
-        self.parts
-            .push(Part::In(column, values.into_iter().map(Into::into).collect()));
+    pub fn is_in<V: Into<Value>>(
+        mut self,
+        column: &'static str,
+        values: impl IntoIterator<Item = V>,
+    ) -> Filter {
+        self.parts.push(Part::In(
+            column,
+            values.into_iter().map(Into::into).collect(),
+        ));
         self
     }
 
     /// A portable SQL fragment (`?` placeholders, `??` for a literal `?`)
     /// with its values. Its column names are not checked or quoted.
     #[must_use]
-    pub fn raw(mut self, sql: impl Into<String>, values: impl IntoIterator<Item = Value>) -> Filter {
+    pub fn raw(
+        mut self,
+        sql: impl Into<String>,
+        values: impl IntoIterator<Item = Value>,
+    ) -> Filter {
         self.parts
             .push(Part::Raw(sql.into(), values.into_iter().collect()));
         self
@@ -321,7 +333,7 @@ impl Filter {
 
     /// `other`, nested (in parentheses).
     #[must_use]
-    pub fn add(mut self, other: Filter) -> Filter {
+    pub fn group(mut self, other: Filter) -> Filter {
         self.parts.push(Part::Group(other));
         self
     }
@@ -492,7 +504,7 @@ impl<R: Record> Select<R> {
     /// Only the rows matching `filter` too (`AND`).
     #[must_use]
     pub fn filter(mut self, filter: Filter) -> Select<R> {
-        self.filter = self.filter.add(filter);
+        self.filter = self.filter.group(filter);
         self
     }
 
@@ -547,7 +559,8 @@ impl<R: Record> Select<R> {
         sql.push_str(" FROM ");
         sql.push_str(&backend.quote_identifier(R::TABLE));
         let mut values = Vec::new();
-        self.filter.render_where::<R>(backend, &mut sql, &mut values)?;
+        self.filter
+            .render_where::<R>(backend, &mut sql, &mut values)?;
         if !self.order.is_empty() {
             sql.push_str(" ORDER BY ");
             for (at, (column, desc)) in self.order.iter().enumerate() {
@@ -607,7 +620,8 @@ impl<R: Record> Select<R> {
         let mut sql = String::from("SELECT COUNT(*) FROM ");
         sql.push_str(&backend.quote_identifier(R::TABLE));
         let mut values = Vec::new();
-        self.filter.render_where::<R>(backend, &mut sql, &mut values)?;
+        self.filter
+            .render_where::<R>(backend, &mut sql, &mut values)?;
         exec.fetch_scalar::<u64>(&Statement::portable(sql, values))
             .await
     }
@@ -615,7 +629,11 @@ impl<R: Record> Select<R> {
     /// Page `query` of the matching rows, with the total (`{"data",
     /// "meta"}`). Order the select first: pages of an unordered select
     /// may overlap.
-    pub async fn page<E: Executor + ?Sized>(&self, exec: &E, query: PageQuery) -> Result<Page<R>, DbError> {
+    pub async fn page<E: Executor + ?Sized>(
+        &self,
+        exec: &E,
+        query: PageQuery,
+    ) -> Result<Page<R>, DbError> {
         let query = PageQuery::new(query.page, query.per_page);
         let total = self.count(exec).await?;
         let rows = self
@@ -691,7 +709,8 @@ impl<R: Record> Update<R> {
             sql.push_str(" = ?");
             values.push(value.clone());
         }
-        self.filter.render_where::<R>(backend, &mut sql, &mut values)?;
+        self.filter
+            .render_where::<R>(backend, &mut sql, &mut values)?;
         Ok(Statement::portable(sql, values))
     }
 
@@ -739,7 +758,8 @@ impl<R: Record> Delete<R> {
         let mut sql = String::from("DELETE FROM ");
         sql.push_str(&backend.quote_identifier(R::TABLE));
         let mut values = Vec::new();
-        self.filter.render_where::<R>(backend, &mut sql, &mut values)?;
+        self.filter
+            .render_where::<R>(backend, &mut sql, &mut values)?;
         Ok(Statement::portable(sql, values))
     }
 
@@ -772,7 +792,8 @@ pub fn insert_statement<R: Record>(backend: Backend, record: &R) -> Statement {
 
 /// Inserts `record` (every column).
 pub async fn insert<R: Record, E: Executor + ?Sized>(exec: &E, record: &R) -> Result<(), DbError> {
-    exec.execute(&insert_statement(exec.backend(), record)).await?;
+    exec.execute(&insert_statement(exec.backend(), record))
+        .await?;
     Ok(())
 }
 
@@ -879,29 +900,36 @@ fn key_string(value: &Value) -> String {
 }
 
 fn json<T: Serialize>(value: &T) -> Result<serde_json::Value, DbError> {
-    serde_json::to_value(value).map_err(|error| DbError::invalid(format!("a record does not serialize: {error}")))
+    serde_json::to_value(value)
+        .map_err(|error| DbError::invalid(format!("a record does not serialize: {error}")))
 }
 
 /// The row with `record`'s key as stored, or `NotFound`.
 async fn stored<R: Record, E: Executor + ?Sized>(exec: &E, record: &R) -> Result<R, DbError> {
     let key = record.key();
-    find::<R, _>(exec, key.clone()).await?.ok_or_else(|| {
-        DbError::not_found(format!("{} {}", R::TABLE, key_string(&key)))
-    })
+    find::<R, _>(exec, key.clone())
+        .await?
+        .ok_or_else(|| DbError::not_found(format!("{} {}", R::TABLE, key_string(&key))))
 }
 
 /// [`insert`], then the row as the database stored it: its rounding of
 /// timestamps (microseconds on PostgreSQL, the column's precision on
 /// MySQL) and decimals. Read back by key on the same executor, so through
 /// a unit of work it is read in its transaction.
-pub async fn insert_returning<R: Record, E: Executor + ?Sized>(exec: &E, record: &R) -> Result<R, DbError> {
+pub async fn insert_returning<R: Record, E: Executor + ?Sized>(
+    exec: &E,
+    record: &R,
+) -> Result<R, DbError> {
     insert(exec, record).await?;
     stored(exec, record).await
 }
 
 /// [`update`], then the row as the database stored it; `NotFound` when no
 /// row has `record`'s key.
-pub async fn update_returning<R: Record, E: Executor + ?Sized>(exec: &E, record: &R) -> Result<R, DbError> {
+pub async fn update_returning<R: Record, E: Executor + ?Sized>(
+    exec: &E,
+    record: &R,
+) -> Result<R, DbError> {
     update(exec, record).await?;
     stored(exec, record).await
 }
@@ -909,7 +937,10 @@ pub async fn update_returning<R: Record, E: Executor + ?Sized>(exec: &E, record:
 /// [`insert_returning`] through `uow`, recording a `created` change event
 /// with the stored record as JSON (its `Serialize` form: fields skipped
 /// there, such as secrets, stay out of audit trails).
-pub async fn insert_recorded<R: Record + Serialize + Clone>(uow: &Uow, record: &R) -> Result<R, DbError> {
+pub async fn insert_recorded<R: Record + Serialize + Clone>(
+    uow: &Uow,
+    record: &R,
+) -> Result<R, DbError> {
     let created = insert_returning(uow, record).await?;
     let event = created.clone();
     uow.record_lazily(move || {
@@ -949,7 +980,10 @@ pub async fn update_recorded<R: Record + Serialize + Clone>(
 
 /// [`delete`] through `uow`, recording a `deleted` change event with the
 /// old record; `NotFound` when no row was deleted.
-pub async fn delete_recorded<R: Record + Serialize + Clone>(uow: &Uow, record: &R) -> Result<(), DbError> {
+pub async fn delete_recorded<R: Record + Serialize + Clone>(
+    uow: &Uow,
+    record: &R,
+) -> Result<(), DbError> {
     if delete(uow, record).await? == 0 {
         return Err(DbError::not_found(format!(
             "{} {}",
@@ -1047,9 +1081,17 @@ mod tests {
                 Filter::any()
                     .is_null("owner_id")
                     .eq("owner_id", Uuid::nil())
-                    .add(Filter::all().eq("type", "new").compare("title", Compare::Ne, "x")),
+                    .group(
+                        Filter::all()
+                            .eq("type", "new")
+                            .compare("title", Compare::Ne, "x"),
+                    ),
             )
-            .filter(Filter::all().is_in("title", ["a", "b"]).is_in::<&str>("type", []))
+            .filter(
+                Filter::all()
+                    .is_in("title", ["a", "b"])
+                    .is_in::<&str>("type", []),
+            )
             .order_by_desc("created_at")
             .order_by("id")
             .offset(20)
@@ -1062,15 +1104,18 @@ mod tests {
              LIMIT 18446744073709551615 OFFSET 20 FOR UPDATE"
         );
         assert_eq!(
-            sql(Deal::select().limit(5).for_update().statement(Backend::Sqlite), Backend::Sqlite),
+            sql(
+                Deal::select()
+                    .limit(5)
+                    .for_update()
+                    .statement(Backend::Sqlite),
+                Backend::Sqlite
+            ),
             "SELECT \"id\", \"title\", \"owner_id\", \"type\", \"secret\", \"created_at\" \
              FROM \"crm\".\"deals\" LIMIT 5"
         );
         let typo = Deal::select().eq("titel", "x").statement(Backend::Postgres);
-        assert_eq!(
-            typo.unwrap_err().kind(),
-            crate::ErrorKind::InvalidStatement
-        );
+        assert_eq!(typo.unwrap_err().kind(), crate::ErrorKind::InvalidStatement);
         assert_eq!(
             sql(
                 Deal::select()
@@ -1129,7 +1174,11 @@ mod tests {
             ),
             "UPDATE \"crm\".\"deals\" SET \"type\" = $1, \"owner_id\" = $2 WHERE \"id\" = $3 AND \"type\" = $4"
         );
-        assert!(Deal::update_where(Filter::all()).statement(Backend::Postgres).is_err());
+        assert!(
+            Deal::update_where(Filter::all())
+                .statement(Backend::Postgres)
+                .is_err()
+        );
         assert_eq!(
             sql(
                 Deal::delete_where(Filter::all().raw("created_at < ?", [Value::from(1_i64)]))
@@ -1146,8 +1195,14 @@ mod tests {
             serde_json::json!({"a": 1, "b": 2}),
             serde_json::json!({"a": 1, "b": 3, "c": true}),
         );
-        assert_eq!(serde_json::Value::from(old), serde_json::json!({"b": 2, "c": null}));
-        assert_eq!(serde_json::Value::from(new), serde_json::json!({"b": 3, "c": true}));
+        assert_eq!(
+            serde_json::Value::from(old),
+            serde_json::json!({"b": 2, "c": null})
+        );
+        assert_eq!(
+            serde_json::Value::from(new),
+            serde_json::json!({"b": 3, "c": true})
+        );
         assert_eq!(key_string(&Value::from(7_i64)), "7");
         assert_eq!(key_string(&Value::from("k")), "k");
     }

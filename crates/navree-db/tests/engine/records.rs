@@ -139,7 +139,11 @@ pub async fn records_round_trip(scratch: Scratch) {
         0
     );
     let later = Contact::select()
-        .filter(Filter::all().compare("created_at", navree_db::Compare::Gt, start + Duration::seconds(8)))
+        .filter(Filter::all().compare(
+            "created_at",
+            navree_db::Compare::Gt,
+            start + Duration::seconds(8),
+        ))
         .count(&db)
         .await
         .unwrap();
@@ -155,8 +159,16 @@ pub async fn records_round_trip(scratch: Scratch) {
     assert_eq!(page.meta.total, 11);
     assert_eq!(page.meta.last_page, 3);
     assert_eq!(
-        page.data.iter().map(|c| c.email.as_str()).collect::<Vec<_>>(),
-        ["c5@example.com", "c4@example.com", "c3@example.com", "c2@example.com"]
+        page.data
+            .iter()
+            .map(|c| c.email.as_str())
+            .collect::<Vec<_>>(),
+        [
+            "c5@example.com",
+            "c4@example.com",
+            "c3@example.com",
+            "c2@example.com"
+        ]
     );
     let offset_only = Contact::select()
         .order_by("created_at")
@@ -226,9 +238,14 @@ pub async fn records_round_trip(scratch: Scratch) {
     assert_eq!(stored.id, grace.id);
     assert_eq!(stored.workspace_id, None);
     assert_eq!((stored.name.as_str(), stored.visits), ("Grace Hopper", 9));
-    record::upsert(&db, &contact("grace@example.com", None, start), &["email"], &[])
-        .await
-        .unwrap();
+    record::upsert(
+        &db,
+        &contact("grace@example.com", None, start),
+        &["email"],
+        &[],
+    )
+    .await
+    .unwrap();
     assert_eq!(
         Contact::select()
             .eq("email", "grace@example.com")
@@ -268,9 +285,15 @@ pub async fn records_in_units_of_work(scratch: Scratch) {
         renamed.name = "Ada Lovelace".to_owned();
         renamed.secret = "resealed".to_owned();
         record::update_recorded(&uow, &ada, &renamed).await.unwrap();
-        record::update_recorded(&uow, &renamed, &renamed).await.unwrap();
+        record::update_recorded(&uow, &renamed, &renamed)
+            .await
+            .unwrap();
         let changes = uow.changes();
-        assert_eq!(changes.len(), 2, "an update that changes nothing records nothing");
+        assert_eq!(
+            changes.len(),
+            2,
+            "an update that changes nothing records nothing"
+        );
         assert_eq!(changes[0].op, ChangeOp::Created);
         assert_eq!(changes[0].entity, "contacts");
         assert_eq!(changes[0].id, ada.id.to_string());
@@ -303,7 +326,9 @@ pub async fn records_in_units_of_work(scratch: Scratch) {
         uow.commit().await.unwrap();
         let ghost = contact("ghost@example.com", None, start);
         let uow = db.uow(None, None).await;
-        let missing = record::update_recorded(&uow, &ghost, &ghost).await.unwrap_err();
+        let missing = record::update_recorded(&uow, &ghost, &ghost)
+            .await
+            .unwrap_err();
         assert_eq!(missing.kind(), ErrorKind::NotFound);
         let missing = record::delete_recorded(&uow, &ghost).await.unwrap_err();
         assert_eq!(missing.kind(), ErrorKind::NotFound);
