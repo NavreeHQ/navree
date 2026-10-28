@@ -6,8 +6,9 @@
 //! functions lower and render in one step, with the signatures of
 //! `compile_*`.
 //!
-//! [`Where::Sql`] (a condition built by the query builder this replaces)
-//! answers `Unsupported` here; it is moved away separately.
+//! [`Where::Sql`](crate::ir::Where::Sql) (a condition built by the query
+//! builder this replaces) answers `Unsupported` here; it is moved away
+//! separately.
 //!
 //! ```
 //! use navree_orm::Dialect;
