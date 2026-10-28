@@ -159,7 +159,10 @@ fn brute_force(cron: &CronExpression, zone: Tz, start: DateTime<Utc>, count: usi
     let mut runs = Vec::new();
     while runs.len() < count {
         let now = local(minute);
-        let due = if cron.matches_local(now) {
+        let due = if cron.follows_wall_clock() {
+            // Wildcard expressions: every real minute whose clock matches.
+            cron.matches_local(now)
+        } else if cron.matches_local(now) {
             match zone.from_local_datetime(&now) {
                 LocalResult::Ambiguous(first, _) => first.to_utc() == minute,
                 _ => true,

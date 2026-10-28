@@ -23,10 +23,22 @@
 //!
 //! # Daylight saving time
 //!
-//! Expressions are read on a wall clock. When clocks go forward, a local
-//! time that is skipped runs once, at the first instant after the gap. When
-//! clocks go back, a local time that happens twice runs once, the first
-//! time.
+//! Expressions are read on a wall clock, and the rule for a clock change
+//! depends on the expression.
+//!
+//! - **Fixed-time expressions** have no `*` in the minute or the hour field
+//!   (`30 2 * * *`, `0 0 1 * *`, `@daily`; `*/n` counts as a `*`). A local
+//!   time that is skipped when clocks go forward runs once, at the first
+//!   minute after the gap. A local time that happens twice when clocks go
+//!   back runs once, the first time.
+//! - **Wildcard expressions** have a `*` in the minute or the hour field
+//!   (`* * * * *`, `*/15 * * * *`, `0 * * * *`, `@hourly`). They follow the
+//!   wall clock as it happens: every real minute whose local time matches is
+//!   a run, so in a repeated hour they run in both passes, and a local time
+//!   inside a gap does not exist, so nothing is caught up for it.
+//!
+//! [`CronExpression::is_due`] is the rule, and [`CronExpression::next_after`]
+//! finds the instants it accepts, so `schedule:list` and real runs agree.
 //!
 //! # Bounds
 //!
@@ -39,8 +51,8 @@ use std::fmt;
 use std::str::FromStr;
 
 use chrono::{
-    DateTime, Datelike, LocalResult, NaiveDate, NaiveDateTime, NaiveTime, TimeDelta, TimeZone,
-    Timelike, Utc, Weekday,
+    DateTime, Datelike, LocalResult, NaiveDate, NaiveDateTime, NaiveTime, Offset, TimeDelta,
+    TimeZone, Timelike, Utc, Weekday,
 };
 
 /// The longest expression accepted, in bytes.
@@ -74,6 +86,9 @@ pub struct CronExpression {
     dow: DayOfWeek,
     /// A day must match both day fields (`+` before the day of week).
     both_days: bool,
+    /// A `*` in the minute or the hour field: the expression follows the
+    /// wall clock through clock changes.
+    wildcard_time: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -435,6 +450,7 @@ impl CronExpression {
                 ),
             ));
         };
+        let wildcard_time = minute.contains('*') || hour.contains('*');
         let minutes = Self::list(&MINUTE, minute)?;
         let hours = Self::list(&HOUR, hour)?;
         let months = Self::list(&MONTH, month)?;
@@ -448,6 +464,7 @@ impl CronExpression {
             dom,
             dow,
             both_days,
+            wildcard_time,
         })
     }
 
@@ -631,14 +648,36 @@ impl CronExpression {
         Some((later.trailing_zeros(), self.minutes.trailing_zeros()))
     }
 
+    /// Whether the expression follows the wall clock through clock changes
+    /// (a `*` in the minute or the hour field) rather than running each
+    /// local time once. See the [module documentation](self).
+    pub fn follows_wall_clock(&self) -> bool {
+        self.wildcard_time
+    }
+
     /// The first run strictly after `after` on `zone`'s clock, as an
     /// instant, or `None` when the expression never matches within the next
     /// 400 years (for example `0 0 30 2 *`).
     ///
-    /// Daylight saving time: a local time that is skipped runs once, at the
-    /// first instant after the gap; one that happens twice runs once, the
-    /// first time.
+    /// Clock changes follow [`is_due`](Self::is_due): a fixed-time
+    /// expression runs a skipped local time once, at the first minute after
+    /// the gap, and a repeated one once, the first time; a wildcard
+    /// expression runs at every real minute whose local time matches.
     pub fn next_after<Tz: TimeZone>(
+        &self,
+        after: DateTime<Utc>,
+        zone: &Tz,
+    ) -> Option<DateTime<Utc>> {
+        let next = if self.wildcard_time {
+            self.next_on_the_wall_clock(after, zone)
+        } else {
+            self.next_fixed_time(after, zone)
+        };
+        debug_assert!(next.is_none_or(|run| run > after && self.is_due(run, zone)));
+        next
+    }
+
+    fn next_fixed_time<Tz: TimeZone>(
         &self,
         after: DateTime<Utc>,
         zone: &Tz,
@@ -662,12 +701,74 @@ impl CronExpression {
         None
     }
 
+    /// The first real minute after `after` whose local time matches. The
+    /// search jumps to the next matching local time while the UTC offset
+    /// stays the same, and looks at the minute where the offset changes,
+    /// because the local clock jumps there.
+    fn next_on_the_wall_clock<Tz: TimeZone>(
+        &self,
+        after: DateTime<Utc>,
+        zone: &Tz,
+    ) -> Option<DateTime<Utc>> {
+        let offset_at = |seconds: i64| -> Option<i64> {
+            let utc = DateTime::from_timestamp(seconds, 0)?.naive_utc();
+            Some(i64::from(
+                zone.offset_from_utc_datetime(&utc).fix().local_minus_utc(),
+            ))
+        };
+        let mut t = after.timestamp().div_euclid(60) * 60 + 60;
+        // A jump never crosses a day, so a clock change is never skipped.
+        let day = 24 * 3600;
+        // Each pass either returns, moves to a clock change, or gives up
+        // after the 400 years `next_local` looks at.
+        for _ in 0..1_000_000 {
+            let offset = offset_at(t)?;
+            let local = DateTime::from_timestamp(t + offset, 0)?.naive_utc();
+            if self.matches_local(local) {
+                return DateTime::from_timestamp(t, 0);
+            }
+            let target = self.next_local(local)?;
+            let target_t = t + (target - local).num_seconds();
+            let mut cursor = t;
+            loop {
+                let next = target_t.min(cursor + day);
+                if offset_at(next)? != offset {
+                    // A clock change: find its first minute and look there.
+                    let (mut behind, mut ahead) = (cursor, next);
+                    while ahead - behind > 60 {
+                        let middle = behind + (ahead - behind) / 120 * 60;
+                        if offset_at(middle)? == offset {
+                            behind = middle;
+                        } else {
+                            ahead = middle;
+                        }
+                    }
+                    t = ahead;
+                    break;
+                }
+                if next == target_t {
+                    return DateTime::from_timestamp(next, 0);
+                }
+                cursor = next;
+            }
+        }
+        None
+    }
+
     /// Whether the expression is due at `tick`, a whole minute (UTC), on
-    /// `zone`'s clock: a local time that happens twice is due only the
-    /// first time, and one that is skipped is due at the first minute after
-    /// the gap.
+    /// `zone`'s clock. This is the rule for clock changes.
+    ///
+    /// A fixed-time expression (no `*` in the minute or hour field) is due
+    /// once for a local time that happens twice (the first time) and once,
+    /// at the first minute after the gap, for local times that are skipped.
+    /// A wildcard expression is due at every real minute whose local time
+    /// matches: in both passes of a repeated hour, and never for a time
+    /// inside a gap.
     pub fn is_due<Tz: TimeZone>(&self, tick: DateTime<Utc>, zone: &Tz) -> bool {
         let local = tick.with_timezone(zone).naive_local();
+        if self.wildcard_time {
+            return self.matches_local(local);
+        }
         if self.matches_local(local) {
             return match zone.from_local_datetime(&local) {
                 LocalResult::Ambiguous(earliest, _) => earliest.to_utc() == tick,
