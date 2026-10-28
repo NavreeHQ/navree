@@ -4,6 +4,6 @@ expression: "statement(Insert\n{\n    on_conflict:\n    Some(OnConflict\n    {\n
 ---
 PostgreSQL: error: invalid query: an upsert on PostgreSQL needs the unique columns its rows conflict on
 MySQL: INSERT INTO `tags` (`name`, `color`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `color` = VALUES(`color`)
-  values: [String(Some("vip")), String(Some("gold"))]
+  values: [String("vip"), String("gold")]
 SQLite: INSERT INTO "tags" ("name", "color") VALUES (?, ?) ON CONFLICT DO UPDATE SET "color" = "excluded"."color"
-  values: [String(Some("vip")), String(Some("gold"))]
+  values: [String("vip"), String("gold")]

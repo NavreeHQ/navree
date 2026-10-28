@@ -1,11 +1,10 @@
 ---
 source: crates/navree-orm/tests/sql/text.rs
-assertion_line: 12
 expression: "query(Company::query().where_(Company::NAME.contains_ignore_case(\"Équipe 50%_\")).or_where(Company::COUNTRY.eq_ignore_case(\"Österreich\")))"
 ---
 PostgreSQL: SELECT "companies"."id", "companies"."name", "companies"."country" FROM "companies" WHERE "companies"."name" ~ $1 OR "companies"."country" ~ $2
-  values: [String(Some("[Éé][qQ][uU][iI][pP][eE] 50\\%\\_")), String(Some("^[Öö][sS][tT][eE][rR][rR][eE][iI][cC][hH]$"))]
+  values: [String("[Éé][qQ][uU][iI][pP][eE] 50\\%\\_"), String("^[Öö][sS][tT][eE][rR][rR][eE][iI][cC][hH]$")]
 MySQL: SELECT `companies`.`id`, `companies`.`name`, `companies`.`country` FROM `companies` WHERE INSTR(CAST(LOWER(`companies`.`name`) AS BINARY), CAST(? AS BINARY)) > 0 OR CAST(LOWER(`companies`.`country`) AS BINARY) = CAST(? AS BINARY)
-  values: [String(Some("équipe 50%_")), String(Some("österreich"))]
+  values: [String("équipe 50%_"), String("österreich")]
 SQLite: SELECT "companies"."id", "companies"."name", "companies"."country" FROM "companies" WHERE "companies"."name" GLOB ? OR "companies"."country" GLOB ?
-  values: [String(Some("*[Éé][qQ][uU][iI][pP][eE] 50%_*")), String(Some("[Öö][sS][tT][eE][rR][rR][eE][iI][cC][hH]"))]
+  values: [String("*[Éé][qQ][uU][iI][pP][eE] 50%_*"), String("[Öö][sS][tT][eE][rR][rR][eE][iI][cC][hH]")]

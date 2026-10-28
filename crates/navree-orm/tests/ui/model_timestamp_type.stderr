@@ -2,10 +2,10 @@ error[E0277]: `std::string::String` cannot be a timestamp column
  --> tests/ui/model_timestamp_type.rs:7:17
   |
 7 |     created_at: String,
-  |                 ^^^^^^ the trait `Timestamp` is not implemented for `std::string::String`
+  |                 ^^^^^^ the trait `navree_orm::Timestamp` is not implemented for `std::string::String`
   |
   = note: use `DateTime<Utc>`, `DateTime<FixedOffset>`, `NaiveDateTime`, `i64` or an `Option` of one
-help: the following other types implement trait `Timestamp`
+help: the following other types implement trait `navree_orm::Timestamp`
  --> src/model.rs
   |
   | impl Timestamp for NaiveDateTime {

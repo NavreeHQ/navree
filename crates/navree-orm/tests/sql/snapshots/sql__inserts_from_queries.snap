@@ -3,8 +3,8 @@ source: crates/navree-orm/tests/sql/main.rs
 expression: "per_dialect(|d| render_insert(&archive, d))"
 ---
 PostgreSQL: INSERT INTO "archived_deals" ("id", "title") SELECT "id", "title" FROM "deals" WHERE "stage" = $1
-  values: [String(Some("lost"))]
+  values: [String("lost")]
 MySQL: INSERT INTO `archived_deals` (`id`, `title`) SELECT `id`, `title` FROM `deals` WHERE `stage` = ?
-  values: [String(Some("lost"))]
+  values: [String("lost")]
 SQLite: INSERT INTO "archived_deals" ("id", "title") SELECT "id", "title" FROM "deals" WHERE "stage" = ?
-  values: [String(Some("lost"))]
+  values: [String("lost")]

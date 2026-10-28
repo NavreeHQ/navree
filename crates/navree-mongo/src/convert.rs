@@ -30,7 +30,6 @@ use std::str::FromStr;
 use bson::spec::BinarySubtype;
 use bson::{Binary, Bson, Decimal128, Document};
 use chrono::{NaiveTime, TimeZone, Utc};
-use navree_db::sea_orm::sea_query::OptionEnum;
 use navree_orm::{Decimal, OrmError, Row, Value, is_null};
 
 use crate::error::invalid;
@@ -45,7 +44,7 @@ const TIME_FORMAT: &str = "%H:%M:%S%.6f";
 /// ```
 /// use bson::Bson;
 /// use navree_mongo::{ObjectId, to_bson};
-/// use navree_orm::{Decimal, Value};
+/// use navree_orm::{Decimal, Kind, Value};
 ///
 /// assert_eq!(to_bson(&Value::from(42_i32)).unwrap(), Bson::Int32(42));
 /// assert_eq!(to_bson(&Value::from(42_i64)).unwrap(), Bson::Int64(42));
@@ -75,12 +74,11 @@ pub fn to_bson(value: &Value) -> Result<Bson, OrmError> {
         Value::F32(v) => Bson::Double(f64::from(*v)),
         Value::F64(v) => Bson::Double(*v),
         Value::String(s) => Bson::String(s.clone()),
-        Value::Char(Some(c)) => Bson::String(c.to_string()),
-        Value::Enum(OptionEnum::Some(value)) if &*value.type_name == OBJECT_ID_TYPE => {
-            let id = ObjectId::parse(&value.value).map_err(|error| invalid(error.to_string()))?;
+        Value::Enum { type_name, value } if type_name == OBJECT_ID_TYPE => {
+            let id = ObjectId::parse(value).map_err(|error| invalid(error.to_string()))?;
             Bson::ObjectId(id.into())
         }
-        Value::Enum(OptionEnum::Some(value)) => Bson::String(value.value.to_string()),
+        Value::Enum { value, .. } => Bson::String(value.clone()),
         Value::Bytes(bytes) => Bson::Binary(Binary {
             subtype: BinarySubtype::Generic,
             bytes: bytes.clone(),
@@ -94,7 +92,6 @@ pub fn to_bson(value: &Value) -> Result<Bson, OrmError> {
             Bson::DateTime(bson::DateTime::from_chrono(Utc.from_utc_datetime(at)))
         }
         Value::Timestamp(at) => Bson::DateTime(bson::DateTime::from_chrono(*at)),
-        Value::ChronoDateTimeLocal(Some(at)) => Bson::DateTime(bson::DateTime::from_chrono(*at)),
         Value::TimestampTz(at) => {
             Bson::DateTime(bson::DateTime::from_chrono(*at))
         }
@@ -103,7 +100,7 @@ pub fn to_bson(value: &Value) -> Result<Bson, OrmError> {
             bytes: uuid.as_bytes().to_vec(),
         }),
         Value::Decimal(decimal) => Bson::Decimal128(decimal128(decimal)?),
-        // Variants other cargo features add: their JSON form.
+        // Vectors and what later versions add: their JSON form.
         other => json_to_bson(&navree_orm::to_json(other))?,
     })
 }

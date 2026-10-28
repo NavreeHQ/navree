@@ -3,8 +3,8 @@ source: crates/navree-orm/tests/render/main.rs
 expression: "expr(Expr::Case\n{\n    operand: Some(Box::new(col(\"stage\"))), whens:\n    vec![(val(\"won\"), Expr::int(1))], otherwise: None,\n})"
 ---
 PostgreSQL: CASE "stage" WHEN $1 THEN 1 END
-  values: [String(Some("won"))]
+  values: [String("won")]
 MySQL: CASE `stage` WHEN ? THEN 1 END
-  values: [String(Some("won"))]
+  values: [String("won")]
 SQLite: CASE "stage" WHEN ? THEN 1 END
-  values: [String(Some("won"))]
+  values: [String("won")]
