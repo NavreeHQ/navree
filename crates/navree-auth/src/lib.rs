@@ -198,7 +198,9 @@ pub use error::AuthError;
 pub use extract::CurrentUser;
 pub use guards::{AccessClaims, Actor, not_while_impersonating, platform_session, recent_auth};
 pub use impersonation::MAX_IMPERSONATION_REASON;
-pub use jwt::{ActorClaim, Claims, JwtService, LEEWAY_SECS, SessionClaims, TokenType};
+pub use jwt::{
+    ActorClaim, Claims, JwtService, LEEWAY_SECS, MAX_TOKEN_LEN, SessionClaims, TokenType,
+};
 pub use migration::AUTH_MIGRATIONS;
 pub use module::{AuthModule, ModuleBuilderAuthExt};
 pub use options::{
