@@ -249,7 +249,12 @@ impl Transaction {
         let pending = lock_std(&self.shared.pending_rollback).take();
         if let Some(depth) = pending {
             while guard.conn.depth() >= depth {
-                guard.conn.rollback().await?;
+                if let Err(error) = guard.conn.rollback().await {
+                    // Still owed: tried again before the next statement.
+                    let mut pending = lock_std(&self.shared.pending_rollback);
+                    *pending = Some(pending.map_or(depth, |owed| owed.min(depth)));
+                    return Err(error);
+                }
             }
         }
         if guard.conn.depth() < self.depth {
@@ -290,7 +295,8 @@ impl Transaction {
     }
 
     /// Commits the transaction, or releases the savepoint. Fails while a
-    /// savepoint inside it is still open.
+    /// savepoint inside it is still open; the transaction then rolls back,
+    /// as a dropped one does.
     pub async fn commit(self) -> Result<(), DbError> {
         let mut guard = self.lock().await?;
         if guard.conn.depth() != self.depth {

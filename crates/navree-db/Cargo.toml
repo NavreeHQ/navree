@@ -13,7 +13,7 @@ workspace = true
 [features]
 default = ["sqlite"]
 ## SQLite (the bundled library). On by default until every crate's tests
-## turn it on themselves (docs/superpowers/specs/2026-10-28-navree-data-layer-on-sqlx.md, §7).
+## turn it on themselves (docs/superpowers/specs/2026-10-28-navree-data-layer-on-sqlx.md, §5).
 sqlite = ["sqlx/sqlite-bundled"]
 ## PostgreSQL and TimescaleDB driver (`postgres://` and `postgresql://` URLs).
 postgres = ["sqlx/postgres", "sea-orm/sqlx-postgres", "sea-orm-migration/sqlx-postgres", "navree-schema/postgres"]
