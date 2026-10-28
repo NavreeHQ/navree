@@ -98,7 +98,7 @@ impl LdapServer {
         let pem = certified.cert.pem();
         let cert = CertificateDer::from(certified.cert.der().to_vec());
         let key =
-            PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(certified.key_pair.serialize_der()));
+            PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(certified.signing_key.serialize_der()));
         let config = rustls::ServerConfig::builder_with_provider(Arc::new(
             rustls::crypto::ring::default_provider(),
         ))

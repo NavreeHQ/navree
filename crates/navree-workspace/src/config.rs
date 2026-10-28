@@ -25,16 +25,23 @@ pub enum ResolverKind {
     Path,
     /// A claim of the request's bearer JWT ([`WorkspaceConfig::claim`]).
     Claim,
+    /// The workspace's own verified domain (`crm.acme-corp.com`), matched
+    /// by navree-domains' `DomainsModule`, which marks the request with a
+    /// [`DomainWorkspace`](crate::DomainWorkspace). Finds nothing without
+    /// that module, or for a host that is not a verified custom domain.
+    /// Workspaces only: organizations and partitions can't use it.
+    Domain,
 }
 
 impl ResolverKind {
-    /// `header`, `subdomain`, `path` or `claim`.
+    /// `header`, `subdomain`, `path`, `claim` or `domain`.
     pub fn as_str(self) -> &'static str {
         match self {
             ResolverKind::Header => "header",
             ResolverKind::Subdomain => "subdomain",
             ResolverKind::Path => "path",
             ResolverKind::Claim => "claim",
+            ResolverKind::Domain => "domain",
         }
     }
 }
@@ -425,6 +432,7 @@ pub(crate) fn parse_hh_mm(time: &str) -> Option<(u32, u32)> {
 /// ```toml
 /// [workspace]
 /// resolvers = ["header", "path", "subdomain", "claim"]  # order; or "header,path"
+/// # "domain" (first, usually) names a workspace by its custom domain (navree-domains)
 /// header = "X-Workspace"          # X-Workspace: acme (a slug or an id)
 /// # base_domain = "app.example.com"  # acme.app.example.com -> acme
 /// path_prefix = "/w"              # /api/w/acme/deals -> acme
@@ -686,8 +694,9 @@ fn segments(prefix: &str) -> Vec<&str> {
         .collect()
 }
 
-/// A resolver list: at least one, no repeats, and (for partitions) no
-/// `subdomain`.
+/// A resolver list of organizations or partitions: at least one, no
+/// repeats, no `domain` (custom domains name workspaces) and, for
+/// partitions, no `subdomain`.
 fn check_resolvers(
     key: &str,
     resolvers: &[ResolverKind],
@@ -704,6 +713,11 @@ fn check_resolvers(
         if !subdomain && *kind == ResolverKind::Subdomain {
             errors.push(format!(
                 "{key}.resolvers can't use `subdomain` (use header, path or claim)"
+            ));
+        }
+        if *kind == ResolverKind::Domain {
+            errors.push(format!(
+                "{key}.resolvers can't use `domain` (custom domains name workspaces)"
             ));
         }
     }
@@ -909,6 +923,30 @@ mod tests {
         }
         let unknown = load(ConfigSources::new().set("workspace.resolvers", json!(["cookie"])));
         assert!(unknown.is_err());
+    }
+
+    #[test]
+    fn custom_domains_name_workspaces_only() {
+        let config = load(ConfigSources::new().env_vars(
+            "APP_",
+            [("APP_WORKSPACE__RESOLVERS", "domain,header")],
+        ))
+        .unwrap();
+        assert_eq!(
+            config.resolvers,
+            [ResolverKind::Domain, ResolverKind::Header]
+        );
+        assert_eq!(ResolverKind::Domain.as_str(), "domain");
+        assert_eq!(ResolverKind::Domain.to_string(), "domain");
+        for key in [
+            "workspace.organizations.resolvers",
+            "workspace.partitions.resolvers",
+        ] {
+            let error = load(ConfigSources::new().set(key, json!(["domain", "header"])))
+                .unwrap_err()
+                .to_string();
+            assert!(error.contains(&format!("{key} can't use `domain`")), "{error}");
+        }
     }
 
     #[test]

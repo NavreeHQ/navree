@@ -150,7 +150,7 @@ struct Certificates {
 }
 
 fn certificates() -> Certificates {
-    use rcgen::{BasicConstraints, CertificateParams, IsCa, KeyPair};
+    use rcgen::{BasicConstraints, CertificateParams, IsCa, Issuer, KeyPair};
 
     let dir = tempfile::tempdir().expect("temp dir");
     let write = |name: &str, contents: String| {
@@ -162,11 +162,12 @@ fn certificates() -> Certificates {
     let mut ca_params = CertificateParams::new(Vec::<String>::new()).expect("ca params");
     ca_params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
     let ca = ca_params.self_signed(&ca_key).expect("ca");
+    let issuer = Issuer::from_params(&ca_params, &ca_key);
     let leaf = |name: &str| {
         let key = KeyPair::generate().expect("key");
         let cert = CertificateParams::new(vec![name.to_owned()])
             .expect("params")
-            .signed_by(&key, &ca, &ca_key)
+            .signed_by(&key, &issuer)
             .expect("signed");
         (cert.pem(), key.serialize_pem())
     };
