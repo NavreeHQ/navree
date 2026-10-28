@@ -232,6 +232,11 @@ impl Lighthouse {
         self.engine.as_ref().map_or(0, EngineHandle::dropped)
     }
 
+    /// Details sampled out by this process.
+    pub fn sampled_out(&self) -> u64 {
+        self.dropped()
+    }
+
     /// Delivers a stored alert (the `lighthouse.alert` job).
     pub(crate) async fn deliver_stored_alert(
         &self,
