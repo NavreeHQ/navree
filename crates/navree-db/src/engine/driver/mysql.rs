@@ -46,6 +46,8 @@ fn bind(args: &mut MySqlArguments, value: &Value) -> Result<(), sqlx::error::Box
         Value::DateTime(v) => args.add(*v),
         Value::Timestamp(v) => args.add(*v),
         Value::TimestampTz(v) => args.add(v.with_timezone(&chrono::Utc)),
+        Value::Enum { value, .. } => args.add(value.as_str()),
+        Value::Vector(v) => args.add(super::vector_bytes(v)),
     }
 }
 
@@ -71,6 +73,8 @@ fn bind_null(args: &mut MySqlArguments, kind: Kind) -> Result<(), sqlx::error::B
         Kind::Time => args.add(None::<chrono::NaiveTime>),
         Kind::DateTime => args.add(None::<chrono::NaiveDateTime>),
         Kind::Timestamp | Kind::TimestampTz => args.add(None::<chrono::DateTime<chrono::Utc>>),
+        Kind::Enum => args.add(None::<String>),
+        Kind::Vector => args.add(None::<Vec<u8>>),
     }
 }
 

@@ -72,6 +72,20 @@ pub enum Value {
     Timestamp(DateTime<Utc>),
     /// An instant with its UTC offset.
     TimestampTz(DateTime<FixedOffset>),
+    /// A value of a named enumerated type: bound as its text on every SQL
+    /// backend (a renderer casts it to `type_name` on PostgreSQL, where
+    /// enums are types of their own), and what a document store reads its
+    /// own typed values from (navree-mongo's `ObjectId`).
+    Enum {
+        /// The type's name, e.g. `mood` or `ObjectId`.
+        type_name: String,
+        /// The value.
+        value: String,
+    },
+    /// A vector of 32-bit floats (embeddings): pgvector's `vector` on
+    /// PostgreSQL, little-endian `f32` bytes on MySQL and SQLite (MySQL 9's
+    /// and MariaDB's `VECTOR`, sqlite-vec's blobs).
+    Vector(Vec<f32>),
 }
 
 /// The kind of a [`Value`]: what a typed `NULL` is, and what a column
@@ -121,6 +135,10 @@ pub enum Kind {
     Timestamp,
     /// [`Value::TimestampTz`].
     TimestampTz,
+    /// [`Value::Enum`] (its NULL binds as text).
+    Enum,
+    /// [`Value::Vector`].
+    Vector,
 }
 
 impl Kind {
@@ -148,6 +166,8 @@ impl Kind {
             Kind::DateTime => "datetime",
             Kind::Timestamp => "timestamp",
             Kind::TimestampTz => "timestamptz",
+            Kind::Enum => "enum",
+            Kind::Vector => "vector",
         }
     }
 }
@@ -194,13 +214,16 @@ impl Value {
             Value::DateTime(_) => Kind::DateTime,
             Value::Timestamp(_) => Kind::Timestamp,
             Value::TimestampTz(_) => Kind::TimestampTz,
+            Value::Enum { .. } => Kind::Enum,
+            Value::Vector(_) => Kind::Vector,
         }
     }
 
     /// The value as JSON: numbers as numbers (decimals as text, so nothing
     /// is rounded; a float that is not finite as `null`), bytes as an array
     /// of numbers, UUIDs and dates as text (date-times in RFC 3339, UTC
-    /// with a `Z` for [`Value::Timestamp`]), JSON as itself.
+    /// with a `Z` for [`Value::Timestamp`]), JSON as itself, an enum as its
+    /// text, a vector as an array of numbers.
     pub fn to_json(&self) -> serde_json::Value {
         use serde_json::Value as Json;
         match self {
@@ -232,6 +255,24 @@ impl Value {
             Value::TimestampTz(at) => {
                 Json::String(at.to_rfc3339_opts(chrono::SecondsFormat::AutoSi, false))
             }
+            Value::Enum { value, .. } => Json::String(value.clone()),
+            Value::Vector(items) => Json::Array(
+                items
+                    .iter()
+                    .map(|item| {
+                        serde_json::Number::from_f64(f64::from(*item))
+                            .map_or(Json::Null, Json::Number)
+                    })
+                    .collect(),
+            ),
+        }
+    }
+
+    /// A value of the enumerated type `type_name`.
+    pub fn enumeration(type_name: impl Into<String>, value: impl Into<String>) -> Value {
+        Value::Enum {
+            type_name: type_name.into(),
+            value: value.into(),
         }
     }
 
@@ -264,6 +305,11 @@ impl Value {
             }
             Value::Json(json) => quoted(&json.to_string()),
             Value::Uuid(id) => quoted(&id.to_string()),
+            Value::Enum { value, .. } => quoted(value),
+            Value::Vector(items) => {
+                let items: Vec<String> = items.iter().map(f32::to_string).collect();
+                quoted(&format!("[{}]", items.join(",")))
+            }
             other => match other.to_json() {
                 serde_json::Value::String(text) => quoted(&text),
                 json => json.to_string(),
@@ -323,6 +369,7 @@ value_from! {
     NaiveDateTime => DateTime, DateTime;
     DateTime<Utc> => Timestamp, Timestamp;
     DateTime<FixedOffset> => TimestampTz, TimestampTz;
+    Vec<f32> => Vector, Vector;
 }
 
 impl From<&str> for Value {
@@ -546,6 +593,7 @@ impl FromValue for String {
             Value::Bytes(bytes) => String::from_utf8(bytes)
                 .map_err(|error| ValueError::new("String", &Value::Bytes(error.into_bytes()))),
             Value::Uuid(id) => Ok(id.to_string()),
+            Value::Enum { value, .. } => Ok(value),
             Value::Null(kind) => Err(ValueError::new("String", &Value::Null(kind))),
             Value::Json(json) => Ok(json.to_string()),
             other => match other.to_json() {
@@ -593,6 +641,38 @@ impl FromValue for Uuid {
                 Uuid::from_slice(bytes).map_err(|_| ValueError::new("Uuid", &value))
             }
             _ => Err(ValueError::new("Uuid", &value)),
+        }
+    }
+}
+
+/// A vector from a [`Value::Vector`], JSON or text holding an array of
+/// numbers (`[1,2,3]`), or little-endian `f32` bytes (MySQL's and SQLite's
+/// form).
+impl FromValue for Vec<f32> {
+    fn from_value(value: Value) -> Result<Self, ValueError> {
+        fn from_json(json: &serde_json::Value) -> Option<Vec<f32>> {
+            json.as_array()?
+                .iter()
+                .map(|item| {
+                    // A vector's components are 32-bit floats.
+                    #[allow(clippy::cast_possible_truncation)]
+                    item.as_f64().map(|f| f as f32)
+                })
+                .collect()
+        }
+        match &value {
+            Value::Vector(items) => Ok(items.clone()),
+            Value::Json(json) => from_json(json).ok_or_else(|| ValueError::new("Vec<f32>", &value)),
+            Value::String(text) => serde_json::from_str::<serde_json::Value>(text)
+                .ok()
+                .as_ref()
+                .and_then(from_json)
+                .ok_or_else(|| ValueError::new("Vec<f32>", &value)),
+            Value::Bytes(bytes) if bytes.len() % 4 == 0 => Ok(bytes
+                .chunks_exact(4)
+                .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+                .collect()),
+            _ => Err(ValueError::new("Vec<f32>", &value)),
         }
     }
 }
@@ -798,6 +878,23 @@ mod tests {
         assert_eq!(Value::String("it's".into()).to_sql_literal(), "'it''s'");
         assert_eq!(Value::Bytes(vec![0, 255]).to_sql_literal(), "X'00ff'");
         assert_eq!(Value::Null(Kind::I64).to_string(), "NULL");
+        let mood = Value::enumeration("mood", "happy");
+        assert_eq!(mood.kind(), Kind::Enum);
+        assert_eq!(mood.to_json(), serde_json::json!("happy"));
+        assert_eq!(String::from_value(mood).unwrap(), "happy");
+        let vector = Value::from(vec![0.5_f32, -2.0]);
+        assert_eq!(vector.to_json(), serde_json::json!([0.5, -2.0]));
+        assert_eq!(vector.to_sql_literal(), "'[0.5,-2]'");
+        assert_eq!(Vec::<f32>::from_value(vector).unwrap(), [0.5, -2.0]);
+        assert_eq!(
+            Vec::<f32>::from_value(Value::String("[1, 2.5]".into())).unwrap(),
+            [1.0, 2.5]
+        );
+        assert_eq!(
+            Vec::<f32>::from_value(Value::Bytes(1.5_f32.to_le_bytes().to_vec())).unwrap(),
+            [1.5]
+        );
+        assert_eq!(Value::from(None::<Vec<f32>>), Value::Null(Kind::Vector));
         let at = DateTime::parse_from_rfc3339("2026-10-28T09:30:00Z")
             .unwrap()
             .with_timezone(&Utc);
