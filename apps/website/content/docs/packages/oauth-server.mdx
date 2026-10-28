@@ -370,7 +370,7 @@ The endpoints that take client credentials are rate-limited per client and per c
 | `POST /oauth/device_authorization` | 60 | 30 |
 
 - The per-IP count comes first, before the body is read, so failed client authentications count against the address that sends them.
-- The per-client count starts once the client has authenticated: requests that name a client with a wrong secret can't use up its budget.
+- The per-client count starts once the client has authenticated: requests that name a client with a wrong secret can't use up its budget. Public clients have no secret, so anyone can name one: they are counted per IP only, and one address can't lock every user of a mobile or single-page app out.
 - Each endpoint has its own budget, as has each client and each address.
 - Change a limit under `oauth.rate_limits.<endpoint>`; `0` turns it off:
 

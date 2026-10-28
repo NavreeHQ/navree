@@ -546,3 +546,82 @@ async fn a_connection_that_does_not_enforce_leaves_every_method_open() {
         .await
         .assert_status(200);
 }
+
+#[tokio::test]
+async fn an_email_change_cannot_move_an_account_across_an_enforced_domain() {
+    let s = Enforced::new().await;
+    let ann = s.world.token(&s.ann).await;
+    let ola = s.world.token(&s.ola).await;
+    s.enforce().await;
+    let change = |access: String, email: &'static str| {
+        let client = s.world.app.client();
+        async move {
+            client
+                .patch("/api/auth/me")
+                .bearer(&access)
+                .json(&json!({ "email": email, "current_password": PASSWORD }))
+                .send()
+                .await
+        }
+    };
+    // Ann's old password can't take her account out of the domain, where
+    // it would sign in with a password again.
+    change(ann, "ann@personal.test")
+        .await
+        .assert_error_code(403, "sso_required");
+    // Ola can't put her account on an address of the domain: it would
+    // stand in the way of that person's first single sign-on.
+    change(ola.clone(), "cto@acme.test")
+        .await
+        .assert_error_code(403, "sso_required");
+    let auth = s.world.app.get::<AuthService>().await;
+    assert_eq!(
+        auth.find_by_email("ann@acme.test")
+            .await
+            .unwrap()
+            .map(|u| u.id),
+        Some(s.ann.id)
+    );
+    assert!(auth.find_by_email("cto@acme.test").await.unwrap().is_none());
+    s.world
+        .saml_sign_in(&s.fake, "acme", "cto@acme.test", &[])
+        .await
+        .assert_status(200);
+    // Domains that don't enforce are unaffected.
+    change(ola, "ola@elsewhere.test").await.assert_status(200);
+}
+
+#[tokio::test]
+async fn other_spellings_of_an_enforced_domain_are_the_domain() {
+    let s = Enforced::new().await;
+    let other = SsoFake::new();
+    let open = Provisioning {
+        allow_unverified_emails: true,
+        ..Provisioning::default()
+    };
+    s.world
+        .saml_connection(&other, SsoOwner::App, "globex", open)
+        .await;
+    s.enforce().await;
+    // A trailing dot names the same domain, and so does an international
+    // spelling that maps to it: mail to them reaches acme.test. Another
+    // connection's identity provider can't create anyone of the domain
+    // under one of them.
+    for email in [
+        "eve@acme.test.",
+        "eve@ACME.TEST.",
+        "eve@\u{ff21}\u{ff23}\u{ff2d}\u{ff25}.test",
+        "eve@acme\u{3002}test",
+    ] {
+        s.world
+            .saml_sign_in(&other, "globex", email, &[])
+            .await
+            .assert_error_code(403, "sso_required");
+    }
+    let discovered = s
+        .post("/api/sso/discover", json!({ "email": "nat@acme.test." }))
+        .await
+        .assert_status(200)
+        .json_value();
+    assert_eq!(discovered["password_allowed"], json!(false), "{discovered}");
+}
