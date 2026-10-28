@@ -36,14 +36,16 @@ import { FlickeringGrid } from "@/components/magicui/flickering-grid";
 import { GridPattern } from "@/components/magicui/grid-pattern";
 import { CopyButton } from "@/components/mdx/copy-button";
 import { categories, ecosystem, entriesIn, entry, type EcosystemCategory } from "@/content/ecosystem";
+import { pageMetadata } from "@/lib/metadata";
 import { cn } from "@/lib/utils";
 import { site } from "@site";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Ecosystem",
   description:
     "Everything first-party, everything included: monitoring, deployment, an admin panel, queue supervision, search, billing, OAuth, AI and more. Open source, self-hosted and released with Navree.",
-};
+  path: "/ecosystem/",
+});
 
 /** The tools that get a feature block with a working mock, by slug. */
 const blocks: Record<string, { mock: ReactNode; layout?: "split" | "wide"; reverse?: boolean }> = {

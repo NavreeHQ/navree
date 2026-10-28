@@ -6,12 +6,14 @@ import { ArrowLink, PrimaryCta, SecondaryCta } from "@/components/home/parts";
 import { CommandLine } from "@/components/showcase/code-panel";
 import { frontEnds } from "@/components/showcase/crm-data";
 import { BrowserFrame, PhoneFrame, ShotImage } from "@/components/showcase/frames";
+import { pageMetadata } from "@/lib/metadata";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Showcase",
   description:
     "Real applications built on Navree, with their code in the repository: the reference CRM, its Rust API and its Next.js and Nuxt front ends.",
-};
+  path: "/showcase/",
+});
 
 const crmFacts = [
   { label: "API", value: "Rust, Navree" },

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
 import { AiSection } from "@/components/home/ai-section";
@@ -13,6 +14,16 @@ import { Ship } from "@/components/home/ship";
 import { Showcase } from "@/components/home/showcase";
 import { WhatIs } from "@/components/home/what-is";
 import { Workspaces } from "@/components/home/workspaces";
+import { pageMetadata } from "@/lib/metadata";
+import { JsonLd, softwareData } from "@/lib/structured-data";
+import { site } from "@site";
+
+export const metadata: Metadata = pageMetadata({
+  title: `${site.name}: ${site.headline}`,
+  absoluteTitle: true,
+  description: site.description,
+  path: "/",
+});
 
 /**
  * The homepage, top to bottom: what Navree is, what every app gets, the
@@ -45,6 +56,7 @@ export default function Home() {
       </Divided>
       <InTheBox />
       <FinalCta />
+      <JsonLd data={softwareData()} />
     </>
   );
 }
