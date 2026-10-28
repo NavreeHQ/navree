@@ -311,7 +311,7 @@ route `GET /api/v1/reports/team` (ReportsController in module `ReportsModule`) d
 
 ## What clients see when nothing matches
 
-A path that no route matches is a 404, and a known path with another method is a 405 with an `Allow` header, both in the error format. Axum answers `HEAD` requests for `GET` routes. CORS preflight (`OPTIONS`) requests are handled by the CORS layer when `http.cors.allowed_origins` is set; otherwise an `OPTIONS` request is a 405 like any other unrouted method. See [CORS](/docs/basics/cors-and-security-headers/).
+A path that no route matches is a 404, and a known path with another method is a 405 with an `Allow` header, both in the error format. Axum answers `HEAD` requests for `GET` routes. CORS preflight requests (`OPTIONS` with `Origin` and `Access-Control-Request-Method`) are handled by the CORS layer when `http.cors.allowed_origins` is set; any other `OPTIONS` request, and every `OPTIONS` request when it isn't set, is a 405 like any other unrouted method. See [CORS](/docs/basics/cors-and-security-headers/).
 
 ## Testing routes
 

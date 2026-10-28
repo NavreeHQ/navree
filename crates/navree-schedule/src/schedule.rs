@@ -270,9 +270,12 @@ impl TaskBuilder {
     /// are accepted): `daily_at("09:00").in_zone("Asia/Kolkata")` runs at
     /// 09:00 in Kolkata. An unknown zone fails the boot.
     ///
-    /// Across DST changes a local time that is skipped runs at the first
-    /// minute after the gap, and one that happens twice runs once (the
-    /// first time).
+    /// Across DST changes, an expression with no `*` in its minute or hour
+    /// field runs a skipped local time once, at the first minute after the
+    /// gap, and one that happens twice once (the first time). An expression
+    /// with a `*` there (`*/15 * * * *`, `0 * * * *`) follows the wall clock:
+    /// it runs in both passes of a repeated hour and catches nothing up for
+    /// a gap.
     pub fn in_zone(&mut self, zone: &str) -> &mut Self {
         self.zone = ZoneChoice::Named(zone.to_owned());
         self

@@ -87,6 +87,7 @@
 mod auth;
 pub mod codes;
 mod controller;
+mod cors;
 mod error;
 mod extract;
 mod limiter;
@@ -101,6 +102,7 @@ mod signed;
 pub use auth::{Authenticator, CurrentPrincipal, Guard, RouteAuthorizer};
 pub use axum::Json;
 pub use controller::{ApplyLayer, Controller, GlobalLayer, LayerSlot, ModuleBuilderHttpExt};
+pub use cors::{Cors, CorsLayer};
 pub use error::{AppError, ERROR_CONTENT_TYPE, ErrorMapper, Result};
 pub use extract::{ClientIp, Created, NoContent, Scoped};
 pub use limiter::{KeyedRateLimiter, Limited};
