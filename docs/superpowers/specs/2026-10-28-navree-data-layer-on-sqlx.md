@@ -32,6 +32,44 @@ the source):
 | `uow.tx()` / `.conn()` / `ConnectionTrait` / `DbErr` / `DbBackend` lines in `src/` | 228 / 184 / 157 / 579 / 220 |
 | navree-orm files naming sea-query | 10 (`sql/{mod,select,filter,write,timescale}.rs` hold 190 of its 198 builder lines; `value.rs` re-exports `sea_query::Value`) |
 
+### What phase 1 built (`build/data-layer`)
+
+- **navree-db's engine on SQLx** (§2.1): values, statements, rows,
+  classified errors, pools with every `database.*` setting, transactions
+  with savepoints, the `Executor` on pools, transactions, units of work and
+  `Db`, and one reporter for query logs, listeners, hooks, telemetry and
+  slow-query logs. `Db` opens its pools itself; SeaORM's `DatabaseConnection`
+  is a view over them, so every crate already runs on navree-db's
+  connections.
+- **Units of work on either transaction**: SeaORM's (the default, serving
+  navree-db's statements through the bridge) or navree-db's own
+  (`Db::with_native_units_of_work`, or `database.native_units_of_work =
+  true`), with savepoints, `set_local`, observers through `observe_with`,
+  after-commit hooks, `rollback_as_committed`.
+- **navree-orm's renderer** (§2.2): the tree, three grammars, the lowering
+  of the IR, snapshot tests, and differential tests that run both the
+  renderer's and today's compiler's SQL on SQLite, PostgreSQL with
+  TimescaleDB and MySQL, through navree-db's engine.
+- **SQLite behind a feature** in navree-db (on by default for now, §5).
+
+Tests (all green, against the real servers of `target/test-databases.env`):
+
+| Suite | Tests |
+|---|---|
+| navree-db engine unit tests | 18 (of the crate's 60 unit tests) |
+| navree-db `tests/engine` | 17 scenarios on each of SQLite, PostgreSQL + TimescaleDB and MySQL 8.4 = 51, plus 1 |
+| navree-db existing suites | `db` 135 (SQLite), `mysql` 40, PostgreSQL 6, doctests 41 |
+| navree-orm `tests/render` | 41 tests, 133 snapshots |
+| navree-orm `tests/differential` | 191 / 191 / 189 IR cases (SQLite / PostgreSQL / MySQL), 0 mismatches; 44 hand-built statements per database |
+| navree-orm existing suites | lib 147, `orm` 265, `relations` 97, `integration` 77, `servers` 41, `sql` 44, `strict_apps` 6, `compile_fail` 1, doctests 420 |
+
+Not built yet (the porting plan, §4): navree-schema's own connection
+types and the migrator on navree-db; the ORM's switch to the renderer and
+to navree-db's values, rows and executor; every crate's migrations,
+entities and stores; navree-db's last SeaORM surface (`Repo`, `paginate`,
+`Factory`, `Reader`, the text helpers); the generators and docs; removing
+the dependencies; turning SQLite off by default.
+
 ## 2. Target architecture
 
 ```text
@@ -113,9 +151,12 @@ cannot share one with it, so for the length of the port:
   `Db` joining it) run in that same transaction through the bridge
   (`navree_db::compat::SeaExecutor`: values converted to SeaORM's, rows read
   back from the driver rows SeaORM holds).
-- A `Db` made with `with_native_units_of_work(true)` gives units of work on
+- A `Db` made with `with_native_units_of_work(true)`, or configured with
+  `database.native_units_of_work = true`, gives units of work on
   **navree-db's own transaction**. `Uow::tx()` then fails (there is no SeaORM
-  transaction to hand out), observers run through `observe_with`.
+  transaction to hand out), observers run through `observe_with`. A ported
+  crate turns the setting on in its tests to prove it no longer needs
+  SeaORM's transaction.
 
 Crates port one at a time while both kinds coexist; once no crate takes
 SeaORM's transaction, navree-db flips to its own and deletes the bridge
@@ -336,8 +377,8 @@ migrator, code generators).
 | 3 | **navree-orm on navree-db's engine**: `Value` → navree-db's (+ `Enum` variant, navree-mongo in lockstep), `Row` on `navree_db::Row`, `Field::from_sql`, `exec.rs` on `Executor` (pools, units of work, savepoints, streams, timeouts, lost-connection retries), `OrmError::Db(DbError)`, pgvector values | 19 files, 213 `Value` lines, 39 `QueryResult` lines; navree-mongo 3 lines | 2 days | Opus |
 | 4 | **Wave 0-2 leaf crates** (topological order of the survey): navree-time (zone expressions), navree-session (store, 1 migration), navree-schedule (store, 1 migration), navree-validation (`unique`/`exists` on statements), navree-mail (5 entities, 1 migration, outbox and delivery log; L3: statements), navree-micro (outbox/inbox store, 1 migration) | 3.5k / 2.0k / 1.8k / 5.4k / 14.2k / 17.1k LOC; 4-44 SeaORM lines each | 2 days | Sonnet (navree-mail: Opus for the entity-to-statement design) |
 | 5 | **Shared APIs**: navree-access (6 entities, abilities to fragments, `SubjectRecords`, `Accessible::apply`), navree-auth (5 dual entities, 6 migrations, `User`), navree-audit (`ChangeObserver`, hypertable), navree-workspace (9 dual entities, 5 + 9 migrations, scoped repositories, row-level security settings through `Uow::set_local`) | access 5.3k, auth 13.4k, audit 1.8k, workspace 18.7k LOC; 46 / 31 / 18 / 97 SeaORM lines | 3 days | Opus |
-| 6 | **Wave 4-5 crates on the ported APIs**: navree-queue (raw-SQL stores, 4 migrations), navree-notify, navree-oauth (8 dual entities), navree-billing (5 dual), navree-flags, navree-settings, navree-social, navree-sso (3 entities), navree-webhooks (4 dual, hypertables), navree-workflows (raw-SQL stores), navree-fleet, navree-i18n, navree-ai (2 entities, pgvector), navree-integrations, navree-media (`MediaStore`), navree-logbook (observer only), navree-graphql / navree-grpc / navree-mcp (tests only) | 17 crates, 1-40 SeaORM lines each in `src/` | 4-5 days, in parallel worktrees | Sonnet; Opus for navree-search (pgvector, full text, `Searchable` derive) |
-| 7 | **Wave 6-7 and apps**: navree-search, navree-helm (admin panel generic over entities → over models), navree-lighthouse (5 dual entities, 142 entity-API lines), navree-sheets (raw-SQL store), navree-directory, navree-domains, evidence-app, crm-* (2 call sites) | helm 10.4k, lighthouse 11.4k, search 10.2k, sheets 9.0k LOC | 3 days | Opus for navree-helm and navree-search, Sonnet for the rest |
+| 6 | **Wave 4-5 crates on the ported APIs**: navree-queue (raw-SQL stores, 4 migrations), navree-notify, navree-oauth (8 dual entities), navree-billing (5 dual), navree-flags, navree-settings, navree-social, navree-sso (3 entities), navree-webhooks (4 dual, hypertables), navree-workflows (raw-SQL stores), navree-fleet, navree-i18n, navree-ai (2 entities, pgvector), navree-integrations, navree-media (`MediaStore`), navree-logbook (observer only), navree-graphql / navree-grpc / navree-mcp (tests only) | 19 crates, 1-40 SeaORM lines each in `src/` | 4-5 days, in parallel worktrees | Sonnet |
+| 7 | **Wave 6-7 and apps**: navree-search, navree-helm (admin panel generic over entities → over models), navree-lighthouse (5 dual entities, 142 entity-API lines), navree-sheets (raw-SQL store), navree-directory, navree-domains, evidence-app, crm-* (2 call sites) | helm 10.4k, lighthouse 11.4k, search 10.2k, sheets 9.0k LOC | 3 days | Opus for navree-helm and navree-search (pgvector, full text, the `Searchable` derive), Sonnet for the rest |
 | 8 | **navree-db's last SeaORM surface**: units of work on navree-db's own transaction only, `Uow::tx` and the bridge removed, `ChangeObserver::observe_with` → `observe`, `Repo` / `paginate` / `Factory` / `Reader` / text helpers / `LoggedQuery` / `map_db_error` on navree-db types, the `MigrationTrait` path and the mock-based tests replaced by the real-server ones, re-exports removed | navree-db 80 SeaORM lines in `src/`, 87 in tests | 1-2 days | Opus |
 | 9 | **Generators and docs**: navree-cli templates (6 entity templates, 2 migration templates, 4 `Cargo.toml.j2`), `make resource`, navree-macros' `Searchable` derive (reads `#[sea_orm]`), docs site (148 lines in 44 pages), skills | 25 template files, 2 macro files | 1 day | Sonnet (templates, docs), Opus (derive) |
 | 10 | **Remove the dependencies**: sea-orm, sea-orm-migration, sea-query from the workspace; Cargo.lock, deny and vet updated; the dependency-graph test refuses any `sea-*` crate | workspace manifest | an hour | Sonnet |
@@ -402,9 +443,10 @@ SQLite in):
   and SQLite, decimals as text on SQLite, typed NULLs on PostgreSQL), so
   rows written by either are read by both; the engine tests round-trip
   every kind on all three servers.
-- **Dropped transactions.** SQLx rolls back nothing by itself for a
-  connection taken out of a pool; navree-db queues one rollback per open
-  level and lets later handles finish it (tested: dropped transactions,
+- **Dropped transactions.** A pooled connection that goes back to the
+  pool in the middle of a transaction is not rolled back by the pool;
+  navree-db queues one rollback per open level and lets later handles
+  finish it (tested: dropped transactions,
   dropped savepoints, streams dropped half way, on all three servers).
 - **Error classification.** MySQL's SQLSTATEs are too coarse, so its error
   number is the code; constraint kinds come from the driver first, codes
