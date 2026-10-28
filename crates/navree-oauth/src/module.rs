@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use navree_auth::ModuleBuilderAuthExt;
 use navree_config::{Config, ModuleBuilderConfigExt};
+use navree_contracts::ModuleBuilderRevocationExt;
 use navree_crypto::Encrypter;
 use navree_db::{Db, ModuleBuilderDbExt};
 use navree_http::ModuleBuilderHttpExt;
@@ -15,6 +16,7 @@ use crate::core::{Core, clock_of};
 use crate::error::map_oauth_error;
 use crate::keys::{SigningKey25519, SigningKeys};
 use crate::migration::migrations;
+use crate::offboarding::OAuthCredentialRevoker;
 use crate::protocol::OAuthProtocolController;
 use crate::strategy::{OAuthStrategy, insufficient_scope_layer};
 use crate::{OAuthClients, OAuthError, OAuthOptions, PersonalAccessTokens};
@@ -168,6 +170,7 @@ fn register(m: &mut ModuleBuilder, options: Option<OAuthOptions>) {
         )
         .exports::<PersonalAccessTokens>()
         .strategy::<OAuthStrategy>()
+        .credential_revoker::<OAuthCredentialRevoker>()
         .controller::<OAuthProtocolController>()
         .controller::<OAuthApiController>()
         .migrations(migrations())
