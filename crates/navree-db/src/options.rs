@@ -772,7 +772,7 @@ fn driver_family(url: &str) -> Option<String> {
 }
 
 /// Whether `url` names a MySQL or MariaDB server.
-#[cfg(any(feature = "mysql", test))]
+#[cfg(test)]
 pub(crate) fn is_mysql_url(url: &str) -> bool {
     matches!(scheme(url).as_deref(), Some("mysql" | "mariadb"))
 }

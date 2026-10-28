@@ -106,6 +106,7 @@
 mod client;
 mod connections;
 mod db;
+mod engine;
 mod events;
 mod http;
 mod migrate;
@@ -124,6 +125,11 @@ mod uow;
 pub use client::ClientCommand;
 pub use connections::DbConnections;
 pub use db::{DEFAULT_CONNECTION, Db, PoolStats};
+pub use engine::compat;
+pub use engine::{
+    Backend, ColumnIndex, DbError, ErrorKind, Executed, Executor, ExecutorExt, FromValue, HasKind,
+    Kind, Pool, Row, RowStream, Statement, Transaction, TxOptions, Value, ValueError,
+};
 pub use events::{ConnectionEstablished, DatabaseBusy, DatabaseStatus};
 pub use http::map_db_error;
 pub use migrate::{
