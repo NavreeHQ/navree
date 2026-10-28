@@ -28,6 +28,7 @@ use serde::{Deserialize, Deserializer};
 /// slow_query_ms = 200      # statements slower than this at warn level; 0 turns it off
 /// migrate_on_boot = false  # run pending migrations when the app boots
 /// transaction_settings = true  # navree.actor and navree.request_id in every unit of work
+/// native_units_of_work = false # units of work on navree-db's own transactions instead of SeaORM's
 ///
 /// [database.connections.analytics]   # a named connection (DbConnections), same keys
 /// url = "postgres://reports@warehouse/analytics"
@@ -121,6 +122,12 @@ pub struct DbOptions {
     /// sets them (and, on MySQL, the one that clears them) in every
     /// transaction.
     pub transaction_settings: bool,
+    /// Runs units of work on navree-db's own transactions instead of
+    /// SeaORM's (see [`Db::with_native_units_of_work`](crate::Db::with_native_units_of_work)).
+    /// Off by default while crates move off SeaORM: turn it on for an app
+    /// (or a crate's tests) whose code no longer takes SeaORM's transaction
+    /// from `Uow::tx`.
+    pub native_units_of_work: bool,
     /// MySQL and MariaDB settings (`database.mysql`); other databases
     /// ignore them.
     pub mysql: MySqlOptions,
@@ -153,6 +160,7 @@ impl Default for DbOptions {
             slow_query_ms: 200,
             migrate_on_boot: false,
             transaction_settings: true,
+            native_units_of_work: false,
             mysql: MySqlOptions::default(),
             postgres: PostgresOptions::default(),
             sqlite: SqliteOptions::default(),
@@ -732,6 +740,7 @@ impl fmt::Debug for DbOptions {
             .field("slow_query_ms", &self.slow_query_ms)
             .field("migrate_on_boot", &self.migrate_on_boot)
             .field("transaction_settings", &self.transaction_settings)
+            .field("native_units_of_work", &self.native_units_of_work)
             .field("mysql", &self.mysql)
             .field("postgres", &self.postgres)
             .field("sqlite", &self.sqlite)
@@ -772,7 +781,7 @@ fn driver_family(url: &str) -> Option<String> {
 }
 
 /// Whether `url` names a MySQL or MariaDB server.
-#[cfg(any(feature = "mysql", test))]
+#[cfg(test)]
 pub(crate) fn is_mysql_url(url: &str) -> bool {
     matches!(scheme(url).as_deref(), Some("mysql" | "mariadb"))
 }

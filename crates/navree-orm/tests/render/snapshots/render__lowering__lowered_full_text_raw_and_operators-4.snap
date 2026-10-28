@@ -1,0 +1,7 @@
+---
+source: crates/navree-orm/tests/render/lowering.rs
+expression: "query(Deal::query().where_raw(\"a = ?\", [1, 2]))"
+---
+PostgreSQL: error: invalid query: the raw SQL `a = ?` has 1 placeholder(s) but 2 value(s)
+MySQL: error: invalid query: the raw SQL `a = ?` has 1 placeholder(s) but 2 value(s)
+SQLite: error: invalid query: the raw SQL `a = ?` has 1 placeholder(s) but 2 value(s)

@@ -1,0 +1,10 @@
+---
+source: crates/navree-orm/tests/render/lowering.rs
+expression: "rows(table(\"deals\").select([\"stage\"]).select_expr(Expr::count_all(),\n\"deals\").select_expr(Expr::sum(col(\"amount_cents\")),\n\"total\").group_by([\"stage\"]).having(Expr::count_all().gt(2)).or_having_raw(\"SUM(amount_cents) > ?\",\n[1000]).order_by_desc(\"total\").order(col(\"stage\").asc().nulls_last()).order_by_raw(\"field(stage, ?, ?) DESC\",\n[\"won\", \"lost\"]).for_page(3, 25))"
+---
+PostgreSQL: SELECT "stage", COUNT(*) AS "deals", SUM("amount_cents") AS "total" FROM "deals" GROUP BY "stage" HAVING COUNT(*) > $1 OR (SUM(amount_cents) > $2) ORDER BY "total" DESC, "stage" ASC NULLS LAST, field(stage, $3, $4) DESC LIMIT $5 OFFSET $6
+  values: [Int(Some(2)), Int(Some(1000)), String(Some("won")), String(Some("lost")), BigUnsigned(Some(25)), BigUnsigned(Some(50))]
+MySQL: SELECT `stage`, COUNT(*) AS `deals`, SUM(`amount_cents`) AS `total` FROM `deals` GROUP BY `stage` HAVING COUNT(*) > ? OR (SUM(amount_cents) > ?) ORDER BY `total` DESC, `stage` IS NULL ASC, `stage` ASC, field(stage, ?, ?) DESC LIMIT ? OFFSET ?
+  values: [Int(Some(2)), Int(Some(1000)), String(Some("won")), String(Some("lost")), BigUnsigned(Some(25)), BigUnsigned(Some(50))]
+SQLite: SELECT "stage", COUNT(*) AS "deals", SUM("amount_cents") AS "total" FROM "deals" GROUP BY "stage" HAVING COUNT(*) > ? OR (SUM(amount_cents) > ?) ORDER BY "total" DESC, "stage" ASC NULLS LAST, field(stage, ?, ?) DESC LIMIT ? OFFSET ?
+  values: [Int(Some(2)), Int(Some(1000)), String(Some("won")), String(Some("lost")), BigUnsigned(Some(25)), BigUnsigned(Some(50))]

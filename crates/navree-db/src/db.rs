@@ -8,17 +8,20 @@ use std::time::Duration;
 
 use navree_config::ConfigSection;
 use navree_kernel::{AppContext, BoxFuture, WeakAppContext};
-use navree_telemetry::{EventKind, QueryExecuted, Telemetry, TelemetryEvent};
-use sea_orm::sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous};
-use sea_orm::{
-    ConnectOptions, ConnectionTrait, Database, DatabaseConnection, DbBackend, DbErr, Statement,
-};
+use navree_telemetry::Telemetry;
+use sea_orm::{ConnectionTrait, DatabaseConnection, DbBackend, DbErr, Statement};
 use tokio::sync::OnceCell;
 use uuid::Uuid;
 
+use crate::engine::compat::SeaExecutor;
+use crate::engine::driver::DriverPool;
+use crate::engine::report::Reporter;
 use crate::options::{driver_url, redact_url, scheme, url_password};
 use crate::queries::Watchers;
-use crate::{ChangeObserver, DbOptions, LoggedQuery, Reader, SqliteOptions, Uow};
+use crate::{
+    Backend, ChangeObserver, DbError, DbOptions, Executed, Executor, LoggedQuery, Pool, Reader,
+    Row, RowStream, Transaction, TxOptions, Uow,
+};
 
 /// The database: a cheap, cloneable handle to the connection pool (and to
 /// the pools of its read replicas).
@@ -47,11 +50,17 @@ pub struct Db {
 }
 
 struct DbInner {
+    /// The writer's SeaORM connection, a view over [`pool`](Self::pool).
     /// Shared by every handle on the same pool ([`Db::with_app`] included),
     /// so [`Db::reader`] can tell whether a unit of work uses this pool.
     conn: Arc<DatabaseConnection>,
-    /// The pools of the read replicas.
+    /// The writer's pool; `None` for a scripted SeaORM connection
+    /// ([`Db::from_connection`] in tests).
+    pool: Option<Pool>,
+    /// The pools of the read replicas (SeaORM views).
     replicas: Arc<Vec<DatabaseConnection>>,
+    /// The read replicas' pools.
+    replica_pools: Arc<Vec<Pool>>,
     /// The replica the next read goes to.
     next_replica: Arc<AtomicUsize>,
     /// Reads follow a unit of work's writes to the writer.
@@ -71,16 +80,29 @@ struct DbInner {
     observed: bool,
     /// `database.transaction_settings`.
     transaction_settings: bool,
+    /// Units of work run on navree-db's own transactions instead of
+    /// SeaORM's ([`Db::with_native_units_of_work`]).
+    native_units_of_work: bool,
 }
 
 /// The pools a [`Db`] shares with the handles made from it
 /// ([`Db::with_app`], [`Db::with_transaction_settings`]).
 struct Pools {
     conn: Arc<DatabaseConnection>,
+    pool: Option<Pool>,
     replicas: Arc<Vec<DatabaseConnection>>,
+    replica_pools: Arc<Vec<Pool>>,
     sticky: bool,
     watchers: Arc<Watchers>,
     direct: Option<Arc<Direct>>,
+}
+
+/// The settings a [`Db`] passes on to the handles made from it.
+#[derive(Clone, Copy)]
+struct Settings {
+    observed: bool,
+    transaction_settings: bool,
+    native_units_of_work: bool,
 }
 
 /// The direct connection of `direct_url`, opened on first use.
@@ -177,10 +199,13 @@ impl Db {
         telemetry: Telemetry,
         watchers: Arc<Watchers>,
     ) -> Result<Db, DbErr> {
-        let conn = open_pool(&options.url, options, telemetry.clone(), &watchers).await?;
+        let (pool, conn) = open_pool(&options.url, options, telemetry.clone(), &watchers).await?;
         let mut replicas = Vec::with_capacity(options.read_urls.len());
+        let mut replica_pools = Vec::with_capacity(options.read_urls.len());
         for url in &options.read_urls {
-            replicas.push(open_pool(url, options, telemetry.clone(), &watchers).await?);
+            let (pool, conn) = open_pool(url, options, telemetry.clone(), &watchers).await?;
+            replica_pools.push(pool);
+            replicas.push(conn);
         }
         let direct = options.direct().map(|options| {
             Arc::new(Direct {
@@ -192,14 +217,19 @@ impl Db {
         Ok(Self::build(
             Pools {
                 conn: Arc::new(conn),
+                pool: Some(pool),
                 replicas: Arc::new(replicas),
+                replica_pools: Arc::new(replica_pools),
                 sticky: options.sticky,
                 watchers,
                 direct,
             },
             None,
-            false,
-            options.transaction_settings,
+            Settings {
+                observed: false,
+                transaction_settings: options.transaction_settings,
+                native_units_of_work: options.native_units_of_work,
+            },
         ))
     }
 
@@ -234,6 +264,7 @@ impl Db {
                         self.inner.watchers.clone(),
                     )
                     .await?;
+                    let db = db.with_native_units_of_work(self.inner.native_units_of_work);
                     Ok(match &self.inner.app {
                         Some(app) => db.with_weak_app(app.clone(), self.inner.observed),
                         None => db,
@@ -252,21 +283,39 @@ impl Db {
 
     /// Wraps an existing SeaORM connection (no replicas, no change
     /// observers; transaction settings on, as
-    /// `database.transaction_settings` is by default). Its statements are
-    /// not watched: query listeners, query logs and unit-of-work statistics
-    /// see only pools opened by [`connect`](Db::connect) and its siblings.
+    /// `database.transaction_settings` is by default). Its SeaORM
+    /// statements are not watched: query listeners, query logs and
+    /// unit-of-work statistics see only pools opened by
+    /// [`connect`](Db::connect) and its siblings, and statements run
+    /// through [`Executor`]. A scripted connection (SeaORM's mock) has no
+    /// [`pool`](Db::pool): navree-db's statements then run through it.
     pub fn from_connection(conn: DatabaseConnection) -> Db {
+        let watchers = Arc::new(Watchers::new(Arc::from(DEFAULT_CONNECTION)));
+        let pool = sea_pool(&conn).map(|driver| {
+            let reporter = Reporter::new(
+                watchers.clone(),
+                Telemetry::disabled(),
+                "",
+                &DbOptions::default(),
+            );
+            Pool::from_driver(driver, reporter)
+        });
         Self::build(
             Pools {
                 conn: Arc::new(conn),
+                pool,
                 replicas: Arc::new(Vec::new()),
+                replica_pools: Arc::new(Vec::new()),
                 sticky: true,
-                watchers: Arc::new(Watchers::new(Arc::from(DEFAULT_CONNECTION))),
+                watchers,
                 direct: None,
             },
             None,
-            false,
-            true,
+            Settings {
+                observed: false,
+                transaction_settings: true,
+                native_units_of_work: false,
+            },
         )
     }
 
@@ -283,8 +332,10 @@ impl Db {
         Self::build(
             self.pools(),
             Some(app),
-            observed,
-            self.inner.transaction_settings,
+            Settings {
+                observed,
+                ..self.settings()
+            },
         )
     }
 
@@ -295,9 +346,47 @@ impl Db {
         Self::build(
             self.pools(),
             self.inner.app.clone(),
-            self.inner.observed,
-            enabled,
+            Settings {
+                transaction_settings: enabled,
+                ..self.settings()
+            },
         )
+    }
+
+    /// The same pool, its units of work running on navree-db's own
+    /// transactions (`enabled`) or on SeaORM's (the default while crates
+    /// move off SeaORM).
+    ///
+    /// A unit of work on navree-db's own transaction runs statements
+    /// through [`Executor`] (`uow.fetch_all(&statement)`), savepoints
+    /// ([`Uow::savepoint`]) and transaction-local settings
+    /// ([`Uow::set_local`]); it has no SeaORM transaction to hand out, so
+    /// [`Uow::tx`] fails, and its change observers run through
+    /// [`ChangeObserver::observe_with`]. A unit of work on SeaORM's serves
+    /// both: navree-db's statements run in the same SeaORM transaction.
+    pub fn with_native_units_of_work(&self, enabled: bool) -> Db {
+        Self::build(
+            self.pools(),
+            self.inner.app.clone(),
+            Settings {
+                native_units_of_work: enabled,
+                ..self.settings()
+            },
+        )
+    }
+
+    /// Whether units of work run on navree-db's own transactions (see
+    /// [`with_native_units_of_work`](Db::with_native_units_of_work)).
+    pub fn native_units_of_work(&self) -> bool {
+        self.inner.native_units_of_work
+    }
+
+    fn settings(&self) -> Settings {
+        Settings {
+            observed: self.inner.observed,
+            transaction_settings: self.inner.transaction_settings,
+            native_units_of_work: self.inner.native_units_of_work,
+        }
     }
 
     /// Whether units of work set the actor and request id in SQL
@@ -315,22 +404,21 @@ impl Db {
     fn pools(&self) -> Pools {
         Pools {
             conn: self.inner.conn.clone(),
+            pool: self.inner.pool.clone(),
             replicas: self.inner.replicas.clone(),
+            replica_pools: self.inner.replica_pools.clone(),
             sticky: self.inner.sticky,
             watchers: self.inner.watchers.clone(),
             direct: self.inner.direct.clone(),
         }
     }
 
-    fn build(
-        pools: Pools,
-        app: Option<WeakAppContext>,
-        observed: bool,
-        transaction_settings: bool,
-    ) -> Db {
+    fn build(pools: Pools, app: Option<WeakAppContext>, settings: Settings) -> Db {
         let Pools {
             conn,
+            pool,
             replicas,
+            replica_pools,
             sticky,
             watchers,
             direct,
@@ -338,7 +426,9 @@ impl Db {
         Self {
             inner: Arc::new(DbInner {
                 conn,
+                pool,
                 replicas,
+                replica_pools,
                 next_replica: Arc::new(AtomicUsize::new(0)),
                 sticky,
                 name: watchers.name().clone(),
@@ -346,8 +436,9 @@ impl Db {
                 direct,
                 app,
                 observers: OnceCell::new(),
-                observed,
-                transaction_settings,
+                observed: settings.observed,
+                transaction_settings: settings.transaction_settings,
+                native_units_of_work: settings.native_units_of_work,
             }),
         }
     }
@@ -761,212 +852,86 @@ impl fmt::Debug for Db {
 }
 
 /// Opens one pool at `url` with the pool, session and logging settings of
-/// `options` (the writer's and each replica's).
+/// `options` (the writer's and each replica's): navree-db's own pool, and
+/// the SeaORM connection that is a view over it (same connections), with
+/// its statements reported like navree-db's.
 async fn open_pool(
     url: &str,
     options: &DbOptions,
     telemetry: Telemetry,
     watchers: &Arc<Watchers>,
-) -> Result<DatabaseConnection, DbErr> {
-    let mut connect = ConnectOptions::new(driver_url(url).into_owned());
-    connect
-        .max_connections(options.max_connections)
-        .min_connections(options.min_connections)
-        .connect_timeout(Duration::from_secs(options.connect_timeout_secs))
-        .acquire_timeout(Duration::from_secs(options.connect_timeout_secs.max(1) * 4))
-        .idle_timeout(seconds_or_never(options.idle_timeout_secs))
-        .max_lifetime(seconds_or_never(options.max_lifetime_secs))
-        .sqlx_logging(false);
-    if options.test_before_acquire {
-        connect.test_before_acquire(true);
-    } else {
-        // Hot connections go straight out; one that sat idle long
-        // enough to have been dropped on the way is pinged first.
-        connect.test_before_acquire_if_idle_for(Duration::from_secs(DbOptions::IDLE_PING_SECS));
-    }
-    if is_sqlite_url(url) {
-        create_sqlite_parent_dir(url).await?;
-        configure_sqlite(&mut connect, &options.sqlite);
-    }
-    #[cfg(feature = "mysql")]
-    if crate::options::is_mysql_url(url) {
-        crate::mysql::configure(&mut connect, &options.mysql);
-    }
-    #[cfg(feature = "postgres")]
-    if matches!(scheme(url).as_deref(), Some("postgres" | "postgresql")) {
-        configure_postgres(&mut connect, &options.postgres)?;
-    }
-    let reported = DbOptions {
-        url: url.to_owned(),
-        ..DbOptions::default()
-    };
-    let mut conn = Database::connect(connect)
+) -> Result<(Pool, DatabaseConnection), DbErr> {
+    let reporter = Reporter::new(watchers.clone(), telemetry, url, options);
+    let pool = Pool::open(url, options, reporter.clone())
         .await
-        .map_err(|error| connect_error(&reported, &error))?;
-    install_query_log(
-        &mut conn,
-        options.log_queries,
-        options.slow_query_ms,
-        QueryTelemetry {
-            telemetry,
-            connection: redact_url(url),
-        },
-        watchers.clone(),
-    );
-    Ok(conn)
+        .map_err(|error| DbErr::Custom(error.message().to_owned()))?;
+    let mut conn = sea_view(pool.driver());
+    install_query_log(&mut conn, reporter);
+    Ok((pool, conn))
 }
 
-/// The SQLite settings of every connection: journal mode, lock wait,
-/// foreign keys, `synchronous` and further pragmas.
-fn configure_sqlite(connect: &mut ConnectOptions, sqlite: &SqliteOptions) {
-    let sqlite = sqlite.clone();
-    connect.map_sqlx_sqlite_opts(move |o| {
-        let journal = sqlite
-            .journal_mode
-            .parse::<SqliteJournalMode>()
-            .unwrap_or(SqliteJournalMode::Wal);
-        let mut o = o
-            .journal_mode(journal)
-            .busy_timeout(Duration::from_millis(sqlite.busy_timeout_ms))
-            .foreign_keys(sqlite.foreign_keys);
-        if let Some(synchronous) = sqlite
-            .synchronous
-            .as_deref()
-            .and_then(|mode| mode.parse::<SqliteSynchronous>().ok())
-        {
-            o = o.synchronous(synchronous);
+/// The SeaORM connection on the connections of `pool`.
+fn sea_view(pool: &DriverPool) -> DatabaseConnection {
+    match pool {
+        #[cfg(feature = "postgres")]
+        DriverPool::Postgres(pool) => {
+            sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool.clone())
         }
-        for (name, value) in &sqlite.pragmas {
-            o = o.pragma(name.clone(), value.clone());
+        #[cfg(feature = "mysql")]
+        DriverPool::MySql(pool) => sea_orm::SqlxMySqlConnector::from_sqlx_mysql_pool(pool.clone()),
+        #[cfg(feature = "sqlite")]
+        DriverPool::Sqlite(pool) => {
+            sea_orm::SqlxSqliteConnector::from_sqlx_sqlite_pool(pool.clone())
         }
-        o
-    });
-}
-
-/// The PostgreSQL session settings of every connection, and TLS.
-#[cfg(feature = "postgres")]
-fn configure_postgres(
-    connect: &mut ConnectOptions,
-    postgres: &crate::PostgresOptions,
-) -> Result<(), DbErr> {
-    use sea_orm::sqlx::postgres::PgSslMode;
-
-    let ssl = postgres
-        .ssl_mode
-        .as_deref()
-        .map(|mode| {
-            mode.parse::<PgSslMode>()
-                .map_err(|error| DbErr::Custom(format!("postgres.ssl_mode: {error}")))
-        })
-        .transpose()?;
-    let settings = postgres.settings();
-    let application = postgres.application_name.clone();
-    connect.map_sqlx_postgres_opts(move |o| {
-        let mut o = o.options(settings.iter().map(|(name, value)| (*name, value.as_str())));
-        if let Some(application) = &application {
-            o = o.application_name(application);
-        }
-        if let Some(ssl) = ssl {
-            o = o.ssl_mode(ssl);
-        }
-        o
-    });
-    // The driver starts every session with `TimeZone=UTC`, which wins over
-    // the `-c` options above; the time zone is set once connected instead.
-    if let Some(timezone) = &postgres.timezone {
-        let sql = format!("SET TIME ZONE '{timezone}'");
-        connect.map_sqlx_postgres_pool_opts(move |pool| {
-            let sql = sql.clone();
-            pool.after_connect(move |conn, _| {
-                let sql = sql.clone();
-                Box::pin(async move {
-                    sea_orm::sqlx::Executor::execute(conn, sea_orm::sqlx::AssertSqlSafe(sql))
-                        .await
-                        .map(|_| ())
-                })
-            })
-        });
+        DriverPool::Never(never) => match *never {},
     }
-    Ok(())
+}
+
+/// The pool under a SeaORM connection (none for a scripted one, or a
+/// driver navree-db is built without).
+fn sea_pool(conn: &DatabaseConnection) -> Option<DriverPool> {
+    if conn.is_mock_connection() {
+        return None;
+    }
+    match conn.get_database_backend() {
+        #[cfg(feature = "postgres")]
+        DbBackend::Postgres => Some(DriverPool::Postgres(
+            conn.get_postgres_connection_pool().clone(),
+        )),
+        #[cfg(feature = "mysql")]
+        DbBackend::MySql => Some(DriverPool::MySql(conn.get_mysql_connection_pool().clone())),
+        #[cfg(feature = "sqlite")]
+        DbBackend::Sqlite => Some(DriverPool::Sqlite(
+            conn.get_sqlite_connection_pool().clone(),
+        )),
+        _ => None,
+    }
+}
+
+/// Reports every statement SeaORM times on `conn` the way navree-db
+/// reports its own: to the connection's watchers (query logs, listeners,
+/// unit-of-work statistics), to the telemetry sinks that want
+/// `QueryExecuted` events, and to `tracing` (target `navree_db::query`:
+/// every statement at debug level when `log_queries`, statements slower
+/// than `slow_query_ms` at warn level). Only the SQL text is logged, never
+/// the bound values. SeaORM does not time `execute_unprepared`, so those
+/// statements are not seen.
+fn install_query_log(conn: &mut DatabaseConnection, reporter: Reporter) {
+    conn.set_metric_callback(move |info| {
+        reporter.watchers.observe(info);
+        reporter.emit(&info.statement.sql, info.elapsed, info.failed, None);
+    });
 }
 
 /// The connections of `conn`'s pool.
 fn pool_stats(conn: &DatabaseConnection) -> PoolStats {
-    if conn.is_mock_connection() {
-        return PoolStats::default();
-    }
-    macro_rules! of {
-        ($pool:expr) => {{
-            let pool = $pool;
-            PoolStats {
-                size: pool.size(),
-                idle: pool.num_idle(),
-                max: pool.options().get_max_connections(),
-            }
-        }};
-    }
-    match conn.get_database_backend() {
-        DbBackend::Sqlite => of!(conn.get_sqlite_connection_pool()),
-        #[cfg(feature = "postgres")]
-        DbBackend::Postgres => of!(conn.get_postgres_connection_pool()),
-        #[cfg(feature = "mysql")]
-        DbBackend::MySql => of!(conn.get_mysql_connection_pool()),
-        _ => PoolStats::default(),
-    }
-}
-
-/// Where statements are reported, and the connection's name in the events.
-struct QueryTelemetry {
-    telemetry: Telemetry,
-    connection: String,
-}
-
-/// Logs statements through `tracing` (target `navree_db::query`): every
-/// statement at debug level when `log_queries`, statements slower than
-/// `slow_query_ms` at warn level. Only the SQL text is logged, never the
-/// bound values. SeaORM does not time `execute_unprepared` statements, so
-/// those are not logged. Also reports every statement to the telemetry
-/// sinks that want `QueryExecuted` events, and to `watchers` (query logs,
-/// listeners, unit-of-work statistics).
-fn install_query_log(
-    conn: &mut DatabaseConnection,
-    log_queries: bool,
-    slow_query_ms: u64,
-    report: QueryTelemetry,
-    watchers: Arc<Watchers>,
-) {
-    let slow = (slow_query_ms > 0).then(|| Duration::from_millis(slow_query_ms));
-    conn.set_metric_callback(move |info| {
-        watchers.observe(info);
-        let sql = info.statement.sql.as_str();
-        report.telemetry.emit_with(EventKind::QueryExecuted, || {
-            TelemetryEvent::QueryExecuted(QueryExecuted {
-                sql: sql.to_owned(),
-                duration: info.elapsed,
-                rows: None,
-                connection: report.connection.clone(),
-                failed: info.failed,
-            })
-        });
-        let elapsed_ms = info.elapsed.as_secs_f64() * 1000.0;
-        if slow.is_some_and(|slow| info.elapsed >= slow) {
-            tracing::warn!(
-                target: "navree_db::query",
-                sql,
-                elapsed_ms,
-                failed = info.failed,
-                "slow query"
-            );
-        } else if log_queries {
-            tracing::debug!(
-                target: "navree_db::query",
-                sql,
-                elapsed_ms,
-                failed = info.failed,
-                "query"
-            );
+    match sea_pool(conn) {
+        Some(pool) => {
+            let (size, idle, max) = pool.stats();
+            PoolStats { size, idle, max }
         }
-    });
+        None => PoolStats::default(),
+    }
 }
 
 /// What SQLx says when a MySQL account's password must go over a
@@ -974,25 +939,27 @@ fn install_query_log(
 /// crypto policy keeps the `rsa` crate out of the tree.
 const MYSQL_RSA_DISABLED: &str = "RSA auth backend disabled";
 
-/// A connection error that names the database without its password (the
-/// driver's own message may echo the URL), with the feature to turn on
-/// when the URL's driver is not compiled in, or how to sign in when a MySQL
-/// account needs TLS.
-fn connect_error(options: &DbOptions, error: &DbErr) -> DbErr {
-    let redacted = options.redacted_url();
-    let mut message = error
-        .to_string()
-        .replace(&options.url, &redacted)
-        .replace(driver_url(&options.url).as_ref(), &redacted);
-    if let Some(password) = url_password(&options.url) {
+/// The message of a failed connection to `url`: the database named without
+/// its password (the driver's own message may echo the URL), with the
+/// feature to turn on when the URL's driver is not compiled in, or how to
+/// sign in when a MySQL account needs TLS.
+pub(crate) fn connect_message(url: &str, message: &str) -> String {
+    let redacted = redact_url(url);
+    let mut message = message
+        .replace(url, &redacted)
+        .replace(driver_url(url).as_ref(), &redacted);
+    if let Some(password) = url_password(url) {
         message = message.replace(password, "***");
     }
-    let hint = match scheme(&options.url).as_deref() {
+    let hint = match scheme(url).as_deref() {
         Some("postgres" | "postgresql") if !cfg!(feature = "postgres") => {
             " (enable the `postgres` feature of navree-db)"
         }
         Some("mysql" | "mariadb") if !cfg!(feature = "mysql") => {
             " (enable the `mysql` feature of navree-db)"
+        }
+        Some("sqlite") if !cfg!(feature = "sqlite") => {
+            " (enable the `sqlite` feature of navree-db)"
         }
         // The server has no cached hash of the password yet, so the
         // password itself must travel, which takes TLS.
@@ -1002,38 +969,164 @@ fn connect_error(options: &DbOptions, error: &DbErr) -> DbErr {
         }
         _ => "",
     };
-    DbErr::Custom(format!("cannot connect to {redacted}: {message}{hint}"))
+    format!("cannot connect to {redacted}: {message}{hint}")
 }
 
-/// `secs` as a duration; 0 means none.
-fn seconds_or_never(secs: u64) -> Option<Duration> {
-    (secs > 0).then(|| Duration::from_secs(secs))
-}
-
-fn is_sqlite_url(url: &str) -> bool {
-    url.starts_with("sqlite:")
-}
-
-/// Creates the directory of a SQLite database file, so
-/// `sqlite://storage/app.db?mode=rwc` works on a fresh checkout.
-async fn create_sqlite_parent_dir(url: &str) -> Result<(), DbErr> {
-    let Ok(options) = url.parse::<SqliteConnectOptions>() else {
-        return Ok(());
-    };
-    let file = options.get_filename();
-    if file.as_os_str().is_empty() || file.as_os_str() == ":memory:" || url.contains("mode=memory")
-    {
-        return Ok(());
+impl Db {
+    /// The writer's pool: navree-db's own connections (the SeaORM
+    /// connection of [`conn`](Db::conn) runs on the same ones). `None` only
+    /// for a `Db` made from a scripted SeaORM connection.
+    pub fn pool(&self) -> Option<&Pool> {
+        self.inner.pool.as_ref()
     }
-    match file.parent() {
-        Some(parent) if !parent.as_os_str().is_empty() => {
-            tokio::fs::create_dir_all(parent).await.map_err(|error| {
-                DbErr::Custom(format!(
-                    "cannot create the database directory {}: {error}",
-                    parent.display()
-                ))
-            })
+
+    /// The pool a read outside a transaction uses: the next read replica
+    /// in turn, or the writer when there is none or the task reads from the
+    /// writer ([`Db::using_writer`]). Like [`read_conn`](Db::read_conn), for
+    /// navree-db's statements.
+    pub fn read_pool(&self) -> Option<&Pool> {
+        let replicas = &self.inner.replica_pools;
+        if replicas.is_empty() || Self::reads_from_writer() {
+            return self.pool();
         }
-        _ => Ok(()),
+        let at = self.inner.next_replica.fetch_add(1, Ordering::Relaxed) % replicas.len();
+        Some(&replicas[at])
+    }
+
+    /// The writer's pool, or the error of a `Db` without one.
+    fn writer_pool(&self) -> Result<&Pool, DbError> {
+        self.pool().ok_or_else(|| {
+            DbError::unsupported(
+                "this database is a scripted SeaORM connection: it has no pool of navree-db's own",
+            )
+        })
+    }
+
+    /// Begins a transaction on a connection of its own (not the task's
+    /// unit of work: see [`Db::transaction`] for one). The connection's
+    /// before-transaction hooks run first.
+    ///
+    /// ```no_run
+    /// # async fn demo(db: navree_db::Db) -> Result<(), navree_db::DbError> {
+    /// use navree_db::{Executor, Statement};
+    ///
+    /// let tx = db.begin().await?;
+    /// tx.execute(&Statement::text("DELETE FROM sessions")).await?;
+    /// tx.commit().await?;
+    /// # Ok(()) }
+    /// ```
+    pub async fn begin(&self) -> Result<Transaction, DbError> {
+        self.writer_pool()?.begin().await
+    }
+
+    /// Begins a transaction with `options` (isolation level, read only,
+    /// SQLite's `IMMEDIATE`).
+    pub async fn begin_with(&self, options: TxOptions) -> Result<Transaction, DbError> {
+        self.writer_pool()?.begin_with(options).await
+    }
+
+    /// Checks the writer with a round trip to the server.
+    pub async fn ping(&self) -> Result<(), DbError> {
+        match self.pool() {
+            Some(pool) => pool.ping().await,
+            None => self.inner.conn.ping().await.map_err(DbError::from),
+        }
+    }
+
+    /// The task's current unit of work, when it works on this pool and is
+    /// not finished.
+    fn current_uow(&self) -> Option<Uow> {
+        Uow::current().filter(|uow| Arc::ptr_eq(&uow.db().inner.conn, &self.inner.conn))
+    }
+
+    /// Where a statement of [`Executor`] runs: the task's current unit of
+    /// work on this pool when its transaction is open (or, for a `write`,
+    /// when it is not finished: the write begins it), else the writer's
+    /// pool (or the scripted connection).
+    async fn route(&self, write: bool) -> Route<'_> {
+        if let Some(uow) = self.current_uow()
+            && !uow.is_finished().await
+            && (write || uow.has_open_transaction().await)
+        {
+            return Route::Uow(uow);
+        }
+        match self.pool() {
+            Some(pool) => Route::Pool(pool),
+            None => Route::Sea(SeaExecutor::new(&*self.inner.conn)),
+        }
+    }
+}
+
+/// Where [`Db`] runs a statement.
+enum Route<'a> {
+    Uow(Uow),
+    Pool(&'a Pool),
+    Sea(SeaExecutor<'a, DatabaseConnection>),
+}
+
+impl Route<'_> {
+    fn executor(&self) -> &dyn Executor {
+        match self {
+            Route::Uow(uow) => uow,
+            Route::Pool(pool) => *pool,
+            Route::Sea(sea) => sea,
+        }
+    }
+}
+
+/// Statements on a `Db` run in the task's unit of work on this pool when
+/// its transaction is open, as [`Db::reader`] reads; `execute` and
+/// `execute_script` (writes) join the task's unfinished unit of work even
+/// before its transaction began (and begin it), as the ORM's writes do, so
+/// a request's writes stay in its transaction and audit trail. Otherwise
+/// they run on the writer's pool. Reads that may go to a replica take
+/// [`Db::read_pool`].
+impl Executor for Db {
+    fn backend(&self) -> Backend {
+        crate::engine::compat::backend_of(self.backend())
+    }
+
+    fn execute<'a>(
+        &'a self,
+        statement: &'a crate::Statement,
+    ) -> BoxFuture<'a, Result<Executed, DbError>> {
+        Box::pin(async move { self.route(true).await.executor().execute(statement).await })
+    }
+
+    fn fetch_all<'a>(
+        &'a self,
+        statement: &'a crate::Statement,
+    ) -> BoxFuture<'a, Result<Vec<Row>, DbError>> {
+        Box::pin(async move {
+            self.route(false)
+                .await
+                .executor()
+                .fetch_all(statement)
+                .await
+        })
+    }
+
+    fn fetch_optional<'a>(
+        &'a self,
+        statement: &'a crate::Statement,
+    ) -> BoxFuture<'a, Result<Option<Row>, DbError>> {
+        Box::pin(async move {
+            self.route(false)
+                .await
+                .executor()
+                .fetch_optional(statement)
+                .await
+        })
+    }
+
+    fn fetch<'a>(
+        &'a self,
+        statement: &'a crate::Statement,
+    ) -> BoxFuture<'a, Result<RowStream, DbError>> {
+        Box::pin(async move { self.route(false).await.executor().fetch(statement).await })
+    }
+
+    fn execute_script<'a>(&'a self, sql: &'a str) -> BoxFuture<'a, Result<Executed, DbError>> {
+        Box::pin(async move { self.route(true).await.executor().execute_script(sql).await })
     }
 }

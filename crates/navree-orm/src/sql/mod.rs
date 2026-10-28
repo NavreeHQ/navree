@@ -20,14 +20,27 @@ use crate::ir::{
 use crate::value::Value;
 
 mod filter;
+#[cfg_attr(feature = "render-sql-for-tests", allow(dead_code))]
 mod select;
 mod timescale;
+#[cfg_attr(feature = "render-sql-for-tests", allow(dead_code))]
 mod write;
 
 pub(crate) use select::timeout_millis;
+#[cfg(not(feature = "render-sql-for-tests"))]
 pub use select::{compile_aggregate, compile_exists, compile_select};
+#[cfg(not(feature = "render-sql-for-tests"))]
 pub use write::{
     compile_delete, compile_insert, compile_truncate, compile_update, compile_update_from,
+};
+// Test-only (feature `render-sql-for-tests`): the renderer stands in for
+// the compiler everywhere `compile_*` is called.
+#[cfg(feature = "render-sql-for-tests")]
+pub use crate::render::{
+    render_aggregate as compile_aggregate, render_delete as compile_delete,
+    render_exists as compile_exists, render_insert as compile_insert,
+    render_select as compile_select, render_truncate as compile_truncate,
+    render_update as compile_update, render_update_from as compile_update_from,
 };
 
 /// An SQL dialect.

@@ -1,0 +1,9 @@
+---
+source: crates/navree-orm/tests/render/main.rs
+expression: "query(part(\"DE\").union(part(\"US\"),\nfalse).intersect(part(\"FR\"), false).except(part(\"NZ\"), true))"
+---
+PostgreSQL: ((SELECT "name" FROM "companies" WHERE "country" = $1 UNION SELECT "name" FROM "companies" WHERE "country" = $2) INTERSECT SELECT "name" FROM "companies" WHERE "country" = $3) EXCEPT ALL SELECT "name" FROM "companies" WHERE "country" = $4
+  values: [String(Some("DE")), String(Some("US")), String(Some("FR")), String(Some("NZ"))]
+MySQL: ((SELECT `name` FROM `companies` WHERE `country` = ? UNION SELECT `name` FROM `companies` WHERE `country` = ?) INTERSECT SELECT `name` FROM `companies` WHERE `country` = ?) EXCEPT ALL SELECT `name` FROM `companies` WHERE `country` = ?
+  values: [String(Some("DE")), String(Some("US")), String(Some("FR")), String(Some("NZ"))]
+SQLite: error: EXCEPT ALL is not supported on SQLite
