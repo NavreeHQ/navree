@@ -1,0 +1,15 @@
+table_then_scalar = "now a string"
+array_then_array = [9]
+array_then_scalar = "now a string"
+scalar_then_array = ["now", "an", "array"]
+table_in_array = [{ name = "three" }]
+
+[scalar_then_table]
+now = "a table"
+
+[deep.inner]
+b = 20
+c = 30
+
+[deep.extra]
+d = 4

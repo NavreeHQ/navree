@@ -1,0 +1,45 @@
+# Every TOML value kind, as one file.
+title = "TOML types"
+integer = 42
+negative = -17
+big = 9223372036854775807
+hex = 0xDEADBEEF
+float = 3.14
+whole_float = 2.0
+exp = 1e3
+inf = inf
+truth = true
+falsehood = false
+empty = ""
+multiline = """
+first
+second"""
+literal = 'C:\Users\navree'
+odt = 1979-05-27T07:32:00Z
+ldt = 1979-05-27T07:32:00
+ld = 1979-05-27
+lt = 07:32:00
+ints = [1, 2, 3]
+mixed = [1, "two", 3.0, true]
+nested = [[1, 2], [3]]
+"quoted.key" = "stays one key"
+"üñí" = "unicode key"
+inline = { a = 1, b = { c = [1, 2] } }
+
+[table]
+key = "value"
+
+[table.sub]
+deep = "value"
+
+[[products]]
+name = "Hammer"
+sku = 738594937
+
+[[products]]
+name = "Nail"
+sku = 284758393
+color = "gray"
+
+[Mixed_Case]
+Key = "keys keep their case"

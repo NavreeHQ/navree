@@ -477,10 +477,6 @@ criteria = "safe-to-deploy"
 version = "2.5.0"
 criteria = "safe-to-deploy"
 
-[[exemptions.config]]
-version = "0.15.27"
-criteria = "safe-to-deploy"
-
 [[exemptions.console]]
 version = "0.16.6"
 criteria = "safe-to-run"
@@ -499,10 +495,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.const-random-macro]]
 version = "0.1.16"
-criteria = "safe-to-deploy"
-
-[[exemptions.convert_case]]
-version = "0.6.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.convert_case]]
@@ -555,10 +547,6 @@ criteria = "safe-to-run"
 
 [[exemptions.critical-section]]
 version = "1.2.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.croner]]
-version = "4.0.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.crossbeam-channel]]
@@ -691,18 +679,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.derive-where]]
 version = "1.7.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.derive_builder]]
-version = "0.20.2"
-criteria = "safe-to-deploy"
-
-[[exemptions.derive_builder_core]]
-version = "0.20.2"
-criteria = "safe-to-deploy"
-
-[[exemptions.derive_builder_macro]]
-version = "0.20.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.derive_more]]
@@ -1679,10 +1655,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.password-hash]]
 version = "0.6.1"
-criteria = "safe-to-deploy"
-
-[[exemptions.pathdiff]]
-version = "0.2.3"
 criteria = "safe-to-deploy"
 
 [[exemptions.pbkdf2]]

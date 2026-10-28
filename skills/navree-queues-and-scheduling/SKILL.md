@@ -219,6 +219,27 @@ s.job_with(|run: &LocalRun| SendDigest { workspace_id: run.owner.unwrap_or_defau
     .per_workspace_local(); // one run per workspace, at 09:00 on its clock
 ```
 
+Cron language (Navree's own parser; anything else fails the boot, naming
+the field and the token): five fields `minute hour day-of-month month
+day-of-week`, or `@yearly` `@annually` `@monthly` `@weekly` `@daily`
+`@hourly`. Each field takes `*`, values, ranges `a-b`, steps `*/s` or
+`a-b/s`, and comma lists; `JAN`-`DEC` and `SUN`-`SAT` (any case) in the
+month and day-of-week fields; day of week 0-7 (0 and 7 Sunday). Day of
+month also `L`, `LW` (last weekday), `15W` (nearest weekday); day of week
+also `5L` (last Friday), `5#2` (second Friday), `?` for `*`. Day of month
+OR day of week matches unless one is `*`; `+MON` asks for both. No seconds
+or year field, no wrapping ranges, no `5/15`, no empty list items, at most
+256 bytes. A never-matching expression (`0 0 30 2 *`) boots and lists as
+`never`. Clock changes depend on the expression. Fixed-time (no `*` in the
+minute or hour field; `*/n` counts as `*`; `@daily` `@weekly` `@monthly`
+`@yearly`): a skipped local time runs once, at the first minute after the
+gap (`30 2 * * *` in New York runs at 03:00 on the spring night); a
+repeated local time runs once, the first time (`30 1 * * *` runs at the first
+01:30 only). Wildcard (a `*` in the minute or hour field; `@hourly`): follows
+the wall clock, so it runs in both passes of a repeated hour (`* * * * *`
+every real minute, `0 * * * *` every real hour) and catches nothing up for a
+gap (`30 * * * *` runs at 01:30 and 03:30, not 03:00).
+
 Per-workspace runs are claimed as `<task>@<workspace id>` (names at most
 154 bytes); `LocalRun::current()` gives the owner and zone inside a run.
 Task names must be unique (`.name("..")` renames). A failed task is logged
