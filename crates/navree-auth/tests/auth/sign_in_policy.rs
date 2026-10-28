@@ -105,18 +105,22 @@ async fn setup(
 #[tokio::test]
 async fn a_policy_sees_one_spelling_of_the_domain() {
     let s = setup(|b| b).await;
+    let auth = s.app.get::<AuthService>().await;
+    // Emails from an identity provider or a social provider reach the
+    // service as they were sent (the login form is stricter).
     for email in [
         "ada@CORP.test.",
         "ada@\u{ff43}orp.test",
         "ada@corp\u{3002}test",
     ] {
-        s.app
-            .client()
-            .post("/api/auth/login")
-            .json(&json!({ "email": email, "password": "wrong" }))
-            .send()
+        let error = auth
+            .attempt_login(email, "wrong", &ClientMeta::default())
             .await
-            .assert_error_code(403, "sso_required");
+            .unwrap_err();
+        assert!(
+            matches!(&error, AuthError::SignInRefused { code, .. } if code == "sso_required"),
+            "{email}: {error:?}"
+        );
     }
     assert!(
         s.seen
