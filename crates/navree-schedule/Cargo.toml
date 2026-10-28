@@ -12,7 +12,6 @@ workspace = true
 
 [dependencies]
 chrono = { workspace = true }
-croner = { workspace = true }
 futures-util = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
