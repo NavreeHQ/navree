@@ -607,13 +607,28 @@ impl Domains {
         let gave_up_reason = gave_up.clone();
         rt.write(None, |uow| async move {
             let tx = uow.tx().await?;
-            let mut record = models::Domain::query()
+            // Only the check's columns: a primary flag or a certificate
+            // written meanwhile stays.
+            let mut columns = vec![
+                models::Domain::STATUS.set(saved.status),
+                models::Domain::POINTS_TO_APP.set(saved.points_to_app),
+                models::Domain::CHECK_ATTEMPTS.set(saved.check_attempts),
+                models::Domain::LAST_CHECKED_AT.set(saved.last_checked_at),
+                models::Domain::NEXT_CHECK_AT.set(saved.next_check_at),
+                models::Domain::VERIFIED_AT.set(saved.verified_at),
+                models::Domain::LAST_ERROR.set(saved.last_error),
+                models::Domain::UPDATED_AT.set(saved.updated_at),
+            ];
+            if verified {
+                columns.push(models::Domain::TLS_STATUS.set(saved.tls_status));
+            }
+            let updated = models::Domain::query()
                 .where_(models::Domain::ID.eq(saved.id))
-                .first(&*tx)
-                .await?
-                .ok_or(DomainsError::DomainNotFound)?;
-            *record = saved;
-            record.save(&*tx).await?;
+                .update(&*tx, columns)
+                .await?;
+            if updated == 0 {
+                return Err(DomainsError::DomainNotFound);
+            }
             uow.mark_modified();
             drop(tx);
             if verified {
