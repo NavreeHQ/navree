@@ -12,7 +12,9 @@ workspace = true
 
 [features]
 ## Runs the PostgreSQL suite (`NAVREE_TEST_POSTGRES_URL`).
-postgres = ["sea-orm/sqlx-postgres"]
+postgres = ["navree-db/postgres"]
+## Runs the MySQL suite (`NAVREE_TEST_MYSQL_URL`).
+mysql = ["navree-db/mysql"]
 
 [dependencies]
 axum = { workspace = true }
@@ -22,9 +24,9 @@ garde = { workspace = true }
 http = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
+navree-db = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
-sea-orm = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
@@ -33,6 +35,8 @@ utoipa = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
+futures-util = { workspace = true }
 http-body-util = { workspace = true }
+tempfile = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
 tower = { workspace = true }

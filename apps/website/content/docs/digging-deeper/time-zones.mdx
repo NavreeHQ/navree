@@ -236,24 +236,23 @@ async fn signups(
 
 ## Reports in SQL
 
-Grouping rows by local day belongs in the database. `zone.sql(backend)` builds the expressions, with the zone written into the SQL as a quoted literal. That is safe because a `Zone` only ever holds a checked name, and it lets the same expression appear in `SELECT` and `GROUP BY`:
+Grouping rows by local day belongs in the database. `zone.sql(backend)` takes a `navree_db::Backend` (`Executor::backend(&db)`) and builds the expressions as `Statement` fragments (portable `?` SQL and the values it binds), with the zone written into the SQL as a quoted literal. That is safe because a `Zone` only ever holds a checked name, and it lets the same expression appear in `SELECT` and `GROUP BY`. `column("created_at")` is the quoted column to convert; any other fragment works too, and its values are carried once per place the expression appears:
 
 ```rust
-use sea_orm::sea_query::{self, Alias, Expr, ExprTrait};
+use navree::db::{Executor, Statement};
 
 let (from, to) = range.utc_bounds(&zone);
-let day = zone
-    .sql(db.backend())
-    .within(from, to)
-    .local_date(Expr::col(signup::Column::CreatedAt));
-let query = sea_query::Query::select()
-    .expr_as(day.clone(), Alias::new("day"))
-    .expr_as(Expr::cust("COUNT(*)"), Alias::new("signups"))
-    .from(signup::Entity)
-    .and_where(Expr::col(signup::Column::CreatedAt).gte(from))
-    .and_where(Expr::col(signup::Column::CreatedAt).lt(to))
-    .add_group_by([day])
-    .to_owned();
+let sql = zone.sql(Executor::backend(&db)).within(from, to);
+let day = sql.local_date(&sql.column("created_at"));
+let statement = Statement::portable(
+    format!(
+        "SELECT {day} AS day, COUNT(*) AS signups FROM signups \
+         WHERE created_at >= ? AND created_at < ? GROUP BY {day}",
+        day = day.sql()
+    ),
+    [from.into(), to.into()],
+);
+let rows = db.fetch_all(&statement).await?;
 ```
 
 | Backend | `local_date(col)` |
@@ -262,7 +261,7 @@ let query = sea_query::Query::select()
 | MySQL | `DATE(CONVERT_TZ(col, '+00:00', 'Asia/Kolkata'))` |
 | SQLite | `date(col, '+19800 seconds')` |
 
-`local_timestamp(col)` gives the local timestamp instead of the date. SQLite has no zones, so it adds the offset in force; `within(from, to)` tells it the window the query covers, and it switches offsets at each clock change inside the window with a `CASE` on `julianday(col)`. With `within`, MySQL uses the same fixed offsets and doesn't need its time zone tables; without it, MySQL's named zones need them loaded (`mysql_tzinfo_to_sql`) and SQLite uses the offset in force now. `set_local()` gives `SET LOCAL TIME ZONE 'Asia/Kolkata'` (PostgreSQL) or `SET time_zone = 'Asia/Kolkata'` (MySQL), to make the zone the transaction's own.
+`local_timestamp(col)` gives the local timestamp instead of the date. SQLite has no zones, so it adds the offset in force; `within(from, to)` tells it the window the query covers, and it switches offsets at each clock change inside the window with a `CASE` (on `julianday(col)` for SQLite). With `within`, MySQL uses the same fixed offsets and doesn't need its time zone tables; without it, MySQL's named zones need them loaded (`mysql_tzinfo_to_sql`) and SQLite uses the offset in force now. `set_local()` gives `SET LOCAL TIME ZONE 'Asia/Kolkata'` (PostgreSQL) or `SET time_zone = 'Asia/Kolkata'` (MySQL), to make the zone the transaction's own.
 
 ## Send windows
 

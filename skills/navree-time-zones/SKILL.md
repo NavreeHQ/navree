@@ -112,24 +112,27 @@ Return the raw stored values (`ZoneOwner { id, zone, country }`);
 ## Reports in SQL
 
 ```rust
-use sea_orm::sea_query::{self, Alias, Expr, ExprTrait};
+use navree::db::{Executor, Statement};
 
-let day = zone.sql(db.backend()).within(from, to).local_date(Expr::col(signup::Column::CreatedAt));
-let query = sea_query::Query::select()
-    .expr_as(day.clone(), Alias::new("day"))
-    .expr_as(Expr::cust("COUNT(*)"), Alias::new("signups"))
-    .from(signup::Entity)
-    .and_where(Expr::col(signup::Column::CreatedAt).gte(from))
-    .and_where(Expr::col(signup::Column::CreatedAt).lt(to))
-    .add_group_by([day])
-    .to_owned();
+let sql = zone.sql(Executor::backend(&db)).within(from, to);
+let day = sql.local_date(&sql.column("created_at"));   // a Statement fragment
+let statement = Statement::portable(
+    format!(
+        "SELECT {day} AS day, COUNT(*) AS signups FROM signups \
+         WHERE created_at >= ? AND created_at < ? GROUP BY {day}",
+        day = day.sql()
+    ),
+    [from.into(), to.into()],
+);
+let rows = db.fetch_all(&statement).await?;
 ```
 
 PostgreSQL: `AT TIME ZONE 'zone'`; MySQL: `CONVERT_TZ`; SQLite: offset in
 force. Always pass `within(from, to)`: SQLite (and MySQL without tz tables)
 then switches offsets at each DST change in the window. The zone is
 inlined as a literal (safe: checked name), so the expression can repeat in
-`GROUP BY`. Write `sea_query::Query`: the prelude's `Query` is axum's.
+`GROUP BY` (carry the fragment's values once per place it appears).
+`zone.sql(..)` takes `navree::db::Backend`: `Executor::backend(&db)`.
 
 ## Send windows and holidays
 
