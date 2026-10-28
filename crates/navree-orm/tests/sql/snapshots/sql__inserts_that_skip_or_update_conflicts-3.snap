@@ -1,6 +1,6 @@
 ---
 source: crates/navree-orm/tests/sql/main.rs
-expression: "per_dialect(|d|\ncompile_insert(&base().on_conflict(OnConflict::Update\n{\n    target: vec![Cow::Borrowed(\"name\")], sets:\n    vec![(Cow::Borrowed(\"color\"), Expr::excluded(\"color\")),\n    (Cow::Borrowed(\"hits\"),\n    Expr::col(\"tags.hits\").add(Expr::excluded(\"hits\"))),\n    (Cow::Borrowed(\"note\"), Expr::val(\"merged\")),],\n}), d))"
+expression: "per_dialect(|d|\nrender_insert(&base().on_conflict(OnConflict::Update\n{\n    target: vec![Cow::Borrowed(\"name\")], sets:\n    vec![(Cow::Borrowed(\"color\"), Expr::excluded(\"color\")),\n    (Cow::Borrowed(\"hits\"),\n    Expr::col(\"tags.hits\").add(Expr::excluded(\"hits\"))),\n    (Cow::Borrowed(\"note\"), Expr::val(\"merged\")),],\n}), d))"
 ---
 PostgreSQL: INSERT INTO "tags" ("name", "color") VALUES ($1, $2) ON CONFLICT ("name") DO UPDATE SET "color" = "excluded"."color", "hits" = "tags"."hits" + "excluded"."hits", "note" = $3
   values: [String(Some("vip")), String(Some("gold")), String(Some("merged"))]

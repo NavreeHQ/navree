@@ -30,11 +30,11 @@ use std::fmt;
 use std::marker::PhantomData;
 
 use chrono::{DateTime, NaiveDate, NaiveDateTime, SecondsFormat, Utc};
-use navree_access::{Ability, Accessible, ActionMarker, SqlColumns, Subject, sql_value};
+use navree_access::{Ability, Accessible, ActionMarker, Cond, Conditions, Subject};
 use navree_db::Uow;
 use navree_http::AppError;
 use navree_kernel::{BoxError, BoxFuture};
-use sea_query::{Alias, Expr as SqlExpr};
+use rust_decimal::prelude::ToPrimitive;
 use serde_json::Value as Json;
 
 use crate::binding::route_value;
@@ -42,15 +42,16 @@ use crate::column::{Filter, col};
 use crate::model::Model;
 use crate::query::Builder;
 use crate::record::Record;
-use crate::value::{Decimal, Value};
+use crate::render::ast::{BinaryOp, Expr as SqlExpr};
+use crate::value::{Decimal, Value, to_json};
 
 /// The column mapping of ability conditions on model `M`: rule fields are
 /// `M`'s columns, qualified with its table, and operands are bound with the
 /// column's type (UUIDs, date-times, dates and decimals as typed values,
 /// enums stored as text or numbers as such). A field that is not a column is
 /// SQL `NULL`, as [`record_json`] has no such member and a record check sees
-/// `null`. Use it with [`Ability::sql_filter_with`] (which
-/// [`Builder::accessible`] does).
+/// `null`. [`ModelColumns::filter`] turns an ability's rules into one SQL
+/// condition with it (which [`Builder::accessible`] does).
 pub struct ModelColumns<M>(PhantomData<fn() -> M>);
 
 impl<M> ModelColumns<M> {
@@ -116,16 +117,25 @@ fn stored<M: Model>(column: &str) -> Option<Stored> {
     })
 }
 
-impl<M: Model> SqlColumns for ModelColumns<M> {
-    fn column(&self, field: &str) -> SqlExpr {
+impl<M: Model> ModelColumns<M> {
+    /// The column for rule field `field`: `M`'s column, qualified with its
+    /// table, or SQL `NULL` when `M` has no such column.
+    pub fn column(&self, field: &str) -> SqlExpr {
         if M::meta().has_column(field) {
-            SqlExpr::col((Alias::new(M::meta().table()), Alias::new(field)))
+            SqlExpr::qualified(
+                crate::render::ast::ObjectName::parse(M::meta().table()),
+                field.to_owned(),
+            )
         } else {
-            SqlExpr::cust("NULL")
+            SqlExpr::null()
         }
     }
 
-    fn value(&self, field: &str, value: &Json) -> sea_query::Value {
+    /// The value bound for the non-null JSON operand `value` on `field`:
+    /// typed by the column (a UUID, a date-time, a date or a decimal parsed
+    /// from its JSON form), else booleans as booleans, integers as `BigInt`,
+    /// other numbers as `Double` and strings as text.
+    pub fn value(&self, field: &str, value: &Json) -> Value {
         let typed = stored::<M>(field).and_then(|stored| {
             let text = value.as_str();
             match stored {
@@ -149,10 +159,15 @@ impl<M: Model> SqlColumns for ModelColumns<M> {
                 _ => None,
             }
         });
-        typed.unwrap_or_else(|| sql_value(value))
+        typed.unwrap_or_else(|| json_operand(value))
     }
 
-    fn accepts(&self, field: &str, value: &Json) -> bool {
+    /// Whether the non-null JSON operand `value` has the JSON type of
+    /// `field`'s column. A record check never matches across types, so a
+    /// rejected operand is written as the check evaluates it: `$eq` and the
+    /// range operators are `FALSE`, `$ne` is `TRUE`, and `$in` / `$nin`
+    /// ignore it.
+    pub fn accepts(&self, field: &str, value: &Json) -> bool {
         match stored::<M>(field) {
             // Not a column: SQL `NULL`, which matches nothing either way.
             None => true,
@@ -167,6 +182,141 @@ impl<M: Model> SqlColumns for ModelColumns<M> {
             ) => value.is_string(),
             Some(Stored::Decimal | Stored::Other) => true,
         }
+    }
+
+    /// A boolean SQL condition that holds exactly for the records of `M`
+    /// (subject type `subject`) on which `ability` allows `action`: the
+    /// relevant conditional rules from last to first as one `CASE`, so the
+    /// first `WHEN` that holds is the rule a record check picks (last match
+    /// wins), `FALSE` when no rule applies.
+    ///
+    /// Each condition is `TRUE` exactly when the record check holds and
+    /// `FALSE` or `NULL` otherwise (`CASE` treats `NULL` as not matched), so
+    /// the condition is always `TRUE` or `FALSE` and safe to negate. As in
+    /// record checks, `$eq: null` is `IS NULL`, `$ne` is null-safe
+    /// (`IS DISTINCT FROM` on PostgreSQL, `NOT (a <=> b)` on MySQL, `IS NOT`
+    /// on SQLite), and `$in` / `$nin` treat a `null` member as matching
+    /// null columns.
+    pub fn filter(&self, ability: &Ability, action: &str, subject: &str) -> SqlExpr {
+        // The rule selection of a whole-record check: field-only `cannot`
+        // rules do not hide records.
+        let relevant = ability.rules().iter().rev().filter(|rule| {
+            rule.matches_action(action) && rule.matches_subject(subject) && rule.matches_field(None)
+        });
+        let mut whens: Vec<(&Conditions, bool)> = Vec::new();
+        let mut otherwise = false;
+        for rule in relevant {
+            match &rule.conditions {
+                Some(conditions) if !conditions.is_empty() => {
+                    whens.push((conditions, !rule.inverted));
+                }
+                // Matches every record: decides for the rows not caught above.
+                _ => {
+                    otherwise = !rule.inverted;
+                    break;
+                }
+            }
+        }
+        // A trailing WHEN with the ELSE result changes nothing.
+        while whens.last().is_some_and(|(_, allow)| *allow == otherwise) {
+            whens.pop();
+        }
+        if whens.is_empty() {
+            return SqlExpr::bool(otherwise);
+        }
+        SqlExpr::case(
+            whens
+                .into_iter()
+                .map(|(conditions, allow)| (self.conditions(conditions), SqlExpr::bool(allow)))
+                .collect(),
+            Some(SqlExpr::bool(otherwise)),
+        )
+    }
+
+    /// Every condition of a rule, joined with `AND`.
+    fn conditions(&self, conditions: &Conditions) -> SqlExpr {
+        let mut all: Vec<SqlExpr> = conditions
+            .iter()
+            .flat_map(|(field, conds)| conds.iter().map(move |cond| self.cond(field, cond)))
+            .collect();
+        if all.len() == 1 {
+            all.remove(0)
+        } else {
+            SqlExpr::And(all)
+        }
+    }
+
+    /// One condition on `field`.
+    fn cond(&self, field: &str, cond: &Cond) -> SqlExpr {
+        let column = self.column(field);
+        let value = |v: &Json| SqlExpr::Value(self.value(field, v));
+        // A non-null operand of another type than the column never compares
+        // equal or ordered (see `accepts`).
+        let foreign = |v: &Json| !v.is_null() && !self.accepts(field, v);
+        match cond {
+            Cond::Eq(Json::Null) => column.is_null(),
+            Cond::Eq(v) if foreign(v) => SqlExpr::bool(false),
+            Cond::Eq(v) => column.eq(value(v)),
+            Cond::Ne(Json::Null) => column.is_not_null(),
+            Cond::Ne(v) if foreign(v) => SqlExpr::bool(true),
+            Cond::Ne(v) => column.binary(BinaryOp::NullSafeNotEq, value(v)),
+            Cond::Lt(v) | Cond::Lte(v) | Cond::Gt(v) | Cond::Gte(v) if foreign(v) => {
+                SqlExpr::bool(false)
+            }
+            Cond::Lt(v) => column.lt(value(v)),
+            Cond::Lte(v) => column.lte(value(v)),
+            Cond::Gt(v) => column.gt(value(v)),
+            Cond::Gte(v) => column.gte(value(v)),
+            Cond::In(items) => {
+                let (has_null, values) = self.listed(field, items);
+                let listed = (!values.is_empty())
+                    .then(|| column.clone().in_list(values.into_iter().map(value).collect()));
+                match (listed, has_null) {
+                    (Some(listed), true) => SqlExpr::Or(vec![listed, column.is_null()]),
+                    (Some(listed), false) => listed,
+                    (None, true) => column.is_null(),
+                    (None, false) => SqlExpr::bool(false),
+                }
+            }
+            Cond::Nin(items) => {
+                let (has_null, values) = self.listed(field, items);
+                let unlisted = (!values.is_empty())
+                    .then(|| column.clone().not_in_list(values.into_iter().map(value).collect()));
+                match (unlisted, has_null) {
+                    (Some(unlisted), true) => SqlExpr::And(vec![column.is_not_null(), unlisted]),
+                    (Some(unlisted), false) => SqlExpr::Or(vec![column.is_null(), unlisted]),
+                    (None, true) => column.is_not_null(),
+                    (None, false) => SqlExpr::bool(true),
+                }
+            }
+        }
+    }
+
+    /// Whether `items` holds `null`, and its members of the column's type.
+    fn listed<'a>(&self, field: &str, items: &'a [Json]) -> (bool, Vec<&'a Json>) {
+        let has_null = items.iter().any(Json::is_null);
+        let values = items
+            .iter()
+            .filter(|v| !v.is_null() && self.accepts(field, v))
+            .collect();
+        (has_null, values)
+    }
+}
+
+/// A JSON operand as a value without a column type: booleans as `Bool`,
+/// integers as `BigInt`, other numbers as `Double`, strings as text (arrays
+/// and objects, which conditions never hold, as their JSON text).
+fn json_operand(value: &Json) -> Value {
+    match value {
+        Json::Null => Value::String(None),
+        Json::Bool(b) => Value::from(*b),
+        Json::Number(n) => match (n.as_i64(), n.as_f64()) {
+            (Some(i), _) => Value::from(i),
+            (None, Some(f)) => Value::from(f),
+            (None, None) => Value::from(n.to_string()),
+        },
+        Json::String(s) => Value::from(s.as_str()),
+        other => Value::from(other.to_string()),
     }
 }
 
@@ -209,7 +359,10 @@ fn condition_json(value: &Value) -> Json {
         Value::ChronoTime(Some(time)) => Json::String(time.format("%H:%M:%S%.f").to_string()),
         // Binary columns have no condition form (and may not be UTF-8).
         Value::Bytes(_) => Json::Null,
-        other => sea_query::value::sea_value_to_json_value(other),
+        // Decimals are numbers to conditions (equality on them is exact
+        // only as strings, which the SQL filter binds as decimals).
+        Value::Decimal(Some(decimal)) => decimal.to_f64().map_or(Json::Null, Json::from),
+        other => to_json(other),
     }
 }
 
@@ -226,7 +379,7 @@ impl<M: Model + Subject> Builder<M> {
     /// [`accessible`](Builder::accessible) for an action named at run time
     /// (`"publish"`).
     pub fn accessible_for(self, ability: &Ability, action: &str) -> Self {
-        let condition = ability.sql_filter_with(action, M::SUBJECT, &ModelColumns::<M>::new());
+        let condition = ModelColumns::<M>::new().filter(ability, action, M::SUBJECT);
         self.where_(Filter::from(condition))
     }
 }

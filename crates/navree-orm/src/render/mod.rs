@@ -1,9 +1,8 @@
 //! navree-orm's own SQL renderer: a [syntax tree](ast) that is the same for
 //! every database, [grammars](grammar) that write it for PostgreSQL /
 //! TimescaleDB, MySQL / MariaDB and SQLite, and a [lowering](lower) from
-//! the ORM's IR ([`render_select`], [`render_insert`], ...: the same
-//! signatures and results as [`crate::sql`]'s `compile_*`, which they are
-//! to replace).
+//! the ORM's IR ([`render_select`], [`render_insert`], ...), which writes
+//! every statement the ORM runs.
 //!
 //! - **The tree** ([`ast`]): statements (`SELECT` with CTEs, compounds,
 //!   windows and locks; `INSERT` with conflict handling and `RETURNING`;
@@ -18,8 +17,8 @@
 //!   placeholders (`$n` on PostgreSQL, `?` elsewhere) in writing order.
 //!   What a dialect cannot express is [`OrmError::Unsupported`], a
 //!   malformed tree [`OrmError::InvalidQuery`]; rendering never panics.
-//! - **The lowering** ([`lower`]): the IR as trees, rule for rule as the
-//!   compiler in [`crate::sql`] builds statements today.
+//! - **The lowering** ([`lower`]): the IR as trees, with each database's
+//!   rules for the clauses where they differ.
 //!
 //! ```
 //! use navree_orm::Dialect;

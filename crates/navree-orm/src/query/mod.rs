@@ -30,7 +30,7 @@ use crate::error::Result;
 use crate::ir::{ColumnRef, Expr, InValues, QueryIr, SelectItem, Where, WhereClause};
 use crate::model::Model;
 use crate::scope::{GlobalScope, ScopeChoices, Trashed, group_scope_wheres};
-use crate::sql::{Dialect, Statement, compile_select};
+use crate::sql::{Dialect, Statement, render_select};
 use crate::value::Field;
 
 use self::clauses::clauses;
@@ -263,7 +263,7 @@ impl<M: Model> Builder<M> {
     /// # Ok(()) }
     /// ```
     pub fn to_sql(&self, dialect: Dialect) -> Result<Statement> {
-        compile_select(&self.clone().into_ir(), dialect)
+        render_select(&self.clone().into_ir(), dialect)
     }
 
     /// The builder with its global scopes applied (once): the model's

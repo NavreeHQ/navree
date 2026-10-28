@@ -1,11 +1,15 @@
 //! Differential tests of navree-orm's own SQL renderer, on real databases.
 //!
-//! - **Versus the compiler**: every case of `corpus.rs` (IR statements) is
-//!   compiled by `sql::compile_*` and by `render::render_*`, both run on the
-//!   same fixture, and their results compared: the rows (in order when the
+//! - **Versus the compiler it replaced**: every case of `corpus.rs` (IR
+//!   statements) is written by `render::render_*`, run on the fixture, and
+//!   its results compared with what the sea-query compiler's SQL did with
+//!   the same case on the same server: the rows (in order when the
 //!   statement orders them), the rows changed and returned, and every
-//!   fixture table afterwards. A case a database refuses must be refused
-//!   (or fail) on both paths.
+//!   fixture table afterwards. A case a database refused must be refused
+//!   (or fail) again. The compiler's outcomes were recorded on the test
+//!   servers (SQLite, PostgreSQL with TimescaleDB, MySQL 8.4) before it was
+//!   deleted, one line per case in `compiler/<database>.jsonl` with its
+//!   SQL.
 //! - **Across databases**: the statements of `across.rs`, built as syntax
 //!   trees, return the rows written there on every database (or are refused
 //!   where the dialect lacks the feature).
@@ -21,9 +25,10 @@ mod corpus;
 mod exec;
 mod support;
 
+use std::collections::HashMap;
 use std::fmt::Write as _;
 
-use navree_orm::{Dialect, OrmError, Statement, render, sql};
+use navree_orm::{Dialect, OrmError, Statement, render};
 use serde_json::Value as Json;
 
 use crate::corpus::{Case, Kind};
@@ -81,27 +86,30 @@ enum Outcome {
     },
 }
 
-/// The statements of `kind` as the compiler builds them.
-fn compiled(kind: &Kind, dialect: Dialect) -> Result<Vec<Statement>, OrmError> {
-    Ok(match kind {
-        Kind::Select(query) | Kind::Locked(query) => vec![sql::compile_select(query, dialect)?],
-        Kind::Aggregate(query, aggregate) => {
-            vec![sql::compile_aggregate(query, aggregate, dialect)?]
-        }
-        Kind::Exists(query) => vec![sql::compile_exists(query, dialect)?],
-        Kind::Insert(insert) => vec![sql::compile_insert(insert, dialect)?],
-        Kind::Update(update) => vec![sql::compile_update(update, dialect)?],
-        Kind::UpdateFrom {
-            table,
-            sets,
-            joins,
-            wheres,
-        } => vec![sql::compile_update_from(
-            table, sets, joins, wheres, dialect,
-        )?],
-        Kind::Delete(delete) => vec![sql::compile_delete(delete, dialect)?],
-        Kind::Truncate { table, cascade } => sql::compile_truncate(table, *cascade, dialect),
-    })
+/// What the sea-query compiler's SQL did with one case.
+#[derive(serde::Deserialize)]
+struct Recorded {
+    case: String,
+    /// Its SQL and values (or why it refused the case).
+    sql: String,
+    outcome: Outcome,
+}
+
+/// The compiler's recorded outcomes on `dialect`, by case name.
+fn recorded(dialect: Dialect) -> HashMap<String, Recorded> {
+    let text = match dialect {
+        Dialect::Postgres => include_str!("compiler/postgres.jsonl"),
+        Dialect::MySql => include_str!("compiler/mysql.jsonl"),
+        Dialect::Sqlite => include_str!("compiler/sqlite.jsonl"),
+    };
+    text.lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| {
+            let recorded: Recorded = serde_json::from_str(line)
+                .unwrap_or_else(|error| panic!("reads a recorded outcome: {error}: {line}"));
+            (recorded.case.clone(), recorded)
+        })
+        .collect()
 }
 
 /// The statements of `kind` as the renderer writes them.
@@ -339,22 +347,24 @@ async fn compare_paths(dialect: Dialect) {
         let mut mismatches = String::new();
         let mut failures_on_both = String::new();
         let mut differences = String::new();
-        let mut recorded = String::new();
+        let compiled = recorded(dialect);
+        assert_eq!(
+            compiled.len(),
+            cases.len(),
+            "every case has the compiler's recorded outcome on {dialect} (a case added since is written in across.rs, with its expected rows)"
+        );
         for case in &cases {
-            let compiler_sql = compiled(&case.kind, dialect);
+            let Some(Recorded {
+                sql: compiler_sql,
+                outcome: compiler,
+                ..
+            }) = compiled.get(&case.name)
+            else {
+                panic!("no recorded outcome of the compiler for [{}]", case.name);
+            };
             let renderer_sql = rendered(&case.kind, dialect);
-            let compiler = run(&exec, case, clone(&compiler_sql)).await;
-            recorded.push_str(
-                &serde_json::to_string(&serde_json::json!({
-                    "case": case.name,
-                    "sql": sql_of(&compiler_sql),
-                    "outcome": &compiler,
-                }))
-                .unwrap(),
-            );
-            recorded.push('\n');
             let renderer = run(&exec, case, clone(&renderer_sql)).await;
-            let verdict = compare(case, &compiler, &renderer);
+            let verdict = compare(case, compiler, &renderer);
             let expected = case
                 .differs
                 .iter()
@@ -367,8 +377,8 @@ async fn compare_paths(dialect: Dialect) {
                         differences,
                         "  [{}] {why}\n    compiler: {}\n      => {}\n    renderer: {}\n      => {}",
                         case.name,
-                        sql_of(&compiler_sql),
-                        describe(&compiler),
+                        compiler_sql,
+                        describe(compiler),
                         sql_of(&renderer_sql),
                         describe(&renderer),
                     )
@@ -398,7 +408,7 @@ async fn compare_paths(dialect: Dialect) {
                         failures_on_both,
                         "  {}: {} | {}",
                         case.name,
-                        describe(&compiler),
+                        describe(compiler),
                         describe(&renderer)
                     )
                     .unwrap();
@@ -408,8 +418,8 @@ async fn compare_paths(dialect: Dialect) {
                         mismatches,
                         "\n[{}] {why}\n  compiler: {}\n    => {}\n  renderer: {}\n    => {}",
                         case.name,
-                        sql_of(&compiler_sql),
-                        describe(&compiler),
+                        compiler_sql,
+                        describe(compiler),
                         sql_of(&renderer_sql),
                         describe(&renderer),
                     )
@@ -419,18 +429,6 @@ async fn compare_paths(dialect: Dialect) {
         }
         if writes > 0 {
             support::reset(&exec).await;
-        }
-        if std::env::var_os("NAVREE_RECORD_COMPILER").is_some() {
-            let name = match dialect {
-                Dialect::Postgres => "postgres",
-                Dialect::MySql => "mysql",
-                Dialect::Sqlite => "sqlite",
-            };
-            let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("tests/differential/compiler")
-                .join(format!("{name}.jsonl"));
-            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-            std::fs::write(&path, &recorded).unwrap();
         }
         eprintln!(
             "differential ({dialect}): {} cases: {rows} same rows ({with_rows} of them not empty), {writes} same writes, {refused} refused by both, {failed} failed on both, {differ} expected differences, {} mismatches",
@@ -445,7 +443,7 @@ async fn compare_paths(dialect: Dialect) {
         }
         assert!(
             mismatches.is_empty(),
-            "the renderer and the compiler differ on {dialect}:{mismatches}"
+            "the renderer's results differ from the compiler's on {dialect}:{mismatches}"
         );
     })
     .await;

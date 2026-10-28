@@ -1,7 +1,8 @@
 ---
 source: crates/navree-orm/tests/sql/main.rs
+assertion_line: 400
 expression: "rows(table(\"companies\").select([\"name\"]).union(table(\"deals\").select([\"title\"])).union_all(table(\"users\").select([\"name\"])))"
 ---
-PostgreSQL: SELECT "name" FROM "companies" UNION (SELECT "title" FROM "deals") UNION ALL (SELECT "name" FROM "users")
-MySQL: SELECT `name` FROM `companies` UNION (SELECT `title` FROM `deals`) UNION ALL (SELECT `name` FROM `users`)
+PostgreSQL: SELECT "name" FROM "companies" UNION SELECT "title" FROM "deals" UNION ALL SELECT "name" FROM "users"
+MySQL: SELECT `name` FROM `companies` UNION SELECT `title` FROM `deals` UNION ALL SELECT `name` FROM `users`
 SQLite: SELECT "name" FROM "companies" UNION SELECT "title" FROM "deals" UNION ALL SELECT "name" FROM "users"

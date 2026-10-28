@@ -545,7 +545,7 @@ impl Target<'_> {
     pub async fn fetch(&self, query: &QueryIr) -> Result<Vec<Row>, OrmError> {
         match self {
             Target::Sql(sql) => {
-                let statement = sql::compile_select(query, sql.dialect)?;
+                let statement = sql::render_select(query, sql.dialect)?;
                 Ok(sql
                     .query_all_timed(&statement, query.timeout)
                     .await?
@@ -571,7 +571,7 @@ impl Target<'_> {
     pub async fn stream<'s>(&'s self, query: &'s QueryIr) -> Result<RowsStream<'s>, OrmError> {
         match self {
             Target::Sql(sql) => {
-                let statement = sql::compile_select(query, sql.dialect)?;
+                let statement = sql::render_select(query, sql.dialect)?;
                 let Some(timeout) = query.timeout else {
                     return sql.stream(&statement).await;
                 };
@@ -606,7 +606,7 @@ impl Target<'_> {
     ) -> Result<Value, OrmError> {
         match self {
             Target::Sql(sql) => {
-                let statement = sql::compile_aggregate(query, aggregate, sql.dialect)?;
+                let statement = sql::render_aggregate(query, aggregate, sql.dialect)?;
                 match sql.query_one_timed(&statement, query.timeout).await? {
                     Some(row) => Row::from_sql(row).value("aggregate"),
                     None => Ok(Value::BigInt(None)),
@@ -623,7 +623,7 @@ impl Target<'_> {
     pub async fn exists(&self, query: &QueryIr) -> Result<bool, OrmError> {
         match self {
             Target::Sql(sql) => {
-                let statement = sql::compile_exists(query, sql.dialect)?;
+                let statement = sql::render_exists(query, sql.dialect)?;
                 match sql.query_one_timed(&statement, query.timeout).await? {
                     Some(row) => {
                         let value = Row::from_sql(row).value("exists")?;
@@ -645,7 +645,7 @@ impl Target<'_> {
     pub async fn insert(&self, insert: &InsertIr) -> Result<InsertOutcome, OrmError> {
         match self {
             Target::Sql(sql) => {
-                let statement = sql::compile_insert(insert, sql.dialect)?;
+                let statement = sql::render_insert(insert, sql.dialect)?;
                 if !insert.returning.is_empty() && sql.dialect.supports_returning() {
                     let rows: Vec<Row> = sql
                         .query_all(&statement)
@@ -679,7 +679,7 @@ impl Target<'_> {
     pub async fn update(&self, update: &UpdateIr) -> Result<u64, OrmError> {
         match self {
             Target::Sql(sql) => {
-                let statement = sql::compile_update(update, sql.dialect)?;
+                let statement = sql::render_update(update, sql.dialect)?;
                 Ok(sql.execute(&statement).await?.rows_affected())
             }
             Target::Document(document) => {
@@ -693,7 +693,7 @@ impl Target<'_> {
     pub async fn delete(&self, delete: &DeleteIr) -> Result<u64, OrmError> {
         match self {
             Target::Sql(sql) => {
-                let statement = sql::compile_delete(delete, sql.dialect)?;
+                let statement = sql::render_delete(delete, sql.dialect)?;
                 Ok(sql.execute(&statement).await?.rows_affected())
             }
             Target::Document(document) => {

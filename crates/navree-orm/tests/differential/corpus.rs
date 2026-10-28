@@ -1,6 +1,7 @@
-//! The IR statements both paths compile: every IR feature the renderer
-//! lowers, on the fixture tables of `support.rs`. A case is built per
-//! dialect (row ids are `ctid` on PostgreSQL, `rowid` on SQLite).
+//! The IR statements the renderer writes and the compiler wrote: every IR
+//! feature the renderer lowers, on the fixture tables of `support.rs`. A
+//! case is built per dialect (row ids are `ctid` on PostgreSQL, `rowid` on
+//! SQLite).
 
 use std::borrow::Cow;
 use std::time::Duration;
@@ -17,32 +18,33 @@ use serde::Serialize;
 /// What a case runs.
 #[derive(Clone, Debug)]
 pub enum Kind {
-    /// `compile_select` / `render_select`.
+    /// `render_select`.
     Select(QueryIr),
     /// A locking read, inside a transaction of its own.
     Locked(QueryIr),
-    /// `compile_aggregate` / `render_aggregate`.
+    /// `render_aggregate`.
     Aggregate(QueryIr, Aggregate),
-    /// `compile_exists` / `render_exists`.
+    /// `render_exists`.
     Exists(QueryIr),
-    /// `compile_insert` / `render_insert`.
+    /// `render_insert`.
     Insert(InsertIr),
-    /// `compile_update` / `render_update`.
+    /// `render_update`.
     Update(UpdateIr),
-    /// `compile_update_from` / `render_update_from`.
+    /// `render_update_from`.
     UpdateFrom {
         table: TableRef,
         sets: Vec<(Cow<'static, str>, IrExpr)>,
         joins: Vec<Join>,
         wheres: Vec<WhereClause>,
     },
-    /// `compile_delete` / `render_delete`.
+    /// `render_delete`.
     Delete(DeleteIr),
-    /// `compile_truncate` / `render_truncate`.
+    /// `render_truncate`.
     Truncate { table: &'static str, cascade: bool },
 }
 
-/// One statement, compiled by both paths.
+/// One statement, written by the renderer and compared with what the
+/// compiler's SQL did.
 #[derive(Clone, Debug)]
 pub struct Case {
     pub name: String,
@@ -134,9 +136,6 @@ fn aggregate(function: AggregateFunction, column: &'static str, distinct: bool) 
 fn deals() -> navree_orm::TableBuilder {
     table("deals")
 }
-
-/// Why the renderer refuses `Where::Sql` for now.
-const QUERY_BUILDER_CONDITION: &str = "the renderer refuses `Where::Sql` (a sea-query condition) until navree-access builds its SQL filters as trees";
 
 /// The read cases.
 pub fn reads(dialect: Dialect) -> Vec<Case> {
@@ -992,21 +991,14 @@ pub fn reads(dialect: Dialect) -> Vec<Case> {
             navree_orm::ir::NativeFilter::new("mongodb", "{ status: 'open' }"),
         ))),
     ));
-    // A condition built with the query builder the renderer replaces: the
-    // renderer refuses it until such conditions are built as trees.
-    cases.push(
-        read(
-            "a condition built with the query builder",
-            table("companies").where_(Filter::from(
-                sea_query::Condition::all().add(sea_query::Expr::cust("1 = 1")),
-            )),
-        )
-        .differs(&[
-            (Dialect::Postgres, QUERY_BUILDER_CONDITION),
-            (Dialect::MySql, QUERY_BUILDER_CONDITION),
-            (Dialect::Sqlite, QUERY_BUILDER_CONDITION),
-        ]),
-    );
+    // A condition built with sea-query: written by sea-query's builder and
+    // embedded by the renderer as a raw fragment.
+    cases.push(read(
+        "a condition built with the query builder",
+        table("companies").where_(Filter::from(
+            sea_query::Condition::all().add(sea_query::Expr::cust("1 = 1")),
+        )),
+    ));
     // Where the compiler's SQL is wrong and the renderer's right.
     cases.push(
         read(

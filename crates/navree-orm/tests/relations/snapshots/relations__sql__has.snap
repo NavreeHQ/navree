@@ -1,7 +1,8 @@
 ---
 source: crates/navree-orm/tests/relations/sql.rs
+assertion_line: 128
 expression: "query(Deal::query().has(\"activities\"))"
 ---
-PostgreSQL: SELECT "deals"."id", "deals"."company_id", "deals"."owner_id", "deals"."title", "deals"."amount_cents", "deals"."stage", "deals"."created_at", "deals"."updated_at", "deals"."deleted_at" FROM "deals" WHERE EXISTS(SELECT 1 FROM "activities" WHERE "deals"."id" = "activities"."deal_id") AND "deals"."deleted_at" IS NULL
-MySQL: SELECT `deals`.`id`, `deals`.`company_id`, `deals`.`owner_id`, `deals`.`title`, `deals`.`amount_cents`, `deals`.`stage`, `deals`.`created_at`, `deals`.`updated_at`, `deals`.`deleted_at` FROM `deals` WHERE EXISTS(SELECT 1 FROM `activities` WHERE `deals`.`id` = `activities`.`deal_id`) AND `deals`.`deleted_at` IS NULL
-SQLite: SELECT "deals"."id", "deals"."company_id", "deals"."owner_id", "deals"."title", "deals"."amount_cents", "deals"."stage", "deals"."created_at", "deals"."updated_at", "deals"."deleted_at" FROM "deals" WHERE EXISTS(SELECT 1 FROM "activities" WHERE "deals"."id" = "activities"."deal_id") AND "deals"."deleted_at" IS NULL
+PostgreSQL: SELECT "deals"."id", "deals"."company_id", "deals"."owner_id", "deals"."title", "deals"."amount_cents", "deals"."stage", "deals"."created_at", "deals"."updated_at", "deals"."deleted_at" FROM "deals" WHERE EXISTS (SELECT 1 FROM "activities" WHERE "deals"."id" = "activities"."deal_id") AND "deals"."deleted_at" IS NULL
+MySQL: SELECT `deals`.`id`, `deals`.`company_id`, `deals`.`owner_id`, `deals`.`title`, `deals`.`amount_cents`, `deals`.`stage`, `deals`.`created_at`, `deals`.`updated_at`, `deals`.`deleted_at` FROM `deals` WHERE EXISTS (SELECT 1 FROM `activities` WHERE `deals`.`id` = `activities`.`deal_id`) AND `deals`.`deleted_at` IS NULL
+SQLite: SELECT "deals"."id", "deals"."company_id", "deals"."owner_id", "deals"."title", "deals"."amount_cents", "deals"."stage", "deals"."created_at", "deals"."updated_at", "deals"."deleted_at" FROM "deals" WHERE EXISTS (SELECT 1 FROM "activities" WHERE "deals"."id" = "activities"."deal_id") AND "deals"."deleted_at" IS NULL

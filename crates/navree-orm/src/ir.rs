@@ -686,9 +686,15 @@ pub enum Where {
         /// Its values, in order.
         values: Vec<Value>,
     },
-    /// A sea-query condition (navree-access SQL filters, navree-db's text
-    /// helpers). SQL drivers only.
+    /// A sea-query condition (`Filter::from(sea_query::Condition)`),
+    /// written by sea-query's builder and embedded by the renderer. SQL
+    /// drivers only. Prefer [`Where::Tree`].
     Sql(sea_query::Condition),
+    /// A condition written as a [render-tree](crate::render::ast)
+    /// expression, which the renderer writes for each SQL dialect (the
+    /// access-control filters of `Builder::accessible` are built this way).
+    /// SQL drivers only.
+    Tree(Box<crate::render::ast::Expr>),
     /// A condition in a document store's own query language (a MongoDB
     /// filter document), built by that store's driver crate. Only the
     /// driver that built it can run it; SQL databases and other drivers

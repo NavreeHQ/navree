@@ -142,11 +142,13 @@ impl Lowerer {
             // Parenthesized beside other conditions and under `NOT`, so an
             // `OR` inside it cannot regroup them.
             Where::Raw { sql, values } => self.raw(sql.clone(), values)?,
-            Where::Sql(_) => {
-                return Err(self.unsupported(
-                    "a sea-query condition (`Where::Sql`; build the condition with the ORM's filters)",
-                ));
+            // Written by the query builder that built it, as a raw
+            // fragment (until navree-access builds its filters as trees).
+            Where::Sql(condition) => {
+                let (sql, values) = crate::sql::condition_fragment(condition, self.dialect)?;
+                self.raw(Cow::Owned(sql), &values)?
             }
+            Where::Tree(condition) => (**condition).clone(),
             Where::Native(native) => {
                 return Err(self.unsupported(format!("a {} filter", native.driver())));
             }

@@ -12,7 +12,7 @@ use navree_orm::ir::{
     ColumnRef, DeleteIr, Direction, Expr as IrExpr, FullText, InsertIr, OnConflict, Operator,
     TableRef, UpdateIr, WhereClause,
 };
-use navree_orm::sql::{compile_delete, compile_insert, compile_update};
+use navree_orm::sql::{render_delete, render_insert, render_update};
 use navree_orm::{Builder, Dialect, Expr, Filter, Model, Statement, Value, col, table};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -298,7 +298,7 @@ fn raw_fragments_keep_their_grouping() {
             sql(Company::query()
                 .where_(Company::ID.gt(1))
                 .or_where_not(either())),
-            r#"WHERE "companies"."id" > $1 OR (NOT (name = $2 OR country = $3))"#,
+            r#"WHERE "companies"."id" > $1 OR NOT (name = $2 OR country = $3)"#,
         ),
         (
             sql(Company::query()
@@ -436,14 +436,14 @@ fn timescale_helpers() {
 #[test]
 fn aggregates_count_what_the_query_returns() {
     use navree_orm::ir::{Aggregate, AggregateFunction};
-    use navree_orm::sql::{compile_aggregate, compile_exists};
+    use navree_orm::sql::{render_aggregate, render_exists};
     let count = Aggregate {
         function: AggregateFunction::Count,
         arg: None,
         distinct: false,
     };
     let plain = Deal::query().where_(Deal::STAGE.eq(Stage::Won)).latest();
-    insta::assert_snapshot!(per_dialect(|d| compile_aggregate(
+    insta::assert_snapshot!(per_dialect(|d| render_aggregate(
         &plain.clone().into_ir(),
         &count,
         d
@@ -451,7 +451,7 @@ fn aggregates_count_what_the_query_returns() {
     let grouped = table("deals")
         .group_by(["stage"])
         .having(Expr::count_all().gt(1));
-    insta::assert_snapshot!(per_dialect(|d| compile_aggregate(
+    insta::assert_snapshot!(per_dialect(|d| render_aggregate(
         &grouped.clone().into_ir(),
         &count,
         d
@@ -462,12 +462,12 @@ fn aggregates_count_what_the_query_returns() {
         distinct: true,
     };
     let limited = table("deals").order_by("title").limit(10);
-    insta::assert_snapshot!(per_dialect(|d| compile_aggregate(
+    insta::assert_snapshot!(per_dialect(|d| render_aggregate(
         &limited.clone().into_ir(),
         &distinct_sum,
         d
     )));
-    insta::assert_snapshot!(per_dialect(|d| compile_exists(&plain.clone().into_ir(), d)));
+    insta::assert_snapshot!(per_dialect(|d| render_exists(&plain.clone().into_ir(), d)));
 }
 
 #[test]
@@ -487,9 +487,9 @@ fn writes() {
         ],
     )
     .returning(vec![Cow::Borrowed("id")]);
-    insta::assert_snapshot!(per_dialect(|d| compile_insert(&insert, d)));
+    insta::assert_snapshot!(per_dialect(|d| render_insert(&insert, d)));
     let empty = InsertIr::new("counters", Vec::new(), Vec::new());
-    insta::assert_snapshot!(per_dialect(|d| compile_insert(&empty, d)));
+    insta::assert_snapshot!(per_dialect(|d| render_insert(&empty, d)));
     let update = UpdateIr {
         table: TableRef::new("deals"),
         sets: vec![
@@ -501,12 +501,12 @@ fn writes() {
         ],
         wheres: vec![WhereClause::and(Deal::ID.eq(Uuid::nil()).into_where())],
     };
-    insta::assert_snapshot!(per_dialect(|d| compile_update(&update, d)));
+    insta::assert_snapshot!(per_dialect(|d| render_update(&update, d)));
     let delete = DeleteIr {
         table: TableRef::new("deals"),
         wheres: vec![WhereClause::and(Deal::AMOUNT_CENTS.lt(0).into_where())],
     };
-    insta::assert_snapshot!(per_dialect(|d| compile_delete(&delete, d)));
+    insta::assert_snapshot!(per_dialect(|d| render_delete(&delete, d)));
 }
 
 #[test]
@@ -696,14 +696,14 @@ fn limits_per_group() {
             .group_limit(3, "deal_id")
     ));
     use navree_orm::ir::{Aggregate, AggregateFunction};
-    use navree_orm::sql::compile_aggregate;
+    use navree_orm::sql::render_aggregate;
     let count = Aggregate {
         function: AggregateFunction::Count,
         arg: None,
         distinct: false,
     };
     let limited = Deal::query().latest().group_limit(2, Deal::COMPANY_ID);
-    insta::assert_snapshot!(per_dialect(|d| compile_aggregate(
+    insta::assert_snapshot!(per_dialect(|d| render_aggregate(
         &limited.clone().into_ir(),
         &count,
         d
@@ -753,11 +753,11 @@ fn inserts_that_skip_or_update_conflicts() {
             ]],
         )
     };
-    insta::assert_snapshot!(per_dialect(|d| compile_insert(
+    insta::assert_snapshot!(per_dialect(|d| render_insert(
         &base().on_conflict(OnConflict::Ignore { target: vec![] }),
         d
     )));
-    insta::assert_snapshot!(per_dialect(|d| compile_insert(
+    insta::assert_snapshot!(per_dialect(|d| render_insert(
         &base()
             .returning(vec![Cow::Borrowed("id")])
             .on_conflict(OnConflict::Ignore {
@@ -765,7 +765,7 @@ fn inserts_that_skip_or_update_conflicts() {
             }),
         d
     )));
-    insta::assert_snapshot!(per_dialect(|d| compile_insert(
+    insta::assert_snapshot!(per_dialect(|d| render_insert(
         &base().on_conflict(OnConflict::Update {
             target: vec![Cow::Borrowed("name")],
             sets: vec![
@@ -780,7 +780,7 @@ fn inserts_that_skip_or_update_conflicts() {
         d
     )));
     // PostgreSQL and SQLite need the conflict target of an update.
-    insta::assert_snapshot!(per_dialect(|d| compile_insert(
+    insta::assert_snapshot!(per_dialect(|d| render_insert(
         &base().on_conflict(OnConflict::Update {
             target: vec![],
             sets: vec![(Cow::Borrowed("color"), Expr::excluded("color"))],
@@ -802,7 +802,7 @@ fn inserts_from_queries() {
             .where_(col("stage").eq("lost"))
             .into_ir(),
     ));
-    insta::assert_snapshot!(per_dialect(|d| compile_insert(&archive, d)));
+    insta::assert_snapshot!(per_dialect(|d| render_insert(&archive, d)));
     let mut ignore = InsertIr::new(
         "archived_deals",
         vec![Cow::Borrowed("id"), Cow::Borrowed("title")],
@@ -810,10 +810,10 @@ fn inserts_from_queries() {
     )
     .on_conflict(OnConflict::Ignore { target: vec![] });
     ignore.select = Some(Box::new(table("deals").select(["id", "title"]).into_ir()));
-    insta::assert_snapshot!(per_dialect(|d| compile_insert(&ignore, d)));
+    insta::assert_snapshot!(per_dialect(|d| render_insert(&ignore, d)));
     let mut mismatch = InsertIr::new("archived_deals", vec![Cow::Borrowed("id")], Vec::new());
     mismatch.select = Some(Box::new(table("deals").select(["id", "title"]).into_ir()));
-    insta::assert_snapshot!(per_dialect(|d| compile_insert(&mismatch, d)));
+    insta::assert_snapshot!(per_dialect(|d| render_insert(&mismatch, d)));
 }
 
 #[test]
@@ -840,7 +840,7 @@ fn json_path_updates() {
         ],
         wheres: vec![WhereClause::and(Deal::ID.eq(Uuid::nil()).into_where())],
     };
-    insta::assert_snapshot!(per_dialect(|d| compile_update(&update, d)));
+    insta::assert_snapshot!(per_dialect(|d| render_update(&update, d)));
     let twice = UpdateIr {
         table: TableRef::new("deals"),
         sets: vec![
@@ -852,7 +852,7 @@ fn json_path_updates() {
         ],
         wheres: vec![],
     };
-    insta::assert_snapshot!(per_dialect(|d| compile_update(&twice, d)));
+    insta::assert_snapshot!(per_dialect(|d| render_update(&twice, d)));
 }
 
 #[test]
@@ -876,13 +876,13 @@ fn table_writes_with_joins_orders_and_limits() {
 
 #[test]
 fn updates_from_joined_tables() {
-    use navree_orm::sql::compile_update_from;
+    use navree_orm::sql::render_update_from;
     let query = table("deals")
         .join("companies as c", "c.id", "=", "deals.company_id")
         .where_(col("c.active").eq(false))
         .into_ir();
     let sets = vec![(Cow::Borrowed("stage"), IrExpr::Value(Value::from("lost")))];
-    insta::assert_snapshot!(per_dialect(|d| compile_update_from(
+    insta::assert_snapshot!(per_dialect(|d| render_update_from(
         &query.table,
         &sets,
         &query.joins,
@@ -892,7 +892,7 @@ fn updates_from_joined_tables() {
     let left = table("deals")
         .left_join("companies", "companies.id", "=", "deals.company_id")
         .into_ir();
-    insta::assert_snapshot!(per_dialect(|d| compile_update_from(
+    insta::assert_snapshot!(per_dialect(|d| render_update_from(
         &left.table,
         &sets,
         &left.joins,
@@ -903,14 +903,14 @@ fn updates_from_joined_tables() {
 
 #[test]
 fn truncation() {
-    use navree_orm::sql::compile_truncate;
+    use navree_orm::sql::render_truncate;
     let mut out = String::new();
     for dialect in DIALECTS {
-        for statement in compile_truncate("deals", false, dialect) {
+        for statement in render_truncate("deals", false, dialect) {
             writeln!(out, "{dialect}: {statement}").unwrap();
         }
     }
-    for statement in compile_truncate("audit.events", true, Dialect::Postgres) {
+    for statement in render_truncate("audit.events", true, Dialect::Postgres) {
         writeln!(out, "cascade: {statement}").unwrap();
     }
     insta::assert_snapshot!(out);
@@ -927,7 +927,7 @@ fn statement_timeouts() {
     use std::time::Duration;
 
     use navree_orm::ir::{Aggregate, AggregateFunction};
-    use navree_orm::sql::{compile_aggregate, compile_exists, compile_select};
+    use navree_orm::sql::{render_aggregate, render_exists, render_select};
 
     let timed = Company::query()
         .where_(Company::COUNTRY.eq("NZ"))
@@ -942,7 +942,7 @@ fn statement_timeouts() {
     writeln!(
         out,
         "count: {}",
-        compile_aggregate(&ir, &count, Dialect::MySql).unwrap().sql
+        render_aggregate(&ir, &count, Dialect::MySql).unwrap().sql
     )
     .unwrap();
     let mut limited = ir.clone();
@@ -950,7 +950,7 @@ fn statement_timeouts() {
     writeln!(
         out,
         "count of a limited query: {}",
-        compile_aggregate(&limited, &count, Dialect::MySql)
+        render_aggregate(&limited, &count, Dialect::MySql)
             .unwrap()
             .sql
     )
@@ -958,14 +958,14 @@ fn statement_timeouts() {
     writeln!(
         out,
         "exists: {}",
-        compile_exists(&ir, Dialect::MySql).unwrap().sql
+        render_exists(&ir, Dialect::MySql).unwrap().sql
     )
     .unwrap();
     let union = timed.clone().union(Company::query());
     writeln!(
         out,
         "union: {}",
-        compile_select(&union.into_ir(), Dialect::MySql)
+        render_select(&union.into_ir(), Dialect::MySql)
             .unwrap()
             .sql
     )
