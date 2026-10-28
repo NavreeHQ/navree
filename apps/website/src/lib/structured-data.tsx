@@ -17,7 +17,15 @@ type Json = Record<string, unknown>;
 
 /** A `<script type="application/ld+json">`, with `<` escaped so the JSON can't close the tag. */
 export function JsonLd({ data }: { data: Json }) {
-  return <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(data).replace(/</g, "\\u003c") }} />;
+  return (
+    <script
+      type="application/ld+json"
+      // The JSON is built from this repository's own data and every `<` is escaped,
+      // so it cannot close the tag.
+      // nosemgrep: navree-raw-html
+      dangerouslySetInnerHTML={{ __html: JSON.stringify(data).replace(/</g, "\\u003c") }}
+    />
+  );
 }
 
 /** The organisation behind Navree and the website itself (root layout). */

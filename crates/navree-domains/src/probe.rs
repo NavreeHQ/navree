@@ -128,6 +128,10 @@ impl TlsProbe {
             .await
             .map_err(|error| failed(format!("cannot connect: {error}")))?;
         let provider = Arc::new(rustls::crypto::ring::default_provider());
+        // Deliberate: this probe only reads the certificate a host presents (to report its expiry)
+        // and sends no data. `ReadOnly` below accepts any chain on purpose and still verifies the
+        // handshake signatures, so the certificate read is the server's own.
+        // nosemgrep: navree-tls-verification-disabled
         let config = rustls::ClientConfig::builder_with_provider(provider.clone())
             .with_safe_default_protocol_versions()
             .map_err(|error| failed(error.to_string()))?

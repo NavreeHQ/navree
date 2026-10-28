@@ -355,6 +355,9 @@
         })
           .then(function (r) { return r.ok ? r.json() : { html: "" }; })
           .then(function (body) {
+            // The server renders Markdown with raw HTML shown as text and only safe link schemes
+            // (navree-helm markdown.rs), so this is not user-controlled markup.
+            // nosemgrep: navree-raw-html
             preview.innerHTML = body.html;
             preview.hidden = false;
             area.hidden = true;
