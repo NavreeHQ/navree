@@ -11,7 +11,7 @@ Lighthouse runs inside your app and stores its data in your database. There is n
 
 - **Every process reports.** `serve`, `queue:work`, `schedule:work`, [Fleet](/docs/tools/fleet/) workers and one-off commands all write to the same store, so a job that fails on a worker shows up next to the request that failed on the web server.
 - **No code changes.** Lighthouse reads what the framework already produces: the request pipeline and its exceptions and panics, query timings from navree-db, job outcomes from navree-queue, scheduled runs, mail, cache calls and the HTTP client. You add the module; the rest is configuration.
-- **Off the request path.** Recording copies a few fields into an in-memory buffer. A background task writes them to the database in batches, so a request never waits for Lighthouse.
+- **Off the request path, and exact.** Recording adds the request to in-memory counters on the thread that handled it, with no I/O and nothing queued, and puts the details worth keeping in a bounded queue. A background task writes both to the database every second, so a request never waits for Lighthouse and no count is lost, however hard the app is pushed ([how](#under-load)).
 
 ## Installation
 
@@ -185,7 +185,7 @@ The release comes from `lighthouse.release`. [Harbor](/docs/tools/harbor/) sets 
 
 The dashboard is served by your app at `lighthouse.path` (`/_lighthouse`), outside the API prefix: server-rendered pages from templates compiled into the crate, with a small stylesheet and script of its own. No Node.js, no CDN and no separate process. The overview refreshes its figures and its feed every ten seconds while you watch.
 
-- **Overview.** A row of figures for the selected period (the last hour, 24 hours or 7 days): requests per minute, the error rate, the 95th percentile latency, failed jobs and open issues. Below them, a timeline of requests and exceptions, and a feed of the latest occurrences, new ones sliding in at the top.
+- **Overview.** A row of figures for the selected period (the last hour, 24 hours or 7 days): requests per minute, the error rate, the 95th percentile latency, failed jobs, open issues and the details [sampled out](#under-load) because the database was not keeping up. Below them, a timeline of requests and exceptions, and a feed of the latest occurrences, new ones sliding in at the top.
 - **Issues.** One line per issue (open ones by default): its title (the first line of the message), the route or job it comes from, a sparkline of the last 24 hours, the number of occurrences, users and workspaces affected, and first and last seen. Filter by status, kind, level, release, environment, route, job, tag (`key:value`), user or workspace, search titles, and sort by last seen, first seen or count.
 - **An issue.** The message and the error's source chain, the backtrace when there is one, and the latest occurrence: the request (method, route, headers with secrets masked), the user, the workspace, the release, the server, tags and your report's context values. A chart shows occurrences per hour over seven days, and a list shows recent occurrences with a link to each trace. Buttons resolve, resolve in the next release, ignore (forever, for an hour, a day or 100 more events) or reopen it, and a table shows the alerts sent about it.
 - **Requests.** Every route with its throughput, error rate and p50, p95 and p99 latency, slowest first. A route's page lists its slowest traces, each drawn as a waterfall of spans.
@@ -232,7 +232,7 @@ Everything on the dashboard is also JSON under `/_lighthouse/api`, for scripts, 
 
 | Route | What it returns or does | Ability |
 |---|---|---|
-| `GET /api/overview?period=24h` | The overview's figures, timeline and latest occurrences (`period` is `1h`, `24h` or `7d`) | `view` |
+| `GET /api/overview?period=24h` | The overview's figures (`requests`, `error_rate`, `p95_ms`, `failed_jobs`, `open_issues`, `sampled_out`, ...), timeline and latest occurrences (`period` is `1h`, `24h` or `7d`) | `view` |
 | `GET /api/issues` | A page of issues, `{"data": [..], "meta": {..}}`, with the filters of the Issues page as query parameters: `status`, `kind`, `level`, `release`, `environment`, `route`, `job`, `tag`, `user`, `workspace`, `search`, `sort` (`last_seen`, `first_seen`, `count`), `page`, `per_page` | `view` |
 | `GET /api/issues/{id}` | One issue: the message, the source chain, the latest occurrence with its context and backtrace, the timeline and the alerts | `view` |
 | `GET /api/issues/{id}/occurrences` | Its stored occurrences, newest first (`page`, `per_page`) | `view` |
@@ -406,20 +406,26 @@ To check every channel, `navree lighthouse:test-alerts` sends a test alert (`"te
 
 ## Sampling
 
-Counts are always exact: every request, job and exception is counted towards its route's throughput and error rate and its issue's occurrences. Sampling decides how many **details** are stored: traces of ordinary requests and jobs, and occurrences of busy issues.
+Counts are always exact: every request, job and exception is counted towards its route's throughput, error rate and latency percentiles and its issue's occurrences, whatever the rates below. Sampling decides how many **details** are stored: traces of ordinary requests and jobs, and occurrences of busy issues.
+
+By default Lighthouse keeps:
+
+- **every error**: the trace of every 5xx response and of every request or job that reported an exception, and every occurrence of an issue (the first 100 per issue per hour, then `exceptions` of them);
+- **every failure**: every failed job attempt and failed scheduled task;
+- **everything slow**: every slow request and slow job (`lighthouse.thresholds`);
+- **one in ten of the rest**: `requests = 0.1` and `jobs = 0.1`.
 
 ```toml title="config/app.toml"
 [lighthouse.sample]
-requests = 0.1    # store the trace of 1 request in 10
+requests = 0.05   # store the trace of 1 ordinary request in 20
 jobs = 0.25
 exceptions = 1.0  # store every occurrence (counts stay exact either way)
 ```
 
-- Slow requests, slow jobs, failed requests and jobs, and the first 100 occurrences of each issue per hour are always stored, whatever the rates.
 - The latency percentiles on the Requests page come from per-minute histograms of every request, not from samples.
 - Sampling is per request: a sampled request keeps its whole trace, with every query in it. Whether a request is sampled depends only on its request id, so every process agrees.
 
-On a busy app, start with `requests = 0.1` and raise it if you want more traces to look at.
+On a busy app, lower `requests` to cut the writes; in development, set it to `1.0` to see every trace.
 
 ## Retention and pruning
 
@@ -446,7 +452,20 @@ APP_LIGHTHOUSE__DATABASE_URL=postgres://lighthouse:secret@db.internal:5432/crm_l
 
 Lighthouse connects to it when the app boots, creates its five tables there if they are missing, and reads and writes there; the dashboard reads from it too. The URL takes the same forms as `database.url`. (The `lighthouse` migration still creates the tables in the app's database, where they stay empty, so removing the setting later works.)
 
-The background writer flushes the buffer every second, or as soon as it holds 500 records. If the database can't keep up and the buffer reaches `lighthouse.buffer` records (10,000), Lighthouse drops samples first and occurrences last, never counts, and says so: the dashboard shows a banner with the number this process dropped, and `/metrics` has `lighthouse_dropped_total`. On shutdown the writer flushes what it holds before the app exits.
+### Under load
+
+Lighthouse never trades a count for speed. Recording runs in two parts:
+
+- **Counts never wait in a queue.** Each request, query, job attempt, outgoing call, exception and issue hit is added at once to this process's per-minute and per-hour counters and latency histograms, in memory, on the thread that handled it. The counters are spread over 64 locks by route or statement, each held for a few map updates, so threads rarely meet and never wait on the database. However large the burst, every request is counted.
+- **Details go through a bounded queue.** The traces and occurrences worth keeping (see [sampling](#sampling)) wait in a queue of `lighthouse.buffer` entries (10,000). When it is full, the new detail is dropped (a trace before an occurrence, and never the issue's count) and counted as **sampled out**.
+
+A background writer takes both every second, or as soon as 500 details wait, and writes them in one transaction: the counters as this process's rows (each process owns its own, so writers never conflict), the issues' counts as relative updates, and the details as batched inserts. If a write fails, the counters and the issue hits are written with the next one; only that batch's details are lost, and they are counted as sampled out too. On shutdown the writer flushes what it holds before the app exits.
+
+Sampled-out details are visible: the overview's **Sampled out** figure adds up every process's for the period, the dashboard shows a banner with this process's number, `/metrics` has `lighthouse_sampled_out_total`, and `Lighthouse::sampled_out()` returns it in code. A growing number means the database is not keeping up with the details: lower `lighthouse.sample.requests`, or give Lighthouse [its own database](#storage).
+
+Status changes are safe across processes too: an issue's status, `regressed_at` and ignore counter change only if they still hold what the process read, so when two processes see a resolved issue happen again at once, one reopens it and raises the regression alert, and both processes' hits are counted.
+
+The evidence harness in the repository's `e2e/` folder checks this in Docker against PostgreSQL: its `lighthouse` scenario sends a mix of reads, writes, 401s and 404s as fast as 200 virtual users can, then compares the requests Lighthouse recorded with the requests k6 sent, and fails when they differ by more than 1 %.
 
 ## Privacy and security
 
@@ -486,12 +505,12 @@ Every key of the `lighthouse` section is optional. As environment variables: `AP
 | `lighthouse.thresholds.slow_query_ms` | `200` | When a query is slow. |
 | `lighthouse.thresholds.slow_job_ms` | `30000` | When a job attempt is slow (its trace is kept). |
 | `lighthouse.thresholds.slow_outgoing_ms` | `2000` | When an outgoing request is slow. |
-| `lighthouse.sample.requests` | `1.0` | Fraction of request traces stored. |
-| `lighthouse.sample.jobs` | `1.0` | Fraction of job traces stored. |
+| `lighthouse.sample.requests` | `0.1` | Fraction of ordinary request traces stored (errors and slow requests are always kept). |
+| `lighthouse.sample.jobs` | `0.1` | Fraction of ordinary job traces stored (failed and slow attempts are always kept). |
 | `lighthouse.sample.exceptions` | `1.0` | Fraction of occurrences stored beyond the first 100 per issue per hour. |
 | `lighthouse.retention_days` | `14` | What `lighthouse:prune` keeps. |
 | `lighthouse.prune_at` | `"03:10"` | When the scheduler prunes (UTC); empty to not schedule it. |
-| `lighthouse.buffer` | `10000` | Records held in memory before dropping (at least 100). |
+| `lighthouse.buffer` | `10000` | Details (traces and occurrences) waiting to be written before new ones are sampled out (at least 100). Counts are never dropped. |
 | `lighthouse.capture.request_body` | `false` | Store JSON request bodies (up to 16 KiB) with stored requests. |
 | `lighthouse.capture.request_headers` | `true` | Store request headers, masked. |
 | `lighthouse.capture.ip` | `true` | Store the client address. |
