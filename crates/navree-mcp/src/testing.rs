@@ -11,9 +11,10 @@ use bytes::{Buf, Bytes};
 use http::header::{ACCEPT, ORIGIN};
 use http_body_util::BodyExt;
 use navree_testing::{TestClient, TestRequest, TestResponse};
-use rmcp::model::{Prompt, ProtocolVersion, Resource, ResourceTemplate, Tool};
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
+
+use crate::protocol::{Prompt, Resource, ResourceTemplate, STATELESS_VERSION, Tool};
 
 /// The protocol version the client asks for.
 const PROTOCOL_VERSION: &str = "2025-11-25";
@@ -132,7 +133,7 @@ impl McpTestClient {
     /// Whether the client speaks the stateless protocol (2026-07-28 and
     /// later: no handshake, no session).
     pub fn is_stateless(&self) -> bool {
-        self.protocol_version.as_str() >= ProtocolVersion::NO_INITIALIZE.as_str()
+        self.protocol_version.as_str() >= STATELESS_VERSION
     }
 
     /// Performs the handshake (`initialize`, then
