@@ -17,7 +17,10 @@ set -uo pipefail
 export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL="*"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-COMPOSE_FILE="$ROOT/e2e/docker/compose.yml"
+# The same directory as Docker on the host sees it: `D:/...` under Git Bash
+# (`pwd -W`), the plain path elsewhere.
+HOST_ROOT="$(cd "$ROOT" && (pwd -W 2>/dev/null || pwd))"
+COMPOSE_FILE="$HOST_ROOT/e2e/docker/compose.yml"
 PROJECT="${E2E_PROJECT:-navree-e2e}"
 IMAGE="${E2E_APP_IMAGE:-navree-evidence-app:local}"
 
@@ -79,7 +82,8 @@ for p in $SERVICES_PROFILES; do
   case "$p" in
     search) SERVICES+=(meilisearch) ;;
     typesense) SERVICES+=(typesense) ;;
-    storage) SERVICES+=(minio minio-bucket) ;;
+    # minio-bucket runs once and exits; the app services wait for it.
+    storage) SERVICES+=(minio) ;;
     nats) SERVICES+=(nats) ;;
     mysql) SERVICES+=(mysql) ;;
     mongo) SERVICES+=(mongo) ;;
@@ -165,19 +169,19 @@ teardown() {
   if [ "$KEEP" = 1 ]; then
     log "keeping the stack (--keep): e2e/run.sh down removes it"
   else
-    compose down -v --remove-orphans >> "$OUT/run.log" 2>&1
+    compose down -v --remove-orphans > "$OUT/logs/teardown.log" 2>&1
   fi
 }
 trap 'teardown; exit 130' INT TERM
 
 log "run $RUN_ID: profile=$LOAD_PROFILE scenarios=$SCENARIOS services=($SERVICES_PROFILES) out=$OUT"
-git -C "$ROOT" rev-parse HEAD > "$OUT/commit.txt" 2>/dev/null
+git -C "$HOST_ROOT" rev-parse HEAD > "$OUT/commit.txt" 2>/dev/null
 docker version --format '{{.Server.Version}}' > "$OUT/docker-version.txt" 2>/dev/null
 docker info --format '{{.NCPU}} CPUs, {{.MemTotal}} bytes, kernel {{.KernelVersion}}' > "$OUT/host.txt" 2>/dev/null
 
 # 1. The image.
 if [ "$BUILD" = 1 ]; then
-  step "image: build" docker build -f "$ROOT/e2e/docker/Dockerfile" -t "$IMAGE" "$ROOT" || { teardown; exit 1; }
+  step "image: build" docker build -f "$HOST_ROOT/e2e/docker/Dockerfile" -t "$IMAGE" "$HOST_ROOT" || { teardown; exit 1; }
 fi
 docker image inspect "$IMAGE" --format '{{.Size}}' > "$OUT/image-size.txt" 2>/dev/null \
   || { record "image: present" fail 0 "no image $IMAGE (run without --no-build)"; teardown; exit 1; }
@@ -230,7 +234,7 @@ FINISHED="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 teardown
 
 # 8. summary.json (assembled in a node container: no host tools needed).
-docker run --rm -v "$OUT:/out" -v "$ROOT/e2e/tools:/tools:ro" \
+docker run --rm -v "$HOST_ROOT/target/evidence/$RUN_ID:/out" -v "$HOST_ROOT/e2e/tools:/tools:ro" \
   -e RUN_ID="$RUN_ID" -e STARTED="$STARTED" -e FINISHED="$FINISHED" -e LOAD_PROFILE="$LOAD_PROFILE" \
   node:24-bookworm-slim node /tools/summarize.mjs /out > "$OUT/logs/summarize.log" 2>&1 \
   || log "summarize failed: see logs/summarize.log"
