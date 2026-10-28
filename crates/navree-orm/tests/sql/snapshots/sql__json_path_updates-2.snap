@@ -1,6 +1,6 @@
 ---
 source: crates/navree-orm/tests/sql/main.rs
-expression: "per_dialect(|d| compile_update(&twice, d))"
+expression: "per_dialect(|d| render_update(&twice, d))"
 ---
 PostgreSQL: error: invalid query: an update of `deals` sets `meta` twice, or both the column and a JSON path inside it
 MySQL: error: invalid query: an update of `deals` sets `meta` twice, or both the column and a JSON path inside it

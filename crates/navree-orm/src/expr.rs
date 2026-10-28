@@ -138,7 +138,7 @@ impl Expr {
     ///
     /// ```
     /// use navree_orm::ir::{InsertIr, OnConflict};
-    /// use navree_orm::sql::{Dialect, compile_insert};
+    /// use navree_orm::sql::{Dialect, render_insert};
     /// use navree_orm::{Expr, Value};
     ///
     /// let insert = InsertIr::new(
@@ -151,11 +151,11 @@ impl Expr {
     ///     sets: vec![("views".into(), Expr::col("page_views.views").add(Expr::excluded("views")))],
     /// });
     /// assert_eq!(
-    ///     compile_insert(&insert, Dialect::Postgres).unwrap().sql,
+    ///     render_insert(&insert, Dialect::Postgres).unwrap().sql,
     ///     r#"INSERT INTO "page_views" ("path", "views") VALUES ($1, $2) ON CONFLICT ("path") DO UPDATE SET "views" = "page_views"."views" + "excluded"."views""#
     /// );
     /// assert_eq!(
-    ///     compile_insert(&insert, Dialect::MySql).unwrap().sql,
+    ///     render_insert(&insert, Dialect::MySql).unwrap().sql,
     ///     "INSERT INTO `page_views` (`path`, `views`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `views` = `page_views`.`views` + VALUES(`views`)"
     /// );
     /// # let _ = Value::from(1);

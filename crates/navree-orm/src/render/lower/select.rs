@@ -18,8 +18,7 @@ use crate::value::Value;
 const GROUP_TABLE: &str = "navree_table";
 const GROUP_ROW: &str = "navree_row";
 
-/// A read query as a tree, as [`compile_select`](crate::sql::compile_select)
-/// builds it (MySQL's timeout hint included).
+/// A read query as a tree (MySQL's timeout hint included).
 pub fn select(query: &QueryIr, dialect: Dialect) -> Result<ast::Query> {
     let lowerer = Lowerer::new(dialect);
     let mut lowered = lowerer.select(query)?;

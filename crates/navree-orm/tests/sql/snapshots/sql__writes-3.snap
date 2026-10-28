@@ -1,6 +1,6 @@
 ---
 source: crates/navree-orm/tests/sql/main.rs
-expression: "per_dialect(|d| compile_update(&update, d))"
+expression: "per_dialect(|d| render_update(&update, d))"
 ---
 PostgreSQL: UPDATE "deals" SET "stage" = $1, "amount_cents" = "amount_cents" + $2 WHERE "deals"."id" = $3
   values: [String(Some("won")), BigInt(Some(5)), Uuid(Some(00000000-0000-0000-0000-000000000000))]

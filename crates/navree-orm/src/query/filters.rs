@@ -593,7 +593,7 @@ macro_rules! filters {
         /// use navree_orm::{Dialect, table};
         ///
         /// let sql = table("deals").where_json_contains_key("meta->owner").to_sql(Dialect::Postgres).unwrap();
-        /// assert_eq!(sql.sql, r#"SELECT * FROM "deals" WHERE COALESCE(("meta")::jsonb ? $1, false)"#);
+        /// assert_eq!(sql.sql, r#"SELECT * FROM "deals" WHERE COALESCE(CAST("meta" AS JSONB) ? $1, FALSE)"#);
         /// ```
         pub fn where_json_contains_key(self, column: impl $crate::IntoExpr) -> Self {
             self.where_($crate::query::filters::json_contains_key(column, false))

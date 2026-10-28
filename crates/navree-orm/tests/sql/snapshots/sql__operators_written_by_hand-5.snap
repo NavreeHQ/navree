@@ -1,7 +1,8 @@
 ---
 source: crates/navree-orm/tests/sql/main.rs
+assertion_line: 570
 expression: "rows(table(\"deals\").select_expr(Expr::col(\"meta\").binary(\"#-\",\nExpr::raw(\"'{owner,email}'\", [] as [i64; 0])), \"meta\"))"
 ---
-PostgreSQL: SELECT ("meta" #- '{owner,email}') AS "meta" FROM "deals"
+PostgreSQL: SELECT "meta" #- ('{owner,email}') AS "meta" FROM "deals"
 MySQL: error: invalid query: `#-` is not an operator MySQL expressions take (they take: +, -, *, /, %, DIV, MOD, &, |, ^, <<, >>, ->, ->>)
 SQLite: error: invalid query: `#-` is not an operator SQLite expressions take (they take: +, -, *, /, %, ||, &, |, <<, >>, ->, ->>)

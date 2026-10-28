@@ -87,7 +87,7 @@ impl<M: Model> Builder<M> {
     /// `SET` items from assignments, plus the update timestamp (at `now`)
     /// unless an assignment sets it. An assignment to a JSON path
     /// (`col("meta->status").set("won")`) changes that value inside the
-    /// column (see [`compile_update`](crate::sql::compile_update)).
+    /// column (see [`render_update`](crate::sql::render_update)).
     pub(crate) fn sets(
         now: DateTime<Utc>,
         assignments: impl IntoIterator<Item = Assignment>,

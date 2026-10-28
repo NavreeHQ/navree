@@ -118,7 +118,7 @@ ability.authorize(Update, &ticket)?;          // a 403 in Navree's error shape
 let can_update: bool = ability.allows(Update, &ticket);
 ```
 
-A list filter and a record check are compiled from the same rules, last match wins, so a record is listed exactly when a check on it would pass; counts and pages of the query respect the filter. Rule conditions name model columns, and their values are bound with the column's type (UUIDs, dates, decimals, enums as stored). `navree make:model tickets Ticket --policy --controller` writes a model, a policy and a controller wired this way.
+A list filter and a record check are compiled from the same rules, last match wins, so a record is listed exactly when a check on it would pass; counts and pages of the query respect the filter. The filter is written for the query's database, PostgreSQL, MySQL or SQLite: `ne` matches null columns on each (`IS DISTINCT FROM`, `NOT (a <=> b)` on MySQL, `IS NOT` on SQLite). Rule conditions name model columns, and their values are bound with the column's type (UUIDs, dates, decimals, enums as stored). `navree make:model tickets Ticket --policy --controller` writes a model, a policy and a controller wired this way.
 
 ## Validation rules
 

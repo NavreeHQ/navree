@@ -17,7 +17,7 @@ use crate::query::clauses::{HasQuery, clauses};
 use crate::query::fetch::Selectable;
 use crate::query::filters::{HasWheres, filters, parse_table};
 use crate::row::{Row, decode_error};
-use crate::sql::{Dialect, Statement, compile_select};
+use crate::sql::{Dialect, Statement, render_select};
 use crate::value::{Field, Value};
 
 /// The page size of [`TableBuilder::paginate`] given a page number alone.
@@ -187,7 +187,7 @@ impl TableBuilder {
     /// The statement the query compiles to for `dialect`, without running
     /// it.
     pub fn to_sql(&self, dialect: Dialect) -> Result<Statement> {
-        compile_select(&self.ir, dialect)
+        render_select(&self.ir, dialect)
     }
 
     /// The statement [`update`](Self::update) would run on `dialect` with
@@ -217,7 +217,7 @@ impl TableBuilder {
             .map(|assignment| assignment.into_set().map_err(OrmError::invalid))
             .collect::<Result<Vec<_>>>()?;
         let (table, wheres) = self.clone().write_target("update", Some(dialect))?;
-        crate::sql::compile_update(
+        crate::sql::render_update(
             &UpdateIr {
                 table,
                 sets,
@@ -231,7 +231,7 @@ impl TableBuilder {
     /// without running it.
     pub fn to_delete_sql(&self, dialect: Dialect) -> Result<Statement> {
         let (table, wheres) = self.clone().write_target("delete", Some(dialect))?;
-        crate::sql::compile_delete(&DeleteIr { table, wheres }, dialect)
+        crate::sql::render_delete(&DeleteIr { table, wheres }, dialect)
     }
 
     /// The query's rows.

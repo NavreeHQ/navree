@@ -259,9 +259,9 @@ pub(crate) fn condition(
                 "raw SQL conditions (`where_raw`; write the condition with typed columns, or as a filter document with `Filter::document(doc! { .. })`)",
             ));
         }
-        Where::Sql(_) => {
+        Where::Sql(_) | Where::Tree(_) => {
             return Err(unsupported(
-                "SQL conditions (sea-query conditions and navree-access SQL filters; write them with typed columns or as a filter document)",
+                "SQL conditions (sea-query conditions, render-tree conditions and access-control filters; write them with typed columns or as a filter document)",
             ));
         }
         Where::Native(native) => match native.downcast_ref::<Document>() {
@@ -411,7 +411,7 @@ pub(crate) fn kind(filter: &Where) -> &'static str {
         Where::JsonContains { .. } => "a JSON containment check",
         Where::JsonLength { .. } => "a JSON length check",
         Where::FullText { .. } => "a full-text condition",
-        Where::Raw { .. } | Where::Sql(_) => "raw SQL",
+        Where::Raw { .. } | Where::Sql(_) | Where::Tree(_) => "raw SQL",
         Where::Native(_) => "a native filter",
         Where::Invalid(_) => "an invalid condition",
         _ => "this condition",

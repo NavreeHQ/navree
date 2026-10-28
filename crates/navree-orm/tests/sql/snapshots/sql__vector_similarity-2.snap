@@ -1,9 +1,10 @@
 ---
 source: crates/navree-orm/tests/sql/main.rs
+assertion_line: 605
 expression: "rows(table(\"documents\").where_vector_distance_less_than(\"embedding\",\n&embedding, 0.4).order_by_vector_distance(\"embedding\", &embedding))"
 ---
-PostgreSQL: SELECT * FROM "documents" WHERE (("embedding" <=> CAST($1 AS vector))) <= $2 ORDER BY ("embedding" <=> CAST($3 AS vector)) ASC
+PostgreSQL: SELECT * FROM "documents" WHERE "embedding" <=> CAST($1 AS vector) <= $2 ORDER BY "embedding" <=> CAST($3 AS vector) ASC
   values: [String(Some("[0.25,-1.5,3]")), Double(Some(0.4)), String(Some("[0.25,-1.5,3]"))]
-MySQL: SELECT * FROM `documents` WHERE (VEC_DISTANCE_COSINE(`embedding`, VEC_FromText(?))) <= ? ORDER BY VEC_DISTANCE_COSINE(`embedding`, VEC_FromText(?)) ASC
+MySQL: SELECT * FROM `documents` WHERE VEC_DISTANCE_COSINE(`embedding`, VEC_FromText(?)) <= ? ORDER BY VEC_DISTANCE_COSINE(`embedding`, VEC_FromText(?)) ASC
   values: [String(Some("[0.25,-1.5,3]")), Double(Some(0.4)), String(Some("[0.25,-1.5,3]"))]
 SQLite: error: a vector distance is not supported on SQLite

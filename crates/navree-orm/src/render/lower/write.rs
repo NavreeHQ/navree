@@ -14,8 +14,7 @@ use crate::render::ast::{self, SqlType};
 use crate::sql::Dialect;
 use crate::value::{Value, to_json};
 
-/// An insert as a tree, as [`compile_insert`](crate::sql::compile_insert)
-/// builds it: `returning` columns come back on PostgreSQL and SQLite only
+/// An insert as a tree: `returning` columns come back on PostgreSQL and SQLite only
 /// (MySQL reads `last_insert_id`); conflicting rows fail the statement,
 /// are skipped or update the existing row, as [`OnConflict`] says.
 pub fn insert(insert: &InsertIr, dialect: Dialect) -> Result<ast::Insert> {
@@ -126,8 +125,7 @@ pub fn insert(insert: &InsertIr, dialect: Dialect) -> Result<ast::Insert> {
     })
 }
 
-/// An update as a tree, as [`compile_update`](crate::sql::compile_update)
-/// builds it: assignments to JSON paths (`meta->status`) are grouped per
+/// An update as a tree: assignments to JSON paths (`meta->status`) are grouped per
 /// column into one call that sets them all (`jsonb_set` on PostgreSQL,
 /// `json_set` on MySQL and SQLite; a NULL column starts as an empty
 /// object).
@@ -153,8 +151,7 @@ pub fn update(update: &UpdateIr, dialect: Dialect) -> Result<ast::Update> {
 /// PostgreSQL's (and SQLite's) `UPDATE table SET .. FROM joined, ..
 /// WHERE ..` as a tree: the joined tables become the `FROM` list and their
 /// join conditions join the `WHERE`; MySQL writes it as `UPDATE table,
-/// joined SET ..`, for one joined table, as
-/// [`compile_update_from`](crate::sql::compile_update_from) allows. Only
+/// joined SET ..`, for one joined table. Only
 /// inner and cross joins can be expressed this way.
 pub fn update_from(
     table: &TableRef,
@@ -221,8 +218,7 @@ pub fn update_from(
     Ok(lowered)
 }
 
-/// A delete as a tree, as [`compile_delete`](crate::sql::compile_delete)
-/// builds it (the table is named without its alias).
+/// A delete as a tree (the table is named without its alias).
 pub fn delete(delete: &DeleteIr, dialect: Dialect) -> Result<ast::Delete> {
     let lowerer = Lowerer::new(dialect);
     let mut lowered = ast::Delete::new(ast::ObjectName::parse(delete.table.name.clone()));
@@ -232,8 +228,7 @@ pub fn delete(delete: &DeleteIr, dialect: Dialect) -> Result<ast::Delete> {
     Ok(lowered)
 }
 
-/// Emptying `table` and restarting its identity, as
-/// [`compile_truncate`](crate::sql::compile_truncate) does: `CASCADE`
+/// Emptying `table` and restarting its identity: `CASCADE`
 /// (PostgreSQL) also empties the tables whose foreign keys point at it.
 pub fn truncate(table: &str, cascade: bool) -> ast::Truncate {
     ast::Truncate {
