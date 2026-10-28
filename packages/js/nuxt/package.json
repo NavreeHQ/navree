@@ -45,7 +45,7 @@
     "@navree/client": "workspace:*",
     "@nuxt/kit": "^4.6.2",
     "@nuxt/schema": "^4.6.2",
-    "@tanstack/vue-table": "^8.21.3",
+    "@tanstack/vue-table": "^9.3.1",
     "defu": "^6.1.7",
     "h3": "^1.15.11"
   },

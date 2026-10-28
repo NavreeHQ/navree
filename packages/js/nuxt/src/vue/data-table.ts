@@ -7,8 +7,32 @@
  * markup, for your own shadcn-vue `Table` components.
  */
 import { pageRange, sortDirection, toggleSort, toSorting, withPage, type ListQuery, type PageMeta } from "@navree/client";
-import { FlexRender, getCoreRowModel, useVueTable, type ColumnDef, type Header, type Table } from "@tanstack/vue-table";
+import {
+  columnVisibilityFeature,
+  FlexRender,
+  rowPaginationFeature,
+  rowSortingFeature,
+  tableFeatures,
+  useTable,
+  type ColumnDef,
+  type Header,
+  type RowData,
+  type VueTable,
+} from "@tanstack/vue-table";
 import { defineComponent, h, type PropType, type VNode } from "vue";
+
+/**
+ * The TanStack Table features the table registers: sorting and paging state
+ * (both done on the server) and column visibility. Rows come from the core row
+ * model as the server sent them.
+ */
+const features = tableFeatures({ columnVisibilityFeature, rowSortingFeature, rowPaginationFeature });
+
+/** The table's TanStack Table feature set, for TanStack types (`createColumnHelper<NavreeTableFeatures, Deal>()`). */
+export type NavreeTableFeatures = typeof features;
+
+/** A column of the table: TanStack Table's `ColumnDef` for the table's features. */
+export type NavreeColumnDef<T extends RowData, V = any> = ColumnDef<NavreeTableFeatures, T, V>;
 
 export interface NavreeColumnMeta {
   /** The list-query sort field; the column is sortable when it is set. */
@@ -36,8 +60,8 @@ export const defaultLabels: DataTableLabels = {
   range: (from, to, total) => `${from}–${to} of ${total}`,
 };
 
-export interface UseDataTableOptions<T> {
-  columns: () => ColumnDef<T, any>[];
+export interface UseDataTableOptions<T extends RowData> {
+  columns: () => NavreeColumnDef<T>[];
   data: () => T[] | undefined;
   query: () => ListQuery;
   meta?: () => PageMeta | undefined;
@@ -45,27 +69,27 @@ export interface UseDataTableOptions<T> {
   getRowId?: (row: T, index: number) => string;
 }
 
-export interface NavreeTable<T> {
-  table: Table<T>;
-  toggleColumnSort(header: Header<T, unknown>, multi?: boolean): void;
-  columnSort(header: Header<T, unknown>): "asc" | "desc" | undefined;
+export interface NavreeTable<T extends RowData> {
+  table: VueTable<NavreeTableFeatures, T>;
+  toggleColumnSort(header: Header<NavreeTableFeatures, T, unknown>, multi?: boolean): void;
+  columnSort(header: Header<NavreeTableFeatures, T, unknown>): "asc" | "desc" | undefined;
   goToPage(page: number): void;
 }
 
-function columnMeta(header: Header<any, unknown>): NavreeColumnMeta {
+function columnMeta(header: Header<NavreeTableFeatures, any, unknown>): NavreeColumnMeta {
   return (header.column.columnDef.meta ?? {}) as NavreeColumnMeta;
 }
 
 /** The table without markup: TanStack Vue Table with server-side sorting and paging from the list query. */
-export function useDataTable<T>(options: UseDataTableOptions<T>): NavreeTable<T> {
-  const table = useVueTable<T>({
+export function useDataTable<T extends RowData>(options: UseDataTableOptions<T>): NavreeTable<T> {
+  const table = useTable<NavreeTableFeatures, T>({
+    features,
     get columns() {
       return options.columns();
     },
     get data() {
       return options.data() ?? [];
     },
-    getCoreRowModel: getCoreRowModel(),
     manualSorting: true,
     manualPagination: true,
     enableSorting: false,
@@ -154,7 +178,7 @@ export const NavreePagination = defineComponent({
 export const NavreeDataTable = defineComponent({
   name: "NavreeDataTable",
   props: {
-    columns: { type: Array as PropType<ColumnDef<any, any>[]>, required: true },
+    columns: { type: Array as PropType<NavreeColumnDef<any>[]>, required: true },
     data: { type: Array as PropType<unknown[]>, default: undefined },
     meta: { type: Object as PropType<PageMeta>, default: undefined },
     query: { type: Object as PropType<ListQuery>, default: () => ({}) },
@@ -194,7 +218,7 @@ export const NavreeDataTable = defineComponent({
             group.headers.map((header) => {
               const m = columnMeta(header);
               const direction = navree.columnSort(header);
-              const label = header.isPlaceholder ? null : h(FlexRender, { render: header.column.columnDef.header, props: header.getContext() });
+              const label = header.isPlaceholder ? null : h(FlexRender, { header });
               return h(
                 "th",
                 {
@@ -262,7 +286,7 @@ export const NavreeDataTable = defineComponent({
               return h(
                 "td",
                 { key: cell.id, "data-slot": "table-cell", class: cls("px-3 text-fg-1", ALIGN[m.align ?? "start"], m.className) },
-                [h(FlexRender, { render: cell.column.columnDef.cell, props: cell.getContext() })],
+                [h(FlexRender, { cell })],
               );
             }),
           ),
