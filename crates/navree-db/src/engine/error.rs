@@ -248,7 +248,8 @@ fn classify(
         E::Encode(_) | E::InvalidArgument(_) => ErrorKind::InvalidStatement,
         E::InvalidSavePointStatement | E::BeginFailed => ErrorKind::Unsupported,
         E::Database(database) => {
-            let code = database.code().map(|code| code.into_owned());
+            let backend = backend.or_else(|| backend_of(database.as_ref()));
+            let code = server_code(database.as_ref());
             let constraint = database.constraint().map(str::to_owned);
             let kind = database_kind(database.as_ref(), code.as_deref(), backend);
             return (kind, code, constraint);
@@ -256,6 +257,45 @@ fn classify(
         _ => ErrorKind::Other,
     };
     (kind, None, None)
+}
+
+/// The backend whose driver made `error`.
+fn backend_of(error: &dyn sqlx::error::DatabaseError) -> Option<Backend> {
+    #[cfg(feature = "postgres")]
+    if error
+        .try_downcast_ref::<sqlx::postgres::PgDatabaseError>()
+        .is_some()
+    {
+        return Some(Backend::Postgres);
+    }
+    #[cfg(feature = "mysql")]
+    if error
+        .try_downcast_ref::<sqlx::mysql::MySqlDatabaseError>()
+        .is_some()
+    {
+        return Some(Backend::MySql);
+    }
+    #[cfg(feature = "sqlite")]
+    if error
+        .try_downcast_ref::<sqlx::sqlite::SqliteError>()
+        .is_some()
+    {
+        return Some(Backend::Sqlite);
+    }
+    let _ = error;
+    None
+}
+
+/// The server's code of `error`: the SQLSTATE on PostgreSQL, the error
+/// number on MySQL (its SQLSTATEs are too coarse: a deadlock and a
+/// serialization failure share `40001`), the extended result code on
+/// SQLite.
+fn server_code(error: &dyn sqlx::error::DatabaseError) -> Option<String> {
+    #[cfg(feature = "mysql")]
+    if let Some(mysql) = error.try_downcast_ref::<sqlx::mysql::MySqlDatabaseError>() {
+        return Some(mysql.number().to_string());
+    }
+    error.code().map(|code| code.into_owned())
 }
 
 /// The kind of an error the server returned.
@@ -272,18 +312,9 @@ fn database_kind(
         Driver::CheckViolation | Driver::ExclusionViolation => return ErrorKind::CheckViolation,
         _ => {}
     }
-    let Some(code) = code else {
+    let (Some(code), Some(backend)) = (code, backend) else {
         return ErrorKind::Database;
     };
-    // The backend is known for statements; without it, codes are told
-    // apart by their shape (SQLSTATEs are five characters with letters).
-    let backend = backend.unwrap_or(
-        if code.len() == 5 && code.chars().any(|c| c.is_ascii_alphabetic()) {
-            Backend::Postgres
-        } else {
-            Backend::MySql
-        },
-    );
     match (backend, code) {
         (Backend::Postgres, "40P01") => ErrorKind::Deadlock,
         (Backend::Postgres, "40001") => ErrorKind::SerializationFailure,

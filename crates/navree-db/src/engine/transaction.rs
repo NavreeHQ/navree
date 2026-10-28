@@ -128,7 +128,9 @@ impl TxConn {
 
 impl Drop for TxConn {
     fn drop(&mut self) {
-        while self.conn.depth() > 0 {
+        // One queued rollback per open level. (SQLite's worker lowers the
+        // depth when it runs each one, so the depth is read once.)
+        for _ in 0..self.conn.depth() {
             self.conn.start_rollback();
         }
     }
@@ -402,23 +404,16 @@ impl Transaction {
 }
 
 impl Drop for Transaction {
+    /// A handle dropped unfinished rolls its level back: before the next
+    /// statement of another handle on the transaction, or, when it was the
+    /// last handle, when its connection goes back to the pool (see
+    /// [`TxConn`]).
     fn drop(&mut self) {
         if self.is_finished() {
             return;
         }
-        match self.shared.conn.try_lock() {
-            Ok(mut guard) => {
-                while guard.conn.depth() >= self.depth {
-                    guard.conn.start_rollback();
-                }
-            }
-            Err(_) => {
-                // Busy (a stream still reads): rolled back before the next
-                // statement, or when the connection goes back to the pool.
-                let mut pending = lock_std(&self.shared.pending_rollback);
-                *pending = Some(pending.map_or(self.depth, |depth| depth.min(self.depth)));
-            }
-        }
+        let mut pending = lock_std(&self.shared.pending_rollback);
+        *pending = Some(pending.map_or(self.depth, |depth| depth.min(self.depth)));
     }
 }
 
