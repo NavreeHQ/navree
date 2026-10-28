@@ -17,6 +17,8 @@ node_modules/
 *.db-shm
 *.db-wal
 .env
+# The configuration loader's test fixtures are apps, .env files included.
+!crates/navree-config/tests/fixtures/**/.env
 
 # insta pending snapshots
 *.snap.new
