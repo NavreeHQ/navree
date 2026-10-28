@@ -39,6 +39,9 @@ export async function CodePanel({
       {/* Shiki's own output, highlighted at build time. */}
       <div
         className="scroll-thin [&_pre]:text-[0.75rem] [&_pre]:leading-[1.7] sm:[&_pre]:text-[0.8125rem]"
+        // Shiki's output for a string that lives in this repository, highlighted at build time
+        // (Shiki escapes the code it highlights).
+        // nosemgrep: navree-raw-html
         dangerouslySetInnerHTML={{ __html: body }}
       />
     </figure>

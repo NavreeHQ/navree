@@ -23,4 +23,6 @@ COPY --from=build /usr/local/bin/navree-bench /usr/local/bin/navree-bench
 # config/app.toml is read from the working directory.
 COPY bench/frameworks/navree/config ./config
 EXPOSE 8080
+# A benchmark harness image: built and run only on a benchmarking machine, never deployed.
+# nosemgrep: dockerfile.security.missing-user.missing-user
 CMD ["navree-bench", "serve"]

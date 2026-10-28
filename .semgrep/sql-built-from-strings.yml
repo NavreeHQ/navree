@@ -1,0 +1,63 @@
+# Navree's SQL goes through bound parameters. Text assembled with format! and
+# handed to a statement-running API is how SQL injection happens: one
+# interpolated request value and the query is the attacker's.
+#
+# The rule is a taint rule. The source is a format! call whose template starts
+# with a DML keyword (SELECT, INSERT, UPDATE, DELETE, WITH, MERGE, REPLACE) and
+# interpolates something; the sinks are the APIs that run SQL text. DDL
+# (CREATE, ALTER, DROP, TRUNCATE) is left out on purpose: identifiers cannot be
+# bound, so migrations and test-database tooling must format them, and they do
+# it through the `quote` helpers. Placeholders that name a SCREAMING_CASE
+# constant (`{JOBS_TABLE}`) are left out too: a constant is not input. Test
+# code, benches and the testing kits are exempt.
+#
+# Fix it with a bound parameter. When the interpolated part is an identifier
+# that went through the dialect's quoting helper, or a constant, suppress the
+# line with `// nosemgrep: navree-sql-built-from-strings` and say why.
+rules:
+  - id: navree-sql-built-from-strings
+    languages: [rust]
+    severity: ERROR
+    mode: taint
+    paths:
+      exclude:
+        - "**/tests/**"
+        - "**/benches/**"
+        - "**/examples/**"
+        - "**/testing/**"
+        - "**/testing.rs"
+        - "/crates/navree-testing/"
+    message: >-
+      SQL text is built with format! and passed to a statement-running API.
+      Bind values as parameters instead. If the interpolated parts are
+      identifiers quoted by the dialect helper, or constants, suppress this
+      line with `// nosemgrep: navree-sql-built-from-strings` and the reason.
+    metadata:
+      category: security
+      cwe: "CWE-89: SQL Injection"
+      confidence: MEDIUM
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: format!($FMT, $...ARGS)
+              - pattern: format!($FMT)
+          - metavariable-regex:
+              metavariable: $FMT
+              regex: '(?is)^r?#*"\s*(select|insert|update|delete|with|merge|replace)\b(?-i:.*(?<!\{)\{(?!\{|[A-Z][A-Z0-9_]*(?::[^}]*)?\}))'
+    pattern-sinks:
+      - pattern-either:
+          - pattern: $CONN.execute_unprepared(...)
+          - pattern: $CONN.execute_raw(...)
+          - pattern: $CONN.query_all_raw(...)
+          - pattern: $CONN.query_one_raw(...)
+          - pattern: $CONN.query_all(...)
+          - pattern: $CONN.query_one(...)
+          - pattern: $CONN.fetch_all(...)
+          - pattern: $CONN.fetch_one(...)
+          - pattern: $CONN.fetch_optional(...)
+          - pattern: Statement::from_string(...)
+          - pattern: Statement::from_sql_and_values(...)
+          - pattern: sqlx::query(...)
+          - pattern: sqlx::query_as(...)
+          - pattern: sqlx::query_scalar(...)
+          - pattern: sqlx::raw_sql(...)

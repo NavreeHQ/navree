@@ -33,4 +33,6 @@ RUN DB_HOST=localhost DB_PORT=5432 DB_NAME=bench DB_USER=bench DB_PASSWORD=bench
       -jar app.jar
 
 EXPOSE 8080
+# A benchmark harness image: built and run only on a benchmarking machine, never deployed.
+# nosemgrep: dockerfile.security.missing-user-entrypoint.missing-user-entrypoint
 ENTRYPOINT ["java", "-XX:AOTCache=app.aot", "-XX:MaxRAMPercentage=75", "-jar", "app.jar"]

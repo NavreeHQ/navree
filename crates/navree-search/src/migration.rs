@@ -50,6 +50,8 @@ impl MigrationTrait for KeyFtsByRowid {
                tokenize = 'unicode61 remove_diacritics 2')"
         ))
         .await?;
+        // Table names here are module constants (and a suffix of one); no input reaches this SQL.
+        // nosemgrep: navree-sql-built-from-strings
         conn.execute_unprepared(&format!(
             "INSERT INTO {FTS_TABLE} (rowid, index_name, id, b1, b2, b3, b4, b5, b6, b7, b8, b9, b10) \
              SELECT d.rowid, o.index_name, o.id, o.b1, o.b2, o.b3, o.b4, o.b5, o.b6, o.b7, o.b8, o.b9, o.b10 \
@@ -163,6 +165,8 @@ mod tests {
         // Three documents whose FTS rows have unrelated rowids, and an FTS
         // row without a document.
         for (id, title) in [("a", "alpha"), ("b", "beta"), ("c", "gamma")] {
+            // Test data: literals from the loop above.
+            // nosemgrep: navree-sql-built-from-strings
             conn.execute_unprepared(&format!(
                 "INSERT INTO {DOCUMENTS_TABLE} (index_name, id, fields) VALUES ('notes', '{id}', '{{}}')"
             ))

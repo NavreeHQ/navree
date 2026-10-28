@@ -297,8 +297,87 @@ cargo vet                                     # every crate audited or exempted 
   crates (auth, crypto, sso, oauth, session, access, orm, schema, db, http)
   need a review from the code owners (`.github/CODEOWNERS`).
 - Tagged releases get a CycloneDX SBOM from `.github/workflows/sbom.yml`.
+- Semgrep and Gitleaks run in CI on every change; see
+  [Static analysis](#static-analysis) for what they check and how to run
+  them locally.
 - Report a vulnerability to security@navree.com, never in a public issue; see
   [`SECURITY.md`](SECURITY.md).
+
+## Static analysis
+
+`.github/workflows/sast.yml` runs two scanners on every push to `main`, every
+pull request and once a week. A finding fails the job. The repository does not
+use GitHub code scanning, so nothing is uploaded to it: each job keeps its SARIF
+and text reports as a workflow artifact (`semgrep-reports`, `gitleaks-reports`,
+30 days).
+
+- **[Semgrep](https://semgrep.dev)** (open source) runs the registry rulesets
+  for Rust, TypeScript, JavaScript, React, GitHub Actions and Dockerfiles, and
+  Navree's own rules in [`.semgrep/`](.semgrep/). Warnings and errors fail the
+  run. On a pull request it reports only what the change introduces; the weekly
+  run scans everything again, so a registry rule that learns something new
+  fails there rather than staying hidden.
+- **[Gitleaks](https://gitleaks.io)** scans every commit on every branch and
+  the working tree for secrets, with the allowlists in
+  [`.gitleaks.toml`](.gitleaks.toml). On a pull request it scans the commits
+  the pull request adds.
+
+Navree's own rules, one file per rule in `.semgrep/` with the reasoning at the
+top of the file and a fixture that proves what it flags and what it leaves alone:
+
+| Rule | What it stops |
+|---|---|
+| `navree-sql-built-from-strings` | SQL text built with `format!` (a DML statement with an interpolated value) and passed to a statement-running API; bind parameters instead |
+| `navree-shell-command-string` | `sh -c`, `bash -c`, `cmd /C`, `powershell -Command`: a string handed to a shell; spawn the program and pass arguments |
+| `navree-process-outside-tooling` | spawning a process outside the crates that own that (CLI, Harbor, Dock, browser, documents, media, fleet, Navigator, test kit) |
+| `navree-tls-verification-disabled` | certificate verification switched off, in Rust and in Node code |
+| `navree-secret-in-log` | a password, token, key or cookie recorded in a `tracing` event |
+| `navree-unwrap-on-request-data` | `.unwrap()` / `.expect()` on a value derived from a handler's request extractors |
+| `navree-sea-orm-ratchet` | new use of `sea_orm`, in source and in `Cargo.toml`, outside the crates still on it; delete a crate from the list in `.semgrep/sea-orm-ratchet.yml` when you port it, never add one |
+| `navree-raw-html` | `dangerouslySetInnerHTML`, `innerHTML =`, `insertAdjacentHTML`, `document.write`; `navree-raw-html-vue` does the same for `v-html` |
+| `navree-workflow-pull-request-target` | a workflow triggered by `pull_request_target` |
+| `navree-workflow-unpinned-action` | an action not pinned to a full commit SHA |
+
+**Run them locally.** You need Docker; the scanner images are pinned by digest in
+`scripts/sast.sh`, the same script CI runs.
+
+```sh
+scripts/sast.sh semgrep-test    # the custom rules against their fixtures
+scripts/sast.sh semgrep         # Semgrep over the repository (needs network for the registry rulesets)
+scripts/sast.sh secrets         # Gitleaks over the history and the working tree
+scripts/sast.sh all             # all three
+
+SAST_CUSTOM_ONLY=1 scripts/sast.sh semgrep         # only .semgrep/, fast and offline
+SEMGREP_BASELINE=origin/main scripts/sast.sh semgrep   # only what your branch adds
+```
+
+Reports are written to `sast-reports/` (git-ignored). The first full Semgrep run
+takes a few minutes.
+
+**Fix first.** Most findings are real: bind the parameter, drop the shell,
+return an error instead of unwrapping. Only suppress a finding that is a false
+positive, and always say why in the same place.
+
+**Suppress a Semgrep false positive** with a `nosemgrep` comment naming the rule,
+on the line before the finding (or at its end), with the reason above it:
+
+```rust
+// A list of `?` placeholders built here; every value is a bound parameter.
+// nosemgrep: navree-sql-built-from-strings
+let rows = conn.query_all_raw(statement(backend, &sql, values)).await?;
+```
+
+In JSX the comment goes between the attributes; in a Dockerfile or a workflow it
+is a `#` comment; in a Vue template it is `<!-- nosemgrep: navree-raw-html-vue -->`.
+Name the rule, not just `nosemgrep`, so one suppression never hides another
+rule's finding.
+
+**Suppress a Gitleaks false positive** in `.gitleaks.toml`: add an `[[allowlists]]`
+entry with a `description` that says why the value is fake (a test fixture, a
+documented sample value, a throwaway local secret), and keep it narrow, an exact
+value or a fixtures path rather than a whole directory of source. For a single
+line, a trailing `gitleaks:allow` comment works too. A real credential is never
+allowlisted: revoke and rotate it, then tell security@navree.com.
 
 ## Design decisions
 
