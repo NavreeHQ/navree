@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Scan lockfiles with OSV-Scanner
         run: |
           docker run --rm -v "$PWD:/src:ro" ghcr.io/google/osv-scanner:v2.7.0 \

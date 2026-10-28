@@ -8,7 +8,9 @@
  * throttling + 429, pagination, and `deal.updated` / `notification.created`
  * broadcasts on a window event bus.
  */
-import { delay, http, HttpResponse, type HttpResponseResolver, type PathParams } from "msw";
+import type { PathParams } from "msw";
+import { http, HttpResponse, type HttpResponseResolver } from "msw/http";
+import { delay } from "msw/utils/delay";
 import { createAppAbility, type AppAbility, type AppAction } from "@/lib/casl/ability";
 import type {
   Activity,
