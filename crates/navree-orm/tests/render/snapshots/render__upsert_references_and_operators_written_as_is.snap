@@ -3,8 +3,8 @@ source: crates/navree-orm/tests/render/main.rs
 expression: "expr(Expr::Tuple(vec![Expr::Excluded(Ident::new(\"color\")),\ncol(\"tags\").binary(BinaryOp::Custom(\"@>\".into()), val(\"[\\\"vip\\\"]\")),\ncol(\"title\").binary(BinaryOp::Custom(\"SOUNDS LIKE\".into()), val(\"x\")),]))"
 ---
 PostgreSQL: ("excluded"."color", "tags" @> $1, "title" SOUNDS LIKE $2)
-  values: [String(Some("[\"vip\"]")), String(Some("x"))]
+  values: [String("[\"vip\"]"), String("x")]
 MySQL: (VALUES(`color`), `tags` @> ?, `title` SOUNDS LIKE ?)
-  values: [String(Some("[\"vip\"]")), String(Some("x"))]
+  values: [String("[\"vip\"]"), String("x")]
 SQLite: ("excluded"."color", "tags" @> ?, "title" SOUNDS LIKE ?)
-  values: [String(Some("[\"vip\"]")), String(Some("x"))]
+  values: [String("[\"vip\"]"), String("x")]

@@ -3,8 +3,8 @@ source: crates/navree-orm/tests/render/main.rs
 expression: "query(Query::from(Select::from_source(Source::function(Expr::func(\"generate_series\",\nvec![val(1_i64), val(3_i64)]), \"n\")).column(col(\"n\"))))"
 ---
 PostgreSQL: SELECT "n" FROM generate_series($1, $2) AS "n"
-  values: [BigInt(Some(1)), BigInt(Some(3))]
+  values: [I64(1), I64(3)]
 MySQL: SELECT `n` FROM generate_series(?, ?) AS `n`
-  values: [BigInt(Some(1)), BigInt(Some(3))]
+  values: [I64(1), I64(3)]
 SQLite: SELECT "n" FROM generate_series(?, ?) AS "n"
-  values: [BigInt(Some(1)), BigInt(Some(3))]
+  values: [I64(1), I64(3)]

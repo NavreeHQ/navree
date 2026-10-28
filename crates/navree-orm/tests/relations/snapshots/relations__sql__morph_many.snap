@@ -3,8 +3,8 @@ source: crates/navree-orm/tests/relations/sql.rs
 expression: per_dialect(|dialect| deal().notes().to_sql(dialect))
 ---
 PostgreSQL: SELECT "notes"."id", "notes"."notable_type", "notes"."notable_id", "notes"."body" FROM "notes" WHERE "notes"."notable_id" = $1 AND "notes"."notable_id" IS NOT NULL AND "notes"."notable_type" = $2
-  values: [BigInt(Some(7)), String(Some("deal"))]
+  values: [I64(7), String("deal")]
 MySQL: SELECT `notes`.`id`, `notes`.`notable_type`, `notes`.`notable_id`, `notes`.`body` FROM `notes` WHERE `notes`.`notable_id` = ? AND `notes`.`notable_id` IS NOT NULL AND `notes`.`notable_type` = ?
-  values: [BigInt(Some(7)), String(Some("deal"))]
+  values: [I64(7), String("deal")]
 SQLite: SELECT "notes"."id", "notes"."notable_type", "notes"."notable_id", "notes"."body" FROM "notes" WHERE "notes"."notable_id" = ? AND "notes"."notable_id" IS NOT NULL AND "notes"."notable_type" = ?
-  values: [BigInt(Some(7)), String(Some("deal"))]
+  values: [I64(7), String("deal")]

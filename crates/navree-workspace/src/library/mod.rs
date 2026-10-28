@@ -77,7 +77,6 @@ use std::str::FromStr;
 use navree_db::Uow;
 use navree_kernel::BoxFuture;
 use navree_orm::{Field, FieldError, FieldKind, Model, OrmError, Record, Value};
-use sea_orm::QueryResult;
 use sea_orm::sea_query::StringLen;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -177,12 +176,6 @@ impl Field for LibraryScope {
 
     fn null() -> Value {
         <String as Field>::null()
-    }
-
-    fn from_sql(row: &QueryResult, column: &str) -> Result<Self, FieldError> {
-        String::from_sql(row, column)?
-            .parse()
-            .map_err(FieldError::Invalid)
     }
 
     fn from_value(value: Value) -> Result<Self, FieldError> {

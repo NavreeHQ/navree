@@ -3,8 +3,8 @@ source: crates/navree-orm/tests/render/lowering.rs
 expression: "rows(table(\"activities\").select([\"id\",\n\"deal_id\"]).order_by_desc(\"due_at\").skip(1).take(50).group_limit(3,\n\"deal_id\"))"
 ---
 PostgreSQL: SELECT "navree_table"."id", "navree_table"."deal_id" FROM (SELECT "id", "deal_id", ROW_NUMBER() OVER (PARTITION BY "deal_id" ORDER BY "due_at" DESC) AS "navree_row" FROM "activities") AS "navree_table" WHERE "navree_table"."navree_row" <= $1 AND "navree_table"."navree_row" > $2 ORDER BY "navree_table"."navree_row" ASC LIMIT $3
-  values: [BigInt(Some(4)), BigInt(Some(1)), BigUnsigned(Some(50))]
+  values: [I64(4), I64(1), U64(50)]
 MySQL: SELECT `navree_table`.`id`, `navree_table`.`deal_id` FROM (SELECT `id`, `deal_id`, ROW_NUMBER() OVER (PARTITION BY `deal_id` ORDER BY `due_at` DESC) AS `navree_row` FROM `activities`) AS `navree_table` WHERE `navree_table`.`navree_row` <= ? AND `navree_table`.`navree_row` > ? ORDER BY `navree_table`.`navree_row` ASC LIMIT ?
-  values: [BigInt(Some(4)), BigInt(Some(1)), BigUnsigned(Some(50))]
+  values: [I64(4), I64(1), U64(50)]
 SQLite: SELECT "navree_table"."id", "navree_table"."deal_id" FROM (SELECT "id", "deal_id", ROW_NUMBER() OVER (PARTITION BY "deal_id" ORDER BY "due_at" DESC) AS "navree_row" FROM "activities") AS "navree_table" WHERE "navree_table"."navree_row" <= ? AND "navree_table"."navree_row" > ? ORDER BY "navree_table"."navree_row" ASC LIMIT ?
-  values: [BigInt(Some(4)), BigInt(Some(1)), BigUnsigned(Some(50))]
+  values: [I64(4), I64(1), U64(50)]

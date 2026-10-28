@@ -101,15 +101,15 @@ async fn find_respects_the_query() {
 }
 
 #[tokio::test]
-async fn not_found_errors_carry_a_record_not_found_source() {
+async fn not_found_errors_carry_a_not_found_source() {
     use std::error::Error as _;
     let t = sqlite().await;
     let error = Company::find_or_fail(&t.db, 9).await.unwrap_err();
     let source = error
         .source()
-        .and_then(|s| s.downcast_ref::<navree_db::sea_orm::DbErr>());
-    assert!(matches!(
-        source,
-        Some(navree_db::sea_orm::DbErr::RecordNotFound(_))
-    ));
+        .and_then(|s| s.downcast_ref::<navree_db::DbError>())
+        .expect("navree-db's error");
+    assert!(source.is_not_found());
+    assert_eq!(error.db_error().map(navree_db::DbError::kind), Some(navree_db::ErrorKind::NotFound));
+    assert_eq!(navree_db::map_db_error(source).unwrap().status.as_u16(), 404);
 }

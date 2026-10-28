@@ -704,13 +704,6 @@ mod tests {
         }
         assert!(db(ErrorKind::ConnectionLost, "gone").is_lost_connection());
         assert!(db(ErrorKind::PoolClosed, "closed").is_lost_connection());
-        assert!(
-            OrmError::from(DbErr::ConnectionAcquire(
-                sea_orm::ConnAcquireErr::ConnectionClosed
-            ))
-            .is_lost_connection(),
-            "SeaORM's closed connection, converted"
-        );
         for message in [
             "UNIQUE constraint failed: tags.name",
             "Connection pool timed out",
