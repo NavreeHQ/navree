@@ -4,8 +4,6 @@
 use std::fmt;
 use std::str::FromStr;
 
-use sea_orm::DbBackend;
-
 /// A database family.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Dialect {
@@ -18,26 +16,6 @@ pub enum Dialect {
 }
 
 impl Dialect {
-    /// The dialect of a SeaORM backend (`None` for a backend this crate does
-    /// not know).
-    pub fn of(backend: DbBackend) -> Option<Dialect> {
-        match backend {
-            DbBackend::Postgres => Some(Dialect::Postgres),
-            DbBackend::MySql => Some(Dialect::MySql),
-            DbBackend::Sqlite => Some(Dialect::Sqlite),
-            _ => None,
-        }
-    }
-
-    /// The SeaORM backend of this dialect.
-    pub fn backend(self) -> DbBackend {
-        match self {
-            Dialect::Postgres => DbBackend::Postgres,
-            Dialect::MySql => DbBackend::MySql,
-            Dialect::Sqlite => DbBackend::Sqlite,
-        }
-    }
-
     /// `postgres`, `mysql` or `sqlite`: the driver name used in file names
     /// such as `database/schema/postgres-schema.sql`.
     pub fn driver(self) -> &'static str {

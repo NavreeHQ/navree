@@ -1,7 +1,6 @@
 //! MySQL, for real.
 
 use navree_schema::{ContinuousAggregate, DumpOptions, IndexKind, ReferentialAction, Schema};
-use sea_orm::TransactionTrait;
 
 use crate::support::{ScratchDb, column, exec};
 

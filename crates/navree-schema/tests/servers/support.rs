@@ -5,9 +5,13 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use sea_orm::{
-    ConnectOptions, ConnectionTrait, Database, DatabaseConnection, QueryResult, Statement,
-};
+use navree_schema::SchemaRow;
+
+#[path = "../common/conn.rs"]
+mod conn;
+
+#[allow(unused_imports)]
+pub use conn::{TestConn, TestTx};
 
 static COUNTER: AtomicU32 = AtomicU32::new(0);
 
@@ -46,9 +50,7 @@ impl ScratchDb {
             std::process::id(),
             COUNTER.fetch_add(1, Ordering::SeqCst)
         );
-        let conn = Database::connect(&admin)
-            .await
-            .expect("the admin URL connects");
+        let conn = TestConn::server(&admin).await;
         conn.execute_unprepared(&format!("CREATE DATABASE {name}"))
             .await
             .expect("the test user may create databases");
@@ -63,15 +65,13 @@ impl ScratchDb {
     }
 
     /// A pool on the database (one connection: session settings stick).
-    pub async fn connect(&self) -> DatabaseConnection {
-        let mut options = ConnectOptions::new(self.url.clone());
-        options.max_connections(1).sqlx_logging(false);
-        Database::connect(options).await.expect("connects")
+    pub async fn connect(&self) -> TestConn {
+        TestConn::server(&self.url).await
     }
 
     /// Drops the database.
     pub async fn drop(self) {
-        let conn = Database::connect(&self.admin).await.expect("connects");
+        let conn = TestConn::server(&self.admin).await;
         let sql = if self.mysql {
             format!("DROP DATABASE IF EXISTS {}", self.name)
         } else {
@@ -96,33 +96,24 @@ fn with_database(url: &str, database: &str) -> String {
     format!("{}/{database}{query}", &base[..host_end])
 }
 
-pub async fn exec(conn: &DatabaseConnection, sql: &str) {
+pub async fn exec(conn: &TestConn, sql: &str) {
     conn.execute_unprepared(sql)
         .await
         .unwrap_or_else(|e| panic!("{sql}: {e}"));
 }
 
-pub async fn query(conn: &DatabaseConnection, sql: &str) -> Vec<QueryResult> {
-    conn.query_all_raw(Statement::from_string(conn.get_database_backend(), sql))
-        .await
-        .unwrap_or_else(|e| panic!("{sql}: {e}"))
+pub async fn query(conn: &TestConn, sql: &str) -> Vec<SchemaRow> {
+    conn.rows(sql).await
 }
 
 /// The first column of every row, as text.
-pub async fn column(conn: &DatabaseConnection, sql: &str) -> Vec<String> {
+pub async fn column(conn: &TestConn, sql: &str) -> Vec<String> {
     query(conn, sql)
         .await
         .iter()
         .map(|row| {
-            row.try_get_by_index::<Option<String>>(0)
-                .ok()
-                .flatten()
-                .or_else(|| {
-                    row.try_get_by_index::<Option<i64>>(0)
-                        .ok()
-                        .flatten()
-                        .map(|n| n.to_string())
-                })
+            row.get_index(0)
+                .and_then(navree_schema::SchemaValue::as_text)
                 .unwrap_or_else(|| "NULL".to_owned())
         })
         .collect()
@@ -130,7 +121,7 @@ pub async fn column(conn: &DatabaseConnection, sql: &str) -> Vec<String> {
 
 /// CHECK constraints on a real server: created with the table, added and
 /// dropped later, each enforced while it exists.
-pub async fn checks_are_enforced(conn: &DatabaseConnection) {
+pub async fn checks_are_enforced(conn: &TestConn) {
     let schema = navree_schema::Schema::new(conn);
     schema
         .create("templates", |t| {

@@ -33,8 +33,11 @@ impl navree::schema::Migration for Migration {
 ## 1. Place in the framework
 
 `navree-schema` is a library at **layer 2**: it depends on `navree-config`
-(its configuration section) and on SeaORM's connection traits, nothing else
-from Navree. `navree-db` (L3) depends on it:
+(its configuration section), nothing else from Navree, and on no database
+driver: it reaches a database only through its own [`SchemaConnection`]
+trait (a dialect, `execute`, and `query` returning [`SchemaRow`]s of
+[`SchemaValue`]s, errors as [`SchemaError`]). `navree-db` (L3) depends on it
+and implements the trait for its `Pool`, `Transaction`, `Uow` and `Db`:
 
 ```
 L4+ framework crates (audit, queue, notify, ...) ──► navree-schema, navree-db
@@ -53,9 +56,11 @@ Why below `navree-db` and not above it:
   history, notification and webhook delivery logs are time-series tables
   that become hypertables on TimescaleDB. Those crates live at L4 and up, so
   the schema builder has to sit below them.
-- **Nothing here needs the pool.** The builder talks to any SeaORM
-  connection or transaction through [`SchemaConnection`], so it works inside
-  the unit of work, inside the migrator, and offline (no database at all).
+- **Nothing here needs the pool.** The builder talks to any
+  [`SchemaConnection`] (navree-db's pools, transactions, units of work and
+  `Db`), so it works inside the unit of work, inside the migrator, and
+  offline (no database at all). The tests use a small SQLx connection of
+  their own (`tests/common/conn.rs`).
 
 The facade re-exports it as `navree::schema` (feature `schema`, in `full`;
 `db` turns it on). `navree_db::navree_schema` re-exports it too.
@@ -323,10 +328,14 @@ pub fn migrations() -> MigrationSet {
 }
 ```
 
-[`SchemaMigration`], what `migration!` builds, implements SeaORM's
-`MigrationTrait`, which is what `MigrationSet` (and the workspace module's
-per-tenant runner) runs: schema migrations and the framework crates'
-SeaORM migrations share sets and runners.
+[`SchemaMigration`], what `migration!` builds, is a [`NamedMigration`]
+(the object-safe face of a [`Migration`] with its name), which is what
+`MigrationSet` holds and the migrator runs. Until every crate's migrations
+are written with the builder, a set also takes SeaORM migrations
+(`MigrationTrait`); they run beside the others in name order, on a SeaORM
+transaction over the same connection, and `MigrationSet::entries` hands
+both kinds to runners of their own (the workspace module's per-tenant
+runner).
 
 `navree make:migration <module> <name>` (the CLI) writes a schema
 migration: `create_<table>[_table]` gets a `create`/`drop_if_exists` pair,
@@ -357,15 +366,17 @@ too.
 - **Pretend.** Nothing runs, not even the migrations table. Schema
   migrations read the real database through the context's reader (so
   SQLite rebuilds and hypertable conversions plan against the real tables)
-  and record what they would change; SeaORM migrations run on a connection
+  and record what they would change (`Schema::pretending` through the
+  context), without touching SeaORM; SeaORM migrations run on a connection
   that keeps every statement and answers no reads (a SeaORM migration that
   reads fails with that explanation). A migration that depends on an
   earlier pending one's tables cannot be planned and says so.
-- **Transactions.** A migration runs in a transaction where DDL is
-  transactional (PostgreSQL, SQLite; on MySQL when it asks), with its
-  `navree_migrations` row in the same transaction, so a failure leaves
-  nothing behind. `within_transaction() == false` opts out (`CREATE INDEX
-  CONCURRENTLY`, refreshing a continuous aggregate).
+- **Transactions.** A migration runs in a navree-db transaction (on the
+  direct connection when there is one) where DDL is transactional
+  (PostgreSQL, SQLite; on MySQL when `within_transaction_on_mysql` asks),
+  with its `navree_migrations` row in the same transaction, so a failure
+  leaves nothing behind. `within_transaction() == false` opts out (`CREATE
+  INDEX CONCURRENTLY`, refreshing a continuous aggregate).
 - **SQLite.** Migrations run on a connection of their own with foreign keys
   off, and `PRAGMA foreign_key_check` must pass before each commit
   (section 4). In-memory databases use the pool.

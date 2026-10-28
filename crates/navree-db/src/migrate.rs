@@ -1,6 +1,7 @@
 //! Module-owned migrations: [`MigrationSet`], [`Migrator`] and [`MigrationStatus`].
 
 pub(crate) mod commands;
+mod conn;
 mod pretend;
 mod report;
 mod runner;
@@ -12,8 +13,7 @@ use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
 use navree_kernel::{AppContext, BoxError};
-use sea_orm::sea_query::{ColumnDef, Index, Query, Table};
-use sea_orm::{ConnectionTrait, DatabaseConnection, DbBackend, DbErr, Statement, TransactionTrait};
+use navree_schema::{Dialect, NamedMigration, SchemaError, SchemaMigration};
 use sea_orm_migration::MigrationTrait;
 use serde::Serialize;
 
@@ -23,7 +23,8 @@ pub use report::{
 };
 pub(crate) use runner::Runner;
 
-use crate::{Db, mysql};
+use self::conn::Conn;
+use crate::{Backend, Db, DbError, Executor, ExecutorExt, Statement, mysql};
 
 /// The table recording applied migrations.
 pub const MIGRATIONS_TABLE: &str = "navree_migrations";
@@ -36,26 +37,51 @@ pub const MIGRATIONS_TABLE: &str = "navree_migrations";
 /// ignored), otherwise in module-name order. Inside a set, migrations run
 /// in name order, so name them `m20261025_000001_create_users` and so on.
 ///
+/// A set holds migrations written with the schema builder
+/// ([`navree_schema::Migration`], added with `navree_schema::migration!` or
+/// [`SchemaMigration::new`]). SeaORM migrations (`MigrationTrait`) still
+/// run beside them, in the same name order, until every crate's
+/// migrations are written with the schema builder.
+///
 /// On SQLite and PostgreSQL each migration runs in its own transaction (DDL
-/// included) unless it returns `Some(false)` from `use_transaction` (for
-/// statements such as `CREATE INDEX CONCURRENTLY`, or SQLite table rebuilds
-/// that switch `PRAGMA foreign_keys`, which has no effect inside a
-/// transaction); the `navree_migrations` row is written in the same
-/// transaction, so a failed migration leaves nothing behind.
+/// included) unless it opts out (`within_transaction` returning `false`; a
+/// SeaORM migration's `use_transaction` returning `Some(false)`), for
+/// statements such as `CREATE INDEX CONCURRENTLY`; the `navree_migrations`
+/// row is written in the same transaction, so a failed migration leaves
+/// nothing behind.
 ///
 /// MySQL and MariaDB commit every DDL statement implicitly, so there a
-/// migration runs outside a transaction unless it returns `Some(true)`
-/// (worth it for data migrations, whose `INSERT`s and `UPDATE`s then roll
-/// back with the `navree_migrations` row). A MySQL migration that fails
-/// part way keeps the statements that ran before the failure and is not
-/// recorded: keep one DDL statement per migration, or make its `up`
-/// re-runnable (`IF NOT EXISTS`).
+/// migration runs outside a transaction unless it asks for one
+/// (`within_transaction_on_mysql` returning `true`; `use_transaction`
+/// returning `Some(true)`): worth it for data migrations, whose `INSERT`s
+/// and `UPDATE`s then roll back with the `navree_migrations` row. A MySQL
+/// migration that fails part way keeps the statements that ran before the
+/// failure and is not recorded: keep one DDL statement per migration, or
+/// make its `up` re-runnable (`IF NOT EXISTS`).
 ///
 /// ```
 /// use navree_db::MigrationSet;
 ///
-/// let set = MigrationSet::new("crm").after(["users"]);
+/// mod m20261025_000001_create_deals {
+///     use navree_schema::{Schema, SchemaResult};
+///
+///     pub struct Migration;
+///
+///     impl navree_schema::Migration for Migration {
+///         async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+///             schema.create("deals", |t| { t.id(); t.string("title"); }).await
+///         }
+///         async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+///             schema.drop_if_exists("deals").await
+///         }
+///     }
+/// }
+///
+/// let set = MigrationSet::new("crm")
+///     .after(["users"])
+///     .migration(navree_schema::migration!(m20261025_000001_create_deals));
 /// assert_eq!(set.module, "crm");
+/// assert_eq!(set.names(), ["m20261025_000001_create_deals"]);
 /// ```
 pub struct MigrationSet {
     /// The name recorded in `navree_migrations.module` and used in `after`
@@ -63,8 +89,45 @@ pub struct MigrationSet {
     pub module: &'static str,
     /// Modules whose migrations must run first (e.g. for foreign keys).
     pub after: Vec<&'static str>,
-    /// The migrations.
-    pub migrations: Vec<Box<dyn MigrationTrait>>,
+    /// The migrations written with the schema builder.
+    pub migrations: Vec<Box<dyn NamedMigration>>,
+    /// SeaORM migrations, run beside [`migrations`](Self::migrations) until
+    /// every crate's are written with the schema builder.
+    sea_orm: Vec<Box<dyn MigrationTrait>>,
+}
+
+/// What [`MigrationSet::migration`] adds: a schema-builder migration
+/// ([`SchemaMigration`], what `navree_schema::migration!` builds), or a
+/// SeaORM migration while crates still have them. `Kind` tells the two
+/// apart ([`migration_kind`]); it is inferred.
+pub trait IntoMigration<Kind>: Sized {
+    /// Adds the migration to `set`.
+    fn add_to(self, set: &mut MigrationSet);
+}
+
+/// The kinds of migration a [`MigrationSet`] takes (the `Kind` of
+/// [`IntoMigration`]).
+pub mod migration_kind {
+    /// A migration written with the schema builder.
+    #[derive(Debug)]
+    pub enum Schema {}
+
+    /// A SeaORM migration (`MigrationTrait`), run until every crate's
+    /// migrations are written with the schema builder.
+    #[derive(Debug)]
+    pub enum SeaOrm {}
+}
+
+impl<M: navree_schema::Migration> IntoMigration<migration_kind::Schema> for SchemaMigration<M> {
+    fn add_to(self, set: &mut MigrationSet) {
+        set.migrations.push(Box::new(self));
+    }
+}
+
+impl<T: MigrationTrait + 'static> IntoMigration<migration_kind::SeaOrm> for T {
+    fn add_to(self, set: &mut MigrationSet) {
+        set.sea_orm.push(Box::new(self));
+    }
 }
 
 impl MigrationSet {
@@ -74,6 +137,7 @@ impl MigrationSet {
             module,
             after: Vec::new(),
             migrations: Vec::new(),
+            sea_orm: Vec::new(),
         }
     }
 
@@ -83,10 +147,48 @@ impl MigrationSet {
         self
     }
 
-    /// Adds a migration.
-    pub fn migration(mut self, migration: impl MigrationTrait + 'static) -> Self {
-        self.migrations.push(Box::new(migration));
+    /// Adds a migration: `navree_schema::migration!(m20261025_000001_create_deals)`
+    /// or `SchemaMigration::new(name, migration)` (a SeaORM migration
+    /// is taken too, while crates still have them).
+    pub fn migration<Kind>(mut self, migration: impl IntoMigration<Kind>) -> Self {
+        migration.add_to(&mut self);
         self
+    }
+
+    /// The names of every migration of the set, in run order.
+    pub fn names(&self) -> Vec<&str> {
+        let mut names: Vec<&str> = self
+            .migrations
+            .iter()
+            .map(|m| m.name())
+            .chain(self.sea_orm.iter().map(|m| m.name()))
+            .collect();
+        names.sort_unstable();
+        names
+    }
+
+    /// Every migration of the set, in run order (by name).
+    pub fn entries(&self) -> Vec<SetMigration<'_>> {
+        let mut entries: Vec<SetMigration<'_>> = self
+            .migrations
+            .iter()
+            .map(|m| SetMigration::Schema(m.as_ref()))
+            .chain(
+                self.sea_orm
+                    .iter()
+                    .map(|m| SetMigration::SeaOrm(m.as_ref())),
+            )
+            .collect();
+        entries.sort_by(|a, b| a.name().cmp(b.name()));
+        entries
+    }
+
+    /// Every migration of the set as a step, in run order.
+    fn steps(&self) -> impl Iterator<Item = Step<'_>> {
+        self.entries().into_iter().map(|body| Step {
+            module: self.module,
+            body,
+        })
     }
 }
 
@@ -95,10 +197,7 @@ impl fmt::Debug for MigrationSet {
         f.debug_struct("MigrationSet")
             .field("module", &self.module)
             .field("after", &self.after)
-            .field(
-                "migrations",
-                &self.migrations.iter().map(|m| m.name()).collect::<Vec<_>>(),
-            )
+            .field("migrations", &self.names())
             .finish()
     }
 }
@@ -120,6 +219,7 @@ pub struct MigrationStatus {
 
 /// A migration problem.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum MigrationError {
     /// Two sets use the same module name.
     #[error("two migration sets are named `{module}`; module names must be unique")]
@@ -146,9 +246,10 @@ pub enum MigrationError {
     Failed {
         /// `module/name`.
         migration: String,
-        /// The database error.
+        /// Why: the schema builder's error ([`SchemaError`]), the
+        /// database's ([`DbError`]), or a SeaORM migration's.
         #[source]
-        source: DbErr,
+        source: BoxError,
     },
     /// `navree_migrations` records a migration no module registers any more.
     #[error("migration `{migration}` is recorded as applied but no module registers it")]
@@ -169,11 +270,20 @@ pub enum MigrationError {
         path: PathBuf,
         /// What went wrong.
         #[source]
-        source: Box<navree_schema::SchemaError>,
+        source: Box<SchemaError>,
     },
+    /// Reading or changing the schema outside a migration failed.
+    #[error(transparent)]
+    Schema(#[from] SchemaError),
     /// A database error outside a migration.
     #[error(transparent)]
-    Db(#[from] DbErr),
+    Db(#[from] DbError),
+}
+
+impl From<sea_orm::DbErr> for MigrationError {
+    fn from(error: sea_orm::DbErr) -> MigrationError {
+        MigrationError::Db(DbError::from(error))
+    }
 }
 
 /// Runs the migrations every module contributed, against the app's [`Db`].
@@ -183,9 +293,9 @@ pub enum MigrationError {
 /// batch (one batch per migration with [`MigrateOptions::step`]), and
 /// [`rollback`](Migrator::rollback) reverts the last batch.
 ///
-/// Migrations written with the schema builder (`navree_schema::Migration`,
-/// added with `navree_schema::migration!`) and SeaORM migrations share a
-/// [`MigrationSet`]. While one runs, the `schema` configuration section
+/// Each migration runs on navree-db's own connections: in a transaction of
+/// the [`Db`]'s direct connection (see [`MigrationSet`] for when), with its
+/// `navree_migrations` row. While one runs, the `schema` configuration section
 /// ([`SchemaOptions`](navree_schema::SchemaOptions)) configures its builder,
 /// and its statements and notices are collected in the
 /// [`MigrationReport`].
@@ -337,16 +447,80 @@ pub(crate) async fn migrate_on_boot(db: &Db, app: &AppContext, url: &str) -> Res
 /// One migration in run order.
 struct Step<'a> {
     module: &'static str,
-    migration: &'a dyn MigrationTrait,
+    body: SetMigration<'a>,
+}
+
+/// One migration of a [`MigrationSet`] ([`MigrationSet::entries`]): written
+/// with the schema builder, or a SeaORM migration while crates still have
+/// them.
+#[derive(Clone, Copy)]
+pub enum SetMigration<'a> {
+    /// A migration written with the schema builder.
+    Schema(&'a dyn NamedMigration),
+    /// A SeaORM migration.
+    SeaOrm(&'a dyn MigrationTrait),
+}
+
+impl SetMigration<'_> {
+    /// The name recorded in `navree_migrations`.
+    pub fn name(&self) -> &str {
+        match self {
+            SetMigration::Schema(migration) => migration.name(),
+            SetMigration::SeaOrm(migration) => migration.name(),
+        }
+    }
+
+    /// Applies the migration inside a SeaORM transaction, for runners of
+    /// their own that still hold one (workspace migrations under schema and
+    /// database isolation). The [`Migrator`] runs migrations on navree-db's
+    /// transactions; this goes once no runner holds a SeaORM transaction.
+    pub async fn up_in(&self, tx: &sea_orm::DatabaseTransaction) -> Result<(), sea_orm::DbErr> {
+        match self {
+            SetMigration::Schema(migration) => {
+                let conn = crate::compat::SeaExecutor::new(tx);
+                migration
+                    .up(&navree_schema::Schema::new(&conn))
+                    .await
+                    .map_err(|error| sea_orm::DbErr::Migration(error.to_string()))
+            }
+            SetMigration::SeaOrm(migration) => {
+                migration
+                    .up(&sea_orm_migration::SchemaManager::new(tx))
+                    .await
+            }
+        }
+    }
+}
+
+impl fmt::Debug for SetMigration<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let kind = match self {
+            SetMigration::Schema(_) => "Schema",
+            SetMigration::SeaOrm(_) => "SeaOrm",
+        };
+        f.debug_tuple(kind).field(&self.name()).finish()
+    }
 }
 
 impl Step<'_> {
     fn name(&self) -> &str {
-        self.migration.name()
+        self.body.name()
     }
 
     fn label(&self) -> String {
         format!("{}/{}", self.module, self.name())
+    }
+
+    /// Whether the step runs in a transaction on `dialect`: as the
+    /// migration asks, else where DDL is transactional (PostgreSQL,
+    /// SQLite; not MySQL).
+    fn transactional(&self, dialect: Dialect) -> bool {
+        match self.body {
+            SetMigration::Schema(migration) => migration.transactional(dialect),
+            SetMigration::SeaOrm(migration) => migration
+                .use_transaction()
+                .unwrap_or(dialect != Dialect::MySql),
+        }
     }
 }
 
@@ -361,11 +535,11 @@ fn plan(sets: &[Arc<MigrationSet>]) -> Result<Vec<Step<'_>>, MigrationError> {
             });
         }
         let mut names = HashSet::new();
-        for migration in &set.migrations {
-            if !names.insert(migration.name()) {
+        for step in set.steps() {
+            if !names.insert(step.name().to_owned()) {
                 return Err(MigrationError::DuplicateMigration {
                     module: set.module.to_owned(),
-                    name: migration.name().to_owned(),
+                    name: step.name().to_owned(),
                 });
             }
         }
@@ -404,14 +578,9 @@ fn plan(sets: &[Arc<MigrationSet>]) -> Result<Vec<Step<'_>>, MigrationError> {
 
     let mut steps = Vec::new();
     for module in order {
-        let set = by_module[module];
-        let mut migrations: Vec<&dyn MigrationTrait> =
-            set.migrations.iter().map(|m| m.as_ref()).collect();
-        migrations.sort_by(|a, b| a.name().cmp(b.name()));
-        steps.extend(migrations.into_iter().map(|migration| Step {
-            module: set.module,
-            migration,
-        }));
+        let mut set: Vec<Step<'_>> = by_module[module].steps().collect();
+        set.sort_by(|a, b| a.name().cmp(b.name()));
+        steps.extend(set);
     }
     Ok(steps)
 }
@@ -422,46 +591,92 @@ struct Applied {
     applied_at: Option<DateTime<Utc>>,
 }
 
-async fn ensure_table(conn: &DatabaseConnection) -> Result<(), DbErr> {
-    let mut applied_at = ColumnDef::new("applied_at");
-    match conn.get_database_backend() {
-        // MySQL's `TIMESTAMP` ends in 2038 and converts through the session
-        // time zone; a `DATETIME` holds the UTC time as written.
-        DbBackend::MySql => applied_at.date_time(),
-        _ => applied_at.timestamp_with_time_zone(),
+/// The migrations table, as every version of the migrator has created it:
+/// `module`, `name`, `batch` and `applied_at`, keyed by module and name.
+/// MySQL's `applied_at` is a `DATETIME` (its `TIMESTAMP` ends in 2038 and
+/// converts through the session time zone; a `DATETIME` holds the UTC time
+/// as written).
+fn create_table_sql(backend: Backend) -> &'static str {
+    match backend {
+        Backend::Postgres => {
+            "CREATE TABLE IF NOT EXISTS \"navree_migrations\" ( \"module\" varchar NOT NULL, \
+             \"name\" varchar NOT NULL, \"batch\" bigint NOT NULL, \
+             \"applied_at\" timestamp with time zone NOT NULL, PRIMARY KEY (\"module\", \"name\") )"
+        }
+        Backend::MySql => {
+            "CREATE TABLE IF NOT EXISTS `navree_migrations` ( `module` varchar(255) NOT NULL, \
+             `name` varchar(255) NOT NULL, `batch` bigint NOT NULL, \
+             `applied_at` datetime NOT NULL, PRIMARY KEY (`module`, `name`) )"
+        }
+        Backend::Sqlite => {
+            "CREATE TABLE IF NOT EXISTS \"navree_migrations\" ( \"module\" varchar NOT NULL, \
+             \"name\" varchar NOT NULL, \"batch\" integer NOT NULL, \
+             \"applied_at\" timestamp_with_timezone_text NOT NULL, PRIMARY KEY (\"module\", \"name\") )"
+        }
     }
-    .not_null();
-    conn.execute(
-        Table::create()
-            .table(MIGRATIONS_TABLE)
-            .if_not_exists()
-            .col(ColumnDef::new("module").string().not_null())
-            .col(ColumnDef::new("name").string().not_null())
-            .col(ColumnDef::new("batch").big_integer().not_null())
-            .col(applied_at)
-            .primary_key(Index::create().col("module").col("name")),
-    )
-    .await
-    .map(drop)
 }
 
-async fn applied_rows(
-    conn: &DatabaseConnection,
-) -> Result<HashMap<(String, String), Applied>, DbErr> {
+/// The recorded migrations.
+fn select_sql(backend: Backend) -> &'static str {
+    match backend {
+        Backend::MySql => "SELECT `module`, `name`, `batch`, `applied_at` FROM `navree_migrations`",
+        _ => "SELECT \"module\", \"name\", \"batch\", \"applied_at\" FROM \"navree_migrations\"",
+    }
+}
+
+/// Records a migration.
+fn insert_sql(backend: Backend) -> &'static str {
+    match backend {
+        Backend::Postgres => {
+            "INSERT INTO \"navree_migrations\" (\"module\", \"name\", \"batch\", \"applied_at\") \
+             VALUES ($1, $2, $3, $4)"
+        }
+        Backend::MySql => {
+            "INSERT INTO `navree_migrations` (`module`, `name`, `batch`, `applied_at`) \
+             VALUES (?, ?, ?, ?)"
+        }
+        Backend::Sqlite => {
+            "INSERT INTO \"navree_migrations\" (\"module\", \"name\", \"batch\", \"applied_at\") \
+             VALUES (?, ?, ?, ?)"
+        }
+    }
+}
+
+/// Removes a migration's row.
+fn delete_sql(backend: Backend) -> &'static str {
+    match backend {
+        Backend::Postgres => {
+            "DELETE FROM \"navree_migrations\" WHERE \"module\" = $1 AND \"name\" = $2"
+        }
+        Backend::MySql => "DELETE FROM `navree_migrations` WHERE `module` = ? AND `name` = ?",
+        Backend::Sqlite => {
+            "DELETE FROM \"navree_migrations\" WHERE \"module\" = ? AND \"name\" = ?"
+        }
+    }
+}
+
+async fn ensure_table(conn: &dyn Executor) -> Result<(), DbError> {
+    let backend = conn.backend();
+    conn.execute(&Statement::new(backend, create_table_sql(backend), []))
+        .await
+        .map(drop)
+}
+
+async fn applied_rows(conn: &dyn Executor) -> Result<HashMap<(String, String), Applied>, DbError> {
     ensure_table(conn).await?;
+    let backend = conn.backend();
     let rows = conn
-        .query_all(
-            Query::select()
-                .columns(["module", "name", "batch", "applied_at"])
-                .from(MIGRATIONS_TABLE),
-        )
+        .fetch_all(&Statement::new(backend, select_sql(backend), []))
         .await?;
     let mut applied = HashMap::with_capacity(rows.len());
     for row in rows {
-        let module: String = row.try_get("", "module")?;
-        let name: String = row.try_get("", "name")?;
-        let batch: i64 = row.try_get("", "batch")?;
-        let applied_at: Option<DateTime<Utc>> = row.try_get("", "applied_at").ok();
+        let module: String = row.get("module")?;
+        let name: String = row.get("name")?;
+        let batch: i64 = row.get("batch")?;
+        let applied_at = row
+            .get::<Option<DateTime<Utc>>>("applied_at")
+            .ok()
+            .flatten();
         applied.insert((module, name), Applied { batch, applied_at });
     }
     Ok(applied)
@@ -473,31 +688,23 @@ fn quote(identifier: &str) -> String {
 }
 
 /// Drops every table of the database (`migrate:fresh`).
-async fn drop_all_tables(conn: &DatabaseConnection) -> Result<(), DbErr> {
-    match conn.get_database_backend() {
-        DbBackend::Sqlite => drop_all_sqlite_tables(conn).await,
-        DbBackend::Postgres => {
+async fn drop_all_tables(conn: &Conn) -> Result<(), DbError> {
+    match conn.backend() {
+        Backend::Sqlite => conn.drop_all_sqlite_tables().await,
+        Backend::Postgres => {
             let tables: Vec<String> = conn
-                .query_all_raw(Statement::from_string(
-                    DbBackend::Postgres,
+                .fetch_column(&Statement::text(
                     "SELECT tablename AS name FROM pg_tables WHERE schemaname = current_schema()",
                 ))
-                .await?
-                .iter()
-                .map(|row| row.try_get::<String>("", "name"))
-                .collect::<Result<_, _>>()?;
+                .await?;
             let tx = conn.begin().await?;
             for table in &tables {
-                tx.execute_unprepared(&format!("DROP TABLE IF EXISTS {} CASCADE", quote(table)))
+                tx.execute_script(&format!("DROP TABLE IF EXISTS {} CASCADE", quote(table)))
                     .await?;
             }
             tx.commit().await
         }
-        DbBackend::MySql => drop_all_mysql_tables(conn).await,
-        other => Err(DbErr::BackendNotSupported {
-            db: other.as_str(),
-            ctx: "migrate:fresh",
-        }),
+        Backend::MySql => drop_all_mysql_tables(conn).await,
     }
 }
 
@@ -509,20 +716,17 @@ async fn drop_all_tables(conn: &DatabaseConnection) -> Result<(), DbErr> {
 /// one connection, pinned by a transaction (`DROP TABLE` commits it
 /// implicitly; the final `COMMIT` is then a no-op). Checks are turned back
 /// on whatever the drop did, before the connection returns to the pool.
-async fn drop_all_mysql_tables(conn: &DatabaseConnection) -> Result<(), DbErr> {
+async fn drop_all_mysql_tables(conn: &Conn) -> Result<(), DbError> {
     let tables: Vec<String> = conn
-        .query_all_raw(Statement::from_string(DbBackend::MySql, mysql::LIST_TABLES))
-        .await?
-        .iter()
-        .map(|row| row.try_get::<String>("", "name"))
-        .collect::<Result<_, _>>()?;
+        .fetch_column(&Statement::text(mysql::LIST_TABLES))
+        .await?;
     if tables.is_empty() {
         return Ok(());
     }
     let tx = conn.begin().await?;
-    tx.execute_unprepared(mysql::FOREIGN_KEY_CHECKS_OFF).await?;
-    let dropped = tx.execute_unprepared(&mysql::drop_tables(&tables)).await;
-    let restored = tx.execute_unprepared(mysql::FOREIGN_KEY_CHECKS_ON).await;
+    tx.execute_script(mysql::FOREIGN_KEY_CHECKS_OFF).await?;
+    let dropped = tx.execute_script(&mysql::drop_tables(&tables)).await;
+    let restored = tx.execute_script(mysql::FOREIGN_KEY_CHECKS_ON).await;
     match (dropped, restored) {
         (Ok(_), Ok(_)) => tx.commit().await,
         (Err(error), _) | (Ok(_), Err(error)) => {
@@ -532,57 +736,6 @@ async fn drop_all_mysql_tables(conn: &DatabaseConnection) -> Result<(), DbErr> {
             Err(error)
         }
     }
-}
-
-/// SQLite's half of [`drop_all_tables`], on one connection taken out of the
-/// pool with `PRAGMA foreign_keys = OFF`.
-///
-/// With foreign keys on, `DROP TABLE` first runs an implicit `DELETE`, and
-/// its `ON DELETE CASCADE` actions fail once a table they touch references
-/// a table already dropped ("no such table: main.roles" for navree-access's
-/// `role_permissions`), whatever `defer_foreign_keys` says. The pragma has
-/// no effect inside a transaction, so it is set before `BEGIN`, and the
-/// connection is closed afterwards (also on error) rather than going back
-/// to the pool with foreign keys off.
-async fn drop_all_sqlite_tables(conn: &DatabaseConnection) -> Result<(), DbErr> {
-    use sea_orm::sqlx::{self, AssertSqlSafe, Connection as _};
-    use sea_orm::{DatabaseConnectionType, RuntimeErr};
-
-    let DatabaseConnectionType::SqlxSqlitePoolConnection(_) = &conn.inner else {
-        return Err(DbErr::BackendNotSupported {
-            db: "SQLite without an SQLx pool",
-            ctx: "migrate:fresh",
-        });
-    };
-    let exec = |error: sqlx::Error| DbErr::Exec(RuntimeErr::SqlxError(Arc::new(error)));
-    let mut dedicated = conn
-        .get_sqlite_connection_pool()
-        .acquire()
-        .await
-        .map_err(|error| DbErr::Conn(RuntimeErr::SqlxError(Arc::new(error))))?;
-    dedicated.close_on_drop();
-    sqlx::query("PRAGMA foreign_keys = OFF")
-        .execute(&mut *dedicated)
-        .await
-        .map_err(exec)?;
-    let tables: Vec<String> = sqlx::query_scalar(
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
-    )
-    .fetch_all(&mut *dedicated)
-    .await
-    .map_err(|error| DbErr::Query(RuntimeErr::SqlxError(Arc::new(error))))?;
-    let mut tx = dedicated.begin().await.map_err(exec)?;
-    for table in &tables {
-        sqlx::query(AssertSqlSafe(format!(
-            "DROP TABLE IF EXISTS {}",
-            quote(table)
-        )))
-        .execute(&mut *tx)
-        .await
-        .map_err(exec)?;
-    }
-    tx.commit().await.map_err(exec)?;
-    dedicated.close().await.map_err(exec)
 }
 
 #[cfg(test)]

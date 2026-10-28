@@ -4,10 +4,9 @@
 
 use std::collections::BTreeMap;
 
-use sea_orm::{QueryResult, Statement, Value};
 use serde::Serialize;
 
-use crate::connection::SchemaConnection;
+use crate::connection::{SchemaConnection, SchemaRow, SchemaValue};
 use crate::error::{SchemaError, SchemaResult};
 use crate::grammar::timescale::KeyState;
 use crate::grammar::{schema_of, table, unqualified};
@@ -152,47 +151,18 @@ fn serialize_action<S: serde::Serializer>(
 // ----- reading rows ----------------------------------------------------------
 
 /// Column `column` of `row` as text, whatever the driver decoded it as.
-pub(crate) fn text(row: &QueryResult, column: &str) -> Option<String> {
-    if let Ok(value) = row.try_get::<Option<String>>("", column) {
-        return value;
-    }
-    if let Ok(Some(bytes)) = row.try_get::<Option<Vec<u8>>>("", column) {
-        return Some(String::from_utf8_lossy(&bytes).into_owned());
-    }
-    if let Ok(Some(number)) = row.try_get::<Option<i64>>("", column) {
-        return Some(number.to_string());
-    }
-    None
+pub(crate) fn text(row: &SchemaRow, column: &str) -> Option<String> {
+    row.text(column)
 }
 
 /// Column `column` of `row` as an integer.
-pub(crate) fn int(row: &QueryResult, column: &str) -> Option<i64> {
-    if let Ok(value) = row.try_get::<Option<i64>>("", column) {
-        return value;
-    }
-    if let Ok(Some(value)) = row.try_get::<Option<i32>>("", column) {
-        return Some(i64::from(value));
-    }
-    if let Ok(Some(value)) = row.try_get::<Option<bool>>("", column) {
-        return Some(i64::from(value));
-    }
-    text(row, column).and_then(|t| t.trim().parse().ok())
+pub(crate) fn int(row: &SchemaRow, column: &str) -> Option<i64> {
+    row.int(column)
 }
 
 /// Column `column` of `row` as a boolean (`false` when absent).
-pub(crate) fn boolean(row: &QueryResult, column: &str) -> bool {
-    if let Ok(Some(value)) = row.try_get::<Option<bool>>("", column) {
-        return value;
-    }
-    if let Some(number) = int(row, column) {
-        return number != 0;
-    }
-    text(row, column).is_some_and(|t| {
-        matches!(
-            t.trim().to_ascii_lowercase().as_str(),
-            "yes" | "y" | "true" | "t" | "1"
-        )
-    })
+pub(crate) fn boolean(row: &SchemaRow, column: &str) -> bool {
+    row.boolean(column)
 }
 
 fn split_list(value: Option<String>) -> Vec<String> {
@@ -206,26 +176,18 @@ fn split_list(value: Option<String>) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// Runs a query, attaching it to the error.
+/// Runs a query (its placeholders in the dialect's own form).
 pub(crate) async fn rows(
     conn: &dyn SchemaConnection,
     sql: &str,
-    values: Vec<Value>,
-) -> SchemaResult<Vec<QueryResult>> {
-    let backend = conn.backend();
-    let statement = if values.is_empty() {
-        Statement::from_string(backend, sql)
-    } else {
-        Statement::from_sql_and_values(backend, sql, values)
-    };
-    conn.query(statement)
-        .await
-        .map_err(|source| SchemaError::database(sql, source))
+    values: Vec<SchemaValue>,
+) -> SchemaResult<Vec<SchemaRow>> {
+    conn.query(sql, &values).await
 }
 
 /// A string parameter.
-pub(crate) fn s(value: &str) -> Value {
-    Value::String(Some(value.to_owned()))
+pub(crate) fn s(value: &str) -> SchemaValue {
+    SchemaValue::Text(value.to_owned())
 }
 
 /// `?` or `$n` placeholders per dialect.
@@ -241,13 +203,7 @@ fn p(dialect: Dialect, n: usize) -> String {
 /// Detects the database behind `conn`: dialect, version, MariaDB, and
 /// TimescaleDB (installed, or installable).
 pub(crate) async fn detect(conn: &dyn SchemaConnection) -> SchemaResult<Target> {
-    let Some(dialect) = Dialect::of(conn.backend()) else {
-        return Err(SchemaError::missing(format!(
-            "the schema builder does not know the {:?} backend",
-            conn.backend()
-        )));
-    };
-    match dialect {
+    match conn.backend() {
         Dialect::Postgres => {
             let sql = "SELECT current_setting('server_version_num') AS version_num, \
                 (SELECT extversion FROM pg_extension WHERE extname = 'timescaledb') AS installed, \

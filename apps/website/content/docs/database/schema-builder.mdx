@@ -3,7 +3,7 @@ title: "Schema builder"
 description: "Tables described in Rust and written as the right SQL for PostgreSQL, MySQL, MariaDB and SQLite: creating, altering, renaming and dropping tables, table options, SQLite rebuilds, reading the schema, previews without a database, and configuration."
 ---
 
-The schema builder (`navree::schema`) describes tables in Rust and writes the SQL each database needs: PostgreSQL (with [TimescaleDB](/docs/database/timescaledb/)), MySQL, MariaDB and SQLite. [Migrations](/docs/database/migrations/) use it through the `Schema` they receive; anywhere else, build one on a connection with `Schema::new(db.conn())`.
+The schema builder (`navree::schema`) describes tables in Rust and writes the SQL each database needs: PostgreSQL (with [TimescaleDB](/docs/database/timescaledb/)), MySQL, MariaDB and SQLite. [Migrations](/docs/database/migrations/) use it through the `Schema` they receive; anywhere else, build one on the database with `Schema::new(&db)`. A `Db`, a pool (`db.pool()`), a transaction (`db.begin()`) and a unit of work are all connections a schema runs on (each implements `SchemaConnection`), and their statements are timed and logged like every other.
 
 ```rust
 use navree::schema::prelude::*;

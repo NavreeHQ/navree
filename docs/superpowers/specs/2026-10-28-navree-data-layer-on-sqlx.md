@@ -1,7 +1,9 @@
 # Navree's data layer on SQLx
 
 Date: 2026-10-28. Status: phase 1 (architecture and foundation) built on
-`build/data-layer`; the porting phases below are planned, not done.
+`build/data-layer`; step 1 of the port (navree-schema and the migrator off
+SeaORM) built on `build/port-schema` (§4); the other steps are planned, not
+done.
 
 ## 1. Decisions and starting point
 
@@ -372,7 +374,7 @@ migrator, code generators).
 | Step | What | Size | Effort | Model |
 |---|---|---|---|---|
 | 0 | **Foundation** (this branch): navree-db's engine on SQLx, units of work on either transaction, the bridge; navree-orm's renderer, lowering, snapshot and differential tests | done | done | Opus |
-| 1 | **navree-schema off SeaORM**: `SchemaConnection` on its own types, implemented by navree-db's executors; `MigrationSet` holding navree-schema migrations; the migrator on navree-db transactions; `--pretend` through `Schema::pretending`. The `MigrationTrait` path keeps running until step 6 ends | navree-schema 13.5k LOC (18 SeaORM lines), navree-db migrate 1.9k | 1 day | Opus |
+| 1 | **navree-schema off SeaORM**: `SchemaConnection` on its own types, implemented by navree-db's executors; `MigrationSet` holding navree-schema migrations; the migrator on navree-db transactions; `--pretend` through `Schema::pretending`. The `MigrationTrait` path keeps running until step 6 ends. **Done** (`build/port-schema`): `SchemaRow`/`SchemaValue`/`SchemaError` connections, `NamedMigration`, `Migration::within_transaction_on_mysql`, `MigrationSet::entries` / `SetMigration` for the workspace runner; every crate's production migrations up, down and fresh on all three databases, and databases migrated by the previous migrator upgrade with nothing pending | navree-schema 13.5k LOC (18 SeaORM lines), navree-db migrate 1.9k | 1 day | Opus |
 | 2 | **navree-orm SQL switch**: `compile_*` → `render_*`, delete the sea-query compiler, review the 30 changed snapshots, port navree-orm's `access.rs` to render-tree conditions (`Where::Sql` goes with navree-access in step 5) | 10 files, 198 builder lines | half a day | Opus |
 | 3 | **navree-orm on navree-db's engine**: `Value` → navree-db's (+ `Enum` variant, navree-mongo in lockstep), `Row` on `navree_db::Row`, `Field::from_sql`, `exec.rs` on `Executor` (pools, units of work, savepoints, streams, timeouts, lost-connection retries), `OrmError::Db(DbError)`, pgvector values | 19 files, 213 `Value` lines, 39 `QueryResult` lines; navree-mongo 3 lines | 2 days | Opus |
 | 4 | **Wave 0-2 leaf crates** (topological order of the survey): navree-time (zone expressions), navree-session (store, 1 migration), navree-schedule (store, 1 migration), navree-validation (`unique`/`exists` on statements), navree-mail (5 entities, 1 migration, outbox and delivery log; L3: statements), navree-micro (outbox/inbox store, 1 migration) | 3.5k / 2.0k / 1.8k / 5.4k / 14.2k / 17.1k LOC; 4-44 SeaORM lines each | 2 days | Sonnet (navree-mail: Opus for the entity-to-statement design) |

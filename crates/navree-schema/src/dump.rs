@@ -21,9 +21,7 @@ mod mysql;
 mod postgres;
 mod sqlite;
 
-use sea_orm::QueryResult;
-
-use crate::connection::SchemaConnection;
+use crate::connection::{SchemaConnection, SchemaRow};
 use crate::error::SchemaResult;
 use crate::grammar::{columnize, ident, table};
 use crate::inspect::{self, text};
@@ -211,7 +209,7 @@ async fn rows_as_inserts(
         table(dialect, table_name),
         columnize(dialect, &order)
     );
-    let found: Vec<QueryResult> = inspect::rows(conn, &sql, Vec::new()).await?;
+    let found: Vec<SchemaRow> = inspect::rows(conn, &sql, Vec::new()).await?;
     let insert = format!(
         "INSERT INTO {} ({}) VALUES",
         table(dialect, table_name),
