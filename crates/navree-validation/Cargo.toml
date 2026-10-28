@@ -16,6 +16,10 @@ workspace = true
 phone = ["dep:rlibphonenumber"]
 ## `SafeHtml`: rich text sanitized by the app's `HtmlPolicy` (ammonia).
 html = ["dep:ammonia"]
+## Runs the PostgreSQL suite (`NAVREE_TEST_POSTGRES_URL`).
+postgres = ["navree-db/postgres"]
+## Runs the MySQL suite (`NAVREE_TEST_MYSQL_URL`).
+mysql = ["navree-db/mysql"]
 
 [dependencies]
 ammonia = { workspace = true, optional = true }
@@ -32,7 +36,6 @@ navree-db = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
 rlibphonenumber = { workspace = true, optional = true }
-sea-orm = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_path_to_error = { workspace = true }
@@ -42,5 +45,7 @@ unicode-properties = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
+futures-util = { workspace = true }
 navree-testing = { workspace = true }
+tempfile = { workspace = true }
 tokio = { workspace = true }
