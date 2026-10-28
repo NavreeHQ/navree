@@ -51,11 +51,8 @@ impl Domains {
             None if !own => return Err(DomainsError::DomainNotFound),
             _ => {}
         }
-        if rt.encrypter.is_none() {
-            return Err(DomainsError::Config(
-                "storing certificates needs CryptoModule with an application key".to_owned(),
-            ));
-        }
+        // The key must be sealable before a certificate is ordered.
+        rt.seal(&host)?;
         let order = AcmeOrder {
             host: host.clone(),
             directory_url: rt.options.acme.directory_url.clone(),

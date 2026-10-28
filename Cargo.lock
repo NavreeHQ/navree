@@ -5524,6 +5524,7 @@ dependencies = [
  "navree-contracts",
  "navree-crypto",
  "navree-db",
+ "navree-domains",
  "navree-events",
  "navree-http",
  "navree-kernel",
