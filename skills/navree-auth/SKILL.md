@@ -139,7 +139,8 @@ A `SignInPolicy` (registered with `m.sign_in_policy::<P>()`) gets a
 `SignInAttempt { email, user_id, method, audience }` and answers `Ok(())` or
 `AuthError::SignInRefused { code, message }` (403 with that code, audited
 `auth.login_refused`). Every flow asks it before issuing anything:
-password login/register/password change (`Password`), magic link and email
+password login/register/password change (`Password`), an email change
+on `PATCH /me` (`Password`, for the old and the new address), magic link and email
 code at request and use (`MagicLink`, `Otp`), passkeys (`Passkey`), token
 exchange (`TokenExchange { issuer }`), `POST /auth/2fa/verify` (the first
 step's method, carried in the challenge's `sign_in` claim), social

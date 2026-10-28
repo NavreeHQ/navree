@@ -958,6 +958,7 @@ A sign-in policy decides whether a sign-in may go on. Every flow that signs a pe
 | Path | Method (`SignInMethod`) | Asked |
 |---|---|---|
 | `POST /api/auth/login`, `POST /api/auth/register`, `PATCH /api/auth/me/password` | `Password` | Before the password is checked |
+| `PATCH /api/auth/me` with a new email | `Password`, for the old address and the new one | Once the current password checks out, before anything changes: an account can't leave a domain that enforces single sign-on, or take an address of one |
 | `POST /api/auth/magic-link` and `/magic-link/verify` | `MagicLink` | When a link is requested (no mail is sent) and when one is used |
 | `POST /api/auth/otp` and `/otp/verify` | `Otp` | When a code is requested and when one is used |
 | `POST /api/auth/passkeys/login` | `Passkey` | Once the passkey is verified, before the session |
