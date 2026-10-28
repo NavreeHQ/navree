@@ -20,7 +20,7 @@ use super::report::{
     FreshOptions, LoadedDump, MigrateOptions, MigrationReport, MigrationRun, RollbackOptions,
 };
 use super::{
-    Applied, Body, MIGRATIONS_TABLE, MigrationError, MigrationSet, MigrationStatus, Step,
+    Applied, MIGRATIONS_TABLE, MigrationError, MigrationSet, MigrationStatus, SetMigration, Step,
     applied_rows, delete_sql, drop_all_tables, ensure_table, insert_sql, plan, sets_of,
 };
 use crate::{Backend, Db, DbError, DbOptions, Executor, Statement, Value};
@@ -380,8 +380,8 @@ impl Runner {
         let check = session.is_dedicated();
         if step.transactional(session.dialect()) {
             let tx = match step.body {
-                Body::Schema(_) => session.begin().await,
-                Body::SeaOrm(_) => session.begin_sea().await,
+                SetMigration::Schema(_) => session.begin().await,
+                SetMigration::SeaOrm(_) => session.begin_sea().await,
             }
             .map_err(|error| failed(error.into()))?;
             let result = context
@@ -411,9 +411,7 @@ impl Runner {
                 .await
                 .map_err(failed)?;
             if check {
-                foreign_key_check(session)
-                    .await
-                    .map_err(|error| failed(error.into()))?;
+                foreign_key_check(session).await.map_err(failed)?;
             }
             bookkeeping(session, step, direction, batch)
                 .await
@@ -442,7 +440,7 @@ impl Runner {
         let context = MigrationContext::pretending(step.label(), self.options.clone(), reader);
         let started = Instant::now();
         match step.body {
-            Body::Schema(migration) => {
+            SetMigration::Schema(migration) => {
                 context
                     .clone()
                     .scope(async {
@@ -455,7 +453,7 @@ impl Runner {
                     .await
                     .map_err(|error| failed(error.into()))?;
             }
-            Body::SeaOrm(migration) => {
+            SetMigration::SeaOrm(migration) => {
                 let recording = recording_connection(session.sea().get_database_backend());
                 let result = context
                     .clone()
@@ -492,14 +490,14 @@ impl Runner {
 /// navree-db's transaction, a SeaORM migration on SeaORM's.
 async fn run_in_transaction(step: &Step<'_>, direction: Direction, tx: &Tx) -> Result<(), BoxError> {
     match step.body {
-        Body::Schema(migration) => {
+        SetMigration::Schema(migration) => {
             let schema = Schema::new(tx);
             match direction {
                 Direction::Up => migration.up(&schema).await?,
                 Direction::Down => migration.down(&schema).await?,
             }
         }
-        Body::SeaOrm(migration) => {
+        SetMigration::SeaOrm(migration) => {
             let manager = match tx.sea() {
                 Some(sea) => SchemaManager::new(sea),
                 None => return Err("a SeaORM migration needs a SeaORM transaction".into()),
@@ -520,14 +518,14 @@ async fn run_on_connection(
     session: &Conn,
 ) -> Result<(), BoxError> {
     match step.body {
-        Body::Schema(migration) => {
+        SetMigration::Schema(migration) => {
             let schema = Schema::new(session);
             match direction {
                 Direction::Up => migration.up(&schema).await?,
                 Direction::Down => migration.down(&schema).await?,
             }
         }
-        Body::SeaOrm(migration) => {
+        SetMigration::SeaOrm(migration) => {
             let manager = SchemaManager::new(session.sea());
             match direction {
                 Direction::Up => migration.up(&manager).await?,
@@ -701,7 +699,7 @@ mod tests {
     fn step(migration: &dyn NamedMigration) -> Step<'_> {
         Step {
             module: "crm",
-            body: Body::Schema(migration),
+            body: SetMigration::Schema(migration),
         }
     }
 
