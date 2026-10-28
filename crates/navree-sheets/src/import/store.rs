@@ -212,6 +212,8 @@ pub(crate) async fn imports_of<C: ConnectionTrait>(
         "SELECT {COLUMNS} FROM {IMPORTS_TABLE} WHERE {filter} ORDER BY created_at DESC, id DESC \
          LIMIT ?"
     );
+    // A list of `?` placeholders and fixed fragments built here; every value is a bound parameter.
+    // nosemgrep: navree-sql-built-from-strings
     let rows = conn
         .query_all_raw(statement(conn.get_database_backend(), &sql, values))
         .await?;
@@ -285,6 +287,8 @@ pub(crate) async fn insert_rows<C: ConnectionTrait>(
             values.push(json(&row.cells).into());
             values.push(json(&row.errors).into());
         }
+        // A list of `?` placeholders and fixed fragments built here; every value is a bound parameter.
+        // nosemgrep: navree-sql-built-from-strings
         conn.execute_raw(statement(backend, &sql, values)).await?;
     }
     Ok(())
@@ -324,6 +328,8 @@ pub(crate) async fn rows_page<C: ConnectionTrait>(
         values.extend(statuses);
     }
     let count_sql = format!("SELECT COUNT(*) AS total FROM {IMPORT_ROWS_TABLE} WHERE {filter}");
+    // A list of `?` placeholders and fixed fragments built here; every value is a bound parameter.
+    // nosemgrep: navree-sql-built-from-strings
     let total = conn
         .query_one_raw(statement(backend, &count_sql, values.clone()))
         .await?
@@ -336,6 +342,8 @@ pub(crate) async fn rows_page<C: ConnectionTrait>(
     );
     values.push(to_i64(limit).into());
     values.push(to_i64(offset).into());
+    // A list of `?` placeholders and fixed fragments built here; every value is a bound parameter.
+    // nosemgrep: navree-sql-built-from-strings
     let rows = conn.query_all_raw(statement(backend, &sql, values)).await?;
     let records = rows
         .iter()
@@ -393,6 +401,8 @@ pub(crate) async fn row_ranges<C: ConnectionTrait>(
     );
     let mut values: Vec<SqlValue> = vec![import_id.to_string().into()];
     values.extend(statuses);
+    // A list of `?` placeholders and fixed fragments built here; every value is a bound parameter.
+    // nosemgrep: navree-sql-built-from-strings
     let rows = conn
         .query_all_raw(statement(conn.get_database_backend(), &sql, values))
         .await?;
@@ -429,6 +439,8 @@ pub(crate) async fn rows_between<C: ConnectionTrait>(
         to_i64(to).into(),
     ];
     values.extend(statuses);
+    // A list of `?` placeholders and fixed fragments built here; every value is a bound parameter.
+    // nosemgrep: navree-sql-built-from-strings
     let rows = conn
         .query_all_raw(statement(conn.get_database_backend(), &sql, values))
         .await?;
@@ -451,6 +463,8 @@ pub(crate) async fn rows_after<C: ConnectionTrait>(
     let mut values: Vec<SqlValue> = vec![import_id.to_string().into(), to_i64(after).into()];
     values.extend(statuses);
     values.push(to_i64(limit).into());
+    // A list of `?` placeholders and fixed fragments built here; every value is a bound parameter.
+    // nosemgrep: navree-sql-built-from-strings
     let rows = conn
         .query_all_raw(statement(conn.get_database_backend(), &sql, values))
         .await?;
@@ -498,6 +512,8 @@ pub(crate) async fn set_rows<C: ConnectionTrait>(
         );
         let mut values: Vec<SqlValue> = vec![status.as_str().into(), import_id.to_string().into()];
         values.extend(batch.iter().map(|n| SqlValue::from(to_i64(*n))));
+        // A list of `?` placeholders and fixed fragments built here; every value is a bound parameter.
+        // nosemgrep: navree-sql-built-from-strings
         conn.execute_raw(statement(backend, &sql, values)).await?;
     }
     Ok(())
@@ -517,6 +533,8 @@ pub(crate) async fn find_mapping<C: ConnectionTrait>(
     );
     let mut all: Vec<SqlValue> = vec![importer.into(), fingerprint.into()];
     all.append(&mut values);
+    // A list of `?` placeholders and fixed fragments built here; every value is a bound parameter.
+    // nosemgrep: navree-sql-built-from-strings
     let row = conn
         .query_one_raw(statement(conn.get_database_backend(), &sql, all))
         .await?;
@@ -551,6 +569,8 @@ pub(crate) async fn save_mapping<C: ConnectionTrait>(
     );
     let mut all: Vec<SqlValue> = vec![importer.into(), fingerprint.into()];
     all.extend(values);
+    // A list of `?` placeholders and fixed fragments built here; every value is a bound parameter.
+    // nosemgrep: navree-sql-built-from-strings
     conn.execute_raw(statement(backend, &sql, all)).await?;
     let sql = format!(
         "INSERT INTO {IMPORT_MAPPINGS_TABLE} (id, importer, workspace_id, fingerprint, mapping, \

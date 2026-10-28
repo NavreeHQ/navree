@@ -53,3 +53,14 @@ sources), cargo-vet (reviewed or exempted crates) and a daily OSV scan; every
 GitHub Action is pinned to a commit SHA, and each release carries a CycloneDX
 SBOM. See [`supply-chain/README.md`](supply-chain/README.md) and the
 "Dependencies and security" section of [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+## Static analysis
+
+Every push to `main`, every pull request and a weekly run scan the code with
+Semgrep (the registry rulesets for Rust, TypeScript, JavaScript, React, GitHub
+Actions and Dockerfiles, plus Navree's own rules in [`.semgrep/`](.semgrep/))
+and the git history and working tree with Gitleaks. A finding fails the build;
+false positives are suppressed at the line or in [`.gitleaks.toml`](.gitleaks.toml)
+with a reason. The reports are kept as workflow artifacts. See "Static
+analysis" in [`CONTRIBUTING.md`](CONTRIBUTING.md) for what the rules check, how
+to run them locally and how to suppress a false positive.

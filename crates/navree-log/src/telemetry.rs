@@ -134,6 +134,8 @@ mod tests {
             tracing_subscriber::registry().with(TelemetryLayer::new(Redactor::new(&["token"])));
         tracing::subscriber::with_default(subscriber, || {
             set_background(telemetry.clone());
+            // A test: logs a token on purpose to prove the telemetry layer redacts it.
+            // nosemgrep: navree-secret-in-log
             tracing::info!(token = "abc", "in the background");
             clear_background(&Telemetry::with_sinks(Vec::new()));
             tracing::info!("still the background registry");
