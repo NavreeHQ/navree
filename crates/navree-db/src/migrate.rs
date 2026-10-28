@@ -167,18 +167,24 @@ impl MigrationSet {
         names
     }
 
-    /// Every migration of the set, in no particular order.
-    fn steps(&self) -> impl Iterator<Item = Step<'_>> {
-        self.migrations
+    /// Every migration of the set, in run order (by name).
+    pub fn entries(&self) -> Vec<SetMigration<'_>> {
+        let mut entries: Vec<SetMigration<'_>> = self
+            .migrations
             .iter()
-            .map(|m| Step {
-                module: self.module,
-                body: Body::Schema(m.as_ref()),
-            })
-            .chain(self.sea_orm.iter().map(|m| Step {
-                module: self.module,
-                body: Body::SeaOrm(m.as_ref()),
-            }))
+            .map(|m| SetMigration::Schema(m.as_ref()))
+            .chain(self.sea_orm.iter().map(|m| SetMigration::SeaOrm(m.as_ref())))
+            .collect();
+        entries.sort_by(|a, b| a.name().cmp(b.name()));
+        entries
+    }
+
+    /// Every migration of the set as a step, in run order.
+    fn steps(&self) -> impl Iterator<Item = Step<'_>> {
+        self.entries().into_iter().map(|body| Step {
+            module: self.module,
+            body,
+        })
     }
 }
 
@@ -437,24 +443,64 @@ pub(crate) async fn migrate_on_boot(db: &Db, app: &AppContext, url: &str) -> Res
 /// One migration in run order.
 struct Step<'a> {
     module: &'static str,
-    body: Body<'a>,
+    body: SetMigration<'a>,
 }
 
-/// What a step runs.
+/// One migration of a [`MigrationSet`] ([`MigrationSet::entries`]): written
+/// with the schema builder, or a SeaORM migration while crates still have
+/// them.
 #[derive(Clone, Copy)]
-enum Body<'a> {
+pub enum SetMigration<'a> {
     /// A migration written with the schema builder.
     Schema(&'a dyn NamedMigration),
     /// A SeaORM migration.
     SeaOrm(&'a dyn MigrationTrait),
 }
 
+impl SetMigration<'_> {
+    /// The name recorded in `navree_migrations`.
+    pub fn name(&self) -> &str {
+        match self {
+            SetMigration::Schema(migration) => migration.name(),
+            SetMigration::SeaOrm(migration) => migration.name(),
+        }
+    }
+
+    /// Applies the migration inside a SeaORM transaction, for runners of
+    /// their own that still hold one (workspace migrations under schema and
+    /// database isolation). The [`Migrator`] runs migrations on navree-db's
+    /// transactions; this goes once no runner holds a SeaORM transaction.
+    pub async fn up_in(&self, tx: &sea_orm::DatabaseTransaction) -> Result<(), sea_orm::DbErr> {
+        match self {
+            SetMigration::Schema(migration) => {
+                let conn = crate::compat::SeaExecutor::new(tx);
+                migration
+                    .up(&navree_schema::Schema::new(&conn))
+                    .await
+                    .map_err(|error| sea_orm::DbErr::Migration(error.to_string()))
+            }
+            SetMigration::SeaOrm(migration) => {
+                migration
+                    .up(&sea_orm_migration::SchemaManager::new(tx))
+                    .await
+            }
+        }
+    }
+}
+
+impl fmt::Debug for SetMigration<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let kind = match self {
+            SetMigration::Schema(_) => "Schema",
+            SetMigration::SeaOrm(_) => "SeaOrm",
+        };
+        f.debug_tuple(kind).field(&self.name()).finish()
+    }
+}
+
 impl Step<'_> {
     fn name(&self) -> &str {
-        match self.body {
-            Body::Schema(migration) => migration.name(),
-            Body::SeaOrm(migration) => migration.name(),
-        }
+        self.body.name()
     }
 
     fn label(&self) -> String {
@@ -466,8 +512,8 @@ impl Step<'_> {
     /// SQLite; not MySQL).
     fn transactional(&self, dialect: Dialect) -> bool {
         match self.body {
-            Body::Schema(migration) => migration.transactional(dialect),
-            Body::SeaOrm(migration) => migration
+            SetMigration::Schema(migration) => migration.transactional(dialect),
+            SetMigration::SeaOrm(migration) => migration
                 .use_transaction()
                 .unwrap_or(dialect != Dialect::MySql),
         }
