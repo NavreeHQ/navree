@@ -14,7 +14,8 @@ implementation, real provider key sets) and `crates/navree/tests/jose_docs.rs`
 (the docs page's examples through the facade). Docs page:
 `/docs/security/signatures-and-keys/`.
 
-Not for Navree's own access tokens: those are navree-auth's HS256 JWTs (load
+Not for checking Navree's own access tokens: those are navree-auth's HS256
+JWTs, written with this module but checked by `JwtService` (load
 `navree-auth`). Social sign-in and the OAuth server already use this module
 for ID tokens; reach for it directly when your own code signs or verifies.
 

@@ -8,6 +8,7 @@ mod access;
 mod exchange;
 mod flow;
 mod impersonation;
+mod jwt;
 mod login;
 mod logout;
 mod module;

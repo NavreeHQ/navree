@@ -125,7 +125,7 @@ HTTP/1.1 200 OK
 Content-Type: application/json
 
 {
-  "access_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIwMWExNzc0OC1lMjEx...",
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwMWExNzc0OC1lMjEx...",
   "expires_in": 900,
   "refresh_token": "01a17748-e21b-71c6-97cf-968b61f8e6b3.1ug0BGRxe4FaZwgRwDYO9BhvnHd3KPPgyzSJngXtYF3uZMZQ",
   "token_type": "Bearer",
@@ -156,7 +156,7 @@ Send the access token in the `Authorization` header:
 
 ```http
 GET /api/auth/me HTTP/1.1
-Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIwMWExNzc0OC1lMjEx...
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwMWExNzc0OC1lMjEx...
 ```
 
 ```json
@@ -189,7 +189,7 @@ Content-Type: application/json
 
 ```json
 {
-  "access_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIwMWExNzc0OC1lMjEx...",
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwMWExNzc0OC1lMjEx...",
   "expires_in": 900,
   "refresh_token": "01a17748-e21f-7764-92e3-307f059b7300.RqBqicxX3GwIxx8mYayt0ZgHxZAXLV81WoI65WWKWysYFRqw",
   "token_type": "Bearer"
@@ -206,7 +206,7 @@ The route is public: it needs no access token. The refresh token you sent is now
 
 ```http
 POST /api/auth/logout HTTP/1.1
-Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 Content-Type: application/json
 
 {"refresh_token": "01a17748-e21b-71c6-97cf-968b61f8e6b3.1ug0BGRxe4FaZwgRwDYO9BhvnHd3KPPgyzSJngXtYF3uZMZQ"}
@@ -228,10 +228,10 @@ Logout needs a valid access token, so one user can't end another's session. When
 
 ## Access tokens
 
-Access tokens are JWTs signed with HS256. Here are the header and the claims of a real one:
+Access tokens are JWTs signed with HS256 (HMAC-SHA-256), written and read by [`navree::crypto::jose`](/docs/security/signatures-and-keys/), Navree's own code. Here are the header and the claims of a real one:
 
 ```json
-{"typ": "JWT", "alg": "HS256"}
+{"alg": "HS256", "typ": "JWT"}
 ```
 
 ```json
@@ -268,12 +268,17 @@ Access tokens are JWTs signed with HS256. Here are the header and the claims of 
 
 The claims carry no roles or permissions: [authorization](/docs/security/authorization/) looks them up for each request (cached until they change), so a role change applies to the next request.
 
-When it verifies a token, `JwtService` accepts only HS256 (an unsigned `alg: none` token is rejected) and checks:
+When it verifies a token, `JwtService` accepts only HS256 and checks, in this order. Every failure answers `401 Invalid token`, except the last:
 
-- the signature;
-- `iss`, and `aud` when an audience is configured (when none is, a token that carries one is rejected);
+- the size and the shape: at most 8 KiB (`navree::auth::MAX_TOKEN_LEN`), three unpadded base64url parts, a JSON header and a JSON object as the payload;
+- the header: `alg` is `HS256`, so an unsigned `alg: none` token, an RSA, ECDSA or EdDSA algorithm named by the token, and another HMAC hash are all rejected. There is no `kid`: tokens carry none, and a token that names a key was not made by this service. There is no `crit`, and headers that point at keys (`jku`, `jwk`, `x5u`, `x5c`) are never followed;
+- the signature, compared in constant time;
+- the claims: `sub`, `iat`, `exp`, `iss`, `jti` and `typ` are all present and of the right kind; `nbf` has passed, if the token has one; `iss` matches, and so does `aud` when an audience is configured (when none is, a token that carries one is rejected);
 - the token type, so a challenge token never works as an access token;
-- the expiry, with 30 seconds of leeway (`navree::auth::LEEWAY_SECS`) against the app's `dyn Clock`. A token issued more than 30 seconds in the future is rejected too.
+- `iat`, which can't be more than 30 seconds ahead of the app's `dyn Clock`;
+- the expiry, last, with 30 seconds of leeway (`navree::auth::LEEWAY_SECS`). An expired token is `401 Token expired`, and only a token that is valid in every other way gets that answer.
+
+The algorithm, the claims and the leeway are the ones earlier releases used, so tokens issued before an upgrade keep verifying until they expire. Only the order of the header's two members changed: `alg` now comes first.
 
 Access tokens are stateless. Nothing revokes one before it expires: not a logout, not a password change. Keep `auth.jwt.access_ttl_secs` short; refresh tokens are the part that gets revoked.
 
@@ -626,17 +631,17 @@ Register it with `m.command(create_admin())` and run it with `navree admin:creat
 
 `AuthModule` picks the HS256 signing key when the app boots, in this order:
 
-1. **`auth.jwt.secret`**, when it is set (in `.env` as `APP_AUTH__JWT__SECRET`). It must be at least 32 bytes long; a shorter one fails the boot.
+1. **`auth.jwt.secret`**, when it is set (in `.env` as `APP_AUTH__JWT__SECRET`). It must be at least 32 bytes long; a shorter one fails the boot. (`JwtService::new` called from code with a shorter secret pads it with zeros to 32 bytes, which is what HMAC does with a short key anyway.)
 2. **A key derived from the application key** (`app.key`, or `APP_KEY`): an HMAC-SHA-256 of the key for the purpose `navree-auth.jwt`, from `Encrypter::derive_key`. The application key itself never signs anything.
 3. **A random key per process**, with a warning in the log. Tokens stop working when the process restarts.
 
 The derived key is the default, and it is enough for most apps: one secret to manage, and rotating `APP_KEY` rotates the JWT key with it. Set a dedicated `auth.jwt.secret` when you want to rotate the two independently.
 
-Rotating the signing key, either way, invalidates every access token: requests get `401 Invalid token`. Refresh tokens don't depend on the key (they are stored as digests), so clients refresh and carry on. `app.previous_keys` doesn't help here: keys are derived from the current application key only.
+There is one signing key and no key id: Navree does not keep old keys to verify with. Rotating the signing key, either way, invalidates every access token: requests get `401 Invalid token`. Refresh tokens don't depend on the key (they are stored as digests), so clients refresh and carry on. `app.previous_keys` doesn't help here: keys are derived from the current application key only.
 
 <Callout type="note" title="HS256 only">
 
-Tokens are signed with a shared secret, and only HS256 is supported: there are no RS256 keys or JWKS endpoint. Anything that can verify a token can also sign one, so don't hand the secret to other services. Every instance of your API needs the same key. To accept tokens that another system signs with its own keys, use [trusted token exchange](#trusted-token-exchange).
+Tokens are signed with a shared secret, and only HS256 is supported: there are no RS256 keys or JWKS endpoint. (`navree::crypto::jose` signs with other algorithms; the access tokens do not use them.) Anything that can verify a token can also sign one, so don't hand the secret to other services. Every instance of your API needs the same key. To accept tokens that another system signs with its own keys, use [trusted token exchange](#trusted-token-exchange).
 
 </Callout>
 
@@ -689,7 +694,7 @@ Content-Type: application/json
 
 ```json
 {
-  "challenge_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
+  "challenge_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "expires_in": 300,
   "two_factor_required": true
 }

@@ -8,8 +8,20 @@ description: "Authentication with navree-auth: `AuthModule`, the `/api/auth/*` r
 `AuthModule` (crate navree-auth, in the default features) gives an app
 email-and-password accounts with bearer tokens. A client posts credentials
 to `/api/auth/login` and gets a short-lived **access token** (HS256 JWT, 15
-minutes) and an opaque **refresh token** (30 days, single use, rotated on
-every refresh). Every other request sends `Authorization: Bearer <access>`.
+minutes, written and read by `navree::crypto::jose`) and an opaque **refresh
+token** (30 days, single use, rotated on every refresh). Every other request
+sends `Authorization: Bearer <access>`.
+
+`JwtService::verify` takes HS256 only and checks, in order: size (at most
+`MAX_TOKEN_LEN`, 8 KiB) and shape, header (`alg` HS256, no `kid`, no `crit`),
+the HMAC in constant time, the claims (`sub`, `iat`, `exp`, `iss`, `jti`,
+`typ` present; `nbf` if any; `iss`; `aud` when configured), the token type,
+`iat` no more than `LEEWAY_SECS` (30) ahead of the clock, and `exp` last
+(`TokenExpired`, with the same leeway). There is one key and no `kid`: rotating
+`auth.jwt.secret` or `APP_KEY` ends the access tokens in flight, never the
+sessions (refresh tokens are opaque). To test hostile tokens, forge one with
+`navree::crypto::jose::SigningKey::hmac(Algorithm::HS256, secret)` and
+`sign_jws` with the header and payload you want.
 Routes stay denied until they declare access (see `navree-access-control`).
 
 ## Setup
