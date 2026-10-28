@@ -59,9 +59,9 @@ use navree::api::ApiOptions;
 
 `ApiModule` imports `HttpModule`, so the document covers every route of the app, framework routes included (authentication, notifications, health checks and so on).
 
-<Callout type="note" title="The docs page loads Scalar from a CDN">
+<Callout type="note" title="The docs page loads nothing from a third party">
 
-`/api/docs` is a small HTML page that loads the Scalar script from `cdn.jsdelivr.net` (major version 1), so the browser viewing it needs internet access. The page sends a strict `Content-Security-Policy`, but the script has no subresource-integrity hash. If that matters for your deployment, set `api.docs_ui = false`; the JSON document stays available.
+`/api/docs` is a small HTML page. Its script, Scalar 1.74.0, is embedded in your binary (with its MIT license) and served by the app at `/api/docs/assets/`, cached for a year, so the browser viewing it needs no internet access and no CDN can change what runs. The page's `Content-Security-Policy` allows scripts from your own origin only, and Scalar's web fonts are off. The version moves only when Navree does. To remove the page and its assets, set `api.docs_ui = false`; the JSON document stays available.
 
 </Callout>
 
