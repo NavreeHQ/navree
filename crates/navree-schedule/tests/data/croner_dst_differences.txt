@@ -1,0 +1,90 @@
+Europe/London | 1768471650 | 0 0 * * 0L | croner runs a time before the gap again when the gap ends
+America/New_York | 1793514030 | * * * * * | croner runs a repeated local time a second time
+Europe/London | 1792891230 | * * * * * | croner runs a repeated local time a second time
+America/New_York | 1793507400 | */15 * * * * | croner runs a repeated local time a second time
+America/New_York | 1793514030 | */15 * * * * | croner runs a repeated local time a second time
+Europe/London | 1792884600 | */15 * * * * | croner runs a repeated local time a second time
+Europe/London | 1792891230 | */15 * * * * | croner runs a repeated local time a second time
+America/New_York | 1793507400 | */30 * * * * | croner runs a repeated local time a second time
+America/New_York | 1793514030 | */30 * * * * | croner runs a repeated local time a second time
+Europe/London | 1792884600 | */30 * * * * | croner runs a repeated local time a second time
+Europe/London | 1792891230 | */30 * * * * | croner runs a repeated local time a second time
+America/New_York | 1793507400 | 0 * * * * | croner runs a repeated local time a second time
+Europe/London | 1792884600 | 0 * * * * | croner runs a repeated local time a second time
+America/New_York | 1772947800 | 30 * * * * | croner skips a skipped local time
+America/New_York | 1793507400 | 30 * * * * | croner runs a repeated local time a second time
+America/New_York | 1793514030 | 30 * * * * | croner runs a repeated local time a second time
+Europe/London | 1774740600 | 30 * * * * | croner skips a skipped local time
+Europe/London | 1792884600 | 30 * * * * | croner runs a repeated local time a second time
+Europe/London | 1792891230 | 30 * * * * | croner runs a repeated local time a second time
+America/New_York | 1772947800 | 0 1 * * * | croner runs a time before the gap again when the gap ends
+America/New_York | 1772947800 | 30 1 * * * | croner runs a time before the gap again when the gap ends
+America/New_York | 1772947800 | 59 1 * * * | croner runs a time before the gap again when the gap ends
+Europe/London | 1774740600 | 0 0 * * * | croner runs a time before the gap again when the gap ends
+America/New_York | 1793507400 | */15 1-3 * * * | croner runs a repeated local time a second time
+America/New_York | 1793514030 | */15 1-3 * * * | croner runs a repeated local time a second time
+Europe/London | 1792884600 | */15 1-3 * * * | croner runs a repeated local time a second time
+Europe/London | 1792891230 | */15 1-3 * * * | croner runs a repeated local time a second time
+America/New_York | 1793507400 | */10 0-4 * * * | croner runs a repeated local time a second time
+America/New_York | 1793514030 | */10 0-4 * * * | croner runs a repeated local time a second time
+Europe/London | 1792884600 | */10 0-4 * * * | croner runs a repeated local time a second time
+Europe/London | 1792891230 | */10 0-4 * * * | croner runs a repeated local time a second time
+America/New_York | 1793507400 | 0,30 1,2,3 * * * | croner runs a repeated local time a second time
+America/New_York | 1793514030 | 0,30 1,2,3 * * * | croner runs a repeated local time a second time
+Europe/London | 1792884600 | 0,30 1,2,3 * * * | croner runs a repeated local time a second time
+Europe/London | 1792891230 | 0,30 1,2,3 * * * | croner runs a repeated local time a second time
+America/New_York | 1772947800 | 15,45 1-2 * * * | croner skips a skipped local time
+America/New_York | 1793507400 | 15,45 1-2 * * * | croner runs a repeated local time a second time
+America/New_York | 1793514030 | 15,45 1-2 * * * | croner runs a repeated local time a second time
+Europe/London | 1774740600 | 15,45 1-2 * * * | croner skips a skipped local time
+Europe/London | 1792884600 | 15,45 1-2 * * * | croner runs a repeated local time a second time
+Europe/London | 1792891230 | 15,45 1-2 * * * | croner runs a repeated local time a second time
+America/New_York | 1793507400 | 0 1-3 * * * | croner runs a repeated local time a second time
+Europe/London | 1792884600 | 0 1-3 * * * | croner runs a repeated local time a second time
+America/New_York | 1772947800 | 30 0-4 * * * | croner skips a skipped local time
+America/New_York | 1793507400 | 30 0-4 * * * | croner runs a repeated local time a second time
+America/New_York | 1793514030 | 30 0-4 * * * | croner runs a repeated local time a second time
+Europe/London | 1774740600 | 30 0-4 * * * | croner skips a skipped local time
+Europe/London | 1792884600 | 30 0-4 * * * | croner runs a repeated local time a second time
+Europe/London | 1792891230 | 30 0-4 * * * | croner runs a repeated local time a second time
+America/New_York | 1772947800 | */20 2 * * * | croner skips a skipped local time
+America/New_York | 1793514030 | */5 1 * * * | croner runs a repeated local time a second time
+Europe/London | 1774740600 | */5 1 * * * | croner skips a skipped local time
+Europe/London | 1792891230 | */5 1 * * * | croner runs a repeated local time a second time
+America/New_York | 1772947800 | */5 2 * * * | croner skips a skipped local time
+America/New_York | 1772947800 | 0 */2 * * * | croner skips a skipped local time
+America/New_York | 1793507400 | 0 1-23/2 * * * | croner runs a repeated local time a second time
+Europe/London | 1774740600 | 0 1-23/2 * * * | croner skips a skipped local time
+Europe/London | 1792884600 | 0 1-23/2 * * * | croner runs a repeated local time a second time
+America/New_York | 1772947800 | 30 1 * * SUN | croner runs a time before the gap again when the gap ends
+America/New_York | 1793507400 | */45 * * * * | croner runs a repeated local time a second time
+America/New_York | 1793514030 | */45 * * * * | croner runs a repeated local time a second time
+Europe/London | 1792884600 | */45 * * * * | croner runs a repeated local time a second time
+Europe/London | 1792891230 | */45 * * * * | croner runs a repeated local time a second time
+America/New_York | 1772947800 | 10 1 * * * | croner runs a time before the gap again when the gap ends
+America/New_York | 1772947800 | 45 1 * * * | croner runs a time before the gap again when the gap ends
+America/New_York | 1772947800 | 0 1,2 * * * | croner skips a skipped local time
+America/New_York | 1793507400 | 0 1,2 * * * | croner runs a repeated local time a second time
+Europe/London | 1792884600 | 0 1,2 * * * | croner runs a repeated local time a second time
+America/New_York | 1772947800 | 59 * * * * | croner skips a skipped local time
+America/New_York | 1793507400 | 59 * * * * | croner runs a repeated local time a second time
+America/New_York | 1793514030 | 59 * * * * | croner runs a repeated local time a second time
+Europe/London | 1774740600 | 59 * * * * | croner skips a skipped local time
+Europe/London | 1792884600 | 59 * * * * | croner runs a repeated local time a second time
+Europe/London | 1792891230 | 59 * * * * | croner runs a repeated local time a second time
+America/New_York | 1772947800 | 1 * * * * | croner skips a skipped local time
+America/New_York | 1793507400 | 1 * * * * | croner runs a repeated local time a second time
+Europe/London | 1774740600 | 1 * * * * | croner skips a skipped local time
+Europe/London | 1792884600 | 1 * * * * | croner runs a repeated local time a second time
+America/New_York | 1793514030 | */3 1-2 * * * | croner runs a repeated local time a second time
+Europe/London | 1792891230 | */3 1-2 * * * | croner runs a repeated local time a second time
+America/New_York | 1772947800 | */7 2 * * * | croner skips a skipped local time
+America/New_York | 1793507400 | 0 0-3 * * * | croner runs a repeated local time a second time
+Europe/London | 1792884600 | 0 0-3 * * * | croner runs a repeated local time a second time
+America/New_York | 1772947800 | */30 1-2 8 3 * | croner skips a skipped local time
+America/New_York | 1772947800 | */30 0-3 1 11 * | croner runs a repeated local time a second time
+America/New_York | 1793507400 | */30 0-3 1 11 * | croner runs a repeated local time a second time
+America/New_York | 1793514030 | */30 0-3 1 11 * | croner runs a repeated local time a second time
+Europe/London | 1774740600 | */30 0-3 25 10 * | croner runs a repeated local time a second time
+Europe/London | 1792884600 | */30 0-3 25 10 * | croner runs a repeated local time a second time
+Europe/London | 1792891230 | */30 0-3 25 10 * | croner runs a repeated local time a second time
