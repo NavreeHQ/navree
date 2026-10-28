@@ -16,7 +16,8 @@
 //! | `search_docs`, `read_doc` | The docs of the app's Navree version | [`docs`] |
 //! | `lighthouse_list_issues`, `lighthouse_get_issue`, `lighthouse_slow_routes`, `lighthouse_slow_queries`, `lighthouse_failed_jobs` | Lighthouse's issues and figures, when the app includes Lighthouse | Lighthouse's tables ([`lighthouse`]) |
 //!
-//! [`Navigator`] answers the tools; [`server`] puts them on MCP (rmcp);
+//! [`Navigator`] answers the tools; [`server`] puts them on MCP (a small
+//! server of its own, on stdio);
 //! [`app::AppProbe`] builds and asks the app binary through a
 //! [`app::Runner`] ([`app::FakeRunner`] in tests).
 //!

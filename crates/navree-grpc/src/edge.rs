@@ -19,7 +19,7 @@ use http::header::{CONTENT_TYPE, HeaderName, HeaderValue};
 use http::{HeaderMap, Method, Request, Response, StatusCode};
 use http_body::Frame;
 use navree_contracts::RequestId;
-use navree_http::{ClientIp, GlobalLayer, HttpOptions, LayerSlot};
+use navree_http::{ClientIp, CorsLayer, GlobalLayer, HttpOptions, LayerSlot};
 use navree_kernel::{AppContext, RequestScope};
 use tokio::sync::OnceCell;
 use tokio::time::{Instant, Sleep};
@@ -28,7 +28,6 @@ use tonic::service::Routes;
 use tonic::{Code, Status};
 use tower::util::BoxCloneSyncService;
 use tower::{Service, ServiceBuilder, ServiceExt};
-use tower_http::cors::{AllowOrigin, CorsLayer};
 use tracing::Instrument;
 
 use crate::call::{CallInfo, Runtime, ServiceRuntime};
@@ -505,16 +504,11 @@ impl Edge {
 /// CORS for browser calls (gRPC-Web and Connect), from `http.cors`: the
 /// app's origins, with the gRPC-Web and Connect headers allowed and exposed.
 fn cors_layer(http: &HttpOptions) -> Result<Option<CorsLayer>, String> {
-    let options = &http.cors;
-    if options.allowed_origins.is_empty() {
+    let Some(layer) = CorsLayer::from_options(&http.cors)
+        .map_err(|error| format!("http.cors.allowed_origins: {error}"))?
+    else {
         return Ok(None);
-    }
-    let origins = options
-        .allowed_origins
-        .iter()
-        .map(|origin| HeaderValue::from_str(origin.trim()))
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|error| format!("http.cors.allowed_origins: {error}"))?;
+    };
     let allow = [
         "accept",
         "accept-language",
@@ -544,13 +538,10 @@ fn cors_layer(http: &HttpOptions) -> Result<Option<CorsLayer>, String> {
     ]
     .map(HeaderName::from_static);
     Ok(Some(
-        CorsLayer::new()
-            .allow_origin(AllowOrigin::list(origins))
-            .allow_credentials(options.allow_credentials)
+        layer
             .allow_methods([Method::POST, Method::OPTIONS])
-            .allow_headers(allow.collect::<Vec<_>>())
-            .expose_headers(expose)
-            .max_age(Duration::from_secs(options.max_age_secs)),
+            .allow_headers(allow)
+            .expose_headers(expose),
     ))
 }
 

@@ -1,0 +1,112 @@
+{
+  "api": {
+    "title": "Acme cloud API",
+    "undocumented": [
+      "/admin*"
+    ]
+  },
+  "app": {
+    "url": "http://localhost:3000"
+  },
+  "auth": {
+    "password_reset": {
+      "url": "http://localhost:3000/reset-password"
+    },
+    "registration": true,
+    "two_factor": {
+      "issuer": "Acme cloud"
+    }
+  },
+  "billing": {
+    "plans": {
+      "pro": {
+        "name": "Pro",
+        "prices": {
+          "monthly": "price_pro_monthly",
+          "yearly": "price_pro_yearly"
+        },
+        "seats": true,
+        "trial_days": 14
+      },
+      "starter": {
+        "name": "Starter",
+        "prices": {
+          "monthly": "price_starter_monthly",
+          "yearly": "price_starter_yearly"
+        },
+        "seats": true,
+        "trial_days": 14
+      }
+    },
+    "provider": "fake",
+    "return_url": "http://localhost:3000/billing/return"
+  },
+  "database": {
+    "migrate_on_boot": true,
+    "url": "postgres://navree:navree@127.0.0.1:5432/acme_cloud"
+  },
+  "helm": {
+    "title": "Acme cloud admin"
+  },
+  "http": {
+    "addr": "127.0.0.1:8080",
+    "api_prefix": "/api",
+    "cors": {
+      "allowed_origins": [
+        "http://localhost:3000"
+      ]
+    },
+    "trusted_proxies": [
+      "127.0.0.1",
+      "::1"
+    ]
+  },
+  "key": "",
+  "log": {
+    "level": "info"
+  },
+  "mail": {
+    "from": "Acme cloud <hello@acme-cloud.test>",
+    "transport": "smtp://127.0.0.1:1025"
+  },
+  "queue": {
+    "driver": "database"
+  },
+  "realtime": {
+    "allowed_origins": [
+      "http://localhost:3000"
+    ],
+    "key": "acme-cloud",
+    "relay_url": "auto"
+  },
+  "social": {
+    "redirect_base": "http://localhost:3000/auth/callback"
+  },
+  "workspace": {
+    "invitations": {
+      "url": "http://localhost:3000/invitations/accept"
+    },
+    "resolvers": [
+      "header"
+    ],
+    "roles": {
+      "admin": {
+        "permissions": [
+          "projects.*",
+          "billing.manage"
+        ]
+      },
+      "member": {
+        "permissions": [
+          "projects.read",
+          "projects.create"
+        ]
+      },
+      "viewer": {
+        "permissions": [
+          "projects.read"
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "api": {
+    "title": "Navree CRM API"
+  },
+  "app": {
+    "url": "http://localhost:3000"
+  },
+  "auth": {
+    "password_reset": {
+      "url": "http://localhost:3000/reset-password"
+    },
+    "registration": false
+  },
+  "database": {
+    "migrate_on_boot": true,
+    "url": "sqlite://storage/crm.db?mode=rwc"
+  },
+  "http": {
+    "addr": "127.0.0.1:8080",
+    "api_prefix": "/api",
+    "cors": {
+      "allowed_origins": [
+        "http://localhost:3000"
+      ]
+    },
+    "trusted_proxies": [
+      "127.0.0.1",
+      "::1"
+    ]
+  },
+  "key": "",
+  "log": {
+    "level": "info"
+  },
+  "mail": {
+    "from": "Navree CRM <crm@navree.test>",
+    "transport": "log"
+  },
+  "mcp": {
+    "auth": "bearer",
+    "instructions": "Tools for the Navree CRM. Deals move through the stages lead, qualified, proposal, negotiation, won and lost. Amounts are in cents.",
+    "name": "navree-crm",
+    "title": "Navree CRM"
+  },
+  "queue": {
+    "driver": "database"
+  },
+  "realtime": {
+    "allowed_origins": [
+      "http://localhost:3000"
+    ],
+    "key": "navree-crm-key",
+    "relay_url": "auto"
+  }
+}

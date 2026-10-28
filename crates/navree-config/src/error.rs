@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 /// An error raised while loading configuration sources or reading a section.
 ///
 /// Messages never contain configuration values: a value that fails to parse
-/// may be a password or an API key.
+/// may be a password or an API key. They name files, lines and keys.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum ConfigError {
@@ -30,6 +30,37 @@ pub enum ConfigError {
         column: usize,
         /// What is wrong (without the source excerpt, which may hold secrets).
         message: String,
+    },
+    /// A JSON file is malformed, or its top level is not an object.
+    #[error("invalid JSON in `{}` at line {line}, column {column}: {message}", .path.display())]
+    Json {
+        /// The file.
+        path: PathBuf,
+        /// The 1-based line of the error.
+        line: usize,
+        /// The 1-based column of the error.
+        column: usize,
+        /// What is wrong (without the source excerpt, which may hold secrets).
+        message: String,
+    },
+    /// A configuration file is larger than the limit
+    /// ([`ConfigSources::max_file_size`](crate::ConfigSources::max_file_size)).
+    #[error("configuration file `{}` is larger than the limit of {limit} bytes", .path.display())]
+    TooLarge {
+        /// The file.
+        path: PathBuf,
+        /// The limit, in bytes.
+        limit: u64,
+    },
+    /// A file, environment variable or [`set`](crate::ConfigSources::set) key
+    /// nests tables and arrays deeper than the limit
+    /// ([`ConfigSources::max_depth`](crate::ConfigSources::max_depth)).
+    #[error("{what} nests deeper than the limit of {limit} levels")]
+    TooDeep {
+        /// What is too deep: the file, or the name of the variable or key.
+        what: String,
+        /// The limit, in levels.
+        limit: usize,
     },
     /// [`Config::section`](crate::Config::section) found nothing at the key.
     #[error("configuration section `{key}` is missing")]
@@ -63,8 +94,8 @@ pub enum ConfigError {
     },
 }
 
-/// Masks the values serde and config-rs quote in their errors
-/// (`invalid type: string "…"`), keeping keys and expected types.
+/// Masks the strings a `Deserialize` implementation quotes in its errors
+/// (`invalid value: string "…"`), keeping keys and expected types.
 pub(crate) fn redact_values(message: &str) -> String {
     const MARKER: &str = "string \"";
     let mut out = String::with_capacity(message.len());

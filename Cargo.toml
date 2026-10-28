@@ -106,7 +106,6 @@ tower-http = { version = "0.6.11", features = [
     "add-extension",
     "catch-panic",
     "compression-gzip",
-    "cors",
     "limit",
     "map-request-body",
     "map-response-body",
@@ -260,11 +259,6 @@ opentelemetry-otlp = { version = "0.33.1", default-features = false, features = 
 opentelemetry-proto = { version = "0.33.1", default-features = false, features = ["gen-tonic-messages", "trace"] }
 
 # ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
-config = { version = "0.15.27", default-features = false, features = ["convert-case", "json", "toml"] }
-
-# ---------------------------------------------------------------------------
 # Database (SeaORM 2 on SQLx 0.9; SQLite bundled, rustls+ring for Postgres)
 # ---------------------------------------------------------------------------
 sea-orm = { version = "2.0.4", default-features = false, features = [
@@ -366,7 +360,6 @@ x509-parser = { version = "0.18.1", default-features = false }
 # messages, headers, parts and attachments, every charset through
 # encoding_rs (pure Rust; already in the tree).
 mail-parser = { version = "0.11.9", features = ["full_encoding"] }
-croner = "4.0.2"
 moka = { version = "0.12.16", features = ["future"] }
 dashmap = "6.2.1"
 wildmatch = "2.7.0"
@@ -398,13 +391,6 @@ memory-stats = "1.2.0"
 async-graphql = { version = "7.2.1", default-features = false, features = ["chrono", "uuid"] }
 # Line diffs for `graphql:schema --check` (the version insta already uses).
 similar = "3.2.1"
-# The official Rust MCP SDK (navree-mcp): the server, stdio and the
-# streamable HTTP transport. Never its `reqwest-native-tls` or `auth` features.
-rmcp = { version = "3.7.0", default-features = false, features = [
-    "server",
-    "transport-io",
-    "transport-streamable-http-server",
-] }
 async-trait = "0.1.92"
 # Media (navree-media), all pure Rust: image codecs without AVIF (rav1e and
 # dav1d need NASM or C), SIMD resizing, SVG rendering on tiny-skia, PDF text

@@ -4,12 +4,15 @@
 use std::collections::BTreeSet;
 use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Mutex, PoisonError};
+use std::sync::{Arc, Mutex, PoisonError, Weak};
 
 use dashmap::DashMap;
-use rmcp::model::ResourceUpdatedNotificationParam;
-use rmcp::service::SubscriptionSink;
-use rmcp::{Peer, RoleServer};
+use serde_json::{Value, json};
+
+use crate::protocol::jsonrpc;
+use crate::protocol::lifecycle::META_SUBSCRIPTION_ID;
+use crate::protocol::outlet::{NotSent, Outlet};
+use crate::session::Session;
 
 /// Sends the notifications the server starts: a resource changed, the
 /// lists of tools, resources or prompts changed. Provided and exported by
@@ -18,7 +21,9 @@ use rmcp::{Peer, RoleServer};
 /// It reaches the sessions open on this process: a session that
 /// subscribed to the resource (`resources/subscribe`, or
 /// `subscriptions/listen` on protocol 2026-07-28) and, for list changes,
-/// every session. Each method returns how many sessions it notified.
+/// every session. Each method returns how many sessions it notified (a
+/// session with no open stream, or one that stopped reading, is not
+/// counted).
 ///
 /// ```no_run
 /// # async fn moved(notifier: std::sync::Arc<navree_mcp::McpNotifier>, deal_id: uuid::Uuid) {
@@ -56,11 +61,13 @@ impl Lists {
     };
 }
 
+#[derive(Clone)]
 enum Channel {
-    /// A session of protocol 2025-11-25 or earlier.
-    Peer(Peer<RoleServer>),
-    /// A `subscriptions/listen` stream (protocol 2026-07-28).
-    Sink(SubscriptionSink),
+    /// A session of protocol 2025-11-25 or earlier: its stream.
+    Session(Weak<Session>),
+    /// A `subscriptions/listen` stream (protocol 2026-07-28): the request's
+    /// stream and its id, which every notification carries.
+    Listen { outlet: Outlet, subscription: Value },
 }
 
 #[derive(Clone, Copy)]
@@ -70,12 +77,22 @@ enum ListKind {
     Prompts,
 }
 
+impl ListKind {
+    fn method(self) -> &'static str {
+        match self {
+            ListKind::Tools => "notifications/tools/list_changed",
+            ListKind::Resources => "notifications/resources/list_changed",
+            ListKind::Prompts => "notifications/prompts/list_changed",
+        }
+    }
+}
+
 impl McpNotifier {
     /// Tells the sessions subscribed to `uri` to read it again
     /// (`notifications/resources/updated`).
     pub async fn resource_updated(&self, uri: impl Into<String>) -> usize {
         let uri = uri.into();
-        let targets: Vec<(u64, ChannelRef)> = self
+        let targets: Vec<(u64, Channel)> = self
             .listeners
             .iter()
             .filter(|listener| {
@@ -85,21 +102,15 @@ impl McpNotifier {
                     .unwrap_or_else(PoisonError::into_inner)
                     .contains(&uri)
             })
-            .map(|listener| (*listener.key(), listener.channel.reference()))
+            .map(|listener| (*listener.key(), listener.channel.clone()))
             .collect();
         let mut sent = 0;
         for (id, channel) in targets {
-            let result = match channel {
-                ChannelRef::Peer(peer) => peer
-                    .notify_resource_updated(ResourceUpdatedNotificationParam::new(uri.clone()))
-                    .await
-                    .map_err(|error| error.to_string()),
-                ChannelRef::Sink(sink) => sink
-                    .notify_resource_updated(uri.clone())
-                    .await
-                    .map_err(|error| error.to_string()),
-            };
-            sent += self.settle(id, result);
+            let result = channel.send(
+                "notifications/resources/updated",
+                Some(json!({ "uri": uri })),
+            );
+            sent += self.settle(id, &channel, result);
         }
         sent
     }
@@ -108,19 +119,19 @@ impl McpNotifier {
     /// (`notifications/tools/list_changed`), for example after a deploy that
     /// adds tools or a change to who may use them.
     pub async fn tools_changed(&self) -> usize {
-        self.list_changed(ListKind::Tools).await
+        self.list_changed(ListKind::Tools)
     }
 
     /// Tells every session that the list of resources changed
     /// (`notifications/resources/list_changed`).
     pub async fn resources_changed(&self) -> usize {
-        self.list_changed(ListKind::Resources).await
+        self.list_changed(ListKind::Resources)
     }
 
     /// Tells every session that the list of prompts changed
     /// (`notifications/prompts/list_changed`).
     pub async fn prompts_changed(&self) -> usize {
-        self.list_changed(ListKind::Prompts).await
+        self.list_changed(ListKind::Prompts)
     }
 
     /// How many sessions (and listen streams) are open on this process.
@@ -128,8 +139,8 @@ impl McpNotifier {
         self.listeners.len()
     }
 
-    async fn list_changed(&self, kind: ListKind) -> usize {
-        let targets: Vec<(u64, ChannelRef)> = self
+    fn list_changed(&self, kind: ListKind) -> usize {
+        let targets: Vec<(u64, Channel)> = self
             .listeners
             .iter()
             .filter(|listener| match kind {
@@ -137,27 +148,23 @@ impl McpNotifier {
                 ListKind::Resources => listener.lists.resources,
                 ListKind::Prompts => listener.lists.prompts,
             })
-            .map(|listener| (*listener.key(), listener.channel.reference()))
+            .map(|listener| (*listener.key(), listener.channel.clone()))
             .collect();
         let mut sent = 0;
         for (id, channel) in targets {
-            let result = channel.list_changed(kind).await;
-            sent += self.settle(id, result);
+            let result = channel.send(kind.method(), None);
+            sent += self.settle(id, &channel, result);
         }
         sent
     }
 
-    /// 1 when a notification went out; forgets listeners whose transport is
-    /// gone.
-    fn settle(&self, id: u64, result: Result<(), String>) -> usize {
+    /// 1 when a notification went out; forgets listeners whose stream is
+    /// gone for good.
+    fn settle(&self, id: u64, channel: &Channel, result: Result<(), NotSent>) -> usize {
         match result {
             Ok(()) => 1,
             Err(error) => {
-                let closed = self
-                    .listeners
-                    .get(&id)
-                    .is_none_or(|listener| listener.channel.is_closed());
-                if closed {
+                if channel.is_gone() {
                     self.listeners.remove(&id);
                 } else {
                     tracing::debug!(target: "navree::mcp", %error, "an MCP notification was not sent");
@@ -167,30 +174,34 @@ impl McpNotifier {
         }
     }
 
-    /// Registers the session `session` (its peer takes notifications);
-    /// replaces an earlier registration of the same session.
-    pub(crate) fn open_session(&self, session: &str, peer: Peer<RoleServer>) -> u64 {
+    /// Registers `session` (its stream takes notifications); replaces an
+    /// earlier registration of the same session.
+    pub(crate) fn open_session(&self, session: &Arc<Session>) -> u64 {
         self.listeners
-            .retain(|_, listener| listener.session.as_deref() != Some(session));
+            .retain(|_, listener| listener.session.as_deref() != Some(session.id.as_str()));
         self.insert(Listener {
-            session: Some(session.to_owned()),
-            channel: Channel::Peer(peer),
+            session: Some(session.id.clone()),
+            channel: Channel::Session(Arc::downgrade(session)),
             lists: Lists::ALL,
             resources: Mutex::default(),
         })
     }
 
-    /// Registers a `subscriptions/listen` stream; returns its id for
-    /// [`close`](McpNotifier::close).
+    /// Registers a `subscriptions/listen` stream (request `subscription` on
+    /// `outlet`); returns its id for [`close`](McpNotifier::close).
     pub(crate) fn listen(
         &self,
-        sink: SubscriptionSink,
+        outlet: Outlet,
+        subscription: Value,
         lists: Lists,
         resources: BTreeSet<String>,
     ) -> u64 {
         self.insert(Listener {
             session: None,
-            channel: Channel::Sink(sink),
+            channel: Channel::Listen {
+                outlet,
+                subscription,
+            },
             lists,
             resources: Mutex::new(resources),
         })
@@ -243,55 +254,79 @@ impl fmt::Debug for McpNotifier {
     }
 }
 
-/// A clone of a listener's channel, so sends happen without holding the map.
-enum ChannelRef {
-    Peer(Peer<RoleServer>),
-    Sink(SubscriptionSink),
-}
-
 impl Channel {
-    fn reference(&self) -> ChannelRef {
+    /// Queues notification `method` (never waits on a slow client).
+    fn send(&self, method: &str, params: Option<Value>) -> Result<(), NotSent> {
         match self {
-            Channel::Peer(peer) => ChannelRef::Peer(peer.clone()),
-            Channel::Sink(sink) => ChannelRef::Sink(sink.clone()),
+            Channel::Session(session) => {
+                let session = session.upgrade().ok_or(NotSent::Closed)?;
+                session.notify(jsonrpc::notification(method, params))
+            }
+            Channel::Listen {
+                outlet,
+                subscription,
+            } => {
+                let mut params = params.unwrap_or_else(|| json!({}));
+                params["_meta"] = json!({ META_SUBSCRIPTION_ID: subscription });
+                outlet.notify(jsonrpc::notification(method, Some(params)))
+            }
         }
     }
 
-    fn is_closed(&self) -> bool {
+    /// Whether the session or stream ended for good.
+    fn is_gone(&self) -> bool {
         match self {
-            Channel::Peer(peer) => peer.is_transport_closed(),
-            Channel::Sink(_) => false,
+            Channel::Session(session) => {
+                session.upgrade().is_none_or(|session| session.is_closed())
+            }
+            Channel::Listen { outlet, .. } => outlet.is_closed(),
         }
     }
 }
 
-impl ChannelRef {
-    async fn list_changed(self, kind: ListKind) -> Result<(), String> {
-        match (self, kind) {
-            (ChannelRef::Peer(peer), ListKind::Tools) => peer
-                .notify_tool_list_changed()
-                .await
-                .map_err(|e| e.to_string()),
-            (ChannelRef::Peer(peer), ListKind::Resources) => peer
-                .notify_resource_list_changed()
-                .await
-                .map_err(|e| e.to_string()),
-            (ChannelRef::Peer(peer), ListKind::Prompts) => peer
-                .notify_prompt_list_changed()
-                .await
-                .map_err(|e| e.to_string()),
-            (ChannelRef::Sink(sink), ListKind::Tools) => sink
-                .notify_tool_list_changed()
-                .await
-                .map_err(|e| e.to_string()),
-            (ChannelRef::Sink(sink), ListKind::Resources) => sink
-                .notify_resource_list_changed()
-                .await
-                .map_err(|e| e.to_string()),
-            (ChannelRef::Sink(sink), ListKind::Prompts) => sink
-                .notify_prompt_list_changed()
-                .await
-                .map_err(|e| e.to_string()),
-        }
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn sessions_and_listen_streams_get_their_notifications() {
+        let notifier = McpNotifier::default();
+        let session = Session::new("s1".to_owned(), None, "2025-11-25".to_owned(), None);
+        let (outlet, mut stream) = Outlet::channel();
+        session.set_stream(outlet);
+        notifier.open_session(&session);
+        assert!(notifier.subscribe("s1", "crm://x", true));
+        let (listen, mut listened) = Outlet::channel();
+        notifier.listen(
+            listen,
+            json!(9),
+            Lists {
+                tools: true,
+                ..Lists::default()
+            },
+            BTreeSet::from(["crm://x".to_owned()]),
+        );
+
+        assert_eq!(notifier.resource_updated("crm://x").await, 2);
+        assert_eq!(
+            stream.recv().await.unwrap()["params"],
+            json!({ "uri": "crm://x" })
+        );
+        assert_eq!(
+            listened.recv().await.unwrap()["params"],
+            json!({ "uri": "crm://x", "_meta": { META_SUBSCRIPTION_ID: 9 } })
+        );
+        assert_eq!(
+            notifier.prompts_changed().await,
+            1,
+            "the stream took tools only"
+        );
+        assert_eq!(notifier.tools_changed().await, 2);
+
+        // A gone stream is forgotten; a closed session too.
+        drop(listened);
+        session.close();
+        assert_eq!(notifier.tools_changed().await, 0);
+        assert_eq!(notifier.sessions(), 0);
     }
 }

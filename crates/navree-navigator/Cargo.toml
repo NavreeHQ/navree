@@ -21,7 +21,6 @@ navree-config = { workspace = true }
 navree-dock = { workspace = true }
 # Downloads the docs bundle of the app's Navree version (rustls with ring).
 reqwest = { workspace = true }
-rmcp = { workspace = true }
 rustls = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -34,6 +33,5 @@ toml = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
-rmcp = { workspace = true, features = ["client"] }
 tempfile = { workspace = true }
 wiremock = { workspace = true }

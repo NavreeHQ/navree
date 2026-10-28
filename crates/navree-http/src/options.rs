@@ -126,7 +126,9 @@ impl Default for HttpOptions {
 }
 
 /// Cross-origin resource sharing: only the listed origins, with credentials,
-/// and explicitly listed request and exposed headers (no wildcards).
+/// and explicitly listed request and exposed headers (no wildcards). Applied
+/// by [`CorsLayer`](crate::CorsLayer); an origin that is not listed gets no
+/// CORS headers.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(default)]
 pub struct CorsOptions {

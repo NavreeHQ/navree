@@ -67,6 +67,7 @@
 //! ```
 #![forbid(unsafe_code)]
 
+mod cron;
 mod error;
 mod local;
 mod module;
@@ -74,6 +75,7 @@ mod schedule;
 mod scheduler;
 mod store;
 
+pub use cron::{CronError, CronExpression, MAX_EXPRESSION_LEN};
 pub use error::ScheduleError;
 pub use local::LocalRun;
 pub use module::ScheduleModule;
