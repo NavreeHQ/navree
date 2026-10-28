@@ -198,6 +198,14 @@ fn prelude_brings_the_everyday_types() {
         OrgRepo<DummyEntity>,
         navree::workspace::OrgRepo<DummyEntity>,
     >());
+    // Shared libraries.
+    assert!(same::<
+        LibraryRepo<Thing>,
+        navree::workspace::library::LibraryRepo<Thing>,
+    >());
+    assert!(same::<LibraryScope, navree::workspace::library::LibraryScope>());
+    fn library<M: Library>() {}
+    let _ = library::<LibraryItem>;
     // Time zones.
     assert!(same::<CurrentZone, navree::time::CurrentZone>());
     assert!(same::<Zone, navree::time::Zone>());
@@ -238,6 +246,19 @@ struct Thing {
     id: i64,
     name: String,
 }
+
+/// A library model declared with the prelude alone.
+#[derive(Model, Clone, Debug, Default, serde::Serialize)]
+#[model(table = "library_items")]
+struct LibraryItem {
+    id: uuid::Uuid,
+    scope: LibraryScope,
+    organization_id: Option<uuid::Uuid>,
+    workspace_id: Option<uuid::Uuid>,
+    cloned_from_id: Option<uuid::Uuid>,
+}
+
+impl Library for LibraryItem {}
 
 /// Settings declared through the facade: the derive names
 /// `::navree::settings`.

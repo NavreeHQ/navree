@@ -128,6 +128,68 @@ pub async fn column(conn: &DatabaseConnection, sql: &str) -> Vec<String> {
         .collect()
 }
 
+/// CHECK constraints on a real server: created with the table, added and
+/// dropped later, each enforced while it exists.
+pub async fn checks_are_enforced(conn: &DatabaseConnection) {
+    let schema = navree_schema::Schema::new(conn);
+    schema
+        .create("templates", |t| {
+            t.id();
+            t.string("scope").length(16);
+            t.integer("workspace_id").nullable();
+            t.integer("position").default(0);
+            t.check(
+                "templates_owner_check",
+                "(scope = 'global' AND workspace_id IS NULL) OR (scope = 'workspace' AND workspace_id IS NOT NULL)",
+            );
+        })
+        .await
+        .unwrap();
+    exec(
+        conn,
+        "INSERT INTO templates (scope, workspace_id, position) VALUES ('global', NULL, 1), ('workspace', 7, 2)",
+    )
+    .await;
+    assert!(
+        conn.execute_unprepared("INSERT INTO templates (scope, workspace_id) VALUES ('global', 7)")
+            .await
+            .is_err(),
+        "a global row with a workspace is refused"
+    );
+    schema
+        .table("templates", |t| {
+            t.check("templates_position_check", "position >= 0");
+        })
+        .await
+        .unwrap();
+    assert!(
+        conn.execute_unprepared(
+            "INSERT INTO templates (scope, workspace_id, position) VALUES ('global', NULL, -1)"
+        )
+        .await
+        .is_err(),
+        "the added check is enforced"
+    );
+    schema
+        .table("templates", |t| t.drop_check("templates_owner_check"))
+        .await
+        .unwrap();
+    exec(
+        conn,
+        "INSERT INTO templates (scope, workspace_id, position) VALUES ('global', 9, 0)",
+    )
+    .await;
+    assert_eq!(column(conn, "SELECT COUNT(*) FROM templates").await, ["3"]);
+    assert!(
+        conn.execute_unprepared(
+            "INSERT INTO templates (scope, workspace_id, position) VALUES ('global', NULL, -1)"
+        )
+        .await
+        .is_err(),
+        "the other check stays"
+    );
+}
+
 #[test]
 fn urls_point_at_the_scratch_database() {
     assert_eq!(

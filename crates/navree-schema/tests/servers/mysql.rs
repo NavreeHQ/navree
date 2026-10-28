@@ -330,3 +330,14 @@ async fn dumps_load_into_an_empty_database_and_dump_the_same() {
     conn.close().await.unwrap();
     db.drop().await;
 }
+
+#[tokio::test]
+async fn check_constraints_are_enforced() {
+    let Some(db) = ScratchDb::mysql().await else {
+        return;
+    };
+    let conn = db.connect().await;
+    crate::support::checks_are_enforced(&conn).await;
+    conn.close().await.unwrap();
+    db.drop().await;
+}

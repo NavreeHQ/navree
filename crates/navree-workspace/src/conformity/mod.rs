@@ -46,6 +46,9 @@ pub(crate) enum EntityKind {
     },
     /// Shared by every workspace.
     Global,
+    /// A library: global, organization and workspace rows, by its scope
+    /// column (`m.library::<M>()`).
+    Library,
 }
 
 impl EntityClass {
@@ -66,14 +69,23 @@ impl EntityClass {
             kind: EntityKind::Global,
         }
     }
+
+    /// Table `table` as a library.
+    pub(crate) fn library(table: &str) -> Self {
+        Self {
+            table: table.to_owned(),
+            kind: EntityKind::Library,
+        }
+    }
 }
 
-/// The classifications of the app: workspace tables (with their column) and
-/// global tables.
+/// The classifications of the app: workspace tables (with their column),
+/// global tables and libraries.
 #[derive(Debug, Default)]
 struct Registry {
     workspace: BTreeMap<String, &'static str>,
     global: BTreeSet<String>,
+    library: BTreeSet<String>,
 }
 
 impl Registry {
@@ -86,6 +98,9 @@ impl Registry {
                 }
                 EntityKind::Global => {
                     registry.global.insert(class.value.table.clone());
+                }
+                EntityKind::Library => {
+                    registry.library.insert(class.value.table.clone());
                 }
             }
         }
@@ -143,24 +158,37 @@ fn entities_check() -> ConformityCheck {
 }
 
 fn classification_finding(entity: &EntityDef, registry: &Registry) -> Option<Finding> {
-    let workspace = registry.workspace.contains_key(&entity.table);
-    let global = registry.global.contains(&entity.table);
-    let name = entity.short_name();
-    match (workspace, global) {
-        (true, false) | (false, true) => None,
-        (true, true) => Some(
-            Finding::error(
-                &entity.location,
-                format!(
-                    "entity `{}` is classified as both a workspace and a global entity",
-                    entity.table
-                ),
-            )
-            .hint(format!(
-                "keep one of m.workspace_entity::<{name}>() and m.global_entity::<{name}>()"
-            )),
+    let classes: Vec<&str> = [
+        (
+            registry.workspace.contains_key(&entity.table),
+            "a workspace",
         ),
-        (false, false) => Some(
+        (registry.global.contains(&entity.table), "a global"),
+        (registry.library.contains(&entity.table), "a library"),
+    ]
+    .into_iter()
+    .filter_map(|(classified, class)| classified.then_some(class))
+    .collect();
+    let name = entity.short_name();
+    match classes.as_slice() {
+        [_] => None,
+        [.., last] if classes.len() > 1 => {
+            let others = &classes[..classes.len() - 1];
+            let listed = match others {
+                [only] => format!("both {only} and {last}"),
+                _ => format!("{} and {last}", others.join(", ")),
+            };
+            Some(
+                Finding::error(
+                    &entity.location,
+                    format!("entity `{}` is classified as {listed} entity", entity.table),
+                )
+                .hint(format!(
+                    "keep one of m.workspace_entity::<{name}>(), m.global_entity::<{name}>() and m.library::<..>() for its table"
+                )),
+            )
+        }
+        _ => Some(
             Finding::error(
                 &entity.location,
                 format!(
@@ -298,6 +326,38 @@ mod tests {
             index_leads: leads.iter().map(|s| (*s).to_owned()).collect(),
             rls,
         }
+    }
+
+    #[test]
+    fn libraries_are_classified_once() {
+        let entity = EntityDef {
+            table: "templates".to_owned(),
+            path: vec!["app".into(), "template".into(), "Entity".into()],
+            location: "src/template.rs:3".to_owned(),
+        };
+        let mut registry = Registry::default();
+        assert!(
+            classification_finding(&entity, &registry)
+                .unwrap()
+                .message
+                .contains("is not classified")
+        );
+        registry.library.insert("templates".to_owned());
+        assert!(classification_finding(&entity, &registry).is_none());
+        registry.global.insert("templates".to_owned());
+        let both = classification_finding(&entity, &registry).unwrap();
+        assert_eq!(
+            both.message,
+            "entity `templates` is classified as both a global and a library entity"
+        );
+        assert!(both.hint.unwrap().contains("m.library::<..>()"));
+        registry
+            .workspace
+            .insert("templates".to_owned(), "workspace_id");
+        assert_eq!(
+            classification_finding(&entity, &registry).unwrap().message,
+            "entity `templates` is classified as a workspace, a global and a library entity"
+        );
     }
 
     #[test]

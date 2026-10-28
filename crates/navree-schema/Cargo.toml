@@ -1,6 +1,6 @@
 [package]
 name = "navree-schema"
-description = "Navree schema builder: tables, columns, indexes and foreign keys in Rust, compiled for PostgreSQL with TimescaleDB, MySQL/MariaDB and SQLite; migrations and hypertables."
+description = "Navree schema builder: tables, columns, indexes, foreign keys and check constraints in Rust, compiled for PostgreSQL with TimescaleDB, MySQL/MariaDB and SQLite; migrations and hypertables."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
