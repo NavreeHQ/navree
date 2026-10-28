@@ -28,8 +28,9 @@ Principles:
   SeaORM entities keep working beside ORM models (same pool, same values).
 - **One driver abstraction.** A query is first a driver-neutral value (the
   IR, `navree_orm::ir`), then SQL for PostgreSQL/TimescaleDB, MySQL or
-  SQLite (sea-query's builders), or a document command (a `DocumentDriver`
-  a separate crate implements).
+  SQLite (sea-query's builders today; the ORM's own renderer,
+  `navree_orm::render`, is built to take over: section 6), or a document
+  command (a `DocumentDriver` a separate crate implements).
 
 ## 1. Crates
 
