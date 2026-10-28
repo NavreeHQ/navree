@@ -146,9 +146,9 @@ pub use navree_workflows::{ModuleBuilderWorkflowsExt as _, WorkflowsModule};
 
 #[cfg(feature = "workspace")]
 pub use navree_workspace::{
-    CurrentOrganization, CurrentPartition, CurrentWorkspace, InOrganization, InWorkspace,
-    ModuleBuilderWorkspaceExt as _, OrgRepo, PartitionRepo, PartitionScope, PartitionScoped,
-    WorkspaceModule, WorkspaceRepo, WorkspaceScoped, WorkspaceUow,
+    CurrentOrganization, CurrentPartition, CurrentWorkspace, InOrganization, InWorkspace, Library,
+    LibraryRepo, LibraryScope, ModuleBuilderWorkspaceExt as _, OrgRepo, PartitionRepo,
+    PartitionScope, PartitionScoped, WorkspaceModule, WorkspaceRepo, WorkspaceScoped, WorkspaceUow,
 };
 
 #[cfg(feature = "webhooks")]

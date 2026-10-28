@@ -851,6 +851,38 @@ async fn clones_need_an_item_the_target_sees() {
     .await
     .unwrap_err();
     assert_eq!(error.to_app_error().status.as_u16(), 404);
+    // It takes its workspaces' items too: a workspace's item is published
+    // to its organization, never to another one.
+    let published = LibraryRepo::<Template>::clone_to(
+        &uow,
+        lib.acme_only,
+        LibraryOwner::Organization(lib.group.id),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        published.library_owner().unwrap(),
+        LibraryOwner::Organization(lib.group.id)
+    );
+    assert_eq!(published.cloned_from().unwrap(), Some(lib.acme_only));
+    for (item, organization) in [
+        (lib.acme_only, lib.other.id),
+        (lib.globex_only, lib.group.id),
+    ] {
+        let error = LibraryRepo::<Template>::clone_to(
+            &uow,
+            item,
+            LibraryOwner::Organization(organization),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(error.to_app_error().status.as_u16(), 404);
+    }
+    // The global library takes global items only.
+    let error = LibraryRepo::<Template>::clone_to(&uow, lib.acme_only, LibraryOwner::Global)
+        .await
+        .unwrap_err();
+    assert_eq!(error.to_app_error().status.as_u16(), 404);
     uow.commit().await.unwrap();
 
     // Inside a workspace, cloning for someone else is refused.
