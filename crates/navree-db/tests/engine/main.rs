@@ -1,5 +1,6 @@
 //! navree-db's own data layer on SQLx (pools, statements, values, rows,
-//! errors, transactions, savepoints, units of work, the SeaORM bridge),
+//! errors, transactions, savepoints, units of work, the SeaORM bridge,
+//! records),
 //! run on every database: SQLite always, PostgreSQL with TimescaleDB and
 //! MySQL when `NAVREE_TEST_POSTGRES_URL` / `NAVREE_TEST_MYSQL_URL` are set
 //! (or `target/test-databases.env` has them) and the `postgres` / `mysql`
@@ -8,6 +9,7 @@
 //!
 //! `cargo test -p navree-db --features postgres,mysql --test engine`
 
+mod records;
 mod statements;
 mod support;
 mod transactions;
@@ -15,6 +17,9 @@ mod units;
 mod values;
 mod watching;
 
+use records::{
+    read_executor_follows_the_unit_of_work, records_in_units_of_work, records_round_trip,
+};
 use statements::{errors_are_classified, placeholders_scripts_and_keys};
 use transactions::{
     commit_rollback_and_drop, options_and_finished_transactions, rows_stream, savepoints_nest,
@@ -45,6 +50,9 @@ on_every_server!(
     bridge_values,
     statements_are_watched,
     sessions_follow_the_options,
+    records_round_trip,
+    records_in_units_of_work,
+    read_executor_follows_the_unit_of_work,
 );
 
 #[test]

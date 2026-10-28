@@ -4,16 +4,13 @@ use std::fmt;
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
-use navree_db::{Page, PageQuery, paginate};
-use sea_orm::ActiveValue::{Set, Unchanged};
-use sea_orm::{
-    ActiveModelTrait as _, ColumnTrait as _, EntityTrait as _, QueryFilter as _, QueryOrder as _,
-};
+use navree_db::record::{self, Filter, Update};
+use navree_db::{Page, PageQuery, Record as _};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use super::entity::{delivery, event};
+use super::entity::{DeliveryRow, EventRow};
 use super::events::{MailBounced, MailClicked, MailComplained, MailDelivered, MailOpened};
 use super::suppressions::{SuppressionReason, Suppressions};
 use super::{Store, recipient_hash};
@@ -58,8 +55,8 @@ pub struct Delivery {
     pub updated_at: DateTime<Utc>,
 }
 
-impl From<&delivery::Model> for Delivery {
-    fn from(model: &delivery::Model) -> Self {
+impl From<&DeliveryRow> for Delivery {
+    fn from(model: &DeliveryRow) -> Self {
         Self {
             id: model.id,
             workspace_id: model.workspace_id,
@@ -105,8 +102,8 @@ pub struct DeliveryEvent {
     pub occurred_at: DateTime<Utc>,
 }
 
-impl From<&event::Model> for DeliveryEvent {
-    fn from(model: &event::Model) -> Self {
+impl From<&EventRow> for DeliveryEvent {
+    fn from(model: &EventRow) -> Self {
         Self {
             id: model.id,
             delivery_id: model.delivery_id,
@@ -164,10 +161,9 @@ impl Deliveries {
     /// One delivery.
     pub async fn find(&self, id: Uuid) -> Result<Delivery, MailError> {
         let db = self.store.db().await?;
-        delivery::Entity::find_by_id(id)
-            .one(&db.reader().await)
+        record::find::<DeliveryRow, _>(&db.read_executor().await, id)
             .await?
-            .map(|model| Delivery::from(&model))
+            .map(|row| Delivery::from(&row))
             .ok_or(MailError::NotFound("delivery"))
     }
 
@@ -177,11 +173,11 @@ impl Deliveries {
         provider_id: &str,
     ) -> Result<Option<Delivery>, MailError> {
         let db = self.store.db().await?;
-        Ok(delivery::Entity::find()
-            .filter(delivery::Column::ProviderId.eq(provider_id))
-            .one(&db.reader().await)
+        Ok(DeliveryRow::select()
+            .eq("provider_id", provider_id)
+            .one(&db.read_executor().await)
             .await?
-            .map(|model| Delivery::from(&model)))
+            .map(|row| Delivery::from(&row)))
     }
 
     /// Deliveries matching `filter`, newest first.
@@ -191,46 +187,53 @@ impl Deliveries {
         page: PageQuery,
     ) -> Result<Page<Delivery>, MailError> {
         let db = self.store.db().await?;
-        let mut select = delivery::Entity::find();
+        let mut select = DeliveryRow::select();
         if let Some(workspace) = filter.workspace_id {
-            select = select.filter(delivery::Column::WorkspaceId.eq(workspace));
+            select = select.eq("workspace_id", workspace);
         }
         if let Some(status) = filter.status {
-            select = select.filter(delivery::Column::Status.eq(status.as_str()));
+            select = select.eq("status", status.as_str());
         }
         if let Some(recipient) = &filter.recipient {
-            select = select.filter(delivery::Column::RecipientHash.eq(recipient_hash(recipient)));
+            select = select.eq("recipient_hash", recipient_hash(recipient));
         }
         if let Some(template) = &filter.template {
-            select = select.filter(delivery::Column::Template.eq(template.as_str()));
+            select = select.eq("template", template.as_str());
         }
-        let select = select
-            .order_by_desc(delivery::Column::CreatedAt)
-            .order_by_desc(delivery::Column::Id);
-        let page = paginate(select, &db.reader().await, page).await?;
-        Ok(page.map(|model| Delivery::from(&model)))
+        let page = select
+            .order_by_desc("created_at")
+            .order_by_desc("id")
+            .page(&db.read_executor().await, page)
+            .await?;
+        Ok(page.map(|row| Delivery::from(&row)))
     }
 
     /// A delivery's events, oldest first.
     pub async fn events(&self, delivery_id: Uuid) -> Result<Vec<DeliveryEvent>, MailError> {
         let db = self.store.db().await?;
-        let models = event::Entity::find()
-            .filter(event::Column::DeliveryId.eq(delivery_id))
-            .order_by_asc(event::Column::OccurredAt)
-            .order_by_asc(event::Column::Id)
-            .all(&db.reader().await)
+        let rows = EventRow::select()
+            .eq("delivery_id", delivery_id)
+            .order_by("occurred_at")
+            .order_by("id")
+            .all(&db.read_executor().await)
             .await?;
-        Ok(models.iter().map(DeliveryEvent::from).collect())
+        Ok(rows.iter().map(DeliveryEvent::from).collect())
     }
 
     /// Records `event` against its delivery (found by delivery id, or by
     /// provider id): logs it in `mail_events`, moves the delivery to
     /// `delivered`, `bounced` (hard bounces) or `complained`, stamps the
-    /// first open and click, suppresses the recipient after a hard bounce
-    /// or a complaint (`mail.delivery.auto_suppress`), and emits
+    /// first open and click (the earliest, when events arrive out of
+    /// order), suppresses the recipient after a hard bounce or a complaint
+    /// (`mail.delivery.auto_suppress`), and emits
     /// `MailDelivered`, `MailBounced`, `MailComplained`, `MailOpened` or
     /// `MailClicked` once committed. Returns the delivery, if found; an
     /// event for an unknown message is still logged.
+    ///
+    /// The delivery is read locked (`FOR UPDATE` on PostgreSQL and MySQL;
+    /// SQLite serialises writers), so events for one message recorded at
+    /// the same time apply one after the other: the first open is stamped
+    /// once, a complaint is not overwritten by a bounce.
     ///
     /// Joins the task's current unit of work when there is an unfinished
     /// one (a request handler's), and uses its own otherwise.
@@ -241,46 +244,50 @@ impl Deliveries {
         let suppressions = self.suppressions.clone();
         self.store
             .in_uow(|uow| async move {
-                let tx = uow.tx().await?;
-                let found = match (event.delivery_id, event.provider_id.as_deref()) {
-                    (Some(id), _) => delivery::Entity::find_by_id(id).one(&*tx).await?,
+                let select = match (event.delivery_id, event.provider_id.as_deref()) {
+                    (Some(id), _) => Some(DeliveryRow::select().eq("id", id)),
                     (None, Some(provider_id)) => {
-                        delivery::Entity::find()
-                            .filter(delivery::Column::ProviderId.eq(provider_id))
-                            .one(&*tx)
-                            .await?
+                        Some(DeliveryRow::select().eq("provider_id", provider_id))
                     }
                     (None, None) => None,
                 };
+                let found = match select {
+                    Some(select) => select.for_update().one(&uow).await?,
+                    None => None,
+                };
                 let occurred_at = event.occurred_at.unwrap_or(now);
                 let workspace_id = found.as_ref().and_then(|d| d.workspace_id);
-                event::ActiveModel {
-                    id: Set(Uuid::now_v7()),
-                    delivery_id: Set(found.as_ref().map(|d| d.id)),
-                    workspace_id: Set(workspace_id),
-                    provider: Set(event.provider.clone()),
-                    kind: Set(event.kind.as_str().to_owned()),
-                    recipient_hash: Set(event.recipient.as_deref().map(recipient_hash)),
-                    bounce_type: Set((event.kind == MailEventKind::Bounced)
-                        .then(|| if event.permanent { "hard" } else { "soft" }.to_owned())),
-                    url: Set(event.url.clone()),
-                    detail: Set(event
+                let logged = EventRow {
+                    id: Uuid::now_v7(),
+                    delivery_id: found.as_ref().map(|d| d.id),
+                    workspace_id,
+                    provider: event.provider.clone(),
+                    kind: event.kind.as_str().to_owned(),
+                    recipient_hash: event.recipient.as_deref().map(recipient_hash),
+                    bounce_type: (event.kind == MailEventKind::Bounced)
+                        .then(|| if event.permanent { "hard" } else { "soft" }.to_owned()),
+                    url: event.url.clone(),
+                    detail: event
                         .detail
                         .as_ref()
-                        .map(|d| d.chars().take(2000).collect())),
-                    occurred_at: Set(occurred_at),
-                    created_at: Set(now),
-                }
-                .insert(&*tx)
-                .await?;
+                        .map(|d| d.chars().take(2000).collect()),
+                    occurred_at,
+                    created_at: now,
+                };
+                record::insert(&uow, &logged).await?;
                 let updated = match &found {
-                    Some(model) => Some(match changes(model, &event, occurred_at, now) {
-                        Some(changes) => changes.update(&*tx).await?,
-                        None => model.clone(),
+                    Some(row) => Some(match changes(row, &event, occurred_at, now) {
+                        Some(update) => {
+                            update.execute(&uow).await?;
+                            // As stored: timestamps rounded by the database.
+                            record::find::<DeliveryRow, _>(&uow, row.id)
+                                .await?
+                                .ok_or(MailError::NotFound("delivery"))?
+                        }
+                        None => row.clone(),
                     }),
                     None => None,
                 };
-                drop(tx);
                 if auto_suppress
                     && event.suppresses()
                     && let Some(recipient) = &event.recipient
@@ -320,47 +327,44 @@ impl Deliveries {
     }
 }
 
-/// How `event` changes `model`, if at all.
+/// How `event` changes `row`, if at all: the update of the changed
+/// columns.
 fn changes(
-    model: &delivery::Model,
+    row: &DeliveryRow,
     event: &ProviderEvent,
     occurred_at: DateTime<Utc>,
     now: DateTime<Utc>,
-) -> Option<delivery::ActiveModel> {
-    let status: DeliveryStatus = model.status.parse().unwrap_or(DeliveryStatus::Sent);
-    let mut changes = delivery::ActiveModel {
-        id: Unchanged(model.id),
-        updated_at: Set(now),
-        ..Default::default()
-    };
-    let mut changed = false;
-    let mut set_status = |to: DeliveryStatus| {
-        changes.status = Set(to.as_str().to_owned());
-        changed = true;
-    };
-    match event.kind {
+) -> Option<Update<DeliveryRow>> {
+    let status: DeliveryStatus = row.status.parse().unwrap_or(DeliveryStatus::Sent);
+    let mut update = DeliveryRow::update_where(Filter::all().eq("id", row.id));
+    let to = match event.kind {
         MailEventKind::Delivered
             if matches!(status, DeliveryStatus::Sending | DeliveryStatus::Sent) =>
         {
-            set_status(DeliveryStatus::Delivered);
+            Some(DeliveryStatus::Delivered)
         }
         MailEventKind::Bounced if event.permanent && status != DeliveryStatus::Complained => {
-            set_status(DeliveryStatus::Bounced);
+            Some(DeliveryStatus::Bounced)
         }
-        MailEventKind::Complained => set_status(DeliveryStatus::Complained),
-        _ => {}
+        MailEventKind::Complained => Some(DeliveryStatus::Complained),
+        _ => None,
+    };
+    let mut any = false;
+    if let Some(to) = to {
+        update = update.set("status", to.as_str());
+        any = true;
     }
     if matches!(event.kind, MailEventKind::Opened | MailEventKind::Clicked)
-        && model.opened_at.is_none()
+        && row.opened_at.is_none_or(|at| occurred_at < at)
     {
-        changes.opened_at = Set(Some(occurred_at));
-        changed = true;
+        update = update.set("opened_at", occurred_at);
+        any = true;
     }
-    if event.kind == MailEventKind::Clicked && model.clicked_at.is_none() {
-        changes.clicked_at = Set(Some(occurred_at));
-        changed = true;
+    if event.kind == MailEventKind::Clicked && row.clicked_at.is_none_or(|at| occurred_at < at) {
+        update = update.set("clicked_at", occurred_at);
+        any = true;
     }
-    changed.then_some(changes)
+    any.then(|| update.set("updated_at", now))
 }
 
 /// Emits the event matching `event` once the unit of work commits.
@@ -368,7 +372,7 @@ async fn emit(
     store: &Store,
     uow: &navree_db::Uow,
     event: &ProviderEvent,
-    delivery: Option<&delivery::Model>,
+    delivery: Option<&DeliveryRow>,
     occurred_at: DateTime<Utc>,
 ) {
     let delivery_id = delivery.map(|d| d.id);
