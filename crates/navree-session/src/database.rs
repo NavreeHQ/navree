@@ -7,11 +7,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use chrono::{DateTime, Utc};
 use navree_contracts::{BoxError, BoxFuture, Clock, SessionRecord, SessionStore, SystemClock};
-use navree_db::{Db, MigrationSet};
-use sea_orm::sea_query::{ColumnDef, Expr, ExprTrait, Index, OnConflict, Query, Table};
-use sea_orm::{ConnectionTrait, DbErr};
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
+use navree_db::navree_schema::{Migration, Schema, SchemaMigration, SchemaResult};
+use navree_db::{Backend, Db, DbError, Executor, MigrationSet, Statement};
 use serde_json::{Map, Value};
 
 use crate::PRUNE_EVERY;
@@ -55,35 +52,35 @@ impl DatabaseStore {
     }
 
     /// Deletes every expired record; returns how many.
-    pub async fn prune_expired(&self) -> Result<u64, DbErr> {
-        let result = self
-            .db
-            .conn()
-            .execute(
-                Query::delete()
-                    .from_table(SESSIONS_TABLE)
-                    .and_where(Expr::col("expires_at").lte(self.clock.now())),
-            )
-            .await?;
-        Ok(result.rows_affected())
+    pub async fn prune_expired(&self) -> Result<u64, DbError> {
+        let statement = Statement::portable(
+            format!("DELETE FROM {SESSIONS_TABLE} WHERE expires_at <= ?"),
+            [self.clock.now().into()],
+        );
+        Ok(self.executor().execute(&statement).await?.rows_affected)
     }
 
-    async fn load_record(&self, id: &str) -> Result<Option<SessionRecord>, DbErr> {
-        let row = self
-            .db
-            .conn()
-            .query_one(
-                Query::select()
-                    .columns(["data", "expires_at"])
-                    .from(SESSIONS_TABLE)
-                    .and_where(Expr::col("id").eq(id)),
-            )
-            .await?;
-        let Some(row) = row else {
+    /// What the store's statements run on: the writer's pool, never the
+    /// request's unit of work (a store that joined it would lose a session
+    /// when the request rolls back), or the connection itself when it has
+    /// no pool.
+    fn executor(&self) -> &dyn Executor {
+        match self.db.pool() {
+            Some(pool) => pool,
+            None => &self.db,
+        }
+    }
+
+    async fn load_record(&self, id: &str) -> Result<Option<SessionRecord>, DbError> {
+        let statement = Statement::portable(
+            format!("SELECT data, expires_at FROM {SESSIONS_TABLE} WHERE id = ?"),
+            [id.into()],
+        );
+        let Some(row) = self.executor().fetch_optional(&statement).await? else {
             return Ok(None);
         };
-        let data: String = row.try_get("", "data")?;
-        let expires_at: Option<DateTime<Utc>> = row.try_get("", "expires_at")?;
+        let data: String = row.get("data")?;
+        let expires_at: Option<DateTime<Utc>> = row.get("expires_at")?;
         match serde_json::from_str::<Map<String, Value>>(&data) {
             Ok(data) => Ok(Some(SessionRecord { data, expires_at })),
             Err(_) => {
@@ -96,23 +93,24 @@ impl DatabaseStore {
         }
     }
 
-    async fn save_record(&self, id: &str, record: SessionRecord) -> Result<(), DbErr> {
+    async fn save_record(&self, id: &str, record: SessionRecord) -> Result<(), DbError> {
         let data = serde_json::to_string(&record.data)
-            .map_err(|error| DbErr::Custom(format!("cannot encode the session: {error}")))?;
-        self.db
-            .conn()
-            .execute(
-                Query::insert()
-                    .into_table(SESSIONS_TABLE)
-                    .columns(["id", "data", "expires_at"])
-                    .values_panic([id.into(), data.into(), record.expires_at.into()])
-                    .on_conflict(
-                        OnConflict::column("id")
-                            .update_columns(["data", "expires_at"])
-                            .to_owned(),
-                    ),
-            )
-            .await?;
+            .map_err(|error| DbError::invalid(format!("cannot encode the session: {error}")))?;
+        let upsert = match self.executor().backend() {
+            Backend::MySql => {
+                "ON DUPLICATE KEY UPDATE data = VALUES(data), expires_at = VALUES(expires_at)"
+            }
+            _ => {
+                "ON CONFLICT (id) DO UPDATE SET data = excluded.data, expires_at = excluded.expires_at"
+            }
+        };
+        let statement = Statement::portable(
+            format!(
+                "INSERT INTO {SESSIONS_TABLE} (id, data, expires_at) VALUES (?, ?, ?) {upsert}"
+            ),
+            [id.into(), data.into(), record.expires_at.into()],
+        );
+        self.executor().execute(&statement).await?;
         if self.saves.fetch_add(1, Ordering::Relaxed) % PRUNE_EVERY == PRUNE_EVERY - 1
             && let Err(error) = self.prune_expired().await
         {
@@ -121,16 +119,12 @@ impl DatabaseStore {
         Ok(())
     }
 
-    async fn delete_record(&self, id: &str) -> Result<(), DbErr> {
-        self.db
-            .conn()
-            .execute(
-                Query::delete()
-                    .from_table(SESSIONS_TABLE)
-                    .and_where(Expr::col("id").eq(id)),
-            )
-            .await
-            .map(drop)
+    async fn delete_record(&self, id: &str) -> Result<(), DbError> {
+        let statement = Statement::portable(
+            format!("DELETE FROM {SESSIONS_TABLE} WHERE id = ?"),
+            [id.into()],
+        );
+        self.executor().execute(&statement).await.map(drop)
     }
 }
 
@@ -161,49 +155,28 @@ impl fmt::Debug for DatabaseStore {
 
 /// The `session` migration set: the `sessions` table.
 pub(crate) fn migrations() -> MigrationSet {
-    MigrationSet::new(MIGRATION_SET).migration(CreateSessionsTable)
+    MigrationSet::new(MIGRATION_SET).migration(SchemaMigration::new(
+        "m20261025_000001_create_sessions_table",
+        CreateSessionsTable,
+    ))
 }
 
 /// Creates `sessions(id, data, expires_at)` with an index on `expires_at`.
 struct CreateSessionsTable;
 
-impl MigrationName for CreateSessionsTable {
-    fn name(&self) -> &str {
-        "m20261025_000001_create_sessions_table"
-    }
-}
-
-#[async_trait]
-impl MigrationTrait for CreateSessionsTable {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table(SESSIONS_TABLE)
-                    .col(ColumnDef::new("id").string().not_null().primary_key())
-                    .col(ColumnDef::new("data").text().not_null())
-                    .col(
-                        ColumnDef::new("expires_at")
-                            .timestamp_with_time_zone()
-                            .null(),
-                    )
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("sessions_expires_at_index")
-                    .table(SESSIONS_TABLE)
-                    .col("expires_at")
-                    .to_owned(),
-            )
+impl Migration for CreateSessionsTable {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema
+            .create(SESSIONS_TABLE, |t| {
+                t.string("id").primary();
+                t.text("data");
+                t.timestamp_tz("expires_at").nullable();
+                t.index(["expires_at"]).name("sessions_expires_at_index");
+            })
             .await
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .drop_table(Table::drop().table(SESSIONS_TABLE).to_owned())
-            .await
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop_if_exists(SESSIONS_TABLE).await
     }
 }
