@@ -1,0 +1,7 @@
+---
+source: crates/navree-orm/tests/render/main.rs
+expression: query(timed)
+---
+PostgreSQL: SELECT "id" FROM "deals" UNION SELECT "id" FROM "archived_deals"
+MySQL: SELECT /*+ MAX_EXECUTION_TIME(1500) */ `id` FROM `deals` UNION SELECT `id` FROM `archived_deals`
+SQLite: SELECT "id" FROM "deals" UNION SELECT "id" FROM "archived_deals"

@@ -1,6 +1,6 @@
 [package]
 name = "navree-db"
-description = "Navree DatabaseModule: SeaORM on SQLite, PostgreSQL and MySQL/MariaDB, unit of work, module migrations, seeders, factories and pagination."
+description = "Navree DatabaseModule: Navree's own data layer on SQLx for PostgreSQL/TimescaleDB, MySQL/MariaDB and SQLite (pools, statements, transactions, the unit of work), module migrations, seeders, factories and pagination."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,16 +11,21 @@ publish.workspace = true
 workspace = true
 
 [features]
-default = []
-## PostgreSQL driver (code paths exist; tests run on SQLite).
-postgres = ["sea-orm/sqlx-postgres", "sea-orm-migration/sqlx-postgres", "navree-schema/postgres"]
+default = ["sqlite"]
+## SQLite (the bundled library). On by default until every crate's tests
+## turn it on themselves (docs/superpowers/specs/2026-10-28-navree-data-layer-on-sqlx.md, §5).
+sqlite = ["sqlx/sqlite-bundled"]
+## PostgreSQL and TimescaleDB driver (`postgres://` and `postgresql://` URLs).
+postgres = ["sqlx/postgres", "sea-orm/sqlx-postgres", "sea-orm-migration/sqlx-postgres", "navree-schema/postgres"]
 ## MySQL and MariaDB driver (`mysql://` and `mariadb://` URLs).
-mysql = ["sea-orm/sqlx-mysql", "sea-orm-migration/sqlx-mysql", "navree-schema/mysql"]
+mysql = ["sqlx/mysql", "sea-orm/sqlx-mysql", "sea-orm-migration/sqlx-mysql", "navree-schema/mysql"]
 
 [dependencies]
 axum = { workspace = true }
 base64 = { workspace = true }
 chrono = { workspace = true }
+# Rows read one by one (`Executor::fetch`).
+futures-util = { workspace = true }
 http = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
@@ -29,11 +34,19 @@ navree-kernel = { workspace = true }
 navree-schema = { workspace = true }
 navree-telemetry = { workspace = true }
 # `mock`: `migrate --pretend` keeps the statements of SeaORM migrations on a
-# connection that runs nothing.
-sea-orm = { workspace = true, features = ["mock"] }
+# connection that runs nothing. `with-rust_decimal`: decimals cross between
+# navree-db's values and SeaORM's while crates move off it.
+sea-orm = { workspace = true, features = ["mock", "with-rust_decimal"] }
 sea-orm-migration = { workspace = true }
+# Exact decimals (`Value::Decimal`).
+rust_decimal = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+# The driver: pools, connections, transactions and statements run on SQLx
+# directly (TLS with rustls and ring). The drivers are this crate's
+# `sqlite`, `postgres` and `mysql` features.
+sqlx = { workspace = true, features = ["chrono", "json", "rust_decimal", "tls-rustls", "uuid"] }
+sqlx-core = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 # The unit-of-work layer is a Tower layer of its own.

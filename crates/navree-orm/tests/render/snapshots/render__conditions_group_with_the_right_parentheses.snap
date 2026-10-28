@@ -1,0 +1,10 @@
+---
+source: crates/navree-orm/tests/render/main.rs
+expression: "query(Query::from(deals().filter(col(\"amount_cents\").gt(val(0_i64)).and(col(\"stage\").eq(val(\"won\")).or(col(\"stage\").eq(val(\"lost\")).and(col(\"closed_at\").is_null()))).and(col(\"title\").eq(val(\"x\")).or(col(\"title\").eq(val(\"y\"))).not()).or(col(\"amount_cents\").lt(val(5_i64)).not()))))"
+---
+PostgreSQL: SELECT * FROM "deals" WHERE ("amount_cents" > $1 AND ("stage" = $2 OR ("stage" = $3 AND "closed_at" IS NULL)) AND NOT ("title" = $4 OR "title" = $5)) OR NOT ("amount_cents" < $6)
+  values: [BigInt(Some(0)), String(Some("won")), String(Some("lost")), String(Some("x")), String(Some("y")), BigInt(Some(5))]
+MySQL: SELECT * FROM `deals` WHERE (`amount_cents` > ? AND (`stage` = ? OR (`stage` = ? AND `closed_at` IS NULL)) AND NOT (`title` = ? OR `title` = ?)) OR NOT (`amount_cents` < ?)
+  values: [BigInt(Some(0)), String(Some("won")), String(Some("lost")), String(Some("x")), String(Some("y")), BigInt(Some(5))]
+SQLite: SELECT * FROM "deals" WHERE ("amount_cents" > ? AND ("stage" = ? OR ("stage" = ? AND "closed_at" IS NULL)) AND NOT ("title" = ? OR "title" = ?)) OR NOT ("amount_cents" < ?)
+  values: [BigInt(Some(0)), String(Some("won")), String(Some("lost")), String(Some("x")), String(Some("y")), BigInt(Some(5))]

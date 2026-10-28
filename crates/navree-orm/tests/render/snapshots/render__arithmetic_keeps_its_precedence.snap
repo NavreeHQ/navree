@@ -1,0 +1,7 @@
+---
+source: crates/navree-orm/tests/render/main.rs
+expression: "expr(Expr::Tuple(vec![col(\"a\").add(col(\"b\")).mul(col(\"c\")),\ncol(\"a\").sub(col(\"b\").sub(col(\"c\"))), col(\"a\").sub(col(\"b\")).sub(col(\"c\")),\ncol(\"a\").div(col(\"b\").mul(col(\"c\"))),\nExpr::Neg(Box::new(col(\"a\").add(col(\"b\")))), col(\"a\").sub(Expr::int(-5)),\ncol(\"a\").add(col(\"b\")).eq(col(\"c\").mul(Expr::int(2))),\ncol(\"a\").eq(col(\"b\")).eq(Expr::bool(false)),]))"
+---
+PostgreSQL: (("a" + "b") * "c", "a" - ("b" - "c"), "a" - "b" - "c", "a" / ("b" * "c"), -("a" + "b"), "a" - -5, "a" + "b" = "c" * 2, ("a" = "b") = FALSE)
+MySQL: ((`a` + `b`) * `c`, `a` - (`b` - `c`), `a` - `b` - `c`, `a` / (`b` * `c`), -(`a` + `b`), `a` - -5, `a` + `b` = `c` * 2, (`a` = `b`) = FALSE)
+SQLite: (("a" + "b") * "c", "a" - ("b" - "c"), "a" - "b" - "c", "a" / ("b" * "c"), -("a" + "b"), "a" - -5, "a" + "b" = "c" * 2, ("a" = "b") = FALSE)

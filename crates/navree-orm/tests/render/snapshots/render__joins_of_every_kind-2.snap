@@ -1,0 +1,7 @@
+---
+source: crates/navree-orm/tests/render/main.rs
+expression: "query(Query::from(deals().join(Join\n{\n    kind: JoinKind::Full, source: Source::table(\"companies\"), on:\n    Some(col(\"companies.id\").eq(col(\"deals.company_id\"))),\n})))"
+---
+PostgreSQL: SELECT * FROM "deals" FULL JOIN "companies" ON "companies"."id" = "deals"."company_id"
+MySQL: error: a full join is not supported on MySQL
+SQLite: SELECT * FROM "deals" FULL JOIN "companies" ON "companies"."id" = "deals"."company_id"

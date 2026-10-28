@@ -1,0 +1,7 @@
+---
+source: crates/navree-orm/tests/render/main.rs
+expression: "statement(Delete\n{ returning: vec![SelectItem::new(col(\"id\"))], ..Delete::new(\"sessions\") })"
+---
+PostgreSQL: DELETE FROM "sessions" RETURNING "id"
+MySQL: error: RETURNING is not supported on MySQL
+SQLite: DELETE FROM "sessions" RETURNING "id"
