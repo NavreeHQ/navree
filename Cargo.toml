@@ -318,14 +318,6 @@ zeroize = "1.9.1"
 # Dev only: an independent QR decoder that checks every code navree_crypto::qr
 # encodes (no image-crate features).
 rqrr = { version = "0.11.0", default-features = false }
-totp-rs ={ version = "6.0.0", features = ["gen_secret", "otpauth", "serde", "zeroize"] }
-qrcode2 = { version = "0.18.0", default-features = false, features = ["std", "svg"] }
-# JWT access tokens (navree-auth): no crypto backend feature and no PEM parsing.
-# navree-auth installs its own HMAC-only provider (hmac + sha2 above), so the
-# `rust_crypto` feature's RSA and ECDSA crates (rsa, p256, p384, crypto-bigint
-# 0.5) are not built, and `aws_lc_rs` (CMake and NASM on Windows) is not used.
-# Do not enable either feature here.
-jsonwebtoken = { version = "11.1.0", default-features = false }
 
 # ---------------------------------------------------------------------------
 # Module capabilities

@@ -8,10 +8,10 @@ use navree_access::AccessModule;
 use navree_auth::{AuthModule, AuthService, ClientMeta};
 use navree_contracts::{Clock, FixedClock};
 use navree_crypto::CryptoModule;
+use navree_crypto::totp::{Secret, Totp};
 use navree_helm::HelmModule;
 use navree_testing::{TestApp, TestClient, TestResponse};
 use serde_json::{Value, json};
-use totp_rs::{Builder, Secret};
 
 use crate::support::*;
 
@@ -272,12 +272,10 @@ async fn accounts_with_two_factor_enter_a_code() {
         .await
         .unwrap();
     let code = |clock: &FixedClock| {
-        Builder::new()
-            .with_secret(Secret::try_from_base32(&setup.secret).unwrap())
+        Totp::builder(Secret::from_base32(&setup.secret).unwrap())
             .build()
             .unwrap()
             .generate(u64::try_from(clock.now().timestamp()).unwrap())
-            .to_string()
     };
     auth.confirm_two_factor(id, &code(&clock), &ClientMeta::default())
         .await

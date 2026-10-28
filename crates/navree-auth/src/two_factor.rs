@@ -1,4 +1,5 @@
-//! TOTP two-factor authentication on [`AuthService`] (totp-rs): setup,
+//! TOTP two-factor authentication on [`AuthService`]
+//! (`navree_crypto::totp`, QR codes from `navree_crypto::qr`): setup,
 //! confirmation with recovery codes, the login challenge and its
 //! verification.
 //!
@@ -18,17 +19,17 @@ use std::fmt;
 use std::time::Duration;
 
 use navree_contracts::{AuditEntry, AuditKind};
+use navree_crypto::qr::{EcLevel, QrCode};
+use navree_crypto::totp::{Secret, Totp};
 use navree_crypto::{constant_time_eq, random_token, sha256_hex};
 use navree_db::Uow;
 use navree_orm::Model as _;
-use qrcode2::QrCode;
-use qrcode2::render::svg;
 use sea_orm::{Set, Unchanged};
 use serde::Serialize;
 use serde_json::json;
-use totp_rs::{Builder, Secret, Totp};
 use utoipa::ToSchema;
 use uuid::Uuid;
+use zeroize::Zeroizing;
 
 use crate::account::update_user;
 use crate::service::entry;
@@ -39,6 +40,9 @@ use crate::{
 
 /// Characters per half of a recovery code (`xxxxxxxxxx-xxxxxxxxxx`).
 const RECOVERY_HALF_LEN: usize = 10;
+
+/// The width the setup QR code is drawn at, at least, in pixels.
+const QR_MIN_SIZE: u32 = 200;
 
 /// How long the last accepted TOTP step of a user is remembered: longer
 /// than any code stays valid (three 30-second steps).
@@ -131,17 +135,16 @@ impl AuthService {
         if two_factor_enabled(&user) {
             return Err(AuthError::TwoFactorAlreadyEnabled);
         }
-        let secret = Secret::generate();
+        let secret =
+            Secret::generate().map_err(|error| AuthError::TwoFactor(error.to_string()))?;
         let encoded = secret.to_base32();
         let totp = self.totp(&user, secret)?;
         let otpauth_url = totp
             .to_url()
             .map_err(|error| AuthError::TwoFactor(error.to_string()))?;
-        let qr_svg = QrCode::new(otpauth_url.as_bytes())
+        let qr_svg = QrCode::encode(otpauth_url.as_bytes(), EcLevel::M)
             .map_err(|error| AuthError::TwoFactor(error.to_string()))?
-            .render::<svg::Color<'_>>()
-            .min_dimensions(200, 200)
-            .build();
+            .to_svg(QR_MIN_SIZE);
         let stored = self.encrypter.encrypt_string(&encoded)?;
         let now = self.clock.now();
         let audit = self.two_factor_entry("auth.two_factor_enabled", &user, meta);
@@ -473,10 +476,9 @@ impl AuthService {
 
     /// The TOTP of `user` with `secret`.
     fn totp(&self, user: &User, secret: Secret) -> Result<Totp, AuthError> {
-        Builder::new()
-            .with_secret(secret)
-            .with_issuer(Some(self.options.two_factor.issuer.as_str()))
-            .with_account_name(user.email.replace(':', ""))
+        Totp::builder(secret)
+            .issuer(self.options.two_factor.issuer.as_str())
+            .account(user.email.replace(':', ""))
             .build()
             .map_err(|error| AuthError::TwoFactor(error.to_string()))
     }
@@ -487,8 +489,8 @@ impl AuthService {
         let Some(stored) = &user.two_factor_secret else {
             return Ok(false);
         };
-        let encoded = self.encrypter.decrypt_string(stored)?;
-        let secret = Secret::try_from_base32(&encoded)
+        let encoded = Zeroizing::new(self.encrypter.decrypt_string(stored)?);
+        let secret = Secret::from_base32(&encoded)
             .map_err(|error| AuthError::TwoFactor(error.to_string()))?;
         let totp = self.totp(user, secret)?;
         let code: String = code.chars().filter(|c| !c.is_whitespace()).collect();
