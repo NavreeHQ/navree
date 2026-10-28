@@ -163,6 +163,89 @@ fn the_caddy_site_follows_the_live_slot() {
     assert!(h2c.contains("reverse_proxy h2c://127.0.0.1:8081"), "{h2c}");
 }
 
+#[test]
+fn custom_domains_get_on_demand_tls_after_the_apps_ask_endpoint() {
+    let text = format!("{SINGLE}\n[web.custom_domains]\nenabled = true\n");
+    let harbor = config(&text);
+    let server = harbor.servers[0].clone();
+    insta::assert_snapshot!(site(&harbor, &server, &plain(), Slot::Blue).unwrap(), @r"
+    # crm-api: written by navree harbor:provision; navree deploy points the
+    # reverse_proxy lines at the live slot (blue).
+    crm.example.com {
+    	encode zstd gzip
+
+    	@metrics path /metrics
+    	respond @metrics 404
+
+    	reverse_proxy 127.0.0.1:8081
+    }
+
+    # Workspaces' own domains: Caddy gets each one's certificate on its first
+    # visit, once /_domains/allow allows it.
+    https:// {
+    	tls {
+    		on_demand
+    	}
+    	encode zstd gzip
+
+    	@metrics path /metrics
+    	respond @metrics 404
+
+    	reverse_proxy 127.0.0.1:8081
+    }
+
+    # Internal entry for workers and the scheduler, always pointing at the live slot.
+    http://:8079 {
+    	bind 127.0.0.1
+    	reverse_proxy 127.0.0.1:8081
+    }
+    ");
+    let planned = steps(&text, "app-1", &plain(), 1987);
+    let caddy = &step(&planned, "caddy").script;
+    insta::assert_snapshot!("custom_domains_caddy_script", caddy);
+    assert!(
+        caddy.contains("on_demand_tls {\n\t\task http://127.0.0.1:8079/_domains/allow\n\t}"),
+        "{caddy}"
+    );
+    assert_bash_syntax("caddy", caddy);
+
+    // With a front end, the domains can go to it, and the ask path follows
+    // the app's `domains.ask_path`.
+    let text = format!(
+        "{SINGLE}\n[frontend]\npath = \"web\"\n\n[web.custom_domains]\nenabled = true\nask_path = \"/caddy/ask\"\nto = \"frontend\"\n"
+    );
+    let harbor = config(&text);
+    let server = harbor.servers[0].clone();
+    let green = site(&harbor, &server, &frontend(), Slot::Green).unwrap();
+    let custom = green.split("https:// {").nth(1).unwrap();
+    assert!(custom.contains("reverse_proxy 127.0.0.1:3002"), "{green}");
+    assert!(green.contains("once /caddy/ask allows it"), "{green}");
+    let planned = steps(&text, "app-1", &frontend(), 1987);
+    assert!(
+        step(&planned, "caddy")
+            .script
+            .contains("ask http://127.0.0.1:8079/caddy/ask"),
+    );
+}
+
+#[test]
+fn the_proxy_protocol_and_custom_domains_share_the_global_options() {
+    let planned = steps(
+        &format!("{MULTI}\n[web.custom_domains]\nenabled = true\n"),
+        "web-1",
+        &plain(),
+        4096,
+    );
+    let caddy = &step(&planned, "caddy").script;
+    let global = caddy
+        .split("import /etc/caddy/sites/*.caddy")
+        .next()
+        .unwrap();
+    assert!(global.contains("on_demand_tls {"), "{caddy}");
+    assert!(global.contains("listener_wrappers {"), "{caddy}");
+    assert_eq!(global.matches("\n{\n").count(), 1, "{caddy}");
+}
+
 fn frontend() -> AppInfo {
     AppInfo {
         h2c: false,
