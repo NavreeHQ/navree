@@ -565,7 +565,10 @@ The strategy runs after the JWT strategy, so a request with a valid bearer token
 | `validate_user(email, password)` | The user, or `AuthError::InvalidCredentials` |
 | `attempt_login(email, password, &meta)` | The login flow: throttle, password check, then `LoginOutcome::Authenticated { user, tokens }` or `LoginOutcome::TwoFactorRequired { user, challenge_token }` |
 | `login(email, password, &meta)` | `attempt_login` for accounts without two-factor authentication; `AuthError::TwoFactorRequired` for the others |
-| `issue_tokens(&user, meta)` | A new session: an access token and the first refresh token of a new family (limited to the two-factor setup when the user [must set it up](/docs/security/account-flows/#requiring-two-factor-authentication)) |
+| `sign_in(&user, method, &meta)` | Asks the [sign-in policies](#sign-in-policies) about `method`, then starts a session: what your own sign-in flows end with |
+| `check_sign_in(&attempt, &meta)` | Asks the sign-in policies about a `SignInAttempt`; a refusal is audited as `auth.login_refused` |
+| `two_factor_challenge(&user, &method)` | A two-factor challenge token that remembers how the user signed in, for `POST /api/auth/2fa/verify` |
+| `issue_tokens(&user, meta)` | A new session without asking the sign-in policies (tests, seeders): an access token and the first refresh token of a new family (limited to the two-factor setup when the user [must set it up](/docs/security/account-flows/#requiring-two-factor-authentication)) |
 | `refresh(refresh_token, meta)` | Rotates a refresh token |
 | `logout(refresh_token, user_id, all)` | Ends one session, or all of them |
 | `revoke_all_refresh_tokens(user_id)` | Ends every session of a user |
@@ -672,6 +675,7 @@ roles = ["platform-admin"]        # navree-access roles that may sign in
 login_throttle_per_minute = 3     # failed platform sign-ins per email and IP
 access_ttl_secs = 900
 session_ttl_secs = 28800          # platform sessions end after 8 hours
+break_glass = true                # sign-in policies can't lock administrators out (audited)
 ```
 
 A platform administrator holds one of `roles` (from `AccessModule`) and has [two-factor authentication](/docs/security/account-flows/#two-factor-authentication) on. The sign-in always takes two steps:
@@ -698,6 +702,7 @@ Content-Type: application/json
 - A platform challenge works only at the platform route, and an app challenge only at the app's.
 - Platform sessions end `session_ttl_secs` after the sign-in, however often they are refreshed through `POST /api/auth/refresh`. Each refresh checks the role again: a user who lost it is signed out.
 - Platform administrators can't be [impersonated](/docs/security/impersonation/).
+- Both steps ask the [sign-in policies](#sign-in-policies), as audience `platform`. With `break_glass = true` (the default), a refusal doesn't stop an administrator whose password, role and second factor check out: when single sign-on is enforced for their domain and the identity provider is down, they still reach the console. Every such sign-in is audited as `auth.break_glass` (kind `security`, `metadata.refused_code`) and logged under `navree::security`. With `break_glass = false` the refusal is the answer. Sign-ins to the app never break glass.
 
 Platform routes refuse everything but platform sessions. Use the `PlatformAdmin` extractor, or the `platform_session()` guard on hand-written routes:
 
@@ -753,7 +758,7 @@ The answer is the user and a token pair. A token is accepted when:
 - its `jti` hasn't been seen before: each token works once (the ids are kept in the app's cache until the token expires);
 - its `email` belongs to a registered user, and `email_verified` isn't `false`.
 
-Every refusal is `401 Invalid token`, whatever the reason; the reason goes to the log and to an `auth.token_exchange_failed` audit entry. Success is recorded as `auth.token_exchanged` with `metadata.issuer` (the name). The session that starts is an ordinary one: the [two-factor policy](/docs/security/account-flows/#requiring-two-factor-authentication) applies, but no second factor is asked for, because the issuer already authenticated the user. Set `enabled = false` to stop accepting an issuer's tokens at once. Unknown users are refused, never created.
+A token for an account the [sign-in policies](#sign-in-policies) refuse (single sign-on enforced for its domain, say) gets their answer, such as `403 sso_required`. Every other refusal is `401 Invalid token`, whatever the reason; the reason goes to the log and to an `auth.token_exchange_failed` audit entry. Success is recorded as `auth.token_exchanged` with `metadata.issuer` (the name). The session that starts is an ordinary one: the [two-factor policy](/docs/security/account-flows/#requiring-two-factor-authentication) applies, but no second factor is asked for, because the issuer already authenticated the user. Set `enabled = false` to stop accepting an issuer's tokens at once. Unknown users are refused, never created.
 
 Signatures are checked with `ring`; `alg: none`, HMAC algorithms and critical header extensions are refused.
 
@@ -829,6 +834,7 @@ refresh_ttl_secs = 2592000      # 30 days
 | `auth.platform.login_throttle_per_minute` | `3` | Failed platform sign-ins per email and IP per minute; `0` turns it off |
 | `auth.platform.access_ttl_secs` | `900` | Platform access token lifetime |
 | `auth.platform.session_ttl_secs` | `28800` | Platform session lifetime (8 hours), not extended by refreshing |
+| `auth.platform.break_glass` | `true` | Platform administrators sign in to the console past a [sign-in policy](#sign-in-policies) refusal, audited as `auth.break_glass` |
 | `auth.trusted_issuers.<name>.issuer` | | The `iss` of the issuer's tokens; required |
 | `auth.trusted_issuers.<name>.jwks_url` / `.public_key` | | Where its keys come from; exactly one |
 | `auth.trusted_issuers.<name>.audience` | | The `aud` its tokens must carry; required |
@@ -866,6 +872,8 @@ With an [audit log](/docs/security/audit-log/) in the app, the module records:
 | `auth.register` | `auth` | An account was registered (after the commit) |
 | `auth.login` | `auth` | A sign-in succeeded (`metadata.two_factor` says `totp` or `recovery_code` after a second factor) |
 | `auth.login_failed` | `security` | Wrong credentials; `metadata.email`, and the user as actor when the email is known |
+| `auth.login_refused` | `security` | A [sign-in policy](#sign-in-policies) refused a sign-in; `metadata.method`, `metadata.email`, `metadata.code`, `metadata.audience` (plus `provider`, `connection` or `issuer`) |
+| `auth.break_glass` | `security` | A platform administrator signed in to the console past a sign-in policy refusal; `metadata.refused_code` |
 | `auth.throttled` | `security` | The first refusal of a throttle window; `metadata.flow` and, for logins, `metadata.email` |
 | `auth.refresh` | `auth` | A refresh token was rotated; `metadata.family_id` |
 | `auth.refresh_reuse_detected` | `security` | A spent refresh token came back and its family was revoked |
@@ -943,9 +951,53 @@ Three packages build on `navree-auth` and its users:
 
 For API keys of your own design, [write a strategy](#writing-your-own-strategy).
 
-### Password sign-in policies
+### Sign-in policies
 
-A module can keep some accounts off passwords with a `PasswordSignInPolicy`, registered with `m.password_sign_in_policy::<P>()` (`ModuleBuilderAuthExt`). `POST /api/auth/login` and `POST /api/auth/register` ask every registered policy before the password is checked, with the email trimmed and lower-cased; the first refusal is the answer, usually `AuthError::PasswordSignInRefused { code, message }` (a 403 with that code). A refused login is audited as `auth.login_refused`. Single sign-on registers one that answers `sso_required` for the verified domains of an enforcing connection. Call `AuthService::check_password_sign_in(email)` from your own password flows to ask the same question.
+A sign-in policy decides whether a sign-in may go on. Every flow that signs a person in asks every registered policy **before** it issues a session, a token pair or a two-factor challenge, so a rule written once holds on every path:
+
+| Path | Method (`SignInMethod`) | Asked |
+|---|---|---|
+| `POST /api/auth/login`, `POST /api/auth/register`, `PATCH /api/auth/me/password` | `Password` | Before the password is checked |
+| `POST /api/auth/magic-link` and `/magic-link/verify` | `MagicLink` | When a link is requested (no mail is sent) and when one is used |
+| `POST /api/auth/otp` and `/otp/verify` | `Otp` | When a code is requested and when one is used |
+| `POST /api/auth/passkeys/login` | `Passkey` | Once the passkey is verified, before the session |
+| `POST /api/auth/exchange` | `TokenExchange { issuer }` | Once the token is verified, before the session |
+| `POST /api/auth/2fa/verify` | the method of the first step | Again, before the code is checked |
+| [Social sign-in](/docs/packages/social-sign-in/) | `Social { provider }` | On the provider's address before any account is created or linked, and on the account before the session |
+| [Single sign-on](/docs/security/single-sign-on/) | `Sso { connection }` | On the identity provider's address before provisioning, and on the account before the session |
+| `POST /api/auth/platform/login` and `/platform/2fa/verify` | `Password`, audience `Platform` | At both steps; see [break-glass](#platform-administrators) |
+
+A policy implements `SignInPolicy` and is registered with `m.sign_in_policy::<P>()` (`ModuleBuilderAuthExt`). It gets a `SignInAttempt`: the email (trimmed and lower-cased), the user's id once the account is known, the method and the audience (`App` or `Platform`). Every policy must allow; the first refusal is the answer, usually `AuthError::SignInRefused { code, message }`, a 403 with that code. Refusals are audited as `auth.login_refused` with the method, the email and the code.
+
+```rust title="src/modules/security/policy.rs"
+use navree::auth::{AuthError, SignInAttempt, SignInMethod, SignInPolicy};
+use navree::kernel::BoxFuture;
+
+/// Contractors sign in with a passkey only.
+pub struct PasskeysForContractors;
+
+impl SignInPolicy for PasskeysForContractors {
+    fn check<'a>(&'a self, attempt: &'a SignInAttempt) -> BoxFuture<'a, Result<(), AuthError>> {
+        Box::pin(async move {
+            if attempt.domain() == Some("contractors.acme.com")
+                && attempt.method != SignInMethod::Passkey
+            {
+                return Err(AuthError::SignInRefused {
+                    code: "passkey_required".to_owned(),
+                    message: "Sign in with your passkey".to_owned(),
+                });
+            }
+            Ok(())
+        })
+    }
+}
+```
+
+[Single sign-on](/docs/security/single-sign-on/#enforcement) registers the policy that sends the verified domains of an enforcing connection through that connection only (`sso_required`).
+
+Your own sign-in flows end with `AuthService::sign_in(&user, method, &meta)`, which asks the policies and then starts the session, or call `check_sign_in(&attempt, &meta)` first and `issue_tokens` after. `check_password_sign_in(email)` asks about `Password` without an audit entry. `issue_tokens` alone asks nothing: keep it for tests and seeders. A two-factor challenge from `two_factor_challenge(&user, &method)` remembers the method, and `POST /api/auth/2fa/verify` asks the policies about it again, so a domain that came to enforce single sign-on between the two steps is refused.
+
+Policies decide at sign-in. Sessions that started before a rule changed go on until they end: to sign everyone of a domain out at once, revoke their sessions (`revoke_all_refresh_tokens`). [Impersonation](/docs/security/impersonation/) is a support session opened by an administrator who already signed in, so it doesn't ask the policies; it has its own permission and audit trail.
 
 ## Limits
 

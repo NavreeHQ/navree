@@ -28,9 +28,9 @@ thread_local! {
 ///
 /// ```
 /// use std::time::Duration;
-/// use navree_http::RateLimiter;
+/// use navree_http::KeyedRateLimiter;
 ///
-/// let limiter = RateLimiter::new(2, Duration::from_secs(60));
+/// let limiter = KeyedRateLimiter::new(2, Duration::from_secs(60));
 /// assert!(limiter.check(&"client-a").is_ok());
 /// assert!(limiter.check(&"client-a").is_ok());
 /// let limited = limiter.check(&"client-a").unwrap_err();
@@ -38,7 +38,7 @@ thread_local! {
 /// assert!(limiter.check(&"client-b").is_ok());
 /// ```
 #[derive(Debug)]
-pub struct RateLimiter<K: Hash + Eq> {
+pub struct KeyedRateLimiter<K: Hash + Eq> {
     interval: Duration,
     period: Duration,
     state: DashMap<K, Slot>,
@@ -64,7 +64,7 @@ pub struct Limited {
     pub report: bool,
 }
 
-impl<K: Hash + Eq + Clone> RateLimiter<K> {
+impl<K: Hash + Eq + Clone> KeyedRateLimiter<K> {
     /// `limit` requests per `per` (a `limit` of 0 is treated as 1).
     pub fn new(limit: u32, per: Duration) -> Self {
         Self {
@@ -112,7 +112,7 @@ mod tests {
 
     #[tokio::test(start_paused = true)]
     async fn allows_a_burst_then_refills_one_per_interval() {
-        let limiter = RateLimiter::new(2, Duration::from_secs(60));
+        let limiter = KeyedRateLimiter::new(2, Duration::from_secs(60));
         assert!(limiter.check(&"a").is_ok());
         assert!(limiter.check(&"a").is_ok());
         let retry = limiter.check(&"a").unwrap_err();
@@ -126,7 +126,7 @@ mod tests {
 
     #[tokio::test(start_paused = true)]
     async fn refusals_are_reported_once_per_window() {
-        let limiter = RateLimiter::new(1, Duration::from_secs(10));
+        let limiter = KeyedRateLimiter::new(1, Duration::from_secs(10));
         assert!(limiter.check(&1).is_ok());
         assert!(limiter.check(&1).unwrap_err().report);
         assert!(!limiter.check(&1).unwrap_err().report);
@@ -140,7 +140,7 @@ mod tests {
     /// Checks of one key from many threads at once allow exactly the burst.
     #[test]
     fn concurrent_checks_never_allow_more_than_the_limit() {
-        let limiter = RateLimiter::new(100, Duration::from_secs(3600));
+        let limiter = KeyedRateLimiter::new(100, Duration::from_secs(3600));
         let allowed = std::sync::atomic::AtomicUsize::new(0);
         std::thread::scope(|scope| {
             for _ in 0..8 {
@@ -162,7 +162,7 @@ mod tests {
 
     #[tokio::test(start_paused = true)]
     async fn rejected_requests_do_not_count() {
-        let limiter = RateLimiter::new(1, Duration::from_secs(10));
+        let limiter = KeyedRateLimiter::new(1, Duration::from_secs(10));
         assert!(limiter.check(&1).is_ok());
         for _ in 0..5 {
             assert!(limiter.check(&1).is_err());

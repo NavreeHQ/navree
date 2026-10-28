@@ -103,7 +103,7 @@ pub use axum::Json;
 pub use controller::{ApplyLayer, Controller, GlobalLayer, LayerSlot, ModuleBuilderHttpExt};
 pub use error::{AppError, ERROR_CONTENT_TYPE, ErrorMapper, Result};
 pub use extract::{ClientIp, Created, NoContent, Scoped};
-pub use limiter::{Limited, RateLimiter};
+pub use limiter::{Limited, KeyedRateLimiter};
 pub use maintenance::{MaintenanceInfo, MaintenanceMode};
 pub use module::{HttpModule, HttpServer};
 pub use options::{CorsOptions, ErrorOptions, HttpOptions};
