@@ -12,7 +12,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use navree_db::{Db, Reader};
 use navree_kernel::BoxFuture;
 use sea_orm::{
-    ConnectionTrait, DatabaseTransaction, DbBackend, DbErr, QueryResult, TransactionTrait,
+    ConnectionTrait, DatabaseTransaction, DbBackend, DbErr, QueryResult, Statement, TransactionTrait,
 };
 use serde_json::Value;
 
@@ -88,6 +88,54 @@ impl DatabaseEngine {
         Ok(u64::try_from(n).unwrap_or(0))
     }
 
+    /// Runs the count and the page of a trigram query with
+    /// `pg_trgm.word_similarity_threshold` set to the configured typo
+    /// threshold for just these statements: `<%` compares against that
+    /// setting, whose default of 0.6 misses most one-letter typos.
+    ///
+    /// On the pool the statements run in a transaction of their own
+    /// (`SET LOCAL` needs one); inside the unit of work's transaction the
+    /// previous value is put back afterwards.
+    async fn query_with_threshold(
+        &self,
+        count: Sql,
+        select: Option<Sql>,
+    ) -> Result<(u64, Vec<QueryResult>), SearchError> {
+        const SETTING: &str = "pg_trgm.word_similarity_threshold";
+        let set = |value: String| {
+            let mut sql = self.sql();
+            sql.push(&format!("SELECT set_config('{SETTING}', "))
+                .bind(value)
+                .push(", true)");
+            sql.statement()
+        };
+        let threshold = self.options.typo_threshold.to_string();
+        match self.db.reader().await {
+            Reader::Pool(pool) => {
+                let tx = pool.begin().await?;
+                tx.execute_raw(set(threshold)).await?;
+                let out = count_and_page(&tx, count, select).await?;
+                tx.commit().await?;
+                Ok(out)
+            }
+            Reader::Transaction(tx) => {
+                let previous = tx
+                    .query_one_raw(Statement::from_string(
+                        DbBackend::Postgres,
+                        format!("SELECT current_setting('{SETTING}', true)"),
+                    ))
+                    .await?
+                    .and_then(|row| row.try_get_by_index::<Option<String>>(0).ok().flatten())
+                    .filter(|value| !value.is_empty())
+                    .unwrap_or_else(|| "0.6".to_owned());
+                tx.execute_raw(set(threshold)).await?;
+                let out = count_and_page(&*tx, count, select).await;
+                tx.execute_raw(set(previous)).await?;
+                Ok(out?)
+            }
+        }
+    }
+
     /// Enables `pg_trgm` and indexes the text with it, once.
     async fn ensure_trigram(&self) -> Result<(), SearchError> {
         if !self.options.trigram
@@ -115,6 +163,24 @@ impl std::fmt::Debug for DatabaseEngine {
             .field("options", &self.options)
             .finish_non_exhaustive()
     }
+}
+
+/// The total of `count` and the rows of `select` (when there is one), on
+/// `conn`.
+async fn count_and_page<C: ConnectionTrait>(
+    conn: &C,
+    count: Sql,
+    select: Option<Sql>,
+) -> Result<(u64, Vec<QueryResult>), DbErr> {
+    let total = match conn.query_one_raw(count.statement()).await? {
+        Some(row) => u64::try_from(row.try_get_by_index::<i64>(0)?).unwrap_or(0),
+        None => 0,
+    };
+    let rows = match select {
+        Some(select) => conn.query_all_raw(select.statement()).await?,
+        None => Vec::new(),
+    };
+    Ok((total, rows))
 }
 
 /// The PostgreSQL weight class of a boost: 5 and up `A`, 3 and 4 `B`, 2
@@ -275,6 +341,19 @@ impl SearchEngine for DatabaseEngine {
                     );
                     statements.push(sql.statement());
                 } else {
+                    // The FTS row shares its document's rowid, so it is
+                    // found through the documents' primary key (an index)
+                    // and goes first, while the document still has a rowid.
+                    let mut delete_fts = Sql::new(backend);
+                    delete_fts
+                        .push(&format!(
+                            "DELETE FROM {FTS_TABLE} WHERE rowid IN (SELECT rowid FROM {DOCUMENTS_TABLE} WHERE index_name = "
+                        ))
+                        .bind(index)
+                        .push(" AND id = ")
+                        .bind(document.id())
+                        .push(")");
+                    statements.push(delete_fts.statement());
                     let mut delete = Sql::new(backend);
                     delete
                         .push(&format!(
@@ -284,13 +363,6 @@ impl SearchEngine for DatabaseEngine {
                         .push(" AND id = ")
                         .bind(document.id());
                     statements.push(delete.statement());
-                    let mut delete_fts = Sql::new(backend);
-                    delete_fts
-                        .push(&format!("DELETE FROM {FTS_TABLE} WHERE index_name = "))
-                        .bind(index)
-                        .push(" AND id = ")
-                        .bind(document.id());
-                    statements.push(delete_fts.statement());
                     let mut insert = Sql::new(backend);
                     insert
                         .push(&format!(
@@ -305,8 +377,12 @@ impl SearchEngine for DatabaseEngine {
                     statements.push(insert.statement());
                     let mut fts = Sql::new(backend);
                     fts.push(&format!(
-                        "INSERT INTO {FTS_TABLE} (index_name, id, b1, b2, b3, b4, b5, b6, b7, b8, b9, b10) VALUES ("
+                        "INSERT INTO {FTS_TABLE} (rowid, index_name, id, b1, b2, b3, b4, b5, b6, b7, b8, b9, b10) VALUES ((SELECT rowid FROM {DOCUMENTS_TABLE} WHERE index_name = "
                     ))
+                    .bind(index)
+                    .push(" AND id = ")
+                    .bind(document.id())
+                    .push("), ")
                     .bind(index)
                     .push(", ")
                     .bind(document.id());
@@ -337,21 +413,8 @@ impl SearchEngine for DatabaseEngine {
         Box::pin(async move {
             let backend = self.backend();
             let mut statements = Vec::new();
-            for table in tables(backend) {
-                for chunk in ids.chunks(500) {
-                    let mut sql = Sql::new(backend);
-                    sql.push(&format!("DELETE FROM {table} WHERE index_name = "))
-                        .bind(index)
-                        .push(" AND id IN (");
-                    for (i, id) in chunk.iter().enumerate() {
-                        if i > 0 {
-                            sql.push(", ");
-                        }
-                        sql.bind(id.clone());
-                    }
-                    sql.push(")");
-                    statements.push(sql.statement());
-                }
+            for chunk in ids.chunks(500) {
+                statements.extend(delete_statements(backend, index, Some(chunk)));
             }
             self.write(move |tx| {
                 Box::pin(async move {
@@ -368,15 +431,7 @@ impl SearchEngine for DatabaseEngine {
     fn flush<'a>(&'a self, index: &'a str) -> BoxFuture<'a, Result<(), SearchError>> {
         Box::pin(async move {
             let backend = self.backend();
-            let statements: Vec<_> = tables(backend)
-                .into_iter()
-                .map(|table| {
-                    let mut sql = Sql::new(backend);
-                    sql.push(&format!("DELETE FROM {table} WHERE index_name = "))
-                        .bind(index);
-                    sql.statement()
-                })
-                .collect();
+            let statements = delete_statements(backend, index, None);
             self.write(move |tx| {
                 Box::pin(async move {
                     for statement in statements {
@@ -400,19 +455,16 @@ impl SearchEngine for DatabaseEngine {
     ) -> BoxFuture<'a, Result<(), SearchError>> {
         Box::pin(async move {
             let backend = self.backend();
-            let mut statements = Vec::new();
+            let mut statements = delete_statements(backend, index, None);
+            // On SQLite the FTS rows are renamed first: they are found
+            // through the documents that still carry the staged name.
             for table in tables(backend) {
-                let mut delete = Sql::new(backend);
-                delete
-                    .push(&format!("DELETE FROM {table} WHERE index_name = "))
-                    .bind(index);
-                statements.push(delete.statement());
                 let mut rename = Sql::new(backend);
                 rename
                     .push(&format!("UPDATE {table} SET index_name = "))
                     .bind(index)
-                    .push(" WHERE index_name = ")
-                    .bind(staged);
+                    .push(" WHERE ");
+                scope(&mut rename, table, staged, None);
                 statements.push(rename.statement());
             }
             self.write(move |tx| {
@@ -433,6 +485,10 @@ impl SearchEngine for DatabaseEngine {
         query: EngineQuery<'a>,
     ) -> BoxFuture<'a, Result<EngineResults, SearchError>> {
         Box::pin(async move {
+            // The trigram index exists before the first typo-tolerant query,
+            // even when the app never ran `prepare` (it is a cheap check
+            // after the first time).
+            self.ensure_trigram().await?;
             let settings = query.settings;
             let terms = QueryTerms::parse(
                 query.text,
@@ -466,11 +522,16 @@ impl SearchEngine for DatabaseEngine {
             select
                 .push(" OFFSET ")
                 .bind(i64::try_from(query.offset).unwrap_or(i64::MAX));
-            let total = self.query_count(count).await?;
-            let rows = if query.limit == 0 {
-                Vec::new()
+            let select = (query.limit > 0).then_some(select);
+            let (total, rows) = if postgres && self.options.trigram && !terms.is_empty() {
+                self.query_with_threshold(count, select).await?
             } else {
-                self.query_all(select).await?
+                let total = self.query_count(count).await?;
+                let rows = match select {
+                    Some(select) => self.query_all(select).await?,
+                    None => Vec::new(),
+                };
+                (total, rows)
             };
             let mut hits = Vec::with_capacity(rows.len());
             for row in rows {
@@ -532,13 +593,59 @@ impl SearchEngine for DatabaseEngine {
     }
 }
 
-/// The tables holding an index's documents.
+/// The tables holding an index's documents, the FTS table first: its rows
+/// are found through their documents, so it is changed before them.
 fn tables(backend: DbBackend) -> Vec<&'static str> {
     if backend == DbBackend::Postgres {
         vec![DOCUMENTS_TABLE]
     } else {
-        vec![DOCUMENTS_TABLE, FTS_TABLE]
+        vec![FTS_TABLE, DOCUMENTS_TABLE]
     }
+}
+
+/// Appends the condition selecting an index's rows in `table` (those of
+/// `ids` when given). An FTS row shares the rowid of its document, so it is
+/// selected through the documents' primary key; filtering the FTS table's
+/// own `UNINDEXED` columns would scan all of it for every document.
+fn scope(sql: &mut Sql, table: &str, index: &str, ids: Option<&[String]>) {
+    let through_documents = table == FTS_TABLE;
+    if through_documents {
+        sql.push(&format!(
+            "rowid IN (SELECT rowid FROM {DOCUMENTS_TABLE} WHERE "
+        ));
+    }
+    sql.push("index_name = ").bind(index);
+    if let Some(ids) = ids {
+        sql.push(" AND id IN (");
+        for (i, id) in ids.iter().enumerate() {
+            if i > 0 {
+                sql.push(", ");
+            }
+            sql.bind(id.clone());
+        }
+        sql.push(")");
+    }
+    if through_documents {
+        sql.push(")");
+    }
+}
+
+/// The statements deleting an index's documents (or just `ids`) from every
+/// table.
+fn delete_statements(
+    backend: DbBackend,
+    index: &str,
+    ids: Option<&[String]>,
+) -> Vec<Statement> {
+    tables(backend)
+        .into_iter()
+        .map(|table| {
+            let mut sql = Sql::new(backend);
+            sql.push(&format!("DELETE FROM {table} WHERE "));
+            scope(&mut sql, table, index, ids);
+            sql.statement()
+        })
+        .collect()
 }
 
 /// Appends `<rank> AS rank FROM ... WHERE <text condition>` to `select`
@@ -574,11 +681,11 @@ fn build_from(
     ));
     for sql in [select, count] {
         sql.push(&format!(
-            "FROM {FTS_TABLE} JOIN {DOCUMENTS_TABLE} d ON d.index_name = {FTS_TABLE}.index_name AND d.id = {FTS_TABLE}.id \
+            "FROM {FTS_TABLE} JOIN {DOCUMENTS_TABLE} d ON d.rowid = {FTS_TABLE}.rowid \
              WHERE {FTS_TABLE} MATCH "
         ));
         sql.bind(matching.clone());
-        sql.push(&format!(" AND {FTS_TABLE}.index_name = "));
+        sql.push(" AND d.index_name = ");
         sql.bind(index);
     }
 }
