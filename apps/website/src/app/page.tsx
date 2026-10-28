@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 
 import { AiSection } from "@/components/home/ai-section";
 import { ArchitectureSection } from "@/components/home/architecture-section";
@@ -31,37 +31,60 @@ export const metadata: Metadata = pageMetadata({
  * shipping, performance, the crates, and the way in. Sections owned by
  * other pages' workers (architecture, AI, ecosystem, performance) render
  * their own content; each sits under a hairline divider drawn here.
+ *
+ * Every section below the hero is its own Suspense boundary. Nothing
+ * suspends; the boundaries let React hydrate the page a section at a time,
+ * in short tasks, instead of in one long one.
  */
 export default function Home() {
   return (
     <>
       <Hero />
-      <WhatIs />
-      <Pillars />
-      <Showcase />
-      <CrmSection />
-      <Divided>
+      <Part>
+        <WhatIs />
+      </Part>
+      <Part>
+        <Pillars />
+      </Part>
+      <Part>
+        <Showcase />
+      </Part>
+      <Part>
+        <CrmSection />
+      </Part>
+      <Part divided>
         <ArchitectureSection />
-      </Divided>
-      <Workspaces />
-      <Divided>
+      </Part>
+      <Part>
+        <Workspaces />
+      </Part>
+      <Part divided>
         <AiSection />
-      </Divided>
-      <Divided>
+      </Part>
+      <Part divided>
         <EcosystemSection />
-      </Divided>
-      <Ship />
-      <Divided>
+      </Part>
+      <Part>
+        <Ship />
+      </Part>
+      <Part divided>
         <PerformanceSection />
-      </Divided>
-      <InTheBox />
-      <FinalCta />
+      </Part>
+      <Part>
+        <InTheBox />
+      </Part>
+      <Part>
+        <FinalCta />
+      </Part>
       <JsonLd data={softwareData()} />
     </>
   );
 }
 
-/** The hairline between sections, for the sections other workers own. */
-function Divided({ children }: { children: ReactNode }) {
-  return <div className="cv-auto border-t border-line">{children}</div>;
+/**
+ * One section, hydrated on its own. `divided` draws the hairline above the
+ * sections other workers own.
+ */
+function Part({ children, divided }: { children: ReactNode; divided?: boolean }) {
+  return <Suspense>{divided ? <div className="cv-auto border-t border-line">{children}</div> : children}</Suspense>;
 }
