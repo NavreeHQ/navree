@@ -1,11 +1,13 @@
 //! [`LoginThrottle`]: failed login attempts per email and client IP.
 
+use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
 use navree_cache::Cache;
 use navree_contracts::Clock;
 use navree_crypto::sha256_hex;
+use navree_http::rate_limit_key;
 
 use crate::AuthError;
 
@@ -32,23 +34,36 @@ pub(crate) struct LoginThrottle {
     cache: Cache,
     limit: u32,
     clock: Arc<dyn Clock>,
+    /// `http.rate_limit_ipv6_prefix`: IPv6 clients are counted by network.
+    ipv6_prefix: u8,
 }
 
 impl LoginThrottle {
-    /// A throttle allowing `limit` failures per minute (`0`: no limit).
-    pub(crate) fn new(cache: Cache, limit: u32, clock: Arc<dyn Clock>) -> Self {
+    /// A throttle allowing `limit` failures per minute (`0`: no limit),
+    /// counting IPv6 clients by their first `ipv6_prefix` bits.
+    pub(crate) fn new(cache: Cache, limit: u32, clock: Arc<dyn Clock>, ipv6_prefix: u8) -> Self {
         Self {
             cache,
             limit,
             clock,
+            ipv6_prefix,
         }
     }
 
     /// The cache key of `email` (normalised) from `ip`: a digest, so the
-    /// cache never holds email addresses.
-    pub(crate) fn key(email: &str, ip: Option<&str>) -> String {
+    /// cache never holds email addresses. An IPv6 address counts as its
+    /// network (see [`navree_http::rate_limit_key`]), so rotating through
+    /// the addresses of one allocation does not give fresh attempts.
+    pub(crate) fn key(&self, email: &str, ip: Option<&str>) -> String {
         let email = email.trim().to_lowercase();
-        let digest = sha256_hex(format!("{email}|{}", ip.unwrap_or("-")).as_bytes());
+        let client = match ip {
+            Some(ip) => match ip.parse::<IpAddr>() {
+                Ok(addr) => rate_limit_key(addr, self.ipv6_prefix).to_string(),
+                Err(_) => ip.to_owned(),
+            },
+            None => "-".to_owned(),
+        };
+        let digest = sha256_hex(format!("{email}|{client}").as_bytes());
         format!("navree-auth:login:{digest}")
     }
 
@@ -171,7 +186,7 @@ mod tests {
         let clock = Arc::new(FixedClock::new(Utc::now()));
         let cache = Cache::memory();
         (
-            LoginThrottle::new(cache.clone(), limit, clock.clone()),
+            LoginThrottle::new(cache.clone(), limit, clock.clone(), 64),
             clock,
             cache,
         )
@@ -180,7 +195,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn blocks_after_limit_attempts_until_the_window_ends() {
         let (throttle, clock, _) = throttle(3);
-        let key = LoginThrottle::key("ada@example.com", Some("127.0.0.1"));
+        let key = throttle.key("ada@example.com", Some("127.0.0.1"));
         for _ in 0..3 {
             throttle.attempt(&key).await.unwrap();
         }
@@ -201,7 +216,7 @@ mod tests {
     async fn parallel_attempts_never_exceed_the_limit() {
         let (throttle, _, _) = throttle(5);
         let throttle = Arc::new(throttle);
-        let key = LoginThrottle::key("ada@example.com", Some("127.0.0.1"));
+        let key = throttle.key("ada@example.com", Some("127.0.0.1"));
         let tasks: Vec<_> = (0..64)
             .map(|_| {
                 let (throttle, key) = (throttle.clone(), key.clone());
@@ -218,7 +233,7 @@ mod tests {
     #[tokio::test]
     async fn only_the_first_refusal_of_a_window_is_marked() {
         let (throttle, _, _) = throttle(1);
-        let key = LoginThrottle::key("ada@example.com", None);
+        let key = throttle.key("ada@example.com", None);
         assert_eq!(throttle.count(&key).await.unwrap(), Attempt::Allowed);
         let mut marked = Vec::new();
         for _ in 0..3 {
@@ -233,9 +248,9 @@ mod tests {
     #[tokio::test]
     async fn keys_are_separate_and_clear_resets() {
         let (throttle, _, _) = throttle(1);
-        let ada = LoginThrottle::key("ada@example.com", Some("127.0.0.1"));
-        let other_ip = LoginThrottle::key("ada@example.com", Some("10.0.0.1"));
-        let grace = LoginThrottle::key("grace@example.com", Some("127.0.0.1"));
+        let ada = throttle.key("ada@example.com", Some("127.0.0.1"));
+        let other_ip = throttle.key("ada@example.com", Some("10.0.0.1"));
+        let grace = throttle.key("grace@example.com", Some("127.0.0.1"));
         throttle.attempt(&ada).await.unwrap();
         assert!(throttle.attempt(&ada).await.is_err());
         throttle.attempt(&other_ip).await.unwrap();
@@ -247,7 +262,7 @@ mod tests {
     #[tokio::test]
     async fn released_attempts_do_not_count() {
         let (throttle, _, _) = throttle(2);
-        let key = LoginThrottle::key("ada@example.com", None);
+        let key = throttle.key("ada@example.com", None);
         for _ in 0..5 {
             throttle.attempt(&key).await.unwrap();
             throttle.release(&key).await.unwrap();
@@ -260,7 +275,7 @@ mod tests {
     #[tokio::test]
     async fn a_limit_of_zero_never_blocks() {
         let (throttle, _, _) = throttle(0);
-        let key = LoginThrottle::key("ada@example.com", None);
+        let key = throttle.key("ada@example.com", None);
         for _ in 0..10 {
             throttle.attempt(&key).await.unwrap();
         }
@@ -268,11 +283,34 @@ mod tests {
 
     #[test]
     fn keys_do_not_contain_the_email_address() {
-        let key = LoginThrottle::key("Ada@Example.com", Some("127.0.0.1"));
+        let (throttle, _, _) = throttle(1);
+        let key = throttle.key("Ada@Example.com", Some("127.0.0.1"));
         assert!(!key.to_lowercase().contains("ada"), "{key}");
+        assert_eq!(key, throttle.key("ada@example.com", Some("127.0.0.1")));
+    }
+
+    #[test]
+    fn ipv6_clients_share_a_key_per_network() {
+        let (throttle, _, _) = throttle(1);
+        let ada = |ip| throttle.key("ada@example.com", Some(ip));
+        assert_eq!(ada("2001:db8:1:2::1"), ada("2001:db8:1:2:ffff:eeee:dddd:1"));
+        assert_ne!(ada("2001:db8:1:2::1"), ada("2001:db8:1:3::1"));
+        assert_eq!(ada("192.0.2.7"), ada("::ffff:192.0.2.7"), "mapped is IPv4");
+        assert_ne!(ada("192.0.2.7"), ada("192.0.2.8"));
+        assert_ne!(
+            throttle.key("grace@example.com", Some("2001:db8:1:2::1")),
+            ada("2001:db8:1:2::1")
+        );
+        // The prefix is the one of `http.rate_limit_ipv6_prefix`.
+        let wide = LoginThrottle::new(
+            Cache::memory(),
+            1,
+            Arc::new(FixedClock::new(Utc::now())),
+            48,
+        );
         assert_eq!(
-            key,
-            LoginThrottle::key("ada@example.com", Some("127.0.0.1"))
+            wide.key("ada@example.com", Some("2001:db8:1:2::1")),
+            wide.key("ada@example.com", Some("2001:db8:1:9::1"))
         );
     }
 }

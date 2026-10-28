@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use navree_auth::user;
+use navree_auth::{AuthError, AuthService, ClientMeta, user};
 use navree_contracts::{AuditKind, AuditSink};
 use navree_crypto::{Hasher, HashingOptions};
 use navree_db::Db;
@@ -205,6 +205,51 @@ async fn a_successful_login_resets_the_failed_attempts() {
     login(&client, "ada@example.com", "wrong password")
         .await
         .assert_status(429);
+}
+
+/// Guesses from the addresses of one IPv6 network share the throttle (the
+/// network is a /64 unless `http.rate_limit_ipv6_prefix` says otherwise),
+/// so rotating through a /64 does not give an attacker fresh guesses.
+#[tokio::test]
+async fn login_throttle_counts_ipv6_clients_by_network() {
+    let app = support::app().await;
+    support::create_user(&app, "ada@example.com").await;
+    let auth = app.get::<AuthService>().await;
+    let from = |ip: &str| ClientMeta {
+        ip: Some(ip.to_owned()),
+        ..ClientMeta::default()
+    };
+    for n in 0..5 {
+        let meta = from(&format!("2001:db8:1:2::{n:x}"));
+        let error = auth
+            .attempt_login("ada@example.com", "wrong password", &meta)
+            .await
+            .unwrap_err();
+        assert!(matches!(error, AuthError::InvalidCredentials), "{error:?}");
+    }
+    // A sixth address of the same /64 is refused before the password is checked.
+    let sixth = from("2001:db8:1:2:aaaa:bbbb:cccc:dddd");
+    let error = auth
+        .attempt_login("ada@example.com", PASSWORD, &sixth)
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(error, AuthError::TooManyAttempts { .. }),
+        "{error:?}"
+    );
+    // Another /64, and an IPv4 client, have their own budgets.
+    let other = from("2001:db8:1:3::1");
+    assert!(
+        auth.attempt_login("ada@example.com", PASSWORD, &other)
+            .await
+            .is_ok()
+    );
+    let v4 = from("192.0.2.9");
+    assert!(
+        auth.attempt_login("ada@example.com", PASSWORD, &v4)
+            .await
+            .is_ok()
+    );
 }
 
 #[tokio::test]
