@@ -16,6 +16,7 @@ path = "src/main.rs"
 unsafe_code = "forbid"
 
 [dependencies]
+async-graphql = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
 garde = { workspace = true }

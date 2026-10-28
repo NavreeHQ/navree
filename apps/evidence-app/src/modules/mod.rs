@@ -4,4 +4,5 @@
 pub mod live;
 pub mod projects;
 pub mod reports;
+pub mod showcase;
 pub mod tasks;

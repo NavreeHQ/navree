@@ -88,9 +88,13 @@ impl DirectoryConnection {
     }
 }
 
-/// Whether a connection works.
+/// Whether a connection works. Named `DirectoryConnectionStatus` in the
+/// OpenAPI document: navree-integrations has a `ConnectionStatus` of its
+/// own, and an app with both modules would otherwise fail to boot with a
+/// schema conflict.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
+#[schema(as = DirectoryConnectionStatus)]
 pub enum ConnectionStatus {
     /// Syncs run and SCIM requests are served.
     #[default]
@@ -119,6 +123,7 @@ impl ConnectionStatus {
 /// Where a run stands.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
+#[schema(as = DirectoryRunStatus)]
 pub enum RunStatus {
     /// Waiting for a worker.
     Queued,

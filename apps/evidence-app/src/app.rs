@@ -16,6 +16,8 @@ pub fn app(sources: ConfigSources) -> AppBuilder {
         .module(modules::reports::ReportsModule)
         // Live: realtime publishes for the load profiles.
         .module(modules::live::LiveModule)
+        // GraphQL fields and MCP tools over the evidence data.
+        .module(modules::showcase::ShowcaseModule)
         // `db:seed evidence`: accounts, workspaces, projects, tasks.
         .module(seed::SeedModule)
 }

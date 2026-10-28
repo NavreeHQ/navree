@@ -15,5 +15,8 @@
   { "name": "billing plans", "package": "navree-billing", "method": "GET", "path": "/api/billing/plans", "auth": true, "workspace": true, "expect": 200 },
   { "name": "helm sign-in page", "package": "navree-helm", "method": "GET", "path": "/admin", "expect": [200, 302, 303] },
   { "name": "lighthouse sign-in page", "package": "navree-lighthouse", "method": "GET", "path": "/_lighthouse", "expect": [200, 302, 303] },
-  { "name": "fleet page", "package": "navree-fleet", "method": "GET", "path": "/_fleet", "expect": 200 }
+  { "name": "fleet page", "package": "navree-fleet", "method": "GET", "path": "/_fleet", "expect": 200 },
+  { "name": "graphql: task counts", "package": "navree-graphql", "method": "POST", "path": "/graphql", "auth": true, "workspace": true, "body": { "query": "{ taskCounts { todo doing done } }" }, "expect": 200, "json_path": "data.taskCounts.todo" },
+  { "name": "flags exposed to the front end", "package": "navree-flags", "method": "GET", "path": "/api/flags", "auth": true, "workspace": true, "expect": 200 },
+  { "name": "mcp: initialize", "package": "navree-mcp", "method": "POST", "path": "/mcp", "auth": true, "headers": { "Accept": "application/json, text/event-stream" }, "body": { "jsonrpc": "2.0", "id": 1, "method": "initialize", "params": { "protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": { "name": "evidence-checks", "version": "1.0.0" } } }, "expect": 200 }
 ]
