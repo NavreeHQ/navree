@@ -866,7 +866,7 @@ pub trait Grammar: Send + Sync {
                 w.push(")");
             }
             Expr::Random => self.random(w),
-            Expr::Default => self.default_keyword(w)?,
+            Expr::DefaultValue => self.default_keyword(w)?,
         }
         Ok(())
     }

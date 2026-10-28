@@ -598,7 +598,7 @@ fn inserts() {
         ["name", "country"],
         vec![
             vec![val("Acme"), val(Value::String(None))],
-            vec![val("Globex"), Expr::Default],
+            vec![val("Globex"), Expr::DefaultValue],
         ],
     );
     insta::assert_snapshot!(statement(rows.clone()));

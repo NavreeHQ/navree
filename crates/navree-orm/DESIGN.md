@@ -695,7 +695,10 @@ SeaORM code (a unit test reads its sources to keep it so); its values are
   fixture table after a write, and statements built as trees (CTEs, `CASE`,
   windows, upserts with a condition, `INTERSECT`, lateral joins) checked
   against the rows they must return on every database. Its executor
-  (`tests/differential/exec.rs`) is the one place that touches a driver.
+  (`tests/differential/exec.rs`) is the one place that touches a driver:
+  both paths run on navree-db's own engine (its pools, transactions and
+  statements on SQLx, rows read as navree-db values), the layer the
+  renderer's output runs on once the ORM moves to it.
   Where the renderer deliberately differs (the compiler's SQL is wrong
   there: a JSON key holding `"` on MySQL, `main.table` on SQLite, a union
   inside a union or a part limited per group on SQLite, a raw window order

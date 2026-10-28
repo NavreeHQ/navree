@@ -7,6 +7,13 @@
 //! errors) while crates move off SeaORM; see
 //! `docs/design`.
 
+// Built without any driver (none of `sqlite`, `postgres`, `mysql`), the
+// engine compiles but every connection fails: the drivers' code is unused.
+#![cfg_attr(
+    not(any(feature = "postgres", feature = "mysql", feature = "sqlite")),
+    allow(unused, unreachable_code)
+)]
+
 mod backend;
 pub mod compat;
 pub(crate) mod driver;
