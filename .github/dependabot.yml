@@ -11,6 +11,11 @@ updates:
     directory: /
     schedule: { interval: weekly }
     open-pull-requests-limit: 5
+    ignore:
+      # reqwest 0.13 is built on tower-http 0.6 and the workspace keeps one
+      # version of each crate; move both together when reqwest does.
+      - dependency-name: tower-http
+        versions: [">= 0.7"]
     groups:
       rust-minor-and-patch:
         update-types: [minor, patch]
