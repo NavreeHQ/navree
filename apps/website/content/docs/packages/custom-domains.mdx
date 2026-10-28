@@ -223,7 +223,7 @@ To serve HTTPS from a server of your own, leave `https_addr` unset and hand it t
 
 ## Certificate expiry
 
-`domains:certificates --due` runs hourly. Besides ACME renewals, with `tls = "on_demand"` it reads each verified domain's certificate over TLS on port 443 (`TlsProbe`: it connects, says the domain's name, and reads the dates of the certificate presented, which is read, not trusted) and records its expiry in `certificate_expires_at`. A domain that can't be read gets `tls: "failed"` and the reason in `tls_error`. `domains.certificates.probe = false` turns the probes off.
+`domains:certificates --due` runs hourly. Besides ACME renewals, with `tls = "on_demand"` it reads each verified domain's certificate over TLS on port 443 (`TlsProbe`: it connects, says the domain's name, and reads the dates of the certificate presented, which is read, not trusted) and records its expiry in `certificate_expires_at`. A domain that can't be read gets `tls: "failed"` and the reason in `tls_error`. Customers control their domains' DNS, so a domain that resolves only to loopback, private, link-local or shared addresses is not connected to: its probe fails with that reason. `domains.certificates.probe = false` turns the probes off.
 
 A certificate that expires within `domains.certificates.warn_days` (default 14) is reported once per check:
 
