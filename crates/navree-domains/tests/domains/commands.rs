@@ -1,5 +1,5 @@
 //! The commands `domains:list`, `domains:verify` and
-//! `domains:certificates`, and the schedule.
+//! `domains:certificates`.
 
 use chrono::TimeDelta;
 use navree_domains::{DomainStatus, TlsStatus};
