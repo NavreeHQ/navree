@@ -1383,6 +1383,12 @@ impl LighthouseStore {
         let requests = self.merged(kind::REQUEST, period, None).await?;
         let exceptions = self.merged(kind::EXCEPTION, period, None).await?;
         let jobs = self.merged(kind::JOB, period, None).await?;
+        let sampled_out: i64 = self
+            .merged(kind::SAMPLED_OUT, period, None)
+            .await?
+            .iter()
+            .map(|(_, values, _)| values.count)
+            .sum();
         let mut all = Values::default();
         for (_, values, _) in &requests {
             all.merge(values);
@@ -1424,7 +1430,7 @@ impl LighthouseStore {
             timeline,
             feed,
             dropped: 0,
-            sampled_out: 0,
+            sampled_out,
         })
     }
 

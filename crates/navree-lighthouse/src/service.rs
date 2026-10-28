@@ -3,7 +3,7 @@
 
 use std::future::Future;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
 use chrono::Utc;
@@ -12,14 +12,14 @@ use navree_telemetry::{
     EventKind, Interest, Telemetry, TelemetryContext, TelemetryEvent, TelemetryRecord,
     TelemetrySink,
 };
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 use uuid::Uuid;
 
 use crate::alert::Alert;
 use crate::dispatch::{Alerter, ChannelResult};
 use crate::engine::{
-    Batch, BatchWriter, EngineHandle, INTERNAL_UNIT, Input, Labels, Processor, UnitKey,
+    Batch, BatchWriter, EngineHandle, INTERNAL_UNIT, Input, Labels, UnitKey,
 };
 use crate::fake::FakeState;
 use crate::options::LighthouseOptions;
@@ -66,14 +66,14 @@ pub struct Lighthouse {
     engine: Option<EngineHandle>,
     alerter: Option<Arc<Alerter>>,
     runtime: Mutex<Runtime>,
+    writer: OnceLock<Arc<dyn BatchWriter>>,
     started: AtomicBool,
     fake: Option<Arc<FakeState>>,
 }
 
-/// The background writer: waiting to start, then running.
+/// The background writer, once running.
 #[derive(Default)]
 struct Runtime {
-    pending: Option<(Processor, mpsc::Receiver<Input>)>,
     stop: Option<oneshot::Sender<()>>,
     task: Option<JoinHandle<()>>,
 }
@@ -93,22 +93,16 @@ impl Lighthouse {
     pub(crate) fn live(
         options: Arc<LighthouseOptions>,
         store: Option<LighthouseStore>,
-        recorder: Option<(EngineHandle, Processor, mpsc::Receiver<Input>)>,
+        engine: Option<EngineHandle>,
         alerter: Option<Arc<Alerter>>,
     ) -> Lighthouse {
-        let (engine, pending) = match recorder {
-            Some((handle, processor, rx)) => (Some(handle), Some((processor, rx))),
-            None => (None, None),
-        };
         Lighthouse {
             options,
             store,
             engine,
             alerter,
-            runtime: Mutex::new(Runtime {
-                pending,
-                ..Runtime::default()
-            }),
+            runtime: Mutex::new(Runtime::default()),
+            writer: OnceLock::new(),
             started: AtomicBool::new(false),
             fake: None,
         }
@@ -122,6 +116,7 @@ impl Lighthouse {
             engine: None,
             alerter: None,
             runtime: Mutex::new(Runtime::default()),
+            writer: OnceLock::new(),
             started: AtomicBool::new(false),
             fake: Some(state),
         }
@@ -219,22 +214,27 @@ impl Lighthouse {
     /// Writes everything recorded so far and waits for it (tests, and
     /// before a command exits).
     pub async fn flush(&self) {
-        if let Some(engine) = &self.engine
+        if let (Some(engine), Some(writer)) = (&self.engine, self.writer.get())
             && self.started.load(Ordering::Acquire)
         {
-            engine.flush().await;
+            engine.flush(writer.as_ref()).await;
         }
     }
 
-    /// Details (samples, occurrences) this process dropped because the
-    /// buffer was full.
+    /// Details (traces and occurrences) this process sampled out because
+    /// the write queue (`lighthouse.buffer`) was full or their write
+    /// failed. Counts are never dropped. Same as
+    /// [`sampled_out`](Self::sampled_out).
     pub fn dropped(&self) -> u64 {
-        self.engine.as_ref().map_or(0, EngineHandle::dropped)
+        self.sampled_out()
     }
 
-    /// Details sampled out by this process.
+    /// Details (traces and occurrences) this process sampled out because
+    /// the write queue (`lighthouse.buffer`) was full or their write
+    /// failed. Every process adds its own to the `sampled_out` figure of
+    /// the overview.
     pub fn sampled_out(&self) -> u64 {
-        self.dropped()
+        self.engine.as_ref().map_or(0, |engine| engine.sampled_out())
     }
 
     /// Delivers a stored alert (the `lighthouse.alert` job).
@@ -297,26 +297,26 @@ impl Lighthouse {
         if let Some(alerter) = &self.alerter {
             alerter.init(ctx).await?;
         }
-        let pending = self
-            .runtime
-            .lock()
-            .map_err(|_| "the Lighthouse runtime lock is poisoned")?
-            .pending
-            .take();
-        let (Some((processor, rx)), Some(store), Some(alerter)) =
-            (pending, self.store.clone(), self.alerter.clone())
+        let (Some(engine), Some(store), Some(alerter)) =
+            (self.engine.clone(), self.store.clone(), self.alerter.clone())
         else {
             return Ok(());
         };
-        let writer: Arc<dyn BatchWriter> = Arc::new(StoreWriter { store, alerter });
-        let (stop_tx, stop_rx) = oneshot::channel::<()>();
-        let task = tokio::spawn(internal(processor.run(rx, writer, async move {
-            let _ = stop_rx.await;
-        })));
         let mut runtime = self
             .runtime
             .lock()
             .map_err(|_| "the Lighthouse runtime lock is poisoned")?;
+        if runtime.task.is_some() {
+            return Ok(());
+        }
+        let writer: Arc<dyn BatchWriter> = self
+            .writer
+            .get_or_init(|| Arc::new(StoreWriter { store, alerter }))
+            .clone();
+        let (stop_tx, stop_rx) = oneshot::channel::<()>();
+        let task = tokio::spawn(internal(engine.run(writer, async move {
+            let _ = stop_rx.await;
+        })));
         runtime.stop = Some(stop_tx);
         runtime.task = Some(task);
         self.started.store(true, Ordering::Release);
@@ -332,8 +332,23 @@ impl Lighthouse {
         if let Some(stop) = stop {
             let _ = stop.send(());
         }
-        if let Some(task) = task {
-            let _ = tokio::time::timeout(Duration::from_secs(10), task).await;
+        let finished = match task {
+            Some(task) => matches!(
+                tokio::time::timeout(Duration::from_secs(10), task).await,
+                Ok(Ok(()))
+            ),
+            None => true,
+        };
+        // The writer panicked or is stuck: what it held is still in the
+        // engine, so write it from here.
+        if !finished
+            && let (Some(engine), Some(writer)) = (&self.engine, self.writer.get())
+        {
+            let _ = tokio::time::timeout(
+                Duration::from_secs(5),
+                internal(engine.flush(writer.as_ref())),
+            )
+            .await;
         }
         self.started.store(false, Ordering::Release);
     }
