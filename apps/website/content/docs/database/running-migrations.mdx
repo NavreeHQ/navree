@@ -59,7 +59,7 @@ deals/m20261027_120000_add_currency_to_deals:
   COMMENT ON COLUMN "deals"."title" IS NULL;
 ```
 
-Schema builder migrations read the real database while pretending, so a SQLite table rebuild or a hypertable conversion is planned against the tables as they are. A migration that changes a table an earlier pending migration creates can't be planned until that one has run, and says so. SeaORM migrations can't read while pretending; their statements are printed as written.
+Schema builder migrations read the real database while pretending, so a SQLite table rebuild or a hypertable conversion is planned against the tables as they are. A migration that changes a table an earlier pending migration creates can't be planned until that one has run, and says so. Their statements are recorded by the schema itself (`Schema::pretending`), so nothing reaches the database. SeaORM migrations can't read while pretending; their statements are printed as written.
 
 Use it before deploying a migration to a database you care about: it shows exactly what will run there, for that database's dialect and version.
 

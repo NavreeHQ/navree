@@ -1,5 +1,6 @@
 //! Migrations written with the schema builder: the [`Migration`] trait,
-//! the [`SchemaMigration`] adapter the migrator runs, the
+//! [`SchemaMigration`] (a migration with its name) and the object-safe
+//! [`NamedMigration`] a module's migration set holds, the
 //! [`MigrationContext`] the migrator provides, and the [`migration!`]
 //! macro.
 //!
@@ -8,14 +9,11 @@
 use std::future::Future;
 use std::sync::{Arc, Mutex};
 
-use sea_orm::DbErr;
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
-
-use crate::connection::SchemaConnection;
+use crate::connection::{BoxFuture, SchemaConnection};
 use crate::error::SchemaResult;
 use crate::options::SchemaOptions;
 use crate::schema::Schema;
+use crate::target::Dialect;
 
 /// A migration: what [`up`](Migration::up) does to the schema,
 /// [`down`](Migration::down) undoes.
@@ -55,18 +53,76 @@ pub trait Migration: Send + Sync + 'static {
     /// Reverts the migration.
     fn down(&self, schema: &Schema<'_>) -> impl Future<Output = SchemaResult> + Send;
 
-    /// Whether the migrator runs it in a transaction (`true`, the default,
-    /// where the database's DDL is transactional). Return `false` for
+    /// Whether the migrator runs it in a transaction, with its
+    /// `navree_migrations` row, where the database's DDL is transactional
+    /// (PostgreSQL and SQLite): `true` by default, so a migration that fails
+    /// leaves neither its changes nor its row. Return `false` for
     /// statements PostgreSQL refuses in a transaction, such as `CREATE
     /// INDEX CONCURRENTLY` (an index's `.online()`) or refreshing a
     /// continuous aggregate.
     fn within_transaction(&self) -> bool {
         true
     }
+
+    /// Whether the migrator runs it in a transaction on MySQL and MariaDB
+    /// too (`false` by default). Those databases commit every DDL
+    /// statement on the spot, so a transaction only helps a data
+    /// migration: its `INSERT`s and `UPDATE`s then roll back with its
+    /// `navree_migrations` row when it fails. Ignored when
+    /// [`within_transaction`](Migration::within_transaction) is `false`.
+    fn within_transaction_on_mysql(&self) -> bool {
+        false
+    }
 }
 
-/// A [`Migration`] with its name, ready for a `MigrationSet`: it implements
-/// the migrator's migration trait, so every runner runs it.
+/// A migration with its name, as a module's migration set holds it: the
+/// object-safe face of [`SchemaMigration`], which the migrator runs.
+///
+/// ```
+/// # #[tokio::main(flavor = "current_thread")]
+/// # async fn main() -> navree_schema::SchemaResult {
+/// use navree_schema::{Dialect, NamedMigration, Schema, SchemaMigration, SchemaResult, Target};
+///
+/// struct CreateDeals;
+///
+/// impl navree_schema::Migration for CreateDeals {
+///     async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+///         schema.create("deals", |t| { t.id(); }).await
+///     }
+///     async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+///         schema.drop_if_exists("deals").await
+///     }
+/// }
+///
+/// let migration: Box<dyn NamedMigration> =
+///     Box::new(SchemaMigration::new("m0001_create_deals", CreateDeals));
+/// let schema = Schema::offline(Target::sqlite((3, 46)));
+/// migration.up(&schema).await?;
+/// assert_eq!(migration.name(), "m0001_create_deals");
+/// assert!(migration.transactional(Dialect::Postgres));
+/// assert!(!migration.transactional(Dialect::MySql));
+/// assert_eq!(schema.statements().len(), 1);
+/// # Ok(())
+/// # }
+/// ```
+pub trait NamedMigration: Send + Sync + 'static {
+    /// The name recorded in `navree_migrations`.
+    fn name(&self) -> &str;
+
+    /// Applies the migration.
+    fn up<'a>(&'a self, schema: &'a Schema<'_>) -> BoxFuture<'a, SchemaResult>;
+
+    /// Reverts the migration.
+    fn down<'a>(&'a self, schema: &'a Schema<'_>) -> BoxFuture<'a, SchemaResult>;
+
+    /// Whether the migrator runs it, with its `navree_migrations` row, in a
+    /// transaction on `dialect`: PostgreSQL and SQLite unless the
+    /// migration opts out, MySQL and MariaDB when it asks.
+    fn transactional(&self, dialect: Dialect) -> bool;
+}
+
+/// A [`Migration`] with its name, ready for a `MigrationSet`: the
+/// migrator runs it as a [`NamedMigration`].
 ///
 /// ```
 /// use navree_schema::{Schema, SchemaMigration, SchemaResult};
@@ -118,26 +174,22 @@ impl<M> std::fmt::Debug for SchemaMigration<M> {
     }
 }
 
-impl<M: Migration> MigrationName for SchemaMigration<M> {
+impl<M: Migration> NamedMigration for SchemaMigration<M> {
     fn name(&self) -> &str {
         &self.name
     }
-}
 
-#[async_trait]
-impl<M: Migration> MigrationTrait for SchemaMigration<M> {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        let schema = Schema::new(manager.get_connection());
-        self.migration.up(&schema).await.map_err(DbErr::from)
+    fn up<'a>(&'a self, schema: &'a Schema<'_>) -> BoxFuture<'a, SchemaResult> {
+        Box::pin(self.migration.up(schema))
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        let schema = Schema::new(manager.get_connection());
-        self.migration.down(&schema).await.map_err(DbErr::from)
+    fn down<'a>(&'a self, schema: &'a Schema<'_>) -> BoxFuture<'a, SchemaResult> {
+        Box::pin(self.migration.down(schema))
     }
 
-    fn use_transaction(&self) -> Option<bool> {
-        (!self.migration.within_transaction()).then_some(false)
+    fn transactional(&self, dialect: Dialect) -> bool {
+        self.migration.within_transaction()
+            && (dialect != Dialect::MySql || self.migration.within_transaction_on_mysql())
     }
 }
 

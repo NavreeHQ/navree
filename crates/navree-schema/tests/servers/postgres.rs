@@ -4,7 +4,6 @@ use navree_schema::{
     ContinuousAggregate, DumpOptions, Hypertable, IndexKind, ReferentialAction, RefreshPolicy,
     Schema, SchemaOptions, TimescaleMode, raw,
 };
-use sea_orm::TransactionTrait;
 
 use crate::support::{ScratchDb, column, exec};
 

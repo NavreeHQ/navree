@@ -126,6 +126,7 @@ mod paginate;
 mod queries;
 mod reader;
 mod repo;
+mod schema;
 mod seed;
 mod text;
 mod time_series;
@@ -142,8 +143,9 @@ pub use engine::{
 pub use events::{ConnectionEstablished, DatabaseBusy, DatabaseStatus};
 pub use http::map_db_error;
 pub use migrate::{
-    FreshOptions, LoadedDump, MIGRATIONS_TABLE, MigrateOptions, MigrationError, MigrationReport,
-    MigrationRun, MigrationSet, MigrationStatus, Migrator, Refreshed, RollbackOptions,
+    FreshOptions, IntoMigration, LoadedDump, MIGRATIONS_TABLE, MigrateOptions, MigrationError,
+    MigrationReport, MigrationRun, MigrationSet, MigrationStatus, Migrator, Refreshed,
+    RollbackOptions, SetMigration, migration_kind,
 };
 pub use module::{DatabaseModule, ModuleBuilderDbExt};
 pub use options::{DbOptions, IsolationLevel, MySqlOptions, PostgresOptions, SqliteOptions};

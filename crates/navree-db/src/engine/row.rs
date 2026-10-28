@@ -204,7 +204,12 @@ impl Row {
 }
 
 impl From<sea_orm::QueryResult> for Row {
+    /// A SeaORM row: read through its driver row, or (a row of a scripted
+    /// connection, which has none) by its values.
     fn from(row: sea_orm::QueryResult) -> Row {
+        if sea_row(&row).is_none() {
+            return crate::engine::compat::scripted_row(&row);
+        }
         Row {
             inner: RowInner::Sea(row),
         }

@@ -101,7 +101,7 @@ async fn insert_event(db: &Db, table: &str, at: DateTime<Utc>) {
 
 /// Whether the server has TimescaleDB (installed when it may be).
 async fn timescaledb(db: &Db) -> bool {
-    let schema = Schema::new(db.conn());
+    let schema = Schema::new(&db);
     let target = schema.target().await.unwrap();
     if target.timescaledb().is_some() {
         return true;
@@ -127,7 +127,7 @@ async fn hypertables_lose_whole_chunks() {
         scratch.drop().await;
         return;
     }
-    Schema::new(db.conn())
+    Schema::new(&db)
         .create_hypertable("events", "occurred_at", |t| {
             t.uuid_primary();
             t.timestamp_tz("occurred_at");
@@ -193,7 +193,7 @@ async fn integer_time_columns_lose_whole_chunks_too() {
         return;
     }
     // Unix milliseconds, in chunks of a day.
-    Schema::new(db.conn())
+    Schema::new(&db)
         .create_hypertable("ticks", "at_ms", |t| {
             t.uuid_primary();
             t.big_integer("at_ms");
@@ -249,7 +249,7 @@ async fn regular_tables_and_other_columns_are_pruned_row_by_row() {
     };
     let db = scratch.db().await;
     let has_timescaledb = timescaledb(&db).await;
-    let schema = Schema::new(db.conn());
+    let schema = Schema::new(&db);
     schema
         .create("notes", |t| {
             t.uuid_primary();

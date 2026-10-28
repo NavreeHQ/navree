@@ -224,3 +224,39 @@ pub fn new_note(title: &str) -> note::ActiveModel {
         body: Set(format!("body of {title}")),
     }
 }
+
+/// A migration set of SeaORM migrations (boxed, as the fixtures build them).
+pub fn set(
+    module: &'static str,
+    after: impl IntoIterator<Item = &'static str>,
+    migrations: Vec<Box<dyn MigrationTrait>>,
+) -> navree_db::MigrationSet {
+    migrations.into_iter().fold(
+        navree_db::MigrationSet::new(module).after(after),
+        |set, migration| set.migration(Boxed(migration)),
+    )
+}
+
+/// A boxed SeaORM migration as a migration of its own.
+struct Boxed(Box<dyn MigrationTrait>);
+
+impl MigrationName for Boxed {
+    fn name(&self) -> &str {
+        self.0.name()
+    }
+}
+
+#[async_trait]
+impl MigrationTrait for Boxed {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        self.0.up(manager).await
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        self.0.down(manager).await
+    }
+
+    fn use_transaction(&self) -> Option<bool> {
+        self.0.use_transaction()
+    }
+}

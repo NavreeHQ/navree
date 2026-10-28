@@ -19,7 +19,7 @@ async fn old_rows_are_deleted_and_counted() {
         return;
     };
     let db = scratch.db().await;
-    let schema = Schema::new(db.conn());
+    let schema = Schema::new(&db);
     schema
         .create_hypertable("events", "occurred_at", |t| {
             t.uuid_primary();

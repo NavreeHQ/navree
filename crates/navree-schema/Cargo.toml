@@ -12,15 +12,14 @@ workspace = true
 
 [features]
 default = []
-## PostgreSQL driver, for the real-server tests (`NAVREE_TEST_POSTGRES_URL`).
-postgres = ["sea-orm/sqlx-postgres"]
-## MySQL and MariaDB driver, for the real-server tests (`NAVREE_TEST_MYSQL_URL`).
-mysql = ["sea-orm/sqlx-mysql"]
+## The real-server tests on PostgreSQL (`NAVREE_TEST_POSTGRES_URL`); the
+## library is the same with or without it.
+postgres = ["sqlx/postgres"]
+## The real-server tests on MySQL and MariaDB (`NAVREE_TEST_MYSQL_URL`).
+mysql = ["sqlx/mysql"]
 
 [dependencies]
 navree-config = { workspace = true }
-sea-orm = { workspace = true }
-sea-orm-migration = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
@@ -29,5 +28,9 @@ tracing = { workspace = true }
 
 [dev-dependencies]
 insta = { workspace = true }
+# The tests' own connections (SQLite files; the real servers with the
+# `postgres` and `mysql` features). The library reaches databases only
+# through `SchemaConnection`.
+sqlx = { workspace = true, features = ["rust_decimal"] }
 tempfile = { workspace = true }
 tokio = { workspace = true }

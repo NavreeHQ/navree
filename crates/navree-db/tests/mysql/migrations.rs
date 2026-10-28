@@ -2,7 +2,7 @@
 //! `migrate:fresh`, and what a failed migration leaves behind when DDL
 //! commits implicitly.
 
-use navree_db::{DatabaseModule, Db, MigrationSet, MigrationStatus, Migrator, ModuleBuilderDbExt};
+use navree_db::{DatabaseModule, Db, MigrationStatus, Migrator, ModuleBuilderDbExt};
 use navree_kernel::{App, Module, ModuleBuilder, Navree};
 use sea_orm::sea_query::ForeignKeyAction;
 use sea_orm::{ConnectionTrait, DbErr, TransactionTrait};
@@ -17,11 +17,11 @@ struct UsersModule;
 
 impl Module for UsersModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.migrations(MigrationSet {
-            module: "users",
-            after: vec![],
-            migrations: vec![CreateTable::boxed("m0001_create_users", "users")],
-        });
+        m.migrations(crate::fixtures::set(
+            "users",
+            [],
+            vec![CreateTable::boxed("m0001_create_users", "users")],
+        ));
     }
 }
 
@@ -31,10 +31,10 @@ struct CrmModule;
 
 impl Module for CrmModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.migrations(MigrationSet {
-            module: "crm",
-            after: vec!["users", "billing"],
-            migrations: vec![
+        m.migrations(crate::fixtures::set(
+            "crm",
+            ["users", "billing"],
+            vec![
                 CreateTable::referencing(
                     "m0002_create_companies",
                     "companies",
@@ -43,7 +43,7 @@ impl Module for CrmModule {
                 ),
                 CreateTable::boxed("m0001_create_tags", "tags"),
             ],
-        });
+        ));
     }
 }
 
@@ -294,10 +294,10 @@ struct Failing;
 
 impl Module for Failing {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.migrations(MigrationSet {
-            module: "failing",
-            after: vec![],
-            migrations: vec![
+        m.migrations(crate::fixtures::set(
+            "failing",
+            [],
+            vec![
                 CreateTable::boxed("m1_good", "good"),
                 Box::new(FailAfterCreating {
                     name: "m2_bad",
@@ -305,7 +305,7 @@ impl Module for Failing {
                     transactional: None,
                 }),
             ],
-        });
+        ));
     }
 }
 
@@ -344,14 +344,14 @@ struct Backfill;
 
 impl Module for Backfill {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.migrations(MigrationSet {
-            module: "users",
-            after: vec![],
-            migrations: vec![
+        m.migrations(crate::fixtures::set(
+            "users",
+            [],
+            vec![
                 CreateTable::boxed("m0001_create_users", "users"),
                 Box::new(FailAfterInserting),
             ],
-        });
+        ));
     }
 }
 
