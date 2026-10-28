@@ -1,3 +1,6 @@
 # Vendored third-party builds are served byte for byte.
 crates/navree-api/assets/* -text
 crates/navree-graphql/assets/* -text
+
+# Fuzzing seeds are fed to the parsers byte for byte.
+fuzz/seeds/** -text
