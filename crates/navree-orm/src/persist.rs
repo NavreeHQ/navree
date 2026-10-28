@@ -494,9 +494,7 @@ pub(crate) async fn touch<M: Model>(
         }
         Some(column) => {
             let now = ctx.now().await;
-            record
-                .model
-                .set_value(column, Value::Timestamp(now))?;
+            record.model.set_value(column, Value::Timestamp(now))?;
         }
     }
     save(target, record).await

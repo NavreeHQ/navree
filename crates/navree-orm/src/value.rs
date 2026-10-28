@@ -1212,15 +1212,15 @@ mod tests {
             i64::from_value(Value::Decimal(Decimal::new(4200, 2))).unwrap(),
             42
         );
-        assert_eq!(
-            i64::from_value(Value::String(" 12 ".into())).unwrap(),
-            12
-        );
+        assert_eq!(i64::from_value(Value::String(" 12 ".into())).unwrap(), 12);
         assert!(matches!(
             i8::from_value(Value::I64(300)),
             Err(FieldError::Invalid(message)) if message == "300 does not fit i8"
         ));
-        assert_eq!(i64::from_value(Value::Null(Kind::I64)), Err(FieldError::Null));
+        assert_eq!(
+            i64::from_value(Value::Null(Kind::I64)),
+            Err(FieldError::Null)
+        );
         assert!(i64::from_value(Value::Decimal(Decimal::new(425, 1))).is_err());
         assert_eq!(u64::from_value(Value::I64(5)).unwrap(), 5);
         assert!(u64::from_value(Value::I64(-5)).is_err());
@@ -1299,10 +1299,7 @@ mod tests {
     #[test]
     fn uuids_and_json() {
         let id = Uuid::now_v7();
-        assert_eq!(
-            Uuid::from_value(Value::String(id.to_string())).unwrap(),
-            id
-        );
+        assert_eq!(Uuid::from_value(Value::String(id.to_string())).unwrap(), id);
         assert_eq!(
             Uuid::from_value(Value::Bytes(id.as_bytes().to_vec())).unwrap(),
             id

@@ -665,10 +665,7 @@ mod tests {
         let cursor = Cursor {
             towards: Towards::Next,
             columns: vec!["_id".into(), "kind".into()],
-            values: vec![
-                object_id,
-                Value::Null(Kind::Enum),
-            ],
+            values: vec![object_id, Value::Null(Kind::Enum)],
         };
         let decoded = Cursor::decode(&cursor.encode()).unwrap();
         assert_eq!(decoded.values[0], cursor.values[0]);

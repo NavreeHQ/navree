@@ -149,14 +149,8 @@ mod tests {
 
     #[test]
     fn keys_ignore_representation() {
-        assert_eq!(
-            key_of(&Value::I32(7)),
-            key_of(&Value::U64(7))
-        );
-        assert_eq!(
-            key_of(&Value::F64(7.0)),
-            key_of(&Value::I64(7))
-        );
+        assert_eq!(key_of(&Value::I32(7)), key_of(&Value::U64(7)));
+        assert_eq!(key_of(&Value::F64(7.0)), key_of(&Value::I64(7)));
         assert_eq!(
             key_of(&Value::Decimal(Decimal::new(700, 2))),
             key_of(&Value::I64(7))

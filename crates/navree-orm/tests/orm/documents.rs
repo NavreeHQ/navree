@@ -16,7 +16,10 @@ use navree_orm::ir::{
     Order, QueryIr, UpdateIr, Where, WhereClause,
 };
 use navree_orm::relations::{BelongsTo, HasMany};
-use navree_orm::{Access, ChangeRecorder, DocumentDriver, DocumentTarget, Executor, InsertOutcome, Kind, Model, OrmError, Row, Target, Value, relations, same_value, to_json};
+use navree_orm::{
+    Access, ChangeRecorder, DocumentDriver, DocumentTarget, Executor, InsertOutcome, Kind, Model,
+    OrmError, Row, Target, Value, relations, same_value, to_json,
+};
 use navree_testing::TestApp;
 use serde::Serialize;
 
@@ -283,9 +286,7 @@ impl DocumentDriver for Memory {
             match aggregate.function {
                 AggregateFunction::Count => {
                     let count = self.matching(&query.table.name, &query.wheres)?.len();
-                    Ok(Value::I64(
-                        i64::try_from(count).unwrap_or(i64::MAX),
-                    ))
+                    Ok(Value::I64(i64::try_from(count).unwrap_or(i64::MAX)))
                 }
                 other => Err(OrmError::Unsupported {
                     feature: format!("{other:?}").into(),

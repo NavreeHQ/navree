@@ -110,6 +110,12 @@ async fn not_found_errors_carry_a_not_found_source() {
         .and_then(|s| s.downcast_ref::<navree_db::DbError>())
         .expect("navree-db's error");
     assert!(source.is_not_found());
-    assert_eq!(error.db_error().map(navree_db::DbError::kind), Some(navree_db::ErrorKind::NotFound));
-    assert_eq!(navree_db::map_db_error(source).unwrap().status.as_u16(), 404);
+    assert_eq!(
+        error.db_error().map(navree_db::DbError::kind),
+        Some(navree_db::ErrorKind::NotFound)
+    );
+    assert_eq!(
+        navree_db::map_db_error(source).unwrap().status.as_u16(),
+        404
+    );
 }

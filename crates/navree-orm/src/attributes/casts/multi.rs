@@ -213,7 +213,10 @@ mod tests {
         );
         assert_eq!(
             <(i64, String)>::nulls(),
-            [Value::Null(crate::Kind::I64), Value::Null(crate::Kind::String)]
+            [
+                Value::Null(crate::Kind::I64),
+                Value::Null(crate::Kind::String)
+            ]
         );
         assert_eq!(<(i64, Option<String>)>::type_name(1), "Option<String>");
     }

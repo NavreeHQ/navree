@@ -144,10 +144,7 @@ impl navree_orm::Field for Opaque {
         navree_orm::Value::Null(Kind::String)
     }
 
-    fn from_sql(
-        _row: &navree_db::Row,
-        _column: &str,
-    ) -> Result<Self, navree_orm::FieldError> {
+    fn from_sql(_row: &navree_db::Row, _column: &str) -> Result<Self, navree_orm::FieldError> {
         Ok(Opaque)
     }
 

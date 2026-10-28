@@ -149,7 +149,11 @@ impl Statement {
     /// The statement as navree-db runs it (its SQL, written in the
     /// dialect's own placeholders, and its values).
     pub fn to_db(&self) -> navree_db::Statement {
-        navree_db::Statement::new(self.dialect.backend(), self.sql.clone(), self.values.clone())
+        navree_db::Statement::new(
+            self.dialect.backend(),
+            self.sql.clone(),
+            self.values.clone(),
+        )
     }
 }
 

@@ -249,9 +249,6 @@ mod tests {
         assert_eq!(serde_json::from_str::<Ulid>(&json).unwrap(), id);
         assert_eq!(id.to_value(), Value::String(id.to_string()));
         assert_eq!(Ulid::from_value(id.to_value()).unwrap(), id);
-        assert_eq!(
-            Ulid::from_value(Value::Uuid(id.to_uuid())).unwrap(),
-            id
-        );
+        assert_eq!(Ulid::from_value(Value::Uuid(id.to_uuid())).unwrap(), id);
     }
 }

@@ -98,9 +98,7 @@ impl ExtraCast {
             }
             ExtraCast::String => Value::String(String::from_value(value)?),
             ExtraCast::Json => Value::Json(serde_json::Value::from_value(value)?),
-            ExtraCast::DateTime => {
-                Value::Timestamp(DateTime::<Utc>::from_value(value)?)
-            }
+            ExtraCast::DateTime => Value::Timestamp(DateTime::<Utc>::from_value(value)?),
             ExtraCast::Date => Value::Date(NaiveDate::from_value(value)?),
             ExtraCast::Uuid => Value::Uuid(Uuid::from_value(value)?),
             ExtraCast::Custom(convert) => convert(value)?,
@@ -182,7 +180,9 @@ mod tests {
             Value::Json(serde_json::json!({"a": 1}))
         );
         assert_eq!(
-            ExtraCast::Integer.convert(Value::Null(Kind::String)).unwrap(),
+            ExtraCast::Integer
+                .convert(Value::Null(Kind::String))
+                .unwrap(),
             Value::Null(Kind::I64)
         );
         assert!(ExtraCast::Uuid.convert(Value::from("nope")).is_err());

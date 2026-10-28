@@ -71,10 +71,7 @@ impl navree_orm::Field for Email {
         <String as navree_orm::Field>::null()
     }
 
-    fn from_sql(
-        row: &navree_db::Row,
-        column: &str,
-    ) -> Result<Self, navree_orm::FieldError> {
+    fn from_sql(row: &navree_db::Row, column: &str) -> Result<Self, navree_orm::FieldError> {
         <String as navree_orm::Field>::from_sql(row, column).map(|text| Email::new(&text))
     }
 

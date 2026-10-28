@@ -562,7 +562,7 @@ mod tests {
             Err(FieldError::Invalid(_))
         ));
         assert_eq!(
-            LibraryScope::from_value(Value::Null(Kind::String)),
+            LibraryScope::from_value(Value::Null(navree_orm::Kind::String)),
             Err(FieldError::Null)
         );
         // A SeaORM column too, stored under the same names.
