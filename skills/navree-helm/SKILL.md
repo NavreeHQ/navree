@@ -62,7 +62,14 @@ navree make:resource deals Deal          # module, entity (Deal or deal); --path
    `navree::helm::ModuleBuilderHelmExt::resource::<..>(m)`. If the entity has
    no `impl Subject`, it prints the impl to add: Helm needs one.
 
-4. Open `http://127.0.0.1:8080/admin` and sign in with an app account.
+4. Open `http://127.0.0.1:8080/admin` and sign in with an app account. When
+   the account has two-factor authentication on, the panel asks for the code
+   after the password: the same check as the API (a six-digit
+   `navree::crypto::totp` code, 30-second steps with one step of drift, each
+   code accepted once, or a recovery code). In a test, compute the code from
+   the secret `AuthService::enable_two_factor` returned with
+   `Totp::builder(Secret::from_base32(&secret)?).build()?.generate(now)` and
+   move a `FixedClock` to the next step between codes.
 
 ## Resource template
 

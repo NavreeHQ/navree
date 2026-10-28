@@ -84,7 +84,10 @@ fn assemble(header: &[u8], payload: &[u8], sign: impl FnOnce(&str) -> Vec<u8>) -
 /// A token with this header and payload, signed with HMAC-SHA-256 under the
 /// service's secret: everything that is wrong with it is in what it says.
 fn forge(header: &Value, payload: &Value) -> String {
-    forge_raw(header.to_string().as_bytes(), payload.to_string().as_bytes())
+    forge_raw(
+        header.to_string().as_bytes(),
+        payload.to_string().as_bytes(),
+    )
 }
 
 fn forge_raw(header: &[u8], payload: &[u8]) -> String {
@@ -181,8 +184,18 @@ fn tokens_minted_by_the_previous_implementation_still_verify() {
         assert_eq!(claims.typ, expected_type, "{name}");
         assert_eq!(claims.iat, issued_at, "{name}");
         assert_eq!(claims.exp, issued_at + 900, "{name}");
-        assert_eq!(claims.iss, if name == "access_audience" { "crm" } else { "navree" });
-        assert_eq!(claims.aud.as_deref(), (name == "access_audience").then_some("crm-web"));
+        assert_eq!(
+            claims.iss,
+            if name == "access_audience" {
+                "crm"
+            } else {
+                "navree"
+            }
+        );
+        assert_eq!(
+            claims.aud.as_deref(),
+            (name == "access_audience").then_some("crm-web")
+        );
         assert_eq!(claims.jti.len(), 32, "{name}");
         match name {
             "access_session" => {
@@ -236,7 +249,10 @@ fn tokens_minted_by_the_previous_implementation_still_verify() {
         // The expiry is the same: valid through exp + leeway, then expired.
         clock.set(Utc.timestamp_opt(issued_at + 900 + LEEWAY_SECS, 0).unwrap());
         assert!(jwt.verify(token, expected_type).is_ok(), "{name}");
-        clock.set(Utc.timestamp_opt(issued_at + 900 + LEEWAY_SECS + 1, 0).unwrap());
+        clock.set(
+            Utc.timestamp_opt(issued_at + 900 + LEEWAY_SECS + 1, 0)
+                .unwrap(),
+        );
         assert!(matches!(
             jwt.verify(token, expected_type),
             Err(AuthError::TokenExpired)
@@ -259,7 +275,8 @@ fn new_tokens_carry_the_algorithm_and_claims_of_the_old_ones() {
     let ttl = Duration::from_secs(900);
     let mint = |name: &str, service: &str| -> String {
         let (jwt, _) = legacy_service(&fixture, service);
-        let method = |m: SignInMethod| jwt.sign_challenge(user, TokenType::TwoFactorChallenge, ttl, &m);
+        let method =
+            |m: SignInMethod| jwt.sign_challenge(user, TokenType::TwoFactorChallenge, ttl, &m);
         match name {
             "access" | "access_audience" => jwt.sign(user, TokenType::Access, ttl),
             "access_session" => jwt.sign_session(
@@ -284,9 +301,12 @@ fn new_tokens_carry_the_algorithm_and_claims_of_the_old_ones() {
             ),
             "two_factor_setup" => jwt.sign(user, TokenType::TwoFactorSetup, ttl),
             "platform" => jwt.sign(user, TokenType::Platform, ttl),
-            "platform_challenge" => {
-                jwt.sign_challenge(user, TokenType::PlatformChallenge, ttl, &SignInMethod::Password)
-            }
+            "platform_challenge" => jwt.sign_challenge(
+                user,
+                TokenType::PlatformChallenge,
+                ttl,
+                &SignInMethod::Password,
+            ),
             "challenge_password" => method(SignInMethod::Password),
             "challenge_magic_link" => method(SignInMethod::MagicLink),
             "challenge_passkey" => method(SignInMethod::Passkey),
@@ -346,16 +366,29 @@ fn alg_none_is_never_accepted() {
     let payload = Value::Object(claims());
     for alg in ["none", "None", "NONE", "nOnE"] {
         let header = json!({ "alg": alg, "typ": "JWT" });
-        let input = format!("{}.{}", b64(header.to_string().as_bytes()), b64(payload.to_string().as_bytes()));
+        let input = format!(
+            "{}.{}",
+            b64(header.to_string().as_bytes()),
+            b64(payload.to_string().as_bytes())
+        );
         // Without a signature part, with an empty one, with a real HMAC and
         // with junk.
         assert_invalid(&jwt, &input);
         assert_invalid(&jwt, &format!("{input}."));
-        assert_invalid(&jwt, &format!("{input}.{}", b64(&hmac_with(hmac::HMAC_SHA256, &input))));
+        assert_invalid(
+            &jwt,
+            &format!("{input}.{}", b64(&hmac_with(hmac::HMAC_SHA256, &input))),
+        );
         assert_invalid(&jwt, &format!("{input}.{}", b64(&[0; 32])));
     }
     // No `alg` at all, or one that is not a string.
-    for header in [json!({ "typ": "JWT" }), json!({ "alg": null }), json!({ "alg": 256 }), json!({ "alg": ["HS256"] }), json!({ "alg": "" })] {
+    for header in [
+        json!({ "typ": "JWT" }),
+        json!({ "alg": null }),
+        json!({ "alg": 256 }),
+        json!({ "alg": ["HS256"] }),
+        json!({ "alg": "" }),
+    ] {
         assert_invalid(&jwt, &forge(&header, &payload));
     }
 }
@@ -370,22 +403,33 @@ fn algorithm_confusion_is_refused() {
     // the secret, but the service takes HS256 only.
     for (alg, hash) in [("HS384", hmac::HMAC_SHA384), ("HS512", hmac::HMAC_SHA512)] {
         let header = json!({ "alg": alg, "typ": "JWT" });
-        let token = assemble(header.to_string().as_bytes(), payload_bytes.as_bytes(), |input| {
-            hmac_with(hash, input)
-        });
+        let token = assemble(
+            header.to_string().as_bytes(),
+            payload_bytes.as_bytes(),
+            |input| hmac_with(hash, input),
+        );
         assert_invalid(&jwt, &token);
     }
 
     // Asymmetric algorithms named in the header with an HMAC of the secret
     // as the "signature" (the classic confusion), and with junk of the
     // size of a real signature.
-    for alg in ["RS256", "RS384", "RS512", "PS256", "PS384", "PS512", "ES256", "ES384", "ES512", "EdDSA", "Ed25519"] {
+    for alg in [
+        "RS256", "RS384", "RS512", "PS256", "PS384", "PS512", "ES256", "ES384", "ES512", "EdDSA",
+        "Ed25519",
+    ] {
         let header = json!({ "alg": alg, "typ": "JWT" });
-        let token = assemble(header.to_string().as_bytes(), payload_bytes.as_bytes(), |input| {
-            hmac_with(hmac::HMAC_SHA256, input)
-        });
+        let token = assemble(
+            header.to_string().as_bytes(),
+            payload_bytes.as_bytes(),
+            |input| hmac_with(hmac::HMAC_SHA256, input),
+        );
         assert_invalid(&jwt, &token);
-        let junk = assemble(header.to_string().as_bytes(), payload_bytes.as_bytes(), |_| vec![7; 256]);
+        let junk = assemble(
+            header.to_string().as_bytes(),
+            payload_bytes.as_bytes(),
+            |_| vec![7; 256],
+        );
         assert_invalid(&jwt, &junk);
     }
 
@@ -418,11 +462,20 @@ fn a_token_that_names_a_key_id_is_refused() {
     let payload = Value::Object(claims());
     // The service has one key and its tokens carry no `kid`: a token that
     // names one, right signature or not, was made by someone else.
-    for kid in [json!("other"), json!(""), json!("1"), json!("navree"), json!(7), json!(["a"])] {
+    for kid in [
+        json!("other"),
+        json!(""),
+        json!("1"),
+        json!("navree"),
+        json!(7),
+        json!(["a"]),
+    ] {
         let header = json!({ "alg": "HS256", "typ": "JWT", "kid": kid });
         assert_invalid(&jwt, &forge(&header, &payload));
     }
-    let key = SigningKey::hmac(Algorithm::HS256, SECRET).unwrap().with_kid("rotated-2025");
+    let key = SigningKey::hmac(Algorithm::HS256, SECRET)
+        .unwrap()
+        .with_kid("rotated-2025");
     assert_invalid(&jwt, &key.sign_jwt(&payload).unwrap());
     // Without the `kid`, the same signing key's token is fine.
     assert_valid(&jwt, &forge(&header(), &payload));
@@ -438,7 +491,10 @@ fn critical_and_key_pointing_headers_are_not_followed() {
         json!({ "crit": "exp" }),
     ] {
         let mut header = header();
-        header.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+        header
+            .as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
         assert_invalid(&jwt, &forge(&header, &payload));
     }
     // `jku`, `jwk`, `x5u`, `x5c` name keys to trust. They are not read: the
@@ -454,9 +510,11 @@ fn critical_and_key_pointing_headers_are_not_followed() {
         assert_valid(&jwt, &forge(&header, &payload));
         // And a token signed with a key that header names is not accepted.
         let attacker = SigningKey::hmac(Algorithm::HS256, [9_u8; 32]).unwrap();
-        let token = assemble(header.to_string().as_bytes(), payload.to_string().as_bytes(), |input| {
-            attacker.sign(input.as_bytes()).unwrap()
-        });
+        let token = assemble(
+            header.to_string().as_bytes(),
+            payload.to_string().as_bytes(),
+            |input| attacker.sign(input.as_bytes()).unwrap(),
+        );
         assert_invalid(&jwt, &token);
     }
 }
@@ -539,9 +597,18 @@ fn tampering_with_any_part_is_refused() {
         assert_invalid(&jwt, &token[..end]);
     }
     // Parts in the wrong order or repeated.
-    assert_invalid(&jwt, &format!("{payload_part}.{header_part}.{signature_part}"));
-    assert_invalid(&jwt, &format!("{header_part}.{payload_part}.{signature_part}.{signature_part}"));
-    assert_invalid(&jwt, &format!("{header_part}.{header_part}.{signature_part}"));
+    assert_invalid(
+        &jwt,
+        &format!("{payload_part}.{header_part}.{signature_part}"),
+    );
+    assert_invalid(
+        &jwt,
+        &format!("{header_part}.{payload_part}.{signature_part}.{signature_part}"),
+    );
+    assert_invalid(
+        &jwt,
+        &format!("{header_part}.{header_part}.{signature_part}"),
+    );
     assert_valid(&jwt, &token);
 }
 
@@ -594,9 +661,15 @@ fn expired_tokens_are_refused_after_the_leeway() {
     let mut payload = claims();
     for exp in [now().timestamp() - LEEWAY_SECS - 1, 0, -1, i64::MIN] {
         payload.insert("exp".into(), json!(exp));
-        let result = jwt.verify(&forge(&header(), &Value::Object(payload.clone())), TokenType::Access);
+        let result = jwt.verify(
+            &forge(&header(), &Value::Object(payload.clone())),
+            TokenType::Access,
+        );
         assert!(
-            matches!(result, Err(AuthError::TokenExpired) | Err(AuthError::InvalidToken)),
+            matches!(
+                result,
+                Err(AuthError::TokenExpired) | Err(AuthError::InvalidToken)
+            ),
             "{exp}: {result:?}"
         );
     }
@@ -627,7 +700,11 @@ fn tokens_that_are_not_yet_valid_are_refused() {
         payload.insert("iat".into(), json!(iat));
         payload.insert("exp".into(), json!(iat.saturating_add(900)));
         let token = forge(&header(), &Value::Object(payload.clone()));
-        assert_eq!(jwt.verify(&token, TokenType::Access).is_ok(), ok, "iat {iat}");
+        assert_eq!(
+            jwt.verify(&token, TokenType::Access).is_ok(),
+            ok,
+            "iat {iat}"
+        );
         if !ok {
             assert_invalid(&jwt, &token);
         }
@@ -656,7 +733,11 @@ fn tokens_that_are_not_yet_valid_are_refused() {
         let mut payload = claims();
         payload.insert("nbf".into(), nbf.clone());
         let token = forge(&header(), &Value::Object(payload));
-        assert_eq!(jwt.verify(&token, TokenType::Access).is_ok(), ok, "nbf {nbf}");
+        assert_eq!(
+            jwt.verify(&token, TokenType::Access).is_ok(),
+            ok,
+            "nbf {nbf}"
+        );
     }
 }
 
@@ -669,7 +750,12 @@ fn the_issuer_and_audience_must_match() {
         payload.insert("iss".into(), json!(iss));
         assert_invalid(&jwt, &forge(&header(), &Value::Object(payload)));
     }
-    for aud in [json!("crm-web"), json!("navree"), json!(["navree"]), json!("")] {
+    for aud in [
+        json!("crm-web"),
+        json!("navree"),
+        json!(["navree"]),
+        json!(""),
+    ] {
         let mut payload = claims();
         payload.insert("aud".into(), aud.clone());
         assert_invalid(&jwt, &forge(&header(), &Value::Object(payload)));
@@ -752,8 +838,21 @@ fn every_required_claim_is_required() {
     }
 
     // The payload must be a JSON object.
-    for payload in ["[]", "null", "\"token\"", "7", "true", "", "{", "{\"sub\":", "{}"] {
-        assert_invalid(&jwt, &forge_raw(header().to_string().as_bytes(), payload.as_bytes()));
+    for payload in [
+        "[]",
+        "null",
+        "\"token\"",
+        "7",
+        "true",
+        "",
+        "{",
+        "{\"sub\":",
+        "{}",
+    ] {
+        assert_invalid(
+            &jwt,
+            &forge_raw(header().to_string().as_bytes(), payload.as_bytes()),
+        );
     }
 }
 
@@ -763,14 +862,28 @@ fn only_the_expected_types_are_accepted() {
     let user = Uuid::now_v7();
     let ttl = Duration::from_secs(300);
     let challenge = jwt
-        .sign_challenge(user, TokenType::TwoFactorChallenge, ttl, &SignInMethod::Password)
+        .sign_challenge(
+            user,
+            TokenType::TwoFactorChallenge,
+            ttl,
+            &SignInMethod::Password,
+        )
         .unwrap();
     assert_invalid(&jwt, &challenge);
-    assert!(jwt.verify(&challenge, TokenType::TwoFactorChallenge).is_ok());
-    assert!(jwt.verify(&challenge, TokenType::PlatformChallenge).is_err());
+    assert!(
+        jwt.verify(&challenge, TokenType::TwoFactorChallenge)
+            .is_ok()
+    );
+    assert!(
+        jwt.verify(&challenge, TokenType::PlatformChallenge)
+            .is_err()
+    );
     let setup = jwt.sign(user, TokenType::TwoFactorSetup, ttl).unwrap();
     assert_invalid(&jwt, &setup);
-    assert!(jwt.verify_any(&setup, &[TokenType::Access, TokenType::TwoFactorSetup]).is_ok());
+    assert!(
+        jwt.verify_any(&setup, &[TokenType::Access, TokenType::TwoFactorSetup])
+            .is_ok()
+    );
     assert!(jwt.verify_any(&setup, &[]).is_err());
 }
 
@@ -787,7 +900,11 @@ fn oversized_tokens_are_refused_before_they_are_read() {
     let base = padded(0).len();
     let fits = ((MAX_TOKEN_LEN - base) * 3 / 4).saturating_sub(8);
     let ok = padded(fits);
-    assert!(ok.len() <= MAX_TOKEN_LEN && ok.len() > MAX_TOKEN_LEN - 64, "{}", ok.len());
+    assert!(
+        ok.len() <= MAX_TOKEN_LEN && ok.len() > MAX_TOKEN_LEN - 64,
+        "{}",
+        ok.len()
+    );
     assert_valid(&jwt, &ok);
     for extra in [fits + 200, 20_000, 1 << 20] {
         let token = padded(extra);
@@ -810,11 +927,20 @@ fn oversized_tokens_are_refused_before_they_are_read() {
     // A header of 100 000 members, a payload nested 3 000 deep, and
     // numbers of 5 000 digits, each properly signed.
     let members: String = (0..100_000).map(|i| format!("\"k{i}\":1,")).collect();
-    assert_invalid(&jwt, &forge_raw(format!("{{{members}\"alg\":\"HS256\"}}").as_bytes(), b"{}"));
+    assert_invalid(
+        &jwt,
+        &forge_raw(format!("{{{members}\"alg\":\"HS256\"}}").as_bytes(), b"{}"),
+    );
     let nested = format!("{}{}", "[".repeat(3_000), "]".repeat(3_000));
-    assert_invalid(&jwt, &forge_raw(header().to_string().as_bytes(), nested.as_bytes()));
+    assert_invalid(
+        &jwt,
+        &forge_raw(header().to_string().as_bytes(), nested.as_bytes()),
+    );
     let nested_object = format!("{}1{}", "{\"a\":".repeat(3_000), "}".repeat(3_000));
-    assert_invalid(&jwt, &forge_raw(header().to_string().as_bytes(), nested_object.as_bytes()));
+    assert_invalid(
+        &jwt,
+        &forge_raw(header().to_string().as_bytes(), nested_object.as_bytes()),
+    );
     let digits = "9".repeat(5_000);
     assert_invalid(
         &jwt,

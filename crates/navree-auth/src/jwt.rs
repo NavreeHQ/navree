@@ -348,7 +348,6 @@ mod tests {
 
     const SECRET: &[u8] = b"0123456789abcdef0123456789abcdef";
 
-
     fn service() -> JwtService {
         JwtService::new(SECRET, &JwtOptions::default())
     }

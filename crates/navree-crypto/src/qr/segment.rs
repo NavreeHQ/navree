@@ -186,9 +186,7 @@ pub(super) fn segment(data: &[u8], version: usize) -> Vec<Segment> {
         }
     }
     let last = data.len() - 1;
-    let mut mode = (0..3)
-        .min_by_key(|m| cost[last][*m])
-        .unwrap_or_default();
+    let mut mode = (0..3).min_by_key(|m| cost[last][*m]).unwrap_or_default();
     let mut modes = vec![0_usize; data.len()];
     for i in (0..data.len()).rev() {
         modes[i] = mode;

@@ -1,7 +1,8 @@
 //! # navree-crypto
 //!
 //! `CryptoModule`: AES-256-GCM [`Encrypter`] with key rotation, Argon2id
-//! [`Hasher`], token helpers and JOSE helpers ([`jose`]).
+//! [`Hasher`], token helpers, JOSE helpers ([`jose`]), one-time passwords
+//! ([`totp`]) and QR codes ([`qr`]).
 //!
 //! - [`Encrypter`] encrypts bytes, strings and JSON values into compact,
 //!   URL- and cookie-safe `v1.<kid>.<nonce>.<ciphertext>` payloads (random
@@ -22,6 +23,12 @@
 //! - [`jose`] signs and verifies JSON Web Signatures (HS256, EdDSA, ES256,
 //!   RS256 and their siblings) on `ring`, reads and publishes JSON Web Keys
 //!   and key sets, and loads PKCS#8 keys such as Apple's `.p8` files.
+//! - [`totp`] makes and checks time-based one-time passwords (RFC 6238 on
+//!   HMAC from `ring`, compared in constant time, secrets wiped on drop) and
+//!   writes and reads `otpauth://` key URIs.
+//! - [`qr`] encodes text as a QR code (ISO/IEC 18004: versions 1 to 40,
+//!   levels L, M, Q and H, numeric, alphanumeric and byte modes, the
+//!   standard's mask penalties) and draws it as SVG.
 //! - [`webpush`] encrypts Web Push messages (RFC 8291, `aes128gcm`) and
 //!   signs their VAPID headers (RFC 8292) with a P-256
 //!   [`VapidKey`](webpush::VapidKey).
