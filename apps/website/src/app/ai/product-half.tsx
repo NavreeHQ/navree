@@ -52,7 +52,7 @@ export async function ProductHalf() {
   );
 
   return (
-    <section id="product" aria-labelledby="product-title" className="border-t border-line">
+    <section id="product" aria-labelledby="product-title" className="cv-auto border-t border-line">
       <div className="container-site section-y">
         <HalfHeading
           id="product-title"

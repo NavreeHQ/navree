@@ -13,6 +13,14 @@ const nextConfig: NextConfig = {
   images: { unoptimized: true },
   reactStrictMode: true,
   allowedDevOrigins: ["127.0.0.1", "localhost"],
+  turbopack: {
+    resolveAlias: {
+      // Next always bundles polyfills for features its own browser targets
+      // already have; src/lib/no-polyfills.ts explains.
+      "next/dist/build/polyfills/polyfill-module": "./src/lib/no-polyfills.ts",
+      "../build/polyfills/polyfill-module": "./src/lib/no-polyfills.ts",
+    },
+  },
 };
 
 export default nextConfig;

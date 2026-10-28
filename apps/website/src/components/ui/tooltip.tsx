@@ -5,7 +5,11 @@ import type * as React from "react";
 
 import { cn } from "@/lib/utils";
 
-/** The root layout already wraps the site in a provider; nest one only to change the delay. */
+/**
+ * Wrap a group of tooltips in one provider (`delayDuration={150}` as the site
+ * uses it): moving between them then skips the delay. There is no provider in
+ * the root layout, so pages without tooltips don't load the tooltip code.
+ */
 function TooltipProvider({ delayDuration = 0, ...props }: React.ComponentProps<typeof TooltipPrimitive.Provider>) {
   return <TooltipPrimitive.Provider data-slot="tooltip-provider" delayDuration={delayDuration} {...props} />;
 }

@@ -102,3 +102,22 @@ export function meta(doc: Doc): DocMeta {
 export function plain(text: string): string {
   return text.replace(/`/g, "");
 }
+
+/**
+ * Titles of the site's other pages (src/app/<page>/page.tsx): a docs page
+ * with the same title gets "(docs)" in its browser and search title.
+ */
+const PAGE_TITLES = new Set(["Documentation", "Ecosystem", "Architecture", "Navree for AI", "Performance", "Showcase"]);
+
+/**
+ * The `<title>` of a docs page: its title, made unique across the site.
+ * Pages that share a title ("Getting started" in Database, ORM and Testing)
+ * add their section in parentheses, unless the section has the same name as
+ * the page. The `<h1>` stays the plain title. `node scripts/check-seo.ts`
+ * fails on any title that is still repeated.
+ */
+export function documentTitle(doc: DocMeta): string {
+  if (PAGE_TITLES.has(doc.title)) return `${doc.title} (docs)`;
+  const shared = allDocs().filter((d) => d.title === doc.title).length > 1;
+  return shared && doc.sectionTitle !== doc.title ? `${doc.title} (${doc.sectionTitle})` : doc.title;
+}
