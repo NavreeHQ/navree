@@ -53,7 +53,12 @@ mod real {
         }
     }
 
-    fn raw(id: Uuid, scope: LibraryScope, organization: Option<Uuid>, workspace: Option<Uuid>) -> Template {
+    fn raw(
+        id: Uuid,
+        scope: LibraryScope,
+        organization: Option<Uuid>,
+        workspace: Option<Uuid>,
+    ) -> Template {
         Template {
             id,
             scope,
@@ -87,7 +92,10 @@ mod real {
                 .await
                 .unwrap();
         assert_eq!(names(&initech), ["Group handbook", "Welcome"]);
-        assert_eq!(names(&Template::query().get(db.as_ref()).await.unwrap()), ["Welcome"]);
+        assert_eq!(
+            names(&Template::query().get(db.as_ref()).await.unwrap()),
+            ["Welcome"]
+        );
 
         // The CHECK constraint, under the hooks (a plain insert).
         let (org, ws) = (lib.group.id, lib.acme.id);
@@ -96,14 +104,21 @@ mod real {
             (LibraryScope::Organization, None, None),
             (LibraryScope::Workspace, Some(org), Some(ws)),
         ] {
-            let refused =
-                Template::insert(db.as_ref(), [raw(Uuid::now_v7(), scope, organization, workspace)])
-                    .await;
+            let refused = Template::insert(
+                db.as_ref(),
+                [raw(Uuid::now_v7(), scope, organization, workspace)],
+            )
+            .await;
             assert!(refused.is_err(), "{scope} {organization:?} {workspace:?}");
         }
         Template::insert(
             db.as_ref(),
-            [raw(Uuid::now_v7(), LibraryScope::Organization, Some(org), None)],
+            [raw(
+                Uuid::now_v7(),
+                LibraryScope::Organization,
+                Some(org),
+                None,
+            )],
         )
         .await
         .unwrap();

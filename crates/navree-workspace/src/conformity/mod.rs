@@ -159,7 +159,10 @@ fn entities_check() -> ConformityCheck {
 
 fn classification_finding(entity: &EntityDef, registry: &Registry) -> Option<Finding> {
     let classes: Vec<&str> = [
-        (registry.workspace.contains_key(&entity.table), "a workspace"),
+        (
+            registry.workspace.contains_key(&entity.table),
+            "a workspace",
+        ),
         (registry.global.contains(&entity.table), "a global"),
         (registry.library.contains(&entity.table), "a library"),
     ]
@@ -348,7 +351,9 @@ mod tests {
             "entity `templates` is classified as both a global and a library entity"
         );
         assert!(both.hint.unwrap().contains("m.library::<..>()"));
-        registry.workspace.insert("templates".to_owned(), "workspace_id");
+        registry
+            .workspace
+            .insert("templates".to_owned(), "workspace_id");
         assert_eq!(
             classification_finding(&entity, &registry).unwrap().message,
             "entity `templates` is classified as a workspace, a global and a library entity"

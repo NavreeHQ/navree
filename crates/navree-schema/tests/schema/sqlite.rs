@@ -583,7 +583,11 @@ async fn check_constraints_are_enforced_and_rebuilt() {
         "the existing row with position -1 violates the new check"
     );
     tx.rollback().await.unwrap();
-    exec(&conn, "UPDATE templates SET position = 0 WHERE position < 0").await;
+    exec(
+        &conn,
+        "UPDATE templates SET position = 0 WHERE position < 0",
+    )
+    .await;
     schema
         .table("templates", |t| {
             t.check("templates_position_check", "position >= 0");
@@ -591,7 +595,13 @@ async fn check_constraints_are_enforced_and_rebuilt() {
         .await
         .unwrap();
     assert_eq!(
-        texts(rows(&conn, "SELECT scope, workspace_id, position FROM templates ORDER BY id").await),
+        texts(
+            rows(
+                &conn,
+                "SELECT scope, workspace_id, position FROM templates ORDER BY id"
+            )
+            .await
+        ),
         [["global", "NULL", "1"], ["workspace", "7", "0"]]
     );
     for (sql, check) in [
@@ -605,7 +615,10 @@ async fn check_constraints_are_enforced_and_rebuilt() {
         ),
     ] {
         let error = conn.execute_unprepared(sql).await.unwrap_err().to_string();
-        assert!(error.contains("CHECK constraint failed"), "{check}: {error}");
+        assert!(
+            error.contains("CHECK constraint failed"),
+            "{check}: {error}"
+        );
     }
 
     // Dropping one keeps the other.

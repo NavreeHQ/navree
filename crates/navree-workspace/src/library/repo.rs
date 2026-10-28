@@ -188,7 +188,10 @@ impl<M: Library> LibraryRepo<M> {
                     model: Cow::Borrowed(meta.name()),
                     column: unique_by.to_owned(),
                     expected: Cow::Borrowed("a column"),
-                    message: format!("{} has no `{unique_by}` column to match global items by", meta.name()),
+                    message: format!(
+                        "{} has no `{unique_by}` column to match global items by",
+                        meta.name()
+                    ),
                 }
                 .into());
             };

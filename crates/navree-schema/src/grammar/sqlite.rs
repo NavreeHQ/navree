@@ -867,7 +867,10 @@ mod tests {
             "CONSTRAINT `Templates_Owner_Check` CHECK (1)",
             "CONSTRAINT [templates_owner_check] CHECK (1)",
         ] {
-            assert!(is_named_check(written, "templates_owner_check"), "{written}");
+            assert!(
+                is_named_check(written, "templates_owner_check"),
+                "{written}"
+            );
         }
         for other in [
             "CONSTRAINT \"templates_owner_check_2\" CHECK (1)",

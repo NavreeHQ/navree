@@ -61,7 +61,9 @@ async fn mysql_before_8_0_16_is_told_its_checks_are_not_enforced() {
         "{sql}"
     );
     assert!(
-        sql.contains("-- notice: MySQL 8.0.15 parses CHECK constraints but enforces them only from 8.0.16"),
+        sql.contains(
+            "-- notice: MySQL 8.0.15 parses CHECK constraints but enforces them only from 8.0.16"
+        ),
         "{sql}"
     );
 }

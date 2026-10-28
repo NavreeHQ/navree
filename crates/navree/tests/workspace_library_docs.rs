@@ -9,9 +9,9 @@
 
 use navree::BoxFuture;
 use navree::access::AccessOptions;
+use navree::axum::http::Method;
 use navree::db::{Db, Seeder};
 use navree::helm::ModuleBuilderHelmExt;
-use navree::axum::http::Method;
 use navree::http::{Controller, RouteDef};
 use navree::prelude::*;
 use navree::schema::{Migration, Schema, SchemaMigration, SchemaResult};
@@ -148,13 +148,23 @@ pub struct NewTemplate {
 
 async fn index(_ws: CurrentWorkspace, uow: Uow) -> Result<Json<Vec<Template>>> {
     let templates = Template::query().order_by(Template::NAME).get(&uow).await?;
-    Ok(Json(templates.into_iter().map(Record::into_inner).collect()))
+    Ok(Json(
+        templates.into_iter().map(Record::into_inner).collect(),
+    ))
 }
 
-async fn store(_ws: CurrentWorkspace, uow: Uow, Json(input): Json<NewTemplate>) -> Result<Json<Template>> {
+async fn store(
+    _ws: CurrentWorkspace,
+    uow: Uow,
+    Json(input): Json<NewTemplate>,
+) -> Result<Json<Template>> {
     let template = Template::create(
         &uow,
-        Template { slug: input.slug, name: input.name, ..Template::default() },
+        Template {
+            slug: input.slug,
+            name: input.name,
+            ..Template::default()
+        },
     )
     .await?;
     Ok(Json(template.into_inner()))
@@ -186,7 +196,11 @@ async fn rename(
     Ok(Json(template.into_inner()))
 }
 
-async fn use_template(ws: CurrentWorkspace, uow: Uow, Path(id): Path<Uuid>) -> Result<Json<Template>> {
+async fn use_template(
+    ws: CurrentWorkspace,
+    uow: Uow,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Template>> {
     let copy = LibraryRepo::<Template>::clone_into(&uow, id, ws.id()).await?;
     Ok(Json(copy.into_inner()))
 }
@@ -200,7 +214,11 @@ async fn share(
     let template = LibraryRepo::<Template>::create(
         &uow,
         LibraryOwner::Organization(org.id()),
-        Template { slug: input.slug, name: input.name, ..Template::default() },
+        Template {
+            slug: input.slug,
+            name: input.name,
+            ..Template::default()
+        },
     )
     .await?;
     Ok(Json(template.into_inner()))
@@ -211,7 +229,9 @@ async fn shared(org: CurrentOrganization, uow: Uow) -> Result<Json<Value>> {
     type Templates = LibraryRepo<Template>;
 
     let shared = Templates::visible_to(&org).get(&uow).await?;
-    let own = Templates::owned_by(LibraryOwner::Organization(org.id())).get(&uow).await?;
+    let own = Templates::owned_by(LibraryOwner::Organization(org.id()))
+        .get(&uow)
+        .await?;
     let catalog = Templates::global().get(&uow).await?;
     let names = |templates: Collection<Template>| {
         let mut names: Vec<String> = templates.into_iter().map(|t| t.name.clone()).collect();
@@ -282,8 +302,16 @@ impl Seeder for TemplateLibrarySeeder {
     fn run<'a>(&'a self, _ctx: &'a AppContext, db: &'a Db) -> BoxFuture<'a, Result<(), BoxError>> {
         Box::pin(async move {
             let items = [
-                ("welcome", "Welcome aboard", "Hello {{ name }}, welcome to the team."),
-                ("reset", "Reset your password", "Use this link to choose a new password."),
+                (
+                    "welcome",
+                    "Welcome aboard",
+                    "Hello {{ name }}, welcome to the team.",
+                ),
+                (
+                    "reset",
+                    "Reset your password",
+                    "Use this link to choose a new password.",
+                ),
             ]
             .map(|(slug, name, body)| Template {
                 slug: slug.into(),
@@ -292,7 +320,10 @@ impl Seeder for TemplateLibrarySeeder {
                 ..Template::default()
             });
             let seeded = LibraryRepo::<Template>::seed_global(db, "slug", items).await?;
-            println!("templates: {} created, {} updated", seeded.created, seeded.updated);
+            println!(
+                "templates: {} created, {} updated",
+                seeded.created, seeded.updated
+            );
             Ok(())
         })
     }
@@ -305,9 +336,14 @@ pub struct TemplatesModule;
 
 impl Module for TemplatesModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.migrations(MigrationSet::new("templates").after(["workspace"]).migration(
-            SchemaMigration::new("m20261028_000001_create_templates", CreateTemplates),
-        ))
+        m.migrations(
+            MigrationSet::new("templates")
+                .after(["workspace"])
+                .migration(SchemaMigration::new(
+                    "m20261028_000001_create_templates",
+                    CreateTemplates,
+                )),
+        )
         .library::<Template>()
         .controller::<TemplatesController>();
         m.migrations(
@@ -331,7 +367,9 @@ pub mod helm_model {
         use sea_orm::entity::prelude::*;
         use serde::Serialize;
 
-        #[derive(Clone, Debug, Default, PartialEq, DeriveEntityModel, navree::orm::Model, Serialize)]
+        #[derive(
+            Clone, Debug, Default, PartialEq, DeriveEntityModel, navree::orm::Model, Serialize,
+        )]
         #[sea_orm(table_name = "templates")]
         #[model(table = "templates", timestamps)]
         pub struct Model {
@@ -419,9 +457,11 @@ pub mod helm {
                     body: input.body.unwrap_or_default(),
                     ..Template::default()
                 };
-                Ok(LibraryRepo::<Template>::create(ctx.uow(), LibraryOwner::Global, template)
-                    .await?
-                    .into_inner())
+                Ok(
+                    LibraryRepo::<Template>::create(ctx.uow(), LibraryOwner::Global, template)
+                        .await?
+                        .into_inner(),
+                )
             })
         }
     }
@@ -507,8 +547,14 @@ async fn tenants(app: &TestApp, ada: Uuid) -> (Uuid, Uuid, Uuid) {
         .create(&uow, ada, NewOrganization::named("Group"))
         .await
         .unwrap();
-    let acme = workspaces.create(&uow, ada, NewWorkspace::named("Acme")).await.unwrap();
-    let globex = workspaces.create(&uow, ada, NewWorkspace::named("Globex")).await.unwrap();
+    let acme = workspaces
+        .create(&uow, ada, NewWorkspace::named("Acme"))
+        .await
+        .unwrap();
+    let globex = workspaces
+        .create(&uow, ada, NewWorkspace::named("Globex"))
+        .await
+        .unwrap();
     organizations.attach(&uow, group.id, acme.id).await.unwrap();
     uow.commit().await.unwrap();
     (group.id, acme.id, globex.id)
@@ -517,7 +563,9 @@ async fn tenants(app: &TestApp, ada: Uuid) -> (Uuid, Uuid, Uuid) {
 #[tokio::test]
 async fn workspaces_read_shared_templates_and_clone_them_to_change_them() {
     let app = builder().build().await;
-    app.run_command("db:seed", &["template-library"]).await.unwrap();
+    app.run_command("db:seed", &["template-library"])
+        .await
+        .unwrap();
     let ada = Uuid::now_v7();
     let (group, acme, _globex) = tenants(&app, ada).await;
     let bus = app.get::<navree::events::EventBus>().await;
@@ -582,7 +630,10 @@ async fn workspaces_read_shared_templates_and_clone_them_to_change_them() {
         .await
         .unwrap()
         .unwrap();
-    for path in [format!("/api/templates/{}", welcome.id), format!("/api/templates/{}/name", welcome.id)] {
+    for path in [
+        format!("/api/templates/{}", welcome.id),
+        format!("/api/templates/{}/name", welcome.id),
+    ] {
         let refused = client
             .patch(&path)
             .header("x-workspace", "acme")
@@ -609,7 +660,11 @@ async fn workspaces_read_shared_templates_and_clone_them_to_change_them() {
         .assert_json_path("workspace_id", json!(acme));
     TemplateBlock::create(
         db.as_ref(),
-        TemplateBlock { template_id: welcome.id, body: "Hello".into(), ..TemplateBlock::default() },
+        TemplateBlock {
+            template_id: welcome.id,
+            body: "Hello".into(),
+            ..TemplateBlock::default()
+        },
     )
     .await
     .unwrap();
@@ -677,8 +732,16 @@ async fn workspaces_read_shared_templates_and_clone_them_to_change_them() {
     );
 
     // Seeding again changes nothing.
-    app.run_command("db:seed", &["template-library"]).await.unwrap();
-    assert_eq!(LibraryRepo::<Template>::global().count(db.as_ref()).await.unwrap(), 2);
+    app.run_command("db:seed", &["template-library"])
+        .await
+        .unwrap();
+    assert_eq!(
+        LibraryRepo::<Template>::global()
+            .count(db.as_ref())
+            .await
+            .unwrap(),
+        2
+    );
     app.shutdown().await.unwrap();
 }
 
@@ -696,14 +759,20 @@ async fn helm_manages_the_global_templates() {
         .module(HelmModule::from_config())
         .build()
         .await;
-    app.run_command("db:seed", &["template-library"]).await.unwrap();
+    app.run_command("db:seed", &["template-library"])
+        .await
+        .unwrap();
     let ada = Uuid::now_v7();
     let (group, _acme, _globex) = tenants(&app, ada).await;
     let db = app.get::<Db>().await;
     LibraryRepo::<Template>::create(
         db.as_ref(),
         LibraryOwner::Organization(group),
-        Template { slug: "handbook".into(), name: "Group handbook".into(), ..Template::default() },
+        Template {
+            slug: "handbook".into(),
+            name: "Group handbook".into(),
+            ..Template::default()
+        },
     )
     .await
     .unwrap();
@@ -796,10 +865,12 @@ async fn a_hook_s_refusal_answers_with_its_mapping() {
 
     impl Module for DealsModule {
         fn register(&self, m: &mut ModuleBuilder) {
-            m.migrations(MigrationSet::new("won_deals").migration(SchemaMigration::new(
-                "m20261028_000003_create_won_deals",
-                CreateDeals,
-            )))
+            m.migrations(
+                MigrationSet::new("won_deals").migration(SchemaMigration::new(
+                    "m20261028_000003_create_won_deals",
+                    CreateDeals,
+                )),
+            )
             .observe::<Deal>(DealObserver)
             .controller::<DealsController>();
             // In the module: a 409 instead of a 500.
@@ -816,7 +887,11 @@ async fn a_hook_s_refusal_answers_with_its_mapping() {
     let db = app.get::<Db>().await;
     let won = Deal::create(
         db.as_ref(),
-        Deal { title: "Renewal".into(), stage: Stage::Won, ..Deal::default() },
+        Deal {
+            title: "Renewal".into(),
+            stage: Stage::Won,
+            ..Deal::default()
+        },
     )
     .await
     .unwrap();

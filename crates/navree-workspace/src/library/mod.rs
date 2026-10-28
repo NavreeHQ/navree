@@ -521,14 +521,13 @@ fn column_value<M: Library>(model: &M, column: &'static str) -> navree_orm::Resu
 pub(crate) fn owner_columns<M: Library>(
     model: &M,
 ) -> navree_orm::Result<(LibraryScope, Option<Uuid>, Option<Uuid>)> {
-    let decode = |column: &'static str, expected: &'static str, error: FieldError| {
-        OrmError::Decode {
+    let decode =
+        |column: &'static str, expected: &'static str, error: FieldError| OrmError::Decode {
             model: Cow::Borrowed(M::meta().name()),
             column: column.to_owned(),
             expected: Cow::Borrowed(expected),
             message: error.to_string(),
-        }
-    };
+        };
     let scope = LibraryScope::from_value(column_value(model, M::SCOPE_COLUMN)?)
         .map_err(|e| decode(M::SCOPE_COLUMN, "a library scope", e))?;
     let organization =
@@ -556,10 +555,7 @@ mod tests {
                 serde_json::to_value(scope).unwrap(),
                 serde_json::json!(scope.as_str())
             );
-            assert_eq!(
-                LibraryScope::from_value(Field::to_value(&scope)),
-                Ok(scope)
-            );
+            assert_eq!(LibraryScope::from_value(Field::to_value(&scope)), Ok(scope));
         }
         assert_eq!(LibraryScope::default(), LibraryScope::Workspace);
         assert!(
@@ -578,10 +574,7 @@ mod tests {
         );
         // A SeaORM column too, stored under the same names.
         use sea_orm::{ActiveEnum, Iterable};
-        assert_eq!(
-            LibraryScope::iter().collect::<Vec<_>>(),
-            LibraryScope::ALL
-        );
+        assert_eq!(LibraryScope::iter().collect::<Vec<_>>(), LibraryScope::ALL);
         for scope in LibraryScope::ALL {
             assert_eq!(ActiveEnum::to_value(&scope), scope.as_str());
             assert_eq!(
@@ -608,12 +601,32 @@ mod tests {
             Ok(LibraryOwner::Workspace(ws))
         );
         for (scope, organization, workspace, message) in [
-            (Global, Some(org), None, "a global item has no organization_id"),
-            (Global, None, Some(ws), "a global item has no organization_id"),
+            (
+                Global,
+                Some(org),
+                None,
+                "a global item has no organization_id",
+            ),
+            (
+                Global,
+                None,
+                Some(ws),
+                "a global item has no organization_id",
+            ),
             (Organization, None, None, "needs an organization_id"),
-            (Organization, Some(org), Some(ws), "an organization's item has no workspace_id"),
+            (
+                Organization,
+                Some(org),
+                Some(ws),
+                "an organization's item has no workspace_id",
+            ),
             (Workspace, None, None, "needs a workspace_id"),
-            (Workspace, Some(org), Some(ws), "a workspace's item has no organization_id"),
+            (
+                Workspace,
+                Some(org),
+                Some(ws),
+                "a workspace's item has no organization_id",
+            ),
         ] {
             let error = LibraryOwner::from_columns(scope, organization, workspace).unwrap_err();
             assert!(error.contains(message), "{scope}: {error}");

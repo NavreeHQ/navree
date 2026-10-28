@@ -130,7 +130,11 @@ async fn index(_ws: CurrentWorkspace, uow: Uow) -> Result<Json<Value>, AppError>
     Ok(Json(json!({ "data": names(&templates) })))
 }
 
-async fn show(_ws: CurrentWorkspace, uow: Uow, Path(id): Path<Uuid>) -> Result<Json<Value>, AppError> {
+async fn show(
+    _ws: CurrentWorkspace,
+    uow: Uow,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Value>, AppError> {
     let template = Template::find_or_fail(&uow, id).await?;
     Ok(Json(json!(template.model())))
 }
@@ -178,13 +182,21 @@ async fn rename_checked(
     Ok(Json(json!(template.model())))
 }
 
-async fn destroy(_ws: CurrentWorkspace, uow: Uow, Path(id): Path<Uuid>) -> Result<Json<Value>, AppError> {
+async fn destroy(
+    _ws: CurrentWorkspace,
+    uow: Uow,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Value>, AppError> {
     let mut template = Template::find_or_fail(&uow, id).await?;
     template.delete(&uow).await?;
     Ok(Json(json!({ "deleted": id })))
 }
 
-async fn clone(ws: CurrentWorkspace, uow: Uow, Path(id): Path<Uuid>) -> Result<Json<Value>, AppError> {
+async fn clone(
+    ws: CurrentWorkspace,
+    uow: Uow,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Value>, AppError> {
     let copy = LibraryRepo::<Template>::clone_into(&uow, id, ws.id()).await?;
     Ok(Json(json!(copy.model())))
 }
@@ -384,7 +396,12 @@ async fn each_viewer_sees_the_global_items_its_organization_s_and_its_own() {
     );
     assert_eq!(owned(&db, LibraryOwner::Global).await, ["Welcome"]);
     assert_eq!(
-        names(&LibraryRepo::<Template>::global().get(db.as_ref()).await.unwrap()),
+        names(
+            &LibraryRepo::<Template>::global()
+                .get(db.as_ref())
+                .await
+                .unwrap()
+        ),
         ["Welcome"]
     );
 
@@ -392,7 +409,10 @@ async fn each_viewer_sees_the_global_items_its_organization_s_and_its_own() {
         .await
         .unwrap()
         .expect("the organization's handbook");
-    assert_eq!(found.library_owner().unwrap(), LibraryOwner::Organization(lib.group.id));
+    assert_eq!(
+        found.library_owner().unwrap(),
+        LibraryOwner::Organization(lib.group.id)
+    );
     assert!(
         LibraryRepo::<Template>::find_visible(db.as_ref(), &lib.acme, lib.globex_only)
             .await
@@ -411,7 +431,10 @@ async fn queries_see_what_the_current_workspace_sees() {
     let lib = fixture().await;
     let db = lib.world.db().await;
     // No current workspace: the global items only.
-    assert_eq!(names(&Template::query().get(db.as_ref()).await.unwrap()), ["Welcome"]);
+    assert_eq!(
+        names(&Template::query().get(db.as_ref()).await.unwrap()),
+        ["Welcome"]
+    );
     assert_eq!(Template::query().count(db.as_ref()).await.unwrap(), 1);
     // A task working for a workspace sees its library.
     let acme = navree_orm::workspace::scope(lib.acme.id, Template::query().get(db.as_ref()))
@@ -520,7 +543,11 @@ async fn the_check_constraint_refuses_contradicting_owners() {
         name: "Bad".into(),
         ..Template::default()
     };
-    let error = WorkspaceError::from(Template::create(db.as_ref(), contradicting).await.unwrap_err());
+    let error = WorkspaceError::from(
+        Template::create(db.as_ref(), contradicting)
+            .await
+            .unwrap_err(),
+    );
     let response = error.to_app_error();
     assert_eq!(response.status.as_u16(), 400);
     assert_eq!(
@@ -631,7 +658,11 @@ async fn the_guard_keeps_a_workspace_to_its_own_items() {
     let lib = fixture().await;
     let db = lib.world.db().await;
     let acme = lib.acme.id;
-    let any = |id| Template::query().without_global_scope::<LibraryVisibility>().find_or_fail(db.as_ref(), id);
+    let any = |id| {
+        Template::query()
+            .without_global_scope::<LibraryVisibility>()
+            .find_or_fail(db.as_ref(), id)
+    };
 
     // Another workspace's item, however it was read: a 404.
     let mut theirs = any(lib.globex_only).await.unwrap();
@@ -825,7 +856,10 @@ async fn clones_need_an_item_the_target_sees() {
     let error = LibraryRepo::<Template>::clone_into(&uow, lib.welcome, Uuid::now_v7())
         .await
         .unwrap_err();
-    assert!(matches!(error, WorkspaceError::WorkspaceNotFound(_)), "{error}");
+    assert!(
+        matches!(error, WorkspaceError::WorkspaceNotFound(_)),
+        "{error}"
+    );
     let error = LibraryRepo::<Template>::clone_to(
         &uow,
         lib.welcome,
@@ -833,7 +867,10 @@ async fn clones_need_an_item_the_target_sees() {
     )
     .await
     .unwrap_err();
-    assert!(matches!(error, WorkspaceError::OrganizationNotFound(_)), "{error}");
+    assert!(
+        matches!(error, WorkspaceError::OrganizationNotFound(_)),
+        "{error}"
+    );
     // An organization clones a global item, or one of its own.
     let copy = LibraryRepo::<Template>::clone_to(
         &uow,
@@ -842,7 +879,10 @@ async fn clones_need_an_item_the_target_sees() {
     )
     .await
     .unwrap();
-    assert_eq!(copy.library_owner().unwrap(), LibraryOwner::Organization(lib.other.id));
+    assert_eq!(
+        copy.library_owner().unwrap(),
+        LibraryOwner::Organization(lib.other.id)
+    );
     let error = LibraryRepo::<Template>::clone_to(
         &uow,
         lib.handbook,
@@ -869,13 +909,10 @@ async fn clones_need_an_item_the_target_sees() {
         (lib.acme_only, lib.other.id),
         (lib.globex_only, lib.group.id),
     ] {
-        let error = LibraryRepo::<Template>::clone_to(
-            &uow,
-            item,
-            LibraryOwner::Organization(organization),
-        )
-        .await
-        .unwrap_err();
+        let error =
+            LibraryRepo::<Template>::clone_to(&uow, item, LibraryOwner::Organization(organization))
+                .await
+                .unwrap_err();
         assert_eq!(error.to_app_error().status.as_u16(), 404);
     }
     // The global library takes global items only.
@@ -938,11 +975,17 @@ async fn seeders_place_global_items_by_a_unique_column() {
     let seeded = LibraryRepo::<Template>::seed_global(db.as_ref(), "slug", items("Welcome"))
         .await
         .unwrap();
-    assert_eq!((seeded.created, seeded.updated, seeded.unchanged), (1, 0, 1));
+    assert_eq!(
+        (seeded.created, seeded.updated, seeded.unchanged),
+        (1, 0, 1)
+    );
     let seeded = LibraryRepo::<Template>::seed_global(db.as_ref(), "slug", items("Welcome aboard"))
         .await
         .unwrap();
-    assert_eq!((seeded.created, seeded.updated, seeded.unchanged), (0, 1, 1));
+    assert_eq!(
+        (seeded.created, seeded.updated, seeded.unchanged),
+        (0, 1, 1)
+    );
     let global = LibraryRepo::<Template>::global()
         .order_by(Template::SLUG)
         .get(db.as_ref())
