@@ -2,8 +2,8 @@
   {
     "name": "helm",
     "package": "navree-helm",
-    "pages": ["/admin"],
-    "expect": "Navree Evidence admin"
+    "pages": ["/admin", "/admin/resources/projects"],
+    "expect": "Projects"
   },
   {
     "name": "lighthouse",
@@ -13,7 +13,8 @@
   {
     "name": "fleet",
     "package": "navree-fleet",
-    "pages": ["/_fleet"]
+    "pages": ["/_fleet"],
+    "expect": "Overview"
   },
   {
     "name": "api-docs",
