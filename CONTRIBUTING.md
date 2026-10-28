@@ -269,6 +269,37 @@ The seed also creates about 20 companies, 50 contacts, 30 deals across the
 pipeline stages and 60 activities. Open the deals board as two users in two
 browsers to see moves arrive over the WebSocket.
 
+## Dependencies and security
+
+Every new or updated Rust dependency goes through three gates in CI
+(`.github/workflows/supply-chain.yml` and `vulnerabilities.yml`), which you
+can run locally first:
+
+```sh
+cargo install --locked cargo-deny cargo-vet   # once
+cargo deny check                              # advisories, licenses, bans, sources (deny.toml)
+cargo vet                                     # every crate audited or exempted (supply-chain/)
+```
+
+- `deny.toml` allows crates.io (plus the one pinned `docx-rs` git
+  dependency), a fixed list of permissive licenses, and bans `openssl`,
+  `openssl-sys`, `native-tls` and `rsa`; use rustls and ring. A new duplicate
+  version of a crate warns; remove it or name it under `skip` with a reason.
+  A vulnerability that has no fixed release gets an entry with a reason and
+  an expiry date in both `osv-scanner.toml` and `deny.toml`.
+- A new crate version needs a review or a deliberate exemption in
+  `supply-chain/`; [`supply-chain/README.md`](supply-chain/README.md) says how.
+- GitHub Actions are pinned to a full commit SHA with the version in a
+  comment (`uses: owner/action@<sha> # v1.2.3`), workflows declare the least
+  `permissions:` they need, and checkouts that don't push set
+  `persist-credentials: false`. Dependabot proposes SHA bumps.
+- Changes to `.github/`, `deny.toml`, `supply-chain/` and the security-critical
+  crates (auth, crypto, sso, oauth, session, access, orm, schema, db, http)
+  need a review from the code owners (`.github/CODEOWNERS`).
+- Tagged releases get a CycloneDX SBOM from `.github/workflows/sbom.yml`.
+- Report a vulnerability to security@navree.com, never in a public issue; see
+  [`SECURITY.md`](SECURITY.md).
+
 ## Design decisions
 
 - **Token authentication.** Stateless JWT access tokens (HS256, 15 minutes)
