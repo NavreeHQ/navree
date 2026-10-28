@@ -230,9 +230,15 @@ also `5L` (last Friday), `5#2` (second Friday), `?` for `*`. Day of month
 OR day of week matches unless one is `*`; `+MON` asks for both. No seconds
 or year field, no wrapping ranges, no `5/15`, no empty list items, at most
 256 bytes. A never-matching expression (`0 0 30 2 *`) boots and lists as
-`never`. Clocks forward: a skipped local time runs once, at the first minute
-after the gap. Clocks back: a repeated local time runs once, the first time
-(so a `* * * * *` task pauses during the repeated hour).
+`never`. Clock changes depend on the expression. Fixed-time (no `*` in the
+minute or hour field; `*/n` counts as `*`; `@daily` `@weekly` `@monthly`
+`@yearly`): a skipped local time runs once, at the first minute after the
+gap (`30 2 * * *` in New York runs at 03:00 on the spring night); a
+repeated local time runs once, the first time (`30 1 * * *` runs at the first
+01:30 only). Wildcard (a `*` in the minute or hour field; `@hourly`): follows
+the wall clock, so it runs in both passes of a repeated hour (`* * * * *`
+every real minute, `0 * * * *` every real hour) and catches nothing up for a
+gap (`30 * * * *` runs at 01:30 and 03:30, not 03:00).
 
 Per-workspace runs are claimed as `<task>@<workspace id>` (names at most
 154 bytes); `LocalRun::current()` gives the owner and zone inside a run.

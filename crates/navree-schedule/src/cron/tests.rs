@@ -251,14 +251,24 @@ fn spring_forward_runs_a_skipped_time_once_after_the_gap() {
         next("30 2 * * *", "2026-03-08T07:00:00Z", New_York).unwrap(),
         "2026-03-09T06:30:00+00:00"
     );
-    // Several skipped times run once.
-    let every_15 = cron("*/15 2 * * *");
-    let first = every_15
+    // Several skipped fixed times run once.
+    let fixed = cron("0,15,30,45 2 * * *");
+    let first = fixed
         .next_after(at("2026-03-08T06:59:00Z"), &New_York)
         .unwrap();
     assert_eq!(first.to_rfc3339(), "2026-03-08T07:00:00+00:00");
-    let second = every_15.next_after(first, &New_York).unwrap();
+    let second = fixed.next_after(first, &New_York).unwrap();
     assert_eq!(second.to_rfc3339(), "2026-03-09T06:00:00+00:00");
+    // A wildcard expression catches nothing up: `*/15` in the hour 2 does
+    // not exist on that night.
+    let every_15 = cron("*/15 2 * * *");
+    assert_eq!(
+        every_15
+            .next_after(at("2026-03-08T06:59:00Z"), &New_York)
+            .unwrap()
+            .to_rfc3339(),
+        "2026-03-09T06:00:00+00:00"
+    );
     // A time at the end of the gap and one inside it still run once there.
     let both = cron("0,30 2,3 * * *");
     let first = both
@@ -334,5 +344,239 @@ fn is_due_agrees_with_next_after() {
             tick += TimeDelta::minutes(1);
         }
         assert_eq!(due, expected, "{text} in {zone}");
+    }
+}
+
+/// Every real minute in `[from, to)` at which `cron` is due, by asking
+/// `is_due` of each one.
+fn due_minutes(cron: &CronExpression, zone: Tz, from: &str, to: &str) -> Vec<DateTime<Utc>> {
+    let (mut tick, to) = (at(from), at(to));
+    let mut due = Vec::new();
+    while tick < to {
+        if cron.is_due(tick, &zone) {
+            due.push(tick);
+        }
+        tick += TimeDelta::minutes(1);
+    }
+    due
+}
+
+/// The runs `next_after` finds in `[from, to)`.
+fn runs(cron: &CronExpression, zone: Tz, from: &str, to: &str) -> Vec<DateTime<Utc>> {
+    let (from, to) = (at(from), at(to));
+    let mut runs = Vec::new();
+    let mut cursor = from - TimeDelta::minutes(1);
+    while let Some(run) = cron.next_after(cursor, &zone) {
+        if run >= to {
+            break;
+        }
+        runs.push(run);
+        cursor = run;
+    }
+    runs
+}
+
+/// Clock changes: (zone, window around the spring-forward change, window
+/// around the fall-back change), each six real hours.
+fn changes() -> Vec<(Tz, [(&'static str, &'static str); 2])> {
+    use chrono_tz::Australia::Lord_Howe;
+    vec![
+        (
+            New_York,
+            [
+                ("2026-03-08T04:00:00Z", "2026-03-08T10:00:00Z"),
+                ("2026-11-01T03:00:00Z", "2026-11-01T09:00:00Z"),
+            ],
+        ),
+        (
+            London,
+            [
+                ("2026-03-28T22:00:00Z", "2026-03-29T04:00:00Z"),
+                ("2026-10-24T22:00:00Z", "2026-10-25T04:00:00Z"),
+            ],
+        ),
+        // Lord Howe shifts by 30 minutes: forward 02:00 -> 02:30 (2026-10-04
+        // 15:30Z), back 02:00 -> 01:30 (2026-04-04 15:00Z).
+        (
+            Lord_Howe,
+            [
+                ("2026-10-04T12:30:00Z", "2026-10-04T18:30:00Z"),
+                ("2026-04-04T12:00:00Z", "2026-04-04T18:00:00Z"),
+            ],
+        ),
+    ]
+}
+
+#[test]
+fn wildcard_expressions_run_on_every_real_minute_whose_clock_matches() {
+    for text in [
+        "* * * * *",
+        "*/15 * * * *",
+        "0 * * * *",
+        "*/20 1-3 * * *",
+        "@hourly",
+    ] {
+        let expr = cron(text);
+        for (zone, windows) in changes() {
+            for (from, to) in windows {
+                let runs = runs(&expr, zone, from, to);
+                // The same instants as the wall clock says, no duplicate.
+                let expected: Vec<_> = {
+                    let (mut t, end) = (at(from), at(to));
+                    let mut matching = Vec::new();
+                    while t < end {
+                        if expr.matches_local(t.with_timezone(&zone).naive_local()) {
+                            matching.push(t);
+                        }
+                        t += TimeDelta::minutes(1);
+                    }
+                    matching
+                };
+                assert_eq!(runs, expected, "{text} in {zone}, {from}");
+                assert_eq!(runs, due_minutes(&expr, zone, from, to), "{text} in {zone}");
+                let mut sorted = runs.clone();
+                sorted.dedup();
+                assert_eq!(sorted, runs, "duplicate instant: {text} in {zone}");
+            }
+        }
+    }
+}
+
+#[test]
+fn every_minute_never_pauses_and_hourly_runs_every_real_hour() {
+    for (zone, windows) in changes() {
+        for (from, to) in windows {
+            // Six real hours: 360 runs, one per real minute.
+            let all = runs(&cron("* * * * *"), zone, from, to);
+            assert_eq!(all.len(), 360, "{zone}, {from}");
+            assert!(
+                all.windows(2).all(|w| w[1] - w[0] == TimeDelta::minutes(1)),
+                "{zone}, {from}: a pause"
+            );
+            // Every quarter of an hour on the wall clock: no gap longer
+            // than the shift allows.
+            let quarters = runs(&cron("*/15 * * * *"), zone, from, to);
+            assert!(
+                quarters
+                    .windows(2)
+                    .all(|w| w[1] - w[0] <= TimeDelta::minutes(45)),
+                "{zone}, {from}: {quarters:?}"
+            );
+        }
+    }
+    // New York, fall back: 01:00 happens twice, and hourly runs both.
+    let hourly = runs(
+        &cron("0 * * * *"),
+        New_York,
+        "2026-11-01T03:00:00Z",
+        "2026-11-01T09:00:00Z",
+    );
+    let hours: Vec<_> = hourly.iter().map(|t| t.format("%H").to_string()).collect();
+    assert_eq!(hours, ["03", "04", "05", "06", "07", "08"]);
+    // London, fall back: 01:00 BST (00:00Z) and 01:00 GMT (01:00Z).
+    let hourly = runs(
+        &cron("0 * * * *"),
+        London,
+        "2026-10-24T22:00:00Z",
+        "2026-10-25T04:00:00Z",
+    );
+    let hours: Vec<_> = hourly.iter().map(|t| t.format("%H").to_string()).collect();
+    assert_eq!(hours, ["22", "23", "00", "01", "02", "03"]);
+}
+
+#[test]
+fn wildcard_expressions_do_not_catch_up_a_gap() {
+    // New York, spring forward: 02:00-03:00 does not exist.
+    let half = runs(
+        &cron("30 * * * *"),
+        New_York,
+        "2026-03-08T05:00:00Z",
+        "2026-03-08T09:00:00Z",
+    );
+    let at_local: Vec<_> = half
+        .iter()
+        .map(|t| t.with_timezone(&New_York).format("%H:%M").to_string())
+        .collect();
+    // 00:30 EST, 01:30 EST, then 03:30 EDT (not 03:00).
+    assert_eq!(at_local, ["00:30", "01:30", "03:30", "04:30"]);
+    let hourly = runs(
+        &cron("0 * * * *"),
+        New_York,
+        "2026-03-08T05:00:00Z",
+        "2026-03-08T09:00:00Z",
+    );
+    let at_local: Vec<_> = hourly
+        .iter()
+        .map(|t| t.with_timezone(&New_York).format("%H:%M").to_string())
+        .collect();
+    assert_eq!(at_local, ["00:00", "01:00", "03:00", "04:00"]);
+}
+
+#[test]
+fn fixed_time_expressions_run_once_at_a_skipped_and_at_a_repeated_time() {
+    for (zone, text, spring, fall) in [
+        (
+            New_York,
+            "30 2 * * *",
+            ("2026-03-08T04:00:00Z", "2026-03-08T12:00:00Z"),
+            ("2026-11-01T03:00:00Z", "2026-11-01T12:00:00Z"),
+        ),
+        (
+            New_York,
+            "30 1 * * *",
+            ("2026-03-08T04:00:00Z", "2026-03-08T12:00:00Z"),
+            ("2026-11-01T03:00:00Z", "2026-11-01T12:00:00Z"),
+        ),
+        (
+            London,
+            "30 1 * * *",
+            ("2026-03-28T22:00:00Z", "2026-03-29T04:00:00Z"),
+            ("2026-10-24T22:00:00Z", "2026-10-25T04:00:00Z"),
+        ),
+        (
+            chrono_tz::Australia::Lord_Howe,
+            "15 2 * * *",
+            ("2026-10-04T12:30:00Z", "2026-10-04T18:30:00Z"),
+            ("2026-04-04T12:00:00Z", "2026-04-04T18:00:00Z"),
+        ),
+        (
+            chrono_tz::Australia::Lord_Howe,
+            "45 1 * * *",
+            ("2026-10-04T12:30:00Z", "2026-10-04T18:30:00Z"),
+            ("2026-04-04T12:00:00Z", "2026-04-04T18:00:00Z"),
+        ),
+    ] {
+        let expr = cron(text);
+        for (from, to) in [spring, fall] {
+            let found = runs(&expr, zone, from, to);
+            assert_eq!(found.len(), 1, "{text} in {zone}, {from}: {found:?}");
+            assert_eq!(
+                found,
+                due_minutes(&expr, zone, from, to),
+                "{text} in {zone}"
+            );
+        }
+    }
+}
+
+#[test]
+fn classification_follows_the_minute_and_hour_fields() {
+    for (text, wildcard) in [
+        ("* * * * *", true),
+        ("*/15 * * * *", true),
+        ("0 * * * *", true),
+        ("0 */2 * * *", true),
+        ("@hourly", true),
+        ("30 2 * * *", false),
+        ("0,30 1-3 * * *", false),
+        ("0 0 * * *", false),
+        ("@daily", false),
+        ("@weekly", false),
+        ("@monthly", false),
+        ("@yearly", false),
+        ("0 0 * * MON-FRI", false),
+        ("0-59/5 8 * * *", false),
+    ] {
+        assert_eq!(cron(text).wildcard_time, wildcard, "{text}");
     }
 }

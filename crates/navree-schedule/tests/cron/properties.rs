@@ -164,3 +164,55 @@ fn the_search_is_bounded() {
     );
     assert!(CronExpression::parse(&"1,".repeat(MAX_EXPRESSION_LEN)).is_err());
 }
+
+/// Starts within three hours of a clock change, in zones that have them.
+fn near_a_clock_change() -> impl Strategy<Value = (Tz, DateTime<Utc>)> {
+    const CHANGES: &[(&str, i64)] = &[
+        ("America/New_York", 1_772_953_200),    // 2026-03-08T07:00:00Z
+        ("America/New_York", 1_793_512_800),    // 2026-11-01T06:00:00Z
+        ("Europe/London", 1_774_746_000),       // 2026-03-29T01:00:00Z
+        ("Europe/London", 1_792_890_000),       // 2026-10-25T01:00:00Z
+        ("Australia/Lord_Howe", 1_791_127_800), // 2026-10-04T15:30:00Z
+        ("Australia/Lord_Howe", 1_775_314_800), // 2026-04-04T15:00:00Z
+        ("America/St_Johns", 1_772_953_200),
+    ];
+    (prop::sample::select(CHANGES), -3 * 3600_i64..3 * 3600).prop_map(|((zone, change), delta)| {
+        (
+            zone.parse::<Tz>().unwrap(),
+            DateTime::from_timestamp(change + delta, 0).unwrap(),
+        )
+    })
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(256))]
+
+    /// Around clock changes, `next_after` finds exactly the minutes
+    /// `is_due` accepts, for wildcard and fixed-time expressions alike.
+    #[test]
+    fn next_after_and_is_due_agree_across_clock_changes(
+        text in expression(),
+        (zone, start) in near_a_clock_change(),
+    ) {
+        let cron = CronExpression::parse(&text).unwrap();
+        let end = start + TimeDelta::hours(6);
+        let mut found = Vec::new();
+        let mut cursor = start;
+        while let Some(run) = cron.next_after(cursor, &zone) {
+            if run >= end {
+                break;
+            }
+            found.push(run);
+            cursor = run;
+        }
+        let mut due = Vec::new();
+        let mut tick = DateTime::from_timestamp(start.timestamp().div_euclid(60) * 60 + 60, 0).unwrap();
+        while tick < end {
+            if cron.is_due(tick, &zone) {
+                due.push(tick);
+            }
+            tick += TimeDelta::minutes(1);
+        }
+        prop_assert_eq!(found, due, "{} in {}", text, zone);
+    }
+}

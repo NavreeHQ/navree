@@ -220,13 +220,16 @@ m.schedule(|s| {
 
 ### When clocks change
 
-A cron expression is read on the wall clock of its zone, and two rules cover the nights the clock changes:
+A cron expression is read on the wall clock of its zone. Which rule covers the nights the clock changes depends on the expression:
 
-- **Clocks go forward.** A local time that is skipped runs once, at the first minute after the gap. On the night clocks in New York jump from 02:00 to 03:00, `30 2 * * *` runs at 03:00, and so does `*/15 2 * * *`: all the skipped times together run once. If 03:00 matches too, it still runs once.
-- **Clocks go back.** A local time that happens twice runs once, the first time. On the night clocks jump from 02:00 back to 01:00, `30 1 * * *` runs at the first 01:30 only. The second pass through the repeated hour runs nothing, so an expression that matches every minute or every hour pauses for that hour.
+- **Fixed-time expressions** have no `*` in the minute or the hour field (`*/n` counts as a `*`): `30 2 * * *`, `0,30 1-3 * * *`, `0 0 1 * *`, and `@daily`, `@weekly`, `@monthly` and `@yearly`. Each local time runs **once**:
+  - When clocks go forward, a skipped local time runs at the first minute after the gap. On the night clocks in New York jump from 02:00 to 03:00, `30 2 * * *` runs at 03:00. Several skipped times (`0,15,30,45 2 * * *`) run once together, and if 03:00 matches too it still runs once.
+  - When clocks go back, a local time that happens twice runs the first time only. When clocks in New York fall from 02:00 back to 01:00, `30 1 * * *` runs at the first 01:30 and not at the second.
+- **Wildcard expressions** have a `*` in the minute or the hour field: `* * * * *`, `*/15 * * * *`, `0 * * * *`, `*/20 1-3 * * *`, and `@hourly`. They follow the wall clock as it happens, so they never pause:
+  - When clocks go back, they run in both passes through the repeated hour. `* * * * *` still runs every real minute, and `0 * * * *` every real hour: 00:00, 01:00, 01:00 again, 02:00.
+  - When clocks go forward, nothing is caught up for the skipped times, which don't exist. `30 * * * *` runs at 01:30 and then at 03:30, with no extra run at 03:00.
 
-The same rules apply to `list`, which shows the next run as an instant in UTC.
-
+The same rules apply to `list`, which shows the next run as an instant in UTC, so `schedule:list` and the real runs never disagree.
 
 ### Once per workspace, in its local time
 
