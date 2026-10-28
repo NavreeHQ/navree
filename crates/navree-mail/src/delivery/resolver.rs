@@ -420,21 +420,21 @@ impl TransportResolver {
         let db = self.store.db().await?;
         let mut any = Filter::any().eq("tier", TransportTier::Platform.as_str());
         if let Some(domain) = sender_domain {
-            any = any.add(
+            any = any.group(
                 Filter::all()
                     .eq("tier", TransportTier::Domain.as_str())
                     .eq("domain", normalize_domain(domain)),
             );
         }
         if let Some(workspace) = scope.workspace_id {
-            any = any.add(
+            any = any.group(
                 Filter::all()
                     .eq("tier", TransportTier::Workspace.as_str())
                     .eq("workspace_id", workspace),
             );
         }
         if let Some(organization) = scope.organization_id {
-            any = any.add(
+            any = any.group(
                 Filter::all()
                     .eq("tier", TransportTier::Organization.as_str())
                     .eq("organization_id", organization),

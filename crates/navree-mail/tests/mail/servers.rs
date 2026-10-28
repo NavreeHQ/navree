@@ -137,14 +137,13 @@ where
         Server::MySql => Backend::MySql,
     };
     assert_eq!(Executor::backend(&*db), expected);
-    let outcome = futures_util::FutureExt::catch_unwind(std::panic::AssertUnwindSafe(scenario(
-        MailApp {
+    let outcome =
+        futures_util::FutureExt::catch_unwind(std::panic::AssertUnwindSafe(scenario(MailApp {
             app,
             fake,
             authorizer,
-        },
-    )))
-    .await;
+        })))
+        .await;
     if let Some(scratch) = scratch {
         scratch.drop().await;
     }
@@ -293,7 +292,10 @@ async fn delivery_log(mail: MailApp) {
         )
         .await
         .unwrap();
-    assert_eq!(to_one.data.iter().map(|d| d.id).collect::<Vec<_>>(), [ids[3]]);
+    assert_eq!(
+        to_one.data.iter().map(|d| d.id).collect::<Vec<_>>(),
+        [ids[3]]
+    );
 
     // Delivered, opened twice, clicked: the first open and click stick.
     let event = |kind| {
@@ -318,7 +320,11 @@ async fn delivery_log(mail: MailApp) {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(clicked.opened_at, Some(opened_at), "a later open changes nothing");
+    assert_eq!(
+        clicked.opened_at,
+        Some(opened_at),
+        "a later open changes nothing"
+    );
     assert!(clicked.clicked_at.is_some());
     let reread = deliveries.find(ids[0]).await.unwrap();
     assert_eq!(reread.status, DeliveryStatus::Delivered);
@@ -360,7 +366,11 @@ async fn delivery_log(mail: MailApp) {
     // An event for an unknown message is still logged.
     assert!(
         deliveries
-            .record(ProviderEvent::new("ses", "unknown", MailEventKind::Delivered))
+            .record(ProviderEvent::new(
+                "ses",
+                "unknown",
+                MailEventKind::Delivered
+            ))
             .await
             .unwrap()
             .is_none()
@@ -446,21 +456,47 @@ async fn suppressions(mail: MailApp) {
         .await
         .unwrap();
     let again = suppressions
-        .add(&uow, Some(workspace), "ada@example.com", SuppressionReason::Complaint, None)
+        .add(
+            &uow,
+            Some(workspace),
+            "ada@example.com",
+            SuppressionReason::Complaint,
+            None,
+        )
         .await
         .unwrap();
     assert_eq!(again.id, added.id, "an address is suppressed once per list");
     let everywhere = suppressions
-        .add(&uow, None, "grace@example.com", SuppressionReason::Unsubscribed, None)
+        .add(
+            &uow,
+            None,
+            "grace@example.com",
+            SuppressionReason::Unsubscribed,
+            None,
+        )
         .await
         .unwrap();
     let changes = uow.changes();
     assert_eq!(changes.len(), 2);
-    assert!(changes.iter().all(|c| c.op == ChangeOp::Created && c.entity == "mail_suppressions"));
+    assert!(
+        changes
+            .iter()
+            .all(|c| c.op == ChangeOp::Created && c.entity == "mail_suppressions")
+    );
     uow.commit().await.unwrap();
 
-    assert!(suppressions.is_suppressed(Some(workspace), "ada@example.com").await.unwrap());
-    assert!(!suppressions.is_suppressed(None, "ada@example.com").await.unwrap());
+    assert!(
+        suppressions
+            .is_suppressed(Some(workspace), "ada@example.com")
+            .await
+            .unwrap()
+    );
+    assert!(
+        !suppressions
+            .is_suppressed(None, "ada@example.com")
+            .await
+            .unwrap()
+    );
     assert!(
         suppressions
             .is_suppressed(Some(Uuid::now_v7()), "Grace <grace@example.com>")
@@ -476,9 +512,15 @@ async fn suppressions(mail: MailApp) {
         .list(Some(workspace), None, PageQuery::default())
         .await
         .unwrap();
-    assert_eq!(listed.data, [added.clone()]);
-    let all = suppressions.list(None, None, PageQuery::default()).await.unwrap();
-    assert_eq!(all.data.iter().map(|s| s.id).collect::<Vec<_>>(), [everywhere.id, added.id]);
+    assert_eq!(listed.data, std::slice::from_ref(&added));
+    let all = suppressions
+        .list(None, None, PageQuery::default())
+        .await
+        .unwrap();
+    assert_eq!(
+        all.data.iter().map(|s| s.id).collect::<Vec<_>>(),
+        [everywhere.id, added.id]
+    );
 
     // A rolled-back removal leaves the row.
     let uow = mail.uow().await;
@@ -489,19 +531,37 @@ async fn suppressions(mail: MailApp) {
     let uow = mail.uow().await;
     let removed = suppressions.remove(&uow, added.id).await.unwrap();
     assert_eq!(removed.id, added.id);
-    assert!(suppressions.remove_email(&uow, None, "grace@example.com").await.unwrap());
-    assert!(!suppressions.remove_email(&uow, None, "grace@example.com").await.unwrap());
+    assert!(
+        suppressions
+            .remove_email(&uow, None, "grace@example.com")
+            .await
+            .unwrap()
+    );
+    assert!(
+        !suppressions
+            .remove_email(&uow, None, "grace@example.com")
+            .await
+            .unwrap()
+    );
     assert!(matches!(
         suppressions.remove(&uow, Uuid::now_v7()).await,
         Err(MailError::NotFound(_))
     ));
     assert_eq!(
-        uow.changes().iter().filter(|c| c.op == ChangeOp::Deleted).count(),
+        uow.changes()
+            .iter()
+            .filter(|c| c.op == ChangeOp::Deleted)
+            .count(),
         2
     );
     uow.commit().await.unwrap();
     assert_eq!(
-        suppressions.list(None, None, PageQuery::default()).await.unwrap().meta.total,
+        suppressions
+            .list(None, None, PageQuery::default())
+            .await
+            .unwrap()
+            .meta
+            .total,
         0
     );
 }
@@ -530,7 +590,11 @@ async fn tenant_transports(mail: MailApp) {
         TransportConfig::Log,
     )
     .await;
-    set(TransportOwner::organization(organization), TransportConfig::Log).await;
+    set(
+        TransportOwner::organization(organization),
+        TransportConfig::Log,
+    )
+    .await;
     assert_eq!(domain.domain.as_deref(), Some("mail.acme.test"));
 
     let db = mail.get::<Db>().await;
@@ -538,13 +602,27 @@ async fn tenant_transports(mail: MailApp) {
         .await
         .unwrap()
         .unwrap();
-    assert!(!row.config.contains("topsecret"), "the settings are encrypted");
+    assert!(
+        !row.config.contains("topsecret"),
+        "the settings are encrypted"
+    );
     assert_eq!(resolver.config(platform.id).await.unwrap(), ses);
 
     let scope = MailScope::workspace(workspace).with_organization(organization);
-    let resolved = resolver.resolve(&scope, Some("mail.acme.test")).await.unwrap().unwrap();
-    assert_eq!((resolved.id, resolved.tier), (domain.id, TransportTier::Domain));
-    let resolved = resolver.resolve(&scope, Some("other.test")).await.unwrap().unwrap();
+    let resolved = resolver
+        .resolve(&scope, Some("mail.acme.test"))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        (resolved.id, resolved.tier),
+        (domain.id, TransportTier::Domain)
+    );
+    let resolved = resolver
+        .resolve(&scope, Some("other.test"))
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(resolved.id, workspace_one.id);
     let resolved = resolver
         .resolve(&MailScope::default(), None)
@@ -563,22 +641,53 @@ async fn tenant_transports(mail: MailApp) {
     let off = resolver.set_enabled(&uow, domain.id, false).await.unwrap();
     uow.commit().await.unwrap();
     assert!(!off.enabled);
-    let resolved = resolver.resolve(&scope, Some("mail.acme.test")).await.unwrap().unwrap();
+    let resolved = resolver
+        .resolve(&scope, Some("mail.acme.test"))
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(resolved.tier, TransportTier::Workspace);
-    assert_eq!(resolver.list(Some(TransportTier::Domain)).await.unwrap().len(), 1);
+    assert_eq!(
+        resolver
+            .list(Some(TransportTier::Domain))
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
     assert_eq!(resolver.list(None).await.unwrap().len(), 4);
 
     let uow = mail.uow().await;
-    assert!(resolver.remove(&uow, &TransportOwner::workspace(workspace)).await.unwrap());
-    assert!(!resolver.remove(&uow, &TransportOwner::workspace(workspace)).await.unwrap());
+    assert!(
+        resolver
+            .remove(&uow, &TransportOwner::workspace(workspace))
+            .await
+            .unwrap()
+    );
+    assert!(
+        !resolver
+            .remove(&uow, &TransportOwner::workspace(workspace))
+            .await
+            .unwrap()
+    );
     assert!(matches!(
         resolver.set_enabled(&uow, Uuid::now_v7(), true).await,
         Err(MailError::NotFound(_))
     ));
     uow.commit().await.unwrap();
-    assert!(resolver.get(&TransportOwner::workspace(workspace)).await.unwrap().is_none());
+    assert!(
+        resolver
+            .get(&TransportOwner::workspace(workspace))
+            .await
+            .unwrap()
+            .is_none()
+    );
     assert_eq!(
-        resolver.get(&TransportOwner::Platform).await.unwrap().map(|t| t.id),
+        resolver
+            .get(&TransportOwner::Platform)
+            .await
+            .unwrap()
+            .map(|t| t.id),
         Some(platform.id)
     );
 }
@@ -600,8 +709,14 @@ async fn outbox(mail: MailApp) {
     let outbox = mail.get::<Outbox>().await;
     let id = held.outbox_id.unwrap();
     let db = mail.get::<Db>().await;
-    let row = record::find::<OutboxRow, _>(&*db, id).await.unwrap().unwrap();
-    assert!(!row.message.contains("all@acme.test"), "the message is encrypted");
+    let row = record::find::<OutboxRow, _>(&*db, id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        !row.message.contains("all@acme.test"),
+        "the message is encrypted"
+    );
     assert_eq!(row.recipients, json!(["all@acme.test"]));
 
     let found = outbox.find(id).await.unwrap();
@@ -612,12 +727,21 @@ async fn outbox(mail: MailApp) {
         Some("<p>Welcome, Ada!</p>")
     );
     let listed = outbox
-        .list(Some(OutboxStatus::Held), Some(workspace), PageQuery::default())
+        .list(
+            Some(OutboxStatus::Held),
+            Some(workspace),
+            PageQuery::default(),
+        )
         .await
         .unwrap();
     assert_eq!(listed.data.iter().map(|h| h.id).collect::<Vec<_>>(), [id]);
     assert_eq!(
-        outbox.list(None, None, PageQuery::new(1, 1)).await.unwrap().meta.last_page,
+        outbox
+            .list(None, None, PageQuery::new(1, 1))
+            .await
+            .unwrap()
+            .meta
+            .last_page,
         2
     );
 
@@ -634,13 +758,20 @@ async fn outbox(mail: MailApp) {
         Err(MailError::Conflict(_))
     ));
 
-    let discarded = outbox.discard(other.outbox_id.unwrap(), Some(admin)).await.unwrap();
+    let discarded = outbox
+        .discard(other.outbox_id.unwrap(), Some(admin))
+        .await
+        .unwrap();
     assert_eq!(discarded.status, OutboxStatus::Discarded);
     assert!(matches!(
         outbox.release(discarded.id, None).await,
         Err(MailError::Conflict(_))
     ));
-    assert_eq!(mail.fake.sent().len(), 1, "only the released message went out");
+    assert_eq!(
+        mail.fake.sent().len(),
+        1,
+        "only the released message went out"
+    );
 }
 
 /// Eight admins release the same message (and one discards it) at the
@@ -660,7 +791,10 @@ async fn released_by_several_admins_at_once(mail: MailApp) {
         let outbox = outbox.clone();
         tasks.push(tokio::spawn(async move {
             if n == 4 {
-                outbox.discard(id, Some(Uuid::now_v7())).await.map(|_| false)
+                outbox
+                    .discard(id, Some(Uuid::now_v7()))
+                    .await
+                    .map(|_| false)
             } else {
                 outbox.release(id, Some(Uuid::now_v7())).await.map(|_| true)
             }

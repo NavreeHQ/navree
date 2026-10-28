@@ -191,9 +191,7 @@ impl Outbox {
         };
         let row = self
             .store
-            .in_uow(|uow| async move {
-                Ok(record::insert_returning(&uow, &row).await?)
-            })
+            .in_uow(|uow| async move { Ok(record::insert_returning(&uow, &row).await?) })
             .await?;
         tracing::info!(target: "navree::mail", outbox_id = %row.id, subject = %row.subject, "mail held for approval");
         Ok(HeldMail::from(&row))

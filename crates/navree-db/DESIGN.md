@@ -68,7 +68,7 @@ async fn demo(uow: &Uow, row: SuppressionRow) -> Result<(), navree_db::DbError> 
   type navree-db's values know works, `Option<T>` included.
 - `Filter`: `all()` / `any()` with `eq` (a NULL value is `IS NULL`),
   `compare`, `is_null`, `not_null`, `is_in` (empty matches nothing), `raw`
-  (a portable `?` fragment) and `add` (a nested group).
+  (a portable `?` fragment) and `group` (a nested group).
 - `Select<R>`: `filter`, `eq`, `order_by(_desc)`, `limit`, `offset`,
   `for_update` (nothing on SQLite, whose units of work begin `IMMEDIATE`);
   `all`, `one`, `count`, `page(PageQuery) -> Page<R>`; `statement(Backend)`.
