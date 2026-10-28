@@ -616,7 +616,9 @@ impl Uow {
     /// cleared after the observers, right before `COMMIT`; if that fails, the
     /// unit of work rolls back and the error is returned.
     pub async fn commit(&self) -> Result<(), DbErr> {
-        let committed = self.commit_tx().await;
+        // Boxed, as `begin`: the commit's future is deep.
+        let committing: BoxFuture<'_, Result<bool, DbErr>> = Box::pin(self.commit_tx());
+        let committed = committing.await;
         // Taken after the observers ran, so hooks they registered run too.
         let hooks = std::mem::take(&mut *lock(&self.inner.after_commit));
         if committed? {
@@ -724,6 +726,13 @@ impl Uow {
     /// rollback, and the hooks are dropped. Ending a finished unit of work
     /// does nothing.
     pub async fn rollback_as_committed(&self) -> Result<(), DbErr> {
+        // Boxed, as `begin`: ending the transaction's future is deep.
+        let ending: BoxFuture<'_, Result<(), DbErr>> = Box::pin(self.end_as_committed());
+        ending.await
+    }
+
+    /// [`rollback_as_committed`](Uow::rollback_as_committed), unboxed.
+    async fn end_as_committed(&self) -> Result<(), DbErr> {
         let current = std::mem::replace(&mut *self.inner.tx.lock().await, TxState::Done);
         let changes = std::mem::take(&mut *lock(&self.inner.changes));
         if matches!(current, TxState::Done) {
@@ -769,6 +778,13 @@ impl Uow {
     /// still held elsewhere (it then rolls back when the last holder drops
     /// it).
     pub async fn rollback(&self) -> Result<(), DbErr> {
+        // Boxed, as `begin`: ending the transaction's future is deep.
+        let ending: BoxFuture<'_, Result<(), DbErr>> = Box::pin(self.roll_back());
+        ending.await
+    }
+
+    /// [`rollback`](Uow::rollback), unboxed.
+    async fn roll_back(&self) -> Result<(), DbErr> {
         let current = std::mem::replace(&mut *self.inner.tx.lock().await, TxState::Done);
         lock(&self.inner.changes).clear();
         lock(&self.inner.after_commit).clear();
@@ -800,15 +816,19 @@ impl Uow {
     }
 
     /// Begins the unit of work's transaction: navree-db's own or SeaORM's,
-    /// as its `Db` says.
-    async fn begin(&self) -> Result<UowTx, DbErr> {
-        if self.inner.db.native_units_of_work() {
-            Ok(UowTx::Native(Arc::new(
-                self.begin_native().await.map_err(DbErr::from)?,
-            )))
-        } else {
-            Ok(UowTx::Sea(Arc::new(self.begin_sea().await?)))
-        }
+    /// as its `Db` says. Boxed: units of work are awaited deep inside
+    /// handlers, jobs and commands, and the drivers' futures are deep; a
+    /// boxed future keeps every caller's future type shallow.
+    fn begin(&self) -> BoxFuture<'_, Result<UowTx, DbErr>> {
+        Box::pin(async move {
+            if self.inner.db.native_units_of_work() {
+                Ok(UowTx::Native(Arc::new(
+                    self.begin_native().await.map_err(DbErr::from)?,
+                )))
+            } else {
+                Ok(UowTx::Sea(Arc::new(self.begin_sea().await?)))
+            }
+        })
     }
 
     /// The settings statement that follows `BEGIN`: the actor and request
