@@ -9,7 +9,7 @@ use axum::body::{Body, Bytes};
 use axum::extract::Path;
 use axum::extract::ws::WebSocketUpgrade;
 use axum::response::{IntoResponse, Response as HttpResponse};
-use http::header::{ACCEPT, ALLOW, CACHE_CONTROL, CONTENT_SECURITY_POLICY, CONTENT_TYPE};
+use http::header::{ACCEPT, ALLOW, CACHE_CONTROL, CONTENT_SECURITY_POLICY, CONTENT_TYPE, HOST};
 use http::request::Parts;
 use http::{HeaderMap, HeaderValue, Method, StatusCode};
 use navree_contracts::AuthState;
@@ -58,9 +58,9 @@ impl Controller for GraphqlController {
             )
             .name("graphql")
             .public(),
-            RouteDef::on(Method::GET, path, move |headers: HeaderMap| {
+            RouteDef::on(Method::GET, path, move |parts: Parts| {
                 let schema = get.clone();
-                async move { graphiql_page(&schema, &headers) }
+                async move { graphiql_page(&schema, &parts) }
             })
             .name("graphql.graphiql")
             .public(),
@@ -188,9 +188,9 @@ fn is_json(headers: &HeaderMap) -> bool {
 }
 
 /// `GET <path>`: GraphiQL for browsers when it is on; 405 otherwise.
-fn graphiql_page(schema: &GraphqlSchema, headers: &HeaderMap) -> HttpResponse {
+fn graphiql_page(schema: &GraphqlSchema, parts: &Parts) -> HttpResponse {
     let options = schema.options();
-    if options.graphiql && accepts_html(headers) {
+    if options.graphiql && accepts_html(&parts.headers) {
         let subscriptions = options.subscriptions.then(|| options.ws_path());
         let html = graphiql::page(&options.path, subscriptions.as_deref());
         return (
@@ -201,7 +201,8 @@ fn graphiql_page(schema: &GraphqlSchema, headers: &HeaderMap) -> HttpResponse {
                 ),
                 (
                     CONTENT_SECURITY_POLICY,
-                    HeaderValue::from_static(graphiql::CSP),
+                    HeaderValue::from_str(&graphiql::csp(request_host(parts)))
+                        .unwrap_or_else(|_| HeaderValue::from_static("default-src 'none'")),
                 ),
             ],
             html,
@@ -231,6 +232,16 @@ fn graphiql_asset(file: &str) -> HttpResponse {
         Bytes::from_static(asset.bytes),
     )
         .into_response()
+}
+
+/// The host the request was sent to: its `Host` header, else (HTTP/2) the
+/// authority of its URI.
+fn request_host(parts: &Parts) -> Option<&str> {
+    parts
+        .headers
+        .get(HOST)
+        .and_then(|value| value.to_str().ok())
+        .or_else(|| parts.uri.authority().map(|authority| authority.as_str()))
 }
 
 fn accepts_html(headers: &HeaderMap) -> bool {
