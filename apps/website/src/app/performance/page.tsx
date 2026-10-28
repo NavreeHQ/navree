@@ -824,6 +824,9 @@ export default async function PerformancePage() {
                   <dt className="font-mono text-[0.75rem] tracking-[0.06em] text-fg-3 uppercase sm:pt-0.5">{row.label}</dt>
                   <dd
                     className="text-[0.9375rem] leading-relaxed break-words text-fg-1 [&_code]:rounded [&_code]:bg-ink-2 [&_code]:px-1 [&_code]:py-px [&_code]:font-mono [&_code]:text-[0.8125rem] [&_code]:text-fg"
+                    // Shiki's output for a string that lives in this repository, highlighted at build time
+                    // (Shiki escapes the code it highlights).
+                    // nosemgrep: navree-raw-html
                     dangerouslySetInnerHTML={{ __html: row.html }}
                   />
                 </div>
@@ -934,7 +937,12 @@ export default async function PerformancePage() {
           <div className="min-w-0 lg:col-span-7">
             <div className="bezel [&_.code-block]:my-0">
               <CodeBlock data-title="Terminal" data-language="shellscript" className="shiki navree-night scroll-thin">
-                <span dangerouslySetInnerHTML={{ __html: reproduceHtml }} />
+                <span
+                  // Shiki's output for a string that lives in this repository, highlighted at build time
+                  // (Shiki escapes the code it highlights).
+                  // nosemgrep: navree-raw-html
+                  dangerouslySetInnerHTML={{ __html: reproduceHtml }}
+                />
               </CodeBlock>
             </div>
 

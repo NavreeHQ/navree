@@ -150,6 +150,9 @@ export function ApiDocument({ errorHtml }: { errorHtml: string }) {
       >
         <pre
           className="shiki navree-night scroll-thin overflow-x-auto bg-transparent! px-3.5 py-3 font-mono text-[0.78rem] leading-[1.7]"
+          // Shiki's output for a string that lives in this repository, highlighted at build time
+          // (Shiki escapes the code it highlights).
+          // nosemgrep: navree-raw-html
           dangerouslySetInnerHTML={{ __html: errorHtml }}
         />
       </Panel>

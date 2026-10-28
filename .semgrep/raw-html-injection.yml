@@ -1,0 +1,62 @@
+# Writing a string into the page as HTML is cross-site scripting unless the
+# string is known to be safe. React's `dangerouslySetInnerHTML`, Vue's
+# `v-html`, `innerHTML`, `insertAdjacentHTML` and `document.write` all skip the
+# escaping the frameworks do by default, so every use is a place where a user's
+# text could become a user's script.
+#
+# Not every use is a hole: server-rendered syntax highlighting (Shiki output of
+# strings that live in this repository) and JSON-LD that escapes `<` are
+# built from trusted input and escape it. Those are suppressed at the line,
+# with the reason:
+#   React:  // nosemgrep: navree-raw-html   (a comment between JSX attributes)
+#   Vue:    <!-- nosemgrep: navree-raw-html-vue -->   (the line above)
+# Everything else should render text, or sanitize first.
+rules:
+  - id: navree-raw-html
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >-
+      Raw HTML is written into the page. Render text instead, or sanitize it.
+      If the string is built only from trusted input (for example, build-time
+      syntax highlighting), suppress this line with
+      `// nosemgrep: navree-raw-html` and say why it is safe.
+    metadata:
+      category: security
+      cwe: "CWE-79: Cross-site Scripting"
+      confidence: HIGH
+    paths:
+      exclude:
+        - "**/*.test.ts"
+        - "**/*.test.tsx"
+        - "**/*.spec.ts"
+        - "**/*.spec.tsx"
+        - "**/e2e/**"
+    patterns:
+      - pattern-either:
+          # React: the `{ __html: .. }` object that dangerouslySetInnerHTML takes.
+          - pattern: '{ __html: $X }'
+          - pattern: $E.innerHTML = $X
+          - pattern: $E.outerHTML = $X
+          - pattern: $E.insertAdjacentHTML(...)
+          - pattern: document.write(...)
+          - pattern: document.writeln(...)
+      # Emptying an element is not injecting anything.
+      - pattern-not: $E.innerHTML = ""
+      - pattern-not: $E.innerHTML = ''
+
+  - id: navree-raw-html-vue
+    languages: [generic]
+    severity: ERROR
+    message: >-
+      `v-html` writes raw HTML into the page. Render text with mustache
+      interpolation, or sanitize it. If the string is built only from trusted
+      input, put `<!-- nosemgrep: navree-raw-html-vue -->` on the line above
+      and say why it is safe.
+    metadata:
+      category: security
+      cwe: "CWE-79: Cross-site Scripting"
+      confidence: HIGH
+    paths:
+      include:
+        - "*.vue"
+    pattern-regex: '\bv-html\s*='

@@ -18,4 +18,6 @@ COPY config ./config
 COPY --from=build /usr/local/bin/bench-loco ./bench-loco
 ENV LOCO_ENV=production
 EXPOSE 8080
+# A benchmark harness image: built and run only on a benchmarking machine, never deployed.
+# nosemgrep: dockerfile.security.missing-user.missing-user
 CMD ["/usr/app/bench-loco"]
