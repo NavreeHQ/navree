@@ -329,7 +329,11 @@ where
     /// How many entries the cache holds, expired ones that no read, write or
     /// [`sweep`](Cache::sweep) has removed yet included.
     pub fn len(&self) -> usize {
-        self.inner.cells.iter().map(|cell| cell.len.load(Relaxed)).sum()
+        self.inner
+            .cells
+            .iter()
+            .map(|cell| cell.len.load(Relaxed))
+            .sum()
     }
 
     /// Whether the cache holds no entries.

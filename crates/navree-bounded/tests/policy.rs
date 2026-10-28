@@ -189,7 +189,11 @@ fn a_scan_does_not_push_out_entries_that_are_read() {
         cache.insert(scan, scan);
         // The application reads its hot keys between scan inserts.
         let key = hot[(scan as usize) % hot.len()];
-        assert_eq!(cache.get(&key), Some(key), "hot key {key} lost at scan {scan}");
+        assert_eq!(
+            cache.get(&key),
+            Some(key),
+            "hot key {key} lost at scan {scan}"
+        );
     }
     for key in &hot {
         assert!(cache.contains_key(key), "hot key {key} lost");
@@ -233,7 +237,11 @@ fn the_capacity_is_split_over_shards_without_losing_any() {
             assert!(cache.shard_count() <= capacity.max(1));
             for key in 0..(capacity as u32 * 4 + 16) {
                 cache.insert(key, key);
-                assert!(cache.len() <= capacity, "len {} over {capacity}", cache.len());
+                assert!(
+                    cache.len() <= capacity,
+                    "len {} over {capacity}",
+                    cache.len()
+                );
             }
         }
     }
@@ -309,5 +317,8 @@ fn a_cache_is_shared_by_its_clones_and_debug_prints() {
     clone.insert(1, 1);
     assert_eq!(cache.get(&1), Some(1));
     let printed = format!("{cache:?}");
-    assert!(printed.contains("len: 1") && printed.contains("capacity: 10"), "{printed}");
+    assert!(
+        printed.contains("len: 1") && printed.contains("capacity: 10"),
+        "{printed}"
+    );
 }

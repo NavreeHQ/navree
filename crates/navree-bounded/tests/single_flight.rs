@@ -159,7 +159,11 @@ async fn a_cancelled_loader_hands_the_load_to_a_waiter() {
     assert!(leader.is_err(), "the first caller timed out");
     assert_eq!(b, c, "both waiters got the value of the one that took over");
     assert!(b == 2 || b == 3);
-    assert_eq!(started.load(SeqCst), 2, "the cancelled load and the one that replaced it");
+    assert_eq!(
+        started.load(SeqCst),
+        2,
+        "the cancelled load and the one that replaced it"
+    );
     assert_eq!(cache.get("k"), Some(b));
 }
 
@@ -196,7 +200,10 @@ async fn a_panicking_loader_does_not_wedge_the_key() {
         9
     });
     let (leader, waiter) = futures::join!(leader, waiter);
-    assert!(leader.is_err(), "the panic reached the caller that ran the load");
+    assert!(
+        leader.is_err(),
+        "the panic reached the caller that ran the load"
+    );
     assert_eq!(waiter, 9, "the waiter loaded the value itself");
     assert_eq!(cache.get("k"), Some(9));
 }
@@ -294,7 +301,11 @@ async fn a_call_after_an_invalidation_starts_a_fresh_load() {
     let (first, second) = futures::join!(first, second);
     assert_eq!((first, second), (1, 2));
     assert_eq!(loads.load(SeqCst), 2);
-    assert_eq!(cache.get("k"), Some(2), "the load started after the invalidation is the one stored");
+    assert_eq!(
+        cache.get("k"),
+        Some(2),
+        "the load started after the invalidation is the one stored"
+    );
 }
 
 #[tokio::test(start_paused = true)]
@@ -316,7 +327,9 @@ async fn a_hit_never_runs_the_loader() {
     let cache = cache();
     cache.insert("k".to_owned(), 1);
     let value = cache
-        .get_with("k".to_owned(), async { unreachable!("the loader must not run on a hit") })
+        .get_with("k".to_owned(), async {
+            unreachable!("the loader must not run on a hit")
+        })
         .await;
     assert_eq!(value, 1);
 }
@@ -329,7 +342,11 @@ fn a_panicking_compute_closure_empties_its_shard_and_the_cache_carries_on() {
         cache.compute(&2, |_| -> Compute<u8> { panic!("the closure panicked") })
     }));
     assert!(result.is_err());
-    assert_eq!(cache.get(&1), None, "the shard was emptied, not left half updated");
+    assert_eq!(
+        cache.get(&1),
+        None,
+        "the shard was emptied, not left half updated"
+    );
     cache.insert(3, 3);
     assert_eq!(cache.get(&3), Some(3));
     assert_eq!(cache.len(), 1);

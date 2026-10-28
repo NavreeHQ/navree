@@ -42,9 +42,10 @@
 //!   intrusive doubly linked queue of the slab's entries. Lookups, inserts,
 //!   removals and the queue's relinking cost a constant number of steps.
 //!   Eviction is amortized O(1) (see below).
-//! - **No unsafe code**, here and in this crate's one dependency on the
-//!   table (`hashbrown`'s raw `HashTable`, which keeps each key once, in
-//!   the slab).
+//! - **No unsafe code in this crate** (`#![forbid(unsafe_code)]`). The table
+//!   is `hashbrown`'s `HashTable`, the implementation under the standard
+//!   library's `HashMap`; used raw, it holds slab indices, so each key is
+//!   stored once, in the slab.
 //! - **Entries are dropped outside the lock.** Whatever a write removes or
 //!   replaces is dropped after the shard's lock is released, so a slow
 //!   `Drop` never holds up other callers.
