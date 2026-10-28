@@ -1,0 +1,7 @@
+---
+source: crates/navree-orm/tests/render/lowering.rs
+expression: "per_dialect(|d| render_insert(&archive, d))"
+---
+PostgreSQL: INSERT INTO "archived_deals" ("id", "title") SELECT "id", "title" FROM "deals" ON CONFLICT DO NOTHING
+MySQL: INSERT IGNORE INTO `archived_deals` (`id`, `title`) SELECT `id`, `title` FROM `deals`
+SQLite: INSERT INTO "archived_deals" ("id", "title") SELECT "id", "title" FROM "deals" WHERE TRUE ON CONFLICT DO NOTHING

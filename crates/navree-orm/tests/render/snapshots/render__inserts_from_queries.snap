@@ -1,0 +1,10 @@
+---
+source: crates/navree-orm/tests/render/main.rs
+expression: "statement(archive(None, true))"
+---
+PostgreSQL: INSERT INTO "archived_deals" ("id", "title") SELECT "id", "title" FROM "deals" WHERE "stage" = $1
+  values: [String(Some("lost"))]
+MySQL: INSERT INTO `archived_deals` (`id`, `title`) SELECT `id`, `title` FROM `deals` WHERE `stage` = ?
+  values: [String(Some("lost"))]
+SQLite: INSERT INTO "archived_deals" ("id", "title") SELECT "id", "title" FROM "deals" WHERE "stage" = ?
+  values: [String(Some("lost"))]

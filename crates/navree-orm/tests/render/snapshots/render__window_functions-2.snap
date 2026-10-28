@@ -1,0 +1,7 @@
+---
+source: crates/navree-orm/tests/render/main.rs
+expression: "query(Query::from(deals().column_as(Expr::func(\"SUM\",\nvec![col(\"amount_cents\")]).over(Vec::new(), Vec::new()), \"running\")))"
+---
+PostgreSQL: SELECT SUM("amount_cents") OVER () AS "running" FROM "deals"
+MySQL: SELECT SUM(`amount_cents`) OVER () AS `running` FROM `deals`
+SQLite: SELECT SUM("amount_cents") OVER () AS "running" FROM "deals"

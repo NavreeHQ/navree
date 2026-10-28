@@ -1,0 +1,14 @@
+---
+source: crates/navree-orm/tests/render/main.rs
+expression: out
+---
+PostgreSQL: TRUNCATE TABLE "deals" RESTART IDENTITY
+MySQL: TRUNCATE TABLE `deals`
+SQLite: DELETE FROM "sqlite_sequence" WHERE "name" = ? -- [String(Some("deals"))]
+SQLite: DELETE FROM "deals"
+SQLite: render alone: invalid query: emptying a table is 2 statement(s) with values on SQLite: render it with render_all
+PostgreSQL: TRUNCATE TABLE "audit"."events" RESTART IDENTITY CASCADE
+MySQL: TRUNCATE TABLE `audit`.`events`
+SQLite: DELETE FROM "audit"."sqlite_sequence" WHERE "name" = ? -- [String(Some("events"))]
+SQLite: DELETE FROM "audit"."events"
+SQLite: render alone: invalid query: emptying a table is 2 statement(s) with values on SQLite: render it with render_all

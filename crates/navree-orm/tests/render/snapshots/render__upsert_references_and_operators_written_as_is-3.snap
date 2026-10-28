@@ -1,0 +1,7 @@
+---
+source: crates/navree-orm/tests/render/main.rs
+expression: "expr(col(\"a\").binary(BinaryOp::Custom(\"= 1; DROP TABLE x\".into()),\nval(1_i64)))"
+---
+PostgreSQL: error: invalid query: `= 1; DROP TABLE x` is not an operator the renderer writes
+MySQL: error: invalid query: `= 1; DROP TABLE x` is not an operator the renderer writes
+SQLite: error: invalid query: `= 1; DROP TABLE x` is not an operator the renderer writes
