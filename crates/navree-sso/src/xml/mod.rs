@@ -160,10 +160,6 @@ fn malformed(error: impl std::fmt::Display) -> XmlError {
     XmlError::Malformed(error.to_string())
 }
 
-fn utf8(bytes: &[u8]) -> Result<&str, XmlError> {
-    std::str::from_utf8(bytes).map_err(|_| XmlError::Malformed("invalid UTF-8".to_owned()))
-}
-
 /// Whether `c` may appear in an XML 1.0 document.
 fn is_xml_char(c: char) -> bool {
     matches!(c, '\t' | '\n' | '\r' | '\u{20}'..='\u{D7FF}' | '\u{E000}'..='\u{FFFD}' | '\u{10000}'..)
@@ -267,14 +263,14 @@ impl Builder {
         if self.stack.len() >= self.limits.max_depth {
             return Err(XmlError::TooLarge("nested too deeply"));
         }
-        let name = utf8(start.name().as_ref())?.to_owned();
+        let name = start.name().into_inner().to_owned();
         let mut decls: Vec<(Option<String>, String)> = Vec::new();
         let mut raw_attrs: Vec<(String, String)> = Vec::new();
         let mut attributes = start.attributes();
         attributes.with_checks(true);
         for attr in attributes {
             let attr = attr.map_err(malformed)?;
-            let key = utf8(attr.key.as_ref())?.to_owned();
+            let key = attr.key.into_inner().to_owned();
             let value = attr
                 .normalized_value(XmlVersion::Implicit1_0)
                 .map_err(|error| match &error {
@@ -396,8 +392,7 @@ impl Document {
             match reader.read_event().map_err(malformed)? {
                 Event::Decl(decl) => {
                     if let Some(encoding) = decl.encoding() {
-                        let encoding = encoding.map_err(malformed)?;
-                        let encoding = utf8(&encoding)?.to_owned();
+                        let encoding = encoding.map_err(malformed)?.into_owned();
                         if !encoding.eq_ignore_ascii_case("utf-8") {
                             return Err(XmlError::Encoding(encoding));
                         }
@@ -413,7 +408,6 @@ impl Document {
                 }
                 Event::End(_) => builder.end(),
                 Event::Text(text) => {
-                    let text = text.decode().map_err(malformed)?;
                     if text.contains('&') {
                         return Err(XmlError::Malformed("a bare `&`".to_owned()));
                     }
@@ -425,36 +419,31 @@ impl Document {
                             "CDATA outside the root element".to_owned(),
                         ));
                     }
-                    builder.text(&data.decode().map_err(malformed)?)?;
+                    builder.text(&data)?;
                 }
                 Event::GeneralRef(reference) => {
                     let c = match reference.resolve_char_ref().map_err(malformed)? {
                         Some(c) => c,
-                        None => {
-                            let name = reference.decode().map_err(malformed)?;
-                            match name.as_ref() {
-                                "lt" => '<',
-                                "gt" => '>',
-                                "amp" => '&',
-                                "apos" => '\'',
-                                "quot" => '"',
-                                other => return Err(XmlError::UndefinedEntity(other.to_owned())),
-                            }
-                        }
+                        None => match &*reference {
+                            "lt" => '<',
+                            "gt" => '>',
+                            "amp" => '&',
+                            "apos" => '\'',
+                            "quot" => '"',
+                            other => return Err(XmlError::UndefinedEntity(other.to_owned())),
+                        },
                     };
                     builder.text(c.encode_utf8(&mut [0; 4]))?;
                 }
                 Event::Comment(comment) => {
                     if !builder.stack.is_empty() {
-                        builder.push(Node::Comment(
-                            comment.decode().map_err(malformed)?.into_owned(),
-                        ))?;
+                        builder.push(Node::Comment(comment.into_inner().into_owned()))?;
                     }
                 }
                 Event::PI(pi) => {
                     if !builder.stack.is_empty() {
-                        let target = utf8(pi.target())?.to_owned();
-                        let data = utf8(pi.content())?.trim_start().to_owned();
+                        let target = pi.target().to_owned();
+                        let data = pi.content().trim_start().to_owned();
                         builder.push(Node::Pi { target, data })?;
                     }
                 }

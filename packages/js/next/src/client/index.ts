@@ -13,8 +13,10 @@ export {
   useDataTable,
   type DataTableLabels,
   type DataTableProps,
+  type NavreeColumnDef,
   type NavreeColumnMeta,
   type NavreeTable,
+  type NavreeTableFeatures,
   type PaginationProps,
   type UseDataTableOptions,
 } from "./data-table.js";

@@ -11,8 +11,10 @@ export {
   NavreePagination,
   useDataTable,
   type DataTableLabels,
+  type NavreeColumnDef,
   type NavreeColumnMeta,
   type NavreeTable,
+  type NavreeTableFeatures,
   type UseDataTableOptions,
 } from "./data-table.js";
 export { applyFieldErrors, type ApplyFieldErrorsOptions } from "./forms.js";
