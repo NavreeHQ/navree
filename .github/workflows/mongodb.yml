@@ -56,11 +56,30 @@ jobs:
 
       - name: Start MongoDB 8.0 as a single-node replica set
         run: |
-          docker run --detach --name mongodb --publish 27017:27017 mongo:8.0 --replSet rs0 --bind_ip_all
-          for attempt in $(seq 1 30); do
-            docker exec mongodb mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok' && break
-            sleep 2
+          # mongod sometimes exits right after starting on a fresh runner: show
+          # why, and start it again (up to three times) instead of failing.
+          ready=""
+          for start in 1 2 3; do
+            docker rm --force mongodb >/dev/null 2>&1 || true
+            docker run --detach --name mongodb --publish 27017:27017 mongo:8.0 --replSet rs0 --bind_ip_all
+            for attempt in $(seq 1 30); do
+              if [ "$(docker inspect --format '{{.State.Running}}' mongodb)" != "true" ]; then
+                echo "mongod exited on start $start (exit code $(docker inspect --format '{{.State.ExitCode}}' mongodb)):" >&2
+                docker logs mongodb 2>&1 | tail -n 40 >&2
+                break
+              fi
+              if docker exec mongodb mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok' >/dev/null 2>&1; then
+                ready=yes
+                break
+              fi
+              sleep 2
+            done
+            [ -n "$ready" ] && break
           done
+          if [ -z "$ready" ]; then
+            echo "MongoDB did not start" >&2
+            exit 1
+          fi
           # The member's address is the one the tests reach it by.
           docker exec mongodb mongosh --quiet --eval 'rs.initiate({ _id: "rs0", members: [{ _id: 0, host: "127.0.0.1:27017" }] })'
           for attempt in $(seq 1 30); do
