@@ -288,7 +288,12 @@ async fn navree_mcp_asks_a_built_app() {
     assert_eq!(routes[0]["module"], "NotesModule");
     assert_eq!(routes[0]["handler"], "NotesController::index");
 
-    let (error, text) = call(&mut client, "module_graph", json!({"module": "NotesModule"})).await;
+    let (error, text) = call(
+        &mut client,
+        "module_graph",
+        json!({"module": "NotesModule"}),
+    )
+    .await;
     assert!(!error, "{text}");
     let notes: Value = serde_json::from_str(&text).unwrap();
     assert!(

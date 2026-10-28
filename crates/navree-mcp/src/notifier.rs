@@ -276,7 +276,9 @@ impl Channel {
     /// Whether the session or stream ended for good.
     fn is_gone(&self) -> bool {
         match self {
-            Channel::Session(session) => session.upgrade().is_none_or(|session| session.is_closed()),
+            Channel::Session(session) => {
+                session.upgrade().is_none_or(|session| session.is_closed())
+            }
             Channel::Listen { outlet, .. } => outlet.is_closed(),
         }
     }
@@ -314,7 +316,11 @@ mod tests {
             listened.recv().await.unwrap()["params"],
             json!({ "uri": "crm://x", "_meta": { META_SUBSCRIPTION_ID: 9 } })
         );
-        assert_eq!(notifier.prompts_changed().await, 1, "the stream took tools only");
+        assert_eq!(
+            notifier.prompts_changed().await,
+            1,
+            "the stream took tools only"
+        );
         assert_eq!(notifier.tools_changed().await, 2);
 
         // A gone stream is forgotten; a closed session too.

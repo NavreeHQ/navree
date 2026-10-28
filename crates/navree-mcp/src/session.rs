@@ -117,7 +117,10 @@ impl Session {
 
     /// Notes activity (requests keep a session alive).
     pub(crate) fn touch(&self) {
-        *self.last_seen.lock().unwrap_or_else(PoisonError::into_inner) = Instant::now();
+        *self
+            .last_seen
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = Instant::now();
     }
 
     /// Whether the session has been idle for `ttl`.

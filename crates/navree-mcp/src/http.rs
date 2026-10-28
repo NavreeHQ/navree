@@ -257,7 +257,10 @@ impl Transport {
         principal: &Principal,
         request: &RpcRequest,
     ) -> Checked<Response> {
-        let Some(requested) = request.params.get("protocolVersion").and_then(Value::as_str)
+        let Some(requested) = request
+            .params
+            .get("protocolVersion")
+            .and_then(Value::as_str)
         else {
             return Ok(json_response(
                 StatusCode::OK,
@@ -289,10 +292,7 @@ impl Transport {
             client,
         );
         self.sessions.insert(&session).await;
-        let answer = jsonrpc::result(
-            &request.id,
-            self.handler.info().initialize_result(version),
-        );
+        let answer = jsonrpc::result(&request.id, self.handler.info().initialize_result(version));
         let mut response = json_response(StatusCode::OK, &answer);
         if let Ok(value) = HeaderValue::from_str(&session.id) {
             response.headers_mut().insert(SESSION_HEADER, value);
@@ -315,7 +315,12 @@ impl Transport {
 
     /// A request in a session. Disconnecting does not cancel it (the
     /// handshake protocols cancel with `notifications/cancelled`).
-    async fn in_session(&self, session: &Arc<Session>, caller: Caller, request: RpcRequest) -> Response {
+    async fn in_session(
+        &self,
+        session: &Arc<Session>,
+        caller: Caller,
+        request: RpcRequest,
+    ) -> Response {
         let prepared = match lifecycle::prepare(&request, Some(&session.version), false) {
             Ok(prepared) => prepared,
             Err(error) => {
@@ -693,7 +698,8 @@ fn check_standard_headers(
     message: &Message,
     tool_schema: impl Fn(&str) -> Option<Value>,
 ) -> Checked<()> {
-    let applies = header(headers, VERSION_HEADER)?.is_some_and(|version| version >= STATELESS_VERSION);
+    let applies =
+        header(headers, VERSION_HEADER)?.is_some_and(|version| version >= STATELESS_VERSION);
     if !applies {
         return Ok(());
     }
@@ -747,12 +753,17 @@ fn check_standard_headers(
         "resources/read" | "resources/subscribe" | "resources/unsubscribe" => Some("uri"),
         _ => None,
     };
-    if let Some(expected) = name_key.and_then(|key| params.get(key)).and_then(Value::as_str) {
+    if let Some(expected) = name_key
+        .and_then(|key| params.get(key))
+        .and_then(Value::as_str)
+    {
         let Some(raw) = single(NAME_HEADER)? else {
-            return Err(mismatch(format!("missing required Mcp-Name header for `{method}`")));
+            return Err(mismatch(format!(
+                "missing required Mcp-Name header for `{method}`"
+            )));
         };
-        let decoded =
-            decode_header(raw).ok_or_else(|| mismatch("Mcp-Name header is not valid Base64".to_owned()))?;
+        let decoded = decode_header(raw)
+            .ok_or_else(|| mismatch("Mcp-Name header is not valid Base64".to_owned()))?;
         if decoded != expected {
             return Err(mismatch(format!(
                 "Mcp-Name header `{decoded}` does not match body value `{expected}`"
@@ -799,7 +810,11 @@ fn check_standard_headers(
 /// The `x-mcp-header` annotations of a tool schema: the property path and
 /// the header name.
 fn param_headers(schema: &Value) -> Vec<(Vec<String>, String)> {
-    fn walk(properties: Option<&Value>, path: &mut Vec<String>, out: &mut Vec<(Vec<String>, String)>) {
+    fn walk(
+        properties: Option<&Value>,
+        path: &mut Vec<String>,
+        out: &mut Vec<(Vec<String>, String)>,
+    ) {
         let Some(Value::Object(properties)) = properties else {
             return;
         };
@@ -845,7 +860,10 @@ fn header<'a>(headers: &'a HeaderMap, name: &str) -> Checked<Option<&'a str>> {
     match headers.get(name) {
         None => Ok(None),
         Some(value) => value.to_str().map(Some).map_err(|_| {
-            status_error(StatusCode::BAD_REQUEST, &format!("The {name} header is not valid text"))
+            status_error(
+                StatusCode::BAD_REQUEST,
+                &format!("The {name} header is not valid text"),
+            )
         }),
     }
 }
@@ -1130,7 +1148,10 @@ mod tests {
     #[test]
     fn standard_header_values_may_be_base64() {
         assert_eq!(decode_header("list_deals").as_deref(), Some("list_deals"));
-        assert_eq!(decode_header("=?base64?Y2Fmw6k=?=").as_deref(), Some("café"));
+        assert_eq!(
+            decode_header("=?base64?Y2Fmw6k=?=").as_deref(),
+            Some("café")
+        );
         assert_eq!(decode_header("=?base64?not base64?="), None);
     }
 
@@ -1146,7 +1167,10 @@ mod tests {
         assert_eq!(
             headers,
             [
-                (vec!["filter".to_owned(), "tenant".to_owned()], "tenant".to_owned()),
+                (
+                    vec!["filter".to_owned(), "tenant".to_owned()],
+                    "tenant".to_owned()
+                ),
                 (vec!["region".to_owned()], "region".to_owned()),
             ]
         );
@@ -1155,11 +1179,23 @@ mod tests {
     #[test]
     fn stateless_errors_map_to_statuses() {
         let error = |code| RpcError::new(code, "", None);
-        assert_eq!(stateless_status(&error(-32022), false), StatusCode::BAD_REQUEST);
-        assert_eq!(stateless_status(&error(-32020), false), StatusCode::BAD_REQUEST);
-        assert_eq!(stateless_status(&error(-32602), true), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            stateless_status(&error(-32022), false),
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            stateless_status(&error(-32020), false),
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            stateless_status(&error(-32602), true),
+            StatusCode::BAD_REQUEST
+        );
         assert_eq!(stateless_status(&error(-32602), false), StatusCode::OK);
-        assert_eq!(stateless_status(&error(-32601), false), StatusCode::NOT_FOUND);
+        assert_eq!(
+            stateless_status(&error(-32601), false),
+            StatusCode::NOT_FOUND
+        );
         assert_eq!(stateless_status(&error(-32603), false), StatusCode::OK);
     }
 
@@ -1178,7 +1214,10 @@ mod tests {
         );
         tx.send(json!(2)).await.unwrap();
         drop(tx);
-        assert_eq!(stream.next().await.unwrap(), Bytes::from("event: message\ndata: 2\n\n"));
+        assert_eq!(
+            stream.next().await.unwrap(),
+            Bytes::from("event: message\ndata: 2\n\n")
+        );
         assert!(stream.next().await.is_none());
     }
 

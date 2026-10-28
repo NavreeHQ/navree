@@ -136,7 +136,10 @@ async fn the_handshake_lists_and_calls() {
     assert_eq!(info["serverInfo"]["name"], "navree-crm");
     assert_eq!(info["capabilities"]["tools"]["listChanged"], true);
 
-    assert_eq!(client.request(1, "ping", Value::Null).await["result"], json!({}));
+    assert_eq!(
+        client.request(1, "ping", Value::Null).await["result"],
+        json!({})
+    );
     let tools = client.request(2, "tools/list", json!({})).await;
     let names: Vec<&str> = tools["result"]["tools"]
         .as_array()

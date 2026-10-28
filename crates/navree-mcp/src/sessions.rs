@@ -44,7 +44,11 @@ pub(crate) struct Sessions {
 }
 
 impl Sessions {
-    pub(crate) fn new(cache: Option<Arc<Cache>>, ttl: Duration, notifier: Arc<McpNotifier>) -> Self {
+    pub(crate) fn new(
+        cache: Option<Arc<Cache>>,
+        ttl: Duration,
+        notifier: Arc<McpNotifier>,
+    ) -> Self {
         Self {
             live: DashMap::new(),
             stored: DashMap::new(),

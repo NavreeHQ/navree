@@ -375,17 +375,29 @@ mod tests {
         assert_eq!(error.code, INVALID_PARAMS);
         assert!(error.message.contains(META_PROTOCOL_VERSION), "{error}");
         assert!(error.message.contains(META_CLIENT_CAPABILITIES), "{error}");
-        let prepared =
-            prepare(&request("tools/list", full_meta(STATELESS_VERSION)), None, true).unwrap();
+        let prepared = prepare(
+            &request("tools/list", full_meta(STATELESS_VERSION)),
+            None,
+            true,
+        )
+        .unwrap();
         assert!(!prepared.legacy);
         assert!(prepared.stateless_shapes());
         // Discovery always needs it.
-        assert!(prepare(&request("server/discover", json!({})), Some("2025-11-25"), false).is_err());
+        assert!(
+            prepare(
+                &request("server/discover", json!({})),
+                Some("2025-11-25"),
+                false
+            )
+            .is_err()
+        );
     }
 
     #[test]
     fn unknown_versions_are_refused() {
-        let error = prepare(&request("tools/list", full_meta("2099-01-01")), None, true).unwrap_err();
+        let error =
+            prepare(&request("tools/list", full_meta("2099-01-01")), None, true).unwrap_err();
         assert_eq!(error.code, UNSUPPORTED_PROTOCOL_VERSION);
         assert_eq!(error.data.unwrap()["requested"], "2099-01-01");
     }
