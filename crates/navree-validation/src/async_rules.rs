@@ -327,7 +327,7 @@ impl AsyncRule {
         RuleError::Database {
             rule: self.rule(),
             field: self.field.clone(),
-            source,
+            source: Box::new(source),
         }
     }
 
@@ -426,9 +426,9 @@ pub enum RuleError {
         rule: &'static str,
         /// The validated field.
         field: String,
-        /// The database error.
+        /// The database error (boxed: it is large).
         #[source]
-        source: DbError,
+        source: Box<DbError>,
     },
     /// A [`UowCheck`] failed to run.
     #[error("the `{rule}` rule on `{field}` could not be checked: {source}")]
