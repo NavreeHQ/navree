@@ -862,6 +862,41 @@
         ],
         "type": "object"
       },
+      "NewPushSubscription": {
+        "description": "A browser push subscription, as `PushSubscription.toJSON()` gives it.",
+        "properties": {
+          "endpoint": {
+            "format": "uri",
+            "type": "string"
+          },
+          "expirationTime": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "keys": {
+            "properties": {
+              "auth": {
+                "type": "string"
+              },
+              "p256dh": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "p256dh",
+              "auth"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "endpoint",
+          "keys"
+        ],
+        "type": "object"
+      },
       "Notification": {
         "description": "A notification stored by the database channel.",
         "properties": {
@@ -945,6 +980,281 @@
           "data",
           "meta"
         ],
+        "type": "object"
+      },
+      "NotificationPreferences": {
+        "description": "Notification preferences with the workspace's defaults and the effective value of each category.",
+        "properties": {
+          "categories": {
+            "items": {
+              "properties": {
+                "category": {
+                  "type": "string"
+                },
+                "channels": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "type": "object"
+                },
+                "digest": {
+                  "enum": [
+                    "off",
+                    "hourly",
+                    "daily",
+                    "weekly"
+                  ],
+                  "type": "string"
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "types": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              },
+              "required": [
+                "category",
+                "types",
+                "required",
+                "digest",
+                "channels"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "channels": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "data": {
+            "description": "Notification preferences: every field is optional and inherited when left out.",
+            "properties": {
+              "categories": {
+                "additionalProperties": {
+                  "properties": {
+                    "channels": {
+                      "additionalProperties": {
+                        "type": "boolean"
+                      },
+                      "description": "Channel switches (mail, database, slack, teams, sms, whatsapp, web_push).",
+                      "type": "object"
+                    },
+                    "digest": {
+                      "enum": [
+                        "off",
+                        "hourly",
+                        "daily",
+                        "weekly"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "type": "object"
+              },
+              "channels": {
+                "additionalProperties": {
+                  "type": "boolean"
+                },
+                "description": "Channel switches (mail, database, slack, teams, sms, whatsapp, web_push).",
+                "type": "object"
+              },
+              "digest": {
+                "enum": [
+                  "off",
+                  "hourly",
+                  "daily",
+                  "weekly"
+                ],
+                "type": "string"
+              },
+              "quiet_hours": {
+                "properties": {
+                  "end": {
+                    "examples": [
+                      "07:00"
+                    ],
+                    "type": "string"
+                  },
+                  "start": {
+                    "examples": [
+                      "22:00"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "start",
+                  "end"
+                ],
+                "type": "object"
+              }
+            },
+            "type": "object"
+          },
+          "time_zone": {
+            "examples": [
+              "Asia/Kolkata"
+            ],
+            "type": "string"
+          },
+          "workspace": {
+            "anyOf": [
+              {
+                "description": "Notification preferences: every field is optional and inherited when left out.",
+                "properties": {
+                  "categories": {
+                    "additionalProperties": {
+                      "properties": {
+                        "channels": {
+                          "additionalProperties": {
+                            "type": "boolean"
+                          },
+                          "description": "Channel switches (mail, database, slack, teams, sms, whatsapp, web_push).",
+                          "type": "object"
+                        },
+                        "digest": {
+                          "enum": [
+                            "off",
+                            "hourly",
+                            "daily",
+                            "weekly"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "type": "object"
+                  },
+                  "channels": {
+                    "additionalProperties": {
+                      "type": "boolean"
+                    },
+                    "description": "Channel switches (mail, database, slack, teams, sms, whatsapp, web_push).",
+                    "type": "object"
+                  },
+                  "digest": {
+                    "enum": [
+                      "off",
+                      "hourly",
+                      "daily",
+                      "weekly"
+                    ],
+                    "type": "string"
+                  },
+                  "quiet_hours": {
+                    "properties": {
+                      "end": {
+                        "examples": [
+                          "07:00"
+                        ],
+                        "type": "string"
+                      },
+                      "start": {
+                        "examples": [
+                          "22:00"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "start",
+                      "end"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "data",
+          "workspace",
+          "categories",
+          "channels",
+          "time_zone"
+        ],
+        "type": "object"
+      },
+      "NotificationPreferencesPatch": {
+        "description": "A JSON merge patch of the preferences: objects merge, null removes a choice.",
+        "properties": {
+          "categories": {
+            "additionalProperties": {
+              "properties": {
+                "channels": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "description": "Channel switches (mail, database, slack, teams, sms, whatsapp, web_push).",
+                  "type": "object"
+                },
+                "digest": {
+                  "enum": [
+                    "off",
+                    "hourly",
+                    "daily",
+                    "weekly"
+                  ],
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "object"
+          },
+          "channels": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "description": "Channel switches (mail, database, slack, teams, sms, whatsapp, web_push).",
+            "type": "object"
+          },
+          "digest": {
+            "enum": [
+              "off",
+              "hourly",
+              "daily",
+              "weekly"
+            ],
+            "type": "string"
+          },
+          "quiet_hours": {
+            "properties": {
+              "end": {
+                "examples": [
+                  "07:00"
+                ],
+                "type": "string"
+              },
+              "start": {
+                "examples": [
+                  "22:00"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "start",
+              "end"
+            ],
+            "type": "object"
+          }
+        },
         "type": "object"
       },
       "NotificationSettings": {
@@ -1350,6 +1660,64 @@
         "required": [
           "key",
           "name"
+        ],
+        "type": "object"
+      },
+      "PushSubscription": {
+        "description": "A saved push subscription.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "endpoint": {
+            "format": "uri",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "last_used_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "notifiable_id": {
+            "type": "string"
+          },
+          "notifiable_type": {
+            "type": "string"
+          },
+          "user_agent": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "notifiable_type",
+          "notifiable_id",
+          "endpoint",
+          "user_agent",
+          "created_at",
+          "last_used_at"
+        ],
+        "type": "object"
+      },
+      "PushUnsubscribe": {
+        "properties": {
+          "endpoint": {
+            "format": "uri",
+            "type": "string"
+          }
+        },
+        "required": [
+          "endpoint"
         ],
         "type": "object"
       },
@@ -2103,6 +2471,14 @@
         ],
         "type": "object"
       },
+      "WorkspaceKind": {
+        "description": "What a workspace holds: a team's own data, or a demo seeded from\nfixtures by the app's [`DemoSeeder`](crate::DemoSeeder)s.\n\nStored in `workspaces.kind` as `live` or `demo`; the API returns it as\n`kind`, so a front end can offer a Live/Demo switch.",
+        "enum": [
+          "live",
+          "demo"
+        ],
+        "type": "string"
+      },
       "WorkspaceResource": {
         "description": "A workspace as the API returns it, with the caller's role.",
         "properties": {
@@ -2127,6 +2503,10 @@
             "description": "The id.",
             "format": "uuid",
             "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/WorkspaceKind",
+            "description": "`live` or `demo` (a demo workspace, for a front end's Live/Demo\nswitch)."
           },
           "name": {
             "description": "The display name.",
@@ -2173,6 +2553,7 @@
           "name",
           "slug",
           "owner_id",
+          "kind",
           "role",
           "created_at",
           "updated_at"
@@ -3274,6 +3655,186 @@
           {
             "in": "path",
             "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/admin/settings": {
+      "get": {
+        "operationId": "helm.settings",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/admin/settings/{key}": {
+      "get": {
+        "operationId": "helm.settings.show",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "operationId": "helm.settings.save",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/admin/settings/{key}/inherit": {
+      "post": {
+        "operationId": "helm.settings.inherit",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
             "required": true,
             "schema": {
               "type": "string"
@@ -5868,6 +6429,347 @@
           }
         ],
         "summary": "List the signed-in user's notifications, newest first",
+        "tags": [
+          "Notifications"
+        ]
+      }
+    },
+    "/api/notifications/preferences": {
+      "get": {
+        "operationId": "notifications.preferences.show",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationPreferences"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "The signed-in user's notification preferences, with their workspace's defaults",
+        "tags": [
+          "Notifications"
+        ]
+      },
+      "patch": {
+        "operationId": "notifications.preferences.update",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationPreferencesPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationPreferences"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Change the signed-in user's notification preferences (a JSON merge patch)",
+        "tags": [
+          "Notifications"
+        ]
+      }
+    },
+    "/api/notifications/preferences/workspace": {
+      "get": {
+        "operationId": "notifications.preferences.workspace.show",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationPreferences"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "The notification preferences the request's workspace gives its members",
+        "tags": [
+          "Notifications"
+        ]
+      },
+      "patch": {
+        "operationId": "notifications.preferences.workspace.update",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationPreferencesPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationPreferences"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Change the notification preferences the request's workspace gives its members",
+        "tags": [
+          "Notifications"
+        ]
+      }
+    },
+    "/api/notifications/push-subscriptions": {
+      "delete": {
+        "operationId": "notifications.push_subscriptions.destroy",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PushUnsubscribe"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete one of the signed-in user's push subscriptions",
+        "tags": [
+          "Notifications"
+        ]
+      },
+      "post": {
+        "operationId": "notifications.push_subscriptions.store",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewPushSubscription"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushSubscription"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Save a browser push subscription for the signed-in user",
         "tags": [
           "Notifications"
         ]

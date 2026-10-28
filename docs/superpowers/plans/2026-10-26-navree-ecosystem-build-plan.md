@@ -23,6 +23,75 @@
 
 ---
 
+## Status on 2026-10-28 (after the integration run)
+
+Everything listed as built is merged into `main`, one branch at a time, and the tree passed the checks below together. The checkboxes in the task sections were not ticked as work landed, so this section is the record. Tasks it doesn't name as left were merged; their individual checkboxes have not been audited line by line (M7-3 does that).
+
+**Checks on the integrated tree.** Run with `CARGO_TARGET_DIR=target/merge`, `CARGO_BUILD_JOBS=12` and the real local servers from `scripts/dev-databases.ps1` (PostgreSQL with TimescaleDB, MySQL and a MongoDB replica set, through `target/test-databases.env`):
+
+- `cargo fmt --all --check`: clean.
+- `cargo clippy --workspace --all-targets -- -D warnings`: clean.
+- `cargo test --workspace`: 8,094 passed, 0 failed, 83 ignored, across 354 test binaries and doc-test runs. The ignored tests are `ignore` doc examples, three full builds of generated kits (`crates/navree-cli/tests/generated_kits.rs`), the generated-app build (`generated_app.rs`) and one Navigator test (`navigator.rs`). Suites behind crate features that `--workspace` doesn't turn on (for example the MySQL library tests, feature `mysql`) did not run.
+- The ignored builds, run separately with `--ignored`: `generated_app` (a new app compiles against the workspace), `navigator` (Navigator asks a built app) and `generated_kits` with `NAVREE_TEST_KIT_WEB=1` (the api, saas and micro kits build, test, pass clippy, `check` and `conformity:check`, and the saas kit's web app installs, lints, tests and builds). All pass. They first failed because the kits' committed OpenAPI document was stale after settings, notify-channels and notify-preferences added routes (`/admin/settings*`, `/api/notifications/preferences*`, `/api/notifications/push-subscriptions`); this run regenerated `crates/navree-cli/templates/kits/api/openapi.json.j2` and `crates/navree-cli/templates/kits/web/lib/api/schema.d.ts` (additive only).
+- Website: `check-docs` (156 pages), `pnpm typecheck`, `pnpm lint` and `pnpm build` pass.
+
+### Built and merged
+
+| Milestone | Built |
+|---|---|
+| M0 Core truth | Request-overhead work (M0-4 code: pool options, one round trip per transaction, lazy unit of work, `crates/navree/benches/pipeline.rs`); auth strategies as a chain (issue #6); `migrate --seed` (issue #32); PostgreSQL, MySQL and MongoDB suites run against real servers locally |
+| M1 Shared foundations | `navree-redis`; OpenTelemetry and typed instrumentation records (`navree-observe`, `navree-telemetry`); the dashboard kit as `navree-ui`; Navigator (`navree-navigator`, with the Lighthouse tools); the versioned docs bundle (`public/v/<version>/docs.json`); `navree skills:install`; `navree_crypto::jose` |
+| M2 SaaS | `navree-webhooks`, `navree-flags`, `navree-social`, `navree-oauth`, `navree-billing`, `navree-search` |
+| M3 Operate | `navree-logbook`, `navree-lighthouse`, `navree-fleet`, Dock (`navree-dock`), Harbor (`navree-harbor`) |
+| M4 Connect | `navree-micro` with the NATS, Kafka, RabbitMQ, Redis Streams, MQTT and TCP transports and the in-memory fake; trace context on every message; `navree-grpc`; `navree-graphql` |
+| M5 AI | `navree-ai` (providers, agents and tools, embeddings, vector stores, reranking); `navree-mcp`; search vectors |
+| M6 Build faster | `navree-helm`, `navree-i18n`, `navree-browser`, starter kits (`navree new --kit saas\|api\|micro`, `--ui next`) |
+
+Built beyond this plan, from the ORM brief (`docs/superpowers/specs/2026-10-26-navree-orm-design.md`) and the HFv3 gap analysis (`docs/superpowers/notes/2026-10-26-hfv3-gap-analysis.md`):
+
+- **ORM and database:** `navree-orm` and `navree-orm-macros` (core, relations, lifecycle, attributes, streams, factories), `navree-schema`, MySQL, `navree-mongo`, TimescaleDB as the default database, the ORM docs, and the CRM and framework crates moved onto the ORM.
+- **Platform packages:** error codes, S3 storage, localized validation, organizations, time zones (`navree-time`), `navree-settings`, auth additions (sessions and more), the front-end layer (`openapi:client` and the frontend packages), mail delivery, incoming webhook sources, `navree-integrations`, `navree-sso`, queue batches, `navree-sheets`, conformity checks, notification channels and preferences, inbound mail, `navree-directory`, `navree-documents` (native PDF engine), `navree-media`, `navree-workflows`, `navree-domains`, shared libraries (`navree_workspace::library`) and demo workspaces.
+- **Apps:** `apps/crm-web` (Next.js) and `apps/crm-nuxt` (Nuxt) on the CRM API.
+
+**Site status.** Every entry in `apps/website/src/content/ecosystem.ts` is `stable` and its crate exists. No docs page has `status: "planned"`: `patterns/microservices.mdx` was the last one, flipped in this run because every API it uses is in `navree-micro`.
+
+### Left, and why
+
+Plan tasks not built or only partly built:
+
+| Task | State | Why it is left |
+|---|---|---|
+| M0-1 CI pipeline | Not built. `.github/workflows/` has only `domains.yml`, `frontend-packages.yml`, `mongodb.yml` and `vulnerabilities.yml`; there is no `ci.yml` or `nightly.yml` with the lint, Windows, Linux (database matrix), website and crm-web jobs. | Builders verified against real local servers instead. Needed before launch, and before anyone else contributes. |
+| M0-2 Service test harness | Not built. No `navree_testing::services`, no `conformance_suite!` macro, no compose file. Gated suites read `NAVREE_TEST_*_URL` themselves. | Replaced in practice by `scripts/dev-databases.ps1`. Still needed for the CI jobs and for one shared skip/require rule. |
+| M0-3 PostgreSQL verification | Done locally against a real server; not a required CI job. | Waits for M0-1. |
+| M0-4 Request overhead | Code merged; the A/B re-run of `bench/run.mjs` on the rig was not done. `bench/results/navree.json` is still from 2026-10-26. | Docker doesn't respond on this machine. Done with M7-1. |
+| M0-5 Core fixes | Partly. Spot checks found these missing: `auth:prune`, `access:assign` (issue #17), `queue.respect_maintenance` (issue #9), the facade's `tracing` re-export (issue #27) and per-listener `JobOptions` (issue #22). | Not scheduled in the package runs. Audit every M0-5 checkbox before launch. |
+| M0-6 Template | Partly. The api and saas kits wire `WorkspaceModule`; the default `navree new` app (`crates/navree-cli/templates/app`) still doesn't, although the site says workspaces are on by default. | Not scheduled. |
+| M0-7 Docs example check | Not built. There is no `apps/website/scripts/check-examples.ts`. | Not scheduled. |
+| M7 Launch | Not started: re-measure (needs Docker), crates.io (the workspace has `publish = false`), the claims audit and `apps/website/scripts/check-status.ts`, the security review, the release-notes audit. Section 8 is open. | Runs last, by design. |
+
+HFv3 items not built (section 8 of the gap analysis): `list-query`, `entitlements`, `kit-nuxt` (`navree new --ui` offers only `next`; `apps/crm-nuxt` is the reference), `migration-safety`, `reports`, `ai-credits`, `ai-route-tools`, `ai-media` and `lighthouse-plus`. They were not scheduled in these runs.
+
+ORM follow-ups:
+
+- The parity checklist (`docs/superpowers/notes/2026-10-27-orm-parity-checklist.md`) has 338 of 884 lines ticked. The orm-core, orm-factories, schema, mysql and timescale-default tracks merged without ticking their lines, so the count understates what exists. The final audit the checklist calls for has not run.
+- The framework's own migrations are still SeaORM migrations, and the workflow tables use SeaORM migrations and raw SQL, against the ORM direction.
+- MySQL UUID columns disagree: the schema builder makes `CHAR(36)`, while the SeaORM migrations make `BINARY(16)` and the ORM writes 16 bytes.
+- Shared libraries: no row-level security policy for library tables yet; the library guard is skipped when the executor has no app (factory quiet operations) and, by design, for raw SeaORM or `Repo` writes.
+
+Package follow-ups the builders reported:
+
+- The CRM front ends' OpenAPI snapshots (`apps/crm-web/openapi.json`, `apps/crm-nuxt/openapi.json`) were last regenerated with error-codes, and no test compares them with `crm-api`, so they may lack routes added since. The kits' snapshot is current (regenerated in this run).
+- mail-inbound and mail-delivery: the SES and Gmail push routes check only a URL token, not the SNS signature or Pub/Sub's OIDC token; SES/SNS signature checking through webhook-sources' verified sources is still to do.
+- notify-channels: Amazon SNS has no delivery-status callbacks; web push hasn't been tried against live push services; the AWS request-signing code exists in three private copies.
+- media: FFmpeg isn't installed here, so video is tested only through `FfmpegFake`; duplicate crate versions (resvg and its tree).
+- documents: `zip` 8.6.0 (through docx-rs) and 9.1.2 are both in `Cargo.lock`.
+- domains: the Pebble ACME test runs only in `.github/workflows/domains.yml`; `navree-micro` was tested with default features only.
+- directory-sync and workflows: `apps/crm-api` doesn't use them yet.
+- The catalogue in `ecosystem.ts` lists 33 entries and leaves out several crates on purpose (`navree-settings`, `navree-mongo`, `navree-redis` and others). Add entries if the site should show them.
+
+---
+
 ## How to run this plan
 
 1. **Milestones are dependency groups, not strict phases.**
