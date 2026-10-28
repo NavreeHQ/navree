@@ -1,0 +1,36 @@
+{
+  "app": {
+    "name": "acme-cloud"
+  },
+  "auth": {
+    "registration": "false"
+  },
+  "database": {
+    "max_connections": "20",
+    "migrate_on_boot": true,
+    "url": "postgres://navree:navree@127.0.0.1:5432/acme_cloud"
+  },
+  "http": {
+    "addr": "0.0.0.0:8080"
+  },
+  "key": "base64:G60q3lWREHaFECJUwNhN58ArvmrSl0sptSaOEWgeBLk=",
+  "log": {
+    "level": "debug"
+  },
+  "micro": {
+    "concurrency": 64,
+    "events": {
+      "max_attempts": 5
+    },
+    "request_timeout_ms": 5000,
+    "service": "acme-cloud",
+    "transport": "nats",
+    "url": "nats://127.0.0.1:4222"
+  },
+  "queue": {
+    "driver": "redis"
+  },
+  "workspace": {
+    "resolvers": "header,subdomain"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "database": {
+    "pool": 20,
+    "replicas": [
+      "p"
+    ],
+    "timeout": "30",
+    "url": "sqlite://app.db"
+  },
+  "feature": {
+    "enabled": true
+  },
+  "layer": "production.toml",
+  "name": "from-app-toml",
+  "only": {
+    "dotenv": "yes",
+    "file": true
+  },
+  "server": {
+    "host": "app-host",
+    "port": 443,
+    "tls": true
+  }
+}
