@@ -4996,6 +4996,7 @@ dependencies = [
  "navree-directory",
  "navree-dock",
  "navree-documents",
+ "navree-domains",
  "navree-events",
  "navree-flags",
  "navree-fleet",
