@@ -5,6 +5,7 @@ mod support;
 
 mod cli;
 mod commands;
+mod cron_language;
 mod failures;
 mod jobs;
 mod module;

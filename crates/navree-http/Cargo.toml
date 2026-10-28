@@ -25,6 +25,7 @@ navree-contracts = { workspace = true }
 navree-kernel = { workspace = true }
 navree-telemetry = { workspace = true }
 metrics = { workspace = true }
+pin-project-lite = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
@@ -42,4 +43,7 @@ serde_json = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
 tower = { workspace = true }
+# Only the CORS differential test compares against tower-http's CorsLayer;
+# dev-dependency features do not reach normal builds.
+tower-http = { workspace = true, features = ["cors"] }
 tracing-subscriber = { workspace = true }
