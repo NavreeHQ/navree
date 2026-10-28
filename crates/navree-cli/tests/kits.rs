@@ -169,6 +169,13 @@ fn the_saas_kit_writes_the_api_and_the_web_app() {
     ] {
         assert!(package["scripts"].get(script).is_some(), "{script}");
     }
+    // shadcn/ui's stylesheet is vendored, so the app does not install the
+    // shadcn CLI and its dependencies (`pnpm dlx shadcn@latest add` runs it).
+    assert!(package["dependencies"].get("shadcn").is_none());
+    assert!(package["devDependencies"].get("shadcn").is_none());
+    assert!(!read(&root, "web/pnpm-lock.yaml").contains("shadcn"));
+    assert!(read(&root, "web/app/globals.css").contains("@import \"./shadcn-tailwind.css\";"));
+    assert!(read(&root, "web/app/shadcn-tailwind.css").contains("@custom-variant data-open"));
     // The browser reaches the API through the backend-for-frontend; the
     // web app's local settings start as a copy of the example.
     assert!(read(&root, "web/.env.example").contains("NAVREE_API_URL="));

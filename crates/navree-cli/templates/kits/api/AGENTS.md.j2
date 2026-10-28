@@ -116,6 +116,11 @@ are plural. Generators never overwrite a file.
   httpOnly cookie. Never put a token in browser storage. After changing a
   DTO, run `pnpm --dir web gen:api`: it exports `openapi.json` and
   regenerates `web/lib/api/schema.d.ts`; commit both.
+- **UI components.** shadcn/ui primitives live in `web/components/ui`.
+  Add one with `cd web && pnpm dlx shadcn@latest add <component>`; never
+  add the `shadcn` package to `package.json` (its one stylesheet is
+  vendored as `web/app/shadcn-tailwind.css`). Restyle what it adds to the
+  theme in `web/app/globals.css`.
 {% endif %}
 
 ## Before you finish

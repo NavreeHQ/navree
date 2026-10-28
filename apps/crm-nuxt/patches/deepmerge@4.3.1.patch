@@ -1,0 +1,96 @@
+diff --git a/dist/cjs.js b/dist/cjs.js
+index 7c36cbdd06cc22c92d590be3f87a08a91ca06b40..8703740e403213c2464b0026c872ee71b311fe58 100644
+--- a/dist/cjs.js
++++ b/dist/cjs.js
+@@ -76,15 +76,26 @@ function propertyIsUnsafe(target, key) {
+ 			&& Object.propertyIsEnumerable.call(target, key)) // and also unsafe if they're nonenumerable.
+ }
+ 
++// Keys that reach or replace an object's prototype are never copied, whatever
++// the target holds (GHSA-gcqx-w48m-w2h4: a null-prototype target, a null or
++// primitive placeholder, or a target with its own "__proto__" key got past
++// propertyIsUnsafe). A pnpm patch in Navree until deepmerge ships a fix.
++function keyIsForbidden(key) {
++	return key === '__proto__' || key === 'constructor' || key === 'prototype'
++}
++
+ function mergeObject(target, source, options) {
+ 	var destination = {};
+ 	if (options.isMergeableObject(target)) {
+ 		getKeys(target).forEach(function(key) {
++			if (keyIsForbidden(key)) {
++				return
++			}
+ 			destination[key] = cloneUnlessOtherwiseSpecified(target[key], options);
+ 		});
+ 	}
+ 	getKeys(source).forEach(function(key) {
+-		if (propertyIsUnsafe(target, key)) {
++		if (keyIsForbidden(key) || propertyIsUnsafe(target, key)) {
+ 			return
+ 		}
+ 
+diff --git a/dist/umd.js b/dist/umd.js
+index 4071e7c56ec8e5273fe166f6e723ac460fab8b72..082261819bce05ed59e4a1a19f6b4de77a94b516 100644
+--- a/dist/umd.js
++++ b/dist/umd.js
+@@ -80,15 +80,26 @@
+ 				&& Object.propertyIsEnumerable.call(target, key)) // and also unsafe if they're nonenumerable.
+ 	}
+ 
++	// Keys that reach or replace an object's prototype are never copied, whatever
++	// the target holds (GHSA-gcqx-w48m-w2h4: a null-prototype target, a null or
++	// primitive placeholder, or a target with its own "__proto__" key got past
++	// propertyIsUnsafe). A pnpm patch in Navree until deepmerge ships a fix.
++	function keyIsForbidden(key) {
++		return key === '__proto__' || key === 'constructor' || key === 'prototype'
++	}
++
+ 	function mergeObject(target, source, options) {
+ 		var destination = {};
+ 		if (options.isMergeableObject(target)) {
+ 			getKeys(target).forEach(function(key) {
++				if (keyIsForbidden(key)) {
++					return
++				}
+ 				destination[key] = cloneUnlessOtherwiseSpecified(target[key], options);
+ 			});
+ 		}
+ 		getKeys(source).forEach(function(key) {
+-			if (propertyIsUnsafe(target, key)) {
++			if (keyIsForbidden(key) || propertyIsUnsafe(target, key)) {
+ 				return
+ 			}
+ 
+diff --git a/index.js b/index.js
+index 77968aed5d456cccc294f60912ef381fa1e52a7b..f371d671c93a35875297a16a2ebbb3de9d2ccb25 100644
+--- a/index.js
++++ b/index.js
+@@ -51,15 +51,26 @@ function propertyIsUnsafe(target, key) {
+ 			&& Object.propertyIsEnumerable.call(target, key)) // and also unsafe if they're nonenumerable.
+ }
+ 
++// Keys that reach or replace an object's prototype are never copied, whatever
++// the target holds (GHSA-gcqx-w48m-w2h4: a null-prototype target, a null or
++// primitive placeholder, or a target with its own "__proto__" key got past
++// propertyIsUnsafe). A pnpm patch in Navree until deepmerge ships a fix.
++function keyIsForbidden(key) {
++	return key === '__proto__' || key === 'constructor' || key === 'prototype'
++}
++
+ function mergeObject(target, source, options) {
+ 	var destination = {}
+ 	if (options.isMergeableObject(target)) {
+ 		getKeys(target).forEach(function(key) {
++			if (keyIsForbidden(key)) {
++				return
++			}
+ 			destination[key] = cloneUnlessOtherwiseSpecified(target[key], options)
+ 		})
+ 	}
+ 	getKeys(source).forEach(function(key) {
+-		if (propertyIsUnsafe(target, key)) {
++		if (keyIsForbidden(key) || propertyIsUnsafe(target, key)) {
+ 			return
+ 		}
+ 
