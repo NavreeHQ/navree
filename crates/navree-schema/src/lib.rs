@@ -80,7 +80,7 @@ mod target;
 mod timescale;
 mod value;
 
-pub use blueprint::{Blueprint, Command};
+pub use blueprint::{Blueprint, CheckDefinition, Command};
 pub use column::{ColumnBuilder, ColumnDefinition, ColumnType, FluentIndex, Identity};
 pub use connection::{BoxFuture, SchemaConnection};
 pub use dump::DumpOptions;

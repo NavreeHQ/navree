@@ -681,6 +681,9 @@ sea-orm-migration = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
+# `tests/workspace_library_docs.rs`: an error type of the app's own, as the
+# ORM's events page writes it.
+thiserror = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }
 # `tests/integrations_docs.rs`: the page's listener logs with tracing, as

@@ -101,6 +101,27 @@ pub(crate) fn compile(
             Command::Comment(comment) => {
                 out.push(format!("ALTER TABLE {t} COMMENT = {}", string(D, comment)))
             }
+            Command::Check(check) => {
+                if !ctx.target.is_mariadb() && !ctx.target.at_least((8, 0, 16)) {
+                    out.notice(format!(
+                        "{} parses CHECK constraints but enforces them only from 8.0.16",
+                        ctx.target.describe()
+                    ));
+                }
+                out.push(format!(
+                    "ALTER TABLE {t} ADD CONSTRAINT {} CHECK ({})",
+                    ident(D, &check.name),
+                    check.expression.trim()
+                ));
+            }
+            // MariaDB drops any constraint by name; MySQL names the kind.
+            Command::DropCheck(check) if ctx.target.is_mariadb() => out.push(format!(
+                "ALTER TABLE {t} DROP CONSTRAINT {}",
+                ident(D, check)
+            )),
+            Command::DropCheck(check) => {
+                out.push(format!("ALTER TABLE {t} DROP CHECK {}", ident(D, check)))
+            }
         }
     }
     for column in blueprint.columns() {

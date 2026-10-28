@@ -246,6 +246,18 @@ pub enum OrmError {
         /// What went wrong.
         message: String,
     },
+    /// A lifecycle hook refused the write with an error of its own
+    /// ([`OrmError::refused`]). The error is the source, so returned from
+    /// a handler it answers as that error does (an app error mapped to a
+    /// 403 stays a 403).
+    #[error("a {model} hook refused the write: {source}")]
+    Refused {
+        /// The model.
+        model: Cow<'static, str>,
+        /// The hook's error.
+        #[source]
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
 }
 
 fn known_relations(known: &[String]) -> String {
@@ -382,6 +394,33 @@ impl OrmError {
                 OrmError::Timeout { timeout, source }
             }
             other => other,
+        }
+    }
+
+    /// A [`Refused`](OrmError::Refused) error: a hook of `model` stops a
+    /// write with `error`, which keeps its meaning over HTTP (navree-http
+    /// maps the first error of the source chain it knows).
+    ///
+    /// ```
+    /// use std::error::Error;
+    ///
+    /// use navree_orm::OrmError;
+    ///
+    /// #[derive(Debug, thiserror::Error)]
+    /// #[error("templates are read-only here")]
+    /// struct ReadOnly;
+    ///
+    /// let error = OrmError::refused("Template", ReadOnly);
+    /// assert_eq!(error.to_string(), "a Template hook refused the write: templates are read-only here");
+    /// assert!(error.source().unwrap().downcast_ref::<ReadOnly>().is_some());
+    /// ```
+    pub fn refused(
+        model: impl Into<Cow<'static, str>>,
+        error: impl std::error::Error + Send + Sync + 'static,
+    ) -> Self {
+        OrmError::Refused {
+            model: model.into(),
+            source: Box::new(error),
         }
     }
 
@@ -730,6 +769,27 @@ mod tests {
             DbErr::from(decode),
             DbErr::Custom(message)
                 if message == "cannot read column `amount` of Deal as i64: not a number"
+        ));
+    }
+
+    /// A hook's refusal keeps its error as the source (what navree-http
+    /// maps), and as a `DbErr` it is a custom error with the message.
+    #[test]
+    fn refusals_keep_the_hook_s_error() {
+        #[derive(Debug, thiserror::Error)]
+        #[error("only the workspace's own items can change")]
+        struct ReadOnly;
+
+        let error = OrmError::refused("Template", ReadOnly);
+        assert!(matches!(&error, OrmError::Refused { model, .. } if model == "Template"));
+        assert!(!error.is_not_found());
+        assert!(!error.is_unique_violation());
+        let source = error.source().expect("the hook's error");
+        assert!(source.downcast_ref::<ReadOnly>().is_some());
+        assert!(matches!(
+            DbErr::from(error),
+            DbErr::Custom(message)
+                if message == "a Template hook refused the write: only the workspace's own items can change"
         ));
     }
 

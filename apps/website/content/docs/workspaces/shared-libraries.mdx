@@ -1,0 +1,532 @@
+---
+title: "Shared libraries"
+description: "Templates, courses and other content kept for the whole app, an organization or one workspace, read together by each workspace and cloned to be changed."
+---
+
+Some content belongs to more than one workspace. Your product ships message templates, courses, badges and policy documents that every customer starts from. A company that runs several workspaces adds its own, for all of them. Each workspace keeps the ones it wrote or adapted. A shared library holds the three levels in one table: a workspace reads the global items, its organization's and its own as one list, changes only its own, and clones a shared item when it wants to change it.
+
+## How it works
+
+Every row of a library table has one owner, written in a `scope` column and the id that goes with it:
+
+| `scope` | `organization_id` | `workspace_id` | Seen by |
+|---|---|---|---|
+| `global` | `NULL` | `NULL` | every workspace and organization |
+| `organization` | the organization | `NULL` | the organization and its workspaces |
+| `workspace` | `NULL` | the workspace | that workspace |
+
+A `CHECK` constraint keeps the three columns consistent, so no row is global and a workspace's at once. Inside a workspace request:
+
+- queries see the global items, the workspace's organization's and the workspace's own;
+- a new item joins the workspace's library;
+- changing or deleting a global or an organization's item is refused with a 403, code `library_read_only`;
+- cloning an item gives the workspace its own copy, which records the original in `cloned_from_id`.
+
+Global items come from seeders and the admin panel, organization items from the organization's admins. The organization level needs [organizations](/docs/workspaces/organizations/) turned on; without them a library has global and workspace items.
+
+## Making a table a library
+
+<Badge feature="workspace" /> Shared libraries are part of `WorkspaceModule`, in `navree::workspace::library`. A library takes a migration, a model and one registration.
+
+### The migration
+
+`LibraryColumns` adds the four columns, an index on each and the `CHECK` constraint to a table created in a [schema-builder migration](/docs/database/migrations/):
+
+```rust title="src/templates/migrations.rs"
+use navree::schema::{Migration, Schema, SchemaResult};
+use navree::workspace::library::LibraryColumns;
+
+pub struct CreateTemplates;
+
+impl Migration for CreateTemplates {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        let library = LibraryColumns::new(schema.target().await?.dialect());
+        schema
+            .create("templates", |t| {
+                library.uuid(t, "id").primary();
+                library.add(t); // scope, organization_id, workspace_id, cloned_from_id
+                t.string("slug");
+                t.string("name");
+                t.text("body");
+                t.timestamp_tz("created_at");
+                t.timestamp_tz("updated_at");
+            })
+            .await
+    }
+
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop_if_exists("templates").await
+    }
+}
+```
+
+| Column | Type | Index |
+|---|---|---|
+| `scope` | string of up to 16 characters | `templates_scope_index` |
+| `organization_id` | nullable UUID | `templates_organization_id_index` |
+| `workspace_id` | nullable UUID | `templates_workspace_id_index` |
+| `cloned_from_id` | nullable UUID (big integer with `.integer_keys()`) | `templates_cloned_from_id_index` |
+
+UUIDs are written the way navree-orm stores them on each database: native `uuid` on PostgreSQL, `BINARY(16)` on MySQL and MariaDB. Use `library.uuid(t, name)` for the table's other UUID columns too, its key included. The constraint is named `<table>_library_owner_check`:
+
+```sql title="PostgreSQL" wrap
+ALTER TABLE "templates" ADD CONSTRAINT "templates_library_owner_check" CHECK (("scope" = 'global' AND "organization_id" IS NULL AND "workspace_id" IS NULL) OR ("scope" = 'organization' AND "organization_id" IS NOT NULL AND "workspace_id" IS NULL) OR ("scope" = 'workspace' AND "workspace_id" IS NOT NULL AND "organization_id" IS NULL))
+```
+
+SQLite writes it into `CREATE TABLE`, MySQL enforces it from 8.0.16. For a model keyed by integers, `LibraryColumns::new(dialect).integer_keys()` makes `cloned_from_id` a big integer. A model that names its columns differently passes itself: `LibraryColumns::of::<Template>(dialect)` reads the names from its `Library` constants. The constraint is an ordinary [check constraint](/docs/database/indexes-and-foreign-keys/#check-constraints) of the schema builder.
+
+### The model
+
+A library model is a navree-orm model with the four columns, implementing `Library`:
+
+```rust title="src/templates/model.rs"
+use chrono::{DateTime, Utc};
+use navree::orm::prelude::*;
+use navree::workspace::library::{Library, LibraryScope};
+use serde::Serialize;
+use uuid::Uuid;
+
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "templates", timestamps)]
+pub struct Template {
+    pub id: Uuid,
+    pub scope: LibraryScope,
+    pub organization_id: Option<Uuid>,
+    pub workspace_id: Option<Uuid>,
+    pub cloned_from_id: Option<Uuid>,
+    pub slug: String,
+    pub name: String,
+    pub body: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+impl Library for Template {}
+```
+
+`LibraryScope` is `Global`, `Organization` or `Workspace`, stored as `global`, `organization` and `workspace` without a cast, and serialized the same way. It defaults to `Workspace`, so a new item made inside a workspace request belongs to that workspace. The model isn't `#[model(workspace)]`: a library's rows aren't all one workspace's, and the library's own scope takes that role. Columns under other names are set with the trait's constants (`SCOPE_COLUMN`, `ORGANIZATION_COLUMN`, `WORKSPACE_COLUMN`, `CLONED_FROM_COLUMN`).
+
+### Registering it
+
+Register the migrations and the model in the module that owns the table:
+
+```rust title="src/templates/mod.rs" {6}
+impl Module for TemplatesModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.migrations(MigrationSet::new("templates").after(["workspace"]).migration(
+            SchemaMigration::new("m20261028_000001_create_templates", CreateTemplates),
+        ))
+        .library::<Template>()
+        .controller::<TemplatesController>();
+    }
+}
+```
+
+`m.library::<Template>()` comes with `ModuleBuilderWorkspaceExt` (in the prelude). It:
+
+- installs `LibraryVisibility`, the global scope that keeps the model's queries to what the current workspace sees;
+- adds `LibraryGuard`, the model hook that keeps a workspace's writes to its own items;
+- registers the model with navree-orm, so `model:show` lists it and its guard;
+- classifies the table as a library for [`navree check`](/docs/testing/conformity-checks/), so a SeaORM entity on it needs no `workspace_entity` or `global_entity`.
+
+## Reading a library
+
+In a workspace request the model's queries see the workspace's library without being asked:
+
+```rust title="src/templates/controller.rs"
+async fn index(_ws: CurrentWorkspace, uow: Uow) -> Result<Json<Vec<Template>>> {
+    let templates = Template::query().order_by(Template::NAME).get(&uow).await?;
+    Ok(Json(templates.into_iter().map(Record::into_inner).collect()))
+}
+```
+
+The current workspace is navree-orm's: the one the request's unit of work entered (`CurrentWorkspace` and `InWorkspace` enter it), or the one a task runs with inside `navree::orm::workspace::scope(id, ..)`. The workspace's organization is read in the same statement. Where no workspace is current (a command, a seeder, an organization request, the admin panel), the model's queries see the global items only. A query can leave the scope out on purpose with `.without_global_scope::<LibraryVisibility>()`.
+
+To read a given viewer's library, or one owner's items, `LibraryRepo` builds the query. Its queries replace the visibility scope, so they read the same inside and outside a workspace request:
+
+```rust
+use navree::workspace::library::{LibraryOwner, LibraryRepo};
+
+type Templates = LibraryRepo<Template>;
+
+// What a workspace picks from: global, its organization's, its own.
+let library = Templates::visible_to(&ws).order_by(Template::NAME).get(&uow).await?;
+// What an organization's admins see: global and the organization's.
+let shared = Templates::visible_to(&org).get(&uow).await?;
+// One owner's items only.
+let own = Templates::owned_by(LibraryOwner::Organization(org.id())).get(&uow).await?;
+let catalog = Templates::global().get(&uow).await?;
+// One item, or a 404 when the viewer doesn't see it.
+let template = Templates::find_visible_or_fail(&uow, &ws, id).await?;
+```
+
+A viewer is a `LibraryViewer`. `&CurrentWorkspace` and `&Workspace` give the workspace with its organization, `&CurrentOrganization` the organization; `LibraryViewer::global()`, `LibraryViewer::organization(id)` and `LibraryViewer::workspace(id).in_organization(Some(org))` build one from ids. `viewer.sees(&owner)` answers for one owner.
+
+## Writing items
+
+### In a workspace
+
+Inside a workspace request, writes keep to the workspace's library. A new item without an owner joins it:
+
+```rust
+let template = Template::create(
+    &uow,
+    Template { slug: "follow-up".into(), name: "Follow-up".into(), ..Template::default() },
+)
+.await?;
+assert_eq!(template.workspace_id, Some(ws.id()));
+```
+
+Saving, deleting or restoring a global or an organization's item is refused, whichever route tries it:
+
+```json title="403 Forbidden"
+{
+  "statusCode": 403,
+  "message": "This library item is shared: clone it to change it.",
+  "error": "Forbidden",
+  "code": "library_read_only"
+}
+```
+
+So is creating an item for another owner, or moving one of the workspace's items to another owner. Another workspace's item answers 404, like a record that doesn't exist. An edit route answers before trying when it loads the item with `find_editable_or_fail`: a 404 for an item the workspace doesn't see, the 403 for one it sees but doesn't own.
+
+```rust
+async fn rename(
+    ws: CurrentWorkspace,
+    uow: Uow,
+    Path(id): Path<Uuid>,
+    Json(input): Json<RenameTemplate>,
+) -> Result<Json<Template>> {
+    let mut template = LibraryRepo::<Template>::find_editable_or_fail(&uow, &ws, id).await?;
+    template.name = input.name;
+    template.save(&uow).await?;
+    Ok(Json(template.into_inner()))
+}
+```
+
+`LibraryGuard` is a model hook, so it runs for every write of the model, inside `without_events` too. The refusal reaches the handler as the ORM error `OrmError::Refused`, whose source is the workspace error, so `?` answers with the 403 above.
+
+### For an organization or the whole app
+
+Outside a workspace request (an organization's admin screens, a command, the admin panel), any owner's items may be written, and the route decides who may. `LibraryRepo::create` sets the owner columns:
+
+```rust
+async fn share(
+    org: CurrentOrganization,
+    uow: Uow,
+    Json(input): Json<NewTemplate>,
+) -> Result<Json<Template>> {
+    org.authorize("templates.share")?;
+    let template = LibraryRepo::<Template>::create(
+        &uow,
+        LibraryOwner::Organization(org.id()),
+        Template { slug: input.slug, name: input.name, ..Template::default() },
+    )
+    .await?;
+    Ok(Json(template.into_inner()))
+}
+```
+
+Whatever the owner, the three columns must agree. A global item with a `workspace_id`, or a workspace item without one, is refused with a 400 on `scope` (`"a global item has no organization_id and no workspace_id"`) before the database sees it.
+
+`unguarded` lifts the workspace rules for one deliberate write inside a workspace request, such as an organization admin publishing a workspace's template to the organization from the workspace's screen. Check the permission first:
+
+```rust
+use navree::workspace::library::unguarded;
+
+let published = unguarded(LibraryRepo::<Template>::clone_to(
+    &uow,
+    id,
+    LibraryOwner::Organization(organization_id),
+))
+.await?;
+```
+
+## Cloning
+
+A workspace that wants to change a shared item clones it. `clone_into` copies the item into the workspace's library in the unit of work:
+
+```rust
+async fn use_template(ws: CurrentWorkspace, uow: Uow, Path(id): Path<Uuid>) -> Result<Json<Template>> {
+    let copy = LibraryRepo::<Template>::clone_into(&uow, id, ws.id()).await?;
+    Ok(Json(copy.into_inner()))
+}
+```
+
+The copy has a new key, the workspace as its owner, `cloned_from_id` set to the item's key, fresh timestamps, and every other value of the item. It is saved through the model's hooks and the unit of work's change events, so the audit log records it. The workspace must see the item (global, its organization's or its own); anything else is a 404.
+
+`clone_to(&uow, id, owner)` clones for another owner. An organization takes a global item, one of its own, or an item of one of its workspaces, which publishes that item to the organization; the global library takes global items. Inside a workspace request only the workspace itself may be the owner (the guard's rule), unless the call runs in `unguarded`.
+
+### Shaping the copy
+
+Two methods of `Library` shape copies. `cloning` changes the copy before it is saved; `cloned` runs after, in the same unit of work, to copy what belongs to the item:
+
+```rust
+impl Library for Template {
+    fn cloning(&mut self, source: &Self) {
+        self.name = format!("{} (copy)", source.name);
+    }
+
+    fn cloned<'a>(
+        uow: &'a Uow,
+        source: &'a Record<Self>,
+        copy: &'a Record<Self>,
+    ) -> BoxFuture<'a, navree::orm::Result<()>> {
+        Box::pin(async move {
+            let blocks = TemplateBlock::query()
+                .where_(TemplateBlock::TEMPLATE_ID.eq(source.id))
+                .get(uow)
+                .await?;
+            for block in blocks {
+                let mut block = block.replicate();
+                block.template_id = copy.id;
+                block.save(uow).await?;
+            }
+            Ok(())
+        })
+    }
+}
+```
+
+An error from `cloned` fails the clone, and the unit of work rolls back with the copy. `copy.cloned_from()?` reads the original's key back, and `LibraryRepo::<Template>::clones_of(id)` queries the clones of an item among the ones the query sees (in a workspace request, the workspace's own; chain `.without_global_scope::<LibraryVisibility>()` to count every owner's, for the app's admins).
+
+### The event
+
+Once the unit of work commits, `LibraryItemCloned` is emitted as `library.item_cloned` (a clone that rolls back emits nothing):
+
+```json
+{
+  "library": "templates",
+  "item_id": "0192f1e2-6c1a-7b3e-9a4d-1f2e3d4c5b6a",
+  "clone_id": "0192f1e9-0d3b-7c41-8e2f-5a6b7c8d9e0f",
+  "source": { "scope": "global" },
+  "owner": { "scope": "workspace", "id": "0192f1d0-3a2b-7c1d-9e8f-0a1b2c3d4e5f" },
+  "cloned_by": "0192f1c4-9f8e-7d6c-8b5a-4f3e2d1c0b9a"
+}
+```
+
+`library` is the model's table; the keys are text; `cloned_by` is the unit of work's actor. Listen to it to count how often a template is used, or to tell its authors.
+
+## Global items from seeders
+
+The items your product ships are global rows, placed by a [seeder](/docs/database/seeding-and-factories/). `seed_global` matches each item to a global row by one column, creates the missing ones and updates the ones that changed, so the seeder runs again after you edit its items:
+
+```rust title="src/templates/seeder.rs"
+#[injectable]
+pub struct TemplateLibrarySeeder;
+
+impl Seeder for TemplateLibrarySeeder {
+    fn name(&self) -> &'static str {
+        "template-library"
+    }
+
+    fn run<'a>(&'a self, _ctx: &'a AppContext, db: &'a Db) -> BoxFuture<'a, Result<(), BoxError>> {
+        Box::pin(async move {
+            let items = [
+                ("welcome", "Welcome aboard", "Hello {{ name }}, welcome to the team."),
+                ("reset", "Reset your password", "Use this link to choose a new password."),
+            ]
+            .map(|(slug, name, body)| Template {
+                slug: slug.into(),
+                name: name.into(),
+                body: body.into(),
+                ..Template::default()
+            });
+            let seeded = LibraryRepo::<Template>::seed_global(db, "slug", items).await?;
+            println!("templates: {} created, {} updated", seeded.created, seeded.updated);
+            Ok(())
+        })
+    }
+}
+```
+
+Register it with `m.seeder::<TemplateLibrarySeeder>()` and run it with `navree db:seed template-library`. Each item becomes global whatever its `scope` says. A row that exists keeps its key, its timestamps and its soft delete, and takes the item's other values; one that matches already is counted in `SeededGlobal::unchanged`. Organization and workspace items with the same slug are never touched, and neither are the clones made from a global item.
+
+## Managing global items in Helm
+
+[Helm](/docs/tools/helm/) resources wrap SeaORM entities, so a library that Helm manages derives the entity on the model's struct, as Navree's own tables do. `LibraryScope` is a SeaORM column type as well:
+
+```rust title="src/templates/model.rs"
+pub mod template {
+    use navree::workspace::library::{Library, LibraryScope};
+    use sea_orm::entity::prelude::*;
+    use serde::Serialize;
+
+    #[derive(Clone, Debug, Default, PartialEq, DeriveEntityModel, navree::orm::Model, Serialize)]
+    #[sea_orm(table_name = "templates")]
+    #[model(table = "templates", timestamps)]
+    pub struct Model {
+        #[sea_orm(primary_key, auto_increment = false)]
+        pub id: Uuid,
+        pub scope: LibraryScope,
+        pub organization_id: Option<Uuid>,
+        pub workspace_id: Option<Uuid>,
+        pub cloned_from_id: Option<Uuid>,
+        pub slug: String,
+        pub name: String,
+        pub body: String,
+        pub created_at: DateTimeUtc,
+        pub updated_at: DateTimeUtc,
+    }
+
+    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+    pub enum Relation {}
+
+    impl ActiveModelBehavior for ActiveModel {}
+
+    impl Library for Model {}
+
+    impl navree::access::Subject for Entity {
+        const SUBJECT: &'static str = "Template";
+        const PERMISSION_PREFIX: &'static str = "templates";
+    }
+}
+
+pub type Template = template::Model;
+```
+
+The resource lists, shows and edits global templates only, and creates new ones as global:
+
+```rust title="src/templates/helm.rs"
+use navree::BoxFuture;
+use navree::helm::{Field, FormData, Resource, SaveContext};
+use navree::prelude::*;
+use navree::workspace::library::{LibraryOwner, LibraryRepo, LibraryScope};
+use sea_orm::{ColumnTrait, QueryFilter, Select};
+
+use super::model::{Template, template};
+
+#[derive(serde::Deserialize, garde::Validate)]
+struct TemplateForm {
+    #[garde(length(min = 1))]
+    slug: String,
+    #[garde(length(min = 1))]
+    name: String,
+    #[garde(skip)]
+    body: Option<String>,
+}
+
+#[injectable]
+pub struct TemplateLibraryResource;
+
+impl Resource for TemplateLibraryResource {
+    type Entity = template::Entity;
+    const LABEL: &'static str = "Template library";
+    const SINGULAR: &'static str = "Template";
+    const SLUG: &'static str = "template-library";
+    const TITLE: &'static str = "name";
+    const SEARCH: &'static [&'static str] = &["name", "slug"];
+
+    fn fields(&self) -> Vec<Field> {
+        vec![
+            Field::text("slug").required(),
+            Field::text("name").required().sortable(),
+            Field::textarea("body").hide_on_index(),
+        ]
+    }
+
+    fn query(&self, select: Select<template::Entity>) -> Select<template::Entity> {
+        select.filter(template::Column::Scope.eq(LibraryScope::Global))
+    }
+
+    fn create<'a>(
+        &'a self,
+        ctx: &'a SaveContext,
+        form: FormData,
+    ) -> BoxFuture<'a, Result<Template, AppError>> {
+        Box::pin(async move {
+            let input: TemplateForm = form.parse().await?;
+            let template = Template {
+                slug: input.slug,
+                name: input.name,
+                body: input.body.unwrap_or_default(),
+                ..Template::default()
+            };
+            Ok(LibraryRepo::<Template>::create(ctx.uow(), LibraryOwner::Global, template)
+                .await?
+                .into_inner())
+        })
+    }
+}
+```
+
+Register it with `m.resource::<TemplateLibraryResource>()` next to `m.library::<Template>()`. Helm's edits and deletes run outside any workspace, so the guard lets them through; the resource's `query` keeps them to global rows, and the user's abilities on `Template` decide the rest.
+
+## Testing
+
+The rules hold for every route of the model, so a test can check them over HTTP. With the module and a workspace in a [test app](/docs/testing/http-tests/):
+
+```rust
+#[tokio::test]
+async fn workspaces_clone_shared_templates_to_change_them() {
+    let app = boot_app().await; // your test's own helpers
+    let ada = create_user(&app, "ada@example.com").await;
+    create_workspace(&app, ada, "acme").await;
+    let welcome = create_global_template(&app, "welcome", "Welcome").await;
+
+    let client = app.acting_as(principal(ada));
+    client
+        .patch(&format!("/api/templates/{welcome}"))
+        .header("x-workspace", "acme")
+        .json(&json!({ "name": "Ours" }))
+        .send()
+        .await
+        .assert_status(403)
+        .assert_json_path("code", json!("library_read_only"));
+    client
+        .post(&format!("/api/templates/{welcome}/clone"))
+        .header("x-workspace", "acme")
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("cloned_from_id", json!(welcome))
+        .assert_json_path("name", json!("Welcome (copy)"));
+}
+```
+
+## Reference
+
+### `LibraryRepo<M>`
+
+| Method | Returns |
+|---|---|
+| `visible_to(viewer)` | The query of what `viewer` sees: global items, its organization's, its workspace's |
+| `owned_by(owner)` | The query of `owner`'s items |
+| `global()` | The query of the global items |
+| `clones_of(key)` | The query of the clones of item `key`, with the visibility scope |
+| `find_visible(exec, viewer, key)` | The item, if the viewer sees it |
+| `find_visible_or_fail(exec, viewer, key)` | The item, or a 404 |
+| `find_editable_or_fail(exec, viewer, key)` | The item, a 404 when unseen, a 403 (`library_read_only`) when it belongs to a wider level than the viewer's own |
+| `create(exec, owner, item)` | The item, created with `owner`'s columns |
+| `seed_global(exec, unique_by, items)` | `SeededGlobal { created, updated, unchanged }` |
+| `clone_into(uow, key, workspace)` | The copy, in `workspace`'s library |
+| `clone_to(uow, key, owner)` | The copy, in `owner`'s library (an organization also takes its workspaces' items) |
+
+### `Library`
+
+| Item | Default | Does |
+|---|---|---|
+| `SCOPE_COLUMN`, `ORGANIZATION_COLUMN`, `WORKSPACE_COLUMN`, `CLONED_FROM_COLUMN` | `scope`, `organization_id`, `workspace_id`, `cloned_from_id` | Name the columns |
+| `cloning(&mut self, source)` | nothing | Changes a copy before it is saved |
+| `cloned(uow, source, copy)` | nothing | Runs after a copy is saved, in the unit of work |
+| `library_owner()` | | The item's `LibraryOwner`, read from its columns |
+| `set_library_owner(owner)` | | Sets the three columns |
+| `cloned_from()` | | The original's key, for a clone |
+
+### Errors and the event
+
+| | Status | Code | When |
+|---|---|---|---|
+| `WorkspaceError::LibraryReadOnly` | 403 | `library_read_only` | A workspace writes an item it sees but doesn't own, creates one for another owner or moves its own away |
+| not found | 404 | `not_found` | A workspace writes another workspace's item, or reads or clones one it doesn't see |
+| `WorkspaceError::Invalid` on `scope` | 400 | `validation_failed` | The owner columns contradict each other |
+| `LibraryItemCloned` | | `library.item_cloned` | A clone committed |
+
+<LinkCards>
+  <LinkCard href="/docs/workspaces/organizations/" title="Organizations">
+    The level above workspaces whose items their workspaces share.
+  </LinkCard>
+  <LinkCard href="/docs/orm/scopes-and-soft-deletes/" title="Scopes and soft deletes">
+    Global scopes, which keep a library's queries to what a workspace sees.
+  </LinkCard>
+</LinkCards>

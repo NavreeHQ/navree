@@ -64,6 +64,22 @@ pub enum Command {
     DropIfExists,
     /// Set the table's comment.
     Comment(String),
+    /// Add a table-level `CHECK` constraint.
+    Check(CheckDefinition),
+    /// Drop the `CHECK` constraint with this name.
+    DropCheck(String),
+}
+
+/// A table-level `CHECK` constraint ([`Blueprint::check`]): its name and
+/// its SQL expression, written as the database reads it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CheckDefinition {
+    /// The constraint name. MySQL wants it unique in the database, so
+    /// prefix it with the table: `templates_owner_check`.
+    pub name: String,
+    /// The condition every row must meet, as raw SQL:
+    /// `position >= 0`.
+    pub expression: String,
 }
 
 /// The description of a table being created ([`Schema::create`]) or altered
@@ -838,6 +854,41 @@ impl Blueprint {
             Some(Command::Foreign(foreign)) => ForeignKeyBuilder::new(foreign),
             _ => unreachable!("a foreign key command was just pushed"),
         }
+    }
+
+    /// Adds a table-level `CHECK` constraint named `name`: every row must
+    /// meet `expression`, raw SQL the database evaluates. It may name
+    /// several columns.
+    ///
+    /// ```
+    /// use navree_schema::{Blueprint, Command};
+    ///
+    /// let mut t = Blueprint::new("templates");
+    /// t.string("scope");
+    /// t.uuid("workspace_id").nullable();
+    /// t.check(
+    ///     "templates_owner_check",
+    ///     "(scope = 'global' AND workspace_id IS NULL) OR (scope = 'workspace' AND workspace_id IS NOT NULL)",
+    /// );
+    /// assert!(matches!(&t.commands()[0], Command::Check(check) if check.name == "templates_owner_check"));
+    /// ```
+    ///
+    /// PostgreSQL, MySQL (enforced from 8.0.16) and MariaDB add it with
+    /// `ALTER TABLE .. ADD CONSTRAINT`; SQLite writes it into `CREATE
+    /// TABLE`, and adds one to an existing table by rebuilding it. Adding a
+    /// check that existing rows violate fails. Name it after its table:
+    /// MySQL wants constraint names unique in the database.
+    pub fn check(&mut self, name: impl Into<String>, expression: impl Into<String>) {
+        self.commands.push(Command::Check(CheckDefinition {
+            name: name.into(),
+            expression: expression.into(),
+        }));
+    }
+
+    /// Drops the `CHECK` constraint `name` (SQLite rebuilds the table
+    /// without it).
+    pub fn drop_check(&mut self, name: impl Into<String>) {
+        self.commands.push(Command::DropCheck(name.into()));
     }
 
     // ----- drops and renames ----------------------------------------------

@@ -1,6 +1,6 @@
 ---
 name: navree-workspaces
-description: "Multi-tenancy with navree-workspace: `WorkspaceModule` and the `workspace` config section, `CurrentWorkspace` and the `InWorkspace` guard (header, subdomain, path prefix or JWT claim), workspace roles (`owner`, `admin`, `member`, `viewer`, app-defined) feeding navree-access, `WorkspaceRepo` and `WorkspaceScoped`, row isolation with PostgreSQL row-level security (`RlsPolicy`), schema and database isolation (`workspace_migrations`, `WorkspaceUow`, `WorkspaceDatabases`), invitations, events and the `/api/workspaces` routes; organizations above workspaces (`workspace.organizations`, `Organizations`, `OrgMembers`, `OrgRole`, `WorkspaceSelector`, `CurrentOrganization`, `InOrganization`, `OrgRepo`, access requests, `/api/organizations`) and partitions inside them (`workspace.partitions`, `Partitions`, `PartitionScoped`, `PartitionScope`, `CurrentPartition`, `PartitionRepo`, `X-Partition`); demo workspaces (`DemoSeeder`, fixtures, `workspace.demo` read-only or nightly reset, `X-Navree-Demo`). Use when building a SaaS or team feature, adding data that belongs to a workspace (team, organization, tenant), grouping workspaces under a company or partner, splitting a workspace's data by domain or region, checking permissions per workspace or organization, inviting users, seeding a demo or sales workspace, or debugging a 400/403/404 from a workspace or organization route or data leaking between workspaces or partitions."
+description: "Multi-tenancy with navree-workspace: `WorkspaceModule` and the `workspace` config section, `CurrentWorkspace` and the `InWorkspace` guard (header, subdomain, path prefix or JWT claim), workspace roles (`owner`, `admin`, `member`, `viewer`, app-defined) feeding navree-access, `WorkspaceRepo` and `WorkspaceScoped`, row isolation with PostgreSQL row-level security (`RlsPolicy`), schema and database isolation (`workspace_migrations`, `WorkspaceUow`, `WorkspaceDatabases`), invitations, events and the `/api/workspaces` routes; organizations above workspaces (`workspace.organizations`, `Organizations`, `OrgMembers`, `OrgRole`, `WorkspaceSelector`, `CurrentOrganization`, `InOrganization`, `OrgRepo`, access requests, `/api/organizations`) and partitions inside them (`workspace.partitions`, `Partitions`, `PartitionScoped`, `PartitionScope`, `CurrentPartition`, `PartitionRepo`, `X-Partition`); shared libraries (`Library`, `LibraryColumns`, `m.library::<M>()`, `LibraryRepo`, `LibraryScope`, clone on use, `library_read_only`); demo workspaces (`DemoSeeder`, fixtures, `workspace.demo` read-only or nightly reset, `X-Navree-Demo`). Use when building a SaaS or team feature, adding data that belongs to a workspace (team, organization, tenant), grouping workspaces under a company or partner, splitting a workspace's data by domain or region, checking permissions per workspace or organization, inviting users, seeding a demo or sales workspace, shipping templates or courses that every tenant sees, extends and clones, or debugging a 400/403/404 from a workspace or organization route or data leaking between workspaces or partitions."
 ---
 
 # Workspaces
@@ -300,6 +300,67 @@ PartitionRepo::<Contact>::insert(&uow, ws.id(), partition.id(), am).await?;
   `GET|PUT .../members/{user}/partitions {partitions: "all" | [ids]}`.
 - `partitions.delete` keeps rows' `partition_id`: move or delete them first.
 
+## Steps: a shared library (global, organization and workspace content)
+
+Content the product ships and tenants adapt (templates, courses, badges,
+policies): one table, each row global, an organization's or a workspace's;
+a workspace reads all three as one list, changes only its own, clones the
+rest. `navree::workspace::library`.
+
+1. Migration (schema builder): `LibraryColumns` adds `scope`,
+   `organization_id`, `workspace_id`, `cloned_from_id`, their indexes and
+   the CHECK `<table>_library_owner_check`:
+
+```rust
+let library = LibraryColumns::new(schema.target().await?.dialect());
+schema.create("templates", |t| {
+    library.uuid(t, "id").primary();   // BINARY(16) on MySQL, uuid elsewhere
+    library.add(t);
+    t.string("name");
+    t.timestamp_tz("created_at");
+    t.timestamp_tz("updated_at");
+}).await
+```
+
+2. Model + registration:
+
+```rust
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "templates", timestamps)]   // NOT #[model(workspace)]
+pub struct Template {
+    pub id: Uuid,
+    pub scope: LibraryScope,                // global | organization | workspace (default)
+    pub organization_id: Option<Uuid>,
+    pub workspace_id: Option<Uuid>,
+    pub cloned_from_id: Option<Uuid>,
+    pub name: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+impl Library for Template {}               // cloning(&mut self, src) / cloned(uow, src, copy) hooks optional
+
+m.migrations(MigrationSet::new("templates").after(["workspace"]).migration(SchemaMigration::new("m.._create_templates", CreateTemplates)))
+ .library::<Template>();                   // LibraryVisibility scope + LibraryGuard hook + navree check class
+```
+
+3. Use it:
+
+```rust
+Template::query().get(&uow).await?;                          // in a workspace request: global + its org's + its own; no workspace: global only
+LibraryRepo::<Template>::visible_to(&ws).get(&uow).await?;    // explicit viewer (&CurrentWorkspace, &Workspace, &CurrentOrganization)
+LibraryRepo::<Template>::owned_by(LibraryOwner::Organization(org.id())).get(&uow).await?;
+LibraryRepo::<Template>::find_editable_or_fail(&uow, &ws, id).await?;  // 404 unseen, 403 library_read_only shared
+LibraryRepo::<Template>::create(&uow, LibraryOwner::Organization(org.id()), item).await?; // outside a workspace request
+let copy = LibraryRepo::<Template>::clone_into(&uow, id, ws.id()).await?;  // cloned_from_id set; event library.item_cloned after commit
+LibraryRepo::<Template>::clone_to(&uow, ws_item, LibraryOwner::Organization(org)).await?; // publish up (in unguarded(..) inside a ws request)
+LibraryRepo::<Template>::seed_global(db, "slug", items).await?;          // seeders: create/update global rows by a unique column
+```
+
+- Helm: derive `DeriveEntityModel` + `navree::orm::Model` on one struct
+  (`LibraryScope` is a SeaORM active enum too); `Resource::query` filters
+  `Column::Scope.eq(LibraryScope::Global)`, `create` calls
+  `LibraryRepo::create(ctx.uow(), LibraryOwner::Global, ..)`.
+
 ## Steps: give the app a demo workspace
 
 A demo is a workspace with `kind = "demo"` (`Workspace::kind()`,
@@ -440,8 +501,18 @@ Read invitation tokens from `app.get::<Mailer>().await.array_transport().unwrap(
   curate it with seeders, `editor_roles` or `allow`, never by turning the
   mode off. A demo seeder that writes outside `demo.uow()` (or forgets
   `tables()`/`clear`) leaves rows a reset doesn't remove.
+- A library model without `m.library::<M>()` has no visibility scope and no
+  guard: `Template::query()` then returns every workspace's rows. Never mark
+  it `#[model(workspace)]` (that hides global rows). Outside a workspace
+  request the scope shows global rows only: use `LibraryRepo::visible_to`
+  / `owned_by` for organization screens and commands. Inside a workspace
+  request a write to a global or organization item is a 403
+  `library_read_only` (clone it), another workspace's item a 404; writing
+  for another owner there needs `unguarded(..)` plus your own permission
+  check.
 
 Docs: `/docs/workspaces/introduction/`, `/docs/workspaces/resolution/`,
 `/docs/workspaces/members-and-roles/`, `/docs/workspaces/invitations/`,
 `/docs/workspaces/isolation/`, `/docs/workspaces/organizations/`,
-`/docs/workspaces/partitions/`, `/docs/workspaces/demo-workspaces/`.
+`/docs/workspaces/partitions/`, `/docs/workspaces/shared-libraries/`,
+`/docs/workspaces/demo-workspaces/`.

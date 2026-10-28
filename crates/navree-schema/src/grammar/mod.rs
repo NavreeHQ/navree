@@ -162,6 +162,24 @@ fn validate(blueprint: &Blueprint, ctx: &Context<'_>) -> SchemaResult {
         {
             return fail(format!("{} `{}` has no columns", index.kind, index.name));
         }
+        match command {
+            Command::Check(check) if check.name.trim().is_empty() => {
+                return fail(
+                    "a CHECK constraint needs a name: t.check(\"<table>_<what>_check\", \"..\")"
+                        .to_owned(),
+                );
+            }
+            Command::Check(check) if check.expression.trim().is_empty() => {
+                return fail(format!(
+                    "CHECK constraint `{}` has no expression",
+                    check.name
+                ));
+            }
+            Command::DropCheck(name) if name.trim().is_empty() => {
+                return fail("a CHECK constraint needs a name to be dropped".to_owned());
+            }
+            _ => {}
+        }
     }
     if blueprint.creating && blueprint.columns().is_empty() && blueprint.hypertable.is_none() {
         return fail("a table needs at least one column".to_owned());

@@ -366,6 +366,29 @@ impl Event for PartitionAccessChanged {
     const NAME: &'static str = "workspace.partition_access_changed";
 }
 
+/// A library item was cloned
+/// ([`LibraryRepo::clone_into`](crate::library::LibraryRepo::clone_into)):
+/// emitted once the unit of work that made the copy commits.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LibraryItemCloned {
+    /// The library: the model's table (`templates`).
+    pub library: String,
+    /// The key of the item that was cloned, as text.
+    pub item_id: String,
+    /// The key of the copy, as text.
+    pub clone_id: String,
+    /// Who owns the item that was cloned.
+    pub source: crate::library::LibraryOwner,
+    /// Who owns the copy.
+    pub owner: crate::library::LibraryOwner,
+    /// The user who cloned it (the unit of work's actor), if any.
+    pub cloned_by: Option<Uuid>,
+}
+
+impl Event for LibraryItemCloned {
+    const NAME: &'static str = "library.item_cloned";
+}
+
 /// A demo workspace was seeded: when it was created
 /// ([`DemoWorkspaces::create`](crate::DemoWorkspaces::create), `reset:
 /// false`) or reset (`workspace:demo-reset`, `reset: true`).

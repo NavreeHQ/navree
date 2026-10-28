@@ -41,8 +41,10 @@ pub const DEMO_READ_ONLY: &str = navree_http::codes::DEMO_READ_ONLY;
 /// | `PartitionForbidden` | 403 | `partition_forbidden` | `You don't have access to this partition.` |
 /// | `DemoReadOnly` | 403 | `demo_read_only` | `Demo workspaces are read-only.` |
 /// | `NotDemo` | 409 | `not_a_demo_workspace` | `This workspace is not a demo workspace.` |
+/// | `LibraryReadOnly` | 403 | `library_read_only` | `This library item is shared: clone it to change it.` |
 /// | `FeatureDisabled` | 500 | `internal_error` | (the setting to turn on, in the log) |
 /// | `Db` | as navree-db maps it (404, 409) or 500 | | |
+/// | `Orm` | as its source maps (a missing record 404, a hook's refusal as that refusal) or 500 | | |
 /// | `Other` | 500 | `internal_error` | |
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
@@ -128,6 +130,16 @@ pub enum WorkspaceError {
     /// The workspace (a slug or an id) is not a demo workspace.
     #[error("workspace `{0}` is not a demo workspace")]
     NotDemo(String),
+    /// A write to a library item the workspace (or organization) does not
+    /// own: a global or an organization's item, seen but shared. The value
+    /// names the item, for the log. Clone it to change it.
+    #[error("{0} is shared and read-only here: clone it to change it")]
+    LibraryReadOnly(String),
+    /// An ORM error (a library query or write). Over HTTP it answers as the
+    /// error in its source does: a 404 for a missing record, a 409 for a
+    /// unique violation, a hook's refusal as that refusal.
+    #[error(transparent)]
+    Orm(#[from] navree_orm::OrmError),
     /// A service of a feature that is off was called; the value is the
     /// setting that turns it on (`workspace.organizations.enabled`).
     #[error("{0} is false: turn it on to use this")]
@@ -242,9 +254,32 @@ pub(crate) fn map_workspace_error(error: &WorkspaceError) -> Option<AppError> {
             AppError::conflict("This workspace is not a demo workspace.")
                 .with_code("not_a_demo_workspace")
         }
+        WorkspaceError::LibraryReadOnly(_) => AppError::forbidden()
+            .with_code(LIBRARY_READ_ONLY)
+            .with_detail("This library item is shared: clone it to change it."),
         WorkspaceError::Db(db) => return navree_db::map_db_error(db),
+        WorkspaceError::Orm(error) => return map_orm_error(error),
         WorkspaceError::FeatureDisabled(_) | WorkspaceError::Other(_) => return None,
     })
+}
+
+/// The error code of a write to a shared library item (`AppError::code`).
+pub const LIBRARY_READ_ONLY: &str = "library_read_only";
+
+/// The response of an ORM error: the first workspace error or database
+/// error of its source chain, as each maps (`None`, a 500, otherwise).
+fn map_orm_error(error: &navree_orm::OrmError) -> Option<AppError> {
+    let mut next: Option<&(dyn std::error::Error + 'static)> = Some(error);
+    while let Some(cause) = next {
+        if let Some(workspace) = cause.downcast_ref::<WorkspaceError>() {
+            return map_workspace_error(workspace);
+        }
+        if let Some(db) = cause.downcast_ref::<DbErr>() {
+            return navree_db::map_db_error(db);
+        }
+        next = cause.source();
+    }
+    None
 }
 
 #[cfg(test)]
@@ -363,6 +398,52 @@ mod tests {
         assert_eq!(body["errors"]["slug"][0], "slug has already been taken");
         let body = WorkspaceError::NotMember.to_app_error().body();
         assert_eq!(body["message"], "You are not a member of this workspace.");
+    }
+
+    #[test]
+    fn library_errors_map_through_the_orm_error_s_source() {
+        let read_only = WorkspaceError::LibraryReadOnly("Template x (global)".into());
+        let response = read_only.to_app_error();
+        assert_eq!(response.status, StatusCode::FORBIDDEN);
+        assert_eq!(response.code, LIBRARY_READ_ONLY);
+        assert_eq!(
+            response.body()["message"],
+            "This library item is shared: clone it to change it."
+        );
+
+        let cases = [
+            (
+                navree_orm::OrmError::refused(
+                    "Template",
+                    WorkspaceError::LibraryReadOnly("Template x (global)".into()),
+                ),
+                403,
+                "library_read_only",
+            ),
+            (
+                navree_orm::OrmError::refused(
+                    "Template",
+                    WorkspaceError::invalid("scope", "a workspace's item needs a workspace_id"),
+                ),
+                400,
+                "validation_failed",
+            ),
+            (
+                navree_orm::OrmError::not_found("Template", vec!["x".into()]),
+                404,
+                "not_found",
+            ),
+            (
+                navree_orm::OrmError::InvalidQuery("bad".into()),
+                500,
+                "internal_error",
+            ),
+        ];
+        for (error, status, code) in cases {
+            let response = WorkspaceError::from(error).to_app_error();
+            assert_eq!(response.status.as_u16(), status, "{code}");
+            assert_eq!(response.code, code);
+        }
     }
 
     #[test]
