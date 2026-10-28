@@ -97,22 +97,19 @@ pub trait Grammar: Send + Sync {
             Statement::Update(update) => self.update(w, update),
             Statement::Delete(delete) => self.delete(w, delete),
             Statement::Truncate(truncate) => {
-                let mut statements = self.truncate(truncate);
-                if statements.len() != 1 {
-                    return Err(OrmError::invalid(format!(
-                        "emptying a table is {} statements on {}: render it with render_all",
+                // One `TRUNCATE` without values, or several statements
+                // (SQLite) that only `render_all` returns.
+                match self.truncate(truncate).as_slice() {
+                    [statement] if statement.values.is_empty() => {
+                        w.push(&statement.sql);
+                        Ok(())
+                    }
+                    statements => Err(OrmError::invalid(format!(
+                        "emptying a table is {} statement(s) with values on {}: render it with render_all",
                         statements.len(),
                         self.dialect().name()
-                    )));
+                    ))),
                 }
-                let statement = statements.remove(0);
-                w.push(&statement.sql);
-                for value in statement.values {
-                    // A truncation binds nothing on databases with
-                    // `TRUNCATE`; kept for completeness.
-                    w.bind(value);
-                }
-                Ok(())
             }
         }
     }
