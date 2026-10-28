@@ -13,7 +13,7 @@ use navree_contracts::{Clock, SystemClock};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{AuthError, JwtOptions};
+use crate::{AuthError, JwtOptions, SignInMethod};
 
 /// Clock skew tolerated on `exp` and `iat`, in seconds.
 pub const LEEWAY_SECS: i64 = 30;
@@ -52,6 +52,10 @@ pub struct Claims {
     /// The user acting as `sub` (an impersonation session).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub act: Option<ActorClaim>,
+    /// How the user signed in, on a two-factor challenge token: the second
+    /// step asks the [`SignInPolicy`](crate::SignInPolicy)s about it again.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sign_in: Option<SignInMethod>,
 }
 
 /// The `act` claim of an impersonation token: who is acting as the
@@ -194,6 +198,36 @@ impl JwtService {
         ttl: Duration,
         session: SessionClaims,
     ) -> Result<String, AuthError> {
+        self.encode(user_id, typ, ttl, session, None)
+    }
+
+    /// A challenge token (`typ` [`TokenType::TwoFactorChallenge`] or
+    /// [`TokenType::PlatformChallenge`]) for `user_id`, valid for `ttl`,
+    /// carrying how the user signed in (`sign_in`).
+    pub fn sign_challenge(
+        &self,
+        user_id: Uuid,
+        typ: TokenType,
+        ttl: Duration,
+        method: &SignInMethod,
+    ) -> Result<String, AuthError> {
+        self.encode(
+            user_id,
+            typ,
+            ttl,
+            SessionClaims::default(),
+            Some(method.clone()),
+        )
+    }
+
+    fn encode(
+        &self,
+        user_id: Uuid,
+        typ: TokenType,
+        ttl: Duration,
+        session: SessionClaims,
+        sign_in: Option<SignInMethod>,
+    ) -> Result<String, AuthError> {
         let iat = self.clock.now().timestamp();
         let ttl = i64::try_from(ttl.as_secs()).unwrap_or(i64::MAX);
         let claims = Claims {
@@ -207,6 +241,7 @@ impl JwtService {
             sid: session.session_id,
             auth_time: session.auth_time,
             act: session.impersonator.map(|sub| ActorClaim { sub }),
+            sign_in,
         };
         jsonwebtoken::encode(&Header::new(Algorithm::HS256), &claims, &self.encoding)
             .map_err(|error| AuthError::Signing(error.to_string()))
@@ -335,11 +370,12 @@ mod tests {
             sid: None,
             auth_time: None,
             act: None,
+            sign_in: None,
         };
         let value = serde_json::to_value(&claims).unwrap();
         assert_eq!(value["typ"], "two_factor_challenge");
         assert!(value.get("aud").is_none());
-        for absent in ["sid", "auth_time", "act"] {
+        for absent in ["sid", "auth_time", "act", "sign_in"] {
             assert!(value.get(absent).is_none(), "{absent}");
         }
         for typ in [

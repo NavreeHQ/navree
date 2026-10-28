@@ -35,7 +35,7 @@ use sea_orm::DbErr;
 /// | `TwoFactorAlreadyEnabled` | 409 | `two_factor_already_enabled` |
 /// | `TwoFactorNotEnabled` | 400 | `two_factor_not_enabled` |
 /// | `InvalidTwoFactorCode` | 401 | `invalid_two_factor_code` |
-/// | `PasswordSignInRefused` | 403 | the policy's code (`sso_required`) |
+/// | `SignInRefused` | 403 | the policy's code (`sso_required`) |
 /// | `TwoFactorSetupRequired` | 403 | `two_factor_required` |
 /// | `ReauthenticationRequired` | 403 | `reauthentication_required` |
 /// | `ImpersonationForbidden` | 403 | `impersonation_forbidden` |
@@ -109,10 +109,10 @@ pub enum AuthError {
     /// A wrong or reused TOTP code or recovery code at a two-factor login.
     #[error("invalid two-factor code")]
     InvalidTwoFactorCode,
-    /// A [`PasswordSignInPolicy`](crate::PasswordSignInPolicy) keeps this
-    /// account off passwords (single sign-on enforced for its domain, say).
-    #[error("password sign-in refused: {message}")]
-    PasswordSignInRefused {
+    /// A [`SignInPolicy`](crate::SignInPolicy) refused the sign-in (single
+    /// sign-on enforced for the account's domain, say).
+    #[error("sign-in refused: {message}")]
+    SignInRefused {
         /// The error code sent to the client (lower snake case), such as
         /// `sso_required`.
         code: String,
@@ -243,7 +243,7 @@ impl AuthError {
                     .with_code("invalid_two_factor_code")
                     .with_detail("Invalid two-factor code"),
             ),
-            AuthError::PasswordSignInRefused { code, message } => Some(
+            AuthError::SignInRefused { code, message } => Some(
                 AppError::forbidden()
                     .with_code(code.as_str())
                     .with_detail(message.as_str()),

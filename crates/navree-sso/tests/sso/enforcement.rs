@@ -479,7 +479,7 @@ async fn another_connection_cannot_sign_in_an_enforced_domain() {
     assert!(auth.find_by_email("eve@acme.test").await.unwrap().is_none());
     // Other domains still sign in through it.
     s.world
-        .saml_sign_in(&other, "globex", "ola@other.test", &[])
+        .saml_sign_in(&other, "globex", "pat@other.test", &[])
         .await
         .assert_status(200);
 }
