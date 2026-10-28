@@ -233,7 +233,7 @@ impl Strategy for OAuthStrategy {
                     if let Some(cache) = &core.cache {
                         let mut refreshed = found.clone();
                         refreshed.last_used_at = Some(now);
-                        cache.insert(crate::token::digest(&token), refreshed).await;
+                        cache.insert(crate::token::digest(&token), refreshed);
                     }
                     tokio::spawn(async move { pats.touch(id).await });
                 }

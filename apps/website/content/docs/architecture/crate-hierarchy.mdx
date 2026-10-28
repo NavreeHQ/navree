@@ -21,12 +21,13 @@ L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access
 L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage  navree-time
 L2  navree-http  navree-log  navree-crypto  navree-events  navree-view  navree-cache  navree-http-client  navree-schema
 L1  navree-contracts  navree-config
-L0  navree-kernel                                navree-macros, navree-i18n-macros, navree-orm-macros (proc-macros; no runtime navree deps)   navree-dock (dev tool; no navree deps)
+L0  navree-kernel  navree-bounded (the bounded in-process cache)   navree-macros, navree-i18n-macros, navree-orm-macros (proc-macros; no runtime navree deps)   navree-dock (dev tool; no navree deps)
 ```
 
 | Layer | Crate | What it provides |
 |---|---|---|
 | L0 | `navree-kernel` | Module graph, type-keyed DI container, lifecycle, command runner |
+| L0 | `navree-bounded` | The bounded in-process cache: sharded locks, a strict capacity, SIEVE eviction, TTL and TTI, single-flight loading. It holds the memory cache store, abilities, token lookups and verified domains, and is re-exported as `navree::bounded` |
 | L0 | `navree-macros` | `#[module]`, `#[injectable]`, `#[controller]`, route and access attributes, `#[mcp_server]` |
 | L0 | `navree-i18n-macros` | `embed_locales!`: Fluent files embedded in the binary, checked at compile time (through navree-i18n) |
 | L0 | `navree-orm-macros` | `#[derive(Model)]`, `#[relations]`, `#[scopes]`, `#[accessors]` and `#[test]` (re-exported by navree-orm) |
@@ -38,7 +39,7 @@ L0  navree-kernel                                navree-macros, navree-i18n-macr
 | L2 | `navree-crypto` | AES-256-GCM encrypter with key rotation, Argon2id hasher, token helpers, JOSE helpers (JWS, JWK, PKCS#8 on `ring`) |
 | L2 | `navree-events` | Typed event bus with sync and queued listeners |
 | L2 | `navree-view` | MiniJinja templates (mail and other text) |
-| L2 | `navree-cache` | Cache stores (memory on moka), remember, tags, locks |
+| L2 | `navree-cache` | Cache stores (memory on navree-bounded), remember, tags, locks |
 | L2 | `navree-http-client` | Outgoing HTTP with retries, timeouts, an SSRF policy and fakes |
 | L2 | `navree-schema` | The schema builder for PostgreSQL (with TimescaleDB), MySQL/MariaDB and SQLite; hypertables and continuous aggregates; introspection; schema dumps; migration files |
 | L3 | `navree-db` | Connections and pools on SeaORM, per-request unit of work, the migrator, seeders, pagination |
@@ -90,10 +91,11 @@ L0  navree-kernel                                navree-macros, navree-i18n-macr
 
 | Crate | May depend on |
 |---|---|
-| `navree-kernel`, `navree-macros`, `navree-orm-macros`, `navree-dock` | No Navree crate |
+| `navree-kernel`, `navree-bounded`, `navree-macros`, `navree-orm-macros`, `navree-dock` | No Navree crate |
 | `navree-contracts` | kernel |
 | `navree-config` | kernel, contracts |
-| `navree-http`, `navree-log`, `navree-crypto`, `navree-events`, `navree-view`, `navree-cache`, `navree-http-client`, `navree-schema` | kernel, contracts, config |
+| `navree-http`, `navree-log`, `navree-crypto`, `navree-events`, `navree-view`, `navree-http-client`, `navree-schema` | kernel, contracts, config |
+| `navree-cache` | kernel, bounded, contracts, config, telemetry |
 | `navree-db` | kernel, contracts, config, http, schema |
 | `navree-testing`, `navree-observe`, `navree-api` | kernel, contracts, config, http |
 | `navree-mail` | kernel, contracts, config, telemetry, view, http, crypto, events, http-client, db (a same-layer edge: the delivery tables), storage (a same-layer edge, feature `inbound`: raw messages on disks) |
@@ -103,7 +105,7 @@ L0  navree-kernel                                navree-macros, navree-i18n-macr
 | `navree-validation`, `navree-audit` | kernel, contracts, config, http, db |
 | `navree-queue` | kernel, contracts, config, db |
 | `navree-schedule` | kernel, contracts, config, db, time |
-| `navree-access` | kernel, contracts, config, http, db, cache |
+| `navree-access` | kernel, bounded, contracts, config, http, db, cache |
 | `navree-notify` | kernel, contracts, config, http, db, mail |
 | `navree-ui` | kernel, contracts, config, http, view |
 | `navree-orm` | kernel, contracts, config, telemetry, http, db, events, crypto, api, orm-macros; access, testing and validation behind features |
@@ -125,11 +127,11 @@ L0  navree-kernel                                navree-macros, navree-i18n-macr
 | `navree-i18n` | kernel, contracts, config, http, view, db, validation, notify, workspace, i18n-macros |
 | `navree-lighthouse` | kernel, contracts, config, telemetry, http, crypto, view, http-client, db, mail, schedule, access, auth, mcp (with its `mcp` feature) |
 | `navree-logbook` | kernel, contracts, config, telemetry, http, view, db, auth |
-| `navree-helm` | kernel, contracts, config, http, view, cache, crypto, db, storage, queue, validation, audit, access, auth, workspace |
+| `navree-helm` | kernel, bounded, contracts, config, http, view, cache, crypto, db, storage, queue, validation, audit, access, auth, workspace |
 | `navree-workflows` | kernel, contracts, config, macros, http, events, db, schedule, workspace |
 | `navree-media` | kernel, contracts, config, http, http-client, db, orm, storage, queue |
 | `navree-directory` | kernel, contracts, config, http, crypto, events, db, orm, queue, schedule, workspace, integrations |
-| `navree-domains` | kernel, contracts, config, http, crypto, events, db, orm, schedule, workspace; lighthouse (feature `lighthouse`) |
+| `navree-domains` | kernel, bounded, contracts, config, http, crypto, events, db, orm, schedule, workspace; lighthouse (feature `lighthouse`) |
 | `navree` | Every runtime crate and the macros |
 | `navree-cli` | `navree-dock` only (for `navree dock`): everything else it knows about the framework is in the code it generates |
 
