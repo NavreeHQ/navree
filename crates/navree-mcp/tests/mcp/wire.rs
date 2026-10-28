@@ -286,11 +286,16 @@ async fn results_and_errors_have_their_protocol_shape() {
     assert_eq!(created["isError"], false);
     assert_eq!(created["structuredContent"]["title"], "Initech");
     assert_eq!(created["content"][0]["type"], "text");
-    let text: Value = serde_json::from_str(created["content"][0]["text"].as_str().unwrap()).unwrap();
+    let text: Value =
+        serde_json::from_str(created["content"][0]["text"].as_str().unwrap()).unwrap();
     assert_eq!(text, created["structuredContent"]);
 
     let failed = session
-        .call(3, "tools/call", json!({ "name": "explode", "arguments": {} }))
+        .call(
+            3,
+            "tools/call",
+            json!({ "name": "explode", "arguments": {} }),
+        )
         .await["result"]
         .clone();
     assert_eq!(failed["isError"], true);
@@ -319,7 +324,11 @@ async fn results_and_errors_have_their_protocol_shape() {
     );
 
     let prompt = session
-        .call(7, "prompts/get", json!({ "name": "summarize", "arguments": { "days": "7" } }))
+        .call(
+            7,
+            "prompts/get",
+            json!({ "name": "summarize", "arguments": { "days": "7" } }),
+        )
         .await["result"]
         .clone();
     assert_eq!(
@@ -330,7 +339,10 @@ async fn results_and_errors_have_their_protocol_shape() {
         })
     );
 
-    assert_eq!(session.call(8, "ping", Value::Null).await["result"], json!({}));
+    assert_eq!(
+        session.call(8, "ping", Value::Null).await["result"],
+        json!({})
+    );
     let unknown_method = session.call(9, "no/such/method", json!({})).await;
     assert_eq!(unknown_method["error"]["code"], -32601, "{unknown_method}");
 }
@@ -405,7 +417,13 @@ async fn stateless_results_carry_their_cache_hints() {
     assert_eq!(result["ttlMs"], 0);
     assert_eq!(result["cacheScope"], "private");
 
-    let read = stateless(&client, 2, "resources/read", json!({ "uri": "crm://notes/x" })).await;
+    let read = stateless(
+        &client,
+        2,
+        "resources/read",
+        json!({ "uri": "crm://notes/x" }),
+    )
+    .await;
     let result = answer(&read, 2)["result"].clone();
     assert_eq!(result["resultType"], "complete");
     assert_eq!(result["ttlMs"], 0);
@@ -421,20 +439,29 @@ async fn stateless_results_carry_their_cache_hints() {
     .await;
     let result = answer(&called, 3)["result"].clone();
     assert_eq!(result["resultType"], "complete");
-    assert_eq!(
-        result["structuredContent"]["session"], false,
-        "no session"
-    );
+    assert_eq!(result["structuredContent"]["session"], false, "no session");
 
     // Resource-not-found is invalid params on the stateless protocol.
-    let missing = stateless(&client, 4, "resources/read", json!({ "uri": "crm://contacts/1" })).await;
+    let missing = stateless(
+        &client,
+        4,
+        "resources/read",
+        json!({ "uri": "crm://contacts/1" }),
+    )
+    .await;
     assert_eq!(answer(&missing, 4)["error"]["code"], -32602);
 
     let discovered = stateless(&client, 5, "server/discover", json!({})).await;
     let result = answer(&discovered, 5)["result"].clone();
     assert_eq!(
         result["supportedVersions"],
-        json!(["2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25", STATELESS])
+        json!([
+            "2024-11-05",
+            "2025-03-26",
+            "2025-06-18",
+            "2025-11-25",
+            STATELESS
+        ])
     );
     assert_eq!(result["resultType"], "complete");
     assert_eq!(result["cacheScope"], "private");
@@ -450,7 +477,13 @@ async fn the_stateless_protocol_checks_versions_methods_and_headers() {
     let ping = stateless(&client, 1, "ping", json!({})).await;
     assert_eq!(ping.status(), 404);
     assert_eq!(answer(&ping, 1)["error"]["code"], -32601);
-    let subscribe = stateless(&client, 2, "resources/subscribe", json!({ "uri": "crm://pipeline" })).await;
+    let subscribe = stateless(
+        &client,
+        2,
+        "resources/subscribe",
+        json!({ "uri": "crm://pipeline" }),
+    )
+    .await;
     assert_eq!(answer(&subscribe, 2)["error"]["code"], -32601);
 
     // An unsupported version in the request's metadata.

@@ -53,7 +53,11 @@ impl RpcError {
     }
 
     pub(crate) fn method_not_found(method: &str) -> Self {
-        Self::new(METHOD_NOT_FOUND, "Method not found", Some(json!({ "method": method })))
+        Self::new(
+            METHOD_NOT_FOUND,
+            "Method not found",
+            Some(json!({ "method": method })),
+        )
     }
 
     pub(crate) fn invalid_params(message: impl Into<String>) -> Self {
@@ -272,7 +276,10 @@ mod tests {
         else {
             panic!("a request");
         };
-        assert_eq!((request.id, request.method.as_str()), (json!(7), "tools/list"));
+        assert_eq!(
+            (request.id, request.method.as_str()),
+            (json!(7), "tools/list")
+        );
         assert_eq!(request.params["cursor"], "x");
         assert!(matches!(
             single(r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#),
@@ -296,10 +303,22 @@ mod tests {
         assert_eq!(code("[]"), INVALID_REQUEST);
         assert_eq!(code("3"), INVALID_REQUEST);
         assert_eq!(code(r#"{"id":1,"method":"ping"}"#), INVALID_REQUEST);
-        assert_eq!(code(r#"{"jsonrpc":"1.0","id":1,"method":"ping"}"#), INVALID_REQUEST);
-        assert_eq!(code(r#"{"jsonrpc":"2.0","id":null,"method":"ping"}"#), INVALID_REQUEST);
-        assert_eq!(code(r#"{"jsonrpc":"2.0","id":1.5,"method":"ping"}"#), INVALID_REQUEST);
-        assert_eq!(code(r#"{"jsonrpc":"2.0","id":1,"method":3}"#), INVALID_REQUEST);
+        assert_eq!(
+            code(r#"{"jsonrpc":"1.0","id":1,"method":"ping"}"#),
+            INVALID_REQUEST
+        );
+        assert_eq!(
+            code(r#"{"jsonrpc":"2.0","id":null,"method":"ping"}"#),
+            INVALID_REQUEST
+        );
+        assert_eq!(
+            code(r#"{"jsonrpc":"2.0","id":1.5,"method":"ping"}"#),
+            INVALID_REQUEST
+        );
+        assert_eq!(
+            code(r#"{"jsonrpc":"2.0","id":1,"method":3}"#),
+            INVALID_REQUEST
+        );
         assert_eq!(
             code(r#"{"jsonrpc":"2.0","id":1,"method":"ping","params":[1]}"#),
             INVALID_PARAMS
@@ -339,7 +358,10 @@ mod tests {
             json!({ "jsonrpc": "2.0", "id": 1, "result": {} })
         );
         let answer = error(&Value::Null, &RpcError::parse_error("Parse error"));
-        assert_eq!(answer["error"], json!({ "code": -32700, "message": "Parse error" }));
+        assert_eq!(
+            answer["error"],
+            json!({ "code": -32700, "message": "Parse error" })
+        );
         assert!(is_answer(&answer));
         let note = notification("notifications/tools/list_changed", None);
         assert!(note.get("params").is_none());

@@ -204,14 +204,26 @@ impl Connection {
     /// `detach`, tool calls run on their own task and answer later.
     async fn message(&mut self, value: Value, detach: bool) -> Option<Value> {
         let Value::Object(mut message) = value else {
-            return Some(error(&Value::Null, -32600, "Invalid Request: not a JSON-RPC message"));
+            return Some(error(
+                &Value::Null,
+                -32600,
+                "Invalid Request: not a JSON-RPC message",
+            ));
         };
         let id = message.remove("id");
         let answer_id = id.clone().filter(valid_id).unwrap_or(Value::Null);
         if message.get("jsonrpc") != Some(&json!("2.0")) {
-            return Some(error(&answer_id, -32600, "Invalid Request: jsonrpc must be \"2.0\""));
+            return Some(error(
+                &answer_id,
+                -32600,
+                "Invalid Request: jsonrpc must be \"2.0\"",
+            ));
         }
-        let Some(method) = message.get("method").and_then(Value::as_str).map(str::to_owned) else {
+        let Some(method) = message
+            .get("method")
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+        else {
             if message.contains_key("result") || message.contains_key("error") {
                 return None;
             }
@@ -221,7 +233,11 @@ impl Connection {
             None | Some(Value::Null) => Map::new(),
             Some(Value::Object(params)) => params,
             Some(_) => {
-                return Some(error(&answer_id, -32602, "Invalid params: params must be an object"));
+                return Some(error(
+                    &answer_id,
+                    -32602,
+                    "Invalid params: params must be an object",
+                ));
             }
         };
         let Some(id) = id else {
@@ -261,7 +277,11 @@ impl Connection {
         let session_version = match (&self.lifecycle, method) {
             (Lifecycle::Pending, "initialize") => {
                 let Some(requested) = params.get("protocolVersion").and_then(Value::as_str) else {
-                    return Some(error(&id, -32602, "Invalid params: protocolVersion must be a string"));
+                    return Some(error(
+                        &id,
+                        -32602,
+                        "Invalid params: protocolVersion must be a string",
+                    ));
                 };
                 let version = negotiate(requested);
                 self.lifecycle = Lifecycle::Session(version.to_owned());
@@ -381,7 +401,11 @@ impl Connection {
         stateless: bool,
         detach: bool,
     ) -> Option<Value> {
-        let Some(name) = params.get("name").and_then(Value::as_str).map(str::to_owned) else {
+        let Some(name) = params
+            .get("name")
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+        else {
             return Some(error(&id, -32602, "Invalid params: name must be a string"));
         };
         if !self.server.navigator.tools().iter().any(|t| t.name == name) {
@@ -390,7 +414,13 @@ impl Connection {
         let args = match params.get("arguments") {
             None | Some(Value::Null) => Value::Null,
             Some(Value::Object(args)) => Value::Object(args.clone()),
-            Some(_) => return Some(error(&id, -32602, "Invalid params: arguments must be an object")),
+            Some(_) => {
+                return Some(error(
+                    &id,
+                    -32602,
+                    "Invalid params: arguments must be an object",
+                ));
+            }
         };
         let navigator = self.server.navigator.clone();
         let key = id.to_string();
@@ -551,7 +581,9 @@ fn tool_result(output: Result<ToolOutput, crate::tools::ToolError>) -> Value {
             }
             result
         }
-        Ok(ToolOutput::Markdown(markdown)) => json!({ "content": text(markdown), "isError": false }),
+        Ok(ToolOutput::Markdown(markdown)) => {
+            json!({ "content": text(markdown), "isError": false })
+        }
         Err(error) => json!({ "content": text(error.0), "isError": true }),
     }
 }

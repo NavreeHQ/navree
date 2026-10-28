@@ -143,8 +143,16 @@ async fn the_server_lists_twelve_read_only_tools() {
         ]
     );
     for tool in tools.as_array().unwrap() {
-        assert_eq!(tool["annotations"]["readOnlyHint"], true, "{}", tool["name"]);
-        assert_eq!(tool["annotations"]["destructiveHint"], false, "{}", tool["name"]);
+        assert_eq!(
+            tool["annotations"]["readOnlyHint"], true,
+            "{}",
+            tool["name"]
+        );
+        assert_eq!(
+            tool["annotations"]["destructiveHint"], false,
+            "{}",
+            tool["name"]
+        );
         assert_eq!(tool["inputSchema"]["type"], "object");
     }
 
@@ -219,7 +227,10 @@ async fn tools_answer_with_text_and_structured_content() {
             .unwrap()
             .starts_with("# Agent skills")
     );
-    assert!(doc.get("structuredContent").is_none(), "Markdown is text only");
+    assert!(
+        doc.get("structuredContent").is_none(),
+        "Markdown is text only"
+    );
 
     let refused = client
         .call(3, "query_database", json!({ "sql": "DELETE FROM deals" }))
@@ -230,7 +241,10 @@ async fn tools_answer_with_text_and_structured_content() {
     );
 
     let unknown = client.call(4, "drop_database", json!({})).await;
-    assert_eq!(unknown["error"]["code"], -32602, "an unknown tool is a protocol error");
+    assert_eq!(
+        unknown["error"]["code"], -32602,
+        "an unknown tool is a protocol error"
+    );
 
     client.close().await;
 }
@@ -240,7 +254,10 @@ async fn the_protocol_refuses_what_it_does_not_speak() {
     let fixture = Fixture::new("[app]\nname = \"crm\"\n");
     let mut client = Client::connect(&fixture);
     // Only ping and discovery before the handshake.
-    assert_eq!(client.request(1, "ping", json!({})).await["result"], json!({}));
+    assert_eq!(
+        client.request(1, "ping", json!({})).await["result"],
+        json!({})
+    );
     let early = client.request(2, "tools/list", json!({})).await;
     assert_eq!(early["error"]["code"], -32602, "{early}");
     client.initialize().await;
@@ -263,7 +280,10 @@ async fn the_protocol_refuses_what_it_does_not_speak() {
     assert_eq!(client.next().await["error"]["code"], -32600);
     client.write_line("{oops").await;
     assert_eq!(client.next().await["error"]["code"], -32700);
-    assert_eq!(client.request(6, "ping", json!({})).await["result"], json!({}));
+    assert_eq!(
+        client.request(6, "ping", json!({})).await["result"],
+        json!({})
+    );
     client.close().await;
 }
 

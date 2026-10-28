@@ -130,7 +130,11 @@ async fn assert_stopped(counter: usize) {
     tokio::time::sleep(Duration::from_millis(100)).await;
     let stopped_at = counted.load(Ordering::SeqCst);
     tokio::time::sleep(Duration::from_millis(300)).await;
-    assert_eq!(counted.load(Ordering::SeqCst), stopped_at, "the call kept running");
+    assert_eq!(
+        counted.load(Ordering::SeqCst),
+        stopped_at,
+        "the call kept running"
+    );
 }
 
 // ---- Origin (DNS rebinding) ----
@@ -143,7 +147,11 @@ async fn browser_origins_must_be_allowed_on_every_method() {
         .await;
     let client = app.acting_as(user());
     let session = Session::open(client.clone(), "2025-11-25").await;
-    for origin in ["https://evil.example", "null", "https://crm.example.com.evil.example"] {
+    for origin in [
+        "https://evil.example",
+        "null",
+        "https://crm.example.com.evil.example",
+    ] {
         let posted = client
             .post("/mcp")
             .header(ORIGIN, origin)
@@ -244,7 +252,11 @@ async fn a_session_is_bound_to_the_user_who_opened_it() {
 
     // The owner's session is untouched.
     let listed = session.call(3, "tools/list", json!({})).await;
-    assert!(listed["result"]["tools"].as_array().is_some_and(|tools| !tools.is_empty()));
+    assert!(
+        listed["result"]["tools"]
+            .as_array()
+            .is_some_and(|tools| !tools.is_empty())
+    );
 }
 
 // ---- Body size and JSON depth ----
@@ -263,7 +275,10 @@ async fn bodies_over_the_limit_are_refused() {
         .await;
     assert_eq!(big.status(), 413);
     // The session goes on.
-    assert_eq!(session.call(3, "ping", Value::Null).await["result"], json!({}));
+    assert_eq!(
+        session.call(3, "ping", Value::Null).await["result"],
+        json!({})
+    );
 }
 
 /// `depth` nested arrays.
@@ -317,7 +332,10 @@ async fn deeply_nested_json_is_refused_over_http() {
 
 #[tokio::test]
 async fn stdio_refuses_deep_and_oversized_messages_and_goes_on() {
-    let app = builder().config("mcp.max_request_bytes", 1024).build().await;
+    let app = builder()
+        .config("mcp.max_request_bytes", 1024)
+        .build()
+        .await;
     let mut client = LineClient::connect(&app, &Uuid::now_v7().to_string());
     client.initialize("2025-11-25").await;
 
@@ -342,7 +360,10 @@ async fn stdio_refuses_deep_and_oversized_messages_and_goes_on() {
     client.write_line("not json").await;
     assert_eq!(client.answer(&Value::Null).await["error"]["code"], -32700);
 
-    assert_eq!(client.request(4, "ping", Value::Null).await["result"], json!({}));
+    assert_eq!(
+        client.request(4, "ping", Value::Null).await["result"],
+        json!({})
+    );
     client.close().await.unwrap();
 }
 
@@ -352,7 +373,10 @@ async fn stdio_refuses_deep_and_oversized_messages_and_goes_on() {
 async fn batches_are_refused_unless_the_protocol_allows_them() {
     let app = app().await;
     let client = app.acting_as(user());
-    let batch = json!([request(2, "ping", Value::Null), request(3, "tools/list", json!({}))]);
+    let batch = json!([
+        request(2, "ping", Value::Null),
+        request(3, "tools/list", json!({}))
+    ]);
 
     for version in ["2024-11-05", "2025-06-18", "2025-11-25"] {
         let session = Session::open(client.clone(), version).await;
@@ -388,7 +412,10 @@ async fn batches_are_refused_unless_the_protocol_allows_them() {
 #[tokio::test]
 async fn stdio_batches_follow_the_same_rule() {
     let app = app().await;
-    let batch = json!([request(2, "ping", Value::Null), request(3, "ping", Value::Null)]);
+    let batch = json!([
+        request(2, "ping", Value::Null),
+        request(3, "ping", Value::Null)
+    ]);
 
     let mut client = LineClient::connect(&app, &Uuid::now_v7().to_string());
     client.initialize("2025-11-25").await;
@@ -434,7 +461,11 @@ async fn unknown_methods_answer_method_not_found_without_side_effects() {
         (6, "logging/setLevel"),
     ] {
         let answer = session
-            .call(id, method, json!({ "name": "create_deal", "arguments": { "title": "x", "amount_cents": 1 } }))
+            .call(
+                id,
+                method,
+                json!({ "name": "create_deal", "arguments": { "title": "x", "amount_cents": 1 } }),
+            )
             .await;
         assert_eq!(answer["error"]["code"], -32601, "{method}: {answer}");
         assert!(answer.get("result").is_none());
@@ -450,7 +481,10 @@ async fn unknown_methods_answer_method_not_found_without_side_effects() {
     });
     let stateless = post(
         &app.acting_as(rep),
-        &[("mcp-protocol-version", "2026-07-28"), ("mcp-method", "tools/delete")],
+        &[
+            ("mcp-protocol-version", "2026-07-28"),
+            ("mcp-method", "tools/delete"),
+        ],
         &request(7, "tools/delete", params),
     )
     .await;
@@ -505,7 +539,11 @@ async fn cancelled_http_session_calls_stop() {
                 ("mcp-session-id", headers.0.as_str()),
                 ("mcp-protocol-version", headers.1.as_str()),
             ],
-            &request(9, "tools/call", json!({ "name": "count_slowly", "arguments": { "counter": 0 } })),
+            &request(
+                9,
+                "tools/call",
+                json!({ "name": "count_slowly", "arguments": { "counter": 0 } }),
+            ),
         )
         .await
     });
@@ -536,7 +574,11 @@ async fn cancelled_stdio_calls_stop() {
     let mut client = LineClient::connect(&app, &Uuid::now_v7().to_string());
     client.initialize("2025-11-25").await;
     client
-        .send(&request(5, "tools/call", json!({ "name": "count_slowly", "arguments": { "counter": 1 } })))
+        .send(&request(
+            5,
+            "tools/call",
+            json!({ "name": "count_slowly", "arguments": { "counter": 1 } }),
+        ))
         .await;
     wait_for_counting(1).await;
     client
@@ -550,7 +592,12 @@ async fn cancelled_stdio_calls_stop() {
     // The connection answers what comes next, and nothing for request 5.
     let pong = client.request(6, "ping", Value::Null).await;
     assert_eq!(pong["result"], json!({}));
-    assert!(client.notifications.iter().all(|message| message["id"] != 5));
+    assert!(
+        client
+            .notifications
+            .iter()
+            .all(|message| message["id"] != 5)
+    );
     client.close().await.unwrap();
 }
 
@@ -604,7 +651,9 @@ async fn a_client_that_does_not_read_cannot_grow_the_servers_memory() {
     let app = app().await;
     let notifier = app.get::<McpNotifier>().await;
     let rep = user();
-    let mcp = McpTestClient::new(app.acting_as(rep.clone())).initialize().await;
+    let mcp = McpTestClient::new(app.acting_as(rep.clone()))
+        .initialize()
+        .await;
     // Open the session's stream and never read it.
     let response = app
         .acting_as(rep)
@@ -651,8 +700,7 @@ async fn every_method_challenges_guests_with_the_resource_metadata() {
         .build()
         .await;
     let guest: TestClient = app.client();
-    let expected =
-        "Bearer resource_metadata=\"https://crm.example.com/.well-known/oauth-protected-resource/mcp\"";
+    let expected = "Bearer resource_metadata=\"https://crm.example.com/.well-known/oauth-protected-resource/mcp\"";
     let posted = post(&guest, &[], &initialize("2025-11-25")).await;
     assert_eq!(posted.status(), 401);
     assert_eq!(posted.header("www-authenticate"), Some(expected));
@@ -679,5 +727,8 @@ async fn every_method_challenges_guests_with_the_resource_metadata() {
         .send()
         .await
         .assert_status(200);
-    assert_eq!(metadata.json_value()["resource"], "https://crm.example.com/mcp");
+    assert_eq!(
+        metadata.json_value()["resource"],
+        "https://crm.example.com/mcp"
+    );
 }

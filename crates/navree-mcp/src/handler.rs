@@ -502,7 +502,11 @@ impl McpHandler {
         Ok(json!({ "tools": tools, "cacheScope": "private" }))
     }
 
-    async fn call_tool(&self, scope: &Scope, params: Map<String, Value>) -> Result<Value, RpcError> {
+    async fn call_tool(
+        &self,
+        scope: &Scope,
+        params: Map<String, Value>,
+    ) -> Result<Value, RpcError> {
         let started = Instant::now();
         let name = required_string(&params, "name")?;
         let arguments = match params.get("arguments") {
@@ -714,10 +718,10 @@ impl McpHandler {
             resources: accepted.resources,
             prompts: accepted.prompts,
         };
-        let listener = self
-            .shared
-            .notifier
-            .listen(scope.outlet.clone(), id.clone(), lists, resources);
+        let listener =
+            self.shared
+                .notifier
+                .listen(scope.outlet.clone(), id.clone(), lists, resources);
         let _guard = ListenGuard {
             notifier: &self.shared.notifier,
             id: listener,
@@ -743,7 +747,11 @@ impl McpHandler {
         Ok(json!({ "prompts": prompts, "cacheScope": "private" }))
     }
 
-    async fn get_prompt(&self, scope: &Scope, params: Map<String, Value>) -> Result<Value, RpcError> {
+    async fn get_prompt(
+        &self,
+        scope: &Scope,
+        params: Map<String, Value>,
+    ) -> Result<Value, RpcError> {
         let started = Instant::now();
         let name = required_string(&params, "name")?;
         let arguments = match params.get("arguments") {
@@ -1022,7 +1030,11 @@ fn tool_error(error: &AppError) -> Value {
 }
 
 /// The contents of a resource read.
-fn resource_contents(output: McpOutput, uri: &str, def: &ResourceDef) -> Result<Vec<Value>, AppError> {
+fn resource_contents(
+    output: McpOutput,
+    uri: &str,
+    def: &ResourceDef,
+) -> Result<Vec<Value>, AppError> {
     let text = |text: String, default_mime: &str| {
         json!({
             "uri": uri,

@@ -371,7 +371,10 @@ impl Connection {
     /// `initialize`: agrees on a version and opens the session, whose
     /// notifications go to the connection's writer.
     fn initialize(&mut self, request: &Request, outlet: &Outlet) -> Value {
-        let Some(requested) = request.params.get("protocolVersion").and_then(Value::as_str)
+        let Some(requested) = request
+            .params
+            .get("protocolVersion")
+            .and_then(Value::as_str)
         else {
             return jsonrpc::error(
                 &request.id,
@@ -513,11 +516,17 @@ mod tests {
     async fn long_lines_are_skipped_without_being_kept() {
         let input = format!("{}\n{{\"a\":1}}\n", "x".repeat(100));
         let mut reader = BufReader::with_capacity(8, input.as_bytes());
-        assert!(matches!(read_line(&mut reader, 16).await.unwrap(), Line::TooLong));
+        assert!(matches!(
+            read_line(&mut reader, 16).await.unwrap(),
+            Line::TooLong
+        ));
         let Line::Message(line) = read_line(&mut reader, 16).await.unwrap() else {
             panic!("the next line");
         };
         assert_eq!(line, b"{\"a\":1}");
-        assert!(matches!(read_line(&mut reader, 16).await.unwrap(), Line::End));
+        assert!(matches!(
+            read_line(&mut reader, 16).await.unwrap(),
+            Line::End
+        ));
     }
 }
