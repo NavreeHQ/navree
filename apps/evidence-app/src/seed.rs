@@ -47,18 +47,48 @@ pub const LOAD_USERS: usize = 200;
 
 /// Project names, cycled through per workspace.
 const PROJECTS: &[(&str, &str)] = &[
-    ("Website relaunch", "New pages, new pricing, one launch date."),
-    ("Mobile app", "Sign-in, projects and notifications on the phone."),
-    ("Onboarding emails", "Five emails over a customer's first two weeks."),
-    ("Warehouse scanners", "Replace the handheld scanners at the north depot."),
-    ("Quarterly planning", "Goals, owners and budgets for next quarter."),
-    ("Billing migration", "Move every plan to usage-based invoices."),
-    ("Support handbook", "Answers to the twenty most asked questions."),
-    ("Data retention", "Delete what we no longer need, on a schedule."),
+    (
+        "Website relaunch",
+        "New pages, new pricing, one launch date.",
+    ),
+    (
+        "Mobile app",
+        "Sign-in, projects and notifications on the phone.",
+    ),
+    (
+        "Onboarding emails",
+        "Five emails over a customer's first two weeks.",
+    ),
+    (
+        "Warehouse scanners",
+        "Replace the handheld scanners at the north depot.",
+    ),
+    (
+        "Quarterly planning",
+        "Goals, owners and budgets for next quarter.",
+    ),
+    (
+        "Billing migration",
+        "Move every plan to usage-based invoices.",
+    ),
+    (
+        "Support handbook",
+        "Answers to the twenty most asked questions.",
+    ),
+    (
+        "Data retention",
+        "Delete what we no longer need, on a schedule.",
+    ),
     ("Partner portal", "Self-serve access for resellers."),
     ("Security review", "Pen test findings and their fixes."),
-    ("Route optimisation", "Shorter delivery routes from live traffic."),
-    ("Hiring pipeline", "Three engineers and a designer by spring."),
+    (
+        "Route optimisation",
+        "Shorter delivery routes from live traffic.",
+    ),
+    (
+        "Hiring pipeline",
+        "Three engineers and a designer by spring.",
+    ),
 ];
 
 /// Task titles, cycled through per project.
@@ -104,7 +134,9 @@ impl Seeder for EvidenceSeeder {
 
 /// Creates (or finds) everything the seeder seeds.
 pub async fn seed(ctx: &AppContext) -> Result<(), BoxError> {
-    let operator = ensure_account(ctx, "Olivia Operator", OPERATOR_EMAIL).await?.id;
+    let operator = ensure_account(ctx, "Olivia Operator", OPERATOR_EMAIL)
+        .await?
+        .id;
     let db = ctx.get::<Db>().await?;
 
     let access = ctx.get::<AccessService>().await?;
@@ -132,11 +164,15 @@ pub async fn seed(ctx: &AppContext) -> Result<(), BoxError> {
     let directory = ctx.get::<Workspaces>().await?;
     for n in 1..=LOAD_USERS {
         let email = format!("load-{n:03}@evidence.test");
-        let user = ensure_account(ctx, &format!("Load User {n:03}"), &email).await?.id;
+        let user = ensure_account(ctx, &format!("Load User {n:03}"), &email)
+            .await?
+            .id;
         if directory.membership(first, user).await?.is_none() {
             let members = members.clone();
             in_uow(&db, |uow| async move {
-                members.add(&uow, first, user, WorkspaceRole::Member).await?;
+                members
+                    .add(&uow, first, user, WorkspaceRole::Member)
+                    .await?;
                 Ok(())
             })
             .await?;

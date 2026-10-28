@@ -167,7 +167,12 @@ impl TasksController {
     /// `DELETE /api/v1/tasks/{id}`
     #[delete("/{id}")]
     #[can(Delete, Task, from = "id")]
-    #[api(summary = "Delete a task", tag = "Tasks", status = 204, responses(401, 403, 404))]
+    #[api(
+        summary = "Delete a task",
+        tag = "Tasks",
+        status = 204,
+        responses(401, 403, 404)
+    )]
     async fn destroy(&self, uow: Uow, task: Authorized<Task, Delete>) -> Result<NoContent> {
         task.into_inner().delete(&uow).await?;
         Ok(NoContent)

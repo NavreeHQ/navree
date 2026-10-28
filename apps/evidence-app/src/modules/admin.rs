@@ -27,7 +27,9 @@ impl Resource for UserAdmin {
         vec![
             Field::text("name").required().max_length(100).sortable(),
             Field::email("email").readonly().sortable(),
-            Field::datetime("email_verified_at").label("Verified").readonly(),
+            Field::datetime("email_verified_at")
+                .label("Verified")
+                .readonly(),
             Field::datetime("created_at").readonly().sortable(),
         ]
     }
@@ -35,12 +37,18 @@ impl Resource for UserAdmin {
     fn metrics(&self) -> Vec<Metric<user::Entity>> {
         vec![
             Metric::value("Users").count().on_dashboard(),
-            Metric::trend("Sign-ups").count().by_day(user::Column::CreatedAt, 30),
+            Metric::trend("Sign-ups")
+                .count()
+                .by_day(user::Column::CreatedAt, 30),
         ]
     }
 
     /// Accounts sign up through the API (`POST /api/auth/register`).
-    fn create<'a>(&'a self, _ctx: &'a SaveContext, _form: FormData) -> BoxFuture<'a, Result<user::Model>> {
+    fn create<'a>(
+        &'a self,
+        _ctx: &'a SaveContext,
+        _form: FormData,
+    ) -> BoxFuture<'a, Result<user::Model>> {
         Box::pin(async move { Err(AppError::bad_request("Accounts sign up in the app.")) })
     }
 }
@@ -63,7 +71,9 @@ impl Resource for WorkspaceAdmin {
         vec![
             Field::text("name").required().max_length(100).sortable(),
             Field::text("slug").readonly().sortable(),
-            Field::belongs_to::<UserAdmin>("owner_id").label("Owner").readonly(),
+            Field::belongs_to::<UserAdmin>("owner_id")
+                .label("Owner")
+                .readonly(),
             Field::datetime("created_at").readonly().sortable(),
         ]
     }
@@ -73,8 +83,16 @@ impl Resource for WorkspaceAdmin {
     }
 
     /// Workspaces are created by their owners (`POST /api/workspaces`).
-    fn create<'a>(&'a self, _ctx: &'a SaveContext, _form: FormData) -> BoxFuture<'a, Result<workspace::Model>> {
-        Box::pin(async move { Err(AppError::bad_request("Workspaces are created by their owners in the app.")) })
+    fn create<'a>(
+        &'a self,
+        _ctx: &'a SaveContext,
+        _form: FormData,
+    ) -> BoxFuture<'a, Result<workspace::Model>> {
+        Box::pin(async move {
+            Err(AppError::bad_request(
+                "Workspaces are created by their owners in the app.",
+            ))
+        })
     }
 }
 
@@ -95,7 +113,9 @@ impl Resource for ProjectAdmin {
     fn fields(&self) -> Vec<Field> {
         vec![
             Field::text("name").required().max_length(120).sortable(),
-            Field::belongs_to::<WorkspaceAdmin>("workspace_id").label("Workspace").readonly(),
+            Field::belongs_to::<WorkspaceAdmin>("workspace_id")
+                .label("Workspace")
+                .readonly(),
             Field::select("status")
                 .options([("active", "Active"), ("archived", "Archived")])
                 .sortable(),
@@ -107,13 +127,24 @@ impl Resource for ProjectAdmin {
     fn metrics(&self) -> Vec<Metric<project::Entity>> {
         vec![
             Metric::value("Projects").count().on_dashboard(),
-            Metric::partition("By status").count().group_by(project::Column::Status).on_dashboard(),
+            Metric::partition("By status")
+                .count()
+                .group_by(project::Column::Status)
+                .on_dashboard(),
         ]
     }
 
     /// Projects are created in their workspace (`POST /api/v1/projects`).
-    fn create<'a>(&'a self, _ctx: &'a SaveContext, _form: FormData) -> BoxFuture<'a, Result<project::Model>> {
-        Box::pin(async move { Err(AppError::bad_request("Projects are created in their workspace.")) })
+    fn create<'a>(
+        &'a self,
+        _ctx: &'a SaveContext,
+        _form: FormData,
+    ) -> BoxFuture<'a, Result<project::Model>> {
+        Box::pin(async move {
+            Err(AppError::bad_request(
+                "Projects are created in their workspace.",
+            ))
+        })
     }
 }
 

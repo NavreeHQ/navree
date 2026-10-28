@@ -11,9 +11,9 @@ mod migrations;
 use chrono::{DateTime, Utc};
 use navree::contracts::{Job, JobContext, JobOptions};
 use navree::db::Db;
+use navree::micro::ServiceClient;
 use navree::orm::prelude::*;
 use navree::prelude::*;
-use navree::micro::ServiceClient;
 use navree::queue::Queue;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -162,7 +162,12 @@ impl ReportsController {
     /// the report, `queued` until a worker runs it.
     #[post("/")]
     #[can(Create, Report)]
-    #[api(summary = "Queue a report", tag = "Reports", status = 201, responses(401, 403))]
+    #[api(
+        summary = "Queue a report",
+        tag = "Reports",
+        status = 201,
+        responses(401, 403)
+    )]
     async fn store(&self, uow: Uow, ws: CurrentWorkspace) -> Result<Created<Record<Report>>> {
         let report = Report::create(
             &uow,

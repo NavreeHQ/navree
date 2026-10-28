@@ -66,7 +66,9 @@ impl EvidenceResolver {
     async fn task_counts(&self, ctx: &Context<'_>) -> navree::graphql::Result<TaskCounts> {
         let workspace = ctx.workspace().await?;
         let uow = ctx.uow()?;
-        Ok(counts(&uow, workspace.id()).await.map_err(|e| AppError::internal(e.to_string()))?)
+        Ok(counts(&uow, workspace.id())
+            .await
+            .map_err(|e| AppError::internal(e.to_string()))?)
     }
 
     /// The workspace's tasks, newest first, optionally one status.
@@ -82,7 +84,9 @@ impl EvidenceResolver {
         let uow = ctx.uow()?;
         let tasks = Task::query()
             .for_workspace(workspace.id())
-            .when_some(status, |query, status| query.where_(Task::STATUS.eq(status)))
+            .when_some(status, |query, status| {
+                query.where_(Task::STATUS.eq(status))
+            })
             .latest()
             .limit(limit)
             .get(&uow)
@@ -128,7 +132,11 @@ impl EvidenceMcp {
     /// counts by status.
     #[mcp_tool(read_only)]
     #[authenticated]
-    async fn workspace_summary(&self, cx: &McpContext, args: SummaryArgs) -> Result<WorkspaceSummary> {
+    async fn workspace_summary(
+        &self,
+        cx: &McpContext,
+        args: SummaryArgs,
+    ) -> Result<WorkspaceSummary> {
         let workspace = self
             .workspaces
             .find_by_slug(&args.workspace)

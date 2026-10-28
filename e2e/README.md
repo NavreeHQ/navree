@@ -33,11 +33,23 @@ Compose v2 and bash.
 | `run.sh`, `run.ps1` | The harness |
 
 The app is `apps/evidence-app`: a Navree application that wires the
-framework's packages and tools, with domain models (projects, a SeaORM
-entity that is searchable; tasks and reports, navree-orm models scoped to
-workspaces) and the `evidence` seeder (three workspaces, an operator who is
-a super admin, 200 load accounts `load-001@evidence.test` and up; password
-`evidence-password`).
+framework's packages and tools (`src/platform.rs`), with domain models and
+the `evidence` seeder (three workspaces, an operator who is a super admin,
+200 load accounts `load-001@evidence.test` and up; password
+`evidence-password`):
+
+| Module | What it exercises |
+|---|---|
+| `projects` | A SeaORM entity behind `WorkspaceRepo`, row-level security, `#[derive(Searchable)]` synced to Meilisearch by queued jobs, broadcasts on change |
+| `tasks` | A navree-orm model with `#[model(workspace)]`, route-model binding with `#[can(.., from = "id")]`, `Accessible` list filters |
+| `reports` | `POST /api/v1/reports` queues `reports.generate` in the request's unit of work; the worker computes and emits `report.computed` on NATS JetStream; the micro event handler in `serve` marks it `done` |
+| `live` | `POST /api/v1/live/publish` on the workspace's private channel; Redis backplane between processes |
+| `showcase` | GraphQL fields (`taskCounts`, `tasks`), the MCP tool `workspace_summary`, two feature flags |
+| `admin` | Helm resources (users, workspaces, projects) with dashboard metrics |
+
+The three process types are `serve` (web), `fleet` (worker: Fleet's master
+supervising `fleet:work` children, visible at `/_fleet`) and
+`schedule:work` (scheduler).
 
 ## Running it
 
@@ -183,6 +195,26 @@ A digest looks like:
 }
 ```
 
+## The first baseline
+
+`e2e/run.sh --load-profile load --duration 3m --vus 50 --scenarios checks,baseline`
+on Docker Desktop (WSL2, 24 CPUs, 16 GB; k6 on the same host), commit
+`953e2145`, 50 virtual users with no think time:
+
+| Requests | RPS | Errors | p50 | p95 | p99 | Max |
+|---|---|---|---|---|---|---|
+| 408,206 | 1,848 | 0 % | 9.7 ms | 19.0 ms | 27.8 ms | 132.6 ms |
+
+Every route's p99 stayed under 26 ms except sign-in (Argon2id, p99
+53.6 ms). 8,811 reports went through the queue and NATS, all done (p95
+1.06 s from the request to the read that saw `done`, polled every 250 ms);
+498 WebSocket round trips were delivered (p95 47 ms). The web process
+averaged 4 cores and peaked at 961 MB; PostgreSQL averaged 2.6 cores.
+
+The spike profile on the same build (`--load-profile spike`: 10 VUs, a
+jump to 200 for 30 s, back to 10) served 116,719 requests with no error,
+p95 97.2 ms and p99 110.1 ms, and every process survived.
+
 ## Known limits
 
 - Typesense (profile `typesense`) exits with a segfault before printing
@@ -190,4 +222,17 @@ A digest looks like:
   to 30.1; the app uses Meilisearch. The profile is there for hosts where
   it runs.
 - k6 runs in a container on the same Docker host as the app, so the load
-  generator and the app share CPUs; the resource samples include k6.
+  generator and the app share CPUs.
+- Every package's module boots in the app (its migrations run, its routes
+  are mounted, its health checks report), but several have no scenario or
+  domain surface yet: social sign-in, SSO, directory sync, custom domains
+  and integrations have no fake providers wired in; gRPC has no service;
+  documents, media, sheets, workflows, webhooks, settings and i18n have no
+  domain use; MySQL and MongoDB start (profiles `mysql`, `mongo`) but the
+  app does not use them. These are the rows and scenarios later builders
+  add.
+- Logbook is off (`logbook.enabled = false`): it records every request's
+  bodies, which is development tooling, not something to measure under
+  load. `APP_LOGBOOK__ENABLED=true` turns it on in the release image;
+  reaching it from outside the container also needs `logbook.allow_remote`
+  and a route authorizer (see the Logbook docs).
