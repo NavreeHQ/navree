@@ -169,7 +169,7 @@ Behind a reverse proxy, a load balancer or a backend-for-frontend, every request
 trusted_proxies = ["127.0.0.1", "::1", "10.0.0.0/8"]
 ```
 
-- A request from a listed proxy: the client is the first address in `X-Forwarded-For`, reading from the right, that isn't itself a listed proxy (the left-most when all are). Without that header, `X-Real-IP`; without either, the proxy's own address.
+- A request from a listed proxy: the client is the first address in `X-Forwarded-For`, reading from the right, that isn't itself a listed proxy (the left-most when all are). An entry may carry a port (`203.0.113.7:51234`, `[2001:db8::7]:443`); an entry that isn't an address stops the reading, so nothing a client wrote to the left of it is believed (the proxy's own address stands when nothing readable is left). Without that header, `X-Real-IP`; without either, the proxy's own address.
 - A request from any other peer: its own address. The headers are ignored, so a client that reaches the app directly can't choose its address.
 
 Entries are IP addresses or CIDR blocks, IPv4 or IPv6 (an IPv4-mapped IPv6 address counts as IPv4). An entry that isn't one fails the boot. From the environment, the list is comma-separated: `APP_HTTP__TRUSTED_PROXIES=127.0.0.1,::1`.

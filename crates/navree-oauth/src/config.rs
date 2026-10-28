@@ -66,7 +66,8 @@ impl Default for PersonalAccessTokenOptions {
 pub struct EndpointLimit {
     /// Requests per minute of one client, counted once it has
     /// authenticated (so requests naming a client with a wrong secret
-    /// can't use up its budget).
+    /// can't use up its budget). Public clients have no secret, so anyone
+    /// can name one: they are limited per IP only.
     pub per_client: u32,
     /// Requests per minute from one client IP address, counted before
     /// anything is checked (failed client authentications included).

@@ -236,6 +236,7 @@ With `sso.enforce_for_verified_domains = true`, or `enforce: true` on a connecti
 | Path | Refused |
 |---|---|
 | Password: `POST /api/auth/login`, `POST /api/auth/register`, `PATCH /api/auth/me/password` | Before the password is checked |
+| An email change: `PATCH /api/auth/me` | Moving an account of the domain to another address, or any account to an address of the domain |
 | [Magic links and emailed codes](/docs/security/passwordless/#sign-in-policies) | When one is requested (no mail goes out) and when one mailed earlier is used |
 | [Passkeys](/docs/security/passwordless/#passkeys) | Before the session starts |
 | [Social sign-in](/docs/packages/social-sign-in/) | Before an account is created or linked, and before the session |
@@ -247,7 +248,7 @@ With `sso.enforce_for_verified_domains = true`, or `enforce: true` on a connecti
 { "statusCode": 403, "message": "Sign in with Acme Okta", "error": "Forbidden", "code": "sso_required" }
 ```
 
-A sign-in through the enforcing connection itself goes on as before, including just-in-time provisioning of new people of the domain. Domains that no enforcing connection has verified are unaffected.
+A sign-in through the enforcing connection itself goes on as before, including just-in-time provisioning of new people of the domain. Domains that no enforcing connection has verified are unaffected. An address's domain is compared in the form verified domains are kept in, the one mail is routed by: lower-case, an international spelling in its `xn--` form, without a trailing dot. So `eve@ACME.com.` and full-width spellings of `acme.com` are `acme.com`.
 
 The rule is one navree-auth [sign-in policy](/docs/security/authentication/#sign-in-policies) the module registers, and every navree-auth flow, social sign-in and single sign-on ask it, so a sign-in path added later asks it too. Each refusal is audited as `auth.login_refused` with the method (`password`, `magic_link`, `otp`, `passkey`, `social`, `sso`, `token_exchange`), the email and the code. A connection with `enforce: false` keeps every method working for its domains whatever the app's default; `follow_default_enforcement: true` goes back to the default. A disabled connection (`enabled: false`) enforces nothing.
 
