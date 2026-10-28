@@ -2,8 +2,38 @@
 //! as `tools/list`, `resources/list`, `resources/templates/list` and
 //! `prompts/list` send them.
 
-use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Map, Value};
+
+/// A JSON object schema, shared (`Arc`) like the lists that carry it.
+pub type JsonSchema = Arc<Map<String, Value>>;
+
+fn serialize_schema<S: Serializer>(schema: &JsonSchema, serializer: S) -> Result<S::Ok, S::Error> {
+    schema.as_ref().serialize(serializer)
+}
+
+fn deserialize_schema<'de, D: Deserializer<'de>>(deserializer: D) -> Result<JsonSchema, D::Error> {
+    Map::deserialize(deserializer).map(Arc::new)
+}
+
+#[expect(
+    clippy::ref_option,
+    reason = "serde's `serialize_with` passes the field by reference"
+)]
+fn serialize_optional_schema<S: Serializer>(
+    schema: &Option<JsonSchema>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    schema.as_deref().serialize(serializer)
+}
+
+fn deserialize_optional_schema<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<JsonSchema>, D::Error> {
+    Option::<Map<String, Value>>::deserialize(deserializer).map(|schema| schema.map(Arc::new))
+}
 
 /// A tool as `tools/list` describes it.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -19,11 +49,20 @@ pub struct Tool {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     /// The JSON Schema of its arguments (always an object schema).
-    #[serde(default)]
-    pub input_schema: Map<String, Value>,
+    #[serde(
+        default,
+        serialize_with = "serialize_schema",
+        deserialize_with = "deserialize_schema"
+    )]
+    pub input_schema: JsonSchema,
     /// The JSON Schema of its structured result, when it declares one.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub output_schema: Option<Map<String, Value>>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "serialize_optional_schema",
+        deserialize_with = "deserialize_optional_schema"
+    )]
+    pub output_schema: Option<JsonSchema>,
     /// Hints about its behaviour.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub annotations: Option<ToolAnnotations>,

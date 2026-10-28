@@ -16,7 +16,7 @@ use crate::context::McpClient;
 use crate::notifier::McpNotifier;
 use crate::session::Session;
 
-/// How many lookups pass between sweeps of idle sessions.
+/// How many lookups and new sessions pass between sweeps of idle sessions.
 const SWEEP_EVERY: usize = 64;
 
 /// The cache key of a session.
@@ -61,6 +61,7 @@ impl Sessions {
 
     /// Keeps a new session.
     pub(crate) async fn insert(&self, session: &Arc<Session>) {
+        self.maybe_sweep().await;
         self.live.insert(session.id.clone(), session.clone());
         self.store(session).await;
     }
@@ -69,9 +70,7 @@ impl Sessions {
     /// and belongs to `user`. Another user's session is not found, exactly
     /// like a missing one.
     pub(crate) async fn find(&self, id: &str, user: Uuid) -> Option<Arc<Session>> {
-        if self.lookups.fetch_add(1, Ordering::Relaxed) % SWEEP_EVERY == 0 {
-            self.sweep().await;
-        }
+        self.maybe_sweep().await;
         let live = self.live.get(id).map(|entry| entry.value().clone());
         let session = match live {
             Some(session) if session.expired(self.ttl) => {
@@ -148,6 +147,18 @@ impl Sessions {
             .is_none_or(|stored| stored.elapsed() >= self.ttl / 2);
         if due {
             self.store(session).await;
+        }
+    }
+
+    /// Sweeps every [`SWEEP_EVERY`] lookups and new sessions, so idle
+    /// sessions do not pile up in memory.
+    async fn maybe_sweep(&self) {
+        if self
+            .lookups
+            .fetch_add(1, Ordering::Relaxed)
+            .is_multiple_of(SWEEP_EVERY)
+        {
+            self.sweep().await;
         }
     }
 

@@ -928,7 +928,7 @@ pub(crate) fn tool(def: &ToolDef) -> Tool {
         name: def.name.clone(),
         title: def.title.clone(),
         description: def.description.clone(),
-        input_schema: def.input_schema.as_object().cloned().unwrap_or_default(),
+        input_schema: Arc::new(def.input_schema.as_object().cloned().unwrap_or_default()),
         output_schema: None,
         annotations: Some(ToolAnnotations {
             title: def.title.clone(),

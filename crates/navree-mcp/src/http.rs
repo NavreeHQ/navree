@@ -14,6 +14,10 @@
 //!   request carries `_meta` and the standard `Mcp-Method` / `Mcp-Name`
 //!   headers, checked against the body.
 
+// The `Err` of the checks below is the response that ends the request: it
+// is built once and returned straight away, so boxing it buys nothing.
+#![allow(clippy::result_large_err, reason = "the error is the response to send")]
+
 use std::convert::Infallible;
 use std::sync::Arc;
 use std::time::Duration;
