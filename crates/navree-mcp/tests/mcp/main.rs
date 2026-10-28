@@ -12,5 +12,7 @@ mod prompts;
 mod resources;
 mod stateless;
 mod stdio;
+mod stdio_wire;
 mod subjects;
 mod tools;
+mod wire;
