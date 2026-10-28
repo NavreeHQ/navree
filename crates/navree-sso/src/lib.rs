@@ -43,6 +43,9 @@ mod entity;
 mod error;
 mod events;
 mod fake;
+#[cfg(feature = "fuzzing")]
+#[doc(hidden)]
+pub mod fuzzing;
 mod migration;
 mod module;
 mod oidc;

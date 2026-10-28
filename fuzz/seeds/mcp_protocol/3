@@ -1,0 +1,1 @@
+È{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"echo","arguments":{"text":5}}}

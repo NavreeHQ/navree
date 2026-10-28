@@ -21,6 +21,8 @@ use chrono::{DateTime, NaiveDateTime, Utc};
 pub(crate) use metadata::certificate_der;
 pub use metadata::{IdpMetadata, ServiceProvider};
 pub use request::{AuthnRequest, RequestOptions};
+#[cfg(feature = "fuzzing")]
+pub(crate) use response::validate_xml_unsigned;
 pub use response::{ResponseCheck, SamlAssertion, validate_response};
 
 use crate::dsig::SignatureError;

@@ -33,6 +33,14 @@ pub(crate) fn extension_schema(path: &AttrPath) -> Option<&'static str> {
         .then_some(ENTERPRISE_USER_SCHEMA)
 }
 
+/// The longest filter or PATCH path read, in bytes. A filter comes from an
+/// identity provider's request and is evaluated recursively, so its size and
+/// nesting are bounded (real filters are a few hundred bytes).
+pub const MAX_FILTER_LEN: usize = 16 * 1024;
+
+/// How deeply parentheses, `not (..)` and `attr[..]` may nest in a filter.
+pub const MAX_FILTER_DEPTH: usize = 32;
+
 /// A filter or path that does not parse.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FilterError(pub String);
@@ -74,7 +82,11 @@ impl AttrPath {
             return Err(FilterError("an attribute path is empty".to_owned()));
         }
         // A URN ends at its last colon: `urn:...:2.0:User:employeeNumber`.
-        let (urn, rest) = if text.len() > 4 && text[..4].eq_ignore_ascii_case("urn:") {
+        let (urn, rest) = if text.len() > 4
+            && text
+                .get(..4)
+                .is_some_and(|scheme| scheme.eq_ignore_ascii_case("urn:"))
+        {
             match text.rfind(':') {
                 Some(at) => (Some(&text[..at]), &text[at + 1..]),
                 None => (None, text),
@@ -252,8 +264,17 @@ pub enum Filter {
 impl Filter {
     /// Parses a filter (`userName eq "ada@acme.test"`).
     pub fn parse(text: &str) -> Result<Filter, FilterError> {
+        if text.len() > MAX_FILTER_LEN {
+            return Err(FilterError(format!(
+                "the filter is longer than {MAX_FILTER_LEN} bytes"
+            )));
+        }
         let tokens = tokenize(text)?;
-        let mut parser = Parser { tokens, at: 0 };
+        let mut parser = Parser {
+            tokens,
+            at: 0,
+            depth: 0,
+        };
         let filter = parser.or_expr()?;
         if parser.at != parser.tokens.len() {
             return Err(FilterError(format!(
@@ -393,6 +414,11 @@ pub struct PatchPath {
 impl PatchPath {
     /// Parses a PATCH path.
     pub fn parse(text: &str) -> Result<PatchPath, FilterError> {
+        if text.len() > MAX_FILTER_LEN {
+            return Err(FilterError(format!(
+                "the path is longer than {MAX_FILTER_LEN} bytes"
+            )));
+        }
         let text = text.trim();
         let Some(open) = text.find('[') else {
             return Ok(PatchPath {
@@ -538,9 +564,24 @@ fn word_token(word: String) -> Token {
 struct Parser {
     tokens: Vec<Token>,
     at: usize,
+    /// How many parentheses, `not (` and `[` are open.
+    depth: usize,
 }
 
 impl Parser {
+    /// Reads an expression inside one more level of nesting.
+    fn nested(&mut self) -> Result<Filter, FilterError> {
+        if self.depth >= MAX_FILTER_DEPTH {
+            return Err(FilterError(format!(
+                "the filter nests deeper than {MAX_FILTER_DEPTH} levels"
+            )));
+        }
+        self.depth += 1;
+        let inner = self.or_expr();
+        self.depth -= 1;
+        inner
+    }
+
     fn peek(&self) -> Option<&Token> {
         self.tokens.get(self.at)
     }
@@ -581,13 +622,13 @@ impl Parser {
             if self.next() != Some(Token::Open) {
                 return Err(FilterError("`not` must be followed by `(`".to_owned()));
             }
-            let inner = self.or_expr()?;
+            let inner = self.nested()?;
             self.expect(&Token::Close)?;
             return Ok(Filter::Not(Box::new(inner)));
         }
         if self.peek() == Some(&Token::Open) {
             self.at += 1;
-            let inner = self.or_expr()?;
+            let inner = self.nested()?;
             self.expect(&Token::Close)?;
             return Ok(inner);
         }
@@ -618,7 +659,7 @@ impl Parser {
         };
         if self.peek() == Some(&Token::OpenBracket) {
             self.at += 1;
-            let inner = self.or_expr()?;
+            let inner = self.nested()?;
             self.expect(&Token::CloseBracket)?;
             return Ok(Filter::ValuePath {
                 path,
@@ -683,6 +724,69 @@ mod tests {
 
     fn matches(filter: &str) -> bool {
         Filter::parse(filter).unwrap().matches(&user())
+    }
+
+    /// Found by fuzzing: a few thousand parentheses (a 6 KB query string)
+    /// overflowed the stack of the recursive parser.
+    #[test]
+    fn deep_nesting_is_refused_instead_of_overflowing_the_stack() {
+        for (opening, closing) in [("(", ")"), ("not (", ")"), ("emails[", "]")] {
+            let deep = format!("{}a pr{}", opening.repeat(1_500), closing.repeat(1_500));
+            let error = Filter::parse(&deep).unwrap_err();
+            assert!(error.0.contains("deeper"), "{error}");
+        }
+        // Up to the limit it still reads.
+        let allowed = format!(
+            "{}a pr{}",
+            "(".repeat(MAX_FILTER_DEPTH),
+            ")".repeat(MAX_FILTER_DEPTH)
+        );
+        assert!(Filter::parse(&allowed).is_ok());
+        let too_deep = format!(
+            "{}a pr{}",
+            "(".repeat(MAX_FILTER_DEPTH + 1),
+            ")".repeat(MAX_FILTER_DEPTH + 1)
+        );
+        assert!(Filter::parse(&too_deep).is_err());
+        // A path with a value filter nests the same way.
+        let path = format!("emails[{}a pr{}]", "(".repeat(1_500), ")".repeat(1_500));
+        assert!(PatchPath::parse(&path).is_err());
+    }
+
+    /// Found by fuzzing: an attribute whose fourth byte is inside a
+    /// multi-byte character panicked the URN check (`text[..4]`), from any
+    /// filter or PATCH path a client sends.
+    #[test]
+    fn attribute_names_with_multi_byte_characters_do_not_panic() {
+        for text in [
+            "abc\u{788} pr",
+            "ab\u{788}c eq 1",
+            "\u{788}\u{788}\u{788} pr",
+            "urn\u{788}x pr",
+            "\u{1f600}\u{1f600} pr",
+        ] {
+            // An error (not an attribute name), but never a panic.
+            let _ = Filter::parse(text);
+            let _ = PatchPath::parse(text);
+        }
+        assert!(Filter::parse("abc\u{788} pr").is_err());
+        assert!(PatchPath::parse("abc\u{788}").is_err());
+        assert!(Filter::parse("URN:x:y:userName pr").is_ok());
+    }
+
+    /// A long chain of `and` is a left-deep tree evaluated recursively, so
+    /// the length of a filter is bounded too.
+    #[test]
+    fn a_filter_has_a_longest_length() {
+        let chain = vec!["a pr"; 100_000].join(" and ");
+        assert!(chain.len() > MAX_FILTER_LEN);
+        assert!(Filter::parse(&chain).unwrap_err().0.contains("longer"));
+        assert!(PatchPath::parse(&"a".repeat(MAX_FILTER_LEN + 1)).is_err());
+        // A chain that fits parses, evaluates and drops.
+        let fits = vec!["a pr"; 1_500].join(" and ");
+        assert!(fits.len() <= MAX_FILTER_LEN);
+        let filter = Filter::parse(&fits).unwrap();
+        assert!(!filter.matches(&json!({})));
     }
 
     #[test]
