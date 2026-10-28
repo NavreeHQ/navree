@@ -84,6 +84,7 @@ navree-sheets = { path = "crates/navree-sheets", version = "0.1.0" }
 navree-workflows = { path = "crates/navree-workflows", version = "0.1.0" }
 navree-media = { path = "crates/navree-media", version = "0.1.0" }
 navree-directory = { path = "crates/navree-directory", version = "0.1.0" }
+navree-domains = { path = "crates/navree-domains", version = "0.1.0" }
 
 # ---------------------------------------------------------------------------
 # Runtime, async and HTTP (Tokio family)
@@ -356,6 +357,12 @@ html2text = { version = "0.17.4", default-features = false }
 # DNS TXT lookups for navree-mail's sending-domain checks (SPF, DKIM,
 # DMARC): pure Rust, the system's resolver configuration, no DNS over TLS.
 hickory-resolver = { version = "0.26.3", default-features = false, features = ["system-config", "tokio"] }
+# Tenant custom domains (navree-domains): certificates from an ACME CA such
+# as Let's Encrypt, on ring and rcgen (never aws-lc), without hyper-rustls
+# (orders go through reqwest); certificate dates are read with x509-parser,
+# already in the tree through ldap3.
+instant-acme = { version = "0.8.5", default-features = false, features = ["rcgen", "ring"] }
+x509-parser = { version = "0.18.1", default-features = false }
 # Inbound mail (navree-mail, feature `inbound`): MIME parsing of received
 # messages, headers, parts and attachments, every charset through
 # encoding_rs (pure Rust; already in the tree).
@@ -460,8 +467,10 @@ rpassword = "7.5.4"
 tempfile = "3.27.0"
 trybuild = "1.0.122"
 insta = { version = "1.49.0", features = ["json"] }
-# Test certificates (navree-micro's TCP TLS tests), on ring.
-rcgen = { version = "0.13.2", default-features = false, features = ["crypto", "pem", "ring"] }
+# Certificates and signing requests on ring: navree-domains' ACME orders
+# (through instant-acme), and the test certificates of navree-micro's TCP
+# TLS and navree-directory's LDAPS tests.
+rcgen = { version = "0.14.10", default-features = false, features = ["crypto", "pem", "ring"] }
 proptest = "1.12.0"
 # HTTP mock servers for provider integrations (navree-social, navree-billing)
 # and the search engines' REST clients (navree-search).

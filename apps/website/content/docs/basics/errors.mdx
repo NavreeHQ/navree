@@ -338,6 +338,15 @@ Navree's modules give each refusal its own code, so a login form can say "wrong 
 | directory | `directory_sync_running` | 409 | `A sync of this connection is already running` |
 | directory | `directory_run_not_held` | 409 | `Only a held run can be approved` |
 | directory | `directory_source_failed` | 502 | `LDAP could not be read: the bind as ... failed: result code 49` |
+| domains | `invalid_domain` | 400 | `Give the domain without a port` |
+| domains | `domain_not_allowed` | 400 | `` `app.example.com` can't be added `` |
+| domains | `domain_not_found` | 404 | `Domain not found` |
+| domains | `domain_taken` | 409 | `` `crm.acme-corp.com` is already in use `` |
+| domains | `domain_limit_reached` | 409 | `This workspace already has 10 domains` |
+| domains | `domain_not_verified` | 409 | `` `crm.acme-corp.com` is not verified yet `` |
+| domains | `dns_lookup_failed` | 502 | `The DNS lookup of crm.acme-corp.com failed` |
+| domains | `dns_provider_failed` | 502 | `The DNS provider failed: Cloudflare error 10000: Authentication error` |
+| domains | `certificate_not_issued` | 502 | `The certificate for crm.acme-corp.com could not be issued: ...` |
 
 Invalid input to these modules (a taken email, an unknown role in a list) is a `validation_failed` error with field messages, like any other validation error.
 

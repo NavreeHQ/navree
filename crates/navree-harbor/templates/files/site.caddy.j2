@@ -40,6 +40,20 @@
 	redir https://{{ domain }}{uri} permanent
 }
 {% endif %}
+{% if custom_domains.enabled %}
+
+# Workspaces' own domains: Caddy gets each one's certificate on its first
+# visit, once {{ custom_domains.ask_path }} allows it.
+https:// {
+	tls {
+		on_demand
+	}
+	encode zstd gzip
+
+{{ metrics() }}
+	reverse_proxy {{ custom_upstream }}
+}
+{% endif %}
 
 # Internal entry for workers and the scheduler, always pointing at the live slot.
 http://:{{ internal_port }} {

@@ -102,6 +102,9 @@ fn every_module_crate_is_reexported_whole() {
         navree::directory::Directory,
         navree::directory::Directory,
     >());
+    assert!(same::<navree::domains::DomainsModule, DomainsModule>());
+    assert!(same::<navree::domains::CurrentDomain, CurrentDomain>());
+    assert!(same::<navree::domains::Domains, navree::domains::Domains>());
     // L7 (opt-in)
     #[cfg(feature = "billing")]
     assert!(same::<navree::billing::BillingModule, BillingModule>());

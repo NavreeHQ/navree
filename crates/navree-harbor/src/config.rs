@@ -375,6 +375,52 @@ pub struct WebConfig {
     /// Accept the PROXY protocol from `deploy.trusted_proxies`.
     #[serde(default)]
     pub proxy_protocol: bool,
+    /// `[web.custom_domains]`: workspaces' own domains.
+    #[serde(default)]
+    pub custom_domains: CustomDomainsConfig,
+}
+
+/// Where Caddy sends requests to workspaces' own domains.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CustomDomainsTo {
+    /// The app's `web` process.
+    #[default]
+    App,
+    /// The `[frontend]`.
+    Frontend,
+}
+
+/// `[web.custom_domains]`: Caddy serves any domain the app's ask endpoint
+/// allows (navree-domains' `domains.ask_path`), with a certificate it gets
+/// on the domain's first visit (on-demand TLS).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CustomDomainsConfig {
+    /// Serve workspaces' own domains.
+    #[serde(default)]
+    pub enabled: bool,
+    /// The app's ask endpoint, called through Caddy's internal entry
+    /// (`domains.ask_path`).
+    #[serde(default = "default_ask_path")]
+    pub ask_path: String,
+    /// `app` (default) or `frontend`.
+    #[serde(default)]
+    pub to: CustomDomainsTo,
+}
+
+impl Default for CustomDomainsConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            ask_path: default_ask_path(),
+            to: CustomDomainsTo::App,
+        }
+    }
+}
+
+fn default_ask_path() -> String {
+    "/_domains/allow".to_owned()
 }
 
 /// `[postgres]`.
@@ -597,6 +643,21 @@ impl HarborConfig {
             }
             if !is_domain(api) {
                 problem(format!("`api_domain` must be a host name (got `{api}`)"));
+            }
+        }
+        let custom = &self.web.custom_domains;
+        if custom.enabled {
+            if !custom.ask_path.starts_with('/')
+                || custom.ask_path.len() < 2
+                || custom.ask_path.contains(char::is_whitespace)
+            {
+                problem(format!(
+                    "`web.custom_domains.ask_path` must be a path such as `/_domains/allow` (got `{}`)",
+                    custom.ask_path
+                ));
+            }
+            if custom.to == CustomDomainsTo::Frontend && self.frontend.is_none() {
+                problem("`web.custom_domains.to = \"frontend\"` needs a [frontend]".into());
             }
         }
 
@@ -1330,6 +1391,38 @@ host_key = "nope"
         // The proxy-protocol check needs trusted proxies; they are set (if
         // invalid) above, so it does not fire.
         assert!(!joined.contains("web.proxy_protocol needs"), "{joined}");
+    }
+
+    #[test]
+    fn custom_domains_are_off_by_default_and_checked_when_on() {
+        let config = HarborConfig::parse(MINIMAL, Path::new("harbor.toml")).unwrap();
+        assert_eq!(config.web.custom_domains, CustomDomainsConfig::default());
+        assert!(!config.web.custom_domains.enabled);
+        assert_eq!(config.web.custom_domains.ask_path, "/_domains/allow");
+        assert_eq!(config.web.custom_domains.to, CustomDomainsTo::App);
+        assert!(
+            problems(&format!(
+                "{MINIMAL}\n[web.custom_domains]\nenabled = true\n"
+            ))
+            .is_empty()
+        );
+        let found = problems(&format!(
+            "{MINIMAL}\n[web.custom_domains]\nenabled = true\nask_path = \"allow\"\nto = \"frontend\"\n"
+        ));
+        assert_eq!(
+            found,
+            [
+                "`web.custom_domains.ask_path` must be a path such as `/_domains/allow` (got `allow`)",
+                "`web.custom_domains.to = \"frontend\"` needs a [frontend]",
+            ]
+        );
+        assert!(
+            HarborConfig::parse(
+                &format!("{MINIMAL}\n[web.custom_domains]\nenable = true\n"),
+                Path::new("harbor.toml")
+            )
+            .is_err()
+        );
     }
 
     #[test]

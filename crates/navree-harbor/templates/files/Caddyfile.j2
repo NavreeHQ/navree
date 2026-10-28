@@ -1,6 +1,14 @@
 # Written by navree harbor:provision. Each app's site is in /etc/caddy/sites/.
-{% if proxy_protocol %}
+{% if proxy_protocol or custom_domains.enabled %}
 {
+{% if custom_domains.enabled %}
+	# Workspaces' own domains: a certificate on each one's first visit,
+	# once the app's ask endpoint allows the domain.
+	on_demand_tls {
+		ask {{ custom_domains.ask_url }}
+	}
+{% endif %}
+{% if proxy_protocol %}
 	# The load balancer sends the PROXY protocol on ports 80 and 443.
 	servers :443 {
 		listener_wrappers {
@@ -23,6 +31,7 @@
 			}
 		}
 	}
+{% endif %}
 }
 {% endif %}
 

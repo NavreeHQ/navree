@@ -349,6 +349,21 @@ export const ecosystem: EcosystemEntry[] = [
     signature: "impl DirectorySink for RecipientSink",
   },
   {
+    slug: "custom-domains",
+    name: "Custom domains",
+    kind: "library",
+    category: "capabilities",
+    tagline: "Each workspace on its own domain, with its own certificate",
+    summary:
+      "Let customers bring crm.acme-corp.com. Navree hands them the DNS records to create, verifies them, gets the certificate through your proxy's on-demand TLS or from Let's Encrypt itself, and resolves each request's workspace from its host.",
+    features: ["DNS TXT verification and routing checks", "On-demand TLS through Caddy's ask endpoint", "ACME certificates served by rustls", "The domain workspace resolver", "Managed Cloudflare zones", "Expiry reports to Lighthouse"],
+    crate: "navree-domains",
+    command: "cargo add --git https://github.com/NavreeHQ/navree navree --features domains",
+    href: "/docs/packages/custom-domains/",
+    status: "stable",
+    signature: "domains.add(workspace, NewDomain::new(\"crm.acme-corp.com\"))",
+  },
+  {
     slug: "documents",
     name: "Documents",
     kind: "library",
