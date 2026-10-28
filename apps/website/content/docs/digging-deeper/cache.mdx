@@ -1,6 +1,6 @@
 ---
 title: "Cache"
-description: "`Cache` and `Locks` from `CacheModule`: the in-memory store on moka, the Redis store shared by every process, `remember`, stale-while-revalidate, counters, tags and atomic locks."
+description: "`Cache` and `Locks` from `CacheModule`: the bounded in-memory store, the Redis store shared by every process, `remember`, stale-while-revalidate, counters, tags and atomic locks, and `navree::bounded` for caches of your own."
 ---
 
 ## Introduction
@@ -10,7 +10,7 @@ description: "`Cache` and `Locks` from `CacheModule`: the in-memory store on mok
 - **`Cache`**: typed values under string keys, each with its own time to live (TTL), plus `remember`, stale-while-revalidate, counters and tags.
 - **`Locks`**: named atomic locks with owner tokens and an expiry.
 
-Both sit on a store. The default is an in-process store on [moka](https://docs.rs/moka); the [Redis store](#the-redis-store) keeps entries and locks in Redis, where every process of your app shares them. Framework crates use the cache too: when `CacheModule` is in the app, navree-auth counts failed logins in it (see [authentication](/docs/security/authentication/)).
+Both sit on a store. The default is an in-process [memory store](#the-memory-store) that never holds more than a fixed number of entries; the [Redis store](#the-redis-store) keeps entries and locks in Redis, where every process of your app shares them. Framework crates use the cache too: when `CacheModule` is in the app, navree-auth counts failed logins in it (see [authentication](/docs/security/authentication/)).
 
 <Callout type="warning" title="The memory store belongs to one process">
 
@@ -59,6 +59,27 @@ Navree::app().module(CacheModule::for_root(CacheOptions {
 ```
 
 The module also registers a `cache` health check and the `cache:clear` command (see [below](#the-health-check-and-cacheclear)).
+
+### The memory store
+
+`cache.store = "memory"` (the default) keeps entries in the process, in a bounded cache from `navree::bounded` (the same one the framework uses for abilities, token lookups and verified domains; see [caches of your own](#caches-of-your-own)):
+
+- **At most one million entries.** The bound is hard: a full store evicts an entry before it takes a new key, so it never grows past the limit, however many keys your app creates. Counters and `add` keys can be evicted like any other entry. A store that evicts is a cache, not a database: don't keep anything in it that you can't recompute.
+- **Eviction follows use.** The store uses the SIEVE policy: an entry that was read since the last pass over it is kept, and the entries that were written once and never read go first. A burst of one-off keys (a scan, a crawl, a report) therefore doesn't push out the entries your app keeps reading.
+- **Expiry is exact on read.** A read never returns an entry past its TTL, and removes it. Expired entries that nobody reads are removed as new keys arrive (each new key checks a few entries), or when they are the next candidate for eviction; there is no background thread.
+- **Sharded.** Keys are spread over independently locked shards, so concurrent requests don't queue on one lock. `add` and `increment` are atomic per key.
+
+To change the limit, build the store yourself and override the provider (see [custom stores](#custom-stores)):
+
+```rust
+use navree::cache::{CacheStore, MemoryStore};
+
+Navree::app()
+    .module(CacheModule::from_config())
+    .override_value::<dyn CacheStore>(Arc::new(MemoryStore::with_capacity(50_000)))
+```
+
+`MemoryStore::sweep(budget)` removes expired entries on demand (it looks at `budget` entries per shard), for an app that wants its memory back during a quiet spell.
 
 ### The Redis store
 
@@ -260,7 +281,7 @@ cache.tags(&[company.as_str()]).flush().await?;
 
 - The tag set addresses the entries: `tags(&["a", "b"])` and `tags(&["b", "a"])` see the same entries, but `tags(&["a"])` and the untagged cache don't.
 - Flushing a tag invalidates every entry stored under a set that includes it.
-- Each tag has a version stored in the cache, and an entry's key includes the versions of its tags. Flushing gives the tag a new version, which makes the old entries unreachable; they stay in memory until their TTL ends. Give tagged entries a TTL rather than `forever`.
+- Each tag has a version stored in the cache, and an entry's key includes the versions of its tags. Flushing gives the tag a new version, which makes the old entries unreachable; they stay in memory until their TTL ends (or, with the memory store, until it needs the room). Give tagged entries a TTL rather than `forever`.
 
 ## Atomic locks
 
@@ -382,6 +403,47 @@ Navree::app()
 ```
 
 `cache.store` names a built-in store (`memory` or `redis`); leave it at `memory` when you override the stores. To build a `Cache` or `Locks` by hand over any store, use `Cache::new(store, prefix, default_ttl)` and `Locks::new(store, prefix)`.
+
+## Caches of your own
+
+For data that belongs to one process and is read on a hot path (an exchange-rate table, a user's permissions, the answer of a lookup per request), use `navree::bounded::Cache` directly. It is the cache the framework itself uses for abilities, token lookups and verified domains, it needs no module, and it can never grow past the capacity you give it:
+
+```rust title="src/modules/pricing/services/rates.rs"
+use std::sync::Arc;
+use std::time::Duration;
+
+use navree::bounded::Cache;
+
+pub struct RateService {
+    rates: Cache<String, Rate>, // Rate: Clone (store an `Arc` for anything large)
+}
+
+impl RateService {
+    pub fn new() -> Self {
+        Self {
+            // At most 1,000 currencies, each kept for five minutes.
+            rates: Cache::builder(1_000)
+                .time_to_live(Duration::from_secs(300))
+                .build(),
+        }
+    }
+
+    pub async fn rate(&self, currency: &str) -> Result<Rate, Arc<RateError>> {
+        // Requests that miss on the same currency together share one fetch.
+        self.rates
+            .try_get_with(currency.to_owned(), self.fetch(currency))
+            .await
+    }
+}
+```
+
+- **Loading.** `get_with` and `try_get_with` run your `async` load on a miss. Callers that miss on one key at the same time share one load: the first runs it, the rest wait for its value. A load that fails is not cached; every caller that shared it gets the same `Arc` of its error, and the next call loads again. If the caller running the load is cancelled or the load panics, one of the waiting callers runs its own load instead; nothing waits forever.
+- **Writes win.** `insert`, `remove`, `compute` and `invalidate` abandon a load in flight for their key: its callers still get their value, but it isn't stored over the newer write.
+- **Expiry.** `time_to_live` ends an entry that long after it was written; `time_to_idle` ends one that was not read or written for that long; with both, the sooner wins. `insert_with_ttl` gives one entry its own lifetime. A read never returns an expired entry. Time is Tokio's clock, so `tokio::time::pause` and `advance` control it in tests.
+- **Eviction.** A full cache evicts with SIEVE (see [the memory store](#the-memory-store)): reads keep an entry, one-off keys go first. The capacity is split over the shards and each shard enforces its share, so the total is never exceeded, not even for an instant; a cache keeps a few hundred entries per shard, so it can evict slightly before it is exactly full.
+- **Read-modify-write.** `compute(key, |current| ...)` sees the live value and returns `Compute::Update`, `Store`, `Remove` or `Keep` atomically; it is how the memory store implements `add` and `increment`. Keep the closure short and don't use the cache from inside it.
+
+The cache has no iteration and no eviction listener, and a read hands out a clone of the value. A loop over slightly more keys than fit evicts every entry just before it is needed again (a hit ratio near zero, as with any recency-based policy): size the cache to the working set.
 
 ## Testing
 

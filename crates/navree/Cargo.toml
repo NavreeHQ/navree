@@ -595,6 +595,7 @@ otel = ["observe", "navree-observe/otel"]
 harbor = ["dep:navree-harbor"]
 
 [dependencies]
+navree-bounded = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-kernel = { workspace = true }

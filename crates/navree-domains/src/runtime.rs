@@ -43,7 +43,7 @@ pub(crate) struct Runtime {
     /// `workspace.resolvers` lists `domain`.
     pub(crate) resolves_workspaces: bool,
     /// Verified hosts (and misses), for `domains.cache_secs`.
-    pub(crate) cache: Option<moka::future::Cache<String, Option<CurrentDomain>>>,
+    pub(crate) cache: Option<navree_bounded::Cache<String, Option<CurrentDomain>>>,
     pub(crate) certificates: Arc<DomainCertificates>,
 }
 
@@ -96,8 +96,7 @@ impl Runtime {
             },
         };
         let cache = (options.cache_secs > 0).then(|| {
-            moka::future::Cache::builder()
-                .max_capacity(100_000)
+            navree_bounded::Cache::builder(100_000)
                 .time_to_live(Duration::from_secs(options.cache_secs))
                 .build()
         });
@@ -177,9 +176,9 @@ impl Runtime {
     }
 
     /// Forgets the cached answer for `host`.
-    pub(crate) async fn forget(&self, host: &str) {
+    pub(crate) fn forget(&self, host: &str) {
         if let Some(cache) = &self.cache {
-            cache.invalidate(host).await;
+            cache.invalidate(host);
         }
     }
 
