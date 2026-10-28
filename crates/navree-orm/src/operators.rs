@@ -166,7 +166,7 @@ impl<M, T> Column<M, T> {
     /// use navree_orm::{Dialect, col};
     ///
     /// let sql = col("roles").contained_by(["admin", "manager"]).to_sql(Dialect::Postgres).unwrap();
-    /// assert_eq!(sql.sql, r#"("roles")::jsonb <@ $1"#);
+    /// assert_eq!(sql.sql, r#"CAST("roles" AS JSONB) <@ $1"#);
     /// ```
     pub fn contained_by(&self, value: impl serde::Serialize) -> Filter {
         let column = self.column_ref();
@@ -270,7 +270,7 @@ impl Expr {
     ///     .select_expr(Expr::col("meta").binary("-", Expr::val("secret")), "meta")
     ///     .to_sql(Dialect::Postgres)
     ///     .unwrap();
-    /// assert_eq!(sql.sql, r#"SELECT ("meta" - $1) AS "meta" FROM "deals""#);
+    /// assert_eq!(sql.sql, r#"SELECT "meta" - $1 AS "meta" FROM "deals""#);
     /// ```
     pub fn binary(self, op: impl Into<Cow<'static, str>>, other: impl Into<Expr>) -> Expr {
         Expr::Binary {
@@ -290,7 +290,7 @@ impl Expr {
     ///
     /// let distance = Expr::vector_distance(Expr::col("embedding"), &[0.5, 1.0]);
     /// let sql = distance.lt(0.3).to_sql(Dialect::Postgres).unwrap();
-    /// assert_eq!(sql.sql, r#"(("embedding" <=> CAST($1 AS vector))) < $2"#);
+    /// assert_eq!(sql.sql, r#""embedding" <=> CAST($1 AS vector) < $2"#);
     /// ```
     pub fn vector_distance(expr: impl Into<Expr>, vector: &[f32]) -> Expr {
         Expr::vector_distance_by(expr, vector, VectorMetric::Cosine)
