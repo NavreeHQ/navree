@@ -8,7 +8,7 @@ use navree_http::{AppError, RouteDef};
 use navree_telemetry::{EventKind, TelemetryContext, TelemetryRecorder, current_trace_id};
 use serde_json::json;
 
-use crate::support::Setup;
+use crate::support::{Setup, capture_logs};
 
 const ALICE: &str = "0199c1d2-6f7e-7a31-b5d4-2f0c8e9a1b23";
 const TRACE: &str = "4bf92f3577b34da6a3ce929d0e0e4736";
@@ -316,8 +316,7 @@ async fn the_request_log_line_is_written_in_the_requests_trace() {
     use tracing_subscriber::layer::SubscriberExt;
 
     let lines = RequestLines::default();
-    let _guard =
-        tracing::subscriber::set_default(tracing_subscriber::registry().with(lines.clone()));
+    let _guard = capture_logs(tracing_subscriber::registry().with(lines.clone()));
     let app = Setup::new(vec![trace_route()]).boot().await;
     let traceparent = format!("00-{TRACE}-{PARENT}-01");
     app.send(get_with("/api/trace", &[("traceparent", &traceparent)]))
