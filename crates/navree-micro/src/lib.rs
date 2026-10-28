@@ -81,8 +81,8 @@ pub use pattern::{check_pattern, has_wildcard, pattern_matches};
 pub use payload::Payload;
 pub use store::{DEAD_LETTERS_TABLE, DeadLetter, INBOX_TABLE, OUTBOX_TABLE};
 pub use transport::{
-    Delivery, DeliveryActions, Group, MemoryTransport, MicroTransport, PatternKind, Subscription,
-    TcpTransport, Transport, TransportKind,
+    Delivery, DeliveryActions, Group, MemoryTransport, MicroTransport, PatternKind, Subscribed,
+    Subscription, TcpTransport, Transport, TransportKind,
 };
 
 #[cfg(feature = "kafka")]
