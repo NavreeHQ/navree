@@ -177,30 +177,44 @@ pub trait Grammar: Send + Sync {
                 left,
                 right,
             } => {
-                // Compounds read left to right; a left operand of another
-                // operator, and any compound on the right, keep their
+                // Compounds read left to right; a left operand the dialect
+                // would regroup, and any compound on the right, keep their
                 // grouping in parentheses.
                 match left.as_ref() {
-                    SetExpr::Operation { op: inner, .. } if inner == op => {
+                    SetExpr::Operation { op: inner, .. }
+                        if !self.groups_left_operand(*op, *inner) =>
+                    {
                         self.set_expr(w, left, hint)?;
                     }
                     SetExpr::Select(select) => self.select(w, select, hint)?,
                     other => self.set_operand(w, other)?,
                 }
-                w.push(match (op, all) {
-                    (SetOperator::Union, false) => " UNION ",
-                    (SetOperator::Union, true) => " UNION ALL ",
-                    (SetOperator::Intersect, false) => " INTERSECT ",
-                    (SetOperator::Intersect, true) => " INTERSECT ALL ",
-                    (SetOperator::Except, false) => " EXCEPT ",
-                    (SetOperator::Except, true) => " EXCEPT ALL ",
-                });
+                w.push(self.set_operator(*op, *all)?);
                 match right.as_ref() {
                     SetExpr::Select(select) => self.select(w, select, None),
                     other => self.set_operand(w, other),
                 }
             }
         }
+    }
+
+    /// Whether a compound of `inner` on the left of `outer` needs its own
+    /// parentheses: `INTERSECT` binds tighter than `UNION` and `EXCEPT`, so
+    /// another operator keeps its grouping.
+    fn groups_left_operand(&self, outer: SetOperator, inner: SetOperator) -> bool {
+        outer != inner
+    }
+
+    /// A compound operator with its spaces: ` UNION ALL `.
+    fn set_operator(&self, op: SetOperator, all: bool) -> Result<&'static str> {
+        Ok(match (op, all) {
+            (SetOperator::Union, false) => " UNION ",
+            (SetOperator::Union, true) => " UNION ALL ",
+            (SetOperator::Intersect, false) => " INTERSECT ",
+            (SetOperator::Intersect, true) => " INTERSECT ALL ",
+            (SetOperator::Except, false) => " EXCEPT ",
+            (SetOperator::Except, true) => " EXCEPT ALL ",
+        })
     }
 
     /// An operand of a compound that keeps clauses or a grouping of its
@@ -1197,6 +1211,9 @@ pub trait Grammar: Send + Sync {
             });
             match segment {
                 JsonSegment::Key(key) => w.string_literal(key),
+                // A negative index counts from the end; parenthesized so it
+                // never reads as part of the operator.
+                JsonSegment::Index(index) if *index < 0 => w.push(&format!("({index})")),
                 JsonSegment::Index(index) => w.push(&index.to_string()),
             }
         }

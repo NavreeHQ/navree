@@ -1,0 +1,7 @@
+---
+source: crates/navree-orm/tests/render/main.rs
+expression: "query(Query::from(deals().column(col(\"id\")).column_as(Expr::row_number().over(vec![col(\"company_id\")],\nvec![col(\"amount_cents\").desc().nulls_last(), col(\"id\").asc()]), \"rank\")))"
+---
+PostgreSQL: SELECT "id", ROW_NUMBER() OVER (PARTITION BY "company_id" ORDER BY "amount_cents" DESC NULLS LAST, "id" ASC) AS "rank" FROM "deals"
+MySQL: SELECT `id`, ROW_NUMBER() OVER (PARTITION BY `company_id` ORDER BY `amount_cents` IS NULL ASC, `amount_cents` DESC, `id` ASC) AS `rank` FROM `deals`
+SQLite: SELECT "id", ROW_NUMBER() OVER (PARTITION BY "company_id" ORDER BY "amount_cents" DESC NULLS LAST, "id" ASC) AS "rank" FROM "deals"

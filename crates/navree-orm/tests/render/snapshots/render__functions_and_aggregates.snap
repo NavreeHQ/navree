@@ -1,0 +1,7 @@
+---
+source: crates/navree-orm/tests/render/main.rs
+expression: "expr(Expr::func(\"coalesce\",\nvec![col(\"closed_at\"), Expr::func_distinct(\"COUNT\", vec![col(\"owner_id\")]),\nExpr::count_all(), Expr::func(\"public.score\", vec![]),]))"
+---
+PostgreSQL: coalesce("closed_at", COUNT(DISTINCT "owner_id"), COUNT(*), public.score())
+MySQL: coalesce(`closed_at`, COUNT(DISTINCT `owner_id`), COUNT(*), public.score())
+SQLite: coalesce("closed_at", COUNT(DISTINCT "owner_id"), COUNT(*), public.score())

@@ -1,0 +1,7 @@
+---
+source: crates/navree-orm/tests/render/main.rs
+expression: "expr(Expr::Tuple(vec![col(\"a\").cast(SqlType::Text),\ncol(\"a\").cast(SqlType::Integer), col(\"a\").cast(SqlType::Double),\ncol(\"a\").cast(SqlType::Decimal { precision: 12, scale: 2 }),\ncol(\"a\").cast(SqlType::Date), col(\"a\").cast(SqlType::Time),\ncol(\"a\").cast(SqlType::DateTime), col(\"a\").cast(SqlType::Json),\ncol(\"a\").cast(SqlType::Custom(\"vector\".into())),]))"
+---
+PostgreSQL: (CAST("a" AS TEXT), CAST("a" AS BIGINT), CAST("a" AS DOUBLE PRECISION), CAST("a" AS NUMERIC(12, 2)), CAST("a" AS DATE), CAST("a" AS TIME), CAST("a" AS TIMESTAMP), CAST("a" AS JSONB), CAST("a" AS vector))
+MySQL: (CAST(`a` AS CHAR), CAST(`a` AS SIGNED), CAST(`a` AS DOUBLE), CAST(`a` AS DECIMAL(12, 2)), CAST(`a` AS DATE), CAST(`a` AS TIME), CAST(`a` AS DATETIME(6)), CAST(`a` AS JSON), CAST(`a` AS vector))
+SQLite: (CAST("a" AS TEXT), CAST("a" AS INTEGER), CAST("a" AS REAL), CAST("a" AS NUMERIC), date("a"), time("a"), datetime("a"), json("a"), CAST("a" AS vector))

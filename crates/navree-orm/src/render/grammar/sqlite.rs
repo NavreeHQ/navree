@@ -14,7 +14,8 @@ use crate::error::Result;
 use crate::ir::JsonSegment;
 use crate::render::Writer;
 use crate::render::ast::{
-    BinaryOp, Delete, Expr, JsonMode, LikeCase, Lock, ObjectName, Query, SetExpr, SqlType, Truncate,
+    BinaryOp, Delete, Expr, JsonMode, LikeCase, Lock, ObjectName, Query, SetExpr, SetOperator,
+    SqlType, Truncate,
 };
 use crate::sql::{self, Dialect};
 use crate::value::Value;
@@ -43,6 +44,29 @@ impl Grammar for Sqlite {
         let alias = w.next_alias("navree_union");
         w.ident(&alias);
         Ok(())
+    }
+
+    /// SQLite's compound operators share one precedence and read left to
+    /// right: a compound on the left never needs regrouping.
+    fn groups_left_operand(&self, outer: SetOperator, inner: SetOperator) -> bool {
+        let _ = (outer, inner);
+        false
+    }
+
+    /// SQLite keeps duplicates in `UNION ALL` only.
+    fn set_operator(&self, op: SetOperator, all: bool) -> Result<&'static str> {
+        Ok(match (op, all) {
+            (SetOperator::Union, false) => " UNION ",
+            (SetOperator::Union, true) => " UNION ALL ",
+            (SetOperator::Intersect, false) => " INTERSECT ",
+            (SetOperator::Except, false) => " EXCEPT ",
+            (SetOperator::Intersect, true) => {
+                return Err(unsupported(Dialect::Sqlite, "INTERSECT ALL"));
+            }
+            (SetOperator::Except, true) => {
+                return Err(unsupported(Dialect::Sqlite, "EXCEPT ALL"));
+            }
+        })
     }
 
     fn lateral(&self, w: &mut Writer) -> Result<()> {
