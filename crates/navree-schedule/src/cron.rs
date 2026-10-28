@@ -40,7 +40,7 @@ use std::str::FromStr;
 
 use chrono::{
     DateTime, Datelike, LocalResult, NaiveDate, NaiveDateTime, NaiveTime, TimeDelta, TimeZone,
-    Timelike, Utc,
+    Timelike, Utc, Weekday,
 };
 
 /// The longest expression accepted, in bytes.
@@ -711,7 +711,7 @@ fn first_of_next_month(date: NaiveDate) -> Option<NaiveDate> {
 }
 
 fn is_weekday(date: NaiveDate) -> bool {
-    date.weekday().num_days_from_sunday() % 6 != 0
+    !matches!(date.weekday(), Weekday::Sat | Weekday::Sun)
 }
 
 /// The last Monday-to-Friday day of the month.
