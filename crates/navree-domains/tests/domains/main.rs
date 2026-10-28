@@ -4,6 +4,7 @@
 
 mod adding;
 mod certificates;
+mod claims;
 mod cloudflare;
 mod commands;
 mod https;
