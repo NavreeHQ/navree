@@ -1,0 +1,148 @@
+# Navree evidence app: settings for every environment.
+#
+# Hosts, ports and secrets are not here: `.env` (local runs, see
+# `.env.example`) or `APP_*` environment variables (the e2e harness, see
+# `e2e/docker/evidence.env`) set them. `.env` only fills keys this file
+# leaves out; `APP_*` variables override any key.
+
+[app]
+name = "Navree Evidence"
+
+[http]
+addr = "0.0.0.0:8080"
+api_prefix = "/api"
+# The load profiles send every request from the k6 container's address:
+# the per-IP limit is raised far above what a run sends.
+per_ip_rate_limit = 10000000
+
+[database]
+migrate_on_boot = false
+
+[mail]
+from = "Navree Evidence <evidence@navree.test>"
+
+[queue]
+driver = "redis"
+queues = ["default", "search", "mail", "notifications"]
+workers = 8
+
+[cache]
+store = "redis"
+
+[log]
+level = "info"
+format = "json"
+
+[auth]
+registration = true
+
+[auth.two_factor]
+issuer = "Navree Evidence"
+
+[workspace]
+# The X-Workspace header (a workspace id or slug) names the request's
+# workspace; the load profiles send it.
+resolvers = ["header"]
+
+[workspace.roles.admin]
+permissions = ["projects.*", "tasks.*", "reports.*", "billing.manage"]
+
+[workspace.roles.member]
+permissions = [
+    "projects.read",
+    "projects.create",
+    "projects.update",
+    "projects.delete",
+    "tasks.*",
+    "reports.*",
+]
+
+[workspace.roles.viewer]
+permissions = ["projects.read", "tasks.read", "reports.read"]
+
+[search]
+engine = "meilisearch"
+prefix = "evidence_"
+queue = "search"
+sync = "queued"
+
+[storage]
+default = "s3"
+
+[storage.disks.s3]
+driver = "s3"
+bucket = "evidence"
+region = "us-east-1"
+
+[storage.disks.local]
+driver = "local"
+root = "storage/app"
+
+[billing]
+# The fake provider: checkout completes in the app, no account needed.
+provider = "fake"
+
+[billing.plans.starter]
+name = "Starter"
+prices = { monthly = "price_starter_monthly", yearly = "price_starter_yearly" }
+trial_days = 14
+seats = true
+
+[billing.plans.pro]
+name = "Pro"
+prices = { monthly = "price_pro_monthly", yearly = "price_pro_yearly" }
+trial_days = 14
+seats = true
+
+[social]
+redirect_base = "http://localhost:47080/auth/callback"
+
+[realtime]
+key = "evidence"
+app_id = "evidence"
+# Several processes (web, worker, scheduler) share broadcasts through Redis.
+backplane = "redis"
+
+[api]
+title = "Navree Evidence API"
+undocumented = ["/admin*", "/_lighthouse*", "/_logbook*", "/_fleet*"]
+
+[helm]
+title = "Navree Evidence admin"
+
+[ai]
+# Every request is answered by AiFake: no provider, no key, no network.
+fake = true
+default = "smart"
+
+[ai.models.smart]
+provider = "anthropic"
+model = "claude-opus-5-5"
+
+[mcp]
+name = "navree-evidence"
+title = "Navree Evidence"
+instructions = "Tools for the Navree evidence app: projects, tasks and reports in workspaces."
+auth = "bearer"
+
+[micro]
+service = "evidence"
+transport = "nats"
+# url: APP_MICRO__URL (the compose network's NATS).
+
+[micro.nats]
+stream = "EVIDENCE"
+
+[i18n]
+default_locale = "en"
+locales = ["en", "fr"]
+
+[oauth]
+consent_url = "http://localhost:47080/oauth/consent"
+device_url = "http://localhost:47080/oauth/device"
+
+[logbook]
+# Off unless the run asks for it (APP_LOGBOOK__ENABLED=true): Logbook
+# records every request's bodies, which is development tooling, not
+# something to measure under load.
+enabled = false

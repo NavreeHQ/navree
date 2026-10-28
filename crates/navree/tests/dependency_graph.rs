@@ -472,6 +472,9 @@ const HIERARCHY: &[Rule] = &[
     rule("crm-deals", 11, &["navree", "crm-core"]),
     rule("crm-activities", 11, &["navree", "crm-core"]),
     rule("crm-api", 12, CRM_API_DEPENDENCIES),
+    // The evidence app (e2e/): one binary on the `navree` facade that wires
+    // every package for the Docker evidence harness.
+    rule("evidence-app", 9, &["navree"]),
 ];
 
 /// What the crm-api binary may depend on: the facade and the CRM crates.

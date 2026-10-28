@@ -1,0 +1,15 @@
+# The evidence app's build context (the repository root): the workspace
+# manifests, the crates and the apps that are workspace members. Everything
+# else stays out, so a change to the website or the benchmarks never
+# invalidates the build.
+*
+!Cargo.toml
+!Cargo.lock
+!crates/
+!apps/crm-api/
+!apps/evidence-app/
+crates/**/target/
+apps/**/target/
+apps/**/storage/
+apps/**/.env
+**/node_modules/

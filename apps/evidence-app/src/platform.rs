@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 use navree::contracts::Principal;
 use navree::realtime::ChannelDecision;
-use navree::workspace::Workspaces;
+use navree::workspace::{Workspace, Workspaces};
 use navree::{BoxFuture, prelude::*};
 use uuid::Uuid;
 
@@ -59,6 +59,24 @@ pub fn platform(builder: AppBuilder, sources: ConfigSources) -> AppBuilder {
         .module(SearchModule::from_config())
         .module(BillingModule::from_config())
         .module(SocialModule::from_config())
+        .module(SettingsModule::from_config())
+        .module(FlagsModule::from_config())
+        .module(WebhooksModule::from_config())
+        .module(IntegrationsModule::from_config())
+        .module(DirectoryModule::from_config())
+        .module(DomainsModule::from_config())
+        .module(SsoModule::from_config())
+        .module(OAuthServerModule::from_config())
+        .module(SheetsModule::from_config())
+        .module(DocumentsModule::from_config())
+        .module(MediaModule::from_config())
+        .module(WorkflowsModule::from_config())
+        .module(I18nModule::from_config())
+        .module(AiModule::from_config())
+        .module(GraphqlModule::from_config())
+        .module(GrpcModule::from_config())
+        .module(MicroModule::from_config())
+        .module(McpModule::from_config())
         .module(ApiModule::from_config())
         .module(ObserveModule::from_config())
         // Tools.
@@ -66,15 +84,17 @@ pub fn platform(builder: AppBuilder, sources: ConfigSources) -> AppBuilder {
         .module(LighthouseModule::from_config())
         .module(LogbookModule::from_config())
         .module(FleetModule::from_config())
-        .module(ChannelsModule)
+        .module(TenancyModule)
 }
 
-/// The private channels: `private-workspace.{id}` for the workspace's
-/// members.
-struct ChannelsModule;
+/// What the app adds to tenancy: workspaces are the billable (plans,
+/// checkout and invoices per workspace, `/api/billing/*`) and the private
+/// channel `private-workspace.{id}` admits the workspace's members.
+#[module(imports = [BillingModule::for_feature::<Workspace>()], register = Self::wire)]
+struct TenancyModule;
 
-impl Module for ChannelsModule {
-    fn register(&self, m: &mut ModuleBuilder) {
+impl TenancyModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
         m.channel(WORKSPACE_CHANNEL, workspace_channel);
     }
 }

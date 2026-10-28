@@ -5,7 +5,11 @@
 # Profiles start only what a run needs:
 #
 #   (none)    TimescaleDB, Redis and Mailpit: always on
-#   search    Meilisearch and Typesense
+#   search    Meilisearch (the app's search engine)
+#   typesense Typesense, for search's Typesense engine checks (on Docker
+#             Desktop's WSL2 kernel 6.18 every Typesense image from 28 to
+#             30.1 exits with a segfault before printing anything; it runs
+#             on stock Linux hosts)
 #   storage   MinIO (S3) and its bucket
 #   nats      NATS with JetStream (micro, events)
 #   mysql     MySQL 8.4
@@ -43,7 +47,6 @@ x-app: &app
     redis: { condition: service_healthy }
     mailpit: { condition: service_healthy }
     meilisearch: { condition: service_healthy }
-    typesense: { condition: service_healthy }
     minio-bucket: { condition: service_completed_successfully }
     nats: { condition: service_healthy }
 
@@ -65,7 +68,7 @@ services:
       POSTGRES_PASSWORD: navree
       POSTGRES_DB: evidence
       TIMESCALEDB_TELEMETRY: "off"
-    ports: ["${E2E_PG_PORT:-55432}:5432"]
+    ports: ["${E2E_PG_PORT:-47432}:5432"]
     volumes: [postgres:/var/lib/postgresql/data]
     healthcheck:
       <<: *healthcheck
@@ -76,7 +79,7 @@ services:
   redis:
     image: redis:7.4-alpine
     command: ["--maxmemory", "256mb", "--appendonly", "no", "--save", ""]
-    ports: ["${E2E_REDIS_PORT:-56379}:6379"]
+    ports: ["${E2E_REDIS_PORT:-47379}:6379"]
     healthcheck:
       <<: *healthcheck
       test: ["CMD", "redis-cli", "ping"]
@@ -88,8 +91,8 @@ services:
       MP_SMTP_AUTH_ALLOW_INSECURE: "1"
       MP_MAX_MESSAGES: "5000"
     ports:
-      - "${E2E_SMTP_PORT:-51025}:1025"
-      - "${E2E_MAILPIT_PORT:-58025}:8025"
+      - "${E2E_SMTP_PORT:-47025}:1025"
+      - "${E2E_MAILPIT_PORT:-47825}:8025"
     healthcheck:
       <<: *healthcheck
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8025/readyz"]
@@ -101,7 +104,7 @@ services:
       MEILI_MASTER_KEY: evidence-meili-master-key
       MEILI_ENV: development
       MEILI_NO_ANALYTICS: "true"
-    ports: ["${E2E_MEILI_PORT:-57700}:7700"]
+    ports: ["${E2E_MEILI_PORT:-47700}:7700"]
     volumes: [meili:/meili_data]
     healthcheck:
       <<: *healthcheck
@@ -109,9 +112,9 @@ services:
 
   typesense:
     image: typesense/typesense:30.1
-    profiles: ["search", "app"]
+    profiles: ["typesense"]
     command: ["--data-dir", "/data", "--api-key", "evidence-typesense-key", "--enable-cors"]
-    ports: ["${E2E_TYPESENSE_PORT:-58108}:8108"]
+    ports: ["${E2E_TYPESENSE_PORT:-47108}:8108"]
     volumes: [typesense:/data]
     healthcheck:
       <<: *healthcheck
@@ -130,8 +133,8 @@ services:
       MINIO_ROOT_USER: navree
       MINIO_ROOT_PASSWORD: navree-minio-secret
     ports:
-      - "${E2E_MINIO_PORT:-59000}:9000"
-      - "${E2E_MINIO_CONSOLE_PORT:-59001}:9001"
+      - "${E2E_MINIO_PORT:-47900}:9000"
+      - "${E2E_MINIO_CONSOLE_PORT:-47901}:9001"
     volumes: [minio:/data]
     healthcheck:
       <<: *healthcheck
@@ -153,8 +156,8 @@ services:
     profiles: ["nats", "app"]
     command: ["--jetstream", "--store_dir", "/data", "--http_port", "8222"]
     ports:
-      - "${E2E_NATS_PORT:-54222}:4222"
-      - "${E2E_NATS_MONITOR_PORT:-58222}:8222"
+      - "${E2E_NATS_PORT:-47222}:4222"
+      - "${E2E_NATS_MONITOR_PORT:-47822}:8222"
     volumes: [nats:/data]
     healthcheck:
       <<: *healthcheck
@@ -168,7 +171,7 @@ services:
       MYSQL_DATABASE: evidence
       MYSQL_USER: navree
       MYSQL_PASSWORD: navree
-    ports: ["${E2E_MYSQL_PORT:-53306}:3306"]
+    ports: ["${E2E_MYSQL_PORT:-47306}:3306"]
     volumes: [mysql:/var/lib/mysql]
     healthcheck:
       <<: *healthcheck
@@ -179,7 +182,7 @@ services:
     profiles: ["mongo"]
     # One node, but a replica set: transactions and change streams need one.
     command: ["--replSet", "rs0", "--bind_ip_all"]
-    ports: ["${E2E_MONGO_PORT:-57017}:27017"]
+    ports: ["${E2E_MONGO_PORT:-47017}:27017"]
     volumes: [mongo:/data/db]
     healthcheck:
       <<: *healthcheck
@@ -197,7 +200,7 @@ services:
   web:
     <<: *app
     command: ["serve"]
-    ports: ["${E2E_APP_PORT:-58080}:8080"]
+    ports: ["${E2E_APP_PORT:-47080}:8080"]
     healthcheck:
       <<: *healthcheck
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health/ready"]
@@ -226,6 +229,7 @@ services:
     profiles: ["load"]
     volumes:
       - ../load:/scripts:ro
+      - ../checks:/checks:ro
       - ${E2E_OUT_DIR:-../../target/evidence/adhoc}:/out
     environment:
       BASE_URL: http://web:8080
