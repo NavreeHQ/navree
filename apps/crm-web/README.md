@@ -100,6 +100,11 @@ Fonts are self-hosted from Fontsource packages through `next/font/local` (`src/a
 titles and big figures, Geist for the UI, Monaspace Neon for ids and small counts. `cn`
 (`src/lib/utils.ts`) knows the custom type scale.
 
+The primitives in `src/components/ui` come from shadcn/ui (`components.json` is set up). Add another one with
+`pnpm dlx shadcn@latest add <component>`, then restyle it to the rules below. The app does not depend on the `shadcn`
+package (the CLI): the one file it used from it, `shadcn/tailwind.css` (keyframes, custom variants and utilities the
+components use), is vendored as `src/app/shadcn-tailwind.css`, with its version and license at the top.
+
 - **The shell** is the shadcn/ui `Sidebar` in the `sidebar-07` layout (`src/components/app-shell`): a workspace
   switcher with the navree mark, the Sales and Workspace groups (32px items, 16px lucide icons, ink-2 hover, ink-3 for
   the current page, no green), the user menu in the footer. It collapses to icons with Ctrl/Cmd B or the rail, remembers
