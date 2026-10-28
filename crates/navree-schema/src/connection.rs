@@ -272,7 +272,10 @@ mod tests {
 
     #[test]
     fn values_read_tolerantly() {
-        assert_eq!(SchemaValue::Bytes(b"abc".to_vec()).as_text().unwrap(), "abc");
+        assert_eq!(
+            SchemaValue::Bytes(b"abc".to_vec()).as_text().unwrap(),
+            "abc"
+        );
         assert_eq!(SchemaValue::Text(" 12 ".into()).as_int(), Some(12));
         assert_eq!(SchemaValue::Float(3.0).as_int(), Some(3));
         assert_eq!(SchemaValue::Float(3.5).as_int(), None);

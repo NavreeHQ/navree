@@ -131,7 +131,10 @@ async fn app(url: &str) -> App {
         .set("billing.provider", "fake")
         .set("billing.routes", false)
         .set("micro.transport", "memory")
-        .set("social.redirect_base", "https://app.example.com/auth/callback")
+        .set(
+            "social.redirect_base",
+            "https://app.example.com/auth/callback",
+        )
         .set("ai.fake", true)
         .set("search.sync", "inline")
         // Lighthouse records nothing while its tables come and go (a flush
@@ -189,7 +192,11 @@ async fn every_migration(url: &str) -> Outcome {
     let applied = Migrator::up(ctx).await.expect("migrates");
     let status = Migrator::status(ctx).await.expect("status");
     assert!(!applied.is_empty());
-    assert_eq!(applied.len(), status.len(), "every registered migration ran");
+    assert_eq!(
+        applied.len(),
+        status.len(),
+        "every registered migration ran"
+    );
     assert!(status.iter().all(|s| s.applied && s.batch == Some(1)));
     let modules: BTreeSet<&str> = status.iter().map(|s| s.module.as_str()).collect();
     for module in expected_modules(url) {
@@ -205,8 +212,18 @@ async fn every_migration(url: &str) -> Outcome {
     );
 
     let reverted = Migrator::reset(ctx, false).await.expect("resets");
-    assert_eq!(reverted.migrations.len(), applied.len(), "every migration rolled back");
-    assert!(Migrator::status(ctx).await.unwrap().iter().all(|s| !s.applied));
+    assert_eq!(
+        reverted.migrations.len(),
+        applied.len(),
+        "every migration rolled back"
+    );
+    assert!(
+        Migrator::status(ctx)
+            .await
+            .unwrap()
+            .iter()
+            .all(|s| !s.applied)
+    );
     assert_eq!(
         tables(&pool).await,
         ["navree_migrations"],
@@ -394,9 +411,14 @@ async fn upgrade() {
             .filter(|s| !s.applied)
             .map(|s| format!("{}/{}", s.module, s.name))
             .collect();
-        assert!(pending.is_empty(), "{url}: pending after the upgrade: {pending:?}");
         assert!(
-            status.iter().all(|s| s.batch.is_some() && s.applied_at.is_some()),
+            pending.is_empty(),
+            "{url}: pending after the upgrade: {pending:?}"
+        );
+        assert!(
+            status
+                .iter()
+                .all(|s| s.batch.is_some() && s.applied_at.is_some()),
             "{url}: every recorded row reads back"
         );
         let report = Migrator::run(ctx, &navree::db::MigrateOptions::default())

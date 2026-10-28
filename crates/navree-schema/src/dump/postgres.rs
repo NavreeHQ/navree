@@ -6,7 +6,6 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
-
 use super::Script;
 use crate::connection::{SchemaConnection, SchemaRow};
 use crate::error::SchemaResult;

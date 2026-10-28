@@ -166,13 +166,7 @@ async fn boot(url: &str, failing: Option<bool>) -> App {
 }
 
 async fn pool_of(app: &App) -> Pool {
-    app.ctx()
-        .get::<Db>()
-        .await
-        .unwrap()
-        .pool()
-        .unwrap()
-        .clone()
+    app.ctx().get::<Db>().await.unwrap().pool().unwrap().clone()
 }
 
 async fn tables(pool: &Pool) -> Vec<String> {
@@ -253,7 +247,9 @@ async fn pretend_status_and_dumps(url: &str, copy_url: &str) {
         "pretending runs nothing (status created the migrations table)"
     );
 
-    let report = Migrator::run(ctx, &MigrateOptions::default()).await.unwrap();
+    let report = Migrator::run(ctx, &MigrateOptions::default())
+        .await
+        .unwrap();
     assert_eq!(report.migrations.len(), 3);
     assert_eq!(report.migrations[0].statements[0], companies_sql);
     assert_eq!(companies(&pool).await, ["Acme"]);
@@ -265,7 +261,10 @@ async fn pretend_status_and_dumps(url: &str, copy_url: &str) {
         "{after:?}"
     );
     let applied_at = after[0].applied_at.unwrap();
-    assert!((chrono::Utc::now() - applied_at).num_minutes().abs() < 5, "{applied_at}");
+    assert!(
+        (chrono::Utc::now() - applied_at).num_minutes().abs() < 5,
+        "{applied_at}"
+    );
 
     // Pretending to roll back prints the downs and changes nothing.
     let pretended = Migrator::rollback_with(
@@ -302,14 +301,20 @@ async fn pretend_status_and_dumps(url: &str, copy_url: &str) {
     .await
     .unwrap();
     assert!(loaded.loaded_dump.is_some());
-    assert!(loaded.migrations.is_empty(), "the dump records every migration");
+    assert!(
+        loaded.migrations.is_empty(),
+        "the dump records every migration"
+    );
     let copied = Migrator::status(copy.ctx()).await.unwrap();
     assert_eq!(
         copied
             .iter()
             .map(|s| (s.name.clone(), s.batch))
             .collect::<Vec<_>>(),
-        after.iter().map(|s| (s.name.clone(), s.batch)).collect::<Vec<_>>()
+        after
+            .iter()
+            .map(|s| (s.name.clone(), s.batch))
+            .collect::<Vec<_>>()
     );
     let copy_pool = pool_of(&copy).await;
     assert_eq!(tables(&copy_pool).await, tables(&pool).await);
@@ -378,7 +383,10 @@ async fn failures(url: &str) {
     let app = boot(url, Some(true)).await;
     let pool = pool_of(&app).await;
     let error = Migrator::up(app.ctx()).await.unwrap_err().to_string();
-    assert!(error.contains("failing/m0001_inserts_then_fails"), "{error}");
+    assert!(
+        error.contains("failing/m0001_inserts_then_fails"),
+        "{error}"
+    );
     assert_eq!(
         companies(&pool).await,
         ["Acme"],
@@ -503,7 +511,12 @@ async fn schemas_run_on_every_connection() {
         })
         .await
         .unwrap();
-    assert!(Schema::new(db.pool().unwrap()).has_table("notes").await.unwrap());
+    assert!(
+        Schema::new(db.pool().unwrap())
+            .has_table("notes")
+            .await
+            .unwrap()
+    );
 
     let tx = db.begin().await.unwrap();
     Schema::new(&tx).drop("notes").await.unwrap();

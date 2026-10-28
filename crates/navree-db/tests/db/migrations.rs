@@ -12,7 +12,11 @@ struct UsersModule;
 
 impl Module for UsersModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.migrations(crate::fixtures::set("users", [], vec![CreateTable::boxed("m0001_create_users", "users")]));
+        m.migrations(crate::fixtures::set(
+            "users",
+            [],
+            vec![CreateTable::boxed("m0001_create_users", "users")],
+        ));
     }
 }
 
@@ -22,10 +26,14 @@ struct CrmModule;
 
 impl Module for CrmModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.migrations(crate::fixtures::set("crm", ["users", "billing"], vec![
+        m.migrations(crate::fixtures::set(
+            "crm",
+            ["users", "billing"],
+            vec![
                 CreateTable::referencing("m0002_create_companies", "companies", "users"),
                 CreateTable::boxed("m0001_create_tags", "tags"),
-            ]));
+            ],
+        ));
     }
 }
 
@@ -219,13 +227,21 @@ struct CycleB;
 
 impl Module for CycleA {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.migrations(crate::fixtures::set("a", ["b"], vec![CreateTable::boxed("m1", "a_table")]));
+        m.migrations(crate::fixtures::set(
+            "a",
+            ["b"],
+            vec![CreateTable::boxed("m1", "a_table")],
+        ));
     }
 }
 
 impl Module for CycleB {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.migrations(crate::fixtures::set("b", ["a"], vec![CreateTable::boxed("m1", "b_table")]));
+        m.migrations(crate::fixtures::set(
+            "b",
+            ["a"],
+            vec![CreateTable::boxed("m1", "b_table")],
+        ));
     }
 }
 
@@ -253,14 +269,18 @@ struct Failing {
 
 impl Module for Failing {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.migrations(crate::fixtures::set("failing", [], vec![
+        m.migrations(crate::fixtures::set(
+            "failing",
+            [],
+            vec![
                 CreateTable::boxed("m1_good", "good"),
                 Box::new(FailAfterCreating {
                     name: "m2_bad",
                     table: "partial",
                     transactional: self.transactional,
                 }),
-            ]));
+            ],
+        ));
     }
 }
 
