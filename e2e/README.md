@@ -25,7 +25,7 @@ Compose v2 and bash.
 | `docker/Dockerfile` | The evidence app's image: cargo-chef dependency layer, release build, Debian slim runtime, non-root, tini, health check |
 | `docker/evidence.env` | The app's settings inside the compose network |
 | `load/lib/` | The k6 library: `config.js` (environment), `auth.js` (sign-in, the workspace header, a session pool), `http.js` (tagged requests), `profiles.js` (smoke, load, spike and thresholds), `summary.js` (the files a run reads) |
-| `load/scenarios/` | One file per package: `auth.js`, `tasks.js` (ORM and workspaces), `reports.js` (queue), `search.js`, `realtime.js`, and `baseline.js`, which mixes them |
+| `load/scenarios/` | One file per package: `auth.js`, `tasks.js` (ORM and workspaces), `reports.js` (queue), `search.js`, `realtime.js`, `lighthouse.js` (Lighthouse's counts against k6's), and `baseline.js`, which mixes them |
 | `load/checks/http.js` | Runs the rows of `checks/http.json` |
 | `checks/http.json` | HTTP smoke rows: method, path, expected status, per package |
 | `browser/` | Playwright screenshots of every UI tool in `browser/tools.json` at 1440 and 390 pixels wide |
@@ -63,7 +63,10 @@ supervising `fleet:work` children, visible at `/_fleet`) and
    `/health/ready`.
 5. **checks**: the HTTP rows (`checks/http.json`).
 6. **k6: \<scenario\>**: each scenario under the profile (`--scenarios`,
-   default `checks,baseline`), with `docker stats` sampled every 2 s.
+   default `checks,baseline`), with `docker stats` sampled every 2 s. After
+   the `lighthouse` scenario, **lighthouse: request count matches k6**
+   compares the requests Lighthouse recorded during the run with the
+   requests k6 sent (within 1 %).
 7. **browser: screenshots**: every tool at both widths.
 8. **app: \<process\> survived**: no restart, no OOM kill.
 
