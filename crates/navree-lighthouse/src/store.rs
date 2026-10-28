@@ -306,6 +306,9 @@ pub struct Overview {
     pub feed: Vec<FeedItem>,
     /// Details this process dropped because the buffer was full.
     pub dropped: u64,
+    /// Details (traces and occurrences) every process dropped in the period
+    /// because the write queue was full.
+    pub sampled_out: i64,
 }
 
 /// A route's figures.
@@ -1421,6 +1424,7 @@ impl LighthouseStore {
             timeline,
             feed,
             dropped: 0,
+            sampled_out: 0,
         })
     }
 
