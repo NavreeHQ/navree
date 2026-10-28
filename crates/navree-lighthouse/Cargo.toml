@@ -15,6 +15,9 @@ workspace = true
 ## so agents read and resolve issues. The facade turns it on when both its
 ## `lighthouse` and `mcp` features are on.
 mcp = ["dep:navree-mcp", "dep:garde", "dep:utoipa"]
+## PostgreSQL integration tests (`tests/postgres.rs`, with
+## NAVREE_TEST_POSTGRES_URL): several processes recording into one database.
+postgres = ["navree-db/postgres"]
 
 [dependencies]
 axum = { workspace = true }

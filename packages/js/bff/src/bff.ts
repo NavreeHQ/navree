@@ -21,7 +21,7 @@
  *   which is the CSRF defence for the cookie hop;
  * - the browser's `X-Forwarded-For` / `X-Real-IP` never reach Navree; the BFF
  *   sends its own `X-Forwarded-For` only when it knows the client address
- *   (see `trustedProxyHops`).
+ *   (see `trustedProxyHops` and `clientIpHeader`).
  *
  * Web-standard `Request` in, `Response` out: no framework imports, so Next.js
  * route handlers, Nitro handlers and tests all use it as is.
@@ -74,6 +74,14 @@ export interface BffOptions {
    * must then be reachable only through them.
    */
   trustedProxyHops?: number;
+  /**
+   * A header that the platform or the one proxy in front of this server sets to the bare client
+   * address, replacing any value the browser sent (e.g. `x-real-ip` behind a proxy configured to
+   * overwrite it, `cf-connecting-ip`, `fly-client-ip`). The BFF believes it before it looks at
+   * `X-Forwarded-For`, so it works with a single trusted hop and no `X-Forwarded-For` chain.
+   * Set it only when the server is reachable through that proxy alone.
+   */
+  clientIpHeader?: string;
   /** The API's auth routes (default `/api/auth`): login, refresh, logout, `2fa/verify`. */
   authPrefix?: string;
   /** The API's current-user route (default `/api/auth/me`). */
@@ -233,6 +241,7 @@ export function createBff(options: BffOptions) {
   const refreshGraceMs = options.refreshGraceMs ?? 30_000;
   const hops = Math.floor(options.trustedProxyHops ?? 0);
   const trustedProxyHops = Number.isFinite(hops) && hops > 0 ? hops : 0;
+  const clientIpHeader = options.clientIpHeader?.trim().toLowerCase() || null;
   const authPrefix = (options.authPrefix ?? "/api/auth").replace(/\/+$/, "");
   const challengePath = `${authPrefix}/2fa`;
   const mePath = options.mePath ?? `${authPrefix}/me`;
@@ -350,6 +359,10 @@ export function createBff(options: BffOptions) {
    * their entry is missing or not an IP address.
    */
   function clientAddress(request: Request): string | null {
+    if (clientIpHeader) {
+      const value = request.headers.get(clientIpHeader)?.trim();
+      if (value && isIP(value)) return value;
+    }
     if (trustedProxyHops === 0) return null;
     const chain = (request.headers.get("x-forwarded-for") ?? "").split(",").map((entry) => entry.trim());
     const entry = chain.length >= trustedProxyHops ? chain[chain.length - trustedProxyHops] : undefined;

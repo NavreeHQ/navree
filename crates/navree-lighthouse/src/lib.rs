@@ -10,18 +10,22 @@
 //! - **Recording.** The module registers a telemetry sink
 //!   (navree-telemetry): every request, query, job attempt, scheduled run,
 //!   mail, cache call, outgoing call and exception the framework reports.
-//!   The sink and [`Lighthouse::report`] only copy the record into a
-//!   bounded channel; one background task groups each request's or job's
-//!   events, decides what to keep and writes in batches (every second, or
-//!   at 500 records).
+//!   The sink and [`Lighthouse::report`] add the record to in-memory
+//!   counters on the calling thread (sharded locks, no I/O) and group each
+//!   request's or job's events; when a request or job ends, what is worth
+//!   keeping goes into a bounded queue. One background task writes both
+//!   in batches (every second, or at 500 details).
 //! - **Issues** ([`Issue`]) group occurrences by fingerprint ([`IssueKind`]
 //!   lists the kinds); statuses ([`IssueStatus`]) are open, resolved,
 //!   resolved in the next release and ignored, and a resolved issue that
 //!   happens again reopens as a regression.
-//! - **Counts are exact; details are sampled** (`lighthouse.sample.*`):
-//!   per-minute histograms of every request give the percentiles, and slow
-//!   requests, failures and the first 100 occurrences of an issue per
-//!   hour are always kept. A full buffer drops samples first, never counts.
+//! - **Counts are exact under any load; details are sampled**
+//!   (`lighthouse.sample.*`, one ordinary trace in ten by default):
+//!   per-minute histograms of every request give the percentiles, and
+//!   errors, failed jobs, slow requests and the first 100 occurrences of
+//!   an issue per hour are always kept. A full queue drops traces first and
+//!   never a count; every dropped detail is counted as sampled out
+//!   ([`Lighthouse::sampled_out`], shown on the dashboard).
 //! - **Alerts** ([`AlertKind`]): email (navree-mail), Slack, signed
 //!   webhooks (Standard Webhooks) and your own [`AlertChannel`]s, sent as
 //!   `lighthouse.alert` jobs when the app has a queue, with a cooldown per

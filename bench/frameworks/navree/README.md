@@ -57,7 +57,7 @@ Global layers, outermost first (navree-http `build_router`):
 3. Request timeout (30 s).
 4. Security headers (`X-Content-Type-Options`, `X-Frame-Options`,
    `Referrer-Policy`, `Strict-Transport-Security`, `Content-Security-Policy`).
-5. Compression (gzip/brotli; only when the client sends `Accept-Encoding`,
+5. Compression (gzip; only when the client sends `Accept-Encoding`,
    which wrk does not).
 6. Error rendering (every error in Navree's NestJS-style JSON format).
 7. Maintenance mode (`storage/framework/down`, checked at most once a second).

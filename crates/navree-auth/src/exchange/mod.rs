@@ -12,6 +12,9 @@
 //!   `max_lifetime_secs`), carries a `jti` not seen before (kept in the
 //!   cache until the token expires) and the `email` of a registered user
 //!   (not `email_verified: false`).
+//! - The [`SignInPolicy`](crate::SignInPolicy)s are asked
+//!   ([`SignInMethod::TokenExchange`] with the issuer's name): an address
+//!   whose domain enforces single sign-on is refused (403 `sso_required`).
 //! - The user then gets a session like any sign-in. Accepted tokens are
 //!   audited as `auth.token_exchanged`, refused ones as
 //!   `auth.token_exchange_failed` with the reason (which the client never
@@ -31,7 +34,8 @@ use serde_json::{Value, json};
 use self::jws::{CompactJws, KeyEntry, key_from_text, keys_from_jwks};
 use crate::service::entry;
 use crate::{
-    AuthError, AuthService, ClientMeta, LEEWAY_SECS, TokenPair, TrustedIssuerOptions, User,
+    AuthError, AuthService, ClientMeta, LEEWAY_SECS, SignInAttempt, SignInMethod, TokenPair,
+    TrustedIssuerOptions, User,
 };
 
 /// The shortest time between two fetches of a key set for an unknown key
@@ -121,6 +125,11 @@ impl AuthService {
             }
             Err(error) => return Err(error),
         };
+        let method = SignInMethod::TokenExchange {
+            issuer: name.clone(),
+        };
+        self.check_sign_in(&SignInAttempt::of(&user, method), meta)
+            .await?;
         let tokens = self.issue_tokens(&user, meta.clone()).await?;
         self.audit(
             entry(AuditKind::Auth, "auth.token_exchanged", meta)

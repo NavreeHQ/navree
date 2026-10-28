@@ -5,7 +5,10 @@
 
 use navree::access::{AccessModule, AccessOptions, AccessService};
 use navree::auth::testing::VirtualAuthenticator;
-use navree::auth::{AccessClaims, Actor, AuthService, PlatformAdmin, TwoFactorPolicy, User};
+use navree::auth::{
+    AccessClaims, Actor, AuthError, AuthService, PlatformAdmin, SignInAttempt, SignInMethod,
+    SignInPolicy, TwoFactorPolicy, User,
+};
 use navree::db::Db;
 use navree::prelude::*;
 use navree::testing::{TestApp, TestAppBuilder};
@@ -137,12 +140,36 @@ impl TwoFactorPolicy for WorkspaceTwoFactorPolicy {
     }
 }
 
-/// Registers the controllers above and the policy.
+// ---------------------------------------------------------------------------
+// Authentication: "Sign-in policies".
+
+/// Contractors sign in with a passkey only.
+#[injectable]
+pub struct PasskeysForContractors;
+
+impl SignInPolicy for PasskeysForContractors {
+    fn check<'a>(&'a self, attempt: &'a SignInAttempt) -> BoxFuture<'a, Result<(), AuthError>> {
+        Box::pin(async move {
+            if attempt.domain() == Some("contractors.acme.com")
+                && attempt.method != SignInMethod::Passkey
+            {
+                return Err(AuthError::SignInRefused {
+                    code: "passkey_required".to_owned(),
+                    message: "Sign in with your passkey".to_owned(),
+                });
+            }
+            Ok(())
+        })
+    }
+}
+
+/// Registers the controllers above and the policies.
 pub struct SecurityModule;
 
 impl Module for SecurityModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.two_factor_policy::<WorkspaceTwoFactorPolicy>()
+        m.sign_in_policy::<PasskeysForContractors>()
+            .two_factor_policy::<WorkspaceTwoFactorPolicy>()
             .controller::<AccountController>()
             .controller::<SessionInfoController>()
             .controller::<BannerController>()
@@ -203,6 +230,31 @@ async fn sign_in(app: &TestApp, email: &str) -> (User, String) {
         .unwrap()
         .to_owned();
     (user, access)
+}
+
+#[tokio::test]
+async fn the_sign_in_policy_example_refuses_passwords_for_contractors() {
+    let app = builder().build().await;
+    create_policy_tables(&app).await;
+    let auth = app.get::<AuthService>().await;
+    for email in ["kim@contractors.acme.com", "ada@acme.com"] {
+        auth.create_user("Someone", email, PASSWORD).await.unwrap();
+    }
+    let login = |email: &'static str| {
+        let client = app.client();
+        async move {
+            client
+                .post("/api/auth/login")
+                .json(&json!({ "email": email, "password": PASSWORD }))
+                .send()
+                .await
+        }
+    };
+    login("kim@contractors.acme.com")
+        .await
+        .assert_error(403, "Sign in with your passkey")
+        .assert_error_code(403, "passkey_required");
+    login("ada@acme.com").await.assert_status(200);
 }
 
 #[tokio::test]

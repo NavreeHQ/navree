@@ -15,7 +15,7 @@ use http::header::{AUTHORIZATION, CACHE_CONTROL, CONTENT_TYPE, LOCATION, PRAGMA}
 use http::{Extensions, HeaderMap, HeaderValue, Method, StatusCode, Uri};
 use navree_contracts::RequestId;
 use navree_db::Uow;
-use navree_http::{ApiMeta, AppError, Controller, Json, RouteDef, schema_fn};
+use navree_http::{ApiMeta, AppError, ClientIp, Controller, Json, RouteDef, schema_fn};
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -31,6 +31,7 @@ use crate::grants::{Grants, TokenResponse};
 use crate::requests::{AuthorizeOutcome, AuthorizeParams, Requests};
 use crate::scope::{OPENID, parse_scope};
 use crate::strategy::{OAuthToken, insufficient_scope};
+use crate::throttle::{Endpoint, Throttles};
 
 /// The body of a form-encoded protocol request, by parameter (the first
 /// value of a repeated parameter).
@@ -221,6 +222,7 @@ pub struct RegistrationRequest {
 pub struct OAuthProtocolController {
     core: Arc<Core>,
     clients: Arc<OAuthClients>,
+    throttles: Arc<Throttles>,
 }
 
 impl Injectable for OAuthProtocolController {
@@ -230,9 +232,12 @@ impl Injectable for OAuthProtocolController {
 
     fn construct(r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
         Box::pin(async move {
+            let core = r.get::<Core>().await?;
+            let throttles = Arc::new(Throttles::new(&core.options.rate_limits));
             Ok(OAuthProtocolController {
-                core: r.get::<Core>().await?,
+                core,
                 clients: r.get::<OAuthClients>().await?,
+                throttles,
             })
         })
     }
@@ -308,17 +313,28 @@ impl Controller for OAuthProtocolController {
         };
 
         // POST /oauth/token
-        let (core, clients) = (self.core.clone(), self.clients.clone());
-        let token = move |headers: HeaderMap, extensions: Extensions, body: Bytes| {
-            let (core, clients) = (core.clone(), clients.clone());
+        let (core, clients, throttles) = (
+            self.core.clone(),
+            self.clients.clone(),
+            self.throttles.clone(),
+        );
+        let token = move |ClientIp(ip): ClientIp,
+                          headers: HeaderMap,
+                          extensions: Extensions,
+                          body: Bytes| {
+            let (core, clients, throttles) = (core.clone(), clients.clone(), throttles.clone());
             async move {
                 let mut basic = false;
                 let result: Result<TokenResponse, OAuthError> = async {
+                    throttles.per_ip(&core, Endpoint::Token, ip).await?;
                     let form = Form::parse(&headers, &body)?;
                     let credentials = client_credentials(&headers, &form)?;
                     basic = credentials.basic;
                     let grant_type = form.require("grant_type")?.to_owned();
                     let client = clients.authenticate(&credentials).await?;
+                    throttles
+                        .per_client(&core, Endpoint::Token, client.id, ip)
+                        .await?;
                     let grants = Grants { core: core.clone() };
                     in_own_uow(&core, &extensions, |uow| async move {
                         match grant_type.as_str() {
@@ -369,16 +385,29 @@ impl Controller for OAuthProtocolController {
         };
 
         // POST /oauth/device_authorization
-        let (core, clients) = (self.core.clone(), self.clients.clone());
-        let device = move |headers: HeaderMap, extensions: Extensions, body: Bytes| {
-            let (core, clients) = (core.clone(), clients.clone());
+        let (core, clients, throttles) = (
+            self.core.clone(),
+            self.clients.clone(),
+            self.throttles.clone(),
+        );
+        let device = move |ClientIp(ip): ClientIp,
+                           headers: HeaderMap,
+                           extensions: Extensions,
+                           body: Bytes| {
+            let (core, clients, throttles) = (core.clone(), clients.clone(), throttles.clone());
             async move {
                 let mut basic = false;
                 let result = async {
+                    throttles
+                        .per_ip(&core, Endpoint::DeviceAuthorization, ip)
+                        .await?;
                     let form = Form::parse(&headers, &body)?;
                     let credentials = client_credentials(&headers, &form)?;
                     basic = credentials.basic;
                     let client = clients.authenticate(&credentials).await?;
+                    throttles
+                        .per_client(&core, Endpoint::DeviceAuthorization, client.id, ip)
+                        .await?;
                     let requests = Requests { core: core.clone() };
                     in_own_uow(&core, &extensions, |uow| async move {
                         requests
@@ -396,17 +425,28 @@ impl Controller for OAuthProtocolController {
         };
 
         // POST /oauth/revoke
-        let (core, clients) = (self.core.clone(), self.clients.clone());
-        let revoke = move |headers: HeaderMap, extensions: Extensions, body: Bytes| {
-            let (core, clients) = (core.clone(), clients.clone());
+        let (core, clients, throttles) = (
+            self.core.clone(),
+            self.clients.clone(),
+            self.throttles.clone(),
+        );
+        let revoke = move |ClientIp(ip): ClientIp,
+                           headers: HeaderMap,
+                           extensions: Extensions,
+                           body: Bytes| {
+            let (core, clients, throttles) = (core.clone(), clients.clone(), throttles.clone());
             async move {
                 let mut basic = false;
                 let result = async {
+                    throttles.per_ip(&core, Endpoint::Revoke, ip).await?;
                     let form = Form::parse(&headers, &body)?;
                     let credentials = client_credentials(&headers, &form)?;
                     basic = credentials.basic;
                     let token = form.require("token")?.to_owned();
                     let client = clients.authenticate(&credentials).await?;
+                    throttles
+                        .per_client(&core, Endpoint::Revoke, client.id, ip)
+                        .await?;
                     let grants = Grants { core: core.clone() };
                     in_own_uow(&core, &extensions, |uow| async move {
                         grants.revoke(&uow, &client, &token).await
@@ -422,17 +462,25 @@ impl Controller for OAuthProtocolController {
         };
 
         // POST /oauth/introspect
-        let (core, clients) = (self.core.clone(), self.clients.clone());
-        let introspect = move |headers: HeaderMap, body: Bytes| {
-            let (core, clients) = (core.clone(), clients.clone());
+        let (core, clients, throttles) = (
+            self.core.clone(),
+            self.clients.clone(),
+            self.throttles.clone(),
+        );
+        let introspect = move |ClientIp(ip): ClientIp, headers: HeaderMap, body: Bytes| {
+            let (core, clients, throttles) = (core.clone(), clients.clone(), throttles.clone());
             async move {
                 let mut basic = false;
                 let result = async {
+                    throttles.per_ip(&core, Endpoint::Introspect, ip).await?;
                     let form = Form::parse(&headers, &body)?;
                     let credentials = client_credentials(&headers, &form)?;
                     basic = credentials.basic;
                     let token = form.require("token")?.to_owned();
                     let client = clients.authenticate(&credentials).await?;
+                    throttles
+                        .per_client(&core, Endpoint::Introspect, client.id, ip)
+                        .await?;
                     if client.is_public() || !client.introspect {
                         return Err(OAuthError::InvalidClient(
                             "This client may not introspect tokens".into(),
@@ -489,23 +537,23 @@ impl Controller for OAuthProtocolController {
                 .name("oauth.token")
                 .api(ApiMeta {
                     response: Some(schema_fn::<TokenResponse>),
-                    ..api("Exchange a grant for tokens", &[400, 401])
+                    ..api("Exchange a grant for tokens", &[400, 401, 429])
                 }),
             RouteDef::on(Method::POST, path("device_authorization"), device)
                 .public()
                 .name("oauth.device_authorization")
                 .api(ApiMeta {
                     response: Some(schema_fn::<crate::DeviceAuthorization>),
-                    ..api("Start a device authorization", &[400, 401])
+                    ..api("Start a device authorization", &[400, 401, 429])
                 }),
             RouteDef::on(Method::POST, path("revoke"), revoke)
                 .public()
                 .name("oauth.revoke")
-                .api(api("Revoke a token (RFC 7009)", &[400, 401])),
+                .api(api("Revoke a token (RFC 7009)", &[400, 401, 429])),
             RouteDef::on(Method::POST, path("introspect"), introspect)
                 .public()
                 .name("oauth.introspect")
-                .api(api("Introspect a token (RFC 7662)", &[400, 401])),
+                .api(api("Introspect a token (RFC 7662)", &[400, 401, 429])),
             RouteDef::on(Method::GET, path("userinfo"), userinfo.clone())
                 .authenticated()
                 .name("oauth.userinfo")

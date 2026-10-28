@@ -17,7 +17,10 @@ use crate::forward::{ProcessRunner, forward};
 use crate::gate::{GateOptions, default_lock_path, run_gate};
 use crate::make::{MakeKind, MakeOptions, MakeReport, make_item, make_model, make_module};
 use crate::names::{AppName, Name};
-use crate::new_app::{NavreeSource, NewApp, create_app, created_message};
+use crate::new_app::{
+    NavreeSource, NewApp, Repository, create_app, created_message, init_repository,
+    write_harbor_key,
+};
 use crate::openapi_client;
 use crate::project::{project_root, run_root};
 use crate::resource::make_resource;
@@ -35,7 +38,12 @@ pub fn execute(cli: Cli, cwd: &Path) -> anyhow::Result<ExitCode> {
             };
             let root = create_app(cwd, &app, Timestamp::now())?;
             format_rust(&rust_files(&root));
+            write_harbor_key(&root)?;
+            let repository = init_repository(&root);
             print!("{}", created_message(&app, &root));
+            if repository == Repository::Created {
+                println!("\nInitialized a Git repository (nothing committed yet).");
+            }
             Ok(ExitCode::SUCCESS)
         }
         Command::MakeModule(args) => {

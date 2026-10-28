@@ -42,6 +42,11 @@ x-app: &app
     APP_AUTH__JWT__SECRET: ${E2E_JWT_SECRET:-evidence-jwt-secret-at-least-32-bytes-long}
     APP_DATABASE__URL: postgres://navree:navree@postgres:5432/evidence
     RUST_LOG: ${E2E_RUST_LOG:-info}
+    # Lighthouse's detail queue and trace sampling (its defaults). A run
+    # with a small queue and every trace wanted shows details sampled out
+    # while the counts stay exact (see the lighthouse scenario).
+    APP_LIGHTHOUSE__BUFFER: ${E2E_LIGHTHOUSE_BUFFER:-10000}
+    APP_LIGHTHOUSE__SAMPLE__REQUESTS: ${E2E_LIGHTHOUSE_SAMPLE_REQUESTS:-0.1}
   depends_on:
     postgres: { condition: service_healthy }
     redis: { condition: service_healthy }

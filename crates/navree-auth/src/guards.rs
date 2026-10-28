@@ -273,6 +273,7 @@ mod tests {
             sid: Some(Uuid::now_v7()),
             auth_time,
             act: act.map(|sub| ActorClaim { sub }),
+            sign_in: None,
         })
     }
 

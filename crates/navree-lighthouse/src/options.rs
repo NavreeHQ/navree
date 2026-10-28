@@ -35,14 +35,17 @@ impl Default for Thresholds {
     }
 }
 
-/// How many details are stored (`lighthouse.sample`): fractions from 0 to 1.
-/// Counts are always exact.
+/// How many details (traces and occurrences) are stored
+/// (`lighthouse.sample`): fractions from 0 to 1. Counts and percentiles are
+/// always exact, whatever the rates. Errors (5xx responses, requests that
+/// reported something), failed job attempts and slow requests and jobs
+/// always keep their trace; the rates apply to the rest.
 #[derive(Clone, Copy, Debug, PartialEq, Deserialize)]
 #[serde(default)]
 pub struct SampleRates {
-    /// Fraction of ordinary request traces stored (1.0).
+    /// Fraction of ordinary request traces stored (0.1).
     pub requests: f64,
-    /// Fraction of ordinary job traces stored (1.0).
+    /// Fraction of ordinary job traces stored (0.1).
     pub jobs: f64,
     /// Fraction of occurrences stored beyond the first 100 per issue per
     /// hour (1.0).
@@ -52,8 +55,8 @@ pub struct SampleRates {
 impl Default for SampleRates {
     fn default() -> Self {
         Self {
-            requests: 1.0,
-            jobs: 1.0,
+            requests: 0.1,
+            jobs: 0.1,
             exceptions: 1.0,
         }
     }
@@ -216,14 +219,14 @@ pub const DEFAULT_ALERT_KINDS: [AlertKind; 3] =
 /// slow_request_ms = 500
 ///
 /// [lighthouse.sample]
-/// requests = 0.1
+/// requests = 0.05
 ///
 /// [lighthouse.alerts.email]
 /// to = ["oncall@example.com"]
 /// ```
 ///
 /// Environment variables: `APP_LIGHTHOUSE__RETENTION_DAYS=30`,
-/// `APP_LIGHTHOUSE__SAMPLE__REQUESTS=0.1`, lists as comma-separated
+/// `APP_LIGHTHOUSE__SAMPLE__REQUESTS=0.05`, lists as comma-separated
 /// strings (`APP_LIGHTHOUSE__IGNORE__ROUTES=/health/*,/metrics`).
 /// [`check`](Self::check) names the key of every problem.
 #[derive(Clone, Debug, PartialEq, Deserialize)]
@@ -264,7 +267,8 @@ pub struct LighthouseOptions {
     /// When the scheduler prunes, `"HH:MM"` UTC (`"03:10"`); empty to not
     /// schedule it.
     pub prune_at: String,
-    /// Records held in memory before dropping (10000).
+    /// Details (traces and occurrences) waiting to be written before new
+    /// ones are sampled out (10000). Counts are never dropped.
     pub buffer: usize,
     /// What is kept of a request.
     pub capture: CaptureOptions,
@@ -594,6 +598,9 @@ mod tests {
         assert_eq!(options.thresholds.slow_job_ms, 30_000);
         assert_eq!(options.thresholds.slow_outgoing_ms, 2000);
         assert_eq!(options.sample, SampleRates::default());
+        assert_eq!(options.sample.requests, 0.1);
+        assert_eq!(options.sample.jobs, 0.1);
+        assert_eq!(options.sample.exceptions, 1.0);
         assert_eq!(options.retention_days, 14);
         assert_eq!(options.prune_at, "03:10");
         assert_eq!(options.buffer, 10_000);
@@ -621,7 +628,7 @@ mod tests {
             "APP_",
             [
                 ("APP_LIGHTHOUSE__RETENTION_DAYS", "30"),
-                ("APP_LIGHTHOUSE__SAMPLE__REQUESTS", "0.1"),
+                ("APP_LIGHTHOUSE__SAMPLE__REQUESTS", "0.25"),
                 (
                     "APP_LIGHTHOUSE__IGNORE__ROUTES",
                     "/health/*,/metrics,/internal/*",
@@ -638,7 +645,7 @@ mod tests {
         .unwrap();
         assert_eq!(options.retention_days, 30);
         assert!(!options.mcp);
-        assert!((options.sample.requests - 0.1).abs() < f64::EPSILON);
+        assert!((options.sample.requests - 0.25).abs() < f64::EPSILON);
         assert_eq!(
             options.ignore.routes,
             ["/health/*", "/metrics", "/internal/*"]

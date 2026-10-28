@@ -36,7 +36,7 @@ pub struct HttpOptions {
     pub per_ip_rate_limit: Option<u32>,
     /// Send the default security headers (default `true`).
     pub security_headers: bool,
-    /// Compress responses with gzip or brotli (default `true`).
+    /// Compress responses with gzip (default `true`). Brotli is not built in.
     pub compression: bool,
     /// While this file exists the app answers 503 (default `storage/framework/down`).
     pub maintenance_file: PathBuf,

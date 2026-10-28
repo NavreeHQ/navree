@@ -1,6 +1,6 @@
 ---
 title: "Single sign-on"
-description: "SAML 2.0 and OpenID Connect sign-in per organization or workspace, verified email domains that route sign-in and can refuse passwords, and just-in-time provisioning with group to role mapping."
+description: "SAML 2.0 and OpenID Connect sign-in per organization or workspace, verified email domains that route sign-in and can make it the only way in, and just-in-time provisioning with group to role mapping."
 ---
 
 ## Introduction
@@ -10,7 +10,7 @@ description: "SAML 2.0 and OpenID Connect sign-in per organization or workspace,
 It covers the whole flow:
 
 - **Connections per tenant.** A connection belongs to the app, an [organization or a workspace](/docs/workspaces/organizations/), and talks SAML 2.0 (the identity provider's metadata, by URL or pasted) or OpenID Connect (an issuer, a client id and a secret).
-- **Verified domains.** A DNS TXT record proves `acme.com` belongs to Acme's connection. From then on `POST /api/sso/discover {email}` sends `@acme.com` addresses to it, and the connection can refuse their passwords.
+- **Verified domains.** A DNS TXT record proves `acme.com` belongs to Acme's connection. From then on `POST /api/sso/discover {email}` sends `@acme.com` addresses to it, and the connection can enforce single sign-on: no password, magic link, emailed code, passkey, social sign-in, token exchange or other connection signs them in.
 - **Just-in-time provisioning.** The first sign-in creates the user, makes them a member of the connection's organization or workspace and gives them the role their identity provider groups map to.
 - **Signatures checked in Rust.** SAML responses are verified by Navree itself: XML read into a strict tree, exclusive canonicalization, RSA-SHA256 or ECDSA on `ring`. SHA-1 is refused, signature wrapping can't move what a signature covers, and every assertion works once.
 - **A fake identity provider** for your tests, whose responses pass the same checks.
@@ -70,7 +70,7 @@ clock_skew_secs = 120
 |---|---|---|
 | `sso.base_url` | `app.url` | The API's public URL. The assertion consumer service, metadata and callback URLs you give identity providers start with it. |
 | `sso.complete_url` | none | The front end's page that finishes a sign-in (see [Finishing a sign-in](#finishing-a-sign-in)). Without it, the assertion consumer service and the callback answer with the login JSON. |
-| `sso.enforce_for_verified_domains` | `false` | Refuse passwords for every verified domain of an enabled connection. A connection's own `enforce` overrides it. |
+| `sso.enforce_for_verified_domains` | `false` | Enforce single sign-on for every verified domain of an enabled connection: its people sign in through it only (see [Enforcement](#enforcement)). A connection's own `enforce` overrides it. |
 | `sso.routes` | `true` | Mount the routes. |
 | `sso.management_routes` | `true` | Mount the management routes too (they need `AccessModule`). |
 | `sso.routes_prefix` | `/sso` | The routes' prefix under `http.api_prefix`. |
@@ -227,17 +227,33 @@ Content-Type: application/json
 }
 ```
 
-An email whose domain no enabled connection has verified answers `{"sso": false, "password_allowed": true}` and nulls.
+An email whose domain no enabled connection has verified answers `{"sso": false, "password_allowed": true}` and nulls. `password_allowed: false` means the connection [enforces single sign-on](#enforcement): offer it alone, since every other method will be refused.
 
-### Refusing passwords
+### Enforcement
 
-With `sso.enforce_for_verified_domains = true`, or `enforce: true` on a connection, people of its verified domains can't use a password: `POST /api/auth/login` and `POST /api/auth/register` answer 403 with code `sso_required` before any password is checked.
+With `sso.enforce_for_verified_domains = true`, or `enforce: true` on a connection, the connection is the only way in for the people of its verified domains. Every other way to a session answers 403 with code `sso_required`, before anything is issued:
+
+| Path | Refused |
+|---|---|
+| Password: `POST /api/auth/login`, `POST /api/auth/register`, `PATCH /api/auth/me/password` | Before the password is checked |
+| [Magic links and emailed codes](/docs/security/passwordless/#sign-in-policies) | When one is requested (no mail goes out) and when one mailed earlier is used |
+| [Passkeys](/docs/security/passwordless/#passkeys) | Before the session starts |
+| [Social sign-in](/docs/packages/social-sign-in/) | Before an account is created or linked, and before the session |
+| [Trusted token exchange](/docs/security/authentication/#trusted-token-exchange) | Before the session starts |
+| `POST /api/auth/2fa/verify` | A challenge started before the domain came to enforce single sign-on |
+| Another connection | Before provisioning: it can't create, link or sign in anyone of the domain |
 
 ```json
 { "statusCode": 403, "message": "Sign in with Acme Okta", "error": "Forbidden", "code": "sso_required" }
 ```
 
-The refusal is audited as `auth.login_refused`. It comes from a navree-auth `PasswordSignInPolicy` the module registers; your own password flows can ask the same question with `AuthService::check_password_sign_in(email)`. A connection with `enforce: false` keeps passwords working for its domains whatever the app's default; `follow_default_enforcement: true` goes back to the default.
+A sign-in through the enforcing connection itself goes on as before, including just-in-time provisioning of new people of the domain. Domains that no enforcing connection has verified are unaffected.
+
+The rule is one navree-auth [sign-in policy](/docs/security/authentication/#sign-in-policies) the module registers, and every navree-auth flow, social sign-in and single sign-on ask it, so a sign-in path added later asks it too. Each refusal is audited as `auth.login_refused` with the method (`password`, `magic_link`, `otp`, `passkey`, `social`, `sso`, `token_exchange`), the email and the code. A connection with `enforce: false` keeps every method working for its domains whatever the app's default; `follow_default_enforcement: true` goes back to the default. A disabled connection (`enabled: false`) enforces nothing.
+
+Enforcement decides at sign-in: sessions that started before it was turned on go on until they end. To sign everyone of the domain out at once, revoke their sessions (`AuthService::revoke_all_refresh_tokens`) when you turn enforcement on.
+
+**Break-glass.** [Platform administrators](/docs/security/authentication/#platform-administrators) can still reach the platform console with their password and second factor when their own domain enforces single sign-on and the identity provider is down (`auth.platform.break_glass`, on by default). Every such sign-in is audited as `auth.break_glass` and logged under `navree::security`. It never opens a session in the app. Set `auth.platform.break_glass = false` to make the console obey enforcement too.
 
 ## How sign-in works
 
@@ -563,7 +579,6 @@ OpenID Connect connections talk to a provider over HTTP; point a connection's `i
 - Directory sync (SCIM) is not part of the module: users are created and their roles updated at sign-in.
 - States, used assertion ids and one-time codes are kept in the cache: give it a shared store with several instances.
 - Only the JSON form of the login route binds a sign-in to the browser (through `state` at the exchange); IdP-initiated sign-ins can't be bound at all, which is why they are off by default.
-- Enforcement refuses passwords only: a social sign-in provider (`navree-social`) or a [passwordless](/docs/security/passwordless/) magic link or code that you also offer still signs the same person in. Leave those off for apps whose customers enforce single sign-on.
 
 <LinkCards>
   <LinkCard href="/docs/security/authentication/" title="Authentication">

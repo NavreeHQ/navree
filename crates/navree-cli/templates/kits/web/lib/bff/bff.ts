@@ -74,6 +74,14 @@ export interface BffOptions {
    * the one the outermost proxy appended. Next.js must then be reachable only through them.
    */
   trustedProxyHops?: number;
+  /**
+   * A header that the platform or the one proxy in front of this server sets to the bare client
+   * address, replacing any value the browser sent (e.g. `x-real-ip` behind a proxy configured to
+   * overwrite it, `cf-connecting-ip`, `fly-client-ip`). The BFF believes it before it looks at
+   * `X-Forwarded-For`, so it works with a single trusted hop and no `X-Forwarded-For` chain.
+   * Set it only when the server is reachable through that proxy alone.
+   */
+  clientIpHeader?: string;
 }
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
@@ -166,6 +174,7 @@ export function createBff(options: BffOptions) {
   const refreshGraceMs = options.refreshGraceMs ?? 30_000;
   const hops = Math.floor(options.trustedProxyHops ?? 0);
   const trustedProxyHops = Number.isFinite(hops) && hops > 0 ? hops : 0;
+  const clientIpHeader = options.clientIpHeader?.trim().toLowerCase() || null;
 
   /**
    * Refresh tokens rotate and reuse revokes the whole family, so concurrent
@@ -255,6 +264,10 @@ export function createBff(options: BffOptions) {
    * entry is missing or not an IP address.
    */
   function clientAddress(request: Request): string | null {
+    if (clientIpHeader) {
+      const value = request.headers.get(clientIpHeader)?.trim();
+      if (value && isIP(value)) return value;
+    }
     if (trustedProxyHops === 0) return null;
     const chain = (request.headers.get("x-forwarded-for") ?? "").split(",").map((entry) => entry.trim());
     const entry = chain.length >= trustedProxyHops ? chain[chain.length - trustedProxyHops] : undefined;

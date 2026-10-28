@@ -1,6 +1,6 @@
 ---
 name: navree-lighthouse
-description: "Application monitoring with navree-lighthouse: the `lighthouse` facade feature (in `full`), `LighthouseModule::from_config()` / `for_root(LighthouseOptions)` and the `lighthouse` config section, what it records through its telemetry sink (5xx and panics, slow requests and queries, failed jobs and scheduled tasks, failing outgoing calls), issues grouped by fingerprint with statuses (open, resolved, resolved in the next release, ignored), reporting handled errors with `Arc<Lighthouse>` (`report`, `capture(Report::..)`, `tag_current`), sampling and the buffer, alerts (email, Slack, signed Standard Webhooks, your own `AlertChannel` via `m.alert_channel::<C>()`, `lighthouse.alert` jobs, cooldown, spikes, `raise_alert`), the `/_lighthouse` dashboard and its sign-in, the JSON API under `/_lighthouse/api` behind the `view` and `resolve` abilities (`lighthouse.view`, `lighthouse.resolve`), MCP tools for agents (`lighthouse_list_issues`, `lighthouse_get_issue`, `lighthouse_resolve_issue`, ..., the resource `lighthouse://issues/{id}` and the prompt `fix-lighthouse-issue`, with the `mcp` feature and `McpModule`), `lighthouse:prune` and `lighthouse:test-alerts`, a separate database, and `LighthouseFake` in tests. Use when adding monitoring to an app, reporting an error you handle, configuring alerts, giving someone or an agent access to the dashboard, its API or its MCP tools, writing tests that assert on reports, or debugging why an error is not an issue, why an alert was not sent, or why the dashboard answers 401, 403 or 404."
+description: "Application monitoring with navree-lighthouse: the `lighthouse` facade feature (in `full`), `LighthouseModule::from_config()` / `for_root(LighthouseOptions)` and the `lighthouse` config section, what it records through its telemetry sink (5xx and panics, slow requests and queries, failed jobs and scheduled tasks, failing outgoing calls), issues grouped by fingerprint with statuses (open, resolved, resolved in the next release, ignored), reporting handled errors with `Arc<Lighthouse>` (`report`, `capture(Report::..)`, `tag_current`), sampling (0.1 by default; errors and slow work always kept), exact counts under load and the sampled-out figure, alerts (email, Slack, signed Standard Webhooks, your own `AlertChannel` via `m.alert_channel::<C>()`, `lighthouse.alert` jobs, cooldown, spikes, `raise_alert`), the `/_lighthouse` dashboard and its sign-in, the JSON API under `/_lighthouse/api` behind the `view` and `resolve` abilities (`lighthouse.view`, `lighthouse.resolve`), MCP tools for agents (`lighthouse_list_issues`, `lighthouse_get_issue`, `lighthouse_resolve_issue`, ..., the resource `lighthouse://issues/{id}` and the prompt `fix-lighthouse-issue`, with the `mcp` feature and `McpModule`), `lighthouse:prune` and `lighthouse:test-alerts`, a separate database, and `LighthouseFake` in tests. Use when adding monitoring to an app, reporting an error you handle, configuring alerts, giving someone or an agent access to the dashboard, its API or its MCP tools, writing tests that assert on reports, or debugging why an error is not an issue, why an alert was not sent, or why the dashboard answers 401, 403 or 404."
 ---
 
 # Lighthouse
@@ -108,6 +108,32 @@ Lighthouse's own routes, `lighthouse.ignore.routes` (`/health/*`, `/metrics`),
 `lighthouse.ignore.jobs` and `lighthouse.alert` jobs are never recorded.
 Queries run with `execute_unprepared` are not timed by SeaORM, so they never
 show up.
+
+## Counts, sampling and load
+
+- **Counts are exact under any load.** The sink adds every request, query,
+  job attempt, outgoing call, exception and issue hit to in-memory
+  per-minute/per-hour counters on the recording thread (64 sharded locks,
+  no I/O, nothing queued); the writer flushes them every second as this
+  process's rows. Never "fix" a count by raising `lighthouse.buffer`.
+- **Details are sampled.** Kept always: 5xx and requests that reported,
+  failed job attempts, slow requests/jobs, the first 100 occurrences per
+  issue per hour. The rest: `lighthouse.sample.requests` / `.jobs`
+  (default `0.1`), `.exceptions` (default `1.0`). Deterministic by request
+  id.
+- **Bounded detail queue** (`lighthouse.buffer`, 10000): when full, a trace
+  goes before an occurrence; the hit (count) is always kept. Every dropped
+  detail is counted as *sampled out*: `Lighthouse::sampled_out()`,
+  `lighthouse_sampled_out_total` on `/metrics`, the overview's `sampled_out`
+  (all processes, the period) and the dashboard's Sampled out figure.
+- **Failed writes**: counters and hits go again with the next write; the
+  batch's details are lost and counted as sampled out.
+- **Several processes**: issue status, `regressed_at` and ignore counters
+  change by compare-and-set, so one process raises a regression; counts
+  are relative updates.
+- **Proof**: `e2e/run.sh --scenarios checks,lighthouse --load-profile load
+  --vus 200` fails the check "lighthouse: request count matches k6" when
+  Lighthouse's count differs from k6's by more than 1 %.
 
 Statuses: `resolve(id, false, comment)` reopens as a regression on the next
 occurrence; `resolve(id, true, ..)` stores the current `lighthouse.release`
@@ -260,6 +286,9 @@ assert_eq!(fake.reports()[0].level, Level::Error);
   behind the crate's `mcp` feature), `cargo test -p navree --test
   lighthouse_docs` and `cargo test -p navree --features mcp --test
   lighthouse_mcp`.
+- Several processes on PostgreSQL: `cargo test -p navree-lighthouse
+  --features postgres --test postgres` with `NAVREE_TEST_POSTGRES_URL` set
+  (skipped without it).
 - After changing options: `LighthouseOptions::check()` names the key of every
   problem (sample rates 0..=1, `path` absolute, `prune_at` "HH:MM" or empty,
   `buffer` >= 100, `spike.minutes` 1..=60, webhook `secret` >= 32 bytes).
@@ -277,10 +306,13 @@ assert_eq!(fake.reports()[0].level, Level::Error);
   `lighthouse.view`. API answers 401/403 JSON instead.
 - **CSRF 403 on API calls from a browser session**: send `x-csrf-token`
   (the `data-csrf` attribute of the page's `<body>`).
-- **No trace for a request**: `lighthouse.sample.requests` < 1 and the
-  request was fast, OK and reported nothing. Counts stay exact.
-- **"dropped" banner / `lighthouse_dropped_total`**: the database is not
-  keeping up with the buffer (`lighthouse.buffer`); samples go first.
+- **No trace for a request**: `lighthouse.sample.requests` (0.1 by
+  default) and the request was fast, OK and reported nothing. Counts stay
+  exact. Set `1.0` in development to keep every trace.
+- **"sampled out" banner / figure / `lighthouse_sampled_out_total`**: the
+  database is not keeping up with the details (`lighthouse.buffer`); traces
+  go first, counts are never dropped. Lower `sample.requests` or use
+  `lighthouse.database_url`.
 - **No `lighthouse_*` tools on `/mcp`**: the facade's `mcp` feature is
   off (it is not in `full`), `McpModule` is missing, `lighthouse.mcp =
   false`, `lighthouse.store = "off"`, or the user lacks `lighthouse.view`
