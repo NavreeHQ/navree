@@ -3008,9 +3008,11 @@ dependencies = [
  "navree-domains",
  "navree-http",
  "navree-kernel",
+ "navree-logbook",
  "navree-mail",
  "navree-mcp",
  "navree-micro",
+ "navree-oauth",
  "navree-schedule",
  "navree-search",
  "navree-sso",
@@ -3123,6 +3125,37 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+]
+
+[[package]]
+name = "navree-logbook"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "bytes",
+ "chrono",
+ "form_urlencoded",
+ "http",
+ "http-body",
+ "http-body-util",
+ "navree-auth",
+ "navree-config",
+ "navree-contracts",
+ "navree-db",
+ "navree-http",
+ "navree-kernel",
+ "navree-telemetry",
+ "navree-view",
+ "percent-encoding",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror 2.0.21",
+ "tokio",
+ "tower",
+ "tracing",
+ "uuid",
+ "wildmatch",
 ]
 
 [[package]]
@@ -3247,6 +3280,41 @@ dependencies = [
  "tracing",
  "uuid",
  "webpki-roots",
+]
+
+[[package]]
+name = "navree-oauth"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "base64 0.23.1",
+ "chrono",
+ "form_urlencoded",
+ "http",
+ "moka",
+ "navree-access",
+ "navree-auth",
+ "navree-config",
+ "navree-contracts",
+ "navree-crypto",
+ "navree-db",
+ "navree-http",
+ "navree-kernel",
+ "navree-orm",
+ "navree-testing",
+ "navree-workspace",
+ "rand 0.10.3",
+ "sea-orm",
+ "sea-orm-migration",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+ "url",
+ "utoipa",
+ "uuid",
 ]
 
 [[package]]

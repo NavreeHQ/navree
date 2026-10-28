@@ -27,7 +27,9 @@ on:
       - "crates/navree-http/**"
       - "crates/navree-mail/**"
       - "crates/navree-mcp/**"
+      - "crates/navree-logbook/**"
       - "crates/navree-micro/**"
+      - "crates/navree-oauth/**"
       - "crates/navree-schedule/**"
       - "crates/navree-search/**"
       - "crates/navree-sso/**"
@@ -79,6 +81,7 @@ jobs:
           - qr_roundtrip
           - schedule_cron
           - scim_filter
+          - small_parsers
           - search_query
           - sso_saml_metadata
           - sso_saml_response

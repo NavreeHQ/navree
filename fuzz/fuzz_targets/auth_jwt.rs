@@ -14,10 +14,10 @@ use std::sync::{Arc, OnceLock};
 
 use chrono::{TimeZone, Utc};
 use libfuzzer_sys::fuzz_target;
+use navree_auth::JwtOptions;
 use navree_auth::{AuthError, JwtService, LEEWAY_SECS, TokenType};
 use navree_contracts::FixedClock;
 use navree_crypto::jose::{Algorithm, SigningKey};
-use navree_auth::JwtOptions;
 use serde_json::{Value, json};
 
 const SECRET: &[u8] = b"fuzzing-secret-0123456789abcdef!";
@@ -85,11 +85,7 @@ fuzz_target!(|data: &[u8]| {
             };
             // Times near "now" are the interesting ones.
             let near = |n: i64| {
-                if n % 4 == 0 {
-                    n
-                } else {
-                    NOW + n % 200 - 100
-                }
+                if n % 4 == 0 { n } else { NOW + n % 200 - 100 }
             };
             let (iat, exp, nbf) = (near(number(0)), near(number(1)), near(number(2)));
             let flags = rest[24];

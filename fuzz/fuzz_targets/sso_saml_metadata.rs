@@ -12,7 +12,10 @@ use navree_sso::saml::{AuthnRequest, IdpMetadata, ServiceProvider};
 
 /// Whether XML 1.0 allows `c` in a document.
 fn legal(c: char) -> bool {
-    !c.is_control() || matches!(c, '\t' | '\n' | '\r')
+    matches!(
+        c,
+        '\t' | '\n' | '\r' | '\u{20}'..='\u{d7ff}' | '\u{e000}'..='\u{fffd}' | '\u{10000}'..='\u{10ffff}'
+    )
 }
 
 fuzz_target!(|data: &[u8]| {

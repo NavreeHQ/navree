@@ -14,8 +14,8 @@ use chrono::DateTime;
 use http::{HeaderMap, HeaderName, HeaderValue};
 use libfuzzer_sys::fuzz_target;
 use navree_webhooks::{
-    AwsSns, GitHub, GooglePubSub, Hmac, Mailgun, Meta, MicrosoftGraph, Paddle, Postmark, PubSubPush,
-    Slack, SnsMessage, StandardWebhooks, Stripe, Tolerance, Twilio, Vonage,
+    AwsSns, GitHub, GooglePubSub, Hmac, Mailgun, Meta, MicrosoftGraph, Paddle, Postmark,
+    PubSubPush, Slack, SnsMessage, StandardWebhooks, Stripe, Tolerance, Twilio, Vonage,
 };
 use navree_webhooks::{IncomingRequest, SourceOptions};
 
@@ -58,7 +58,9 @@ fn attack(input: &Input) {
         }
     }
     let now = DateTime::from_timestamp(i64::from(input.now), 0).expect("a time");
-    let tolerance = input.tolerance.map(|secs| Tolerance::at(now, u64::from(secs)));
+    let tolerance = input
+        .tolerance
+        .map(|secs| Tolerance::at(now, u64::from(secs)));
     let (secret, body) = (input.secret.as_str(), input.body.as_slice());
 
     let _ = StandardWebhooks::verify(secret, &headers, body, tolerance);
@@ -121,7 +123,11 @@ fn signed(input: &Input) {
     let secret = input.secret.as_str();
     let body = input.body.as_slice();
     let other = input.other_body.as_slice();
-    let id: String = input.id.chars().filter(char::is_ascii_alphanumeric).collect();
+    let id: String = input
+        .id
+        .chars()
+        .filter(char::is_ascii_alphanumeric)
+        .collect();
 
     // Standard Webhooks (the id is a header value without spaces or dots).
     if !id.is_empty() {
@@ -175,7 +181,11 @@ fn signed(input: &Input) {
     }
 
     // Vonage.
-    let jti = if id.is_empty() { "jti".to_owned() } else { id.clone() };
+    let jti = if id.is_empty() {
+        "jti".to_owned()
+    } else {
+        id.clone()
+    };
     let headers = header_map(&[("authorization", Vonage::sign(secret, body, ts, &jti))]);
     let verified =
         Vonage::verify(secret, &headers, body, tolerance).expect("a signed Vonage request");
@@ -185,7 +195,11 @@ fn signed(input: &Input) {
     }
 
     // Mailgun, JSON body.
-    let token = if id.is_empty() { "token".to_owned() } else { id.clone() };
+    let token = if id.is_empty() {
+        "token".to_owned()
+    } else {
+        id.clone()
+    };
     let mailgun = serde_json::json!({
         "signature": {
             "timestamp": ts.to_string(),
@@ -195,8 +209,8 @@ fn signed(input: &Input) {
         "event-data": { "id": "evt", "event": "delivered" },
     })
     .to_string();
-    let verified = Mailgun::verify(secret, mailgun.as_bytes(), tolerance)
-        .expect("a signed Mailgun request");
+    let verified =
+        Mailgun::verify(secret, mailgun.as_bytes(), tolerance).expect("a signed Mailgun request");
     assert_eq!(verified.timestamp, Some(now));
 
     // Twilio: the URL as sent (its query string included).

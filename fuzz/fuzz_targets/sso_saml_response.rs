@@ -22,7 +22,9 @@ use chrono::{DateTime, Utc};
 use libfuzzer_sys::fuzz_target;
 use navree_fuzz::sso as fixtures;
 use navree_sso::SsoFake;
-use navree_sso::saml::{IdpMetadata, ResponseCheck, SamlAssertion, ServiceProvider, validate_response};
+use navree_sso::saml::{
+    IdpMetadata, ResponseCheck, SamlAssertion, ServiceProvider, validate_response,
+};
 
 fn now() -> DateTime<Utc> {
     DateTime::parse_from_rfc3339("2026-10-27T12:01:00Z")
@@ -62,11 +64,16 @@ fn accepted(assertion: &SamlAssertion, idp: &IdpMetadata, skew: Duration) {
     assert!(!assertion.name_id.is_empty());
     assert_eq!(assertion.name_id, assertion.name_id.trim());
     let skew = chrono::TimeDelta::from_std(skew).unwrap();
-    assert!(assertion.not_on_or_after > now() - skew, "an expired assertion");
+    assert!(
+        assertion.not_on_or_after > now() - skew,
+        "an expired assertion"
+    );
 }
 
 fuzz_target!(|data: &[u8]| {
-    let [mode, flags, rest @ ..] = data else { return };
+    let [mode, flags, rest @ ..] = data else {
+        return;
+    };
     let Ok(text) = std::str::from_utf8(rest) else {
         return;
     };

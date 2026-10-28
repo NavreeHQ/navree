@@ -59,10 +59,7 @@ fuzz_target!(|data: &[u8]| {
     }
 
     // The `Host` header, byte for byte.
-    if let Ok(request) = Request::builder()
-        .header(HOST, data)
-        .body(())
-    {
+    if let Ok(request) = Request::builder().header(HOST, data).body(()) {
         let (parts, ()) = request.into_parts();
         if let Some(host) = request_host(&parts) {
             assert!(!host.is_empty() && !host.ends_with('.'));

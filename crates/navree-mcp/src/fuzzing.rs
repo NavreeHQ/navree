@@ -36,7 +36,12 @@ pub fn parse(bytes: &[u8]) -> usize {
             assert_eq!(answer["jsonrpc"], "2.0");
             assert!(answer["error"]["code"].is_i64());
             assert!(answer["error"]["message"].is_string());
-            assert!(answer["id"].is_null() || answer["id"].is_string() || answer["id"].is_i64() || answer["id"].is_u64());
+            assert!(
+                answer["id"].is_null()
+                    || answer["id"].is_string()
+                    || answer["id"].is_i64()
+                    || answer["id"].is_u64()
+            );
             0
         }
         Ok(parsed) => {
