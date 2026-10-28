@@ -18,6 +18,7 @@ mod partitions;
 mod permission_check;
 mod resolution;
 mod routes;
+mod servers;
 mod services;
 mod telemetry;
 mod zones;

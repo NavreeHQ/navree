@@ -117,7 +117,7 @@ impl Injectable for TemplatesController {
     }
 }
 
-fn names(templates: &[Record<Template>]) -> Vec<String> {
+pub fn names(templates: &[Record<Template>]) -> Vec<String> {
     let mut names: Vec<String> = templates.iter().map(|t| t.name.clone()).collect();
     names.sort();
     names
@@ -229,19 +229,19 @@ impl Module for TemplatesModule {
 
 /// Organization `Group` with workspaces Acme and Initech, organization
 /// `Other` with Hooli, and the standalone Globex, each with library items.
-struct Fixture {
-    world: World,
-    ada: Uuid,
-    group: Organization,
-    other: Organization,
-    acme: Workspace,
-    initech: Workspace,
-    globex: Workspace,
-    welcome: Uuid,
-    handbook: Uuid,
-    other_handbook: Uuid,
-    acme_only: Uuid,
-    globex_only: Uuid,
+pub struct Fixture {
+    pub world: World,
+    pub ada: Uuid,
+    pub group: Organization,
+    pub other: Organization,
+    pub acme: Workspace,
+    pub initech: Workspace,
+    pub globex: Workspace,
+    pub welcome: Uuid,
+    pub handbook: Uuid,
+    pub other_handbook: Uuid,
+    pub acme_only: Uuid,
+    pub globex_only: Uuid,
 }
 
 async fn create(db: &Db, owner: LibraryOwner, slug: &str, name: &str) -> Uuid {
@@ -260,7 +260,13 @@ async fn create(db: &Db, owner: LibraryOwner, slug: &str, name: &str) -> Uuid {
 }
 
 async fn fixture() -> Fixture {
-    let world = World::with(org_builder().module(TemplatesModule)).await;
+    fixture_with(org_builder()).await
+}
+
+/// The fixture on the app `builder` makes (organizations on), with the
+/// templates module.
+pub async fn fixture_with(builder: navree_testing::TestAppBuilder) -> Fixture {
+    let world = World::with(builder.module(TemplatesModule)).await;
     let ada = world.user("Ada", "ada@example.com").await;
     let group = world.organization(ada, "Group").await;
     let other = world.organization(ada, "Other").await;
@@ -327,7 +333,7 @@ async fn fixture() -> Fixture {
     }
 }
 
-async fn visible(db: &Db, viewer: impl Into<LibraryViewer>) -> Vec<String> {
+pub async fn visible(db: &Db, viewer: impl Into<LibraryViewer>) -> Vec<String> {
     names(
         &LibraryRepo::<Template>::visible_to(viewer)
             .get(db)
