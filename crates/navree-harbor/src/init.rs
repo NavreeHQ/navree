@@ -88,14 +88,19 @@ pub fn ensure_key(dir: &Path, env: &Environment) -> Result<InitReport> {
     let config_file = env.config_file();
     let key_file = env.key_file();
     let config_path = dir.join(&config_file);
-    let text = std::fs::read_to_string(&config_path).map_err(|e| HarborError::io(&config_path, e))?;
+    let text =
+        std::fs::read_to_string(&config_path).map_err(|e| HarborError::io(&config_path, e))?;
     let mut report = InitReport::default();
     report.push("kept", &config_file, "");
     if !dir.join(&key_file).exists() {
         let encrypted = text
             .parse::<toml::Table>()
             .ok()
-            .and_then(|table| table.get("secrets").and_then(|s| s.as_table().map(|t| !t.is_empty())))
+            .and_then(|table| {
+                table
+                    .get("secrets")
+                    .and_then(|s| s.as_table().map(|t| !t.is_empty()))
+            })
             .unwrap_or(false);
         if encrypted {
             return Err(HarborError::msg(format!(

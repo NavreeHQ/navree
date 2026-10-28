@@ -12,7 +12,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use navree_db::{Db, Reader};
 use navree_kernel::BoxFuture;
 use sea_orm::{
-    ConnectionTrait, DatabaseTransaction, DbBackend, DbErr, QueryResult, Statement, TransactionTrait,
+    ConnectionTrait, DatabaseTransaction, DbBackend, DbErr, QueryResult, Statement,
+    TransactionTrait,
 };
 use serde_json::Value;
 
@@ -632,11 +633,7 @@ fn scope(sql: &mut Sql, table: &str, index: &str, ids: Option<&[String]>) {
 
 /// The statements deleting an index's documents (or just `ids`) from every
 /// table.
-fn delete_statements(
-    backend: DbBackend,
-    index: &str,
-    ids: Option<&[String]>,
-) -> Vec<Statement> {
+fn delete_statements(backend: DbBackend, index: &str, ids: Option<&[String]>) -> Vec<Statement> {
     tables(backend)
         .into_iter()
         .map(|table| {
