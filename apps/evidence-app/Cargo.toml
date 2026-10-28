@@ -1,0 +1,49 @@
+[package]
+name = "evidence-app"
+description = "Navree evidence app: one application wiring the framework's packages and tools, run in Docker under load by the e2e harness."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "evidence-app"
+path = "src/main.rs"
+
+# Application code: unsafe stays forbidden, but undocumented items are fine.
+[lints.rust]
+unsafe_code = "forbid"
+
+[dependencies]
+async-trait = { workspace = true }
+chrono = { workspace = true }
+garde = { workspace = true }
+# Every package the evidence app shows: the `full` set plus the opt-in
+# packages, the PostgreSQL driver and NATS for micro.
+navree = { workspace = true, features = [
+    "full",
+    "postgres",
+    "ai",
+    "billing",
+    "flags",
+    "graphql",
+    "grpc",
+    "i18n",
+    "mcp",
+    "micro-nats",
+    "oauth",
+    "redis",
+    "search",
+    "social",
+] }
+sea-orm = { workspace = true }
+sea-orm-migration = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+utoipa = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
