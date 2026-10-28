@@ -294,12 +294,11 @@ pub async fn grant_role(app: &TestApp, user: uuid::Uuid, role: &str, permissions
 
 /// The TOTP code of `secret` (base32) at `clock`'s time.
 pub fn totp_code(secret: &str, clock: &FixedClock) -> String {
-    totp_rs::Builder::new()
-        .with_secret(totp_rs::Secret::try_from_base32(secret).expect("a base32 secret"))
+    use navree_crypto::totp::{Secret, Totp};
+    Totp::builder(Secret::from_base32(secret).expect("a base32 secret"))
         .build()
         .expect("a valid TOTP")
         .generate(u64::try_from(clock.now().timestamp()).unwrap())
-        .to_string()
 }
 
 /// Turns two-factor authentication on for `user` through the service; the

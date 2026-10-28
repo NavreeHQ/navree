@@ -289,10 +289,6 @@ criteria = "safe-to-deploy"
 version = "1.6.0"
 criteria = "safe-to-deploy"
 
-[[exemptions.base32]]
-version = "0.5.1"
-criteria = "safe-to-deploy"
-
 [[exemptions.base64]]
 version = "0.23.1"
 criteria = "safe-to-deploy"
@@ -501,10 +497,6 @@ criteria = "safe-to-deploy"
 version = "0.1.16"
 criteria = "safe-to-deploy"
 
-[[exemptions.constant_time_eq]]
-version = "0.4.2"
-criteria = "safe-to-deploy"
-
 [[exemptions.convert_case]]
 version = "0.10.0"
 criteria = "safe-to-deploy"
@@ -583,10 +575,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.css-inline]]
 version = "0.23.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.csscolorparser]]
-version = "0.8.4"
 criteria = "safe-to-deploy"
 
 [[exemptions.csv]]
@@ -908,6 +896,18 @@ criteria = "safe-to-deploy"
 [[exemptions.futures-util]]
 version = "0.3.34"
 criteria = "safe-to-deploy"
+
+[[exemptions.g2gen]]
+version = "1.2.2"
+criteria = "safe-to-run"
+
+[[exemptions.g2p]]
+version = "1.2.2"
+criteria = "safe-to-run"
+
+[[exemptions.g2poly]]
+version = "1.2.2"
+criteria = "safe-to-run"
 
 [[exemptions.garde]]
 version = "0.23.0"
@@ -1239,10 +1239,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.js-sys]]
 version = "0.3.106"
-criteria = "safe-to-deploy"
-
-[[exemptions.jsonwebtoken]]
-version = "11.1.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.kafka-protocol]]
@@ -1706,15 +1702,7 @@ version = "0.14.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.phf_generator]]
-version = "0.13.1"
-criteria = "safe-to-deploy"
-
-[[exemptions.phf_generator]]
 version = "0.14.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.phf_macros]]
-version = "0.13.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.phf_macros]]
@@ -1873,10 +1861,6 @@ criteria = "safe-to-deploy"
 version = "0.1.30"
 criteria = "safe-to-deploy"
 
-[[exemptions.qrcode2]]
-version = "0.18.0"
-criteria = "safe-to-deploy"
-
 [[exemptions.quanta]]
 version = "0.12.6"
 criteria = "safe-to-deploy"
@@ -2024,6 +2008,10 @@ criteria = "safe-to-deploy"
 [[exemptions.rpassword]]
 version = "7.5.4"
 criteria = "safe-to-deploy"
+
+[[exemptions.rqrr]]
+version = "0.11.0"
+criteria = "safe-to-run"
 
 [[exemptions.rtoolbox]]
 version = "0.0.6"
@@ -2597,10 +2585,6 @@ criteria = "safe-to-deploy"
 version = "0.14.6"
 criteria = "safe-to-deploy"
 
-[[exemptions.totp-rs]]
-version = "6.0.0"
-criteria = "safe-to-deploy"
-
 [[exemptions.tower]]
 version = "0.5.3"
 criteria = "safe-to-deploy"
@@ -2687,10 +2671,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.ucd-trie]]
 version = "0.1.7"
-criteria = "safe-to-deploy"
-
-[[exemptions.uncased]]
-version = "0.9.10"
 criteria = "safe-to-deploy"
 
 [[exemptions.unicase]]
@@ -2999,10 +2979,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.zerofrom-derive]]
 version = "0.1.8"
-criteria = "safe-to-deploy"
-
-[[exemptions.zeroize_derive]]
-version = "1.5.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.zerotrie]]

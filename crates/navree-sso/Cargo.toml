@@ -59,6 +59,4 @@ ring = { workspace = true }
 # digests (which the verifier itself refuses).
 sha1 = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
-# Codes for the two-factor sign-ins of the enforcement tests.
-totp-rs = { workspace = true }
 wiremock = { workspace = true }

@@ -1,6 +1,6 @@
 [package]
 name = "navree-crypto"
-description = "Navree CryptoModule: AES-256-GCM Encrypter with key rotation, Argon2id Hasher, token helpers and JOSE helpers (JWS, JWK, PKCS#8 on ring)."
+description = "Navree CryptoModule: AES-256-GCM Encrypter with key rotation, Argon2id Hasher, token helpers, JOSE helpers (JWS, JWK, PKCS#8 on ring), TOTP one-time passwords and a QR code encoder."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -30,6 +30,8 @@ subtle = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
+zeroize = { workspace = true }
 
 [dev-dependencies]
+rqrr = { workspace = true }
 tokio = { workspace = true }

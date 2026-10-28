@@ -19,14 +19,12 @@ postgres = ["navree-db/postgres"]
 axum = { workspace = true }
 # base64 and ring: token exchange (JWS verification of trusted issuers' tokens)
 # and passkeys (WebAuthn signatures), until navree_crypto::jose carries them.
+# The service's own tokens, TOTP codes and QR codes are navree-crypto's.
 base64 = { workspace = true }
 chrono = { workspace = true }
 form_urlencoded = { workspace = true }
 garde = { workspace = true }
-# hmac and sha2: the HMAC-only jsonwebtoken CryptoProvider (src/jwt/provider.rs).
-hmac = { workspace = true }
 http = { workspace = true }
-jsonwebtoken = { workspace = true }
 # Only for `impl navree_access::Subject for user::Entity` (no module import).
 navree-access = { workspace = true }
 navree-cache = { workspace = true }
@@ -38,14 +36,12 @@ navree-http = { workspace = true }
 # Fetching trusted issuers' key sets (`auth.trusted_issuers.*.jwks_url`).
 navree-http-client = { workspace = true }
 navree-kernel = { workspace = true }
-# navree-mail, qrcode2 and totp-rs: the account flows of plan Task 30
-# (password reset mail, TOTP two-factor).
+# navree-mail: the account flows of plan Task 30 (password reset mail).
 navree-mail = { workspace = true }
 # The auth tables are models (`User`, `refresh_token::Model`, ...); sessions,
 # sign-in tokens, pending resets and passkeys are written through the ORM.
 navree-orm = { workspace = true }
 navree-validation = { workspace = true }
-qrcode2 = { workspace = true }
 ring = { workspace = true }
 sea-orm = { workspace = true }
 sea-orm-migration = { workspace = true }
@@ -54,10 +50,11 @@ serde_json = { workspace = true }
 sha2 = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
-totp-rs = { workspace = true }
 tracing = { workspace = true }
 utoipa = { workspace = true }
 uuid = { workspace = true }
+# The two-factor secret and the token key are wiped when dropped.
+zeroize = { workspace = true }
 
 [dev-dependencies]
 futures = { workspace = true }

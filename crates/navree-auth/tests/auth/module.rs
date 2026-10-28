@@ -117,7 +117,7 @@ async fn tokens_are_signed_with_a_key_derived_from_the_app_key() {
     let (_, access, _) = signed_in(&app, "ada@example.com").await;
     let header = access.split('.').next().unwrap();
     assert_eq!(
-        header, "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9",
+        header, "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
         "HS256 JWT header"
     );
     // Not the raw app key: a token signed with it is rejected.
