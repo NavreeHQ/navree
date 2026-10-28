@@ -92,7 +92,7 @@ On the way out, this layer writes one log line per request (target `navree::requ
 
 ### CORS, panics and timeouts
 
-- **CORS** answers preflight requests and adds the CORS headers for the origins listed in `http.cors.allowed_origins`. With no origins listed (the default), there is no CORS layer. Because it sits outside the error layer, error responses get the CORS headers too. See [CORS and security headers](/docs/basics/cors-and-security-headers/).
+- **CORS** answers preflight requests (`OPTIONS` with `Origin` and `Access-Control-Request-Method`) and adds the CORS headers for the origins listed in `http.cors.allowed_origins`; other origins get no CORS headers. With no origins listed (the default), there is no CORS layer. Because it sits outside the error layer, error responses get the CORS headers too. See [CORS and security headers](/docs/basics/cors-and-security-headers/).
 - **The panic catcher** turns a panic anywhere further in into a 500 `"Internal server error"`. The panic message is logged on target `navree::error`, never sent to the client.
 - **The timeout** gives every request `http.timeout_secs` (30 seconds by default). A request that runs out of time gets a 503 with the message `"The server did not finish the request in time."`. A route with its own `#[timeout]` can be shorter or longer: a longer one moves this deadline.
 

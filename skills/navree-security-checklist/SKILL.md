@@ -90,6 +90,13 @@ Go through it in order; each item says how to check.
 - [ ] Behind a proxy, load balancer or BFF: `http.trusted_proxies` lists
   it (else everyone shares one IP and one login throttle). Avoid
   `http.trust_proxy = true` unless nothing reaches the app directly.
+- [ ] Per-IP limits count an IPv6 client by network (`http.rate_limit_ipv6_prefix`,
+  64 by default), IPv4 by address; limits you write key with
+  `HttpOptions::rate_limit_key(ip)` (`navree::http::rate_limit_key`), not the
+  raw address.
+- [ ] Turning on SSO enforcement (or removing someone) also calls
+  `AuthService::revoke_credentials_of_domain` / `revoke_all_credentials`:
+  `revoke_all_refresh_tokens` leaves personal access tokens and OAuth grants.
 - [ ] `auth.login_throttle_per_minute` (5) and
   `auth.two_factor.max_attempts_per_minute` (5) are not 0.
 - [ ] With the OAuth server: `oauth.rate_limits` (token, introspect,

@@ -133,6 +133,11 @@ servers = ["https://api.example.com"]
 docs_ui = true                        # false removes /api/docs and its embedded Scalar script (/api/docs/assets/)
 ```
 
+The docs page's CSP allows scripts from the app only, and images from the
+app (`'self'`) and `data:` URIs only (Scalar loads no other): a remote image
+in a description is not shown, so serve it from the app or inline it as a
+`data:` URI. `connect-src` adds the absolute `api.servers` URLs.
+
 ## Export and typed clients
 
 ```sh

@@ -260,6 +260,34 @@ async fn the_callback_is_counted_by_the_login_throttle() {
     sign_in(&app, "github", "code-ada").await.assert_status(429);
 }
 
+/// Callbacks from the addresses of one IPv6 network share the throttle.
+#[tokio::test]
+async fn the_callback_throttle_counts_ipv6_clients_by_network() {
+    let (app, _fake) = fake_app(|b| {
+        b.config("auth.login_throttle_per_minute", 2)
+            .config("http.trust_proxy", true)
+    })
+    .await;
+    let from = |ip: &'static str| {
+        let app = &app;
+        async move {
+            app.client()
+                .post("/api/auth/social/github/callback")
+                .header("x-forwarded-for", ip)
+                .json(&json!({ "code": "code", "state": "nvs1.bad" }))
+                .send()
+                .await
+        }
+    };
+    from("2001:db8:7:7::1").await.assert_status(400);
+    from("2001:db8:7:7:1:2:3:4").await.assert_status(400);
+    from("2001:db8:7:7:ffff::1").await.assert_status(429);
+    // Another /64, and IPv4 clients, have their own budgets.
+    from("2001:db8:7:8::1").await.assert_status(400);
+    from("192.0.2.1").await.assert_status(400);
+    from("192.0.2.2").await.assert_status(400);
+}
+
 #[tokio::test]
 async fn a_successful_sign_in_resets_the_throttle() {
     let (app, fake) = fake_app(|b| b.config("auth.login_throttle_per_minute", 2)).await;

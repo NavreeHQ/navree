@@ -19,7 +19,7 @@ use crate::options::NatsOptions;
 use crate::transport::LocalRetry;
 use crate::{
     DeadLetter, Delivery, DeliveryActions, Envelope, MicroError, MicroTransport, PatternKind,
-    Subscription,
+    Subscribed, Subscription,
 };
 
 /// NATS: requests go to the subject named after the pattern, answered by a
@@ -248,6 +248,15 @@ impl MicroTransport for NatsTransport {
         subscriptions: Vec<Subscription>,
         deliveries: mpsc::Sender<Delivery>,
     ) -> BoxFuture<'_, Result<(), MicroError>> {
+        self.listen_subscribed(subscriptions, deliveries, Subscribed::detached())
+    }
+
+    fn listen_subscribed(
+        &self,
+        subscriptions: Vec<Subscription>,
+        deliveries: mpsc::Sender<Delivery>,
+        subscribed: Subscribed,
+    ) -> BoxFuture<'_, Result<(), MicroError>> {
         Box::pin(async move {
             let client = self.client().await?.clone();
             let mut tasks = JoinSet::new();
@@ -306,6 +315,20 @@ impl MicroTransport for NatsTransport {
                     }
                 }
             }
+            // A subscription is only queued on the client until the server
+            // reads it, and core NATS drops a message nobody is subscribed
+            // to: wait until the server has taken them all in (the flush is
+            // a PING answered after them) before saying the listener is up.
+            match tokio::time::timeout(self.connect_timeout, client.flush()).await {
+                Ok(Ok(())) => {}
+                Ok(Err(error)) => {
+                    tracing::warn!(target: "navree::micro", %error, "the NATS subscriptions could not be confirmed");
+                }
+                Err(_) => {
+                    tracing::warn!(target: "navree::micro", "the NATS server did not confirm the subscriptions in time; they are sent when it answers");
+                }
+            }
+            subscribed.signal();
             deliveries.closed().await;
             tasks.abort_all();
             while tasks.join_next().await.is_some() {}

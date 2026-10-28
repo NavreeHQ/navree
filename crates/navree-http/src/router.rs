@@ -14,7 +14,7 @@ use axum::Router;
 use axum::extract::{DefaultBodyLimit, Request};
 use axum::middleware::from_fn_with_state;
 use axum::response::{IntoResponse, Response};
-use http::header::{CONTENT_LENGTH, HeaderName, HeaderValue};
+use http::header::{CONTENT_LENGTH, HeaderName};
 use http::request::Parts;
 use http::{Method, StatusCode};
 use navree_config::Config;
@@ -23,19 +23,19 @@ use navree_kernel::{AppContext, BoxError, BoxFuture};
 use navree_telemetry::{EventKind, Telemetry, TracePolicy};
 use tower::{Layer, Service, ServiceExt};
 use tower_http::compression::CompressionLayer;
-use tower_http::cors::{AllowOrigin, CorsLayer};
 use uuid::Uuid;
 
 use crate::controller::ControllerRegistration;
 use crate::error::ErrorFormat;
 use crate::extract::ProxyTrust;
 use crate::limiter::KeyedRateLimiter;
+use crate::network::rate_limit_key;
 use crate::pipeline::{
     self, CheckStages, ContextState, GuardStages, Requester, Stages, TimeoutOverride, X_REQUEST_ID,
 };
 use crate::{
-    AppError, Authenticator, ClientIp, CorsOptions, ErrorMapper, GlobalLayer, HttpOptions,
-    HttpServer, LayerSlot, RouteAuthorizer, RouteDef, RouteMeta,
+    AppError, Authenticator, ClientIp, CorsLayer, CorsOptions, ErrorMapper, GlobalLayer,
+    HttpOptions, HttpServer, LayerSlot, RouteAuthorizer, RouteDef, RouteMeta,
 };
 
 /// Builds the app's full router: every controller route behind its per-route
@@ -66,6 +66,7 @@ pub async fn build_router(ctx: &AppContext) -> Result<Router, BoxError> {
         authorizer,
         audit,
         body_limit: options.body_limit_bytes,
+        ipv6_prefix: options.rate_limit_ipv6_prefix,
     };
     let mut router = Router::new();
     for route in routes {
@@ -108,6 +109,7 @@ pub async fn build_router(ctx: &AppContext) -> Result<Router, BoxError> {
             },
             per_ip: options.per_ip_rate_limit.map(|limit| pipeline::PerIpLimit {
                 limiter: KeyedRateLimiter::<IpAddr>::new(limit, Duration::from_secs(60)),
+                ipv6_prefix: options.rate_limit_ipv6_prefix,
                 audit: shared.audit.clone(),
             }),
             authentication,
@@ -364,6 +366,7 @@ struct Shared {
     authorizer: Option<Arc<dyn RouteAuthorizer>>,
     audit: Option<Arc<dyn AuditSink>>,
     body_limit: usize,
+    ipv6_prefix: u8,
 }
 
 fn mount(router: Router, route: Mounted, shared: &Shared) -> Result<Router, RouteErrors> {
@@ -381,6 +384,7 @@ fn mount(router: Router, route: Mounted, shared: &Shared) -> Result<Router, Rout
             .and_then(|_| shared.audit.clone()),
         security: shared.audit.clone(),
         body_limit: meta.body_limit.unwrap_or(shared.body_limit),
+        ipv6_prefix: shared.ipv6_prefix,
         meta: meta.clone(),
     });
     let mut handler = route.handler;
@@ -407,6 +411,8 @@ struct RouteRuntime {
     /// Where security events go: throttling, 403s from guards and handlers.
     security: Option<Arc<dyn AuditSink>>,
     body_limit: usize,
+    /// The IPv6 prefix a guest's address is counted under.
+    ipv6_prefix: u8,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -441,7 +447,7 @@ impl RouteRuntime {
         if let Some(limiter) = &self.throttle {
             let key = match user {
                 Some(user) => ThrottleKey::User(user),
-                None => ThrottleKey::Ip(client_ip(parts)),
+                None => ThrottleKey::Ip(rate_limit_key(client_ip(parts), self.ipv6_prefix)),
             };
             if let Err(limited) = limiter.check(&key) {
                 tracing::warn!(
@@ -726,14 +732,9 @@ fn apply_slots(
 
 /// The CORS layer: exact origins, credentials, explicit headers.
 fn cors_layer(options: &CorsOptions) -> Result<Option<CorsLayer>, BoxError> {
-    if options.allowed_origins.is_empty() {
+    let Some(layer) = CorsLayer::from_options(options)? else {
         return Ok(None);
-    }
-    let origins = options
-        .allowed_origins
-        .iter()
-        .map(|origin| HeaderValue::from_str(origin.trim()))
-        .collect::<Result<Vec<_>, _>>()?;
+    };
     let allow_headers = [
         "accept",
         "accept-language",
@@ -760,9 +761,7 @@ fn cors_layer(options: &CorsOptions) -> Result<Option<CorsLayer>, BoxError> {
         HeaderName::from_static("x-navree-demo"),
     ];
     Ok(Some(
-        CorsLayer::new()
-            .allow_origin(AllowOrigin::list(origins))
-            .allow_credentials(options.allow_credentials)
+        layer
             .allow_methods([
                 Method::GET,
                 Method::HEAD,
@@ -773,8 +772,7 @@ fn cors_layer(options: &CorsOptions) -> Result<Option<CorsLayer>, BoxError> {
                 Method::OPTIONS,
             ])
             .allow_headers(allow_headers)
-            .expose_headers(expose_headers)
-            .max_age(Duration::from_secs(options.max_age_secs)),
+            .expose_headers(expose_headers),
     ))
 }
 

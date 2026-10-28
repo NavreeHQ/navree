@@ -233,7 +233,11 @@ impl Injectable for OAuthProtocolController {
     fn construct(r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
         Box::pin(async move {
             let core = r.get::<Core>().await?;
-            let throttles = Arc::new(Throttles::new(&core.options.rate_limits));
+            let ipv6_prefix = match r.app().try_get::<navree_http::HttpOptions>().await {
+                Some(options) => options.rate_limit_ipv6_prefix,
+                None => navree_http::DEFAULT_IPV6_PREFIX,
+            };
+            let throttles = Arc::new(Throttles::new(&core.options.rate_limits, ipv6_prefix));
             Ok(OAuthProtocolController {
                 core,
                 clients: r.get::<OAuthClients>().await?,

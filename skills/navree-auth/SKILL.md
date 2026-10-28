@@ -8,8 +8,20 @@ description: "Authentication with navree-auth: `AuthModule`, the `/api/auth/*` r
 `AuthModule` (crate navree-auth, in the default features) gives an app
 email-and-password accounts with bearer tokens. A client posts credentials
 to `/api/auth/login` and gets a short-lived **access token** (HS256 JWT, 15
-minutes) and an opaque **refresh token** (30 days, single use, rotated on
-every refresh). Every other request sends `Authorization: Bearer <access>`.
+minutes, written and read by `navree::crypto::jose`) and an opaque **refresh
+token** (30 days, single use, rotated on every refresh). Every other request
+sends `Authorization: Bearer <access>`.
+
+`JwtService::verify` takes HS256 only and checks, in order: size (at most
+`MAX_TOKEN_LEN`, 8 KiB) and shape, header (`alg` HS256, no `kid`, no `crit`),
+the HMAC in constant time, the claims (`sub`, `iat`, `exp`, `iss`, `jti`,
+`typ` present; `nbf` if any; `iss`; `aud` when configured), the token type,
+`iat` no more than `LEEWAY_SECS` (30) ahead of the clock, and `exp` last
+(`TokenExpired`, with the same leeway). There is one key and no `kid`: rotating
+`auth.jwt.secret` or `APP_KEY` ends the access tokens in flight, never the
+sessions (refresh tokens are opaque). To test hostile tokens, forge one with
+`navree::crypto::jose::SigningKey::hmac(Algorithm::HS256, secret)` and
+`sign_jws` with the header and payload you want.
 Routes stay denied until they declare access (see `navree-access-control`).
 
 ## Setup
@@ -122,7 +134,8 @@ let user = auth.create_user("Ada Lovelace", "ada@example.com", &password).await?
 let user = auth.register(&uow, NewUser { name, email, password }).await?;          // with the policy, in your uow
 let token = auth.jwt().sign_access(user.id)?;
 let found = auth.find_by_email("ada@example.com").await?;
-auth.revoke_all_refresh_tokens(user.id).await?;
+auth.revoke_all_refresh_tokens(user.id).await?;                  // sessions only
+let ended = auth.revoke_credentials_of_domain("acme.com").await?; // offboarding: see below
 ```
 
 Also: `attempt_login`, `sign_in`, `check_sign_in`, `two_factor_challenge`,
@@ -136,7 +149,10 @@ Also: `attempt_login`, `sign_in`, `check_sign_in`, `two_factor_challenge`,
 ## Sign-in policies (one rule for every path)
 
 A `SignInPolicy` (registered with `m.sign_in_policy::<P>()`) gets a
-`SignInAttempt { email, user_id, method, audience }` and answers `Ok(())` or
+`SignInAttempt { email, user_id, method, audience }` (`attempt.domain()` is
+normalized: lower-case ASCII, `xn--` for international names, no trailing dot,
+full-width letters and `。` mapped; `navree::auth::email_domain(email)` gives
+the same form) and answers `Ok(())` or
 `AuthError::SignInRefused { code, message }` (403 with that code, audited
 `auth.login_refused`). Every flow asks it before issuing anything:
 password login/register/password change (`Password`), an email change
@@ -151,6 +167,26 @@ enforcement is such a policy. Your own sign-in flow ends with
 `auth.sign_in(&user, method, &meta)`; a two-factor challenge you hand out
 comes from `auth.two_factor_challenge(&user, &method)`. Impersonation and
 refresh don't ask (support sessions; existing sessions).
+
+### Offboarding: end every credential
+
+Policies decide at sign-in only. When a rule starts to apply (SSO
+enforcement turns on for a domain), call
+`auth.revoke_credentials_of_domain("acme.com")` (or
+`auth.revoke_all_credentials(user_id)`), not just
+`revoke_all_refresh_tokens`: it revokes the sessions and real-time
+subscriptions of navree-auth, then asks every `dyn CredentialRevoker`
+(navree-oauth registers one: personal access tokens, OAuth access and
+refresh tokens, unexchanged codes, remembered consent). It returns
+`CredentialsRevoked { users, by_kind }` (`revoked("personal_access_tokens")`,
+`total()`) and audits `auth.credentials_revoked`. The domain is read like
+`attempt.domain()`. Access JWTs already issued live out `auth.access_ttl_secs`
+(15 minutes) but can't be refreshed. Your module can take part:
+`m.credential_revoker::<R>()` (`navree::contracts::ModuleBuilderRevocationExt`)
+with `R: CredentialRevoker` and `revoke_for_users(&[Uuid])`. A failing revoker
+yields `AuthError::Revocation` after all others ran; repeat the call. Finding a
+domain's users scans the users' emails in pages: for an offboarding, not a
+request.
 
 ## Require two-factor authentication
 
@@ -218,7 +254,7 @@ impl Strategy for ApiKeyStrategy {
 ```toml
 [auth]
 registration = true            # false: POST /auth/register answers 404
-login_throttle_per_minute = 5  # failed logins per email + IP; 0 = off
+login_throttle_per_minute = 5  # failed logins per email + client (IPv4 address or IPv6 /64); 0 = off
 password_min_length = 8
 routes_prefix = "/auth"
 

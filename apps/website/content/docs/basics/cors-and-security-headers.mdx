@@ -5,7 +5,7 @@ description: "Allow browser front ends on other origins with exact-origin CORS, 
 
 Browsers block a page from reading responses from another origin unless the server allows it with CORS headers. Navree's CORS support is off until you list the origins of your front ends, and then allows exactly those, with credentials. Separately, every response carries a set of security headers that tell browsers not to sniff content types, frame the response or leak the referrer.
 
-Both are part of `HttpModule` and configured in the `http` section.
+Both are part of `HttpModule` and configured in the `http` section. Navree implements the CORS protocol itself, after the Fetch standard, in `CorsLayer`.
 
 ## CORS
 
@@ -39,7 +39,7 @@ access-control-allow-credentials: true
 access-control-allow-methods: GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS
 access-control-allow-headers: accept,accept-language,authorization,content-type,if-match,if-none-match,traceparent,tracestate,x-csrf-token,x-request-id,x-requested-with,x-socket-id,x-xsrf-token
 access-control-max-age: 600
-vary: origin
+vary: Origin, Access-Control-Request-Method, Access-Control-Request-Headers
 ```
 
 and every actual response, errors included, gets:
@@ -48,7 +48,7 @@ and every actual response, errors included, gets:
 access-control-allow-origin: https://app.example.com
 access-control-allow-credentials: true
 access-control-expose-headers: x-request-id,etag,location,retry-after,content-disposition
-vary: origin
+vary: Origin
 ```
 
 - **Origins** are matched exactly. The response names the caller's origin, never `*`.
@@ -57,6 +57,14 @@ vary: origin
 - **Request headers**: the thirteen listed above, explicitly, since browsers don't accept a wildcard together with credentials. They cover bearer tokens, JSON bodies, conditional requests, tracing, request ids, the CSRF headers and the Pusher socket id.
 - **Exposed headers**: `X-Request-Id`, `ETag`, `Location`, `Retry-After` and `Content-Disposition` are readable from JavaScript.
 - **Preflight caching**: browsers may reuse a preflight answer for 600 seconds.
+
+The protocol, exactly:
+
+- **A preflight** is an `OPTIONS` request with both an `Origin` and an `Access-Control-Request-Method` header. Navree answers it with an empty `200` and never calls your handlers or the layers inside CORS. An `OPTIONS` request without `Access-Control-Request-Method`, or without `Origin`, is an ordinary request: it reaches the router, which answers `405` for a route that doesn't handle `OPTIONS`.
+- **An origin that isn't listed** gets no CORS headers at all, only `Vary`. Its preflight is answered with that empty `200`, which makes the browser refuse the real request; any other request still reaches your handler (see the warning below). A request with two `Origin` headers counts as an unlisted origin.
+- **Origins are compared as written**, byte for byte: `https://app.example.com` doesn't allow `https://app.example.com:8443`, `http://app.example.com` or `HTTPS://APP.EXAMPLE.COM`. The one allowed origin is echoed back, never `*`, with or without credentials.
+- **`Vary`**: every response varies with `Origin`, whether or not the request had one, so a cache never serves one origin's answer to another. A preflight response also varies with `Access-Control-Request-Method` and `Access-Control-Request-Headers`. A `Vary` your handler set is kept.
+- **Methods and headers** are the fixed lists above, sent on every preflight for an allowed origin. Navree doesn't judge the requested method or headers; the browser compares them with the lists.
 
 Error responses from every layer carry the CORS headers too, including panics, timeouts, 429s and maintenance-mode 503s, so a front end can always read the error body. Preflight requests are answered before the rate limiter and don't count against it.
 
@@ -69,6 +77,8 @@ Error responses from every layer carry the CORS headers too, including panics, t
 | `http.cors.max_age_secs` | `600` | how long browsers may cache a preflight answer |
 
 The allowed methods, request headers and exposed headers are fixed: there are no keys to change them in this release.
+
+gRPC-Web and Connect calls from browsers use the same layer and the same three options, with `POST` and `OPTIONS` as the methods and the gRPC-Web and Connect headers added to the request and exposed headers; see [gRPC](/docs/microservices/grpc/).
 
 <Callout type="warning" title="CORS is not access control">
 

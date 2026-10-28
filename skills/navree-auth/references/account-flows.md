@@ -67,7 +67,9 @@ verified), `verification_url(&user)`, `verify_email(user_id, hash, &meta)`.
 ## Two-factor (TOTP)
 
 1. `POST /2fa/enable` (signed in) → `{otpauth_url, qr_svg, secret}`. Show the
-   QR code; nothing is active yet. 409 when already on.
+   QR code (`qr_svg` is a standalone SVG, black on white, at least 200 px wide
+   with a `viewBox`: put it in the page as it is); nothing is active yet. 409
+   when already on.
 2. `POST /2fa/confirm` `{code}` → `{recovery_codes: [8 codes]}`; two-factor is
    now on. The codes are shown only here.
 3. Login with a correct password now answers
@@ -119,5 +121,15 @@ Mail templates get `name`, `email`, `token`, `url`, `expires_in_minutes`
 Use `mail.transport = "array"` and read
 `app.get::<Mailer>().await.array_transport().unwrap().sent()` (with a queue
 in the app, run `Queue::run_pending` first). For two-factor, compute codes
-from the `secret` with a TOTP crate and move a `FixedClock` to the next
-30-second step between codes.
+from the `secret` with `navree::crypto::totp`
+(`Totp::builder(Secret::from_base32(&secret)?).build()?.generate(now)`) and
+move a `FixedClock` to the next 30-second step between codes.
+
+Codes and QR codes for your own screens: `navree::crypto::totp` (`Secret::
+generate`, `Totp::builder(secret).issuer(..).account(..).build()`, `generate`,
+`check(code, time) -> Option<step>`, `to_url`, `from_url`; HMAC-SHA-1, 6
+digits, 30 s, skew 1 by default; check is constant time and replay protection
+is yours: refuse a step not newer than the last accepted) and
+`navree::crypto::qr` (`QrCode::encode(bytes, EcLevel::M)?.to_svg(200)`;
+levels L/M/Q/H, versions 1 to 40 chosen automatically, numeric, alphanumeric
+and byte segments, `QrError::TooLong` past version 40).

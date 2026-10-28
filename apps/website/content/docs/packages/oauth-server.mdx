@@ -345,6 +345,10 @@ println!("{}", created.token); // nvp_...
 
 Users see the apps they authorized at `GET /api/oauth/authorizations` (`{ "data": [{ "client", "scopes", "created_at", "updated_at" }] }`) and revoke one with `DELETE /api/oauth/authorizations/{client_id}`, which forgets the approval and revokes every token that client holds for them. Clients revoke their own tokens at `POST /oauth/revoke` (RFC 7009; revoking a refresh token also revokes the access tokens of its grant, and the answer is 200 even for unknown tokens), and resource servers, such as your other [microservices](/docs/microservices/introduction/), check a token at `POST /oauth/introspect` (RFC 7662), authenticating as a confidential client created with `--introspect`. Introspection answers `{ "active": false }` for anything that isn't a live token, and otherwise `active`, `scope`, `sub`, `username` (the email), `client_id`, `aud`, `iss`, `iat`, `exp` and `token_type`, for access tokens, refresh tokens and personal access tokens.
 
+### Ending everything a person holds
+
+When someone leaves, or a domain starts to require single sign-on, their personal access tokens, OAuth tokens and remembered consent keep working until they expire or are revoked. The module registers a `CredentialRevoker`, so `AuthService::revoke_credentials_of_domain("acme.com")` (or `revoke_all_credentials(user_id)` for one person) revokes, with their sessions, every personal access token, every access and refresh token, every approved code and device code that was not exchanged yet, and forgets the consent they gave each app. The tokens stop at once on the instance that revokes them, and within `oauth.token_cache_secs` on the others. See [Offboarding](/docs/security/authentication/#offboarding-a-user-or-a-domain).
+
 ## Dynamic client registration
 
 With `oauth.dynamic_registration = true`, clients register themselves at `POST /oauth/register` (RFC 7591), and the discovery documents list `registration_endpoint`. [MCP clients](/docs/ai/mcp-servers/) rely on it.
@@ -360,7 +364,7 @@ The answer is 201 with `client_id` (and `client_secret` with `client_secret_expi
 
 ## Rate limits
 
-The endpoints that take client credentials are rate-limited per client and per client IP address, with Navree's [rate limiter](/docs/basics/rate-limiting/) (one-minute windows, counted on each instance):
+The endpoints that take client credentials are rate-limited per client and per client IP address (an IPv4 address, or an IPv6 network, a /64 by default: see [IPv6 clients](/docs/basics/rate-limiting/#ipv6-clients)), with Navree's [rate limiter](/docs/basics/rate-limiting/) (one-minute windows, counted on each instance):
 
 | Endpoint | Per client | Per IP |
 |---|---|---|
@@ -371,7 +375,7 @@ The endpoints that take client credentials are rate-limited per client and per c
 
 - The per-IP count comes first, before the body is read, so failed client authentications count against the address that sends them.
 - The per-client count starts once the client has authenticated: requests that name a client with a wrong secret can't use up its budget. Public clients have no secret, so anyone can name one: they are counted per IP only, and one address can't lock every user of a mobile or single-page app out.
-- Each endpoint has its own budget, as has each client and each address.
+- Each endpoint has its own budget, as has each client and each address (network, for IPv6, so a /64 shares one per-IP budget; `http.rate_limit_ipv6_prefix` changes the prefix for every per-IP limit).
 - Change a limit under `oauth.rate_limits.<endpoint>`; `0` turns it off:
 
 ```toml title="config/app.toml"
