@@ -1,0 +1,75 @@
+[package]
+name = "navree-domains"
+description = "Navree DomainsModule: workspaces on their own domains, verified through DNS TXT records, with automatic TLS through an on-demand proxy (Caddy's ask endpoint) or in-process ACME certificates served by a rustls resolver, a `domain` workspace resolver, a Cloudflare DNS driver and certificate expiry reports."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = []
+## Reports certificates close to expiry to navree-lighthouse.
+lighthouse = ["dep:navree-lighthouse"]
+# The database drivers of the gated server tests (`tests/domains/servers.rs`).
+postgres = ["navree-db/postgres"]
+mysql = ["navree-db/mysql"]
+
+[dependencies]
+axum = { workspace = true }
+bytes = { workspace = true }
+chrono = { workspace = true }
+# DNS lookups for verification: TXT, CNAME and addresses, the system's
+# resolver configuration.
+hickory-resolver = { workspace = true }
+http = { workspace = true }
+http-body-util = { workspace = true }
+# ACME orders (Let's Encrypt or any RFC 8555 CA) on ring.
+instant-acme = { workspace = true }
+# Host lookups are cached for `domains.cache_secs`.
+moka = { workspace = true }
+navree-config = { workspace = true }
+navree-contracts = { workspace = true }
+# Certificate private keys and ACME account keys are sealed with the
+# application key.
+navree-crypto = { workspace = true }
+navree-db = { workspace = true }
+navree-events = { workspace = true }
+navree-http = { workspace = true }
+navree-kernel = { workspace = true }
+navree-lighthouse = { workspace = true, optional = true }
+# Domains, certificates, challenges and ACME accounts are navree-orm models.
+navree-orm = { workspace = true }
+# `domains:verify --due` and `domains:certificates --due` on the scheduler.
+navree-schedule = { workspace = true }
+# Domains belong to workspaces; the `domain` resolver.
+navree-workspace = { workspace = true }
+rand = { workspace = true }
+# AcmeFake signs certificates with a test root of its own (the rcgen
+# instant-acme uses).
+rcgen = { workspace = true }
+# The ACME client's and the Cloudflare driver's requests.
+reqwest = { workspace = true }
+rustls = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+# The HTTPS listener of in-process ACME, and certificate probes.
+tokio-rustls = { workspace = true }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }
+utoipa = { workspace = true }
+uuid = { workspace = true }
+x509-parser = { workspace = true }
+
+[dev-dependencies]
+navree-access = { workspace = true }
+navree-lighthouse = { workspace = true }
+navree-testing = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
+wiremock = { workspace = true }
