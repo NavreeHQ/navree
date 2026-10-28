@@ -15,7 +15,8 @@ mod types;
 
 pub use jsonrpc::MAX_JSON_DEPTH;
 pub use types::{
-    Implementation, Prompt, PromptArgumentInfo, Resource, ResourceTemplate, Tool, ToolAnnotations,
+    Implementation, JsonSchema, Prompt, PromptArgumentInfo, Resource, ResourceTemplate, Tool,
+    ToolAnnotations,
 };
 
 /// Every protocol version the server speaks, oldest first.
