@@ -148,6 +148,70 @@ async fn depth_and_complexity_limits_reject_the_document() {
 }
 
 #[tokio::test]
+async fn introspection_lists_only_the_public_schema() {
+    let (app, _audit) = app().await;
+    let body = app
+        .client()
+        .post("/graphql")
+        .json(&json!({
+            "query": "{ __schema { queryType { name } mutationType { name } subscriptionType { name } types { name } } hello }"
+        }))
+        .send()
+        .await
+        .json_value();
+    assert_eq!(body["data"]["hello"], json!("hello"), "{body}");
+    let schema = &body["data"]["__schema"];
+    assert_eq!(schema["queryType"]["name"], json!("Query"));
+    assert_eq!(schema["mutationType"]["name"], json!("Mutation"));
+    assert_eq!(schema["subscriptionType"]["name"], json!("Subscription"));
+    let names: Vec<&str> = schema["types"]
+        .as_array()
+        .expect("types")
+        .iter()
+        .map(|t| t["name"].as_str().expect("name"))
+        .collect();
+    for expected in ["Query", "Mutation", "Subscription", "Post"] {
+        assert!(names.contains(&expected), "{expected} missing in {names:?}");
+    }
+    // Only the spec's own introspection types may start with `__`, and no
+    // internal resolver part shows.
+    let spec = [
+        "__Schema",
+        "__Type",
+        "__TypeKind",
+        "__Field",
+        "__InputValue",
+        "__EnumValue",
+        "__Directive",
+        "__DirectiveLocation",
+    ];
+    let leaked: Vec<&&str> = names
+        .iter()
+        .filter(|name| name.contains("Navree") || (name.starts_with("__") && !spec.contains(name)))
+        .collect();
+    assert!(leaked.is_empty(), "internal types leaked: {leaked:?}");
+    // The root types keep their fields.
+    let query = app
+        .client()
+        .post("/graphql")
+        .json(&json!({ "query": "{ __type(name: \"Query\") { fields { name } } }" }))
+        .send()
+        .await
+        .json_value();
+    let fields: Vec<&str> = query["data"]["__type"]["fields"]
+        .as_array()
+        .expect("fields")
+        .iter()
+        .map(|f| f["name"].as_str().expect("name"))
+        .collect();
+    assert!(
+        fields.contains(&"hello") && fields.contains(&"postCount"),
+        "{fields:?}"
+    );
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
 async fn introspection_can_be_turned_off() {
     let introspect = json!({ "query": "{ __schema { queryType { name } } }" });
     let (app, _audit) = app().await;
