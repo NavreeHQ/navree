@@ -10,14 +10,16 @@ import { frontEnds } from "@/components/showcase/crm-data";
 import { crmCrates, crmFrontEnds } from "@/components/showcase/crm-diagrams";
 import { CrmGallery } from "@/components/showcase/crm-gallery";
 import { BrowserFrame, PhoneFrame, ShotImage } from "@/components/showcase/frames";
+import { pageMetadata } from "@/lib/metadata";
 import { cn } from "@/lib/utils";
 import { site } from "@site";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "A real CRM, built on Navree",
   description:
     "The reference CRM: companies, contacts, a deal pipeline, tasks and a live dashboard on a Navree API, with a Next.js and a Nuxt front end on one backend-for-frontend contract. Screens, architecture and the commands to run it.",
-};
+  path: "/showcase/crm/",
+});
 
 /** A section of this page: a hairline on top, the container and the rhythm. */
 function Section({ id, children, className }: { id: string; children: ReactNode; className?: string }) {
@@ -25,7 +27,7 @@ function Section({ id, children, className }: { id: string; children: ReactNode;
     <section
       id={id}
       aria-labelledby={`${id}-heading`}
-      className={cn("scroll-mt-(--header-h) border-t border-line", className)}
+      className={cn("cv-auto scroll-mt-(--header-h) border-t border-line", className)}
     >
       <div className="container-site section-y">{children}</div>
     </section>

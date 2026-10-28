@@ -26,7 +26,7 @@ function breakable(command: string) {
 export function FinalCta() {
   const commands = [site.install.cli, site.install.newApp];
   return (
-    <section aria-labelledby="start" className="relative overflow-hidden border-t border-line">
+    <section aria-labelledby="start" className="cv-auto relative overflow-hidden border-t border-line">
       <div aria-hidden className="pointer-events-none absolute inset-0">
         <FlickeringGrid
           squareSize={3}

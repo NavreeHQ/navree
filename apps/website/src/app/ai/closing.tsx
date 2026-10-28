@@ -29,7 +29,7 @@ export function AiClosing() {
   const pages = section?.pages ?? [];
 
   return (
-    <section aria-labelledby="ai-docs-title" className="border-t border-line">
+    <section aria-labelledby="ai-docs-title" className="cv-auto border-t border-line">
       <div className="container-site section-y">
         <div className="relative overflow-hidden rounded-[1.5rem] border border-line bg-ink-1 shadow-bezel">
           <BorderBeam size={140} duration={14} />

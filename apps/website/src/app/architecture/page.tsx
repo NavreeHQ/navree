@@ -9,16 +9,18 @@ import { patterns, type Pattern } from "@/components/diagrams/patterns";
 import { GrowThumb, PatternThumb } from "@/components/diagrams/thumbs";
 import { InlineMarkdown } from "@/components/inline-markdown";
 import { CopyButton } from "@/components/mdx/copy-button";
+import { pageMetadata } from "@/lib/metadata";
 import { cn } from "@/lib/utils";
 
 import { CodeExcerpt } from "./code-excerpt";
 import { PatternNav } from "./pattern-nav";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Architecture",
   description:
     "One framework, every architecture: build a modular monolith, microservices, a multi-tenant SaaS, an event-driven system, an API-first backend or a backend for frontend with Navree, and move between them without rewriting your modules.",
-};
+  path: "/architecture/",
+});
 
 /** The green call to action with its arrow in a nested circle. */
 function PrimaryLink({ href, children }: { href: string; children: ReactNode }) {
@@ -132,7 +134,7 @@ function PatternSection({ pattern, index }: { pattern: Pattern; index: number })
     <section
       id={pattern.id}
       aria-labelledby={`${pattern.id}-heading`}
-      className="scroll-mt-[calc(var(--header-h)+3.25rem)] border-b border-line"
+      className="cv-auto scroll-mt-[calc(var(--header-h)+3.25rem)] border-b border-line"
     >
       <div className="container-site section-y">
         {/*
@@ -235,7 +237,7 @@ self.client // [!code ++]
 
 function Grow() {
   return (
-    <section id="grow" aria-labelledby="grow-heading" className="scroll-mt-[calc(var(--header-h)+3.25rem)] border-b border-line">
+    <section id="grow" aria-labelledby="grow-heading" className="cv-auto scroll-mt-[calc(var(--header-h)+3.25rem)] border-b border-line">
       <div className="container-site section-y">
         <header className="grid gap-6 lg:grid-cols-12 lg:items-end lg:gap-12">
           <div className="lg:col-span-7">
@@ -312,7 +314,7 @@ const kits = [
 
 function Kits() {
   return (
-    <section aria-labelledby="kits-heading">
+    <section aria-labelledby="kits-heading" className="cv-auto">
       <div className="container-site section-y">
         <div className="max-w-3xl">
           <p className="eyebrow">Start</p>

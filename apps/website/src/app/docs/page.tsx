@@ -4,13 +4,14 @@ import Link from "next/link";
 import { ArrowRightIcon } from "@/components/icons";
 import { InlineMarkdown } from "@/components/inline-markdown";
 import { navigation } from "@/lib/docs";
+import { pageMetadata } from "@/lib/metadata";
 import { site } from "@site";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Documentation",
   description: `Everything ${site.name} does, from installation to queues, real time and testing.`,
-  alternates: { canonical: "/docs/" },
-};
+  path: "/docs/",
+});
 
 /** The four first steps, above the full index. */
 const startHere = [
