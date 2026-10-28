@@ -57,6 +57,8 @@ tokio = { workspace = true }
 totp-rs = { workspace = true }
 tracing = { workspace = true }
 utoipa = { workspace = true }
+# IDNA mapping of email domains (`email_domain`).
+url = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]

@@ -220,6 +220,6 @@ pub use session_controller::{
     PasswordlessInput, SessionList,
 };
 pub use sessions::{ConfirmProof, ConfirmedToken, SessionResource};
-pub use sign_in_policy::{SignInAttempt, SignInAudience, SignInMethod, SignInPolicy};
+pub use sign_in_policy::{SignInAttempt, SignInAudience, SignInMethod, SignInPolicy, email_domain};
 pub use strategy::{JwtStrategy, Strategy, StrategyAuthenticator};
 pub use two_factor::{LoginOutcome, TwoFactorProof, TwoFactorSetup, two_factor_enabled};

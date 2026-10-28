@@ -28,12 +28,11 @@ pub struct SsoProfile {
 }
 
 impl SsoProfile {
-    /// The email's domain (after the last `@`).
-    pub fn email_domain(&self) -> Option<&str> {
-        self.email
-            .as_deref()
-            .and_then(|email| email.rsplit_once('@'))
-            .map(|(_, domain)| domain)
+    /// The email's domain (after the last `@`) in its normalized form
+    /// ([`navree_auth::email_domain`]: lower-case ASCII, no trailing dot),
+    /// the form verified domains are kept in.
+    pub fn email_domain(&self) -> Option<String> {
+        self.email.as_deref().and_then(navree_auth::email_domain)
     }
 
     /// The profile of a SAML assertion.
@@ -168,7 +167,7 @@ mod tests {
         );
         assert_eq!(profile.subject, "00u1abcd");
         assert_eq!(profile.email.as_deref(), Some("bob@acme.test"));
-        assert_eq!(profile.email_domain(), Some("acme.test"));
+        assert_eq!(profile.email_domain().as_deref(), Some("acme.test"));
         assert_eq!(profile.name.as_deref(), Some("Bob Builder"));
         assert_eq!(profile.groups, ["Admins", "Sales"]);
     }
@@ -188,6 +187,21 @@ mod tests {
             &AttributeMapping::default(),
         );
         assert_eq!(profile.email, None);
+    }
+
+    /// The profile's domain is the one navree-auth gives policies.
+    #[test]
+    fn the_email_domain_is_normalized() {
+        for email in ["Eve@ACME.test.", "eve@\u{ff41}cme\u{3002}test"] {
+            let claims = json!({ "sub": "u1", "email": email });
+            let profile =
+                SsoProfile::from_claims(claims.as_object().unwrap(), &AttributeMapping::default());
+            assert_eq!(
+                profile.email_domain().as_deref(),
+                Some("acme.test"),
+                "{email}"
+            );
+        }
     }
 
     #[test]
