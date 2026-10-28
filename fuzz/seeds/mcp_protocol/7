@@ -1,0 +1,1 @@
+È{"jsonrpc":"2.0","id":9,"method":"prompts/get","params":{"name":"greet","arguments":{"name":"Ada"}}}

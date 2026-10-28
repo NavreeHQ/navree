@@ -123,6 +123,36 @@ pub(crate) fn validate_xml(
     check: &ResponseCheck<'_>,
 ) -> Result<SamlAssertion, SamlError> {
     let doc = Document::parse(xml)?;
+    let (response, assertion) = locate(&doc)?;
+
+    let keys = &check.idp.signing_keys;
+    let response_signed = verify_enveloped(&doc, response, keys)?.is_some();
+    let assertion_signed = verify_enveloped(&doc, assertion, keys)?.is_some();
+    if !(response_signed || assertion_signed)
+        || (check.require_signed_assertion && !assertion_signed)
+    {
+        return Err(SamlError::Signature(SignatureError::Missing));
+    }
+
+    check_claims(&doc, response, assertion, check)
+}
+
+/// [`validate_xml`] without the signature checks: what a fuzzer needs to
+/// reach the code that reads claims (it cannot forge a signature).
+#[cfg(feature = "fuzzing")]
+pub(crate) fn validate_xml_unsigned(
+    xml: &str,
+    check: &ResponseCheck<'_>,
+) -> Result<SamlAssertion, SamlError> {
+    let doc = Document::parse(xml)?;
+    let (response, assertion) = locate(&doc)?;
+    check_claims(&doc, response, assertion, check)
+}
+
+/// The response and its one assertion, after the checks that come before
+/// any signature: status, unique ids, no encrypted assertion, the
+/// assertion a child of the response, signatures only on those two.
+fn locate(doc: &Document) -> Result<(NodeId, NodeId), SamlError> {
     let response = doc.root();
     if !doc.is(response, PROTOCOL_NS, "Response") {
         return Err(invalid("the message is not a SAML response"));
@@ -132,8 +162,8 @@ pub(crate) fn validate_xml(
     }
     // An error status grants nothing, so it is read before the signature
     // checks (identity providers often send it unsigned).
-    check_status(&doc, response)?;
-    check_unique_ids(&doc)?;
+    check_status(doc, response)?;
+    check_unique_ids(doc)?;
 
     let elements = doc.elements();
     if elements
@@ -166,23 +196,25 @@ pub(crate) fn validate_xml(
             return Err(invalid("a signature in an unexpected place"));
         }
     }
+    Ok((response, assertion))
+}
 
-    let keys = &check.idp.signing_keys;
-    let response_signed = verify_enveloped(&doc, response, keys)?.is_some();
-    let assertion_signed = verify_enveloped(&doc, assertion, keys)?.is_some();
-    if !(response_signed || assertion_signed)
-        || (check.require_signed_assertion && !assertion_signed)
-    {
-        return Err(SamlError::Signature(SignatureError::Missing));
-    }
-
+/// What the response and its assertion say, once the signatures are
+/// checked: destination, issuer, `InResponseTo`, subject, conditions,
+/// attributes and the authentication statement.
+fn check_claims(
+    doc: &Document,
+    response: NodeId,
+    assertion: NodeId,
+    check: &ResponseCheck<'_>,
+) -> Result<SamlAssertion, SamlError> {
     if let Some(destination) = doc.attr(response, "Destination")
         && !same_url(destination, &check.sp.acs_url)
     {
         return Err(SamlError::WrongRecipient(destination.to_owned()));
     }
     if let Some(issuer) = doc.child(response, ASSERTION_NS, "Issuer") {
-        check_issuer(&doc, issuer, check)?;
+        check_issuer(doc, issuer, check)?;
     }
     let response_in_response_to = doc.attr(response, "InResponseTo");
     match response_in_response_to {
@@ -194,7 +226,7 @@ pub(crate) fn validate_xml(
         None => {}
     }
 
-    read_assertion(&doc, assertion, response_in_response_to, check)
+    read_assertion(doc, assertion, response_in_response_to, check)
 }
 
 fn check_status(doc: &Document, response: NodeId) -> Result<(), SamlError> {

@@ -22,6 +22,8 @@ pub(crate) use metadata::certificate_der;
 pub use metadata::{IdpMetadata, ServiceProvider};
 pub use request::{AuthnRequest, RequestOptions};
 pub use response::{ResponseCheck, SamlAssertion, validate_response};
+#[cfg(feature = "fuzzing")]
+pub(crate) use response::validate_xml_unsigned;
 
 use crate::dsig::SignatureError;
 use crate::xml::XmlError;

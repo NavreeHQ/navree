@@ -10,6 +10,11 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+## Entry points for the fuzz targets in `fuzz/` (`navree_mcp::fuzzing`). Not
+## part of the API.
+fuzzing = []
+
 [dependencies]
 async-trait = { workspace = true }
 axum = { workspace = true }

@@ -51,6 +51,9 @@ mod document;
 mod engine;
 mod error;
 mod filter;
+#[cfg(feature = "fuzzing")]
+#[doc(hidden)]
+pub mod fuzzing;
 mod index;
 mod migration;
 mod module;
