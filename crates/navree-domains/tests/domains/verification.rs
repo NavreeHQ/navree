@@ -195,6 +195,7 @@ async fn verified_domains_are_rechecked_for_their_routing() {
     let workspace = world.workspace(Uuid::now_v7(), "Acme").await;
     let domain = world.verified(workspace, "crm.acme-corp.test").await;
     let domains = world.domains().await;
+    domains.make_primary(domain.id).await.unwrap();
     world.dns().remove("crm.acme-corp.test");
     world.advance(23 * HOUR);
     assert!(domains.verify_due().await.unwrap().is_empty());
@@ -206,6 +207,8 @@ async fn verified_domains_are_rechecked_for_their_routing() {
     assert_eq!(checked[0].points_to_app, Some(false));
     assert!(checked[0].last_error.is_some());
     assert_eq!(checked[0].id, domain.id);
+    // A check writes its own columns only.
+    assert!(domains.get(domain.id).await.unwrap().primary);
 }
 
 #[tokio::test]

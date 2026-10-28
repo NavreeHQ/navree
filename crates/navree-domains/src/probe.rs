@@ -5,7 +5,7 @@
 
 use std::collections::BTreeMap;
 use std::fmt;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
@@ -96,13 +96,37 @@ impl TlsProbe {
         self
     }
 
+    /// Where to connect for `host`: its `connect_to` address, else the
+    /// first public address it resolves to. A tenant controls its domain's
+    /// DNS, so a host that resolves to loopback, private, link-local or
+    /// shared addresses only is refused rather than probed.
+    async fn address(&self, host: &str) -> Result<SocketAddr, String> {
+        if let Some(addr) = self.connect_to.get(&host.to_ascii_lowercase()) {
+            return Ok(*addr);
+        }
+        let found: Vec<SocketAddr> = tokio::net::lookup_host((host, self.port))
+            .await
+            .map_err(|error| format!("cannot resolve: {error}"))?
+            .collect();
+        found
+            .iter()
+            .copied()
+            .find(|addr| is_public(addr.ip()))
+            .ok_or_else(|| {
+                if found.is_empty() {
+                    "cannot resolve: no address".to_owned()
+                } else {
+                    "resolves to a private address only; it is not probed".to_owned()
+                }
+            })
+    }
+
     async fn run(&self, host: &str) -> Result<ProbedCertificate, DomainsError> {
         let failed = |reason: String| DomainsError::Certificate(format!("{host}: {reason}"));
-        let stream = match self.connect_to.get(&host.to_ascii_lowercase()) {
-            Some(addr) => TcpStream::connect(addr).await,
-            None => TcpStream::connect((host, self.port)).await,
-        }
-        .map_err(|error| failed(format!("cannot connect: {error}")))?;
+        let addr = self.address(host).await.map_err(failed)?;
+        let stream = TcpStream::connect(addr)
+            .await
+            .map_err(|error| failed(format!("cannot connect: {error}")))?;
         let provider = Arc::new(rustls::crypto::ring::default_provider());
         let config = rustls::ClientConfig::builder_with_provider(provider.clone())
             .with_safe_default_protocol_versions()
@@ -139,6 +163,36 @@ impl CertificateProbe for TlsProbe {
                 .await
                 .map_err(|_| DomainsError::Certificate(format!("{host}: timed out")))?
         })
+    }
+}
+
+/// Whether `ip` is a public unicast address: not unspecified, loopback,
+/// private, link-local, shared (100.64.0.0/10), multicast, broadcast or
+/// unique local.
+pub(crate) fn is_public(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => {
+            let [a, b, ..] = v4.octets();
+            !(v4.is_unspecified()
+                || v4.is_loopback()
+                || v4.is_private()
+                || v4.is_link_local()
+                || v4.is_multicast()
+                || v4.is_broadcast()
+                || (a == 100 && (64..128).contains(&b))
+                || a == 0)
+        }
+        IpAddr::V6(v6) => {
+            if let Some(v4) = v6.to_ipv4_mapped() {
+                return is_public(IpAddr::V4(v4));
+            }
+            let first = v6.segments()[0];
+            !(v6.is_unspecified()
+                || v6.is_loopback()
+                || v6.is_multicast()
+                || (first & 0xfe00) == 0xfc00
+                || (first & 0xffc0) == 0xfe80)
+        }
     }
 }
 
@@ -272,5 +326,50 @@ impl CertificateProbe for ProbeFake {
                 ))),
             }
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_public_addresses_are_probed() {
+        for ip in [
+            "203.0.113.10",
+            "8.8.8.8",
+            "2606:4700::6810:84e5",
+            "::ffff:203.0.113.10",
+        ] {
+            assert!(is_public(ip.parse().unwrap()), "{ip}");
+        }
+        for ip in [
+            "127.0.0.1",
+            "10.1.2.3",
+            "172.16.0.1",
+            "192.168.1.1",
+            "169.254.169.254",
+            "100.64.0.1",
+            "0.0.0.0",
+            "255.255.255.255",
+            "224.0.0.1",
+            "::1",
+            "::",
+            "fd00::1",
+            "fe80::1",
+            "::ffff:127.0.0.1",
+        ] {
+            assert!(!is_public(ip.parse().unwrap()), "{ip}");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_host_on_the_apps_own_network_is_not_probed() {
+        let error = TlsProbe::new()
+            .probe("localhost")
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("private address"), "{error}");
     }
 }
