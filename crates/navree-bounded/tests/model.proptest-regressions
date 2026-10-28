@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 2a92c15590dc2725daf29648760621c0ba0194afc18e2084a16aecab790af3f8 # shrinks to config = Config { capacity: 2, shards: 1, ttl: Some(63), tti: None }, ops = [Insert(0, 0), Advance(63)]
+cc 070723cd8577e24f613b202c0e490287b6df8712f54e56692de2925b61e837a5 # shrinks to config = Config { capacity: 512, shards: 1, ttl: None, tti: None }, ops = [InsertTtl(0, 0, Some(78)), Advance(19), Advance(11), Advance(48)]

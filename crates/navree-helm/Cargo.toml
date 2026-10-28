@@ -24,10 +24,10 @@ cookie = { workspace = true }
 form_urlencoded = { workspace = true }
 garde = { workspace = true }
 http = { workspace = true }
-moka = { workspace = true }
 navree-access = { workspace = true }
 navree-audit = { workspace = true }
 navree-auth = { workspace = true }
+navree-bounded = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-crypto = { workspace = true }

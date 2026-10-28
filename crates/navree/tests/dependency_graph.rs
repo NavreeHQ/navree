@@ -62,6 +62,12 @@ const HIERARCHY: &[Rule] = &[
     rule("navree-harbor", 0, &[]),
     // `embed_locales!` for navree-i18n (proc-macro; no navree dependencies).
     rule("navree-i18n-macros", 0, &[]),
+    // The bounded in-process cache (sharded, SIEVE eviction, TTL and TTI,
+    // single-flight loading) under every framework cache: below everything
+    // that keeps one (navree-cache, navree-access, navree-oauth,
+    // navree-domains, navree-helm) and re-exported by the facade. It depends
+    // on no navree crate.
+    rule("navree-bounded", 0, &[]),
     // L1
     rule("navree-contracts", 1, &["navree-kernel"]),
     rule("navree-config", 1, &["navree-kernel", "navree-contracts"]),
@@ -74,7 +80,8 @@ const HIERARCHY: &[Rule] = &[
     // Events report each emit to the telemetry sinks (`EventEmitted`).
     rule("navree-events", 2, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry"]),
     rule("navree-view", 2, &["navree-kernel", "navree-contracts", "navree-config"]),
-    rule("navree-cache", 2, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry"]),
+    // The memory store is a navree-bounded cache.
+    rule("navree-cache", 2, &["navree-kernel", "navree-bounded", "navree-contracts", "navree-config", "navree-telemetry"]),
     rule("navree-http-client", 2, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry"]),
     // The schema builder and migration language: below navree-db, which
     // runs its migrations, so framework crates at L4 and up can build their
@@ -126,7 +133,8 @@ const HIERARCHY: &[Rule] = &[
     // Schedule: `in_zone` and `per_workspace_local` evaluate cron
     // expressions on local clocks (navree-time).
     rule("navree-schedule", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-telemetry", "navree-db", "navree-time"]),
-    rule("navree-access", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db", "navree-cache"]),
+    // Each principal's abilities are kept in a navree-bounded cache.
+    rule("navree-access", 4, &["navree-kernel", "navree-bounded", "navree-contracts", "navree-config", "navree-http", "navree-db", "navree-cache"]),
     // Stored notifications are navree-orm models, written by the database
     // channel through the ORM (same layer; the ORM never depends on notify),
     // like the delivery log, opt-outs and push subscriptions of the
@@ -245,9 +253,9 @@ const HIERARCHY: &[Rule] = &[
     // OAuth 2.1 and OpenID Connect provider: clients, grants and personal
     // access tokens for navree-auth users, scopes mapped to navree-access
     // permissions, workspace-limited clients. The OAuth tables are
-    // navree-orm models.
+    // navree-orm models. Token lookups are kept in a navree-bounded cache.
     rule("navree-oauth", 6, &[
-        "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto",
+        "navree-kernel", "navree-bounded", "navree-contracts", "navree-config", "navree-http", "navree-crypto",
         "navree-db", "navree-access", "navree-auth", "navree-workspace", "navree-orm",
         // `navree_oauth::testing` drives the flows with navree-testing's TestClient.
         "navree-testing",
@@ -411,9 +419,10 @@ const HIERARCHY: &[Rule] = &[
     ]),
     // Helm: the admin panel. navree-crypto seals its session cookie; with
     // its `settings` feature, the Settings screens edit navree-settings'
-    // types (organizations and workspaces named by navree-workspace).
+    // types (organizations and workspaces named by navree-workspace). Metric
+    // results are kept in a navree-bounded cache.
     rule("navree-helm", 7, &[
-        "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-view",
+        "navree-kernel", "navree-bounded", "navree-contracts", "navree-config", "navree-http", "navree-view",
         "navree-cache", "navree-crypto", "navree-db", "navree-storage", "navree-queue",
         "navree-validation", "navree-audit", "navree-access", "navree-auth", "navree-workspace",
         "navree-settings",
@@ -448,9 +457,9 @@ const HIERARCHY: &[Rule] = &[
     // navree-crypto; events; `domains:verify --due` and
     // `domains:certificates --due` on navree-schedule; with its
     // `lighthouse` feature, certificates close to expiry reported to
-    // navree-lighthouse.
+    // navree-lighthouse. Verified hosts are kept in a navree-bounded cache.
     rule("navree-domains", 7, &[
-        "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto",
+        "navree-kernel", "navree-bounded", "navree-contracts", "navree-config", "navree-http", "navree-crypto",
         "navree-events", "navree-db", "navree-orm", "navree-schedule", "navree-workspace",
         "navree-lighthouse",
     ]),
@@ -492,6 +501,7 @@ const CRM_API_DEPENDENCIES: &[&str] = &[
 /// may re-export and what navree-macros tests may dev-depend on.
 const RUNTIME_CRATES: &[&str] = &[
     "navree-kernel",
+    "navree-bounded",
     "navree-macros",
     "navree-dock",
     "navree-harbor",
