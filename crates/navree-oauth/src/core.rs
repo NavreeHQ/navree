@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::{DateTime, TimeDelta, Utc};
-use moka::future::Cache;
+use navree_bounded::Cache;
 use navree_contracts::{AuditEntry, AuditSink, Clock, SystemClock};
 use navree_db::{Db, Uow};
 use navree_kernel::{AppContext, WeakAppContext};
@@ -16,7 +16,7 @@ use crate::keys::SigningKeys;
 use crate::scope::ScopeRegistry;
 
 /// How many token lookups each instance caches.
-const CACHE_CAPACITY: u64 = 100_000;
+const CACHE_CAPACITY: usize = 100_000;
 
 /// A token found by the authentication strategy, as cached.
 #[derive(Clone, Debug)]
@@ -54,8 +54,7 @@ impl Core {
         app: WeakAppContext,
     ) -> Self {
         let cache = (options.token_cache_secs > 0).then(|| {
-            Cache::builder()
-                .max_capacity(CACHE_CAPACITY)
+            Cache::builder(CACHE_CAPACITY)
                 .time_to_live(Duration::from_secs(options.token_cache_secs))
                 .build()
         });
@@ -117,10 +116,10 @@ impl Core {
     }
 
     /// Forgets the cached lookups of `hashes` (token digests).
-    pub(crate) async fn forget(&self, hashes: impl IntoIterator<Item = String>) {
+    pub(crate) fn forget(&self, hashes: impl IntoIterator<Item = String>) {
         if let Some(cache) = &self.cache {
             for hash in hashes {
-                cache.invalidate(&hash).await;
+                cache.invalidate(&hash);
             }
         }
     }

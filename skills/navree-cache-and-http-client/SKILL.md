@@ -6,7 +6,8 @@ description: "Caching, locks and outgoing HTTP in Navree: `Cache` (`remember`, `
 # Cache, locks and the HTTP client
 
 `CacheModule` (in a new app) gives `Cache` and `Locks` on an in-process
-store (moka). `HttpClientModule` (add `HttpClientModule::from_config()` to
+store (bounded: at most 1,000,000 entries, SIEVE eviction).
+`HttpClientModule` (add `HttpClientModule::from_config()` to
 the root) gives one shared `HttpClient` on reqwest/rustls with retries,
 timeouts, a response size limit, an SSRF guard and a fake. All are global:
 inject `Arc<Cache>`, `Arc<Locks>`, `Arc<HttpClient>`.
@@ -83,6 +84,40 @@ use `cache.store = "redis"` with `RedisModule` (skill `navree-redis`). For
 once-per-cluster work you can also use the scheduler (runs each tick once)
 or unique jobs. With the memory store, `cache:clear` in a new process
 doesn't clear a running server.
+
+**The memory store is bounded.** It holds at most 1,000,000 entries; a full
+store evicts (entries that were read are kept, one-off keys go first), so
+counters and `add` keys can disappear under pressure and nothing in it may be
+the only copy of anything. Reads never return an expired entry. To change
+the limit, override the provider:
+`.override_value::<dyn CacheStore>(Arc::new(MemoryStore::with_capacity(50_000)))`
+(`navree::cache::MemoryStore`). There is no config key for it.
+
+## A cache of your own (`navree::bounded`)
+
+For per-process data on a hot path, use `navree::bounded::Cache<K, V>`
+(`V: Clone`; store an `Arc` for large values). It is always bounded, sharded,
+and needs no module:
+
+```rust
+use navree::bounded::Cache;
+
+let rates: Cache<String, Rate> = Cache::builder(1_000) // capacity: required
+    .time_to_live(Duration::from_secs(300))            // and/or .time_to_idle(..)
+    .build();
+
+// Misses on one key at the same time share one load; a failed load is not
+// cached (every waiter gets the same Arc<E>); a cancelled or panicking
+// loader never wedges the key (a waiter loads instead).
+let rate = rates.try_get_with(currency.to_owned(), fetch(&currency)).await?; // Result<Rate, Arc<E>>
+```
+
+Sync calls: `get(&k)`, `insert(k, v)`, `insert_with_ttl(k, v, Option<Duration>)`,
+`remove(&k)`, `invalidate(&k)`, `invalidate_all()`, `len()`, and
+`compute(&k, |current| Compute::Update(..) | Store(.., ttl) | Remove | Keep)`
+for an atomic read-modify-write. A write or invalidation of a key abandons a
+load in flight for it (its callers still get their value, but it is not
+stored). There is no iteration and no eviction listener.
 
 ## HTTP client
 

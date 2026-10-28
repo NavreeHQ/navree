@@ -91,7 +91,7 @@ pub(crate) struct Core {
     pub(crate) views: Views,
     /// The app's templates (`ViewModule`), for view fields and pages.
     pub(crate) app_views: Option<Arc<Views>>,
-    pub(crate) metrics: Option<moka::future::Cache<String, Arc<MetricResult>>>,
+    pub(crate) metrics: Option<navree_bounded::Cache<String, Arc<MetricResult>>>,
     pub(crate) assets: Assets,
 }
 
@@ -124,8 +124,7 @@ impl Core {
             }
         }
         let metrics = (options.metrics_cache_secs > 0).then(|| {
-            moka::future::Cache::builder()
-                .max_capacity(10_000)
+            navree_bounded::Cache::builder(10_000)
                 .time_to_live(Duration::from_secs(options.metrics_cache_secs))
                 .build()
         });

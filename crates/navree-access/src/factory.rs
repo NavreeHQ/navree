@@ -5,7 +5,7 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
-use moka::future::Cache;
+use navree_bounded::Cache;
 use navree_contracts::Principal;
 use navree_db::{Db, Uow};
 use navree_http::{AccessSpec, AppError};
@@ -46,7 +46,7 @@ impl PrincipalAccess {
 }
 
 /// How many principals' abilities are kept in memory.
-const CACHE_CAPACITY: u64 = 10_000;
+const CACHE_CAPACITY: usize = 10_000;
 
 /// How long an unused cached ability is kept.
 const CACHE_IDLE: Duration = Duration::from_secs(10 * 60);
@@ -76,8 +76,7 @@ impl AbilityFactory {
             db,
             options,
             subjects,
-            cache: Cache::builder()
-                .max_capacity(CACHE_CAPACITY)
+            cache: Cache::builder(CACHE_CAPACITY)
                 .time_to_idle(CACHE_IDLE)
                 .build(),
         }
