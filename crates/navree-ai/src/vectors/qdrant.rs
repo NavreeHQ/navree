@@ -108,13 +108,10 @@ pub(crate) fn qdrant_filter(filter: &Filter) -> Value {
 /// One condition (nested filters become nested filter objects).
 fn condition(filter: &Filter) -> Value {
     let key = |field: &str| format!("metadata.{field}");
+    // The REST API takes numbers and RFC 3339 datetime strings in `range`
+    // alike (`datetime_range` exists only in gRPC).
     let range = |field: &str, op: &str, value: &Value| {
-        let kind = if value.is_number() {
-            "range"
-        } else {
-            "datetime_range"
-        };
-        json!({ "key": key(field), kind: { op: value } })
+        json!({ "key": key(field), "range": { op: value } })
     };
     match filter {
         Filter::Eq(field, value) => json!({ "key": key(field), "match": { "value": value } }),
@@ -326,7 +323,7 @@ mod tests {
             json!({ "must": [
                 { "key": "metadata.subject_id", "match": { "value": "d1" } },
                 { "key": "metadata.kind", "match": { "any": ["call", "note"] } },
-                { "key": "metadata.created_at", "datetime_range": { "gte": "2026-10-01T00:00:00Z" } },
+                { "key": "metadata.created_at", "range": { "gte": "2026-10-01T00:00:00Z" } },
                 { "key": "metadata.count", "range": { "lt": 5 } },
                 { "must_not": [{ "key": "metadata.owner_id", "match": { "value": "u2" } }] }
             ]})
