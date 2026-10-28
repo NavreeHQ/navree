@@ -19,11 +19,10 @@ use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use navree_contracts::{Clock, SystemClock};
 use navree_crypto::Encrypter;
-use navree_db::{Db, Uow};
+use navree_db::record::{self, Filter};
+use navree_db::{Db, DbError, Record as _, Uow};
 use navree_events::{Event, EventBus};
 use navree_kernel::{AppContext, WeakAppContext};
-use sea_orm::ActiveModelTrait as _;
-use sea_orm::ActiveValue::{Set, Unchanged};
 use sha2::{Digest as _, Sha256};
 use tokio::sync::OnceCell;
 use uuid::Uuid;
@@ -33,7 +32,7 @@ use crate::message::bare_address;
 use crate::{
     DeliveryStatus, MailError, MailOptions, MailTransport, Message, SendReport, Sent, TransportTier,
 };
-use entity::delivery;
+use entity::DeliveryRow;
 use outbox::Outbox;
 use resolver::TransportResolver;
 use suppressions::Suppressions;
@@ -159,7 +158,7 @@ impl Store {
     {
         let db = self.db().await?;
         if let Some(current) = Uow::current()
-            && std::ptr::eq(current.db().conn(), db.conn())
+            && current.db().same_as(&db)
             && !current.is_finished().await
         {
             return f(current).await;
@@ -167,7 +166,7 @@ impl Store {
         let uow = db.uow(None, None).await;
         match uow.scope(f(uow.clone())).await {
             Ok(value) => {
-                uow.commit().await?;
+                uow.commit().await.map_err(DbError::from)?;
                 Ok(value)
             }
             Err(error) => {
@@ -328,27 +327,23 @@ impl Pipeline {
         outcome: &Result<Sent, MailError>,
     ) -> Result<(), MailError> {
         let now = self.store.now().await;
-        let model = match outcome {
-            Ok(sent) => delivery::ActiveModel {
-                id: Unchanged(delivery_id),
-                status: Set(DeliveryStatus::Sent.as_str().to_owned()),
-                transport: Set(sent.transport.to_owned()),
-                provider_id: Set(sent.provider_id.clone()),
-                updated_at: Set(now),
-                ..Default::default()
-            },
-            Err(error) => delivery::ActiveModel {
-                id: Unchanged(delivery_id),
-                status: Set(DeliveryStatus::Failed.as_str().to_owned()),
-                error: Set(Some(error.to_string().chars().take(1000).collect())),
-                updated_at: Set(now),
-                ..Default::default()
-            },
-        };
+        let row = Filter::all().eq("id", delivery_id);
+        let changes = match outcome {
+            Ok(sent) => DeliveryRow::update_where(row)
+                .set("status", DeliveryStatus::Sent.as_str())
+                .set("transport", sent.transport)
+                .set("provider_id", sent.provider_id.clone()),
+            Err(error) => DeliveryRow::update_where(row)
+                .set("status", DeliveryStatus::Failed.as_str())
+                .set(
+                    "error",
+                    error.to_string().chars().take(1000).collect::<String>(),
+                ),
+        }
+        .set("updated_at", now);
         self.store
             .in_uow(|uow| async move {
-                let tx = uow.tx().await?;
-                model.update(&*tx).await?;
+                changes.execute(&uow).await?;
                 Ok(())
             })
             .await
@@ -367,33 +362,32 @@ impl Pipeline {
         let now = self.store.now().await;
         let id = Uuid::now_v7();
         let scope = options.scope.clone().unwrap_or_default();
-        let model = delivery::ActiveModel {
-            id: Set(id),
-            workspace_id: Set(scope.workspace_id),
-            organization_id: Set(scope.organization_id),
-            status: Set(status.as_str().to_owned()),
-            transport: Set(transport.to_owned()),
-            tier: Set(tier.as_str().to_owned()),
-            provider_id: Set(None),
-            template: Set(options.template.clone()),
-            subject: Set(message.subject.clone()),
-            sender: Set(message
+        let row = DeliveryRow {
+            id,
+            workspace_id: scope.workspace_id,
+            organization_id: scope.organization_id,
+            status: status.as_str().to_owned(),
+            transport: transport.to_owned(),
+            tier: tier.as_str().to_owned(),
+            provider_id: None,
+            template: options.template.clone(),
+            subject: message.subject.clone(),
+            sender: message
                 .from
                 .as_deref()
                 .map(bare_address)
-                .unwrap_or_default()),
-            recipient_hash: Set(recipient_hash(first_recipient)),
-            recipients: Set(i32::try_from(recipients).unwrap_or(i32::MAX)),
-            error: Set(None),
-            opened_at: Set(None),
-            clicked_at: Set(None),
-            created_at: Set(now),
-            updated_at: Set(now),
+                .unwrap_or_default(),
+            recipient_hash: recipient_hash(first_recipient),
+            recipients: i32::try_from(recipients).unwrap_or(i32::MAX),
+            error: None,
+            opened_at: None,
+            clicked_at: None,
+            created_at: now,
+            updated_at: now,
         };
         self.store
             .in_uow(|uow| async move {
-                let tx = uow.tx().await?;
-                model.insert(&*tx).await?;
+                record::insert(&uow, &row).await?;
                 Ok(())
             })
             .await?;

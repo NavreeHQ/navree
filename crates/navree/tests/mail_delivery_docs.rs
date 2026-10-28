@@ -224,6 +224,17 @@ async fn named_transports_suppressions_and_held_mail() {
             .await
             .unwrap()
     );
+
+    // Reading the tables directly: the records of `navree::mail::entity`.
+    use navree::db::Record as _;
+    use navree::mail::entity::DeliveryRow;
+    let db = app.get::<Db>().await;
+    let sent = DeliveryRow::select()
+        .eq("status", "sent")
+        .count(&*db)
+        .await
+        .unwrap();
+    assert!(sent >= 1);
 }
 
 #[tokio::test]

@@ -12,7 +12,7 @@ use base64::engine::general_purpose::STANDARD;
 use chrono::{DateTime, Utc};
 use http::{HeaderMap, Method, StatusCode, Uri, header};
 use navree_contracts::{Clock, SystemClock};
-use navree_db::PageQuery;
+use navree_db::{ErrorKind, PageQuery};
 use navree_http::{
     ApiMeta, AppError, Controller, Created, CurrentPrincipal, Json, NoContent, RouteDef, UrlSigner,
     schema_fn,
@@ -719,8 +719,19 @@ impl MailError {
     /// [`NotFound`](MailError::NotFound), 409 for
     /// [`Conflict`](MailError::Conflict), 422 `mail_transport_unusable` for
     /// [`Unusable`](MailError::Unusable), 400 for invalid addresses,
-    /// headers and settings; `None` (a 500) otherwise.
+    /// headers and settings; for a database error
+    /// ([`db_error`](MailError::db_error)), 404 when the row is gone and 409
+    /// for a unique or foreign-key violation; `None` (a 500) otherwise.
     pub fn to_app_error(&self) -> Option<AppError> {
+        if let Some(error) = self.db_error() {
+            return match error.kind() {
+                ErrorKind::NotFound => Some(AppError::not_found()),
+                ErrorKind::UniqueViolation | ErrorKind::ForeignKeyViolation => Some(
+                    AppError::conflict("the change conflicts with another record"),
+                ),
+                _ => None,
+            };
+        }
         match self {
             MailError::NotFound(_) => Some(AppError::not_found()),
             MailError::Conflict(message) => Some(AppError::conflict(message.clone())),

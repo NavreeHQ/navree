@@ -121,6 +121,20 @@ enabled = true
 
 `MailModule` contributes the migration set `mail` whether the pipeline is on or not. It creates `mail_transports`, `mail_deliveries`, `mail_events`, `mail_suppressions` and `mail_outbox`. With `enabled = true` and no `DatabaseModule`, the boot fails. Stored transports and held messages are encrypted with the app key, so they also need `CryptoModule` and `APP_KEY`.
 
+The services below are the way to change these tables. To read them directly (a report, an export), `navree::mail::entity` has a record per table: `TransportRow`, `DeliveryRow`, `EventRow`, `SuppressionRow` and `OutboxRow`.
+
+```rust
+use navree::db::Record as _;
+use navree::mail::entity::DeliveryRow;
+
+let bounced = DeliveryRow::select()
+    .eq("status", "bounced")
+    .eq("workspace_id", workspace_id)
+    .count(&*db)
+    .await?;
+```
+
+
 When the pipeline is off, none of this runs: the mailer renders, validates and hands the message to the transport, as described on the [mail page](/docs/digging-deeper/mail/).
 
 ### Writes and transactions
@@ -285,11 +299,11 @@ Each answers 204 once the events are recorded, and 401 with code `invalid_signat
 Recording an event, with `Deliveries::record`:
 
 1. finds the delivery by its provider id and logs the event in `mail_events`;
-2. moves the delivery to `delivered`, `bounced` (hard bounces only) or `complained`, and stamps the first open and click (a click counts as an open);
+2. moves the delivery to `delivered`, `bounced` (hard bounces only) or `complained`, and stamps the first open and click (a click counts as an open; the earliest wins when events arrive out of order);
 3. suppresses the recipient after a hard bounce or a complaint, in the delivery's workspace;
 4. emits an event once the unit of work commits.
 
-An event for a message the log doesn't know is still logged and still suppresses.
+An event for a message the log doesn't know is still logged and still suppresses. The delivery is locked while an event is recorded, so events about one message that arrive at the same time apply one after the other.
 
 | Event | Name | Fields besides `delivery_id`, `workspace_id`, `provider`, `recipient`, `occurred_at` |
 |---|---|---|
@@ -563,7 +577,7 @@ Besides the errors on the [mail page](/docs/digging-deeper/mail/#validation-and-
 | `Conflict` | Releasing or discarding mail that is no longer held. | 409 |
 | `Missing` | A feature needs something the app lacks (the pipeline, `DatabaseModule`, an app key). | 500 |
 | `Dns` | A DNS lookup failed (a missing record is not an error). | 500 |
-| `Store` | Reading or writing the mail tables failed. | 500 |
+| `Store` | Reading or writing the mail tables failed. `db_error()` returns the database error, whose `kind()` tells a lost connection or a deadlock (`is_retryable()`) from a broken constraint. | 404 for a row that is gone, 409 for a unique or foreign-key violation, else 500 |
 
 <LinkCards>
   <LinkCard href="/docs/digging-deeper/mail/" title="Mail">

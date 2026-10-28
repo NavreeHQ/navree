@@ -18,6 +18,7 @@ mod options;
 mod queue;
 mod render;
 mod routes;
+mod servers;
 mod smtp;
 mod support;
 mod telemetry;
