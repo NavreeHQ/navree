@@ -12,7 +12,7 @@
 //! holding a JSON object or array too), bytes as text when they are UTF-8.
 
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, SecondsFormat, Utc};
-use navree_db::{Backend, Db, DbOptions, Executor, Value};
+use navree_db::{Db, DbOptions, Executor, Value};
 use navree_orm::{Decimal, Dialect, Statement};
 use serde_json::Value as Json;
 
@@ -106,23 +106,7 @@ impl Exec {
 /// The ORM's statement as navree-db runs it (its SQL is already in the
 /// backend's placeholders).
 fn engine_statement(statement: &Statement) -> Result<navree_db::Statement, String> {
-    let backend = match statement.dialect {
-        Dialect::Postgres => Backend::Postgres,
-        Dialect::MySql => Backend::MySql,
-        Dialect::Sqlite => Backend::Sqlite,
-    };
-    let values = statement
-        .values
-        .iter()
-        .cloned()
-        .map(navree_db::compat::from_sea_value)
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|error| error.to_string())?;
-    Ok(navree_db::Statement::new(
-        backend,
-        statement.sql.clone(),
-        values,
-    ))
+    Ok(statement.to_db())
 }
 
 /// A row, normalized.

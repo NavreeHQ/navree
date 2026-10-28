@@ -304,10 +304,9 @@ fn parse_serialized(text: &str) -> Option<DateTime<FixedOffset>> {
 /// A date-time value of an extra column, if it is one.
 fn date_time_value(value: &Value) -> Option<DateTime<FixedOffset>> {
     match value {
-        Value::ChronoDateTimeUtc(Some(at)) => Some(at.fixed_offset()),
-        Value::ChronoDateTimeWithTimeZone(Some(at)) => Some(*at),
-        Value::ChronoDateTimeLocal(Some(at)) => Some(at.fixed_offset()),
-        Value::ChronoDateTime(Some(at)) => Some(at.and_utc().fixed_offset()),
+        Value::Timestamp(at) => Some(at.fixed_offset()),
+        Value::TimestampTz(at) => Some(*at),
+        Value::DateTime(at) => Some(at.and_utc().fixed_offset()),
         _ => None,
     }
 }

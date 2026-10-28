@@ -16,10 +16,7 @@ use navree_orm::ir::{
     Order, QueryIr, UpdateIr, Where, WhereClause,
 };
 use navree_orm::relations::{BelongsTo, HasMany};
-use navree_orm::{
-    Access, ChangeRecorder, DocumentDriver, DocumentTarget, Executor, InsertOutcome, Model,
-    OrmError, Row, Target, Value, relations, same_value, to_json,
-};
+use navree_orm::{Access, ChangeRecorder, DocumentDriver, DocumentTarget, Executor, InsertOutcome, Kind, Model, OrmError, Row, Target, Value, relations, same_value, to_json};
 use navree_testing::TestApp;
 use serde::Serialize;
 
@@ -139,7 +136,7 @@ fn matches_one(document: &Document, filter: &Where) -> Result<bool, OrmError> {
         Where::Compare { left, op, right } => {
             let actual = field(document, column_name(left)?)
                 .cloned()
-                .unwrap_or(Value::String(None));
+                .unwrap_or(Value::Null(Kind::String));
             let wanted = value_of(right)?;
             match op {
                 Operator::Eq => same_value(&actual, wanted),
@@ -167,7 +164,7 @@ fn matches_one(document: &Document, filter: &Where) -> Result<bool, OrmError> {
         } => {
             let actual = field(document, column_name(expr)?)
                 .cloned()
-                .unwrap_or(Value::String(None));
+                .unwrap_or(Value::Null(Kind::String));
             let found = list
                 .iter()
                 .map(value_of)
@@ -266,7 +263,7 @@ impl DocumentDriver for Memory {
                                     output.clone(),
                                     field(&document, source)
                                         .cloned()
-                                        .unwrap_or(Value::String(None)),
+                                        .unwrap_or(Value::Null(Kind::String)),
                                 )
                             })
                             .collect()
@@ -286,9 +283,9 @@ impl DocumentDriver for Memory {
             match aggregate.function {
                 AggregateFunction::Count => {
                     let count = self.matching(&query.table.name, &query.wheres)?.len();
-                    Ok(Value::BigInt(Some(
+                    Ok(Value::I64(
                         i64::try_from(count).unwrap_or(i64::MAX),
-                    )))
+                    ))
                 }
                 other => Err(OrmError::Unsupported {
                     feature: format!("{other:?}").into(),
@@ -317,10 +314,10 @@ impl DocumentDriver for Memory {
                 for column in &insert.returning {
                     let mut next = self.next_id.lock().unwrap();
                     *next += 1;
-                    document.push((column.to_string(), Value::BigInt(Some(*next))));
+                    document.push((column.to_string(), Value::I64(*next)));
                     returned.push(Row::from_values(vec![(
                         column.to_string(),
-                        Value::BigInt(Some(*next)),
+                        Value::I64(*next),
                     )]));
                 }
                 collection.push(document);
@@ -747,7 +744,7 @@ async fn drivers_turn_native_rows_into_records() {
     let rows = vec![Row::from_values(vec![
         ("id".to_owned(), Value::from(7_i64)),
         ("name".to_owned(), Value::from("Initech")),
-        ("country".to_owned(), Value::String(None)),
+        ("country".to_owned(), Value::Null(Kind::String)),
         ("active".to_owned(), Value::from(true)),
         ("employees".to_owned(), Value::from(15_i32)),
         ("created_at".to_owned(), Value::from(Utc::now())),

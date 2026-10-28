@@ -957,7 +957,7 @@ impl<P: Model, R: Model, X: PivotKind> BelongsToMany<P, R, X> {
         if rows.is_empty() {
             return Ok(());
         }
-        let now = Value::ChronoDateTimeUtc(Some(target.context().now().await));
+        let now = Value::Timestamp(target.context().now().await);
         let spec = self.spec();
         let mut records = Vec::with_capacity(rows.len());
         for (id, values) in rows {
@@ -1006,7 +1006,7 @@ impl<P: Model, R: Model, X: PivotKind> BelongsToMany<P, R, X> {
                 .iter()
                 .any(|(column, _)| column == updated_at.as_ref())
         {
-            let now = Value::ChronoDateTimeUtc(Some(target.context().now().await));
+            let now = Value::Timestamp(target.context().now().await);
             values.push((updated_at.to_string(), now));
         }
         let keys = distinct_keys([id]);

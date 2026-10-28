@@ -101,8 +101,25 @@ impl Writer {
         }
     }
 
-    /// Appends the next placeholder and binds `value` to it.
+    /// Appends the next placeholder and binds `value` to it. On PostgreSQL
+    /// a [`Value::Enum`] (bound as its text) is cast to its type there:
+    /// `CAST($1 AS "mood")`.
     pub fn bind(&mut self, value: Value) {
+        if self.dialect == Dialect::Postgres
+            && let Value::Enum { type_name, .. } = &value
+        {
+            let type_name = ObjectName::parse(type_name.clone());
+            self.push("CAST(");
+            self.bind_placeholder(value);
+            self.push(" AS ");
+            self.object_name(&type_name);
+            self.push(")");
+            return;
+        }
+        self.bind_placeholder(value);
+    }
+
+    fn bind_placeholder(&mut self, value: Value) {
         self.values.push(value);
         match self.dialect {
             Dialect::Postgres => {
@@ -353,6 +370,21 @@ mod tests {
         w.raw("? + ?", &[Value::from(2_i64), Value::from(3_i64)])
             .unwrap();
         assert_eq!(w.finish().sql, "$1, $2 + $3");
+    }
+
+    #[test]
+    fn enum_values_are_cast_to_their_type_on_postgres() {
+        let mood = Value::enumeration("public.mood", "happy");
+        let mut w = Writer::new(Dialect::Postgres);
+        w.bind(Value::from(1_i64));
+        w.push(", ");
+        w.bind(mood.clone());
+        let statement = w.finish();
+        assert_eq!(statement.sql, r#"$1, CAST($2 AS "public"."mood")"#);
+        assert_eq!(statement.values[1], mood);
+        let mut w = Writer::new(Dialect::MySql);
+        w.bind(mood);
+        assert_eq!(w.finish().sql, "?");
     }
 
     #[test]

@@ -32,7 +32,7 @@ use crate::ir::{
 use crate::model::{KeyKind, Model, PrimaryKey};
 use crate::query::Builder;
 use crate::record::Record;
-use crate::value::{Field, Numeric, Value, is_null, to_json};
+use crate::value::{Field, Kind, Numeric, Value, is_null, to_json};
 
 /// `WHERE table.key = key`.
 fn by_key<M: Model>(key: &M::Key) -> Vec<WhereClause> {
@@ -245,7 +245,7 @@ async fn insert<M: Model>(
     if assigned_by_database {
         let key = match (outcome.returned.first(), outcome.last_insert_id) {
             (Some(row), _) => row.value(meta.key_column())?,
-            (None, Some(id)) => Value::BigUnsigned(Some(id)),
+            (None, Some(id)) => Value::U64(id),
             (None, None) => {
                 return Err(OrmError::invalid(format!(
                     "the database did not return the key of the new {}",
@@ -496,7 +496,7 @@ pub(crate) async fn touch<M: Model>(
             let now = ctx.now().await;
             record
                 .model
-                .set_value(column, Value::ChronoDateTimeUtc(Some(now)))?;
+                .set_value(column, Value::Timestamp(now))?;
         }
     }
     save(target, record).await
@@ -634,17 +634,17 @@ pub(crate) async fn increment_cast<M: Model, T>(
 fn is_number(value: &Value) -> bool {
     matches!(
         value,
-        Value::TinyInt(Some(_))
-            | Value::SmallInt(Some(_))
-            | Value::Int(Some(_))
-            | Value::BigInt(Some(_))
-            | Value::TinyUnsigned(Some(_))
-            | Value::SmallUnsigned(Some(_))
-            | Value::Unsigned(Some(_))
-            | Value::BigUnsigned(Some(_))
-            | Value::Float(Some(_))
-            | Value::Double(Some(_))
-            | Value::Decimal(Some(_))
+        Value::I8(_)
+            | Value::I16(_)
+            | Value::I32(_)
+            | Value::I64(_)
+            | Value::U8(_)
+            | Value::U16(_)
+            | Value::U32(_)
+            | Value::U64(_)
+            | Value::F32(_)
+            | Value::F64(_)
+            | Value::Decimal(_)
     )
 }
 
@@ -694,7 +694,7 @@ async fn apply_increment<M: Model>(
         let value = record
             .model
             .value(updated_at)?
-            .unwrap_or(Value::String(None));
+            .unwrap_or(Value::Null(Kind::String));
         sets.push((Cow::Borrowed(updated_at), Expr::Value(value)));
         written.push(updated_at.to_owned());
     }

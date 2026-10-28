@@ -249,7 +249,7 @@ pub(crate) fn model_row<M: Model>(mut document: Document) -> Row {
     for column in M::meta().all_columns() {
         let value = document
             .remove(column.name())
-            .map_or(Value::String(None), from_bson);
+            .map_or(Value::Null(Kind::String), from_bson);
         values.push((column.name().to_owned(), value));
     }
     values.extend(

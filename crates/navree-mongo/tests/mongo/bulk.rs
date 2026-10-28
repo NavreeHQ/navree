@@ -131,7 +131,7 @@ async fn upserts_update_by_unique_fields_or_insert() {
         sources,
         [
             (Value::from("DKK"), Value::from("ecb")),
-            (Value::from("EUR"), Value::String(None)),
+            (Value::from("EUR"), Value::Null(Kind::String)),
         ],
         "fields not updated are set on insert only"
     );

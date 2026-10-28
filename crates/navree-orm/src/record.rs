@@ -15,7 +15,7 @@ use crate::model::Model;
 use crate::persist;
 use crate::relations::Relations;
 use crate::row::Row;
-use crate::value::{Field, Numeric, Value};
+use crate::value::{Field, Kind, Numeric, Value};
 
 /// A model instance as the ORM knows it: the model itself (a `Record<M>`
 /// dereferences to `M`, so fields read and write directly), whether it is
@@ -345,8 +345,8 @@ impl<M: Model> Record<M> {
         let mut previous = Vec::with_capacity(dirty.len());
         for (column, _) in &dirty {
             let before = match &self.original {
-                Some(original) => original.value(column)?.unwrap_or(Value::String(None)),
-                None => Value::String(None),
+                Some(original) => original.value(column)?.unwrap_or(Value::Null(Kind::String)),
+                None => Value::Null(Kind::String),
             };
             previous.push((*column, before));
         }

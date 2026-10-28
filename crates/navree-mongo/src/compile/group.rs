@@ -21,7 +21,7 @@ use crate::error::{invalid, unsupported};
 
 /// `value LIKE pattern` over the groups, as `$regexMatch`.
 fn like(value: Bson, pattern: &Expr, insensitive: bool, negated: bool) -> Result<Bson, OrmError> {
-    let Expr::Value(navree_orm::Value::String(Some(pattern))) = pattern else {
+    let Expr::Value(navree_orm::Value::String(pattern)) = pattern else {
         return Err(invalid("a LIKE in HAVING takes a text pattern"));
     };
     let options = if insensitive { "is" } else { "s" };

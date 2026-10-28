@@ -2,18 +2,16 @@
 
 use std::borrow::Cow;
 
-use sea_orm::QueryResult;
-
 use crate::attributes::CastContext;
 use crate::cast::{Cast, CastError};
 use crate::sql::Dialect;
-use crate::value::{Field, FieldError, FieldKind, Value, sql_get};
+use crate::value::{Field, FieldError, FieldKind, Kind, Value};
 
 /// How a vector travels to its database.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Wire {
-    /// pgvector's `vector` (binary protocol, with navree-orm's `postgres`
-    /// feature).
+    /// pgvector's `vector` ([`Value::Vector`], bound in pgvector's binary
+    /// form).
     Postgres,
     /// Little-endian 32-bit floats: MySQL 9's and MariaDB 11.7's binary
     /// vector format, and the blob SQLite extensions such as sqlite-vec read.
@@ -94,65 +92,37 @@ impl Field for StoredVector {
 
     fn to_value(&self) -> Value {
         match self.wire {
-            #[cfg(feature = "postgres")]
-            Wire::Postgres => {
-                Value::Vector(Some(sea_orm::prelude::PgVector::from(self.floats.clone())))
-            }
-            #[cfg(not(feature = "postgres"))]
-            Wire::Postgres => Value::String(Some(StoredVector::text(&self.floats))),
-            Wire::Binary => Value::Bytes(Some(StoredVector::to_bytes(&self.floats))),
-            Wire::Text => Value::String(Some(StoredVector::text(&self.floats))),
+            Wire::Postgres => Value::Vector(self.floats.clone()),
+            Wire::Binary => Value::Bytes(StoredVector::to_bytes(&self.floats)),
+            Wire::Text => Value::String(StoredVector::text(&self.floats)),
         }
     }
 
     fn null() -> Value {
-        Value::Bytes(None)
-    }
-
-    fn from_sql(row: &QueryResult, column: &str) -> Result<Self, FieldError> {
-        #[cfg(feature = "postgres")]
-        if let Ok(vector) = sql_get::<sea_orm::prelude::PgVector>(row, column) {
-            return Ok(StoredVector {
-                floats: vector.to_vec(),
-                wire: Wire::Postgres,
-            });
-        }
-        match sql_get::<Vec<u8>>(row, column) {
-            Ok(bytes) => {
-                // Text read back as bytes (`[1,2]`) is the text form.
-                if bytes.first() == Some(&b'[') {
-                    let text = String::from_utf8(bytes).map_err(|_| {
-                        FieldError::Invalid("a vector's text is not UTF-8".to_owned())
-                    })?;
-                    return StoredVector::from_value(Value::String(Some(text)));
-                }
-                Ok(StoredVector {
-                    floats: StoredVector::from_bytes(&bytes)?,
-                    wire: Wire::Binary,
-                })
-            }
-            Err(FieldError::Invalid(_)) => sql_get::<String>(row, column)
-                .and_then(|text| StoredVector::from_value(Value::String(Some(text)))),
-            Err(other) => Err(other),
-        }
+        Value::Null(Kind::Bytes)
     }
 
     fn from_value(value: Value) -> Result<Self, FieldError> {
         match value {
-            #[cfg(feature = "postgres")]
-            Value::Vector(Some(vector)) => Ok(StoredVector {
-                floats: vector.to_vec(),
+            Value::Vector(floats) => Ok(StoredVector {
+                floats,
                 wire: Wire::Postgres,
             }),
-            Value::Bytes(Some(bytes)) => Ok(StoredVector {
+            // Text read back as bytes (`[1,2]`) is the text form.
+            Value::Bytes(bytes) if bytes.first() == Some(&b'[') => {
+                let text = String::from_utf8(bytes)
+                    .map_err(|_| FieldError::Invalid("a vector's text is not UTF-8".to_owned()))?;
+                StoredVector::from_value(Value::String(text))
+            }
+            Value::Bytes(bytes) => Ok(StoredVector {
                 floats: StoredVector::from_bytes(&bytes)?,
                 wire: Wire::Binary,
             }),
-            Value::String(Some(text)) => Ok(StoredVector {
+            Value::String(text) => Ok(StoredVector {
                 floats: StoredVector::parse_text(&text)?,
                 wire: Wire::Text,
             }),
-            Value::Json(Some(json)) => match *json {
+            Value::Json(json) => match json {
                 serde_json::Value::Array(items) => items
                     .iter()
                     .map(|item| {
@@ -192,7 +162,7 @@ impl Field for StoredVector {
 ///
 /// | Database | Column | Stored as |
 /// |---|---|---|
-/// | PostgreSQL | pgvector's `vector(N)` | pgvector's binary value (navree-orm's `postgres` feature) |
+/// | PostgreSQL | pgvector's `vector(N)` | pgvector's binary value |
 /// | MySQL 9 | `VECTOR(N)` | little-endian 32-bit floats, its binary vector format |
 /// | MariaDB 11.7 | `VECTOR(N)` | the same bytes |
 /// | SQLite | `BLOB` | the same bytes, which sqlite-vec reads |
@@ -209,7 +179,7 @@ impl Field for StoredVector {
 /// let embedding = vec![0.5_f32, -1.0, 2.25];
 /// let mysql = CastContext::new().with_dialect(Dialect::MySql);
 /// let stored = Vector::set_with(&embedding, &mysql)?;
-/// assert_eq!(stored.to_value(), Value::Bytes(Some(vec![0, 0, 0, 63, 0, 0, 128, 191, 0, 0, 16, 64])));
+/// assert_eq!(stored.to_value(), Value::Bytes(vec![0, 0, 0, 63, 0, 0, 128, 191, 0, 0, 16, 64]));
 /// let read: Vec<f32> = Vector::get_with(stored, &mysql)?;
 /// assert_eq!(read, embedding);
 /// # Ok::<(), navree_orm::cast::CastError>(())
@@ -246,12 +216,9 @@ impl Cast<Vec<f32>> for Vector {
 
     fn null_with(context: &CastContext) -> Value {
         match Wire::of(context) {
-            #[cfg(feature = "postgres")]
-            Wire::Postgres => Value::Vector(None),
-            #[cfg(not(feature = "postgres"))]
-            Wire::Postgres => Value::String(None),
-            Wire::Binary => Value::Bytes(None),
-            Wire::Text => Value::String(None),
+            Wire::Postgres => Value::Null(Kind::Vector),
+            Wire::Binary => Value::Null(Kind::Bytes),
+            Wire::Text => Value::Null(Kind::String),
         }
     }
 
@@ -262,7 +229,7 @@ impl Cast<Vec<f32>> for Vector {
 
     fn from_json(input: serde_json::Value, context: &CastContext) -> Result<Vec<f32>, CastError> {
         let _ = context;
-        StoredVector::from_value(Value::Json(Some(Box::new(input))))
+        StoredVector::from_value(Value::Json(input))
             .map(|stored| stored.floats)
             .map_err(CastError::from)
     }
@@ -289,7 +256,7 @@ mod tests {
 
     #[test]
     fn malformed_vectors_are_errors() {
-        assert!(StoredVector::from_value(Value::Bytes(Some(vec![1, 2, 3]))).is_err());
+        assert!(StoredVector::from_value(Value::Bytes(vec![1, 2, 3])).is_err());
         assert!(StoredVector::from_value(Value::from("1,2")).is_err());
         assert!(StoredVector::from_value(Value::from("[1,x]")).is_err());
         assert_eq!(
@@ -299,7 +266,7 @@ mod tests {
             [] as [f32; 0]
         );
         assert_eq!(
-            StoredVector::from_value(Value::Bytes(None)).unwrap_err(),
+            StoredVector::from_value(Value::Null(Kind::Bytes)).unwrap_err(),
             FieldError::Null
         );
         let error = Vector::set_with(&vec![f32::NAN], &CastContext::new()).unwrap_err();
@@ -311,7 +278,7 @@ mod tests {
         let mysql = CastContext::new().with_dialect(Dialect::MySql);
         assert_eq!(
             <Vector as Cast<Vec<f32>>>::null_with(&mysql),
-            Value::Bytes(None)
+            Value::Null(Kind::Bytes)
         );
     }
 

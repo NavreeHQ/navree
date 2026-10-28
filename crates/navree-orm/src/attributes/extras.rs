@@ -13,7 +13,7 @@ use crate::error::{OrmError, Result};
 use crate::model::Model;
 use crate::query::Builder;
 use crate::record::Record;
-use crate::value::{Decimal, Field, Value, is_null};
+use crate::value::{Decimal, Field, Kind, Value, is_null};
 
 /// How an extra column is converted when records are read
 /// ([`Builder::with_casts`]): databases type expressions loosely (SQLite's
@@ -68,25 +68,25 @@ impl ExtraCast {
     pub fn convert(&self, value: Value) -> std::result::Result<Value, CastError> {
         if is_null(&value) {
             return Ok(match self {
-                ExtraCast::Bool => Value::Bool(None),
-                ExtraCast::Integer => Value::BigInt(None),
-                ExtraCast::Float => Value::Double(None),
-                ExtraCast::Decimal(_) => Value::Decimal(None),
-                ExtraCast::String => Value::String(None),
-                ExtraCast::Json => Value::Json(None),
-                ExtraCast::DateTime => Value::ChronoDateTimeUtc(None),
-                ExtraCast::Date => Value::ChronoDate(None),
-                ExtraCast::Uuid => Value::Uuid(None),
+                ExtraCast::Bool => Value::Null(Kind::Bool),
+                ExtraCast::Integer => Value::Null(Kind::I64),
+                ExtraCast::Float => Value::Null(Kind::F64),
+                ExtraCast::Decimal(_) => Value::Null(Kind::Decimal),
+                ExtraCast::String => Value::Null(Kind::String),
+                ExtraCast::Json => Value::Null(Kind::Json),
+                ExtraCast::DateTime => Value::Null(Kind::Timestamp),
+                ExtraCast::Date => Value::Null(Kind::Date),
+                ExtraCast::Uuid => Value::Null(Kind::Uuid),
                 ExtraCast::Custom(_) => value,
             });
         }
         Ok(match self {
-            ExtraCast::Bool => Value::Bool(Some(bool::from_value(value)?)),
-            ExtraCast::Integer => Value::BigInt(Some(i64::from_value(value)?)),
-            ExtraCast::Float => Value::Double(Some(f64::from_value(value)?)),
+            ExtraCast::Bool => Value::Bool(bool::from_value(value)?),
+            ExtraCast::Integer => Value::I64(i64::from_value(value)?),
+            ExtraCast::Float => Value::F64(f64::from_value(value)?),
             ExtraCast::Decimal(scale) => {
                 let decimal = Decimal::from_value(value)?;
-                Value::Decimal(Some(match scale {
+                Value::Decimal(match scale {
                     Some(scale) => {
                         let mut rounded = decimal
                             .round_dp_with_strategy(*scale, RoundingStrategy::MidpointAwayFromZero);
@@ -94,15 +94,15 @@ impl ExtraCast {
                         rounded
                     }
                     None => decimal,
-                }))
+                })
             }
-            ExtraCast::String => Value::String(Some(String::from_value(value)?)),
-            ExtraCast::Json => Value::Json(Some(Box::new(serde_json::Value::from_value(value)?))),
+            ExtraCast::String => Value::String(String::from_value(value)?),
+            ExtraCast::Json => Value::Json(serde_json::Value::from_value(value)?),
             ExtraCast::DateTime => {
-                Value::ChronoDateTimeUtc(Some(DateTime::<Utc>::from_value(value)?))
+                Value::Timestamp(DateTime::<Utc>::from_value(value)?)
             }
-            ExtraCast::Date => Value::ChronoDate(Some(NaiveDate::from_value(value)?)),
-            ExtraCast::Uuid => Value::Uuid(Some(Uuid::from_value(value)?)),
+            ExtraCast::Date => Value::Date(NaiveDate::from_value(value)?),
+            ExtraCast::Uuid => Value::Uuid(Uuid::from_value(value)?),
             ExtraCast::Custom(convert) => convert(value)?,
         })
     }
@@ -118,7 +118,7 @@ impl ExtraCasts {
     pub(crate) fn apply<M: Model>(&self, record: &mut Record<M>) -> Result<()> {
         for (name, cast) in &self.0 {
             if let Some((_, value)) = record.extras.iter_mut().find(|(extra, _)| extra == name) {
-                let converted = cast.convert(std::mem::replace(value, Value::String(None)));
+                let converted = cast.convert(std::mem::replace(value, Value::Null(Kind::String)));
                 *value = converted.map_err(|error| OrmError::Cast {
                     model: M::meta().name().into(),
                     column: name.to_string(),
@@ -168,26 +168,26 @@ mod tests {
     #[test]
     fn conversions_and_nulls() {
         assert_eq!(
-            ExtraCast::Bool.convert(Value::BigInt(Some(1))).unwrap(),
-            Value::Bool(Some(true))
+            ExtraCast::Bool.convert(Value::I64(1)).unwrap(),
+            Value::Bool(true)
         );
         assert_eq!(
             ExtraCast::Decimal(Some(2))
-                .convert(Value::Double(Some(2.0 / 3.0)))
+                .convert(Value::F64(2.0 / 3.0))
                 .unwrap(),
-            Value::Decimal(Some(Decimal::new(67, 2)))
+            Value::Decimal(Decimal::new(67, 2))
         );
         assert_eq!(
             ExtraCast::Json.convert(Value::from(r#"{"a":1}"#)).unwrap(),
-            Value::Json(Some(Box::new(serde_json::json!({"a": 1}))))
+            Value::Json(serde_json::json!({"a": 1}))
         );
         assert_eq!(
-            ExtraCast::Integer.convert(Value::String(None)).unwrap(),
-            Value::BigInt(None)
+            ExtraCast::Integer.convert(Value::Null(Kind::String)).unwrap(),
+            Value::Null(Kind::I64)
         );
         assert!(ExtraCast::Uuid.convert(Value::from("nope")).is_err());
         let upper = ExtraCast::Custom(|value| match value {
-            Value::String(Some(s)) => Ok(Value::from(s.to_uppercase())),
+            Value::String(s) => Ok(Value::from(s.to_uppercase())),
             _ => Err(CastError::new("text only")),
         });
         assert_eq!(upper.convert(Value::from("ok")).unwrap(), Value::from("OK"));

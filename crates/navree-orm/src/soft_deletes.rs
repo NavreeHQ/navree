@@ -235,7 +235,7 @@ impl<M: SoftDeleting> Builder<M> {
     pub async fn restore<E: Executor + ?Sized>(mut self, exec: &E) -> Result<u64> {
         let deleted_at = deleted_at_column::<M>()?;
         let null = M::timestamp_value(deleted_at, chrono::DateTime::UNIX_EPOCH)
-            .map(|value| value.as_null())
+            .map(|value| crate::Value::Null(value.kind()))
             .ok_or_else(|| crate::model::derive_support::not_a_timestamp::<M>(deleted_at))?;
         if self.scopes.trashed != Trashed::Excluded {
             self.scopes.trashed = Trashed::Only;

@@ -3,7 +3,7 @@
 //! other than UNION): rendered for each dialect, they return the same rows
 //! everywhere, the rows written here.
 
-use navree_orm::Dialect;
+use navree_orm::{Dialect, Kind};
 use navree_orm::ir::JsonSegment;
 use navree_orm::render::ast::{
     Assignment, BinaryOp, ConflictAction, Cte, Delete, Expr, Ident, Insert, InsertSource, Join,
@@ -598,7 +598,7 @@ pub fn statements() -> Vec<Portable> {
         query(
             "null-safe equality with a null",
             Query::from(from("companies").column(col("id")).filter(
-                col("country").binary(BinaryOp::NullSafeEq, val(navree_orm::Value::String(None))),
+                col("country").binary(BinaryOp::NullSafeEq, val(navree_orm::Value::Null(Kind::String))),
             )),
             json!([[3]]),
         ),

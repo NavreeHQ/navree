@@ -172,7 +172,7 @@ impl Field for LibraryScope {
     const KIND: FieldKind = FieldKind::Text;
 
     fn to_value(&self) -> Value {
-        Value::String(Some(self.as_str().to_owned()))
+        Value::String(self.as_str().to_owned())
     }
 
     fn null() -> Value {
@@ -565,11 +565,11 @@ mod tests {
                 .contains("expected `global`, `organization` or `workspace`")
         );
         assert!(matches!(
-            LibraryScope::from_value(Value::String(Some("shared".into()))),
+            LibraryScope::from_value(Value::String("shared".into())),
             Err(FieldError::Invalid(_))
         ));
         assert_eq!(
-            LibraryScope::from_value(Value::String(None)),
+            LibraryScope::from_value(Value::Null(Kind::String)),
             Err(FieldError::Null)
         );
         // A SeaORM column too, stored under the same names.

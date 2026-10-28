@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use chrono::{DateTime, FixedOffset, NaiveDate, TimeZone, Utc};
 use navree_orm::attributes::ExtraCast;
-use navree_orm::{Collection, Model, OrmError, Record, accessors};
+use navree_orm::{Collection, Kind, Model, OrmError, Record, accessors};
 use serde::{Serialize, Serializer};
 use serde_json::json;
 
@@ -137,15 +137,15 @@ impl Serialize for Opaque {
 
 impl navree_orm::Field for Opaque {
     fn to_value(&self) -> navree_orm::Value {
-        navree_orm::Value::String(Some(String::new()))
+        navree_orm::Value::String(String::new())
     }
 
     fn null() -> navree_orm::Value {
-        navree_orm::Value::String(None)
+        navree_orm::Value::Null(Kind::String)
     }
 
     fn from_sql(
-        _row: &navree_db::sea_orm::QueryResult,
+        _row: &navree_db::Row,
         _column: &str,
     ) -> Result<Self, navree_orm::FieldError> {
         Ok(Opaque)
