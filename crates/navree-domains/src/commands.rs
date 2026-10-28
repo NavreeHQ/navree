@@ -172,9 +172,7 @@ async fn transfer(ctx: AppContext, args: Vec<String>) -> Result<(), BoxError> {
     let host = args
         .iter()
         .enumerate()
-        .find(|(at, arg)| {
-            !arg.starts_with("--") && (*at == 0 || args[*at - 1] != "--to")
-        })
+        .find(|(at, arg)| !arg.starts_with("--") && (*at == 0 || args[*at - 1] != "--to"))
         .map(|(_, arg)| arg.as_str());
     let Some(host) = host else {
         return Err("name the domain to move: <host> --to <workspace-id>".into());

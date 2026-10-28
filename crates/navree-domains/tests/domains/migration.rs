@@ -46,15 +46,23 @@ pub async fn roundtrip(world: &World) {
     .await
     .unwrap();
     assert!(
-        reverted
-            .labels()
-            .contains(&format!("domains/{CLAIMS}")),
+        reverted.labels().contains(&format!("domains/{CLAIMS}")),
         "{:?}",
         reverted.labels()
     );
     let schema = Schema::new(db.conn());
-    assert!(!schema.has_column("custom_domains", "verified_host").await.unwrap());
-    assert!(!schema.has_column("custom_domains", "transfer").await.unwrap());
+    assert!(
+        !schema
+            .has_column("custom_domains", "verified_host")
+            .await
+            .unwrap()
+    );
+    assert!(
+        !schema
+            .has_column("custom_domains", "transfer")
+            .await
+            .unwrap()
+    );
     assert!(
         schema
             .has_index("custom_domains", ["host"], Some(IndexKind::Unique))
@@ -65,7 +73,12 @@ pub async fn roundtrip(world: &World) {
 
     // Up again: the verified domain keeps its host, claims are possible.
     Migrator::up(ctx).await.unwrap();
-    assert!(schema.has_column("custom_domains", "verified_host").await.unwrap());
+    assert!(
+        schema
+            .has_column("custom_domains", "verified_host")
+            .await
+            .unwrap()
+    );
     assert!(
         schema
             .has_index("custom_domains", ["verified_host"], Some(IndexKind::Unique))
@@ -74,7 +87,11 @@ pub async fn roundtrip(world: &World) {
     );
     assert!(
         schema
-            .has_index("custom_domains", ["workspace_id", "host"], Some(IndexKind::Unique))
+            .has_index(
+                "custom_domains",
+                ["workspace_id", "host"],
+                Some(IndexKind::Unique)
+            )
             .await
             .unwrap()
     );
@@ -94,7 +111,13 @@ pub async fn roundtrip(world: &World) {
     assert_eq!(owner.status, DomainStatus::Verified.as_str());
     // The claims written before were dropped by the rollback (the old
     // schema had no room for two rows of one host).
-    assert!(domains.claims("go.acme-corp.test").await.unwrap().is_empty());
+    assert!(
+        domains
+            .claims("go.acme-corp.test")
+            .await
+            .unwrap()
+            .is_empty()
+    );
     domains
         .add(acme, NewDomain::new("go.acme-corp.test"))
         .await
