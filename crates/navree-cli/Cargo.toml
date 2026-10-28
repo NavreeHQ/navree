@@ -50,9 +50,8 @@ zip = { workspace = true }
 
 [dev-dependencies]
 insta = { workspace = true }
-# `tests/navigator.rs`: rmcp's client over `navree mcp`'s stdio, and the
-# fixture app's SQLite database.
-rmcp = { workspace = true, features = ["client", "transport-child-process"] }
+# `tests/navigator.rs`: the fixture app's SQLite database (the test speaks
+# JSON-RPC lines to `navree mcp`'s stdio itself).
 sqlx = { workspace = true }
 tempfile = { workspace = true }
 # A local server for the browser:install download tests.
