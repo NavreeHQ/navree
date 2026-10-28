@@ -24,6 +24,7 @@
 //! | `observe` | navree-observe | `observe` | `ObserveModule`: health checks and metrics |
 //! | `api` | navree-api | `api` | `ApiModule`: OpenAPI document and docs UI |
 //! | `mail` | navree-mail | `mail` | `MailModule`: mailables, transports, queued mail |
+//! | | | `mail-inbound` | Inbound mail: parsed messages, SES, Mailgun, Postmark and raw MIME sources, mailboxes by address, signed reply tokens, raw `.eml` on a disk |
 //! | `realtime` | navree-realtime | `realtime` | `RealtimeModule`: Pusher-protocol broadcasting |
 //! | `storage` | navree-storage | `storage` | `StorageModule`: disks, signed links, direct uploads, disk sync |
 //! | | | `storage-s3` | S3 disks: AWS, MinIO, Cloudflare R2, DigitalOcean Spaces |

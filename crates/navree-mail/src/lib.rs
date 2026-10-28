@@ -36,6 +36,14 @@
 //!   and the commands `mail:test` and `mail:suppressions`.
 //! - [`SendingDomains`] checks SPF, DKIM and DMARC (`mail:domains`);
 //!   [`MailFake`] records mail and plays the provider in tests.
+//! - Inbound mail (crate feature `inbound`, module [`inbound`]): received
+//!   messages parsed into [`InboundMail`](inbound::InboundMail), routed to
+//!   mailboxes by address (`m.mailbox("reply+{token}@in.acme.test", handler)`,
+//!   [`ModuleBuilderMailExt`](inbound::ModuleBuilderMailExt)) through
+//!   [`Inbound`](inbound::Inbound), with signed reply addresses
+//!   ([`ReplyTokens`](inbound::ReplyTokens)), raw `.eml` files on a
+//!   navree-storage disk, the SES, Mailgun, Postmark and raw MIME source
+//!   routes under `/api/mail/inbound`, and `InboundMailReceived`.
 //!
 //! Every message is validated before it reaches a transport (sender, at
 //! least one recipient, parseable addresses, no line break in the subject
@@ -96,6 +104,8 @@ mod dkim;
 mod domains;
 mod error;
 mod fake;
+#[cfg(feature = "inbound")]
+pub mod inbound;
 mod job;
 mod mailable;
 mod mailer;
@@ -133,6 +143,11 @@ pub use domains::{
 };
 pub use error::MailError;
 pub use fake::MailFake;
+#[cfg(feature = "inbound")]
+pub use inbound::{
+    Inbound, InboundError, InboundMail, InboundOptions, Incoming, MailboxContext, MailboxHandler,
+    ModuleBuilderMailExt, Received, ReplyTokens,
+};
 pub use job::SendMailJob;
 pub use mailable::{Held, Mailable, TemplateMail};
 pub use mailer::{Mailer, ScopedMailer};

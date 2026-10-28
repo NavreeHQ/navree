@@ -286,6 +286,10 @@ Navree's modules give each refusal its own code, so a login form can say "wrong 
 | billing | `invalid_webhook_signature` | 400 | `Invalid webhook signature.` |
 | billing | `invalid_webhook_payload` | 400 | `Invalid webhook payload.` |
 | billing | `payment_provider_error` | 502 | `The payment provider refused the request: ...` |
+| mail | `mail_transport_unusable` | 422 | `mailgun: the API answered 401` (a transport that fails its `usable` check) |
+| mail | `mail_too_large` | 413 | ``the message is 31457280 bytes, over the 26214400-byte limit (`mail.inbound.max_size`)`` |
+| mail | `invalid_inbound_mail` | 400 | `the postmark payload is malformed: the body is not JSON` |
+| mail | `invalid_reply_token` | 400 | `the reply token is invalid` |
 | webhooks | `invalid_webhook_signature` | 400 | `Invalid webhook signature` |
 | integrations | `unknown_integration` | 404 | ``Unknown integration `zoom` `` |
 | integrations | `unknown_scope_set` | 400 | ``Unknown scope set `directory` for Slack`` |
@@ -300,6 +304,7 @@ Navree's modules give each refusal its own code, so a login form can say "wrong 
 | integrations | `integration_reauthorization_required` | 409 | `Connect Google Workspace again to continue` |
 | integrations | `integration_unavailable` | 502 | `Slack is unavailable. Please try again.` |
 | integrations | `integration_api_error` | 502 | `Slack answered: channel_not_found` |
+| integrations | `mailbox_watch_not_found` | 404 | `Mailbox watch not found` |
 | queue | `operation_finished` | 409 | `The operation has already finished.` |
 | storage | `invalid_file_path` | 400 | `Invalid file path.` |
 | storage | `file_type_not_allowed` | 400 | `The file must be of type: application/pdf, image/* (it is text/html).` |

@@ -33,6 +33,7 @@ conventions, and says which skill to load for each task.
 | [`navree-events-and-broadcasting`](navree-events-and-broadcasting/SKILL.md) | Events and listeners; real-time channels over WebSockets |
 | [`navree-mail-and-notifications`](navree-mail-and-notifications/SKILL.md) | Mail with templates and transports; notifications over several channels |
 | [`navree-mail-delivery`](navree-mail-delivery/SKILL.md) | Email APIs, tenant transports, the delivery log, suppressions, hold for approval, tracking, DKIM and domain checks |
+| [`navree-inbound-mail`](navree-inbound-mail/SKILL.md) | Received mail routed to mailboxes by address, signed reply addresses, the SES, Mailgun, Postmark and raw MIME sources, watched Microsoft 365 and Gmail mailboxes, `MailFake::receive` (feature `mail-inbound`) |
 | [`navree-notification-channels`](navree-notification-channels/SKILL.md) | Notifications over Slack, Teams, SMS, WhatsApp and web push; opt-outs, push subscriptions, the delivery log and provider callbacks |
 | [`navree-notification-preferences`](navree-notification-preferences/SKILL.md) | What people and workspaces receive: channels per category, digests, quiet hours, send windows, held deliveries and per-workspace mail templates |
 | [`navree-storage`](navree-storage/SKILL.md) | Disks (local, S3, Google Cloud Storage, Azure), uploads, direct browser uploads, signed links and disk sync |

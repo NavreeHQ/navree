@@ -59,6 +59,10 @@ pub struct MailOptions {
     /// The provider webhooks that report deliveries, bounces and
     /// complaints.
     pub webhooks: WebhookOptions,
+    /// Inbound mail: size limit, the disk for raw messages, reply tokens
+    /// and the provider sources (crate feature `inbound`).
+    #[cfg(feature = "inbound")]
+    pub inbound: crate::inbound::InboundOptions,
 }
 
 impl Default for MailOptions {
@@ -72,6 +76,8 @@ impl Default for MailOptions {
             delivery: DeliveryOptions::default(),
             tracking: TrackingOptions::default(),
             webhooks: WebhookOptions::default(),
+            #[cfg(feature = "inbound")]
+            inbound: crate::inbound::InboundOptions::default(),
         }
     }
 }
@@ -109,6 +115,8 @@ impl ConfigSection for MailOptions {
                 return Err("`tracking.base_url` must be an http(s) URL".to_owned());
             }
         }
+        #[cfg(feature = "inbound")]
+        self.inbound.validate()?;
         Ok(())
     }
 }

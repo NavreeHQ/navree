@@ -177,6 +177,7 @@ export const sections: DocsSection[] = [
       "time-zones", // Owner: time-zones
       "mail",
       "mail-delivery",
+      "inbound-mail", // Owner: mail-inbound
       "notifications",
       "notification-channels", // Owner: notify-channels
       "notification-preferences", // Owner: notify-preferences

@@ -1,0 +1,77 @@
+{
+  "FromName": "Ada Lovelace",
+  "MessageStream": "inbound",
+  "From": "ada@example.com",
+  "FromFull": {
+    "Email": "ada@example.com",
+    "Name": "Ada Lovelace",
+    "MailboxHash": ""
+  },
+  "To": "\"Acme Support\" <reply+abc@in.acme.test>",
+  "ToFull": [
+    {
+      "Email": "reply+abc@in.acme.test",
+      "Name": "Acme Support",
+      "MailboxHash": "abc"
+    }
+  ],
+  "Cc": "grace@example.com",
+  "CcFull": [
+    {
+      "Email": "grace@example.com",
+      "Name": "",
+      "MailboxHash": ""
+    }
+  ],
+  "Bcc": "",
+  "BccFull": [],
+  "OriginalRecipient": "reply+abc@in.acme.test",
+  "Subject": "Re: [#42] Printer on fire",
+  "MessageID": "73e6d360-66eb-11e1-8e72-a8904824019b",
+  "ReplyTo": "",
+  "MailboxHash": "abc",
+  "Date": "Tue, 27 Oct 2026 10:14:00 +0100",
+  "TextBody": "Thanks, the fire is out now.\n\nOn Mon, 26 Oct 2026 at 18:02, Acme Support <support@acme.test> wrote:\n> We are sending someone over.\n",
+  "HtmlBody": "<p>Thanks, the fire is out now.</p>",
+  "StrippedTextReply": "Thanks, the fire is out now.",
+  "Tag": "",
+  "Headers": [
+    {
+      "Name": "X-Spam-Checker-Version",
+      "Value": "SpamAssassin 3.3.1 (2010-03-16) onrs-ord-pm-inbound1.wildbit.com"
+    },
+    {
+      "Name": "X-Spam-Status",
+      "Value": "No"
+    },
+    {
+      "Name": "X-Spam-Score",
+      "Value": "-0.1"
+    },
+    {
+      "Name": "Received-SPF",
+      "Value": "Pass (sender SPF authorized) identity=mailfrom; client-ip=203.0.113.7"
+    },
+    {
+      "Name": "MIME-Version",
+      "Value": "1.0"
+    },
+    {
+      "Name": "Message-ID",
+      "Value": "<CAF2reply-0001@mail.example.com>"
+    },
+    {
+      "Name": "In-Reply-To",
+      "Value": "<ticket-42@acme.test>"
+    }
+  ],
+  "Attachments": [
+    {
+      "Name": "notes.txt",
+      "Content": "ZmlyZTogb3V0Cg==",
+      "ContentType": "text/plain",
+      "ContentLength": 10,
+      "ContentID": ""
+    }
+  ]
+}
