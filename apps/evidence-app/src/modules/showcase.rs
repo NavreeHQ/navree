@@ -142,7 +142,7 @@ impl EvidenceMcp {
             .find_by_slug(&args.workspace)
             .await
             .map_err(|e| AppError::internal(e.to_string()))?
-            .ok_or_else(|| AppError::not_found())?;
+            .ok_or_else(AppError::not_found)?;
         let member = self
             .workspaces
             .membership(workspace.id, cx.user_id())

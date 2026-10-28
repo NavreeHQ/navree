@@ -91,8 +91,12 @@ for p in $SERVICES_PROFILES; do
 done
 
 if [ "$COMMAND" = "up" ]; then
-  compose up -d --wait "${SERVICES[@]}"
-  exit $?
+  compose up -d --wait "${SERVICES[@]}" || exit $?
+  # The app's bucket (a one-off job, so not part of --wait).
+  case " ${SERVICES[*]} " in
+    *" minio "*) compose run --rm minio-bucket || exit $? ;;
+  esac
+  exit 0
 fi
 if [ "$COMMAND" = "down" ]; then
   compose down -v --remove-orphans
