@@ -3,13 +3,13 @@
 use std::sync::Arc;
 
 use chrono::TimeDelta;
-use navree_db::Db;
+use navree_db::{Db, Executor, Statement};
 use navree_kernel::{AppContext, BoxError};
 use navree_schedule::{RunStatus, SkipReason};
-use sea_orm::ConnectionTrait;
-use sea_orm::sea_query::Query;
 use tokio::sync::{Semaphore, mpsc};
 
+use crate::databases::Scratch;
+use crate::on_every_server;
 use crate::support::{Tasks, TestDb, at, clock, scheduler, within};
 
 /// A task body that reports when it starts and then waits to be released.
@@ -52,9 +52,8 @@ impl Gate {
     }
 }
 
-#[tokio::test]
-async fn without_overlapping_skips_while_running() {
-    let db = TestDb::new();
+async fn without_overlapping_skips_while_running(scratch: Scratch) {
+    let db = TestDb::on(&scratch);
     let (gate, mut started) = Gate::new();
     let body = gate.task();
     let app = db
@@ -96,9 +95,8 @@ async fn without_overlapping_skips_while_running() {
     );
 }
 
-#[tokio::test]
-async fn without_overlapping_sees_runs_of_other_schedulers() {
-    let db = TestDb::new();
+async fn without_overlapping_sees_runs_of_other_schedulers(scratch: Scratch) {
+    let db = TestDb::on(&scratch);
     let clock = clock("2026-10-25T10:00:00Z");
     let (gate, mut started) = Gate::new();
     let (body_one, body_two) = (gate.task(), gate.task());
@@ -134,9 +132,8 @@ async fn without_overlapping_sees_runs_of_other_schedulers() {
     within(first).await.unwrap().unwrap();
 }
 
-#[tokio::test]
-async fn a_running_row_older_than_a_day_does_not_block() {
-    let db = TestDb::new();
+async fn a_running_row_older_than_a_day_does_not_block(scratch: Scratch) {
+    let db = TestDb::on(&scratch);
     let (gate, mut started) = Gate::new();
     gate.open();
     let body = gate.task();
@@ -153,18 +150,15 @@ async fn a_running_row_older_than_a_day_does_not_block() {
     let crashed = at("2026-10-25T10:00:00Z") - TimeDelta::hours(25);
     let db_handle = app.ctx().get::<Db>().await.unwrap();
     db_handle
-        .conn()
-        .execute(
-            Query::insert()
-                .into_table("schedule_runs")
-                .columns(["task", "tick", "started_at", "status"])
-                .values_panic([
-                    "import".into(),
-                    crashed.into(),
-                    crashed.into(),
-                    "running".into(),
-                ]),
-        )
+        .execute(&Statement::portable(
+            "INSERT INTO schedule_runs (task, tick, started_at, status) VALUES (?, ?, ?, ?)",
+            [
+                "import".into(),
+                crashed.into(),
+                crashed.into(),
+                "running".into(),
+            ],
+        ))
         .await
         .unwrap();
 
@@ -177,9 +171,8 @@ async fn a_running_row_older_than_a_day_does_not_block() {
     started.recv().await.expect("it ran");
 }
 
-#[tokio::test]
-async fn tasks_may_overlap_by_default() {
-    let db = TestDb::new();
+async fn tasks_may_overlap_by_default(scratch: Scratch) {
+    let db = TestDb::on(&scratch);
     let (gate, mut started) = Gate::new();
     let body = gate.task();
     let app = db
@@ -212,3 +205,11 @@ async fn tasks_may_overlap_by_default() {
         );
     }
 }
+
+on_every_server!(
+    "navree_schedule";
+    without_overlapping_skips_while_running,
+    without_overlapping_sees_runs_of_other_schedulers,
+    a_running_row_older_than_a_day_does_not_block,
+    tasks_may_overlap_by_default,
+);

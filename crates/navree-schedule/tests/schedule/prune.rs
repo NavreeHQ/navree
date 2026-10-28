@@ -2,30 +2,27 @@
 
 use chrono::{DateTime, Utc};
 use navree_db::navree_schema::{IndexKind, Schema};
-use navree_db::{Db, MIGRATIONS_TABLE};
+use navree_db::{Db, Executor, ExecutorExt, MIGRATIONS_TABLE, Statement, prune_time_series_on};
 use navree_kernel::App;
-use sea_orm::sea_query::Query;
-use sea_orm::{ConnectionTrait, Statement};
 
+use crate::databases::Scratch;
+use crate::on_every_server;
 use crate::support::{Counter, Tasks, TestDb, at, clock, runs, scheduler};
 
 async fn insert_run(app: &App, task: &str, tick: DateTime<Utc>) {
     let db = app.ctx().get::<Db>().await.unwrap();
-    db.conn()
-        .execute(
-            Query::insert()
-                .into_table("schedule_runs")
-                .columns(["task", "tick", "started_at", "finished_at", "status"])
-                .values_panic([
-                    task.into(),
-                    tick.into(),
-                    tick.into(),
-                    tick.into(),
-                    "succeeded".into(),
-                ]),
-        )
-        .await
-        .unwrap();
+    db.execute(&Statement::portable(
+        "INSERT INTO schedule_runs (task, tick, started_at, finished_at, status) VALUES (?, ?, ?, ?, ?)",
+        [
+            task.into(),
+            tick.into(),
+            tick.into(),
+            tick.into(),
+            "succeeded".into(),
+        ],
+    ))
+    .await
+    .unwrap();
 }
 
 async fn tasks_recorded(app: &App) -> Vec<String> {
@@ -34,9 +31,8 @@ async fn tasks_recorded(app: &App) -> Vec<String> {
     tasks
 }
 
-#[tokio::test]
-async fn runs_older_than_a_week_are_pruned_hourly() {
-    let db = TestDb::new();
+async fn runs_older_than_a_week_are_pruned_hourly(scratch: Scratch) {
+    let db = TestDb::on(&scratch);
     let count = Counter::default();
     let app = db
         .boot(
@@ -64,24 +60,18 @@ async fn runs_older_than_a_week_are_pruned_hourly() {
 /// `schedule_runs` is time series: a TimescaleDB hypertable on `tick` (its
 /// key, `(task, tick)`, already holds the time), a regular table with a
 /// `tick` index elsewhere, which hourly pruning reads.
-#[tokio::test]
-async fn the_runs_are_declared_a_hypertable() {
-    let db = TestDb::new();
+async fn the_runs_are_declared_a_hypertable(scratch: Scratch) {
+    let db = TestDb::on(&scratch);
     let app = db
         .boot(&clock("2026-10-25T10:30:00Z"), Tasks::new(|_s| {}))
         .await;
     let pool = app.ctx().get::<Db>().await.unwrap();
     let applied: Vec<String> = pool
-        .conn()
-        .query_all_raw(Statement::from_string(
-            pool.backend(),
-            format!("SELECT name FROM {MIGRATIONS_TABLE} WHERE module = 'schedule' ORDER BY name"),
-        ))
+        .fetch_column(&Statement::text(format!(
+            "SELECT name FROM {MIGRATIONS_TABLE} WHERE module = 'schedule' ORDER BY name"
+        )))
         .await
-        .unwrap()
-        .iter()
-        .map(|row| row.try_get::<String>("", "name").unwrap())
-        .collect();
+        .unwrap();
     assert_eq!(
         applied,
         [
@@ -90,13 +80,21 @@ async fn the_runs_are_declared_a_hypertable() {
         ]
     );
     let schema = Schema::new(&pool);
-    assert!(!schema.is_hypertable("schedule_runs").await.unwrap());
-    assert!(
-        schema
-            .has_index("schedule_runs", ["tick"], Some(IndexKind::Index))
-            .await
-            .unwrap()
+    // A hypertable where the database has TimescaleDB, else a regular table
+    // with the `tick` index the hourly pruning reads.
+    let timescale = schema.target().await.unwrap().timescaledb().is_some();
+    assert_eq!(
+        schema.is_hypertable("schedule_runs").await.unwrap(),
+        timescale
     );
+    if !timescale {
+        assert!(
+            schema
+                .has_index("schedule_runs", ["tick"], Some(IndexKind::Index))
+                .await
+                .unwrap()
+        );
+    }
     assert!(
         schema
             .has_index("schedule_runs", ["task", "tick"], Some(IndexKind::Primary))
@@ -104,3 +102,36 @@ async fn the_runs_are_declared_a_hypertable() {
             .unwrap()
     );
 }
+
+/// `prune_time_series_on` cuts the run table (whole chunks on TimescaleDB)
+/// and counts the rows it removed.
+async fn pruning_counts_what_it_deletes(scratch: Scratch) {
+    let db = TestDb::on(&scratch);
+    let app = db
+        .boot(&clock("2026-10-25T10:30:00Z"), Tasks::new(|_s| {}))
+        .await;
+    for (task, tick) in [
+        ("old", "2026-10-01T00:00:00Z"),
+        ("older", "2026-09-01T00:00:00Z"),
+        ("new", "2026-10-24T00:00:00Z"),
+    ] {
+        insert_run(&app, task, at(tick)).await;
+    }
+    let pool = app.ctx().get::<Db>().await.unwrap();
+    let deleted = prune_time_series_on(&*pool, "schedule_runs", "tick", at("2026-10-10T00:00:00Z"))
+        .await
+        .unwrap();
+    assert_eq!(deleted, 2);
+    assert_eq!(tasks_recorded(&app).await, ["new"]);
+    let again = prune_time_series_on(&*pool, "schedule_runs", "tick", at("2026-10-10T00:00:00Z"))
+        .await
+        .unwrap();
+    assert_eq!(again, 0);
+}
+
+on_every_server!(
+    "navree_schedule";
+    pruning_counts_what_it_deletes,
+    runs_older_than_a_week_are_pruned_hourly,
+    the_runs_are_declared_a_hypertable,
+);

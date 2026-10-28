@@ -7,11 +7,12 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use chrono::{DateTime, Utc};
 use navree_contracts::{Clock, FixedClock};
-use navree_db::{DatabaseModule, Db, DbOptions};
+use navree_db::{DatabaseModule, Db, DbOptions, Executor, Statement};
 use navree_kernel::{App, AppBuilder, AppContext, BoxError, Module, ModuleBuilder, Navree};
 use navree_schedule::{ModuleBuilderScheduleExt, Schedule, ScheduleModule, Scheduler};
 use navree_testing::TempDirGuard;
-use sea_orm::{ConnectionTrait, Statement};
+
+use crate::databases::Scratch;
 
 /// Fails the test instead of hanging when `f` takes longer than 20 seconds.
 pub async fn within<T>(f: impl std::future::Future<Output = T>) -> T {
@@ -64,16 +65,29 @@ impl Counter {
     }
 }
 
-/// A temporary SQLite database shared by the apps of one test.
+/// A database shared by the apps of one test: a temporary SQLite file, or
+/// the database of a [`Scratch`] on any server.
 pub struct TestDb {
     pub url: String,
-    _guard: TempDirGuard,
+    _guard: Option<TempDirGuard>,
 }
 
 impl TestDb {
+    /// A temporary SQLite file.
     pub fn new() -> Self {
         let (url, guard) = navree_testing::temp_sqlite_url();
-        Self { url, _guard: guard }
+        Self {
+            url,
+            _guard: Some(guard),
+        }
+    }
+
+    /// The scratch database of a test that runs on every server.
+    pub fn on(scratch: &Scratch) -> Self {
+        Self {
+            url: scratch.url.clone(),
+            _guard: None,
+        }
     }
 
     /// An app on this database with `ScheduleModule`, the `tasks` module and
@@ -120,21 +134,19 @@ pub struct RunRow {
 pub async fn runs(app: &App) -> Vec<RunRow> {
     let db = app.ctx().get::<Db>().await.expect("Db");
     let rows = db
-        .conn()
-        .query_all_raw(Statement::from_string(
-            db.backend(),
+        .fetch_all(&Statement::text(
             "SELECT task, tick, started_at, finished_at, status, error FROM schedule_runs ORDER BY tick, task",
         ))
         .await
         .expect("select schedule_runs");
     rows.iter()
         .map(|row| RunRow {
-            task: row.try_get("", "task").expect("task"),
-            tick: row.try_get("", "tick").expect("tick"),
-            started_at: row.try_get("", "started_at").expect("started_at"),
-            finished_at: row.try_get("", "finished_at").expect("finished_at"),
-            status: row.try_get("", "status").expect("status"),
-            error: row.try_get("", "error").expect("error"),
+            task: row.get("task").expect("task"),
+            tick: row.get("tick").expect("tick"),
+            started_at: row.get("started_at").expect("started_at"),
+            finished_at: row.get("finished_at").expect("finished_at"),
+            status: row.get("status").expect("status"),
+            error: row.get("error").expect("error"),
         })
         .collect()
 }

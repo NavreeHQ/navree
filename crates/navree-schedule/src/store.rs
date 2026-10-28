@@ -3,11 +3,7 @@
 
 use chrono::{DateTime, Utc};
 use navree_db::navree_schema::{Hypertable, KeyStrategy, Migration, Schema, SchemaResult};
-use navree_db::prune_time_series;
-use sea_orm::sea_query::{ColumnDef, Expr, ExprTrait, Index, OnConflict, Query, Table};
-use sea_orm::{ConnectionTrait, DbErr};
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
+use navree_db::{DbError, Executor, Statement, prune_time_series_on};
 
 /// The table recording every claimed tick.
 pub const RUNS_TABLE: &str = "schedule_runs";
@@ -26,122 +22,99 @@ pub(crate) const FAILED: &str = "failed";
 /// error, PRIMARY KEY (task, tick))`.
 pub(crate) struct CreateScheduleRuns;
 
-impl MigrationName for CreateScheduleRuns {
-    fn name(&self) -> &str {
-        "m20261025_000001_create_schedule_runs"
-    }
+impl CreateScheduleRuns {
+    /// The name recorded in `navree_migrations`.
+    pub(crate) const NAME: &'static str = "m20261025_000001_create_schedule_runs";
 }
 
-#[async_trait]
-impl MigrationTrait for CreateScheduleRuns {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table(RUNS_TABLE)
-                    .col(ColumnDef::new("task").string_len(191).not_null())
-                    .col(ColumnDef::new("tick").timestamp_with_time_zone().not_null())
-                    .col(
-                        ColumnDef::new("started_at")
-                            .timestamp_with_time_zone()
-                            .not_null(),
-                    )
-                    .col(
-                        ColumnDef::new("finished_at")
-                            .timestamp_with_time_zone()
-                            .null(),
-                    )
-                    .col(ColumnDef::new("status").string_len(16).not_null())
-                    .col(ColumnDef::new("error").text().null())
-                    .primary_key(Index::create().col("task").col("tick"))
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("idx_schedule_runs_task_status")
-                    .table(RUNS_TABLE)
-                    .col("task")
-                    .col("status")
-                    .to_owned(),
-            )
+impl Migration for CreateScheduleRuns {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema
+            .create(RUNS_TABLE, |t| {
+                t.string("task").length(191);
+                t.timestamp_tz("tick");
+                t.timestamp_tz("started_at");
+                t.timestamp_tz("finished_at").nullable();
+                t.string("status").length(16);
+                t.text("error").nullable();
+                t.primary(["task", "tick"]);
+                t.index(["task", "status"])
+                    .name("idx_schedule_runs_task_status");
+            })
             .await
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .drop_table(Table::drop().table(RUNS_TABLE).to_owned())
-            .await
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop_if_exists(RUNS_TABLE).await
     }
 }
 
 /// Claims `tick` of `task` (`INSERT … ON CONFLICT DO NOTHING`): true when
 /// this call inserted the row, false when another scheduler already had.
-pub(crate) async fn claim<C: ConnectionTrait>(
-    conn: &C,
+pub(crate) async fn claim<E: Executor + ?Sized>(
+    executor: &E,
     task: &str,
     tick: DateTime<Utc>,
     started_at: DateTime<Utc>,
-) -> Result<bool, DbErr> {
-    let mut insert = Query::insert();
-    insert
-        .into_table(RUNS_TABLE)
-        .columns(["task", "tick", "started_at", "status"])
-        .values([task.into(), tick.into(), started_at.into(), RUNNING.into()])
-        .map_err(|error| DbErr::Custom(error.to_string()))?
-        .on_conflict(
-            OnConflict::columns(["task", "tick"])
-                .do_nothing()
-                .to_owned(),
-        );
-    Ok(conn.execute(&insert).await?.rows_affected() == 1)
+) -> Result<bool, DbError> {
+    // MySQL's `INSERT IGNORE` skips a duplicate key (and only that, here:
+    // every column is bound and checked by the table).
+    let insert = match executor.backend() {
+        navree_db::Backend::MySql => "INSERT IGNORE INTO",
+        _ => "INSERT INTO",
+    };
+    let conflict = match executor.backend() {
+        navree_db::Backend::MySql => "",
+        _ => " ON CONFLICT (task, tick) DO NOTHING",
+    };
+    let statement = Statement::portable(
+        format!(
+            "{insert} {RUNS_TABLE} (task, tick, started_at, status) VALUES (?, ?, ?, ?){conflict}"
+        ),
+        [task.into(), tick.into(), started_at.into(), RUNNING.into()],
+    );
+    Ok(executor.execute(&statement).await?.rows_affected == 1)
 }
 
 /// Records how the run of `tick` of `task` ended (`error` is `None` on success).
-pub(crate) async fn finish<C: ConnectionTrait>(
-    conn: &C,
+pub(crate) async fn finish<E: Executor + ?Sized>(
+    executor: &E,
     task: &str,
     tick: DateTime<Utc>,
     finished_at: DateTime<Utc>,
     error: Option<&str>,
-) -> Result<(), DbErr> {
+) -> Result<(), DbError> {
     let status = if error.is_some() { FAILED } else { SUCCEEDED };
-    conn.execute(
-        Query::update()
-            .table(RUNS_TABLE)
-            .values([
-                ("finished_at", finished_at.into()),
-                ("status", status.into()),
-                ("error", error.map(str::to_owned).into()),
-            ])
-            .and_where(Expr::col("task").eq(task))
-            .and_where(Expr::col("tick").eq(tick)),
-    )
-    .await?;
+    let statement = Statement::portable(
+        format!(
+            "UPDATE {RUNS_TABLE} SET finished_at = ?, status = ?, error = ? WHERE task = ? AND tick = ?"
+        ),
+        [
+            finished_at.into(),
+            status.into(),
+            error.map(str::to_owned).into(),
+            task.into(),
+            tick.into(),
+        ],
+    );
+    executor.execute(&statement).await?;
     Ok(())
 }
 
 /// Whether `task` has a `running` row for a tick other than `tick` that
 /// started after `since` (older rows are left behind by crashed processes).
-pub(crate) async fn running_elsewhere<C: ConnectionTrait>(
-    conn: &C,
+pub(crate) async fn running_elsewhere<E: Executor + ?Sized>(
+    executor: &E,
     task: &str,
     tick: DateTime<Utc>,
     since: DateTime<Utc>,
-) -> Result<bool, DbErr> {
-    let rows = conn
-        .query_all(
-            Query::select()
-                .column("started_at")
-                .from(RUNS_TABLE)
-                .and_where(Expr::col("task").eq(task))
-                .and_where(Expr::col("status").eq(RUNNING))
-                .and_where(Expr::col("tick").ne(tick)),
-        )
-        .await?;
-    for row in rows {
-        let started_at: DateTime<Utc> = row.try_get("", "started_at")?;
+) -> Result<bool, DbError> {
+    let statement = Statement::portable(
+        format!("SELECT started_at FROM {RUNS_TABLE} WHERE task = ? AND status = ? AND tick <> ?"),
+        [task.into(), RUNNING.into(), tick.into()],
+    );
+    for row in executor.fetch_all(&statement).await? {
+        let started_at: DateTime<Utc> = row.get("started_at")?;
         if started_at > since {
             return Ok(true);
         }
@@ -152,11 +125,11 @@ pub(crate) async fn running_elsewhere<C: ConnectionTrait>(
 /// Deletes the runs of ticks before `before`; returns how many. On
 /// TimescaleDB, where `schedule_runs` is a hypertable, the days entirely
 /// before `before` go as whole chunks.
-pub(crate) async fn prune<C: ConnectionTrait + Send + Sync>(
-    conn: &C,
+pub(crate) async fn prune<E: Executor + ?Sized>(
+    executor: &E,
     before: DateTime<Utc>,
-) -> Result<u64, DbErr> {
-    prune_time_series(conn, RUNS_TABLE, "tick", before).await
+) -> Result<u64, DbError> {
+    prune_time_series_on(executor, RUNS_TABLE, "tick", before).await
 }
 
 /// How `schedule_runs` is partitioned on TimescaleDB: by `tick`, a day per

@@ -9,6 +9,8 @@ use navree_schedule::{
     ModuleBuilderScheduleExt, RUNS_TABLE, ScheduleError, ScheduleModule, Scheduler,
 };
 
+use crate::databases::Scratch;
+use crate::on_every_server;
 use crate::support::{Counter, Tasks, TestDb, at, clock, scheduler};
 
 /// A feature module that imports `ScheduleModule` by type, as the PRD shows.
@@ -23,9 +25,8 @@ impl Module for BillingModule {
     }
 }
 
-#[tokio::test]
-async fn a_plain_import_reuses_the_configured_module() {
-    let db = TestDb::new();
+async fn a_plain_import_reuses_the_configured_module(scratch: Scratch) {
+    let db = TestDb::on(&scratch);
     let count = Counter::default();
     let app = db
         .app(&clock("2026-10-25T00:00:00Z"), BillingModule(count.clone()))
@@ -41,9 +42,8 @@ async fn a_plain_import_reuses_the_configured_module() {
     assert_eq!(count.get(), 1);
 }
 
-#[tokio::test]
-async fn the_migration_creates_schedule_runs() {
-    let db = TestDb::new();
+async fn the_migration_creates_schedule_runs(scratch: Scratch) {
+    let db = TestDb::on(&scratch);
     let app = db
         .boot(&clock("2026-10-25T00:00:00Z"), Tasks::new(|_| {}))
         .await;
@@ -84,9 +84,8 @@ async fn without_a_clock_the_system_clock_is_used() {
     assert!(drift < 5, "{drift}");
 }
 
-#[tokio::test]
-async fn ticking_after_the_app_is_dropped_fails() {
-    let db = TestDb::new();
+async fn ticking_after_the_app_is_dropped_fails(scratch: Scratch) {
+    let db = TestDb::on(&scratch);
     let app = db
         .boot(&clock("2026-10-25T00:00:00Z"), Tasks::new(|_| {}))
         .await;
@@ -98,3 +97,10 @@ async fn ticking_after_the_app_is_dropped_fails() {
         .unwrap_err();
     assert!(matches!(error, ScheduleError::AppDropped), "{error}");
 }
+
+on_every_server!(
+    "navree_schedule";
+    a_plain_import_reuses_the_configured_module,
+    the_migration_creates_schedule_runs,
+    ticking_after_the_app_is_dropped_fails,
+);
