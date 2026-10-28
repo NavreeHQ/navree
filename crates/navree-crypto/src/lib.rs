@@ -53,6 +53,7 @@ mod key;
 mod module;
 pub mod qr;
 mod tokens;
+pub mod totp;
 pub mod webpush;
 
 pub use encrypter::Encrypter;
