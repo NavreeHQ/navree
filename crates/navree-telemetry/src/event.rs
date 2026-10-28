@@ -150,7 +150,8 @@ impl TelemetryEvent {
 /// once the response is ready.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RequestHandled {
-    /// The method (`GET`).
+    /// The method (`GET`): one HTTP defines, or `OTHER` for a made-up one
+    /// (navree-http's pipeline).
     pub method: String,
     /// The matched route template (`/api/v1/deals/{id}`); `None` when no
     /// route matched.

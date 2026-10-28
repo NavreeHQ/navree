@@ -174,6 +174,48 @@ async fn a_flood_of_unknown_clients_cannot_use_up_a_clients_budget() {
 }
 
 #[tokio::test]
+async fn nobody_can_use_up_a_public_clients_budget() {
+    // A public client has no secret: anyone can name it, so a per-client
+    // count would let one attacker lock every user of the app out. Each
+    // address keeps its own limit.
+    let world = World::with(limits(2, 3)).await;
+    let mobile = world
+        .register(
+            NewClient::public("Acme mobile")
+                .redirect_uri(support::REDIRECT_URI)
+                .scopes(["deals:read"])
+                .device(),
+        )
+        .await;
+    let id = mobile.client.id.to_string();
+    let request = |ip: &'static str| {
+        let id = id.clone();
+        let world = &world;
+        async move {
+            world
+                .client()
+                .post("/oauth/token")
+                .header("x-forwarded-for", ip)
+                .form(&[
+                    ("client_id", id.as_str()),
+                    ("grant_type", "refresh_token"),
+                    ("refresh_token", "nvr_unknown"),
+                ])
+                .send()
+                .await
+        }
+    };
+    for attacker in ["203.0.113.7", "203.0.113.8"] {
+        for _ in 0..3 {
+            assert_ne!(request(attacker).await.status(), 429);
+        }
+        assert_limited(request(attacker).await);
+    }
+    let status = request("198.51.100.9").await.status();
+    assert_ne!(status, 429, "a user of the app is locked out");
+}
+
+#[tokio::test]
 async fn a_refusal_is_audited_once_per_window() {
     let world = World::with(limits(1, 0)).await;
     let zapier = client(&world, "Zapier").await;
