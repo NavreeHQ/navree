@@ -327,7 +327,11 @@ impl AuthService {
     /// `current_password` (a field error on `current_password` when missing
     /// or wrong, counted by the login throttle), so a stolen access token
     /// cannot move the account to an address whose password reset mail the
-    /// thief reads. It must be free ([`AuthError::EmailTaken`]) and is
+    /// thief reads. The [`SignInPolicy`](crate::SignInPolicy)s must allow a
+    /// password ([`SignInMethod::Password`](crate::SignInMethod::Password))
+    /// for the old address and the new one: an account of a domain that
+    /// enforces single sign-on can't leave it, and no account can take an
+    /// address of such a domain. It must be free ([`AuthError::EmailTaken`]) and is
     /// unverified until the user follows the verification link mailed to
     /// it; the old address is told about the change (both when the app has
     /// a `Mailer`), and a pending password reset of the old address is
@@ -379,6 +383,15 @@ impl AuthService {
                 };
                 self.confirm_password(&user, password, "current_password", meta)
                     .await?;
+                // The password moves the account, so the sign-in policies
+                // must let both addresses use one: an account can't leave a
+                // domain that enforces single sign-on, or take an address
+                // of one.
+                for address in [user.email.as_str(), email.as_str()] {
+                    let attempt = crate::SignInAttempt::new(address, crate::SignInMethod::Password)
+                        .user(user.id);
+                    self.check_sign_in(&attempt, meta).await?;
+                }
                 old.insert("email".to_owned(), json!(user.email));
                 new.insert("email".to_owned(), json!(email));
                 row.email = Set(email.clone());
