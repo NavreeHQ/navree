@@ -103,29 +103,18 @@ pub fn query(
 /// into the statement) and escaped in Meilisearch's and Typesense's filter
 /// strings.
 pub fn filters(value: &Value) {
-    let filters = [
-        Filter::eq("status", value),
-        Filter::ne("status", value),
-        Filter::is_in("status", [value, value]),
-        Filter::range::<Value>("amount", value.clone()..),
-        Filter::All(vec![
-            Filter::eq("status", value),
-            Filter::Any(vec![Filter::null("owner"), Filter::ne("stage", value)]),
-        ]),
-        Filter::Not(Box::new(Filter::eq("status", value))),
-        Filter::NotIn {
-            field: "status".to_owned(),
-            values: vec![value.clone()],
-        },
-        Filter::Cmp {
-            field: "amount".to_owned(),
-            op: CmpOp::Lt,
-            value: value.clone(),
-        },
-    ];
+    let filters = shapes(value);
+    // The SQL does not depend on the value, only on its type: whatever the
+    // value holds, it is bound.
+    let probe = match value {
+        Value::String(_) => Some(Value::String("x".to_owned())),
+        Value::Number(_) => Some(Value::from(1)),
+        _ => None,
+    };
+    let probes = probe.as_ref().map(shapes);
     let fields: BTreeMap<String, Value> =
         BTreeMap::from([("status".to_owned(), value.clone())]);
-    for filter in filters {
+    for (n, filter) in filters.into_iter().enumerate() {
         let _ = filter.fields();
         let _ = filter.matches(&fields);
         let filter = filter.normalized();
@@ -173,16 +162,39 @@ pub fn filters(value: &Value) {
                 _ => sql.text().matches('?').count() == sql.bound(),
             };
             assert!(placeholders, "placeholders and values differ: {}", sql.text());
-            if let Value::String(text) = value
-                && text.len() >= 4
-                && text.contains(['\'', ';', '"', '-', '\\'])
-            {
-                assert!(
-                    !sql.text().contains(text.as_str()),
-                    "the value is in the SQL text: {}",
-                    sql.text()
+            if let Some(probes) = &probes {
+                let mut expected = Sql::new(backend);
+                expected.filter(&probes[n].clone().normalized(), "fields");
+                assert_eq!(
+                    sql.text(),
+                    expected.text(),
+                    "the SQL depends on the value {value}"
                 );
             }
         }
     }
+}
+
+/// Filters on `value`, one of each shape.
+fn shapes(value: &Value) -> [Filter; 8] {
+    [
+        Filter::eq("status", value),
+        Filter::ne("status", value),
+        Filter::is_in("status", [value, value]),
+        Filter::range::<Value>("amount", value.clone()..),
+        Filter::All(vec![
+            Filter::eq("status", value),
+            Filter::Any(vec![Filter::null("owner"), Filter::ne("stage", value)]),
+        ]),
+        Filter::Not(Box::new(Filter::eq("status", value))),
+        Filter::NotIn {
+            field: "status".to_owned(),
+            values: vec![value.clone()],
+        },
+        Filter::Cmp {
+            field: "amount".to_owned(),
+            op: CmpOp::Lt,
+            value: value.clone(),
+        },
+    ]
 }

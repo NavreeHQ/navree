@@ -66,6 +66,7 @@ fuzz_target!(|data: &[u8]| {
         let (parts, ()) = request.into_parts();
         if let Some(host) = request_host(&parts) {
             assert!(!host.is_empty() && !host.ends_with('.'));
+            assert!(!host.contains(':'));
             assert_eq!(host, host.to_ascii_lowercase());
             assert!(!host.starts_with('['));
         }

@@ -109,7 +109,9 @@ pub fn request_host(parts: &Parts) -> Option<String> {
 }
 
 /// `raw` (a `Host` value) lower-cased, without its port or trailing dot;
-/// `None` for IP literals and empty values.
+/// `None` for IP literals, empty values and values that are no host name:
+/// a second trailing dot (`example.com..`) or a `:` that is no port
+/// separator (`a:b`).
 pub(crate) fn host_without_port(raw: &str) -> Option<String> {
     let raw = raw.trim();
     if raw.starts_with('[') {
@@ -120,7 +122,11 @@ pub(crate) fn host_without_port(raw: &str) -> Option<String> {
         _ => raw,
     };
     let name = name.strip_suffix('.').unwrap_or(name).to_ascii_lowercase();
-    (!name.is_empty() && name.parse::<std::net::IpAddr>().is_err()).then_some(name)
+    (!name.is_empty()
+        && !name.ends_with('.')
+        && !name.contains(':')
+        && name.parse::<std::net::IpAddr>().is_err())
+    .then_some(name)
 }
 
 #[cfg(test)]
@@ -205,6 +211,10 @@ mod tests {
             request_host(&parts(None, "https://shop.acme.test/x")).as_deref(),
             Some("shop.acme.test")
         );
+        // Found by fuzzing: a second dot or a stray colon is no host name.
+        for malformed in ["ez..", "crm.acme-corp.com..", ".", "..", "a:b", "a:b:8080", "a.b:c"] {
+            assert_eq!(request_host(&parts(Some(malformed), "/")), None, "{malformed}");
+        }
         assert_eq!(request_host(&parts(Some("127.0.0.1:8080"), "/")), None);
         assert_eq!(request_host(&parts(Some("[::1]:8080"), "/")), None);
         assert_eq!(request_host(&parts(None, "/")), None);

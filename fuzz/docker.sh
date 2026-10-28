@@ -26,4 +26,4 @@ MSYS_NO_PATHCONV=1 exec docker run --rm \
   -v navree-fuzz-registry:/usr/local/cargo/registry \
   -v navree-fuzz-corpus:/corpus \
   -e CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-6}" \
-  navree-fuzz cargo fuzz "$@"
+  navree-fuzz sh -c 'for arg; do case "$arg" in /corpus/*) mkdir -p "$arg";; esac; done; exec cargo fuzz "$@"' sh "$@"

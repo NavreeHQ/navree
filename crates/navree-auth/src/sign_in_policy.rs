@@ -142,11 +142,13 @@ pub struct SignInAttempt {
 /// ```
 pub fn email_domain(email: &str) -> Option<String> {
     let (_, domain) = email.trim().rsplit_once('@')?;
+    // Blanks around the domain or after its trailing dot are no part of it.
+    let domain = domain.trim();
     let domain = match url::Host::parse(domain) {
         Ok(url::Host::Domain(ascii)) => ascii,
         _ => domain.to_lowercase(),
     };
-    let domain = domain.trim_end_matches('.');
+    let domain = domain.trim_end_matches(|c: char| c == '.' || c.is_whitespace());
     (!domain.is_empty()).then(|| domain.to_owned())
 }
 
@@ -339,6 +341,32 @@ mod tests {
         assert_eq!(email_domain("ann"), None);
         assert_eq!(email_domain("ann@"), None);
         assert_eq!(email_domain("ann@."), None);
+    }
+
+    /// Found by fuzzing: a domain `url` cannot read as a host name (it has a
+    /// blank or a colon in it) kept the blank in front of or behind its
+    /// trailing dot, so the same address gave another domain once written
+    /// again. One spelling, whatever the input.
+    #[test]
+    fn blanks_around_a_domain_are_not_part_of_it() {
+        assert_eq!(email_domain("ann@acme.test. ").as_deref(), Some("acme.test"));
+        assert_eq!(email_domain("ann@acme.test .").as_deref(), Some("acme.test"));
+        assert_eq!(email_domain("ann@ acme.test").as_deref(), Some("acme.test"));
+        for email in [
+            " CRAEvA@E.tcM.me-Corpp.com:84/3.comes. .",
+            "a@b c . .",
+            "a@ . x . ",
+            "a@x\t.\t",
+        ] {
+            if let Some(domain) = email_domain(email) {
+                assert!(!domain.ends_with(|c: char| c == '.' || c.is_whitespace()), "{email}");
+                assert_eq!(
+                    email_domain(&format!("someone@{domain}")).as_deref(),
+                    Some(domain.as_str()),
+                    "{email}: the domain is not in its canonical spelling"
+                );
+            }
+        }
         assert_eq!(SignInAttempt::new("ann@", SignInMethod::Otp).domain(), None);
     }
 
