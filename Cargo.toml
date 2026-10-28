@@ -21,6 +21,7 @@ missing_docs = "warn"
 # ---------------------------------------------------------------------------
 navree = { path = "crates/navree", version = "0.1.0" }
 navree-kernel = { path = "crates/navree-kernel", version = "0.1.0" }
+navree-bounded = { path = "crates/navree-bounded", version = "0.1.0" }
 navree-contracts = { path = "crates/navree-contracts", version = "0.1.0" }
 navree-telemetry = { path = "crates/navree-telemetry", version = "0.1.0" }
 navree-macros = { path = "crates/navree-macros", version = "0.1.0" }
@@ -357,7 +358,8 @@ x509-parser = { version = "0.18.1", default-features = false }
 # messages, headers, parts and attachments, every charset through
 # encoding_rs (pure Rust; already in the tree).
 mail-parser = { version = "0.11.9", features = ["full_encoding"] }
-moka = { version = "0.12.16", features = ["future"] }
+# navree-bounded's tables: the raw hash table, so keys live once, in the slab.
+hashbrown = { version = "0.17.1", default-features = false, features = ["inline-more"] }
 dashmap = "6.2.1"
 wildmatch = "2.7.0"
 utoipa = { version = "6.0.0", features = ["chrono", "preserve_order", "preserve_path_order", "uuid"] }

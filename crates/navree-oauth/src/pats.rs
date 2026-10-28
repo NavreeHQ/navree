@@ -225,7 +225,7 @@ impl PersonalAccessTokens {
         record.save(&*tx).await?;
         drop(tx);
         let core = self.core.clone();
-        uow.after_commit(move || Box::pin(async move { core.forget([hash]).await }));
+        uow.after_commit(move || Box::pin(async move { core.forget([hash]) }));
         let entry = AuditEntry::new(AuditKind::Auth, "oauth.pat_revoked")
             .actor(user_id)
             .subject("PersonalAccessToken", id.to_string())

@@ -1,52 +1,31 @@
-//! [`MemoryStore`]: the in-process [`CacheStore`] on moka.
+//! [`MemoryStore`]: the in-process [`CacheStore`], on navree-bounded.
 
 use std::fmt;
 use std::time::Duration;
 
 use bytes::Bytes;
-use moka::Expiry;
-use moka::ops::compute::{CompResult, Op};
+use navree_bounded::{Cache, Compute, Computed};
 use navree_kernel::BoxFuture;
 use tokio::time::Instant;
 
 use crate::store::parse_integer;
 use crate::{CacheError, CacheStore};
 
-/// An in-process [`CacheStore`] on [moka](https://docs.rs/moka) with a TTL
-/// per entry.
+/// The most entries a [`MemoryStore`] holds unless told otherwise
+/// (`cache.memory_max_entries`).
+pub const DEFAULT_MAX_ENTRIES: usize = 1_000_000;
+
+/// An in-process [`CacheStore`]: a bounded cache with a TTL per entry.
 ///
 /// Expiry is checked against Tokio's clock, so `tokio::time::pause` and
-/// `advance` control it in tests; moka evicts expired entries in the
-/// background to reclaim memory. The store is unbounded and per process:
-/// every app gets its own.
+/// `advance` control it in tests: a read never returns an expired entry, and
+/// expired entries are removed as reads, writes and `sweep` meet them. The
+/// store holds at most [`capacity`](MemoryStore::capacity) entries (a hard
+/// bound, never exceeded); when it is full, a new key evicts the entry
+/// least likely to be used again (SIEVE: see navree-bounded). It is per
+/// process: every app gets its own.
 pub struct MemoryStore {
-    entries: moka::future::Cache<String, Entry>,
-}
-
-/// A stored value and the instant it stops being visible.
-#[derive(Clone)]
-struct Entry {
-    value: Bytes,
-    expires_at: Option<Instant>,
-}
-
-impl Entry {
-    fn new(value: Bytes, ttl: Option<Duration>) -> Self {
-        Self {
-            value,
-            expires_at: deadline(ttl),
-        }
-    }
-
-    fn is_live(&self) -> bool {
-        self.expires_at.is_none_or(|at| Instant::now() < at)
-    }
-
-    /// The time left before expiry, for moka's eviction.
-    fn remaining(&self) -> Option<Duration> {
-        self.expires_at
-            .map(|at| at.saturating_duration_since(Instant::now()))
-    }
+    entries: Cache<String, Bytes>,
 }
 
 /// `now + ttl`; `None` (never expires) when there is no TTL or it overflows.
@@ -54,43 +33,41 @@ pub(crate) fn deadline(ttl: Option<Duration>) -> Option<Instant> {
     ttl.and_then(|ttl| Instant::now().checked_add(ttl))
 }
 
-/// Tells moka when to evict each entry (memory reclaim only: visibility is
-/// decided by [`Entry::is_live`]).
-struct EntryExpiry;
-
-impl Expiry<String, Entry> for EntryExpiry {
-    fn expire_after_create(
-        &self,
-        _key: &String,
-        value: &Entry,
-        _created_at: std::time::Instant,
-    ) -> Option<Duration> {
-        value.remaining()
-    }
-
-    fn expire_after_update(
-        &self,
-        _key: &String,
-        value: &Entry,
-        _updated_at: std::time::Instant,
-        _duration_until_expiry: Option<Duration>,
-    ) -> Option<Duration> {
-        value.remaining()
-    }
-}
-
 impl MemoryStore {
-    /// An empty store.
+    /// An empty store holding at most [`DEFAULT_MAX_ENTRIES`] entries.
     pub fn new() -> Self {
+        Self::with_capacity(DEFAULT_MAX_ENTRIES)
+    }
+
+    /// An empty store holding at most `max_entries` entries.
+    pub fn with_capacity(max_entries: usize) -> Self {
         Self {
-            entries: moka::future::Cache::builder()
-                .expire_after(EntryExpiry)
-                .build(),
+            entries: Cache::new(max_entries),
         }
     }
 
-    async fn live(&self, key: &str) -> Option<Entry> {
-        self.entries.get(key).await.filter(Entry::is_live)
+    /// The most entries the store holds.
+    pub fn capacity(&self) -> usize {
+        self.entries.capacity()
+    }
+
+    /// How many entries the store holds now (expired ones that nothing has
+    /// removed yet included).
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    /// Whether the store holds no entries.
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    /// Looks at up to `budget` slots of every shard and removes the expired
+    /// entries among them; returns how many it removed. The store also
+    /// reclaims expired entries as it is used, so a periodic task only helps
+    /// an app that wants its memory back during a quiet spell.
+    pub fn sweep(&self, budget: usize) -> usize {
+        self.entries.sweep(budget)
     }
 }
 
@@ -103,14 +80,15 @@ impl Default for MemoryStore {
 impl fmt::Debug for MemoryStore {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("MemoryStore")
-            .field("entries", &self.entries.entry_count())
+            .field("entries", &self.entries.len())
+            .field("capacity", &self.entries.capacity())
             .finish()
     }
 }
 
 impl CacheStore for MemoryStore {
     fn get<'a>(&'a self, key: &'a str) -> BoxFuture<'a, Result<Option<Bytes>, CacheError>> {
-        Box::pin(async move { Ok(self.live(key).await.map(|entry| entry.value)) })
+        Box::pin(async move { Ok(self.entries.get(key)) })
     }
 
     fn put<'a>(
@@ -120,21 +98,13 @@ impl CacheStore for MemoryStore {
         ttl: Option<Duration>,
     ) -> BoxFuture<'a, Result<(), CacheError>> {
         Box::pin(async move {
-            self.entries
-                .insert(key.to_owned(), Entry::new(value, ttl))
-                .await;
+            self.entries.insert_with_ttl(key.to_owned(), value, ttl);
             Ok(())
         })
     }
 
     fn forget<'a>(&'a self, key: &'a str) -> BoxFuture<'a, Result<bool, CacheError>> {
-        Box::pin(async move {
-            Ok(self
-                .entries
-                .remove(key)
-                .await
-                .is_some_and(|entry| entry.is_live()))
-        })
+        Box::pin(async move { Ok(self.entries.remove(key).is_some()) })
     }
 
     fn flush(&self) -> BoxFuture<'_, Result<(), CacheError>> {
@@ -151,52 +121,40 @@ impl CacheStore for MemoryStore {
         ttl: Option<Duration>,
     ) -> BoxFuture<'a, Result<bool, CacheError>> {
         Box::pin(async move {
-            let result = self
-                .entries
-                .entry_by_ref(key)
-                .and_compute_with(|existing| {
-                    let op = match existing {
-                        Some(entry) if entry.value().is_live() => Op::Nop,
-                        _ => Op::Put(Entry::new(value, ttl)),
-                    };
-                    std::future::ready(op)
-                })
-                .await;
-            Ok(matches!(
-                result,
-                CompResult::Inserted(_) | CompResult::ReplacedWith(_)
-            ))
+            let outcome = self.entries.compute(key, |existing| match existing {
+                Some(_) => Compute::Keep,
+                None => Compute::Store(value, ttl),
+            });
+            Ok(outcome == Computed::Inserted)
         })
     }
 
     fn increment<'a>(&'a self, key: &'a str, by: i64) -> BoxFuture<'a, Result<i64, CacheError>> {
         Box::pin(async move {
-            let result = self
-                .entries
-                .entry_by_ref(key)
-                .and_try_compute_with(|existing| {
-                    let next = match existing.map(|e| e.into_value()).filter(Entry::is_live) {
-                        Some(entry) => parse_integer(key, &entry.value).and_then(|current| {
-                            add_checked(key, current, by).map(|next| Entry {
-                                value: Bytes::from(next.to_string()),
-                                expires_at: entry.expires_at,
-                            })
-                        }),
-                        None => add_checked(key, 0, by)
-                            .map(|next| Entry::new(Bytes::from(next.to_string()), None)),
-                    };
-                    std::future::ready(next.map(Op::Put))
-                })
-                .await?;
-            match result {
-                CompResult::Inserted(entry) | CompResult::ReplacedWith(entry) => {
-                    parse_integer(key, &entry.into_value().value)
+            let mut result = Ok(0);
+            self.entries.compute(key, |existing| {
+                let next = match existing {
+                    Some(value) => parse_integer(key, value)
+                        .and_then(|current| add_checked(key, current, by)),
+                    None => add_checked(key, 0, by),
+                };
+                match next {
+                    Ok(next) => {
+                        result = Ok(next);
+                        let value = Bytes::from(next.to_string());
+                        match existing {
+                            // The entry keeps its TTL; a new one never expires.
+                            Some(_) => Compute::Update(value),
+                            None => Compute::Store(value, None),
+                        }
+                    }
+                    Err(error) => {
+                        result = Err(error);
+                        Compute::Keep
+                    }
                 }
-                // Unreachable: the closure always returns `Op::Put`.
-                _ => Err(CacheError::NotAnInteger {
-                    key: key.to_owned(),
-                }),
-            }
+            });
+            result
         })
     }
 }
