@@ -8,7 +8,11 @@ description: "Adds an MCP server to a Navree app with navree-mcp: `McpModule` an
 `navree-mcp` (facade feature `mcp`, opt-in: not in `full`) turns methods on
 an injectable into an MCP server. Every module may register servers; they
 merge into one endpoint. HTTP clients reach it at `/mcp` (authenticated,
-always); local clients start `<app> mcp:serve --user <email or id>`.
+always); local clients start `<app> mcp:serve --user <email or id>`. The
+protocol layer (JSON-RPC, versions `2024-11-05` to `2025-11-25` with the
+`initialize` handshake plus the stateless `2026-07-28`, both transports) is
+Navree's own, in `navree-mcp`; protocol types are in `navree::mcp::protocol`
+(`Tool`, `Resource`, `ResourceTemplate`, `Prompt`, `SUPPORTED_VERSIONS`).
 
 This is the MCP server of the **product**. The coding agent's server is
 Navigator (`navree mcp`), configured by nothing in the app.
@@ -152,7 +156,8 @@ default `application/json`), `String` as text (`text/plain`),
 `authorize::<E, A>(id).await`, `uow()` (panics without `DatabaseModule`;
 commits on `Ok`, rolls back on `Err`), `now()`, `session_id()`,
 `client()` (name, version), `request_id()`, `app()`, `wants_progress()`,
-`progress(done, Some(total), "message").await`.
+`progress(done, Some(total), "message").await`, `is_cancelled()` (the
+client cancelled; the call's future is also dropped at its next `.await`).
 
 ## McpNotifier
 
@@ -245,6 +250,9 @@ Also: `list_resources()`, `list_resource_templates()`, `list_prompts()`,
 - Inspect by hand: `npx @modelcontextprotocol/inspector`, URL
   `http://127.0.0.1:8080/mcp`, header `Authorization: Bearer <token>`.
 - stdio: `cargo run -- mcp:serve --user ada@example.com` (logs on stderr).
+- Navree's own conformance run with the official TypeScript SDK client:
+  `npm ci --prefix e2e/mcp-sdk`, then
+  `cargo test -p navree-mcp --test sdk_conformance -- --ignored`.
 
 ## Gotchas
 
@@ -271,6 +279,13 @@ Also: `list_resources()`, `list_resource_templates()`, `list_prompts()`,
   `McpTestClient::new(client).protocol_version("2026-07-28")`.
 - Never log arguments yourself in tools; Navree's `mcp call` line leaves
   them out on purpose.
-- Errors: 5xx details go to the log; the client reads
-  `"Internal server error"`. Resource and prompt failures are JSON-RPC
-  errors (404 `-32002`, 400 `-32602`).
+- Errors: 5xx details (and panics) go to the log; the client reads
+  `"Internal server error"`. Return a 4xx `AppError` for a message the
+  model should see. Resource and prompt failures are JSON-RPC errors (404
+  `-32002`, 400 `-32602`); unknown methods are `-32601`.
+- Limits: bodies over `mcp.max_request_bytes` get a 413; JSON nested deeper
+  than 64 levels gets `-32600`; batches only on a `2025-03-26` session; at
+  most 64 messages wait for a slow client (notifications beyond are
+  dropped).
+- `navree::mcp::rmcp` is gone: use `navree::mcp::protocol` for the protocol
+  types.

@@ -1,0 +1,55 @@
+# navree-mcp against the official MCP TypeScript SDK: the SDK's client
+# (pinned in e2e/mcp-sdk/package.json) drives an app's MCP server over stdio
+# and Streamable HTTP and checks the handshake, tools, resources and prompts
+# (crates/navree-mcp/tests/sdk_conformance.rs, e2e/mcp-sdk/conformance.mjs).
+name: MCP conformance
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "crates/navree-mcp/**"
+      - "crates/navree-http/**"
+      - "crates/navree-auth/**"
+      - "e2e/mcp-sdk/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/mcp-conformance.yml"
+  pull_request:
+    paths:
+      - "crates/navree-mcp/**"
+      - "crates/navree-http/**"
+      - "crates/navree-auth/**"
+      - "e2e/mcp-sdk/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/mcp-conformance.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  typescript-sdk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Install the SDK
+        run: npm ci --prefix e2e/mcp-sdk --ignore-scripts
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+
+      - name: Conformance
+        run: cargo test -p navree-mcp --test sdk_conformance -- --ignored --nocapture
