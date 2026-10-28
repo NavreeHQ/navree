@@ -163,6 +163,17 @@
   padding-block: clamp(4.5rem, 3rem + 5vw, 8rem);
 }
 
+/*
+ * Below-the-fold sections of long pages: the browser skips their style,
+ * layout and paint until they near the viewport, so the first frame only
+ * draws what is on screen. Nothing changes visually; the placeholder height
+ * is replaced by the real one (and remembered) as soon as a section renders.
+ */
+@utility cv-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 1000px;
+}
+
 @utility font-display-wide {
   font-variation-settings: "wdth" 125;
 }
@@ -390,6 +401,39 @@
   @keyframes drawer-in {
     from {
       transform: translateX(-100%);
+    }
+  }
+}
+
+@layer components {
+  /*
+   * The light that travels along a diagram's lines: a request, an event, a
+   * message. Each pulse is a dash on a copy of the line's path; the dash
+   * offset moves at a constant speed, so a pulse is visible only while its
+   * head is on the line. `--dash`, `--travel`, `--cycle` and `--delay` come
+   * from the diagram kit (components/diagrams/kit.tsx), which times every
+   * pulse in a diagram so one flow reads in order. Under reduced motion the
+   * pulses are not drawn. (Here rather than in a CSS module, so it doesn't
+   * cost every page with a diagram one more stylesheet request.)
+   */
+  .diagram-pulse {
+    fill: none;
+    stroke-linecap: round;
+    stroke-dasharray: var(--dash) 100000px;
+    stroke-dashoffset: var(--dash);
+    animation: diagram-travel var(--cycle) linear var(--delay) infinite both;
+  }
+  @keyframes diagram-travel {
+    from {
+      stroke-dashoffset: var(--dash);
+    }
+    to {
+      stroke-dashoffset: calc(var(--dash) - var(--travel));
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .diagram-pulse {
+      display: none;
     }
   }
 }

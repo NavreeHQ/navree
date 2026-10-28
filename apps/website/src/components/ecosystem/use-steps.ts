@@ -1,7 +1,9 @@
 "use client";
 
-import { useInView, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
+
+import { useInView } from "@/lib/use-in-view";
+import { useReducedMotion } from "@/lib/use-reduced-motion";
 
 type StepOptions = {
   /** Milliseconds before moving on from a step: one value, or one per step. */

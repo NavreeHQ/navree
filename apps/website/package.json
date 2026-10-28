@@ -9,6 +9,8 @@
     "build": "node scripts/prebuild.ts && node scripts/agent-files.ts && next build && node scripts/postbuild.ts",
     "serve": "node scripts/serve.ts",
     "check:links": "node scripts/check-links.ts",
+    "check:seo": "node scripts/check-seo.ts",
+    "icons": "node scripts/icons.ts",
     "lint": "eslint",
     "typecheck": "node scripts/prebuild.ts && tsc --noEmit",
     "screenshots": "node scripts/screenshots.ts"

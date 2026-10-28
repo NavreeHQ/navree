@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+
 import { ArrowLink, PrimaryCta, SecondaryCta } from "@/components/home/parts";
 import { GridPattern } from "@/components/magicui/grid-pattern";
 
@@ -7,6 +9,12 @@ const elsewhere = [
   { href: "/ai/", label: "Navree for AI" },
   { href: "/performance/", label: "Performance" },
 ];
+
+export const metadata: Metadata = {
+  title: "Page not found",
+  description: "This page isn't here. Search the docs, or start from the homepage.",
+  robots: { index: false, follow: true },
+};
 
 export default function NotFound() {
   return (

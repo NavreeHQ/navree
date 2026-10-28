@@ -7,8 +7,11 @@ import { Toc } from "@/components/docs/toc";
 import { ArrowLeftIcon, ArrowRightIcon, EditIcon } from "@/components/icons";
 import { InlineMarkdown } from "@/components/inline-markdown";
 import { PlannedBadge } from "@/components/site/planned-badge";
-import { allDocs, findDoc, neighbours, plain } from "@/lib/docs";
+import { allDocs, documentTitle, findDoc, neighbours, plain } from "@/lib/docs";
+import { lastModified } from "@/lib/last-modified";
 import { renderMdx } from "@/lib/mdx";
+import { pageMetadata } from "@/lib/metadata";
+import { JsonLd, docData } from "@/lib/structured-data";
 import { editUrl, site } from "@site";
 
 /** Every page is also published as Markdown (`scripts/agent-files.ts`). */
@@ -26,13 +29,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const doc = findDoc(slug);
   if (!doc) return {};
-  const description = plain(doc.description);
-  return {
-    title: doc.title,
-    description,
-    alternates: { canonical: doc.href, types: { "text/markdown": markdownPath(doc.slug) } },
-    openGraph: { title: doc.title, description, url: doc.href, type: "article", images: ["/og.png"] },
-  };
+  return pageMetadata({
+    title: documentTitle(doc),
+    description: plain(doc.description),
+    path: doc.href,
+    type: "article",
+    extra: { alternates: { types: { "text/markdown": markdownPath(doc.slug) } } },
+  });
 }
 
 export default async function DocPage({ params }: Props) {
@@ -130,6 +133,16 @@ export default async function DocPage({ params }: Props) {
           </a>
         </div>
       </aside>
+      <JsonLd
+        data={docData({
+          title: doc.title,
+          description: plain(doc.description),
+          href: doc.href,
+          section: doc.section,
+          sectionTitle: doc.sectionTitle,
+          dateModified: lastModified(`content/docs/${doc.file}`),
+        })}
+      />
     </div>
   );
 }

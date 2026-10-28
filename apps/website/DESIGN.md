@@ -43,9 +43,15 @@ hover color): never write `hover:bg-accent` for a hover state, use
 | **Geist** (variable) | `font-sans` (default) | Body, UI, `h3` and below |
 | **Monaspace Neon** | `font-mono` | Code, commands, crate names, eyebrows |
 
-All self-hosted through `next/font/local`; no runtime font requests.
+All self-hosted through `next/font/local`; no runtime font requests. The
+files in `src/app/fonts/` are subsets made by `scripts/subset-fonts.py`
+(Latin and the symbols the site uses; Mona Sans cut at `wdth 112`, weights
+500 to 650). Only Mona Sans, Geist upright and Monaspace Neon regular are
+preloaded; italics and bold mono load where a page uses them.
 `h1`/`h2` get the display face from a base style; add `font-sans` to opt out.
-Use `font-display-wide` (wdth 125) for a single oversized word at most.
+Use `font-display-wide` (wdth 125) for a single oversized word at most; it
+needs the wider cut, so add 125 to the Mona Sans width range in
+`scripts/subset-fonts.py` first.
 
 Display scale (fluid between 390 and 1440 px; size, line height and
 tracking come together):
@@ -125,7 +131,8 @@ restyle: replace `bg-accent`/`text-accent-foreground` hover states with
 - `Tabs` `TabsList variant="default"` (segmented pill) or `"line"` (green
   underline, for code panes).
 - `Sheet` always needs a `SheetTitle` (use `sr-only` if hidden).
-- `TooltipProvider` is already in the root layout.
+- Wrap a group of tooltips in one `TooltipProvider` (`delayDuration={150}`):
+  the root layout has none, so pages without tooltips skip the tooltip code.
 - The older CSS classes still work and are used by existing pages: `.btn
   .btn-primary .btn-secondary`, `.link`, `.kbd`, `.inline-code`, `.numeric`,
   `.prose-navree`, the search dialog and the docs drawer.
@@ -149,7 +156,7 @@ all work in the static export. Client components are marked `"use client"`.
 | `shine-border` | `ShineBorder` | A slow sheen on one frame | Still |
 | `marquee` | `Marquee` | The ecosystem strip (`[--duration:40s] [--gap:1rem]`) | Still; pauses on hover/focus |
 | `number-ticker` | `NumberTicker` | Performance numbers (HTML holds the real value) | Final value |
-| `dot-pattern` | `DotPattern` | Background texture (`glow` for a few green pulses) | Static dots |
+| `dot-pattern`, `dot-pattern-glow` | `DotPattern` (static, no JavaScript), `DotPatternGlow` | Background texture (`DotPatternGlow glow` for a few green pulses) | Static dots |
 | `grid-pattern` | `GridPattern` | Hairline grid background, `squares` to light cells | Static |
 | `flickering-grid` | `FlickeringGrid` | Status-light field behind one hero or CTA | One still frame |
 | `animated-list` | `AnimatedList` | The Lighthouse issue feed | Whole list |
@@ -263,3 +270,30 @@ hover use the ink steps.
 
 **Density**: 14px body text, 13px secondary; table rows 40px with 12px
 cell padding; page padding 24px; headings 20–24px semibold.
+
+## 10. Performance
+
+The site loads fast on a mid-range phone on a slow network. Keep it that
+way when adding to it:
+
+- **Text paints without JavaScript.** Every page is complete HTML, and the
+  app's scripts only start after the first paint (`scripts/postbuild.ts`
+  also moves each page's RSC payload out of the HTML). Nothing above the
+  fold may wait for hydration or an entrance animation to become visible.
+- **Below the fold, add `cv-auto`** to the sections of long pages: the
+  browser skips their layout and paint until they come near the screen.
+- **Server components by default.** Make a client component only for the
+  part that needs state or events, and pass it small props: everything a
+  client component receives is shipped with the page a second time.
+- **Load interactive extras on intent.** The search dialog, the mobile menu
+  sheet and tooltips load where and when they are used; follow the same
+  pattern (`import()` on pointer, focus or click) for anything heavy that
+  isn't visible at first.
+- **`motion` only where a component needs it.** A page that imports it
+  ships 140 KB of JavaScript. Fades and slides are CSS; a single spring
+  can use `src/lib/spring.ts` (motion's own curve).
+- **Fonts** are the subsets in `src/app/fonts/`; don't add faces or
+  weights without updating `scripts/subset-fonts.py`.
+- After `pnpm build`, `node scripts/check-seo.ts` checks titles,
+  descriptions, canonical URLs, social tags, one `h1` per page, alt text,
+  the sitemap and robots.txt.
