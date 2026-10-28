@@ -87,7 +87,9 @@ struct Setup {
     sink: Arc<RecordingSink>,
 }
 
-async fn setup(configure: impl FnOnce(navree_testing::TestAppBuilder) -> navree_testing::TestAppBuilder) -> Setup {
+async fn setup(
+    configure: impl FnOnce(navree_testing::TestAppBuilder) -> navree_testing::TestAppBuilder,
+) -> Setup {
     let seen = Arc::new(Seen::default());
     let sink = Arc::new(RecordingSink::default());
     let app = configure(support::builder())
@@ -140,7 +142,11 @@ async fn a_policy_refuses_login_and_registration_for_its_accounts() {
     );
 
     let refused = s.sink.with_action("auth.login_refused");
-    assert_eq!(refused.len(), 1, "the login refusal only (register and checks don't audit)");
+    assert_eq!(
+        refused.len(),
+        1,
+        "the login refusal only (register and checks don't audit)"
+    );
     assert_eq!(
         refused[0].metadata,
         json!({
@@ -176,7 +182,11 @@ async fn sign_in_asks_the_policy_with_the_method_of_other_crates() {
     assert_eq!(audited[0].actor_id, Some(ada.id));
 
     // Another connection is refused too; the domain's own goes on.
-    assert!(auth.sign_in(&ada, SignInMethod::sso("other"), &meta).await.is_err());
+    assert!(
+        auth.sign_in(&ada, SignInMethod::sso("other"), &meta)
+            .await
+            .is_err()
+    );
     let tokens = auth
         .sign_in(&ada, SignInMethod::sso("corp"), &meta)
         .await

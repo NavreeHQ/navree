@@ -86,13 +86,7 @@ impl Enforced {
     }
 
     async fn post(&self, path: &str, body: Value) -> TestResponse {
-        self.world
-            .app
-            .client()
-            .post(path)
-            .json(&body)
-            .send()
-            .await
+        self.world.app.client().post(path).json(&body).send().await
     }
 
     /// The text body of the last mail.
@@ -163,17 +157,25 @@ impl Enforced {
     }
 
     /// A passkey sign-in with `authenticator` for `email`.
-    async fn passkey_login(&self, authenticator: &VirtualAuthenticator, email: &str) -> TestResponse {
+    async fn passkey_login(
+        &self,
+        authenticator: &VirtualAuthenticator,
+        email: &str,
+    ) -> TestResponse {
         let options = self
-            .post("/api/auth/passkeys/login/options", json!({ "email": email }))
+            .post(
+                "/api/auth/passkeys/login/options",
+                json!({ "email": email }),
+            )
             .await
             .assert_status(200)
             .json_value();
-        let assertion = authenticator
-            .get(&options["publicKey"])
-            .expect("a passkey");
-        self.post("/api/auth/passkeys/login", json!({ "credential": assertion }))
-            .await
+        let assertion = authenticator.get(&options["publicKey"]).expect("a passkey");
+        self.post(
+            "/api/auth/passkeys/login",
+            json!({ "credential": assertion }),
+        )
+        .await
     }
 }
 
@@ -306,7 +308,9 @@ async fn a_password_change_opens_no_session_for_an_enforced_domain() {
             client
                 .patch("/api/auth/me/password")
                 .bearer(&access)
-                .json(&json!({ "current_password": PASSWORD, "password": "a brand new passphrase" }))
+                .json(
+                    &json!({ "current_password": PASSWORD, "password": "a brand new passphrase" }),
+                )
                 .send()
                 .await
         }
@@ -510,10 +514,9 @@ async fn refusals_are_audited_with_the_method() {
 #[tokio::test]
 async fn a_connection_that_does_not_enforce_leaves_every_method_open() {
     let issuer = Issuer::new();
-    let world = support::world_with(
-        builder(&issuer).config("sso.enforce_for_verified_domains", false),
-    )
-    .await;
+    let world =
+        support::world_with(builder(&issuer).config("sso.enforce_for_verified_domains", false))
+            .await;
     let fake = SsoFake::new();
     let connection = world
         .saml_connection(&fake, SsoOwner::App, "acme", Provisioning::default())

@@ -173,8 +173,8 @@ impl AuthService {
         meta: &ClientMeta,
         finishing: bool,
     ) -> Result<(), AuthError> {
-        let attempt = SignInAttempt::of(user, SignInMethod::Password)
-            .audience(SignInAudience::Platform);
+        let attempt =
+            SignInAttempt::of(user, SignInMethod::Password).audience(SignInAudience::Platform);
         let (code, message) = match self.evaluate_sign_in(&attempt).await {
             Ok(()) => return Ok(()),
             Err(AuthError::SignInRefused { code, message }) => (code, message),
