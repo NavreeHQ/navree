@@ -1,0 +1,10 @@
+---
+source: crates/navree-orm/tests/render/lowering.rs
+expression: "query(Deal::query().add_select([(Deal::TITLE,\n\"label\")]).select_raw(\"amount_cents * ? AS doubled\",\n[2]).select_sub(Company::query().select([Company::NAME]).where_column(Company::ID,\n\"=\", Deal::COMPANY_ID),\n\"company\").select_expr(Expr::coalesce([col(\"closed_at\"), col(\"created_at\")]),\n\"settled_at\"))"
+---
+PostgreSQL: SELECT "deals"."id", "deals"."company_id", "deals"."title", "deals"."amount_cents", "deals"."stage", "deals"."tags", "deals"."closed_at", "deals"."created_at", "deals"."updated_at", "deals"."deleted_at", "deals"."title" AS "label", amount_cents * $1 AS doubled, (SELECT "companies"."name" FROM "companies" WHERE "companies"."id" = "deals"."company_id") AS "company", coalesce("closed_at", "created_at") AS "settled_at" FROM "deals" WHERE "deals"."deleted_at" IS NULL
+  values: [Int(Some(2))]
+MySQL: SELECT `deals`.`id`, `deals`.`company_id`, `deals`.`title`, `deals`.`amount_cents`, `deals`.`stage`, `deals`.`tags`, `deals`.`closed_at`, `deals`.`created_at`, `deals`.`updated_at`, `deals`.`deleted_at`, `deals`.`title` AS `label`, amount_cents * ? AS doubled, (SELECT `companies`.`name` FROM `companies` WHERE `companies`.`id` = `deals`.`company_id`) AS `company`, coalesce(`closed_at`, `created_at`) AS `settled_at` FROM `deals` WHERE `deals`.`deleted_at` IS NULL
+  values: [Int(Some(2))]
+SQLite: SELECT "deals"."id", "deals"."company_id", "deals"."title", "deals"."amount_cents", "deals"."stage", "deals"."tags", "deals"."closed_at", "deals"."created_at", "deals"."updated_at", "deals"."deleted_at", "deals"."title" AS "label", amount_cents * ? AS doubled, (SELECT "companies"."name" FROM "companies" WHERE "companies"."id" = "deals"."company_id") AS "company", coalesce("closed_at", "created_at") AS "settled_at" FROM "deals" WHERE "deals"."deleted_at" IS NULL
+  values: [Int(Some(2))]

@@ -1,0 +1,9 @@
+---
+source: crates/navree-orm/tests/render/main.rs
+expression: "query(Query::from(Select::from_table(\"companies\").column(col(\"companies.name\")).column(col(\"latest.title\")).join(Join\n{\n    kind: JoinKind::Inner, source: Source::lateral(latest(), \"latest\"), on:\n    None,\n})))"
+---
+PostgreSQL: SELECT "companies"."name", "latest"."title" FROM "companies" INNER JOIN LATERAL (SELECT "deals"."title" FROM "deals" WHERE "deals"."company_id" = "companies"."id" ORDER BY "deals"."created_at" DESC LIMIT $1) AS "latest" ON TRUE
+  values: [BigUnsigned(Some(2))]
+MySQL: SELECT `companies`.`name`, `latest`.`title` FROM `companies` INNER JOIN LATERAL (SELECT `deals`.`title` FROM `deals` WHERE `deals`.`company_id` = `companies`.`id` ORDER BY `deals`.`created_at` DESC LIMIT ?) AS `latest` ON TRUE
+  values: [BigUnsigned(Some(2))]
+SQLite: error: a lateral join is not supported on SQLite

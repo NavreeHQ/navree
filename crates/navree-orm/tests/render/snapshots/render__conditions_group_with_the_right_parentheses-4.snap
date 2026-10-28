@@ -1,0 +1,7 @@
+---
+source: crates/navree-orm/tests/render/main.rs
+expression: "query(Query::from(deals().filter(Expr::And(Vec::new()).and(Expr::Or(Vec::new()).not()))))"
+---
+PostgreSQL: SELECT * FROM "deals" WHERE NOT FALSE
+MySQL: SELECT * FROM `deals` WHERE NOT FALSE
+SQLite: SELECT * FROM "deals" WHERE NOT FALSE
