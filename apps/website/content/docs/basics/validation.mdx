@@ -820,7 +820,7 @@ How they run:
 - Inside the request's [unit of work](/docs/database/unit-of-work/), as `SELECT 1 FROM <table> WHERE <column> = ? [AND id <> ?] LIMIT 1` with bound values. The app needs `DatabaseModule`; without it, a rule that has a value to check answers 500.
 - Table and column names must match `[a-z_][a-z0-9_]*`. Anything else fails with a 500 before any SQL runs, so a name can never inject SQL. Never build them from input.
 
-Outside a request, check a rule yourself with `rule.passes(conn).await`, which returns `Result<bool, RuleError>`.
+Outside a request, check a rule yourself with `rule.passes(&executor).await` (a `Db`, a `Transaction` or a `Uow`: anything that is a navree-db `Executor`), which returns `Result<bool, RuleError>`. A failed query is `RuleError::Database`, carrying the engine's `DbError`.
 
 <Callout type="warning" title="No extra conditions">
 
