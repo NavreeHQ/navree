@@ -6,10 +6,9 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
-use sea_orm::QueryResult;
 
 use super::Script;
-use crate::connection::SchemaConnection;
+use crate::connection::{SchemaConnection, SchemaRow};
 use crate::error::SchemaResult;
 use crate::grammar::timescale::regclass;
 use crate::grammar::{ident, string};
@@ -31,11 +30,11 @@ fn qualified(schema: &str, name: &str) -> String {
     format!("{}.{}", ident(D, schema), ident(D, name))
 }
 
-fn field(row: &QueryResult, column: &str) -> String {
+fn field(row: &SchemaRow, column: &str) -> String {
     text(row, column).unwrap_or_default()
 }
 
-async fn query(conn: &dyn SchemaConnection, sql: &str) -> SchemaResult<Vec<QueryResult>> {
+async fn query(conn: &dyn SchemaConnection, sql: &str) -> SchemaResult<Vec<SchemaRow>> {
     rows(conn, sql, Vec::new()).await
 }
 
@@ -474,7 +473,7 @@ async fn tables(
 }
 
 /// `"name" type [COLLATE] [GENERATED ...] [DEFAULT ...] [NOT NULL]`.
-fn column_definition(row: &QueryResult, target: &Target) -> String {
+fn column_definition(row: &SchemaRow, target: &Target) -> String {
     let data_type = field(row, "data_type");
     let mut sql = format!("{} {data_type}", ident(D, &field(row, "name")));
     if let Some(collation) = text(row, "collation") {
@@ -574,7 +573,7 @@ async fn views(
          AND d.refobjid <> r.ev_class",
     )
     .await?;
-    let mut by_oid: BTreeMap<i64, &QueryResult> = BTreeMap::new();
+    let mut by_oid: BTreeMap<i64, &SchemaRow> = BTreeMap::new();
     for row in &view_rows {
         let key = (field(row, "schema"), field(row, "name"));
         if skipped.contains(&key) {

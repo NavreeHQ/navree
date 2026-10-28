@@ -3,8 +3,13 @@
 #![allow(dead_code)]
 
 use navree_schema::{Schema, SchemaResult, Target};
-use sea_orm::{ConnectOptions, Database, DatabaseConnection};
 use tempfile::TempDir;
+
+#[path = "../common/conn.rs"]
+mod conn;
+
+#[allow(unused_imports)]
+pub use conn::{TestConn, TestTx, text_rows};
 
 /// PostgreSQL 17 without TimescaleDB.
 pub fn postgres() -> Target {
@@ -100,15 +105,12 @@ impl TempSqlite {
     }
 
     /// A pool on the database (foreign keys on, as `navree-db` opens it).
-    pub async fn connect(&self) -> DatabaseConnection {
+    pub async fn connect(&self) -> TestConn {
         self.connect_with_foreign_keys(true).await
     }
 
     /// A one-connection pool with foreign keys on or off.
-    pub async fn connect_with_foreign_keys(&self, on: bool) -> DatabaseConnection {
-        let mut options = ConnectOptions::new(self.url.clone());
-        options.max_connections(1).sqlx_logging(false);
-        options.map_sqlx_sqlite_opts(move |o| o.foreign_keys(on));
-        Database::connect(options).await.expect("sqlite connects")
+    pub async fn connect_with_foreign_keys(&self, on: bool) -> TestConn {
+        TestConn::sqlite(&self.url, on).await
     }
 }

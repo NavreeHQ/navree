@@ -161,10 +161,20 @@ async fn unsupported_features_name_the_database_and_the_way_out() {
 }
 
 #[tokio::test]
-async fn schema_errors_become_migration_errors() {
-    let error: sea_orm::DbErr = SchemaError::definition("t", "bad").into();
-    assert_eq!(
-        error.to_string(),
-        "Migration Error: invalid definition of `t`: bad"
+async fn database_errors_name_the_statement_and_keep_the_driver_error() {
+    let db = crate::support::TempSqlite::new();
+    let conn = db.connect().await;
+    let error = Schema::new(&conn).drop("missing").await.unwrap_err();
+    let SchemaError::Database { statement, source } = &error else {
+        panic!("a database error: {error:?}");
+    };
+    assert_eq!(statement, "DROP TABLE \"missing\"");
+    assert!(
+        source.downcast_ref::<sqlx::Error>().is_some(),
+        "the connection's own error stays reachable: {source:?}"
+    );
+    assert!(
+        error.to_string().ends_with("\n  while running: DROP TABLE \"missing\""),
+        "{error}"
     );
 }
