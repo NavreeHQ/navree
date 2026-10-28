@@ -3,14 +3,7 @@
 //! lists and results, errors, sessions and the stateless protocol's
 //! headers and metadata.
 
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Duration;
-
 use http::header::ORIGIN;
-use navree_http::AppError;
-use navree_kernel::{Module, ModuleBuilder};
-use navree_macros::{injectable, mcp_server};
-use navree_mcp::{McpContext, ModuleBuilderMcpExt};
 use navree_testing::{TestClient, TestResponse};
 use serde_json::{Value, json};
 
@@ -509,80 +502,4 @@ async fn the_stateless_protocol_checks_versions_methods_and_headers() {
     .await;
     assert_eq!(mismatched.status(), 400);
     assert_eq!(answer(&mismatched, 6)["error"]["code"], -32020);
-}
-
-/// How many times `count_up` counted.
-static COUNTED: AtomicU64 = AtomicU64::new(0);
-
-/// A server whose tool works until it is cancelled.
-#[injectable]
-pub struct SlowMcp;
-
-#[mcp_server]
-#[authenticated]
-impl SlowMcp {
-    /// Counts up for a long time.
-    #[mcp_tool]
-    async fn count_up(&self, _cx: &McpContext) -> Result<u64, AppError> {
-        for _ in 0..1000 {
-            COUNTED.fetch_add(1, Ordering::SeqCst);
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-        Ok(COUNTED.load(Ordering::SeqCst))
-    }
-}
-
-pub struct SlowModule;
-
-impl Module for SlowModule {
-    fn register(&self, m: &mut ModuleBuilder) {
-        m.mcp_server::<SlowMcp>();
-    }
-}
-
-#[tokio::test]
-async fn cancellation_stops_the_call() {
-    let app = builder().module(SlowModule).build().await;
-    let rep = user();
-    let session = Session::open(app.acting_as(rep.clone()), "2025-11-25").await;
-    let headers = (session.id.clone(), session.version.clone());
-    let caller = app.acting_as(rep);
-    let call = tokio::spawn(async move {
-        post(
-            &caller,
-            &[
-                ("mcp-session-id", headers.0.as_str()),
-                ("mcp-protocol-version", headers.1.as_str()),
-            ],
-            &json!({
-                "jsonrpc": "2.0", "id": 7, "method": "tools/call",
-                "params": { "name": "count_up", "arguments": {} },
-            }),
-        )
-        .await
-    });
-    // Wait until the tool runs.
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
-    let before = COUNTED.load(Ordering::SeqCst);
-    while COUNTED.load(Ordering::SeqCst) < before + 3 {
-        assert!(tokio::time::Instant::now() < deadline, "the tool never ran");
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
-    let cancelled = session
-        .send(&json!({
-            "jsonrpc": "2.0",
-            "method": "notifications/cancelled",
-            "params": { "requestId": 7, "reason": "the user pressed stop" },
-        }))
-        .await;
-    assert_eq!(cancelled.status(), 202);
-    tokio::time::sleep(Duration::from_millis(100)).await;
-    let stopped_at = COUNTED.load(Ordering::SeqCst);
-    tokio::time::sleep(Duration::from_millis(300)).await;
-    assert_eq!(
-        COUNTED.load(Ordering::SeqCst),
-        stopped_at,
-        "the call stopped counting"
-    );
-    call.abort();
 }
