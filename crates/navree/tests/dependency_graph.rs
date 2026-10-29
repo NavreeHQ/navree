@@ -123,8 +123,9 @@ const HIERARCHY: &[Rule] = &[
     // L4
     rule("navree-session", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto", "navree-db"]),
     rule("navree-validation", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db"]),
-    // The audit trail is a navree-orm model (`AuditRecord`), written and
-    // listed through the ORM (same layer; the ORM never depends on audit).
+    // The audit trail is a navree-orm model (`AuditRecord`), listed through
+    // the ORM (same layer; the ORM never depends on audit) and written with
+    // navree-db's statements.
     rule("navree-audit", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db", "navree-orm"]),
     // Queue: operations mount routes with an SSE stream (http), authorize
     // the private channel `operations.{id}` (realtime) and schedule their
@@ -180,7 +181,8 @@ const HIERARCHY: &[Rule] = &[
     ]),
     // L5
     // Token exchange fetches trusted issuers' key sets with navree-http-client.
-    // The auth tables are navree-orm models.
+    // The auth tables are navree-orm models; users are navree-access's
+    // subject `User`.
     rule("navree-auth", 5, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db",
         "navree-crypto", "navree-session", "navree-validation", "navree-cache", "navree-mail",
@@ -932,7 +934,7 @@ fn allowed_edges_pass() {
     let edges = [
         edge("navree-contracts", "navree-kernel", Kind::Normal),
         edge("navree-auth", "navree-session", Kind::Normal),
-        // `impl navree_access::Subject for navree_auth::user::Entity`.
+        // `impl navree_access::Subject for navree_auth::User`.
         edge("navree-auth", "navree-access", Kind::Normal),
         edge("navree", "navree-auth", Kind::Normal),
         edge("navree", "navree-macros", Kind::Normal),
