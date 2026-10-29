@@ -1,6 +1,11 @@
 //! `users`: the accounts. Emails are stored trimmed and lower-cased.
 //!
-//! [`Model`] (exported as [`User`](crate::User)) is a navree-orm model. The
+//! [`Model`] (exported as [`User`](crate::User)) is a navree-orm model and
+//! the access subject `User` (permission prefix `users`): register it with
+//! `AccessModule::for_feature::<navree_auth::User>()` to load users for
+//! `can(.., User, from = "id")` checks (through the ORM, in the request's
+//! unit of work) and to make `users.*` permissions grant abilities on
+//! `User`. The
 //! password hash and the two-factor columns are never serialized (the
 //! fields are skipped by `Serialize`, so a `Model` can be returned as JSON
 //! and recorded in change events and audit trails) and never appear in
@@ -15,8 +20,7 @@
 //!
 //! Crates not yet moved to navree-orm still use users as a SeaORM entity
 //! (`user::Entity`, `user::Column`, `user::ActiveModel`, `Repo<user::Entity>`,
-//! `AccessModule::for_feature::<user::Entity>()`, admin resources over
-//! `user::Entity`). For them, and only for them, `Model` keeps the SeaORM
+//! admin resources over `user::Entity`). For them, and only for them, `Model` keeps the SeaORM
 //! derive, its `Relation` and `ActiveModelBehavior`, and `Entity` is the
 //! access subject `User`. Everything marked `COMPAT` below is that layer;
 //! nothing else in navree-auth uses it. Step 8 of the move deletes it once
@@ -42,7 +46,7 @@ pub(crate) const TABLE: &str = "users";
 // COMPAT: `DeriveEntityModel` and the `#[sea_orm]` attributes.
 #[derive(Clone, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
 #[sea_orm(table_name = "users")]
-#[model(table = "users")]
+#[model(table = "users", subject = "User", permission_prefix = "users")]
 pub struct Model {
     /// The id (UUID v7).
     #[sea_orm(primary_key, auto_increment = false)]
@@ -90,12 +94,6 @@ impl fmt::Debug for Model {
     }
 }
 
-/// Users are the access subject `User` with permission prefix `users`.
-impl navree_access::Subject for Model {
-    const SUBJECT: &'static str = USER_SUBJECT;
-    const PERMISSION_PREFIX: &'static str = USER_PERMISSION_PREFIX;
-}
-
 /// COMPAT: no relations are declared (the SeaORM entity's).
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {}
@@ -103,10 +101,9 @@ pub enum Relation {}
 /// COMPAT: the SeaORM entity's behaviour.
 impl ActiveModelBehavior for ActiveModel {}
 
-/// COMPAT: the SeaORM entity is the access subject `User` too. Import
-/// `AccessModule::for_feature::<navree_auth::user::Entity>()` to load users
-/// for `can(.., User, from = "id")` checks and to make `users.*`
-/// permissions grant abilities on `User`.
+/// COMPAT: the SeaORM entity is the access subject `User` too, for crates
+/// that still name it (admin-panel resources over `user::Entity`). Apps
+/// register the model: `AccessModule::for_feature::<navree_auth::User>()`.
 impl navree_access::Subject for Entity {
     const SUBJECT: &'static str = USER_SUBJECT;
     const PERMISSION_PREFIX: &'static str = USER_PERMISSION_PREFIX;
