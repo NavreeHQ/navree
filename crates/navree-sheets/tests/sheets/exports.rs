@@ -278,7 +278,7 @@ impl navree_sheets::Export for Everyone {
         _params: &(),
         page: navree_sheets::ExportPage,
     ) -> Result<Vec<EmailRow>, navree_contracts::BoxError> {
-        let all: Vec<EmailRow> = support::contacts(ctx.app.get::<Db>().await?.conn())
+        let all: Vec<EmailRow> = support::contacts(&*ctx.app.get::<Db>().await?)
             .await
             .into_iter()
             .map(|c| EmailRow { email: c.email })

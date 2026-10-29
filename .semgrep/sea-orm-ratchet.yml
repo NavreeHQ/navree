@@ -48,7 +48,6 @@ rules:
         - "/crates/navree-orm/"
         - "/crates/navree-schema/"
         - "/crates/navree-search/"
-        - "/crates/navree-sheets/"
         - "/crates/navree-cli/"
         - "/crates/navree-directory/"
         - "/crates/navree-domains/"
@@ -93,7 +92,6 @@ rules:
         - "/crates/navree-orm/"
         - "/crates/navree-schema/"
         - "/crates/navree-search/"
-        - "/crates/navree-sheets/"
         # navree-workspace: sea-orm for its compatibility layer, until step 8.
         - "/crates/navree-workspace/Cargo.toml"
     pattern-regex: '(?m)^\s*sea-orm(?:-migration)?\s*(?:=|\.)'

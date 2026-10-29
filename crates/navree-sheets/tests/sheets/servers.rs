@@ -1,203 +1,185 @@
-//! PostgreSQL and MySQL: the import and export flow on a real server, so
-//! the staging SQL (multi-row inserts, `IN` lists, `LIMIT ? OFFSET ?`,
-//! `GROUP BY`, `IS NULL` lookups of saved mappings) runs on each.
+//! The database the suite runs on, chosen by the environment:
 //!
-//! Opt-in: build with `--features postgres` and set
-//! `NAVREE_TEST_POSTGRES_URL`, or `--features mysql` and
-//! `NAVREE_TEST_MYSQL_URL`, to a URL of a throwaway server whose user may
-//! create databases. Each test creates its own database and drops it at
-//! the end.
+//! - `NAVREE_TEST_DATABASE`: `sqlite` (the default: a file of its own per
+//!   app), `postgres` (a database of its own per app on the server of
+//!   `NAVREE_TEST_POSTGRES_URL`, feature `postgres`) or `mysql` (on the
+//!   server of `NAVREE_TEST_MYSQL_URL`, feature `mysql`). Server databases
+//!   are dropped with the app.
+//! - `NAVREE_TEST_NATIVE_UNITS_OF_WORK=1`: units of work on navree-db's own
+//!   transactions (`database.native_units_of_work`) instead of SeaORM's.
+//!
+//! ```text
+//! NAVREE_TEST_DATABASE=postgres NAVREE_TEST_NATIVE_UNITS_OF_WORK=1 \
+//!   cargo test -p navree-sheets --features postgres
+//! ```
 
-use encoding_rs::WINDOWS_1256;
-use navree_db::Db;
-use sea_orm::{ConnectionTrait, Database, DbBackend};
-use serde_json::json;
+#![allow(dead_code)]
+
+use std::any::Any;
+
+use navree_db::{DbOptions, Executor, Pool};
+use navree_testing::TestAppBuilder;
 use uuid::Uuid;
 
-use crate::support::{
-    self, ADMIN, contact, csv_lines, id_of, principal, run_queue, seed, stored_contacts, upload,
-};
-
-/// A database of its own on the test server.
-struct Scratch {
-    admin: String,
-    name: String,
-    url: String,
-    mysql: bool,
+/// A server the suite can run on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Server {
+    Sqlite,
+    Postgres,
+    MySql,
 }
 
-impl Scratch {
-    async fn new(var: &str, test: &str, mysql: bool) -> Option<Scratch> {
-        let admin = match std::env::var(var) {
-            Ok(url) if !url.is_empty() => url,
-            _ => {
-                println!("SKIPPED {test}: set {var}");
-                return None;
-            }
+impl Server {
+    /// The server `NAVREE_TEST_DATABASE` names.
+    ///
+    /// # Panics
+    ///
+    /// For an unknown name, or a server whose driver feature is off or
+    /// whose URL is not set.
+    pub fn current() -> Server {
+        let server = match std::env::var("NAVREE_TEST_DATABASE").as_deref() {
+            Err(_) | Ok("" | "sqlite") => return Server::Sqlite,
+            Ok("postgres") => Server::Postgres,
+            Ok("mysql") => Server::MySql,
+            Ok(other) => panic!("NAVREE_TEST_DATABASE: `{other}` is not sqlite, postgres or mysql"),
         };
+        let compiled = match server {
+            Server::Postgres => cfg!(feature = "postgres"),
+            _ => cfg!(feature = "mysql"),
+        };
+        assert!(
+            compiled,
+            "NAVREE_TEST_DATABASE={server:?} needs the `{}` feature",
+            server.feature()
+        );
+        server
+    }
+
+    fn feature(self) -> &'static str {
+        match self {
+            Server::Sqlite => "sqlite",
+            Server::Postgres => "postgres",
+            Server::MySql => "mysql",
+        }
+    }
+
+    fn variable(self) -> &'static str {
+        match self {
+            Server::Postgres => "NAVREE_TEST_POSTGRES_URL",
+            _ => "NAVREE_TEST_MYSQL_URL",
+        }
+    }
+}
+
+/// Whether units of work run on navree-db's own transactions.
+pub fn native_units_of_work() -> bool {
+    std::env::var("NAVREE_TEST_NATIVE_UNITS_OF_WORK").as_deref() == Ok("1")
+}
+
+/// `builder` with a fresh, migrated database of its own on the current
+/// server, and the current kind of units of work.
+pub fn database(builder: TestAppBuilder) -> TestAppBuilder {
+    let builder = if native_units_of_work() {
+        builder.config("database.native_units_of_work", true)
+    } else {
+        builder
+    };
+    let server = Server::current();
+    if server == Server::Sqlite {
+        return builder.temp_database();
+    }
+    let database = ServerDatabase::create(server);
+    builder
+        .config("database.url", database.url.clone())
+        .config("database.migrate_on_boot", true)
+        .config("database.max_connections", 4)
+        .hold(database)
+}
+
+/// A fresh database on the current server for an app built by hand: its
+/// URL and the guard that deletes it (a SQLite file's directory, or the
+/// server database).
+pub fn scratch() -> (String, Box<dyn Any + Send + Sync>) {
+    match Server::current() {
+        Server::Sqlite => {
+            let (url, guard) = navree_testing::temp_sqlite_url();
+            (url, Box::new(guard))
+        }
+        server => {
+            let database = ServerDatabase::create(server);
+            (database.url.clone(), Box::new(database))
+        }
+    }
+}
+
+/// A database of its own on a server, dropped with its guard.
+pub struct ServerDatabase {
+    server: Server,
+    admin: String,
+    name: String,
+    /// The database's URL.
+    pub url: String,
+}
+
+impl ServerDatabase {
+    /// Creates a database on `server`.
+    pub fn create(server: Server) -> ServerDatabase {
+        let admin = std::env::var(server.variable())
+            .ok()
+            .filter(|url| !url.is_empty())
+            .unwrap_or_else(|| panic!("NAVREE_TEST_DATABASE needs {}", server.variable()));
         let name = format!("navree_sheets_{}", Uuid::now_v7().simple());
-        let conn = Database::connect(&admin).await.unwrap();
-        let create = if mysql {
-            format!("CREATE DATABASE `{name}` CHARACTER SET utf8mb4")
-        } else {
-            format!("CREATE DATABASE {name}")
-        };
-        conn.execute_unprepared(&create).await.unwrap();
-        conn.close().await.unwrap();
-        let (base, rest) = admin.rsplit_once('/').unwrap();
-        let options = rest.find('?').map_or("", |at| &rest[at..]);
-        let url = format!("{base}/{name}{options}");
-        Some(Scratch {
+        let base = admin.split('?').next().unwrap_or(&admin);
+        let (base, _) = base.rsplit_once('/').expect("a database URL");
+        let url = format!("{base}/{name}");
+        run_admin(&admin, format!("CREATE DATABASE {name}"))
+            .unwrap_or_else(|error| panic!("{error}"));
+        ServerDatabase {
+            server,
             admin,
             name,
             url,
-            mysql,
-        })
+        }
     }
+}
 
-    async fn drop(self) {
-        let conn = Database::connect(&self.admin).await.unwrap();
-        let drop = if self.mysql {
-            format!("DROP DATABASE IF EXISTS `{}`", self.name)
+impl Drop for ServerDatabase {
+    fn drop(&mut self) {
+        let force = if self.server == Server::Postgres {
+            " WITH (FORCE)"
         } else {
-            format!("DROP DATABASE IF EXISTS {} WITH (FORCE)", self.name)
+            ""
         };
-        conn.execute_unprepared(&drop).await.unwrap();
+        let sql = format!("DROP DATABASE IF EXISTS {}{force}", self.name);
+        if let Err(error) = run_admin(&self.admin, sql) {
+            eprintln!("could not drop a test database: {error}");
+        }
     }
 }
 
-/// Upload, stage, preview, map, apply with updates, the error file, and an
-/// export, on `scratch`.
-async fn flow(scratch: &Scratch) {
-    let app = support::base()
-        .config("database.url", scratch.url.as_str())
-        .config("database.migrate_on_boot", true)
-        .config("sheets.imports.chunk_size", 2)
-        .build()
-        .await;
-    let expected = if scratch.mysql {
-        DbBackend::MySql
-    } else {
-        DbBackend::Postgres
-    };
-    assert_eq!(app.get::<Db>().await.backend(), expected);
-    seed(&app, &[("ada@example.com", "Ada", Some(30), false)]).await;
-    let admin = app.acting_as(principal(ADMIN));
-
-    let text = "البريد الإلكتروني,الاسم,Age\n\
-        ADA@example.com,آدا لوفليس,36\n\
-        mohammed@example.com,محمد عبد الله,40\n\
-        not-an-email,فاطمة الزهراء,31\n\
-        mohammed@example.com,محمد,41\n\
-        noura@example.com,نورة القحطاني,28\n";
-    let (bytes, _, _) = WINDOWS_1256.encode(text);
-    let uploaded = upload(&admin, "عملاء.csv", &bytes, &[])
-        .await
-        .assert_status(202)
-        .json_value();
-    let id = id_of(&uploaded);
-    run_queue(&app).await;
-    let record = admin
-        .get(&format!("/api/imports/{id}"))
-        .send()
-        .await
-        .json_value();
-    assert_eq!(record["status"], "staged", "{record}");
-    assert_eq!(record["encoding"], "windows-1256");
-    assert_eq!(record["counts"]["valid"], 2);
-    assert_eq!(record["counts"]["duplicate"], 1);
-    assert_eq!(record["counts"]["invalid"], 1);
-    assert_eq!(record["counts"]["repeated"], 1);
-    let page = admin
-        .get(&format!("/api/imports/{id}/rows?per_page=2&page=2"))
-        .send()
-        .await
-        .json_value();
-    assert_eq!(
-        page["meta"],
-        json!({ "current_page": 2, "per_page": 2, "total": 5, "last_page": 3 })
-    );
-    assert_eq!(page["data"][0]["row"], 4);
-
-    admin
-        .post(&format!("/api/imports/{id}/apply"))
-        .json(&json!({ "duplicates": "update" }))
-        .send()
-        .await
-        .assert_status(202);
-    run_queue(&app).await;
-    let record = admin
-        .get(&format!("/api/imports/{id}"))
-        .send()
-        .await
-        .json_value();
-    assert_eq!(record["status"], "completed", "{record}");
-    assert_eq!(record["counts"]["created"], 2);
-    assert_eq!(record["counts"]["updated"], 1);
-    let contacts = stored_contacts(&app).await;
-    assert_eq!(
-        contacts[0],
-        contact("ada@example.com", "آدا لوفليس", Some(36), false)
-    );
-    assert_eq!(contacts.len(), 3);
-    let errors = admin
-        .get(&format!("/api/imports/{id}/errors"))
-        .send()
-        .await
-        .assert_status(200);
-    let lines = csv_lines(errors.bytes());
-    assert_eq!(lines.len(), 3, "{lines:?}");
-    assert!(lines[2].ends_with("Repeats row 3"), "{lines:?}");
-
-    // A chosen, saved mapping is found again for the next file.
-    let uploaded = upload(&admin, "x.csv", b"Mail,Who\nzed@example.com,Zed\n", &[])
-        .await
-        .json_value();
-    run_queue(&app).await;
-    let next = id_of(&uploaded);
-    admin
-        .put(&format!("/api/imports/{next}/mapping"))
-        .json(&json!({ "mapping": { "email": "Mail", "name": "Who" }, "save": true }))
-        .send()
-        .await
-        .assert_status(202);
-    run_queue(&app).await;
-    let again = upload(&admin, "y.csv", b"WHO,mail\nyan@example.com,Yan\n", &[])
-        .await
-        .json_value();
-    run_queue(&app).await;
-    let record = admin
-        .get(&format!("/api/imports/{}", id_of(&again)))
-        .send()
-        .await
-        .json_value();
-    assert_eq!(record["status"], "staged", "{record}");
-
-    // An export pages through the server.
-    let export = admin
-        .get("/api/exports/contacts?vip=false")
-        .send()
-        .await
-        .assert_status(200);
-    assert_eq!(csv_lines(export.bytes()).len(), 4);
-}
-
-#[cfg(feature = "postgres")]
-#[tokio::test]
-async fn imports_and_exports_run_on_postgres() {
-    let Some(scratch) = Scratch::new("NAVREE_TEST_POSTGRES_URL", "postgres", false).await else {
-        return;
-    };
-    flow(&scratch).await;
-    scratch.drop().await;
-}
-
-#[cfg(feature = "mysql")]
-#[tokio::test]
-async fn imports_and_exports_run_on_mysql() {
-    let Some(scratch) = Scratch::new("NAVREE_TEST_MYSQL_URL", "mysql", true).await else {
-        return;
-    };
-    flow(&scratch).await;
-    scratch.drop().await;
+/// Runs `sql` on the server of `admin`, on a thread and runtime of its own
+/// (so it works from synchronous code, `Drop` included, and from inside a
+/// test's runtime alike).
+fn run_admin(admin: &str, sql: String) -> Result<(), String> {
+    let admin = admin.to_owned();
+    std::thread::spawn(move || {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(|error| error.to_string())?;
+        runtime.block_on(async move {
+            let pool = Pool::connect(&DbOptions {
+                url: admin,
+                max_connections: 1,
+                ..DbOptions::default()
+            })
+            .await
+            .map_err(|error| format!("cannot connect to the test server: {error}"))?;
+            let result = pool.execute_script(&sql).await;
+            pool.close().await;
+            result.map(drop).map_err(|error| format!("{sql}: {error}"))
+        })
+    })
+    .join()
+    .map_err(|_| "the admin thread panicked".to_owned())?
 }
