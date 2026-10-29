@@ -13,7 +13,9 @@ use navree_search::{
     SyncDocuments, SyncMode, VECTORS_TABLE, VectorStoreKind,
 };
 
-use crate::support::{Contact, contact};
+use navree_orm::Record;
+
+use crate::support::Contact;
 
 /// Compiles only if the documented query surface exists with these shapes.
 #[allow(dead_code, unused_must_use, clippy::let_underscore_future)]
@@ -35,8 +37,8 @@ async fn query_surface(search: Arc<Search>, scope: Accessible<Contact, Read>, pa
         .workspace(uuid::Uuid::nil())
         .hybrid(0.4)
         .highlight_tags("<em>", "</em>");
-    let _: Result<Page<contact::Model>, SearchError> = query.paginate(page).await;
-    let _: Result<Page<Hit<contact::Model>>, SearchError> =
+    let _: Result<Page<Record<Contact>>, SearchError> = query.paginate(page).await;
+    let _: Result<Page<Hit<Record<Contact>>>, SearchError> =
         search.query::<Contact>("ada").hits(page).await;
     let _: Result<Vec<String>, SearchError> = search.query::<Contact>("").ids(10).await;
     let _: Result<u64, SearchError> = search.query::<Contact>("").count().await;
@@ -46,7 +48,7 @@ async fn query_surface(search: Arc<Search>, scope: Accessible<Contact, Read>, pa
         .filter("status", "customer")
         .accessible(scope.clone())
         .limit(10);
-    let _: Result<Vec<Hit<contact::Model>>, SearchError> = similar.run().await;
+    let _: Result<Vec<Hit<Record<Contact>>>, SearchError> = similar.run().await;
     let _ = search
         .similar_to::<Contact>(uuid::Uuid::nil())
         .limit(5)

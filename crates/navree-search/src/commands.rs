@@ -15,12 +15,12 @@ pub(crate) fn commands() -> [CommandSpec; 4] {
     [
         CommandSpec::new(
             "search:import",
-            "Index every row of a searchable entity (<Name>... or --all; --fresh builds a new index and swaps it in)",
+            "Index every row of a searchable model (<Name>... or --all; --fresh builds a new index and swaps it in)",
             import_command,
         ),
         CommandSpec::new(
             "search:flush",
-            "Remove every document from an entity's index (<Name>...)",
+            "Remove every document from a model's index (<Name>...)",
             flush_command,
         ),
         CommandSpec::new(
@@ -69,7 +69,7 @@ async fn import_command(ctx: AppContext, args: Vec<String>) -> Result<(), BoxErr
     )?;
     for entry in entries {
         let rows = match search.db() {
-            Ok(db) => entry.ops.count_rows(db.conn()).await.unwrap_or(0),
+            Ok(db) => entry.ops.count_rows(db).await.unwrap_or(0),
             Err(_) => 0,
         };
         println!(
@@ -122,7 +122,7 @@ async fn status_command(ctx: AppContext, _args: Vec<String>) -> Result<(), BoxEr
     let search = ctx.get::<Search>().await?;
     let statuses = search.status().await?;
     if statuses.is_empty() {
-        println!("No searchable entities are registered.");
+        println!("No searchable models are registered.");
         return Ok(());
     }
     let rows: Vec<[String; 6]> = statuses

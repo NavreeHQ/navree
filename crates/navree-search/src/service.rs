@@ -8,11 +8,10 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, PoisonError, Weak};
 
 use navree_contracts::{Dispatcher, JobEnvelope, JobOptions};
-use navree_db::{Db, Reader, Uow};
+use navree_db::{Backend, Db, Uow};
 use navree_kernel::{AppContext, BoxError, BoxFuture, Lifecycle, WeakAppContext};
 use navree_queue::Queue;
 use navree_workspace::Workspaces;
-use sea_orm::{DatabaseTransaction, DbBackend, TransactionTrait};
 use serde::Serialize;
 use tokio::sync::{Notify, mpsc};
 use uuid::Uuid;
@@ -72,7 +71,7 @@ pub(crate) struct Entry {
     pub(crate) settings: IndexSettings,
     /// The engine's index name (`search.prefix` + index).
     pub(crate) index: String,
-    /// The entity's table (what change events name).
+    /// The model's table (what change events name).
     pub(crate) table: String,
 }
 
@@ -111,7 +110,7 @@ pub struct IndexStatus {
 
 impl Search {
     /// Builds the service for `app`: the engine from `options`, and every
-    /// entity registered with `SearchModule::for_feature`.
+    /// model registered with `SearchModule::for_feature`.
     pub(crate) async fn build(
         app: &AppContext,
         options: SearchOptions,
@@ -284,7 +283,7 @@ impl Search {
         for entry in &self.inner.entries {
             let documents = self.inner.engine.count(&entry.index).await.unwrap_or(0);
             let rows = match &self.inner.db {
-                Some(db) => entry.ops.count_rows(db.conn()).await?,
+                Some(db) => entry.ops.count_rows(db).await?,
                 None => 0,
             };
             out.push(IndexStatus {
@@ -314,7 +313,7 @@ impl Search {
 
     /// Panics unless `E`'s index holds the record `id` (tests).
     pub async fn assert_indexed<E: Searchable>(&self, id: impl Display) {
-        let entry = self.entry::<E>().expect("the entity is searchable");
+        let entry = self.entry::<E>().expect("the model is searchable");
         let id = id.to_string();
         let found = self
             .inner
@@ -332,7 +331,7 @@ impl Search {
 
     /// Panics if `E`'s index holds the record `id` (tests).
     pub async fn assert_not_indexed<E: Searchable>(&self, id: impl Display) {
-        let entry = self.entry::<E>().expect("the entity is searchable");
+        let entry = self.entry::<E>().expect("the model is searchable");
         let id = id.to_string();
         let found = self
             .inner
@@ -410,7 +409,6 @@ impl Search {
     /// Queues `job` as part of the commit a change observer sees.
     pub(crate) async fn queue_observed(
         &self,
-        _tx: &DatabaseTransaction,
         uow: &Uow,
         job: SyncDocuments,
     ) -> Result<(), SearchError> {
@@ -475,7 +473,7 @@ impl Search {
             return Ok(vec![(None, ids.to_vec())]);
         };
         let ctx = self.read_context(None).await?;
-        let found = entry.ops.workspaces(ctx.conn(), column, ids).await;
+        let found = entry.ops.workspaces(ctx.uow(), column, ids).await;
         self.finish_context(ctx).await;
         Ok(group_by_workspace(ids, &found?))
     }
@@ -624,7 +622,7 @@ impl Search {
         self.ensure_prepared(entry, &entry.index).await?;
         self.ensure_prepared(entry, &target).await?;
         let total = match &self.inner.db {
-            Some(db) => entry.ops.count_rows(db.conn()).await.unwrap_or(0),
+            Some(db) => entry.ops.count_rows(db).await.unwrap_or(0),
             None => 0,
         };
         let mut report = ImportReport {
@@ -686,7 +684,7 @@ impl Search {
                 .inner
                 .db
                 .as_ref()
-                .is_some_and(|db| db.backend() == DbBackend::Postgres);
+                .is_some_and(|db| backend(db) == Backend::Postgres);
         match (&self.inner.workspaces, per_workspace) {
             (Some(workspaces), true) => Ok(workspaces
                 .all()
@@ -699,10 +697,10 @@ impl Search {
         }
     }
 
-    /// A read context: the current unit of work's transaction when one is
+    /// A read context: the current unit of work when its transaction is
     /// open on the app's database (a request that already wrote), else a
-    /// new transaction, inside `workspace` when given (PostgreSQL
-    /// row-level security).
+    /// new unit of work, inside `workspace` when given (PostgreSQL
+    /// row-level security; the unit of work's workspace elsewhere).
     pub(crate) async fn read_context(
         &self,
         workspace: Option<Uuid>,
@@ -710,45 +708,45 @@ impl Search {
         let db = self.db()?;
         let app = self.app()?;
         if workspace.is_none()
-            && let Reader::Transaction(tx) = db.reader().await
+            && let Some(uow) = open_uow(db).await
         {
-            return Ok(SearchContext::new(tx, app, None).borrowed());
+            return Ok(SearchContext::new(uow, app, None));
         }
-        if let (Some(workspace), Some(workspaces)) = (workspace, &self.inner.workspaces)
-            && db.backend() == DbBackend::Postgres
-        {
-            let uow = db.uow(None, None).await;
-            workspaces
-                .enter(&uow, workspace)
-                .await
-                .map_err(|e| SearchError::Other(e.to_string()))?;
-            let tx = uow.tx().await?;
-            return Ok(SearchContext::new(tx, app, Some(workspace)).with_uow(uow));
+        let uow = db.uow(None, None).await;
+        if let Some(workspace) = workspace {
+            match &self.inner.workspaces {
+                Some(workspaces) if backend(db) == Backend::Postgres => workspaces
+                    .enter(&uow, workspace)
+                    .await
+                    .map_err(|e| SearchError::Other(e.to_string()))?,
+                _ => uow.set_workspace(Some(workspace)),
+            }
         }
-        let tx = db.conn().begin().await?;
-        Ok(SearchContext::new(Arc::new(tx), app, workspace))
+        Ok(SearchContext::owning(uow, app, workspace))
     }
 
-    /// Ends a read context: rolls back the transaction it opened.
+    /// Ends a read context: rolls back the unit of work it opened.
     pub(crate) async fn finish_context(&self, ctx: SearchContext) {
-        let (tx, uow, borrowed) = ctx.into_parts();
-        if borrowed {
-            return;
-        }
-        if let Some(uow) = uow {
-            drop(tx);
-            if let Err(error) = uow.rollback().await {
-                tracing::warn!(target: "navree::search", %error, "cannot end a read transaction");
-            }
-            return;
-        }
-        if let Ok(tx) = Arc::try_unwrap(tx)
-            && let Err(error) = tx.rollback().await
-        {
+        let (uow, owned) = ctx.into_parts();
+        if owned && let Err(error) = uow.rollback().await {
             tracing::warn!(target: "navree::search", %error, "cannot end a read transaction");
         }
     }
 }
+
+/// The backend of `db` (navree-db's).
+pub(crate) fn backend(db: &Db) -> Backend {
+    navree_db::Executor::backend(db)
+}
+
+/// The task's unit of work on `db` when its transaction is open: reads
+/// and writes of search go through it (they see its writes, and on SQLite
+/// a second connection would wait for the write lock it holds).
+pub(crate) async fn open_uow(db: &Db) -> Option<Uow> {
+    let uow = Uow::current().filter(|uow| uow.db().same_as(db))?;
+    (!uow.is_finished().await && uow.has_open_transaction().await).then_some(uow)
+}
+
 
 impl fmt::Debug for Search {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -822,6 +820,13 @@ fn make_engine(
     Ok(match &options.engine {
         Engine::Postgres(pg) => {
             let db = db.ok_or("the postgres search engine needs DatabaseModule in the app")?;
+            if backend(db) == Backend::MySql {
+                return Err(
+                    "the postgres search engine runs on PostgreSQL or SQLite, not MySQL: \
+                     use the meilisearch, typesense, tantivy or memory engine"
+                        .into(),
+                );
+            }
             Arc::new(DatabaseEngine::new(db.clone(), pg.clone()))
         }
         Engine::Meilisearch { url, key } => {

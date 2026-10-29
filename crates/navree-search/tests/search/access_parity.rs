@@ -1,5 +1,5 @@
 //! Access parity: for any rule set, `accessible(scope)` returns exactly the
-//! records the SQL `Accessible` list returns, on every embedded engine.
+//! records the SQL `accessible` list returns, on every embedded engine.
 //! When the rules only name filterable, non-temporal columns, the engine
 //! applies them itself and the total is exact too.
 //!
@@ -12,40 +12,62 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use chrono::{DateTime, Duration, Utc};
-use navree_access::{Ability, Accessible, Cond, Conditions, Read, Rule, Subject};
+use navree_access::{Ability, Accessible, Cond, Conditions, Read, Rule};
+use navree_db::navree_schema::{Dialect, Migration, Schema, SchemaMigration, SchemaResult};
 use navree_db::{DatabaseModule, Db, MigrationSet, ModuleBuilderDbExt, PageQuery};
 use navree_kernel::{Module, ModuleBuilder};
+use navree_orm::Model;
+use navree_orm::access::AccessibleQuery;
 use navree_search::{Search, SearchModule};
 use navree_testing::TestApp;
 use proptest::prelude::*;
 use proptest::test_runner::{Config, TestCaseError, TestRunner};
-use sea_orm::{ActiveModelTrait, ActiveValue::Set, ConnectionTrait, DbErr, EntityTrait};
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-mod item {
-    use navree_search::Searchable;
-    use sea_orm::entity::prelude::*;
-    use serde::Serialize;
+use crate::servers::Server;
 
-    /// Serde says `Open` / `ClosedWon`; the database holds `open` /
-    /// `closed_won`, and access rules compare the database values.
-    #[derive(Clone, Debug, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize)]
-    #[sea_orm(rs_type = "String", db_type = "Text")]
+mod item {
+    use chrono::{DateTime, Utc};
+    use navree_orm::Model;
+    use navree_search::Searchable;
+    use serde::Serialize;
+    use uuid::Uuid;
+
+    /// Serde says `Open` / `ClosedWon`; the database holds `0` / `1`
+    /// (`int_enum`), and access rules compare the database values.
+    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
     pub enum Stage {
-        #[sea_orm(string_value = "open")]
+        #[default]
         Open,
-        #[sea_orm(string_value = "closed_won")]
         ClosedWon,
     }
 
-    #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Searchable)]
-    #[sea_orm(table_name = "items")]
+    impl From<Stage> for i64 {
+        fn from(stage: Stage) -> i64 {
+            match stage {
+                Stage::Open => 0,
+                Stage::ClosedWon => 1,
+            }
+        }
+    }
+
+    impl TryFrom<i64> for Stage {
+        type Error = String;
+
+        fn try_from(value: i64) -> Result<Self, String> {
+            match value {
+                0 => Ok(Stage::Open),
+                1 => Ok(Stage::ClosedWon),
+                other => Err(format!("no stage {other}")),
+            }
+        }
+    }
+
+    #[derive(Model, Searchable, Clone, Debug, Default, PartialEq, Serialize)]
+    #[model(table = "items", subject = "Item")]
     #[searchable(name = "Item")]
-    pub struct Model {
-        #[sea_orm(primary_key, auto_increment = false)]
+    pub struct Item {
         pub id: Uuid,
         #[searchable]
         pub title: String,
@@ -53,6 +75,7 @@ mod item {
         pub owner_id: Option<Uuid>,
         #[searchable(filter)]
         pub status: Option<String>,
+        #[model(cast = "int_enum")]
         #[searchable(filter)]
         pub stage: Stage,
         #[searchable(filter, sort)]
@@ -62,54 +85,36 @@ mod item {
         #[searchable(filter)]
         pub flag: bool,
         #[searchable(filter, sort)]
-        pub created_at: DateTimeUtc,
+        pub created_at: DateTime<Utc>,
         #[searchable(filter)]
-        pub due_at: Option<DateTimeUtc>,
+        pub due_at: Option<DateTime<Utc>>,
         pub note: Option<String>,
     }
-
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
-type Item = item::Entity;
-
-impl Subject for item::Entity {
-    const SUBJECT: &'static str = "Item";
-    const PERMISSION_PREFIX: &'static str = "items";
-}
+use item::Item;
 
 struct CreateItems;
 
-impl MigrationName for CreateItems {
-    fn name(&self) -> &str {
-        "m20261026_000001_create_items"
-    }
-}
-
-#[async_trait]
-impl MigrationTrait for CreateItems {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .get_connection()
-            .execute_unprepared(
-                "CREATE TABLE items (id TEXT PRIMARY KEY NOT NULL, title TEXT NOT NULL, \
-                 owner_id TEXT NULL, status TEXT NULL, stage TEXT NOT NULL, \
-                 amount BIGINT NOT NULL, score DOUBLE NOT NULL, flag BOOLEAN NOT NULL, \
-                 created_at TEXT NOT NULL, due_at TEXT NULL, note TEXT NULL)",
-            )
+impl Migration for CreateItems {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        let (uuid, double, timestamp) = match schema.target().await?.dialect() {
+            Dialect::Postgres => ("UUID", "DOUBLE PRECISION", "TIMESTAMPTZ"),
+            Dialect::MySql => ("BINARY(16)", "DOUBLE", "DATETIME(6)"),
+            Dialect::Sqlite => ("TEXT", "DOUBLE", "TEXT"),
+        };
+        schema
+            .statement(&format!(
+                "CREATE TABLE items (id {uuid} PRIMARY KEY NOT NULL, title TEXT NOT NULL, \
+                 owner_id {uuid} NULL, status TEXT NULL, stage BIGINT NOT NULL, \
+                 amount BIGINT NOT NULL, score {double} NOT NULL, flag BOOLEAN NOT NULL, \
+                 created_at {timestamp} NOT NULL, due_at {timestamp} NULL, note TEXT NULL)"
+            ))
             .await
-            .map(|_| ())
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .get_connection()
-            .execute_unprepared("DROP TABLE items")
-            .await
-            .map(|_| ())
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop_if_exists("items").await
     }
 }
 
@@ -117,8 +122,11 @@ struct ItemsModule;
 
 impl Module for ItemsModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.migrations(MigrationSet::new("items").migration(CreateItems))
-            .import(SearchModule::for_feature::<Item>());
+        m.migrations(MigrationSet::new("items").migration(SchemaMigration::new(
+            "m20261026_000001_create_items",
+            CreateItems,
+        )))
+        .import(SearchModule::for_feature::<Item>());
     }
 }
 
@@ -186,9 +194,9 @@ fn operand(pools: &Pools, field: &str, seed: u8, range: bool) -> Value {
     }
     if seed % 11 == 5 {
         return match field {
-            "amount" | "score" => json!("3"),
+            "amount" | "score" | "stage" => json!("3"),
             "flag" => json!(0),
-            "status" | "stage" | "title" | "note" => json!(3),
+            "status" | "title" | "note" => json!(3),
             "created_at" | "due_at" => json!(1_761_393_600_250_i64),
             _ => json!(false),
         };
@@ -204,8 +212,9 @@ fn operand(pools: &Pools, field: &str, seed: u8, range: bool) -> Value {
             json!("a"),
         ]),
         "stage" => pick(&[
-            json!("open"),
-            json!("closed_won"),
+            json!(0),
+            json!(1),
+            json!(1.0),
             json!("Open"),
             json!("ClosedWon"),
         ]),
@@ -284,31 +293,33 @@ fn rules_strategy() -> impl Strategy<Value = Vec<RuleSeed>> {
 }
 
 /// Inserts records covering every pool value, including nulls.
-async fn seed(db: &Db, pools: &Pools) -> Vec<item::Model> {
+async fn seed(db: &Db, pools: &Pools) -> Vec<Item> {
     let statuses = [Some("draft"), Some("open"), Some("won"), None];
     let mut records = Vec::new();
     for i in 0..72_usize {
-        let model = item::ActiveModel {
-            id: Set(Uuid::now_v7()),
-            title: Set(format!("item {}", i % 3)),
-            owner_id: Set((i % 4 != 3).then(|| pools.owners[i % 3])),
-            status: Set(statuses[(i / 2) % 4].map(str::to_owned)),
-            stage: Set(if i % 5 < 2 {
-                item::Stage::Open
-            } else {
-                item::Stage::ClosedWon
-            }),
-            amount: Set([-5, 0, 3, 4, 10][(i / 3) % 5]),
-            score: Set([0.5, 1.0, 2.25][(i / 5) % 3]),
-            flag: Set(i.is_multiple_of(2)),
-            created_at: Set(pools.times[(i / 7) % 5]),
-            due_at: Set((i % 3 != 0).then(|| pools.times[(i + 2) % 5])),
-            note: Set((i % 2 == 0).then(|| format!("n{}", i % 3))),
-        }
-        .insert(db.conn())
+        let model = Item::create(
+            db,
+            Item {
+                id: Uuid::now_v7(),
+                title: format!("item {}", i % 3),
+                owner_id: (i % 4 != 3).then(|| pools.owners[i % 3]),
+                status: statuses[(i / 2) % 4].map(str::to_owned),
+                stage: if i % 5 < 2 {
+                    item::Stage::Open
+                } else {
+                    item::Stage::ClosedWon
+                },
+                amount: [-5, 0, 3, 4, 10][(i / 3) % 5],
+                score: [0.5, 1.0, 2.25][(i / 5) % 3],
+                flag: i.is_multiple_of(2),
+                created_at: pools.times[(i / 7) % 5],
+                due_at: (i % 3 != 0).then(|| pools.times[(i + 2) % 5]),
+                note: (i % 2 == 0).then(|| format!("n{}", i % 3)),
+            },
+        )
         .await
         .expect("insert item");
-        records.push(model);
+        records.push(model.into_inner());
     }
     records
 }
@@ -316,8 +327,8 @@ async fn seed(db: &Db, pools: &Pools) -> Vec<item::Model> {
 async fn listed(db: &Db, scope: &Accessible<Item, Read>) -> BTreeSet<String> {
     scope
         .clone()
-        .apply(item::Entity::find())
-        .all(db.conn())
+        .query()
+        .get(db)
         .await
         .expect("list query")
         .into_iter()
@@ -334,8 +345,7 @@ fn parity(engine: &str, dir: Option<&std::path::Path>, cases: u32) {
         .unwrap();
     let pools = Pools::new();
     let (app, db, search) = runtime.block_on(async {
-        let mut builder = TestApp::builder()
-            .temp_database()
+        let mut builder = crate::servers::database(TestApp::builder())
             .config("search.engine", engine)
             .config("search.sync", "off");
         if let Some(dir) = dir {
@@ -419,7 +429,12 @@ fn the_memory_engine_returns_what_sql_lists() {
 
 #[test]
 fn the_database_engine_returns_what_sql_lists() {
-    parity("postgres", None, 128);
+    if crate::support::runs_on(
+        &[Server::Sqlite, Server::Postgres],
+        "the_database_engine_returns_what_sql_lists",
+    ) {
+        parity("postgres", None, 128);
+    }
 }
 
 #[cfg(feature = "tantivy")]

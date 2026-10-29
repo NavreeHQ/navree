@@ -10,14 +10,15 @@ use std::sync::Arc;
 
 use navree_access::{Ability, Accessible, ActionMarker, Subject};
 use navree_db::{Page, PageQuery, Uow};
-use sea_orm::sea_query::SimpleExpr;
-use sea_orm::{ColumnTrait, QueryFilter};
+use navree_orm::access::ModelColumns;
+use navree_orm::{Filter as RowFilter, Record, col};
 use serde::{Serialize, Serializer};
 use serde_json::Value;
 use uuid::Uuid;
 
 use crate::engine::{EngineHit, EngineQuery, SortBy};
 use crate::filter::{AccessFilter, ColumnTypes, access_filter, column_type};
+use crate::index::{by_ids, unscoped};
 use crate::searchable::{key_column, key_value, primary_key_string};
 use crate::service::Entry;
 use crate::settings::WORKSPACE_FIELD;
@@ -76,8 +77,8 @@ pub(crate) struct Access {
     ability: Arc<Ability>,
     action: &'static str,
     subject: &'static str,
-    condition: SimpleExpr,
-    /// The entity's column types, to compare operands as SQL does.
+    condition: RowFilter,
+    /// The model's column types, to compare operands as SQL does.
     columns: ColumnTypes,
 }
 
@@ -89,7 +90,11 @@ impl Access {
             ability: scope.ability().clone(),
             action: A::NAME,
             subject: E::SUBJECT,
-            condition: scope.condition(),
+            condition: RowFilter::from(ModelColumns::<E>::new().filter(
+                scope.ability(),
+                A::NAME,
+                E::SUBJECT,
+            )),
             columns: column_type::<E>,
         }
     }
@@ -101,7 +106,7 @@ struct Plan {
     /// The normalized filter.
     filter: Filter,
     /// Access conditions the engine cannot apply: filter the rows with them.
-    rows: Option<SimpleExpr>,
+    rows: Option<RowFilter>,
 }
 
 impl Plan {
@@ -169,7 +174,7 @@ impl Plan {
     }
 }
 
-/// A full-text query on one entity's index, built by
+/// A full-text query on one model's index, built by
 /// [`Search::query`](crate::Search::query).
 ///
 /// ```ignore
@@ -303,7 +308,7 @@ impl<E: Searchable> SearchQuery<E> {
     }
 
     /// The page `page` of matching records, in relevance (or sort) order.
-    pub async fn paginate(self, page: PageQuery) -> Result<Page<E::Model>, SearchError> {
+    pub async fn paginate(self, page: PageQuery) -> Result<Page<Record<E>>, SearchError> {
         let page = PageQuery::new(page.page, page.per_page);
         let (hits, total, rows) = self.run(page.offset(), page.per_page, false).await?;
         let models = load_in_order::<E>(&self.search, hits, rows).await?;
@@ -316,7 +321,7 @@ impl<E: Searchable> SearchQuery<E> {
 
     /// Like [`paginate`](SearchQuery::paginate), with each record's score
     /// and highlights.
-    pub async fn hits(self, page: PageQuery) -> Result<Page<Hit<E::Model>>, SearchError> {
+    pub async fn hits(self, page: PageQuery) -> Result<Page<Hit<Record<E>>>, SearchError> {
         let page = PageQuery::new(page.page, page.per_page);
         let (hits, total, rows) = self.run(page.offset(), page.per_page, true).await?;
         let models = load_in_order::<E>(&self.search, hits, rows).await?;
@@ -353,7 +358,7 @@ impl<E: Searchable> SearchQuery<E> {
         offset: u64,
         limit: u64,
         highlight: bool,
-    ) -> Result<(Vec<EngineHit>, u64, Option<SimpleExpr>), SearchError> {
+    ) -> Result<(Vec<EngineHit>, u64, Option<RowFilter>), SearchError> {
         let entry = self.search.entry::<E>()?;
         let hybrid = self
             .hybrid
@@ -490,25 +495,23 @@ impl<E> fmt::Debug for SearchQuery<E> {
 pub(crate) async fn load_in_order<E: Searchable>(
     search: &Search,
     hits: Vec<EngineHit>,
-    rows: Option<SimpleExpr>,
-) -> Result<Vec<Hit<E::Model>>, SearchError> {
+    rows: Option<RowFilter>,
+) -> Result<Vec<Hit<Record<E>>>, SearchError> {
     if hits.is_empty() {
         return Ok(Vec::new());
     }
     let db = search.db()?;
-    let column = key_column::<E>()?;
-    let values: Vec<_> = hits
-        .iter()
-        .filter_map(|h| key_value(&column, &h.id))
-        .collect();
-    let mut select = E::find().filter(column.is_in(values));
+    let ids: Vec<String> = hits.iter().map(|h| h.id.clone()).collect();
+    let Some(mut query) = by_ids::<E>(&ids) else {
+        return Ok(Vec::new());
+    };
     if let Some(condition) = rows {
-        select = select.filter(condition);
+        query = query.where_(condition);
     }
-    let models = select.all(&db.reader().await).await?;
-    let mut by_id: HashMap<String, E::Model> = models
+    let records = query.get(db).await?.into_vec();
+    let mut by_id: HashMap<String, Record<E>> = records
         .into_iter()
-        .map(|m| (primary_key_string(&m), m))
+        .map(|r| (primary_key_string(r.model()), r))
         .collect();
     Ok(hits
         .into_iter()
@@ -618,7 +621,7 @@ impl<E: Searchable> SimilarQuery<E> {
 
     /// The nearest records, nearest first, with their similarity as score
     /// (0 to 1).
-    pub async fn run(self) -> Result<Vec<Hit<E::Model>>, SearchError> {
+    pub async fn run(self) -> Result<Vec<Hit<Record<E>>>, SearchError> {
         let vectors = self
             .search
             .inner
@@ -681,16 +684,17 @@ pub struct AcrossHit {
 impl AcrossHit {
     /// The whole record, read in `uow`'s transaction; `None` when the hit
     /// is of another kind or the record is gone.
-    pub async fn load<E: Searchable>(&self, uow: &Uow) -> Result<Option<E::Model>, SearchError> {
+    pub async fn load<E: Searchable>(&self, uow: &Uow) -> Result<Option<Record<E>>, SearchError> {
         if self.kind != E::settings().name() {
             return Ok(None);
         }
-        let column = key_column::<E>()?;
-        let Some(value) = key_value(&column, &self.id) else {
+        let Some(value) = key_value::<E>(&self.id) else {
             return Ok(None);
         };
-        let tx = uow.tx().await?;
-        Ok(E::find().filter(column.eq(value)).one(&*tx).await?)
+        Ok(unscoped::<E>()
+            .where_(col(key_column::<E>()).eq(value))
+            .first(uow)
+            .await?)
     }
 }
 

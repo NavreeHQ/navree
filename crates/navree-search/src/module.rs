@@ -16,14 +16,14 @@ use crate::migration::migrations;
 use crate::sync::{SearchObserver, SyncDocuments};
 use crate::{Search, SearchError, SearchOptions, Searchable};
 
-/// Full-text and vector search over the app's entities.
+/// Full-text and vector search over the app's models.
 ///
 /// Global; provides and exports [`Search`] and [`SearchOptions`], and
 /// contributes:
 ///
 /// - a change observer that queues a `search.sync` job
-///   ([`SyncDocuments`]) for every committed write to a searchable entity
-///   made through `Repo` (or syncs inline, per `search.sync`);
+///   ([`SyncDocuments`]) for every committed write to a searchable model
+///   made through the model API (or syncs inline, per `search.sync`);
 /// - the `search` migrations (`search_documents`, used by the `postgres`
 ///   engine);
 /// - the commands `search:import`, `search:flush`, `search:settings` and
@@ -33,7 +33,7 @@ use crate::{Search, SearchError, SearchOptions, Searchable};
 ///   is unavailable).
 ///
 /// At boot it pushes every index's settings to the engine. Register
-/// entities with [`for_feature`](SearchModule::for_feature) in the modules
+/// models with [`for_feature`](SearchModule::for_feature) in the modules
 /// that own them.
 ///
 /// ```no_run
@@ -69,10 +69,10 @@ impl SearchModule {
         ConfiguredSearchModule { options: None }
     }
 
-    /// Registers entity `E`: its index is added to the commands, its
+    /// Registers model `M`: its index is added to the commands, its
     /// settings pushed at boot, and its changes synced.
-    pub fn for_feature<E: Searchable>() -> impl Module {
-        SearchFeature::<E>(PhantomData)
+    pub fn for_feature<M: Searchable>() -> impl Module {
+        SearchFeature::<M>(PhantomData)
     }
 }
 
@@ -145,11 +145,11 @@ fn register(m: &mut ModuleBuilder, options: Option<SearchOptions>) {
     }
 }
 
-/// `SearchModule::for_feature::<E>()`.
-struct SearchFeature<E>(PhantomData<fn() -> E>);
+/// `SearchModule::for_feature::<M>()`.
+struct SearchFeature<M>(PhantomData<fn() -> M>);
 
-impl<E: Searchable> Module for SearchFeature<E> {
+impl<M: Searchable> Module for SearchFeature<M> {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.contribute(IndexRegistration::of::<E>());
+        m.contribute(IndexRegistration::of::<M>());
     }
 }

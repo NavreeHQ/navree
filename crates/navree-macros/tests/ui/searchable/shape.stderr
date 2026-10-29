@@ -1,4 +1,4 @@
-error: #[derive(Searchable)] goes on a SeaORM model struct (`pub struct Model { .. }`)
+error: #[derive(Searchable)] goes on a navree-orm model struct (`#[derive(Model)] pub struct Deal { .. }`)
  --> tests/ui/searchable/shape.rs:4:10
   |
 4 | pub enum Status {

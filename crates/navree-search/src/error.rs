@@ -2,7 +2,8 @@
 
 use navree_http::AppError;
 use navree_kernel::BoxError;
-use sea_orm::DbErr;
+use navree_db::DbError;
+use navree_orm::OrmError;
 
 /// Everything that can go wrong while searching or indexing.
 ///
@@ -28,10 +29,10 @@ pub enum SearchError {
         /// The field.
         field: String,
     },
-    /// No registered entity has this name (commands take the `name`).
-    #[error("no searchable entity is named `{0}`; register it with SearchModule::for_feature")]
+    /// No registered model has this name (commands take the `name`).
+    #[error("no searchable model is named `{0}`; register it with SearchModule::for_feature")]
     UnknownIndex(String),
-    /// The entity type is not registered with `SearchModule::for_feature`.
+    /// The model is not registered with `SearchModule::for_feature`.
     #[error("`{0}` is not registered with SearchModule::for_feature")]
     NotRegistered(&'static str),
     /// The index is scoped to workspaces and the query names none.
@@ -96,7 +97,10 @@ pub enum SearchError {
     },
     /// A database error.
     #[error(transparent)]
-    Db(#[from] DbErr),
+    Db(#[from] DbError),
+    /// An ORM error (reading the records).
+    #[error(transparent)]
+    Orm(#[from] OrmError),
     /// A queue error (queued syncs).
     #[error(transparent)]
     Queue(#[from] navree_queue::QueueError),
@@ -128,6 +132,8 @@ pub(crate) fn map_search_error(error: &SearchError) -> Option<AppError> {
                 .with_source(error.to_string()),
         ),
         SearchError::Db(db) => navree_db::map_db_error(db),
+        SearchError::Orm(OrmError::Db(db)) => navree_db::map_db_error(db),
+        SearchError::Orm(OrmError::ModelNotFound { .. }) => Some(AppError::not_found()),
         _ => None,
     }
 }
@@ -162,7 +168,7 @@ mod tests {
             ),
             (SearchError::Other("boom".into()), 500),
             (
-                SearchError::Db(DbErr::RecordNotFound("deals 1".into())),
+                SearchError::Db(DbError::not_found("deals 1")),
                 404,
             ),
         ];

@@ -3,22 +3,15 @@
 
 use std::sync::atomic::Ordering;
 
-use navree_db::{Db, PageQuery, Repo};
+use navree_db::{Db, PageQuery};
 use navree_search::{Search, SearchError};
-use sea_orm::ActiveValue::Set;
-use sea_orm::IntoActiveModel;
 
 use crate::support::{self, Contact, insert_contacts, new_contact, settle};
 
-fn with_notes(
-    first: &str,
-    last: &str,
-    notes: &str,
-    status: &str,
-) -> crate::support::contact::ActiveModel {
+fn with_notes(first: &str, last: &str, notes: &str, status: &str) -> Contact {
     let mut row = new_contact(first, last);
-    row.notes = Set(Some(notes.to_owned()));
-    row.status = Set(status.to_owned());
+    row.notes = Some(notes.to_owned());
+    row.status = status.to_owned();
     row
 }
 
@@ -127,12 +120,7 @@ async fn deleted_records_leave_the_vector_store() {
     )
     .await;
     settle(&app).await;
-    let mut row = rows[0].clone().into_active_model();
-    row.deleted_at = Set(Some(support::now()));
-    support::in_uow(&db, async |uow| {
-        Repo::<Contact>::update(uow, row).await.unwrap()
-    })
-    .await;
+    support::update(&db, &rows[0], |c| c.deleted_at = Some(support::now())).await;
     settle(&app).await;
     assert!(
         search

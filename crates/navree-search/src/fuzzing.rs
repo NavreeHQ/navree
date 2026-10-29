@@ -5,7 +5,7 @@
 
 use std::collections::BTreeMap;
 
-use sea_orm::DbBackend;
+use navree_db::Backend;
 use serde_json::Value;
 
 use crate::engine::database::{fts5_query, tsquery, tsquery_any};
@@ -152,11 +152,11 @@ pub fn filters(value: &Value) {
             assert!(!text.contains('`'));
         }
 
-        for backend in [DbBackend::Sqlite, DbBackend::Postgres] {
+        for backend in [Backend::Sqlite, Backend::Postgres] {
             let mut sql = Sql::new(backend);
             sql.filter(&filter, "fields");
             let placeholders = match backend {
-                DbBackend::Postgres => {
+                Backend::Postgres => {
                     (1..=sql.bound()).all(|n| sql.text().contains(&format!("${n}")))
                 }
                 _ => sql.text().matches('?').count() == sql.bound(),
