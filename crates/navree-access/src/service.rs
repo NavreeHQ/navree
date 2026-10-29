@@ -469,7 +469,7 @@ impl AccessService {
         })?;
         let uow = self.db.uow(None, None).await;
         let loaded = loader.load(&uow, id).await;
-        uow.rollback().await?;
+        uow.rollback().await.map_err(DbError::from)?;
         loaded
             .map_err(|error| {
                 AccessError::Db(DbError::new(ErrorKind::Other, error.to_string()))
