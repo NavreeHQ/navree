@@ -21,8 +21,9 @@ use navree::config::{ConfigModule, ConfigSources};
 use navree::db::{DatabaseModule, Db, DbOptions, Executor, ExecutorExt, Migrator, Pool, Statement};
 use navree::kernel::{App, AppBuilder, Navree};
 
-/// Whether `url` is a MySQL or MariaDB database, which navree-search does
-/// not support (it needs PostgreSQL's or SQLite's full-text search).
+/// Whether `url` is a MySQL or MariaDB database, where navree-search's
+/// default engine (`postgres`: PostgreSQL's or SQLite's full-text search)
+/// does not run (its migrations create nothing there).
 fn is_mysql(url: &str) -> bool {
     url.starts_with("mysql") || url.starts_with("mariadb")
 }

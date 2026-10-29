@@ -1,27 +1,32 @@
 //! The `search` migration set on SQLite: `search_documents` and its FTS5
-//! table, through `migrate:fresh` and rollbacks.
+//! table, through `migrate:fresh` and rollbacks. (PostgreSQL runs it in
+//! `postgres.rs`, and every database in the facade's
+//! `production_migrations`.)
 
-use navree_db::Db;
+use navree_db::{Db, Executor, ExecutorExt, Statement};
 use navree_search::{DOCUMENTS_TABLE, FTS_TABLE, Search};
-use sea_orm::{ConnectionTrait, DbBackend, Statement};
 
+use crate::servers::Server;
 use crate::support::{self, Contact, insert_contacts, new_contact};
 
+/// Whether the suite runs on SQLite (else the test is skipped).
+fn on_sqlite(test: &str) -> bool {
+    support::runs_on(&[Server::Sqlite], test)
+}
+
 async fn tables(db: &Db) -> Vec<String> {
-    db.conn()
-        .query_all_raw(Statement::from_string(
-            DbBackend::Sqlite,
-            "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'search_%' ORDER BY name",
-        ))
-        .await
-        .unwrap()
-        .iter()
-        .map(|row| row.try_get::<String>("", "name").unwrap())
-        .collect()
+    db.fetch_column::<String>(&Statement::text(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'search_%' ORDER BY name",
+    ))
+    .await
+    .unwrap()
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_search_tables_survive_fresh_and_rollback() {
+    if !on_sqlite("the_search_tables_survive_fresh_and_rollback") {
+        return;
+    }
     let app = support::app("postgres", "inline").await;
     let db = app.get::<Db>().await;
     let found = tables(&db).await;
@@ -45,43 +50,38 @@ async fn the_search_tables_survive_fresh_and_rollback() {
 /// document's FTS row is found (and deleted) by rowid, not by scanning the
 /// `UNINDEXED` columns.
 async fn rowids(db: &Db) -> Vec<(String, i64, Option<i64>)> {
-    db.conn()
-        .query_all_raw(Statement::from_string(
-            DbBackend::Sqlite,
-            format!(
-                "SELECT d.id AS id, d.rowid AS doc, f.rowid AS fts FROM {DOCUMENTS_TABLE} d \
-                 LEFT JOIN {FTS_TABLE} f ON f.rowid = d.rowid ORDER BY d.id"
-            ),
-        ))
-        .await
-        .unwrap()
-        .iter()
-        .map(|row| {
-            (
-                row.try_get("", "id").unwrap(),
-                row.try_get("", "doc").unwrap(),
-                row.try_get("", "fts").unwrap(),
-            )
-        })
-        .collect()
+    db.fetch_all(&Statement::text(format!(
+        "SELECT d.id AS id, d.rowid AS doc, f.rowid AS fts FROM {DOCUMENTS_TABLE} d \
+         LEFT JOIN {FTS_TABLE} f ON f.rowid = d.rowid ORDER BY d.id"
+    )))
+    .await
+    .unwrap()
+    .iter()
+    .map(|row| {
+        (
+            row.get("id").unwrap(),
+            row.get("doc").unwrap(),
+            row.get("fts").unwrap(),
+        )
+    })
+    .collect()
 }
 
 async fn fts_rows(db: &Db) -> i64 {
-    db.conn()
-        .query_one_raw(Statement::from_string(
-            DbBackend::Sqlite,
-            format!("SELECT COUNT(*) AS n FROM {FTS_TABLE}"),
-        ))
-        .await
-        .unwrap()
-        .unwrap()
-        .try_get("", "n")
-        .unwrap()
+    db.fetch_scalar(&Statement::text(format!(
+        "SELECT COUNT(*) AS n FROM {FTS_TABLE}"
+    )))
+    .await
+    .unwrap()
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn fts_rows_are_keyed_by_the_documents_rowid() {
     use navree_search::{Document, IndexSettings};
+
+    if !on_sqlite("fts_rows_are_keyed_by_the_documents_rowid") {
+        return;
+    }
 
     let app = support::app("postgres", "off").await;
     let db = app.get::<Db>().await;
@@ -141,6 +141,9 @@ async fn fts_rows_are_keyed_by_the_documents_rowid() {
 async fn importing_many_documents_does_not_scan_the_fts_table_per_row() {
     use navree_search::{Document, IndexSettings};
 
+    if !on_sqlite("importing_many_documents_does_not_scan_the_fts_table_per_row") {
+        return;
+    }
     let app = support::app("postgres", "off").await;
     let search = app.get::<Search>().await;
     let engine = search.engine().clone();

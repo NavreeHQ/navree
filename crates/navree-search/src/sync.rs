@@ -1,13 +1,13 @@
 //! Keeping indexes in sync: the change observer and the `search.sync` job.
 
 use navree_contracts::{BoxError, Job, JobContext};
-use navree_db::{ChangeEvent, ChangeObserver, ChangeOp, Uow};
+use navree_db::{ChangeEvent, ChangeObserver, ChangeOp, DbError, ErrorKind, Uow};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Lazy, Resolver};
-use sea_orm::{DatabaseTransaction, DbErr};
+use navree_orm::OrmError;
 use serde::{Deserialize, Serialize};
 
-use crate::Search;
 use crate::service::{group_by_workspace, syncing_paused};
+use crate::{Search, SearchError};
 
 /// The job name of [`SyncDocuments`].
 pub const SYNC_JOB: &str = "search.sync";
@@ -17,7 +17,7 @@ pub const SYNC_JOB: &str = "search.sync";
 /// records that are gone or kept out of the index.
 ///
 /// Queued by the change observer when a unit of work that wrote a
-/// searchable entity through `Repo` commits (one job per index and
+/// searchable model through the model API commits (one job per index and
 /// workspace), and by [`Search::reindex`].
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SyncDocuments {
@@ -67,21 +67,16 @@ impl Injectable for SearchObserver {
 }
 
 impl ChangeObserver for SearchObserver {
-    fn observe<'a>(
+    fn observe_with<'a>(
         &'a self,
-        tx: &'a DatabaseTransaction,
         uow: &'a Uow,
         changes: &'a [ChangeEvent],
-    ) -> BoxFuture<'a, Result<(), DbErr>> {
+    ) -> BoxFuture<'a, Result<(), DbError>> {
         Box::pin(async move {
             if syncing_paused() {
                 return Ok(());
             }
-            let search = self
-                .search
-                .get()
-                .await
-                .map_err(|e| DbErr::Custom(e.to_string()))?;
+            let search = self.search.get().await.map_err(|e| other(e.to_string()))?;
             if search.options().sync == crate::SyncMode::Off {
                 return Ok(());
             }
@@ -100,7 +95,11 @@ impl ChangeObserver for SearchObserver {
                 let groups = match entry.settings.workspace_column() {
                     None => vec![(None, ids)],
                     Some(column) => {
-                        let mut found = entry.ops.workspaces(tx, column, &ids).await?;
+                        let mut found = entry
+                            .ops
+                            .workspaces(uow, column, &ids)
+                            .await
+                            .map_err(db_error)?;
                         // Deleted rows: their old values name the workspace.
                         for change in changed.iter().filter(|c| c.op == ChangeOp::Deleted) {
                             if let Some(workspace) = change
@@ -122,13 +121,26 @@ impl ChangeObserver for SearchObserver {
                         workspace,
                     };
                     search
-                        .queue_observed(tx, uow, job)
+                        .queue_observed(uow, job)
                         .await
-                        .map_err(|e| DbErr::Custom(format!("cannot queue a search sync: {e}")))?;
+                        .map_err(|e| other(format!("cannot queue a search sync: {e}")))?;
                 }
             }
             Ok(())
         })
+    }
+}
+
+/// An observer failure that is not the database's.
+fn other(message: impl Into<String>) -> DbError {
+    DbError::new(ErrorKind::Other, message)
+}
+
+/// A search error as the database error a commit fails with.
+fn db_error(error: SearchError) -> DbError {
+    match error {
+        SearchError::Db(error) | SearchError::Orm(OrmError::Db(error)) => error,
+        other_error => other(other_error.to_string()),
     }
 }
 

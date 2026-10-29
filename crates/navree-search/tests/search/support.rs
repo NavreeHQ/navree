@@ -1,136 +1,85 @@
-//! Test entities (`contacts`, `companies`, `deals`), their migrations, and
-//! test apps.
+//! Test models (`contacts`, `companies`, `deals`), their migration, and
+//! test apps on the database `NAVREE_TEST_DATABASE` names
+//! ([`crate::servers`]).
 
 #![allow(dead_code)]
 
 use std::sync::Arc;
 
-use navree_access::Subject;
-use navree_db::{DatabaseModule, Db, MigrationSet, ModuleBuilderDbExt, Repo, Uow};
+use chrono::{DateTime, NaiveDate, Utc};
+use navree_db::navree_schema::{Dialect, Migration, Schema, SchemaMigration, SchemaResult};
+use navree_db::{DatabaseModule, Db, MigrationSet, ModuleBuilderDbExt, Uow};
 use navree_kernel::{BoxError, BoxFuture, Module, ModuleBuilder};
+use navree_orm::{Model, Record};
 use navree_queue::QueueModule;
 use navree_search::{
     Document, Embeddings, IndexSettings, Search, SearchContext, SearchModule, Searchable,
 };
 use navree_testing::{TestApp, TestAppBuilder};
-use navree_workspace::sea_compat::WorkspaceScoped;
-use sea_orm::{ActiveValue::Set, ConnectionTrait, DbErr, EntityTrait};
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
+use navree_workspace::WorkspaceScoped;
+use serde::Serialize;
 use serde_json::Value;
 use uuid::Uuid;
 
+use crate::servers::{self, Server};
+
 /// `contacts`: derived, soft-deleted, with filter and sort fields.
-pub mod contact {
-    use navree_search::Searchable;
-    use sea_orm::entity::prelude::*;
-    use serde::Serialize;
-
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize, Searchable)]
-    #[sea_orm(table_name = "contacts")]
-    #[searchable(name = "Contact", soft_delete = "deleted_at")]
-    pub struct Model {
-        #[sea_orm(primary_key, auto_increment = false)]
-        pub id: Uuid,
-        #[searchable(boost = 3)]
-        pub first_name: String,
-        #[searchable(boost = 3)]
-        pub last_name: String,
-        #[searchable(boost = 2, rename = "email_address")]
-        pub email: Option<String>,
-        #[searchable]
-        pub title: Option<String>,
-        #[searchable(filter)]
-        pub status: String,
-        #[searchable(filter)]
-        pub owner_id: Uuid,
-        #[searchable(filter, sort)]
-        pub score: i64,
-        #[searchable(sort)]
-        pub created_at: DateTimeUtc,
-        #[searchable(embed)]
-        pub notes: Option<String>,
-        pub deleted_at: Option<DateTimeUtc>,
-    }
-
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
+#[derive(Model, Searchable, Clone, Debug, Default, PartialEq, Serialize)]
+#[model(table = "contacts", subject = "Contact")]
+#[searchable(name = "Contact", soft_delete = "deleted_at")]
+pub struct Contact {
+    pub id: Uuid,
+    #[searchable(boost = 3)]
+    pub first_name: String,
+    #[searchable(boost = 3)]
+    pub last_name: String,
+    #[searchable(boost = 2, rename = "email_address")]
+    pub email: Option<String>,
+    #[searchable]
+    pub title: Option<String>,
+    #[searchable(filter)]
+    pub status: String,
+    #[searchable(filter)]
+    pub owner_id: Uuid,
+    #[searchable(filter, sort)]
+    pub score: i64,
+    #[searchable(sort)]
+    pub created_at: DateTime<Utc>,
+    #[searchable(embed)]
+    pub notes: Option<String>,
+    pub deleted_at: Option<DateTime<Utc>>,
 }
 
 /// `companies`: derived and workspace-scoped (the derive finds the
 /// `WorkspaceScoped` column).
-pub mod company {
-    use navree_search::Searchable;
-    use sea_orm::entity::prelude::*;
-    use serde::Serialize;
-
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize, Searchable)]
-    #[sea_orm(table_name = "companies")]
-    #[searchable(name = "Company")]
-    pub struct Model {
-        #[sea_orm(primary_key, auto_increment = false)]
-        pub id: Uuid,
-        pub workspace_id: Uuid,
-        #[searchable(boost = 3)]
-        pub name: String,
-        #[searchable]
-        pub domain: Option<String>,
-    }
-
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
+#[derive(Model, Searchable, Clone, Debug, Default, PartialEq, Serialize)]
+#[model(table = "companies", subject = "Company")]
+#[searchable(name = "Company")]
+pub struct Company {
+    pub id: Uuid,
+    pub workspace_id: Uuid,
+    #[searchable(boost = 3)]
+    pub name: String,
+    #[searchable]
+    pub domain: Option<String>,
 }
 
-impl WorkspaceScoped for company::Entity {}
+impl WorkspaceScoped for Company {}
 
 /// `deals`: a hand-written `Searchable` with the company's name.
-pub mod deal {
-    use sea_orm::entity::prelude::*;
-    use serde::Serialize;
-
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
-    #[sea_orm(table_name = "deals")]
-    pub struct Model {
-        #[sea_orm(primary_key, auto_increment = false)]
-        pub id: Uuid,
-        pub title: String,
-        pub company_id: Option<Uuid>,
-        pub stage: String,
-        pub amount_cents: i64,
-        pub closes_on: Option<Date>,
-        pub archived: bool,
-    }
-
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
+#[derive(Model, Clone, Debug, Default, PartialEq, Serialize)]
+#[model(table = "deals", subject = "Deal")]
+pub struct Deal {
+    pub id: Uuid,
+    pub title: String,
+    pub company_id: Option<Uuid>,
+    pub stage: String,
+    pub amount_cents: i64,
+    pub closes_on: Option<NaiveDate>,
+    pub archived: bool,
 }
 
-pub type Contact = contact::Entity;
-pub type Company = company::Entity;
-pub type Deal = deal::Entity;
-
-impl Subject for contact::Entity {
-    const SUBJECT: &'static str = "Contact";
-    const PERMISSION_PREFIX: &'static str = "contacts";
-}
-
-impl Subject for company::Entity {
-    const SUBJECT: &'static str = "Company";
-    const PERMISSION_PREFIX: &'static str = "companies";
-}
-
-impl Subject for deal::Entity {
-    const SUBJECT: &'static str = "Deal";
-    const PERMISSION_PREFIX: &'static str = "deals";
-}
-
-impl Searchable for deal::Entity {
+impl Searchable for Deal {
     fn settings() -> IndexSettings {
         IndexSettings::new("Deal", "deals")
             .text("title", 3)
@@ -143,7 +92,7 @@ impl Searchable for deal::Entity {
     }
 
     fn document<'a>(
-        deal: &'a deal::Model,
+        deal: &'a Record<Deal>,
         ctx: &'a SearchContext,
     ) -> BoxFuture<'a, Result<Option<Document>, BoxError>> {
         Box::pin(async move {
@@ -151,13 +100,13 @@ impl Searchable for deal::Entity {
                 return Ok(None);
             }
             let company = match deal.company_id {
-                Some(id) => company::Entity::find_by_id(id).one(ctx.conn()).await?,
+                Some(id) => Company::find(ctx.uow(), id).await?,
                 None => None,
             };
             Ok(Some(
                 Document::new(deal.id)
                     .field("title", &deal.title)
-                    .field("company_name", company.map(|c| c.name))
+                    .field("company_name", company.map(|c| c.into_inner().name))
                     .field("stage", &deal.stage)
                     .field("amount_cents", deal.amount_cents)
                     .field("closes_on", deal.closes_on),
@@ -166,24 +115,16 @@ impl Searchable for deal::Entity {
     }
 }
 
-/// Creates the three tables.
+/// Creates the three tables, with each database's types for UUIDs,
+/// timestamps and dates (MySQL keeps UUIDs as 16 bytes).
 struct CreateTables;
 
-impl MigrationName for CreateTables {
-    fn name(&self) -> &str {
-        "m20261026_000001_create_test_tables"
-    }
-}
-
-#[async_trait]
-impl MigrationTrait for CreateTables {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        let conn = manager.get_connection();
-        // SQLite stores uuids, timestamps and dates as text; PostgreSQL has
-        // types for them.
-        let (uuid, timestamp, date) = match manager.get_database_backend() {
-            sea_orm::DbBackend::Postgres => ("UUID", "TIMESTAMPTZ", "DATE"),
-            _ => ("TEXT", "TEXT", "TEXT"),
+impl Migration for CreateTables {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        let (uuid, timestamp, date, boolean) = match schema.target().await?.dialect() {
+            Dialect::Postgres => ("UUID", "TIMESTAMPTZ", "DATE", "BOOLEAN"),
+            Dialect::MySql => ("BINARY(16)", "DATETIME(6)", "DATE", "BOOLEAN"),
+            Dialect::Sqlite => ("TEXT", "TEXT", "TEXT", "BOOLEAN"),
         };
         for sql in [
             format!(
@@ -199,41 +140,79 @@ impl MigrationTrait for CreateTables {
             format!(
                 "CREATE TABLE deals (id {uuid} PRIMARY KEY NOT NULL, title TEXT NOT NULL, \
                  company_id {uuid} NULL, stage TEXT NOT NULL, amount_cents BIGINT NOT NULL, \
-                 closes_on {date} NULL, archived BOOLEAN NOT NULL DEFAULT FALSE)"
+                 closes_on {date} NULL, archived {boolean} NOT NULL DEFAULT FALSE)"
             ),
         ] {
-            conn.execute_unprepared(&sql).await?;
+            schema.statement(&sql).await?;
         }
         Ok(())
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        let conn = manager.get_connection();
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
         for table in ["contacts", "companies", "deals"] {
-            conn.execute_unprepared(&format!("DROP TABLE {table}"))
-                .await?;
+            schema.drop_if_exists(table).await?;
         }
         Ok(())
     }
 }
 
-/// The test tables and the three searchable entities.
+/// The test tables and the three searchable models.
 pub struct CrmModule;
 
 impl Module for CrmModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.migrations(MigrationSet::new("crm").migration(CreateTables))
-            .import(SearchModule::for_feature::<Contact>())
-            .import(SearchModule::for_feature::<Company>())
-            .import(SearchModule::for_feature::<Deal>());
+        m.migrations(MigrationSet::new("crm").migration(SchemaMigration::new(
+            "m20261026_000001_create_test_tables",
+            CreateTables,
+        )))
+        .import(SearchModule::for_feature::<Contact>())
+        .import(SearchModule::for_feature::<Company>())
+        .import(SearchModule::for_feature::<Deal>());
     }
 }
 
-/// A test app: a temporary SQLite database, a memory queue, the search
-/// module from configuration and the test entities. `config` goes on top.
+/// Whether the suite's database runs the `postgres` engine (PostgreSQL
+/// and SQLite do; MySQL does not).
+pub fn has_database_engine() -> bool {
+    Server::current() != Server::MySql
+}
+
+/// The engines a test that compares the `memory` engine with the database
+/// one runs on.
+pub fn engines() -> &'static [&'static str] {
+    if has_database_engine() {
+        &["memory", "postgres"]
+    } else {
+        &["memory"]
+    }
+}
+
+/// The engine of a test of the database engine's SQL: `postgres` where it
+/// runs, else `memory` (the query builder is the same).
+pub fn database_engine() -> &'static str {
+    if has_database_engine() {
+        "postgres"
+    } else {
+        "memory"
+    }
+}
+
+/// `true` when the suite runs on one of `servers`; else prints why `test`
+/// is skipped.
+pub fn runs_on(servers: &[Server], test: &str) -> bool {
+    let current = Server::current();
+    let runs = servers.contains(&current);
+    if !runs {
+        println!("SKIPPED {test}: not on {current:?}");
+    }
+    runs
+}
+
+/// A test app: a database of its own on the current server, a memory
+/// queue, the search module from configuration and the test models.
+/// `config` goes on top.
 pub fn builder(engine: &str, sync: &str) -> TestAppBuilder {
-    TestApp::builder()
-        .temp_database()
+    servers::database(TestApp::builder())
         .config("queue.driver", "memory")
         .config("search.engine", engine)
         .config("search.sync", sync)
@@ -248,36 +227,91 @@ pub async fn app(engine: &str, sync: &str) -> TestApp {
     builder(engine, sync).build().await
 }
 
-pub fn now() -> chrono::DateTime<chrono::Utc> {
+pub fn now() -> DateTime<Utc> {
     "2026-10-26T12:00:00Z".parse().unwrap()
 }
 
-/// A contact row.
-pub fn new_contact(first: &str, last: &str) -> contact::ActiveModel {
-    contact::ActiveModel {
-        id: Set(Uuid::now_v7()),
-        first_name: Set(first.to_owned()),
-        last_name: Set(last.to_owned()),
-        email: Set(Some(format!("{}@example.io", first.to_lowercase()))),
-        title: Set(None),
-        status: Set("lead".to_owned()),
-        owner_id: Set(Uuid::nil()),
-        score: Set(0),
-        created_at: Set(now()),
-        notes: Set(None),
-        deleted_at: Set(None),
+/// A contact.
+pub fn new_contact(first: &str, last: &str) -> Contact {
+    Contact {
+        id: Uuid::now_v7(),
+        first_name: first.to_owned(),
+        last_name: last.to_owned(),
+        email: Some(format!("{}@example.io", first.to_lowercase())),
+        title: None,
+        status: "lead".to_owned(),
+        owner_id: Uuid::nil(),
+        score: 0,
+        created_at: now(),
+        notes: None,
+        deleted_at: None,
     }
 }
 
-/// Inserts `rows` through `Repo` in one unit of work and commits.
-pub async fn insert_contacts(db: &Db, rows: Vec<contact::ActiveModel>) -> Vec<contact::Model> {
+/// A company of `workspace`.
+pub fn new_company(workspace: Uuid, name: &str) -> Company {
+    Company {
+        id: Uuid::now_v7(),
+        workspace_id: workspace,
+        name: name.to_owned(),
+        domain: None,
+    }
+}
+
+/// An open deal without a company or a closing date.
+pub fn new_deal(title: &str, stage: &str, amount_cents: i64) -> Deal {
+    Deal {
+        id: Uuid::now_v7(),
+        title: title.to_owned(),
+        company_id: None,
+        stage: stage.to_owned(),
+        amount_cents,
+        closes_on: None,
+        archived: false,
+    }
+}
+
+/// Inserts `rows` through the model API in one unit of work and commits.
+pub async fn insert_contacts(db: &Db, rows: Vec<Contact>) -> Vec<Contact> {
+    insert(db, rows).await
+}
+
+/// Inserts `rows` of any model in one unit of work and commits.
+pub async fn insert<M: Model>(db: &Db, rows: Vec<M>) -> Vec<M> {
     let uow = db.uow(None, None).await;
     let mut out = Vec::new();
     for row in rows {
-        out.push(Repo::<Contact>::insert(&uow, row).await.unwrap());
+        out.push(M::create(&uow, row).await.unwrap().into_inner());
     }
     uow.commit().await.unwrap();
     out
+}
+
+/// Reads `model` again and saves `change` to it in a unit of work of its
+/// own (the change events reach the observers).
+pub async fn update<M: Model>(db: &Db, model: &M, change: impl FnOnce(&mut M) + Send) -> M {
+    let key = model.key();
+    in_uow(db, async move |uow| {
+        let mut record = M::find(uow, key).await.unwrap().expect("the record exists");
+        record.update(uow, change).await.unwrap();
+        record.into_inner()
+    })
+    .await
+}
+
+/// Deletes `model` in a unit of work of its own.
+pub async fn delete<M: Model>(db: &Db, model: &M) {
+    let key = model.key();
+    in_uow(db, async move |uow| {
+        let mut record = M::find(uow, key).await.unwrap().expect("the record exists");
+        assert!(record.delete(uow).await.unwrap());
+    })
+    .await;
+}
+
+/// The stored `Contact` `id`.
+pub async fn reload(db: &Db, id: Uuid) -> Contact {
+    Contact::find(db, id).await.unwrap().unwrap().into_inner()
 }
 
 /// Runs `f` in a new unit of work and commits it.

@@ -1,20 +1,19 @@
 //! The business logic of projects. Every read and write goes through
-//! `WorkspaceRepo`, so it only ever touches the current workspace's rows.
+//! `WorkspaceRepo`, so it only ever touches the named workspace's rows.
 
-use chrono::Utc;
 use navree::access::{Accessible, Read};
 use navree::contracts::Broadcaster;
-use navree::db::{Page, PageQuery, Uow, paginate};
+use navree::db::{Page, PageQuery, Uow};
 use navree::injectable;
-// COMPAT (data-layer move): the SeaORM forms of the workspace repositories.
-use navree::workspace::sea_compat::WorkspaceRepo;
-use sea_orm::{ActiveValue::Set, ColumnTrait, DbErr, QueryFilter, QueryOrder};
+use navree::orm::access::AccessibleQuery;
+use navree::orm::prelude::*;
+use navree::workspace::WorkspaceRepo;
 use serde_json::json;
 use std::sync::Arc;
 use uuid::Uuid;
 
 use super::dto::{CreateProject, ProjectFilter, ProjectResource, UpdateProject};
-use super::entity::{ActiveModel, Column, Model, Project};
+use super::entity::Project;
 
 /// The real-time event a project change is broadcast as, on the
 /// workspace's channel `private-workspace.{id}`:
@@ -41,18 +40,18 @@ impl ProjectService {
         scope: Accessible<Project, Read>,
         filter: ProjectFilter,
         page: PageQuery,
-    ) -> Result<Page<ProjectResource>, DbErr> {
-        let mut select =
-            WorkspaceRepo::<Project>::select(workspace).order_by_desc(Column::CreatedAt);
+    ) -> Result<Page<ProjectResource>, OrmError> {
+        let mut query =
+            WorkspaceRepo::<Project>::query(workspace).order_by_desc(Project::CREATED_AT);
         if let Some(status) = filter.status {
-            select = select.filter(Column::Status.eq(status.as_str()));
+            query = query.where_(Project::STATUS.eq(status.as_str()));
         }
         if let Some(search) = filter.search.as_deref().map(str::trim)
             && !search.is_empty()
         {
-            select = select.filter(Column::Name.contains(search));
+            query = query.where_(Project::NAME.like(format!("%{search}%")));
         }
-        let page = paginate(scope.apply(select), &*uow.tx().await?, page).await?;
+        let page = scope.apply(query).paginate(uow, page).await?;
         Ok(page.map(ProjectResource::from))
     }
 
@@ -63,21 +62,19 @@ impl ProjectService {
         workspace: Uuid,
         user: Uuid,
         input: CreateProject,
-    ) -> Result<ProjectResource, DbErr> {
-        let now = Utc::now();
+    ) -> Result<ProjectResource, OrmError> {
         let project = WorkspaceRepo::<Project>::insert(
             uow,
             workspace,
-            ActiveModel {
-                id: Set(Uuid::now_v7()),
-                name: Set(input.name),
-                description: Set(input.description),
-                status: Set(input.status.as_str().to_owned()),
-                created_by: Set(user),
-                created_at: Set(now),
-                updated_at: Set(now),
-                // Set by the repository.
-                workspace_id: sea_orm::ActiveValue::NotSet,
+            Project {
+                id: Uuid::now_v7(),
+                name: input.name,
+                description: input.description,
+                status: input.status.as_str().to_owned(),
+                created_by: user,
+                // The workspace is set by the repository, the times by the
+                // model.
+                ..Project::default()
             },
         )
         .await?;
@@ -91,29 +88,32 @@ impl ProjectService {
         &self,
         uow: &Uow,
         workspace: Uuid,
-        project: Model,
+        mut project: Record<Project>,
         input: UpdateProject,
-    ) -> Result<ProjectResource, DbErr> {
-        let mut active: ActiveModel = project.into();
+    ) -> Result<ProjectResource, OrmError> {
         if let Some(name) = input.name {
-            active.name = Set(name);
+            project.name = name;
         }
         if let Some(description) = input.description {
-            active.description = Set(Some(description));
+            project.description = Some(description);
         }
         if let Some(status) = input.status {
-            active.status = Set(status.as_str().to_owned());
+            project.status = status.as_str().to_owned();
         }
-        active.updated_at = Set(Utc::now());
-        let project =
-            ProjectResource::from(WorkspaceRepo::<Project>::update(uow, workspace, active).await?);
+        WorkspaceRepo::<Project>::update(uow, workspace, &mut project).await?;
+        let project = ProjectResource::from(project);
         self.broadcast(uow, "updated", &project);
         Ok(project)
     }
 
     /// Deletes `project`.
-    pub async fn delete(&self, uow: &Uow, workspace: Uuid, project: Model) -> Result<(), DbErr> {
-        let resource = ProjectResource::from(project.clone());
+    pub async fn delete(
+        &self,
+        uow: &Uow,
+        workspace: Uuid,
+        project: Record<Project>,
+    ) -> Result<(), OrmError> {
+        let resource = ProjectResource::from(project.model().clone());
         WorkspaceRepo::<Project>::delete(uow, workspace, project).await?;
         self.broadcast(uow, "deleted", &resource);
         Ok(())

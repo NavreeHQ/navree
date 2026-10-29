@@ -2,35 +2,28 @@
 //! expands to.
 
 use std::fmt;
-use std::sync::Arc;
 
-use navree_db::Uow;
+use navree_db::{Uow, Value};
 use navree_kernel::{AppContext, BoxError, BoxFuture};
-use sea_orm::sea_query::Value as SqlValue;
-use sea_orm::sea_query::value::sea_value_to_json_value;
-use sea_orm::{
-    ColumnTrait, ColumnType, DatabaseTransaction, EntityTrait, IdenStatic, Iterable, ModelTrait,
-    PrimaryKeyToColumn,
-};
+use navree_orm::{ColumnMeta, Model, PrimaryKey, Record};
 use uuid::Uuid;
 
 use crate::{Document, IndexSettings};
 
-/// An entity whose records can be searched.
+/// A navree-orm model whose records can be searched.
 ///
-/// Derive it on a SeaORM model with `#[derive(Searchable)]` (it implements
-/// this trait for the module's `Entity`), or implement it by hand when a
-/// document needs data from other tables. Register the entity with
-/// `SearchModule::for_feature::<E>()`.
+/// Derive it with `#[derive(Searchable)]` next to `#[derive(Model)]`, or
+/// implement it by hand when a document needs data from other tables.
+/// Register the model with `SearchModule::for_feature::<M>()`.
 ///
 /// ```ignore
-/// impl Searchable for deal::Entity {
+/// impl Searchable for Deal {
 ///     fn settings() -> IndexSettings {
 ///         IndexSettings::new("Deal", "deals").text("title", 3).filter("stage")
 ///     }
 ///
 ///     fn document<'a>(
-///         deal: &'a deal::Model,
+///         deal: &'a Record<Deal>,
 ///         ctx: &'a SearchContext,
 ///     ) -> BoxFuture<'a, Result<Option<Document>, BoxError>> {
 ///         Box::pin(async move {
@@ -39,65 +32,65 @@ use crate::{Document, IndexSettings};
 ///     }
 /// }
 /// ```
-pub trait Searchable: EntityTrait<Model: Sync> + Send + Sync + 'static {
+///
+/// Records are read without the model's global scopes (soft-deleted rows
+/// are read, and kept out of the index by the index's `soft_delete`
+/// column; workspace-scoped models are read in every workspace, each
+/// document carrying its workspace).
+pub trait Searchable: Model {
     /// The index: its name, fields and their uses.
     fn settings() -> IndexSettings;
 
     /// The document of `record`; `Ok(None)` keeps it out of the index (and
     /// removes it if it was indexed). Read related rows through
-    /// [`ctx.conn()`](SearchContext::conn).
+    /// [`ctx.uow()`](SearchContext::uow).
     fn document<'a>(
-        record: &'a Self::Model,
+        record: &'a Record<Self>,
         ctx: &'a SearchContext,
     ) -> BoxFuture<'a, Result<Option<Document>, BoxError>>;
 }
 
-/// What [`Searchable::document`] may use: a read transaction on the app's
-/// database (inside the record's workspace, when it has one) and the app.
+/// What [`Searchable::document`] may use: a unit of work reading the app's
+/// database (inside the records' workspace, when they have one) and the
+/// app.
 pub struct SearchContext {
-    tx: Arc<DatabaseTransaction>,
+    uow: Uow,
     app: AppContext,
     workspace: Option<Uuid>,
-    /// The unit of work the transaction belongs to, when it was opened
-    /// for a workspace.
-    uow: Option<Uow>,
-    /// The transaction belongs to the task's unit of work (not ours to end).
-    borrowed: bool,
+    /// The unit of work was opened for this context (rolled back when the
+    /// context ends); otherwise it is the caller's.
+    owned: bool,
 }
 
 impl SearchContext {
-    /// A context reading through `tx` (to call [`Searchable::document`] in
-    /// a test).
-    pub fn new(tx: Arc<DatabaseTransaction>, app: AppContext, workspace: Option<Uuid>) -> Self {
+    /// A context reading through `uow`, which stays the caller's to commit
+    /// or roll back (to call [`Searchable::document`] in a test).
+    pub fn new(uow: Uow, app: AppContext, workspace: Option<Uuid>) -> Self {
         Self {
-            tx,
+            uow,
             app,
             workspace,
-            uow: None,
-            borrowed: false,
+            owned: false,
         }
     }
 
-    /// The transaction is the current unit of work's.
-    pub(crate) fn borrowed(mut self) -> Self {
-        self.borrowed = true;
-        self
+    /// A context on a unit of work opened for it, rolled back when it ends.
+    pub(crate) fn owning(uow: Uow, app: AppContext, workspace: Option<Uuid>) -> Self {
+        Self {
+            owned: true,
+            ..Self::new(uow, app, workspace)
+        }
     }
 
-    /// The transaction belongs to `uow`.
-    pub(crate) fn with_uow(mut self, uow: Uow) -> Self {
-        self.uow = Some(uow);
-        self
+    /// The unit of work, and whether it was opened for this context.
+    pub(crate) fn into_parts(self) -> (Uow, bool) {
+        (self.uow, self.owned)
     }
 
-    /// The transaction, its unit of work and whether it is borrowed.
-    pub(crate) fn into_parts(self) -> (Arc<DatabaseTransaction>, Option<Uow>, bool) {
-        (self.tx, self.uow, self.borrowed)
-    }
-
-    /// The connection to read related rows with (`.one(ctx.conn())`).
-    pub fn conn(&self) -> &DatabaseTransaction {
-        &self.tx
+    /// The unit of work to read related rows through
+    /// (`Company::find(ctx.uow(), id)`, or navree-db statements).
+    pub fn uow(&self) -> &Uow {
+        &self.uow
     }
 
     /// The app, to resolve services.
@@ -115,69 +108,63 @@ impl fmt::Debug for SearchContext {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("SearchContext")
             .field("workspace", &self.workspace)
+            .field("owned", &self.owned)
             .finish_non_exhaustive()
     }
 }
 
 /// The value of column `column` of `model` as a string (`None` for null or
 /// an unknown column).
-pub(crate) fn column_string<M: ModelTrait>(model: &M, column: &str) -> Option<String> {
-    let column = <M::Entity as EntityTrait>::Column::iter().find(|c| c.as_str() == column)?;
-    value_string(&model.get(column))
+pub(crate) fn column_string<M: Model>(model: &M, column: &str) -> Option<String> {
+    value_string(&model.value(column).ok().flatten()?)
 }
 
 /// Whether column `column` of `model` holds a value.
-pub(crate) fn column_is_set<M: ModelTrait>(model: &M, column: &str) -> bool {
+pub(crate) fn column_is_set<M: Model>(model: &M, column: &str) -> bool {
     column_string(model, column).is_some()
 }
 
 /// A database value as a string: UUIDs hyphenated, numbers and strings as
 /// they are; `None` for null.
-pub(crate) fn value_string(value: &SqlValue) -> Option<String> {
-    match value {
-        SqlValue::Uuid(Some(uuid)) => Some(uuid.hyphenated().to_string()),
-        other => match sea_value_to_json_value(other) {
-            serde_json::Value::Null => None,
-            serde_json::Value::String(s) => Some(s),
-            json => Some(json.to_string()),
-        },
+pub(crate) fn value_string(value: &Value) -> Option<String> {
+    match value.to_json() {
+        serde_json::Value::Null => None,
+        serde_json::Value::String(s) => Some(s),
+        json => Some(json.to_string()),
     }
 }
 
-/// The primary key of `model` as a string (composite keys joined with `,`).
-pub fn primary_key_string<M: ModelTrait>(model: &M) -> String {
-    <M::Entity as EntityTrait>::PrimaryKey::iter()
-        .map(|key| value_string(&model.get(key.into_column())).unwrap_or_default())
-        .collect::<Vec<_>>()
-        .join(",")
+/// The primary key of `model` as a string (what change events name it).
+pub fn primary_key_string<M: Model>(model: &M) -> String {
+    model.key().to_key_string()
 }
 
-/// The single primary key column of `E`.
-pub(crate) fn key_column<E: EntityTrait>() -> Result<E::Column, crate::SearchError> {
-    let mut keys = E::PrimaryKey::iter();
-    match (keys.next(), keys.next()) {
-        (Some(key), None) => Ok(key.into_column()),
-        _ => Err(crate::SearchError::Other(format!(
-            "`{}` needs a single-column primary key to be searchable",
-            E::default().table_name()
-        ))),
-    }
+/// The key column of `M`, qualified with its table.
+pub(crate) fn key_column<M: Model>() -> String {
+    let meta = M::meta();
+    format!("{}.{}", meta.table(), meta.key_column())
 }
 
-/// The key value for id `id`, typed like `column`; `None` when `id` cannot
-/// be a key of that type.
-pub(crate) fn key_value<C: ColumnTrait>(column: &C, id: &str) -> Option<SqlValue> {
-    match column.def().get_column_type() {
-        ColumnType::Uuid => Uuid::parse_str(id).ok().map(SqlValue::from),
-        ColumnType::TinyInteger
-        | ColumnType::SmallInteger
-        | ColumnType::Integer
-        | ColumnType::BigInteger
-        | ColumnType::TinyUnsigned
-        | ColumnType::SmallUnsigned
-        | ColumnType::Unsigned
-        | ColumnType::BigUnsigned => id.parse::<i64>().ok().map(SqlValue::from),
-        _ => Some(SqlValue::from(id.to_owned())),
+/// The value of `M`'s key for id `id`; `None` when `id` cannot be a key.
+pub(crate) fn key_value<M: Model>(id: &str) -> Option<Value> {
+    let meta = M::meta();
+    typed_value(meta.column(meta.key_column())?, id)
+}
+
+/// Text `text` as a value of the column `meta` describes (a UUID, an
+/// integer, a boolean, else text); `None` when it cannot be one.
+pub(crate) fn typed_value(meta: &ColumnMeta, text: &str) -> Option<Value> {
+    let rust_type = meta.rust_type();
+    let inner = rust_type
+        .strip_prefix("Option<")
+        .and_then(|rest| rest.strip_suffix('>'))
+        .unwrap_or(rust_type);
+    match inner.rsplit("::").next().unwrap_or(inner).trim() {
+        "Uuid" => Uuid::parse_str(text).ok().map(Value::from),
+        "i8" | "i16" | "i32" | "i64" | "isize" => text.parse::<i64>().ok().map(Value::from),
+        "u8" | "u16" | "u32" | "u64" | "usize" => text.parse::<u64>().ok().map(Value::from),
+        "bool" => text.parse::<bool>().ok().map(Value::from),
+        _ => Some(Value::from(text.to_owned())),
     }
 }
 
@@ -187,15 +174,18 @@ pub mod __private {
     use std::marker::PhantomData;
 
     pub use navree_kernel::{BoxError, BoxFuture};
-    pub use sea_orm;
+    pub use navree_orm::{Model, Record};
 
-    pub use super::primary_key_string;
+    /// The primary key of `record` as a string.
+    pub fn primary_key_string<M: Model>(record: &Record<M>) -> String {
+        super::primary_key_string(record.model())
+    }
 
     /// The record's columns in the form access rules compare
-    /// ([`navree_access::record_json`]): the derive stores filter and sort
-    /// fields this way, so engine filters agree with SQL.
-    pub fn columns<M: sea_orm::ModelTrait>(record: &M) -> serde_json::Value {
-        navree_access::record_json(record)
+    /// (`navree_orm::access::record_json`): the derive stores filter and
+    /// sort fields this way, so engine filters agree with SQL.
+    pub fn columns<M: Model>(record: &Record<M>) -> serde_json::Value {
+        navree_orm::access::record_json(record)
     }
 
     /// Column `name` of [`columns`]' result (`null` when absent).
@@ -206,48 +196,47 @@ pub mod __private {
             .unwrap_or(serde_json::Value::Null)
     }
 
-    /// The table name of `E`.
-    pub fn table_name<E: sea_orm::EntityTrait>() -> String {
-        sea_orm::EntityName::table_name(&E::default()).to_owned()
+    /// The table of `M`.
+    pub fn table_name<M: Model>() -> String {
+        M::meta().table().to_owned()
     }
 
-    /// Finds an entity's `WorkspaceScoped` column at the derive site:
-    /// `(&&WorkspaceProbe::<Entity>::new()).workspace_column()` picks
-    /// [`ViaScoped`] when `Entity: WorkspaceScoped` and [`ViaPlain`]
+    /// Finds a model's workspace column at the derive site:
+    /// `(&&WorkspaceProbe::<M>::new()).workspace_column()` picks
+    /// [`ViaScoped`] when `M: navree_workspace::WorkspaceScoped` and
+    /// [`ViaPlain`] (the model's own `#[model(workspace)]` column, if any)
     /// otherwise.
-    pub struct WorkspaceProbe<E>(PhantomData<fn() -> E>);
+    pub struct WorkspaceProbe<M>(PhantomData<fn() -> M>);
 
-    impl<E> WorkspaceProbe<E> {
-        /// A probe for `E`.
+    impl<M> WorkspaceProbe<M> {
+        /// A probe for `M`.
         #[allow(clippy::new_without_default)]
         pub fn new() -> Self {
             Self(PhantomData)
         }
     }
 
-    /// The workspace column of a `WorkspaceScoped` entity (the SeaORM form
-    /// of navree-workspace's compatibility layer, `sea_compat`, while
-    /// `Searchable` is derived on SeaORM entities).
+    /// The workspace column of a `WorkspaceScoped` model.
     pub trait ViaScoped {
-        /// `Some(E::WORKSPACE_COLUMN)`.
+        /// `Some(M::WORKSPACE_COLUMN)`.
         fn workspace_column(&self) -> Option<&'static str>;
     }
 
-    impl<E: navree_workspace::sea_compat::WorkspaceScoped> ViaScoped for &WorkspaceProbe<E> {
+    impl<M: navree_workspace::WorkspaceScoped> ViaScoped for &WorkspaceProbe<M> {
         fn workspace_column(&self) -> Option<&'static str> {
-            Some(E::WORKSPACE_COLUMN)
+            Some(M::WORKSPACE_COLUMN)
         }
     }
 
-    /// No workspace column.
+    /// The model's `#[model(workspace)]` column, if it has one.
     pub trait ViaPlain {
-        /// `None`.
+        /// `M::meta().workspace_column()`.
         fn workspace_column(&self) -> Option<&'static str>;
     }
 
-    impl<E> ViaPlain for WorkspaceProbe<E> {
+    impl<M: Model> ViaPlain for WorkspaceProbe<M> {
         fn workspace_column(&self) -> Option<&'static str> {
-            None
+            M::meta().workspace_column()
         }
     }
 }

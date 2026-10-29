@@ -4,25 +4,17 @@
 use std::sync::Arc;
 
 use navree_contracts::{Dispatcher, JobEnvelope};
-use navree_db::{DatabaseModule, Db, Repo};
+use navree_db::{DatabaseModule, Db};
 use navree_kernel::{BoxError, BoxFuture};
+use navree_orm::Model;
 use navree_queue::{Queue, QueueFake};
 use navree_search::{Search, SearchModule, SyncDocuments};
 use navree_testing::{TestApp, TestAppBuilder};
-use sea_orm::{ActiveValue::Set, ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter};
 use uuid::Uuid;
 
 use crate::support::{
-    self, Company, Contact, Deal, company, deal, insert_contacts, new_contact, settle,
+    self, Contact, Deal, insert, insert_contacts, new_company, new_contact, new_deal, settle,
 };
-
-async fn reload(db: &Db, id: Uuid) -> crate::support::contact::Model {
-    Contact::find_by_id(id)
-        .one(db.conn())
-        .await
-        .unwrap()
-        .unwrap()
-}
 
 async fn found(search: &Search, text: &str) -> Vec<String> {
     search
@@ -46,24 +38,13 @@ async fn inline_sync_indexes_committed_writes() {
     assert_eq!(found(&search, "lovelace").await, [ada.id.to_string()]);
 
     // An update replaces the document.
-    let mut row = ada.clone().into_active_model();
-    row.last_name = Set("Byron".into());
-    support::in_uow(&db, async |uow| {
-        Repo::<Contact>::update(uow, row).await.unwrap()
-    })
-    .await;
+    support::update(&db, &ada, |c| c.last_name = "Byron".into()).await;
     settle(&app).await;
     assert!(found(&search, "lovelace").await.is_empty());
     assert_eq!(found(&search, "byron").await, [ada.id.to_string()]);
 
     // A soft delete removes it.
-    let current = reload(&db, ada.id).await;
-    let mut row = current.into_active_model();
-    row.deleted_at = Set(Some(support::now()));
-    support::in_uow(&db, async |uow| {
-        Repo::<Contact>::update(uow, row).await.unwrap()
-    })
-    .await;
+    support::update(&db, &ada, |c| c.deleted_at = Some(support::now())).await;
     settle(&app).await;
     search.assert_not_indexed::<Contact>(ada.id).await;
 }
@@ -85,17 +66,15 @@ async fn deletes_and_rollbacks() {
     .unwrap();
     settle(&app).await;
 
-    support::in_uow(&db, async |uow| {
-        Repo::<Contact>::delete(uow, ada.clone()).await.unwrap()
-    })
-    .await;
+    support::delete(&db, &ada).await;
     settle(&app).await;
     search.assert_not_indexed::<Contact>(ada.id).await;
 
     let uow = db.uow(None, None).await;
-    let mut row = grace.clone().into_active_model();
-    row.last_name = Set("Rolled back".into());
-    Repo::<Contact>::update(&uow, row).await.unwrap();
+    let mut row = Contact::find(&uow, grace.id).await.unwrap().unwrap();
+    row.update(&uow, |c| c.last_name = "Rolled back".into())
+        .await
+        .unwrap();
     uow.rollback().await.unwrap();
     settle(&app).await;
     assert_eq!(found(&search, "hopper").await, [grace.id.to_string()]);
@@ -125,7 +104,7 @@ async fn queued_sync_records_a_search_sync_job_in_the_commit() {
     // A rolled-back unit of work queues nothing.
     fake.clear();
     let uow = db.uow(None, None).await;
-    Repo::<Contact>::insert(&uow, new_contact("Grace", "Hopper"))
+    Contact::create(&uow, new_contact("Grace", "Hopper"))
         .await
         .unwrap();
     uow.rollback().await.unwrap();
@@ -147,13 +126,7 @@ async fn queued_sync_jobs_run_on_the_queue_and_collapse() {
 
     // Two more writes to the same record collapse into the pending job.
     for name in ["Byron", "King"] {
-        let current = reload(&db, ada.id).await;
-        let mut row = current.into_active_model();
-        row.last_name = Set(name.into());
-        support::in_uow(&db, async |uow| {
-            Repo::<Contact>::update(uow, row).await.unwrap()
-        })
-        .await;
+        support::update(&db, &ada, |c| c.last_name = name.into()).await;
     }
     assert_eq!(queue.pending_count("default").await.unwrap(), 1);
 
@@ -218,14 +191,10 @@ async fn raw_writes_need_a_reindex() {
         .try_into()
         .unwrap();
     settle(&app).await;
-    // A bulk update bypasses `Repo`.
-    Contact::update_many()
-        .col_expr(
-            crate::support::contact::Column::LastName,
-            sea_orm::sea_query::Expr::value("Byron"),
-        )
-        .filter(crate::support::contact::Column::Id.eq(ada.id))
-        .exec(db.conn())
+    // A mass update records no change events.
+    Contact::query()
+        .where_(Contact::ID.eq(ada.id))
+        .update(&*db, [Contact::LAST_NAME.set("Byron")])
         .await
         .unwrap();
     settle(&app).await;
@@ -244,47 +213,25 @@ async fn hand_written_documents_read_related_rows_and_can_opt_out() {
     let db = app.get::<Db>().await;
     let search = app.get::<Search>().await;
     let workspace = Uuid::now_v7();
-    let acme = support::in_uow(&db, async |uow| {
-        Repo::<Company>::insert(
-            uow,
-            company::ActiveModel {
-                id: Set(Uuid::now_v7()),
-                workspace_id: Set(workspace),
-                name: Set("Acme Rockets".into()),
-                domain: Set(None),
-            },
-        )
+    let [acme] = insert(&db, vec![new_company(workspace, "Acme Rockets")])
         .await
-        .unwrap()
-    })
-    .await;
-    let renewal = support::in_uow(&db, async |uow| {
-        Repo::<Deal>::insert(
-            uow,
-            deal::ActiveModel {
-                id: Set(Uuid::now_v7()),
-                title: Set("Renewal".into()),
-                company_id: Set(Some(acme.id)),
-                stage: Set("negotiation".into()),
-                amount_cents: Set(1_000_000),
-                closes_on: Set(None),
-                archived: Set(false),
-            },
-        )
-        .await
-        .unwrap()
-    })
-    .await;
+        .try_into()
+        .unwrap();
+    let [renewal] = insert(
+        &db,
+        vec![Deal {
+            company_id: Some(acme.id),
+            ..new_deal("Renewal", "negotiation", 1_000_000)
+        }],
+    )
+    .await
+    .try_into()
+    .unwrap();
     settle(&app).await;
     let ids = search.query::<Deal>("rockets").ids(10).await.unwrap();
     assert_eq!(ids, [renewal.id.to_string()], "found by its company's name");
 
-    let mut row = renewal.clone().into_active_model();
-    row.archived = Set(true);
-    support::in_uow(&db, async |uow| {
-        Repo::<Deal>::update(uow, row).await.unwrap()
-    })
-    .await;
+    support::update(&db, &renewal, |d| d.archived = true).await;
     settle(&app).await;
     search.assert_not_indexed::<Deal>(renewal.id).await;
 }
@@ -298,21 +245,14 @@ async fn workspace_scoped_changes_carry_their_workspace() {
         .await;
     let db = app.get::<Db>().await;
     let (w1, w2) = (Uuid::now_v7(), Uuid::now_v7());
-    support::in_uow(&db, async |uow| {
-        for (workspace, name) in [(w1, "Acme"), (w2, "Globex"), (w1, "Initech")] {
-            Repo::<Company>::insert(
-                uow,
-                company::ActiveModel {
-                    id: Set(Uuid::now_v7()),
-                    workspace_id: Set(workspace),
-                    name: Set(name.into()),
-                    domain: Set(None),
-                },
-            )
-            .await
-            .unwrap();
-        }
-    })
+    insert(
+        &db,
+        vec![
+            new_company(w1, "Acme"),
+            new_company(w2, "Globex"),
+            new_company(w1, "Initech"),
+        ],
+    )
     .await;
     let jobs = fake.dispatched::<SyncDocuments>();
     assert_eq!(jobs.len(), 2, "one job per workspace: {jobs:?}");
@@ -345,8 +285,7 @@ impl Dispatcher for RecordingDispatcher {
 
 /// An app with `sync = "queued"` and no `QueueModule`.
 fn without_a_queue() -> TestAppBuilder {
-    TestApp::builder()
-        .temp_database()
+    crate::servers::database(TestApp::builder())
         .config("search.engine", "memory")
         .config("search.sync", "queued")
         .module(DatabaseModule::from_config())
@@ -376,7 +315,7 @@ async fn queued_sync_without_a_queue_goes_to_the_dispatcher() {
 
     // A rolled-back unit of work dispatches nothing.
     let uow = db.uow(None, None).await;
-    Repo::<Contact>::insert(&uow, new_contact("Grace", "Hopper"))
+    Contact::create(&uow, new_contact("Grace", "Hopper"))
         .await
         .unwrap();
     uow.rollback().await.unwrap();

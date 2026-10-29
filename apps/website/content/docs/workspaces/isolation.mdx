@@ -49,7 +49,7 @@ async fn index(&self, ws: CurrentWorkspace, uow: Uow, page: PageQuery) -> Result
 }
 ```
 
-A crate that is not on navree-orm yet keeps its SeaORM entities working through `navree::workspace::sea_compat`, which has the SeaORM forms of `WorkspaceScoped`, `PartitionScoped`, `WorkspaceRepo`, `OrgRepo`, `PartitionRepo` and the module registrations (`sea_workspace_scoped`, `sea_workspace_entity`, `sea_global_entity`). It goes away once the last SeaORM entity is moved; everything on this page uses models.
+An app's remaining SeaORM entities keep working through `navree::workspace::sea_compat`, which has the SeaORM forms of `WorkspaceScoped` and `WorkspaceRepo` and the module registrations (`sea_workspace_scoped`, `sea_workspace_entity`, `sea_global_entity`): the forms the `workspace.*` conformity checks name. It has no partition or organization forms. It goes away once the last SeaORM entity is moved; everything on this page uses models.
 
 ### Records checked by route
 

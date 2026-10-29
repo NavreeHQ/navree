@@ -2,7 +2,7 @@
 //! statements with numbered or positional placeholders, and filters on a
 //! JSON column of document fields.
 
-use sea_orm::{DbBackend, Statement, Value as SqlValue};
+use navree_db::{Backend, Statement, Value as SqlValue};
 use serde_json::Value;
 
 use crate::engine::SortBy;
@@ -10,13 +10,13 @@ use crate::filter::{CmpOp, Filter};
 
 /// A statement being built: SQL text and its bound values.
 pub(crate) struct Sql {
-    backend: DbBackend,
+    backend: Backend,
     text: String,
     values: Vec<SqlValue>,
 }
 
 impl Sql {
-    pub(crate) fn new(backend: DbBackend) -> Self {
+    pub(crate) fn new(backend: Backend) -> Self {
         Self {
             backend,
             text: String::new(),
@@ -33,7 +33,7 @@ impl Sql {
     pub(crate) fn bind(&mut self, value: impl Into<SqlValue>) -> &mut Self {
         self.values.push(value.into());
         match self.backend {
-            DbBackend::Postgres => {
+            Backend::Postgres => {
                 let n = self.values.len();
                 self.text.push_str(&format!("${n}"));
             }
@@ -43,11 +43,11 @@ impl Sql {
     }
 
     pub(crate) fn is_postgres(&self) -> bool {
-        self.backend == DbBackend::Postgres
+        self.backend == Backend::Postgres
     }
 
     pub(crate) fn statement(self) -> Statement {
-        Statement::from_sql_and_values(self.backend, self.text, self.values)
+        Statement::new(self.backend, self.text, self.values)
     }
 
     #[cfg(any(test, feature = "fuzzing"))]
@@ -245,7 +245,7 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    fn render(backend: DbBackend, filter: Filter) -> (String, usize) {
+    fn render(backend: Backend, filter: Filter) -> (String, usize) {
         let mut sql = Sql::new(backend);
         sql.filter(&filter.normalized(), "d.fields");
         let n = sql.values.len();
@@ -255,7 +255,7 @@ mod tests {
     #[test]
     fn postgres_filters_compare_jsonb() {
         let (text, n) = render(
-            DbBackend::Postgres,
+            Backend::Postgres,
             Filter::All(vec![
                 Filter::eq("stage", "won"),
                 Filter::range("amount", 100..),
@@ -273,7 +273,7 @@ mod tests {
     #[test]
     fn sqlite_filters_check_json_types() {
         let (text, n) = render(
-            DbBackend::Sqlite,
+            Backend::Sqlite,
             Filter::Any(vec![Filter::eq("flag", true), Filter::null("closed_at")]),
         );
         assert_eq!(
@@ -281,10 +281,7 @@ mod tests {
             "(json_type(d.fields, '$.\"flag\"') = 'true' OR json_extract(d.fields, '$.\"closed_at\"') IS NULL)"
         );
         assert_eq!(n, 0);
-        let (text, _) = render(
-            DbBackend::Sqlite,
-            Filter::is_in("s", [json!("a"), json!(2)]),
-        );
+        let (text, _) = render(Backend::Sqlite, Filter::is_in("s", [json!("a"), json!(2)]));
         assert_eq!(
             text,
             "(((json_type(d.fields, '$.\"s\"') = 'text' AND json_extract(d.fields, '$.\"s\"') = ?) OR \
@@ -294,7 +291,7 @@ mod tests {
 
     #[test]
     fn order_puts_missing_values_last() {
-        let mut sql = Sql::new(DbBackend::Sqlite);
+        let mut sql = Sql::new(Backend::Sqlite);
         sql.order(
             &[SortBy {
                 field: "amount".into(),
