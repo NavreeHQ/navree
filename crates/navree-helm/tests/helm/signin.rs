@@ -20,8 +20,7 @@ const PASSWORD: &str = "correct horse battery";
 /// An app with real sign-in (AuthModule, CryptoModule) and its clock.
 async fn signin_app() -> (TestApp, Arc<FixedClock>) {
     let clock = Arc::new(FixedClock::new(now()));
-    let app = TestApp::builder()
-        .temp_database()
+    let app = crate::servers::database(TestApp::builder())
         .config("app.key", navree_crypto::generate_key())
         .config("hashing.memory_kib", 1024)
         .config("hashing.iterations", 1)

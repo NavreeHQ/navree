@@ -492,7 +492,7 @@ fleet = [
     "view",
 ]
 ## L7 (in `full`)
-## Helm: the admin panel generated from your entities.
+## Helm: the admin panel generated from your navree-orm models.
 helm = [
     "dep:navree-helm",
     "http",
@@ -504,6 +504,7 @@ helm = [
     "audit",
     "access",
     "auth",
+    "orm",
 ]
 ## L7 (opt-in, not in `full`: the image codecs, resvg and the document
 ## readers add to the build)

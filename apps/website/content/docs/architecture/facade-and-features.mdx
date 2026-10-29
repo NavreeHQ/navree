@@ -106,7 +106,7 @@ Every module crate is re-exported whole, as a module of the facade. `navree::db:
 | `navree::lighthouse` | navree-lighthouse | `lighthouse` | `LighthouseModule`: [application monitoring](/docs/tools/lighthouse/), issues, traces, alerts and the `/_lighthouse` dashboard |
 | `navree::logbook` | navree-logbook | `logbook` | `LogbookModule`: the [local debugging timeline](/docs/tools/logbook/) at `/_logbook`, with filters and request replay |
 | `navree::fleet` | navree-fleet | `fleet` | `FleetModule`: [supervised queue workers](/docs/tools/fleet/), metrics, failed jobs and the `/_fleet` dashboard |
-| `navree::helm` | navree-helm | `helm` | `HelmModule`: [Helm](/docs/tools/helm/), the admin panel generated from your entities |
+| `navree::helm` | navree-helm | `helm` | `HelmModule`: [Helm](/docs/tools/helm/), the admin panel generated from your navree-orm models |
 | `navree::workflows` | navree-workflows, plus `#[workflow]`, `#[trigger]`, `#[condition]` and `#[action]` | `workflows` | `WorkflowsModule`: [durable workflows](/docs/packages/workflows/) and [end-user automations](/docs/packages/automations/) |
 | `navree::directory` | navree-directory | `directory` | `DirectoryModule`: [directory sync](/docs/packages/directory-sync/), a SCIM 2.0 server and pull connectors for Microsoft Graph, Google Workspace, Okta, LDAP and Active Directory |
 | `navree::domains` | navree-domains | `domains` | `DomainsModule`: [custom domains](/docs/packages/custom-domains/), workspaces on their own domains with DNS verification, automatic TLS and the `domain` workspace resolver |

@@ -47,7 +47,7 @@ Commands:
   make:model         Generate an ORM model in a module (models/NAME.rs), with its migration, factory, seeder, controller and policy on request
   make:factory       Generate a model factory in a module (factories/NAME.rs)
   make:seeder        Generate a seeder in a module (seeders/NAME.rs), registered for db:seed
-  make:resource      Generate a Helm admin-panel resource for an entity of a module (resources/ENTITY.rs)
+  make:resource      Generate a Helm admin-panel resource for a model of a module (resources/MODEL.rs)
   dev                Serve the app, rebuilding and restarting it when the code changes
   openapi:client     Export the OpenAPI document and generate the front end's typed client schema (schema.d.ts)
   help               Print this message or the help of the given subcommand(s)
@@ -214,7 +214,7 @@ The tools of the ecosystem add their own commands to the CLI:
 | `navree openapi:client [--out DIR] [--input FILE]` | Exports the OpenAPI document and generates `schema.d.ts` with openapi-typescript, for the [typed client](/docs/frontend/typed-client/#generating-the-schema). |
 | `navree harbor:provision`, `navree deploy`, `navree deploy:rollback` | Prepare servers and ship releases with [Harbor](/docs/tools/harbor/). |
 | `navree fleet` | Runs queue workers under [Fleet](/docs/tools/fleet/)'s supervisor. |
-| `navree make:resource <module> <Entity>` | Generates a [Helm](/docs/tools/helm/) admin resource for an entity of the module, with a field per column, and registers it in the module's `wire`. |
+| `navree make:resource <module> <Model>` | Generates a [Helm](/docs/tools/helm/) admin resource for a model of the module (`models/<model>.rs`), with a field per column, and registers it in the module's `wire`. |
 | `navree mcp` | Starts [Navigator](/docs/ai/navigator/), the MCP server for your coding agent. |
 | `navree skills:install` | Installs the [agent skills](/docs/ai/agent-skills/) into the project. |
 | `navree check` | Validates the module graph, then runs the app's [conformity checks](/docs/testing/conformity-checks/) (`--only`, `--json`). |

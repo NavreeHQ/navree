@@ -2,10 +2,10 @@
 //! and on the dashboard.
 
 use std::fmt;
+use std::marker::PhantomData;
 
 use chrono::{DateTime, Datelike, Duration, NaiveDate, TimeZone, Utc};
-use sea_orm::sea_query::IntoCondition;
-use sea_orm::{Condition, EntityTrait};
+use navree_orm::{ColumnName, Model};
 use serde::Serialize;
 
 use crate::slug;
@@ -29,7 +29,7 @@ impl MetricKind {
 }
 
 /// What a metric computes over its rows.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub(crate) enum Aggregate<C> {
     Count,
     Sum(C),
@@ -62,6 +62,11 @@ impl<C> Aggregate<C> {
     }
 }
 
+/// The name of a column given to a metric.
+fn name(column: impl ColumnName) -> String {
+    column.column_name().into_owned()
+}
+
 /// The buckets of a trend.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Interval {
@@ -76,29 +81,34 @@ pub(crate) enum Interval {
 ///
 /// ```ignore
 /// Metric::value("Open pipeline")
-///     .sum(deal::Column::AmountCents)
-///     .filter(deal::Column::ClosedAt.is_null())
+///     .sum(Deal::AMOUNT_CENTS)
+///     .filter(Deal::CLOSED_AT.is_null())
 ///     .money("USD")
 ///     .on_dashboard()
-/// Metric::trend("New deals").count().by_day(deal::Column::CreatedAt, 30)
-/// Metric::partition("Deals by stage").count().group_by(deal::Column::Stage)
+/// Metric::trend("New deals").count().by_day(Deal::CREATED_AT, 30)
+/// Metric::partition("Deals by stage").count().group_by(Deal::STAGE)
 /// ```
-pub struct Metric<E: EntityTrait> {
+///
+/// Columns are the model's typed columns (`Deal::AMOUNT_CENTS`) or column
+/// names (`"amount_cents"`); the panel checks them when it boots.
+pub struct Metric<M: Model> {
+    _model: PhantomData<fn() -> M>,
     pub(crate) label: String,
     pub(crate) slug: String,
     pub(crate) kind: MetricKind,
-    pub(crate) aggregate: Aggregate<E::Column>,
-    pub(crate) conditions: Vec<Condition>,
+    pub(crate) aggregate: Aggregate<String>,
+    pub(crate) conditions: Vec<navree_orm::Filter>,
     pub(crate) money: Option<String>,
     pub(crate) on_dashboard: bool,
-    pub(crate) over: Option<E::Column>,
-    pub(crate) trend: Option<(E::Column, Interval, u32)>,
-    pub(crate) group_by: Option<E::Column>,
+    pub(crate) over: Option<String>,
+    pub(crate) trend: Option<(String, Interval, u32)>,
+    pub(crate) group_by: Option<String>,
 }
 
-impl<E: EntityTrait> Metric<E> {
+impl<M: Model> Metric<M> {
     fn new(label: &str, kind: MetricKind) -> Self {
         Self {
+            _model: PhantomData,
             label: label.to_owned(),
             slug: slug(label),
             kind,
@@ -137,33 +147,33 @@ impl<E: EntityTrait> Metric<E> {
     }
 
     /// Adds up `column`.
-    pub fn sum(mut self, column: E::Column) -> Self {
-        self.aggregate = Aggregate::Sum(column);
+    pub fn sum(mut self, column: impl ColumnName) -> Self {
+        self.aggregate = Aggregate::Sum(name(column));
         self
     }
 
     /// Averages `column`.
-    pub fn average(mut self, column: E::Column) -> Self {
-        self.aggregate = Aggregate::Average(column);
+    pub fn average(mut self, column: impl ColumnName) -> Self {
+        self.aggregate = Aggregate::Average(name(column));
         self
     }
 
     /// The smallest `column`.
-    pub fn min(mut self, column: E::Column) -> Self {
-        self.aggregate = Aggregate::Min(column);
+    pub fn min(mut self, column: impl ColumnName) -> Self {
+        self.aggregate = Aggregate::Min(name(column));
         self
     }
 
     /// The largest `column`.
-    pub fn max(mut self, column: E::Column) -> Self {
-        self.aggregate = Aggregate::Max(column);
+    pub fn max(mut self, column: impl ColumnName) -> Self {
+        self.aggregate = Aggregate::Max(name(column));
         self
     }
 
-    /// Only the rows matching `condition` (a SeaORM condition, such as
-    /// `deal::Column::ClosedAt.is_null()`); calls add up.
-    pub fn filter<C: IntoCondition>(mut self, condition: C) -> Self {
-        self.conditions.push(condition.into_condition());
+    /// Only the rows matching `condition` (a navree-orm condition, such as
+    /// `Deal::CLOSED_AT.is_null()`); calls add up.
+    pub fn filter(mut self, condition: impl Into<navree_orm::Filter>) -> Self {
+        self.conditions.push(condition.into());
         self
     }
 
@@ -182,32 +192,32 @@ impl<E: EntityTrait> Metric<E> {
     /// A value metric over the date column `column`: a range picker (7, 30
     /// or 90 days, this month, this year) and the change against the
     /// period before.
-    pub fn over(mut self, column: E::Column) -> Self {
-        self.over = Some(column);
+    pub fn over(mut self, column: impl ColumnName) -> Self {
+        self.over = Some(name(column));
         self
     }
 
     /// A trend of the last `days` days, by day of `column`.
-    pub fn by_day(mut self, column: E::Column, days: u32) -> Self {
-        self.trend = Some((column, Interval::Day, days.max(1)));
+    pub fn by_day(mut self, column: impl ColumnName, days: u32) -> Self {
+        self.trend = Some((name(column), Interval::Day, days.max(1)));
         self
     }
 
     /// A trend of the last `weeks` weeks (from Monday), by week of `column`.
-    pub fn by_week(mut self, column: E::Column, weeks: u32) -> Self {
-        self.trend = Some((column, Interval::Week, weeks.max(1)));
+    pub fn by_week(mut self, column: impl ColumnName, weeks: u32) -> Self {
+        self.trend = Some((name(column), Interval::Week, weeks.max(1)));
         self
     }
 
     /// A trend of the last `months` months, by month of `column`.
-    pub fn by_month(mut self, column: E::Column, months: u32) -> Self {
-        self.trend = Some((column, Interval::Month, months.max(1)));
+    pub fn by_month(mut self, column: impl ColumnName, months: u32) -> Self {
+        self.trend = Some((name(column), Interval::Month, months.max(1)));
         self
     }
 
     /// A breakdown by the values of `column`.
-    pub fn group_by(mut self, column: E::Column) -> Self {
-        self.group_by = Some(column);
+    pub fn group_by(mut self, column: impl ColumnName) -> Self {
+        self.group_by = Some(name(column));
         self
     }
 
@@ -217,24 +227,25 @@ impl<E: EntityTrait> Metric<E> {
     }
 }
 
-impl<E: EntityTrait> Clone for Metric<E> {
+impl<M: Model> Clone for Metric<M> {
     fn clone(&self) -> Self {
         Self {
+            _model: PhantomData,
             label: self.label.clone(),
             slug: self.slug.clone(),
             kind: self.kind,
-            aggregate: self.aggregate,
+            aggregate: self.aggregate.clone(),
             conditions: self.conditions.clone(),
             money: self.money.clone(),
             on_dashboard: self.on_dashboard,
-            over: self.over,
-            trend: self.trend,
-            group_by: self.group_by,
+            over: self.over.clone(),
+            trend: self.trend.clone(),
+            group_by: self.group_by.clone(),
         }
     }
 }
 
-impl<E: EntityTrait> fmt::Debug for Metric<E> {
+impl<M: Model> fmt::Debug for Metric<M> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Metric")
             .field("label", &self.label)

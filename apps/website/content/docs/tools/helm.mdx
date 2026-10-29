@@ -1,17 +1,17 @@
 ---
 title: "Helm"
-description: "An admin panel generated from your entities, with fields, filters, search, actions and metrics checked against the access rules your API already enforces."
+description: "An admin panel generated from your navree-orm models, with fields, filters, search, actions and metrics checked against the access rules your API already enforces."
 ---
 
 ## Introduction
 
-<Badge feature="helm" /> Helm gives your team an admin panel without building one. You describe each entity once, as a **resource**: which fields to show and edit, how to filter and search it, which actions run on it and which numbers matter. Helm turns that into list, detail, create and edit screens, bulk actions and metric cards, served by your app at `/admin`.
+<Badge feature="helm" /> Helm gives your team an admin panel without building one. You describe each model once, as a **resource**: which fields to show and edit, how to filter and search it, which actions run on it and which numbers matter. Helm turns that into list, detail, create and edit screens, bulk actions and metric cards, served by your app at `/admin`.
 
 Helm works with what your app already has:
 
-- **Your entities.** A resource wraps a SeaORM entity. There is no second schema to keep in sync.
+- **Your models.** A resource wraps a [navree-orm model](/docs/orm/models/) that is an access subject. Every screen reads the model's query, with its global scopes: soft-deleted rows stay hidden. There is no second schema to keep in sync.
 - **Your access rules.** Every screen, row, field and action is checked against your [abilities](/docs/security/authorization/), the same rules your API enforces. A sales rep who may only edit their own deals sees exactly that in Helm.
-- **Your unit of work.** Every change runs in a transaction with the signed-in user as the actor, so your observers run and the [audit log](/docs/security/audit-log/) records who changed what.
+- **Your unit of work.** Every change runs in a transaction with the signed-in user as the actor, so the [audit log](/docs/security/audit-log/) records who changed what, and your change observers see it.
 
 The screens are rendered on the server from templates, with a small stylesheet and script embedded in the crate: there is nothing to build and no front-end toolchain. They work without the script, which only adds conveniences such as confirmations, local times, searchable pickers, the command menu and the collapsible sidebar.
 
@@ -46,7 +46,19 @@ Open `http://127.0.0.1:8080/admin` and sign in with your app's account. Until yo
 
 ## Your first resource
 
-Generate a resource for an entity with the CLI. The first argument is the module, the second the entity:
+A resource wraps a [model](/docs/orm/models/) that is an access subject. `navree make:model deals Deal --policy` makes one (the policy makes it a subject); a model of your own becomes one with `subject` in its `#[model(..)]` attribute:
+
+```rust title="src/modules/deals/models/deal.rs"
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "deals", subject = "Deal", permission_prefix = "deals")]
+pub struct Deal {
+    pub id: Uuid,
+    pub title: String,
+    // ...
+}
+```
+
+Generate a resource for the model with the CLI. The first argument is the module, the second the model:
 
 ```sh
 navree make:resource deals Deal
@@ -59,7 +71,7 @@ navree make:resource deals Deal
   updated  src/modules/deals/mod.rs
 ```
 
-The generator reads the entity's columns (from `entities/deal.rs`, or the module's `entity.rs`) and writes a field for each one: text, numbers, money when there is a `currency` column, dates, booleans, read-only timestamps, and a comment suggesting `Field::belongs_to` for each foreign key. It then declares the `resources` module and registers the resource in the module's `wire` method, at the `// navree:wire` marker:
+The generator reads the model's columns (from the module's `models/deal.rs`) and writes a field for each one: text, numbers, money when there is a `currency` column, dates, booleans, read-only timestamps, and a comment suggesting `Field::belongs_to` for each foreign key. It then declares the `resources` module and registers the resource in the module's `wire` method, at the `// navree:wire` marker:
 
 ```rust title="src/modules/deals/mod.rs"
 impl DealsModule {
@@ -71,19 +83,18 @@ impl DealsModule {
 }
 ```
 
-`m.resource::<R>()` registers `R` as a provider of the module and adds it to the panel. The prelude brings it into scope, so in code you write by hand it is `m.resource::<DealResource>()`. When the entity doesn't implement `Subject` yet, the generator prints how to add it. Reload `/admin`: **Deals** is in the menu, with a list, filters and search, a detail page, and create and edit forms.
+`m.resource::<R>()` registers `R` as a provider of the module and adds it to the panel. The prelude brings it into scope, so in code you write by hand it is `m.resource::<DealResource>()`. When the model isn't a subject yet, the generator prints how to make it one. Reload `/admin`: **Deals** is in the menu, with a list, filters and search, a detail page, and create and edit forms.
 
 ## Resources
 
-A resource is a provider that implements `Resource` for one entity. This is a complete one, for deals:
+A resource is a provider that implements `Resource` for one model. This is a complete one, for deals:
 
 ```rust title="src/modules/deals/resources/deal.rs"
 use navree::helm::{Action, ActionResult, Field, Filter, Metric, Resource};
 use navree::prelude::*;
-use sea_orm::{ColumnTrait, QueryFilter};
 
 use crate::modules::companies::resources::{CompanyResource, ContactResource};
-use crate::modules::deals::entity::{self as deal, Stage};
+use crate::modules::deals::models::{Deal, Stage};
 use crate::modules::deals::{DealService, Move, MoveDeal};
 use crate::modules::users::resources::UserResource;
 
@@ -91,7 +102,7 @@ use crate::modules::users::resources::UserResource;
 pub struct DealResource;
 
 impl Resource for DealResource {
-    type Entity = deal::Entity;
+    type Model = Deal;
 
     const LABEL: &'static str = "Deals";
     const SINGULAR: &'static str = "Deal";
@@ -112,25 +123,25 @@ impl Resource for DealResource {
             Field::belongs_to::<ContactResource>("contact_id").label("Contact"),
             Field::belongs_to::<UserResource>("owner_id").label("Owner"),
             Field::date("expected_close_date").sortable(),
-            Field::computed("probability", |deal: &deal::Model| format!("{}%", deal.stage.probability())),
+            Field::computed("probability", |deal: &Deal| format!("{}%", deal.stage.probability())),
             Field::textarea("lost_reason").hide_on_index(),
             Field::datetime("closed_at").readonly(),
             Field::datetime("created_at").readonly().sortable(),
         ]
     }
 
-    fn filters(&self) -> Vec<Filter<deal::Entity>> {
+    fn filters(&self) -> Vec<Filter<Deal>> {
         vec![
             Filter::select("stage").options(Stage::ALL.iter().map(|s| (s.as_str(), s.label()))),
             Filter::belongs_to::<UserResource>("owner_id").label("Owner"),
             Filter::date_range("expected_close_date"),
-            Filter::boolean("open", "Open deals only", |select, on| {
-                if on { select.filter(deal::Column::ClosedAt.is_null()) } else { select }
+            Filter::boolean("open", "Open deals only", |query, on| {
+                if on { query.where_(Deal::CLOSED_AT.is_null()) } else { query }
             }),
         ]
     }
 
-    fn actions(&self) -> Vec<Action<deal::Entity>> {
+    fn actions(&self) -> Vec<Action<Deal>> {
         vec![
             Action::new("mark-won", "Mark as won")
                 .ability(Move)
@@ -147,23 +158,25 @@ impl Resource for DealResource {
         ]
     }
 
-    fn metrics(&self) -> Vec<Metric<deal::Entity>> {
+    fn metrics(&self) -> Vec<Metric<Deal>> {
         vec![
             Metric::value("Open pipeline")
-                .sum(deal::Column::AmountCents)
-                .filter(deal::Column::ClosedAt.is_null())
+                .sum(Deal::AMOUNT_CENTS)
+                .filter(Deal::CLOSED_AT.is_null())
                 .money("USD")
                 .on_dashboard(),
-            Metric::trend("New deals").count().by_day(deal::Column::CreatedAt, 30),
-            Metric::partition("Deals by stage").count().group_by(deal::Column::Stage),
+            Metric::trend("New deals").count().by_day(Deal::CREATED_AT, 30),
+            Metric::partition("Deals by stage").count().group_by(Deal::STAGE),
         ]
     }
 }
 ```
 
+The model behind it stores the stage as its name (`#[model(cast = "string_enum")]` on `stage: Stage`), so the select, the filter and the partition use `lead`, `won` and `lost`.
+
 | Item | What it does |
 |---|---|
-| `type Entity` | The SeaORM entity. It must implement `Subject`, which it already does if your routes check it with `#[can]`. `m.resource::<R>()` registers it with navree-access (like `AccessModule::for_feature`), so permissions such as `deals.read` map to it. |
+| `type Model` | The navree-orm model. It must be an access subject (`#[model(subject = "Deal")]`), which it already is if your routes check it with `#[can]`. `m.resource::<R>()` registers it with navree-access (like `AccessModule::for_feature`), so permissions such as `deals.read` map to it. |
 | `LABEL`, `SINGULAR` | The plural and singular names on screen. `SINGULAR` defaults to `LABEL`. |
 | `GROUP` | The menu group. Resources without one go under **Resources**. |
 | `ICON` | A [Lucide](https://lucide.dev/icons/) icon name for the menu, such as `handshake`, `users`, `building-2`, `receipt` or `package`. Helm embeds about 140 common Lucide icons (no external requests); any other name shows a folder icon and logs a warning at boot. Custom front ends get the name from the [metadata API](#the-json-api). |
@@ -177,7 +190,7 @@ impl Resource for DealResource {
 | `query` | The base query every screen starts from. See [scoping the query](#scoping-the-query). |
 | `create`, `update`, `delete` | How records are saved. See [saving through your services](#saving-through-your-services). |
 
-Helm checks every resource when the app boots, so a mistake fails the boot with a message that names the resource: a field or `TITLE` that isn't a column, an invalid `pattern`, a relationship to a resource that isn't registered, an action without `.handle(..)`, a trend without a period, or two resources with the same slug.
+Helm checks every resource when the app boots, so a mistake fails the boot with a message that names the resource: a field, a metric's column or `TITLE` that isn't a column of the model, an invalid `pattern`, a relationship to a resource that isn't registered, an action without `.handle(..)`, a trend without a period, or two resources with the same slug.
 
 ### The screens
 
@@ -190,7 +203,7 @@ Destructive buttons and actions that ask a question show a confirmation first: a
 
 ## Fields
 
-Each field names a column of the entity, except `computed`, `has_many` and `view`.
+Each field names a column of the model, except `computed`, `has_many` and `view`.
 
 | Field | Shows | In forms |
 |---|---|---|
@@ -240,7 +253,7 @@ fn fields(&self) -> Vec<Field> {
 
 ## Search, sorting and filters
 
-The search box matches the `SEARCH` columns, ignoring case (non-ASCII letters included). The list sorts by any `.sortable()` field, newest first by default (`-created_at` when the entity has that column, else its primary key descending); set `const DEFAULT_SORT: &'static str = "-amount_cents";` to change it (a leading `-` sorts descending).
+The search box matches the `SEARCH` columns, ignoring case (non-ASCII letters included). The list sorts by any `.sortable()` field, newest first by default (`-created_at` when the model has that column, else its primary key descending); set `const DEFAULT_SORT: &'static str = "-amount_cents";` to change it (a leading `-` sorts descending).
 
 Filters narrow the list from the side panel:
 
@@ -248,19 +261,21 @@ Filters narrow the list from the side panel:
 |---|---|
 | `Filter::select(column).options(..)` | One or more values |
 | `Filter::belongs_to::<R>(column)` | One or more related records |
-| `Filter::boolean(name, label, f)` | On or off; `f(select, on)` changes the query |
+| `Filter::boolean(name, label, f)` | On or off; `f(query, on)` changes the model query (a `Builder`) |
 | `Filter::date_range(column)` | A range of dates (`2026-10-01..2026-10-31`, either end optional), or a preset: today, this week, this month, this quarter |
-| `Filter::custom(name, label, f)` | A value typed in; `f(select, value)` changes the query |
+| `Filter::custom(name, label, f)` | A value typed in; `f(query, value)` changes the model query |
 
 The search, filters, sort and page are in the URL (`?search=globex&filters[stage]=won&sort=-amount_cents&page=2`), so a filtered list is a link you can share. A filter takes one or more values: repeat it, or separate them with commas.
 
 ### Scoping the query
 
-`query` is the starting point of every screen, metric and relationship picker. Use it to hide soft-deleted rows or to narrow what the panel works on:
+`query` is the starting point of every screen, metric and relationship picker. It gets the model's query (`Company::query()`), whose global scopes apply when it runs: a model with `#[model(soft_deletes)]` already hides its trashed rows. Use it to narrow what the panel works on:
 
 ```rust
-fn query(&self, select: Select<company::Entity>) -> Select<company::Entity> {
-    select.filter(company::Column::DeletedAt.is_null())
+use navree::orm::Builder;
+
+fn query(&self, query: Builder<Company>) -> Builder<Company> {
+    query.where_(Company::DELETED_AT.is_null())
 }
 ```
 
@@ -301,7 +316,7 @@ Action::new("mark-lost", "Mark as lost")
 
 The handler runs inside the request's unit of work: return an error and every change rolls back, and the error's message appears on screen. `ActionContext` has `uow()`, `user_id()`, `get::<T>()` to resolve services (with the visibility of the resource's module), `input(name)` and `inputs()`. Records the user isn't allowed to act on are left out, and the result says how many were skipped; when none is left, the action is refused with a 403. A queued action checks the user's abilities again when the job runs.
 
-When the handler calls a method on a record itself (rather than passing it to a service), Rust can't infer the records' type: write `|ctx, deals: Vec<deal::Model>|`.
+When the handler calls a method on a record itself (rather than passing it to a service), Rust can't infer the records' type: write `|ctx, deals: Vec<Record<Deal>>|`.
 
 `ActionResult::message(text)` shows a message, `ActionResult::redirect(url)` goes somewhere, and `ActionResult::download(url)` starts a download, for example of an export a queued action stored on a [disk](/docs/digging-deeper/storage/) with a temporary URL. A redirect or download to another site opens from a link on a confirmation page.
 
@@ -315,7 +330,9 @@ Metrics are cards above a resource's list, and on the dashboard when marked `.on
 | `Metric::trend(label)` | A line over time | an aggregate, then `.by_day(col, days)`, `.by_week(col, weeks)` or `.by_month(col, months)` |
 | `Metric::partition(label)` | A breakdown by a column | an aggregate, then `.group_by(col)` |
 
-A value metric with a date column (`.over(deal::Column::CreatedAt)`) gets a range picker (7, 30 or 90 days, this month, this year; 30 days by default) and shows the change against the period before. A partition labels its groups with a select field's option labels, or with the titles of related records for a `belongs_to` column. Results are cached in memory for `helm.metrics_cache_secs` (60) per user, access version and range.
+A `col` is one of the model's typed columns (`Deal::AMOUNT_CENTS`) or a column name (`"amount_cents"`), and `.filter(cond)` takes a condition on the model (`Deal::CLOSED_AT.is_null()`).
+
+A value metric with a date column (`.over(Deal::CREATED_AT)`) gets a range picker (7, 30 or 90 days, this month, this year; 30 days by default) and shows the change against the period before. A partition labels its groups with a select field's option labels, or with the titles of related records for a `belongs_to` column. Results are cached in memory for `helm.metrics_cache_secs` (60) per user, access version and range.
 
 ## Authorization
 
@@ -324,7 +341,7 @@ Helm doesn't have its own permission system. It asks your abilities, with the [a
 | In Helm | Requires |
 |---|---|
 | Entering the panel | `view` on `Helm` (permission `helm.view`) |
-| A resource in the menu, its list and its metrics | `read` on its subject, as a type-level check; rows are filtered like `Accessible<E, Read>` |
+| A resource in the menu, its list and its metrics | `read` on its subject, as a type-level check; rows are filtered like `Accessible<M, Read>` |
 | A record's page | `read` on that record; a record the filter hides is a 404 |
 | The create form | `create` on the subject; the saved record must then pass your `create` rules too |
 | Editing a record | `update` on that record; fields your rules don't permit (`.fields([..])` rules) are shown read-only, and changing them is a 403 |
@@ -335,15 +352,21 @@ Helm doesn't have its own permission system. It asks your abilities, with the [a
 
 So with rules where reps read every deal but update only their own, and only some of its fields, a rep's Helm lists every deal, shows an **Edit** button only on their own, and grays out the fields they may not change. The API under `/admin/api` enforces the same checks: hiding a button is never the only protection.
 
-Every create, update and delete runs through `Repo` in the request's [unit of work](/docs/database/unit-of-work/), so [audit](/docs/security/audit-log/) entries name the user who made the change (`deal.updated`), and each action run adds an entry `helm.action` with the action's name, the resource and the record ids.
+Every create, update and delete runs in the request's [unit of work](/docs/database/unit-of-work/), so [audit](/docs/security/audit-log/) entries name the user who made the change (`deal.updated`), and each action run adds an entry `helm.action` with the action's name, the resource and the record ids. The change events of Helm's own writes carry the record's [serialized form](/docs/orm/serialization/): a field the model hides (`#[model(hidden)]`, or skipped by serde) is stored, but never reaches an observer or the audit log.
 
 ### Saving through your services
 
-By default Helm writes the form's values straight to the entity's columns: a create gets a UUID v7 key when the key is a UUID and `created_at` and `updated_at` set to now when the entity has them, and an update sets `updated_at`. When your service does more than that, such as moving the other deals of a stage, emitting events or checking a business rule, save through it instead by overriding `create`, `update` or `delete`:
+By default Helm writes the form's values straight to the model's columns, through each field's conversion (its cast and mutator):
+
+- a create starts from a model whose fields are at their types' defaults, sets the form's values, generates the key (a UUID v7 for a `Uuid` key) and sets `created_at` and `updated_at` to now when the model has them;
+- an update writes the columns that changed and sets `updated_at`;
+- a delete removes the row, or trashes it when the model soft-deletes.
+
+These writes are statements: the model's hooks and observers don't run (its change observers, such as the audit log, do). A model with a field whose type has no `Default` can't start from defaults, so its resource overrides `create`. When your service does more than that, such as moving the other deals of a stage, emitting events or checking a business rule, save through it instead by overriding `create`, `update` or `delete`:
 
 ```rust
 use navree::BoxFuture;
-use navree::helm::{FormData, SaveContext};
+use navree::helm::{FormData, RecordOf, SaveContext};
 
 impl Resource for DealResource {
     // ...
@@ -351,9 +374,9 @@ impl Resource for DealResource {
     fn update<'a>(
         &'a self,
         ctx: &'a SaveContext,
-        deal: deal::Model,
+        deal: RecordOf<Self>,
         form: FormData,
-    ) -> BoxFuture<'a, Result<deal::Model>> {
+    ) -> BoxFuture<'a, Result<RecordOf<Self>>> {
         Box::pin(async move {
             let deals = ctx.get::<DealService>().await?;
             let input: UpdateDeal = form.parse().await?; // garde validation, errors under each field
@@ -363,7 +386,7 @@ impl Resource for DealResource {
 }
 ```
 
-`form.parse::<T>()` deserializes the submitted values into your DTO and validates it with its garde rules, exactly as `Valid<Json<T>>` does, so the panel and your API apply the same validation. The values have already passed the fields' own rules; money is in minor units, dates are `YYYY-MM-DD` and date-times RFC 3339. `form.values()` and `form.get(name)` give them as JSON. An `AppError` from your service appears on the form: a 400 with field errors under the fields, anything else as a message.
+`RecordOf<Self>` is a [record](/docs/orm/models/) of the resource's model (`Record<Deal>`); a service that saves it with `deal.update(uow, |d| ..)` runs the model's hooks. `form.parse::<T>()` deserializes the submitted values into your DTO and validates it with its garde rules, exactly as `Valid<Json<T>>` does, so the panel and your API apply the same validation. The values have already passed the fields' own rules; money is in minor units, dates are `YYYY-MM-DD` and date-times RFC 3339. `form.values()` and `form.get(name)` give them as JSON. An `AppError` from your service appears on the form: a 400 with field errors under the fields, anything else as a message.
 
 ## The panel's look and pages
 
@@ -485,14 +508,14 @@ Every key of the `helm` section is optional. From the environment: `APP_HELM__TI
 
 | Command | What it does |
 |---|---|
-| `navree make:resource <module> <Entity> [--path src/modules]` | Generates a resource with a field for every column of the entity, and registers it. The entity may be written `Deal` or `deal`. |
+| `navree make:resource <module> <Model> [--path src/modules]` | Generates a resource with a field for every column of the module's model (`models/<model>.rs`), and registers it. The model may be written `Deal` or `deal`. |
 
 <LinkCards>
   <LinkCard href="/docs/security/authorization/" title="Authorization">
     The abilities every Helm screen checks.
   </LinkCard>
-  <LinkCard href="/docs/database/entities-and-repositories/" title="Entities and repositories">
-    The entities resources are built on.
+  <LinkCard href="/docs/orm/models/" title="Models">
+    The navree-orm models resources are built on.
   </LinkCard>
   <LinkCard href="/docs/security/audit-log/" title="The audit log">
     Who changed what, from the API or from Helm.

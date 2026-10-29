@@ -15,46 +15,30 @@
 //! ORM statements in a unit of work that record the same change events
 //! `navree_db::Repo` recorded (the model's `Serialize` form, so no secret
 //! reaches an observer; an update carries only the changed fields).
-//!
-//! # Compatibility layer (data-layer port; removed in step 8)
-//!
-//! Crates not yet ported to navree-orm still use users as a SeaORM entity
-//! (`user::Entity`, `user::Column`, `user::ActiveModel`, `Repo<user::Entity>`,
-//! admin resources over `user::Entity`). For them, and only for them, `Model` keeps the SeaORM
-//! derive, its `Relation` and `ActiveModelBehavior`, and `Entity` is the
-//! access subject `User`. Everything marked `COMPAT` below is that layer;
-//! nothing else in navree-auth uses it. Step 8 of the port deletes it once
-//! the last of those crates is on navree-orm.
 
 use std::fmt;
 
 use chrono::{DateTime, Utc};
 use navree_db::{ChangeEvent, ChangeOp, DbError, Uow};
 use navree_orm::{Assignment, Model as _, OrmError};
-// COMPAT: the SeaORM derive of `Model` (see the module documentation).
-use sea_orm::entity::prelude::*;
 use serde::Serialize;
 use uuid::Uuid;
 
 use crate::AuthError;
-use crate::resource::{USER_PERMISSION_PREFIX, USER_SUBJECT};
 
 /// The table.
 pub(crate) const TABLE: &str = "users";
 
-/// A user account.
-// COMPAT: `DeriveEntityModel` and the `#[sea_orm]` attributes.
-#[derive(Clone, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
-#[sea_orm(table_name = "users")]
+/// A user account. The struct is called `Model`, so the derive names the
+/// trait by path.
+#[derive(Clone, PartialEq, Eq, navree_orm::Model, Serialize)]
 #[model(table = "users", subject = "User", permission_prefix = "users")]
 pub struct Model {
     /// The id (UUID v7).
-    #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
     /// The display name.
     pub name: String,
     /// The unique, lower-cased email address.
-    #[sea_orm(unique)]
     pub email: String,
     /// The Argon2id PHC string. Never serialized.
     #[serde(skip_serializing)]
@@ -92,21 +76,6 @@ impl fmt::Debug for Model {
             .field("updated_at", &self.updated_at)
             .finish_non_exhaustive()
     }
-}
-
-/// COMPAT: no relations are declared (the SeaORM entity's).
-#[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-pub enum Relation {}
-
-/// COMPAT: the SeaORM entity's behaviour.
-impl ActiveModelBehavior for ActiveModel {}
-
-/// COMPAT: the SeaORM entity is the access subject `User` too, for crates
-/// that still name it (admin-panel resources over `user::Entity`). Apps
-/// register the model: `AccessModule::for_feature::<navree_auth::User>()`.
-impl navree_access::Subject for Entity {
-    const SUBJECT: &'static str = USER_SUBJECT;
-    const PERMISSION_PREFIX: &'static str = USER_PERMISSION_PREFIX;
 }
 
 /// Inserts `user` through `uow` and records a `created` change event with

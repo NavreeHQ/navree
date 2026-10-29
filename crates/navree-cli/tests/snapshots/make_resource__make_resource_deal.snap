@@ -7,7 +7,7 @@ expression: resource
 use navree::helm::{Field, Resource};
 use navree::injectable;
 
-use super::super::entity as deal;
+use super::super::models::deal::Deal;
 
 /// Deals in the panel. What a user sees and changes follows their
 /// abilities on `Deal`: grant `deals.read` (and `.create`,
@@ -17,7 +17,7 @@ use super::super::entity as deal;
 pub struct DealResource;
 
 impl Resource for DealResource {
-    type Entity = deal::Entity;
+    type Model = Deal;
 
     const LABEL: &'static str = "Deals";
     const SINGULAR: &'static str = "Deal";
@@ -27,8 +27,6 @@ impl Resource for DealResource {
     fn fields(&self) -> Vec<Field> {
         vec![
             Field::id(),
-            // Shows the related title with a picker: Field::belongs_to::<OwnerResource>("owner_id")
-            Field::text("owner_id").hide_on_index(),
             Field::text("name").required().sortable(),
             Field::datetime("created_at").readonly().sortable(),
             Field::datetime("updated_at").readonly().sortable(),

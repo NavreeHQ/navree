@@ -82,7 +82,12 @@ pub mod model {
     use uuid::Uuid;
 
     #[derive(Model, Clone, Debug, Default, Serialize)]
-    #[model(table = "templates", timestamps)]
+    #[model(
+        table = "templates",
+        timestamps,
+        subject = "Template",
+        permission_prefix = "templates"
+    )]
     pub struct Template {
         pub id: Uuid,
         pub scope: LibraryScope,
@@ -361,55 +366,14 @@ impl Module for TemplatesModule {
 // ---------------------------------------------------------------------------
 // "Managing global items in Helm".
 
-pub mod helm_model {
-    pub mod template {
-        use navree::workspace::library::{Library, LibraryScope};
-        use sea_orm::entity::prelude::*;
-        use serde::Serialize;
-
-        #[derive(
-            Clone, Debug, Default, PartialEq, DeriveEntityModel, navree::orm::Model, Serialize,
-        )]
-        #[sea_orm(table_name = "templates")]
-        #[model(table = "templates", timestamps)]
-        pub struct Model {
-            #[sea_orm(primary_key, auto_increment = false)]
-            pub id: Uuid,
-            pub scope: LibraryScope,
-            pub organization_id: Option<Uuid>,
-            pub workspace_id: Option<Uuid>,
-            pub cloned_from_id: Option<Uuid>,
-            pub slug: String,
-            pub name: String,
-            pub body: String,
-            pub created_at: DateTimeUtc,
-            pub updated_at: DateTimeUtc,
-        }
-
-        #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-        pub enum Relation {}
-
-        impl ActiveModelBehavior for ActiveModel {}
-
-        impl Library for Model {}
-
-        impl navree::access::Subject for Entity {
-            const SUBJECT: &'static str = "Template";
-            const PERMISSION_PREFIX: &'static str = "templates";
-        }
-    }
-
-    pub type Template = template::Model;
-}
-
 pub mod helm {
     use navree::BoxFuture;
-    use navree::helm::{Field, FormData, Resource, SaveContext};
+    use navree::helm::{Field, FormData, RecordOf, Resource, SaveContext};
+    use navree::orm::Builder;
     use navree::prelude::*;
     use navree::workspace::library::{LibraryOwner, LibraryRepo, LibraryScope};
-    use sea_orm::{ColumnTrait, QueryFilter, Select};
 
-    use super::helm_model::{Template, template};
+    use super::model::Template;
 
     #[derive(serde::Deserialize, garde::Validate)]
     struct TemplateForm {
@@ -425,7 +389,7 @@ pub mod helm {
     pub struct TemplateLibraryResource;
 
     impl Resource for TemplateLibraryResource {
-        type Entity = template::Entity;
+        type Model = Template;
         const LABEL: &'static str = "Template library";
         const SINGULAR: &'static str = "Template";
         const SLUG: &'static str = "template-library";
@@ -440,15 +404,15 @@ pub mod helm {
             ]
         }
 
-        fn query(&self, select: Select<template::Entity>) -> Select<template::Entity> {
-            select.filter(template::Column::Scope.eq(LibraryScope::Global))
+        fn query(&self, query: Builder<Template>) -> Builder<Template> {
+            query.where_(Template::SCOPE.eq(LibraryScope::Global))
         }
 
         fn create<'a>(
             &'a self,
             ctx: &'a SaveContext,
             form: FormData,
-        ) -> BoxFuture<'a, Result<Template, AppError>> {
+        ) -> BoxFuture<'a, Result<RecordOf<Self>, AppError>> {
             Box::pin(async move {
                 let input: TemplateForm = form.parse().await?;
                 let template = Template {
@@ -459,8 +423,7 @@ pub mod helm {
                 };
                 Ok(
                     LibraryRepo::<Template>::create(ctx.uow(), LibraryOwner::Global, template)
-                        .await?
-                        .into_inner(),
+                        .await?,
                 )
             })
         }

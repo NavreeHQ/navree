@@ -3,27 +3,27 @@
 use std::fmt;
 use std::sync::Arc;
 
-use sea_orm::{EntityTrait, Select};
+use navree_orm::{Builder, Model};
 
 use crate::Resource;
 use crate::field::{Related, sentence_case};
 
 /// A query change taking an on/off flag.
-type BooleanFn<E> = Arc<dyn Fn(Select<E>, bool) -> Select<E> + Send + Sync>;
+type BooleanFn<M> = Arc<dyn Fn(Builder<M>, bool) -> Builder<M> + Send + Sync>;
 
 /// A query change taking typed-in text.
-type CustomFn<E> = Arc<dyn Fn(Select<E>, String) -> Select<E> + Send + Sync>;
+type CustomFn<M> = Arc<dyn Fn(Builder<M>, String) -> Builder<M> + Send + Sync>;
 
 /// The kinds of filter.
-pub(crate) enum FilterKind<E: EntityTrait> {
+pub(crate) enum FilterKind<M: Model> {
     Select,
     BelongsTo(Related),
-    Boolean(BooleanFn<E>),
+    Boolean(BooleanFn<M>),
     DateRange,
-    Custom(CustomFn<E>),
+    Custom(CustomFn<M>),
 }
 
-impl<E: EntityTrait> Clone for FilterKind<E> {
+impl<M: Model> Clone for FilterKind<M> {
     fn clone(&self) -> Self {
         match self {
             FilterKind::Select => FilterKind::Select,
@@ -35,7 +35,7 @@ impl<E: EntityTrait> Clone for FilterKind<E> {
     }
 }
 
-impl<E: EntityTrait> FilterKind<E> {
+impl<M: Model> FilterKind<M> {
     pub(crate) fn name(&self) -> &'static str {
         match self {
             FilterKind::Select => "select",
@@ -54,19 +54,19 @@ impl<E: EntityTrait> FilterKind<E> {
 /// Filter::select("stage").options([("lead", "Lead"), ("won", "Won")])
 /// Filter::belongs_to::<UserResource>("owner_id").label("Owner")
 /// Filter::date_range("expected_close_date")
-/// Filter::boolean("open", "Open deals only", |select, on| {
-///     if on { select.filter(deal::Column::ClosedAt.is_null()) } else { select }
+/// Filter::boolean("open", "Open deals only", |query, on| {
+///     if on { query.where_(Deal::CLOSED_AT.is_null()) } else { query }
 /// })
 /// ```
-pub struct Filter<E: EntityTrait> {
+pub struct Filter<M: Model> {
     pub(crate) name: String,
     pub(crate) label: Option<String>,
     pub(crate) options: Vec<(String, String)>,
-    pub(crate) kind: FilterKind<E>,
+    pub(crate) kind: FilterKind<M>,
 }
 
-impl<E: EntityTrait> Filter<E> {
-    fn new(name: &str, kind: FilterKind<E>) -> Self {
+impl<M: Model> Filter<M> {
+    fn new(name: &str, kind: FilterKind<M>) -> Self {
         Self {
             name: name.to_owned(),
             label: None,
@@ -86,11 +86,11 @@ impl<E: EntityTrait> Filter<E> {
         Self::new(column, FilterKind::BelongsTo(Related::of::<R>()))
     }
 
-    /// On or off: `f(select, on)` changes the query (`filters[name]=1` or
+    /// On or off: `f(query, on)` changes the model query (`filters[name]=1` or
     /// `0`).
     pub fn boolean<F>(name: &str, label: &str, f: F) -> Self
     where
-        F: Fn(Select<E>, bool) -> Select<E> + Send + Sync + 'static,
+        F: Fn(Builder<M>, bool) -> Builder<M> + Send + Sync + 'static,
     {
         Self::new(name, FilterKind::Boolean(Arc::new(f))).label(label)
     }
@@ -101,10 +101,10 @@ impl<E: EntityTrait> Filter<E> {
         Self::new(column, FilterKind::DateRange)
     }
 
-    /// A value typed in: `f(select, value)` changes the query.
+    /// A value typed in: `f(query, value)` changes the model query.
     pub fn custom<F>(name: &str, label: &str, f: F) -> Self
     where
-        F: Fn(Select<E>, String) -> Select<E> + Send + Sync + 'static,
+        F: Fn(Builder<M>, String) -> Builder<M> + Send + Sync + 'static,
     {
         Self::new(name, FilterKind::Custom(Arc::new(f))).label(label)
     }
@@ -143,7 +143,7 @@ impl<E: EntityTrait> Filter<E> {
     }
 }
 
-impl<E: EntityTrait> Clone for Filter<E> {
+impl<M: Model> Clone for Filter<M> {
     fn clone(&self) -> Self {
         Self {
             name: self.name.clone(),
@@ -154,7 +154,7 @@ impl<E: EntityTrait> Clone for Filter<E> {
     }
 }
 
-impl<E: EntityTrait> fmt::Debug for Filter<E> {
+impl<M: Model> fmt::Debug for Filter<M> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Filter")
             .field("name", &self.name)

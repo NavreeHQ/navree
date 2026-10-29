@@ -1,7 +1,11 @@
 //! Integration tests of navree-helm: the panel's JSON API (routing,
 //! authorization, CRUD, search, sorting, filters, actions and metrics),
-//! its pages and sign-in, and the checks it makes at boot.
+//! its pages and sign-in, and the checks it makes at boot. The resources
+//! are navree-orm models; the suite runs on the database
+//! `NAVREE_TEST_DATABASE` names, with either kind of unit of work
+//! (`NAVREE_TEST_NATIVE_UNITS_OF_WORK`), see `servers`.
 
+mod servers;
 mod support;
 
 mod actions;

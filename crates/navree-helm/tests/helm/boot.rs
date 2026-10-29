@@ -29,7 +29,7 @@ macro_rules! resource {
         }
 
         impl Resource for $name {
-            type Entity = deal::Entity;
+            type Model = Deal;
             const LABEL: &'static str = "Broken";
             const SLUG: &'static str = $slug;
             fn fields(&self) -> Vec<Field> {
@@ -54,7 +54,7 @@ fn with<R: Resource + Injectable>() -> With<R> {
 
 resource!(UnknownColumn, "unknown-column", fields: vec![Field::text("colour")]);
 resource!(BadPattern, "bad-pattern", fields: vec![Field::text("title").pattern("(")]);
-resource!(WrongModel, "wrong-model", fields: vec![Field::computed("x", |c: &company::Model| c.name.clone())]);
+resource!(WrongModel, "wrong-model", fields: vec![Field::computed("x", |c: &Company| c.name.clone())]);
 resource!(NotRegistered, "not-registered", fields: vec![Field::belongs_to::<OtherResource>("company_id")]);
 resource!(OtherResource, "other", fields: vec![Field::text("title")]);
 resource!(Duplicate, "deals", fields: vec![Field::text("title")]);
@@ -62,7 +62,7 @@ resource!(
     NoHandler,
     "no-handler",
     fields: vec![Field::text("title")],
-    fn actions(&self) -> Vec<Action<deal::Entity>> {
+    fn actions(&self) -> Vec<Action<Deal>> {
         vec![Action::new("noop", "Do nothing")]
     }
 );
@@ -70,7 +70,7 @@ resource!(
     NoBuckets,
     "no-buckets",
     fields: vec![Field::text("title")],
-    fn metrics(&self) -> Vec<Metric<deal::Entity>> {
+    fn metrics(&self) -> Vec<Metric<Deal>> {
         vec![Metric::trend("Deals").count()]
     }
 );
@@ -161,8 +161,7 @@ async fn invalid_options_fail_the_boot() {
         per_page: 0,
         ..HelmOptions::default()
     };
-    let error = match TestApp::builder()
-        .temp_database()
+    let error = match crate::servers::database(TestApp::builder())
         .module(navree_db::DatabaseModule)
         .module(AccessModule::for_root(options_access()))
         .module(HelmModule::for_root(options))
@@ -184,8 +183,7 @@ fn options_access() -> navree_access::AccessOptions {
 
 #[tokio::test]
 async fn for_root_takes_options_without_config() {
-    let app = TestApp::builder()
-        .temp_database()
+    let app = crate::servers::database(TestApp::builder())
         .module(navree_db::DatabaseModule)
         .module(AccessModule::for_root(options()))
         .module(CrmModule)

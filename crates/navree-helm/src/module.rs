@@ -141,7 +141,7 @@ impl ModuleBuilderHelmExt for ModuleBuilder {
     fn resource<R: Resource + Injectable>(&mut self) -> &mut Self {
         let module = self.module_id();
         self.provider::<R>()
-            .imports(AccessModule::for_feature::<R::Entity>())
+            .imports(AccessModule::for_feature::<R::Model>())
             .contribute(ResourceRegistration::of::<R>(module))
     }
 
