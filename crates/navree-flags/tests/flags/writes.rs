@@ -4,12 +4,12 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use navree_audit::{AuditLog, audit_log};
+use navree_audit::{AuditFilter, AuditLog};
 use navree_cache::{Cache, CacheStore, MemoryStore};
-use navree_db::Db;
+use navree_db::{Db, PageQuery};
 use navree_flags::{FlagScope, FlagStore, FlagsError, MemoryFlagStore, Rollout, ScopeType};
 use sea_orm::sea_query::Query;
-use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder};
+use sea_orm::ConnectionTrait;
 use serde_json::json;
 use uuid::Uuid;
 
@@ -123,12 +123,25 @@ async fn every_change_is_audited_in_its_transaction() {
         .unwrap();
 
     world.app.get::<AuditLog>().await.flush().await;
-    let entries = audit_log::Entity::find()
-        .filter(audit_log::Column::Action.eq("flag.changed"))
-        .order_by_asc(audit_log::Column::Id)
-        .all(db.conn())
-        .await
-        .unwrap();
+    let entries = {
+        let mut page = world.app
+            .get::<AuditLog>()
+            .await
+            .list(
+                &AuditFilter {
+                    action: Some("flag.changed".to_owned()),
+                    ..AuditFilter::default()
+                },
+                PageQuery {
+                    page: 1,
+                    per_page: 100,
+                },
+            )
+            .await
+            .unwrap();
+        page.data.reverse();
+        page.data
+    };
     assert_eq!(entries.len(), 2, "{entries:#?}");
     let rollout = &entries[0];
     assert_eq!(rollout.kind, "custom");
@@ -398,10 +411,24 @@ async fn the_memory_store_applies_changes_at_once() {
     );
     assert_eq!(events.drain().len(), 1, "emitted at once");
     world.app.get::<AuditLog>().await.flush().await;
-    let audited = audit_log::Entity::find()
-        .filter(audit_log::Column::Action.eq("flag.changed"))
-        .all(world.db().await.conn())
-        .await
-        .unwrap();
+    let audited = {
+        let mut page = world.app
+            .get::<AuditLog>()
+            .await
+            .list(
+                &AuditFilter {
+                    action: Some("flag.changed".to_owned()),
+                    ..AuditFilter::default()
+                },
+                PageQuery {
+                    page: 1,
+                    per_page: 100,
+                },
+            )
+            .await
+            .unwrap();
+        page.data.reverse();
+        page.data
+    };
     assert_eq!(audited.len(), 1);
 }

@@ -782,11 +782,17 @@ async fn changes_are_audited_with_the_user() {
         .assert_status(200);
     let log = app.get::<navree_audit::AuditLog>().await;
     log.flush().await;
-    let db = app.get::<Db>().await;
-    let rows = navree_audit::audit_log::Entity::find()
-        .all(db.conn())
-        .await
-        .unwrap();
+    let rows = navree_audit::AuditLog::list(
+        &*app.get::<navree_audit::AuditLog>().await,
+        &navree_audit::AuditFilter::default(),
+        navree_db::PageQuery {
+            page: 1,
+            per_page: 100,
+        },
+    )
+    .await
+    .unwrap()
+    .data;
     let updated = rows
         .iter()
         .find(|r| r.action == "deal.updated")
