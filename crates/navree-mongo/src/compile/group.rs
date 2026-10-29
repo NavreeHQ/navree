@@ -333,7 +333,7 @@ impl Post<'_> {
                 })
             }
             Where::Group(inner) => self.clauses(cx, scope, pending, inner)?,
-            Where::Raw { .. } | Where::Sql(_) | Where::Tree(_) => {
+            Where::Raw { .. } | Where::Tree(_) => {
                 return Err(unsupported(
                     "raw SQL in HAVING (`having_raw`; compare aggregates and group keys)",
                 ));

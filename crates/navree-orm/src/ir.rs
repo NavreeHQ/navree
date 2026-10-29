@@ -678,18 +678,15 @@ pub enum Where {
         /// The mode and language.
         options: FullText,
     },
-    /// Raw SQL with `?` placeholders (`??` is a literal `?`). SQL drivers
-    /// only.
+    /// Raw SQL with `?` placeholders (`??` is a literal `?`): `Filter::raw`,
+    /// or a navree-db `Statement::portable` fragment given to
+    /// `Filter::from`. SQL drivers only.
     Raw {
         /// The SQL fragment.
         sql: Cow<'static, str>,
         /// Its values, in order.
         values: Vec<Value>,
     },
-    /// A sea-query condition (`Filter::from(sea_query::Condition)`),
-    /// written by sea-query's builder and embedded by the renderer. SQL
-    /// drivers only. Prefer [`Where::Tree`].
-    Sql(sea_query::Condition),
     /// A condition written as a [render-tree](crate::render::ast)
     /// expression, which the renderer writes for each SQL dialect (the
     /// access-control filters of `Builder::accessible` are built this way).
