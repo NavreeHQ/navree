@@ -98,10 +98,9 @@ impl Domains {
         let stored_host = host.clone();
         let renewal = rt
             .write(None, |uow| async move {
-                let tx = uow.tx().await?;
                 let existing = models::Certificate::query()
                     .where_(models::Certificate::HOST.eq(stored_host.clone()))
-                    .first(&*tx)
+                    .first(&uow)
                     .await?;
                 let renewal = existing.is_some();
                 let mut record = existing.unwrap_or_else(|| {
@@ -118,12 +117,12 @@ impl Domains {
                 record.not_before = validity.not_before;
                 record.not_after = validity.not_after;
                 record.updated_at = now;
-                record.save(&*tx).await?;
+                record.save(&uow).await?;
                 if let Some(id) = domain_id {
                     models::Domain::query()
                         .where_(models::Domain::ID.eq(id))
                         .update(
-                            &*tx,
+                            &uow,
                             [
                                 models::Domain::TLS_STATUS.set(TlsStatus::Active.as_str()),
                                 models::Domain::TLS_ERROR.set(None::<String>),
@@ -136,7 +135,6 @@ impl Domains {
                         .await?;
                 }
                 uow.mark_modified();
-                drop(tx);
                 runtime
                     .emit_after_commit(
                         &uow,

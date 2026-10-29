@@ -88,6 +88,7 @@ mod options;
 mod probe;
 mod provider;
 mod runtime;
+mod savepoint;
 mod service;
 mod tls;
 mod types;

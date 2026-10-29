@@ -210,7 +210,7 @@ impl Runtime {
         let uow = self.db.uow(actor, None).await;
         match uow.scope(f(uow.clone())).await {
             Ok(value) => {
-                uow.commit().await?;
+                uow.commit().await.map_err(navree_db::DbError::from)?;
                 Ok(value)
             }
             Err(error) => {
