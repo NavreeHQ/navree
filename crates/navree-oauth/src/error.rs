@@ -7,9 +7,10 @@ use std::time::Duration;
 use axum::response::{IntoResponse, Response};
 use http::header::{CACHE_CONTROL, CONTENT_TYPE, PRAGMA, RETRY_AFTER, WWW_AUTHENTICATE};
 use http::{HeaderValue, StatusCode};
+use navree_db::DbError;
 use navree_http::AppError;
 use navree_kernel::BoxError;
-use sea_orm::DbErr;
+use navree_orm::OrmError;
 use serde_json::json;
 
 /// An OAuth server error.
@@ -40,7 +41,7 @@ use serde_json::json;
 /// | `Forbidden` | | 403 |
 /// | `Unavailable` | `temporarily_unavailable` | 503 |
 /// | `TooManyRequests` | `too_many_requests` | 429, with `Retry-After` |
-/// | `Db`, `Other` | `server_error` | 500 (404/409 for database errors navree-db maps) |
+/// | `Db`, `Orm`, `Other` | `server_error` | 500 (404/409 for database errors navree-db maps) |
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum OAuthError {
@@ -106,9 +107,13 @@ pub enum OAuthError {
         /// When the client may send again.
         retry_after: Duration,
     },
-    /// A database error.
+    /// A database error (navree-db's statements, transactions and units of
+    /// work).
     #[error("oauth database error: {0}")]
-    Db(#[from] DbErr),
+    Db(#[from] DbError),
+    /// An ORM error (the server's models and their queries).
+    #[error("oauth database error: {0}")]
+    Orm(#[from] OrmError),
     /// Anything else.
     #[error(transparent)]
     Other(BoxError),
@@ -142,7 +147,7 @@ impl OAuthError {
             OAuthError::Forbidden(_) => "access_denied",
             OAuthError::Unavailable(_) => "temporarily_unavailable",
             OAuthError::TooManyRequests { .. } => "too_many_requests",
-            OAuthError::Db(_) | OAuthError::Other(_) => "server_error",
+            OAuthError::Db(_) | OAuthError::Orm(_) | OAuthError::Other(_) => "server_error",
         }
     }
 
@@ -171,7 +176,9 @@ impl OAuthError {
                 retry_after_secs(*retry_after)
             ),
             OAuthError::NotFound(message) | OAuthError::Expired(message) => (*message).to_owned(),
-            OAuthError::Db(_) | OAuthError::Other(_) => "Internal server error".to_owned(),
+            OAuthError::Db(_) | OAuthError::Orm(_) | OAuthError::Other(_) => {
+                "Internal server error".to_owned()
+            }
         }
     }
 
@@ -183,7 +190,9 @@ impl OAuthError {
             OAuthError::Forbidden(_) => StatusCode::FORBIDDEN,
             OAuthError::Unavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
             OAuthError::TooManyRequests { .. } => StatusCode::TOO_MANY_REQUESTS,
-            OAuthError::Db(_) | OAuthError::Other(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            OAuthError::Db(_) | OAuthError::Orm(_) | OAuthError::Other(_) => {
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
             _ => StatusCode::BAD_REQUEST,
         }
     }
@@ -193,7 +202,10 @@ impl OAuthError {
     /// `invalid_client` answer to HTTP Basic authentication carries
     /// `WWW-Authenticate: Basic`.
     pub fn protocol_response(&self, basic_auth: bool) -> Response {
-        if matches!(self, OAuthError::Db(_) | OAuthError::Other(_)) {
+        if matches!(
+            self,
+            OAuthError::Db(_) | OAuthError::Orm(_) | OAuthError::Other(_)
+        ) {
             tracing::error!(target: "navree::oauth", error = %self, "OAuth endpoint failed");
         }
         let body = json!({ "error": self.code(), "error_description": self.description() });
@@ -248,6 +260,7 @@ pub(crate) fn map_oauth_error(error: &OAuthError) -> Option<AppError> {
         OAuthError::Unavailable(message) => AppError::service_unavailable(message.clone()),
         OAuthError::TooManyRequests { retry_after } => AppError::too_many_requests(*retry_after),
         OAuthError::Db(db) => return navree_db::map_db_error(db),
+        OAuthError::Orm(error) => return error.db_error().and_then(navree_db::map_db_error),
         OAuthError::Other(_) => return None,
         other => AppError::bad_request(other.description()),
     })
@@ -262,14 +275,6 @@ fn retry_after_secs(retry_after: Duration) -> u64 {
         secs
     };
     rounded.max(1)
-}
-
-/// The server's ORM operations fail as database errors
-/// ([`OAuthError::Db`]), like its SeaORM ones.
-impl From<navree_orm::OrmError> for OAuthError {
-    fn from(error: navree_orm::OrmError) -> Self {
-        OAuthError::Db(error.into())
-    }
 }
 
 impl IntoResponse for OAuthError {
@@ -343,7 +348,9 @@ mod tests {
                 },
                 429,
             ),
-            (OAuthError::Db(DbErr::RecordNotFound("x".into())), 404),
+            (OAuthError::Db(DbError::not_found("x")), 404),
+            (OAuthError::Orm(OrmError::Db(DbError::not_found("x"))), 404),
+            (OAuthError::Orm(OrmError::InvalidQuery("x".into())), 500),
             (OAuthError::Other("boom".into()), 500),
         ];
         for (error, status) in cases {

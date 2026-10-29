@@ -47,14 +47,13 @@ impl CredentialRevoker for OAuthCredentialRevoker {
             let now = self.core.now();
             let uow = self.core.db.uow(None, None).await;
             let work = async {
-                let tx = uow.tx().await?;
                 let mut revoked = RevokedByKind::new();
                 revoked.insert(
                     "personal_access_tokens",
                     personal_access_token::Model::query()
                         .where_(personal_access_token::Model::USER_ID.is_in(users.to_vec()))
                         .where_null(personal_access_token::Model::REVOKED_AT)
-                        .update(&*tx, [personal_access_token::Model::REVOKED_AT.set(now)])
+                        .update(&uow, [personal_access_token::Model::REVOKED_AT.set(now)])
                         .await?,
                 );
                 revoked.insert(
@@ -62,7 +61,7 @@ impl CredentialRevoker for OAuthCredentialRevoker {
                     access_token::Model::query()
                         .where_(access_token::Model::USER_ID.is_in(users.to_vec()))
                         .where_null(access_token::Model::REVOKED_AT)
-                        .update(&*tx, [access_token::Model::REVOKED_AT.set(now)])
+                        .update(&uow, [access_token::Model::REVOKED_AT.set(now)])
                         .await?,
                 );
                 revoked.insert(
@@ -70,7 +69,7 @@ impl CredentialRevoker for OAuthCredentialRevoker {
                     refresh_token::Model::query()
                         .where_(refresh_token::Model::USER_ID.is_in(users.to_vec()))
                         .where_null(refresh_token::Model::REVOKED_AT)
-                        .update(&*tx, [refresh_token::Model::REVOKED_AT.set(now)])
+                        .update(&uow, [refresh_token::Model::REVOKED_AT.set(now)])
                         .await?,
                 );
                 // A code approved before and not exchanged yet would
@@ -80,7 +79,7 @@ impl CredentialRevoker for OAuthCredentialRevoker {
                     code::Model::query()
                         .where_(code::Model::USER_ID.is_in(users.to_vec()))
                         .where_null(code::Model::USED_AT)
-                        .update(&*tx, [code::Model::USED_AT.set(now)])
+                        .update(&uow, [code::Model::USED_AT.set(now)])
                         .await?,
                 );
                 revoked.insert(
@@ -88,14 +87,14 @@ impl CredentialRevoker for OAuthCredentialRevoker {
                     device_code::Model::query()
                         .where_(device_code::Model::USER_ID.is_in(users.to_vec()))
                         .where_null(device_code::Model::USED_AT)
-                        .update(&*tx, [device_code::Model::USED_AT.set(now)])
+                        .update(&uow, [device_code::Model::USED_AT.set(now)])
                         .await?,
                 );
                 revoked.insert(
                     "oauth_authorizations",
                     authorization::Model::query()
                         .where_(authorization::Model::USER_ID.is_in(users.to_vec()))
-                        .delete(&*tx)
+                        .delete(&uow)
                         .await?,
                 );
                 Ok::<_, BoxError>(revoked)

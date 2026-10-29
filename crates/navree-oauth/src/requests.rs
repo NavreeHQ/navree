@@ -288,7 +288,7 @@ impl Requests {
             expires_at: core.after(core.options.request_ttl_secs),
             created_at: now,
         };
-        authorization_request::Model::insert(&*uow.tx().await?, [request]).await?;
+        authorization_request::Model::insert(uow, [request]).await?;
         Ok(AuthorizeOutcome::Redirect(with_query(
             &consent_url,
             &[("request", &id.to_string())],
@@ -375,13 +375,10 @@ impl Requests {
         user_id: Uuid,
         id: Uuid,
     ) -> Result<Decision, OAuthError> {
-        let tx = uow.tx().await?;
-        let (request, client) = self.pending(&*tx, id).await?;
-        drop(tx);
+        let (request, client) = self.pending(uow, id).await?;
         self.check_workspace_member(&client, user_id).await?;
-        let tx = uow.tx().await?;
         let now = self.core.now();
-        let claimed = decide_request(&*tx, id, "approved", user_id).await?;
+        let claimed = decide_request(uow, id, "approved", user_id).await?;
         if claimed != 1 {
             return Err(OAuthError::NotFound("Authorization request not found."));
         }
@@ -400,8 +397,7 @@ impl Requests {
             used_at: None,
             created_at: now,
         };
-        code::Model::insert(&*tx, [row]).await?;
-        drop(tx);
+        code::Model::insert(uow, [row]).await?;
         self.remember(uow, user_id, &client, &scopes).await?;
         self.audit_decision(
             uow,
@@ -429,10 +425,8 @@ impl Requests {
         user_id: Uuid,
         id: Uuid,
     ) -> Result<Decision, OAuthError> {
-        let tx = uow.tx().await?;
-        let (request, client) = self.pending(&*tx, id).await?;
-        let claimed = decide_request(&*tx, id, "denied", user_id).await?;
-        drop(tx);
+        let (request, client) = self.pending(uow, id).await?;
+        let claimed = decide_request(uow, id, "denied", user_id).await?;
         if claimed != 1 {
             return Err(OAuthError::NotFound("Authorization request not found."));
         }
@@ -497,24 +491,30 @@ impl Requests {
         client: &Client,
         scopes: &[String],
     ) -> Result<(), OAuthError> {
-        let tx = uow.tx().await?;
         let now = self.core.now();
         let existing = authorization::Model::query()
             .where_(authorization::Model::USER_ID.eq(user_id))
             .where_(authorization::Model::CLIENT_ID.eq(client.id))
-            .first(&*tx)
+            .first(uow)
             .await?;
         match existing {
-            Some(mut row) => {
+            Some(row) => {
                 let mut merged = row.scope_list();
                 for scope in scopes {
                     if !merged.contains(scope) {
                         merged.push(scope.clone());
                     }
                 }
-                row.scopes = join_scopes(&merged);
-                row.updated_at = now;
-                row.save(&*tx).await?;
+                authorization::Model::query()
+                    .where_key(row.id)
+                    .update(
+                        uow,
+                        [
+                            authorization::Model::SCOPES.set(join_scopes(&merged)),
+                            authorization::Model::UPDATED_AT.set(now),
+                        ],
+                    )
+                    .await?;
             }
             None => {
                 let row = authorization::Model {
@@ -525,7 +525,7 @@ impl Requests {
                     created_at: now,
                     updated_at: now,
                 };
-                authorization::Model::insert(&*tx, [row]).await?;
+                authorization::Model::insert(uow, [row]).await?;
             }
         }
         Ok(())
@@ -584,13 +584,12 @@ impl Requests {
             ));
         }
         let device_code = new_token(DEVICE_CODE_PREFIX);
-        let tx = uow.tx().await?;
         // A clash with a pending code is astronomically rare; retry anyway.
         let mut user_code = new_user_code();
         for _ in 0..5 {
             let taken = device_code::Model::query()
                 .where_(device_code::Model::USER_CODE.eq(user_code.as_str()))
-                .exists(&*tx)
+                .exists(uow)
                 .await?;
             if !taken {
                 break;
@@ -612,7 +611,7 @@ impl Requests {
             used_at: None,
             created_at: core.now(),
         };
-        device_code::Model::insert(&*tx, [row]).await?;
+        device_code::Model::insert(uow, [row]).await?;
         let shown = display_user_code(&user_code);
         Ok(DeviceAuthorization {
             device_code,
@@ -677,26 +676,22 @@ impl Requests {
         user_code: &str,
         approve: bool,
     ) -> Result<(), OAuthError> {
-        let tx = uow.tx().await?;
-        let (row, client) = self.pending_device(&*tx, user_code).await?;
-        drop(tx);
+        let (row, client) = self.pending_device(uow, user_code).await?;
         if approve {
             self.check_workspace_member(&client, user_id).await?;
         }
-        let tx = uow.tx().await?;
         let status = if approve { "approved" } else { "denied" };
         let claimed = device_code::Model::query()
             .where_key(row.id)
             .where_(device_code::Model::STATUS.eq("pending"))
             .update(
-                &*tx,
+                uow,
                 [
                     device_code::Model::STATUS.set(status),
                     device_code::Model::USER_ID.set(user_id),
                 ],
             )
             .await?;
-        drop(tx);
         if claimed != 1 {
             return Err(OAuthError::NotFound("Device code not found or expired."));
         }
@@ -754,41 +749,39 @@ impl Requests {
         user_id: Uuid,
         client_id: Uuid,
     ) -> Result<(), OAuthError> {
-        let tx = uow.tx().await?;
         let row = authorization::Model::query()
             .where_(authorization::Model::USER_ID.eq(user_id))
             .where_(authorization::Model::CLIENT_ID.eq(client_id))
-            .first(&*tx)
+            .first(uow)
             .await?
             .ok_or(OAuthError::NotFound("Authorization not found."))?;
         let scopes = row.scope_list();
         authorization::Model::query()
             .where_key(row.id)
-            .delete(&*tx)
+            .delete(uow)
             .await?;
         let now = self.core.now();
         access_token::Model::query()
             .where_(access_token::Model::USER_ID.eq(user_id))
             .where_(access_token::Model::CLIENT_ID.eq(client_id))
             .where_null(access_token::Model::REVOKED_AT)
-            .update(&*tx, [access_token::Model::REVOKED_AT.set(now)])
+            .update(uow, [access_token::Model::REVOKED_AT.set(now)])
             .await?;
         refresh_token::Model::query()
             .where_(refresh_token::Model::USER_ID.eq(user_id))
             .where_(refresh_token::Model::CLIENT_ID.eq(client_id))
             .where_null(refresh_token::Model::REVOKED_AT)
-            .update(&*tx, [refresh_token::Model::REVOKED_AT.set(now)])
+            .update(uow, [refresh_token::Model::REVOKED_AT.set(now)])
             .await?;
         code::Model::query()
             .where_(code::Model::USER_ID.eq(user_id))
             .where_(code::Model::CLIENT_ID.eq(client_id))
             .where_null(code::Model::USED_AT)
-            .update(&*tx, [code::Model::USED_AT.set(now)])
+            .update(uow, [code::Model::USED_AT.set(now)])
             .await?;
-        let client = client::Model::find(&*tx, client_id)
+        let client = client::Model::find(uow, client_id)
             .await?
             .map(Record::into_inner);
-        drop(tx);
         let core = self.core.clone();
         uow.after_commit(move || {
             Box::pin(async move {

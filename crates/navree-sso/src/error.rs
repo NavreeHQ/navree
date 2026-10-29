@@ -5,11 +5,12 @@ use std::collections::BTreeMap;
 use navree_auth::AuthError;
 use navree_cache::CacheError;
 use navree_crypto::CryptoError;
+use navree_db::DbError;
 use navree_http::AppError;
 use navree_http_client::HttpClientError;
 use navree_kernel::KernelError;
+use navree_orm::OrmError;
 use navree_workspace::WorkspaceError;
-use sea_orm::DbErr;
 
 use crate::saml::SamlError;
 
@@ -123,9 +124,13 @@ pub enum SsoError {
     /// The state, replay or code cache failed.
     #[error("single sign-on cache error: {0}")]
     Cache(#[from] CacheError),
-    /// A database error.
+    /// A database error (navree-db's statements, transactions and units of
+    /// work).
     #[error("single sign-on database error: {0}")]
-    Db(#[from] DbErr),
+    Db(#[from] DbError),
+    /// An ORM error (the module's models and their queries).
+    #[error("single sign-on database error: {0}")]
+    Orm(#[from] OrmError),
     /// A provider the service needs could not be resolved.
     #[error("single sign-on provider error: {0}")]
     Kernel(#[from] KernelError),
@@ -211,6 +216,7 @@ impl SsoError {
             SsoError::Auth(error) => return error.to_app_error(),
             SsoError::Workspace(error) => error.to_app_error(),
             SsoError::Db(error) => return navree_db::map_db_error(error),
+            SsoError::Orm(error) => return error.db_error().and_then(navree_db::map_db_error),
             SsoError::Config(_)
             | SsoError::Crypto(_)
             | SsoError::Cache(_)

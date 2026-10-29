@@ -53,6 +53,8 @@ The module contributes the migration set `sso` (after `auth`), which creates thr
 
 Deleting a connection deletes its domains and identities; deleting a user deletes their identities.
 
+The tables are models of Navree's [ORM](/docs/orm/getting-started/): `navree::sso::sso_connection::Model`, `sso_domain::Model` and `sso_identity::Model`, with typed columns (`sso_domain::Model::DOMAIN`). The module writes them in the unit of work and records their changes, so audit trails see connections, domains and identities change. A connection's `settings` column holds the OpenID Connect client secret (encrypted) and the identity provider's metadata with its certificates; the model never serializes or prints it, and a connection's change events carry a summary instead: the protocol, the URLs, the client id and scopes, `has_client_secret`, `has_metadata_xml` and a SHA-256 digest of the metadata. No client secret, certificate or key reaches an observer. Users are read and created as navree-auth's `User` model, and owners are checked as navree-workspace's `Workspace` and `Organization` models. Database errors are `SsoError::Db` (navree-db's `DbError`) and `SsoError::Orm` (the ORM's `OrmError`).
+
 ## Configuration
 
 ```toml title="config/app.toml"

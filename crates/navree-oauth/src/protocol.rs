@@ -14,7 +14,7 @@ use base64::engine::general_purpose::STANDARD;
 use http::header::{AUTHORIZATION, CACHE_CONTROL, CONTENT_TYPE, LOCATION, PRAGMA};
 use http::{Extensions, HeaderMap, HeaderValue, Method, StatusCode, Uri};
 use navree_contracts::RequestId;
-use navree_db::Uow;
+use navree_db::{DbError, Uow};
 use navree_http::{ApiMeta, AppError, ClientIp, Controller, Json, RouteDef, schema_fn};
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use serde::{Deserialize, Serialize};
@@ -186,12 +186,12 @@ where
     let uow = core.db.uow(None, request_id).await;
     let result = uow.scope(f(uow.clone())).await;
     match &result {
-        Err(OAuthError::Db(_) | OAuthError::Other(_)) => {
+        Err(OAuthError::Db(_) | OAuthError::Orm(_) | OAuthError::Other(_)) => {
             if let Err(error) = uow.rollback().await {
                 tracing::warn!(target: "navree::oauth", %error, "rollback failed");
             }
         }
-        _ => uow.commit().await?,
+        _ => uow.commit().await.map_err(DbError::from)?,
     }
     result
 }
