@@ -4,31 +4,31 @@
 use std::sync::Arc;
 
 use navree_access::{Accessible, READ, Read, Rules, field};
-use navree_db::{Db, PageQuery, Repo};
+use navree_db::{Db, PageQuery};
 use navree_search::{Search, SearchError};
-use sea_orm::ActiveValue::Set;
 use uuid::Uuid;
 
+use crate::servers::Server;
 use crate::support::{
-    self, Company, Contact, Deal, company, deal, ids, insert_contacts, new_contact, settle,
+    self, Company, Contact, Deal, ids, insert, insert_contacts, new_company, new_contact, settle,
 };
 
 /// Ada, Grace and Alan; Ada and Alan owned by `owner`, Grace a customer.
-async fn seeded(engine: &str) -> (navree_testing::TestApp, Uuid, Vec<support::contact::Model>) {
+async fn seeded(engine: &str) -> (navree_testing::TestApp, Uuid, Vec<Contact>) {
     let app = support::app(engine, "inline").await;
     let db = app.get::<Db>().await;
     let owner = Uuid::now_v7();
     let mut ada = new_contact("Ada", "Lovelace");
-    ada.owner_id = Set(owner);
-    ada.score = Set(30);
-    ada.title = Set(Some("Countess of Lovelace".into()));
+    ada.owner_id = owner;
+    ada.score = 30;
+    ada.title = Some("Countess of Lovelace".into());
     let mut grace = new_contact("Grace", "Hopper");
-    grace.status = Set("customer".into());
-    grace.score = Set(50);
+    grace.status = "customer".into();
+    grace.score = 50;
     let mut alan = new_contact("Alan", "Turing");
-    alan.owner_id = Set(owner);
-    alan.score = Set(10);
-    alan.email = Set(Some("alan@lovelace-labs.io".into()));
+    alan.owner_id = owner;
+    alan.score = 10;
+    alan.email = Some("alan@lovelace-labs.io".into());
     let rows = insert_contacts(&db, vec![ada, grace, alan]).await;
     settle(&app).await;
     (app, owner, rows)
@@ -36,7 +36,7 @@ async fn seeded(engine: &str) -> (navree_testing::TestApp, Uuid, Vec<support::co
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn paginate_returns_models_in_relevance_order() {
-    for engine in ["memory", "postgres"] {
+    for &engine in support::engines() {
         let (app, _, rows) = seeded(engine).await;
         let search = app.get::<Search>().await;
         let page = search
@@ -44,12 +44,20 @@ async fn paginate_returns_models_in_relevance_order() {
             .paginate(PageQuery::new(1, 15))
             .await
             .unwrap();
+        // PostgreSQL's text parser keeps an email address as one token, so
+        // Alan's `alan@lovelace-labs.io` does not match there.
+        let expected: Vec<String> = if engine == "postgres" && Server::current() == Server::Postgres
+        {
+            vec![rows[0].id.to_string()]
+        } else {
+            vec![rows[0].id.to_string(), rows[2].id.to_string()]
+        };
         assert_eq!(
             ids(&page),
-            [rows[0].id.to_string(), rows[2].id.to_string()],
+            expected,
             "{engine}: the last name outranks the email"
         );
-        assert_eq!(page.meta.total, 2);
+        assert_eq!(page.meta.total, expected.len() as u64);
         assert_eq!(
             (
                 page.meta.current_page,
@@ -107,7 +115,7 @@ async fn hits_carry_scores_and_highlights() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn filters_and_sorts_use_declared_fields() {
-    let (app, owner, rows) = seeded("postgres").await;
+    let (app, owner, rows) = seeded(support::database_engine()).await;
     let search = app.get::<Search>().await;
     let customers = search
         .query::<Contact>("")
@@ -210,25 +218,10 @@ async fn workspace_scoped_indexes_need_a_workspace() {
     let db = app.get::<Db>().await;
     let search = app.get::<Search>().await;
     let (w1, w2) = (Uuid::now_v7(), Uuid::now_v7());
-    let companies = support::in_uow(&db, async |uow| {
-        let mut out = Vec::new();
-        for (workspace, name) in [(w1, "Acme"), (w2, "Acme Europe")] {
-            out.push(
-                Repo::<Company>::insert(
-                    uow,
-                    company::ActiveModel {
-                        id: Set(Uuid::now_v7()),
-                        workspace_id: Set(workspace),
-                        name: Set(name.into()),
-                        domain: Set(None),
-                    },
-                )
-                .await
-                .unwrap(),
-            );
-        }
-        out
-    })
+    let companies = insert(
+        &db,
+        vec![new_company(w1, "Acme"), new_company(w2, "Acme Europe")],
+    )
     .await;
     settle(&app).await;
     let error = search.query::<Company>("acme").ids(10).await.unwrap_err();
@@ -247,36 +240,29 @@ async fn workspace_scoped_indexes_need_a_workspace() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn date_ranges_and_sorts_compare_dates() {
-    let app = support::app("postgres", "inline").await;
+    let app = support::app(support::database_engine(), "inline").await;
     let db = app.get::<Db>().await;
     let search = app.get::<Search>().await;
     let date = |s: &str| chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").unwrap();
-    let deals = support::in_uow(&db, async |uow| {
-        let mut out = Vec::new();
-        for (title, closes) in [
+    let deals = insert(
+        &db,
+        [
             ("Q4 renewal", Some("2026-12-01")),
             ("Q1 renewal", Some("2027-02-01")),
             ("Open renewal", None),
-        ] {
-            out.push(
-                Repo::<Deal>::insert(
-                    uow,
-                    deal::ActiveModel {
-                        id: Set(Uuid::now_v7()),
-                        title: Set(title.into()),
-                        company_id: Set(None),
-                        stage: Set("negotiation".into()),
-                        amount_cents: Set(100),
-                        closes_on: Set(closes.map(date)),
-                        archived: Set(false),
-                    },
-                )
-                .await
-                .unwrap(),
-            );
-        }
-        out
-    })
+        ]
+        .into_iter()
+        .map(|(title, closes)| Deal {
+            id: Uuid::now_v7(),
+            title: title.into(),
+            company_id: None,
+            stage: "negotiation".into(),
+            amount_cents: 100,
+            closes_on: closes.map(date),
+            archived: false,
+        })
+        .collect(),
+    )
     .await;
     settle(&app).await;
     let this_year = search
@@ -307,23 +293,21 @@ async fn across_merges_indexes_by_score() {
     let (app, _, rows) = seeded("memory").await;
     let db = app.get::<Db>().await;
     let search = app.get::<Search>().await;
-    let lovelace_deal = support::in_uow(&db, async |uow| {
-        Repo::<Deal>::insert(
-            uow,
-            deal::ActiveModel {
-                id: Set(Uuid::now_v7()),
-                title: Set("Lovelace renewal".into()),
-                company_id: Set(None),
-                stage: Set("won".into()),
-                amount_cents: Set(5),
-                closes_on: Set(None),
-                archived: Set(false),
-            },
-        )
-        .await
-        .unwrap()
-    })
-    .await;
+    let [lovelace_deal] = insert(
+        &db,
+        vec![Deal {
+            id: Uuid::now_v7(),
+            title: "Lovelace renewal".into(),
+            company_id: None,
+            stage: "won".into(),
+            amount_cents: 5,
+            closes_on: None,
+            archived: false,
+        }],
+    )
+    .await
+    .try_into()
+    .unwrap();
     settle(&app).await;
     let all = |subject: &str| {
         let mut rules = Rules::new();
@@ -375,7 +359,7 @@ async fn across_merges_indexes_by_score() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn configured_synonyms_and_stop_words_apply() {
-    for engine in ["memory", "postgres"] {
+    for &engine in support::engines() {
         let app = support::builder(engine, "inline")
             .config(
                 "search.indexes.contacts.synonyms",

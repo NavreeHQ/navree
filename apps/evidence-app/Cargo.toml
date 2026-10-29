@@ -40,8 +40,9 @@ navree = { workspace = true, features = [
     "search",
     "social",
 ] }
+# COMPAT (data-layer port): the SeaORM derive kept on `Project` for the admin
+# panel (navree-helm resources are SeaORM entities until it is ported).
 sea-orm = { workspace = true }
-sea-orm-migration = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }

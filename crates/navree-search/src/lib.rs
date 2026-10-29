@@ -1,17 +1,18 @@
 //! # navree-search
 //!
-//! `SearchModule`: full-text and vector search over the app's entities,
+//! `SearchModule`: full-text and vector search over the app's models,
 //! kept in sync with the database through the queue.
 //!
-//! - **Searchable entities.** Derive [`Searchable`] on a SeaORM model
+//! - **Searchable models.** Derive [`Searchable`] next to navree-orm's
+//!   `#[derive(Model)]`
 //!   (`#[searchable(boost = 3)]`, `#[searchable(filter, sort)]`, ...) or
 //!   implement it by hand for documents with related data, and register it
 //!   with [`SearchModule::for_feature`].
-//! - **Syncing.** Every commit that wrote a searchable entity through
-//!   `Repo` queues a `search.sync` job ([`SyncDocuments`]) inside the same
+//! - **Syncing.** Every commit that wrote a searchable model through the
+//!   model API queues a `search.sync` job ([`SyncDocuments`]) inside the same
 //!   commit; the worker indexes the committed rows. `search.sync` can also
 //!   be `inline` or `off`; [`Search::reindex`] and `search:import` cover
-//!   writes that bypass `Repo`.
+//!   writes that bypass the model API (mass updates, raw SQL).
 //! - **Queries.** [`Search::query`] returns a [`SearchQuery`]: filters,
 //!   ranges and sorts on declared fields, access rules
 //!   ([`accessible`](SearchQuery::accessible)), workspaces, then
@@ -93,6 +94,7 @@ pub use vector::{
     VectorRecord, VectorStore,
 };
 
-/// `#[derive(Searchable)]`: implements [`Searchable`] for the module's
-/// `Entity` from a SeaORM model's fields.
+/// `#[derive(Searchable)]`: implements [`Searchable`] for a navree-orm
+/// model from its fields (`#[model(column = "..")]` names a field's
+/// column).
 pub use navree_macros::Searchable;

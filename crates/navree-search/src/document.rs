@@ -48,7 +48,7 @@ impl Document {
     }
 
     /// Scopes the document to a workspace (the derive and the sync fill it
-    /// from the entity's workspace column).
+    /// from the model's workspace column).
     pub fn workspace(mut self, id: impl Display) -> Self {
         self.workspace = Some(id.to_string());
         self

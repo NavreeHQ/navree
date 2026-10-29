@@ -555,22 +555,24 @@ pub fn delete(_args: TokenStream, item: TokenStream) -> TokenStream {
     controller::outside_controller("delete", item.into()).into()
 }
 
-/// Implements `navree_search::Searchable` for the SeaORM `Entity` of the
-/// model it is derived on (re-exported as `navree::search::Searchable`).
+/// Implements `navree_search::Searchable` for the navree-orm model it is
+/// derived on, next to `#[derive(Model)]` (re-exported as
+/// `navree::search::Searchable`).
 ///
 /// ```text
-/// #[derive(DeriveEntityModel, Serialize, Searchable)]
-/// #[sea_orm(table_name = "contacts")]
+/// #[derive(Model, Searchable, Clone, Debug, Default, Serialize)]
+/// #[model(table = "contacts", soft_deletes)]
 /// #[searchable(name = "Contact", soft_delete = "deleted_at")]
-/// pub struct Model {
-///     #[sea_orm(primary_key, auto_increment = false)]
+/// pub struct Contact {
 ///     pub id: Uuid,
 ///     #[searchable(boost = 3)]
 ///     pub last_name: String,
+///     #[model(cast = "string_enum")]
 ///     #[searchable(filter)]
 ///     pub status: ContactStatus,
 ///     #[searchable(sort)]
-///     pub created_at: DateTimeUtc,
+///     pub created_at: DateTime<Utc>,
+///     pub deleted_at: Option<DateTime<Utc>>,
 /// }
 /// ```
 ///
@@ -585,13 +587,15 @@ pub fn delete(_args: TokenStream, item: TokenStream) -> TokenStream {
 ///
 /// Model attributes: `name` and `index` (both default to the table name),
 /// `soft_delete` (a nullable column; rows where it is set are removed from
-/// the index) and `workspace` (default: the entity's `WorkspaceScoped`
-/// column, if it implements that trait). The document holds the primary
-/// key and the marked fields: text and embedded fields serialized with
-/// serde, filter and sort fields as the database holds them (the form
-/// access rules compare). A field's column is its name or its
-/// `#[sea_orm(column_name = "..")]`. The generated code names
-/// `::navree::search` (or `::navree_search`).
+/// the index) and `workspace` (default: the model's
+/// `navree::workspace::WorkspaceScoped` column when it implements that
+/// trait, else its `#[model(workspace)]` column, if any). The document
+/// holds the primary key and the marked fields: text and embedded fields
+/// serialized with serde, filter and sort fields as the database holds them
+/// (the form access rules compare). A field's column is its name or its
+/// `#[model(column = "..")]`; a `#[model(skip)]` or `#[model(columns(..))]`
+/// field can be a text field but not a filter or sort field. The generated
+/// code names `::navree::search` (or `::navree_search`).
 #[proc_macro_derive(Searchable, attributes(searchable))]
 pub fn derive_searchable(input: TokenStream) -> TokenStream {
     searchable::expand(input.into()).into()

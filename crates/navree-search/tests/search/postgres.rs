@@ -10,48 +10,32 @@
 
 use std::sync::Arc;
 
-use navree_db::{DatabaseModule, Db, PageQuery, Repo};
+use navree_db::{DatabaseModule, Db, Executor, ExecutorExt, PageQuery, Statement};
 use navree_queue::{Queue, QueueModule};
 use navree_search::{DatabaseEngine, Metric, PgvectorStore, PostgresOptions, Search, SearchModule};
 use navree_testing::{TestApp, TestAppBuilder};
-use sea_orm::{ActiveValue::Set, ConnectionTrait, Database, IntoActiveModel};
-use uuid::Uuid;
 
 use crate::conformance::{Caps, suite};
+use crate::servers::{Server, ServerDatabase};
 use crate::support::{self, Contact, CrmModule, insert_contacts, new_contact};
 use crate::vector_stores::vector_suite;
 
-/// A database of its own on the test server; dropped with [`Scratch::drop`].
+/// A database of its own on the test server, dropped at the end.
 struct Scratch {
-    admin: String,
-    name: String,
+    database: ServerDatabase,
     url: String,
 }
 
 impl Scratch {
     async fn new(test: &str) -> Option<Scratch> {
-        let admin = support::service("NAVREE_TEST_POSTGRES_URL", test)?;
-        let name = format!("navree_search_{}", Uuid::now_v7().simple());
-        let conn = Database::connect(&admin).await.unwrap();
-        conn.execute_unprepared(&format!("CREATE DATABASE {name}"))
-            .await
-            .unwrap();
-        conn.close().await.unwrap();
-        // postgres://user:password@host:port/database?options
-        let (base, rest) = admin.rsplit_once('/').unwrap();
-        let options = rest.find('?').map_or("", |at| &rest[at..]);
-        let url = format!("{base}/{name}{options}");
-        Some(Scratch { admin, name, url })
+        support::service("NAVREE_TEST_POSTGRES_URL", test)?;
+        let database = ServerDatabase::create(Server::Postgres);
+        let url = database.url.clone();
+        Some(Scratch { database, url })
     }
 
     async fn drop(self) {
-        let conn = Database::connect(&self.admin).await.unwrap();
-        conn.execute_unprepared(&format!(
-            "DROP DATABASE IF EXISTS {} WITH (FORCE)",
-            self.name
-        ))
-        .await
-        .unwrap();
+        drop(self.database);
     }
 }
 
@@ -171,46 +155,28 @@ async fn the_typo_threshold_applies_per_query_and_the_trigram_index_exists() {
         assert_eq!(found(&loose, "lovlace").await, 1);
 
         // The setting stayed local to the queries.
-        let shown = db
-            .conn()
-            .query_one_raw(sea_orm::Statement::from_string(
-                sea_orm::DbBackend::Postgres,
-                "SELECT current_setting('pg_trgm.word_similarity_threshold') AS value",
-            ))
-            .await
-            .unwrap()
-            .unwrap();
-        assert_eq!(shown.try_get::<String>("", "value").unwrap(), "0.6");
+        let setting =
+            Statement::text("SELECT current_setting('pg_trgm.word_similarity_threshold') AS value");
+        let shown: String = db.fetch_scalar(&setting).await.unwrap();
+        assert_eq!(shown, "0.6");
 
-        // And inside a unit of work's transaction, which gets it back.
-        support::in_uow(&db, async |_uow| {
+        // And inside a unit of work's open transaction, which gets it back.
+        let uow = db.uow(None, None).await;
+        uow.scope(async {
+            uow.execute(&Statement::text("SELECT 1")).await.unwrap();
             assert_eq!(found(&loose, "lovlace").await, 1);
-            let shown = db
-                .reader()
-                .await
-                .query_one_raw(sea_orm::Statement::from_string(
-                    sea_orm::DbBackend::Postgres,
-                    "SELECT current_setting('pg_trgm.word_similarity_threshold') AS value",
-                ))
-                .await
-                .unwrap()
-                .unwrap();
-            assert_eq!(shown.try_get::<String>("", "value").unwrap(), "0.6");
+            let shown: String = uow.fetch_scalar(&setting).await.unwrap();
+            assert_eq!(shown, "0.6");
         })
         .await;
+        uow.rollback().await.unwrap();
 
-        let indexes = db
-            .conn()
-            .query_all_raw(sea_orm::Statement::from_string(
-                sea_orm::DbBackend::Postgres,
+        let defs: Vec<String> = db
+            .fetch_column(&Statement::text(
                 "SELECT indexdef FROM pg_indexes WHERE tablename = 'search_documents'",
             ))
             .await
             .unwrap();
-        let defs: Vec<String> = indexes
-            .iter()
-            .map(|row| row.try_get("", "indexdef").unwrap())
-            .collect();
         assert!(
             defs.iter()
                 .any(|d| d.contains("USING gin") && d.contains("gin_trgm_ops")),
@@ -233,8 +199,8 @@ async fn an_app_on_postgres_syncs_through_the_database_queue() {
         let queue = app.get::<Queue>().await;
 
         let mut grace = new_contact("Grace", "Hopper");
-        grace.score = Set(7);
-        grace.status = Set("customer".to_owned());
+        grace.score = 7;
+        grace.status = "customer".to_owned();
         let [ada, grace] = insert_contacts(&db, vec![new_contact("Ada", "Lovelace"), grace])
             .await
             .try_into()
@@ -274,20 +240,16 @@ async fn an_app_on_postgres_syncs_through_the_database_queue() {
         assert_eq!(hits.data[0].record.id, grace.id);
         assert!(hits.data[0].score > 0.0 && hits.data[0].score <= 1.0);
 
-        // A delete through `Repo` removes the document once the job runs.
-        support::in_uow(&db, async |uow| {
-            Repo::<Contact>::delete(uow, grace.clone()).await.unwrap()
-        })
-        .await;
+        // A delete through the model API removes the document once the job
+        // runs.
+        support::delete(&db, &grace).await;
         queue.run_pending().await.unwrap();
         search.assert_not_indexed::<Contact>(grace.id).await;
 
         // A fresh import rebuilds the index from the table.
-        let mut row = ada.clone().into_active_model();
-        row.last_name = Set("Byron".to_owned());
         search
-            .without_syncing(support::in_uow(&db, async |uow| {
-                Repo::<Contact>::update(uow, row).await.unwrap()
+            .without_syncing(support::update(&db, &ada, |c| {
+                c.last_name = "Byron".to_owned();
             }))
             .await;
         let report = search.import_fresh::<Contact>().await.unwrap();
@@ -306,16 +268,12 @@ async fn pgvector_store_conforms() {
     {
         let app = builder(&scratch, "off").build().await;
         let db = app.get::<Db>().await;
-        let available = db
-            .conn()
-            .query_one_raw(sea_orm::Statement::from_string(
-                sea_orm::DbBackend::Postgres,
+        let available: i64 = db
+            .fetch_scalar(&Statement::text(
                 "SELECT COUNT(*) AS n FROM pg_available_extensions WHERE name = 'vector'",
             ))
             .await
-            .unwrap()
-            .and_then(|row| row.try_get::<i64>("", "n").ok())
-            .unwrap_or(0);
+            .unwrap();
         if available == 0 {
             assert!(
                 std::env::var("NAVREE_TEST_REQUIRE_SERVICES").as_deref() != Ok("1"),

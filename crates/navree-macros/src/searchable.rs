@@ -1,5 +1,5 @@
 //! `#[derive(Searchable)]`: implements `navree_search::Searchable` for a
-//! SeaORM model's `Entity` from the model's fields.
+//! navree-orm model (`#[derive(Model)]`) from its fields.
 
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
@@ -27,7 +27,8 @@ struct FieldArgs {
     ident: Ident,
     /// The field's name in the index.
     name: String,
-    /// The column it comes from (the Rust field name).
+    /// The column it comes from (`#[model(column = "..")]`, else the Rust
+    /// field name).
     column: String,
     boost: Option<u8>,
     filter: bool,
@@ -41,7 +42,7 @@ fn try_expand(input: TokenStream) -> syn::Result<TokenStream> {
     let Data::Struct(data) = &input.data else {
         return Err(syn::Error::new(
             input.ident.span(),
-            "#[derive(Searchable)] goes on a SeaORM model struct (`pub struct Model { .. }`)",
+            "#[derive(Searchable)] goes on a navree-orm model struct (`#[derive(Model)] pub struct Deal { .. }`)",
         ));
     };
     let Fields::Named(named) = &data.fields else {
@@ -101,7 +102,9 @@ fn try_expand(input: TokenStream) -> syn::Result<TokenStream> {
     }
     let workspace = match &model.workspace {
         Some(column) => quote!(::core::option::Option::Some(#column)),
-        None => quote!((&&#search::__private::WorkspaceProbe::<Entity>::new()).workspace_column()),
+        None => {
+            quote!((&&#search::__private::WorkspaceProbe::<#model_ident>::new()).workspace_column())
+        }
     };
     // Filter and sort fields hold the column's value in the form access
     // rules compare (the database value: an enum's stored string, a
@@ -121,18 +124,18 @@ fn try_expand(input: TokenStream) -> syn::Result<TokenStream> {
 
     Ok(quote! {
         #[automatically_derived]
-        impl #search::Searchable for Entity {
+        impl #search::Searchable for #model_ident {
             fn settings() -> #search::IndexSettings {
                 #[allow(unused_imports)]
                 use #search::__private::{ViaPlain as _, ViaScoped as _};
-                let table = #search::__private::table_name::<Entity>();
+                let table = #search::__private::table_name::<#model_ident>();
                 #search::IndexSettings::new(#name, #index)
                     #(#builder)*
                     .workspace_opt(#workspace)
             }
 
             fn document<'a>(
-                record: &'a #model_ident,
+                record: &'a #search::__private::Record<#model_ident>,
                 _ctx: &'a #search::SearchContext,
             ) -> #search::__private::BoxFuture<
                 'a,
@@ -257,8 +260,21 @@ fn parse_field(field: &syn::Field) -> syn::Result<Option<FieldArgs>> {
         .strip_prefix("r#")
         .unwrap_or(&rust_name)
         .to_owned();
-    // The database column: `#[sea_orm(column_name = "..")]`, or the field.
-    let column = sea_orm_column_name(field).unwrap_or_else(|| rust_name.clone());
+    // The database column: `#[model(column = "..")]`, or the field. A field
+    // that is not one column (`skip`, `columns(..)`) has no value to filter
+    // or sort on.
+    let model = model_attribute(field);
+    if (filter || sort)
+        && let Some(span) = model.not_a_column
+    {
+        return Err(syn::Error::new(
+            span,
+            "a filter or sort field is one column of the model: this field is not \
+             (`#[model(skip)]` or `#[model(columns(..))]`); index it as text only, \
+             or put the value in a column",
+        ));
+    }
+    let column = model.column.unwrap_or_else(|| rust_name.clone());
     let name = match &rename {
         Some(rename) => {
             let value = rename.value();
@@ -288,31 +304,59 @@ fn parse_field(field: &syn::Field) -> syn::Result<Option<FieldArgs>> {
     }))
 }
 
-/// The `column_name = ".."` of a field's `#[sea_orm(..)]` attributes. The
-/// tokens are scanned rather than parsed, so other SeaORM arguments of any
-/// shape pass through.
-fn sea_orm_column_name(field: &syn::Field) -> Option<String> {
-    use proc_macro2::TokenTree;
-    field
+/// What a field's `#[model(..)]` attributes say about its column.
+#[derive(Default)]
+struct ModelAttribute {
+    /// `column = ".."`.
+    column: Option<String>,
+    /// Where `skip` or `columns(..)` says the field is not one column.
+    not_a_column: Option<Span>,
+}
+
+/// Reads `column = ".."`, `skip` and `columns(..)` from a field's
+/// `#[model(..)]` attributes. The tokens are scanned rather than parsed, so
+/// the derive's other arguments of any shape pass through.
+fn model_attribute(field: &syn::Field) -> ModelAttribute {
+    use proc_macro2::{Delimiter, TokenTree};
+    let mut out = ModelAttribute::default();
+    for list in field
         .attrs
         .iter()
-        .filter(|attr| attr.path().is_ident("sea_orm"))
+        .filter(|attr| attr.path().is_ident("model"))
         .filter_map(|attr| attr.meta.require_list().ok())
-        .find_map(|list| {
-            let tokens: Vec<TokenTree> = list.tokens.clone().into_iter().collect();
-            tokens.windows(3).find_map(|window| match window {
-                [
-                    TokenTree::Ident(key),
-                    TokenTree::Punct(eq),
-                    TokenTree::Literal(value),
-                ] if key == "column_name" && eq.as_char() == '=' => {
-                    syn::parse_str::<LitStr>(&value.to_string())
-                        .ok()
-                        .map(|lit| lit.value())
+    {
+        let tokens: Vec<TokenTree> = list.tokens.clone().into_iter().collect();
+        for (at, token) in tokens.iter().enumerate() {
+            let TokenTree::Ident(key) = token else {
+                continue;
+            };
+            // Only top-level keys: the token before is a comma or nothing.
+            let top =
+                at == 0 || matches!(&tokens[at - 1], TokenTree::Punct(p) if p.as_char() == ',');
+            if !top {
+                continue;
+            }
+            let next = tokens.get(at + 1);
+            match key.to_string().as_str() {
+                "column" => {
+                    if let (Some(TokenTree::Punct(eq)), Some(TokenTree::Literal(value))) =
+                        (next, tokens.get(at + 2))
+                        && eq.as_char() == '='
+                        && let Ok(lit) = syn::parse_str::<LitStr>(&value.to_string())
+                    {
+                        out.column = Some(lit.value());
+                    }
                 }
-                _ => None,
-            })
-        })
+                "skip" => out.not_a_column = Some(key.span()),
+                "columns" if matches!(next, Some(TokenTree::Group(g)) if g.delimiter() == Delimiter::Parenthesis) =>
+                {
+                    out.not_a_column = Some(key.span());
+                }
+                _ => {}
+            }
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -359,9 +403,9 @@ mod tests {
     }
 
     #[test]
-    fn the_column_comes_from_sea_orm_column_name() {
+    fn the_column_comes_from_model_column() {
         let args = field(quote!(
-            #[sea_orm(column_type = "Text", column_name = "mail", nullable)]
+            #[model(cast = "string_enum", column = "mail", hidden)]
             #[searchable(filter)]
             pub email: Option<String>
         ))
@@ -372,13 +416,47 @@ mod tests {
             ("email", "mail")
         );
         let args = field(quote!(
-            #[sea_orm(primary_key, auto_increment = false)]
+            #[model(default)]
             #[searchable(filter)]
             pub r#type: String
         ))
         .unwrap()
         .unwrap();
         assert_eq!((args.name.as_str(), args.column.as_str()), ("type", "type"));
+        // A key named `column` inside another argument is not the field's.
+        let args = field(quote!(
+            #[model(cast(Wrapped, column = "inner"))]
+            #[searchable]
+            pub notes: String
+        ))
+        .unwrap()
+        .unwrap();
+        assert_eq!(args.column, "notes");
+    }
+
+    #[test]
+    fn filters_and_sorts_need_one_column() {
+        let message = error(quote!(
+            #[model(skip)]
+            #[searchable(filter)]
+            pub label: String
+        ));
+        assert!(message.contains("one column of the model"), "{message}");
+        let message = error(quote!(
+            #[model(columns(amount: i64, currency: String))]
+            #[searchable(sort)]
+            pub price: Money
+        ));
+        assert!(message.contains("one column of the model"), "{message}");
+        // As text only, a computed field is fine.
+        let args = field(quote!(
+            #[model(skip)]
+            #[searchable(boost = 2)]
+            pub label: String
+        ))
+        .unwrap()
+        .unwrap();
+        assert_eq!(args.boost, Some(2));
     }
 
     #[test]
@@ -455,7 +533,7 @@ mod tests {
         ))
         .unwrap_err()
         .to_string();
-        assert!(error.contains("SeaORM model struct"), "{error}");
+        assert!(error.contains("navree-orm model struct"), "{error}");
         let error = try_expand(quote!(
             struct Model(u32);
         ))

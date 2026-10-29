@@ -73,7 +73,7 @@ L0  navree-kernel  navree-bounded (the bounded in-process cache)   navree-macros
 | L6 | `navree-i18n` | [Localization](/docs/packages/localization/): Fluent files, `t!`, the request's locale, ICU4X formatting, translated validation messages, templates and notifications |
 | L6 | `navree-documents` | [Documents](/docs/packages/documents/): PDF from HTML templates or documents built in code (native engine or Chrome), DOCX, merge and stamps, queued renders |
 | L6 | `navree-sheets` | [Imports and exports](/docs/packages/imports-and-exports/): CSV and Excel exports, streamed or queued with a signed link; imports with encoding detection, header mapping, row validation, a staging preview and error files |
-| L7 | `navree-search` | [Search](/docs/packages/search/): full-text and vector search over entities, synced through the queue |
+| L7 | `navree-search` | [Search](/docs/packages/search/): full-text and vector search over models, synced through the queue |
 | L7 | `navree-billing` | [Billing](/docs/packages/billing/) for users or workspaces with Stripe or Paddle: plans, trials, seats, metered usage, invoices, the portal, verified webhooks |
 | L7 | `navree-lighthouse` | [Lighthouse](/docs/tools/lighthouse/): application monitoring inside the app, issues, traces, alerts and the `/_lighthouse` dashboard |
 | L7 | `navree-logbook` | [Logbook](/docs/tools/logbook/): the local debugging timeline at `/_logbook`, with filters, duplicate-query detection and request replay |
@@ -119,7 +119,7 @@ L0  navree-kernel  navree-bounded (the bounded in-process cache)   navree-macros
 | `navree-integrations` | kernel, contracts, config, http, crypto, cache, events, http-client, db, schedule, workspace, orm, notify (feature `notify`), mail (feature `mail`: watched mailboxes) |
 | `navree-flags` | kernel, contracts, config, http, cache, db, events, audit, access, auth, workspace |
 | `navree-mcp` | kernel, contracts, config, http, cache, db, testing, validation, access, auth |
-| `navree-search` | kernel, contracts, config, macros, http, http-client, db, queue, access, workspace |
+| `navree-search` | kernel, contracts, config, macros, http, http-client, db, orm, queue, access, workspace |
 | `navree-documents` | kernel, contracts, config, http, view, storage, db and queue (with its `operations` feature) |
 | `navree-sheets` | kernel, contracts, config, macros, http, db, storage, validation, queue, workspace; i18n with its `i18n` feature |
 | `navree-billing` | kernel, contracts, config, http, cache, events, http-client, db, queue, schedule, access, auth, workspace |

@@ -7,10 +7,9 @@ use std::sync::{Arc, Mutex, PoisonError, RwLock};
 use std::time::Duration;
 
 use http::Method;
-use navree_db::Db;
+use navree_db::{Backend, Db, DbError, Executor, Pool};
 use navree_http_client::HttpClient;
 use navree_kernel::{AppContext, BoxError, BoxFuture};
-use sea_orm::{ConnectionTrait, DbBackend, TransactionTrait};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
@@ -575,6 +574,15 @@ impl PgvectorStore {
     }
 }
 
+impl PgvectorStore {
+    /// The writer's pool (the store keeps its rows outside units of work).
+    fn pool(&self) -> Result<&Pool, SearchError> {
+        Ok(self.db.pool().ok_or_else(|| {
+            DbError::unsupported("the pgvector store needs a database with a pool")
+        })?)
+    }
+}
+
 impl fmt::Debug for PgvectorStore {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("PgvectorStore")
@@ -632,7 +640,7 @@ pub(crate) fn pgvector_nearest(
         Metric::Dot => "<#>",
         Metric::Euclidean => "<->",
     };
-    let mut sql = Sql::new(DbBackend::Postgres);
+    let mut sql = Sql::new(Backend::Postgres);
     sql.push("SELECT id, (embedding ")
         .push(operator)
         .push(" ")
@@ -658,8 +666,9 @@ impl VectorStore for PgvectorStore {
             if self.ready.load(std::sync::atomic::Ordering::Relaxed) {
                 return Ok(());
             }
+            let pool = self.pool()?;
             for statement in pgvector_schema(self.dimensions, self.metric) {
-                self.db.conn().execute_unprepared(&statement).await?;
+                pool.execute_script(&statement).await?;
             }
             self.ready.store(true, std::sync::atomic::Ordering::Relaxed);
             Ok(())
@@ -673,9 +682,9 @@ impl VectorStore for PgvectorStore {
     ) -> BoxFuture<'a, Result<(), SearchError>> {
         Box::pin(async move {
             self.prepare(index).await?;
-            let tx = self.db.conn().begin().await?;
+            let tx = self.pool()?.begin().await?;
             for record in records {
-                let mut sql = Sql::new(DbBackend::Postgres);
+                let mut sql = Sql::new(Backend::Postgres);
                 sql.push(&format!(
                     "INSERT INTO {VECTORS_TABLE} (index_name, id, payload, embedding) VALUES ("
                 ))
@@ -690,7 +699,7 @@ impl VectorStore for PgvectorStore {
                     "::vector) ON CONFLICT (index_name, id) DO UPDATE SET \
                      payload = EXCLUDED.payload, embedding = EXCLUDED.embedding",
                 );
-                tx.execute_raw(sql.statement()).await?;
+                tx.execute(&sql.statement()).await?;
             }
             tx.commit().await?;
             Ok(())
@@ -704,7 +713,7 @@ impl VectorStore for PgvectorStore {
     ) -> BoxFuture<'a, Result<(), SearchError>> {
         Box::pin(async move {
             self.prepare(index).await?;
-            let mut sql = Sql::new(DbBackend::Postgres);
+            let mut sql = Sql::new(Backend::Postgres);
             sql.push(&format!("DELETE FROM {VECTORS_TABLE} WHERE index_name = "))
                 .bind(index)
                 .push(" AND id IN (");
@@ -718,7 +727,7 @@ impl VectorStore for PgvectorStore {
             if ids.is_empty() {
                 return Ok(());
             }
-            self.db.conn().execute_raw(sql.statement()).await?;
+            self.pool()?.execute(&sql.statement()).await?;
             Ok(())
         })
     }
@@ -726,10 +735,10 @@ impl VectorStore for PgvectorStore {
     fn flush<'a>(&'a self, index: &'a str) -> BoxFuture<'a, Result<(), SearchError>> {
         Box::pin(async move {
             self.prepare(index).await?;
-            let mut sql = Sql::new(DbBackend::Postgres);
+            let mut sql = Sql::new(Backend::Postgres);
             sql.push(&format!("DELETE FROM {VECTORS_TABLE} WHERE index_name = "))
                 .bind(index);
-            self.db.conn().execute_raw(sql.statement()).await?;
+            self.pool()?.execute(&sql.statement()).await?;
             Ok(())
         })
     }
@@ -741,18 +750,18 @@ impl VectorStore for PgvectorStore {
     ) -> BoxFuture<'a, Result<Option<Vec<f32>>, SearchError>> {
         Box::pin(async move {
             self.prepare(index).await?;
-            let mut sql = Sql::new(DbBackend::Postgres);
+            let mut sql = Sql::new(Backend::Postgres);
             sql.push(&format!(
                 "SELECT embedding::text AS embedding FROM {VECTORS_TABLE} WHERE index_name = "
             ))
             .bind(index)
             .push(" AND id = ")
             .bind(id);
-            let row = self.db.conn().query_one_raw(sql.statement()).await?;
+            let row = self.pool()?.fetch_optional(&sql.statement()).await?;
             let Some(row) = row else {
                 return Ok(None);
             };
-            let text: String = row.try_get("", "embedding")?;
+            let text: String = row.get("embedding")?;
             Ok(Some(
                 text.trim_matches(['[', ']'])
                     .split(',')
@@ -772,12 +781,12 @@ impl VectorStore for PgvectorStore {
         Box::pin(async move {
             self.prepare(index).await?;
             let sql = pgvector_nearest(index, vector, filter, limit, self.metric);
-            let rows = self.db.conn().query_all_raw(sql.statement()).await?;
+            let rows = self.pool()?.fetch_all(&sql.statement()).await?;
             let metric = self.metric;
             rows.iter()
                 .map(|row| {
-                    let id: String = row.try_get("", "id")?;
-                    let distance: f64 = row.try_get("", "distance")?;
+                    let id: String = row.get("id")?;
+                    let distance: f64 = row.get("distance")?;
                     let score = match metric {
                         // `<=>` is 1 - cosine similarity.
                         Metric::Cosine => (2.0 - distance) / 2.0,
@@ -823,7 +832,7 @@ impl Vectors {
             )?),
             VectorStoreKind::Pgvector => {
                 let db = db.ok_or("the pgvector store needs DatabaseModule in the app")?;
-                if db.backend() != DbBackend::Postgres {
+                if crate::service::backend(db) != Backend::Postgres {
                     return Err("the pgvector store needs a PostgreSQL database".into());
                 }
                 Arc::new(PgvectorStore::new(
