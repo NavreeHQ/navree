@@ -1,4 +1,4 @@
-//! Projects: a resource owned by a workspace (a SeaORM entity behind
+//! Projects: a resource owned by a workspace (a navree-orm model behind
 //! `WorkspaceRepo`), searchable through `SearchModule`, broadcast to the
 //! workspace's members on every change.
 //!
@@ -7,7 +7,7 @@
 //! ├── mod.rs           # ProjectsModule: what the module provides
 //! ├── controller.rs    # ProjectsController: /api/v1/projects, behind InWorkspace
 //! ├── service.rs       # ProjectService: WorkspaceRepo reads and writes, broadcasts
-//! ├── entity.rs        # the `projects` table: Subject + WorkspaceScoped
+//! ├── entity.rs        # the `projects` model: subject, WorkspaceScoped, Searchable
 //! ├── dto.rs           # request and response bodies
 //! └── migrations/      # the table and its row-level security policy
 //! ```
@@ -19,8 +19,6 @@ mod migrations;
 mod service;
 
 use navree::prelude::*;
-// COMPAT (data-layer move): `sea_workspace_scoped` for the SeaORM entity.
-use navree::workspace::sea_compat::ModuleBuilderSeaWorkspaceExt as _;
 
 pub use controller::ProjectsController;
 pub use entity::Project;
@@ -44,6 +42,7 @@ impl ProjectsModule {
     fn wire(&self, m: &mut ModuleBuilder) {
         m.migrations(migrations::migrations())
             // `#[can(.., from = "id")]` answers 404 for another workspace's project.
-            .sea_workspace_scoped::<Project>();
+            .workspace_scoped::<Project>();
+        m.model::<Project>();
     }
 }

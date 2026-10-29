@@ -24,7 +24,9 @@ rules:
     paths:
       exclude:
         # The crates that still use sea_orm. Remove an entry when its crate is moved.
-        - "/apps/evidence-app/"
+        # evidence-app is moved; `Project` keeps its SeaORM derive for the
+        # admin panel's resource until navree-helm runs on models.
+        - "/apps/evidence-app/src/modules/projects/entity.rs"
         - "/bench/"
         - "/crates/navree/"
         # navree-access is moved; its SeaORM compatibility shim (SeaORM
@@ -48,17 +50,15 @@ rules:
         - "/crates/navree-micro/tests/micro/support.rs"
         - "/crates/navree-orm/"
         - "/crates/navree-schema/"
-        - "/crates/navree-search/"
         - "/crates/navree-sheets/"
         - "/crates/navree-cli/"
         - "/crates/navree-directory/"
         - "/crates/navree-domains/"
-        - "/crates/navree-macros/"
         # navree-workspace is moved; its SeaORM compatibility layer (the
-        # `sea_compat` repositories and registrations, the SeaORM derive kept
-        # on three models and on `LibraryScope`) stays until the crates
-        # using it are moved (step 8). The conformity scanner's tests read
-        # SeaORM entity sources as text.
+        # `sea_compat` repository and registrations the conformity checks
+        # name, the SeaORM derive kept on three models and on `LibraryScope`)
+        # stays until step 8. The conformity scanner's tests read SeaORM
+        # entity sources as text.
         - "/crates/navree-workspace/src/sea_compat.rs"
         - "/crates/navree-workspace/src/entity.rs"
         - "/crates/navree-workspace/src/library/mod.rs"
@@ -79,7 +79,9 @@ rules:
         - "**/Cargo.toml"
       exclude:
         - "/Cargo.toml"
-        - "/apps/evidence-app/"
+        # evidence-app: sea-orm for `Project`'s compatibility derive (the
+        # admin panel), until navree-helm runs on models.
+        - "/apps/evidence-app/Cargo.toml"
         - "/bench/"
         - "/crates/navree/"
         # navree-auth: sea-orm for `User`'s compatibility derive, until step 8.
@@ -94,7 +96,6 @@ rules:
         - "/crates/navree-micro/Cargo.toml"
         - "/crates/navree-orm/"
         - "/crates/navree-schema/"
-        - "/crates/navree-search/"
         - "/crates/navree-sheets/"
         # navree-workspace: sea-orm for its compatibility layer, until step 8.
         - "/crates/navree-workspace/Cargo.toml"

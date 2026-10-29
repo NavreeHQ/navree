@@ -369,13 +369,14 @@ ai = [
 ## process, or headless Chrome), DOCX, merge and stamps, queued renders.
 documents = ["dep:navree-documents", "http", "view", "storage"]
 ## L7 (opt-in, not in `full`)
-## Search: full-text and vector search over entities (postgres,
+## Search: full-text and vector search over navree-orm models (postgres,
 ## meilisearch, typesense and memory engines).
 search = [
     "dep:navree-search",
     "http",
     "http-client",
     "db",
+    "orm",
     "queue",
     "access",
     "workspace",

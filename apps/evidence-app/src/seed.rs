@@ -14,15 +14,14 @@
 use navree::access::AccessService;
 use navree::auth::{AuthService, User};
 use navree::db::{Db, Seeder, Uow};
-// COMPAT (data-layer move): the SeaORM form of `WorkspaceRepo`.
-use navree::workspace::sea_compat::WorkspaceRepo;
-use navree::workspace::{Members, NewWorkspace, Workspace, WorkspaceRole, Workspaces};
+use navree::workspace::{
+    Members, NewWorkspace, Workspace, WorkspaceRepo, WorkspaceRole, Workspaces,
+};
 use navree::{BoxFuture, prelude::*};
-use sea_orm::{ActiveModelTrait, ActiveValue::Set, IntoActiveModel, PaginatorTrait};
 use uuid::Uuid;
 
 use crate::abilities::SUPER_ADMIN;
-use crate::modules::projects::entity::{ActiveModel as ProjectModel, Project};
+use crate::modules::projects::Project;
 use crate::modules::tasks::Task;
 
 /// The seeder's name.
@@ -219,28 +218,23 @@ async fn seed_projects(
     in_uow(&db, |uow| async move {
         // On PostgreSQL, row-level security admits this workspace's rows only.
         workspaces.enter(&uow, id).await?;
-        let existing = WorkspaceRepo::<Project>::select(id)
-            .count(&*uow.tx().await?)
-            .await?;
+        let existing = WorkspaceRepo::<Project>::query(id).count(&uow).await?;
         if existing > 0 {
             return Ok(());
         }
-        let now = chrono::Utc::now();
         for n in 0..PROJECTS.len() {
             let (name, description) = PROJECTS[(n + offset) % PROJECTS.len()];
             let status = if n % 5 == 4 { "archived" } else { "active" };
             let project = WorkspaceRepo::<Project>::insert(
                 &uow,
                 id,
-                ProjectModel {
-                    id: Set(Uuid::now_v7()),
-                    name: Set(name.to_owned()),
-                    description: Set(Some(description.to_owned())),
-                    status: Set(status.to_owned()),
-                    created_by: Set(author),
-                    created_at: Set(now),
-                    updated_at: Set(now),
-                    ..Default::default()
+                Project {
+                    id: Uuid::now_v7(),
+                    name: name.to_owned(),
+                    description: Some(description.to_owned()),
+                    status: status.to_owned(),
+                    created_by: author,
+                    ..Project::default()
                 },
             )
             .await?;
@@ -282,9 +276,13 @@ pub async fn ensure_account(ctx: &AppContext, name: &str, email: &str) -> Result
     }
     let db = ctx.get::<Db>().await?;
     let verified_at = user.created_at;
-    let mut active = user.into_active_model();
-    active.email_verified_at = Set(Some(verified_at));
-    Ok(active.update(db.conn()).await?)
+    let mut record = User::find(&*db, user.id)
+        .await?
+        .ok_or("the account was just found or created")?;
+    record
+        .update(&*db, |user| user.email_verified_at = Some(verified_at))
+        .await?;
+    Ok(record.into_inner())
 }
 
 /// Runs `f` in a new unit of work: commits when it succeeds, rolls back

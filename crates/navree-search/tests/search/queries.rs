@@ -8,6 +8,7 @@ use navree_db::{Db, PageQuery};
 use navree_search::{Search, SearchError};
 use uuid::Uuid;
 
+use crate::servers::Server;
 use crate::support::{
     self, Contact, Deal, Company, ids, insert, insert_contacts, new_company, new_contact, settle,
 };
@@ -43,12 +44,20 @@ async fn paginate_returns_models_in_relevance_order() {
             .paginate(PageQuery::new(1, 15))
             .await
             .unwrap();
+        // PostgreSQL's text parser keeps an email address as one token, so
+        // Alan's `alan@lovelace-labs.io` does not match there.
+        let expected: Vec<String> = if engine == "postgres" && Server::current() == Server::Postgres
+        {
+            vec![rows[0].id.to_string()]
+        } else {
+            vec![rows[0].id.to_string(), rows[2].id.to_string()]
+        };
         assert_eq!(
             ids(&page),
-            [rows[0].id.to_string(), rows[2].id.to_string()],
+            expected,
             "{engine}: the last name outranks the email"
         );
-        assert_eq!(page.meta.total, 2);
+        assert_eq!(page.meta.total, expected.len() as u64);
         assert_eq!(
             (
                 page.meta.current_page,
