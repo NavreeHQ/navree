@@ -45,7 +45,7 @@ impl fmt::Debug for TempDirGuard {
     }
 }
 
-/// A SeaORM/SQLx URL for a new SQLite file in a fresh temporary directory
+/// A navree-db URL for a new SQLite file in a fresh temporary directory
 /// (`sqlite://<dir>/database.sqlite?mode=rwc`; SQLite creates the file on
 /// first connect), and the guard that deletes the directory.
 ///

@@ -73,7 +73,7 @@ L0  navree-kernel                                navree-macros  navree-orm-macro
 | L2 | `navree-http-client` | Outgoing HTTP with retries, timeouts, an SSRF policy and fakes |
 | L2 | `navree-schema` | The schema builder: tables, columns, indexes, foreign keys and check constraints in Rust for PostgreSQL, MySQL/MariaDB and SQLite (SQLite alterations by table rebuild); TimescaleDB hypertables, compression, retention, reorder policies and continuous aggregates with fallbacks on other databases; introspection; schema dumps; migration files (`navree::schema`) |
 | L2 | `navree-navigator` | Navigator, the MCP server for coding agents behind `navree mcp`: routes, the module graph and providers, the schema, read-only SQL, logs and the last error, redacted configuration and the docs of the app's Navree version; and the agent skills of `navree skills:install` (a dev tool; opt-in facade feature `navigator`) |
-| L3 | `navree-db` | SeaORM integration, per-request unit of work, migrations (schema and SeaORM, batches, steps, rollback, reset, refresh, fresh, `--pretend`, `schema:dump`), seeders, factories, pagination |
+| L3 | `navree-db` | Navree's data layer on SQLx: pools, statements, rows, classified errors, transactions and savepoints, the per-request unit of work, records below the ORM, migrations (navree-schema, batches, steps, rollback, reset, refresh, fresh, `--pretend`, `schema:dump`), seeders, pagination shapes |
 | L3 | `navree-testing` | `TestApp`, an in-process `TestClient`, fakes, cross-tenant isolation suites generated from a module's routes |
 | L3 | `navree-observe` | Health checks, readiness, Prometheus metrics, tracing (spans from telemetry events, `SpanRecorder`, OTLP export behind the opt-in facade feature `otel`) |
 | L3 | `navree-api` | OpenAPI 3.1 from route metadata, docs UI, API resources, `api.require_docs` and the `api.docs` check |
@@ -393,7 +393,7 @@ top of the file and a fixture that proves what it flags and what it leaves alone
 | `navree-tls-verification-disabled` | certificate verification switched off, in Rust and in Node code |
 | `navree-secret-in-log` | a password, token, key or cookie recorded in a `tracing` event |
 | `navree-unwrap-on-request-data` | `.unwrap()` / `.expect()` on a value derived from a handler's request extractors |
-| `navree-sea-orm-ratchet` | new use of `sea_orm`, in source and in `Cargo.toml`, outside the crates still on it; delete a crate from the list in `.semgrep/sea-orm-ratchet.yml` when you port it, never add one |
+| `navree-no-sea-orm` | any use of `sea_orm`, `sea_orm_migration` or `sea_query` in source, and any `sea-*` dependency in a `Cargo.toml` (`.semgrep/no-sea-orm.yml`): navree-db, navree-orm and navree-schema are the data layer |
 | `navree-raw-html` | `dangerouslySetInnerHTML`, `innerHTML =`, `insertAdjacentHTML`, `document.write`; `navree-raw-html-vue` does the same for `v-html` |
 | `navree-workflow-pull-request-target` | a workflow triggered by `pull_request_target` |
 | `navree-workflow-unpinned-action` | an action not pinned to a full commit SHA |

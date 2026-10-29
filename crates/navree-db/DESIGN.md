@@ -78,11 +78,10 @@ async fn demo(uow: &Uow, row: SuppressionRow) -> Result<(), navree_db::DbError> 
   database stored it: timestamps rounded to its precision), `upsert` (`ON
   CONFLICT .. DO UPDATE` / `ON DUPLICATE KEY UPDATE`), `delete`, and the
   recorded writes on a `Uow`: `insert_recorded`, `update_recorded(old,
-  new)`, `delete_recorded`, which record the same `ChangeEvent`s `Repo`
-  does (the record's `Serialize` form, so a `skip_serializing` secret stays
+  new)`, `delete_recorded`, which record the same `ChangeEvent`s as
+  navree-orm's model writes (the record's `Serialize` form, so a `skip_serializing` secret stays
   out of audit trails; an update records only the changed fields).
-- `Db::read_executor()`: where a read goes, as `Db::reader` decides for
-  SeaORM: the task's open unit of work, the writer after a sticky write or
+- `Db::read_executor()`: where a read goes: the task's open unit of work, the writer after a sticky write or
   inside `Db::using_writer`, else a read replica. `Db::same_as` tells
   whether two handles share pools (whether to join the task's unit of
   work).
@@ -126,8 +125,7 @@ backend.
    `for_update()`.
 5. Errors: `DbError` and its `ErrorKind` (`UniqueViolation`, `NotFound`,
    `is_retryable()`), wrapped in the crate's own error.
-6. Units of work: test with `database.native_units_of_work = true` as well
-   as the default, on SQLite, PostgreSQL and MySQL.
+6. Units of work: test on SQLite, PostgreSQL and MySQL.
 
 For navree-access (step 5) the same applies to its 6 tables: its ability
 filters become `Filter::raw` fragments (portable SQL with `?`), the shape
@@ -159,8 +157,7 @@ read the new bytes as the old type:
 The same happened on every pooled connection that had run the statement,
 inside transactions and savepoints, in streamed rows, through navree-orm's
 builder over an untyped column (`col("amount").gt(..)`), and in units of
-work on SeaORM's transactions (whose driver caches statements the same
-way). Nothing failed where the sizes matched: the rows were silently
+work. Nothing failed where the sizes matched: the rows were silently
 wrong.
 
 MySQL sends the parameters' types with every run, so parameters are read
@@ -192,10 +189,7 @@ beyond `i64` binds `NUMERIC` and is named so; an enum binds text, its
 `CAST(? AS mood)` being in the SQL; a vector is pgvector's `vector`). A
 `NULL` is named by its kind's type. Statements without values keep their
 text unchanged. PostgreSQL and MySQL key their statements; SQLite runs the
-SQL as written. navree-db statements on SeaORM's connections (units of
-work on SeaORM's transactions, migrations) are keyed the same way, by the
-kind of each value (`/* params: i64, text */`), since SeaORM binds each
-kind as one type.
+SQL as written.
 
 Considered:
 
@@ -226,9 +220,7 @@ columns.
 - Navree's query log (`QueryLog`, `Db::on_query`, `before_executing`),
   the slow-query log, telemetry, errors and `Statement`'s `Display` show
   the SQL as written, without the comment, and so does `migrate
-  --pretend` (a SeaORM mock connection prepares nothing, so its
-  statements are not keyed; a transaction on one cannot say it is a
-  mock, so the scripted tests see keyed statements there).
+  --pretend`.
 - The database sees the comment: PostgreSQL's `pg_stat_activity.query`,
   `pg_prepared_statements`, server logs (`log_statement`,
   `log_min_duration_statement`) and `pg_stat_statements` show
@@ -261,8 +253,8 @@ connection (the PostgreSQL test counts them in `pg_prepared_statements`).
 
 `tests/engine/placeholder_types.rs`, on every server: integers then floats
 and back, text then integers, typed `NULL`s then other kinds, every
-pooled connection, transactions, savepoints, streams, units of work on
-both kinds of transaction, every kind of value after every other through
+pooled connection, transactions, savepoints, streams, units of work,
+every kind of value after every other through
 `SELECT ?` and a cast to text, the prepared statements on PostgreSQL, and
 what logs and the server see. navree-orm's `tests/servers/value_types.rs`
 runs the builder over an untyped column.

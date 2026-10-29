@@ -173,8 +173,8 @@ pub struct RequestHandled {
     pub client_ip: Option<String>,
 }
 
-/// A SQL statement ran: emitted by navree-db for every statement SeaORM
-/// times (every query and execute; not `execute_unprepared`).
+/// A SQL statement ran: emitted by navree-db for every statement its pools
+/// and transactions run.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct QueryExecuted {
     /// The statement with its placeholders, never the bound values.
@@ -182,7 +182,7 @@ pub struct QueryExecuted {
     /// How long it took.
     #[serde(with = "millis")]
     pub duration: Duration,
-    /// The rows returned or affected, when known (SeaORM does not report them).
+    /// The rows returned or affected, when known.
     pub rows: Option<u64>,
     /// The connection: the database URL without its password.
     pub connection: String,

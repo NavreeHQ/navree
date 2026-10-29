@@ -20,7 +20,7 @@
 //! | `cache` | navree-cache | `cache` | `CacheModule`: cache stores and locks |
 //! | `http_client` | navree-http-client | `http-client` | `HttpClientModule`: outgoing HTTP with fakes |
 //! | `schema` | navree-schema | `schema` | `Schema`, `Blueprint`, `Migration`: the schema builder, TimescaleDB hypertables, schema dumps |
-//! | `db` | navree-db | `db` | `DatabaseModule`: SeaORM, unit of work, migrations, pagination |
+//! | `db` | navree-db | `db` | `DatabaseModule`: navree-db's pools, statements and transactions on SQLx, unit of work, migrations, pagination |
 //! | `testing` | navree-testing | `testing` | `TestApp`, `TestClient`: in-process HTTP tests |
 //! | `observe` | navree-observe | `observe` | `ObserveModule`: health checks and metrics |
 //! | `api` | navree-api | `api` | `ApiModule`: OpenAPI document and docs UI |
@@ -100,7 +100,7 @@
 //! [`patch`] and [`delete`], which `#[controller]` consumes). Their
 //! expansions name the runtime crates through this facade (`::navree::kernel`,
 //! `::navree::http`, `::navree::access`), so an app depends on `navree` alone
-//! (plus `serde`, `sea-orm` and `garde`, whose derives name their own crates).
+//! (plus `serde` and `garde`, whose derives name their own crates).
 //!
 //! ```no_run
 //! # // Inside this crate's own doctests the macros name `crate::kernel` and

@@ -287,9 +287,7 @@ impl AuditLog {
     }
 }
 
-/// Writes the `data` entries through the unit of work being committed, on
-/// either kind of transaction (SeaORM's runs this through `observe`'s
-/// default).
+/// Writes the `data` entries through the unit of work being committed.
 impl ChangeObserver for AuditLog {
     fn observe<'a>(
         &'a self,
