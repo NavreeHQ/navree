@@ -238,6 +238,46 @@ pub async fn changing_value_types_across_connections_and_transactions(scratch: S
     checks.finish();
 }
 
+/// Units of work on SeaORM's transactions (the default while crates move
+/// off it, whose driver caches prepared statements by their text too) and
+/// on navree-db's own.
+pub async fn changing_value_types_in_units_of_work(scratch: Scratch) {
+    let pool = pool_of(&scratch, 2).await;
+    measures(&pool).await;
+    let mut checks = Checks::default();
+    for native in [false, true] {
+        let db = pool.with_native_units_of_work(native);
+        let on = if native { "native" } else { "SeaORM" };
+        let uow = db.uow(None, None).await;
+        let below = BELOW;
+        let mut check = |case: &str, got, want: &[i64]| {
+            checks.expect(&format!("{on} unit of work: {case}"), got, want);
+        };
+        check("I64 2", ids(&uow, below, 2_i64.into()).await, &[1]);
+        let got = ids(&uow, below, 3.5_f64.into()).await;
+        check("F64 3.5 after I64", got, &[1, 2]);
+        let got = ids(&uow, below, Value::Null(Kind::I64)).await;
+        check("I64 NULL after F64", got, &[]);
+        let got = ids(&uow, below, 2.6_f32.into()).await;
+        check("F32 2.6 after I64 NULL", got, &[1, 2]);
+        let got = ids(&uow, below, Value::I32(2)).await;
+        check("I32 2 after F32", got, &[1]);
+        let got = ids(&uow, below, Value::I16(3)).await;
+        check("I16 3 after I32", got, &[1, 2]);
+        let got = streamed(&uow, below, Value::Decimal("4.5".parse().unwrap())).await;
+        check("streamed Decimal 4.5 after I16", got, &[1, 2, 3]);
+        let text = match scratch.server.backend() {
+            Backend::MySql => "SELECT id FROM measures WHERE code = CONCAT('', ?) ORDER BY id",
+            _ => "SELECT id FROM measures WHERE code = ('' || ?) ORDER BY id",
+        };
+        check("text '7'", ids(&uow, text, "7".into()).await, &[2]);
+        let got = ids(&uow, text, 12_345_678_i64.into()).await;
+        check("I64 12345678 after text", got, &[3]);
+        uow.commit().await.unwrap();
+    }
+    checks.finish();
+}
+
 /// The ids `sql` streams with `value` bound.
 async fn streamed(db: &impl Executor, sql: &str, value: Value) -> Result<Vec<i64>, String> {
     let statement = Statement::portable(sql, [value]);

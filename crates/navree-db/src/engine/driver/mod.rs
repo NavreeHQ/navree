@@ -114,9 +114,63 @@ pub(crate) const PARAMS_START: &str = " /* params: ";
 /// The end of the comment [`PARAMS_START`] begins.
 pub(crate) const PARAMS_END: &str = " */";
 
+/// The text of a statement keyed by the types its values bind: the SQL as
+/// written, with `/* params: INT8, TEXT */` before any trailing `;` and
+/// whitespace (after a `;`, MySQL would read the comment as a statement
+/// of its own). Nothing bound: the SQL as written.
+pub(crate) struct KeyedText<'s> {
+    /// The SQL as written.
+    written: &'s str,
+    /// Where the comment goes in it.
+    end: usize,
+    /// `written[..end]`, then the comment so far.
+    text: String,
+    named: usize,
+}
+
+impl<'s> KeyedText<'s> {
+    /// `sql`, about to name the types of `values` values.
+    pub(crate) fn new(sql: &'s str, values: usize) -> KeyedText<'s> {
+        let end = sql
+            .trim_end_matches(|c: char| c == ';' || c.is_whitespace())
+            .len();
+        // Type names are mostly at most 11 bytes (`TIMESTAMPTZ`), and `, `.
+        let comment = match values {
+            0 => 0,
+            n => PARAMS_START.len() + PARAMS_END.len() + n * 13,
+        };
+        let mut text = String::with_capacity(sql.len() + comment);
+        text.push_str(&sql[..end]);
+        KeyedText {
+            written: sql,
+            end,
+            text,
+            named: 0,
+        }
+    }
+
+    /// Names the type the next value binds.
+    pub(crate) fn name(&mut self, type_name: &str) {
+        let separator = if self.named == 0 { PARAMS_START } else { ", " };
+        self.text.push_str(separator);
+        self.text.push_str(type_name);
+        self.named += 1;
+    }
+
+    /// The text to prepare.
+    pub(crate) fn finish(mut self) -> String {
+        if self.named > 0 {
+            self.text.push_str(PARAMS_END);
+        }
+        self.text.push_str(&self.written[self.end..]);
+        self.text
+    }
+}
+
 /// A statement as a driver whose prepared statements keep the types of
-/// their first run (PostgreSQL, MySQL) prepares it: the SQL as written
-/// followed by a comment naming the type each value binds, and the values.
+/// their first run (PostgreSQL, MySQL) prepares it: its [`KeyedText`],
+/// naming the type each value binds as the driver sends it, and the
+/// values.
 ///
 /// SQLx caches a connection's prepared statements by their text. With the
 /// types in the text, the same SQL run with a value of another type (an
@@ -128,62 +182,33 @@ pub(crate) const PARAMS_END: &str = " */";
 /// statements and parameter types".
 #[cfg_attr(not(any(feature = "postgres", feature = "mysql")), allow(dead_code))]
 pub(crate) struct Keyed<'s, A> {
-    /// The SQL as written.
-    written: &'s str,
-    /// Where the comment goes in it: before any trailing `;` and
-    /// whitespace (after a `;`, MySQL would read the comment as a
-    /// statement of its own).
-    end: usize,
-    /// The text being built: `written[..end]`, then the comment.
-    sql: String,
+    text: KeyedText<'s>,
     args: A,
-    bound: usize,
 }
 
 #[cfg_attr(not(any(feature = "postgres", feature = "mysql")), allow(dead_code))]
 impl<'s, A: sqlx::Arguments> Keyed<'s, A> {
     /// `sql`, about to bind `values` values.
     pub(crate) fn new(sql: &'s str, values: usize) -> Keyed<'s, A> {
-        let end = sql
-            .trim_end_matches(|c: char| c == ';' || c.is_whitespace())
-            .len();
-        // Type names are mostly at most 11 bytes (`TIMESTAMPTZ`), and `, `.
-        let comment = match values {
-            0 => 0,
-            n => PARAMS_START.len() + PARAMS_END.len() + n * 13,
-        };
-        let mut text = String::with_capacity(sql.len() + comment);
-        text.push_str(&sql[..end]);
         Keyed {
-            written: sql,
-            end,
-            sql: text,
+            text: KeyedText::new(sql, values),
             args: A::default(),
-            bound: 0,
         }
     }
 
-    /// Binds `value`, naming the type it binds as in the statement's text.
+    /// Binds `value`, naming the type it binds in the statement's text.
     pub(crate) fn add<'t, T>(&mut self, value: T) -> Result<(), sqlx::error::BoxDynError>
     where
         T: sqlx::Encode<'t, A::Database> + sqlx::Type<A::Database>,
     {
         let type_info = value.produces().unwrap_or_else(T::type_info);
-        let separator = if self.bound == 0 { PARAMS_START } else { ", " };
-        self.sql.push_str(separator);
-        self.sql.push_str(sqlx::TypeInfo::name(&type_info));
-        self.bound += 1;
+        self.text.name(sqlx::TypeInfo::name(&type_info));
         self.args.add(value)
     }
 
-    /// The text to prepare (the SQL as written when nothing is bound) and
-    /// the values.
-    pub(crate) fn finish(mut self) -> (String, A) {
-        if self.bound > 0 {
-            self.sql.push_str(PARAMS_END);
-        }
-        self.sql.push_str(&self.written[self.end..]);
-        (self.sql, self.args)
+    /// The text to prepare and the values.
+    pub(crate) fn finish(self) -> (String, A) {
+        (self.text.finish(), self.args)
     }
 }
 

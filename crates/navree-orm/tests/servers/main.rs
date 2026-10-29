@@ -14,6 +14,7 @@ mod relations;
 mod scenarios;
 mod support;
 mod text;
+mod value_types;
 
 use support::{Server, run};
 
@@ -238,4 +239,22 @@ async fn postgres_text_ignoring_case() {
 #[tokio::test]
 async fn mysql_text_ignoring_case() {
     run(Server::MySql, |db| text::ignoring_case(db, Server::MySql)).await;
+}
+
+#[tokio::test]
+async fn postgres_untyped_columns_bind_each_value_with_its_type() {
+    run(
+        Server::Postgres,
+        value_types::untyped_columns_bind_each_value_with_its_type,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn mysql_untyped_columns_bind_each_value_with_its_type() {
+    run(
+        Server::MySql,
+        value_types::untyped_columns_bind_each_value_with_its_type,
+    )
+    .await;
 }
