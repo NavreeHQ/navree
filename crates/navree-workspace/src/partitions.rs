@@ -4,16 +4,15 @@
 use std::fmt;
 use std::sync::Arc;
 
-use navree_db::{Repo, Uow};
-use sea_orm::{
-    ColumnTrait, ConnectionTrait, EntityTrait, IntoActiveModel, QueryFilter, QueryOrder, Set,
-};
+use navree_db::Uow;
+use navree_orm::{Executor, Model as _, Record};
 use uuid::Uuid;
 
 use crate::core::Core;
-use crate::entity::{Member, Partition, partition};
+use crate::entity::{Member, Partition};
 use crate::events::{PartitionAccessChanged, PartitionCreated, PartitionDeleted};
 use crate::grants::{partition_selector, set_partition_selector};
+use crate::store;
 use crate::workspaces::{check_name, check_slug, slugify_or};
 use crate::{PartitionSelector, WorkspaceError, WorkspaceRole};
 
@@ -75,13 +74,12 @@ impl Partitions {
     ) -> Result<Partition, WorkspaceError> {
         self.core.require_partitions()?;
         let name = check_name(&input.name)?;
-        let tx = uow.tx().await?;
-        self.core.workspace_in(&*tx, workspace).await?;
+        self.core.workspace_in(uow, workspace).await?;
         let slug = match input.slug {
             Some(slug) => {
                 let slug = slug.trim().to_owned();
                 check_slug(&slug)?;
-                if slug_taken(&*tx, workspace, &slug).await? {
+                if slug_taken(uow, workspace, &slug).await? {
                     return Err(WorkspaceError::invalid(
                         "slug",
                         "slug has already been taken",
@@ -89,19 +87,18 @@ impl Partitions {
                 }
                 slug
             }
-            None => free_slug(&*tx, workspace, &slugify_or(&name, "partition")).await?,
+            None => free_slug(uow, workspace, &slugify_or(&name, "partition")).await?,
         };
-        drop(tx);
         let now = self.core.now();
-        let created = Repo::<partition::Entity>::insert(
+        let created = store::insert(
             uow,
-            partition::ActiveModel {
-                id: Set(Uuid::now_v7()),
-                workspace_id: Set(workspace),
-                name: Set(name.clone()),
-                slug: Set(slug.clone()),
-                created_at: Set(now),
-                updated_at: Set(now),
+            Partition {
+                id: Uuid::now_v7(),
+                workspace_id: workspace,
+                name: name.clone(),
+                slug: slug.clone(),
+                created_at: now,
+                updated_at: now,
             },
         )
         .await?;
@@ -129,11 +126,13 @@ impl Partitions {
     ) -> Result<Partition, WorkspaceError> {
         self.core.require_partitions()?;
         let name = check_name(name)?;
-        let current = self.partition_in(&*uow.tx().await?, workspace, id).await?;
-        let mut row = current.into_active_model();
-        row.name = Set(name);
-        row.updated_at = Set(self.core.now());
-        Ok(Repo::<partition::Entity>::update(uow, row).await?)
+        let current = self.partition_in(uow, workspace, id).await?;
+        let now = self.core.now();
+        store::update(uow, current, |row| {
+            row.name = name;
+            row.updated_at = now;
+        })
+        .await
     }
 
     /// Deletes partition `id` of `workspace` with its grants. Rows of
@@ -141,9 +140,9 @@ impl Partitions {
     /// them first.
     pub async fn delete(&self, uow: &Uow, workspace: Uuid, id: Uuid) -> Result<(), WorkspaceError> {
         self.core.require_partitions()?;
-        let current = self.partition_in(&*uow.tx().await?, workspace, id).await?;
+        let current = self.partition_in(uow, workspace, id).await?;
         let slug = current.slug.clone();
-        Repo::<partition::Entity>::delete(uow, current).await?;
+        store::delete(uow, current).await?;
         self.core
             .emit_after_commit(
                 uow,
@@ -160,12 +159,13 @@ impl Partitions {
     /// The partitions of `workspace`, by name.
     pub async fn list(&self, workspace: Uuid) -> Result<Vec<Partition>, WorkspaceError> {
         self.core.require_partitions()?;
-        Ok(partition::Entity::find()
-            .filter(partition::Column::WorkspaceId.eq(workspace))
-            .order_by_asc(partition::Column::Name)
-            .order_by_asc(partition::Column::Id)
-            .all(&self.core.db.reader().await)
-            .await?)
+        Ok(Partition::query()
+            .where_(Partition::WORKSPACE_ID.eq(workspace))
+            .order_by(Partition::NAME)
+            .order_by(Partition::ID)
+            .get(&*self.core.db)
+            .await?
+            .into_models())
     }
 
     /// The partitions of `workspace` that `selector` sees, by name.
@@ -189,10 +189,12 @@ impl Partitions {
         id: Uuid,
     ) -> Result<Option<Partition>, WorkspaceError> {
         self.core.require_partitions()?;
-        Ok(partition::Entity::find_by_id(id)
-            .filter(partition::Column::WorkspaceId.eq(workspace))
-            .one(&self.core.db.reader().await)
-            .await?)
+        Ok(Partition::query()
+            .where_key(id)
+            .where_(Partition::WORKSPACE_ID.eq(workspace))
+            .first(&*self.core.db)
+            .await?
+            .map(Record::into_inner))
     }
 
     /// The partition of `workspace` an identifier names: an id (UUID) or a
@@ -203,15 +205,15 @@ impl Partitions {
         identifier: &str,
     ) -> Result<Partition, WorkspaceError> {
         self.core.require_partitions()?;
-        let mut select =
-            partition::Entity::find().filter(partition::Column::WorkspaceId.eq(workspace));
+        let mut select = Partition::query().where_(Partition::WORKSPACE_ID.eq(workspace));
         select = match Uuid::parse_str(identifier) {
-            Ok(id) => select.filter(partition::Column::Id.eq(id)),
-            Err(_) => select.filter(partition::Column::Slug.eq(identifier)),
+            Ok(id) => select.where_key(id),
+            Err(_) => select.where_(Partition::SLUG.eq(identifier)),
         };
         select
-            .one(&self.core.db.reader().await)
+            .first(&*self.core.db)
             .await?
+            .map(Record::into_inner)
             .ok_or_else(|| WorkspaceError::PartitionNotFound(identifier.to_owned()))
     }
 
@@ -223,13 +225,13 @@ impl Partitions {
         user: Uuid,
     ) -> Result<PartitionSelector, WorkspaceError> {
         self.core.require_partitions()?;
-        let conn = self.core.db.reader().await;
+        let db = &*self.core.db;
         let member = self
             .core
-            .member_in(&conn, workspace, user)
+            .member_in(db, workspace, user)
             .await?
             .ok_or(WorkspaceError::MemberNotFound)?;
-        partition_selector(&conn, &member).await
+        partition_selector(db, &member).await
     }
 
     /// The partitions membership `member` sees.
@@ -237,7 +239,7 @@ impl Partitions {
         &self,
         member: &Member,
     ) -> Result<PartitionSelector, WorkspaceError> {
-        partition_selector(&self.core.db.reader().await, member).await
+        partition_selector(&*self.core.db, member).await
     }
 
     /// Sets the partitions member `user` of `workspace` sees: `All`, or
@@ -253,18 +255,18 @@ impl Partitions {
         partitions: PartitionSelector,
     ) -> Result<Member, WorkspaceError> {
         self.core.require_partitions()?;
-        let tx = uow.tx().await?;
-        self.core.workspace_in(&*tx, workspace).await?;
+        self.core.workspace_in(uow, workspace).await?;
         let member = self
             .core
-            .member_in(&*tx, workspace, user)
+            .member_in(uow, workspace, user)
             .await?
             .ok_or(WorkspaceError::MemberNotFound)?;
         if let Some(ids) = partitions.ids() {
-            let known: Vec<Uuid> = partition::Entity::find()
-                .filter(partition::Column::WorkspaceId.eq(workspace))
-                .all(&*tx)
+            let known: Vec<Uuid> = Partition::query()
+                .where_(Partition::WORKSPACE_ID.eq(workspace))
+                .get(uow)
                 .await?
+                .into_models()
                 .iter()
                 .map(|p| p.id)
                 .collect();
@@ -275,7 +277,6 @@ impl Partitions {
                 ));
             }
         }
-        drop(tx);
         if member.role() == WorkspaceRole::Owner {
             if partitions.is_all() {
                 return Ok(member);
@@ -310,16 +311,18 @@ impl Partitions {
             .await
     }
 
-    async fn partition_in<C: ConnectionTrait>(
+    async fn partition_in<E: Executor + ?Sized>(
         &self,
-        conn: &C,
+        exec: &E,
         workspace: Uuid,
         id: Uuid,
     ) -> Result<Partition, WorkspaceError> {
-        partition::Entity::find_by_id(id)
-            .filter(partition::Column::WorkspaceId.eq(workspace))
-            .one(conn)
+        Partition::query()
+            .where_key(id)
+            .where_(Partition::WORKSPACE_ID.eq(workspace))
+            .first(exec)
             .await?
+            .map(Record::into_inner)
             .ok_or_else(|| WorkspaceError::PartitionNotFound(id.to_string()))
     }
 }
@@ -330,31 +333,30 @@ impl fmt::Debug for Partitions {
     }
 }
 
-async fn slug_taken<C: ConnectionTrait>(
-    conn: &C,
+async fn slug_taken<E: Executor + ?Sized>(
+    exec: &E,
     workspace: Uuid,
     slug: &str,
 ) -> Result<bool, WorkspaceError> {
-    Ok(partition::Entity::find()
-        .filter(partition::Column::WorkspaceId.eq(workspace))
-        .filter(partition::Column::Slug.eq(slug))
-        .one(conn)
-        .await?
-        .is_some())
+    Ok(Partition::query()
+        .where_(Partition::WORKSPACE_ID.eq(workspace))
+        .where_(Partition::SLUG.eq(slug))
+        .exists(exec)
+        .await?)
 }
 
 /// `base`, or `base-2`, `base-3`, ... whichever is free in `workspace`.
-async fn free_slug<C: ConnectionTrait>(
-    conn: &C,
+async fn free_slug<E: Executor + ?Sized>(
+    exec: &E,
     workspace: Uuid,
     base: &str,
 ) -> Result<String, WorkspaceError> {
-    if !slug_taken(conn, workspace, base).await? {
+    if !slug_taken(exec, workspace, base).await? {
         return Ok(base.to_owned());
     }
     for n in 2..1000 {
         let candidate = format!("{base}-{n}");
-        if !slug_taken(conn, workspace, &candidate).await? {
+        if !slug_taken(exec, workspace, &candidate).await? {
             return Ok(candidate);
         }
     }

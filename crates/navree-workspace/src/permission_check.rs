@@ -34,13 +34,10 @@ impl PermissionCheck for WorkspacePermissionCheck {
             let Some(ctx) = core.app.upgrade() else {
                 return Ok(Some(false));
             };
-            let found = {
-                let reader = core.db.reader().await;
-                match core.workspace_in(&reader, workspace).await {
-                    Ok(found) => found,
-                    Err(WorkspaceError::WorkspaceNotFound(_)) => return Ok(Some(false)),
-                    Err(error) => return Err(error.into()),
-                }
+            let found = match core.workspace_in(&*core.db, workspace).await {
+                Ok(found) => found,
+                Err(WorkspaceError::WorkspaceNotFound(_)) => return Ok(Some(false)),
+                Err(error) => return Err(error.into()),
             };
             let workspaces = ctx.get::<Workspaces>().await?;
             let Some(admission) = workspaces.admission(&found, principal.user_id).await? else {

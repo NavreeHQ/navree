@@ -20,7 +20,6 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use navree_contracts::{CheckContext, CheckOutcome, ConformityCheck, Finding};
 use navree_db::Db;
-use sea_orm::EntityTrait;
 
 use crate::{Isolation, WorkspaceConfig, WorkspaceScoped};
 
@@ -52,20 +51,23 @@ pub(crate) enum EntityKind {
 }
 
 impl EntityClass {
-    /// `E` as a workspace entity.
-    pub(crate) fn workspace<E: WorkspaceScoped>() -> Self {
+    /// Model `M` as a workspace entity.
+    pub(crate) fn workspace<M: WorkspaceScoped>() -> Self {
+        Self::workspace_table(M::meta().table(), M::WORKSPACE_COLUMN)
+    }
+
+    /// Table `table` as a workspace entity's, by `column`.
+    pub(crate) fn workspace_table(table: &str, column: &'static str) -> Self {
         Self {
-            table: E::default().table_name().to_owned(),
-            kind: EntityKind::Workspace {
-                column: E::WORKSPACE_COLUMN,
-            },
+            table: table.to_owned(),
+            kind: EntityKind::Workspace { column },
         }
     }
 
-    /// `E` as a global entity.
-    pub(crate) fn global<E: EntityTrait>() -> Self {
+    /// Table `table` as a global entity's.
+    pub(crate) fn global(table: &str) -> Self {
         Self {
-            table: E::default().table_name().to_owned(),
+            table: table.to_owned(),
             kind: EntityKind::Global,
         }
     }
