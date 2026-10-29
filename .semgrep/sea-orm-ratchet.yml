@@ -49,7 +49,6 @@ rules:
         - "/crates/navree-schema/"
         - "/crates/navree-search/"
         - "/crates/navree-cli/"
-        - "/crates/navree-directory/"
         - "/crates/navree-domains/"
         - "/crates/navree-macros/"
         # navree-workspace is moved; its SeaORM compatibility layer (the

@@ -157,13 +157,12 @@ impl SinkContext {
         if external_ids.is_empty() {
             return Ok(HashMap::new());
         }
-        let tx = self.uow.tx().await?;
         let mut found = HashMap::new();
         for chunk in external_ids.chunks(500) {
             let rows = models::User::query()
                 .where_(models::User::CONNECTION_ID.eq(self.connection.id))
                 .where_(models::User::EXTERNAL_ID.is_in(chunk.iter().cloned()))
-                .get(&*tx)
+                .get(&self.uow)
                 .await?
                 .into_models();
             for row in rows {

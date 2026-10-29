@@ -1,277 +1,185 @@
-//! PostgreSQL (with TimescaleDB) and MySQL: the directory on a real server,
-//! so the migrations and every statement of the models run on each: SCIM
-//! users and groups (case-insensitive user names, uniqueness, memberships,
-//! deletes), sync runs (inserts and updates in chunks, booleans,
-//! optional booleans and timestamps that come back as written, the due
-//! lookup, held runs, recorded changes, pruning) and connection deletes.
+//! The database the suite runs on, chosen by the environment:
 //!
-//! Opt-in: build with `--features postgres` and set
-//! `NAVREE_TEST_POSTGRES_URL`, or `--features mysql` and
-//! `NAVREE_TEST_MYSQL_URL`, to a URL of a throwaway server whose user may
-//! create databases. Each test creates its own database and drops it at
-//! the end.
+//! - `NAVREE_TEST_DATABASE`: `sqlite` (the default: a file of its own per
+//!   app), `postgres` (a database of its own per app on the server of
+//!   `NAVREE_TEST_POSTGRES_URL`, feature `postgres`) or `mysql` (on the
+//!   server of `NAVREE_TEST_MYSQL_URL`, feature `mysql`). Server databases
+//!   are dropped with the app.
+//! - `NAVREE_TEST_NATIVE_UNITS_OF_WORK=1`: units of work on navree-db's own
+//!   transactions (`database.native_units_of_work`) instead of SeaORM's.
+//!
+//! ```text
+//! NAVREE_TEST_DATABASE=postgres NAVREE_TEST_NATIVE_UNITS_OF_WORK=1 \
+//!   cargo test -p navree-directory --features postgres
+//! ```
 
-#![cfg_attr(
-    not(any(feature = "postgres", feature = "mysql")),
-    allow(dead_code, unused_imports)
-)]
+#![allow(dead_code)]
 
-use std::time::Duration;
+use std::any::Any;
 
-use navree_db::Db;
-use navree_db::sea_orm::{ConnectionTrait, Database, DbBackend};
-use navree_directory::{
-    ChangeStatus, DirectoryGroup, DirectoryUser, Owner, RunStatus, SyncOptions, models,
-};
-use navree_orm::Model as _;
-use serde_json::json;
+use navree_db::{DbOptions, Executor, Pool};
+use navree_testing::TestAppBuilder;
 use uuid::Uuid;
 
-use crate::support::{harness, start};
-
-/// A database of its own on the test server.
-struct Scratch {
-    admin: String,
-    name: String,
-    url: String,
-    mysql: bool,
+/// A server the suite can run on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Server {
+    Sqlite,
+    Postgres,
+    MySql,
 }
 
-impl Scratch {
-    async fn new(var: &str, test: &str, mysql: bool) -> Option<Scratch> {
-        let admin = match std::env::var(var) {
-            Ok(url) if !url.is_empty() => url,
-            _ => {
-                println!("SKIPPED {test}: set {var}");
-                return None;
-            }
+impl Server {
+    /// The server `NAVREE_TEST_DATABASE` names.
+    ///
+    /// # Panics
+    ///
+    /// For an unknown name, or a server whose driver feature is off or
+    /// whose URL is not set.
+    pub fn current() -> Server {
+        let server = match std::env::var("NAVREE_TEST_DATABASE").as_deref() {
+            Err(_) | Ok("" | "sqlite") => return Server::Sqlite,
+            Ok("postgres") => Server::Postgres,
+            Ok("mysql") => Server::MySql,
+            Ok(other) => panic!("NAVREE_TEST_DATABASE: `{other}` is not sqlite, postgres or mysql"),
         };
+        let compiled = match server {
+            Server::Postgres => cfg!(feature = "postgres"),
+            _ => cfg!(feature = "mysql"),
+        };
+        assert!(
+            compiled,
+            "NAVREE_TEST_DATABASE={server:?} needs the `{}` feature",
+            server.feature()
+        );
+        server
+    }
+
+    fn feature(self) -> &'static str {
+        match self {
+            Server::Sqlite => "sqlite",
+            Server::Postgres => "postgres",
+            Server::MySql => "mysql",
+        }
+    }
+
+    fn variable(self) -> &'static str {
+        match self {
+            Server::Postgres => "NAVREE_TEST_POSTGRES_URL",
+            _ => "NAVREE_TEST_MYSQL_URL",
+        }
+    }
+}
+
+/// Whether units of work run on navree-db's own transactions.
+pub fn native_units_of_work() -> bool {
+    std::env::var("NAVREE_TEST_NATIVE_UNITS_OF_WORK").as_deref() == Ok("1")
+}
+
+/// `builder` with a fresh, migrated database of its own on the current
+/// server, and the current kind of units of work.
+pub fn database(builder: TestAppBuilder) -> TestAppBuilder {
+    let builder = if native_units_of_work() {
+        builder.config("database.native_units_of_work", true)
+    } else {
+        builder
+    };
+    let server = Server::current();
+    if server == Server::Sqlite {
+        return builder.temp_database();
+    }
+    let database = ServerDatabase::create(server);
+    builder
+        .config("database.url", database.url.clone())
+        .config("database.migrate_on_boot", true)
+        .config("database.max_connections", 4)
+        .hold(database)
+}
+
+/// A fresh database on the current server for an app built by hand: its
+/// URL and the guard that deletes it (a SQLite file's directory, or the
+/// server database).
+pub fn scratch() -> (String, Box<dyn Any + Send + Sync>) {
+    match Server::current() {
+        Server::Sqlite => {
+            let (url, guard) = navree_testing::temp_sqlite_url();
+            (url, Box::new(guard))
+        }
+        server => {
+            let database = ServerDatabase::create(server);
+            (database.url.clone(), Box::new(database))
+        }
+    }
+}
+
+/// A database of its own on a server, dropped with its guard.
+pub struct ServerDatabase {
+    server: Server,
+    admin: String,
+    name: String,
+    /// The database's URL.
+    pub url: String,
+}
+
+impl ServerDatabase {
+    /// Creates a database on `server`.
+    pub fn create(server: Server) -> ServerDatabase {
+        let admin = std::env::var(server.variable())
+            .ok()
+            .filter(|url| !url.is_empty())
+            .unwrap_or_else(|| panic!("NAVREE_TEST_DATABASE needs {}", server.variable()));
         let name = format!("navree_directory_{}", Uuid::now_v7().simple());
-        let conn = Database::connect(&admin).await.unwrap();
-        let create = if mysql {
-            format!("CREATE DATABASE `{name}` CHARACTER SET utf8mb4")
-        } else {
-            format!("CREATE DATABASE {name}")
-        };
-        conn.execute_unprepared(&create).await.unwrap();
-        conn.close().await.unwrap();
-        let (base, rest) = admin.rsplit_once('/').unwrap();
-        let options = rest.find('?').map_or("", |at| &rest[at..]);
-        let url = format!("{base}/{name}{options}");
-        Some(Scratch {
+        let base = admin.split('?').next().unwrap_or(&admin);
+        let (base, _) = base.rsplit_once('/').expect("a database URL");
+        let url = format!("{base}/{name}");
+        run_admin(&admin, format!("CREATE DATABASE {name}"))
+            .unwrap_or_else(|error| panic!("{error}"));
+        ServerDatabase {
+            server,
             admin,
             name,
             url,
-            mysql,
-        })
+        }
     }
+}
 
-    async fn drop(self) {
-        let conn = Database::connect(&self.admin).await.unwrap();
-        let drop = if self.mysql {
-            format!("DROP DATABASE IF EXISTS `{}`", self.name)
+impl Drop for ServerDatabase {
+    fn drop(&mut self) {
+        let force = if self.server == Server::Postgres {
+            " WITH (FORCE)"
         } else {
-            format!("DROP DATABASE IF EXISTS {} WITH (FORCE)", self.name)
+            ""
         };
-        conn.execute_unprepared(&drop).await.unwrap();
+        let sql = format!("DROP DATABASE IF EXISTS {}{force}", self.name);
+        if let Err(error) = run_admin(&self.admin, sql) {
+            eprintln!("could not drop a test database: {error}");
+        }
     }
 }
 
-const USER: &str = "urn:ietf:params:scim:schemas:core:2.0:User";
-const PATCH: &str = "urn:ietf:params:scim:api:messages:2.0:PatchOp";
-
-async fn flow(scratch: &Scratch) {
-    // Queued syncs stay queued: nothing runs behind the test's back.
-    let queue = navree_queue::QueueFake::new();
-    let dispatcher = queue.dispatcher();
-    let h = harness(|b| {
-        b.config("database.url", scratch.url.as_str())
-            .config("database.migrate_on_boot", true)
-            .config("directory.sync.chunk_size", 2)
-            .override_value(dispatcher)
-    })
-    .await;
-    let db = h.app.get::<Db>().await;
-    let expected = if scratch.mysql {
-        DbBackend::MySql
-    } else {
-        DbBackend::Postgres
-    };
-    assert_eq!(db.backend(), expected);
-    let directory = h.directory().await;
-
-    // -- SCIM ------------------------------------------------------------------
-    let created = h.scim(Owner::Workspace(Uuid::now_v7())).await;
-    assert_eq!(created.connection.created_at, start());
-    let token = created.scim_token.unwrap().expose().clone();
-    let client = h.app.client();
-    let ada = client
-        .post("/scim/v2/Users")
-        .bearer(&token)
-        .json(&json!({
-            "schemas": [USER], "externalId": "e-ada", "userName": "Ada@Acme.test",
-            "name": { "givenName": "Ada", "familyName": "Lovelace" },
-            "emails": [{ "value": "ada@acme.test", "type": "work", "primary": true }]
-        }))
-        .send()
-        .await
-        .assert_status(201)
-        .json_value();
-    let ada_id = ada["id"].as_str().unwrap().to_owned();
-    client
-        .post("/scim/v2/Users")
-        .bearer(&token)
-        .json(&json!({ "schemas": [USER], "userName": "ada@ACME.test" }))
-        .send()
-        .await
-        .assert_status(409);
-    client
-        .get("/scim/v2/Users?filter=userName%20eq%20%22ada%40acme.test%22")
-        .bearer(&token)
-        .send()
-        .await
-        .assert_status(200)
-        .assert_json_path("totalResults", json!(1))
-        .assert_json_path("Resources.0.id", json!(ada_id));
-    let group = client
-        .post("/scim/v2/Groups")
-        .bearer(&token)
-        .json(&json!({ "displayName": "Engineering", "members": [{ "value": ada_id }] }))
-        .send()
-        .await
-        .assert_status(201)
-        .json_value();
-    client
-        .get("/scim/v2/Groups?filter=displayName%20eq%20%22ENGINEERING%22")
-        .bearer(&token)
-        .send()
-        .await
-        .assert_json_path("totalResults", json!(1))
-        .assert_json_path("Resources.0.members.0.value", json!(ada_id));
-    client
-        .patch(&format!("/scim/v2/Users/{ada_id}"))
-        .bearer(&token)
-        .json(&json!({ "schemas": [PATCH], "Operations": [{ "op": "Replace", "path": "active", "value": "False" }] }))
-        .send()
-        .await
-        .assert_status(200);
-    let row = models::User::query()
-        .where_(models::User::ID.eq(Uuid::parse_str(&ada_id).unwrap()))
-        .first(&*db)
-        .await
-        .unwrap()
-        .unwrap();
-    assert!(!row.active);
-    assert_eq!(row.deactivated_at, Some(start()));
-    assert_eq!(row.local_id.as_deref(), Some("local-e-ada"));
-    client
-        .delete(&format!("/scim/v2/Users/{ada_id}"))
-        .bearer(&token)
-        .send()
-        .await
-        .assert_status(204);
-    client
-        .get(&format!(
-            "/scim/v2/Groups/{}",
-            group["id"].as_str().unwrap()
-        ))
-        .bearer(&token)
-        .send()
-        .await
-        .assert_json_path("members", json!([]));
-
-    // -- sync runs -------------------------------------------------------------
-    let people: Vec<DirectoryUser> = (0..15)
-        .map(|n| {
-            DirectoryUser::new(format!("u{n}"), format!("p{n}@acme.test"))
-                .name("Person", format!("{n}"))
-                .email(format!("p{n}@acme.test"))
+/// Runs `sql` on the server of `admin`, on a thread and runtime of its own
+/// (so it works from synchronous code, `Drop` included, and from inside a
+/// test's runtime alike).
+fn run_admin(admin: &str, sql: String) -> Result<(), String> {
+    let admin = admin.to_owned();
+    std::thread::spawn(move || {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(|error| error.to_string())?;
+        runtime.block_on(async move {
+            let pool = Pool::connect(&DbOptions {
+                url: admin,
+                max_connections: 1,
+                ..DbOptions::default()
+            })
+            .await
+            .map_err(|error| format!("cannot connect to the test server: {error}"))?;
+            let result = pool.execute_script(&sql).await;
+            pool.close().await;
+            result.map(drop).map_err(|error| format!("{sql}: {error}"))
         })
-        .collect();
-    h.fake().users(people.clone()).group(
-        DirectoryGroup::new("g1", "Everyone").members(people.iter().map(|p| p.external_id.clone())),
-    );
-    let id = h.connection("ldap").await;
-    let run = directory
-        .sync_now(id, SyncOptions::default())
-        .await
-        .unwrap();
-    assert_eq!(run.status, RunStatus::Succeeded, "{run:?}");
-    assert_eq!((run.done, run.total), (16, 16));
-    assert_eq!(run.complete, Some(true));
-    assert_eq!(run.started_at, Some(start()));
-    assert_eq!(directory.users(id).await.unwrap().len(), 15);
-    assert_eq!(
-        directory.groups(id).await.unwrap()[0].group.members.len(),
-        15
-    );
-
-    // A mistaken filter: held, then forced.
-    h.fake().users(people[..2].to_vec());
-    let held = directory
-        .sync_now(id, SyncOptions::default())
-        .await
-        .unwrap();
-    assert_eq!(held.status, RunStatus::Held);
-    let planned = directory.changes(held.id, 0, 100).await.unwrap();
-    assert!(planned.iter().all(|c| c.status == ChangeStatus::Planned));
-    let forced = SyncOptions {
-        force: true,
-        ..SyncOptions::default()
-    };
-    let run = directory.sync_now(id, forced).await.unwrap();
-    assert_eq!(run.summary.users_deactivated, 13);
-    assert_eq!(run.summary.memberships_removed, 13);
-    let runs = directory.runs(id, 10).await.unwrap();
-    assert_eq!(runs.len(), 3);
-    assert_eq!(runs[0].id, run.id, "newest first");
-
-    // Due: the hourly schedule.
-    let connection = directory.connection(id).await.unwrap();
-    assert!(connection.next_sync_at.is_some());
-    h.clock.advance(Duration::from_secs(61 * 60));
-    let due = directory.sync_due().await.unwrap();
-    assert_eq!(due.len(), 1);
-    assert_eq!(due[0].status, RunStatus::Queued);
-    queue.assert_dispatched_times::<navree_directory::SyncDirectory>(1);
-
-    h.clock.advance(Duration::from_secs(100 * 24 * 3600));
-    assert!(directory.prune_runs().await.unwrap() >= 3);
-    directory.delete_connection(id).await.unwrap();
-    assert_eq!(
-        models::Membership::query()
-            .where_(models::Membership::CONNECTION_ID.eq(id))
-            .count(&*db)
-            .await
-            .unwrap(),
-        0
-    );
-    assert_eq!(
-        models::User::query()
-            .where_(models::User::CONNECTION_ID.eq(id))
-            .count(&*db)
-            .await
-            .unwrap(),
-        0
-    );
-}
-
-#[cfg(feature = "postgres")]
-#[tokio::test]
-async fn the_directory_works_on_postgres() {
-    let Some(scratch) = Scratch::new("NAVREE_TEST_POSTGRES_URL", "postgres", false).await else {
-        return;
-    };
-    flow(&scratch).await;
-    scratch.drop().await;
-}
-
-#[cfg(feature = "mysql")]
-#[tokio::test]
-async fn the_directory_works_on_mysql() {
-    let Some(scratch) = Scratch::new("NAVREE_TEST_MYSQL_URL", "mysql", true).await else {
-        return;
-    };
-    flow(&scratch).await;
-    scratch.drop().await;
+    })
+    .join()
+    .map_err(|_| "the admin thread panicked".to_owned())?
 }
