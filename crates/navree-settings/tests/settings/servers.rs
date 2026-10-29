@@ -1,121 +1,185 @@
-//! PostgreSQL and MySQL: the store contract, resolution and a write in a
-//! unit of work on real servers.
+//! The database the suite runs on, chosen by the environment:
 //!
-//! Opt-in: build with `--features postgres` and set
-//! `NAVREE_TEST_POSTGRES_URL`, or with `--features mysql` and set
-//! `NAVREE_TEST_MYSQL_URL`, to the URL of a throwaway server whose user may
-//! create databases. Each test creates its own database and drops it at the
-//! end; without the feature or the variable the test returns at once.
+//! - `NAVREE_TEST_DATABASE`: `sqlite` (the default: a file of its own per
+//!   app), `postgres` (a database of its own per app on the server of
+//!   `NAVREE_TEST_POSTGRES_URL`, feature `postgres`) or `mysql` (on the
+//!   server of `NAVREE_TEST_MYSQL_URL`, feature `mysql`). Server databases
+//!   are dropped with the app.
+//! - `NAVREE_TEST_NATIVE_UNITS_OF_WORK=1`: units of work on navree-db's own
+//!   transactions (`database.native_units_of_work`) instead of SeaORM's.
+//!
+//! ```text
+//! NAVREE_TEST_DATABASE=postgres NAVREE_TEST_NATIVE_UNITS_OF_WORK=1 \
+//!   cargo test -p navree-settings --features postgres
+//! ```
 
-#[cfg(any(feature = "postgres", feature = "mysql"))]
-mod real {
-    use navree_settings::{DatabaseSettingsStore, Scope, Source};
-    use sea_orm::{ConnectionTrait, Database};
-    use serde_json::json;
-    use uuid::Uuid;
+#![allow(dead_code)]
 
-    use crate::store::contract;
-    use crate::support::{PortalSettings, World, builder};
+use std::any::Any;
 
-    /// A database of its own on the test server.
-    struct Scratch {
-        admin: String,
-        url: String,
-        drop_sql: String,
-    }
+use navree_db::{DbOptions, Executor, Pool};
+use navree_testing::TestAppBuilder;
+use uuid::Uuid;
 
-    impl Scratch {
-        async fn new(variable: &str, drop_sql: fn(&str) -> String) -> Option<Scratch> {
-            let admin = std::env::var(variable).ok()?;
-            let name = format!("navree_settings_{}", Uuid::now_v7().simple());
-            let conn = Database::connect(&admin).await.unwrap();
-            conn.execute_unprepared(&format!("CREATE DATABASE {name}"))
-                .await
-                .unwrap();
-            conn.close().await.unwrap();
-            let (base, rest) = admin.rsplit_once('/').unwrap();
-            let options = rest.find('?').map_or("", |at| &rest[at..]);
-            let url = format!("{base}/{name}{options}");
-            Some(Scratch {
-                drop_sql: drop_sql(&name),
-                admin,
-                url,
-            })
-        }
+/// A server the suite can run on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Server {
+    Sqlite,
+    Postgres,
+    MySql,
+}
 
-        async fn drop(self) {
-            let conn = Database::connect(&self.admin).await.unwrap();
-            conn.execute_unprepared(&self.drop_sql).await.unwrap();
-        }
-    }
-
-    async fn exercise(scratch: &Scratch) {
-        let world = World::with(builder().config("database.url", scratch.url.clone())).await;
-        contract(&DatabaseSettingsStore::new(world.db().await)).await;
-
-        let settings = world.settings().await;
-        let ada = world.user("Ada").await;
-        let holding = world.organization(ada, "Holding").await;
-        let acme = world.workspace(ada, "Acme").await;
-        world.attach(holding.id, acme.id).await;
-        for (scope, patch) in [
-            (Scope::global(), json!({"page_size": 50})),
-            (
-                Scope::organization(holding.id),
-                json!({"show_leaderboard": true}),
-            ),
-            (
-                Scope::workspace(acme.id),
-                json!({"welcome_text": "Hi Acme"}),
-            ),
-        ] {
-            let settings = settings.clone();
-            world
-                .work(|uow| async move {
-                    settings.update::<PortalSettings>(&uow, scope, patch).await
-                })
-                .await
-                .unwrap();
-        }
-        let portal = settings
-            .resolve::<PortalSettings>(Scope::workspace(acme.id))
-            .await
-            .unwrap();
-        assert_eq!(portal.page_size, 50);
-        assert_eq!(
-            portal.source("show_leaderboard"),
-            Some(Source::Organization)
+impl Server {
+    /// The server `NAVREE_TEST_DATABASE` names.
+    ///
+    /// # Panics
+    ///
+    /// For an unknown name, or a server whose driver feature is off or
+    /// whose URL is not set.
+    pub fn current() -> Server {
+        let server = match std::env::var("NAVREE_TEST_DATABASE").as_deref() {
+            Err(_) | Ok("" | "sqlite") => return Server::Sqlite,
+            Ok("postgres") => Server::Postgres,
+            Ok("mysql") => Server::MySql,
+            Ok(other) => panic!("NAVREE_TEST_DATABASE: `{other}` is not sqlite, postgres or mysql"),
+        };
+        let compiled = match server {
+            Server::Postgres => cfg!(feature = "postgres"),
+            _ => cfg!(feature = "mysql"),
+        };
+        assert!(
+            compiled,
+            "NAVREE_TEST_DATABASE={server:?} needs the `{}` feature",
+            server.feature()
         );
-        assert_eq!(portal.welcome_text, "Hi Acme");
-        assert_eq!(portal.overridden, ["welcome_text"]);
-        world.app.shutdown().await.unwrap();
+        server
     }
 
-    #[cfg(feature = "postgres")]
-    #[tokio::test]
-    async fn postgres() {
-        let Some(scratch) = Scratch::new("NAVREE_TEST_POSTGRES_URL", |name| {
-            format!("DROP DATABASE IF EXISTS {name} WITH (FORCE)")
-        })
-        .await
-        else {
-            return;
-        };
-        exercise(&scratch).await;
-        scratch.drop().await;
+    fn feature(self) -> &'static str {
+        match self {
+            Server::Sqlite => "sqlite",
+            Server::Postgres => "postgres",
+            Server::MySql => "mysql",
+        }
     }
 
-    #[cfg(feature = "mysql")]
-    #[tokio::test]
-    async fn mysql() {
-        let Some(scratch) = Scratch::new("NAVREE_TEST_MYSQL_URL", |name| {
-            format!("DROP DATABASE IF EXISTS {name}")
-        })
-        .await
-        else {
-            return;
-        };
-        exercise(&scratch).await;
-        scratch.drop().await;
+    fn variable(self) -> &'static str {
+        match self {
+            Server::Postgres => "NAVREE_TEST_POSTGRES_URL",
+            _ => "NAVREE_TEST_MYSQL_URL",
+        }
     }
+}
+
+/// Whether units of work run on navree-db's own transactions.
+pub fn native_units_of_work() -> bool {
+    std::env::var("NAVREE_TEST_NATIVE_UNITS_OF_WORK").as_deref() == Ok("1")
+}
+
+/// `builder` with a fresh, migrated database of its own on the current
+/// server, and the current kind of units of work.
+pub fn database(builder: TestAppBuilder) -> TestAppBuilder {
+    let builder = if native_units_of_work() {
+        builder.config("database.native_units_of_work", true)
+    } else {
+        builder
+    };
+    let server = Server::current();
+    if server == Server::Sqlite {
+        return builder.temp_database();
+    }
+    let database = ServerDatabase::create(server);
+    builder
+        .config("database.url", database.url.clone())
+        .config("database.migrate_on_boot", true)
+        .config("database.max_connections", 4)
+        .hold(database)
+}
+
+/// A fresh database on the current server for an app built by hand: its
+/// URL and the guard that deletes it (a SQLite file's directory, or the
+/// server database).
+pub fn scratch() -> (String, Box<dyn Any + Send + Sync>) {
+    match Server::current() {
+        Server::Sqlite => {
+            let (url, guard) = navree_testing::temp_sqlite_url();
+            (url, Box::new(guard))
+        }
+        server => {
+            let database = ServerDatabase::create(server);
+            (database.url.clone(), Box::new(database))
+        }
+    }
+}
+
+/// A database of its own on a server, dropped with its guard.
+pub struct ServerDatabase {
+    server: Server,
+    admin: String,
+    name: String,
+    /// The database's URL.
+    pub url: String,
+}
+
+impl ServerDatabase {
+    /// Creates a database on `server`.
+    pub fn create(server: Server) -> ServerDatabase {
+        let admin = std::env::var(server.variable())
+            .ok()
+            .filter(|url| !url.is_empty())
+            .unwrap_or_else(|| panic!("NAVREE_TEST_DATABASE needs {}", server.variable()));
+        let name = format!("navree_settings_{}", Uuid::now_v7().simple());
+        let base = admin.split('?').next().unwrap_or(&admin);
+        let (base, _) = base.rsplit_once('/').expect("a database URL");
+        let url = format!("{base}/{name}");
+        run_admin(&admin, format!("CREATE DATABASE {name}"))
+            .unwrap_or_else(|error| panic!("{error}"));
+        ServerDatabase {
+            server,
+            admin,
+            name,
+            url,
+        }
+    }
+}
+
+impl Drop for ServerDatabase {
+    fn drop(&mut self) {
+        let force = if self.server == Server::Postgres {
+            " WITH (FORCE)"
+        } else {
+            ""
+        };
+        let sql = format!("DROP DATABASE IF EXISTS {}{force}", self.name);
+        if let Err(error) = run_admin(&self.admin, sql) {
+            eprintln!("could not drop a test database: {error}");
+        }
+    }
+}
+
+/// Runs `sql` on the server of `admin`, on a thread and runtime of its own
+/// (so it works from synchronous code, `Drop` included, and from inside a
+/// test's runtime alike).
+fn run_admin(admin: &str, sql: String) -> Result<(), String> {
+    let admin = admin.to_owned();
+    std::thread::spawn(move || {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(|error| error.to_string())?;
+        runtime.block_on(async move {
+            let pool = Pool::connect(&DbOptions {
+                url: admin,
+                max_connections: 1,
+                ..DbOptions::default()
+            })
+            .await
+            .map_err(|error| format!("cannot connect to the test server: {error}"))?;
+            let result = pool.execute_script(&sql).await;
+            pool.close().await;
+            result.map(drop).map_err(|error| format!("{sql}: {error}"))
+        })
+    })
+    .join()
+    .map_err(|_| "the admin thread panicked".to_owned())?
 }

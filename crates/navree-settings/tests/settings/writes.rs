@@ -4,9 +4,9 @@
 
 use navree_audit::{AuditFilter, AuditLog};
 use navree_db::{Db, PageQuery};
+use navree_orm::Model as _;
+use navree_settings::entity::setting;
 use navree_settings::{Scope, Settings, SettingsError, Source};
-use sea_orm::ConnectionTrait;
-use sea_orm::sea_query::{Expr, ExprTrait, Query};
 use serde::Serialize;
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -550,14 +550,13 @@ async fn every_change_is_audited_in_its_transaction() {
 /// straight to the table, as another app instance with its own cache
 /// would.
 async fn write_behind_the_cache(db: &Db, scope_type: &str, scope_id: Uuid, value: Value) {
-    let update = Query::update()
-        .table("settings")
-        .value("value", value)
-        .and_where(Expr::col("key").eq("portal"))
-        .and_where(Expr::col("scope_type").eq(scope_type))
-        .and_where(Expr::col("scope_id").eq(scope_id))
-        .to_owned();
-    db.conn().execute(&update).await.unwrap();
+    setting::Model::query()
+        .where_(setting::Model::KEY.eq("portal"))
+        .where_(setting::Model::SCOPE_TYPE.eq(scope_type))
+        .where_(setting::Model::SCOPE_ID.eq(scope_id))
+        .update(db, [setting::Model::VALUE.set(value)])
+        .await
+        .unwrap();
 }
 
 async fn page_size(settings: &Settings, scope: Scope) -> u32 {

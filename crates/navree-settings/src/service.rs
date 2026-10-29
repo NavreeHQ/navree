@@ -350,7 +350,7 @@ impl Engine {
             return false;
         }
         match Uow::current() {
-            Some(uow) => uow.open_tx().await.is_some(),
+            Some(uow) => uow.has_open_transaction().await,
             None => false,
         }
     }
@@ -828,9 +828,7 @@ impl Engine {
                 if let Some(request_id) = uow.request_id() {
                     entry = entry.request_id(request_id);
                 }
-                log.record_in(uow, entry)
-                    .await
-                    .map_err(sea_orm::DbErr::from)?;
+                log.record_in(uow, entry).await?;
             }
             None => {
                 if let Err(error) = log.record(entry).await {
