@@ -2,7 +2,7 @@
 
 use chrono::{DateTime, Utc};
 use navree_db::navree_schema::{IndexKind, Schema};
-use navree_db::{Db, Executor, ExecutorExt, MIGRATIONS_TABLE, Statement, prune_time_series_on};
+use navree_db::{Db, Executor, ExecutorExt, MIGRATIONS_TABLE, Statement, prune_time_series};
 use navree_kernel::App;
 
 use crate::databases::Scratch;
@@ -103,7 +103,7 @@ async fn the_runs_are_declared_a_hypertable(scratch: Scratch) {
     );
 }
 
-/// `prune_time_series_on` cuts the run table (whole chunks on TimescaleDB)
+/// `prune_time_series` cuts the run table (whole chunks on TimescaleDB)
 /// and counts the rows it removed.
 async fn pruning_counts_what_it_deletes(scratch: Scratch) {
     let db = TestDb::on(&scratch);
@@ -118,12 +118,12 @@ async fn pruning_counts_what_it_deletes(scratch: Scratch) {
         insert_run(&app, task, at(tick)).await;
     }
     let pool = app.ctx().get::<Db>().await.unwrap();
-    let deleted = prune_time_series_on(&*pool, "schedule_runs", "tick", at("2026-10-10T00:00:00Z"))
+    let deleted = prune_time_series(&*pool, "schedule_runs", "tick", at("2026-10-10T00:00:00Z"))
         .await
         .unwrap();
     assert_eq!(deleted, 2);
     assert_eq!(tasks_recorded(&app).await, ["new"]);
-    let again = prune_time_series_on(&*pool, "schedule_runs", "tick", at("2026-10-10T00:00:00Z"))
+    let again = prune_time_series(&*pool, "schedule_runs", "tick", at("2026-10-10T00:00:00Z"))
         .await
         .unwrap();
     assert_eq!(again, 0);

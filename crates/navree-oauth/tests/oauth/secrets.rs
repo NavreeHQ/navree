@@ -41,7 +41,7 @@ impl Injectable for Recorder {
 }
 
 impl ChangeObserver for Recorder {
-    fn observe_with<'a>(
+    fn observe<'a>(
         &'a self,
         _uow: &'a Uow,
         changes: &'a [ChangeEvent],

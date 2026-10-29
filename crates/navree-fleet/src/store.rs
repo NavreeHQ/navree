@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 
 use chrono::{DateTime, TimeZone, Utc};
-use navree_db::{Backend, Db, Executor, Row, Statement, Value, prune_time_series_on};
+use navree_db::{Backend, Db, Executor, Row, Statement, Value, prune_time_series};
 use navree_queue::AttemptOutcome;
 use uuid::Uuid;
 
@@ -30,10 +30,7 @@ impl FleetStore {
     /// bookkeeping never joins a unit of work), or the connection itself
     /// when it has no pool.
     fn executor(&self) -> &dyn Executor {
-        match self.db.pool() {
-            Some(pool) => pool,
-            None => &self.db,
-        }
+        self.db.pool()
     }
 
     /// The database server the store talks to.
@@ -381,7 +378,7 @@ impl FleetStore {
     /// Deletes the jobs that finished before `before` (Unix milliseconds):
     /// whole chunks on TimescaleDB.
     pub(crate) async fn delete_jobs_before(&self, before: i64) -> Result<u64, FleetError> {
-        Ok(prune_time_series_on(self.executor(), JOBS_TABLE, "finished_at", before).await?)
+        Ok(prune_time_series(self.executor(), JOBS_TABLE, "finished_at", before).await?)
     }
 
     // ------------------------------------------------------------- metrics
@@ -457,7 +454,7 @@ impl FleetStore {
     /// Deletes the snapshots taken before `before` (Unix milliseconds):
     /// whole chunks on TimescaleDB.
     pub(crate) async fn delete_metrics_before(&self, before: i64) -> Result<u64, FleetError> {
-        Ok(prune_time_series_on(self.executor(), METRICS_TABLE, "at", before).await?)
+        Ok(prune_time_series(self.executor(), METRICS_TABLE, "at", before).await?)
     }
 }
 

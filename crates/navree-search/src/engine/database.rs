@@ -115,10 +115,7 @@ impl DatabaseEngine {
             uow.fetch_all(&set(previous)).await?;
             return Ok(out?);
         }
-        let tx = match self.db.read_pool() {
-            Some(pool) => pool.begin().await?,
-            None => self.db.begin().await?,
-        };
+        let tx = self.db.read_pool().begin().await?;
         tx.fetch_all(&set(threshold)).await?;
         let out = count_and_page(&tx, count, select).await?;
         tx.commit().await?;
@@ -133,9 +130,7 @@ impl DatabaseEngine {
         {
             return Ok(());
         }
-        let pool = self.db.pool().ok_or_else(|| {
-            DbError::unsupported("the postgres search engine needs a database with a pool")
-        })?;
+        let pool = self.db.pool();
         pool.execute_script("CREATE EXTENSION IF NOT EXISTS pg_trgm")
             .await?;
         pool.execute_script(&format!(

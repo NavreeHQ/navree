@@ -57,10 +57,6 @@ navree-telemetry = { workspace = true }
 navree-testing = { workspace = true, optional = true }
 navree-validation = { workspace = true, optional = true }
 rust_decimal = { workspace = true }
-# SeaORM's connections and transactions as executors while crates still
-# hand them over (`exec/sea.rs`); `stream`: their cursors read rows as the
-# database sends them.
-sea-orm = { workspace = true, features = ["stream"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

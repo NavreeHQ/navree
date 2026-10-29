@@ -3,7 +3,7 @@
 
 use chrono::{DateTime, Utc};
 use navree_db::navree_schema::{Hypertable, KeyStrategy, Migration, Schema, SchemaResult};
-use navree_db::{DbError, Executor, Statement, prune_time_series_on};
+use navree_db::{DbError, Executor, Statement, prune_time_series};
 
 /// The table recording every claimed tick.
 pub const RUNS_TABLE: &str = "schedule_runs";
@@ -129,7 +129,7 @@ pub(crate) async fn prune<E: Executor + ?Sized>(
     executor: &E,
     before: DateTime<Utc>,
 ) -> Result<u64, DbError> {
-    prune_time_series_on(executor, RUNS_TABLE, "tick", before).await
+    prune_time_series(executor, RUNS_TABLE, "tick", before).await
 }
 
 /// How `schedule_runs` is partitioned on TimescaleDB: by `tick`, a day per

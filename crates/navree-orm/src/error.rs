@@ -3,7 +3,6 @@
 use std::borrow::Cow;
 
 use navree_db::{DbError, ErrorKind};
-use sea_orm::DbErr;
 
 /// The result type of ORM operations.
 pub type Result<T, E = OrmError> = std::result::Result<T, E>;
@@ -449,48 +448,6 @@ impl OrmError {
     }
 }
 
-/// A SeaORM error as the ORM's: [`OrmError::Db`] with the [`DbError`] it
-/// converts to (a driver error keeps its classification), for code that
-/// still runs SeaORM statements inside ORM operations while crates move off
-/// SeaORM.
-impl From<DbErr> for OrmError {
-    fn from(error: DbErr) -> Self {
-        OrmError::Db(DbError::from(error))
-    }
-}
-
-/// An ORM error as a SeaORM [`DbErr`], for code whose API speaks `DbErr`
-/// (navree-db's repositories, the framework crates' services) and runs ORM
-/// operations inside: `?` converts.
-///
-/// The database's own error comes back as SeaORM would have returned it, so
-/// a unique or foreign-key violation still answers 409 over HTTP; a missing
-/// record is `DbErr::RecordNotFound` (a 404); anything else (a column that
-/// does not decode, a cast that fails, an invalid query) is `DbErr::Custom`
-/// with the ORM's message.
-///
-/// ```
-/// use navree_db::{DbError, ErrorKind};
-/// use navree_orm::OrmError;
-/// use sea_orm::DbErr;
-///
-/// let missing = DbErr::from(OrmError::not_found("Deal", vec!["42".to_owned()]));
-/// assert!(matches!(missing, DbErr::RecordNotFound(message) if message == "no Deal found for key 42"));
-/// let refused = DbErr::from(OrmError::from(DbError::new(ErrorKind::Database, "UNIQUE constraint failed")));
-/// assert!(matches!(refused, DbErr::Custom(message) if message == "UNIQUE constraint failed"));
-/// ```
-impl From<OrmError> for DbErr {
-    fn from(error: OrmError) -> Self {
-        match error {
-            OrmError::ModelNotFound { source, .. } => {
-                DbErr::RecordNotFound(source.message().to_owned())
-            }
-            OrmError::Db(source) | OrmError::Timeout { source, .. } => DbErr::from(source),
-            other => DbErr::Custom(other.to_string()),
-        }
-    }
-}
-
 /// Whether `error` says the connection under a statement was lost:
 /// navree-db classified it so, or its message says so (a driver error
 /// navree-db could not classify).
@@ -737,40 +694,8 @@ mod tests {
         assert!(OrmError::invalid("x").db_error().is_none());
     }
 
-    #[test]
-    fn orm_errors_become_db_errors_keeping_the_database_s_own() {
-        assert!(matches!(
-            DbErr::from(OrmError::from(DbErr::RecordNotFound("gone".into()))),
-            DbErr::RecordNotFound(message) if message == "gone"
-        ));
-        assert!(matches!(
-            DbErr::from(OrmError::not_found("Deal", Vec::new())),
-            DbErr::RecordNotFound(message) if message == "no Deal found"
-        ));
-        let timeout = db(
-            ErrorKind::Database,
-            "canceling statement due to statement timeout",
-        )
-        .timed_out(std::time::Duration::from_secs(1));
-        assert!(matches!(
-            DbErr::from(timeout),
-            DbErr::Custom(message) if message.contains("statement timeout")
-        ));
-        let decode = OrmError::Decode {
-            model: "Deal".into(),
-            column: "amount".into(),
-            expected: "i64".into(),
-            message: "not a number".into(),
-        };
-        assert!(matches!(
-            DbErr::from(decode),
-            DbErr::Custom(message)
-                if message == "cannot read column `amount` of Deal as i64: not a number"
-        ));
-    }
-
     /// A hook's refusal keeps its error as the source (what navree-http
-    /// maps), and as a `DbErr` it is a custom error with the message.
+    /// maps), and its message.
     #[test]
     fn refusals_keep_the_hook_s_error() {
         #[derive(Debug, thiserror::Error)]
@@ -783,11 +708,10 @@ mod tests {
         assert!(!error.is_unique_violation());
         let source = error.source().expect("the hook's error");
         assert!(source.downcast_ref::<ReadOnly>().is_some());
-        assert!(matches!(
-            DbErr::from(error),
-            DbErr::Custom(message)
-                if message == "a Template hook refused the write: only the workspace's own items can change"
-        ));
+        assert_eq!(
+            error.to_string(),
+            "a Template hook refused the write: only the workspace's own items can change"
+        );
     }
 
     /// A document store's duplicate key is a unique violation, and its

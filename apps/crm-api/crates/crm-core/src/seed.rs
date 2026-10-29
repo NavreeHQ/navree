@@ -122,10 +122,7 @@ pub async fn ensure_demo_accounts(ctx: &AppContext) -> Result<Vec<User>, BoxErro
 }
 
 /// Runs `f` in a new unit of work: commits when it succeeds, rolls back
-/// when it fails. Writes through the unit of work are audited; writes
-/// through its transaction (`uow.tx()`) are not, and every
-/// `Arc<DatabaseTransaction>` taken from it must be dropped by the time `f`
-/// returns.
+/// when it fails. Writes through the unit of work are audited.
 pub async fn in_uow<F, Fut>(db: &Db, f: F) -> Result<(), BoxError>
 where
     F: FnOnce(Uow) -> Fut,
