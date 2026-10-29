@@ -386,7 +386,7 @@ pub(crate) async fn start_enrollment(
     .await;
     let record = match (result, &uow) {
         (Ok(record), Some(uow)) => {
-            uow.commit().await?;
+            uow.commit().await.map_err(navree_db::DbError::from)?;
             record
         }
         (Ok(record), None) => record,

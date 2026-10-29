@@ -2,8 +2,8 @@
 
 use std::collections::BTreeMap;
 
+use navree_db::DbError;
 use navree_http::AppError;
-use sea_orm::DbErr;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -102,7 +102,7 @@ pub enum WorkflowsError {
     Payload(String),
     /// The database failed.
     #[error("workflow storage failed: {0}")]
-    Database(#[from] DbErr),
+    Database(#[from] DbError),
     /// Something else failed (the app shutting down, a missing module).
     #[error("{0}")]
     Other(String),
