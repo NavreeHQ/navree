@@ -4,28 +4,25 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use navree_db::{DatabaseModule, Db, Repo};
+use navree_db::{DatabaseModule, Db};
 use navree_kernel::BoxFuture;
 use navree_search::{
     Document, Engine, EngineQuery, EngineResults, IndexSettings, MemoryEngine, Search,
     SearchEngine, SearchError, SearchModule, SearchOptions, SyncMode,
 };
 use navree_testing::TestApp;
-use sea_orm::ActiveValue::Set;
-use sea_orm::IntoActiveModel;
 use tokio::sync::Notify;
-use uuid::Uuid;
 
-use crate::support::{self, Contact, Deal, deal, insert_contacts, new_contact};
+use crate::support::{self, Contact, Deal, insert, insert_contacts, new_contact, new_deal};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn import_indexes_every_row_and_skips_filtered_ones() {
-    for engine in ["memory", "postgres"] {
+    for &engine in support::engines() {
         let app = support::app(engine, "off").await;
         let db = app.get::<Db>().await;
         let search = app.get::<Search>().await;
         let mut gone = new_contact("Old", "Record");
-        gone.deleted_at = Set(Some(support::now()));
+        gone.deleted_at = Some(support::now());
         let rows = insert_contacts(
             &db,
             vec![
@@ -75,39 +72,21 @@ async fn imports_run_in_chunks() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn fresh_imports_swap_in_a_rebuilt_index() {
-    for engine in ["memory", "postgres"] {
+    for &engine in support::engines() {
         let app = support::builder(engine, "off")
             .config("search.prefix", "crm_")
             .build()
             .await;
         let db = app.get::<Db>().await;
         let search = app.get::<Search>().await;
-        let deal = support::in_uow(&db, async |uow| {
-            Repo::<Deal>::insert(
-                uow,
-                deal::ActiveModel {
-                    id: Set(Uuid::now_v7()),
-                    title: Set("Lovelace renewal".into()),
-                    company_id: Set(None),
-                    stage: Set("won".into()),
-                    amount_cents: Set(1),
-                    closes_on: Set(None),
-                    archived: Set(false),
-                },
-            )
+        let [deal] = insert(&db, vec![new_deal("Lovelace renewal", "won", 1)])
             .await
-            .unwrap()
-        })
-        .await;
+            .try_into()
+            .unwrap();
         search.import::<Deal>().await.unwrap();
         // The row is archived while syncing is off; the fresh import
         // rebuilds the index from the rows and swaps it in.
-        let mut row = deal.clone().into_active_model();
-        row.archived = Set(true);
-        support::in_uow(&db, async |uow| {
-            Repo::<Deal>::update(uow, row).await.unwrap()
-        })
-        .await;
+        support::update(&db, &deal, |d| d.archived = true).await;
         search.assert_indexed::<Deal>(deal.id).await;
         app.run_command("search:import", &["Deal", "--fresh"])
             .await
@@ -228,8 +207,7 @@ async fn fresh_imports_answer_queries_and_keep_writes_made_meanwhile() {
         reached: Notify::new(),
         release: Notify::new(),
     });
-    let app = TestApp::builder()
-        .temp_database()
+    let app = crate::servers::database(TestApp::builder())
         .module(DatabaseModule::from_config())
         .module(SearchModule::for_root(SearchOptions {
             engine: Engine::custom(gated.clone()),
@@ -263,12 +241,7 @@ async fn fresh_imports_answer_queries_and_keep_writes_made_meanwhile() {
     let found = search.query::<Contact>("lovelace").ids(10).await.unwrap();
     assert_eq!(found, std::slice::from_ref(&ada));
     // ...and writes keep syncing into it.
-    let mut renamed = rows[0].clone().into_active_model();
-    renamed.last_name = Set("Byron".into());
-    support::in_uow(&db, async |uow| {
-        Repo::<Contact>::update(uow, renamed).await.unwrap()
-    })
-    .await;
+    support::update(&db, &rows[0], |c| c.last_name = "Byron".into()).await;
     support::settle(&app).await;
     let found = search.query::<Contact>("byron").ids(10).await.unwrap();
     assert_eq!(found, std::slice::from_ref(&ada));

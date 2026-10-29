@@ -1,22 +1,19 @@
 //! Registered indexes: the type-erased operations of each `Searchable`
-//! entity, and building their documents.
+//! model, and building their documents.
 
 use std::any::TypeId;
 use std::collections::{HashMap, HashSet};
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use navree_db::Db;
+use navree_db::{Db, Uow};
 use navree_kernel::BoxFuture;
-use sea_orm::sea_query::SimpleExpr;
-use sea_orm::{
-    ColumnTrait, DatabaseConnection, DatabaseTransaction, DbErr, IdenStatic, Iterable,
-    PaginatorTrait, QueryFilter, QueryOrder, QuerySelect,
-};
+use navree_orm::{Builder, Filter as RowFilter, Record, col};
 
 use crate::document::index_value;
 use crate::searchable::{
     SearchContext, column_is_set, column_string, key_column, key_value, primary_key_string,
+    typed_value,
 };
 use crate::{Document, IndexSettings, SearchError, Searchable};
 
@@ -24,15 +21,15 @@ use crate::{Document, IndexSettings, SearchError, Searchable};
 /// the index.
 pub(crate) type Documents = Vec<(String, Option<Document>)>;
 
-/// What `SearchModule::for_feature::<E>()` contributes.
+/// What `SearchModule::for_feature::<M>()` contributes.
 pub(crate) struct IndexRegistration {
     pub(crate) ops: Arc<dyn IndexOps>,
 }
 
 impl IndexRegistration {
-    pub(crate) fn of<E: Searchable>() -> Self {
+    pub(crate) fn of<M: Searchable>() -> Self {
         Self {
-            ops: Arc::new(EntityIndex::<E>(PhantomData)),
+            ops: Arc::new(ModelIndex::<M>(PhantomData)),
         }
     }
 }
@@ -48,8 +45,8 @@ pub(crate) struct Chunk {
     pub(crate) skipped: Vec<String>,
 }
 
-/// The operations on one entity's records that the service needs without
-/// knowing the entity type.
+/// The operations on one model's records that the service needs without
+/// knowing the model type.
 pub(crate) trait IndexOps: Send + Sync + 'static {
     fn entity_type(&self) -> TypeId;
     fn type_name(&self) -> &'static str;
@@ -77,45 +74,57 @@ pub(crate) trait IndexOps: Send + Sync + 'static {
     ) -> BoxFuture<'a, Result<Chunk, SearchError>>;
 
     /// How many rows the table has.
-    fn count_rows<'a>(
-        &'a self,
-        conn: &'a DatabaseConnection,
-    ) -> BoxFuture<'a, Result<u64, SearchError>>;
+    fn count_rows<'a>(&'a self, db: &'a Db) -> BoxFuture<'a, Result<u64, SearchError>>;
 
-    /// The workspace (column `column`) of each of these records.
+    /// The workspace (column `column`) of each of these records, read
+    /// through `uow`.
     fn workspaces<'a>(
         &'a self,
-        tx: &'a DatabaseTransaction,
+        uow: &'a Uow,
         column: &'a str,
         ids: &'a [String],
-    ) -> BoxFuture<'a, Result<HashMap<String, String>, DbErr>>;
+    ) -> BoxFuture<'a, Result<HashMap<String, String>, SearchError>>;
 
     /// Which of `ids` satisfy `condition` (an access rule's SQL filter).
     fn readable_ids<'a>(
         &'a self,
         db: &'a Db,
         ids: &'a [String],
-        condition: SimpleExpr,
+        condition: RowFilter,
     ) -> BoxFuture<'a, Result<HashSet<String>, SearchError>>;
 }
 
-struct EntityIndex<E>(PhantomData<fn() -> E>);
+struct ModelIndex<M>(PhantomData<fn() -> M>);
 
-impl<E: Searchable> IndexOps for EntityIndex<E> {
+/// Every row of `M`, without its global scopes: soft-deleted rows are read
+/// (the index's `soft_delete` column keeps them out), rows of every
+/// workspace too (each document names its workspace).
+pub(crate) fn unscoped<M: Searchable>() -> Builder<M> {
+    M::query().without_global_scopes()
+}
+
+/// [`unscoped`] rows whose key is one of `ids` (ids that cannot be keys
+/// are left out); `None` when none can.
+pub(crate) fn by_ids<M: Searchable>(ids: &[String]) -> Option<Builder<M>> {
+    let values: Vec<_> = ids.iter().filter_map(|id| key_value::<M>(id)).collect();
+    (!values.is_empty()).then(|| unscoped::<M>().where_(col(key_column::<M>()).is_in(values)))
+}
+
+impl<M: Searchable> IndexOps for ModelIndex<M> {
     fn entity_type(&self) -> TypeId {
-        TypeId::of::<E>()
+        TypeId::of::<M>()
     }
 
     fn type_name(&self) -> &'static str {
-        std::any::type_name::<E>()
+        std::any::type_name::<M>()
     }
 
     fn settings(&self) -> IndexSettings {
-        E::settings()
+        M::settings()
     }
 
     fn table(&self) -> String {
-        sea_orm::EntityName::table_name(&E::default()).to_owned()
+        M::meta().table().to_owned()
     }
 
     fn documents<'a>(
@@ -125,24 +134,18 @@ impl<E: Searchable> IndexOps for EntityIndex<E> {
         ids: &'a [String],
     ) -> BoxFuture<'a, Result<Documents, SearchError>> {
         Box::pin(async move {
-            let column = key_column::<E>()?;
-            let values: Vec<_> = ids.iter().filter_map(|id| key_value(&column, id)).collect();
-            let models = if values.is_empty() {
-                Vec::new()
-            } else {
-                E::find()
-                    .filter(column.is_in(values))
-                    .all(ctx.conn())
-                    .await?
+            let records = match by_ids::<M>(ids) {
+                Some(query) => query.get(ctx.uow()).await?.into_vec(),
+                None => Vec::new(),
             };
-            let mut by_id: HashMap<String, E::Model> = models
+            let mut by_id: HashMap<String, Record<M>> = records
                 .into_iter()
-                .map(|m| (primary_key_string(&m), m))
+                .map(|r| (primary_key_string(r.model()), r))
                 .collect();
             let mut out = Vec::with_capacity(ids.len());
             for id in ids {
                 let document = match by_id.remove(id) {
-                    Some(model) => build_document::<E>(&model, ctx, settings).await?,
+                    Some(record) => build_document::<M>(&record, ctx, settings).await?,
                     None => None,
                 };
                 out.push((id.clone(), document));
@@ -160,55 +163,62 @@ impl<E: Searchable> IndexOps for EntityIndex<E> {
         limit: u64,
     ) -> BoxFuture<'a, Result<Chunk, SearchError>> {
         Box::pin(async move {
-            let key = key_column::<E>()?;
-            let mut select = E::find().order_by_asc(key);
+            let mut query = unscoped::<M>().order_by(col(key_column::<M>()));
             if let (Some(workspace), Some(name)) = (workspace, settings.workspace_column()) {
-                let column = E::Column::iter()
-                    .find(|c| c.as_str() == name)
-                    .ok_or_else(|| missing_column::<E>(name))?;
-                if let Some(value) = key_value(&column, workspace) {
-                    select = select.filter(column.eq(value));
+                let column = M::meta()
+                    .column(name)
+                    .ok_or_else(|| missing_column::<M>(name))?;
+                if let Some(value) = typed_value(column, workspace) {
+                    query = query.where_(
+                        col(format!("{}.{}", M::meta().table(), column.name())).eq(value),
+                    );
                 }
             }
-            let models = select.offset(offset).limit(limit).all(ctx.conn()).await?;
+            let records = query
+                .offset(offset)
+                .limit(limit)
+                .get(ctx.uow())
+                .await?
+                .into_vec();
             let mut chunk = Chunk {
-                rows: models.len() as u64,
-                documents: Vec::with_capacity(models.len()),
+                rows: records.len() as u64,
+                documents: Vec::with_capacity(records.len()),
                 skipped: Vec::new(),
             };
-            for model in &models {
-                match build_document::<E>(model, ctx, settings).await? {
+            for record in &records {
+                match build_document::<M>(record, ctx, settings).await? {
                     Some(document) => chunk.documents.push(document),
-                    None => chunk.skipped.push(primary_key_string(model)),
+                    None => chunk.skipped.push(primary_key_string(record.model())),
                 }
             }
             Ok(chunk)
         })
     }
 
-    fn count_rows<'a>(
-        &'a self,
-        conn: &'a DatabaseConnection,
-    ) -> BoxFuture<'a, Result<u64, SearchError>> {
-        Box::pin(async move { Ok(E::find().count(conn).await?) })
+    fn count_rows<'a>(&'a self, db: &'a Db) -> BoxFuture<'a, Result<u64, SearchError>> {
+        Box::pin(async move { Ok(unscoped::<M>().count(db).await?) })
     }
 
     fn workspaces<'a>(
         &'a self,
-        tx: &'a DatabaseTransaction,
+        uow: &'a Uow,
         column: &'a str,
         ids: &'a [String],
-    ) -> BoxFuture<'a, Result<HashMap<String, String>, DbErr>> {
+    ) -> BoxFuture<'a, Result<HashMap<String, String>, SearchError>> {
         Box::pin(async move {
-            let key = key_column::<E>().map_err(|e| DbErr::Custom(e.to_string()))?;
-            let values: Vec<_> = ids.iter().filter_map(|id| key_value(&key, id)).collect();
-            if values.is_empty() {
+            let Some(query) = by_ids::<M>(ids) else {
                 return Ok(HashMap::new());
-            }
-            let models = E::find().filter(key.is_in(values)).all(tx).await?;
-            Ok(models
+            };
+            Ok(query
+                .get(uow)
+                .await?
                 .iter()
-                .filter_map(|m| Some((primary_key_string(m), column_string(m, column)?)))
+                .filter_map(|r| {
+                    Some((
+                        primary_key_string(r.model()),
+                        column_string(r.model(), column)?,
+                    ))
+                })
                 .collect())
         })
     }
@@ -217,49 +227,45 @@ impl<E: Searchable> IndexOps for EntityIndex<E> {
         &'a self,
         db: &'a Db,
         ids: &'a [String],
-        condition: SimpleExpr,
+        condition: RowFilter,
     ) -> BoxFuture<'a, Result<HashSet<String>, SearchError>> {
         Box::pin(async move {
-            let key = key_column::<E>()?;
-            let values: Vec<_> = ids.iter().filter_map(|id| key_value(&key, id)).collect();
-            if values.is_empty() {
+            let Some(query) = by_ids::<M>(ids) else {
                 return Ok(HashSet::new());
-            }
-            let models = E::find()
-                .filter(key.is_in(values))
-                .filter(condition)
-                .all(&db.reader().await)
-                .await?;
-            Ok(models.iter().map(primary_key_string).collect())
+            };
+            Ok(query
+                .where_(condition)
+                .get(db)
+                .await?
+                .iter()
+                .map(|r| primary_key_string(r.model()))
+                .collect())
         })
     }
 }
 
-fn missing_column<E: sea_orm::EntityTrait>(column: &str) -> SearchError {
-    SearchError::Other(format!(
-        "`{}` has no column `{column}`",
-        sea_orm::EntityName::table_name(&E::default())
-    ))
+fn missing_column<M: Searchable>(column: &str) -> SearchError {
+    SearchError::Other(format!("`{}` has no column `{column}`", M::meta().table()))
 }
 
-/// The document of `model`: `None` when its soft-delete column is set or
+/// The document of `record`: `None` when its soft-delete column is set or
 /// [`Searchable::document`] keeps it out; the workspace filled in from the
 /// workspace column when the document has none.
-pub(crate) async fn build_document<E: Searchable>(
-    model: &E::Model,
+pub(crate) async fn build_document<M: Searchable>(
+    record: &Record<M>,
     ctx: &SearchContext,
     settings: &IndexSettings,
 ) -> Result<Option<Document>, SearchError> {
     if let Some(column) = settings.soft_delete_column()
-        && column_is_set(model, column)
+        && column_is_set(record.model(), column)
     {
         return Ok(None);
     }
-    let document = E::document(model, ctx)
+    let document = M::document(record, ctx)
         .await
         .map_err(|source| SearchError::Document {
             index: settings.index().to_owned(),
-            id: primary_key_string(model),
+            id: primary_key_string(record.model()),
             source,
         })?;
     let Some(mut document) = document else {
@@ -268,7 +274,7 @@ pub(crate) async fn build_document<E: Searchable>(
     if document.workspace_id().is_none()
         && let Some(column) = settings.workspace_column()
     {
-        document.set_workspace(column_string(model, column));
+        document.set_workspace(column_string(record.model(), column));
     }
     Ok(Some(document))
 }

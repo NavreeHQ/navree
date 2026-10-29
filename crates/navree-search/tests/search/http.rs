@@ -12,7 +12,9 @@ use navree_search::Search;
 use serde::Deserialize;
 use serde_json::json;
 
-use crate::support::{self, Contact, contact, insert_contacts, new_contact, settle};
+use navree_orm::Record;
+
+use crate::support::{self, Contact, insert_contacts, new_contact, settle};
 
 #[derive(Debug, Deserialize)]
 pub struct SearchContacts {
@@ -34,7 +36,7 @@ impl ContactSearchController {
         &self,
         Query(input): Query<SearchContacts>,
         page: PageQuery,
-    ) -> Result<Page<contact::Model>, AppError> {
+    ) -> Result<Page<Record<Contact>>, AppError> {
         let mut query = self.search.query::<Contact>(&input.q);
         if let Some(status) = &input.status {
             query = query.filter("status", status);

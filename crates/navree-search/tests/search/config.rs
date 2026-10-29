@@ -10,8 +10,7 @@ use crate::support::CrmModule;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn for_root_takes_an_engine_or_options() {
-    let app = TestApp::builder()
-        .temp_database()
+    let app = crate::servers::database(TestApp::builder())
         .module(DatabaseModule::from_config())
         .module(SearchModule::for_root(Engine::memory()))
         .module(CrmModule)
@@ -21,8 +20,7 @@ async fn for_root_takes_an_engine_or_options() {
     assert_eq!(search.engine().name(), "memory");
     assert_eq!(search.options().sync, SyncMode::Queued);
 
-    let app = TestApp::builder()
-        .temp_database()
+    let app = crate::servers::database(TestApp::builder())
         .module(DatabaseModule::from_config())
         .module(SearchModule::for_root(SearchOptions {
             engine: Engine::memory(),
@@ -48,9 +46,7 @@ async fn from_config_reads_the_environment() {
             ("APP_SEARCH__CHUNK_SIZE", "50"),
         ],
     );
-    let app = TestApp::builder()
-        .sources(sources)
-        .temp_database()
+    let app = crate::servers::database(TestApp::builder().sources(sources))
         .module(DatabaseModule::from_config())
         .module(SearchModule)
         .module(CrmModule)
@@ -64,8 +60,7 @@ async fn from_config_reads_the_environment() {
 }
 
 async fn boot_error(config: &[(&str, serde_json::Value)]) -> String {
-    let mut builder = TestApp::builder()
-        .temp_database()
+    let mut builder = crate::servers::database(TestApp::builder())
         .module(DatabaseModule::from_config())
         .module(SearchModule::from_config())
         .module(CrmModule);
@@ -116,8 +111,20 @@ async fn the_postgres_engine_needs_the_database() {
     assert!(error.to_string().contains("DatabaseModule"), "{error}");
 }
 
+/// On MySQL the `search` migrations create nothing and the app runs the
+/// other engines; the `postgres` engine is refused at boot.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn registering_an_entity_twice_is_harmless() {
+async fn the_postgres_engine_is_refused_on_mysql() {
+    use crate::servers::Server;
+    if !crate::support::runs_on(&[Server::MySql], "the_postgres_engine_is_refused_on_mysql") {
+        return;
+    }
+    let error = boot_error(&[("search.engine", serde_json::json!("postgres"))]).await;
+    assert!(error.contains("not MySQL"), "{error}");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn registering_a_model_twice_is_harmless() {
     use navree_kernel::{Module, ModuleBuilder};
     struct Twice;
     impl Module for Twice {
@@ -125,8 +132,7 @@ async fn registering_an_entity_twice_is_harmless() {
             m.import(SearchModule::for_feature::<crate::support::Contact>());
         }
     }
-    TestApp::builder()
-        .temp_database()
+    crate::servers::database(TestApp::builder())
         .module(DatabaseModule::from_config())
         .module(SearchModule::for_root(Engine::memory()))
         .module(CrmModule)
@@ -137,37 +143,31 @@ async fn registering_an_entity_twice_is_harmless() {
 
 /// `people`, indexed under the contacts' index name.
 mod person {
+    use navree_orm::Model;
     use navree_search::Searchable;
-    use sea_orm::entity::prelude::*;
     use serde::Serialize;
+    use uuid::Uuid;
 
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize, Searchable)]
-    #[sea_orm(table_name = "people")]
+    #[derive(Model, Searchable, Clone, Debug, Default, PartialEq, Serialize)]
+    #[model(table = "people")]
     #[searchable(index = "contacts")]
-    pub struct Model {
-        #[sea_orm(primary_key, auto_increment = false)]
+    pub struct Person {
         pub id: Uuid,
         #[searchable]
         pub name: String,
     }
-
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn two_entities_cannot_share_an_index() {
+async fn two_models_cannot_share_an_index() {
     use navree_kernel::{Module, ModuleBuilder};
     struct People;
     impl Module for People {
         fn register(&self, m: &mut ModuleBuilder) {
-            m.import(SearchModule::for_feature::<person::Entity>());
+            m.import(SearchModule::for_feature::<person::Person>());
         }
     }
-    let Err(error) = TestApp::builder()
-        .temp_database()
+    let Err(error) = crate::servers::database(TestApp::builder())
         .module(DatabaseModule::from_config())
         .module(SearchModule::for_root(Engine::memory()))
         .module(CrmModule)

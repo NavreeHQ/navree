@@ -362,6 +362,10 @@ async fn memory_engine_conforms() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn database_engine_on_sqlite_conforms() {
+    use crate::servers::Server;
+    if !support::runs_on(&[Server::Sqlite], "database_engine_on_sqlite_conforms") {
+        return;
+    }
     let app = support::app("postgres", "off").await;
     let search = app.get::<Search>().await;
     suite(

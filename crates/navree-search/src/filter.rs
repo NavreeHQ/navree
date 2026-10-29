@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::ops::{Bound, RangeBounds};
 
 use navree_access::{Ability, Cond, Conditions};
-use sea_orm::{ColumnTrait, ColumnType, EntityTrait, IdenStatic, Iterable};
+use navree_orm::{FieldKind, Model};
 use serde::Serialize;
 use serde_json::Value;
 
@@ -386,21 +386,32 @@ pub(crate) enum AccessFilter {
     Rows,
 }
 
-/// The type of an entity's column by name; `None` when the entity has no
-/// such column. The access translation compares operands the way the SQL
-/// `Accessible` filter does, which depends on the column's type.
-pub(crate) type ColumnTypes = fn(&str) -> Option<ColumnType>;
+/// What the index holds for a model's column by name; `None` when the
+/// model has no such column. The access translation compares operands the
+/// way the SQL `accessible` filter does, which depends on the column's
+/// type.
+pub(crate) type ColumnTypes = fn(&str) -> Option<ColumnKind>;
 
-/// [`ColumnTypes`] for entity `E`.
-pub(crate) fn column_type<E: EntityTrait>(name: &str) -> Option<ColumnType> {
-    E::Column::iter()
-        .find(|column| column.as_str() == name)
-        .map(|column| column.def().get_column_type().clone())
+/// [`ColumnTypes`] for model `M`: by its cast (`string_enum` is text,
+/// `int_enum` a number, any other cast inexact), else by the field's kind.
+pub(crate) fn column_type<M: Model>(name: &str) -> Option<ColumnKind> {
+    let column = M::meta().column(name)?;
+    Some(match column.cast_name() {
+        Some("string_enum") => ColumnKind::Text,
+        Some("int_enum") => ColumnKind::Number,
+        Some(_) => ColumnKind::Inexact,
+        None => match column.field_kind() {
+            FieldKind::Bool => ColumnKind::Boolean,
+            FieldKind::Integer { .. } | FieldKind::Float { .. } => ColumnKind::Number,
+            FieldKind::Text | FieldKind::Uuid | FieldKind::Ulid => ColumnKind::Text,
+            _ => ColumnKind::Inexact,
+        },
+    })
 }
 
 /// What the index holds for a column, as access operands compare with it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum ColumnKind {
+pub(crate) enum ColumnKind {
     /// JSON booleans.
     Boolean,
     /// JSON numbers.
@@ -411,28 +422,6 @@ enum ColumnKind {
     /// index keeps Unix milliseconds, the database finer precision),
     /// decimals, JSON, binary and custom types.
     Inexact,
-}
-
-fn column_kind(ty: &ColumnType) -> ColumnKind {
-    match ty {
-        ColumnType::Boolean => ColumnKind::Boolean,
-        ColumnType::TinyInteger
-        | ColumnType::SmallInteger
-        | ColumnType::Integer
-        | ColumnType::BigInteger
-        | ColumnType::TinyUnsigned
-        | ColumnType::SmallUnsigned
-        | ColumnType::Unsigned
-        | ColumnType::BigUnsigned
-        | ColumnType::Float
-        | ColumnType::Double => ColumnKind::Number,
-        ColumnType::Char(_)
-        | ColumnType::String(_)
-        | ColumnType::Text
-        | ColumnType::Uuid
-        | ColumnType::Enum { .. } => ColumnKind::Text,
-        _ => ColumnKind::Inexact,
-    }
 }
 
 /// The records of `subject` on which `ability` allows `action`, as a filter
@@ -495,7 +484,7 @@ fn conditions_filter(
     let mut parts = Vec::new();
     for (column, conds) in conditions.iter() {
         let field = settings.field_for_column(column).filter(|f| f.filter)?;
-        let kind = column_kind(&columns(column)?);
+        let kind = columns(column)?;
         // A non-null operand of another JSON type than the column's; the
         // SQL filter compiles it to a constant (`SqlColumns::accepts`).
         let foreign = |v: &Value| match kind {
@@ -659,15 +648,14 @@ mod tests {
             .filter("ghost")
     }
 
-    /// The test entity's columns (`ghost` is a declared field without a
+    /// The test model's columns (`ghost` is a declared field without a
     /// column).
-    fn columns(name: &str) -> Option<ColumnType> {
+    fn columns(name: &str) -> Option<ColumnKind> {
         match name {
-            "owner_id" => Some(ColumnType::Uuid),
-            "locked" => Some(ColumnType::Boolean),
-            "amount" => Some(ColumnType::BigInteger),
-            "closes_at" => Some(ColumnType::TimestampWithTimeZone),
-            "title" | "team_id" => Some(ColumnType::Text),
+            "owner_id" | "title" | "team_id" => Some(ColumnKind::Text),
+            "locked" => Some(ColumnKind::Boolean),
+            "amount" => Some(ColumnKind::Number),
+            "closes_at" => Some(ColumnKind::Inexact),
             _ => None,
         }
     }
@@ -715,7 +703,7 @@ mod tests {
             .can(READ, "Deal")
             .when(field("closes_at").gt("2026-10-25T12:00:00.250001Z"));
         assert_eq!(translate(rules), AccessFilter::Rows);
-        // A declared field without a column of the entity.
+        // A declared field without a column of the model.
         let mut rules = Rules::new();
         rules.can(READ, "Deal").when(field("ghost").eq(1));
         assert_eq!(translate(rules), AccessFilter::Rows);

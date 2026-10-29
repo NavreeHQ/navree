@@ -11,6 +11,7 @@ mod migrations;
 #[cfg(feature = "postgres")]
 mod postgres;
 mod queries;
+mod servers;
 mod support;
 mod surface;
 mod sync;

@@ -12,7 +12,6 @@ use navree_search::{
     QdrantStore, Search, SearchEngine, SearchError, SortBy, TypesenseEngine, VectorRecord,
     VectorStore,
 };
-use sea_orm::ActiveValue::Set;
 use serde_json::{Value, json};
 use wiremock::matchers::{body_partial_json, header, method, path, path_regex, query_param};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
@@ -381,7 +380,7 @@ async fn access_rules_meilisearch_cannot_run_filter_the_loaded_rows() {
         .await;
     let db = app.get::<Db>().await;
     let mut grace = new_contact("Grace", "Hopper");
-    grace.status = Set("customer".into());
+    grace.status = "customer".into();
     let rows = insert_contacts(&db, vec![new_contact("Ada", "Lovelace"), grace]).await;
     Mock::given(method("POST"))
         .and(path("/indexes/contacts/search"))

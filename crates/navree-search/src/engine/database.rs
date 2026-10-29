@@ -9,17 +9,14 @@
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use navree_db::{Db, Reader};
+use navree_db::{Backend, Db, DbError, Executor, Row, Statement};
 use navree_kernel::BoxFuture;
-use sea_orm::{
-    ConnectionTrait, DatabaseTransaction, DbBackend, DbErr, QueryResult, Statement,
-    TransactionTrait,
-};
 use serde_json::Value;
 
 use crate::engine::{EngineHit, EngineQuery, EngineResults, SearchEngine};
 use crate::migration::{DOCUMENTS_TABLE, FTS_TABLE};
 use crate::options::PostgresOptions;
+use crate::service::open_uow;
 use crate::settings::WORKSPACE_FIELD;
 use crate::sql::Sql;
 use crate::text::{QueryTerms, Term, field_text, highlight};
@@ -42,51 +39,44 @@ impl DatabaseEngine {
         }
     }
 
-    fn backend(&self) -> DbBackend {
-        self.db.backend()
+    fn backend(&self) -> Backend {
+        crate::service::backend(&self.db)
     }
 
     fn sql(&self) -> Sql {
         Sql::new(self.backend())
     }
 
-    /// Runs `f` in the current unit of work's open transaction when there
-    /// is one on this database (so a request that already wrote does not
-    /// wait for its own write lock), else in a new transaction.
-    async fn write<F>(&self, f: F) -> Result<(), SearchError>
-    where
-        F: for<'c> FnOnce(&'c DatabaseTransaction) -> BoxFuture<'c, Result<(), DbErr>>,
-    {
-        if let Reader::Transaction(tx) = self.db.reader().await {
-            return Ok(f(&tx).await?);
+    /// Runs `statements` in the current unit of work's open transaction
+    /// when there is one on this database (so a request that already wrote
+    /// does not wait for its own write lock), else in a new transaction.
+    async fn write(&self, statements: Vec<Statement>) -> Result<(), SearchError> {
+        if let Some(uow) = open_uow(&self.db).await {
+            for statement in &statements {
+                uow.execute(statement).await?;
+            }
+            return Ok(());
         }
-        let tx = self.db.conn().begin().await?;
-        f(&tx).await?;
+        let tx = self.db.begin().await?;
+        for statement in &statements {
+            tx.execute(statement).await?;
+        }
         tx.commit().await?;
         Ok(())
     }
 
-    async fn query_all(&self, sql: Sql) -> Result<Vec<QueryResult>, SearchError> {
+    async fn query_all(&self, sql: Sql) -> Result<Vec<Row>, SearchError> {
         Ok(self
             .db
-            .reader()
+            .read_executor()
             .await
-            .query_all_raw(sql.statement())
+            .fetch_all(&sql.statement())
             .await?)
     }
 
     async fn query_count(&self, sql: Sql) -> Result<u64, SearchError> {
-        let row = self
-            .db
-            .reader()
-            .await
-            .query_one_raw(sql.statement())
-            .await?;
-        let n: i64 = match row {
-            Some(row) => row.try_get_by_index(0)?,
-            None => 0,
-        };
-        Ok(u64::try_from(n).unwrap_or(0))
+        let reader = self.db.read_executor().await;
+        Ok(count_of(&reader, sql).await?)
     }
 
     /// Runs the count and the page of a trigram query with
@@ -94,14 +84,14 @@ impl DatabaseEngine {
     /// threshold for just these statements: `<%` compares against that
     /// setting, whose default of 0.6 misses most one-letter typos.
     ///
-    /// On the pool the statements run in a transaction of their own
-    /// (`SET LOCAL` needs one); inside the unit of work's transaction the
-    /// previous value is put back afterwards.
+    /// Outside a unit of work the statements run in a transaction of their
+    /// own on the read pool (`SET LOCAL` needs one); inside the unit of
+    /// work's transaction the previous value is put back afterwards.
     async fn query_with_threshold(
         &self,
         count: Sql,
         select: Option<Sql>,
-    ) -> Result<(u64, Vec<QueryResult>), SearchError> {
+    ) -> Result<(u64, Vec<Row>), SearchError> {
         const SETTING: &str = "pg_trgm.word_similarity_threshold";
         let set = |value: String| {
             let mut sql = self.sql();
@@ -111,44 +101,44 @@ impl DatabaseEngine {
             sql.statement()
         };
         let threshold = self.options.typo_threshold.to_string();
-        match self.db.reader().await {
-            Reader::Pool(pool) => {
-                let tx = pool.begin().await?;
-                tx.execute_raw(set(threshold)).await?;
-                let out = count_and_page(&tx, count, select).await?;
-                tx.commit().await?;
-                Ok(out)
-            }
-            Reader::Transaction(tx) => {
-                let previous = tx
-                    .query_one_raw(Statement::from_string(
-                        DbBackend::Postgres,
-                        format!("SELECT current_setting('{SETTING}', true)"),
-                    ))
-                    .await?
-                    .and_then(|row| row.try_get_by_index::<Option<String>>(0).ok().flatten())
-                    .filter(|value| !value.is_empty())
-                    .unwrap_or_else(|| "0.6".to_owned());
-                tx.execute_raw(set(threshold)).await?;
-                let out = count_and_page(&*tx, count, select).await;
-                tx.execute_raw(set(previous)).await?;
-                Ok(out?)
-            }
+        if let Some(uow) = open_uow(&self.db).await {
+            let previous = uow
+                .fetch_optional(&Statement::text(format!(
+                    "SELECT current_setting('{SETTING}', true)"
+                )))
+                .await?
+                .and_then(|row| row.get::<Option<String>>(0).ok().flatten())
+                .filter(|value| !value.is_empty())
+                .unwrap_or_else(|| "0.6".to_owned());
+            uow.fetch_all(&set(threshold)).await?;
+            let out = count_and_page(&uow, count, select).await;
+            uow.fetch_all(&set(previous)).await?;
+            return Ok(out?);
         }
+        let tx = match self.db.read_pool() {
+            Some(pool) => pool.begin().await?,
+            None => self.db.begin().await?,
+        };
+        tx.fetch_all(&set(threshold)).await?;
+        let out = count_and_page(&tx, count, select).await?;
+        tx.commit().await?;
+        Ok(out)
     }
 
     /// Enables `pg_trgm` and indexes the text with it, once.
     async fn ensure_trigram(&self) -> Result<(), SearchError> {
         if !self.options.trigram
-            || self.backend() != DbBackend::Postgres
+            || self.backend() != Backend::Postgres
             || self.trigram_ready.load(Ordering::Relaxed)
         {
             return Ok(());
         }
-        let conn = self.db.conn();
-        conn.execute_unprepared("CREATE EXTENSION IF NOT EXISTS pg_trgm")
+        let pool = self.db.pool().ok_or_else(|| {
+            DbError::unsupported("the postgres search engine needs a database with a pool")
+        })?;
+        pool.execute_script("CREATE EXTENSION IF NOT EXISTS pg_trgm")
             .await?;
-        conn.execute_unprepared(&format!(
+        pool.execute_script(&format!(
             "CREATE INDEX IF NOT EXISTS {DOCUMENTS_TABLE}_content_trgm ON {DOCUMENTS_TABLE} USING GIN (content gin_trgm_ops)"
         ))
         .await?;
@@ -166,19 +156,25 @@ impl std::fmt::Debug for DatabaseEngine {
     }
 }
 
+/// The number `count` (a `SELECT COUNT(*)`) answers on `exec`.
+async fn count_of(exec: &(impl Executor + ?Sized), count: Sql) -> Result<u64, DbError> {
+    let n: Option<i64> = match exec.fetch_optional(&count.statement()).await? {
+        Some(row) => row.get(0)?,
+        None => None,
+    };
+    Ok(n.and_then(|n| u64::try_from(n).ok()).unwrap_or(0))
+}
+
 /// The total of `count` and the rows of `select` (when there is one), on
-/// `conn`.
-async fn count_and_page<C: ConnectionTrait>(
-    conn: &C,
+/// `exec`.
+async fn count_and_page(
+    exec: &(impl Executor + ?Sized),
     count: Sql,
     select: Option<Sql>,
-) -> Result<(u64, Vec<QueryResult>), DbErr> {
-    let total = match conn.query_one_raw(count.statement()).await? {
-        Some(row) => u64::try_from(row.try_get_by_index::<i64>(0)?).unwrap_or(0),
-        None => 0,
-    };
+) -> Result<(u64, Vec<Row>), DbError> {
+    let total = count_of(exec, count).await?;
     let rows = match select {
-        Some(select) => conn.query_all_raw(select.statement()).await?,
+        Some(select) => exec.fetch_all(&select.statement()).await?,
         None => Vec::new(),
     };
     Ok((total, rows))
@@ -311,7 +307,7 @@ impl SearchEngine for DatabaseEngine {
             for document in &documents {
                 let texts = texts_by_boost(document, settings);
                 let fields = stored_fields(document);
-                if backend == DbBackend::Postgres {
+                if backend == Backend::Postgres {
                     let mut sql = Sql::new(backend);
                     sql.push(&format!(
                         "INSERT INTO {DOCUMENTS_TABLE} (index_name, id, fields, content, search_vector) VALUES ("
@@ -394,14 +390,7 @@ impl SearchEngine for DatabaseEngine {
                     statements.push(fts.statement());
                 }
             }
-            self.write(move |tx| {
-                Box::pin(async move {
-                    for statement in statements {
-                        tx.execute_raw(statement).await?;
-                    }
-                    Ok(())
-                })
-            })
+            self.write(statements)
             .await
         })
     }
@@ -417,14 +406,7 @@ impl SearchEngine for DatabaseEngine {
             for chunk in ids.chunks(500) {
                 statements.extend(delete_statements(backend, index, Some(chunk)));
             }
-            self.write(move |tx| {
-                Box::pin(async move {
-                    for statement in statements {
-                        tx.execute_raw(statement).await?;
-                    }
-                    Ok(())
-                })
-            })
+            self.write(statements)
             .await
         })
     }
@@ -433,14 +415,7 @@ impl SearchEngine for DatabaseEngine {
         Box::pin(async move {
             let backend = self.backend();
             let statements = delete_statements(backend, index, None);
-            self.write(move |tx| {
-                Box::pin(async move {
-                    for statement in statements {
-                        tx.execute_raw(statement).await?;
-                    }
-                    Ok(())
-                })
-            })
+            self.write(statements)
             .await
         })
     }
@@ -468,14 +443,7 @@ impl SearchEngine for DatabaseEngine {
                 scope(&mut rename, table, staged, None);
                 statements.push(rename.statement());
             }
-            self.write(move |tx| {
-                Box::pin(async move {
-                    for statement in statements {
-                        tx.execute_raw(statement).await?;
-                    }
-                    Ok(())
-                })
-            })
+            self.write(statements)
             .await
         })
     }
@@ -496,7 +464,7 @@ impl SearchEngine for DatabaseEngine {
                 settings.stop_word_list(),
                 settings.synonym_map(),
             );
-            let postgres = self.backend() == DbBackend::Postgres;
+            let postgres = self.backend() == Backend::Postgres;
             let (mut select, mut count) = (self.sql(), self.sql());
             select.push("SELECT d.id, d.fields, ");
             count.push("SELECT COUNT(*) ");
@@ -536,9 +504,9 @@ impl SearchEngine for DatabaseEngine {
             };
             let mut hits = Vec::with_capacity(rows.len());
             for row in rows {
-                let id: String = row.try_get("", "id")?;
+                let id: String = row.get("id")?;
                 let fields = fields_of(&row, postgres)?;
-                let rank: f64 = row.try_get("", "rank").unwrap_or(0.0);
+                let rank: f64 = row.get("rank").unwrap_or(0.0);
                 let highlights = match query.highlight {
                     Some(tags) if !terms.is_empty() => settings
                         .text_fields()
@@ -596,8 +564,8 @@ impl SearchEngine for DatabaseEngine {
 
 /// The tables holding an index's documents, the FTS table first: its rows
 /// are found through their documents, so it is changed before them.
-fn tables(backend: DbBackend) -> Vec<&'static str> {
-    if backend == DbBackend::Postgres {
+fn tables(backend: Backend) -> Vec<&'static str> {
+    if backend == Backend::Postgres {
         vec![DOCUMENTS_TABLE]
     } else {
         vec![FTS_TABLE, DOCUMENTS_TABLE]
@@ -633,7 +601,7 @@ fn scope(sql: &mut Sql, table: &str, index: &str, ids: Option<&[String]>) {
 
 /// The statements deleting an index's documents (or just `ids`) from every
 /// table.
-fn delete_statements(backend: DbBackend, index: &str, ids: Option<&[String]>) -> Vec<Statement> {
+fn delete_statements(backend: Backend, index: &str, ids: Option<&[String]>) -> Vec<Statement> {
     tables(backend)
         .into_iter()
         .map(|table| {
@@ -745,11 +713,11 @@ fn postgres_from(
 }
 
 /// The `fields` column of a result row.
-fn fields_of(row: &QueryResult, postgres: bool) -> Result<BTreeMap<String, Value>, SearchError> {
+fn fields_of(row: &Row, postgres: bool) -> Result<BTreeMap<String, Value>, SearchError> {
     let value: Value = if postgres {
-        row.try_get("", "fields")?
+        row.get("fields")?
     } else {
-        let text: String = row.try_get("", "fields")?;
+        let text: String = row.get("fields")?;
         serde_json::from_str(&text).unwrap_or(Value::Null)
     };
     Ok(match value {
@@ -781,7 +749,7 @@ mod tests {
 
     fn postgres_sql(text: &str, trigram: bool) -> (String, String) {
         let (mut select, mut count) =
-            (Sql::new(DbBackend::Postgres), Sql::new(DbBackend::Postgres));
+            (Sql::new(Backend::Postgres), Sql::new(Backend::Postgres));
         let options = PostgresOptions {
             trigram,
             ..PostgresOptions::default()
