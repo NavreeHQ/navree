@@ -77,10 +77,13 @@ impl DbConnections {
             return Ok(self.default.clone());
         }
         let Some(options) = self.configured.get(name) else {
-            return Err(DbError::new(crate::ErrorKind::Other, format!(
-                "no database connection named `{name}` (configured: {})",
-                self.names().join(", ")
-            )));
+            return Err(DbError::new(
+                crate::ErrorKind::Other,
+                format!(
+                    "no database connection named `{name}` (configured: {})",
+                    self.names().join(", ")
+                ),
+            ));
         };
         let mut open = self.open.lock().await;
         if let Some(db) = open.get(name) {
@@ -88,7 +91,10 @@ impl DbConnections {
         }
         let db = Db::connect_named(name, options, self.telemetry.clone())
             .await
-            .map_err(|error| { let message = format!("connection `{name}`: {}", error.message()); error.with_message(message) })?;
+            .map_err(|error| {
+                let message = format!("connection `{name}`: {}", error.message());
+                error.with_message(message)
+            })?;
         let db = Arc::new(match self.app.as_ref().and_then(WeakAppContext::upgrade) {
             Some(app) => db.with_app(&app),
             None => db,

@@ -54,7 +54,6 @@ use navree_db::{
 };
 use navree_kernel::{AppContext, BoxFuture};
 
-
 use crate::driver::{DocumentDriver, InsertOutcome};
 use crate::error::OrmError;
 use crate::ir::{Aggregate, DeleteIr, InsertIr, QueryIr, UpdateIr};
@@ -527,7 +526,12 @@ impl Target<'_> {
     /// began).
     pub(crate) fn on_transaction<'b>(&self, tx: &'b OwnTransaction) -> Target<'b> {
         match self {
-            Target::Sql(sql) => Target::Sql(SqlTarget::new(tx.conn(), sql.dialect, sql.uow.clone(), sql.app.clone())),
+            Target::Sql(sql) => Target::Sql(SqlTarget::new(
+                tx.conn(),
+                sql.dialect,
+                sql.uow.clone(),
+                sql.app.clone(),
+            )),
             Target::Document(document) => Target::Document(document.clone()),
         }
     }
@@ -1133,14 +1137,12 @@ impl Executor for Uow {
         if access == Access::Write {
             self.mark_modified();
         }
-        Ok(Target::Sql(
-            SqlTarget::new(
-                SqlConn::Uow(self.clone()),
-                Dialect::from(DbExecutor::backend(self)),
-                Some(self.clone()),
-                self.db().app(),
-            ),
-        ))
+        Ok(Target::Sql(SqlTarget::new(
+            SqlConn::Uow(self.clone()),
+            Dialect::from(DbExecutor::backend(self)),
+            Some(self.clone()),
+            self.db().app(),
+        )))
     }
 
     async fn target_routed(
@@ -1178,11 +1180,11 @@ impl Target<'_> {
     pub fn reborrow(&self) -> Target<'_> {
         match self {
             Target::Sql(sql) => Target::Sql(SqlTarget::new(
-                    sql.conn.reborrow(),
-                    sql.dialect,
-                    sql.uow.clone(),
-                    sql.app.clone(),
-                )),
+                sql.conn.reborrow(),
+                sql.dialect,
+                sql.uow.clone(),
+                sql.app.clone(),
+            )),
             Target::Document(document) => Target::Document(document.clone()),
         }
     }

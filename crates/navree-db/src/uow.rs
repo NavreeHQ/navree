@@ -106,8 +106,7 @@ type AfterCommit = Box<dyn FnOnce() -> BoxFuture<'static, ()> + Send>;
 
 /// Prepares a change event on demand: `None` when the write changed
 /// nothing worth an event.
-pub(crate) type PrepareChange =
-    Box<dyn Fn() -> Result<Option<ChangeEvent>, DbError> + Send + Sync>;
+pub(crate) type PrepareChange = Box<dyn Fn() -> Result<Option<ChangeEvent>, DbError> + Send + Sync>;
 
 /// A recorded change: its event, or what prepares it. Writes defer the
 /// event (serializing records to JSON) in an app with no change observer,
