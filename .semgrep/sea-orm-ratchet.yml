@@ -50,7 +50,6 @@ rules:
         # entity, a subject through navree-access's SeaORM shim) until step 8.
         - "/crates/navree-micro/tests/micro/support.rs"
         - "/crates/navree-notify/"
-        - "/crates/navree-oauth/"
         - "/crates/navree-orm/"
         - "/crates/navree-queue/"
         - "/crates/navree-schema/"
@@ -58,7 +57,6 @@ rules:
         - "/crates/navree-settings/"
         - "/crates/navree-sheets/"
         - "/crates/navree-social/"
-        - "/crates/navree-sso/"
         - "/crates/navree-webhooks/"
         - "/crates/navree-workflows/"
         - "/crates/navree-cli/"
@@ -112,7 +110,6 @@ rules:
         # navree-micro: a dev-dependency for that fixture (navree-access's shim, step 8).
         - "/crates/navree-micro/Cargo.toml"
         - "/crates/navree-notify/"
-        - "/crates/navree-oauth/"
         - "/crates/navree-orm/"
         - "/crates/navree-queue/"
         - "/crates/navree-schema/"
@@ -120,7 +117,6 @@ rules:
         - "/crates/navree-settings/"
         - "/crates/navree-sheets/"
         - "/crates/navree-social/"
-        - "/crates/navree-sso/"
         - "/crates/navree-webhooks/"
         - "/crates/navree-workflows/"
         # navree-workspace: sea-orm for its compatibility layer, until step 8.

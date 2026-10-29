@@ -1,5 +1,6 @@
 //! navree-sso integration tests.
 
+mod servers;
 mod support;
 
 mod domains;
@@ -9,4 +10,5 @@ mod oidc_flow;
 mod provisioning;
 mod saml_flow;
 mod samples;
+mod secrets;
 mod wrapping;

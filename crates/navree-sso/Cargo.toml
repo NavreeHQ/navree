@@ -14,6 +14,11 @@ workspace = true
 ## Entry points for the fuzz targets in `fuzz/` (`navree_sso::fuzzing`). Not
 ## part of the API.
 fuzzing = []
+## The test suite on PostgreSQL (`NAVREE_TEST_DATABASE=postgres` with
+## NAVREE_TEST_POSTGRES_URL).
+postgres = ["navree-db/postgres"]
+## The test suite on MySQL (`NAVREE_TEST_DATABASE=mysql` with NAVREE_TEST_MYSQL_URL).
+mysql = ["navree-db/mysql"]
 
 [dependencies]
 axum = { workspace = true }
@@ -35,10 +40,11 @@ navree-events = { workspace = true }
 navree-http = { workspace = true }
 navree-http-client = { workspace = true }
 navree-kernel = { workspace = true }
+# The SSO tables are models (`sso_connection::Model`, ...); users and
+# workspaces are read as navree-auth's and navree-workspace's models.
+navree-orm = { workspace = true }
 navree-workspace = { workspace = true }
 quick-xml = { workspace = true }
-sea-orm = { workspace = true }
-sea-orm-migration = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }

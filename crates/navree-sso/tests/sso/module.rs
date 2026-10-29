@@ -36,8 +36,7 @@ async fn options_come_from_the_sso_section() {
 
 /// An app with auth and single sign-on only (no access module).
 fn minimal() -> navree_testing::TestAppBuilder {
-    TestApp::builder()
-        .temp_database()
+    crate::servers::database(TestApp::builder())
         .config("app.key", navree_crypto::generate_key())
         .module(navree_crypto::CryptoModule::from_config())
         .module(navree_db::DatabaseModule::from_config())

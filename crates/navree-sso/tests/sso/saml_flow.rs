@@ -3,10 +3,10 @@
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
-use navree_auth::{AuthService, user};
+use navree_auth::{AuthService, User};
 use navree_db::Db;
+use navree_orm::Model as _;
 use navree_sso::{Provisioning, SsoFake, SsoOwner};
-use sea_orm::EntityTrait;
 use serde_json::json;
 
 use crate::support::{self, BASE};
@@ -111,8 +111,8 @@ async fn a_new_user_from_a_verified_domain_is_created_and_signed_in() {
         .await
         .assert_status(200)
         .assert_json_path("user.id", json!(user.id));
-    let users = user::Entity::find()
-        .all(world.app.get::<Db>().await.conn())
+    let users = User::query()
+        .get(&world.app.get::<Db>().await)
         .await
         .unwrap();
     assert_eq!(users.len(), 1);

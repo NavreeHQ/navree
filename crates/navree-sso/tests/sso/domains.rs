@@ -366,13 +366,11 @@ async fn client_secrets_are_encrypted_and_never_returned() {
     assert!(!created.text().contains("super-secret-value"));
     let id = created.json_value()["id"].as_str().unwrap().to_owned();
     let db = world.app.get::<navree_db::Db>().await;
-    let row = <navree_sso::sso_connection::Entity as sea_orm::EntityTrait>::find_by_id(
-        uuid::Uuid::parse_str(&id).unwrap(),
-    )
-    .one(db.conn())
-    .await
-    .unwrap()
-    .unwrap();
+    use navree_orm::Model as _;
+    let row = navree_sso::sso_connection::Model::find(&db, uuid::Uuid::parse_str(&id).unwrap())
+        .await
+        .unwrap()
+        .unwrap();
     assert!(!row.settings.contains("super-secret-value"));
     // Changing other settings keeps the secret.
     world
