@@ -5,7 +5,7 @@
 use std::collections::BTreeMap;
 
 use chrono::{DateTime, Utc};
-use sea_orm::{ConnectionTrait, DbErr, QueryResult, Value as SqlValue};
+use navree_db::{DbError, Executor, Row, Statement, Value as SqlValue};
 use serde_json::Value;
 use uuid::Uuid;
 
@@ -13,7 +13,7 @@ use super::{
     DuplicateMode, FileKind, ImportCounts, ImportRecord, ImportRowRecord, ImportStatus, Mapping,
     RowStatus,
 };
-use crate::support::{statement, to_i64};
+use crate::support::to_i64;
 
 /// The imports table.
 pub const IMPORTS_TABLE: &str = "imports";
@@ -103,10 +103,10 @@ const UPDATE_SET: &str = "status = ?, format = ?, encoding = ?, sheet = ?, local
      duplicates = ?, counts = ?, operation_id = ?, error_path = ?, error = ?, updated_at = ?, \
      finished_at = ?";
 
-pub(crate) async fn insert_import<C: ConnectionTrait>(
-    conn: &C,
+pub(crate) async fn insert_import<E: Executor + ?Sized>(
+    exec: &E,
     record: &ImportRecord,
-) -> Result<(), DbErr> {
+) -> Result<(), DbError> {
     let mut values = vec![
         record.id.to_string().into(),
         record.importer.clone().into(),
@@ -125,32 +125,30 @@ pub(crate) async fn insert_import<C: ConnectionTrait>(
          error, updated_at, finished_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, \
          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     );
-    conn.execute_raw(statement(conn.get_database_backend(), &sql, values))
-        .await?;
+    exec.execute(&Statement::portable(&sql, values)).await?;
     Ok(())
 }
 
-pub(crate) async fn update_import<C: ConnectionTrait>(
-    conn: &C,
+pub(crate) async fn update_import<E: Executor + ?Sized>(
+    exec: &E,
     record: &ImportRecord,
-) -> Result<(), DbErr> {
+) -> Result<(), DbError> {
     let mut values = mutable_values(record);
     values.push(record.id.to_string().into());
     let sql = format!("UPDATE {IMPORTS_TABLE} SET {UPDATE_SET} WHERE id = ?");
-    conn.execute_raw(statement(conn.get_database_backend(), &sql, values))
-        .await?;
+    exec.execute(&Statement::portable(&sql, values)).await?;
     Ok(())
 }
 
-fn record(row: &QueryResult) -> Result<ImportRecord, DbErr> {
-    let text = |name: &str| row.try_get::<Option<String>>("", name);
-    let id: String = row.try_get("", "id")?;
+fn record(row: &Row) -> Result<ImportRecord, DbError> {
+    let text = |name: &str| row.get::<Option<String>>(name);
+    let id: String = row.get("id")?;
     Ok(ImportRecord {
-        id: Uuid::parse_str(&id).map_err(|e| DbErr::Type(e.to_string()))?,
-        importer: row.try_get("", "importer")?,
-        status: ImportStatus::parse(&row.try_get::<String>("", "status")?)
-            .unwrap_or(ImportStatus::Failed),
-        filename: row.try_get("", "filename")?,
+        id: Uuid::parse_str(&id)
+            .map_err(|e| DbError::new(navree_db::ErrorKind::Decode, e.to_string()))?,
+        importer: row.get("importer")?,
+        status: ImportStatus::parse(&row.get::<String>("status")?).unwrap_or(ImportStatus::Failed),
+        filename: row.get("filename")?,
         format: text("format")?.and_then(|f| FileKind::parse(&f)),
         encoding: text("encoding")?,
         sheet: text("sheet")?,
@@ -164,42 +162,36 @@ fn record(row: &QueryResult) -> Result<ImportRecord, DbErr> {
         error: text("error")?,
         owner_id: uuid_of(text("owner_id")?),
         workspace_id: uuid_of(text("workspace_id")?),
-        created_at: from_millis(row.try_get("", "created_at")?),
-        updated_at: from_millis(row.try_get("", "updated_at")?),
-        finished_at: row
-            .try_get::<Option<i64>>("", "finished_at")?
-            .map(from_millis),
-        disk: row.try_get("", "disk")?,
-        path: row.try_get("", "path")?,
+        created_at: from_millis(row.get("created_at")?),
+        updated_at: from_millis(row.get("updated_at")?),
+        finished_at: row.get::<Option<i64>>("finished_at")?.map(from_millis),
+        disk: row.get("disk")?,
+        path: row.get("path")?,
         error_path: text("error_path")?,
         locale: text("locale")?,
-        mapping_chosen: row.try_get("", "mapping_chosen")?,
-        save_mapping: row.try_get("", "save_mapping")?,
+        mapping_chosen: row.get("mapping_chosen")?,
+        save_mapping: row.get("save_mapping")?,
     })
 }
 
-pub(crate) async fn find_import<C: ConnectionTrait>(
-    conn: &C,
+pub(crate) async fn find_import<E: Executor + ?Sized>(
+    exec: &E,
     id: Uuid,
-) -> Result<Option<ImportRecord>, DbErr> {
+) -> Result<Option<ImportRecord>, DbError> {
     let sql = format!("SELECT {COLUMNS} FROM {IMPORTS_TABLE} WHERE id = ?");
-    let row = conn
-        .query_one_raw(statement(
-            conn.get_database_backend(),
-            &sql,
-            vec![id.to_string().into()],
-        ))
+    let row = exec
+        .fetch_optional(&Statement::portable(&sql, vec![id.to_string().into()]))
         .await?;
     row.as_ref().map(record).transpose()
 }
 
 /// The imports `owner` uploaded, newest first.
-pub(crate) async fn imports_of<C: ConnectionTrait>(
-    conn: &C,
+pub(crate) async fn imports_of<E: Executor + ?Sized>(
+    exec: &E,
     owner: Uuid,
     workspace: Option<Uuid>,
     limit: u64,
-) -> Result<Vec<ImportRecord>, DbErr> {
+) -> Result<Vec<ImportRecord>, DbError> {
     let (filter, mut values) = match workspace {
         Some(workspace) => (
             "owner_id = ? AND workspace_id = ?",
@@ -214,24 +206,21 @@ pub(crate) async fn imports_of<C: ConnectionTrait>(
     );
     // A list of `?` placeholders and fixed fragments built here; every value is a bound parameter.
     // nosemgrep: navree-sql-built-from-strings
-    let rows = conn
-        .query_all_raw(statement(conn.get_database_backend(), &sql, values))
-        .await?;
+    let rows = exec.fetch_all(&Statement::portable(&sql, values)).await?;
     rows.iter().map(record).collect()
 }
 
 /// Imports not changed since `before` and not being applied.
-pub(crate) async fn stale_imports<C: ConnectionTrait>(
-    conn: &C,
+pub(crate) async fn stale_imports<E: Executor + ?Sized>(
+    exec: &E,
     before: DateTime<Utc>,
-) -> Result<Vec<ImportRecord>, DbErr> {
+) -> Result<Vec<ImportRecord>, DbError> {
     let sql = format!(
         "SELECT {COLUMNS} FROM {IMPORTS_TABLE} WHERE updated_at < ? AND status <> ? \
          ORDER BY updated_at"
     );
-    let rows = conn
-        .query_all_raw(statement(
-            conn.get_database_backend(),
+    let rows = exec
+        .fetch_all(&Statement::portable(
             &sql,
             vec![
                 millis(before).into(),
@@ -243,35 +232,26 @@ pub(crate) async fn stale_imports<C: ConnectionTrait>(
 }
 
 /// Deletes the import and its rows.
-pub(crate) async fn delete_import<C: ConnectionTrait>(conn: &C, id: Uuid) -> Result<(), DbErr> {
-    delete_rows(conn, id).await?;
+pub(crate) async fn delete_import<E: Executor + ?Sized>(exec: &E, id: Uuid) -> Result<(), DbError> {
+    delete_rows(exec, id).await?;
     let sql = format!("DELETE FROM {IMPORTS_TABLE} WHERE id = ?");
-    conn.execute_raw(statement(
-        conn.get_database_backend(),
-        &sql,
-        vec![id.to_string().into()],
-    ))
-    .await?;
+    exec.execute(&Statement::portable(&sql, vec![id.to_string().into()]))
+        .await?;
     Ok(())
 }
 
-pub(crate) async fn delete_rows<C: ConnectionTrait>(conn: &C, id: Uuid) -> Result<(), DbErr> {
+pub(crate) async fn delete_rows<E: Executor + ?Sized>(exec: &E, id: Uuid) -> Result<(), DbError> {
     let sql = format!("DELETE FROM {IMPORT_ROWS_TABLE} WHERE import_id = ?");
-    conn.execute_raw(statement(
-        conn.get_database_backend(),
-        &sql,
-        vec![id.to_string().into()],
-    ))
-    .await?;
+    exec.execute(&Statement::portable(&sql, vec![id.to_string().into()]))
+        .await?;
     Ok(())
 }
 
-pub(crate) async fn insert_rows<C: ConnectionTrait>(
-    conn: &C,
+pub(crate) async fn insert_rows<E: Executor + ?Sized>(
+    exec: &E,
     import_id: Uuid,
     rows: &[NewRow],
-) -> Result<(), DbErr> {
-    let backend = conn.get_database_backend();
+) -> Result<(), DbError> {
     for batch in rows.chunks(INSERT_BATCH) {
         let placeholders = vec!["(?, ?, ?, ?, ?, ?)"; batch.len()].join(", ");
         let sql = format!(
@@ -289,18 +269,17 @@ pub(crate) async fn insert_rows<C: ConnectionTrait>(
         }
         // A list of `?` placeholders and fixed fragments built here; every value is a bound parameter.
         // nosemgrep: navree-sql-built-from-strings
-        conn.execute_raw(statement(backend, &sql, values)).await?;
+        exec.execute(&Statement::portable(&sql, values)).await?;
     }
     Ok(())
 }
 
-fn stored(row: &QueryResult) -> Result<StoredRow, DbErr> {
+fn stored(row: &Row) -> Result<StoredRow, DbError> {
     Ok(StoredRow {
-        row: u64::try_from(row.try_get::<i64>("", "row_no")?).unwrap_or(0),
-        status: RowStatus::parse(&row.try_get::<String>("", "status")?)
-            .unwrap_or(RowStatus::Invalid),
-        cells: parse(row.try_get::<Option<String>>("", "cells")?),
-        errors: parse(row.try_get::<Option<String>>("", "errors")?),
+        row: u64::try_from(row.get::<i64>("row_no")?).unwrap_or(0),
+        status: RowStatus::parse(&row.get::<String>("status")?).unwrap_or(RowStatus::Invalid),
+        cells: parse(row.get::<Option<String>>("cells")?),
+        errors: parse(row.get::<Option<String>>("errors")?),
     })
 }
 
@@ -312,14 +291,13 @@ fn status_list(statuses: &[RowStatus]) -> (String, Vec<SqlValue>) {
 
 /// A page of rows (`statuses` empty: every row), ordered by row number,
 /// and how many there are in all.
-pub(crate) async fn rows_page<C: ConnectionTrait>(
-    conn: &C,
+pub(crate) async fn rows_page<E: Executor + ?Sized>(
+    exec: &E,
     import_id: Uuid,
     statuses: &[RowStatus],
     offset: u64,
     limit: u64,
-) -> Result<(Vec<ImportRowRecord>, u64), DbErr> {
-    let backend = conn.get_database_backend();
+) -> Result<(Vec<ImportRowRecord>, u64), DbError> {
     let mut filter = "import_id = ?".to_owned();
     let mut values: Vec<SqlValue> = vec![import_id.to_string().into()];
     if !statuses.is_empty() {
@@ -330,10 +308,10 @@ pub(crate) async fn rows_page<C: ConnectionTrait>(
     let count_sql = format!("SELECT COUNT(*) AS total FROM {IMPORT_ROWS_TABLE} WHERE {filter}");
     // A list of `?` placeholders and fixed fragments built here; every value is a bound parameter.
     // nosemgrep: navree-sql-built-from-strings
-    let total = conn
-        .query_one_raw(statement(backend, &count_sql, values.clone()))
+    let total = exec
+        .fetch_optional(&Statement::portable(&count_sql, values.clone()))
         .await?
-        .map(|row| row.try_get::<i64>("", "total"))
+        .map(|row| row.get::<i64>("total"))
         .transpose()?
         .unwrap_or(0);
     let sql = format!(
@@ -344,7 +322,7 @@ pub(crate) async fn rows_page<C: ConnectionTrait>(
     values.push(to_i64(offset).into());
     // A list of `?` placeholders and fixed fragments built here; every value is a bound parameter.
     // nosemgrep: navree-sql-built-from-strings
-    let rows = conn.query_all_raw(statement(backend, &sql, values)).await?;
+    let rows = exec.fetch_all(&Statement::portable(&sql, values)).await?;
     let records = rows
         .iter()
         .map(|row| {
@@ -360,24 +338,23 @@ pub(crate) async fn rows_page<C: ConnectionTrait>(
 }
 
 /// How many rows are in each state.
-pub(crate) async fn counts<C: ConnectionTrait>(
-    conn: &C,
+pub(crate) async fn counts<E: Executor + ?Sized>(
+    exec: &E,
     import_id: Uuid,
-) -> Result<ImportCounts, DbErr> {
+) -> Result<ImportCounts, DbError> {
     let sql = format!(
         "SELECT status, COUNT(*) AS n FROM {IMPORT_ROWS_TABLE} WHERE import_id = ? GROUP BY status"
     );
-    let rows = conn
-        .query_all_raw(statement(
-            conn.get_database_backend(),
+    let rows = exec
+        .fetch_all(&Statement::portable(
             &sql,
             vec![import_id.to_string().into()],
         ))
         .await?;
     let mut counts = ImportCounts::default();
     for row in rows {
-        let status: String = row.try_get("", "status")?;
-        let n = u64::try_from(row.try_get::<i64>("", "n")?).unwrap_or(0);
+        let status: String = row.get("status")?;
+        let n = u64::try_from(row.get::<i64>("n")?).unwrap_or(0);
         if let Some(status) = RowStatus::parse(&status) {
             counts.add(status, n);
             counts.total += n;
@@ -388,12 +365,12 @@ pub(crate) async fn counts<C: ConnectionTrait>(
 
 /// The row numbers in `statuses`, cut into ranges of at most `size` rows:
 /// one apply job each.
-pub(crate) async fn row_ranges<C: ConnectionTrait>(
-    conn: &C,
+pub(crate) async fn row_ranges<E: Executor + ?Sized>(
+    exec: &E,
     import_id: Uuid,
     statuses: &[RowStatus],
     size: u64,
-) -> Result<Vec<(u64, u64)>, DbErr> {
+) -> Result<Vec<(u64, u64)>, DbError> {
     let (placeholders, statuses) = status_list(statuses);
     let sql = format!(
         "SELECT row_no FROM {IMPORT_ROWS_TABLE} WHERE import_id = ? AND status IN \
@@ -403,13 +380,11 @@ pub(crate) async fn row_ranges<C: ConnectionTrait>(
     values.extend(statuses);
     // A list of `?` placeholders and fixed fragments built here; every value is a bound parameter.
     // nosemgrep: navree-sql-built-from-strings
-    let rows = conn
-        .query_all_raw(statement(conn.get_database_backend(), &sql, values))
-        .await?;
+    let rows = exec.fetch_all(&Statement::portable(&sql, values)).await?;
     let numbers: Vec<u64> = rows
         .iter()
         .map(|row| {
-            row.try_get::<i64>("", "row_no")
+            row.get::<i64>("row_no")
                 .map(|n| u64::try_from(n).unwrap_or(0))
         })
         .collect::<Result<_, _>>()?;
@@ -421,13 +396,13 @@ pub(crate) async fn row_ranges<C: ConnectionTrait>(
 }
 
 /// The rows numbered `from..=to` in `statuses`.
-pub(crate) async fn rows_between<C: ConnectionTrait>(
-    conn: &C,
+pub(crate) async fn rows_between<E: Executor + ?Sized>(
+    exec: &E,
     import_id: Uuid,
     from: u64,
     to: u64,
     statuses: &[RowStatus],
-) -> Result<Vec<StoredRow>, DbErr> {
+) -> Result<Vec<StoredRow>, DbError> {
     let (placeholders, statuses) = status_list(statuses);
     let sql = format!(
         "SELECT row_no, status, cells, errors FROM {IMPORT_ROWS_TABLE} WHERE import_id = ? AND \
@@ -441,20 +416,18 @@ pub(crate) async fn rows_between<C: ConnectionTrait>(
     values.extend(statuses);
     // A list of `?` placeholders and fixed fragments built here; every value is a bound parameter.
     // nosemgrep: navree-sql-built-from-strings
-    let rows = conn
-        .query_all_raw(statement(conn.get_database_backend(), &sql, values))
-        .await?;
+    let rows = exec.fetch_all(&Statement::portable(&sql, values)).await?;
     rows.iter().map(stored).collect()
 }
 
 /// The rows in `statuses` after row `after`, at most `limit`.
-pub(crate) async fn rows_after<C: ConnectionTrait>(
-    conn: &C,
+pub(crate) async fn rows_after<E: Executor + ?Sized>(
+    exec: &E,
     import_id: Uuid,
     after: u64,
     limit: u64,
     statuses: &[RowStatus],
-) -> Result<Vec<StoredRow>, DbErr> {
+) -> Result<Vec<StoredRow>, DbError> {
     let (placeholders, statuses) = status_list(statuses);
     let sql = format!(
         "SELECT row_no, status, cells, errors FROM {IMPORT_ROWS_TABLE} WHERE import_id = ? AND \
@@ -465,25 +438,22 @@ pub(crate) async fn rows_after<C: ConnectionTrait>(
     values.push(to_i64(limit).into());
     // A list of `?` placeholders and fixed fragments built here; every value is a bound parameter.
     // nosemgrep: navree-sql-built-from-strings
-    let rows = conn
-        .query_all_raw(statement(conn.get_database_backend(), &sql, values))
-        .await?;
+    let rows = exec.fetch_all(&Statement::portable(&sql, values)).await?;
     rows.iter().map(stored).collect()
 }
 
 /// Sets one row's status and errors.
-pub(crate) async fn set_row<C: ConnectionTrait>(
-    conn: &C,
+pub(crate) async fn set_row<E: Executor + ?Sized>(
+    exec: &E,
     import_id: Uuid,
     row: u64,
     status: RowStatus,
     errors: &BTreeMap<String, Vec<String>>,
-) -> Result<(), DbErr> {
+) -> Result<(), DbError> {
     let sql = format!(
         "UPDATE {IMPORT_ROWS_TABLE} SET status = ?, errors = ? WHERE import_id = ? AND row_no = ?"
     );
-    conn.execute_raw(statement(
-        conn.get_database_backend(),
+    exec.execute(&Statement::portable(
         &sql,
         vec![
             status.as_str().into(),
@@ -497,13 +467,12 @@ pub(crate) async fn set_row<C: ConnectionTrait>(
 }
 
 /// Sets the status of many rows (their errors are kept).
-pub(crate) async fn set_rows<C: ConnectionTrait>(
-    conn: &C,
+pub(crate) async fn set_rows<E: Executor + ?Sized>(
+    exec: &E,
     import_id: Uuid,
     rows: &[u64],
     status: RowStatus,
-) -> Result<(), DbErr> {
-    let backend = conn.get_database_backend();
+) -> Result<(), DbError> {
     for batch in rows.chunks(INSERT_BATCH) {
         let placeholders = vec!["?"; batch.len()].join(", ");
         let sql = format!(
@@ -514,18 +483,18 @@ pub(crate) async fn set_rows<C: ConnectionTrait>(
         values.extend(batch.iter().map(|n| SqlValue::from(to_i64(*n))));
         // A list of `?` placeholders and fixed fragments built here; every value is a bound parameter.
         // nosemgrep: navree-sql-built-from-strings
-        conn.execute_raw(statement(backend, &sql, values)).await?;
+        exec.execute(&Statement::portable(&sql, values)).await?;
     }
     Ok(())
 }
 
 /// The saved mapping of `importer` for files with these headers.
-pub(crate) async fn find_mapping<C: ConnectionTrait>(
-    conn: &C,
+pub(crate) async fn find_mapping<E: Executor + ?Sized>(
+    exec: &E,
     importer: &str,
     workspace: Option<Uuid>,
     fingerprint: &str,
-) -> Result<Option<Mapping>, DbErr> {
+) -> Result<Option<Mapping>, DbError> {
     let (filter, mut values) = workspace_filter(workspace);
     let sql = format!(
         "SELECT mapping FROM {IMPORT_MAPPINGS_TABLE} WHERE importer = ? AND fingerprint = ? AND \
@@ -535,11 +504,9 @@ pub(crate) async fn find_mapping<C: ConnectionTrait>(
     all.append(&mut values);
     // A list of `?` placeholders and fixed fragments built here; every value is a bound parameter.
     // nosemgrep: navree-sql-built-from-strings
-    let row = conn
-        .query_one_raw(statement(conn.get_database_backend(), &sql, all))
-        .await?;
+    let row = exec.fetch_optional(&Statement::portable(&sql, all)).await?;
     Ok(row
-        .map(|row| row.try_get::<Option<String>>("", "mapping"))
+        .map(|row| row.get::<Option<String>>("mapping"))
         .transpose()?
         .flatten()
         .and_then(|text| serde_json::from_str(&text).ok()))
@@ -554,15 +521,14 @@ fn workspace_filter(workspace: Option<Uuid>) -> (&'static str, Vec<SqlValue>) {
 
 /// Saves `mapping` for `importer` and files with these headers, replacing
 /// the one saved before.
-pub(crate) async fn save_mapping<C: ConnectionTrait>(
-    conn: &C,
+pub(crate) async fn save_mapping<E: Executor + ?Sized>(
+    exec: &E,
     importer: &str,
     workspace: Option<Uuid>,
     fingerprint: &str,
     mapping: &Mapping,
     now: DateTime<Utc>,
-) -> Result<(), DbErr> {
-    let backend = conn.get_database_backend();
+) -> Result<(), DbError> {
     let (filter, values) = workspace_filter(workspace);
     let sql = format!(
         "DELETE FROM {IMPORT_MAPPINGS_TABLE} WHERE importer = ? AND fingerprint = ? AND {filter}"
@@ -571,13 +537,12 @@ pub(crate) async fn save_mapping<C: ConnectionTrait>(
     all.extend(values);
     // A list of `?` placeholders and fixed fragments built here; every value is a bound parameter.
     // nosemgrep: navree-sql-built-from-strings
-    conn.execute_raw(statement(backend, &sql, all)).await?;
+    exec.execute(&Statement::portable(&sql, all)).await?;
     let sql = format!(
         "INSERT INTO {IMPORT_MAPPINGS_TABLE} (id, importer, workspace_id, fingerprint, mapping, \
          created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
     );
-    conn.execute_raw(statement(
-        backend,
+    exec.execute(&Statement::portable(
         &sql,
         vec![
             Uuid::now_v7().to_string().into(),

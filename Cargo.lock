@@ -6644,8 +6644,6 @@ dependencies = [
  "navree-workspace",
  "percent-encoding",
  "rust_xlsxwriter",
- "sea-orm",
- "sea-orm-migration",
  "serde",
  "serde_json",
  "sha2 0.11.1",

@@ -9,7 +9,11 @@ use std::sync::{Mutex, PoisonError};
 use garde::Validate;
 use navree_access::{AbilityCtx, AccessModule, AccessOptions, Rules};
 use navree_contracts::{AuthVia, BoxError, Principal};
-use navree_db::{DatabaseModule, Db, MigrationSet, ModuleBuilderDbExt, Uow};
+use navree_db::navree_schema::{Migration, Schema, SchemaMigration, SchemaResult};
+use navree_db::{
+    DatabaseModule, Db, DbError, Executor, MigrationSet, ModuleBuilderDbExt, Statement, Uow,
+    Value as SqlValue,
+};
 use navree_kernel::{Module, ModuleBuilder};
 use navree_macros::injectable;
 use navree_queue::{OperationRecord, Operations, Queue, QueueModule};
@@ -19,10 +23,6 @@ use navree_sheets::{
 };
 use navree_storage::{Storage, StorageModule};
 use navree_testing::{TestApp, TestAppBuilder, TestClient};
-use sea_orm::sea_query::{ColumnDef, Index, Table};
-use sea_orm::{ConnectionTrait, DbBackend, DbErr, Statement, Value as SqlValue};
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -49,68 +49,27 @@ pub fn principal(user_id: Uuid) -> Principal {
     }
 }
 
-/// `sql` with `?` placeholders, numbered on PostgreSQL.
-pub fn stmt(backend: DbBackend, sql: &str, values: Vec<SqlValue>) -> Statement {
-    let sql = if backend == DbBackend::Postgres {
-        let mut out = String::new();
-        let mut n = 0;
-        for c in sql.chars() {
-            if c == '?' {
-                n += 1;
-                out.push_str(&format!("${n}"));
-            } else {
-                out.push(c);
-            }
-        }
-        out
-    } else {
-        sql.to_owned()
-    };
-    Statement::from_sql_and_values(backend, sql, values)
-}
-
 // ---------------------------------------------------------------------------
 // The contacts table.
 
 struct CreateContacts;
 
-impl MigrationName for CreateContacts {
-    fn name(&self) -> &str {
-        "m20261027_000001_create_contacts"
-    }
-}
-
-#[async_trait]
-impl MigrationTrait for CreateContacts {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table("contacts")
-                    .col(ColumnDef::new("id").string_len(36).not_null().primary_key())
-                    .col(ColumnDef::new("email").string_len(255).not_null())
-                    .col(ColumnDef::new("name").string_len(255).not_null())
-                    .col(ColumnDef::new("age").big_integer().null())
-                    .col(ColumnDef::new("vip").boolean().not_null())
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("contacts_email_unique")
-                    .table("contacts")
-                    .col("email")
-                    .unique()
-                    .to_owned(),
-            )
+impl Migration for CreateContacts {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema
+            .create("contacts", |t| {
+                t.string("id").length(36).primary();
+                t.string("email").length(255);
+                t.string("name").length(255);
+                t.big_integer("age").nullable();
+                t.boolean("vip");
+                t.unique(["email"]).name("contacts_email_unique");
+            })
             .await
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .drop_table(Table::drop().table("contacts").to_owned())
-            .await
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop("contacts").await
     }
 }
 
@@ -123,9 +82,11 @@ pub struct Contact {
     pub vip: bool,
 }
 
-pub async fn insert_contact<C: ConnectionTrait>(conn: &C, contact: &Contact) -> Result<(), DbErr> {
-    conn.execute_raw(stmt(
-        conn.get_database_backend(),
+pub async fn insert_contact<E: Executor + ?Sized>(
+    exec: &E,
+    contact: &Contact,
+) -> Result<(), DbError> {
+    exec.execute(&Statement::portable(
         "INSERT INTO contacts (id, email, name, age, vip) VALUES (?, ?, ?, ?, ?)",
         vec![
             Uuid::now_v7().to_string().into(),
@@ -139,21 +100,19 @@ pub async fn insert_contact<C: ConnectionTrait>(conn: &C, contact: &Contact) -> 
     Ok(())
 }
 
-pub async fn contacts<C: ConnectionTrait>(conn: &C) -> Vec<Contact> {
-    let rows = conn
-        .query_all_raw(stmt(
-            conn.get_database_backend(),
+pub async fn contacts<E: Executor + ?Sized>(exec: &E) -> Vec<Contact> {
+    let rows = exec
+        .fetch_all(&Statement::text(
             "SELECT email, name, age, vip FROM contacts ORDER BY email",
-            vec![],
         ))
         .await
         .unwrap();
     rows.iter()
         .map(|row| Contact {
-            email: row.try_get("", "email").unwrap(),
-            name: row.try_get("", "name").unwrap(),
-            age: row.try_get("", "age").unwrap(),
-            vip: row.try_get("", "vip").unwrap(),
+            email: row.get("email").unwrap(),
+            name: row.get("name").unwrap(),
+            age: row.get("age").unwrap(),
+            vip: row.get("vip").unwrap(),
         })
         .collect()
 }
@@ -206,16 +165,14 @@ impl Import for ContactsImport {
         let db = ctx.app.get::<Db>().await?;
         let placeholders = vec!["?"; keys.len()].join(", ");
         let rows = db
-            .conn()
-            .query_all_raw(stmt(
-                db.backend(),
-                &format!("SELECT email FROM contacts WHERE email IN ({placeholders})"),
-                keys.iter().map(|k| SqlValue::from(k.clone())).collect(),
+            .fetch_all(&Statement::portable(
+                format!("SELECT email FROM contacts WHERE email IN ({placeholders})"),
+                keys.iter().map(|k| SqlValue::from(k.clone())),
             ))
             .await?;
         Ok(rows
             .iter()
-            .map(|row| row.try_get::<String>("", "email"))
+            .map(|row| row.get::<String>("email"))
             .collect::<Result<_, _>>()?)
     }
 
@@ -237,7 +194,7 @@ impl Import for ContactsImport {
             age: row.age.map(i64::from),
             vip: row.vip,
         };
-        insert_contact(&*uow.tx().await?, &contact).await?;
+        insert_contact(uow, &contact).await?;
         Ok(())
     }
 
@@ -247,11 +204,9 @@ impl Import for ContactsImport {
         uow: &Uow,
         row: ContactRow,
     ) -> Result<(), BoxError> {
-        let tx = uow.tx().await?;
-        tx.execute_raw(stmt(
-            tx.get_database_backend(),
+        uow.execute(&Statement::portable(
             "UPDATE contacts SET name = ?, age = ?, vip = ? WHERE email = ?",
-            vec![
+            [
                 row.name.into(),
                 row.age.map(i64::from).into(),
                 row.vip.into(),
@@ -322,15 +277,13 @@ impl Export for ContactsExport {
         let db = ctx.app.get::<Db>().await?;
         let (clause, values) = filter_sql(filter);
         let row = db
-            .conn()
-            .query_one_raw(stmt(
-                db.backend(),
-                &format!("SELECT COUNT(*) AS n FROM contacts {clause}"),
+            .fetch_optional(&Statement::portable(
+                format!("SELECT COUNT(*) AS n FROM contacts {clause}"),
                 values,
             ))
             .await?
             .ok_or("no count")?;
-        Ok(Some(u64::try_from(row.try_get::<i64>("", "n")?)?))
+        Ok(Some(u64::try_from(row.get::<i64>("n")?)?))
     }
 
     async fn rows(
@@ -344,10 +297,8 @@ impl Export for ContactsExport {
         values.push(i64::try_from(page.limit)?.into());
         values.push(i64::try_from(page.offset)?.into());
         let rows = db
-            .conn()
-            .query_all_raw(stmt(
-                db.backend(),
-                &format!(
+            .fetch_all(&Statement::portable(
+                format!(
                     "SELECT email, name, age, vip FROM contacts {clause} ORDER BY email LIMIT ? OFFSET ?"
                 ),
                 values,
@@ -356,10 +307,10 @@ impl Export for ContactsExport {
         rows.iter()
             .map(|row| {
                 Ok(ContactExportRow {
-                    email: row.try_get("", "email")?,
-                    name: row.try_get("", "name")?,
-                    age: row.try_get("", "age")?,
-                    vip: row.try_get("", "vip")?,
+                    email: row.get("email")?,
+                    name: row.get("name")?,
+                    age: row.get("age")?,
+                    vip: row.get("vip")?,
                 })
             })
             .collect()
@@ -371,19 +322,24 @@ pub struct ContactsModule;
 
 impl Module for ContactsModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.migrations(MigrationSet::new("contacts").migration(CreateContacts))
-            .importer::<ContactsImport>()
-            .export::<ContactsExport>();
+        m.migrations(
+            MigrationSet::new("contacts").migration(SchemaMigration::new(
+                "m20261027_000001_create_contacts",
+                CreateContacts,
+            )),
+        )
+        .importer::<ContactsImport>()
+        .export::<ContactsExport>();
     }
 }
 
 // ---------------------------------------------------------------------------
 // The app.
 
-/// Database (on a fresh SQLite file), memory queue, memory disk, access
+/// Database (on a fresh SQLite file, or the server `NAVREE_TEST_DATABASE` names), memory queue, memory disk, access
 /// rules, sheets and the contacts module.
 pub fn builder() -> TestAppBuilder {
-    base().temp_database()
+    crate::servers::database(base())
 }
 
 /// [`builder`] without the database URL.
@@ -437,7 +393,7 @@ pub async fn seed(app: &TestApp, list: &[(&str, &str, Option<i64>, bool)]) {
     let db = app.get::<Db>().await;
     for (email, name, age, vip) in list {
         insert_contact(
-            db.conn(),
+            &*db,
             &Contact {
                 email: (*email).to_owned(),
                 name: (*name).to_owned(),
@@ -451,7 +407,7 @@ pub async fn seed(app: &TestApp, list: &[(&str, &str, Option<i64>, bool)]) {
 }
 
 pub async fn stored_contacts(app: &TestApp) -> Vec<Contact> {
-    contacts(app.get::<Db>().await.conn()).await
+    contacts(&*app.get::<Db>().await).await
 }
 
 pub fn contact(email: &str, name: &str, age: Option<i64>, vip: bool) -> Contact {

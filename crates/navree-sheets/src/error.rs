@@ -29,7 +29,7 @@ pub enum SheetsError {
     Queue(#[from] navree_queue::QueueError),
     /// The database failed.
     #[error("database: {0}")]
-    Db(#[from] sea_orm::DbErr),
+    Db(#[from] navree_db::DbError),
     /// A value did not (de)serialize.
     #[error("JSON: {0}")]
     Json(#[from] serde_json::Error),

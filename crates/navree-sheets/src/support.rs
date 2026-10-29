@@ -1,5 +1,5 @@
 //! What exports and imports share: the clock, the locale they run in, the
-//! header translator, the disks and SQL placeholders.
+//! header translator and the disks.
 
 use std::future::Future;
 use std::sync::Arc;
@@ -8,7 +8,6 @@ use chrono::{DateTime, Utc};
 use navree_contracts::Clock;
 use navree_kernel::AppContext;
 use navree_storage::{Disk, Storage};
-use sea_orm::{DbBackend, Statement, Value};
 
 use crate::{HeaderTranslator, SheetsError};
 
@@ -93,27 +92,6 @@ pub(crate) async fn disk(app: &AppContext, name: &str) -> Result<Disk, SheetsErr
     }
 }
 
-/// `sql` with `?` placeholders, numbered (`$1`) on PostgreSQL.
-pub(crate) fn statement(backend: DbBackend, sql: &str, values: Vec<Value>) -> Statement {
-    let sql = if backend == DbBackend::Postgres {
-        let mut numbered = String::with_capacity(sql.len() + 8);
-        let mut n = 0;
-        for c in sql.chars() {
-            if c == '?' {
-                n += 1;
-                numbered.push('$');
-                numbered.push_str(&n.to_string());
-            } else {
-                numbered.push(c);
-            }
-        }
-        numbered
-    } else {
-        sql.to_owned()
-    };
-    Statement::from_sql_and_values(backend, sql, values)
-}
-
 /// `secs` seconds as a duration, at most a hundred years (larger configured
 /// values would overflow date arithmetic).
 pub(crate) fn seconds(secs: u64) -> chrono::Duration {
@@ -124,21 +102,4 @@ pub(crate) fn seconds(secs: u64) -> chrono::Duration {
 /// `n` as an `i64` column value (saturating).
 pub(crate) fn to_i64(n: u64) -> i64 {
     i64::try_from(n).unwrap_or(i64::MAX)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn placeholders_are_numbered_on_postgres() {
-        let stmt = statement(
-            DbBackend::Postgres,
-            "a = ? AND b = ?",
-            vec![1.into(), 2.into()],
-        );
-        assert_eq!(stmt.sql, "a = $1 AND b = $2");
-        let stmt = statement(DbBackend::Sqlite, "a = ?", vec![1.into()]);
-        assert_eq!(stmt.sql, "a = ?");
-    }
 }

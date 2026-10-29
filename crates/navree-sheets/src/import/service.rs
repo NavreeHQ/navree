@@ -7,10 +7,9 @@ use std::sync::Arc;
 
 use bytes::Bytes;
 use navree_contracts::{BoxError, JobContext};
-use navree_db::{Db, Uow};
+use navree_db::{Db, DbError, Uow};
 use navree_kernel::{AppContext, WeakAppContext};
 use navree_queue::{Batch, Operation, OperationStatus, Operations};
-use sea_orm::{DatabaseConnection, DatabaseTransaction};
 use serde_json::Value;
 use uuid::Uuid;
 
@@ -129,29 +128,6 @@ impl UploadOptions {
         self.workspace_id = Some(workspace_id);
         self
     }
-}
-
-/// A connection to read with: the current unit of work's transaction (a
-/// request reading what it wrote), else the pool.
-enum Conn {
-    Tx(Arc<DatabaseTransaction>),
-    Pool(DatabaseConnection),
-}
-
-/// Runs `$body` with `$c` bound to the connection of `$conn`.
-macro_rules! on_conn {
-    ($conn:expr, |$c:ident| $body:expr) => {
-        match &$conn {
-            Conn::Tx(tx) => {
-                let $c: &DatabaseTransaction = tx;
-                $body.await
-            }
-            Conn::Pool(pool) => {
-                let $c: &DatabaseConnection = pool;
-                $body.await
-            }
-        }
-    };
 }
 
 /// Imports: provided and exported by [`SheetsModule`](crate::SheetsModule).
@@ -273,18 +249,6 @@ impl Imports {
             ))
     }
 
-    /// The current unit of work's transaction when there is an unfinished
-    /// one, else the pool.
-    async fn conn(&self) -> Result<Conn, SheetsError> {
-        if let Some(uow) = Uow::current()
-            && !uow.is_finished().await
-        {
-            return Ok(Conn::Tx(uow.tx().await?));
-        }
-        let app = self.app()?;
-        Ok(Conn::Pool(Self::db(&app).await?.conn().clone()))
-    }
-
     /// Stores `upload` for `importer` and queues its staging, as part of
     /// `uow`: an operation (kind `import.{importer}`) the client follows
     /// at `GET /api/operations/{id}/events`. The file is refused at once
@@ -344,7 +308,7 @@ impl Imports {
             save_mapping: options.save_mapping && options.mapping.is_some(),
         };
         record.operation_id = Some(self.queue_staging(uow, &operations, &record).await?);
-        store::insert_import(&*uow.tx().await?, &record).await?;
+        store::insert_import(uow, &record).await?;
         Ok(record)
     }
 
@@ -381,8 +345,10 @@ impl Imports {
 
     /// The import `id`.
     pub async fn find(&self, id: Uuid) -> Result<ImportRecord, SheetsError> {
-        let conn = self.conn().await?;
-        on_conn!(conn, |c| store::find_import(c, id))?.ok_or(SheetsError::NotFound)
+        let db = Self::db(&self.app()?).await?;
+        store::find_import(&*db, id)
+            .await?
+            .ok_or(SheetsError::NotFound)
     }
 
     /// The imports `owner` uploaded (in `workspace`, when given), newest
@@ -393,10 +359,8 @@ impl Imports {
         workspace: Option<Uuid>,
         limit: u64,
     ) -> Result<Vec<ImportRecord>, SheetsError> {
-        let conn = self.conn().await?;
-        Ok(on_conn!(conn, |c| store::imports_of(
-            c, owner, workspace, limit
-        ))?)
+        let db = Self::db(&self.app()?).await?;
+        Ok(store::imports_of(&*db, owner, workspace, limit).await?)
     }
 
     /// A page of the import's staged rows, by row number: every row, or
@@ -406,14 +370,15 @@ impl Imports {
         let per_page = query.per_page.unwrap_or(50).clamp(1, 500);
         let page = query.page.unwrap_or(1).max(1);
         let statuses: Vec<RowStatus> = query.status.into_iter().collect();
-        let conn = self.conn().await?;
-        let (data, total) = on_conn!(conn, |c| store::rows_page(
-            c,
+        let db = Self::db(&self.app()?).await?;
+        let (data, total) = store::rows_page(
+            &*db,
             id,
             &statuses,
             (page - 1).saturating_mul(per_page),
-            per_page
-        ))?;
+            per_page,
+        )
+        .await?;
         Ok(RowsPage {
             data,
             meta: PageMeta {
@@ -460,7 +425,7 @@ impl Imports {
         record.error = None;
         record.updated_at = support::now(&app).await;
         record.operation_id = Some(self.queue_staging(uow, &operations, &record).await?);
-        store::update_import(&*uow.tx().await?, &record).await?;
+        store::update_import(uow, &record).await?;
         Ok(record)
     }
 
@@ -508,16 +473,13 @@ impl Imports {
         }
         let registration = self.registry.get(&record.importer)?;
         let operations = Self::operations(&app).await?;
-        let ranges = {
-            let tx = uow.tx().await?;
-            store::row_ranges(
-                &*tx,
-                id,
-                &[RowStatus::Valid, RowStatus::Duplicate],
-                self.options.imports.chunk_size,
-            )
-            .await?
-        };
+        let ranges = store::row_ranges(
+            uow,
+            id,
+            &[RowStatus::Valid, RowStatus::Duplicate],
+            self.options.imports.chunk_size,
+        )
+        .await?;
         let to_apply = record.counts.valid + record.counts.duplicate;
         let operation = operations
             .start(
@@ -553,7 +515,7 @@ impl Imports {
         record.operation_id = Some(operation.id);
         record.error = None;
         record.updated_at = support::now(&app).await;
-        store::update_import(&*uow.tx().await?, &record).await?;
+        store::update_import(uow, &record).await?;
         Ok(record)
     }
 
@@ -567,7 +529,7 @@ impl Imports {
                 "The import is being applied; it can be deleted once it finishes.".into(),
             ));
         }
-        store::delete_import(&*uow.tx().await?, id).await?;
+        store::delete_import(uow, id).await?;
         Self::delete_files(&app, &record).await;
         Ok(())
     }
@@ -613,9 +575,9 @@ impl Imports {
         let db = Self::db(&app).await?;
         let keep = support::seconds(self.options.imports.keep_days.saturating_mul(86_400));
         let before = support::now(&app).await - keep;
-        let stale = store::stale_imports(db.conn(), before).await?;
+        let stale = store::stale_imports(&*db, before).await?;
         for record in &stale {
-            store::delete_import(db.conn(), record.id).await?;
+            store::delete_import(&*db, record.id).await?;
             Self::delete_files(&app, record).await;
         }
         Ok(stale.len() as u64)
@@ -628,7 +590,7 @@ impl Imports {
     async fn fail(
         &self,
         app: &AppContext,
-        conn: &DatabaseConnection,
+        conn: &Db,
         mut record: ImportRecord,
         message: String,
     ) -> Result<(), BoxError> {
@@ -649,14 +611,13 @@ impl Imports {
     pub(crate) async fn staging_stopped(&self, id: Uuid, message: &str) -> Result<(), BoxError> {
         let app = self.app()?;
         let db = Self::db(&app).await?;
-        if let Some(record) = store::find_import(db.conn(), id).await?
+        if let Some(record) = store::find_import(&*db, id).await?
             && matches!(
                 record.status,
                 ImportStatus::Uploaded | ImportStatus::Staging
             )
         {
-            self.fail(&app, db.conn(), record, message.to_owned())
-                .await?;
+            self.fail(&app, &db, record, message.to_owned()).await?;
         }
         Ok(())
     }
@@ -666,7 +627,7 @@ impl Imports {
     pub(crate) async fn stage(&self, id: Uuid, job: &JobContext) -> Result<(), BoxError> {
         let app = self.app()?;
         let db = Self::db(&app).await?;
-        let conn = db.conn();
+        let conn = &*db;
         let Some(mut record) = store::find_import(conn, id).await? else {
             return Ok(());
         };
@@ -844,7 +805,7 @@ impl Imports {
     /// else the automatic one.
     async fn choose_mapping(
         &self,
-        conn: &DatabaseConnection,
+        conn: &Db,
         record: &ImportRecord,
         columns: &[ImportColumn],
     ) -> Result<Mapping, BoxError> {
@@ -896,7 +857,7 @@ impl Imports {
     ) -> Result<(), BoxError> {
         let app = self.app()?;
         let db = Self::db(&app).await?;
-        let conn = db.conn();
+        let conn = &*db;
         let Some(record) = store::find_import(conn, id).await? else {
             return Ok(());
         };
@@ -952,10 +913,8 @@ impl Imports {
                         RowStatus::Created
                     };
                     let marked = async {
-                        let tx = uow.tx().await?;
-                        store::set_row(&*tx, id, row.row, status, &BTreeMap::new()).await?;
-                        drop(tx);
-                        uow.commit().await
+                        store::set_row(&uow, id, row.row, status, &BTreeMap::new()).await?;
+                        uow.commit().await.map_err(DbError::from)
                     }
                     .await;
                     match marked {
@@ -995,7 +954,7 @@ impl Imports {
     pub(crate) async fn finish(&self, id: Uuid) -> Result<(), BoxError> {
         let app = self.app()?;
         let db = Self::db(&app).await?;
-        let conn = db.conn();
+        let conn = &*db;
         let Some(mut record) = store::find_import(conn, id).await? else {
             return Ok(());
         };
@@ -1087,7 +1046,7 @@ impl Imports {
         let mut after = 0u64;
         loop {
             let rows = store::rows_after(
-                db.conn(),
+                &*db,
                 record.id,
                 after,
                 ERROR_FILE_PAGE,
