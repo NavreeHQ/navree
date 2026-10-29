@@ -6,18 +6,16 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 
 use chrono::{Datelike, Duration, NaiveDate};
-use navree_access::{CREATE, DELETE, EntityColumns, READ, Subject, UPDATE, record_json};
+use navree_access::{CREATE, DELETE, READ, Subject, UPDATE};
 use navree_contracts::Dispatcher;
-use navree_db::{PageMeta, PageQuery, contains_ignore_case, paginate};
+use navree_db::{PageMeta, PageQuery};
 use navree_http::AppError;
 use navree_kernel::{BoxFuture, ModuleId};
+use navree_orm::access::record_json;
+use navree_orm::ir::AggregateFunction;
+use navree_orm::{Builder, Expr, FieldError, Model, Row, Selectable, Value, col};
 use regex::Regex;
-use sea_orm::sea_query::{Alias, Expr, Func, SimpleExpr, Value as SqlValue};
-use sea_orm::{
-    ColumnTrait, Condition, ConnectionTrait, DbErr, EntityName, EntityTrait, IdenStatic,
-    ModelTrait, Order, QueryFilter, QueryOrder, QueryResult, QuerySelect, QueryTrait, Select,
-};
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value as Json, json};
 
 use crate::action::Action;
 use crate::cx::{Cx, action_entry};
@@ -28,11 +26,9 @@ use crate::metric::{
     Aggregate, Metric, MetricKind, MetricRange, MetricResult, Point, RangeOption, buckets, midnight,
 };
 use crate::query::ListQuery;
-use crate::values::{self, Invalid, is_blank, is_sql_null, key_from_str, key_text};
-use crate::{ActionContext, ActionResult, FormData, HelmOptions, ModelOf, Resource, SaveContext};
+use crate::values::{self, Invalid, Shape, is_blank, key_from_str, key_text};
+use crate::{ActionContext, ActionResult, FormData, HelmOptions, RecordOf, Resource, SaveContext};
 use crate::{money, save};
-
-type Col<R> = <<R as Resource>::Entity as EntityTrait>::Column;
 
 /// What the panel knows about a resource, without its types.
 pub(crate) struct ResourceInfo {
@@ -82,7 +78,7 @@ impl ResourceInfo {
     }
 }
 
-/// A filter, without its entity type.
+/// A filter, without its model type.
 #[derive(Clone, Debug)]
 pub(crate) struct FilterInfo {
     pub(crate) name: String,
@@ -92,7 +88,7 @@ pub(crate) struct FilterInfo {
     pub(crate) related: Option<Related>,
 }
 
-/// An action, without its entity type.
+/// An action, without its model type.
 #[derive(Clone, Debug)]
 pub(crate) struct ActionInfo {
     pub(crate) name: String,
@@ -106,7 +102,7 @@ pub(crate) struct ActionInfo {
     pub(crate) queued: bool,
 }
 
-/// A metric, without its entity type.
+/// A metric, without its model type.
 #[derive(Clone, Debug)]
 pub(crate) struct MetricInfo {
     pub(crate) slug: String,
@@ -123,7 +119,7 @@ pub(crate) struct MetricInfo {
 pub(crate) struct RawRecord {
     pub(crate) id: String,
     pub(crate) title: String,
-    pub(crate) json: Value,
+    pub(crate) json: Json,
     pub(crate) computed: HashMap<String, String>,
     pub(crate) html: HashMap<String, String>,
 }
@@ -162,14 +158,14 @@ pub(crate) trait ErasedResource: Send + Sync + 'static {
     fn create<'a>(
         &'a self,
         cx: &'a Cx,
-        input: Map<String, Value>,
+        input: Map<String, Json>,
     ) -> BoxFuture<'a, Result<RawRecord, AppError>>;
 
     fn update<'a>(
         &'a self,
         cx: &'a Cx,
         id: &'a str,
-        input: Map<String, Value>,
+        input: Map<String, Json>,
     ) -> BoxFuture<'a, Result<RawRecord, AppError>>;
 
     fn delete<'a>(&'a self, cx: &'a Cx, id: &'a str) -> BoxFuture<'a, Result<(), AppError>>;
@@ -181,7 +177,7 @@ pub(crate) trait ErasedResource: Send + Sync + 'static {
         cx: &'a Cx,
         name: &'a str,
         ids: Vec<String>,
-        input: Map<String, Value>,
+        input: Map<String, Json>,
         from_job: bool,
     ) -> BoxFuture<'a, Result<ActionOutcome, AppError>>;
 
@@ -207,19 +203,16 @@ pub(crate) trait ErasedResource: Send + Sync + 'static {
 pub(crate) struct Handle<R: Resource> {
     resource: Arc<R>,
     info: ResourceInfo,
-    filters: Vec<Filter<R::Entity>>,
-    actions: Vec<Action<R::Entity>>,
-    metrics: Vec<Metric<R::Entity>>,
-    templates: HashMap<&'static str, SqlValue>,
-    pk: Col<R>,
-    title: Col<R>,
-    search: Vec<Col<R>>,
+    filters: Vec<Filter<R::Model>>,
+    actions: Vec<Action<R::Model>>,
+    metrics: Vec<Metric<R::Model>>,
+    shapes: HashMap<&'static str, Shape>,
     computed: Vec<(String, Computed)>,
     views: Vec<(String, String)>,
 }
 
 impl<R: Resource> Handle<R> {
-    /// Checks `resource`'s definition against its entity; the error names
+    /// Checks `resource`'s definition against its model; the error names
     /// the resource and what is wrong.
     pub(crate) fn build(
         resource: Arc<R>,
@@ -227,17 +220,23 @@ impl<R: Resource> Handle<R> {
         options: &HelmOptions,
     ) -> Result<Self, String> {
         let name = std::any::type_name::<R>();
-        let table = <R::Entity as Default>::default().table_name();
+        let meta = R::Model::meta();
+        let table = meta.table();
         let fail = |what: String| format!("Helm resource `{name}`: {what}");
-        let pk = values::primary_key::<R::Entity>().map_err(fail)?;
-        let templates = values::templates::<R::Entity>();
-        let column = |column: &str| values::column::<R::Entity>(column);
-        let mut nullable = HashSet::new();
-        for c in values::column_names::<R::Entity>() {
-            if column(c).is_some_and(|col| col.def().is_null()) {
-                nullable.insert(c);
-            }
-        }
+        let pk = meta.key_column();
+        let shapes: HashMap<&'static str, Shape> = meta
+            .all_columns()
+            .iter()
+            .map(|column| (column.name(), Shape::of(column)))
+            .collect();
+        let column = |column: &str| meta.column(column).map(|c| c.name());
+        let shape = |column: &str| shapes.get(column).copied().unwrap_or(Shape::Other);
+        let nullable: HashSet<&'static str> = meta
+            .all_columns()
+            .iter()
+            .filter(|c| c.is_nullable())
+            .map(|c| c.name())
+            .collect();
 
         let mut fields = resource.fields();
         let mut seen = HashSet::new();
@@ -246,7 +245,7 @@ impl<R: Resource> Handle<R> {
         let mut views = Vec::new();
         for field in &mut fields {
             if matches!(field.kind, FieldKind::Id) {
-                field.name = pk.as_str().to_owned();
+                field.name = pk.to_owned();
             }
             if !seen.insert(field.name.clone()) {
                 return Err(fail(format!("two fields are named `{}`", field.name)));
@@ -265,20 +264,19 @@ impl<R: Resource> Handle<R> {
                     )));
                 }
                 FieldKind::Computed(c) => {
-                    if c.model != TypeId::of::<ModelOf<R>>() {
+                    if c.model != TypeId::of::<R::Model>() {
                         return Err(fail(format!(
                             "computed field `{}` takes `{}`, not the resource's model `{}`",
                             field.name,
                             c.model_name,
-                            std::any::type_name::<ModelOf<R>>()
+                            std::any::type_name::<R::Model>()
                         )));
                     }
                     computed.push((field.name.clone(), c.clone()));
                 }
                 FieldKind::View { template } => views.push((field.name.clone(), template.clone())),
                 FieldKind::Date | FieldKind::DateTime
-                    if !values::is_temporal(&templates[field.name.as_str()])
-                        && !matches!(templates[field.name.as_str()], SqlValue::String(_)) =>
+                    if !shape(&field.name).is_temporal() && shape(&field.name) != Shape::Text =>
                 {
                     return Err(fail(format!(
                         "field `{}` is a date field but its column is not a date",
@@ -328,9 +326,7 @@ impl<R: Resource> Handle<R> {
                     filter.name
                 )));
             }
-            if matches!(filter.kind, FilterKind::DateRange)
-                && !values::is_temporal(&templates[filter.name.as_str()])
-            {
+            if matches!(filter.kind, FilterKind::DateRange) && !shape(&filter.name).is_temporal() {
                 return Err(fail(format!(
                     "date_range filter `{}` needs a date or date-time column",
                     filter.name
@@ -394,7 +390,19 @@ impl<R: Resource> Handle<R> {
             if !metric_slugs.insert(metric.slug.clone()) {
                 return Err(fail(format!("two metrics are named `{}`", metric.label)));
             }
-            let temporal = |c: &Col<R>| values::is_temporal(&templates[c.as_str()]);
+            let named = [
+                metric.aggregate.column(),
+                metric.over.as_ref(),
+                metric.trend.as_ref().map(|t| &t.0),
+                metric.group_by.as_ref(),
+            ];
+            if let Some(unknown) = named.into_iter().flatten().find(|c| column(c).is_none()) {
+                return Err(fail(format!(
+                    "metric `{}`: `{unknown}` is not a column of `{table}`",
+                    metric.label
+                )));
+            }
+            let temporal = |c: &str| shape(c).is_temporal();
             match metric.kind {
                 MetricKind::Trend => match &metric.trend {
                     None => {
@@ -442,7 +450,7 @@ impl<R: Resource> Handle<R> {
             if column("created_at").is_some() {
                 "-created_at".to_owned()
             } else {
-                format!("-{}", pk.as_str())
+                format!("-{pk}")
             }
         } else {
             R::DEFAULT_SORT.to_owned()
@@ -486,10 +494,10 @@ impl<R: Resource> Handle<R> {
             },
             icon: R::ICON,
             order: R::ORDER,
-            subject: <R::Entity as Subject>::SUBJECT,
-            pk: pk.as_str(),
-            title: title.as_str(),
-            search: search.iter().map(|c| c.as_str()).collect(),
+            subject: <R::Model as Subject>::SUBJECT,
+            pk,
+            title,
+            search,
             per_page,
             default_sort,
             fields,
@@ -505,49 +513,47 @@ impl<R: Resource> Handle<R> {
             filters,
             actions,
             metrics,
-            templates,
-            pk,
-            title,
-            search,
+            shapes,
             computed,
             views,
         })
     }
 
     /// The rows the user may do `action` on, starting from the resource's
-    /// query.
-    fn base(&self, cx: &Cx, action: &str) -> Select<R::Entity> {
-        // SeaORM shim of navree-access (until navree-helm is ported).
-        let condition = cx.ability().sql_filter_with(
-            action,
-            <R::Entity as Subject>::SUBJECT,
-            &EntityColumns::<R::Entity>::new(),
-        );
+    /// query: the model's query (its global scopes apply when it runs),
+    /// the resource's narrowing, then the user's access filter.
+    fn base(&self, cx: &Cx, action: &str) -> Builder<R::Model> {
         self.resource
-            .query(<R::Entity as EntityTrait>::find())
-            .filter(condition.to_sea_query())
+            .query(R::Model::query())
+            .accessible_for(cx.ability(), action)
     }
 
-    fn template(&self, column: &str) -> &SqlValue {
-        self.templates
-            .get(column)
-            .unwrap_or(&SqlValue::String(None))
+    fn shape(&self, column: &str) -> Shape {
+        self.shapes.get(column).copied().unwrap_or(Shape::Other)
     }
 
-    fn raw(&self, cx: &Cx, model: &ModelOf<R>) -> RawRecord {
-        let json = record_json(model);
+    /// Column `name` of the model, qualified with its table.
+    fn col(&self, name: &str) -> navree_orm::Column<navree_orm::Untyped, Value> {
+        col(values::qualified::<R::Model>(name))
+    }
+
+    fn raw(&self, cx: &Cx, record: &RecordOf<R>) -> RawRecord {
+        let json = record_json(record);
         let id = json
             .get(self.info.pk)
             .and_then(key_text)
             .unwrap_or_default();
-        let title = match json.get(self.title.as_str()) {
-            None | Some(Value::Null) => format!("#{id}"),
+        let title = match json.get(self.info.title) {
+            None | Some(Json::Null) => format!("#{id}"),
             Some(value) => key_text(value).unwrap_or_else(|| value.to_string()),
         };
         let computed = self
             .computed
             .iter()
-            .filter_map(|(name, c)| c.call::<ModelOf<R>>(model).map(|v| (name.clone(), v)))
+            .filter_map(|(name, c)| {
+                c.call::<R::Model>(record.model())
+                    .map(|v| (name.clone(), v))
+            })
             .collect();
         let mut html = HashMap::new();
         if let Some(views) = &cx.core.app_views {
@@ -573,57 +579,52 @@ impl<R: Resource> Handle<R> {
 
     /// The readable record `id` (locked for update when `lock` and the
     /// backend supports it).
-    async fn load(&self, cx: &Cx, id: &str, lock: bool) -> Result<Option<ModelOf<R>>, AppError> {
-        let Some(key) = key_from_str(self.template(self.info.pk), id) else {
+    async fn load(&self, cx: &Cx, id: &str, lock: bool) -> Result<Option<RecordOf<R>>, AppError> {
+        let Some(key) = key_from_str(self.shape(self.info.pk), id) else {
             return Ok(None);
         };
-        let mut select = self.base(cx, READ).filter(self.pk.eq(key));
+        let mut query = self.base(cx, READ).where_(self.col(self.info.pk).eq(key));
         if lock && cx.uow.lock_for_update() {
-            select = select.lock_exclusive();
+            query = query.lock_for_update();
         }
-        let tx = cx.uow.tx().await?;
-        Ok(select.one(&*tx).await?)
+        Ok(query.first(&cx.uow).await?)
     }
 
     /// Converts form input to its JSON form for `field` (numbers from text,
     /// booleans from `on`, date-times to RFC 3339 in UTC, blanks to `null`
     /// for nullable columns).
-    fn normalize(&self, field: &Field, value: Value, tz_offset: Option<i32>) -> Value {
+    fn normalize(&self, field: &Field, value: Json, tz_offset: Option<i32>) -> Json {
         let value = match (&field.kind, value) {
-            (FieldKind::Number | FieldKind::Money { .. }, Value::String(text))
+            (FieldKind::Number | FieldKind::Money { .. }, Json::String(text))
                 if !text.trim().is_empty() =>
             {
                 let text = text.trim();
                 if let Ok(n) = text.parse::<i64>() {
-                    Value::from(n)
+                    Json::from(n)
                 } else if let Some(n) = text
                     .parse::<f64>()
                     .ok()
                     .and_then(serde_json::Number::from_f64)
                 {
-                    Value::Number(n)
+                    Json::Number(n)
                 } else {
-                    Value::String(text.to_owned())
+                    Json::String(text.to_owned())
                 }
             }
-            (FieldKind::Boolean, value) => {
-                values::boolean(&value).map(Value::Bool).unwrap_or(value)
-            }
-            (FieldKind::DateTime, Value::String(text)) if !text.trim().is_empty() => {
-                match values::datetime(&Value::String(text.clone()), tz_offset) {
-                    Some(at) => {
-                        Value::String(at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true))
-                    }
-                    None => Value::String(text),
+            (FieldKind::Boolean, value) => values::boolean(&value).map(Json::Bool).unwrap_or(value),
+            (FieldKind::DateTime, Json::String(text)) if !text.trim().is_empty() => {
+                match values::datetime(&Json::String(text.clone()), tz_offset) {
+                    Some(at) => Json::String(at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)),
+                    None => Json::String(text),
                 }
             }
-            (FieldKind::Email | FieldKind::Url, Value::String(text)) => {
-                Value::String(text.trim().to_owned())
+            (FieldKind::Email | FieldKind::Url, Json::String(text)) => {
+                Json::String(text.trim().to_owned())
             }
             (_, value) => value,
         };
         if is_blank(&value) && self.info.nullable.contains(field.name.as_str()) {
-            Value::Null
+            Json::Null
         } else {
             value
         }
@@ -632,7 +633,7 @@ impl<R: Resource> Handle<R> {
     /// Whether `value` is the path of a file Helm stored for this resource
     /// (`{slug}/{40 letters and digits}.{extension}`): a file field never
     /// points at another file of its disk.
-    fn stored_path(&self, value: &Value) -> bool {
+    fn stored_path(&self, value: &Json) -> bool {
         let Some(name) = value
             .as_str()
             .and_then(|path| path.strip_prefix(self.info.slug.as_str()))
@@ -657,10 +658,10 @@ impl<R: Resource> Handle<R> {
         &self,
         cx: &Cx,
         fields: &[Field],
-        input: Map<String, Value>,
+        input: Map<String, Json>,
         create: bool,
         columns: bool,
-    ) -> Result<Map<String, Value>, AppError> {
+    ) -> Result<Map<String, Json>, AppError> {
         let messages = &cx.core.messages;
         let mut errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
         let mut checked = Map::new();
@@ -676,7 +677,7 @@ impl<R: Resource> Handle<R> {
             let value = self.normalize(field, value, cx.tz_offset);
             let mut problems = Vec::new();
             let pattern = match &field.pattern {
-                Some(source) if columns => self.info.patterns.get(&key).cloned(),
+                Some(_) if columns => self.info.patterns.get(&key).cloned(),
                 Some(source) => Regex::new(source).ok(),
                 None => None,
             };
@@ -688,9 +689,9 @@ impl<R: Resource> Handle<R> {
                 problems.push(messages.render(&key, "invalid", &[]));
             }
             if problems.is_empty() && columns && field.is_column() {
-                match values::to_sql(self.template(&key), &value, None) {
+                match values::to_input(self.shape(&key), &value, None) {
                     Err(Invalid(rule)) => problems.push(messages.render(&key, rule, &[])),
-                    Ok(sql) if is_sql_null(&sql) && !self.info.nullable.contains(key.as_str()) => {
+                    Ok(Json::Null) if !self.info.nullable.contains(key.as_str()) => {
                         problems.push(messages.render(&key, "required", &[]));
                     }
                     Ok(_) => {}
@@ -753,26 +754,36 @@ impl<R: Resource> Handle<R> {
         SaveContext::new(cx.inner(self.info.module, Map::new()))
     }
 
-    fn form(&self, cx: &Cx, values: Map<String, Value>) -> FormData {
+    fn form(&self, cx: &Cx, values: Map<String, Json>) -> FormData {
         FormData::new(values).with_app(cx.app.clone(), cx.tz_offset)
     }
 
+    /// The condition matching any of `columns` containing `term`, ignoring
+    /// letter case.
+    fn search_filter(&self, columns: &[&'static str], term: &str) -> navree_orm::Filter {
+        navree_orm::Filter::any(
+            columns
+                .iter()
+                .map(|column| self.col(column).contains_ignore_case(term)),
+        )
+    }
+
     async fn list_page(&self, cx: &Cx, q: &ListQuery) -> Result<RawPage, AppError> {
-        let subject = <R::Entity as Subject>::SUBJECT;
+        let subject = <R::Model as Subject>::SUBJECT;
         if !cx.can(READ, subject, None) {
             return Err(AppError::forbidden());
         }
-        let mut select = self.base(cx, READ);
+        let mut query = self.base(cx, READ);
         let mut errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
         if let Some((column, id)) = &q.via {
             let field = self
                 .info
                 .field(column)
                 .filter(|f| matches!(f.kind, FieldKind::BelongsTo(_)));
-            match (field, values::column::<R::Entity>(column)) {
-                (Some(_), Some(col)) => match key_from_str(self.template(column), id) {
-                    Some(key) => select = select.filter(col.eq(key)),
-                    None => select = select.filter(Expr::cust("1 = 0")),
+            match (field, values::column::<R::Model>(column)) {
+                (Some(_), Some(_)) => match key_from_str(self.shape(column), id) {
+                    Some(key) => query = query.where_(self.col(column).eq(key)),
+                    None => query = query.where_(nothing()),
                 },
                 _ => {
                     errors.insert(
@@ -785,23 +796,14 @@ impl<R: Resource> Handle<R> {
             }
         }
         if let Some(term) = &q.search
-            && !self.search.is_empty()
+            && !self.info.search.is_empty()
         {
-            let backend = cx.uow.db().backend();
-            let mut any = Condition::any();
-            for column in &self.search {
-                any = any.add(contains_ignore_case(
-                    backend,
-                    Expr::col((<R::Entity as Default>::default(), *column)),
-                    term,
-                ));
-            }
-            select = select.filter(any);
+            query = query.where_(self.search_filter(&self.info.search, term));
         }
         for (name, values) in &q.filters {
             match self.filters.iter().find(|f| f.name == *name) {
-                Some(filter) => match self.apply_filter(cx, select.clone(), filter, values).await {
-                    Ok(filtered) => select = filtered,
+                Some(filter) => match self.apply_filter(cx, query.clone(), filter, values).await {
+                    Ok(filtered) => query = filtered,
                     Err(message) => {
                         errors.insert(format!("filters.{name}"), vec![message]);
                     }
@@ -840,20 +842,24 @@ impl<R: Resource> Handle<R> {
         if !errors.is_empty() {
             return Err(AppError::validation(errors));
         }
-        if let Some(column) = values::column::<R::Entity>(column_name) {
-            let order = if descending { Order::Desc } else { Order::Asc };
-            select = select.order_by(column, order.clone());
+        if values::column::<R::Model>(column_name).is_some() {
+            let direction = if descending {
+                navree_orm::ir::Direction::Desc
+            } else {
+                navree_orm::ir::Direction::Asc
+            };
+            query = query.order_by_dir(values::qualified::<R::Model>(column_name), direction);
             if column_name != self.info.pk {
-                select = select.order_by(self.pk, order);
+                query =
+                    query.order_by_dir(values::qualified::<R::Model>(self.info.pk), direction);
             }
         }
         let per_page = q.per_page.unwrap_or(self.info.per_page);
-        let page = {
-            let tx = cx.uow.tx().await?;
-            paginate(select, &*tx, PageQuery::new(q.page, per_page)).await?
-        };
+        let page = query
+            .paginate(&cx.uow, PageQuery::new(q.page, per_page))
+            .await?;
         Ok(RawPage {
-            records: page.data.iter().map(|m| self.raw(cx, m)).collect(),
+            records: page.data.iter().map(|r| self.raw(cx, r)).collect(),
             meta: page.meta,
         })
     }
@@ -863,12 +869,12 @@ impl<R: Resource> Handle<R> {
     async fn apply_filter(
         &self,
         cx: &Cx,
-        select: Select<R::Entity>,
-        filter: &Filter<R::Entity>,
+        query: Builder<R::Model>,
+        filter: &Filter<R::Model>,
         values: &[String],
-    ) -> Result<Select<R::Entity>, String> {
+    ) -> Result<Builder<R::Model>, String> {
         let name = &filter.name;
-        let column = || values::column::<R::Entity>(name);
+        let shape = self.shape(name);
         match &filter.kind {
             FilterKind::Select => {
                 if !filter.options.is_empty() {
@@ -882,91 +888,101 @@ impl<R: Resource> Handle<R> {
                         ));
                     }
                 }
-                let col = column().ok_or("not a column")?;
-                let keys: Vec<SqlValue> = values
+                let keys: Vec<Value> = values
                     .iter()
-                    .map(|v| values::to_sql(self.template(name), &Value::String(v.clone()), None))
+                    .map(|v| values::to_value(shape, &Json::String(v.clone())))
                     .collect::<Result<_, _>>()
                     .map_err(|Invalid(rule)| {
                         cx.core
                             .messages
                             .render(&format!("filters.{name}"), rule, &[])
                     })?;
-                Ok(select.filter(col.is_in(keys)))
+                Ok(query.where_(self.col(name).is_in(keys)))
             }
             FilterKind::BelongsTo(_) => {
-                let col = column().ok_or("not a column")?;
-                let keys: Vec<SqlValue> = values
+                let keys: Vec<Value> = values
                     .iter()
-                    .filter_map(|v| key_from_str(self.template(name), v))
+                    .filter_map(|v| key_from_str(shape, v))
                     .collect();
                 if keys.is_empty() {
-                    return Ok(select.filter(Expr::cust("1 = 0")));
+                    return Ok(query.where_(nothing()));
                 }
-                Ok(select.filter(col.is_in(keys)))
+                Ok(query.where_(self.col(name).is_in(keys)))
             }
             FilterKind::Boolean(f) => {
                 let value = values
                     .last()
-                    .map(|v| Value::String(v.clone()))
-                    .unwrap_or(Value::Null);
+                    .map(|v| Json::String(v.clone()))
+                    .unwrap_or(Json::Null);
                 let on = values::boolean(&value).ok_or_else(|| {
                     cx.core
                         .messages
                         .render(&format!("filters.{name}"), "boolean", &[])
                 })?;
-                Ok(f(select, on))
+                Ok(f(query, on))
             }
             FilterKind::DateRange => {
-                let col = column().ok_or("not a column")?;
                 let today = save::now(&cx.app).await.date_naive();
                 let text = values.last().cloned().unwrap_or_default();
                 let (from, to) = date_range(&text, today).ok_or_else(|| {
                     format!("filters.{name} must be a range of dates (YYYY-MM-DD..YYYY-MM-DD) or today, week, month or quarter")
                 })?;
-                let template = self.template(name);
-                let mut select = select;
+                let mut query = query;
                 if let Some(from) = from {
-                    select = select.filter(col.gte(values::date_bound(template, midnight(from))));
+                    query = query.where_(
+                        self.col(name)
+                            .gte(values::date_bound(shape, midnight(from))),
+                    );
                 }
                 if let Some(to) = to {
                     let end = to + Duration::days(1);
-                    select = select.filter(col.lt(values::date_bound(template, midnight(end))));
+                    query = query.where_(self.col(name).lt(values::date_bound(shape, midnight(end))));
                 }
-                Ok(select)
+                Ok(query)
             }
-            FilterKind::Custom(f) => Ok(f(select, values.join(","))),
+            FilterKind::Custom(f) => Ok(f(query, values.join(","))),
         }
     }
 
-    async fn aggregate<C: ConnectionTrait>(
+    /// The SQL aggregate of a metric.
+    fn aggregate_expr(&self, aggregate: &Aggregate<String>) -> Expr {
+        let column = |c: &str| Expr::col(values::qualified::<R::Model>(c));
+        match aggregate {
+            Aggregate::Count => Expr::count(column(self.info.pk)),
+            Aggregate::Sum(c) => Expr::sum(column(c)),
+            Aggregate::Average(c) => Expr::avg(column(c)),
+            Aggregate::Min(c) => Expr::min(column(c)),
+            Aggregate::Max(c) => Expr::max(column(c)),
+        }
+    }
+
+    /// The aggregate over the rows of `query`, as a number (`None` when the
+    /// database answers NULL).
+    async fn aggregate(
         &self,
-        select: Select<R::Entity>,
-        aggregate: &Aggregate<Col<R>>,
-        conn: &C,
-    ) -> Result<Option<f64>, DbErr> {
-        let row = select
-            .select_only()
-            .column_as(self.aggregate_expr(aggregate), "value")
-            .into_tuple::<Option<f64>>()
-            .one(conn)
-            .await?;
-        Ok(row.flatten())
-    }
-
-    fn aggregate_expr(&self, aggregate: &Aggregate<Col<R>>) -> SimpleExpr {
-        let col = |c: Col<R>| Expr::col((<R::Entity as Default>::default(), c));
-        let call = match aggregate {
-            Aggregate::Count => Func::count(col(self.pk)),
-            Aggregate::Sum(c) => Func::sum(col(*c)),
-            Aggregate::Average(c) => Func::avg(col(*c)),
-            Aggregate::Min(c) => Func::min(col(*c)),
-            Aggregate::Max(c) => Func::max(col(*c)),
+        cx: &Cx,
+        query: Builder<R::Model>,
+        aggregate: &Aggregate<String>,
+    ) -> Result<Option<f64>, AppError> {
+        let (function, column) = match aggregate {
+            Aggregate::Count => return Ok(Some(query.count(&cx.uow).await? as f64)),
+            Aggregate::Sum(c) => (AggregateFunction::Sum, c),
+            Aggregate::Average(c) => (AggregateFunction::Avg, c),
+            Aggregate::Min(c) => (AggregateFunction::Min, c),
+            Aggregate::Max(c) => (AggregateFunction::Max, c),
         };
-        Func::cast_as(call, Alias::new("DOUBLE PRECISION")).into()
+        let value = query
+            .aggregate::<Value>(
+                &cx.uow,
+                function,
+                Some(Expr::col(values::qualified::<R::Model>(column))),
+                false,
+            )
+            .await?;
+        Ok(value.as_ref().and_then(values::value_number))
     }
 
-    fn display(&self, metric: &Metric<R::Entity>, value: f64) -> String {
+    fn display(&self, metric: &Metric<R::Model>, value: f64) -> String {
         match &metric.money {
             Some(currency) => money::format(value.round() as i64, currency),
             None => money::format_number(value),
@@ -976,13 +992,12 @@ impl<R: Resource> Handle<R> {
     async fn compute(
         &self,
         cx: &Cx,
-        metric: &Metric<R::Entity>,
+        metric: &Metric<R::Model>,
         range: MetricRange,
     ) -> Result<MetricResult, AppError> {
-        let mut select = self.base(cx, READ);
-        QueryTrait::query(&mut select).clear_order_by();
+        let mut query = self.base(cx, READ).reorder();
         for condition in &metric.conditions {
-            select = select.filter(condition.clone());
+            query = query.where_(condition.clone());
         }
         let now = save::now(&cx.app).await;
         let mut result = MetricResult {
@@ -999,26 +1014,25 @@ impl<R: Resource> Handle<R> {
             points: Vec::new(),
             groups: Vec::new(),
         };
-        let tx = cx.uow.tx().await?;
         match metric.kind {
             MetricKind::Value => {
-                if let Some(over) = metric.over {
-                    let template = self.template(over.as_str()).clone();
+                if let Some(over) = &metric.over {
+                    let shape = self.shape(over);
                     let ((start, end), (previous_start, previous_end)) = range.periods(now);
                     let between = |from, to| {
-                        select
+                        query
                             .clone()
-                            .filter(over.gte(values::date_bound(&template, from)))
-                            .filter(over.lt(values::date_bound(&template, to)))
+                            .where_(self.col(over).gte(values::date_bound(shape, from)))
+                            .where_(self.col(over).lt(values::date_bound(shape, to)))
                     };
                     result.value = self
-                        .aggregate(between(start, end), &metric.aggregate, &*tx)
+                        .aggregate(cx, between(start, end), &metric.aggregate)
                         .await?;
                     result.previous = self
                         .aggregate(
+                            cx,
                             between(previous_start, previous_end),
                             &metric.aggregate,
-                            &*tx,
                         )
                         .await?;
                     result.range = Some(range.as_str());
@@ -1030,7 +1044,7 @@ impl<R: Resource> Handle<R> {
                         })
                         .collect();
                 } else {
-                    result.value = self.aggregate(select, &metric.aggregate, &*tx).await?;
+                    result.value = self.aggregate(cx, query, &metric.aggregate).await?;
                 }
                 if matches!(metric.aggregate, Aggregate::Count | Aggregate::Sum(_)) {
                     result.value = Some(result.value.unwrap_or(0.0));
@@ -1050,20 +1064,29 @@ impl<R: Resource> Handle<R> {
                     .unwrap_or_else(|| "—".to_owned());
             }
             MetricKind::Trend => {
-                let Some((column, interval, count)) = metric.trend else {
+                let Some((column, interval, count)) = &metric.trend else {
                     return Err(AppError::internal("a trend metric without a period"));
                 };
-                let template = self.template(column.as_str()).clone();
+                let shape = self.shape(column);
                 let today = now.date_naive();
-                let buckets = buckets(interval, count, today);
+                let buckets = buckets(*interval, *count, today);
                 let start = buckets.first().map(|b| b.1).unwrap_or(today);
-                let models = select
-                    .filter(column.gte(values::date_bound(&template, midnight(start))))
-                    .all(&*tx)
-                    .await?;
+                let records = query
+                    .where_(
+                        self.col(column)
+                            .gte(values::date_bound(shape, midnight(start))),
+                    )
+                    .get(&cx.uow)
+                    .await?
+                    .into_vec();
                 let mut grouped: Vec<Vec<f64>> = vec![Vec::new(); buckets.len()];
-                for model in &models {
-                    let Some(day) = values::sql_date(&model.get(column)) else {
+                for record in &records {
+                    let model = record.model();
+                    let Some(day) = model
+                        .value(column)?
+                        .as_ref()
+                        .and_then(values::value_date)
+                    else {
                         continue;
                     };
                     let Some(index) = buckets.iter().position(|b| b.1 <= day && day < b.2) else {
@@ -1071,7 +1094,7 @@ impl<R: Resource> Handle<R> {
                     };
                     let value = match metric.aggregate.column() {
                         None => 1.0,
-                        Some(c) => match values::sql_number(&model.get(*c)) {
+                        Some(c) => match model.value(c)?.as_ref().and_then(values::value_number) {
                             Some(n) => n,
                             None => continue,
                         },
@@ -1096,34 +1119,23 @@ impl<R: Resource> Handle<R> {
                 result.display = self.display(metric, total);
             }
             MetricKind::Partition => {
-                let Some(column) = metric.group_by else {
+                let Some(column) = &metric.group_by else {
                     return Err(AppError::internal("a partition metric without a column"));
                 };
-                let statement = select
-                    .select_only()
-                    .column_as(
-                        Expr::col((<R::Entity as Default>::default(), column)),
-                        "key",
-                    )
-                    .column_as(self.aggregate_expr(&metric.aggregate), "value")
-                    .group_by(column)
-                    .build(tx.get_database_backend());
-                let rows = tx.query_all_raw(statement).await?;
-                drop(tx);
-                let template = self.template(column.as_str()).clone();
+                let key = GroupKey {
+                    expr: Expr::col(values::qualified::<R::Model>(column)),
+                    shape: self.shape(column),
+                };
+                let rows = query
+                    .group_by([values::qualified::<R::Model>(column)])
+                    .pluck_keyed(&cx.uow, self.aggregate_expr(&metric.aggregate), key)
+                    .await?;
                 let mut groups: Vec<(String, f64)> = rows
-                    .iter()
-                    .map(|row| {
-                        let value = row
-                            .try_get::<Option<f64>>("", "value")
-                            .ok()
-                            .flatten()
-                            .unwrap_or(0.0);
-                        (group_key(row, &template), value)
-                    })
+                    .into_iter()
+                    .map(|(key, value)| (key, values::value_number(&value).unwrap_or(0.0)))
                     .collect();
                 groups.sort_by(|a, b| b.1.total_cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
-                let labels = self.group_labels(cx, column.as_str(), &groups).await?;
+                let labels = self.group_labels(cx, column, &groups).await?;
                 result.groups = groups
                     .into_iter()
                     .map(|(key, value)| Point {
@@ -1142,7 +1154,6 @@ impl<R: Resource> Handle<R> {
                 let total: f64 = result.groups.iter().map(|g| g.value).sum();
                 result.value = Some(total);
                 result.display = self.display(metric, total);
-                return Ok(result);
             }
         }
         Ok(result)
@@ -1179,27 +1190,74 @@ impl<R: Resource> Handle<R> {
             _ => Ok(HashMap::new()),
         }
     }
+
+    fn raw_id(&self, record: &RecordOf<R>) -> String {
+        record_json(record)
+            .get(self.info.pk)
+            .and_then(key_text)
+            .unwrap_or_default()
+    }
 }
 
-/// The `key` column of a partition row, read with the Rust type of the
-/// grouped column and spelled as record JSON spells it (`""` for NULL).
-fn group_key(row: &QueryResult, template: &SqlValue) -> String {
-    fn get<T: sea_orm::TryGetable>(row: &QueryResult) -> Option<T> {
-        row.try_get::<Option<T>>("", "key").ok().flatten()
+/// A condition no row matches.
+fn nothing() -> navree_orm::Filter {
+    navree_orm::Filter::raw("1 = 0", Vec::<Value>::new())
+}
+
+/// The grouped column of a partition, read with the Rust type of the
+/// column and spelled as record JSON spells it (`""` for NULL), so the keys
+/// match related records' ids.
+struct GroupKey {
+    expr: Expr,
+    shape: Shape,
+}
+
+impl Selectable for GroupKey {
+    type Output = String;
+
+    fn selected(&self) -> Expr {
+        self.expr.clone()
     }
-    let text = match template {
-        SqlValue::Uuid(_) => get::<uuid::Uuid>(row).map(|u| u.hyphenated().to_string()),
-        SqlValue::Bool(_) => get::<bool>(row).map(|b| b.to_string()),
-        SqlValue::TinyInt(_) | SqlValue::SmallInt(_) | SqlValue::Int(_) => {
-            get::<i32>(row).map(|n| n.to_string())
-        }
-        SqlValue::BigInt(_)
-        | SqlValue::TinyUnsigned(_)
-        | SqlValue::SmallUnsigned(_)
-        | SqlValue::Unsigned(_) => get::<i64>(row).map(|n| n.to_string()),
-        SqlValue::Float(_) | SqlValue::Double(_) => get::<f64>(row).map(|n| n.to_string()),
-        SqlValue::ChronoDate(_) => get::<NaiveDate>(row).map(|d| d.format("%Y-%m-%d").to_string()),
-        _ => get::<String>(row),
+
+    fn read(&self, row: &Row, column: &str) -> Result<String, FieldError> {
+        Ok(group_key(row, column, self.shape))
+    }
+}
+
+/// The `column` of a partition row as text (see [`GroupKey`]).
+fn group_key(row: &Row, column: &str, shape: Shape) -> String {
+    let text = match shape {
+        Shape::Uuid => row
+            .get::<Option<uuid::Uuid>>(column)
+            .ok()
+            .flatten()
+            .map(|u| u.hyphenated().to_string()),
+        Shape::Bool => row
+            .get::<Option<bool>>(column)
+            .ok()
+            .flatten()
+            .map(|b| b.to_string()),
+        Shape::Int { .. } => row
+            .get::<Option<i64>>(column)
+            .ok()
+            .flatten()
+            .map(|n| n.to_string()),
+        Shape::Float => row
+            .get::<Option<f64>>(column)
+            .ok()
+            .flatten()
+            .map(|n| n.to_string()),
+        Shape::Date => row
+            .get::<Option<NaiveDate>>(column)
+            .ok()
+            .flatten()
+            .map(|d| d.format("%Y-%m-%d").to_string()),
+        _ => row.get::<Option<String>>(column).ok().flatten().or_else(|| {
+            row.value(column)
+                .ok()
+                .filter(|v| !matches!(v, Value::Null(_)))
+                .and_then(|v| key_text(&navree_orm::to_json(&v)))
+        }),
     };
     text.unwrap_or_default()
 }
@@ -1271,20 +1329,20 @@ impl<R: Resource> ErasedResource for Handle<R> {
         id: &'a str,
     ) -> BoxFuture<'a, Result<Option<RawRecord>, AppError>> {
         Box::pin(async move {
-            if !cx.can(READ, <R::Entity as Subject>::SUBJECT, None) {
+            if !cx.can(READ, <R::Model as Subject>::SUBJECT, None) {
                 return Err(AppError::forbidden());
             }
-            Ok(self.load(cx, id, false).await?.map(|m| self.raw(cx, &m)))
+            Ok(self.load(cx, id, false).await?.map(|r| self.raw(cx, &r)))
         })
     }
 
     fn create<'a>(
         &'a self,
         cx: &'a Cx,
-        input: Map<String, Value>,
+        input: Map<String, Json>,
     ) -> BoxFuture<'a, Result<RawRecord, AppError>> {
         Box::pin(async move {
-            let subject = <R::Entity as Subject>::SUBJECT;
+            let subject = <R::Model as Subject>::SUBJECT;
             if !cx.can(CREATE, subject, None) {
                 return Err(AppError::forbidden());
             }
@@ -1297,11 +1355,11 @@ impl<R: Resource> ErasedResource for Handle<R> {
                 .collect();
             let values = self.checked(cx, &editable, input, true, true).await?;
             let submitted: Vec<String> = values.keys().cloned().collect();
-            let model = self
+            let record = self
                 .resource
                 .create(&self.save_context(cx), self.form(cx, values))
                 .await?;
-            let json = record_json(&model);
+            let json = record_json(&record);
             if !cx.can(CREATE, subject, Some(&json)) {
                 return Err(AppError::forbidden().with_detail(format!(
                     "You may not create this {}.",
@@ -1319,7 +1377,7 @@ impl<R: Resource> ErasedResource for Handle<R> {
                     denied.join(", ")
                 )));
             }
-            Ok(self.raw(cx, &model))
+            Ok(self.raw(cx, &record))
         })
     }
 
@@ -1327,17 +1385,17 @@ impl<R: Resource> ErasedResource for Handle<R> {
         &'a self,
         cx: &'a Cx,
         id: &'a str,
-        input: Map<String, Value>,
+        input: Map<String, Json>,
     ) -> BoxFuture<'a, Result<RawRecord, AppError>> {
         Box::pin(async move {
-            let subject = <R::Entity as Subject>::SUBJECT;
+            let subject = <R::Model as Subject>::SUBJECT;
             if !cx.can(READ, subject, None) {
                 return Err(AppError::forbidden());
             }
-            let Some(model) = self.load(cx, id, true).await? else {
+            let Some(record) = self.load(cx, id, true).await? else {
                 return Err(AppError::not_found());
             };
-            let json = record_json(&model);
+            let json = record_json(&record);
             if !cx.can(UPDATE, subject, Some(&json)) {
                 return Err(AppError::forbidden());
             }
@@ -1361,27 +1419,27 @@ impl<R: Resource> ErasedResource for Handle<R> {
                 .cloned()
                 .collect();
             let values = self.checked(cx, &editable, input, false, true).await?;
-            let model = self
+            let record = self
                 .resource
-                .update(&self.save_context(cx), model, self.form(cx, values))
+                .update(&self.save_context(cx), record, self.form(cx, values))
                 .await?;
-            Ok(self.raw(cx, &model))
+            Ok(self.raw(cx, &record))
         })
     }
 
     fn delete<'a>(&'a self, cx: &'a Cx, id: &'a str) -> BoxFuture<'a, Result<(), AppError>> {
         Box::pin(async move {
-            let subject = <R::Entity as Subject>::SUBJECT;
+            let subject = <R::Model as Subject>::SUBJECT;
             if !cx.can(READ, subject, None) {
                 return Err(AppError::forbidden());
             }
-            let Some(model) = self.load(cx, id, true).await? else {
+            let Some(record) = self.load(cx, id, true).await? else {
                 return Err(AppError::not_found());
             };
-            if !cx.can(DELETE, subject, Some(&record_json(&model))) {
+            if !cx.can(DELETE, subject, Some(&record_json(&record))) {
                 return Err(AppError::forbidden());
             }
-            self.resource.delete(&self.save_context(cx), model).await
+            self.resource.delete(&self.save_context(cx), record).await
         })
     }
 
@@ -1390,11 +1448,11 @@ impl<R: Resource> ErasedResource for Handle<R> {
         cx: &'a Cx,
         name: &'a str,
         ids: Vec<String>,
-        input: Map<String, Value>,
+        input: Map<String, Json>,
         from_job: bool,
     ) -> BoxFuture<'a, Result<ActionOutcome, AppError>> {
         Box::pin(async move {
-            let subject = <R::Entity as Subject>::SUBJECT;
+            let subject = <R::Model as Subject>::SUBJECT;
             let Some(action) = self.actions.iter().find(|a| a.name == name) else {
                 return Err(AppError::not_found().with_detail(format!("No action `{name}`.")));
             };
@@ -1412,23 +1470,24 @@ impl<R: Resource> ErasedResource for Handle<R> {
                 );
                 return Err(AppError::validation(errors));
             }
-            let keys: Vec<SqlValue> = unique
+            let keys: Vec<Value> = unique
                 .iter()
-                .filter_map(|id| key_from_str(self.template(self.info.pk), id))
+                .filter_map(|id| key_from_str(self.shape(self.info.pk), id))
                 .collect();
-            let models = if keys.is_empty() {
+            let records: Vec<RecordOf<R>> = if keys.is_empty() {
                 Vec::new()
             } else {
-                let mut select = self.base(cx, READ).filter(self.pk.is_in(keys));
+                let mut query = self
+                    .base(cx, READ)
+                    .where_(self.col(self.info.pk).is_in(keys));
                 if cx.uow.lock_for_update() {
-                    select = select.lock_exclusive();
+                    query = query.lock_for_update();
                 }
-                let tx = cx.uow.tx().await?;
-                select.all(&*tx).await?
+                query.get(&cx.uow).await?.into_vec()
             };
-            let permitted: Vec<ModelOf<R>> = models
+            let permitted: Vec<RecordOf<R>> = records
                 .into_iter()
-                .filter(|m| cx.can(action.ability, subject, Some(&record_json(m))))
+                .filter(|r| cx.can(action.ability, subject, Some(&record_json(r))))
                 .collect();
             let skipped = unique.len().saturating_sub(permitted.len());
             if permitted.is_empty() {
@@ -1436,7 +1495,7 @@ impl<R: Resource> ErasedResource for Handle<R> {
                     .with_detail("You may not run this action on the selected records."));
             }
             let input = self.checked(cx, &action.fields, input, true, false).await?;
-            let permitted_ids: Vec<String> = permitted.iter().map(|m| self.raw_id(m)).collect();
+            let permitted_ids: Vec<String> = permitted.iter().map(|r| self.raw_id(r)).collect();
             let dispatcher = if action.queued && !from_job {
                 cx.app.try_get::<dyn Dispatcher>().await
             } else {
@@ -1501,7 +1560,7 @@ impl<R: Resource> ErasedResource for Handle<R> {
             let Some(metric) = self.metrics.iter().find(|m| m.slug == slug) else {
                 return Err(AppError::not_found().with_detail(format!("No metric `{slug}`.")));
             };
-            if !cx.can(READ, <R::Entity as Subject>::SUBJECT, None) {
+            if !cx.can(READ, <R::Model as Subject>::SUBJECT, None) {
                 return Err(AppError::forbidden());
             }
             let key = format!(
@@ -1537,64 +1596,43 @@ impl<R: Resource> ErasedResource for Handle<R> {
         limit: u64,
     ) -> BoxFuture<'a, Result<Vec<(String, String)>, AppError>> {
         Box::pin(async move {
-            if !cx.can(READ, <R::Entity as Subject>::SUBJECT, None) {
+            if !cx.can(READ, <R::Model as Subject>::SUBJECT, None) {
                 return Ok(Vec::new());
             }
-            let mut select = self.base(cx, READ);
-            QueryTrait::query(&mut select).clear_order_by();
+            let mut query = self.base(cx, READ).reorder();
             if let Some(ids) = ids {
-                let keys: Vec<SqlValue> = ids
+                let keys: Vec<Value> = ids
                     .iter()
-                    .filter_map(|id| key_from_str(self.template(self.info.pk), id))
+                    .filter_map(|id| key_from_str(self.shape(self.info.pk), id))
                     .collect();
                 if keys.is_empty() {
                     return Ok(Vec::new());
                 }
-                select = select.filter(self.pk.is_in(keys));
+                query = query.where_(self.col(self.info.pk).is_in(keys));
             }
             if let Some(term) = search.map(str::trim).filter(|t| !t.is_empty()) {
-                let backend = cx.uow.db().backend();
-                let columns = if self.search.is_empty() {
-                    vec![self.title]
+                let columns: Vec<&'static str> = if self.info.search.is_empty() {
+                    vec![self.info.title]
                 } else {
-                    self.search.clone()
+                    self.info.search.clone()
                 };
-                let mut any = Condition::any();
-                for column in columns {
-                    any = any.add(contains_ignore_case(
-                        backend,
-                        Expr::col((<R::Entity as Default>::default(), column)),
-                        term,
-                    ));
-                }
-                select = select.filter(any);
+                query = query.where_(self.search_filter(&columns, term));
             }
-            let models = {
-                let tx = cx.uow.tx().await?;
-                select
-                    .order_by(self.title, Order::Asc)
-                    .order_by(self.pk, Order::Asc)
-                    .limit(limit)
-                    .all(&*tx)
-                    .await?
-            };
-            Ok(models
+            let records = query
+                .order_by(values::qualified::<R::Model>(self.info.title))
+                .order_by(values::qualified::<R::Model>(self.info.pk))
+                .limit(limit)
+                .get(&cx.uow)
+                .await?
+                .into_vec();
+            Ok(records
                 .iter()
-                .map(|m| {
-                    let raw = self.raw(cx, m);
+                .map(|r| {
+                    let raw = self.raw(cx, r);
                     (raw.id, raw.title)
                 })
                 .collect())
         })
-    }
-}
-
-impl<R: Resource> Handle<R> {
-    fn raw_id(&self, model: &ModelOf<R>) -> String {
-        record_json(model)
-            .get(self.info.pk)
-            .and_then(key_text)
-            .unwrap_or_default()
     }
 }
 

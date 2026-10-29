@@ -1,9 +1,9 @@
 //! # navree-helm
 //!
-//! `HelmModule`: an admin panel generated from your entities, served by
-//! your app at `/admin`.
+//! `HelmModule`: an admin panel generated from your navree-orm models,
+//! served by your app at `/admin`.
 //!
-//! You describe each entity once, as a [`Resource`]: its [`Field`]s (what
+//! You describe each model once, as a [`Resource`]: its [`Field`]s (what
 //! to show and edit), [`Filter`]s and search columns, [`Action`]s (on one
 //! record or on the rows ticked on the list) and [`Metric`]s (cards above
 //! the list and on the dashboard). Register it in its module with
@@ -11,11 +11,15 @@
 //! serves the list, detail, create and edit screens, bulk actions and
 //! metric cards, plus a JSON API under `/admin/api`.
 //!
-//! - **Your entities.** A resource wraps a SeaORM entity; writes go
-//!   through `navree_db::Repo` in the request's unit of work (or through
-//!   your services when you override [`Resource::create`] and
-//!   [`Resource::update`]), so observers run and the audit log records who
-//!   changed what. Every action run is audited as `helm.action`.
+//! - **Your models.** A resource wraps a navree-orm model that is an
+//!   access subject (`#[model(subject = "Deal")]`). Every screen reads the
+//!   model's query (its global scopes, soft deletes included) in the
+//!   request's unit of work. The default writes run as ORM statements in
+//!   that unit of work and record their change events with the record's
+//!   serialized form, so the audit log records who changed what and hidden
+//!   fields never reach it (override [`Resource::create`],
+//!   [`Resource::update`] and [`Resource::delete`] to write through your
+//!   services). Every action run is audited as `helm.action`.
 //! - **Your access rules.** Entering the panel needs `view` on [`Helm`]
 //!   (`helm.view`); every screen, row, field and action is then checked
 //!   against the user's abilities on the resource's subject (navree-access),
@@ -39,7 +43,7 @@
 //! pub struct DealResource;
 //!
 //! impl Resource for DealResource {
-//!     type Entity = deal::Entity;
+//!     type Model = Deal;
 //!     const LABEL: &'static str = "Deals";
 //!     const TITLE: &'static str = "title";
 //!     const SEARCH: &'static [&'static str] = &["title"];
@@ -89,7 +93,7 @@ pub use metric::{Metric, MetricRange};
 pub use module::{Helm, HelmModule, ModuleBuilderHelmExt};
 pub use options::HelmOptions;
 pub use page::HelmPage;
-pub use resource::{FormData, ModelOf, Resource};
+pub use resource::{FormData, ModelOf, RecordOf, Resource};
 pub use session::SESSION_COOKIE;
 
 /// The action that lets a user into the panel: `view` on [`Helm`].

@@ -7,17 +7,17 @@ use std::sync::Arc;
 use navree_access::{ActionMarker, UPDATE};
 use navree_http::AppError;
 use navree_kernel::BoxFuture;
-use sea_orm::EntityTrait;
+use navree_orm::{Model, Record};
 use serde::{Deserialize, Serialize};
 
 use crate::field::Field;
 use crate::{ActionContext, slug};
 
 /// The work of an action.
-pub(crate) type Handler<E> = Arc<
+pub(crate) type Handler<M> = Arc<
     dyn Fn(
             ActionContext,
-            Vec<<E as EntityTrait>::Model>,
+            Vec<Record<M>>,
         ) -> BoxFuture<'static, Result<ActionResult, AppError>>
         + Send
         + Sync,
@@ -40,11 +40,13 @@ pub(crate) enum Placement {
 ///     .ability(Move)
 ///     .confirm("Mark the selected deals as won?")
 ///     .handle(|ctx, deals| async move {
-///         // ...
-///         Ok(ActionResult::message(format!("{} deals marked as won.", deals.len())))
+///         for mut deal in deals {
+///             deal.update(ctx.uow(), |d| d.stage = Stage::Won).await?;
+///         }
+///         Ok(ActionResult::message("Deals marked as won."))
 ///     })
 /// ```
-pub struct Action<E: EntityTrait> {
+pub struct Action<M: Model> {
     pub(crate) name: String,
     pub(crate) label: String,
     pub(crate) ability: &'static str,
@@ -53,10 +55,10 @@ pub struct Action<E: EntityTrait> {
     pub(crate) fields: Vec<Field>,
     pub(crate) placement: Placement,
     pub(crate) queued: bool,
-    pub(crate) handler: Option<Handler<E>>,
+    pub(crate) handler: Option<Handler<M>>,
 }
 
-impl<E: EntityTrait> Action<E> {
+impl<M: Model> Action<M> {
     /// An action named `name` (in URLs and the audit log; kebab-case is
     /// best) with the button label `label`.
     pub fn new(name: &str, label: &str) -> Self {
@@ -120,10 +122,11 @@ impl<E: EntityTrait> Action<E> {
     }
 
     /// The work: `f(ctx, records)` gets an [`ActionContext`] and the
-    /// selected records the user may act on.
+    /// selected records the user may act on (navree-orm records, read in
+    /// the unit of work and locked for update where the database can).
     pub fn handle<F, Fut>(mut self, f: F) -> Self
     where
-        F: Fn(ActionContext, Vec<E::Model>) -> Fut + Send + Sync + 'static,
+        F: Fn(ActionContext, Vec<Record<M>>) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<ActionResult, AppError>> + Send + 'static,
     {
         self.handler = Some(Arc::new(move |ctx, records| Box::pin(f(ctx, records))));
@@ -155,7 +158,7 @@ impl<E: EntityTrait> Action<E> {
     }
 }
 
-impl<E: EntityTrait> Clone for Action<E> {
+impl<M: Model> Clone for Action<M> {
     fn clone(&self) -> Self {
         Self {
             name: self.name.clone(),
@@ -171,7 +174,7 @@ impl<E: EntityTrait> Clone for Action<E> {
     }
 }
 
-impl<E: EntityTrait> fmt::Debug for Action<E> {
+impl<M: Model> fmt::Debug for Action<M> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Action")
             .field("name", &self.name)

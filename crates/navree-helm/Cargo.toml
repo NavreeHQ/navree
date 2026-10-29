@@ -1,6 +1,6 @@
 [package]
 name = "navree-helm"
-description = "Navree HelmModule: an admin panel generated from your entities, checked against your access rules."
+description = "Navree HelmModule: an admin panel generated from your navree-orm models, checked against your access rules."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -16,6 +16,11 @@ default = []
 ## with navree-settings, edited per level (the facade turns it on with
 ## `helm` and `settings`).
 settings = ["dep:navree-settings", "dep:navree-workspace"]
+## The test suite on PostgreSQL (`NAVREE_TEST_DATABASE=postgres` with
+## NAVREE_TEST_POSTGRES_URL).
+postgres = ["navree-db/postgres"]
+## The test suite on MySQL (`NAVREE_TEST_DATABASE=mysql` with NAVREE_TEST_MYSQL_URL).
+mysql = ["navree-db/mysql"]
 
 [dependencies]
 axum = { workspace = true }
@@ -34,6 +39,8 @@ navree-crypto = { workspace = true }
 navree-db = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
+# Resources are navree-orm models (access filters and subjects included).
+navree-orm = { workspace = true, features = ["access"] }
 navree-settings = { workspace = true, optional = true }
 navree-storage = { workspace = true }
 navree-validation = { workspace = true }
@@ -41,8 +48,6 @@ navree-view = { workspace = true }
 navree-workspace = { workspace = true, optional = true }
 pulldown-cmark = { workspace = true }
 regex = { workspace = true }
-sea-orm = { workspace = true }
-sea-orm-migration = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
@@ -51,6 +56,7 @@ uuid = { workspace = true }
 
 [dev-dependencies]
 navree-queue = { workspace = true }
+navree-schema = { workspace = true }
 navree-testing = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
