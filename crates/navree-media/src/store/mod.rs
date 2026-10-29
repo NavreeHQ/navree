@@ -6,7 +6,6 @@ mod memory;
 
 use futures_util::future::BoxFuture;
 use navree_db::Uow;
-use navree_db::sea_orm::DatabaseTransaction;
 use uuid::Uuid;
 
 pub use database::DatabaseStore;
@@ -98,13 +97,13 @@ pub trait MediaStore: Send + Sync + 'static {
         ids: &'a [Uuid],
     ) -> BoxFuture<'a, Result<u64, MediaError>>;
 
-    /// Deletes every row of one model inside `tx`, the transaction a
-    /// change observer was given (the model's own delete is committing),
-    /// without change events; returns the deleted rows. The `memory`
-    /// driver ignores `tx`.
+    /// Deletes every row of one model in `uow`, the unit of work a change
+    /// observer was given (the model's own delete is committing), without
+    /// change events; returns the deleted rows. The `memory` driver ignores
+    /// `uow`.
     fn delete_owner<'a>(
         &'a self,
-        tx: &'a DatabaseTransaction,
+        uow: &'a Uow,
         model_type: &'a str,
         model_id: &'a str,
     ) -> BoxFuture<'a, Result<Vec<MediaItem>, MediaError>>;
