@@ -342,7 +342,7 @@ impl DriverPool {
     /// Runs a statement that returns no rows.
     pub(crate) async fn execute(&self, sql: &str, values: &[Value]) -> Result<Executed, DbError> {
         on_driver!(self, DriverPool, |pool, driver, BACKEND| {
-            let (sql, args) = driver::statement(&sql, values)?;
+            let (sql, args) = driver::statement(sql, values)?;
             let done = sqlx::query_with(AssertSqlSafe(sql), args)
                 .execute(pool)
                 .await
@@ -358,7 +358,7 @@ impl DriverPool {
         values: &[Value],
     ) -> Result<Vec<DriverRow>, DbError> {
         on_driver!(self, DriverPool, |pool, driver, BACKEND| {
-            let (sql, args) = driver::statement(&sql, values)?;
+            let (sql, args) = driver::statement(sql, values)?;
             let rows = sqlx::query_with(AssertSqlSafe(sql), args)
                 .fetch_all(pool)
                 .await
@@ -374,7 +374,7 @@ impl DriverPool {
         values: &[Value],
     ) -> Result<Option<DriverRow>, DbError> {
         on_driver!(self, DriverPool, |pool, driver, BACKEND| {
-            let (sql, args) = driver::statement(&sql, values)?;
+            let (sql, args) = driver::statement(sql, values)?;
             let row = sqlx::query_with(AssertSqlSafe(sql), args)
                 .fetch_optional(pool)
                 .await
@@ -435,7 +435,7 @@ impl DriverConn {
         values: &[Value],
     ) -> Result<Executed, DbError> {
         on_driver!(self, DriverConn, |conn, driver, BACKEND| {
-            let (sql, args) = driver::statement(&sql, values)?;
+            let (sql, args) = driver::statement(sql, values)?;
             let done = sqlx::query_with(AssertSqlSafe(sql), args)
                 .execute(&mut **conn)
                 .await
@@ -451,7 +451,7 @@ impl DriverConn {
         values: &[Value],
     ) -> Result<Vec<DriverRow>, DbError> {
         on_driver!(self, DriverConn, |conn, driver, BACKEND| {
-            let (sql, args) = driver::statement(&sql, values)?;
+            let (sql, args) = driver::statement(sql, values)?;
             let rows = sqlx::query_with(AssertSqlSafe(sql), args)
                 .fetch_all(&mut **conn)
                 .await
@@ -467,7 +467,7 @@ impl DriverConn {
         values: &[Value],
     ) -> Result<Option<DriverRow>, DbError> {
         on_driver!(self, DriverConn, |conn, driver, BACKEND| {
-            let (sql, args) = driver::statement(&sql, values)?;
+            let (sql, args) = driver::statement(sql, values)?;
             let row = sqlx::query_with(AssertSqlSafe(sql), args)
                 .fetch_optional(&mut **conn)
                 .await

@@ -523,11 +523,7 @@ pub async fn logs_show_the_sql_as_written(scratch: Scratch) {
     let as_run = statement.for_backend(backend).unwrap().sql().to_owned();
     assert_eq!(logged.len(), 1);
     assert_eq!(logged[0].sql, as_run, "the query log");
-    assert_eq!(
-        heard.lock().unwrap().as_slice(),
-        [as_run.clone()],
-        "listeners"
-    );
+    assert_eq!(*heard.lock().unwrap(), [as_run], "listeners");
 
     // A failure names the SQL as written too.
     let missing = Statement::portable("SELECT id FROM nowhere WHERE id = ?", [1_i64.into()]);
