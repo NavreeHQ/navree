@@ -1,11 +1,11 @@
-error[E0599]: the method `restore` exists for struct `Record<Company>`, but its trait bounds were not satisfied
+error[E0599]: the method `restore` exists for struct `navree_orm::Record<Company>`, but its trait bounds were not satisfied
   --> tests/ui/model_lifecycle_traits.rs:24:21
    |
 19 | struct Company {
    | -------------- doesn't satisfy `Company: SoftDeleting`
 ...
 24 |     let _ = company.restore(&db).await;
-   |                     ^^^^^^^ method cannot be called on `Record<Company>` due to unsatisfied trait bounds
+   |                     ^^^^^^^ method cannot be called on `navree_orm::Record<Company>` due to unsatisfied trait bounds
    |
    = note: the following trait bounds were not satisfied:
            `Company: SoftDeleting`
