@@ -273,7 +273,7 @@ assert_eq!(fake.tool_results("search_deals").len(), 1);
   `ai.fake = true` (the app's own `Ai`).
 - **Agents**: every `#[tool]` needs a doc comment and must be `async`, take
   `&self`, `&AgentRun` and at most one arguments value; `#[can]` on a tool
-  takes no `from` (use `run.authorize::<E, A>(id)`). Access attributes on a
+  takes no `from` (use `run.authorize::<S, A>(id)`). Access attributes on a
   method without `#[tool]` are a compile error. Results over 16 KB are cut
   off. Tool 5xx errors reach the model as "The tool failed".
 - **Memory needs `.conversation(..)`**: without it a run stores nothing and
