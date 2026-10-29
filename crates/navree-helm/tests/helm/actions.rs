@@ -5,10 +5,8 @@ use std::sync::Arc;
 
 use navree_audit::AuditModule;
 use navree_contracts::{Dispatcher, Job, JobContext};
-use navree_db::Db;
 use navree_helm::HelmActionJob;
 use navree_queue::QueueFake;
-use sea_orm::EntityTrait;
 use serde_json::json;
 use uuid::Uuid;
 
@@ -259,11 +257,17 @@ async fn every_action_run_is_audited() {
         .await
         .assert_status(200);
     app.get::<navree_audit::AuditLog>().await.flush().await;
-    let db = app.get::<Db>().await;
-    let rows = navree_audit::audit_log::Entity::find()
-        .all(db.conn())
-        .await
-        .unwrap();
+    let rows = navree_audit::AuditLog::list(
+        &*app.get::<navree_audit::AuditLog>().await,
+        &navree_audit::AuditFilter::default(),
+        navree_db::PageQuery {
+            page: 1,
+            per_page: 100,
+        },
+    )
+    .await
+    .unwrap()
+    .data;
     let entry = rows
         .iter()
         .find(|r| r.action == "helm.action")

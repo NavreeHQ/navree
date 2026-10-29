@@ -112,7 +112,7 @@ async fn graceful_shutdown_drains_the_queue() {
     .unwrap();
     let written = AuditRecord::query().count(&db).await.unwrap();
     assert_eq!(written, 20);
-    db.close().await;
+    db.close().await.unwrap();
 }
 
 #[tokio::test]
