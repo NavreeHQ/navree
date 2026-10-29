@@ -14,7 +14,11 @@ pub struct ProfileService;
 
 impl ProfileService {
     /// The saved profile of `user_id`, if any.
-    pub async fn find(&self, uow: &Uow, user_id: Uuid) -> Result<Option<Record<Profile>>, OrmError> {
+    pub async fn find(
+        &self,
+        uow: &Uow,
+        user_id: Uuid,
+    ) -> Result<Option<Record<Profile>>, OrmError> {
         Profile::query().where_key(user_id).first(uow).await
     }
 
