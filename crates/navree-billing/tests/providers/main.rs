@@ -4,6 +4,7 @@
 //! each real driver end to end.
 
 mod fixtures;
+mod servers;
 mod support;
 
 mod app;

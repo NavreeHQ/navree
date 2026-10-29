@@ -441,7 +441,7 @@ A job that fails is retried with backoff (8 attempts, from 10 seconds to 10 minu
 | `billing_usage` | Recorded usage, with `reported_at` once sent |
 | `billing_events` | Every webhook received: type, payload, `processed_at`, `attempts`, `error` |
 
-Read them through `Billing` rather than querying them: a subscription row is only as fresh as the last webhook, and the service methods know which fields the provider owns. The entities are in `navree::billing::entity`. Subscriptions are an access subject, `Subscription` (`SUBSCRIPTION_SUBJECT`, permissions `subscriptions.*`), so an admin panel can list them with [Helm](/docs/tools/helm/) and routes can check `#[can(Read, subscription::Entity)]`, as the [SaaS starter kit](/docs/getting-started/starter-kits/)'s admin panel does.
+Read them through `Billing` rather than querying them: a subscription row is only as fresh as the last webhook, and the service methods know which fields the provider owns. The tables are navree-orm models in `navree::billing::entity` (`customer::Model`, `subscription::Model`, `subscription_item::Model`, `usage::Model` and `event::Model`), read like any model with `subscription::Model::query()` and its typed columns such as `subscription::Model::STATUS`. Subscriptions are an access subject, `Subscription` (`SUBSCRIPTION_SUBJECT`, permissions `subscriptions.*`), so routes can check `#[can(Read, subscription::Model)]`.
 
 ## Testing
 
