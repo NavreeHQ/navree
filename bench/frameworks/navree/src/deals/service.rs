@@ -2,14 +2,12 @@
 
 use chrono::Utc;
 use navree::auth::User;
-use navree::db::paginate;
+use navree::orm::prelude::*;
 use navree::prelude::*;
-use sea_orm::ActiveValue::Set;
-use sea_orm::{EntityTrait, QueryOrder};
 use uuid::Uuid;
 
 use super::dto::{CreateDeal, DealsQuery};
-use super::entity::{self as deal, Entity as Deal};
+use super::entity::Deal;
 use super::resource::{DealResource, OwnerRef};
 
 /// Lists and creates deals in the caller's unit of work.
@@ -21,13 +19,14 @@ impl DealService {
     /// its owner: a count, the page and one query for the page's owners,
     /// all in the request's transaction (so the total and the page agree).
     pub async fn list(&self, uow: &Uow, query: &DealsQuery) -> Result<Page<DealResource>> {
-        let select = Deal::find()
-            .order_by_desc(deal::Column::CreatedAt)
-            .order_by_desc(deal::Column::Id);
-        let tx = uow.tx().await?;
-        let page = paginate(select, &*tx, query.page()).await?;
+        let page = Deal::query()
+            .order_by_desc(Deal::CREATED_AT)
+            .order_by_desc(Deal::ID)
+            .paginate(uow, query.page())
+            .await?;
+        let deals: Vec<Deal> = page.data.into_iter().map(Record::into_inner).collect();
         Ok(Page {
-            data: DealResource::load_many(&*tx, page.data).await?,
+            data: DealResource::load_many(uow, deals).await?,
             meta: page.meta,
         })
     }
@@ -36,19 +35,19 @@ impl DealService {
     /// by the request pipeline once the response is a success).
     pub async fn create(&self, uow: &Uow, owner: &User, input: CreateDeal) -> Result<DealResource> {
         let now = Utc::now();
-        let deal = Repo::<Deal>::insert(
+        let deal = Deal::create(
             uow,
-            deal::ActiveModel {
-                id: Set(Uuid::now_v7()),
-                title: Set(input.title),
-                amount_cents: Set(input.amount_cents),
-                stage: Set(input.stage),
-                owner_id: Set(owner.id),
-                created_at: Set(now),
-                updated_at: Set(now),
+            Deal {
+                id: Uuid::now_v7(),
+                title: input.title,
+                amount_cents: input.amount_cents,
+                stage: input.stage,
+                owner_id: owner.id,
+                created_at: now,
+                updated_at: now,
             },
         )
         .await?;
-        Ok(DealResource::new(deal, OwnerRef::from(owner)))
+        Ok(DealResource::new(deal.into_inner(), OwnerRef::from(owner)))
     }
 }

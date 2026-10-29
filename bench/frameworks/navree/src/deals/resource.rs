@@ -4,12 +4,11 @@ use std::collections::{BTreeSet, HashMap};
 
 use chrono::{DateTime, Utc};
 use navree::auth::User;
-use sea_orm::sea_query::{Alias, Expr, ExprTrait, Query};
-use sea_orm::{ConnectionTrait, DbErr};
+use navree::db::{DbError, Executor, Statement, Value};
 use serde::Serialize;
 use uuid::Uuid;
 
-use super::entity::{self as deal, Stage};
+use super::entity::{Deal, Stage};
 
 /// A deal as the API returns it.
 #[derive(Clone, Debug, Serialize)]
@@ -30,7 +29,7 @@ pub struct DealResource {
 
 impl DealResource {
     /// The resource of `deal`, owned by `owner`.
-    pub fn new(deal: deal::Model, owner: OwnerRef) -> Self {
+    pub fn new(deal: Deal, owner: OwnerRef) -> Self {
         Self {
             id: deal.id,
             title: deal.title,
@@ -42,12 +41,12 @@ impl DealResource {
     }
 
     /// The resources of `deals`, in order, with their owners read through
-    /// `conn` in one query.
-    pub async fn load_many<C: ConnectionTrait>(
-        conn: &C,
-        deals: Vec<deal::Model>,
-    ) -> Result<Vec<DealResource>, DbErr> {
-        let owners = OwnerRef::load(conn, deals.iter().map(|deal| deal.owner_id)).await?;
+    /// `exec` in one query.
+    pub async fn load_many<E: Executor + ?Sized>(
+        exec: &E,
+        deals: Vec<Deal>,
+    ) -> Result<Vec<DealResource>, DbError> {
+        let owners = OwnerRef::load(exec, deals.iter().map(|deal| deal.owner_id)).await?;
         Ok(deals
             .into_iter()
             .map(|deal| {
@@ -75,26 +74,24 @@ pub struct OwnerRef {
 impl OwnerRef {
     /// The users with `ids`, by id: one `SELECT id, name ... WHERE id IN
     /// (..)` for the distinct ids (none for an empty list).
-    pub async fn load<C: ConnectionTrait>(
-        conn: &C,
+    pub async fn load<E: Executor + ?Sized>(
+        exec: &E,
         ids: impl IntoIterator<Item = Uuid>,
-    ) -> Result<HashMap<Uuid, OwnerRef>, DbErr> {
+    ) -> Result<HashMap<Uuid, OwnerRef>, DbError> {
         let ids: BTreeSet<Uuid> = ids.into_iter().collect();
         if ids.is_empty() {
             return Ok(HashMap::new());
         }
-        let select = Query::select()
-            .columns([Alias::new("id"), Alias::new("name")])
-            .from(Alias::new("users"))
-            .and_where(Expr::col(Alias::new("id")).is_in(ids))
-            .to_owned();
-        let rows = conn
-            .query_all(conn.get_database_backend().build(&select))
-            .await?;
+        let placeholders = vec!["?"; ids.len()].join(", ");
+        let select = Statement::portable(
+            format!("SELECT id, name FROM users WHERE id IN ({placeholders})"),
+            ids.into_iter().map(Value::from),
+        );
+        let rows = exec.fetch_all(&select).await?;
         rows.iter()
             .map(|row| {
-                let id: Uuid = row.try_get("", "id")?;
-                let name: String = row.try_get("", "name")?;
+                let id: Uuid = row.get("id")?;
+                let name: String = row.get("name")?;
                 Ok((id, OwnerRef { id, name }))
             })
             .collect()

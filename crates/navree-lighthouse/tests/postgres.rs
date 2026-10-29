@@ -68,10 +68,6 @@ async fn run_admin(admin: &str, sql: &str) {
 async fn process(scratch: &Scratch, server: &str) -> TestApp {
     TestApp::builder()
         .config("database.url", scratch.url.clone())
-        .config(
-            "database.native_units_of_work",
-            std::env::var("NAVREE_TEST_NATIVE_UNITS_OF_WORK").as_deref() == Ok("1"),
-        )
         .config("database.migrate_on_boot", true)
         .config("lighthouse.server", server)
         .config("lighthouse.release", "r1")

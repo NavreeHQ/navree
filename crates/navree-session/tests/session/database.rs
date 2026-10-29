@@ -57,13 +57,11 @@ impl Module for WritesBothModule {
     }
 }
 
-/// An app on the scratch database, migrated on boot, its units of work on
-/// navree-db's own transaction.
+/// An app on the scratch database, migrated on boot.
 fn builder(scratch: &Scratch) -> TestAppBuilder {
     support::base()
         .config("database.url", scratch.url.as_str())
         .config("database.migrate_on_boot", true)
-        .config("database.native_units_of_work", true)
 }
 
 async fn app(scratch: &Scratch) -> TestApp {

@@ -161,7 +161,6 @@ async fn valid_async_runs_the_database_rules_after_the_garde_rules(scratch: Scra
         .config("http.per_ip_rate_limit", Value::Null)
         .config("database.url", scratch.url.as_str())
         .config("database.migrate_on_boot", true)
-        .config("database.native_units_of_work", true)
         .module(navree_db::DatabaseModule)
         .module(LinesModule)
         .build()

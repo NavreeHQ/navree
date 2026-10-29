@@ -343,7 +343,6 @@ pub async fn database_app(scratch: &Scratch) -> TestApp {
         .config("http.per_ip_rate_limit", Value::Null)
         .config("database.url", scratch.url.as_str())
         .config("database.migrate_on_boot", true)
-        .config("database.native_units_of_work", true)
         .module(DatabaseModule)
         .module(DatabaseTestModule)
         .build()
