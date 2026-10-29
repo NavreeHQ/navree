@@ -313,6 +313,9 @@ async fn workspace_migrations_run_once() {
 
 #[tokio::test]
 async fn schema_isolation_refuses_to_boot_without_postgres() {
+    if crate::database::Server::current() == crate::database::Server::Postgres {
+        return;
+    }
     let error = builder()
         .config("workspace.isolation", "schema")
         .try_build()
