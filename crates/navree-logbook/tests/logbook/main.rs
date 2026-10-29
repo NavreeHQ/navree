@@ -3,6 +3,7 @@
 //! watcher, the module in a `TestApp` (capture, the UI and its API, the
 //! loopback guard, replay, pruning, `logbook:clear`), and the docs.
 
+mod servers;
 mod support;
 
 mod app;

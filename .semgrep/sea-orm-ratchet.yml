@@ -31,9 +31,11 @@ rules:
         # entities as subjects, `Accessible::apply` on a SeaORM select) stays
         # until the crates using it are moved (data-layer move, step 8).
         - "/crates/navree-access/src/sea_compat.rs"
-        - "/crates/navree-ai/"
         # navree-auth is moved; `User` keeps its SeaORM derive (the
-        # compatibility layer for the crates not yet on navree-orm) until step 8.
+        # compatibility layer for the crates not yet on navree-orm: navree-sso, the
+        # admin resources over `user::Entity` in navree-helm's tests, the CLI kit and
+        # evidence-app, and navree-auth's own subject test) until step 8. navree-social
+        # is on the `User` model and no longer needs it.
         - "/crates/navree-auth/src/entity/user.rs"
         - "/crates/navree-billing/"
         - "/crates/navree-db/"
@@ -43,7 +45,6 @@ rules:
         - "/crates/navree-helm/"
         - "/crates/navree-i18n/"
         - "/crates/navree-lighthouse/"
-        - "/crates/navree-logbook/"
         - "/crates/navree-mcp/"
         # navree-micro is moved; its tests keep one SeaORM fixture (the `deals`
         # entity, a subject through navree-access's SeaORM shim) until step 8.
@@ -54,7 +55,6 @@ rules:
         - "/crates/navree-search/"
         - "/crates/navree-settings/"
         - "/crates/navree-sheets/"
-        - "/crates/navree-social/"
         - "/crates/navree-sso/"
         - "/crates/navree-webhooks/"
         - "/crates/navree-workflows/"
@@ -63,7 +63,6 @@ rules:
         - "/crates/navree-domains/"
         - "/crates/navree-integrations/"
         - "/crates/navree-macros/"
-        - "/crates/navree-media/"
         - "/crates/navree-workspace/"
     pattern-regex: '(?m)^(?!\s*//)[^\n"]*?(?:\bsea_orm(?:_migration)?\s*::|#\[\s*sea_orm\s*[(\]])'
 
@@ -84,7 +83,6 @@ rules:
         - "/apps/evidence-app/"
         - "/bench/"
         - "/crates/navree/"
-        - "/crates/navree-ai/"
         # navree-auth: sea-orm for `User`'s compatibility derive, until step 8.
         - "/crates/navree-auth/Cargo.toml"
         - "/crates/navree-billing/"
@@ -95,7 +93,6 @@ rules:
         - "/crates/navree-helm/"
         - "/crates/navree-i18n/"
         - "/crates/navree-lighthouse/"
-        - "/crates/navree-logbook/"
         - "/crates/navree-mcp/"
         # navree-micro: a dev-dependency for that fixture (navree-access's shim, step 8).
         - "/crates/navree-micro/Cargo.toml"
@@ -105,7 +102,6 @@ rules:
         - "/crates/navree-search/"
         - "/crates/navree-settings/"
         - "/crates/navree-sheets/"
-        - "/crates/navree-social/"
         - "/crates/navree-sso/"
         - "/crates/navree-webhooks/"
         - "/crates/navree-workflows/"

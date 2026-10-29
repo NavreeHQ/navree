@@ -6,8 +6,9 @@ use std::sync::Arc;
 
 use navree_config::ModuleBuilderConfigExt;
 use navree_contracts::ModuleBuilderJobsExt;
-use navree_db::sea_orm::{DatabaseTransaction, DbErr};
-use navree_db::{ChangeEvent, ChangeObserver, ChangeOp, Db, ModuleBuilderDbExt, Uow};
+use navree_db::{
+    ChangeEvent, ChangeObserver, ChangeOp, Db, DbError, ErrorKind, ModuleBuilderDbExt, Uow,
+};
 use navree_http::ModuleBuilderHttpExt;
 use navree_kernel::{
     BoxFuture, Factory, Injectable, KernelError, Module, ModuleBuilder, ModuleId, ProviderKey,
@@ -258,12 +259,11 @@ impl Injectable for DeleteWithModel {
 }
 
 impl ChangeObserver for DeleteWithModel {
-    fn observe<'a>(
+    fn observe_with<'a>(
         &'a self,
-        tx: &'a DatabaseTransaction,
         uow: &'a Uow,
         changes: &'a [ChangeEvent],
-    ) -> BoxFuture<'a, Result<(), DbErr>> {
+    ) -> BoxFuture<'a, Result<(), DbError>> {
         Box::pin(async move {
             if self.tables.is_empty() {
                 return Ok(());
@@ -291,11 +291,15 @@ impl ChangeObserver for DeleteWithModel {
                 return Ok(());
             }
             media
-                .delete_owners_in(tx, uow, &owners)
+                .delete_owners_in(uow, &owners)
                 .await
                 .map_err(|error| match error {
                     MediaError::Db(db) => db,
-                    other => DbErr::Custom(other.to_string()),
+                    MediaError::Orm(orm) => orm
+                        .db_error()
+                        .cloned()
+                        .unwrap_or_else(|| DbError::new(ErrorKind::Other, orm.to_string())),
+                    other => DbError::new(ErrorKind::Other, other.to_string()),
                 })
         })
     }
