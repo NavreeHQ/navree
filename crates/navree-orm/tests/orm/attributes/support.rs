@@ -6,7 +6,7 @@
 use std::sync::Arc;
 
 use navree_crypto::{CryptoModule, CryptoOptions, HashingOptions, generate_key};
-use navree_db::sea_orm::ConnectionTrait;
+use navree_db::Executor as _;
 use navree_db::{DatabaseModule, Db, DbOptions};
 use navree_testing::TestApp;
 use tempfile::TempDir;
@@ -21,8 +21,8 @@ pub struct Sqlite {
 /// Runs each statement of `schema`.
 pub async fn create(db: &Db, schema: &str) {
     for statement in schema.split(';').map(str::trim).filter(|s| !s.is_empty()) {
-        db.conn()
-            .execute_unprepared(statement)
+        db.pool()
+            .execute_script(statement)
             .await
             .unwrap_or_else(|error| panic!("{statement}: {error}"));
     }

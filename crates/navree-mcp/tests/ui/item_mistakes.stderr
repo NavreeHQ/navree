@@ -1,59 +1,59 @@
 error: a tool name is 1 to 128 letters, digits, `_`, `-` or `.`
-  --> tests/ui/item_mistakes.rs:38:23
+  --> tests/ui/item_mistakes.rs:22:23
    |
-38 |     #[mcp_tool(name = "has space")]
+22 |     #[mcp_tool(name = "has space")]
    |                       ^^^^^^^^^^^
 
 error: resource URI `deals/{id}` has no scheme: write it like `crm://deals/{id}`
-  --> tests/ui/item_mistakes.rs:43:20
+  --> tests/ui/item_mistakes.rs:27:20
    |
-43 |     #[mcp_resource("deals/{id}")]
+27 |     #[mcp_resource("deals/{id}")]
    |                    ^^^^^^^^^^^^
 
 error: `from = "deal_id"` names no variable of the resource URI `crm://deals/{id}`: the record id must come from a variable such as `{deal_id}`
-  --> tests/ui/item_mistakes.rs:48:5
+  --> tests/ui/item_mistakes.rs:32:5
    |
-48 |     #[mcp_resource("crm://deals/{id}")]
+32 |     #[mcp_resource("crm://deals/{id}")]
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 error: a resource parameter is `&McpContext`, an `Authorized` record or a variable of `crm://notes/{slug}` (by name)
-  --> tests/ui/item_mistakes.rs:55:38
+  --> tests/ui/item_mistakes.rs:39:38
    |
-55 |     async fn unknown_variable(&self, name: String) -> Result<String, AppError> {
+39 |     async fn unknown_variable(&self, name: String) -> Result<String, AppError> {
    |                                      ^^^^
 
 error: an MCP tool takes one arguments value: put every argument in one struct
-  --> tests/ui/item_mistakes.rs:60:56
+  --> tests/ui/item_mistakes.rs:44:56
    |
-60 |     async fn two_arguments(&self, first: Args, second: Args) -> Result<u32, AppError> {
+44 |     async fn two_arguments(&self, first: Args, second: Args) -> Result<u32, AppError> {
    |                                                        ^^^^
 
 error: `record_without_from` takes an `Authorized` record but declares no #[can(Action, Subject, from = "..")] to load it
-  --> tests/ui/item_mistakes.rs:66:47
+  --> tests/ui/item_mistakes.rs:50:47
    |
-66 |     async fn record_without_from(&self, deal: Authorized<Deal, Read>) -> Result<u32, AppError> {
+50 |     async fn record_without_from(&self, deal: Authorized<Deal, Read>) -> Result<u32, AppError> {
    |                                               ^^^^^^^^^^^^^^^^^^^^^^
 
 error: MCP item `not_async` must be an `async fn`
-  --> tests/ui/item_mistakes.rs:72:8
+  --> tests/ui/item_mistakes.rs:56:8
    |
-72 |     fn not_async(&self) -> Result<u32, AppError> {
+56 |     fn not_async(&self) -> Result<u32, AppError> {
    |        ^^^^^^^^^
 
 error: MCP item `no_result` must return a `Result` (`navree::Result<T>`)
-  --> tests/ui/item_mistakes.rs:77:34
+  --> tests/ui/item_mistakes.rs:61:34
    |
-77 |     async fn no_result(&self) -> u32 {
+61 |     async fn no_result(&self) -> u32 {
    |                                  ^^^
 
 error: unknown #[mcp_tool] key `unknown_key`: expected `name`, `title`, `read_only`, `destructive`, `idempotent` or `open_world`
-  --> tests/ui/item_mistakes.rs:81:16
+  --> tests/ui/item_mistakes.rs:65:16
    |
-81 |     #[mcp_tool(unknown_key)]
+65 |     #[mcp_tool(unknown_key)]
    |                ^^^^^^^^^^^
 
 error: a method is one tool, resource or prompt: `two_kinds` already has #[mcp_tool]
-  --> tests/ui/item_mistakes.rs:87:5
+  --> tests/ui/item_mistakes.rs:71:5
    |
-87 |     #[mcp_prompt]
+71 |     #[mcp_prompt]
    |     ^^^^^^^^^^^^^

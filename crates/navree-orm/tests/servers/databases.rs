@@ -2,15 +2,14 @@
 //! TEMPLATE` on PostgreSQL, a copy of the tables and rows on MySQL), fresh
 //! databases and truncation, each dropped afterwards.
 
-use navree_db::sea_orm::{ConnectionTrait, DbBackend, Statement};
-use navree_db::{Db, DbOptions};
+use navree_db::{Db, DbOptions, Executor as _, ExecutorExt as _, Statement};
 use navree_orm::table;
 use navree_orm::testing::database::{DatabaseKind, Template, TestDb, TestServer, test_setting};
 
 /// Authors and notes (a foreign key), one author and a migration row.
 static SCHEMA: Template = Template::new("servers", |template| {
     Box::pin(async move {
-        let conn = template.db().conn();
+        let conn = template.db().pool();
         let statements = match template.kind() {
             DatabaseKind::Postgres => [
                 "CREATE TABLE authors (id BIGSERIAL PRIMARY KEY, name TEXT NOT NULL)",
@@ -24,11 +23,11 @@ static SCHEMA: Template = Template::new("servers", |template| {
             ],
         };
         for sql in statements {
-            conn.execute_unprepared(sql).await?;
+            conn.execute_script(sql).await?;
         }
-        conn.execute_unprepared("INSERT INTO authors (name) VALUES ('Ada')")
+        conn.execute_script("INSERT INTO authors (name) VALUES ('Ada')")
             .await?;
-        conn.execute_unprepared("INSERT INTO navree_migrations (version) VALUES ('m0001')")
+        conn.execute_script("INSERT INTO navree_migrations (version) VALUES ('m0001')")
             .await?;
         Ok(())
     })
@@ -53,23 +52,17 @@ async fn exists(server: TestServer, name: &str) -> bool {
     })
     .await
     .unwrap();
-    let (sql, backend) = match server {
-        TestServer::Postgres => (
-            "SELECT datname FROM pg_database WHERE datname = $1",
-            DbBackend::Postgres,
-        ),
-        _ => (
-            "SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = ?",
-            DbBackend::MySql,
-        ),
+    let sql = match server {
+        TestServer::Postgres => "SELECT datname FROM pg_database WHERE datname = ?",
+        _ => "SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = ?",
     };
     let found = db
-        .conn()
-        .query_one_raw(Statement::from_sql_and_values(backend, sql, [name.into()]))
+        .pool()
+        .fetch_optional(&Statement::portable(sql, [name.into()]))
         .await
         .unwrap()
         .is_some();
-    let _ = db.conn().clone().close().await;
+    let _ = db.close().await;
     found
 }
 
@@ -78,7 +71,7 @@ async fn exists(server: TestServer, name: &str) -> bool {
 async fn copies_truncation_and_cleanup(server: TestServer, first: TestDb, second: TestDb) {
     assert_ne!(first.url(), second.url());
     let insert = "INSERT INTO notes (author_id, body) VALUES (1, 'hello')";
-    first.db().conn().execute_unprepared(insert).await.unwrap();
+    first.db().pool().execute_script(insert).await.unwrap();
     assert_eq!(count(first.db(), "notes").await, 1);
     assert_eq!(count(second.db(), "notes").await, 0);
     assert_eq!(
@@ -88,7 +81,7 @@ async fn copies_truncation_and_cleanup(server: TestServer, first: TestDb, second
     );
     // The copy keeps the foreign key.
     let orphan = "INSERT INTO notes (author_id, body) VALUES (99, 'orphan')";
-    assert!(second.db().conn().execute_unprepared(orphan).await.is_err());
+    assert!(second.db().pool().execute_script(orphan).await.is_err());
 
     first.truncate(&["navree_migrations"]).await.unwrap();
     assert_eq!(count(first.db(), "notes").await, 0);
@@ -96,8 +89,8 @@ async fn copies_truncation_and_cleanup(server: TestServer, first: TestDb, second
     assert_eq!(count(first.db(), "navree_migrations").await, 1);
     first
         .db()
-        .conn()
-        .execute_unprepared("INSERT INTO authors (name) VALUES ('Grace')")
+        .pool()
+        .execute_script("INSERT INTO authors (name) VALUES ('Grace')")
         .await
         .unwrap();
     let restarted = table("authors")
@@ -167,14 +160,13 @@ async fn fresh_server_databases_are_empty() {
                 "SELECT COUNT(*) AS n FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()"
             }
         };
-        let row = test
+        let tables: i64 = test
             .db()
-            .conn()
-            .query_one_raw(Statement::from_string(test.db().backend(), tables))
+            .pool()
+            .fetch_scalar(&Statement::text(tables))
             .await
-            .unwrap()
             .unwrap();
-        assert_eq!(row.try_get::<i64>("", "n").unwrap(), 0, "{server:?}");
+        assert_eq!(tables, 0, "{server:?}");
         test.close().await.unwrap();
     }
 }

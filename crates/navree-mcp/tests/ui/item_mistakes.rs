@@ -1,30 +1,14 @@
 //! Mistakes in items: names, URIs, `from`, parameters and signatures.
 
-use navree_access::{Authorized, Read, Subject};
+use navree_access::{Authorized, Read};
 use navree_http::AppError;
 use navree_macros::{injectable, mcp_server};
 
-mod deal {
-    use sea_orm::entity::prelude::*;
-
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
-    #[sea_orm(table_name = "deals")]
-    pub struct Model {
-        #[sea_orm(primary_key)]
-        pub id: i64,
-    }
-
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
-}
-
-type Deal = deal::Entity;
-
-impl Subject for Deal {
-    const SUBJECT: &'static str = "Deal";
-    const PERMISSION_PREFIX: &'static str = "deals";
+/// The `deals` model, the access subject `Deal`.
+#[derive(Clone, Debug, Default, navree_orm::Model, serde::Serialize)]
+#[model(table = "deals", subject = "Deal", permission_prefix = "deals")]
+struct Deal {
+    id: i64,
 }
 
 struct Args;

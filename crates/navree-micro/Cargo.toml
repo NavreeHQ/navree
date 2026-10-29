@@ -68,6 +68,8 @@ webpki-roots = { workspace = true }
 garde = { workspace = true }
 navree-access = { workspace = true }
 navree-macros = { workspace = true }
+# The `deals` fixture is a model and an access subject.
+navree-orm = { workspace = true, features = ["access"] }
 rcgen = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }

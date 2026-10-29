@@ -139,8 +139,8 @@ impl McpContext {
         &self.inner.access.ability
     }
 
-    /// A list filter: the records of `E` the user may do `A` on (a SeaORM
-    /// entity's `apply(select)`, an ORM model's `apply(query)`).
+    /// A list filter: the records of `E` the user may do `A` on (for an ORM
+    /// model, `accessible.query()`; for other subjects, its `sql_filter`).
     pub fn accessible<E, A>(&self) -> Accessible<E, A>
     where
         E: Subject,
@@ -149,8 +149,8 @@ impl McpContext {
         Accessible::new(self.inner.access.ability.clone())
     }
 
-    /// Loads record `id` of `E` (a SeaORM entity, an ORM model or any other
-    /// subject with records) in the call's unit of work and checks `A` on
+    /// Loads record `id` of `E` (an ORM model or any other subject with
+    /// records) in the call's unit of work and checks `A` on
     /// it: the record, or a 404 (no such record) or 403 (not allowed). The
     /// tool's equivalent of `#[can(A, E, from = "id")]`.
     pub async fn authorize<E, A>(&self, id: impl fmt::Display) -> Result<Authorized<E, A>, AppError>

@@ -1,7 +1,7 @@
 //! `first_or_new`, `first_or_create`, `create_or_first` and
 //! `update_or_create`.
 
-use navree_db::sea_orm::ConnectionTrait;
+use navree_db::Executor as _;
 use navree_orm::{Assignment, Model};
 
 use crate::models::{Setting, Tag};
@@ -113,8 +113,8 @@ async fn update_or_create_updates_the_match_or_creates_one() {
     assert!(created.was_recently_created());
     assert_eq!(created.value, "dark");
 
-    t.db.conn()
-        .execute_unprepared("UPDATE settings SET value = 'light'")
+    t.db.pool()
+        .execute_script("UPDATE settings SET value = 'light'")
         .await
         .unwrap();
     let updated = Setting::update_or_create(&t.db, [Setting::KEY.set("theme")], |s| {

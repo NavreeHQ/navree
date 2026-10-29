@@ -14,10 +14,9 @@ use std::sync::Arc;
 use async_graphql::futures_util::{Stream, StreamExt};
 use async_graphql::{ComplexObject, Enum, InputObject, SimpleObject};
 use garde::Validate;
-use navree_access::{
-    AbilityCtx, AccessModule, AccessOptions, ActionMarker, Read, Rules, Subject, field,
-};
-use navree_db::{DatabaseModule, Db, MigrationSet, ModuleBuilderDbExt, Uow};
+use navree_access::{AbilityCtx, AccessModule, AccessOptions, ActionMarker, Read, Rules, field};
+use navree_db::navree_schema::{Migration, Schema, SchemaMigration, SchemaResult};
+use navree_db::{DatabaseModule, Db, DbError, MigrationSet, ModuleBuilderDbExt, Uow};
 use navree_events::EventsModule;
 use navree_graphql::{
     Context, ContextExt, EventStream, GraphqlModule, GraphqlSchema, Loader,
@@ -25,14 +24,10 @@ use navree_graphql::{
 };
 use navree_kernel::ModuleBuilder;
 use navree_macros::{injectable, module, resolver};
+use navree_orm::Model as _;
+use navree_orm::access::AccessibleQuery as _;
 use navree_testing::{TestApp, principal};
 use navree_validation::Valid;
-use sea_orm::sea_query::{ColumnDef, Table};
-use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DbErr, EntityTrait, QueryFilter, QueryOrder, QuerySelect, Set,
-};
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -111,16 +106,15 @@ mod crm_contracts {
 
 use crm_contracts::deals::{DealUpdated, DealView, MoveDeal};
 
-/// What `crm_core` holds in the docs: the entities and the `Move` action.
-mod entities {
+/// What `crm_core` holds in the docs: the models and the `Move` action.
+mod models {
     pub mod deal {
-        use sea_orm::entity::prelude::*;
         use serde::Serialize;
+        use uuid::Uuid;
 
-        #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
-        #[sea_orm(table_name = "deals")]
-        pub struct Model {
-            #[sea_orm(primary_key, auto_increment = false)]
+        #[derive(Clone, Debug, Default, PartialEq, Eq, navree_orm::Model, Serialize)]
+        #[model(table = "deals", subject = "Deal", permission_prefix = "deals")]
+        pub struct Deal {
             pub id: Uuid,
             pub title: String,
             pub amount_cents: i64,
@@ -129,41 +123,25 @@ mod entities {
             pub owner_id: Uuid,
             pub company_id: Uuid,
         }
-
-        #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-        pub enum Relation {}
-
-        impl ActiveModelBehavior for ActiveModel {}
     }
 
     pub mod company {
-        use sea_orm::entity::prelude::*;
+        use chrono::{DateTime, Utc};
         use serde::Serialize;
+        use uuid::Uuid;
 
-        #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
-        #[sea_orm(table_name = "companies")]
-        pub struct Model {
-            #[sea_orm(primary_key, auto_increment = false)]
+        #[derive(Clone, Debug, Default, PartialEq, Eq, navree_orm::Model, Serialize)]
+        #[model(table = "companies")]
+        pub struct Company {
             pub id: Uuid,
             pub name: String,
-            pub deleted_at: Option<DateTimeUtc>,
+            pub deleted_at: Option<DateTime<Utc>>,
         }
-
-        #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-        pub enum Relation {}
-
-        impl ActiveModelBehavior for ActiveModel {}
     }
 }
 
-use entities::{company, deal};
-
-type Deal = deal::Entity;
-
-impl Subject for deal::Entity {
-    const SUBJECT: &'static str = "Deal";
-    const PERMISSION_PREFIX: &'static str = "deals";
-}
+use models::company::Company;
+use models::deal::Deal;
 
 /// The `move` action on deals.
 struct Move;
@@ -174,52 +152,31 @@ impl ActionMarker for Move {
 
 struct CreateTables;
 
-impl MigrationName for CreateTables {
-    fn name(&self) -> &str {
-        "m20261026_000001_create_deals_and_companies"
-    }
-}
-
-#[async_trait]
-impl MigrationTrait for CreateTables {
-    async fn up(&self, manager: &SchemaManager) -> std::result::Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table("companies")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("name").string().not_null())
-                    .col(
-                        ColumnDef::new("deleted_at")
-                            .timestamp_with_time_zone()
-                            .null(),
-                    )
-                    .to_owned(),
-            )
+impl Migration for CreateTables {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema
+            .create("companies", |t| {
+                t.uuid("id").primary();
+                t.string("name");
+                t.timestamp_tz("deleted_at").nullable();
+            })
             .await?;
-        manager
-            .create_table(
-                Table::create()
-                    .table("deals")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("title").string().not_null())
-                    .col(ColumnDef::new("amount_cents").big_integer().not_null())
-                    .col(ColumnDef::new("currency").string().not_null())
-                    .col(ColumnDef::new("stage").string().not_null())
-                    .col(ColumnDef::new("owner_id").uuid().not_null())
-                    .col(ColumnDef::new("company_id").uuid().not_null())
-                    .to_owned(),
-            )
+        schema
+            .create("deals", |t| {
+                t.uuid("id").primary();
+                t.string("title");
+                t.big_integer("amount_cents");
+                t.string("currency");
+                t.string("stage");
+                t.uuid("owner_id");
+                t.uuid("company_id");
+            })
             .await
     }
 
-    async fn down(&self, manager: &SchemaManager) -> std::result::Result<(), DbErr> {
-        manager
-            .drop_table(Table::drop().table("deals").to_owned())
-            .await?;
-        manager
-            .drop_table(Table::drop().table("companies").to_owned())
-            .await
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop_if_exists("deals").await?;
+        schema.drop_if_exists("companies").await
     }
 }
 
@@ -287,8 +244,8 @@ pub struct CompanyObject {
     pub name: String,
 }
 
-impl From<company::Model> for CompanyObject {
-    fn from(company: company::Model) -> Self {
+impl From<Company> for CompanyObject {
+    fn from(company: Company) -> Self {
         Self {
             id: company.id,
             name: company.name,
@@ -335,7 +292,7 @@ pub struct MoveDealInput {
 #[injectable]
 pub struct DealService;
 
-fn view(deal: deal::Model) -> DealView {
+fn view(deal: Deal) -> DealView {
     DealView {
         id: deal.id,
         title: deal.title,
@@ -348,8 +305,8 @@ fn view(deal: deal::Model) -> DealView {
 }
 
 impl DealService {
-    async fn view(&self, _uow: &Uow, deal: deal::Model) -> Result<DealView> {
-        Ok(view(deal))
+    async fn view(&self, _uow: &Uow, deal: navree_orm::Record<Deal>) -> Result<DealView> {
+        Ok(view(deal.into_inner()))
     }
 
     async fn find(
@@ -359,19 +316,19 @@ impl DealService {
         stage: Option<crm_contracts::deals::Stage>,
         limit: u64,
     ) -> Result<Vec<DealView>> {
-        let mut select = scope.apply(deal::Entity::find().order_by_asc(deal::Column::Title));
+        let mut query = scope.query().order_by(Deal::TITLE);
         if let Some(stage) = stage {
-            select = select.filter(deal::Column::Stage.eq(stage.as_str()));
+            query = query.where_(Deal::STAGE.eq(stage.as_str()));
         }
-        let deals = select.limit(limit).all(&*uow.tx().await?).await?;
-        Ok(deals.into_iter().map(view).collect())
+        let deals = query.limit(limit).get(uow).await?;
+        Ok(deals.into_models().into_iter().map(view).collect())
     }
 
     async fn move_to(
         &self,
         uow: &Uow,
         _me: Uuid,
-        deal: deal::Model,
+        mut deal: navree_orm::Record<Deal>,
         to: MoveDeal,
     ) -> Result<DealView> {
         assert_eq!(deal.id, to.id);
@@ -379,10 +336,9 @@ impl DealService {
             return Err(async_graphql::Error::new("Say why the deal was lost"));
         }
         assert!(to.position.is_none_or(|position| position >= 0));
-        let mut model: deal::ActiveModel = deal.into();
-        model.stage = Set(to.stage.as_str().to_owned());
-        let updated = model.update(&*uow.tx().await?).await?;
-        Ok(view(updated))
+        deal.stage = to.stage.as_str().to_owned();
+        deal.save(uow).await?;
+        Ok(view(deal.into_inner()))
     }
 }
 
@@ -495,18 +451,26 @@ pub struct CompanyLoader {
 
 impl Loader<Uuid> for CompanyLoader {
     type Value = CompanyObject;
-    type Error = Arc<DbErr>;
+    type Error = Arc<DbError>;
 
     async fn load(
         &self,
         ids: &[Uuid],
     ) -> std::result::Result<HashMap<Uuid, CompanyObject>, Self::Error> {
-        let companies = company::Entity::find()
-            .filter(company::Column::Id.is_in(ids.iter().copied()))
-            .filter(company::Column::DeletedAt.is_null())
-            .all(self.db.conn())
-            .await?;
-        Ok(companies.into_iter().map(|c| (c.id, c.into())).collect())
+        let companies = Company::query()
+            .where_in(Company::ID, ids.iter().copied())
+            .where_null(Company::DELETED_AT)
+            .get(&*self.db)
+            .await
+            .map_err(|error| match error.db_error() {
+                Some(db) => Arc::new(db.clone()),
+                None => Arc::new(DbError::new(navree_db::ErrorKind::Other, error.to_string())),
+            })?;
+        Ok(companies
+            .into_models()
+            .into_iter()
+            .map(|c| (c.id, c.into()))
+            .collect())
     }
 }
 
@@ -519,8 +483,12 @@ pub struct DealsModule;
 
 impl DealsModule {
     fn wire(&self, m: &mut ModuleBuilder) {
-        m.import(AccessModule::for_feature::<Deal>())
-            .migrations(MigrationSet::new("deals").migration(CreateTables));
+        m.import(AccessModule::for_feature::<Deal>()).migrations(
+            MigrationSet::new("deals").migration(SchemaMigration::new(
+                "m20261026_000001_create_deals_and_companies",
+                CreateTables,
+            )),
+        );
         m.resolver::<DealResolver>().dataloader::<CompanyLoader>();
     }
 }
@@ -547,25 +515,29 @@ async fn app() -> TestApp {
 
 async fn seed_rep_with_deal(app: &TestApp) -> (Uuid, Uuid) {
     let db = app.get::<Db>().await;
-    let company = company::ActiveModel {
-        id: Set(Uuid::now_v7()),
-        name: Set("Acme".to_owned()),
-        deleted_at: Set(None),
-    }
-    .insert(db.conn())
+    let company = Company::create(
+        &*db,
+        Company {
+            id: Uuid::now_v7(),
+            name: "Acme".to_owned(),
+            deleted_at: None,
+        },
+    )
     .await
     .unwrap();
     let rep = Uuid::now_v7();
-    let deal = deal::ActiveModel {
-        id: Set(Uuid::now_v7()),
-        title: Set("Acme renewal".to_owned()),
-        amount_cents: Set(500_000),
-        currency: Set("USD".to_owned()),
-        stage: Set("negotiation".to_owned()),
-        owner_id: Set(rep),
-        company_id: Set(company.id),
-    }
-    .insert(db.conn())
+    let deal = Deal::create(
+        &*db,
+        Deal {
+            id: Uuid::now_v7(),
+            title: "Acme renewal".to_owned(),
+            amount_cents: 500_000,
+            currency: "USD".to_owned(),
+            stage: "negotiation".to_owned(),
+            owner_id: rep,
+            company_id: company.id,
+        },
+    )
     .await
     .unwrap();
     (rep, deal.id)

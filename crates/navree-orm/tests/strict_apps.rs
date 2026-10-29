@@ -5,7 +5,7 @@
 use std::sync::{Arc, Mutex};
 
 use chrono::{DateTime, Utc};
-use navree_db::sea_orm::ConnectionTrait;
+use navree_db::Executor as _;
 use navree_db::{DatabaseModule, Db};
 use navree_orm::strict::Violation;
 use navree_orm::{Model, OrmError, OrmModule, OrmOptions, OrmRuntime};
@@ -29,8 +29,8 @@ async fn app(builder: navree_testing::TestAppBuilder) -> (TestApp, Arc<Db>) {
         .build()
         .await;
     let db = app.get::<Db>().await;
-    db.conn()
-        .execute_unprepared(
+    db.pool()
+        .execute_script(
             "CREATE TABLE probes (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, reading INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
         )
         .await

@@ -10,13 +10,14 @@ use std::time::Duration;
 
 use http::request::Parts;
 use navree_access::{
-    AbilityCtx, AccessModule, AccessOptions, Accessible, Authorized, READ, Read, Rules, Subject,
-    UPDATE, Update, field,
+    AbilityCtx, AccessModule, AccessOptions, Accessible, Authorized, READ, Read, Rules, UPDATE,
+    Update, field,
 };
 use navree_contracts::{
     AuditEntry, AuditSink, AuthState, AuthVia, BoxError, BoxFuture, Principal, RequestId,
 };
-use navree_db::{Db, MigrationSet, ModuleBuilderDbExt, Repo, Uow};
+use navree_db::navree_schema::{Migration, Schema, SchemaMigration, SchemaResult};
+use navree_db::{Db, MigrationSet, ModuleBuilderDbExt, Uow};
 use navree_events::{Event, EventBus, EventsModule};
 use navree_grpc::{
     GrpcChannels, GrpcModule, ModuleBuilderGrpcExt, Request, Response, Status, Streaming, Valid,
@@ -25,11 +26,9 @@ use navree_grpc::{
 use navree_http::{AppError, Authenticator, CurrentPrincipal, Guard, Result};
 use navree_kernel::{Module, ModuleBuilder};
 use navree_macros::injectable;
+use navree_orm::Model as _;
+use navree_orm::access::AccessibleQuery as _;
 use navree_testing::{TestApp, TestAppBuilder};
-use sea_orm::sea_query::{ColumnDef, Table};
-use sea_orm::{ActiveModelTrait, EntityTrait, QueryOrder, Set};
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio_stream::{Stream, StreamExt, wrappers::BroadcastStream};
@@ -57,67 +56,51 @@ use pb::ping::ping_server::{Ping, PingServer};
 // The deals table and its access rules
 // ---------------------------------------------------------------------------
 
-/// The `deals` entity.
+/// The `deals` model: the subject the docs call `Deal`.
 pub mod deal {
-    use sea_orm::entity::prelude::*;
     use serde::Serialize;
+    use uuid::Uuid;
 
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
-    #[sea_orm(table_name = "deals")]
-    pub struct Model {
-        #[sea_orm(primary_key, auto_increment = false)]
+    #[derive(Clone, Debug, Default, PartialEq, Eq, navree_orm::Model, Serialize)]
+    #[model(table = "deals", subject = "Deal", permission_prefix = "deals")]
+    pub struct Deal {
         pub id: Uuid,
         pub title: String,
         pub stage: String,
         pub amount_cents: i64,
         pub owner_id: Uuid,
     }
-
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
-/// The subject the docs call `Deal`.
-pub type Deal = deal::Entity;
-
-impl Subject for deal::Entity {
-    const SUBJECT: &'static str = "Deal";
-    const PERMISSION_PREFIX: &'static str = "deals";
-}
+pub use deal::Deal;
 
 /// Creates `deals`.
 pub struct CreateDeals;
 
-impl MigrationName for CreateDeals {
-    fn name(&self) -> &str {
-        "m20261026_000001_create_deals"
+impl Migration for CreateDeals {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema
+            .create("deals", |t| {
+                t.uuid("id").primary();
+                t.string("title");
+                t.string("stage");
+                t.big_integer("amount_cents");
+                t.uuid("owner_id");
+            })
+            .await
+    }
+
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop_if_exists("deals").await
     }
 }
 
-#[async_trait]
-impl MigrationTrait for CreateDeals {
-    async fn up(&self, manager: &SchemaManager) -> std::result::Result<(), sea_orm::DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table("deals")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("title").string().not_null())
-                    .col(ColumnDef::new("stage").string().not_null())
-                    .col(ColumnDef::new("amount_cents").big_integer().not_null())
-                    .col(ColumnDef::new("owner_id").uuid().not_null())
-                    .to_owned(),
-            )
-            .await
-    }
-
-    async fn down(&self, manager: &SchemaManager) -> std::result::Result<(), sea_orm::DbErr> {
-        manager
-            .drop_table(Table::drop().table("deals").to_owned())
-            .await
-    }
+/// The `deals` migration set.
+pub fn deals_migrations() -> MigrationSet {
+    MigrationSet::new("deals").migration(SchemaMigration::new(
+        "m20261026_000001_create_deals",
+        CreateDeals,
+    ))
 }
 
 /// Signed-in users read and update the deals they own.
@@ -141,32 +124,35 @@ pub fn access_options() -> AccessOptions {
 }
 
 /// Inserts a deal owned by `owner`.
-pub async fn insert_deal(app: &TestApp, title: &str, owner: Uuid) -> deal::Model {
+pub async fn insert_deal(app: &TestApp, title: &str, owner: Uuid) -> Deal {
     let db = app.get::<Db>().await;
-    deal::ActiveModel {
-        id: Set(Uuid::now_v7()),
-        title: Set(title.to_owned()),
-        stage: Set("lead".to_owned()),
-        amount_cents: Set(1_200_000),
-        owner_id: Set(owner),
-    }
-    .insert(db.conn())
+    Deal::create(
+        &*db,
+        Deal {
+            id: Uuid::now_v7(),
+            title: title.to_owned(),
+            stage: "lead".to_owned(),
+            amount_cents: 1_200_000,
+            owner_id: owner,
+        },
+    )
     .await
     .expect("insert deal")
+    .into_inner()
 }
 
 /// The deal with `id`, read outside any request.
-pub async fn find_deal(app: &TestApp, id: Uuid) -> deal::Model {
+pub async fn find_deal(app: &TestApp, id: Uuid) -> Deal {
     let db = app.get::<Db>().await;
-    deal::Entity::find_by_id(id)
-        .one(db.conn())
+    Deal::find(&*db, id)
         .await
         .expect("query")
         .expect("the deal exists")
+        .into_inner()
 }
 
-impl From<deal::Model> for pb::deals::Deal {
-    fn from(model: deal::Model) -> Self {
+impl From<Deal> for pb::deals::Deal {
+    fn from(model: Deal) -> Self {
         pb::deals::Deal {
             id: model.id.to_string(),
             title: model.title,
@@ -216,7 +202,7 @@ impl Deals for DealsGrpc {
         deal: Authorized<Deal, Read>,
     ) -> Result<Response<pb::deals::Deal>> {
         assert!(Uow::current().is_some_and(|current| current.same_as(&uow)));
-        Ok(Response::new(deal.into_inner().into()))
+        Ok(Response::new(deal.into_inner().into_inner().into()))
     }
 
     #[can(Read, Deal)]
@@ -226,8 +212,12 @@ impl Deals for DealsGrpc {
         uow: Uow,
         scope: Accessible<Deal, Read>,
     ) -> Result<Response<pb::deals::ListDealsResponse>> {
-        let select = scope.apply(deal::Entity::find().order_by_asc(deal::Column::Title));
-        let rows = select.all(&*uow.tx().await?).await?;
+        let rows = scope
+            .query()
+            .order_by(Deal::TITLE)
+            .get(&uow)
+            .await?
+            .into_models();
         Ok(Response::new(pb::deals::ListDealsResponse {
             total: rows.len() as u64,
             deals: rows.into_iter().map(Into::into).collect(),
@@ -243,9 +233,10 @@ impl Deals for DealsGrpc {
         deal: Authorized<Deal, Update>,
     ) -> Result<Response<pb::deals::Deal>> {
         let input = request.into_inner();
-        let mut model: deal::ActiveModel = deal.into_inner().into();
-        model.stage = Set(input.stage.clone());
-        let updated = model.update(&*uow.tx().await?).await?;
+        let mut updated = deal.into_inner();
+        updated.stage = input.stage.clone();
+        updated.save(&uow).await?;
+        let updated = updated.into_inner();
         if input.lost_reason.as_deref() == Some("fail after writing") {
             return Err(AppError::conflict("the move was undone"));
         }
@@ -308,8 +299,8 @@ pub struct DealsModule;
 
 impl Module for DealsModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.import(AccessModule::for_feature::<deal::Entity>())
-            .migrations(MigrationSet::new("deals").migration(CreateDeals))
+        m.import(AccessModule::for_feature::<Deal>())
+            .migrations(deals_migrations())
             .grpc_service::<DealsGrpc>()
             .grpc_descriptors(pb::FILE_DESCRIPTOR_SET);
     }
@@ -364,7 +355,7 @@ impl Ping for PingGrpc {
                 Err::<(), _>(Status::failed_precondition("upstream says no"))?;
             }
             "missing" => {
-                Repo::<deal::Entity>::find_or_fail(&uow, Uuid::now_v7()).await?;
+                Deal::find_or_fail(&uow, Uuid::now_v7()).await?;
             }
             _ => {}
         }
@@ -450,7 +441,7 @@ pub struct DealsTableModule;
 
 impl Module for DealsTableModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.migrations(MigrationSet::new("deals").migration(CreateDeals));
+        m.migrations(deals_migrations());
     }
 }
 

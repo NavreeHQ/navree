@@ -1373,17 +1373,13 @@ pub async fn timeouts(db: Db, server: Server) {
         ["Acme"]
     );
 
-    // Units of work on SeaORM's transaction (the default) and on
-    // navree-db's own.
-    for (round, db) in [db.clone(), db.with_native_units_of_work(true)]
-        .into_iter()
-        .enumerate()
+    // A unit of work.
     {
         let uow = db.uow(None, None).await;
         Company::create(
             &uow,
             Company {
-                name: format!("Globex {round}"),
+                name: "Globex".to_owned(),
                 ..Company::default()
             },
         )
@@ -1397,7 +1393,7 @@ pub async fn timeouts(db: Db, server: Server) {
                 .count(&uow)
                 .await
                 .unwrap(),
-            2 + round as u64,
+            2,
             "the unit of work goes on"
         );
         if server == Server::Postgres {
@@ -1417,6 +1413,6 @@ pub async fn timeouts(db: Db, server: Server) {
             );
         }
         uow.commit().await.unwrap();
-        assert_eq!(Company::query().count(&db).await.unwrap(), 2 + round as u64);
+        assert_eq!(Company::query().count(&db).await.unwrap(), 2);
     }
 }
