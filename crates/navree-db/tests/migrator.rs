@@ -4,6 +4,9 @@
 //! `--pretend` output, status, dump and load round trips, and what a failing
 //! migration leaves behind.
 
+// The server scenarios run only with the `postgres` or `mysql` feature.
+#![cfg_attr(not(any(feature = "postgres", feature = "mysql")), allow(dead_code))]
+
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use navree_db::{
@@ -166,7 +169,7 @@ async fn boot(url: &str, failing: Option<bool>) -> App {
 }
 
 async fn pool_of(app: &App) -> Pool {
-    app.ctx().get::<Db>().await.unwrap().pool().unwrap().clone()
+    app.ctx().get::<Db>().await.unwrap().pool().clone()
 }
 
 async fn tables(pool: &Pool) -> Vec<String> {
@@ -511,12 +514,7 @@ async fn schemas_run_on_every_connection() {
         })
         .await
         .unwrap();
-    assert!(
-        Schema::new(db.pool().unwrap())
-            .has_table("notes")
-            .await
-            .unwrap()
-    );
+    assert!(Schema::new(db.pool()).has_table("notes").await.unwrap());
 
     let tx = db.begin().await.unwrap();
     Schema::new(&tx).drop("notes").await.unwrap();

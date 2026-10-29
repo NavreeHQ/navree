@@ -12,7 +12,8 @@ use http::{Method, Request, StatusCode};
 use http_body_util::BodyExt;
 use navree_contracts::{AuthVia, Impersonator, Principal};
 use navree_db::{
-    ChangeEvent, ChangeObserver, DatabaseModule, Db, MigrationSet, ModuleBuilderDbExt, Repo, Uow,
+    ChangeEvent, ChangeObserver, DatabaseModule, Db, DbError, MigrationSet, ModuleBuilderDbExt,
+    Uow, record,
 };
 use navree_http::{
     AppError, Authenticator, Controller, HttpModule, HttpOptions, Json, ModuleBuilderHttpExt,
@@ -23,16 +24,13 @@ use navree_kernel::{
     ProviderKey, Resolver,
 };
 use navree_telemetry::TelemetryContext;
-use sea_orm::{DatabaseTransaction, DbErr};
 use serde_json::{Value, json};
 use tokio::sync::{Mutex, Notify, oneshot};
 use tower::ServiceExt;
 use uuid::Uuid;
 
-use crate::fixtures::{CreateNotes, count, new_note, note};
+use crate::fixtures::{CreateNotes, Note, count, new_note};
 use crate::support::TempDb;
-
-type Notes = Repo<note::Entity>;
 
 /// Signals for the disconnect test: the handler reports that it has
 /// written, then waits until the test lets it finish, and reports what it
@@ -73,13 +71,13 @@ impl Injectable for RefusingObserver {
 impl ChangeObserver for RefusingObserver {
     fn observe<'a>(
         &'a self,
-        _tx: &'a DatabaseTransaction,
+
         _uow: &'a Uow,
         _changes: &'a [ChangeEvent],
-    ) -> BoxFuture<'a, Result<(), DbErr>> {
+    ) -> BoxFuture<'a, Result<(), DbError>> {
         Box::pin(async move {
             if self.0.0.load(Ordering::SeqCst) {
-                Err(DbErr::Custom("refused".into()))
+                Err(DbError::invalid("refused"))
             } else {
                 Ok(())
             }
@@ -117,7 +115,7 @@ impl Controller for NotesController {
                 Method::POST,
                 "/{title}",
                 |uow: Uow, Path(title): Path<String>| async move {
-                    let note = Notes::insert(&uow, new_note(&title)).await?;
+                    let note = record::insert_recorded(&uow, &new_note(&title)).await?;
                     Ok::<_, AppError>((StatusCode::CREATED, Json(json!({ "id": note.id }))))
                 },
             )
@@ -126,7 +124,7 @@ impl Controller for NotesController {
                 Method::POST,
                 "/{title}/fail",
                 |uow: Uow, Path(title): Path<String>| async move {
-                    Notes::insert(&uow, new_note(&title)).await?;
+                    record::insert_recorded(&uow, &new_note(&title)).await?;
                     Err::<(), _>(AppError::bad_request("changed my mind"))
                 },
             )
@@ -135,7 +133,9 @@ impl Controller for NotesController {
                 Method::POST,
                 "/{title}/panic",
                 |uow: Uow, Path(title): Path<String>| async move {
-                    Notes::insert(&uow, new_note(&title)).await.unwrap();
+                    record::insert_recorded(&uow, &new_note(&title))
+                        .await
+                        .unwrap();
                     if title.len() < 1000 {
                         panic!("handler panicked");
                     }
@@ -148,7 +148,7 @@ impl Controller for NotesController {
                 move |uow: Uow, Path(title): Path<String>| {
                     let gate = gate.clone();
                     async move {
-                        Notes::insert(&uow, new_note(&title)).await?;
+                        record::insert_recorded(&uow, &new_note(&title)).await?;
                         let committed = gate.committed.lock().await.take();
                         uow.after_commit(move || {
                             Box::pin(async move {
@@ -178,7 +178,9 @@ impl Controller for NotesController {
                 Method::GET,
                 "/by-id/{id}",
                 |uow: Uow, Path(id): Path<Uuid>| async move {
-                    let note = Notes::find_or_fail(&uow, id).await?;
+                    let note = record::find::<Note, _>(&uow, id)
+                        .await?
+                        .ok_or_else(|| DbError::not_found(format!("notes {id}")))?;
                     Ok::<_, AppError>(Json(json!({ "title": note.title })))
                 },
             )

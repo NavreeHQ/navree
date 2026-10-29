@@ -134,7 +134,7 @@ pub async fn placeholders_scripts_and_keys(scratch: Scratch) {
 }
 
 /// Errors are classified the same way on every backend, and map to the
-/// same HTTP responses as SeaORM's.
+/// HTTP responses (`map_db_error`): 409 for a violation, 404 for no row.
 pub async fn errors_are_classified(scratch: Scratch) {
     let db = scratch.db().await;
     let backend = scratch.server.backend();
@@ -147,7 +147,7 @@ pub async fn errors_are_classified(scratch: Scratch) {
     assert_eq!(unique.kind(), ErrorKind::UniqueViolation, "{unique:?}");
     assert!(unique.is_unique_violation());
     assert!(unique.code().is_some());
-    let http = map_db_error::<sea_orm::DbErr>(&unique.clone().into()).expect("a 409");
+    let http = map_db_error(&unique).expect("a 409");
     assert_eq!(http.status.as_u16(), 409);
 
     let foreign = db
@@ -162,13 +162,7 @@ pub async fn errors_are_classified(scratch: Scratch) {
         ErrorKind::ForeignKeyViolation,
         "{foreign:?}"
     );
-    assert_eq!(
-        map_db_error::<sea_orm::DbErr>(&foreign.into())
-            .unwrap()
-            .status
-            .as_u16(),
-        409
-    );
+    assert_eq!(map_db_error(&foreign).unwrap().status.as_u16(), 409);
 
     let not_null = db
         .execute(&Statement::portable(
@@ -194,20 +188,11 @@ pub async fn errors_are_classified(scratch: Scratch) {
 
     let syntax = db.execute(&Statement::text("SELEKT 1")).await.unwrap_err();
     assert_eq!(syntax.kind(), ErrorKind::Database, "{syntax:?}");
-    assert!(
-        map_db_error::<sea_orm::DbErr>(&syntax.into()).is_none(),
-        "a 500"
-    );
+    assert!(map_db_error(&syntax).is_none(), "a 500");
 
     let not_found = db
         .fetch_one(&Statement::text("SELECT id FROM companies WHERE 1 = 0"))
         .await
         .unwrap_err();
-    assert_eq!(
-        map_db_error::<sea_orm::DbErr>(&not_found.into())
-            .unwrap()
-            .status
-            .as_u16(),
-        404
-    );
+    assert_eq!(map_db_error(&not_found).unwrap().status.as_u16(), 404);
 }

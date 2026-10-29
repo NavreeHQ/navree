@@ -2,12 +2,13 @@
 //! `migrate:fresh`, and what a failed migration leaves behind when DDL
 //! commits implicitly.
 
+use navree_db::Executor;
 use navree_db::{DatabaseModule, Db, MigrationStatus, Migrator, ModuleBuilderDbExt};
+use navree_kernel::BoxFuture;
 use navree_kernel::{App, Module, ModuleBuilder, Navree};
-use sea_orm::sea_query::ForeignKeyAction;
-use sea_orm::{ConnectionTrait, DbErr, TransactionTrait};
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
+use navree_schema::{
+    Dialect, NamedMigration, ReferentialAction, Schema, SchemaError, SchemaResult,
+};
 
 use crate::fixtures::CreateTable;
 use crate::support::{Scratch, count, string, tables};
@@ -39,7 +40,7 @@ impl Module for CrmModule {
                     "m0002_create_companies",
                     "companies",
                     "users",
-                    ForeignKeyAction::Restrict,
+                    ReferentialAction::Restrict,
                 ),
                 CreateTable::boxed("m0001_create_tags", "tags"),
             ],
@@ -77,12 +78,12 @@ async fn migrations_run_in_dependency_order() {
     );
     let db = db(&app).await;
     assert_eq!(
-        tables(db.conn()).await,
+        tables(db.pool()).await,
         ["companies", "navree_migrations", "tags", "users"]
     );
     assert_eq!(
         string(
-            db.conn(),
+            db.pool(),
             "SELECT CAST(data_type AS CHAR) FROM information_schema.columns \
              WHERE table_schema = DATABASE() AND table_name = 'navree_migrations' \
              AND column_name = 'applied_at'"
@@ -144,12 +145,12 @@ async fn rollback_reverts_the_last_batch() {
         ["crm/m0002_create_companies", "crm/m0001_create_tags"]
     );
     let db = db(&app).await;
-    assert_eq!(tables(db.conn()).await, ["navree_migrations", "users"]);
+    assert_eq!(tables(db.pool()).await, ["navree_migrations", "users"]);
     assert_eq!(
         Migrator::rollback(app.ctx()).await.unwrap(),
         ["users/m0001_create_users"]
     );
-    assert_eq!(tables(db.conn()).await, ["navree_migrations"]);
+    assert_eq!(tables(db.pool()).await, ["navree_migrations"]);
     assert!(Migrator::rollback(app.ctx()).await.unwrap().is_empty());
 }
 
@@ -180,8 +181,8 @@ async fn fresh_drops_every_table_and_reruns() {
         "INSERT INTO permissions (id) VALUES ('deals.manage')",
         "INSERT INTO role_permissions (role_id, permission_id) VALUES ('admin', 'deals.manage')",
     ] {
-        db.conn()
-            .execute_unprepared(sql)
+        db.pool()
+            .execute_script(sql)
             .await
             .unwrap_or_else(|error| panic!("{sql}: {error}"));
     }
@@ -189,10 +190,10 @@ async fn fresh_drops_every_table_and_reruns() {
     let applied = Migrator::fresh(app.ctx()).await.expect("fresh");
     assert_eq!(applied.len(), 3);
     assert_eq!(
-        tables(db.conn()).await,
+        tables(db.pool()).await,
         ["companies", "navree_migrations", "tags", "users"]
     );
-    assert_eq!(count(db.conn(), "users").await, 0);
+    assert_eq!(count(db.pool(), "users").await, 0);
     assert!(
         Migrator::status(app.ctx())
             .await
@@ -204,7 +205,7 @@ async fn fresh_drops_every_table_and_reruns() {
     // Hold several connections at once: each checks foreign keys.
     let mut held = Vec::new();
     for _ in 0..4 {
-        held.push(db.conn().begin().await.unwrap());
+        held.push(db.begin().await.unwrap());
     }
     for tx in &held {
         assert_eq!(
@@ -214,8 +215,8 @@ async fn fresh_drops_every_table_and_reruns() {
     }
     drop(held);
     let error = db
-        .conn()
-        .execute_unprepared(
+        .pool()
+        .execute_script(
             "INSERT INTO companies (id, title, owner_id) VALUES \
              (UNHEX('0199A7A0000070008000000000000003'), 'orphan', UNHEX('0199A7A0000070008000000000000009'))",
         )
@@ -236,57 +237,70 @@ async fn fresh_on_an_empty_database_only_migrates() {
     );
 }
 
-/// Creates `table`, then fails; transactional or not as asked.
+/// A migration's failure.
+fn failure(table: &str, message: &str) -> SchemaError {
+    SchemaError::Definition {
+        table: table.to_owned(),
+        message: message.to_owned(),
+    }
+}
+
+/// Creates `table`, then fails; outside a transaction, as MySQL runs
+/// migrations by default.
 struct FailAfterCreating {
     name: &'static str,
     table: &'static str,
-    transactional: Option<bool>,
 }
 
-impl MigrationName for FailAfterCreating {
+impl NamedMigration for FailAfterCreating {
     fn name(&self) -> &str {
         self.name
     }
-}
 
-#[async_trait]
-impl MigrationTrait for FailAfterCreating {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .get_connection()
-            .execute_unprepared(&format!("CREATE TABLE {} (id INT PRIMARY KEY)", self.table))
-            .await?;
-        Err(DbErr::Migration("boom".into()))
+    fn up<'a>(&'a self, schema: &'a Schema<'_>) -> BoxFuture<'a, SchemaResult> {
+        Box::pin(async move {
+            schema
+                .statement(&format!("CREATE TABLE {} (id INT PRIMARY KEY)", self.table))
+                .await?;
+            Err(failure(self.table, "boom"))
+        })
     }
 
-    fn use_transaction(&self) -> Option<bool> {
-        self.transactional
+    fn down<'a>(&'a self, _schema: &'a Schema<'_>) -> BoxFuture<'a, SchemaResult> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn transactional(&self, dialect: Dialect) -> bool {
+        dialect != Dialect::MySql
     }
 }
 
 /// Inserts a row into `users`, then fails, inside its transaction.
 struct FailAfterInserting;
 
-impl MigrationName for FailAfterInserting {
+impl NamedMigration for FailAfterInserting {
     fn name(&self) -> &str {
         "m0002_backfill"
     }
-}
 
-#[async_trait]
-impl MigrationTrait for FailAfterInserting {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .get_connection()
-            .execute_unprepared(
-                "INSERT INTO users (id, title) VALUES (UNHEX('0199A7A0000070008000000000000001'), 'ann')",
-            )
-            .await?;
-        Err(DbErr::Migration("backfill failed".into()))
+    fn up<'a>(&'a self, schema: &'a Schema<'_>) -> BoxFuture<'a, SchemaResult> {
+        Box::pin(async move {
+            schema
+                .statement(
+                    "INSERT INTO users (id, title) VALUES (UNHEX('0199A7A0000070008000000000000001'), 'ann')",
+                )
+                .await?;
+            Err(failure("users", "backfill failed"))
+        })
     }
 
-    fn use_transaction(&self) -> Option<bool> {
-        Some(true)
+    fn down<'a>(&'a self, _schema: &'a Schema<'_>) -> BoxFuture<'a, SchemaResult> {
+        Box::pin(async { Ok(()) })
+    }
+
+    /// A data migration asks for a transaction, on MySQL too.
+    fn transactional(&self, _dialect: Dialect) -> bool {
+        true
     }
 }
 
@@ -302,7 +316,6 @@ impl Module for Failing {
                 Box::new(FailAfterCreating {
                     name: "m2_bad",
                     table: "partial",
-                    transactional: None,
                 }),
             ],
         ));
@@ -332,7 +345,7 @@ async fn a_failed_migration_keeps_its_ddl_and_is_not_recorded() {
     assert!(error.contains("boom"), "{error}");
     let db = db(&app).await;
     assert_eq!(
-        tables(db.conn()).await,
+        tables(db.pool()).await,
         ["good", "navree_migrations", "partial"]
     );
     let status = status_of(&app).await;
@@ -371,7 +384,7 @@ async fn a_transactional_data_migration_rolls_back_its_rows() {
     let error = Migrator::up(app.ctx()).await.unwrap_err().to_string();
     assert!(error.contains("users/m0002_backfill"), "{error}");
     let db = db(&app).await;
-    assert_eq!(count(db.conn(), "users").await, 0, "the insert rolled back");
+    assert_eq!(count(db.pool(), "users").await, 0, "the insert rolled back");
     let status = status_of(&app).await;
     assert!(status[0].applied);
     assert!(!status[1].applied);
@@ -385,16 +398,16 @@ async fn migrate_commands_run_through_the_app() {
     let app = boot(&scratch, true).await;
     let db = db(&app).await;
     app.run_command("migrate", vec![]).await.expect("migrate");
-    assert_eq!(tables(db.conn()).await.len(), 4);
+    assert_eq!(tables(db.pool()).await.len(), 4);
     app.run_command("migrate:status", vec![])
         .await
         .expect("status");
     app.run_command("migrate:rollback", vec![])
         .await
         .expect("rollback");
-    assert_eq!(tables(db.conn()).await, ["navree_migrations"]);
+    assert_eq!(tables(db.pool()).await, ["navree_migrations"]);
     app.run_command("migrate:fresh", vec![])
         .await
         .expect("fresh");
-    assert_eq!(tables(db.conn()).await.len(), 4);
+    assert_eq!(tables(db.pool()).await.len(), 4);
 }

@@ -1,8 +1,8 @@
 //! Module-owned migrations: order, batches, rollback, fresh, status, commands.
 
 use navree_db::{DatabaseModule, Db, MigrationStatus, Migrator, ModuleBuilderDbExt};
+use navree_db::{Executor, ExecutorExt, Statement};
 use navree_kernel::{App, Module, ModuleBuilder, Navree};
-use sea_orm::ConnectionTrait;
 
 use crate::fixtures::{CreateTable, FailAfterCreating, count, tables};
 use crate::support::TempDb;
@@ -143,8 +143,8 @@ async fn fresh_drops_and_reruns() {
     let app = boot(&temp, true).await;
     Migrator::up(app.ctx()).await.unwrap();
     let db = db(&app).await;
-    db.conn()
-        .execute_unprepared(
+    db.pool()
+        .execute_script(
             "INSERT INTO users (id, title) VALUES ('0199a7a0-0000-7000-8000-000000000001', 'ann');
              INSERT INTO companies (id, title, owner_id) VALUES ('0199a7a0-0000-7000-8000-000000000002', 'acme', '0199a7a0-0000-7000-8000-000000000001');
              CREATE TABLE stray (id INTEGER PRIMARY KEY);",
@@ -179,8 +179,8 @@ async fn fresh_drops_join_tables_with_two_cascading_parents() {
     let app = boot(&temp, true).await;
     Migrator::up(app.ctx()).await.unwrap();
     let db = db(&app).await;
-    db.conn()
-        .execute_unprepared(
+    db.pool()
+        .execute_script(
             "CREATE TABLE roles (id TEXT PRIMARY KEY);
              CREATE TABLE permissions (id TEXT PRIMARY KEY);
              CREATE TABLE role_permissions (
@@ -208,16 +208,12 @@ async fn fresh_drops_join_tables_with_two_cascading_parents() {
 
     // Every pooled connection still enforces foreign keys afterwards.
     for _ in 0..4 {
-        let row = db
-            .conn()
-            .query_one_raw(sea_orm::Statement::from_string(
-                db.backend(),
-                "PRAGMA foreign_keys",
-            ))
+        let on: i32 = db
+            .pool()
+            .fetch_scalar(&Statement::text("PRAGMA foreign_keys"))
             .await
-            .unwrap()
-            .expect("a row");
-        assert_eq!(row.try_get_by_index::<i32>(0).unwrap(), 1);
+            .unwrap();
+        assert_eq!(on, 1);
     }
 }
 

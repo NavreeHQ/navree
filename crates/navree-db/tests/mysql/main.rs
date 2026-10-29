@@ -19,7 +19,6 @@ mod health;
 mod migrations;
 mod monitor;
 mod paginate;
-mod repo;
 mod text;
 mod time_series;
 mod uow;

@@ -1,94 +1,69 @@
-//! The `notes` entity and the migrations the MySQL suite runs.
+//! The `notes` record and the migrations the MySQL suite runs.
 
 #![allow(dead_code)]
 
 use navree_db::Db;
-use sea_orm::sea_query::{ColumnDef, ForeignKey, ForeignKeyAction, Table};
-use sea_orm::{DbErr, Set};
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
+use navree_kernel::BoxFuture;
+use navree_schema::{Dialect, NamedMigration, ReferentialAction, Schema, SchemaResult};
 use uuid::Uuid;
 
-/// The `notes` entity: UUID id (`BINARY(16)` on MySQL), unique title,
-/// body.
-pub mod note {
-    use sea_orm::entity::prelude::*;
-    use serde::Serialize;
-
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
-    #[sea_orm(table_name = "notes")]
-    pub struct Model {
-        #[sea_orm(primary_key, auto_increment = false)]
+navree_db::record! {
+    /// A note: UUID id (`BINARY(16)` on MySQL), unique title, body.
+    #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+    pub struct Note in "notes" {
         pub id: Uuid,
-        #[sea_orm(unique)]
         pub title: String,
         pub body: String,
     }
-
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
-/// A new note active model.
-pub fn new_note(title: &str) -> note::ActiveModel {
-    note::ActiveModel {
-        id: Set(Uuid::now_v7()),
-        title: Set(title.to_owned()),
-        body: Set(format!("body of {title}")),
+/// A new note.
+pub fn new_note(title: &str) -> Note {
+    Note {
+        id: Uuid::now_v7(),
+        title: title.to_owned(),
+        body: format!("body of {title}"),
     }
 }
 
 /// Creates `notes` and `audit` (written by test change observers).
 pub struct CreateNotes;
 
-impl MigrationName for CreateNotes {
+impl NamedMigration for CreateNotes {
     fn name(&self) -> &str {
         "m0001_create_notes"
     }
-}
 
-#[async_trait]
-impl MigrationTrait for CreateNotes {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table("notes")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("title").string().not_null().unique_key())
-                    .col(ColumnDef::new("body").string().not_null())
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_table(
-                Table::create()
-                    .table("audit")
-                    .col(
-                        ColumnDef::new("id")
-                            .integer()
-                            .not_null()
-                            .auto_increment()
-                            .primary_key(),
-                    )
-                    .col(ColumnDef::new("entity").string().not_null())
-                    .col(ColumnDef::new("entity_id").string().not_null())
-                    .col(ColumnDef::new("op").string().not_null())
-                    .col(ColumnDef::new("actor").string().null())
-                    .to_owned(),
-            )
-            .await
+    fn up<'a>(&'a self, schema: &'a Schema<'_>) -> BoxFuture<'a, SchemaResult> {
+        Box::pin(async move {
+            schema
+                .create("notes", |t| {
+                    t.binary("id").length(16).fixed().primary();
+                    t.string("title").unique();
+                    t.string("body");
+                })
+                .await?;
+            schema
+                .create("audit", |t| {
+                    t.increments("id");
+                    t.string("entity");
+                    t.string("entity_id");
+                    t.string("op");
+                    t.string("actor").nullable();
+                })
+                .await
+        })
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .drop_table(Table::drop().table("audit").to_owned())
-            .await?;
-        manager
-            .drop_table(Table::drop().table("notes").to_owned())
-            .await
+    fn down<'a>(&'a self, schema: &'a Schema<'_>) -> BoxFuture<'a, SchemaResult> {
+        Box::pin(async move {
+            schema.drop("audit").await?;
+            schema.drop("notes").await
+        })
+    }
+
+    fn transactional(&self, dialect: Dialect) -> bool {
+        dialect != Dialect::MySql
     }
 }
 
@@ -97,11 +72,11 @@ impl MigrationTrait for CreateNotes {
 pub struct CreateTable {
     pub name: &'static str,
     pub table: &'static str,
-    pub references: Option<(&'static str, ForeignKeyAction)>,
+    pub references: Option<(&'static str, ReferentialAction)>,
 }
 
 impl CreateTable {
-    pub fn boxed(name: &'static str, table: &'static str) -> Box<dyn MigrationTrait> {
+    pub fn boxed(name: &'static str, table: &'static str) -> Box<dyn NamedMigration> {
         Box::new(Self {
             name,
             table,
@@ -113,8 +88,8 @@ impl CreateTable {
         name: &'static str,
         table: &'static str,
         references: &'static str,
-        on_delete: ForeignKeyAction,
-    ) -> Box<dyn MigrationTrait> {
+        on_delete: ReferentialAction,
+    ) -> Box<dyn NamedMigration> {
         Box::new(Self {
             name,
             table,
@@ -123,53 +98,51 @@ impl CreateTable {
     }
 }
 
-impl MigrationName for CreateTable {
+impl NamedMigration for CreateTable {
     fn name(&self) -> &str {
         self.name
     }
-}
 
-#[async_trait]
-impl MigrationTrait for CreateTable {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        let mut table = Table::create();
-        table
-            .table(self.table)
-            .col(ColumnDef::new("id").uuid().not_null().primary_key())
-            .col(ColumnDef::new("title").string().not_null().unique_key());
-        if let Some((parent, on_delete)) = self.references {
-            table
-                .col(ColumnDef::new("owner_id").uuid().null())
-                .foreign_key(
-                    ForeignKey::create()
-                        .from(self.table, "owner_id")
-                        .to(parent, "id")
-                        .on_delete(on_delete),
-                );
-        }
-        manager.create_table(table).await
+    fn up<'a>(&'a self, schema: &'a Schema<'_>) -> BoxFuture<'a, SchemaResult> {
+        Box::pin(async move {
+            schema
+                .create(self.table, |t| {
+                    t.binary("id").length(16).fixed().primary();
+                    t.string("title").unique();
+                    if let Some((parent, on_delete)) = self.references {
+                        t.binary("owner_id").length(16).fixed().nullable();
+                        t.foreign("owner_id")
+                            .references("id")
+                            .on(parent)
+                            .on_delete(on_delete);
+                    }
+                })
+                .await
+        })
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .drop_table(Table::drop().table(self.table).to_owned())
-            .await
+    fn down<'a>(&'a self, schema: &'a Schema<'_>) -> BoxFuture<'a, SchemaResult> {
+        Box::pin(async move { schema.drop(self.table).await })
+    }
+
+    fn transactional(&self, dialect: Dialect) -> bool {
+        dialect != Dialect::MySql
     }
 }
 
 /// Creates `notes` and `audit` on `db` directly (no migration record).
 pub async fn create_notes(db: &Db) {
     CreateNotes
-        .up(&SchemaManager::new(db.conn()))
+        .up(&Schema::new(db.pool()))
         .await
         .expect("creates the notes and audit tables");
 }
 
-/// A migration set of SeaORM migrations (boxed, as the fixtures build them).
+/// A migration set of boxed migrations (as the fixtures build them).
 pub fn set(
     module: &'static str,
     after: impl IntoIterator<Item = &'static str>,
-    migrations: Vec<Box<dyn MigrationTrait>>,
+    migrations: Vec<Box<dyn NamedMigration>>,
 ) -> navree_db::MigrationSet {
     migrations.into_iter().fold(
         navree_db::MigrationSet::new(module).after(after),
@@ -177,26 +150,23 @@ pub fn set(
     )
 }
 
-/// A boxed SeaORM migration as a migration of its own.
-struct Boxed(Box<dyn MigrationTrait>);
+/// A boxed migration as a migration of its own.
+struct Boxed(Box<dyn NamedMigration>);
 
-impl MigrationName for Boxed {
+impl NamedMigration for Boxed {
     fn name(&self) -> &str {
         self.0.name()
     }
-}
 
-#[async_trait]
-impl MigrationTrait for Boxed {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        self.0.up(manager).await
+    fn up<'a>(&'a self, schema: &'a Schema<'_>) -> BoxFuture<'a, SchemaResult> {
+        self.0.up(schema)
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        self.0.down(manager).await
+    fn down<'a>(&'a self, schema: &'a Schema<'_>) -> BoxFuture<'a, SchemaResult> {
+        self.0.down(schema)
     }
 
-    fn use_transaction(&self) -> Option<bool> {
-        self.0.use_transaction()
+    fn transactional(&self, dialect: Dialect) -> bool {
+        self.0.transactional(dialect)
     }
 }

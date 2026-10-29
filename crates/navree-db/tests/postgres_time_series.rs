@@ -13,11 +13,32 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 use chrono::{DateTime, TimeDelta, TimeZone, Utc};
 use navree_db::{Db, DbOptions, TimePoint, prune_time_series};
+use navree_db::{Executor, ExecutorExt, Pool, Statement};
 use navree_schema::Schema;
-use sea_orm::sea_query::{Alias, Query};
-use sea_orm::{ConnectionTrait, Database, DbBackend, Statement};
 
 static COUNTER: AtomicU32 = AtomicU32::new(0);
+
+/// A one-connection pool on `url`.
+async fn connect(url: &str) -> Pool {
+    Pool::connect(&DbOptions {
+        url: url.to_owned(),
+        max_connections: 1,
+        ..DbOptions::default()
+    })
+    .await
+    .unwrap()
+}
+
+/// `INSERT INTO table (columns) VALUES (values)`.
+async fn insert(db: &Db, table: &str, columns: &str, values: Vec<navree_db::Value>) {
+    let placeholders = vec!["?"; values.len()].join(", ");
+    db.execute(&Statement::portable(
+        format!("INSERT INTO {table} ({columns}) VALUES ({placeholders})"),
+        values,
+    ))
+    .await
+    .unwrap();
+}
 
 /// A database of its own on the test server.
 struct Scratch {
@@ -37,14 +58,14 @@ impl Scratch {
             std::process::id(),
             COUNTER.fetch_add(1, Ordering::SeqCst)
         );
-        let conn = Database::connect(&admin).await.unwrap();
-        conn.execute_unprepared(&format!("DROP DATABASE IF EXISTS {name} WITH (FORCE)"))
+        let conn = connect(&admin).await;
+        conn.execute_script(&format!("DROP DATABASE IF EXISTS {name} WITH (FORCE)"))
             .await
             .unwrap();
-        conn.execute_unprepared(&format!("CREATE DATABASE {name}"))
+        conn.execute_script(&format!("CREATE DATABASE {name}"))
             .await
             .unwrap();
-        conn.close().await.unwrap();
+        conn.close().await;
         let (base, _) = admin.rsplit_once('/').unwrap();
         let url = format!("{base}/{name}");
         Some(Scratch { admin, name, url })
@@ -60,26 +81,22 @@ impl Scratch {
     }
 
     async fn drop(self) {
-        let conn = Database::connect(&self.admin).await.unwrap();
-        conn.execute_unprepared(&format!(
+        let conn = connect(&self.admin).await;
+        conn.execute_script(&format!(
             "DROP DATABASE IF EXISTS {} WITH (FORCE)",
             self.name
         ))
         .await
         .unwrap();
-        conn.close().await.unwrap();
+        conn.close().await;
     }
 }
 
 /// The single number `sql` returns.
 async fn number(db: &Db, sql: &str) -> i64 {
-    let row = db
-        .conn()
-        .query_one_raw(Statement::from_string(DbBackend::Postgres, sql))
+    db.fetch_scalar(&Statement::text(sql))
         .await
         .unwrap_or_else(|e| panic!("{sql}: {e}"))
-        .unwrap();
-    row.try_get_by_index::<i64>(0).unwrap()
 }
 
 /// Noon UTC on October `n`, 2026.
@@ -88,15 +105,13 @@ fn day(n: u32) -> DateTime<Utc> {
 }
 
 async fn insert_event(db: &Db, table: &str, at: DateTime<Utc>) {
-    db.conn()
-        .execute(
-            Query::insert()
-                .into_table(Alias::new(table))
-                .columns([Alias::new("id"), Alias::new("occurred_at")])
-                .values_panic([uuid::Uuid::now_v7().into(), at.into()]),
-        )
-        .await
-        .unwrap();
+    insert(
+        db,
+        table,
+        "id, occurred_at",
+        vec![uuid::Uuid::now_v7().into(), at.into()],
+    )
+    .await;
 }
 
 /// Whether the server has TimescaleDB (installed when it may be).
@@ -107,8 +122,7 @@ async fn timescaledb(db: &Db) -> bool {
         return true;
     }
     if target.timescaledb_installable().is_some() {
-        db.conn()
-            .execute_unprepared("CREATE EXTENSION IF NOT EXISTS timescaledb")
+        db.execute_script("CREATE EXTENSION IF NOT EXISTS timescaledb")
             .await
             .unwrap();
         return true;
@@ -148,10 +162,9 @@ async fn hypertables_lose_whole_chunks() {
     // 5th's chunk straddles the cutoff and loses its noon event.
     let cutoff = day(5) + TimeDelta::hours(6);
     let deleted = db
-        .transaction(|uow| async move {
-            let tx = uow.tx().await?;
-            prune_time_series(&*tx, "events", "occurred_at", cutoff).await
-        })
+        .transaction(
+            |uow| async move { prune_time_series(&uow, "events", "occurred_at", cutoff).await },
+        )
         .await
         .unwrap();
     assert_eq!(deleted, 5, "the 1st to the 5th at noon");
@@ -167,14 +180,14 @@ async fn hypertables_lose_whole_chunks() {
     assert_eq!(number(&db, "SELECT count(*) FROM events").await, 6);
 
     // A qualified name works the same.
-    let deleted = prune_time_series(db.conn(), "public.events", "occurred_at", day(8))
+    let deleted = prune_time_series(&db, "public.events", "occurred_at", day(8))
         .await
         .unwrap();
     assert_eq!(deleted, 3, "the 5th at 20:00, the 6th and the 7th");
     assert_eq!(chunks().await, 3);
 
     // Nothing older: nothing happens.
-    let none = prune_time_series(db.conn(), "events", "occurred_at", day(8))
+    let none = prune_time_series(&db, "events", "occurred_at", day(8))
         .await
         .unwrap();
     assert_eq!(none, 0);
@@ -202,22 +215,20 @@ async fn integer_time_columns_lose_whole_chunks_too() {
         .await
         .unwrap();
     for n in 1..=6 {
-        db.conn()
-            .execute(
-                Query::insert()
-                    .into_table(Alias::new("ticks"))
-                    .columns([Alias::new("id"), Alias::new("at_ms")])
-                    .values_panic([
-                        uuid::Uuid::now_v7().into(),
-                        day(n).timestamp_millis().into(),
-                    ]),
-            )
-            .await
-            .unwrap();
+        insert(
+            &db,
+            "ticks",
+            "id, at_ms",
+            vec![
+                uuid::Uuid::now_v7().into(),
+                day(n).timestamp_millis().into(),
+            ],
+        )
+        .await;
     }
     let chunks = || number(&db, "SELECT count(*) FROM show_chunks('ticks')");
     assert_eq!(chunks().await, 6);
-    let deleted = prune_time_series(db.conn(), "ticks", "at_ms", day(4).timestamp_millis())
+    let deleted = prune_time_series(&db, "ticks", "at_ms", day(4).timestamp_millis())
         .await
         .unwrap();
     assert_eq!(deleted, 3);
@@ -230,7 +241,7 @@ async fn integer_time_columns_lose_whole_chunks_too() {
     // A moment for an integer column is refused before anything runs (the
     // database would only say `operator does not exist: bigint < timestamp
     // with time zone`).
-    let error = prune_time_series(db.conn(), "ticks", "at_ms", TimePoint::At(day(6)))
+    let error = prune_time_series(&db, "ticks", "at_ms", TimePoint::At(day(6)))
         .await
         .unwrap_err()
         .to_string();
@@ -260,7 +271,7 @@ async fn regular_tables_and_other_columns_are_pruned_row_by_row() {
     for n in 1..=4 {
         insert_event(&db, "notes", day(n)).await;
     }
-    let deleted = prune_time_series(db.conn(), "notes", "occurred_at", day(3))
+    let deleted = prune_time_series(&db, "notes", "occurred_at", day(3))
         .await
         .unwrap();
     assert_eq!(deleted, 2);
@@ -279,21 +290,15 @@ async fn regular_tables_and_other_columns_are_pruned_row_by_row() {
             .await
             .unwrap();
         for n in 1..=3 {
-            db.conn()
-                .execute(
-                    Query::insert()
-                        .into_table(Alias::new("visits"))
-                        .columns([
-                            Alias::new("id"),
-                            Alias::new("occurred_at"),
-                            Alias::new("seen_at"),
-                        ])
-                        .values_panic([uuid::Uuid::now_v7().into(), day(n).into(), day(1).into()]),
-                )
-                .await
-                .unwrap();
+            insert(
+                &db,
+                "visits",
+                "id, occurred_at, seen_at",
+                vec![uuid::Uuid::now_v7().into(), day(n).into(), day(1).into()],
+            )
+            .await;
         }
-        let deleted = prune_time_series(db.conn(), "visits", "seen_at", day(2))
+        let deleted = prune_time_series(&db, "visits", "seen_at", day(2))
             .await
             .unwrap();
         assert_eq!(deleted, 3);
@@ -306,13 +311,11 @@ async fn regular_tables_and_other_columns_are_pruned_row_by_row() {
     scratch.drop().await;
 }
 
-/// `prune_time_series_on`, the same pruning on navree-db's executors: a
-/// transaction, then the `Db`; whole chunks on hypertables (by a moment or
+/// `prune_time_series` on every kind of executor: a transaction (committed
+/// and rolled back), then the `Db`; whole chunks on hypertables (by a moment or
 /// by an integer), the cutoff's kind checked, a regular table row by row.
 #[tokio::test]
-async fn the_executor_variant_prunes_like_the_connection_one() {
-    use navree_db::prune_time_series_on;
-
+async fn pruning_runs_on_transactions_and_the_db() {
     let Some(scratch) = Scratch::new().await else {
         return;
     };
@@ -348,18 +351,16 @@ async fn the_executor_variant_prunes_like_the_connection_one() {
     for n in 1..=10 {
         insert_event(&db, "events", day(n)).await;
         insert_event(&db, "notes", day(n)).await;
-        db.conn()
-            .execute(
-                Query::insert()
-                    .into_table(Alias::new("ticks"))
-                    .columns([Alias::new("id"), Alias::new("at_ms")])
-                    .values_panic([
-                        uuid::Uuid::now_v7().into(),
-                        day(n).timestamp_millis().into(),
-                    ]),
-            )
-            .await
-            .unwrap();
+        insert(
+            &db,
+            "ticks",
+            "id, at_ms",
+            vec![
+                uuid::Uuid::now_v7().into(),
+                day(n).timestamp_millis().into(),
+            ],
+        )
+        .await;
     }
     let chunks = |table: &'static str| {
         let db = db.clone();
@@ -370,7 +371,7 @@ async fn the_executor_variant_prunes_like_the_connection_one() {
     // In a transaction: the count, the dropped chunks and the delete commit
     // together.
     let tx = db.begin().await.unwrap();
-    let deleted = prune_time_series_on(&tx, "events", "occurred_at", day(4))
+    let deleted = prune_time_series(&tx, "events", "occurred_at", day(4))
         .await
         .unwrap();
     assert_eq!(deleted, 3);
@@ -379,19 +380,19 @@ async fn the_executor_variant_prunes_like_the_connection_one() {
 
     // A rolled-back prune leaves everything.
     let tx = db.begin().await.unwrap();
-    prune_time_series_on(&tx, "events", "occurred_at", day(8))
+    prune_time_series(&tx, "events", "occurred_at", day(8))
         .await
         .unwrap();
     tx.rollback().await.unwrap();
     assert_eq!(chunks("events").await, 7);
 
     // The `Db`, a qualified name, nothing older.
-    let deleted = prune_time_series_on(&db, "public.events", "occurred_at", day(6))
+    let deleted = prune_time_series(&db, "public.events", "occurred_at", day(6))
         .await
         .unwrap();
     assert_eq!(deleted, 2);
     assert_eq!(
-        prune_time_series_on(&db, "events", "occurred_at", day(6))
+        prune_time_series(&db, "events", "occurred_at", day(6))
             .await
             .unwrap(),
         0
@@ -399,12 +400,12 @@ async fn the_executor_variant_prunes_like_the_connection_one() {
     assert_eq!(chunks("events").await, 5);
 
     // Integer time columns, and a cutoff of the wrong kind refused.
-    let deleted = prune_time_series_on(&db, "ticks", "at_ms", day(4).timestamp_millis())
+    let deleted = prune_time_series(&db, "ticks", "at_ms", day(4).timestamp_millis())
         .await
         .unwrap();
     assert_eq!(deleted, 3);
     assert_eq!(chunks("ticks").await, 7);
-    let error = prune_time_series_on(&db, "ticks", "at_ms", TimePoint::At(day(6)))
+    let error = prune_time_series(&db, "ticks", "at_ms", TimePoint::At(day(6)))
         .await
         .unwrap_err();
     assert!(
@@ -415,7 +416,7 @@ async fn the_executor_variant_prunes_like_the_connection_one() {
     );
 
     // A regular table is pruned row by row.
-    let deleted = prune_time_series_on(&db, "notes", "occurred_at", day(3))
+    let deleted = prune_time_series(&db, "notes", "occurred_at", day(3))
         .await
         .unwrap();
     assert_eq!(deleted, 2);

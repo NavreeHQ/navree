@@ -14,11 +14,22 @@
 
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use navree_db::{Db, DbOptions, contains_ignore_case, eq_ignore_case};
-use sea_orm::sea_query::{Alias, Expr, Query};
-use sea_orm::{ConnectionTrait, Database};
+use navree_db::{
+    Db, DbOptions, Executor, ExecutorExt, Pool, Statement, contains_ignore_case, eq_ignore_case,
+};
 
 static COUNTER: AtomicU32 = AtomicU32::new(0);
+
+/// A one-connection pool on `url`.
+async fn connect(url: &str) -> Pool {
+    Pool::connect(&DbOptions {
+        url: url.to_owned(),
+        max_connections: 1,
+        ..DbOptions::default()
+    })
+    .await
+    .unwrap()
+}
 
 /// A database of its own on the test server, with the `C` locale.
 struct Scratch {
@@ -38,16 +49,16 @@ impl Scratch {
             std::process::id(),
             COUNTER.fetch_add(1, Ordering::SeqCst)
         );
-        let conn = Database::connect(&admin).await.unwrap();
-        conn.execute_unprepared(&format!("DROP DATABASE IF EXISTS {name} WITH (FORCE)"))
+        let conn = connect(&admin).await;
+        conn.execute_script(&format!("DROP DATABASE IF EXISTS {name} WITH (FORCE)"))
             .await
             .unwrap();
-        conn.execute_unprepared(&format!(
+        conn.execute_script(&format!(
             "CREATE DATABASE {name} TEMPLATE template0 ENCODING 'UTF8' LC_COLLATE 'C' LC_CTYPE 'C'"
         ))
         .await
         .unwrap();
-        conn.close().await.unwrap();
+        conn.close().await;
         let (base, _) = admin.rsplit_once('/').unwrap();
         let url = format!("{base}/{name}");
         Some(Scratch { admin, name, url })
@@ -63,33 +74,28 @@ impl Scratch {
     }
 
     async fn drop(self) {
-        let conn = Database::connect(&self.admin).await.unwrap();
-        conn.execute_unprepared(&format!(
+        let conn = connect(&self.admin).await;
+        conn.execute_script(&format!(
             "DROP DATABASE IF EXISTS {} WITH (FORCE)",
             self.name
         ))
         .await
         .unwrap();
-        conn.close().await.unwrap();
+        conn.close().await;
     }
 }
 
 /// The titles of `notes` matching `condition`, in title order.
-async fn titles(db: &Db, condition: Expr) -> Vec<String> {
-    let rows = db
-        .conn()
-        .query_all(
-            Query::select()
-                .column(Alias::new("title"))
-                .from(Alias::new("notes"))
-                .and_where(condition)
-                .order_by(Alias::new("title"), sea_orm::Order::Asc),
-        )
-        .await
-        .unwrap();
-    rows.iter()
-        .map(|row| row.try_get::<String>("", "title").unwrap())
-        .collect()
+async fn titles(db: &Db, condition: Statement) -> Vec<String> {
+    db.fetch_column(&Statement::portable(
+        format!(
+            "SELECT title FROM notes WHERE {} ORDER BY title",
+            condition.sql()
+        ),
+        condition.values().to_vec(),
+    ))
+    .await
+    .unwrap()
 }
 
 #[tokio::test]
@@ -101,7 +107,7 @@ async fn non_ascii_text_matches_in_any_case_but_not_without_its_accents() {
     // Checked in a task of its own, so the database is dropped even when
     // an assertion fails.
     let checked = tokio::spawn(case_is_ignored_and_accents_kept(db.clone())).await;
-    db.conn().clone().close().await.unwrap();
+    db.close().await.unwrap();
     scratch.drop().await;
     if let Err(failure) = checked {
         std::panic::resume_unwind(failure.into_panic());
@@ -110,8 +116,7 @@ async fn non_ascii_text_matches_in_any_case_but_not_without_its_accents() {
 
 /// The searches and comparisons, on a database with the `C` locale.
 async fn case_is_ignored_and_accents_kept(db: Db) {
-    db.conn()
-        .execute_unprepared("CREATE TABLE notes (title TEXT NOT NULL)")
+    db.execute_script("CREATE TABLE notes (title TEXT NOT NULL)")
         .await
         .unwrap();
     for title in [
@@ -124,19 +129,17 @@ async fn case_is_ignored_and_accents_kept(db: Db) {
         "Release v2x0",
         "a.b|c^d$e+f{g}h[i]j\\k",
     ] {
-        db.conn()
-            .execute(
-                Query::insert()
-                    .into_table(Alias::new("notes"))
-                    .columns([Alias::new("title")])
-                    .values_panic([title.into()]),
-            )
-            .await
-            .unwrap();
+        db.execute(&Statement::portable(
+            "INSERT INTO notes (title) VALUES (?)",
+            [title.into()],
+        ))
+        .await
+        .unwrap();
     }
     // The database folds ASCII letters only: `LOWER` alone would miss these.
     let backend = db.backend();
-    let title = || Expr::col(Alias::new("title"));
+    let column = backend.quote_identifier("title");
+    let title = || column.as_str();
     for (term, expected) in [
         ("Øresund", vec!["Øresund Énergie"]),
         ("øresund", vec!["Øresund Énergie"]),

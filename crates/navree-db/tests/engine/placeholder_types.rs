@@ -256,20 +256,18 @@ pub async fn changing_value_types_across_connections_and_transactions(scratch: S
     checks.finish();
 }
 
-/// Units of work on SeaORM's transactions (the default while crates move
-/// off it, whose driver caches prepared statements by their text too) and
-/// on navree-db's own.
+/// Units of work, whose transactions keep one prepared statement per SQL
+/// text and set of value types like any other connection.
 pub async fn changing_value_types_in_units_of_work(scratch: Scratch) {
     let pool = pool_of(&scratch, 2).await;
     measures(&pool).await;
     let mut checks = Checks::default();
-    for native in [false, true] {
-        let db = pool.with_native_units_of_work(native);
-        let on = if native { "native" } else { "SeaORM" };
+    {
+        let db = pool.clone();
         let uow = db.uow(None, None).await;
         let below = BELOW;
         let mut check = |case: &str, got, want: &[i64]| {
-            checks.expect(&format!("{on} unit of work: {case}"), got, want);
+            checks.expect(&format!("unit of work: {case}"), got, want);
         };
         check("I64 2", ids(&uow, below, 2_i64.into()).await, &[1]);
         let got = ids(&uow, below, 3.5_f64.into()).await;
