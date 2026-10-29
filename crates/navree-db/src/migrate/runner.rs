@@ -12,15 +12,13 @@ use navree_kernel::{AppContext, BoxError};
 use navree_schema::{
     Dialect, DumpOptions, MigrationContext, Schema, SchemaConnection, SchemaError, SchemaOptions,
 };
-use sea_orm_migration::SchemaManager;
 
 use super::conn::{Conn, Tx};
-use super::pretend::{STATEMENT_LIMIT, record_into, recording_connection};
 use super::report::{
     FreshOptions, LoadedDump, MigrateOptions, MigrationReport, MigrationRun, RollbackOptions,
 };
 use super::{
-    Applied, MIGRATIONS_TABLE, MigrationError, MigrationSet, MigrationStatus, SetMigration, Step,
+    Applied, MIGRATIONS_TABLE, MigrationError, MigrationSet, MigrationStatus, Step,
     applied_rows, delete_sql, drop_all_tables, ensure_table, insert_sql, plan, sets_of,
 };
 use crate::{Backend, Db, DbError, DbOptions, Executor, SqliteOptions, Statement, Value};
@@ -385,11 +383,10 @@ impl Runner {
         let started = Instant::now();
         let check = session.is_dedicated();
         if step.transactional(session.dialect()) {
-            let tx = match step.body {
-                SetMigration::Schema(_) => session.begin().await,
-                SetMigration::SeaOrm(_) => session.begin_sea().await,
-            }
-            .map_err(|error| failed(error.into()))?;
+            let tx = session
+                .begin()
+                .await
+                .map_err(|error| failed(error.into()))?;
             let result = context
                 .clone()
                 .scope(async {
@@ -427,10 +424,9 @@ impl Runner {
     }
 
     /// Runs one migration step without changing anything and records what
-    /// it would run: a schema-builder migration reads the real database
-    /// through the session and records its statements
-    /// ([`MigrationContext::pretending`]); a SeaORM migration runs against
-    /// a connection that keeps its statements and answers no reads.
+    /// it would run: the migration reads the real database through the
+    /// session and records its statements
+    /// ([`MigrationContext::pretending`]).
     async fn pretend(
         &self,
         session: &Conn,
@@ -445,80 +441,29 @@ impl Runner {
         let reader: Arc<dyn SchemaConnection> = Arc::new(session.clone());
         let context = MigrationContext::pretending(step.label(), self.options.clone(), reader);
         let started = Instant::now();
-        match step.body {
-            SetMigration::Schema(migration) => {
-                context
-                    .clone()
-                    .scope(async {
-                        let schema = Schema::new(session);
-                        match direction {
-                            Direction::Up => migration.up(&schema).await,
-                            Direction::Down => migration.down(&schema).await,
-                        }
-                    })
-                    .await
-                    .map_err(|error| failed(error.into()))?;
-            }
-            SetMigration::SeaOrm(migration) => {
-                let recording = recording_connection(session.sea().get_database_backend());
-                let result = context
-                    .clone()
-                    .scope(async {
-                        let manager = SchemaManager::new(&recording);
-                        match direction {
-                            Direction::Up => migration.up(&manager).await,
-                            Direction::Down => migration.down(&manager).await,
-                        }
-                    })
-                    .await;
-                record_into(recording, &context);
-                result.map_err(|error| {
-                    let message = error.to_string();
-                    failed(if message.contains("`exec_results` buffer is empty") {
-                        format!(
-                            "it runs more than {STATEMENT_LIMIT} statements, more than pretending keeps"
-                        )
-                        .into()
-                    } else if message.contains("`query_results` buffer is empty") {
-                        "it reads the database, which a SeaORM migration cannot do while the migrator pretends (write it with the schema builder, which reads the real database when pretending)"
-                            .into()
-                    } else {
-                        error.into()
-                    })
-                })?;
-            }
-        }
+        let migration = step.body.migration();
+        context
+            .clone()
+            .scope(async {
+                let schema = Schema::new(session);
+                match direction {
+                    Direction::Up => migration.up(&schema).await,
+                    Direction::Down => migration.down(&schema).await,
+                }
+            })
+            .await
+            .map_err(|error| failed(error.into()))?;
         Ok(run_of(step, batch, &context, started.elapsed()))
     }
 }
 
-/// Runs a transactional step in `tx`: a schema-builder migration on
-/// navree-db's transaction, a SeaORM migration on SeaORM's.
+/// Runs a transactional step in `tx`.
 async fn run_in_transaction(
     step: &Step<'_>,
     direction: Direction,
     tx: &Tx,
 ) -> Result<(), BoxError> {
-    match step.body {
-        SetMigration::Schema(migration) => {
-            let schema = Schema::new(tx);
-            match direction {
-                Direction::Up => migration.up(&schema).await?,
-                Direction::Down => migration.down(&schema).await?,
-            }
-        }
-        SetMigration::SeaOrm(migration) => {
-            let manager = match tx.sea() {
-                Some(sea) => SchemaManager::new(sea),
-                None => return Err("a SeaORM migration needs a SeaORM transaction".into()),
-            };
-            match direction {
-                Direction::Up => migration.up(&manager).await?,
-                Direction::Down => migration.down(&manager).await?,
-            }
-        }
-    }
-    Ok(())
+    run_on(step, direction, tx).await
 }
 
 /// Runs a step outside a transaction, on the session's connection.
@@ -527,21 +472,20 @@ async fn run_on_connection(
     direction: Direction,
     session: &Conn,
 ) -> Result<(), BoxError> {
-    match step.body {
-        SetMigration::Schema(migration) => {
-            let schema = Schema::new(session);
-            match direction {
-                Direction::Up => migration.up(&schema).await?,
-                Direction::Down => migration.down(&schema).await?,
-            }
-        }
-        SetMigration::SeaOrm(migration) => {
-            let manager = SchemaManager::new(session.sea());
-            match direction {
-                Direction::Up => migration.up(&manager).await?,
-                Direction::Down => migration.down(&manager).await?,
-            }
-        }
+    run_on(step, direction, session).await
+}
+
+/// Runs a step's `up` or `down` on `conn`.
+async fn run_on(
+    step: &Step<'_>,
+    direction: Direction,
+    conn: &(impl SchemaConnection + Sync),
+) -> Result<(), BoxError> {
+    let migration = step.body.migration();
+    let schema = Schema::new(conn);
+    match direction {
+        Direction::Up => migration.up(&schema).await?,
+        Direction::Down => migration.down(&schema).await?,
     }
     Ok(())
 }
@@ -713,7 +657,7 @@ mod tests {
     fn step(migration: &dyn NamedMigration) -> Step<'_> {
         Step {
             module: "crm",
-            body: SetMigration::Schema(migration),
+            body: super::super::SetMigration(migration),
         }
     }
 

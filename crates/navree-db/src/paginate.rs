@@ -1,5 +1,8 @@
-//! Offset pagination ([`PageQuery`], [`Page`], [`paginate`]) and cursor
-//! pagination ([`CursorQuery`], [`CursorPage`], [`cursor_paginate`]).
+//! The shapes of pagination: offset pages ([`PageQuery`], [`Page`]) and
+//! cursor pages ([`CursorQuery`], [`CursorPage`]), as extractors and
+//! responses. navree-orm's builders fill them (`Builder::paginate`,
+//! `cursor_paginate`); a [`Record`](crate::Record) select has
+//! [`page`](crate::Select::page).
 
 use std::collections::BTreeMap;
 
@@ -9,10 +12,6 @@ use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use http::request::Parts;
 use navree_http::{AppError, Json};
-use sea_orm::{
-    ColumnTrait, ConnectionTrait, DbErr, EntityTrait, ModelTrait, Order, PaginatorTrait,
-    QueryFilter, QueryOrder, QuerySelect, Select, Value,
-};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -168,35 +167,6 @@ impl<T: Serialize> IntoResponse for Page<T> {
     }
 }
 
-/// Runs `select` for page `q` (one `COUNT(*)` and one `LIMIT/OFFSET`
-/// query). Order `select` yourself for stable pages. A page past the end
-/// (any page number, however large) is empty; its rows are not queried.
-pub async fn paginate<E, C>(
-    select: Select<E>,
-    conn: &C,
-    q: PageQuery,
-) -> Result<Page<E::Model>, DbErr>
-where
-    E: EntityTrait,
-    E::Model: Send + Sync,
-    C: ConnectionTrait,
-{
-    let q = PageQuery::new(q.page, q.per_page);
-    let paginator = select.paginate(conn, q.per_page);
-    let total = paginator.num_items().await?;
-    // Only offsets below `total` reach SeaORM, whose `page * per_page`
-    // would overflow (and whose SQL bind panics above `i64::MAX`).
-    let past_the_end = (q.page - 1)
-        .checked_mul(q.per_page)
-        .is_none_or(|offset| offset >= total);
-    let data = if past_the_end {
-        Vec::new()
-    } else {
-        paginator.fetch_page(q.page - 1).await?
-    };
-    Ok(Page::new(data, q, total))
-}
-
 /// `?cursor=&limit=` for cursor pagination (`limit` defaults to 15 and is
 /// clamped to 100). As an extractor it rejects a malformed cursor or a
 /// non-positive limit with a 400.
@@ -287,89 +257,6 @@ impl<T: Serialize> IntoResponse for CursorPage<T> {
     }
 }
 
-/// Cursor pagination over a UUID v7 `column` (usually the primary key),
-/// oldest first. `select` may filter but must not be ordered.
-pub async fn cursor_paginate<E, C>(
-    select: Select<E>,
-    column: E::Column,
-    conn: &C,
-    q: CursorQuery,
-) -> Result<CursorPage<E::Model>, DbErr>
-where
-    E: EntityTrait,
-    E::Model: Send + Sync,
-    C: ConnectionTrait,
-{
-    cursor_page(select, column, conn, q, Order::Asc).await
-}
-
-/// Like [`cursor_paginate`], newest first.
-pub async fn cursor_paginate_desc<E, C>(
-    select: Select<E>,
-    column: E::Column,
-    conn: &C,
-    q: CursorQuery,
-) -> Result<CursorPage<E::Model>, DbErr>
-where
-    E: EntityTrait,
-    E::Model: Send + Sync,
-    C: ConnectionTrait,
-{
-    cursor_page(select, column, conn, q, Order::Desc).await
-}
-
-async fn cursor_page<E, C>(
-    select: Select<E>,
-    column: E::Column,
-    conn: &C,
-    q: CursorQuery,
-    order: Order,
-) -> Result<CursorPage<E::Model>, DbErr>
-where
-    E: EntityTrait,
-    E::Model: Send + Sync,
-    C: ConnectionTrait,
-{
-    let limit = q.limit.clamp(1, MAX_PER_PAGE);
-    let mut select = select;
-    if let Some(cursor) = q.cursor.as_deref() {
-        let after = decode_cursor(cursor)
-            .ok_or_else(|| DbErr::Type("invalid pagination cursor".to_owned()))?;
-        select = match order {
-            Order::Desc => select.filter(column.lt(after)),
-            _ => select.filter(column.gt(after)),
-        };
-    }
-    let mut data = select
-        .order_by(column, order)
-        .limit(limit + 1)
-        .all(conn)
-        .await?;
-    let next_cursor = if data.len() as u64 > limit {
-        data.truncate(usize::try_from(limit).unwrap_or(usize::MAX));
-        match data.last() {
-            Some(last) => Some(encode_cursor(&last.get(column))?),
-            None => None,
-        }
-    } else {
-        None
-    };
-    Ok(CursorPage { data, next_cursor })
-}
-
-/// The opaque cursor for a UUID column value.
-fn encode_cursor(value: &Value) -> Result<String, DbErr> {
-    let id = match value {
-        Value::Uuid(Some(id)) => *id,
-        Value::String(Some(s)) => Uuid::parse_str(s)
-            .map_err(|_| DbErr::Type("the cursor column must hold UUIDs".to_owned()))?,
-        _ => {
-            return Err(DbErr::Type("the cursor column must hold UUIDs".to_owned()));
-        }
-    };
-    Ok(URL_SAFE_NO_PAD.encode(id.as_bytes()))
-}
-
 fn decode_cursor(cursor: &str) -> Option<Uuid> {
     let bytes = URL_SAFE_NO_PAD.decode(cursor.trim()).ok()?;
     Uuid::from_slice(&bytes).ok()
@@ -382,7 +269,7 @@ mod tests {
     #[test]
     fn cursors_round_trip() {
         let id = Uuid::now_v7();
-        let cursor = encode_cursor(&Value::Uuid(Some(id))).unwrap();
+        let cursor = URL_SAFE_NO_PAD.encode(id.as_bytes());
         assert_eq!(decode_cursor(&cursor), Some(id));
         assert_eq!(decode_cursor("!!"), None);
         assert_eq!(decode_cursor("AAAA"), None, "wrong length");

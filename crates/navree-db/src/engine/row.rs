@@ -30,9 +30,6 @@ pub struct Row {
 enum RowInner {
     /// As the driver returned it.
     Driver(DriverRow),
-    /// A row SeaORM read (statements run through a SeaORM connection while
-    /// crates move off it).
-    Sea(sea_orm::QueryResult),
     /// Values built by hand.
     Values {
         columns: Arc<[String]>,
@@ -110,7 +107,6 @@ impl Row {
     pub fn backend(&self) -> Option<Backend> {
         match &self.inner {
             RowInner::Driver(row) => Some(row.backend()),
-            RowInner::Sea(row) => sea_row(row).map(|row| row.backend()),
             RowInner::Values { .. } => None,
         }
     }
@@ -119,7 +115,6 @@ impl Row {
     pub fn len(&self) -> usize {
         match &self.inner {
             RowInner::Driver(row) => row.len(),
-            RowInner::Sea(row) => sea_row(row).map_or(0, |row| row.len()),
             RowInner::Values { columns, .. } => columns.len(),
         }
     }
@@ -133,7 +128,6 @@ impl Row {
     pub fn columns(&self) -> Vec<String> {
         match &self.inner {
             RowInner::Driver(row) => row.columns().into_iter().map(str::to_owned).collect(),
-            RowInner::Sea(row) => sea_row(row).map_or_else(Vec::new, |row| row.columns()),
             RowInner::Values { columns, .. } => columns.to_vec(),
         }
     }
@@ -142,7 +136,6 @@ impl Row {
     pub fn column_index(&self, name: &str) -> Option<usize> {
         match &self.inner {
             RowInner::Driver(row) => row.columns().iter().position(|column| *column == name),
-            RowInner::Sea(_) => self.columns().iter().position(|column| column == name),
             RowInner::Values { columns, .. } => columns.iter().position(|column| column == name),
         }
     }
@@ -157,11 +150,6 @@ impl Row {
         let index = column.index_in(self)?;
         match &self.inner {
             RowInner::Driver(row) => row.value(index),
-            RowInner::Sea(row) => sea_row(row)
-                .ok_or_else(|| {
-                    DbError::unsupported("a row of a scripted connection cannot be read")
-                })?
-                .value(index),
             RowInner::Values { values, .. } => Ok(values[index].clone()),
         }
     }
@@ -193,27 +181,6 @@ impl Row {
         }
         Ok(object)
     }
-
-    /// The SeaORM row, when the row came through a SeaORM connection.
-    pub fn as_sea_orm(&self) -> Option<&sea_orm::QueryResult> {
-        match &self.inner {
-            RowInner::Sea(row) => Some(row),
-            _ => None,
-        }
-    }
-}
-
-impl From<sea_orm::QueryResult> for Row {
-    /// A SeaORM row: read through its driver row, or (a row of a scripted
-    /// connection, which has none) by its values.
-    fn from(row: sea_orm::QueryResult) -> Row {
-        if sea_row(&row).is_none() {
-            return crate::engine::compat::scripted_row(&row);
-        }
-        Row {
-            inner: RowInner::Sea(row),
-        }
-    }
 }
 
 impl fmt::Debug for Row {
@@ -226,88 +193,6 @@ impl fmt::Debug for Row {
             };
         }
         map.finish()
-    }
-}
-
-/// The driver row inside a SeaORM row.
-fn sea_row(row: &sea_orm::QueryResult) -> Option<SeaRow<'_>> {
-    #[cfg(feature = "postgres")]
-    if let Some(row) = row.try_as_pg_row() {
-        return Some(SeaRow::Postgres(row));
-    }
-    #[cfg(feature = "mysql")]
-    if let Some(row) = row.try_as_mysql_row() {
-        return Some(SeaRow::MySql(row));
-    }
-    #[cfg(feature = "sqlite")]
-    if let Some(row) = row.try_as_sqlite_row() {
-        return Some(SeaRow::Sqlite(row));
-    }
-    let _ = row;
-    None
-}
-
-/// A borrowed driver row of a SeaORM row.
-enum SeaRow<'a> {
-    #[cfg(feature = "postgres")]
-    Postgres(&'a sqlx::postgres::PgRow),
-    #[cfg(feature = "mysql")]
-    MySql(&'a sqlx::mysql::MySqlRow),
-    #[cfg(feature = "sqlite")]
-    Sqlite(&'a sqlx::sqlite::SqliteRow),
-    #[allow(dead_code)]
-    Never(std::marker::PhantomData<&'a ()>, std::convert::Infallible),
-}
-
-impl SeaRow<'_> {
-    fn backend(&self) -> Backend {
-        match self {
-            #[cfg(feature = "postgres")]
-            SeaRow::Postgres(_) => Backend::Postgres,
-            #[cfg(feature = "mysql")]
-            SeaRow::MySql(_) => Backend::MySql,
-            #[cfg(feature = "sqlite")]
-            SeaRow::Sqlite(_) => Backend::Sqlite,
-            SeaRow::Never(_, never) => match *never {},
-        }
-    }
-
-    fn len(&self) -> usize {
-        use sqlx::Row as _;
-        match self {
-            #[cfg(feature = "postgres")]
-            SeaRow::Postgres(row) => row.len(),
-            #[cfg(feature = "mysql")]
-            SeaRow::MySql(row) => row.len(),
-            #[cfg(feature = "sqlite")]
-            SeaRow::Sqlite(row) => row.len(),
-            SeaRow::Never(_, never) => match *never {},
-        }
-    }
-
-    fn columns(&self) -> Vec<String> {
-        use sqlx::{Column as _, Row as _};
-        match self {
-            #[cfg(feature = "postgres")]
-            SeaRow::Postgres(row) => row.columns().iter().map(|c| c.name().to_owned()).collect(),
-            #[cfg(feature = "mysql")]
-            SeaRow::MySql(row) => row.columns().iter().map(|c| c.name().to_owned()).collect(),
-            #[cfg(feature = "sqlite")]
-            SeaRow::Sqlite(row) => row.columns().iter().map(|c| c.name().to_owned()).collect(),
-            SeaRow::Never(_, never) => match *never {},
-        }
-    }
-
-    fn value(&self, index: usize) -> Result<Value, DbError> {
-        match self {
-            #[cfg(feature = "postgres")]
-            SeaRow::Postgres(row) => crate::engine::driver::postgres::value(row, index),
-            #[cfg(feature = "mysql")]
-            SeaRow::MySql(row) => crate::engine::driver::mysql::value(row, index),
-            #[cfg(feature = "sqlite")]
-            SeaRow::Sqlite(row) => crate::engine::driver::sqlite::value(row, index),
-            SeaRow::Never(_, never) => match *never {},
-        }
     }
 }
 

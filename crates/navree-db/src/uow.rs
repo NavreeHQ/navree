@@ -7,14 +7,9 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
 use navree_kernel::BoxFuture;
-use sea_orm::{
-    ConnectionTrait, DatabaseTransaction, DbBackend, DbErr, SqliteTransactionMode, Statement,
-    TransactionOptions, TransactionTrait,
-};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::engine::compat::SeaExecutor;
 use crate::queries::{QueryCounter, log_stats};
 use crate::{
     Backend, Db, DbError, Executed, Executor, QueryStats, Row, RowStream, Transaction, TxOptions,
@@ -50,9 +45,10 @@ impl fmt::Display for ChangeOp {
     }
 }
 
-/// A change to one record, recorded in the unit of work (by [`Repo`](crate::Repo)
-/// or by hand with [`Uow::record_change`]) and handed to every
-/// [`ChangeObserver`] at commit.
+/// A change to one record, recorded in the unit of work (by navree-orm's
+/// model writes, the recorded writes of [`record`](crate::record), or by
+/// hand with [`Uow::record_change`]) and handed to every [`ChangeObserver`]
+/// at commit.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ChangeEvent {
     /// The table, e.g. `deals`.
@@ -75,44 +71,34 @@ pub struct ChangeEvent {
 /// [`ModuleBuilderDbExt::change_observer`](crate::ModuleBuilderDbExt::change_observer);
 /// they are collected with `ctx.get_all::<dyn ChangeObserver>()`.
 ///
-/// Implement one of the two methods. [`observe_with`](ChangeObserver::observe_with)
-/// writes through the unit of work itself (an [`Executor`] on its
-/// transaction) and runs on every unit of work. [`observe`](ChangeObserver::observe)
-/// is handed SeaORM's transaction and runs only in units of work on
-/// SeaORM's transactions (the default while crates move off SeaORM).
+/// ```
+/// use navree_db::{ChangeEvent, ChangeObserver, DbError, Executor, Statement, Uow};
+/// use navree_kernel::BoxFuture;
+///
+/// struct Counter;
+///
+/// impl ChangeObserver for Counter {
+///     fn observe<'a>(&'a self, uow: &'a Uow, changes: &'a [ChangeEvent]) -> BoxFuture<'a, Result<(), DbError>> {
+///         Box::pin(async move {
+///             let statement = Statement::portable(
+///                 "UPDATE change_counts SET total = total + ?",
+///                 [(changes.len() as i64).into()],
+///             );
+///             uow.execute(&statement).await?;
+///             Ok(())
+///         })
+///     }
+/// }
+/// ```
 pub trait ChangeObserver: Send + Sync + 'static {
-    /// Called once per commit with every recorded change, in order, in a
-    /// unit of work on SeaORM's transaction `tx`. By default it runs
-    /// [`observe_with`](ChangeObserver::observe_with).
-    fn observe<'a>(
-        &'a self,
-        tx: &'a DatabaseTransaction,
-        uow: &'a Uow,
-        changes: &'a [ChangeEvent],
-    ) -> BoxFuture<'a, Result<(), DbErr>> {
-        let _ = tx;
-        Box::pin(async move { self.observe_with(uow, changes).await.map_err(DbErr::from) })
-    }
-
     /// Called once per commit with every recorded change, in order. `uow`
     /// runs statements in the transaction being committed (it is an
-    /// [`Executor`] until the commit ends). By default it fails: an
-    /// observer that only implements [`observe`](ChangeObserver::observe)
-    /// cannot run in a unit of work on navree-db's own transaction.
-    fn observe_with<'a>(
+    /// [`Executor`] until the commit ends).
+    fn observe<'a>(
         &'a self,
         uow: &'a Uow,
         changes: &'a [ChangeEvent],
-    ) -> BoxFuture<'a, Result<(), DbError>> {
-        let _ = (uow, changes);
-        Box::pin(async move {
-            Err(DbError::unsupported(format!(
-                "the change observer `{}` writes through a SeaORM transaction: implement \
-                 `ChangeObserver::observe_with` to run it in a unit of work on navree-db's own transactions",
-                std::any::type_name::<Self>()
-            )))
-        })
-    }
+    ) -> BoxFuture<'a, Result<(), DbError>>;
 }
 
 /// A hook run after a successful commit.
@@ -120,7 +106,8 @@ type AfterCommit = Box<dyn FnOnce() -> BoxFuture<'static, ()> + Send>;
 
 /// Prepares a change event on demand: `None` when the write changed
 /// nothing worth an event.
-pub(crate) type PrepareChange = Box<dyn Fn() -> Result<Option<ChangeEvent>, DbErr> + Send + Sync>;
+pub(crate) type PrepareChange =
+    Box<dyn Fn() -> Result<Option<ChangeEvent>, DbError> + Send + Sync>;
 
 /// A recorded change: its event, or what prepares it. Writes defer the
 /// event (serializing records to JSON) in an app with no change observer,
@@ -132,44 +119,10 @@ enum Recorded {
 
 impl Recorded {
     /// The event, prepared now if it was deferred.
-    fn event(&self) -> Result<Option<ChangeEvent>, DbErr> {
+    fn event(&self) -> Result<Option<ChangeEvent>, DbError> {
         match self {
             Recorded::Ready(event) => Ok(Some(event.clone())),
             Recorded::Deferred(prepare) => prepare(),
-        }
-    }
-}
-
-/// The transaction of a unit of work: SeaORM's (the default while crates
-/// move off SeaORM; it serves navree-db's statements too) or navree-db's
-/// own ([`Db::with_native_units_of_work`]).
-#[derive(Clone)]
-enum UowTx {
-    Sea(Arc<DatabaseTransaction>),
-    Native(Arc<Transaction>),
-}
-
-impl UowTx {
-    /// navree-db's statements on this transaction.
-    fn executor(&self) -> TxExecutor<'_> {
-        match self {
-            UowTx::Native(tx) => TxExecutor::Native(tx),
-            UowTx::Sea(tx) => TxExecutor::Sea(SeaExecutor::new(&**tx)),
-        }
-    }
-}
-
-/// An [`Executor`] on a unit of work's transaction.
-enum TxExecutor<'a> {
-    Native(&'a Transaction),
-    Sea(SeaExecutor<'a, DatabaseTransaction>),
-}
-
-impl TxExecutor<'_> {
-    fn get(&self) -> &dyn Executor {
-        match self {
-            TxExecutor::Native(tx) => *tx,
-            TxExecutor::Sea(sea) => sea,
         }
     }
 }
@@ -178,27 +131,24 @@ enum TxState {
     /// No transaction yet (the unit of work is lazy).
     Idle,
     /// The open transaction.
-    Open(UowTx),
+    Open(Arc<Transaction>),
     /// Committed or rolled back.
     Done,
 }
 
 /// The unit of work: one per HTTP request, job run or command. It carries
 /// the actor and request id, opens its database transaction lazily on the
-/// first [`tx`](Uow::tx) (or statement, as an [`Executor`]), collects
-/// [`ChangeEvent`]s and after-commit hooks, and commits or rolls back once.
+/// first statement (it is an [`Executor`]), collects [`ChangeEvent`]s and
+/// after-commit hooks, and commits or rolls back once.
 ///
 /// In HTTP handlers, take it as an extractor (the `DatabaseModule` layer
 /// commits it when the response status is below 400 and rolls it back
 /// otherwise). Elsewhere, create one with [`Db::uow`]. Services take
-/// `&Uow` as a parameter instead of having it injected.
-///
-/// **Two transactions, one unit of work.** A unit of work runs on SeaORM's
-/// transaction by default, which [`tx`](Uow::tx) hands out and navree-db's
-/// statements ([`Executor`]) share; or, on a `Db` made with
-/// [`Db::with_native_units_of_work`], on navree-db's own transaction,
-/// reached only through [`Executor`], [`savepoint`](Uow::savepoint) and
-/// [`set_local`](Uow::set_local). Everything below holds for both.
+/// `&Uow` as a parameter instead of having it injected; navree-orm's
+/// models run on it (`Deal::create(&uow, ..)`), and so do navree-db's
+/// statements (`uow.fetch_all(&statement)`), savepoints
+/// ([`savepoint`](Uow::savepoint)) and transaction-local settings
+/// ([`set_local`](Uow::set_local)).
 ///
 /// **Per database.** On SQLite the transaction starts with `BEGIN
 /// IMMEDIATE`, so concurrent units of work queue on the write lock (up to
@@ -219,13 +169,13 @@ enum TxState {
 ///
 /// MySQL has no row-level security, so nothing in the database itself
 /// keeps one workspace's rows from another's: on MySQL, workspace isolation
-/// is query scoping (every query of a workspace-scoped repository filters
-/// on `workspace_id`), and only PostgreSQL can also enforce it with
-/// policies. Rows are locked with `SELECT ... FOR UPDATE` on PostgreSQL
-/// and MySQL ([`lock_for_update`](Uow::lock_for_update)). A deadlock
-/// (error 1213) makes MySQL roll the whole transaction back at once, and
-/// whatever runs through it afterwards commits on its own, beyond the reach
-/// of [`rollback`](Uow::rollback): return the error instead of carrying on.
+/// is query scoping (every query of a workspace-scoped model filters on
+/// `workspace_id`), and only PostgreSQL can also enforce it with policies.
+/// Rows are locked with `SELECT ... FOR UPDATE` on PostgreSQL and MySQL
+/// ([`lock_for_update`](Uow::lock_for_update)). A deadlock (error 1213)
+/// makes MySQL roll the whole transaction back at once, and whatever runs
+/// through it afterwards commits on its own, beyond the reach of
+/// [`rollback`](Uow::rollback): return the error instead of carrying on.
 ///
 /// **Current unit of work.** While a request's handler runs (and inside
 /// [`Db::transaction`] or [`scope`](Uow::scope)), [`Uow::current`] returns
@@ -248,7 +198,7 @@ struct UowInner {
     tx: tokio::sync::Mutex<TxState>,
     /// The transaction while change observers run inside the commit (the
     /// unit of work already counts as finished).
-    observing: Mutex<Option<UowTx>>,
+    observing: Mutex<Option<Arc<Transaction>>>,
     /// MySQL session variables [`Uow::set_local`] set, cleared before the
     /// transaction ends.
     session_variables: Mutex<Vec<String>>,
@@ -263,15 +213,6 @@ struct UowInner {
 tokio::task_local! {
     /// The unit of work of the running task (see [`Uow::current`]).
     static CURRENT: Uow;
-}
-
-/// Why a unit of work on navree-db's own transaction has no SeaORM one.
-fn no_sea_transaction() -> DbErr {
-    DbErr::Custom(
-        "this unit of work runs on navree-db's own transaction, which has no SeaORM transaction to hand out: \
-         run statements through it as an `Executor`"
-            .to_owned(),
-    )
 }
 
 impl Uow {
@@ -376,8 +317,8 @@ impl Uow {
     }
 
     /// Notes that something was written through the unit of work (the
-    /// ORM's writes, [`Repo`](crate::Repo) and recorded changes do it);
-    /// see [`has_modified_records`](Uow::has_modified_records).
+    /// ORM's writes, recorded writes and statements through `execute` do
+    /// it); see [`has_modified_records`](Uow::has_modified_records).
     pub fn mark_modified(&self) {
         self.inner.modified.store(true, Ordering::Relaxed);
     }
@@ -389,42 +330,9 @@ impl Uow {
         self.inner.modified.load(Ordering::Relaxed)
     }
 
-    /// The SeaORM transaction, begun on the first call. Drop the returned
-    /// `Arc` before the unit of work commits (at the end of the handler).
-    /// Fails for a unit of work on navree-db's own transaction
-    /// ([`Db::with_native_units_of_work`]): run statements through it as an
-    /// [`Executor`] instead.
-    pub async fn tx(&self) -> Result<Arc<DatabaseTransaction>, DbErr> {
-        let mut state = self.inner.tx.lock().await;
-        match &*state {
-            TxState::Open(UowTx::Sea(tx)) => Ok(tx.clone()),
-            TxState::Open(UowTx::Native(_)) => Err(no_sea_transaction()),
-            TxState::Done => Err(DbErr::Custom(
-                "the unit of work is already committed or rolled back".to_owned(),
-            )),
-            TxState::Idle if self.inner.db.native_units_of_work() => Err(no_sea_transaction()),
-            TxState::Idle => {
-                let tx = Arc::new(self.begin_sea().await?);
-                *state = TxState::Open(UowTx::Sea(tx.clone()));
-                Ok(tx)
-            }
-        }
-    }
-
-    /// The SeaORM transaction when it is open, without beginning one
-    /// (unlike [`tx`](Uow::tx)): `None` before the first `tx`, once the
-    /// unit of work is finished, and for a unit of work on navree-db's own
-    /// transaction. See [`Db::reader`].
-    pub async fn open_tx(&self) -> Option<Arc<DatabaseTransaction>> {
-        match &*self.inner.tx.lock().await {
-            TxState::Open(UowTx::Sea(tx)) => Some(tx.clone()),
-            TxState::Open(UowTx::Native(_)) | TxState::Idle | TxState::Done => None,
-        }
-    }
-
-    /// The transaction for navree-db's statements: the one observers run
-    /// in during the commit, else the open one, else a new one.
-    async fn transaction(&self) -> Result<UowTx, DbError> {
+    /// The transaction for statements: the one observers run in during
+    /// the commit, else the open one, else a new one.
+    async fn transaction(&self) -> Result<Arc<Transaction>, DbError> {
         if let Some(tx) = lock(&self.inner.observing).clone() {
             return Ok(tx);
         }
@@ -435,7 +343,7 @@ impl Uow {
                 "the unit of work is already committed or rolled back",
             )),
             TxState::Idle => {
-                let tx = self.begin().await?;
+                let tx = Arc::new(self.begin().await?);
                 *state = TxState::Open(tx.clone());
                 Ok(tx)
             }
@@ -444,15 +352,21 @@ impl Uow {
 
     /// A savepoint inside the unit of work's transaction (begun if need
     /// be): a nested level that commits or rolls back on its own, for work
-    /// that may fail without failing the unit of work. Only on navree-db's
-    /// own transaction; on SeaORM's, use `uow.tx().await?.begin()`.
+    /// that may fail without failing the unit of work.
+    ///
+    /// ```no_run
+    /// # async fn demo(uow: navree_db::Uow) -> Result<(), navree_db::DbError> {
+    /// use navree_db::{Executor, Statement};
+    ///
+    /// let savepoint = uow.savepoint().await?;
+    /// match savepoint.execute(&Statement::text("UPDATE deals SET stage = 'won'")).await {
+    ///     Ok(_) => savepoint.commit().await?,
+    ///     Err(_) => savepoint.rollback().await?,
+    /// }
+    /// # Ok(()) }
+    /// ```
     pub async fn savepoint(&self) -> Result<Transaction, DbError> {
-        match self.transaction().await? {
-            UowTx::Native(tx) => tx.savepoint().await,
-            UowTx::Sea(_) => Err(DbError::unsupported(
-                "this unit of work runs on a SeaORM transaction: nest one with `uow.tx().await?.begin()`",
-            )),
-        }
+        self.transaction().await?.savepoint().await
     }
 
     /// Sets `name` to `value` for the rest of the transaction (begun if
@@ -528,7 +442,7 @@ impl Uow {
     ///
     /// ```
     /// # #[tokio::main(flavor = "current_thread")]
-    /// # async fn main() -> Result<(), sea_orm::DbErr> {
+    /// # async fn main() -> Result<(), navree_db::DbError> {
     /// # let dir = tempfile::tempdir().unwrap();
     /// # let url = format!("sqlite://{}?mode=rwc", dir.path().join("w.db").display());
     /// use navree_db::{Db, DbOptions};
@@ -568,7 +482,7 @@ impl Uow {
     /// Records the change `prepare` describes: prepared now when the app
     /// has a [`ChangeObserver`] (an error is returned, as the write's own),
     /// when [`changes`](Uow::changes) asks otherwise.
-    pub(crate) fn record_with(&self, prepare: PrepareChange) -> Result<(), DbErr> {
+    pub(crate) fn record_with(&self, prepare: PrepareChange) -> Result<(), DbError> {
         if self.inner.db.observed() {
             if let Some(event) = prepare()? {
                 self.record_change(event);
@@ -580,14 +494,13 @@ impl Uow {
         Ok(())
     }
 
-    /// [`record_with`](Uow::record_with) for navree-db's own errors (the
-    /// record statements of [`crate::record`]).
+    /// [`record_with`](Uow::record_with) for a closure (the record
+    /// statements of [`crate::record`]).
     pub(crate) fn record_lazily(
         &self,
         prepare: impl Fn() -> Result<Option<ChangeEvent>, DbError> + Send + Sync + 'static,
     ) -> Result<(), DbError> {
-        self.record_with(Box::new(move || prepare().map_err(DbErr::from)))
-            .map_err(DbError::from)
+        self.record_with(Box::new(prepare))
     }
 
     /// The changes recorded so far (cleared by commit and rollback). A
@@ -614,20 +527,19 @@ impl Uow {
 
     /// Runs the [`ChangeObserver`]s inside the transaction, commits, then runs
     /// the after-commit hooks. An observer error rolls back and is returned.
-    /// Fails if an `Arc` from [`tx`](Uow::tx) is still held. Committing a
-    /// finished unit of work does nothing.
+    /// Committing a finished unit of work does nothing.
     ///
     /// The unit of work counts as finished as soon as `commit` starts:
-    /// observers write through the transaction they are given (or through
-    /// the unit of work, an [`Executor`] until the commit ends), and
-    /// [`tx`](Uow::tx) fails from then on. Observers may still register
-    /// [`after_commit`](Uow::after_commit) hooks; they run after the ones
-    /// registered before the commit. On MySQL the session variables are
-    /// cleared after the observers, right before `COMMIT`; if that fails, the
-    /// unit of work rolls back and the error is returned.
-    pub async fn commit(&self) -> Result<(), DbErr> {
+    /// observers write through the unit of work (an [`Executor`] on the
+    /// transaction being committed until the commit ends). Observers may
+    /// still register [`after_commit`](Uow::after_commit) hooks; they run
+    /// after the ones registered before the commit. On MySQL the session
+    /// variables are cleared after the observers, right before `COMMIT`;
+    /// if that fails, the unit of work rolls back and the error is
+    /// returned.
+    pub async fn commit(&self) -> Result<(), DbError> {
         // Boxed, as `begin`: the commit's future is deep.
-        let committing: BoxFuture<'_, Result<bool, DbErr>> = Box::pin(self.commit_tx());
+        let committing: BoxFuture<'_, Result<bool, DbError>> = Box::pin(self.commit_tx());
         let committed = committing.await;
         // Taken after the observers ran, so hooks they registered run too.
         let hooks = std::mem::take(&mut *lock(&self.inner.after_commit));
@@ -642,12 +554,16 @@ impl Uow {
     /// The transaction to end: the open one; a new one when changes were
     /// recorded without one (their observers still run); `None` when there
     /// is nothing to end.
-    async fn ending(&self, current: TxState, changes: &[Recorded]) -> Result<Option<UowTx>, DbErr> {
+    async fn ending(
+        &self,
+        current: TxState,
+        changes: &[Recorded],
+    ) -> Result<Option<Arc<Transaction>>, DbError> {
         Ok(match current {
             TxState::Done | TxState::Idle if changes.is_empty() => None,
             TxState::Done => None,
             TxState::Open(tx) => Some(tx),
-            TxState::Idle => Some(self.begin().await?),
+            TxState::Idle => Some(Arc::new(self.begin().await?)),
         })
     }
 
@@ -655,7 +571,7 @@ impl Uow {
     /// finished, runs the observers and commits the transaction. `false`
     /// when it was already finished (its hooks are dropped then, as after a
     /// failed commit).
-    async fn commit_tx(&self) -> Result<bool, DbErr> {
+    async fn commit_tx(&self) -> Result<bool, DbError> {
         let current = std::mem::replace(&mut *self.inner.tx.lock().await, TxState::Done);
         let changes = std::mem::take(&mut *lock(&self.inner.changes));
         if matches!(current, TxState::Done) {
@@ -665,62 +581,16 @@ impl Uow {
         let Some(tx) = self.ending(current, &changes).await? else {
             return Ok(true);
         };
-        match tx {
-            UowTx::Sea(tx) => self.commit_sea(tx, &changes).await,
-            UowTx::Native(tx) => self.commit_native(tx, &changes).await,
-        }
-    }
-
-    /// Commits SeaORM's transaction.
-    async fn commit_sea(
-        &self,
-        tx: Arc<DatabaseTransaction>,
-        changes: &[Recorded],
-    ) -> Result<bool, DbErr> {
-        // Nobody can take a new handle once the unit of work is finished; a
-        // handle still held means the transaction cannot be committed.
-        if Arc::strong_count(&tx) > 1 {
-            // Rolled back when the last holder drops it.
-            self.end_session_sea_or_warn(&tx).await;
-            return Err(still_in_use("commit"));
-        }
-        if let Err(error) = self.observe_sea(&tx, changes).await {
-            self.end_session_sea_or_warn(&tx).await;
-            rollback_or_warn(sole(tx, "commit")?, "a change observer error").await;
+        if let Err(error) = self.observe(&tx, &changes).await {
+            self.end_session_or_warn(&tx).await;
+            rollback_or_warn(&tx, "a change observer error").await;
             return Err(error);
         }
-        if let Err(error) = self.end_session_sea(&tx).await {
-            rollback_or_warn(
-                sole(tx, "commit")?,
-                "a failure to clear the session variables",
-            )
-            .await;
+        if let Err(error) = self.end_session(&tx).await {
+            rollback_or_warn(&tx, "a failure to clear the session variables").await;
             return Err(error);
         }
-        sole(tx, "commit")?.commit().await.map(|()| true)
-    }
-
-    /// Commits navree-db's own transaction.
-    async fn commit_native(
-        &self,
-        tx: Arc<Transaction>,
-        changes: &[Recorded],
-    ) -> Result<bool, DbErr> {
-        let observed = self.observe_native(&tx, changes).await;
-        if let Err(error) = observed {
-            self.end_session_native_or_warn(&tx).await;
-            if let Err(rollback) = tx.rollback_ref().await {
-                tracing::warn!(target: "navree_db::uow", error = %rollback, cause = "a change observer error", "rollback failed");
-            }
-            return Err(error.into());
-        }
-        if let Err(error) = self.end_session_native(&tx).await {
-            if let Err(rollback) = tx.rollback_ref().await {
-                tracing::warn!(target: "navree_db::uow", error = %rollback, cause = "a failure to clear the session variables", "rollback failed");
-            }
-            return Err(error.into());
-        }
-        tx.commit_ref().await.map_err(DbErr::from)?;
+        tx.commit_ref().await?;
         Ok(true)
     }
 
@@ -729,50 +599,30 @@ impl Uow {
     /// then the after-commit hooks run. The transaction-per-test strategy:
     /// nothing a test wrote stays, and what a commit triggers (jobs, mail,
     /// broadcasts) still happens, so the test can assert it. Hooks run
-    /// after the rollback and see what other connections see. Fails like
-    /// [`commit`](Uow::commit) when an `Arc` from [`tx`](Uow::tx) is still
-    /// held (the transaction then rolls back when the last holder drops it,
-    /// and the hooks are dropped); an observer error is returned after the
-    /// rollback, and the hooks are dropped. Ending a finished unit of work
-    /// does nothing.
-    pub async fn rollback_as_committed(&self) -> Result<(), DbErr> {
+    /// after the rollback and see what other connections see. An observer
+    /// error is returned after the rollback, and the hooks are dropped.
+    /// Ending a finished unit of work does nothing.
+    pub async fn rollback_as_committed(&self) -> Result<(), DbError> {
         // Boxed, as `begin`: ending the transaction's future is deep.
-        let ending: BoxFuture<'_, Result<(), DbErr>> = Box::pin(self.end_as_committed());
+        let ending: BoxFuture<'_, Result<(), DbError>> = Box::pin(self.end_as_committed());
         ending.await
     }
 
     /// [`rollback_as_committed`](Uow::rollback_as_committed), unboxed.
-    async fn end_as_committed(&self) -> Result<(), DbErr> {
+    async fn end_as_committed(&self) -> Result<(), DbError> {
         let current = std::mem::replace(&mut *self.inner.tx.lock().await, TxState::Done);
         let changes = std::mem::take(&mut *lock(&self.inner.changes));
         if matches!(current, TxState::Done) {
             return Ok(());
         }
-        match self.ending(current, &changes).await? {
-            Some(UowTx::Sea(tx)) => {
-                if Arc::strong_count(&tx) > 1 {
-                    self.end_session_sea_or_warn(&tx).await;
-                    lock(&self.inner.after_commit).clear();
-                    return Err(still_in_use("end"));
-                }
-                let observed = self.observe_sea(&tx, &changes).await;
-                self.end_session_sea_or_warn(&tx).await;
-                sole(tx, "end")?.rollback().await?;
-                if let Err(error) = observed {
-                    lock(&self.inner.after_commit).clear();
-                    return Err(error);
-                }
+        if let Some(tx) = self.ending(current, &changes).await? {
+            let observed = self.observe(&tx, &changes).await;
+            self.end_session_or_warn(&tx).await;
+            tx.rollback_ref().await?;
+            if let Err(error) = observed {
+                lock(&self.inner.after_commit).clear();
+                return Err(error);
             }
-            Some(UowTx::Native(tx)) => {
-                let observed = self.observe_native(&tx, &changes).await;
-                self.end_session_native_or_warn(&tx).await;
-                tx.rollback_ref().await?;
-                if let Err(error) = observed {
-                    lock(&self.inner.after_commit).clear();
-                    return Err(error.into());
-                }
-            }
-            None => {}
         }
         // Taken after the observers ran, so hooks they registered run too.
         let hooks = std::mem::take(&mut *lock(&self.inner.after_commit));
@@ -784,17 +634,15 @@ impl Uow {
 
     /// Rolls back and drops recorded changes and after-commit hooks.
     /// Rolling back a finished unit of work does nothing. On MySQL the
-    /// session variables are cleared first, also when the transaction is
-    /// still held elsewhere (it then rolls back when the last holder drops
-    /// it).
-    pub async fn rollback(&self) -> Result<(), DbErr> {
+    /// session variables are cleared first.
+    pub async fn rollback(&self) -> Result<(), DbError> {
         // Boxed, as `begin`: ending the transaction's future is deep.
-        let ending: BoxFuture<'_, Result<(), DbErr>> = Box::pin(self.roll_back());
+        let ending: BoxFuture<'_, Result<(), DbError>> = Box::pin(self.roll_back());
         ending.await
     }
 
     /// [`rollback`](Uow::rollback), unboxed.
-    async fn roll_back(&self) -> Result<(), DbErr> {
+    async fn roll_back(&self) -> Result<(), DbError> {
         let current = std::mem::replace(&mut *self.inner.tx.lock().await, TxState::Done);
         lock(&self.inner.changes).clear();
         lock(&self.inner.after_commit).clear();
@@ -802,17 +650,9 @@ impl Uow {
             self.log_query_stats();
         }
         match current {
-            TxState::Open(UowTx::Sea(tx)) => {
-                self.end_session_sea_or_warn(&tx).await;
-                match Arc::try_unwrap(tx) {
-                    Ok(tx) => tx.rollback().await,
-                    // Still held elsewhere: rolled back when the last holder drops it.
-                    Err(_) => Ok(()),
-                }
-            }
-            TxState::Open(UowTx::Native(tx)) => {
-                self.end_session_native_or_warn(&tx).await;
-                tx.rollback_ref().await.map_err(DbErr::from)
+            TxState::Open(tx) => {
+                self.end_session_or_warn(&tx).await;
+                tx.rollback_ref().await
             }
             TxState::Idle | TxState::Done => Ok(()),
         }
@@ -822,22 +662,28 @@ impl Uow {
     /// LOCKED`): true on PostgreSQL and MySQL, false on SQLite, where
     /// `BEGIN IMMEDIATE` already serialises writers.
     pub fn lock_for_update(&self) -> bool {
-        self.inner.db.backend() != DbBackend::Sqlite
+        self.inner.db.backend() != Backend::Sqlite
     }
 
-    /// Begins the unit of work's transaction: navree-db's own or SeaORM's,
-    /// as its `Db` says. Boxed: units of work are awaited deep inside
-    /// handlers, jobs and commands, and the drivers' futures are deep; a
-    /// boxed future keeps every caller's future type shallow.
-    fn begin(&self) -> BoxFuture<'_, Result<UowTx, DbErr>> {
+    /// Begins the unit of work's transaction: `BEGIN IMMEDIATE` on SQLite,
+    /// the actor and request id set right after `BEGIN` elsewhere. Boxed:
+    /// units of work are awaited deep inside handlers, jobs and commands,
+    /// and the drivers' futures are deep; a boxed future keeps every
+    /// caller's future type shallow.
+    fn begin(&self) -> BoxFuture<'_, Result<Transaction, DbError>> {
         Box::pin(async move {
-            if self.inner.db.native_units_of_work() {
-                Ok(UowTx::Native(Arc::new(
-                    self.begin_native().await.map_err(DbErr::from)?,
-                )))
-            } else {
-                Ok(UowTx::Sea(Arc::new(self.begin_sea().await?)))
+            let db = &self.inner.db;
+            let backend = db.backend();
+            let options = match backend {
+                Backend::Sqlite => TxOptions::new().immediate(),
+                Backend::Postgres | Backend::MySql => TxOptions::new(),
+            };
+            let tx = db.begin_with(options).await?;
+            if let Some(statement) = self.settings_statement(backend) {
+                // A failure drops `tx`, which rolls it back.
+                tx.execute(&statement).await?;
             }
+            Ok(tx)
         })
     }
 
@@ -872,108 +718,23 @@ impl Uow {
         }
     }
 
-    /// Begins navree-db's own transaction: `BEGIN IMMEDIATE` on SQLite, the
-    /// actor and request id set right after `BEGIN` elsewhere.
-    async fn begin_native(&self) -> Result<Transaction, DbError> {
-        let db = &self.inner.db;
-        let backend = Executor::backend(db);
-        let options = match backend {
-            Backend::Sqlite => TxOptions::new().immediate(),
-            Backend::Postgres | Backend::MySql => TxOptions::new(),
-        };
-        let tx = db.begin_with(options).await?;
-        if let Some(statement) = self.settings_statement(backend) {
-            // A failure drops `tx`, which rolls it back.
-            tx.execute(&statement).await?;
-        }
-        Ok(tx)
-    }
-
-    /// Begins SeaORM's transaction.
-    async fn begin_sea(&self) -> Result<DatabaseTransaction, DbErr> {
-        let db = &self.inner.db;
-        db.run_before_starting_transaction();
-        let backend = match db.backend() {
-            // Nothing to set: `database.transaction_settings` is off.
-            DbBackend::Postgres | DbBackend::MySql if !db.transaction_settings() => {
-                return db.conn().begin().await;
-            }
-            backend => backend,
-        };
-        match backend {
-            DbBackend::Sqlite => {
-                db.conn()
-                    .begin_with_options(TransactionOptions {
-                        sqlite_transaction_mode: Some(SqliteTransactionMode::Immediate),
-                        ..TransactionOptions::default()
-                    })
-                    .await
-            }
-            DbBackend::Postgres | DbBackend::MySql => {
-                let tx = db.conn().begin().await?;
-                let statement = self
-                    .settings_statement(crate::engine::compat::backend_of(backend))
-                    .expect("PostgreSQL and MySQL set the actor and request id");
-                let (sql, values) = statement.into_parts();
-                // A failure drops `tx`, which rolls it back.
-                tx.execute_raw(Statement::from_sql_and_values(
-                    backend,
-                    sql,
-                    values.iter().map(crate::engine::compat::to_sea_value),
-                ))
-                .await?;
-                Ok(tx)
-            }
-            _ => db.conn().begin().await,
-        }
-    }
-
-    /// The change events of `changes`, when the app has observers to see
-    /// them.
-    async fn events_for_observers(
-        &self,
-        changes: &[Recorded],
-    ) -> Result<Option<(Vec<ChangeEvent>, &[Arc<dyn ChangeObserver>])>, DbErr> {
+    /// Runs the change observers on `changes`, in `tx`, when the app has
+    /// any.
+    async fn observe(&self, tx: &Arc<Transaction>, changes: &[Recorded]) -> Result<(), DbError> {
         if changes.is_empty() {
-            return Ok(None);
+            return Ok(());
         }
         let observers = self.inner.db.observers().await?;
         if observers.is_empty() {
-            return Ok(None);
+            return Ok(());
         }
         let mut events = Vec::with_capacity(changes.len());
         for recorded in changes {
             events.extend(recorded.event()?);
         }
-        Ok(Some((events, observers)))
-    }
-
-    async fn observe_sea(
-        &self,
-        tx: &Arc<DatabaseTransaction>,
-        changes: &[Recorded],
-    ) -> Result<(), DbErr> {
-        let Some((events, observers)) = self.events_for_observers(changes).await? else {
-            return Ok(());
-        };
-        let _observing = Observing::new(self, UowTx::Sea(tx.clone()));
+        let _observing = Observing::new(self, tx.clone());
         for observer in observers {
-            observer.observe(tx, self, &events).await?;
-        }
-        Ok(())
-    }
-
-    async fn observe_native(
-        &self,
-        tx: &Arc<Transaction>,
-        changes: &[Recorded],
-    ) -> Result<(), DbError> {
-        let Some((events, observers)) = self.events_for_observers(changes).await? else {
-            return Ok(());
-        };
-        let _observing = Observing::new(self, UowTx::Native(tx.clone()));
-        for observer in observers {
-            observer.observe_with(self, &events).await?;
+            observer.observe(self, &events).await?;
         }
         Ok(())
     }
@@ -984,7 +745,7 @@ impl Uow {
     /// pool; PostgreSQL's `set_config(.., true)` ends with the
     /// transaction.
     fn end_session_sql(&self) -> Option<String> {
-        if self.inner.db.backend() != DbBackend::MySql {
+        if self.inner.db.backend() != Backend::MySql {
             return None;
         }
         let extra = std::mem::take(&mut *lock(&self.inner.session_variables));
@@ -1006,28 +767,15 @@ impl Uow {
         Some(sql)
     }
 
-    async fn end_session_sea(&self, tx: &DatabaseTransaction) -> Result<(), DbErr> {
-        if let Some(sql) = self.end_session_sql() {
-            tx.execute_unprepared(&sql).await?;
-        }
-        Ok(())
-    }
-
-    async fn end_session_sea_or_warn(&self, tx: &DatabaseTransaction) {
-        if let Err(error) = self.end_session_sea(tx).await {
-            tracing::warn!(target: "navree_db::uow", %error, "clearing the unit of work's session variables failed");
-        }
-    }
-
-    async fn end_session_native(&self, tx: &Transaction) -> Result<(), DbError> {
+    async fn end_session(&self, tx: &Transaction) -> Result<(), DbError> {
         if let Some(sql) = self.end_session_sql() {
             tx.execute_script(&sql).await?;
         }
         Ok(())
     }
 
-    async fn end_session_native_or_warn(&self, tx: &Transaction) {
-        if let Err(error) = self.end_session_native(tx).await {
+    async fn end_session_or_warn(&self, tx: &Transaction) {
+        if let Err(error) = self.end_session(tx).await {
             tracing::warn!(target: "navree_db::uow", %error, "clearing the unit of work's session variables failed");
         }
     }
@@ -1039,7 +787,7 @@ struct Observing<'a> {
 }
 
 impl<'a> Observing<'a> {
-    fn new(uow: &'a Uow, tx: UowTx) -> Self {
+    fn new(uow: &'a Uow, tx: Arc<Transaction>) -> Self {
         *lock(&uow.inner.observing) = Some(tx);
         Observing { uow }
     }
@@ -1051,13 +799,19 @@ impl Drop for Observing<'_> {
     }
 }
 
-/// Statements in the unit of work's transaction (begun on the first one).
-/// On a unit of work on SeaORM's transaction they run in that transaction;
+/// Rolls `tx` back after `cause` stopped its commit.
+async fn rollback_or_warn(tx: &Transaction, cause: &str) {
+    if let Err(error) = tx.rollback_ref().await {
+        tracing::warn!(target: "navree_db::uow", %error, cause, "rollback failed");
+    }
+}
+
+/// Statements in the unit of work's transaction (begun on the first one);
 /// `execute` and `execute_script` count as writes
 /// ([`has_modified_records`](Uow::has_modified_records)).
 impl Executor for Uow {
     fn backend(&self) -> Backend {
-        crate::engine::compat::backend_of(self.inner.db.backend())
+        self.inner.db.backend()
     }
 
     fn execute<'a>(
@@ -1067,7 +821,7 @@ impl Executor for Uow {
         Box::pin(async move {
             let tx = self.transaction().await?;
             self.mark_modified();
-            tx.executor().get().execute(statement).await
+            tx.execute(statement).await
         })
     }
 
@@ -1075,48 +829,28 @@ impl Executor for Uow {
         &'a self,
         statement: &'a crate::Statement,
     ) -> BoxFuture<'a, Result<Vec<Row>, DbError>> {
-        Box::pin(async move {
-            let tx = self.transaction().await?;
-            tx.executor().get().fetch_all(statement).await
-        })
+        Box::pin(async move { self.transaction().await?.fetch_all(statement).await })
     }
 
     fn fetch_optional<'a>(
         &'a self,
         statement: &'a crate::Statement,
     ) -> BoxFuture<'a, Result<Option<Row>, DbError>> {
-        Box::pin(async move {
-            let tx = self.transaction().await?;
-            tx.executor().get().fetch_optional(statement).await
-        })
+        Box::pin(async move { self.transaction().await?.fetch_optional(statement).await })
     }
 
     fn fetch<'a>(
         &'a self,
         statement: &'a crate::Statement,
     ) -> BoxFuture<'a, Result<RowStream, DbError>> {
-        Box::pin(async move {
-            let tx = self.transaction().await?;
-            match &tx {
-                // SeaORM's own stream, so rows arrive as the database sends
-                // them on either transaction.
-                UowTx::Sea(sea) => {
-                    let statement = SeaExecutor::new(&**sea).statement(statement)?;
-                    Ok(crate::engine::compat::stream_on_transaction(
-                        Arc::clone(sea),
-                        statement,
-                    ))
-                }
-                UowTx::Native(_) => tx.executor().get().fetch(statement).await,
-            }
-        })
+        Box::pin(async move { self.transaction().await?.fetch(statement).await })
     }
 
     fn execute_script<'a>(&'a self, sql: &'a str) -> BoxFuture<'a, Result<Executed, DbError>> {
         Box::pin(async move {
             let tx = self.transaction().await?;
             self.mark_modified();
-            tx.executor().get().execute_script(sql).await
+            tx.execute_script(sql).await
         })
     }
 }
@@ -1135,24 +869,4 @@ impl fmt::Debug for Uow {
 
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
-}
-
-/// The error of a unit of work whose SeaORM transaction is still held when
-/// it would `action` (commit, end) it.
-fn still_in_use(action: &str) -> DbErr {
-    DbErr::Custom(format!(
-        "cannot {action} the unit of work: its transaction is still in use; drop every `Arc<DatabaseTransaction>` from `Uow::tx` first (it rolls back when the last one is dropped)"
-    ))
-}
-
-/// The transaction out of its `Arc`, when nothing else holds it.
-fn sole(tx: Arc<DatabaseTransaction>, action: &str) -> Result<DatabaseTransaction, DbErr> {
-    Arc::try_unwrap(tx).map_err(|_| still_in_use(action))
-}
-
-/// Rolls `tx` back after `cause` stopped its commit.
-async fn rollback_or_warn(tx: DatabaseTransaction, cause: &str) {
-    if let Err(error) = tx.rollback().await {
-        tracing::warn!(target: "navree_db::uow", %error, cause, "rollback failed");
-    }
 }

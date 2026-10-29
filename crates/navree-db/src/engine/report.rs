@@ -62,18 +62,8 @@ impl Reporter {
         failed: bool,
         rows: Option<u64>,
     ) {
-        self.watchers.observe_statement(
-            sql,
-            || {
-                values
-                    .iter()
-                    .map(crate::engine::compat::to_sea_value)
-                    .collect()
-            },
-            crate::engine::compat::db_backend(backend),
-            elapsed,
-            failed,
-        );
+        self.watchers
+            .observe_statement(sql, || values.to_vec(), backend, elapsed, failed);
         self.emit(sql, elapsed, failed, rows);
     }
 
