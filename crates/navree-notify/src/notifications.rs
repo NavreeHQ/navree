@@ -1,11 +1,10 @@
 //! The `notifications` table (the database channel's storage): a
-//! navree-orm model, and a SeaORM entity.
+//! navree-orm model.
 //!
 //! [`Model`] is the one definition of a row. The database channel writes
 //! rows through the ORM, and apps query them with it for what the
 //! [`Notifier`](crate::Notifier) does not offer, such as pruning old
-//! notifications; the SeaORM entity (`Entity`, `Column`, `ActiveModel`)
-//! stays for code built on SeaORM's query API.
+//! notifications.
 //!
 //! ```no_run
 //! use chrono::{TimeDelta, Utc};
@@ -22,17 +21,17 @@
 //! # Ok(()) }
 //! ```
 
-use sea_orm::entity::prelude::*;
+use chrono::{DateTime, Utc};
 use serde::Serialize;
+use serde_json::Value;
+use uuid::Uuid;
 
 /// One stored notification. `notifiable_type` and `notifiable_id` name its
 /// owner (`user` and the user's UUID); `read_at` is `None` while unread.
-#[derive(Clone, Debug, PartialEq, DeriveEntityModel, navree_orm::Model, Serialize)]
-#[sea_orm(table_name = "notifications")]
+#[derive(Clone, Debug, PartialEq, navree_orm::Model, Serialize)]
 #[model(table = "notifications")]
 pub struct Model {
     /// A UUID v7, shared with the notification's broadcast and mail.
-    #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
     /// The owner type, e.g. `user`.
     pub notifiable_type: String,
@@ -40,21 +39,13 @@ pub struct Model {
     pub notifiable_id: String,
     /// The notification type ([`Notification::TYPE`](crate::Notification::TYPE)),
     /// column `type` (serialized as `type` too).
-    #[sea_orm(column_name = "type")]
     #[model(column = "type")]
     #[serde(rename = "type")]
     pub notification_type: String,
     /// What [`Notification::to_database`](crate::Notification::to_database) returned.
-    #[sea_orm(column_type = "JsonBinary")]
-    pub data: Json,
+    pub data: Value,
     /// When the owner read it.
-    pub read_at: Option<DateTimeUtc>,
+    pub read_at: Option<DateTime<Utc>>,
     /// When it was sent.
-    pub created_at: DateTimeUtc,
+    pub created_at: DateTime<Utc>,
 }
-
-/// `notifications` has no relations.
-#[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-pub enum Relation {}
-
-impl ActiveModelBehavior for ActiveModel {}

@@ -7,14 +7,13 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use navree_contracts::{Clock, FixedClock, JobEnvelope};
 use navree_db::{
-    ChangeEvent, ChangeObserver, ChangeOp, DatabaseModule, Db, ModuleBuilderDbExt, Uow,
+    ChangeEvent, ChangeObserver, ChangeOp, DatabaseModule, Db, DbError, ModuleBuilderDbExt, Uow,
 };
 use navree_kernel::{
     BoxFuture, Injectable, KernelError, Lazy, Module, ModuleBuilder, ProviderKey, Resolver,
 };
 use navree_queue::{Queue, QueueDriver, QueueModule};
 use navree_testing::TestApp;
-use sea_orm::{DatabaseTransaction, DbErr};
 
 use crate::support::{JobsModule, Journal, Record, options, start};
 
@@ -44,28 +43,27 @@ impl Injectable for QueueingObserver {
 }
 
 impl ChangeObserver for QueueingObserver {
-    fn observe<'a>(
+    fn observe_with<'a>(
         &'a self,
-        tx: &'a DatabaseTransaction,
         uow: &'a Uow,
         changes: &'a [ChangeEvent],
-    ) -> BoxFuture<'a, Result<(), DbErr>> {
+    ) -> BoxFuture<'a, Result<(), DbError>> {
         Box::pin(async move {
             let queue = self
                 .queue
                 .get()
                 .await
-                .map_err(|e| DbErr::Custom(e.to_string()))?;
+                .map_err(|e| DbError::invalid(e.to_string()))?;
             for change in changes {
                 let envelope = JobEnvelope::of(&Record::new(change.id.clone()))
-                    .map_err(|e| DbErr::Custom(e.to_string()))?;
+                    .map_err(|e| DbError::invalid(e.to_string()))?;
                 queue
-                    .push_observed(tx, uow, envelope)
+                    .push_observed(uow, envelope)
                     .await
-                    .map_err(|e| DbErr::Custom(e.to_string()))?;
+                    .map_err(|e| DbError::invalid(e.to_string()))?;
             }
             if self.refuse.0.load(Ordering::SeqCst) {
-                return Err(DbErr::Custom("refused".into()));
+                return Err(DbError::invalid("refused"));
             }
             Ok(())
         })
@@ -101,8 +99,7 @@ async fn push_observed_joins_the_commit(driver: QueueDriver) {
             crate::reference_store::ReferenceStore::default(),
         ));
     }
-    let app = builder
-        .temp_database()
+    let app = crate::servers::database(builder)
         .module(DatabaseModule)
         .module(QueueModule::for_root(options(driver)))
         .module(JobsModule)

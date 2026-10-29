@@ -9,7 +9,6 @@ use std::fmt;
 use chrono::{DateTime, Utc};
 use navree_kernel::WeakAppContext;
 use navree_orm::{Model, Record};
-use sea_orm::DbErr;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use uuid::Uuid;
@@ -422,8 +421,7 @@ impl NotificationPreferences {
             .where_(NotificationPreference::OWNER_TYPE.eq(owner.owner_type.as_str()))
             .where_(NotificationPreference::OWNER_ID.eq(owner.owner_id.as_str()))
             .first(e)
-            .await)
-        .map_err(DbErr::from)?;
+            .await)?;
         Ok(row.map(|row| row.into_inner().read()).unwrap_or_default())
     }
 
@@ -470,8 +468,7 @@ impl NotificationPreferences {
             .where_(NotificationPreference::OWNER_TYPE.eq(owner.owner_type.as_str()))
             .where_(NotificationPreference::OWNER_ID.eq(owner.owner_id.as_str()))
             .delete(e)
-            .await)
-        .map_err(DbErr::from)?;
+            .await)?;
         exec.wrote();
         Ok(deleted > 0)
     }
@@ -503,8 +500,7 @@ impl NotificationPreferences {
         let rows = on!(&exec, e => NotificationPreference::query()
             .where_(NotificationPreference::OWNER_ID.is_in(ids.iter().map(String::as_str)))
             .get(e)
-            .await)
-        .map_err(DbErr::from)?;
+            .await)?;
         let mut resolved = ResolvedPreferences {
             required: self.options.required.clone(),
             ..ResolvedPreferences::default()
@@ -556,8 +552,7 @@ impl NotificationPreferences {
                 [NotificationPreference::OWNER_TYPE, NotificationPreference::OWNER_ID],
                 [NotificationPreference::PREFERENCES],
             )
-            .await)
-        .map_err(DbErr::from)?;
+            .await)?;
         exec.wrote();
         Ok(())
     }

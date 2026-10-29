@@ -38,7 +38,6 @@ rules:
         - "/crates/navree-billing/"
         - "/crates/navree-db/"
         - "/crates/navree-flags/"
-        - "/crates/navree-fleet/"
         - "/crates/navree-graphql/"
         - "/crates/navree-grpc/"
         - "/crates/navree-helm/"
@@ -49,10 +48,8 @@ rules:
         # navree-micro is ported; its tests keep one SeaORM fixture (the `deals`
         # entity, a subject through navree-access's SeaORM shim) until step 8.
         - "/crates/navree-micro/tests/micro/support.rs"
-        - "/crates/navree-notify/"
         - "/crates/navree-oauth/"
         - "/crates/navree-orm/"
-        - "/crates/navree-queue/"
         - "/crates/navree-schema/"
         - "/crates/navree-search/"
         - "/crates/navree-settings/"
@@ -93,7 +90,6 @@ rules:
         - "/crates/navree-billing/"
         - "/crates/navree-db/"
         - "/crates/navree-flags/"
-        - "/crates/navree-fleet/"
         - "/crates/navree-graphql/"
         - "/crates/navree-grpc/"
         - "/crates/navree-helm/"
@@ -103,10 +99,8 @@ rules:
         - "/crates/navree-mcp/"
         # navree-micro: a dev-dependency for that fixture (navree-access's shim, step 8).
         - "/crates/navree-micro/Cargo.toml"
-        - "/crates/navree-notify/"
         - "/crates/navree-oauth/"
         - "/crates/navree-orm/"
-        - "/crates/navree-queue/"
         - "/crates/navree-schema/"
         - "/crates/navree-search/"
         - "/crates/navree-settings/"
