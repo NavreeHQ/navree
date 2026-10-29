@@ -9,7 +9,10 @@ use std::time::Duration;
 use navree_config::ConfigSection;
 use navree_kernel::{AppContext, BoxFuture, WeakAppContext};
 use navree_telemetry::Telemetry;
-use sea_orm::{ConnectionTrait, DatabaseConnection, DbBackend, DbErr, Statement};
+use sea_orm::{
+    ConnectionTrait, DatabaseConnection, DatabaseTransaction, DbBackend, DbErr,
+    SqliteTransactionMode, Statement, TransactionOptions, TransactionTrait,
+};
 use tokio::sync::OnceCell;
 use uuid::Uuid;
 
@@ -870,6 +873,27 @@ async fn open_pool(
     Ok((pool, conn))
 }
 
+/// Begins a SeaORM transaction that may read before it writes. SQLite
+/// takes the write lock when it begins (`BEGIN IMMEDIATE`), waiting up to
+/// `busy_timeout` for another writer: a deferred `BEGIN` that upgrades to a
+/// write after a read fails with `database is locked` at once, without
+/// waiting, when another connection holds the write lock then. The other
+/// databases begin as usual.
+pub(crate) async fn begin_for_write(
+    conn: &DatabaseConnection,
+) -> Result<DatabaseTransaction, DbErr> {
+    match conn.get_database_backend() {
+        DbBackend::Sqlite => {
+            conn.begin_with_options(TransactionOptions {
+                sqlite_transaction_mode: Some(SqliteTransactionMode::Immediate),
+                ..TransactionOptions::default()
+            })
+            .await
+        }
+        _ => conn.begin().await,
+    }
+}
+
 /// The SeaORM connection on the connections of `pool`.
 pub(crate) fn sea_view(pool: &DriverPool) -> DatabaseConnection {
     match pool {
@@ -1034,6 +1058,16 @@ impl Db {
     /// ```
     pub async fn begin(&self) -> Result<Transaction, DbError> {
         self.writer_pool()?.begin().await
+    }
+
+    /// Begins a SeaORM transaction for work that reads and then writes
+    /// (outside a unit of work): `BEGIN IMMEDIATE` on SQLite, so it queues
+    /// for the write lock instead of failing with `database is locked` when
+    /// another connection holds it between the read and the write; a plain
+    /// `BEGIN` elsewhere.
+    pub async fn begin_for_write(&self) -> Result<DatabaseTransaction, DbErr> {
+        self.run_before_starting_transaction();
+        begin_for_write(self.conn()).await
     }
 
     /// Begins a transaction with `options` (isolation level, read only,
