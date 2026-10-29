@@ -8,8 +8,8 @@ use navree_db::{DatabaseModule, Uow};
 use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use navree_logbook::{Logbook, LogbookModule};
-use navree_testing::{TestApp, principal};
 use navree_orm::Model as _;
+use navree_testing::{TestApp, principal};
 use serde_json::json;
 use uuid::Uuid;
 

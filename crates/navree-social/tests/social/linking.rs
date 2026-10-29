@@ -8,9 +8,9 @@ use navree_auth::{AuthService, JwtService, TokenType, User};
 use navree_contracts::AuditSink;
 use navree_db::Db;
 use navree_events::{EventBus, EventsModule};
+use navree_orm::Model as _;
 use navree_social::{Social, SocialUser, social_account};
 use navree_testing::TestApp;
-use navree_orm::Model as _;
 use serde_json::{Value, json};
 
 use crate::support::{

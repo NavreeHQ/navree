@@ -438,11 +438,10 @@ impl Conversations {
         pending: Option<&Pending>,
         summary: Option<(String, i32)>,
     ) -> Result<(), AiError> {
-        let mut changes = conversation::Model::update_where(Filter::all().eq("id", row.id))
-            .set(
-                "pending",
-                pending.map(|p| serde_json::to_string(p).unwrap_or_default()),
-            );
+        let mut changes = conversation::Model::update_where(Filter::all().eq("id", row.id)).set(
+            "pending",
+            pending.map(|p| serde_json::to_string(p).unwrap_or_default()),
+        );
         if let Some((summary, count)) = summary {
             changes = changes
                 .set("summary", Some(summary))

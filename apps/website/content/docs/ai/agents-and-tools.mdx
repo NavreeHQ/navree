@@ -239,8 +239,8 @@ The JSON Schema the model sees comes from `ToSchema`, with the field doc comment
 | `run.user_id()` | Their id. |
 | `run.access()` | Their `PrincipalAccess`: roles, permissions and compiled abilities, with any token restrictions applied. |
 | `run.ability()` | `&Arc<Ability>`, for [checks in services](/docs/security/authorization/#checks-in-services). |
-| `run.accessible::<E, A>()` | An `Accessible<E, A>` list filter for the user. |
-| `run.authorize::<E, A>(id)` | Loads record `id` of `E` in the tool call's unit of work and checks `A` on it: an `Authorized<E, A>`, or a 404 or 403. |
+| `run.accessible::<S, A>()` | An `Accessible<S, A>` list filter for the user, for any subject `S` (apply it to a model's query with `AccessibleQuery::apply`). |
+| `run.authorize::<S, A>(id)` | Loads record `id` of `S` (a model declared with `#[model(subject = "...")]`) in the tool call's unit of work and checks `A` on it: an `Authorized<S, A>`, or a 404 or 403. |
 | `run.uow()` | The tool call's unit of work. |
 | `run.now()` | The time from the app's `dyn Clock`. |
 | `run.conversation_id()` | The conversation, when the run has memory. |
@@ -263,7 +263,7 @@ async fn reassign_deal(&self, run: &AgentRun, args: ReassignDeal) -> Result<Deal
 
 In the CRM only managers and admins can `manage` deals, so a rep's assistant is never offered `reassign_deal`.
 
-**Which records a tool touches.** Lists go through `run.accessible::<E, A>()`, as `search_deals` does. A tool that acts on one record loads it with `run.authorize`, the tool's equivalent of `#[can(Move, Deal, from = "id")]` on a route:
+**Which records a tool touches.** Lists go through `run.accessible::<S, A>()`, as `search_deals` does. A tool that acts on one record loads it with `run.authorize`, the tool's equivalent of `#[can(Move, Deal, from = "id")]` on a route:
 
 ```rust
 /// Moves a deal to another stage. `lost` needs a reason.

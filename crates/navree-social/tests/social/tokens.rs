@@ -8,9 +8,9 @@ use chrono::{TimeDelta, TimeZone, Utc};
 use navree_contracts::Clock;
 use navree_crypto::Encrypter;
 use navree_db::Db;
+use navree_orm::Model as _;
 use navree_social::{ProviderToken, Social, SocialError, SocialUser, social_account};
 use navree_testing::{FixedClock, TestApp};
-use navree_orm::Model as _;
 use uuid::Uuid;
 
 use crate::support::{fake_app, sign_in};

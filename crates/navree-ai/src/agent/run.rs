@@ -78,7 +78,12 @@ impl AgentRun {
         S: SubjectRecords,
         A: ActionMarker,
     {
-        Authorized::load(&self.uow, self.shared.access.ability.clone(), &id.to_string()).await
+        Authorized::load(
+            &self.uow,
+            self.shared.access.ability.clone(),
+            &id.to_string(),
+        )
+        .await
     }
 
     /// The tool call's unit of work: it commits when the tool returns `Ok`

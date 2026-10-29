@@ -2,10 +2,10 @@
 //! writes them (the facade, the prelude and the macros), compiled and run.
 
 use navree::db::Db;
+use navree::db::navree_schema::{Migration, Schema, SchemaMigration, SchemaResult};
 use navree::logbook::Logbook;
 use navree::prelude::*;
 use navree::testing::{TestApp, principal};
-use navree::db::navree_schema::{Migration, Schema, SchemaMigration, SchemaResult};
 use serde::Serialize;
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -198,10 +198,10 @@ struct DealsModule;
 
 impl DealsModule {
     fn wire(&self, m: &mut ModuleBuilder) {
-        m.migrations(MigrationSet::new("deals").migration(SchemaMigration::new(
-            "m0001_create_deals",
-            CreateDeals,
-        )));
+        m.migrations(
+            MigrationSet::new("deals")
+                .migration(SchemaMigration::new("m0001_create_deals", CreateDeals)),
+        );
     }
 }
 

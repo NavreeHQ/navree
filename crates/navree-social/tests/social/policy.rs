@@ -9,9 +9,9 @@ use navree_auth::{
 };
 use navree_db::Db;
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
+use navree_orm::Model as _;
 use navree_social::{Social, SocialUser};
 use navree_testing::TestApp;
-use navree_orm::Model as _;
 use serde_json::json;
 
 use crate::support::{create_user, fake_app, sign_in};
