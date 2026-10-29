@@ -3,8 +3,9 @@
 use std::collections::{BTreeSet, HashMap};
 
 use chrono::{DateTime, Utc};
-use navree::auth::{User, user};
-use sea_orm::{ColumnTrait, ConnectionTrait, DbErr, EntityTrait, QueryFilter, QuerySelect};
+use navree::auth::User;
+use sea_orm::sea_query::{Alias, Expr, ExprTrait, Query};
+use sea_orm::{ConnectionTrait, DbErr};
 use serde::Serialize;
 use uuid::Uuid;
 
@@ -82,18 +83,21 @@ impl OwnerRef {
         if ids.is_empty() {
             return Ok(HashMap::new());
         }
-        let rows: Vec<(Uuid, String)> = user::Entity::find()
-            .select_only()
-            .column(user::Column::Id)
-            .column(user::Column::Name)
-            .filter(user::Column::Id.is_in(ids))
-            .into_tuple()
-            .all(conn)
+        let select = Query::select()
+            .columns([Alias::new("id"), Alias::new("name")])
+            .from(Alias::new("users"))
+            .and_where(Expr::col(Alias::new("id")).is_in(ids))
+            .to_owned();
+        let rows = conn
+            .query_all(conn.get_database_backend().build(&select))
             .await?;
-        Ok(rows
-            .into_iter()
-            .map(|(id, name)| (id, OwnerRef { id, name }))
-            .collect())
+        rows.iter()
+            .map(|row| {
+                let id: Uuid = row.try_get("", "id")?;
+                let name: String = row.try_get("", "name")?;
+                Ok((id, OwnerRef { id, name }))
+            })
+            .collect()
     }
 }
 

@@ -85,7 +85,7 @@ are plural. Generators never overwrite a file.
 | A queued job | `navree make:job invoices send_reminder` |
 | An event and a listener | `navree make:event invoices invoice_paid`, then `navree make:listener invoices notify_owner --event invoice_paid` |
 | A mail | `navree make:mail invoices overdue` |
-| An admin-panel resource | `navree make:resource invoices Invoice` |
+| An admin-panel resource (over a model: `navree make:model invoices Invoice --policy` first) | `navree make:resource invoices Invoice` |
 | A test | `navree make:test invoices reminders` |
 
 ## Conventions
