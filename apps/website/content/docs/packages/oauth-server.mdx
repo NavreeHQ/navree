@@ -41,6 +41,8 @@ Navree::app()
 
 The module contributes the migration set `oauth` (after `auth`), which creates `oauth_clients`, `oauth_authorizations`, `oauth_authorization_requests`, `oauth_codes`, `oauth_access_tokens`, `oauth_refresh_tokens`, `oauth_device_codes` and `personal_access_tokens`. It also registers an authentication strategy, `oauth`, that runs after the JWT strategy. `OAuthServerModule` and `OAuthToken` are in the prelude with the feature; everything else is under `navree::oauth`.
 
+The tables are models of Navree's [ORM](/docs/orm/getting-started/): `navree::oauth::Client`, `PersonalAccessToken` and `Authorization`, and `navree::oauth::entity::{access_token, refresh_token, code, device_code, authorization_request}::Model`. Read them with `Client::query()` and typed columns (`Client::OWNER_ID`), or `Client::find(&db, id)`. The server writes them itself, in the request's unit of work, with bulk inserts and set-based updates that record no change events, so client secrets, token, code and device code digests never reach an audit trail or another change observer. The models don't serialize their digests either. Database errors are `OAuthError::Db` (navree-db's `DbError`) and `OAuthError::Orm` (the ORM's `OrmError`), and answer 404 or 409 where the database error says so, and 500 otherwise.
+
 ## Configuration
 
 Define your scopes and say where your front end shows the consent and device pages:

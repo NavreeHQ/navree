@@ -3,6 +3,7 @@
 //! introspection and revocation, clients and commands, configuration,
 //! dynamic registration and workspaces.
 
+mod servers;
 mod support;
 
 mod authorizations;
@@ -17,6 +18,7 @@ mod openapi;
 mod orm;
 mod pats;
 mod registration;
+mod secrets;
 mod throttle;
 mod tokens;
 mod workspace;

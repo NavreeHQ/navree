@@ -289,22 +289,14 @@ async fn prune_deletes_old_expired_records() {
         .await
         .unwrap();
     let db = world.db().await;
-    use sea_orm::{EntityTrait, PaginatorTrait};
+    use navree_oauth::entity::{access_token, authorization_request, code, refresh_token};
+    use navree_orm::Model as _;
     for count in [
-        navree_oauth::entity::access_token::Entity::find()
-            .count(db.conn())
-            .await
-            .unwrap(),
-        navree_oauth::entity::refresh_token::Entity::find()
-            .count(db.conn())
-            .await
-            .unwrap(),
-        navree_oauth::entity::code::Entity::find()
-            .count(db.conn())
-            .await
-            .unwrap(),
-        navree_oauth::entity::authorization_request::Entity::find()
-            .count(db.conn())
+        access_token::Model::query().count(&db).await.unwrap(),
+        refresh_token::Model::query().count(&db).await.unwrap(),
+        code::Model::query().count(&db).await.unwrap(),
+        authorization_request::Model::query()
+            .count(&db)
             .await
             .unwrap(),
     ] {
