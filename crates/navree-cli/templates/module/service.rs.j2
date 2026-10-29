@@ -1,21 +1,20 @@
 //! The business logic of the {{ module_words }} module.
 
 {% if crud %}
-use chrono::Utc;
 use navree::access::{Accessible, Read};
-use navree::db::{Page, PageQuery, Repo, Uow, paginate};
+use navree::db::{Page, PageQuery, Uow};
 use navree::injectable;
-use sea_orm::{ActiveValue::Set, DbErr, EntityTrait, QueryOrder};
-use uuid::Uuid;
+use navree::orm::access::AccessibleQuery as _;
+use navree::orm::{Model as _, OrmError, Record};
 
 use super::dto::{Create{{ entity_pascal }}, Update{{ entity_pascal }}};
-use super::entity::{ActiveModel, Column, Entity, Model};
+use super::entity::{{ entity_pascal }};
 
 /// Lists, creates, updates and deletes {{ module_words }}.
 ///
-/// Writes go through `Repo` inside the caller's unit of work: they commit
-/// with the request (or roll back with it) and record change events for the
-/// audit log and change observers.
+/// Writes go through the model's records inside the caller's unit of work:
+/// they commit with the request (or roll back with it) and record change
+/// events for the audit log and change observers.
 #[injectable]
 pub struct {{ entity_pascal }}Service;
 
@@ -24,47 +23,63 @@ impl {{ entity_pascal }}Service {
     pub async fn list(
         &self,
         uow: &Uow,
-        scope: Accessible<Entity, Read>,
+        scope: Accessible<{{ entity_pascal }}, Read>,
         page: PageQuery,
-    ) -> Result<Page<Model>, DbErr> {
-        let select = scope.apply(Entity::find().order_by_desc(Column::CreatedAt));
-        paginate(select, &*uow.tx().await?, page).await
+    ) -> Result<Page<Record<{{ entity_pascal }}>>, OrmError> {
+        scope
+            .query()
+            .order_by_desc({{ entity_pascal }}::CREATED_AT)
+            .order_by_desc({{ entity_pascal }}::ID)
+            .paginate(uow, page)
+            .await
     }
 
-    /// Creates {{ a_entity }} owned by the acting user.
-    pub async fn create(&self, uow: &Uow, input: Create{{ entity_pascal }}) -> Result<Model, DbErr> {
-        let now = Utc::now();
-        let {{ entity_var }} = ActiveModel {
-            id: Set(Uuid::now_v7()),
-            owner_id: Set(uow.actor()),
-            name: Set(input.name),
-            created_at: Set(now),
-            updated_at: Set(now),
-        };
-        Repo::<Entity>::insert(uow, {{ entity_var }}).await
+    /// Creates {{ a_entity }} owned by the acting user. The ORM generates the
+    /// id (a UUID v7) and sets the timestamps.
+    pub async fn create(
+        &self,
+        uow: &Uow,
+        input: Create{{ entity_pascal }},
+    ) -> Result<Record<{{ entity_pascal }}>, OrmError> {
+        {{ entity_pascal }}::create(
+            uow,
+            {{ entity_pascal }} {
+                owner_id: uow.actor(),
+                name: input.name,
+                ..{{ entity_pascal }}::default()
+            },
+        )
+        .await
     }
 
     /// Applies the fields present in `input`.
-    pub async fn update(&self, uow: &Uow, {{ entity_var }}: Model, input: Update{{ entity_pascal }}) -> Result<Model, DbErr> {
-        let mut active: ActiveModel = {{ entity_var }}.into();
+    pub async fn update(
+        &self,
+        uow: &Uow,
+        mut {{ entity_var }}: Record<{{ entity_pascal }}>,
+        input: Update{{ entity_pascal }},
+    ) -> Result<Record<{{ entity_pascal }}>, OrmError> {
         if let Some(name) = input.name {
-            active.name = Set(name);
+            {{ entity_var }}.name = name;
         }
-        active.updated_at = Set(Utc::now());
-        Repo::<Entity>::update(uow, active).await
+        // Writes only the changed columns, sets `updated_at` and records the
+        // change.
+        {{ entity_var }}.save(uow).await?;
+        Ok({{ entity_var }})
     }
 
     /// Deletes `{{ entity_var }}`.
-    pub async fn delete(&self, uow: &Uow, {{ entity_var }}: Model) -> Result<(), DbErr> {
-        Repo::<Entity>::delete(uow, {{ entity_var }}).await
+    pub async fn delete(&self, uow: &Uow, mut {{ entity_var }}: Record<{{ entity_pascal }}>) -> Result<(), OrmError> {
+        {{ entity_var }}.delete(uow).await?;
+        Ok(())
     }
 }
 {% else %}
 use navree::db::Uow;
 use navree::injectable;
-use sea_orm::{DbErr, EntityTrait, QueryOrder};
+use navree::orm::{Model as _, OrmError, Record};
 
-use super::entity::{Column, Entity, Model};
+use super::entity::{{ entity_pascal }};
 
 /// Reads and writes {{ module_words }}. Take the caller's `Uow` so the work
 /// joins its transaction.
@@ -73,11 +88,13 @@ pub struct {{ entity_pascal }}Service;
 
 impl {{ entity_pascal }}Service {
     /// Every {{ entity_words }}, newest first.
-    pub async fn all(&self, uow: &Uow) -> Result<Vec<Model>, DbErr> {
-        Entity::find()
-            .order_by_desc(Column::CreatedAt)
-            .all(&*uow.tx().await?)
-            .await
+    pub async fn all(&self, uow: &Uow) -> Result<Vec<Record<{{ entity_pascal }}>>, OrmError> {
+        Ok({{ entity_pascal }}::query()
+            .order_by_desc({{ entity_pascal }}::CREATED_AT)
+            .order_by_desc({{ entity_pascal }}::ID)
+            .get(uow)
+            .await?
+            .into_vec())
     }
 }
 {% endif %}

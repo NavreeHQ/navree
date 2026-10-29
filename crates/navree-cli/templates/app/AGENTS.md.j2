@@ -105,14 +105,17 @@ snake_case; module names are plural. Generators never overwrite a file.
   `AppError::conflict("..").with_code("invoice_already_sent")`. Validation
   errors are 400s (`"code": "validation_failed"`) whose `message` lists
   every problem, plus `"errors": { "field": ["field should not be empty"] }`.
-- **Database.** Entities are SeaORM entities with UUID v7 ids
-  (`Uuid::now_v7()`); set `created_at` and `updated_at` yourself. Services
-  take the request's `&Uow` as a parameter; write with
-  `Repo::<Entity>::insert`, `update` and `delete` (they record the changes
-  for the audit log) and read with SeaORM through `&*uow.tx().await?`. The
-  unit of work commits when the response status is below 400 and rolls
-  back otherwise. Lists take `PageQuery`, return `Page<T>` (`{ "data",
-  "meta" }`) and filter with `Accessible<Entity, Read>`.
+- **Database.** Tables are ORM models: `#[derive(Model)]` structs
+  (`#[model(table = "posts", timestamps)]`) whose `id` is a UUID v7 the ORM
+  generates, with `created_at` and `updated_at` it fills in. Services take
+  the request's `&Uow` as a parameter; read with `Post::query()` and write
+  with `Post::create(uow, Post { .. })`, `record.save(uow)` and
+  `record.delete(uow)` (they record the changes for the audit log).
+  Anything else, such as a hand-written statement, runs on the `&Uow` as an
+  `Executor`. The unit of work commits when the response status is below
+  400 and rolls back otherwise. Lists take `PageQuery`, return `Page<T>`
+  (`{ "data", "meta" }`) and filter with `Accessible<Post, Read>`
+  (`scope.query().paginate(uow, page)`).
 - **Migrations** belong to their module's `MigrationSet`; never edit one
   that has run anywhere, add a new one.
 {% if database == "timescaledb" %}
