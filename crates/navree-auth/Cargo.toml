@@ -28,8 +28,7 @@ chrono = { workspace = true }
 form_urlencoded = { workspace = true }
 garde = { workspace = true }
 http = { workspace = true }
-# `User` is the access subject `User` (no module import), and the SeaORM
-# entity of the compatibility layer too.
+# `User` is the access subject `User` (no module import).
 navree-access = { workspace = true }
 navree-cache = { workspace = true }
 navree-config = { workspace = true }

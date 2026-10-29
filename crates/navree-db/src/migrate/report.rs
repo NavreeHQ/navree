@@ -17,8 +17,7 @@ use serde::Serialize;
 pub struct MigrateOptions {
     /// Record the SQL the pending migrations would run, and run nothing
     /// (`--pretend`). Schema migrations read the real database (so SQLite
-    /// rebuilds and hypertable conversions plan against it); SeaORM
-    /// migrations see no rows.
+    /// rebuilds and hypertable conversions plan against it).
     pub pretend: bool,
     /// Record each migration as a batch of its own, so `migrate:rollback`
     /// reverts them one at a time (`--step`).
@@ -64,8 +63,8 @@ pub struct MigrationRun {
     pub name: String,
     /// The batch it was recorded in, or removed from.
     pub batch: i64,
-    /// The statements it ran (pretending: would run). Schema migrations
-    /// record theirs on every run; SeaORM migrations when pretending.
+    /// The statements it ran (pretending: would run), recorded on every
+    /// run.
     pub statements: Vec<String>,
     /// What the database could not do as asked (a hypertable on a
     /// database without TimescaleDB, ...).
