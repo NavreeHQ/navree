@@ -36,11 +36,7 @@ impl {{ entity_pascal }}Service {
 
     /// Creates {{ a_entity }} owned by the acting user. The ORM generates the
     /// id (a UUID v7) and sets the timestamps.
-    pub async fn create(
-        &self,
-        uow: &Uow,
-        input: Create{{ entity_pascal }},
-    ) -> Result<Record<{{ entity_pascal }}>, OrmError> {
+    pub async fn create(&self, uow: &Uow, input: Create{{ entity_pascal }}) -> Result<Record<{{ entity_pascal }}>, OrmError> {
         {{ entity_pascal }}::create(
             uow,
             {{ entity_pascal }} {

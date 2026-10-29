@@ -184,11 +184,7 @@ impl PostService {
 
     /// Creates a post owned by the acting user. The ORM generates the
     /// id (a UUID v7) and sets the timestamps.
-    pub async fn create(
-        &self,
-        uow: &Uow,
-        input: CreatePost,
-    ) -> Result<Record<Post>, OrmError> {
+    pub async fn create(&self, uow: &Uow, input: CreatePost) -> Result<Record<Post>, OrmError> {
         Post::create(
             uow,
             Post {
