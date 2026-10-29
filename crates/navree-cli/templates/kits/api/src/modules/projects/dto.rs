@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use super::entity::Model;
+use super::entity::Project;
 
 /// Whether a project is in use.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
@@ -105,15 +105,15 @@ pub struct ProjectResource {
     pub updated_at: DateTime<Utc>,
 }
 
-impl From<Model> for ProjectResource {
-    fn from(project: Model) -> Self {
+impl From<&Project> for ProjectResource {
+    fn from(project: &Project) -> Self {
         Self {
             resource_type: "Project",
             id: project.id,
             workspace_id: project.workspace_id,
-            name: project.name,
-            description: project.description,
-            status: project.status,
+            name: project.name.clone(),
+            description: project.description.clone(),
+            status: project.status.clone(),
             created_by: project.created_by,
             created_at: project.created_at,
             updated_at: project.updated_at,

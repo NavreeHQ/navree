@@ -75,7 +75,7 @@ impl ProjectsController {
         responses(401, 403, 404)
     )]
     async fn show(&self, project: Authorized<Project, Read>) -> Json<ProjectResource> {
-        Json(project.into_inner().into())
+        Json(ProjectResource::from(&*project.into_inner()))
     }
 
     /// `PATCH /api/v1/projects/{id}`: changes the fields sent.
