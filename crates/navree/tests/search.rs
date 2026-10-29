@@ -12,10 +12,14 @@ use navree::testing::TestApp;
 #[derive(Model, Searchable, Clone, Debug, Default, PartialEq, serde::Serialize)]
 #[model(table = "notes")]
 #[searchable(name = "Note")]
+/// A note: its title searched, `pinned` filterable.
 pub struct Note {
+    /// The id (UUID v7).
     pub id: uuid::Uuid,
+    /// The title.
     #[searchable(boost = 2)]
     pub title: String,
+    /// Whether it is pinned.
     #[searchable(filter)]
     pub pinned: bool,
 }
