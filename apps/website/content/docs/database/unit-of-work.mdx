@@ -326,6 +326,8 @@ A unit of work holds one pool connection from its first query until it commits, 
 - **Don't wait for a second connection while you hold one.** Read through `uow.tx()`, or through `db.reader()` in code that has no `&Uow`, never through `db.conn()` in a request. Otherwise, once about `max_connections` requests run together, each holds a connection while waiting for another, and they fail with "database is locked".
 - **Keep units of work short.** Other writers queue behind yours for up to the 5-second busy timeout.
 
+A transaction you begin yourself with `db.begin()` is a plain `BEGIN`, and SQLite fails a plain transaction that reads and then writes with "database is locked" at once, without waiting for the busy timeout, when another connection holds the write lock at that moment. If it may write after reading, begin it with `TxOptions::new().immediate()` (`db.begin_with(..)`), or with `db.begin_for_write()` for a SeaORM transaction: both take the write lock when the transaction begins and queue for it. Migrations do this themselves.
+
 The CRM has a regression test for the first rule: it boots the whole API with `database.max_connections = 1` and drives every route that combines a record check, `CurrentUser` and an embedded user. Any request that needed a second connection would time out. It's a cheap test to copy into your own app ([database tests](/docs/testing/database-tests/#catching-pool-starvation)).
 
 ## Testing

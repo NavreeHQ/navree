@@ -23,7 +23,7 @@ use super::{
     Applied, MIGRATIONS_TABLE, MigrationError, MigrationSet, MigrationStatus, SetMigration, Step,
     applied_rows, delete_sql, drop_all_tables, ensure_table, insert_sql, plan, sets_of,
 };
-use crate::{Backend, Db, DbError, DbOptions, Executor, Statement, Value};
+use crate::{Backend, Db, DbError, DbOptions, Executor, SqliteOptions, Statement, Value};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Direction {
@@ -37,6 +37,8 @@ pub(crate) struct Runner {
     sets: Vec<Arc<MigrationSet>>,
     options: SchemaOptions,
     url: Option<String>,
+    /// `database.sqlite`, for SQLite's migration connection.
+    sqlite: SqliteOptions,
 }
 
 /// The `schema` configuration section, or its defaults when the app has
@@ -53,31 +55,35 @@ impl Runner {
     /// (the `Db` itself without `direct_url`).
     pub(crate) async fn of(app: &AppContext) -> Result<Runner, BoxError> {
         let db = app.get::<Db>().await?.direct().await?;
-        let url = app
-            .try_get::<DbOptions>()
-            .await
+        let options = app.try_get::<DbOptions>().await;
+        let url = options
+            .as_ref()
             .map(|o| o.direct_url.clone().unwrap_or_else(|| o.url.clone()));
+        let sqlite = options.map(|o| o.sqlite.clone()).unwrap_or_default();
         Ok(Runner::new(
             db,
             sets_of(app),
             schema_options(app).await?,
             url,
+            sqlite,
         ))
     }
 
-    /// A runner for `sets` on `db`; `url` opens SQLite's migration
-    /// connection.
+    /// A runner for `sets` on `db`; `url` and `sqlite` open SQLite's
+    /// migration connection.
     pub(crate) fn new(
         db: Db,
         sets: Vec<Arc<MigrationSet>>,
         options: SchemaOptions,
         url: Option<String>,
+        sqlite: SqliteOptions,
     ) -> Runner {
         Runner {
             db,
             sets,
             options,
             url,
+            sqlite,
         }
     }
 
@@ -92,7 +98,7 @@ impl Runner {
         let conn = self.conn();
         match self.url.as_deref() {
             Some(url) if conn.dialect() == Dialect::Sqlite && !url.contains("memory") => {
-                Conn::sqlite(url).await
+                Conn::sqlite(url, &self.sqlite).await
             }
             _ => Ok(conn),
         }

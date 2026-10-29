@@ -435,11 +435,22 @@ pub(crate) fn sets_of(ctx: &AppContext) -> Vec<Arc<MigrationSet>> {
 }
 
 /// Runs the pending migrations of `app` on `db` while [`Db`] is being
-/// constructed (`database.migrate_on_boot`); `url` opens SQLite's migration
-/// connection.
-pub(crate) async fn migrate_on_boot(db: &Db, app: &AppContext, url: &str) -> Result<(), BoxError> {
+/// constructed (`database.migrate_on_boot`); `url` and `sqlite` open SQLite's
+/// migration connection.
+pub(crate) async fn migrate_on_boot(
+    db: &Db,
+    app: &AppContext,
+    url: &str,
+    sqlite: &crate::SqliteOptions,
+) -> Result<(), BoxError> {
     let options = runner::schema_options(app).await?;
-    let runner = Runner::new(db.clone(), sets_of(app), options, Some(url.to_owned()));
+    let runner = Runner::new(
+        db.clone(),
+        sets_of(app),
+        options,
+        Some(url.to_owned()),
+        sqlite.clone(),
+    );
     runner.up(&MigrateOptions::default()).await?;
     Ok(())
 }

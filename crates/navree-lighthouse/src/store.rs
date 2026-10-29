@@ -10,7 +10,7 @@ use navree_db::{Db, prune_time_series};
 use sea_orm::sea_query::{Expr, OnConflict, Query};
 use sea_orm::{
     ActiveValue::Set, ColumnTrait, ConnectionTrait, DbErr, EntityTrait, PaginatorTrait,
-    QueryFilter, QueryOrder, QuerySelect, TransactionTrait,
+    QueryFilter, QueryOrder, QuerySelect,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -576,7 +576,7 @@ impl LighthouseStore {
         labels: &Labels,
     ) -> Result<Vec<Candidate>, DbErr> {
         let now = Utc::now();
-        let txn = self.db.conn().begin().await?;
+        let txn = self.db.begin_for_write().await?;
         let mut candidates = Vec::new();
         let mut touched: Vec<issue::Model> = Vec::new();
 
