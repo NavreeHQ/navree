@@ -1,10 +1,10 @@
-//! The auth module's tables: navree-orm models, and SeaORM entities.
+//! The auth module's tables, as navree-orm models.
 //!
-//! Each table's `Model` is one struct deriving both, so the rows are ORM
-//! models (`User::query()`, typed columns such as `User::EMAIL`) and the
-//! SeaORM entities (`Entity`, `Column`, `ActiveModel`) stay for code built
-//! on them. Secrets (password hashes, token digests, two-factor data,
-//! passkeys' keys) are never serialized, as records or as plain models.
+//! Each table's `Model` is a navree-orm model: rows are read and written
+//! with the model API and its builders (`User::query()`, typed columns such
+//! as `User::EMAIL`, `RefreshToken::insert`). Secrets (password hashes,
+//! token digests, two-factor data, passkeys' keys) are never serialized, as
+//! records or as plain models, and so never reach a change event.
 //!
 //! - `users(id, name, email UNIQUE, password_hash, email_verified_at,
 //!   two_factor_secret, two_factor_recovery_codes, two_factor_confirmed_at,
@@ -19,74 +19,7 @@
 //!   public_key, algorithm, sign_count, transports, name, created_at,
 //!   last_used_at)`
 
-/// `users`: the accounts. Emails are stored trimmed and lower-cased.
-///
-/// The password hash and the two-factor columns are never serialized (the
-/// fields are skipped by `Serialize`, so a `Model` can be returned as JSON
-/// and recorded in audit trails) and never appear in `Debug` output.
-pub mod user {
-    use std::fmt;
-
-    use sea_orm::entity::prelude::*;
-    use serde::Serialize;
-
-    /// A user account.
-    #[derive(Clone, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
-    #[sea_orm(table_name = "users")]
-    #[model(table = "users")]
-    pub struct Model {
-        /// The id (UUID v7).
-        #[sea_orm(primary_key, auto_increment = false)]
-        pub id: Uuid,
-        /// The display name.
-        pub name: String,
-        /// The unique, lower-cased email address.
-        #[sea_orm(unique)]
-        pub email: String,
-        /// The Argon2id PHC string. Never serialized.
-        #[serde(skip_serializing)]
-        pub password_hash: String,
-        /// When the email address was verified, if it was.
-        pub email_verified_at: Option<DateTimeUtc>,
-        /// The encrypted TOTP secret. Never serialized.
-        #[serde(skip_serializing)]
-        pub two_factor_secret: Option<String>,
-        /// The encrypted recovery codes. Never serialized.
-        #[serde(skip_serializing)]
-        pub two_factor_recovery_codes: Option<String>,
-        /// When two-factor authentication was confirmed. Never serialized.
-        #[serde(skip_serializing)]
-        pub two_factor_confirmed_at: Option<DateTimeUtc>,
-        /// When the account was created.
-        pub created_at: DateTimeUtc,
-        /// When the account last changed.
-        pub updated_at: DateTimeUtc,
-    }
-
-    /// The password hash and two-factor data are redacted.
-    impl fmt::Debug for Model {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            f.debug_struct("User")
-                .field("id", &self.id)
-                .field("name", &self.name)
-                .field("email", &self.email)
-                .field("email_verified_at", &self.email_verified_at)
-                .field(
-                    "two_factor_enabled",
-                    &self.two_factor_confirmed_at.is_some(),
-                )
-                .field("created_at", &self.created_at)
-                .field("updated_at", &self.updated_at)
-                .finish_non_exhaustive()
-        }
-    }
-
-    /// No relations are declared.
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
-}
+pub mod user;
 
 /// `refresh_tokens`: opaque refresh tokens, stored as SHA-256 digests.
 ///
@@ -96,29 +29,27 @@ pub mod user {
 /// `impersonator_id` and `audience`. Presenting a revoked token revokes the
 /// whole family (reuse detection).
 pub mod refresh_token {
-    use sea_orm::entity::prelude::*;
+    use chrono::{DateTime, Utc};
     use serde::Serialize;
+    use uuid::Uuid;
 
     /// A refresh token. Its digest is never serialized.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
-    #[sea_orm(table_name = "refresh_tokens")]
+    #[derive(Clone, Debug, PartialEq, Eq, navree_orm::Model, Serialize)]
     #[model(table = "refresh_tokens")]
     pub struct Model {
         /// The id: the part of the token before the `.`.
-        #[sea_orm(primary_key, auto_increment = false)]
         pub id: Uuid,
         /// The user.
         pub user_id: Uuid,
         /// The login session the token belongs to.
         pub family_id: Uuid,
         /// SHA-256 of the whole token, as lower-case hex. Never serialized.
-        #[sea_orm(unique)]
         #[serde(skip_serializing)]
         pub token_hash: String,
         /// When the token expires.
-        pub expires_at: DateTimeUtc,
+        pub expires_at: DateTime<Utc>,
         /// When the token was used, revoked or its family was revoked.
-        pub revoked_at: Option<DateTimeUtc>,
+        pub revoked_at: Option<DateTime<Utc>>,
         /// The token issued when this one was used.
         pub replaced_by: Option<Uuid>,
         /// The client IP address the token was issued to.
@@ -126,50 +57,36 @@ pub mod refresh_token {
         /// The client user agent the token was issued to (truncated).
         pub user_agent: Option<String>,
         /// When the token was issued.
-        pub created_at: DateTimeUtc,
+        pub created_at: DateTime<Utc>,
         /// When the user last authenticated in this session (signing in or
         /// `POST /auth/confirm`): the `auth_time` of its access tokens.
-        pub authenticated_at: Option<DateTimeUtc>,
+        pub authenticated_at: Option<DateTime<Utc>>,
         /// For an impersonation session: the impersonating user.
         pub impersonator_id: Option<Uuid>,
         /// `"platform"` for a platform session; `None` for the app.
         pub audience: Option<String>,
     }
-
-    /// No relations are declared.
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
 /// `password_reset_tokens`: one pending reset per email address, stored as
 /// a SHA-256 digest (used by the password reset flow).
 pub mod password_reset_token {
-    use sea_orm::entity::prelude::*;
+    use chrono::{DateTime, Utc};
     use serde::Serialize;
 
     /// A pending password reset, keyed by email address. Its digest is
     /// never serialized.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
-    #[sea_orm(table_name = "password_reset_tokens")]
+    #[derive(Clone, Debug, PartialEq, Eq, navree_orm::Model, Serialize)]
     #[model(table = "password_reset_tokens", primary_key = "email")]
     pub struct Model {
         /// The lower-cased email address.
-        #[sea_orm(primary_key, auto_increment = false)]
         pub email: String,
         /// SHA-256 of the reset token, as lower-case hex. Never serialized.
         #[serde(skip_serializing)]
         pub token_hash: String,
         /// When the reset was requested.
-        pub created_at: DateTimeUtc,
+        pub created_at: DateTime<Utc>,
     }
-
-    /// No relations are declared.
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
 /// `login_tokens`: pending passwordless sign-ins, stored as digests: magic
@@ -177,16 +94,15 @@ pub mod password_reset_token {
 /// sign-in codes (`kind = "otp"`, an HMAC of the code). Each works once,
 /// until `expires_at`; a code is burned after too many wrong guesses.
 pub mod login_token {
-    use sea_orm::entity::prelude::*;
+    use chrono::{DateTime, Utc};
     use serde::Serialize;
+    use uuid::Uuid;
 
     /// A pending passwordless sign-in. Its digest is never serialized.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
-    #[sea_orm(table_name = "login_tokens")]
+    #[derive(Clone, Debug, PartialEq, Eq, navree_orm::Model, Serialize)]
     #[model(table = "login_tokens")]
     pub struct Model {
         /// The id (the part of a magic link token before the `.`).
-        #[sea_orm(primary_key, auto_increment = false)]
         pub id: Uuid,
         /// The user.
         pub user_id: Uuid,
@@ -199,33 +115,26 @@ pub mod login_token {
         /// Wrong guesses so far (codes).
         pub attempts: i32,
         /// When the token expires.
-        pub expires_at: DateTimeUtc,
+        pub expires_at: DateTime<Utc>,
         /// When the token was used (or burned).
-        pub used_at: Option<DateTimeUtc>,
+        pub used_at: Option<DateTime<Utc>>,
         /// When the token was issued.
-        pub created_at: DateTimeUtc,
+        pub created_at: DateTime<Utc>,
     }
-
-    /// No relations are declared.
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
 /// `passkeys`: WebAuthn credentials (passkeys) registered by users, with
 /// the public key that verifies their sign-ins.
 pub mod passkey {
-    use sea_orm::entity::prelude::*;
+    use chrono::{DateTime, Utc};
     use serde::Serialize;
+    use uuid::Uuid;
 
     /// A registered passkey. The public key is never serialized.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
-    #[sea_orm(table_name = "passkeys")]
+    #[derive(Clone, Debug, PartialEq, Eq, navree_orm::Model, Serialize)]
     #[model(table = "passkeys")]
     pub struct Model {
         /// The id (UUID v7).
-        #[sea_orm(primary_key, auto_increment = false)]
         pub id: Uuid,
         /// The user.
         pub user_id: Uuid,
@@ -233,7 +142,6 @@ pub mod passkey {
         pub credential_id: String,
         /// SHA-256 of the raw credential id, lower-case hex (the lookup
         /// key; unique).
-        #[sea_orm(unique)]
         #[serde(skip_serializing)]
         pub credential_hash: String,
         /// The public key: the uncompressed P-256 point (ES256) or the 32
@@ -249,16 +157,10 @@ pub mod passkey {
         /// A name the user gave it.
         pub name: String,
         /// When it was registered.
-        pub created_at: DateTimeUtc,
+        pub created_at: DateTime<Utc>,
         /// When it last signed the user in.
-        pub last_used_at: Option<DateTimeUtc>,
+        pub last_used_at: Option<DateTime<Utc>>,
     }
-
-    /// No relations are declared.
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
 /// A user account (`users` row).

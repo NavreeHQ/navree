@@ -6,14 +6,11 @@ use axum::extract::{FromRequestParts, Query};
 use axum::http::request::Parts;
 use navree_contracts::AuditKind;
 use navree_http::AppError;
-use navree_orm::{Builder, Model as _};
-use sea_orm::sea_query::LikeExpr;
-use sea_orm::{ColumnTrait, Condition, QueryFilter, Select};
+use navree_orm::{Builder, Filter, Model as _};
 use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::AuditRecord;
-use crate::audit_log::{self, Column};
 use crate::log::kind_str;
 
 /// Filters for audit entries; every field is optional and they combine
@@ -59,55 +56,49 @@ impl AuditFilter {
         AuditRecord::query().where_(self.condition())
     }
 
-    /// `select` restricted to the matching entries (the SeaORM form of
-    /// [`query`](AuditFilter::query)).
-    pub fn apply(&self, select: Select<audit_log::Entity>) -> Select<audit_log::Entity> {
-        select.filter(self.condition())
-    }
-
-    /// The condition both query forms share. An action without a `.` also
-    /// matches the actions ending in `.<action>`, with the `LIKE` wildcards
-    /// in it escaped (the escape character is given, since SQLite has none
-    /// by default).
-    fn condition(&self) -> Condition {
-        let mut condition = Condition::all();
+    /// The condition of [`query`](AuditFilter::query). An action without a
+    /// `.` also matches the actions ending in `.<action>`: a `LIKE` with
+    /// the database's own case rules (as an exact action has), the
+    /// wildcards in the action escaped with `!` (an escape character every
+    /// database reads the same in a string literal).
+    fn condition(&self) -> Filter {
+        let mut filters = Vec::new();
         if let Some(actor_id) = self.actor_id {
-            condition = condition.add(Column::ActorId.eq(actor_id));
+            filters.push(AuditRecord::ACTOR_ID.eq(actor_id));
         }
         if let Some(impersonator_id) = self.impersonator_id {
-            condition = condition.add(Column::ImpersonatorId.eq(impersonator_id));
+            filters.push(AuditRecord::IMPERSONATOR_ID.eq(impersonator_id));
         }
         if let Some(subject_type) = &self.subject_type {
-            condition = condition.add(Column::SubjectType.eq(subject_type.as_str()));
+            filters.push(AuditRecord::SUBJECT_TYPE.eq(subject_type.as_str()));
         }
         if let Some(subject_id) = &self.subject_id {
-            condition = condition.add(Column::SubjectId.eq(subject_id.as_str()));
+            filters.push(AuditRecord::SUBJECT_ID.eq(subject_id.as_str()));
         }
         if let Some(action) = &self.action {
-            condition = condition.add(if action.contains('.') {
-                Condition::all().add(Column::Action.eq(action.as_str()))
+            let exact = AuditRecord::ACTION.eq(action.as_str());
+            filters.push(if action.contains('.') {
+                exact
             } else {
-                Condition::any()
-                    .add(Column::Action.eq(action.as_str()))
-                    .add(
-                        Column::Action
-                            .like(LikeExpr::new(format!("%.{}", escape_like(action))).escape('\\')),
-                    )
+                exact.or(Filter::raw(
+                    "action LIKE ? ESCAPE '!'",
+                    [format!("%.{}", escape_like(action))],
+                ))
             });
         }
         if let Some(kind) = self.kind {
-            condition = condition.add(Column::Kind.eq(kind_str(kind)));
+            filters.push(AuditRecord::KIND.eq(kind_str(kind)));
         }
-        condition
+        Filter::all(filters)
     }
 }
 
-/// `value` with the LIKE wildcards `%` and `_` (and the escape `\`) escaped.
+/// `value` with the LIKE wildcards `%` and `_` (and the escape `!`) escaped.
 fn escape_like(value: &str) -> String {
     let mut escaped = String::with_capacity(value.len());
     for c in value.chars() {
-        if matches!(c, '%' | '_' | '\\') {
-            escaped.push('\\');
+        if matches!(c, '%' | '_' | '!') {
+            escaped.push('!');
         }
         escaped.push(c);
     }
@@ -190,8 +181,9 @@ mod tests {
 
     #[test]
     fn like_wildcards_are_escaped() {
-        assert_eq!(escape_like("role_assigned"), "role\\_assigned");
-        assert_eq!(escape_like("100%\\"), "100\\%\\\\");
+        assert_eq!(escape_like("role_assigned"), "role!_assigned");
+        assert_eq!(escape_like("100%!"), "100!%!!");
+        assert_eq!(escape_like("a\\b"), "a\\b");
     }
 
     #[test]

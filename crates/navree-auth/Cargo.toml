@@ -12,8 +12,11 @@ workspace = true
 
 [features]
 default = []
-## PostgreSQL integration tests (`tests/postgres.rs`, with NAVREE_TEST_POSTGRES_URL).
+## The test suite on PostgreSQL (`NAVREE_TEST_DATABASE=postgres` with
+## NAVREE_TEST_POSTGRES_URL; also `tests/postgres.rs`).
 postgres = ["navree-db/postgres"]
+## The test suite on MySQL (`NAVREE_TEST_DATABASE=mysql` with NAVREE_TEST_MYSQL_URL).
+mysql = ["navree-db/mysql"]
 
 [dependencies]
 axum = { workspace = true }
@@ -43,8 +46,10 @@ navree-mail = { workspace = true }
 navree-orm = { workspace = true }
 navree-validation = { workspace = true }
 ring = { workspace = true }
+# Compatibility layer only (`entity/user.rs`): the SeaORM derive kept on
+# `User` for crates not yet moved to navree-orm. Removed in step 8 of the
+# data-layer move.
 sea-orm = { workspace = true }
-sea-orm-migration = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }

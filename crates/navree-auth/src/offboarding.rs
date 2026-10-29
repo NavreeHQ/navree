@@ -139,11 +139,10 @@ impl AuthService {
         let ids = users.to_vec();
         let sessions = self
             .own(None, None, |uow| async move {
-                let tx = uow.tx().await?;
                 Ok(RefreshToken::query()
                     .where_(RefreshToken::USER_ID.is_in(ids))
                     .where_null(RefreshToken::REVOKED_AT)
-                    .update(&*tx, [RefreshToken::REVOKED_AT.set(now)])
+                    .update(&uow, [RefreshToken::REVOKED_AT.set(now)])
                     .await?)
             })
             .await?;

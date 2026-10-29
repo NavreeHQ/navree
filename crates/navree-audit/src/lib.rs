@@ -4,8 +4,9 @@
 //! changes, in the table `audit_logs`.
 //!
 //! - **Data changes** made through a `navree_db::Uow` (navree-orm models
-//!   saved in it, or `navree_db::Repo`) are written as `data` entries by a
-//!   `dyn ChangeObserver` inside the unit of work's transaction, so a
+//!   saved in it, navree-db's recorded record writes, or `navree_db::Repo`)
+//!   are written as `data` entries by a `dyn ChangeObserver`
+//!   (`observe_with`) inside the unit of work's transaction, so a
 //!   rolled-back change leaves no audit row. Entries carry the unit of
 //!   work's actor and request id, the subject type and id (`Deal`,
 //!   `0199...`), the action (`deal.created`, `deal.updated`,
@@ -75,5 +76,5 @@ pub use policy::AUDIT_TABLE;
 
 /// One stored audit entry (a row of `audit_logs`): a navree-orm model
 /// (`AuditRecord::query()`, typed columns such as `AuditRecord::ACTION`),
-/// and the `Model` of the SeaORM entity [`audit_log`].
+/// written as a navree-db record (see [`audit_log`]).
 pub type AuditRecord = audit_log::Model;

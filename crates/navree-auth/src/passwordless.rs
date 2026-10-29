@@ -26,7 +26,6 @@ use chrono::{DateTime, Utc};
 use navree_contracts::AuditKind;
 use navree_crypto::{constant_time_eq, hmac_sha256, sha256_hex};
 use navree_orm::{Model as _, Record};
-use sea_orm::Set;
 use serde_json::json;
 use uuid::Uuid;
 
@@ -306,13 +305,12 @@ impl AuthService {
         let user_id = user.id;
         self.write(Some(user_id), |uow| async move {
             {
-                let tx = uow.tx().await?;
                 LoginToken::query()
                     .where_(LoginToken::USER_ID.eq(user_id))
                     .where_(LoginToken::KIND.eq(kind))
-                    .delete(&*tx)
+                    .delete(&uow)
                     .await?;
-                LoginToken::insert(&*tx, [row]).await?;
+                LoginToken::insert(&uow, [row]).await?;
             }
             if let Some((mailer, mail)) = mail {
                 send_after_commit(&uow, mailer, mail);
@@ -327,11 +325,10 @@ impl AuthService {
     /// first.
     async fn claim_login_token(&self, id: Uuid, now: DateTime<Utc>) -> Result<bool, AuthError> {
         self.write(None, |uow| async move {
-            let tx = uow.tx().await?;
             let claimed = LoginToken::query()
                 .where_key(id)
                 .where_null(LoginToken::USED_AT)
-                .update(&*tx, [LoginToken::USED_AT.set(now)])
+                .update(&uow, [LoginToken::USED_AT.set(now)])
                 .await?;
             Ok(claimed == 1)
         })
@@ -353,12 +350,11 @@ impl AuthService {
             Some(row.user_id),
             meta.request_id.clone(),
             |uow| async move {
-                let tx = uow.tx().await?;
                 let mut sets = vec![LoginToken::ATTEMPTS.set(attempts)];
                 if burned {
                     sets.push(LoginToken::USED_AT.set(now));
                 }
-                LoginToken::query().where_key(id).update(&*tx, sets).await?;
+                LoginToken::query().where_key(id).update(&uow, sets).await?;
                 Ok(())
             },
         )
@@ -378,15 +374,14 @@ impl AuthService {
         self.check_sign_in(&SignInAttempt::of(&user, method.clone()), meta)
             .await?;
         if user.email_verified_at.is_none() {
-            let row = user::ActiveModel {
-                id: sea_orm::Unchanged(user.id),
-                email_verified_at: Set(Some(now)),
-                updated_at: Set(now),
-                ..Default::default()
-            };
+            let id = user.id;
             user = self
-                .write(Some(user.id), |uow| async move {
-                    crate::account::update_user(&uow, row).await
+                .write(Some(id), |uow| async move {
+                    user::update(&uow, id, |user| {
+                        user.email_verified_at = Some(now);
+                        user.updated_at = now;
+                    })
+                    .await
                 })
                 .await?;
         }
