@@ -1,14 +1,18 @@
 //! A light reading of an app's Rust source for the workspace conformity
-//! checks: which SeaORM entities it defines (and their tables), and where
-//! code reaches an entity directly (`Entity::find`, `Repo::<Entity>`)
-//! instead of through `WorkspaceRepo`.
+//! checks: which navree-orm models it defines (`#[derive(Model)]` structs:
+//! their tables, and whether `#[model(workspace)]` scopes them to the
+//! current workspace), and where code reaches a model's table directly
+//! (`Deal::query()`, `Deal::find(..)`, `Deal::create(..)`, ..) instead of
+//! through `WorkspaceRepo`, or leaves a self-scoping model's workspace
+//! scope (`.without_workspace_scope()`).
 //!
 //! It reads text, not a syntax tree: comments and string contents are
 //! blanked, paths are resolved through `use` declarations (trees, `as`,
-//! `self`, `super`, `crate` and globs) and `type` aliases, and modules come
-//! from file locations and inline `mod name { .. }` blocks. Test code is
-//! left out: `tests/`, `benches/` and `examples/` directories and
-//! `#[cfg(test)] mod` blocks.
+//! `self`, `super`, `crate` and globs), `type` aliases and the `Self` of
+//! `impl` blocks, and modules come from file locations and inline
+//! `mod name { .. }` blocks. Test code is left out: `tests/`, `benches/`
+//! and `examples/` directories, `#[cfg(test)] mod` blocks and
+//! `#[cfg(test)]` structs.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -17,19 +21,36 @@ use std::path::{Path, PathBuf};
 /// line above: `// navree:allow(workspace-repo)`.
 pub(crate) const ALLOW_MARKER: &str = "navree:allow(workspace-repo)";
 
-/// Associated functions on an entity that read or write its table without
-/// a workspace scope.
-const ENTITY_ENTRY_POINTS: [&str; 9] = [
+/// The associated functions of `navree_orm::Model` that read or write the
+/// model's table. Without `#[model(workspace)]` none of them is scoped to
+/// a workspace.
+pub(crate) const MODEL_ENTRY_POINTS: [&str; 20] = [
+    "query",
+    "where_",
+    "on_connection",
+    "on_write_connection",
+    "all",
     "find",
-    "find_by_id",
+    "find_or_fail",
+    "find_many",
+    "create",
+    "create_from",
+    "force_create",
     "insert",
-    "insert_many",
-    "update",
-    "update_many",
-    "delete",
-    "delete_many",
-    "delete_by_id",
+    "insert_or_ignore",
+    "fill_and_insert",
+    "upsert",
+    "destroy",
+    "first_or_create",
+    "first_or_new",
+    "create_or_first",
+    "update_or_create",
 ];
+
+/// Query builder methods that leave out the workspace scope of a
+/// `#[model(workspace)]` model (every workspace's rows); so does
+/// `without_global_scope::<WorkspaceScope>()`.
+const SCOPE_OPT_OUTS: [&str; 2] = ["without_workspace_scope", "without_global_scopes"];
 
 /// Directories never read: build output, dependencies, front ends, test
 /// and example code.
@@ -43,36 +64,55 @@ const SKIPPED_DIRS: [&str; 7] = [
     "migrations",
 ];
 
-/// An entity the source defines.
+/// A navree-orm model the source defines: a struct that derives `Model`.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct EntityDef {
-    /// Its table (`#[sea_orm(table_name = "..")]`).
+pub(crate) struct ModelDef {
+    /// The struct's name (`Deal`): how code names it.
+    pub(crate) name: String,
+    /// Its table: `#[model(table = "..")]` (or `collection = ".."`), else
+    /// the derive's default, the snake_case plural of the name.
     pub(crate) table: String,
-    /// The absolute path of its `Entity` type: crate, modules, `Entity`.
+    /// The workspace column of a model declared `#[model(workspace)]`
+    /// (`workspace_id`) or `#[model(workspace = "..")]`: it scopes its own
+    /// queries to the current workspace.
+    pub(crate) workspace: Option<String>,
+    /// The absolute path of the struct: crate, modules, name.
     pub(crate) path: Vec<String>,
-    /// The file and line of the `table_name` attribute.
+    /// The file and line of the struct.
     pub(crate) location: String,
 }
 
-impl EntityDef {
-    /// `deal::Entity`: how code usually names it.
-    pub(crate) fn short_name(&self) -> String {
-        match self.path.len() {
-            0..=2 => "Entity".to_owned(),
-            n => format!("{}::Entity", self.path[n - 2]),
-        }
+impl ModelDef {
+    /// Whether `#[model(workspace)]` scopes its queries to the current
+    /// workspace.
+    pub(crate) fn scopes_itself(&self) -> bool {
+        self.workspace.is_some()
     }
 }
 
-/// A direct access to an entity.
+/// How code reaches a workspace model's table past its workspace.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum AccessKind {
+    /// A [`MODEL_ENTRY_POINTS`] call on a model that does not scope itself.
+    Unscoped,
+    /// A self-scoping model's query that leaves its workspace scope.
+    LeavesScope,
+}
+
+/// A direct access to a model.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct DirectAccess {
     /// `src/deals/service.rs:42`.
     pub(crate) location: String,
-    /// The entity's table.
+    /// The model's name.
+    pub(crate) model: String,
+    /// The model's table.
     pub(crate) table: String,
-    /// What the code wrote: `entity::Entity::find`, `Repo::<Deal>`.
+    /// What the code wrote: `deal::Deal::find`,
+    /// `Project::query().without_workspace_scope()`.
     pub(crate) expression: String,
+    /// Which bypass it is.
+    pub(crate) kind: AccessKind,
 }
 
 /// The Rust source of the crates under a root.
@@ -131,52 +171,87 @@ impl Project {
         self.files.len()
     }
 
-    /// Every entity definition, in file order.
-    pub(crate) fn entities(&self) -> Vec<EntityDef> {
+    /// Every model definition, in file order.
+    pub(crate) fn models(&self) -> Vec<ModelDef> {
         self.files
             .iter()
-            .flat_map(|file| file.entities.iter().cloned())
+            .flat_map(|file| file.models.iter().cloned())
             .collect()
     }
 
-    /// Every direct access to one of `entities` (absolute `Entity` paths)
-    /// not allowed by the marker comment.
-    pub(crate) fn direct_accesses(&self, entities: &[EntityDef]) -> Vec<DirectAccess> {
-        let by_path: BTreeMap<&[String], &EntityDef> =
-            entities.iter().map(|e| (e.path.as_slice(), e)).collect();
+    /// Every direct access to one of `models` not allowed by the marker
+    /// comment: any entry point of a model that does not scope itself, and
+    /// a query that leaves the workspace scope of one that does.
+    pub(crate) fn direct_accesses(&self, models: &[ModelDef]) -> Vec<DirectAccess> {
+        let by_path: BTreeMap<&[String], &ModelDef> =
+            models.iter().map(|m| (m.path.as_slice(), m)).collect();
         let mut found = Vec::new();
         for file in &self.files {
             for candidate in &file.paths {
-                if file.allowed(candidate.line) {
-                    continue;
-                }
                 let resolved = file.resolve(&candidate.module, &candidate.segments, &self.crates);
-                if let Some(entity) = resolved
+                let Some(model) = resolved
                     .iter()
                     .find_map(|path| by_path.get(path.as_slice()))
-                {
-                    found.push(DirectAccess {
-                        location: format!("{}:{}", file.display, candidate.line),
-                        table: entity.table.clone(),
-                        expression: candidate.expression.clone(),
-                    });
+                else {
+                    continue;
+                };
+                let (line, expression, kind) = if model.scopes_itself() {
+                    let Some(opt_out) = &candidate.opt_out else {
+                        continue;
+                    };
+                    (
+                        opt_out.line,
+                        format!("{}{}", candidate.call, opt_out.call),
+                        AccessKind::LeavesScope,
+                    )
+                } else {
+                    (
+                        candidate.line,
+                        candidate.expression.clone(),
+                        AccessKind::Unscoped,
+                    )
+                };
+                if file.allowed(candidate.line) || file.allowed(line) {
+                    continue;
                 }
+                found.push(DirectAccess {
+                    location: format!("{}:{line}", file.display),
+                    model: model.name.clone(),
+                    table: model.table.clone(),
+                    expression,
+                    kind,
+                });
             }
         }
         found
     }
 }
 
-/// A path the code uses in a way that bypasses `WorkspaceRepo`.
+/// A model entry point call: `path::entry_point(..)`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Candidate {
     line: usize,
     /// The inline module path (inside the file) where it appears.
     module: Vec<String>,
-    /// The type path as written (`entity::Entity`, `Deal`).
+    /// The model path as written (`deal::Deal`, `Deal`), with `Self`
+    /// replaced by the type of the enclosing `impl` block.
     segments: Vec<String>,
-    /// The expression as written, for the report.
+    /// The path as written, for the report: `deal::Deal::find`.
     expression: String,
+    /// The call, for the report: `Deal::query()`, `Deal::find(..)`.
+    call: String,
+    /// Where the call's method chain leaves the workspace scope, if it
+    /// does.
+    opt_out: Option<OptOut>,
+}
+
+/// `.without_workspace_scope()` (or another of [`SCOPE_OPT_OUTS`]) in a
+/// method chain.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct OptOut {
+    line: usize,
+    /// `.without_workspace_scope()`.
+    call: String,
 }
 
 /// One parsed `.rs` file.
@@ -193,7 +268,7 @@ struct SourceFile {
     uses: BTreeMap<Vec<String>, BTreeMap<String, Vec<String>>>,
     /// Glob imports per inline module path.
     globs: BTreeMap<Vec<String>, Vec<Vec<String>>>,
-    entities: Vec<EntityDef>,
+    models: Vec<ModelDef>,
     paths: Vec<Candidate>,
     /// Line ranges of `#[cfg(test)]` modules, left out.
     test_lines: Vec<(usize, usize)>,
@@ -210,12 +285,13 @@ impl SourceFile {
             comments: stripped.comments,
             uses: BTreeMap::new(),
             globs: BTreeMap::new(),
-            entities: Vec::new(),
+            models: Vec::new(),
             paths: Vec::new(),
             test_lines: Vec::new(),
         };
         let line_modules = file.walk(&tokens);
-        file.find_entities(&stripped.code, &line_modules);
+        let code: Vec<char> = stripped.code.chars().collect();
+        file.find_models(&tokens, &code, &line_modules);
         file
     }
 
@@ -231,13 +307,18 @@ impl SourceFile {
         has(line) || has(line.saturating_sub(1))
     }
 
-    /// Walks the tokens: tracks inline modules, skips `#[cfg(test)]`
-    /// modules, collects `use` declarations, `type` aliases and candidate
-    /// paths. Returns the inline module path at the start of each line.
+    /// Walks the tokens: tracks inline modules and `impl` blocks, skips
+    /// `#[cfg(test)]` modules, collects `use` declarations, `type` aliases
+    /// and model entry point calls. Returns the inline module path at the
+    /// start of each line.
     fn walk(&mut self, tokens: &[Token]) -> Vec<Vec<String>> {
         let mut line_modules: Vec<Vec<String>> = Vec::new();
         // (inline module name, brace depth inside it)
         let mut stack: Vec<(String, usize)> = Vec::new();
+        // (the `Self` type of an `impl` block, brace depth inside it)
+        let mut selves: Vec<(Vec<String>, usize)> = Vec::new();
+        // (the index of an `impl` block's `{`, its `Self` type)
+        let mut pending_impl: Option<(usize, Vec<String>)> = None;
         let mut depth = 0usize;
         let mut cfg_test = false;
         let mut i = 0;
@@ -262,7 +343,7 @@ impl SourceFile {
                 {
                     if cfg_test {
                         // Skip the whole test module.
-                        let end = skip_block(tokens, i + 2);
+                        let end = skip_group(tokens, i + 2);
                         let last = tokens
                             .get(end.saturating_sub(1))
                             .map_or(token.line, |t| t.line);
@@ -302,13 +383,28 @@ impl SourceFile {
                     i = end + 1;
                     continue;
                 }
+                "impl" if starts_item(tokens, i) => {
+                    pending_impl = impl_header(tokens, i);
+                    i += 1;
+                    continue;
+                }
                 "{" => {
                     depth += 1;
                     cfg_test = false;
+                    if let Some((open, self_type)) = pending_impl.take() {
+                        if open == i {
+                            selves.push((self_type, depth));
+                        } else {
+                            pending_impl = Some((open, self_type));
+                        }
+                    }
                 }
                 "}" => {
                     if stack.last().is_some_and(|(_, d)| *d == depth) {
                         stack.pop();
+                    }
+                    if selves.last().is_some_and(|(_, d)| *d == depth) {
+                        selves.pop();
                     }
                     depth = depth.saturating_sub(1);
                 }
@@ -316,36 +412,27 @@ impl SourceFile {
                 text if is_ident(text) && !is_path_continuation(tokens, i) => {
                     let (path, used) = read_path(&tokens[i..]);
                     let after = i + used;
-                    let text_at = |k: usize| tokens.get(k).map(|t| t.text.as_str());
-                    // `Repo::<path>`: navree-db's repository on an entity.
-                    if path.last().is_some_and(|s| s == "Repo")
-                        && text_at(after) == Some("::")
-                        && text_at(after + 1) == Some("<")
-                    {
-                        let (entity, entity_used) = read_path(&tokens[after + 2..]);
-                        if !entity.is_empty() && text_at(after + 2 + entity_used) == Some(">") {
-                            self.paths.push(Candidate {
-                                line: token.line,
-                                module: current(&stack),
-                                expression: format!("Repo::<{}>", entity.join("::")),
-                                segments: entity,
-                            });
-                        }
-                        i = after + 2 + entity_used;
-                        continue;
-                    }
                     // `path::entry_point(`: the entry point is the last
-                    // segment, the entity the ones before it.
+                    // segment, the model the ones before it.
                     if path.len() >= 2
-                        && ENTITY_ENTRY_POINTS.contains(&path[path.len() - 1].as_str())
-                        && text_at(after) == Some("(")
+                        && MODEL_ENTRY_POINTS.contains(&path[path.len() - 1].as_str())
+                        && tokens.get(after).is_some_and(|t| t.text == "(")
                     {
-                        let entity = path[..path.len() - 1].to_vec();
+                        let mut model = path[..path.len() - 1].to_vec();
+                        if model[0] == "Self"
+                            && let Some((self_type, _)) = selves.last()
+                        {
+                            model.splice(0..1, self_type.iter().cloned());
+                        }
+                        let no_arguments = tokens.get(after + 1).is_some_and(|t| t.text == ")");
+                        let expression = path.join("::");
                         self.paths.push(Candidate {
                             line: token.line,
                             module: current(&stack),
-                            expression: path.join("::"),
-                            segments: entity,
+                            segments: model,
+                            call: format!("{expression}({})", if no_arguments { "" } else { ".." }),
+                            expression,
+                            opt_out: chain_opt_out(tokens, after),
                         });
                     }
                     i += used.max(1);
@@ -359,36 +446,56 @@ impl SourceFile {
         line_modules
     }
 
-    /// Finds `#[sea_orm(table_name = "..")]` attributes.
-    fn find_entities(&mut self, code: &str, line_modules: &[Vec<String>]) {
-        let lines: Vec<&str> = code.lines().collect();
-        for (index, line) in lines.iter().enumerate() {
-            let in_attribute =
-                line.contains("sea_orm(") || (index > 0 && lines[index - 1].contains("#[sea_orm("));
-            let in_tests = self
-                .test_lines
-                .iter()
-                .any(|&(start, end)| (start..=end).contains(&(index + 1)));
-            if !in_attribute || in_tests {
+    /// Finds the structs that derive `Model`, with their `#[model(..)]`
+    /// container attributes.
+    fn find_models(&mut self, tokens: &[Token], code: &[char], line_modules: &[Vec<String>]) {
+        let text_at = |k: usize| tokens.get(k).map(|t| t.text.as_str());
+        let mut i = 0;
+        while i < tokens.len() {
+            if !(text_at(i) == Some("#") && text_at(i + 1) == Some("[")) {
+                i += 1;
                 continue;
             }
-            let Some(table) = table_name(line) else {
-                continue;
-            };
-            let inline = line_modules
-                .get(index)
-                .or_else(|| line_modules.last())
-                .cloned()
-                .unwrap_or_default();
-            let mut path = vec![self.krate.clone()];
-            path.extend(self.module.iter().cloned());
-            path.extend(inline);
-            path.push("Entity".to_owned());
-            self.entities.push(EntityDef {
-                table,
-                path,
-                location: format!("{}:{}", self.display, index + 1),
-            });
+            // A run of outer attributes, then the item.
+            let mut attributes: Vec<&[Token]> = Vec::new();
+            let mut j = i;
+            while text_at(j) == Some("#") && text_at(j + 1) == Some("[") {
+                let end = skip_group(tokens, j + 1);
+                attributes.push(&tokens[(j + 2).min(end)..end.saturating_sub(1).max(j + 2)]);
+                j = end;
+            }
+            if text_at(j) == Some("pub") {
+                j += 1;
+                if text_at(j) == Some("(") {
+                    j = skip_group(tokens, j);
+                }
+            }
+            if text_at(j) == Some("struct")
+                && let Some(name) = tokens.get(j + 1).filter(|t| is_ident(&t.text))
+                && let Some((table, workspace)) = model_attributes(&attributes, code)
+            {
+                let in_tests = self
+                    .test_lines
+                    .iter()
+                    .any(|&(start, end)| (start..=end).contains(&name.line));
+                if !in_tests {
+                    let inline = line_modules
+                        .get(name.line - 1)
+                        .or_else(|| line_modules.last())
+                        .cloned()
+                        .unwrap_or_default();
+                    let mut path = self.absolute_module(&inline);
+                    path.push(name.text.clone());
+                    self.models.push(ModelDef {
+                        table: table.unwrap_or_else(|| default_table(&name.text)),
+                        name: name.text.clone(),
+                        workspace,
+                        path,
+                        location: format!("{}:{}", self.display, name.line),
+                    });
+                }
+            }
+            i = j.max(i + 1);
         }
     }
 
@@ -449,7 +556,7 @@ impl SourceFile {
                 }
                 out.push(join(&base, rest));
             }
-            name if crates.contains(name) && name != "Entity" => out.push(segments.to_vec()),
+            name if crates.contains(name) => out.push(segments.to_vec()),
             _ => {
                 // An item of this module, or one a glob import brings in.
                 out.push(join(&here, segments));
@@ -469,14 +576,266 @@ fn join(base: &[String], rest: &[String]) -> Vec<String> {
     path
 }
 
-/// `table_name = "deals"` on a line: `deals`.
-fn table_name(line: &str) -> Option<String> {
-    let start = line.find("table_name")?;
-    let rest = line[start + "table_name".len()..].trim_start();
-    let rest = rest.strip_prefix('=')?.trim_start();
-    let rest = rest.strip_prefix('"')?;
-    let end = rest.find('"')?;
-    Some(rest[..end].to_owned())
+/// `(table, workspace column)` of a struct whose outer attributes are
+/// `attributes` (each the tokens inside `#[..]`), when it derives `Model`
+/// and is not `#[cfg(test)]`: the table when `#[model(table = "..")]` (or
+/// `collection`) names it, the column when `#[model(workspace)]` or
+/// `#[model(workspace = "..")]` scopes it.
+fn model_attributes(
+    attributes: &[&[Token]],
+    code: &[char],
+) -> Option<(Option<String>, Option<String>)> {
+    let named = |attribute: &[Token], name: &str| {
+        attribute.first().is_some_and(|t| t.text == name)
+            && attribute.get(1).is_some_and(|t| t.text == "(")
+    };
+    let derives_model = attributes.iter().any(|attribute| {
+        named(attribute, "derive")
+            && attribute
+                .windows(2)
+                .any(|pair| pair[0].text == "Model" && matches!(pair[1].text.as_str(), "," | ")"))
+    });
+    let cfg_test = attributes.iter().any(|attribute| {
+        attribute.len() == 4
+            && named(attribute, "cfg")
+            && attribute[2].text == "test"
+            && attribute[3].text == ")"
+    });
+    if !derives_model || cfg_test {
+        return None;
+    }
+    let mut table = None;
+    let mut workspace = None;
+    for attribute in attributes.iter().filter(|a| named(a, "model")) {
+        let inner = &attribute[2..attribute.len().saturating_sub(1).max(2)];
+        for item in split_top_level(inner) {
+            let Some(key) = item.first() else {
+                continue;
+            };
+            let value = item
+                .get(1)
+                .filter(|t| t.text == "=")
+                .and_then(|_| string_literal(&item[2..], code));
+            match key.text.as_str() {
+                "table" | "collection" => table = value.or(table),
+                "workspace" => workspace = Some(value.unwrap_or_else(|| "workspace_id".to_owned())),
+                _ => {}
+            }
+        }
+    }
+    Some((table, workspace))
+}
+
+/// The items of a comma-separated list, split at the top level.
+fn split_top_level(tokens: &[Token]) -> Vec<&[Token]> {
+    let mut items = Vec::new();
+    let mut depth = 0usize;
+    let mut start = 0;
+    for (k, token) in tokens.iter().enumerate() {
+        match token.text.as_str() {
+            "(" | "[" | "{" => depth += 1,
+            ")" | "]" | "}" => depth = depth.saturating_sub(1),
+            "," if depth == 0 => {
+                items.push(&tokens[start..k]);
+                start = k + 1;
+            }
+            _ => {}
+        }
+    }
+    items.push(&tokens[start..]);
+    items
+}
+
+/// The contents of the string literal the tokens start with (`"deals"`,
+/// `r#"deals"#`), read from the comment-free source `code` since the
+/// tokens come from source with string contents blanked.
+fn string_literal(tokens: &[Token], code: &[char]) -> Option<String> {
+    let mut k = 0;
+    if tokens.first().is_some_and(|t| t.text == "r") {
+        k += 1;
+        while tokens.get(k).is_some_and(|t| t.text == "#") {
+            k += 1;
+        }
+    }
+    let open = tokens.get(k).filter(|t| t.text == "\"")?;
+    let close = tokens.get(k + 1).filter(|t| t.text == "\"")?;
+    code.get(open.pos + 1..close.pos)
+        .map(|chars| chars.iter().collect())
+}
+
+/// Words the same in the plural (navree-orm-macros' default table names).
+const UNCOUNTABLE: &[&str] = &[
+    "audio",
+    "data",
+    "deer",
+    "equipment",
+    "feedback",
+    "fish",
+    "information",
+    "metadata",
+    "money",
+    "news",
+    "rice",
+    "series",
+    "sheep",
+    "species",
+    "staff",
+    "traffic",
+];
+
+/// Plurals that follow no rule (navree-orm-macros' default table names).
+const IRREGULAR: &[(&str, &str)] = &[
+    ("analysis", "analyses"),
+    ("child", "children"),
+    ("criterion", "criteria"),
+    ("foot", "feet"),
+    ("goose", "geese"),
+    ("half", "halves"),
+    ("index", "indices"),
+    ("knife", "knives"),
+    ("leaf", "leaves"),
+    ("life", "lives"),
+    ("man", "men"),
+    ("mouse", "mice"),
+    ("ox", "oxen"),
+    ("person", "people"),
+    ("quiz", "quizzes"),
+    ("tooth", "teeth"),
+    ("wife", "wives"),
+    ("woman", "women"),
+];
+
+/// The table `#[derive(Model)]` gives a struct named `name` without
+/// `#[model(table = "..")]`: the snake_case plural of the name (`Deal` →
+/// `deals`, `DealStage` → `deal_stages`, `Person` → `people`), as
+/// navree-orm-macros names it.
+fn default_table(name: &str) -> String {
+    let snake = heck::ToSnakeCase::to_snake_case(name);
+    match snake.rsplit_once('_') {
+        Some((head, last)) => format!("{head}_{}", plural(last)),
+        None => plural(&snake),
+    }
+}
+
+/// The plural of an English noun (lower case).
+fn plural(word: &str) -> String {
+    if UNCOUNTABLE.contains(&word) {
+        return word.to_owned();
+    }
+    if let Some((_, plural)) = IRREGULAR.iter().find(|(singular, _)| *singular == word) {
+        return (*plural).to_owned();
+    }
+    let consonant_before = |suffix_len: usize| {
+        word.len() > suffix_len
+            && word[..word.len() - suffix_len]
+                .chars()
+                .last()
+                .is_some_and(|c| !"aeiou".contains(c))
+    };
+    if word.ends_with('y') && consonant_before(1) {
+        return format!("{}ies", &word[..word.len() - 1]);
+    }
+    if word.ends_with("is") && word.len() > 3 {
+        return format!("{}es", &word[..word.len() - 2]);
+    }
+    if ["s", "x", "z", "ch", "sh"]
+        .iter()
+        .any(|suffix| word.ends_with(suffix))
+    {
+        return format!("{word}es");
+    }
+    format!("{word}s")
+}
+
+/// Whether the token at `i` starts an item (an `impl` block rather than
+/// `impl Trait` in a type): it follows the start of the file, `;`, `{`,
+/// `}`, an attribute's `]` or `unsafe`.
+fn starts_item(tokens: &[Token], i: usize) -> bool {
+    i.checked_sub(1)
+        .map(|p| tokens[p].text.as_str())
+        .is_none_or(|prev| matches!(prev, ";" | "{" | "}" | "]" | "unsafe"))
+}
+
+/// The index of the `{` of the `impl` block starting at `i`, and its
+/// `Self` type as written (`Deal` in `impl Deal` and in `impl Trait for
+/// Deal`).
+fn impl_header(tokens: &[Token], i: usize) -> Option<(usize, Vec<String>)> {
+    let mut k = i + 1;
+    if tokens.get(k).is_some_and(|t| t.text == "<") {
+        k = skip_angles(tokens, k);
+    }
+    let (mut path, used) = read_path(tokens.get(k..)?);
+    k += used;
+    if tokens.get(k).is_some_and(|t| t.text == "<") {
+        k = skip_angles(tokens, k);
+    }
+    if tokens.get(k).is_some_and(|t| t.text == "for") {
+        let (for_path, used) = read_path(tokens.get(k + 1..)?);
+        path = for_path;
+        k += 1 + used;
+    }
+    if path.is_empty() {
+        return None;
+    }
+    let open = find(tokens, k, "{");
+    (open < tokens.len()).then_some((open, path))
+}
+
+/// The index after the `<..>` whose `<` is at `open` (a `>` of `->` does
+/// not close it).
+fn skip_angles(tokens: &[Token], open: usize) -> usize {
+    let mut depth = 0usize;
+    for (k, token) in tokens.iter().enumerate().skip(open) {
+        match token.text.as_str() {
+            "<" => depth += 1,
+            ">" if k == 0 || tokens[k - 1].text != "-" => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    return k + 1;
+                }
+            }
+            "{" | ";" => return k,
+            _ => {}
+        }
+    }
+    tokens.len()
+}
+
+/// Follows the method chain after the call whose `(` is at `open`
+/// (`Deal::query()` `.where_(..)` `.without_workspace_scope()` `.get(..)`
+/// `.await?`) and returns where it leaves the workspace scope.
+fn chain_opt_out(tokens: &[Token], open: usize) -> Option<OptOut> {
+    let text_at = |k: usize| tokens.get(k).map(|t| t.text.as_str());
+    let mut k = skip_group(tokens, open);
+    loop {
+        match text_at(k) {
+            Some("?") => k += 1,
+            Some(".") => {
+                let method = tokens.get(k + 1).filter(|t| is_ident(&t.text))?;
+                k += 2;
+                let mut generic = None;
+                if text_at(k) == Some("::") && text_at(k + 1) == Some("<") {
+                    let close = skip_angles(tokens, k + 1);
+                    generic = read_path(&tokens[k + 2..close]).0.last().cloned();
+                    k = close;
+                }
+                let leaves = SCOPE_OPT_OUTS.contains(&method.text.as_str())
+                    || (method.text == "without_global_scope"
+                        && generic.as_deref() == Some("WorkspaceScope"));
+                if leaves {
+                    let turbofish = generic.map_or_else(String::new, |g| format!("::<{g}>"));
+                    return Some(OptOut {
+                        line: method.line,
+                        call: format!(".{}{turbofish}()", method.text),
+                    });
+                }
+                if text_at(k) == Some("(") {
+                    k = skip_group(tokens, k);
+                }
+            }
+            _ => return None,
+        }
+    }
 }
 
 /// Source text with comments removed (`code`), with comments and string
@@ -661,6 +1020,8 @@ fn raw_string_start(chars: &[char], i: usize) -> Option<(usize, usize)> {
 struct Token {
     text: String,
     line: usize,
+    /// The index of its first character in the source.
+    pos: usize,
 }
 
 fn tokenize(bare: &str) -> Vec<Token> {
@@ -683,6 +1044,7 @@ fn tokenize(bare: &str) -> Vec<Token> {
             tokens.push(Token {
                 text: chars[start..i].iter().collect(),
                 line,
+                pos: start,
             });
         } else if c.is_ascii_digit() {
             while i < chars.len() && (chars[i].is_alphanumeric() || chars[i] == '_') {
@@ -692,12 +1054,14 @@ fn tokenize(bare: &str) -> Vec<Token> {
             tokens.push(Token {
                 text: "::".to_owned(),
                 line,
+                pos: i,
             });
             i += 2;
         } else {
             tokens.push(Token {
                 text: c.to_string(),
                 line,
+                pos: i,
             });
             i += 1;
         }
@@ -755,14 +1119,14 @@ fn find(tokens: &[Token], from: usize, text: &str) -> usize {
         .map_or(tokens.len(), |p| from + p)
 }
 
-/// The index after the block whose `{` is at `open`.
-fn skip_block(tokens: &[Token], open: usize) -> usize {
+/// The index after the group whose `(`, `[` or `{` is at `open`.
+fn skip_group(tokens: &[Token], open: usize) -> usize {
     let mut depth = 0usize;
     for (i, token) in tokens.iter().enumerate().skip(open) {
         match token.text.as_str() {
-            "{" => depth += 1,
-            "}" => {
-                depth -= 1;
+            "(" | "[" | "{" => depth += 1,
+            ")" | "]" | "}" => {
+                depth = depth.saturating_sub(1);
                 if depth == 0 {
                     return i + 1;
                 }
@@ -1006,10 +1370,10 @@ mod tests {
     #[test]
     fn use_trees_bring_names_and_globs_into_scope() {
         let tokens =
-            tokenize("use super::{entity::{self, Entity as Deal}, dto::*, service::DealService};");
+            tokenize("use super::{deal::{self, Deal as D}, dto::*, service::DealService};");
         let (names, globs) = parse_use(&tokens[1..tokens.len() - 1]);
-        assert_eq!(names["entity"], strs(&["super", "entity"]));
-        assert_eq!(names["Deal"], strs(&["super", "entity", "Entity"]));
+        assert_eq!(names["deal"], strs(&["super", "deal"]));
+        assert_eq!(names["D"], strs(&["super", "deal", "Deal"]));
         assert_eq!(
             names["DealService"],
             strs(&["super", "service", "DealService"])
@@ -1028,38 +1392,53 @@ mod tests {
         assert_eq!(package_name("[workspace]\nname = \"x\"\n"), None);
     }
 
-    const DEALS_ENTITY: &str = r#"
-use sea_orm::entity::prelude::*;
+    const DEAL_MODEL: &str = r#"
+use navree::orm::Model;
+use uuid::Uuid;
 
-#[derive(Clone, Debug, DeriveEntityModel)]
-#[sea_orm(table_name = "deals")]
-pub struct Model {
-    #[sea_orm(primary_key)]
+/// A deal.
+#[derive(Clone, Debug, Default, Model, serde::Serialize)]
+#[model(table = "deals", timestamps)]
+pub struct Deal {
+    pub id: Uuid,
+    #[model(cast = "json", table = "not_this")]
+    pub meta: Option<String>,
+}
+
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct DealResource {}
+
+#[derive(DeriveEntityModel, ModelFactory)]
+pub struct Model {}
+"#;
+
+    const COMPANY_MODEL: &str = r#"
+#[derive(navree_orm::Model, Clone)]
+pub struct Company {
     pub id: Uuid,
 }
 "#;
 
-    const COMPANIES_ENTITY: &str = r#"
-#[derive(Clone, Debug, DeriveEntityModel)]
-#[sea_orm(
-    table_name = "companies"
-)]
-pub struct Model {}
+    const PROJECT_MODEL: &str = r#"
+#[model(workspace = "team_id", per_page = 25)]
+#[derive(Clone, Debug, Default, navree::orm::Model)]
+pub(crate) struct Project {}
 "#;
 
     fn project(service: &str) -> Project {
         Project::from_files(&[
+            ("src/deals/deal.rs", "shop", &["deals", "deal"], DEAL_MODEL),
             (
-                "src/deals/entity.rs",
+                "src/companies/company.rs",
                 "shop",
-                &["deals", "entity"],
-                DEALS_ENTITY,
+                &["companies", "company"],
+                COMPANY_MODEL,
             ),
             (
-                "src/companies/entity.rs",
+                "src/projects/project.rs",
                 "shop",
-                &["companies", "entity"],
-                COMPANIES_ENTITY,
+                &["projects", "project"],
+                PROJECT_MODEL,
             ),
             (
                 "src/deals/service.rs",
@@ -1070,103 +1449,208 @@ pub struct Model {}
         ])
     }
 
-    fn deals(project: &Project) -> Vec<EntityDef> {
+    fn deals(project: &Project) -> Vec<ModelDef> {
         project
-            .entities()
+            .models()
             .into_iter()
-            .filter(|e| e.table == "deals")
+            .filter(|m| m.table == "deals")
+            .collect()
+    }
+
+    fn summary(found: &[DirectAccess]) -> Vec<(&str, &str)> {
+        found
+            .iter()
+            .map(|f| (f.location.as_str(), f.expression.as_str()))
             .collect()
     }
 
     #[test]
-    fn entities_are_found_with_their_tables_and_paths() {
+    fn models_are_found_with_their_tables_and_paths() {
         let project = project("");
-        let entities = project.entities();
-        assert_eq!(entities.len(), 2);
-        assert_eq!(entities[0].table, "deals");
+        let models = project.models();
+        assert_eq!(models.len(), 3, "{models:?}");
+        assert_eq!(models[0].name, "Deal");
+        assert_eq!(models[0].table, "deals");
+        assert_eq!(models[0].path, strs(&["shop", "deals", "deal", "Deal"]));
+        assert_eq!(models[0].location, "src/deals/deal.rs:8");
+        assert_eq!(models[0].workspace, None);
+        assert!(!models[0].scopes_itself());
+        assert_eq!(models[1].name, "Company");
+        assert_eq!(models[1].table, "companies");
         assert_eq!(
-            entities[0].path,
-            strs(&["shop", "deals", "entity", "Entity"])
+            models[1].path,
+            strs(&["shop", "companies", "company", "Company"])
         );
-        assert_eq!(entities[0].location, "src/deals/entity.rs:5");
-        assert_eq!(entities[0].short_name(), "entity::Entity");
-        assert_eq!(entities[1].table, "companies");
-        assert_eq!(entities[1].location, "src/companies/entity.rs:4");
+        assert_eq!(models[1].location, "src/companies/company.rs:3");
+        assert_eq!(models[2].name, "Project");
+        assert_eq!(models[2].table, "projects");
+        assert_eq!(models[2].workspace.as_deref(), Some("team_id"));
+        assert!(models[2].scopes_itself());
+        assert_eq!(models[2].location, "src/projects/project.rs:4");
     }
 
     #[test]
-    fn inline_entity_modules_are_part_of_the_path() {
+    fn default_tables_follow_the_derive() {
+        for (model, table) in [
+            ("Deal", "deals"),
+            ("DealStage", "deal_stages"),
+            ("Company", "companies"),
+            ("Activity", "activities"),
+            ("Person", "people"),
+            ("Status", "statuses"),
+            ("Box", "boxes"),
+            ("Branch", "branches"),
+            ("Day", "days"),
+            ("AuditLog", "audit_logs"),
+            ("Metadata", "metadata"),
+            ("Analysis", "analyses"),
+            ("ApiKey", "api_keys"),
+            ("APIToken", "api_tokens"),
+        ] {
+            assert_eq!(default_table(model), table, "{model}");
+        }
         let project = Project::from_files(&[(
             "src/lib.rs",
             "shop",
             &[],
-            "pub mod deal {\n    #[sea_orm(table_name = \"deals\")]\n    pub struct Model {}\n}\n#[cfg(test)]\nmod tests {\n    #[sea_orm(table_name = \"fixtures\")]\n    struct Model {}\n}\n",
+            "#[derive(Model)]\n#[model(workspace)]\npub struct DealNote {}\n#[derive(Model)]\n#[model(collection = \"events\", driver = \"mongodb\")]\npub struct Event {}\n#[derive(Model)]\n#[model(table = r#\"raw_items\"#)]\npub struct Item {}\n",
         )]);
-        let entities = project.entities();
-        assert_eq!(entities.len(), 1, "{entities:?}");
-        assert_eq!(entities[0].path, strs(&["shop", "deal", "Entity"]));
-        assert_eq!(entities[0].short_name(), "deal::Entity");
+        let models = project.models();
+        let tables: Vec<_> = models.iter().map(|m| m.table.as_str()).collect();
+        assert_eq!(tables, ["deal_notes", "events", "raw_items"]);
+        assert_eq!(models[0].workspace.as_deref(), Some("workspace_id"));
+        assert_eq!(models[1].workspace, None);
+    }
+
+    #[test]
+    fn inline_model_modules_are_part_of_the_path() {
+        let project = Project::from_files(&[(
+            "src/lib.rs",
+            "shop",
+            &[],
+            "pub mod deal {\n    #[derive(Model)]\n    #[model(table = \"deals\")]\n    pub struct Deal {}\n}\n#[cfg(test)]\nmod tests {\n    #[derive(Model)]\n    struct Fixture {}\n}\n#[cfg(test)]\n#[derive(Model)]\nstruct TestOnly {}\n",
+        )]);
+        let models = project.models();
+        assert_eq!(models.len(), 1, "{models:?}");
+        assert_eq!(models[0].path, strs(&["shop", "deal", "Deal"]));
+        assert_eq!(models[0].location, "src/lib.rs:4");
     }
 
     #[test]
     fn direct_accesses_are_found_through_use_declarations() {
         let service = r#"
-use navree::db::Repo;
+use navree::orm::prelude::*;
 use navree::workspace::WorkspaceRepo;
-use super::entity::{self, Entity as Deal};
-use crate::companies::entity as company;
+use super::deal::{self, Deal as D};
+use crate::companies::company as co;
 
-pub async fn index(ws: Uuid) {
-    let a = entity::Entity::find().all(conn).await;
-    let b = Deal::find_by_id(id);
-    let c = Repo::<entity::Entity>::insert(&uow, am).await;
-    let d = WorkspaceRepo::<entity::Entity>::select(ws);
-    let e = company::Entity::find();
+pub async fn index(uow: Uow, ws: Uuid) {
+    let a = deal::Deal::query().get(&uow).await;
+    let b = D::find(&uow, id).await;
+    let c = D::create(&uow, deal).await;
+    let d = WorkspaceRepo::<D>::query(ws).get(&uow).await;
+    let e = co::Company::all(&uow).await;
     // navree:allow(workspace-repo)
-    let f = Deal::delete_many();
-    let g = Deal::find(); // navree:allow(workspace-repo)
-    let h = "Deal::find()";
+    let f = D::destroy(&uow, [id]).await;
+    let g = D::all(&uow).await; // navree:allow(workspace-repo)
+    let h = "D::find(&uow, id)";
     let i = x.find(y);
+    let j = D::table_name();
+    let k = D::where_(D::TITLE.eq("x")).first(&uow).await;
 }
 "#;
         let project = project(service);
         let found = project.direct_accesses(&deals(&project));
-        let summary: Vec<_> = found
-            .iter()
-            .map(|f| (f.location.as_str(), f.expression.as_str()))
-            .collect();
         assert_eq!(
-            summary,
+            summary(&found),
             [
-                ("src/deals/service.rs:8", "entity::Entity::find"),
-                ("src/deals/service.rs:9", "Deal::find_by_id"),
-                ("src/deals/service.rs:10", "Repo::<entity::Entity>"),
+                ("src/deals/service.rs:8", "deal::Deal::query"),
+                ("src/deals/service.rs:9", "D::find"),
+                ("src/deals/service.rs:10", "D::create"),
+                ("src/deals/service.rs:19", "D::where_"),
             ]
         );
-        assert!(found.iter().all(|f| f.table == "deals"));
+        assert!(
+            found
+                .iter()
+                .all(|f| f.table == "deals" && f.model == "Deal" && f.kind == AccessKind::Unscoped)
+        );
+    }
+
+    #[test]
+    fn self_scoping_models_are_reported_only_when_they_leave_the_scope() {
+        let service = r#"
+use crate::projects::project::Project;
+
+pub async fn report(uow: Uow, other: Uuid) -> Result<()> {
+    let mine = Project::query().get(&uow).await?;
+    let theirs = Project::query().for_workspace(other).get(&uow).await?;
+    let every = Project::query()
+        .where_(Project::NAME.eq("x"))
+        .without_workspace_scope()
+        .count(&uow)
+        .await?;
+    let all = Project::all(&uow).await?;
+    let raw = Project::on_write_connection().without_global_scope::<WorkspaceScope>().get(&uow).await?;
+    let soft = Project::query().without_global_scope::<SoftDeleteScope>().get(&uow).await?;
+    // A report across workspaces. navree:allow(workspace-repo)
+    let total = Project::query()
+        .without_global_scopes()
+        .count(&uow)
+        .await?;
+    let later = Project::find(&uow, id).await?.map(|p| p.id);
+    Ok(())
+}
+"#;
+        let project = project(service);
+        let projects: Vec<_> = project
+            .models()
+            .into_iter()
+            .filter(ModelDef::scopes_itself)
+            .collect();
+        let found = project.direct_accesses(&projects);
+        assert_eq!(
+            summary(&found),
+            [
+                (
+                    "src/deals/service.rs:9",
+                    "Project::query().without_workspace_scope()"
+                ),
+                (
+                    "src/deals/service.rs:13",
+                    "Project::on_write_connection().without_global_scope::<WorkspaceScope>()"
+                ),
+            ]
+        );
+        assert!(found.iter().all(|f| f.kind == AccessKind::LeavesScope));
+    }
+
+    #[test]
+    fn self_in_impl_blocks_is_the_implementing_type() {
+        let model = format!(
+            "{DEAL_MODEL}\nimpl Deal {{\n    pub fn open() -> Builder<Self> {{\n        Self::query()\n    }}\n    pub fn later() -> impl Future<Output = ()> {{\n        async {{ Self::all(&db); }}\n    }}\n}}\n#[async_trait]\nimpl Summary for Deal {{\n    fn count() {{ Self::find_many(&db, ids); }}\n}}\nimpl Other {{\n    fn f() {{ Self::query(); }}\n}}\n"
+        );
+        let project =
+            Project::from_files(&[("src/deals/deal.rs", "shop", &["deals", "deal"], &model)]);
+        let found = project.direct_accesses(&deals(&project));
+        let expressions: Vec<_> = found.iter().map(|f| f.expression.as_str()).collect();
+        assert_eq!(
+            expressions,
+            ["Self::query", "Self::all", "Self::find_many"],
+            "{found:?}"
+        );
     }
 
     #[test]
     fn a_module_of_the_same_name_elsewhere_is_not_confused() {
-        // `entity` here is the companies module's entity.
+        // `deal` here would be a module of companies.
         let other = r#"
-use super::entity;
+use super::deal;
 
-fn list() { entity::Entity::find(); }
+fn list() { deal::Deal::query(); }
 "#;
         let project = Project::from_files(&[
-            (
-                "src/deals/entity.rs",
-                "shop",
-                &["deals", "entity"],
-                DEALS_ENTITY,
-            ),
-            (
-                "src/companies/entity.rs",
-                "shop",
-                &["companies", "entity"],
-                COMPANIES_ENTITY,
-            ),
+            ("src/deals/deal.rs", "shop", &["deals", "deal"], DEAL_MODEL),
             (
                 "src/companies/service.rs",
                 "shop",
@@ -1180,14 +1664,14 @@ fn list() { entity::Entity::find(); }
     #[test]
     fn globs_aliases_and_absolute_paths_resolve() {
         let service = r#"
-use crate::deals::entity::*;
-type Deals = shop::deals::entity::Entity;
+use crate::deals::deal::*;
+type Deals = shop::deals::deal::Deal;
 
-fn a() { Entity::find(); }
-fn b() { Deals::update_many(); }
-fn c() { crate::deals::entity::Entity::delete_by_id(1); }
-fn d() { super::entity::Entity::insert(am); }
-fn e() { ::shop::deals::entity::Entity::find(); }
+fn a() { Deal::find_many(&db, ids); }
+fn b() { Deals::upsert(&db, rows, ["id"]); }
+fn c() { crate::deals::deal::Deal::first_or_create(&db, attrs); }
+fn d() { super::deal::Deal::insert(&db, rows); }
+fn e() { ::shop::deals::deal::Deal::update_or_create(&db, a, b); }
 "#;
         let project = project(service);
         let found = project.direct_accesses(&deals(&project));
@@ -1207,30 +1691,18 @@ fn e() { ::shop::deals::entity::Entity::find(); }
     #[test]
     fn test_modules_are_left_out() {
         let service = r#"
-use super::entity;
+use super::deal::Deal;
 
 #[cfg(test)]
 mod tests {
-    use super::entity;
-    fn setup() { entity::Entity::find(); }
+    use super::Deal;
+    fn setup() { Deal::query(); }
 }
 
 fn real() {}
 "#;
         let project = project(service);
         assert!(project.direct_accesses(&deals(&project)).is_empty());
-    }
-
-    #[test]
-    fn the_defining_module_reaches_its_own_entity() {
-        let entity = format!(
-            "{DEALS_ENTITY}\nimpl Entity {{\n    pub fn open() -> Select<Entity> {{ Entity::find() }}\n}}\n"
-        );
-        let project =
-            Project::from_files(&[("src/deals/entity.rs", "shop", &["deals", "entity"], &entity)]);
-        let found = project.direct_accesses(&deals(&project));
-        assert_eq!(found.len(), 1, "{found:?}");
-        assert_eq!(found[0].expression, "Entity::find");
     }
 
     #[test]
@@ -1248,17 +1720,17 @@ fn real() {}
         )
         .unwrap();
         std::fs::write(deals.join("src/lib.rs"), "pub mod deal;\n").unwrap();
-        std::fs::write(deals.join("src/deal.rs"), DEALS_ENTITY).unwrap();
+        std::fs::write(deals.join("src/deal.rs"), DEAL_MODEL).unwrap();
         std::fs::create_dir_all(deals.join("tests")).unwrap();
-        std::fs::write(deals.join("tests/it.rs"), COMPANIES_ENTITY).unwrap();
+        std::fs::write(deals.join("tests/it.rs"), COMPANY_MODEL).unwrap();
         std::fs::create_dir_all(root.join("target/debug")).unwrap();
-        std::fs::write(root.join("target/debug/junk.rs"), COMPANIES_ENTITY).unwrap();
+        std::fs::write(root.join("target/debug/junk.rs"), COMPANY_MODEL).unwrap();
 
         let project = Project::load(root);
         assert_eq!(project.file_count(), 3);
-        let entities = project.entities();
-        assert_eq!(entities.len(), 1);
-        assert_eq!(entities[0].path, strs(&["crm_deals", "deal", "Entity"]));
-        assert_eq!(entities[0].location, "crates/crm-deals/src/deal.rs:5");
+        let models = project.models();
+        assert_eq!(models.len(), 1);
+        assert_eq!(models[0].path, strs(&["crm_deals", "deal", "Deal"]));
+        assert_eq!(models[0].location, "crates/crm-deals/src/deal.rs:8");
     }
 }

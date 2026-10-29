@@ -69,12 +69,17 @@
 //!   with `testing::IsolationSuiteExt::factory` (a navree-orm factory) sends every route of module
 //!   `M` from one workspace against another's records: a 404, not listed,
 //!   never created there.
-//! - **Conformity.** `navree check` runs `workspace.entities` (every entity
-//!   classified with [`ModuleBuilderWorkspaceExt::workspace_entity`] or
-//!   [`global_entity`](ModuleBuilderWorkspaceExt::global_entity)),
-//!   `workspace.repo` (workspace entities reached only through
-//!   [`WorkspaceRepo`]) and `workspace.tables` (an indexed workspace
-//!   column, row-level security on PostgreSQL).
+//! - **Conformity.** `navree check` runs `workspace.entities` (every
+//!   navree-orm model of the app's source classified once:
+//!   `#[model(workspace)]`, [`ModuleBuilderWorkspaceExt::workspace_entity`]
+//!   or [`workspace_scoped`](ModuleBuilderWorkspaceExt::workspace_scoped),
+//!   [`global_entity`](ModuleBuilderWorkspaceExt::global_entity), or
+//!   [`library`](ModuleBuilderWorkspaceExt::library)), `workspace.repo`
+//!   (registered workspace models that do not scope themselves reached only
+//!   through [`WorkspaceRepo`], not `Deal::query()` and the other `Model`
+//!   entry points; `#[model(workspace)]` models not taken out of their
+//!   scope with `.without_workspace_scope()`) and `workspace.tables` (an
+//!   indexed workspace column, row-level security on PostgreSQL).
 //! - **Demo workspaces** ([`DemoWorkspaces`]). Workspaces of kind
 //!   [`WorkspaceKind::Demo`], filled from fixtures by each module's
 //!   [`DemoSeeder`] (`m.demo_seeder::<CrmDemo>()`). With
@@ -82,10 +87,6 @@
 //!   code `demo_read_only`); with `"reset"` they are cleared and seeded
 //!   again every night (`workspace:demo-reset`). Responses about a demo
 //!   carry `X-Navree-Demo: read_only|reset` ([`DEMO_HEADER`]).
-//!
-//! - **SeaORM compatibility** ([`sea_compat`]). The SeaORM forms of the
-//!   scoped repositories and registrations, for crates not yet on
-//!   navree-orm; removed in step 8 of the data-layer move.
 //!
 //! ```no_run
 //! use navree_access::{AccessModule, AccessOptions};
@@ -113,7 +114,6 @@
 pub mod entity;
 pub mod events;
 pub mod library;
-pub mod sea_compat;
 #[cfg(feature = "testing")]
 pub mod testing;
 
