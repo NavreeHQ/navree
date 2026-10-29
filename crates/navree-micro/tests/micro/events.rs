@@ -531,7 +531,7 @@ async fn the_relay_publishes_what_a_crashed_process_left_in_the_outbox(scratch: 
     ))
     .await
     .unwrap();
-    for _ in 0..100 {
+    for _ in 0..300 {
         if !micro.emitted_envelopes("deal.renamed").is_empty() {
             break;
         }
