@@ -22,7 +22,10 @@ pub(crate) enum Instant {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Shape {
     Bool,
-    Int { bits: u8, signed: bool },
+    Int {
+        bits: u8,
+        signed: bool,
+    },
     Float,
     Decimal,
     Text,
@@ -106,7 +109,11 @@ pub(crate) fn is_blank(value: &Json) -> bool {
 /// A blank input is `null`, except for text and JSON columns. `tz_offset`
 /// is the browser's offset from UTC (`Date.getTimezoneOffset()`), applied
 /// to date-times without an offset (`datetime-local` inputs).
-pub(crate) fn to_input(shape: Shape, input: &Json, tz_offset: Option<i32>) -> Result<Json, Invalid> {
+pub(crate) fn to_input(
+    shape: Shape,
+    input: &Json,
+    tz_offset: Option<i32>,
+) -> Result<Json, Invalid> {
     if input.is_null() || (is_blank(input) && !matches!(shape, Shape::Text | Shape::Json)) {
         return Ok(Json::Null);
     }
@@ -121,12 +128,7 @@ pub(crate) fn to_input(shape: Shape, input: &Json, tz_offset: Option<i32>) -> Re
             Json::String(text(input).ok_or(Invalid("numeric"))?.trim().to_owned())
         }
         Shape::Text => Json::String(text(input).ok_or(Invalid("string"))?),
-        Shape::Uuid => Json::String(
-            uuid(input)
-                .ok_or(Invalid("uuid"))?
-                .hyphenated()
-                .to_string(),
-        ),
+        Shape::Uuid => Json::String(uuid(input).ok_or(Invalid("uuid"))?.hyphenated().to_string()),
         Shape::Date => Json::String(
             date(input)
                 .ok_or(Invalid("date"))?
@@ -165,9 +167,10 @@ pub(crate) fn to_value(shape: Shape, input: &Json) -> Result<Value, Invalid> {
         Shape::Uuid => Value::Uuid(uuid(input).ok_or(Invalid("uuid"))?),
         Shape::Date => Value::Date(date(input).ok_or(Invalid("date"))?),
         Shape::Time => Value::Time(time(input).ok_or(Invalid("date"))?),
-        Shape::DateTime(instant) => {
-            date_bound(Shape::DateTime(instant), datetime(input, None).ok_or(Invalid("date"))?)
-        }
+        Shape::DateTime(instant) => date_bound(
+            Shape::DateTime(instant),
+            datetime(input, None).ok_or(Invalid("date"))?,
+        ),
         Shape::Json => Value::Json(input.clone()),
         Shape::Text | Shape::Other => Value::String(text(input).ok_or(Invalid("string"))?),
     })
@@ -415,7 +418,11 @@ mod tests {
             Err(Invalid("numeric"))
         );
         assert_eq!(
-            to_input(Shape::DateTime(Instant::Utc), &json!("2026-10-26T14:30"), Some(-120)),
+            to_input(
+                Shape::DateTime(Instant::Utc),
+                &json!("2026-10-26T14:30"),
+                Some(-120)
+            ),
             Ok(json!("2026-10-26T12:30:00.000000Z"))
         );
     }

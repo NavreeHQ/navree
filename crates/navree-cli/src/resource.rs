@@ -52,16 +52,24 @@ pub struct ModelInfo {
 /// Whether `attrs` derive `Model` (`#[derive(Model)]` or a path ending in
 /// `Model`, such as `navree::orm::Model`).
 fn derives_model(attrs: &[syn::Attribute]) -> bool {
-    attrs.iter().filter(|a| a.path().is_ident("derive")).any(|a| {
-        let mut found = false;
-        let _ = a.parse_nested_meta(|meta| {
-            if meta.path.segments.last().is_some_and(|s| s.ident == "Model") {
-                found = true;
-            }
-            Ok(())
-        });
-        found
-    })
+    attrs
+        .iter()
+        .filter(|a| a.path().is_ident("derive"))
+        .any(|a| {
+            let mut found = false;
+            let _ = a.parse_nested_meta(|meta| {
+                if meta
+                    .path
+                    .segments
+                    .last()
+                    .is_some_and(|s| s.ident == "Model")
+                {
+                    found = true;
+                }
+                Ok(())
+            });
+            found
+        })
 }
 
 /// The tokens of every `#[model(..)]` attribute in `attrs`, as text.

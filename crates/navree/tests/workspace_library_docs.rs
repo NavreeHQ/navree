@@ -82,7 +82,12 @@ pub mod model {
     use uuid::Uuid;
 
     #[derive(Model, Clone, Debug, Default, Serialize)]
-    #[model(table = "templates", timestamps, subject = "Template", permission_prefix = "templates")]
+    #[model(
+        table = "templates",
+        timestamps,
+        subject = "Template",
+        permission_prefix = "templates"
+    )]
     pub struct Template {
         pub id: Uuid,
         pub scope: LibraryScope,
@@ -416,7 +421,10 @@ pub mod helm {
                     body: input.body.unwrap_or_default(),
                     ..Template::default()
                 };
-                Ok(LibraryRepo::<Template>::create(ctx.uow(), LibraryOwner::Global, template).await?)
+                Ok(
+                    LibraryRepo::<Template>::create(ctx.uow(), LibraryOwner::Global, template)
+                        .await?,
+                )
             })
         }
     }

@@ -45,13 +45,12 @@ async fn apply<M: Model>(model: &mut M, form: &FormData, app: &AppContext) -> Re
         let Some(column) = values::column::<M>(name) else {
             continue;
         };
-        let result = values::to_input(Shape::of(column), value, form.tz_offset()).and_then(
-            |input| {
+        let result =
+            values::to_input(Shape::of(column), value, form.tz_offset()).and_then(|input| {
                 model
                     .set_attribute(name, input)
                     .map_err(|_| Invalid("invalid"))
-            },
-        );
+            });
         if let Err(Invalid(rule)) = result {
             if messages.is_none() {
                 messages = Some(self::messages(app).await);
@@ -83,9 +82,11 @@ fn touch<M: Model>(model: &mut M, name: &str, now: DateTime<Utc>) {
 /// `Resource::create`.
 async fn blank<M: Model>() -> Result<M, AppError> {
     let lenient = strict::current().prevent_missing_attributes(false);
-    strict::scope(lenient, async { M::from_row(&Row::from_values(Vec::new())) })
-        .await
-        .map_err(|error| {
+    strict::scope(lenient, async {
+        M::from_row(&Row::from_values(Vec::new()))
+    })
+    .await
+    .map_err(|error| {
         AppError::internal(format!(
             "Helm cannot make a new {} from a form ({error}): override `Resource::create`",
             M::meta().name()
@@ -136,7 +137,13 @@ fn changed_fields(old: Json, new: Json) -> (Map<String, Json>, Map<String, Json>
     (before, after)
 }
 
-fn record_change<M: Model>(uow: &Uow, key: &M::Key, op: ChangeOp, old: Option<Json>, new: Option<Json>) {
+fn record_change<M: Model>(
+    uow: &Uow,
+    key: &M::Key,
+    op: ChangeOp,
+    old: Option<Json>,
+    new: Option<Json>,
+) {
     uow.record_change(ChangeEvent {
         entity: M::meta().table().to_owned(),
         id: key.to_key_string(),
@@ -147,7 +154,10 @@ fn record_change<M: Model>(uow: &Uow, key: &M::Key, op: ChangeOp, old: Option<Js
 }
 
 /// `Resource::create`'s default.
-pub(crate) async fn create<M: Model>(ctx: &SaveContext, form: FormData) -> Result<Record<M>, AppError> {
+pub(crate) async fn create<M: Model>(
+    ctx: &SaveContext,
+    form: FormData,
+) -> Result<Record<M>, AppError> {
     let mut model = blank::<M>().await?;
     apply(&mut model, &form, ctx.app()).await?;
     let now = now(ctx.app()).await.trunc_subsecs(6);

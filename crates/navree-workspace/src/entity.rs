@@ -99,8 +99,8 @@ impl fmt::Display for WorkspaceKind {
 /// `workspaces`: the tenants.
 pub mod workspace {
     use chrono::{DateTime, Utc};
-    use uuid::Uuid;
     use serde::Serialize;
+    use uuid::Uuid;
 
     use super::WorkspaceKind;
 
@@ -148,14 +148,13 @@ pub mod workspace {
             self.kind() == WorkspaceKind::Demo
         }
     }
-
 }
 
 /// `workspace_members`: who belongs to a workspace, with which role.
 pub mod member {
     use chrono::{DateTime, Utc};
-    use uuid::Uuid;
     use serde::Serialize;
+    use uuid::Uuid;
 
     use crate::WorkspaceRole;
 
@@ -197,7 +196,6 @@ pub mod member {
             self.partition_scope == crate::org_role::SCOPE_ONLY
         }
     }
-
 }
 
 /// `workspace_invitations`: pending and accepted invitations.
@@ -257,8 +255,8 @@ pub mod invitation {
 /// `organizations`: the level above workspaces.
 pub mod organization {
     use chrono::{DateTime, Utc};
-    use uuid::Uuid;
     use serde::Serialize;
+    use uuid::Uuid;
 
     /// An organization: the access subject `Organization` (permissions
     /// `organization.<action>`).
@@ -287,7 +285,6 @@ pub mod organization {
         /// When the organization last changed.
         pub updated_at: DateTime<Utc>,
     }
-
 }
 
 /// `organization_members`: who belongs to an organization, with which role

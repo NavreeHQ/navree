@@ -4,9 +4,9 @@ use std::sync::Arc;
 
 use navree_helm::{Field, HelmPage, ModuleBuilderHelmExt, Resource};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
+use navree_orm::Model;
 use navree_testing::principal;
 use navree_view::{ModuleBuilderViewExt, ViewModule};
-use navree_orm::Model;
 use serde_json::json;
 use uuid::Uuid;
 

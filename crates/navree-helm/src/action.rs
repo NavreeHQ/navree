@@ -15,10 +15,7 @@ use crate::{ActionContext, slug};
 
 /// The work of an action.
 pub(crate) type Handler<M> = Arc<
-    dyn Fn(
-            ActionContext,
-            Vec<Record<M>>,
-        ) -> BoxFuture<'static, Result<ActionResult, AppError>>
+    dyn Fn(ActionContext, Vec<Record<M>>) -> BoxFuture<'static, Result<ActionResult, AppError>>
         + Send
         + Sync,
 >;
