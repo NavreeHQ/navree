@@ -10,7 +10,7 @@ use navree_db::{Db, prune_time_series};
 use sea_orm::sea_query::{Expr, OnConflict, Query};
 use sea_orm::{
     ActiveValue::Set, ColumnTrait, ConnectionTrait, DbErr, EntityTrait, PaginatorTrait,
-    QueryFilter, QueryOrder, QuerySelect, TransactionTrait,
+    QueryFilter, QueryOrder, QuerySelect,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
