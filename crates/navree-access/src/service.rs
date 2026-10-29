@@ -471,9 +471,7 @@ impl AccessService {
         let loaded = loader.load(&uow, id).await;
         uow.rollback().await.map_err(DbError::from)?;
         loaded
-            .map_err(|error| {
-                AccessError::Db(DbError::new(ErrorKind::Other, error.to_string()))
-            })?
+            .map_err(|error| AccessError::Db(DbError::new(ErrorKind::Other, error.to_string())))?
             .map(|record| record.json)
             .ok_or_else(|| AccessError::RecordNotFound {
                 subject: subject.to_owned(),
@@ -622,10 +620,7 @@ fn info(role: RoleRow, permissions: Vec<String>) -> RoleInfo {
     }
 }
 
-async fn existing_role<E: Executor + ?Sized>(
-    exec: &E,
-    name: &str,
-) -> Result<RoleRow, AccessError> {
+async fn existing_role<E: Executor + ?Sized>(exec: &E, name: &str) -> Result<RoleRow, AccessError> {
     store::find_role(exec, name)
         .await?
         .ok_or_else(|| AccessError::RoleNotFound(name.to_owned()))

@@ -183,10 +183,7 @@ impl Renamer<'_> {
             // Raw SQL, render-tree conditions and a document store's native
             // filters are written by the caller, who names tables as they
             // mean them.
-            Where::Raw { .. }
-            | Where::Tree(_)
-            | Where::Native(_)
-            | Where::Invalid(_) => {}
+            Where::Raw { .. } | Where::Tree(_) | Where::Native(_) | Where::Invalid(_) => {}
         }
     }
 }
