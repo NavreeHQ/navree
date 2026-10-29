@@ -9,11 +9,11 @@ use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use navree_logbook::{Logbook, LogbookModule};
 use navree_testing::{TestApp, principal};
-use sea_orm::{EntityTrait, QueryOrder};
+use navree_orm::Model as _;
 use serde_json::json;
 use uuid::Uuid;
 
-use crate::app::{FixturesModule, deal};
+use crate::app::{Deal, FixturesModule};
 
 /// The deals board, loaded in one query, and the same board loading each
 /// deal one at a time (the loop Logbook's duplicate detection points at).
@@ -33,11 +33,7 @@ impl Controller for Board {
     fn routes(self: Arc<Self>) -> Vec<RouteDef> {
         vec![
             RouteDef::on(Method::GET, "!/deals/board", |uow: Uow| async move {
-                let tx = uow.tx().await?;
-                let deals = deal::Entity::find()
-                    .order_by_asc(deal::Column::Title)
-                    .all(&*tx)
-                    .await?;
+                let deals = Deal::query().order_by(Deal::TITLE).get(&uow).await?;
                 Ok::<_, AppError>(Json(json!({ "deals": deals.len() })))
             })
             .authenticated(),
@@ -45,15 +41,15 @@ impl Controller for Board {
                 Method::GET,
                 "!/deals/board-one-by-one",
                 |uow: Uow| async move {
-                    let tx = uow.tx().await?;
-                    let ids: Vec<Uuid> = deal::Entity::find()
-                        .all(&*tx)
+                    let ids: Vec<Uuid> = Deal::query()
+                        .get(&uow)
                         .await?
+                        .into_models()
                         .into_iter()
                         .map(|d| d.id)
                         .collect();
                     for id in &ids {
-                        deal::Entity::find_by_id(*id).one(&*tx).await?;
+                        Deal::find(&uow, *id).await?;
                     }
                     Ok::<_, AppError>(Json(json!({ "deals": ids.len() })))
                 },
@@ -86,10 +82,15 @@ fn rep_id() -> Uuid {
     Uuid::from_u128(7)
 }
 
+/// The unit of work's own statements that set the actor and request id
+/// for the database session.
+fn is_session_setting(sql: &str) -> bool {
+    sql.contains("navree.actor") || sql.contains("@navree_actor")
+}
+
 #[tokio::test]
 async fn the_board_loads_in_three_queries() {
-    let app = TestApp::builder()
-        .temp_database()
+    let app = crate::servers::database(TestApp::builder())
         .config("logbook.enabled", true)
         .config("logbook.store", "memory")
         .config("http.per_ip_rate_limit", serde_json::Value::Null)
@@ -108,15 +109,23 @@ async fn the_board_loads_in_three_queries() {
         .assert_status(200);
 
     let batch = app.get::<Logbook>().await.last_request().await.unwrap();
-    assert!(batch.queries().len() <= 3, "{:#?}", batch.queries());
+    // Units of work on navree-db's own transactions run the session
+    // settings for triggers and views (`set_config('navree.actor', ..)`,
+    // `SET @navree_actor = ..`) as statements of their own, which Logbook
+    // lists like any other; they are not the handler's queries.
+    let queries: Vec<_> = batch
+        .queries()
+        .into_iter()
+        .filter(|query| !is_session_setting(&query.sql))
+        .collect();
+    assert!(queries.len() <= 3, "{queries:#?}");
     assert!(batch.duplicate_queries().is_empty());
     app.shutdown().await.unwrap();
 }
 
 #[tokio::test]
 async fn loading_one_at_a_time_is_flagged_as_duplicate_queries() {
-    let app = TestApp::builder()
-        .temp_database()
+    let app = crate::servers::database(TestApp::builder())
         .config("logbook.enabled", true)
         .config("logbook.store", "memory")
         .config("http.per_ip_rate_limit", serde_json::Value::Null)

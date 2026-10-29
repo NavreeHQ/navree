@@ -3,8 +3,7 @@
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use navree_db::sea_orm::{DatabaseTransaction, DbErr};
-use navree_db::{ChangeEvent, ChangeObserver, Uow};
+use navree_db::{ChangeEvent, ChangeObserver, DbError, Uow};
 use navree_kernel::BoxFuture;
 use navree_telemetry::{EventContext, Telemetry, TelemetryEvent, TelemetryRecord};
 
@@ -431,12 +430,11 @@ pub(crate) fn singular(entity: &str) -> String {
 }
 
 impl ChangeObserver for Logbook {
-    fn observe<'a>(
+    fn observe_with<'a>(
         &'a self,
-        _tx: &'a DatabaseTransaction,
         uow: &'a Uow,
         changes: &'a [ChangeEvent],
-    ) -> BoxFuture<'a, Result<(), DbErr>> {
+    ) -> BoxFuture<'a, Result<(), DbError>> {
         if let Some(active) = self.active()
             && active.options.watchers.models
         {
