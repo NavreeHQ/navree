@@ -194,8 +194,8 @@ impl Module for FixturesModule {
             CreateUsers,
         )))
         .plan_resolver::<TestPlans>()
-            .exports::<TestPlans>()
-            .global();
+        .exports::<TestPlans>()
+        .global();
     }
 }
 

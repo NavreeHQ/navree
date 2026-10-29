@@ -1,7 +1,7 @@
 //! [`FlagsError`].
 
-use navree_http::AppError;
 use navree_db::DbError;
+use navree_http::AppError;
 use navree_orm::OrmError;
 
 /// What can go wrong checking or changing a flag.
