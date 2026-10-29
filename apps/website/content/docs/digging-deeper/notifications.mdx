@@ -379,20 +379,19 @@ An `unread` value other than `true`, `1`, `false` or `0` is a 400. The routes ap
 
 ### In code
 
-The same read state is available on the `Notifier`, for any notifiable. Each method takes the connection to use: in a handler, `uow.db().conn()` to read and `&*uow.tx().await?` to write.
+The same read state is available on the `Notifier`, for any notifiable. Each method takes the executor to use (any `navree::orm::Executor`: a `Db`, a `Uow`): in a handler, `uow.db()` to read and `&uow` to write.
 
 ```rust
 use navree::db::{Page, PageQuery};
 use navree::notify::DatabaseNotification;
 
 let page: Page<DatabaseNotification> = notifier
-    .notifications(uow.db().conn(), &me, true, PageQuery::default()) // unread only
+    .notifications(uow.db(), &me, true, PageQuery::default()) // unread only
     .await?;
-let unread = notifier.unread_count(uow.db().conn(), &me).await?;
+let unread = notifier.unread_count(uow.db(), &me).await?;
 
-let tx = uow.tx().await?;
-let found = notifier.mark_as_read(&*tx, &me, id).await?;  // false: not one of mine
-let marked = notifier.mark_all_as_read(&*tx, &me).await?; // how many were unread
+let found = notifier.mark_as_read(&uow, &me, id).await?;  // false: not one of mine
+let marked = notifier.mark_all_as_read(&uow, &me).await?; // how many were unread
 ```
 
 For any other query, a stored notification is a model of Navree's ORM (`navree::orm`), `navree::notify::notifications::Model`; its `type` column is the field `notification_type`:
@@ -409,15 +408,14 @@ let unread = Stored::query()
     .await?;
 ```
 
-The same table is also a SeaORM entity, `navree::notify::notifications::Entity`, for code built on SeaORM.
-
 ## Errors
 
-`send`, `send_now` and `send_in` return `NotifyError`; the read-state methods (`notifications`, `unread_count`, `mark_as_read`, `mark_all_as_read`) return SeaORM's `DbErr`. `NotifyError`'s messages never contain notification data or mail bodies.
+`send`, `send_now` and `send_in` return `NotifyError`; the read-state methods (`notifications`, `unread_count`, `mark_as_read`, `mark_all_as_read`) return the ORM's `OrmError`. `NotifyError`'s messages never contain notification data or mail bodies.
 
 | Variant | When |
 |---|---|
-| `Database` | Storing the row failed. |
+| `Database` | A statement failed (a `DbError`). |
+| `Orm` | Storing or reading a row of a channel table failed (an `OrmError`). |
 | `Mail` | The mail channel failed (a `MailError`, such as a missing template). |
 | `Broadcast` | The broadcaster failed. |
 | `Queue` | Dispatching a `notify.send` job failed. |
@@ -491,7 +489,7 @@ async fn followers_hear_about_moved_contacts() {
     let id = notifier.send(&me, moved).await.unwrap();
 
     let db = app.get::<Db>().await;
-    assert_eq!(notifier.unread_count(db.conn(), &me).await.unwrap(), 1);
+    assert_eq!(notifier.unread_count(&*db, &me).await.unwrap(), 1);
     let sent = broadcaster.0.lock().unwrap().clone();
     assert_eq!(sent[0].0, [format!("private-users.{}", me.id)]);
     assert_eq!(sent[0].1, "notification.created");

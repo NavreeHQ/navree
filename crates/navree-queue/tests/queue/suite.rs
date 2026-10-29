@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 
 use chrono::TimeDelta;
 use navree_contracts::{Dispatcher, Job};
-use navree_db::Db;
+use navree_db::{Db, Executor as _, Statement};
 use navree_queue::{
     Attempt, AttemptOutcome, PendingQuery, PendingState, QueueDriver, QueueError, QueueOptions,
     RetryTarget, STALE_RESERVATION_GRACE_SECS, Supervision, WorkHooks, WorkOptions, WorkStats,
@@ -85,7 +85,9 @@ pub async fn dispatch_joins_the_current_unit_of_work(driver: QueueDriver) {
 
     let uow = db.uow(None, None).await;
     // BEGIN IMMEDIATE: the unit of work now holds SQLite's write lock.
-    drop(uow.tx().await.expect("transaction"));
+    uow.fetch_all(&Statement::text("SELECT 1"))
+        .await
+        .expect("transaction");
     uow.scope(async {
         let dispatched = async {
             h.queue.dispatch(Record::new("dispatch")).await?;

@@ -9,10 +9,9 @@ use navree_auth::{
     ClientMeta, LoginOutcome, SignInAttempt, SignInMethod, User, two_factor_enabled, user,
 };
 use navree_contracts::{AuditEntry, AuditKind, Secret};
-use navree_db::{Repo, Uow};
+use navree_db::{DbError, Uow};
 use navree_kernel::{AppContext, BoxError, BoxFuture, Lifecycle};
 use navree_orm::{Executor, Model as _, Record};
-use sea_orm::{ActiveValue, Set, Unchanged};
 use serde_json::json;
 use tokio::sync::OnceCell;
 use uuid::Uuid;
@@ -305,13 +304,8 @@ impl Social {
     ) -> Result<LinkedAccount, SocialError> {
         let rt = self.rt()?;
         let entry = rt.provider(&social_user.provider)?;
-        let (by_provider_id, by_user) = {
-            let tx = uow.tx().await?;
-            (
-                find_account(&*tx, &entry.key, &social_user.id).await?,
-                find_user_account(&*tx, user_id, &entry.key).await?,
-            )
-        };
+        let by_provider_id = find_account(uow, &entry.key, &social_user.id).await?;
+        let by_user = find_user_account(uow, user_id, &entry.key).await?;
         let account = match by_provider_id {
             Some(account) if account.user_id == user_id => {
                 self.refresh_account(rt, uow, account, social_user).await?
@@ -347,17 +341,13 @@ impl Social {
     ) -> Result<(), SocialError> {
         let rt = self.rt()?;
         let provider_name = rt.provider_name(provider);
-        let (account, user, others) = {
-            let tx = uow.tx().await?;
-            let account = find_user_account(&*tx, user_id, provider).await?;
-            let user = User::find(&*tx, user_id).await?;
-            let others = social_account::Model::query()
-                .where_(social_account::Model::USER_ID.eq(user_id))
-                .where_(social_account::Model::PROVIDER.ne(provider))
-                .count(&*tx)
-                .await?;
-            (account, user, others)
-        };
+        let account = find_user_account(uow, user_id, provider).await?;
+        let user = User::find(uow, user_id).await?;
+        let others = social_account::Model::query()
+            .where_(social_account::Model::USER_ID.eq(user_id))
+            .where_(social_account::Model::PROVIDER.ne(provider))
+            .count(uow)
+            .await?;
         let Some(account) = account else {
             return Err(SocialError::NotLinked {
                 provider: provider_name,
@@ -374,7 +364,7 @@ impl Social {
             provider: account.provider.clone(),
             provider_user_id: account.provider_user_id.clone(),
         };
-        Repo::<social_account::Entity>::delete(uow, account).await?;
+        social_account::delete(uow, &account).await?;
         rt.emit_after_commit(uow, event).await;
         let mut audit = AuditEntry::new(AuditKind::Auth, "social.unlinked")
             .actor(user_id)
@@ -462,20 +452,16 @@ impl Social {
         let columns = TokenColumns::of(rt, Some(&token))?;
         let now = rt.now();
         self.write(rt, None, |uow| async move {
-            let row = social_account::ActiveModel {
-                id: Unchanged(account.id),
-                access_token: Set(columns.access),
-                refresh_token: Set(columns.refresh.or(account.refresh_token)),
-                token_expires_at: Set(columns.expires_at),
-                scopes: if columns.scopes.is_some() {
-                    Set(columns.scopes)
-                } else {
-                    ActiveValue::NotSet
-                },
-                updated_at: Set(now),
-                ..Default::default()
-            };
-            Repo::<social_account::Entity>::update(&uow, row).await?;
+            social_account::update(&uow, account.id, |row| {
+                row.access_token = columns.access;
+                row.refresh_token = columns.refresh.or(account.refresh_token);
+                row.token_expires_at = columns.expires_at;
+                if columns.scopes.is_some() {
+                    row.scopes = columns.scopes;
+                }
+                row.updated_at = now;
+            })
+            .await?;
             Ok(())
         })
         .await?;
@@ -551,23 +537,19 @@ impl Social {
         entry: &ProviderEntry,
         social_user: &SocialUser,
     ) -> Result<User, SocialError> {
-        let (linked, by_email) = {
-            let tx = uow.tx().await?;
-            let linked = match find_account(&*tx, &entry.key, &social_user.id).await? {
-                Some(account) => User::find(&*tx, account.user_id)
-                    .await?
-                    .map(|user| (account, user.into_inner())),
-                None => None,
-            };
-            let by_email = match (&linked, &social_user.email) {
-                (None, Some(email)) => User::query()
-                    .where_(User::EMAIL.eq(email.as_str()))
-                    .first(&*tx)
-                    .await?
-                    .map(Record::into_inner),
-                _ => None,
-            };
-            (linked, by_email)
+        let linked = match find_account(uow, &entry.key, &social_user.id).await? {
+            Some(account) => User::find(uow, account.user_id)
+                .await?
+                .map(|user| (account, user.into_inner())),
+            None => None,
+        };
+        let by_email = match (&linked, &social_user.email) {
+            (None, Some(email)) => User::query()
+                .where_(User::EMAIL.eq(email.as_str()))
+                .first(uow)
+                .await?
+                .map(Record::into_inner),
+            _ => None,
         };
         if let Some((account, user)) = linked {
             self.refresh_account(rt, uow, account, social_user).await?;
@@ -575,12 +557,7 @@ impl Social {
         }
         if let Some(user) = by_email {
             if rt.options.link_by_email == LinkByEmail::Verified && social_user.email_verified {
-                let taken = {
-                    let tx = uow.tx().await?;
-                    find_user_account(&*tx, user.id, &entry.key)
-                        .await?
-                        .is_some()
-                };
+                let taken = find_user_account(uow, user.id, &entry.key).await?.is_some();
                 if taken {
                     return Err(SocialError::ProviderAlreadyConnected {
                         provider: entry.name.clone(),
@@ -633,19 +610,19 @@ impl Social {
             .clone()
             .or_else(|| social_user.nickname.clone())
             .unwrap_or_else(|| email.split('@').next().unwrap_or(email).to_owned());
-        let row = user::ActiveModel {
-            id: Set(Uuid::now_v7()),
-            name: Set(name),
-            email: Set(email.trim().to_lowercase()),
-            password_hash: Set(password_hash),
-            email_verified_at: Set(social_user.email_verified.then_some(now)),
-            two_factor_secret: Set(None),
-            two_factor_recovery_codes: Set(None),
-            two_factor_confirmed_at: Set(None),
-            created_at: Set(now),
-            updated_at: Set(now),
+        let row = User {
+            id: Uuid::now_v7(),
+            name,
+            email: email.trim().to_lowercase(),
+            password_hash,
+            email_verified_at: social_user.email_verified.then_some(now),
+            two_factor_secret: None,
+            two_factor_recovery_codes: None,
+            two_factor_confirmed_at: None,
+            created_at: now,
+            updated_at: now,
         };
-        Ok(Repo::<user::Entity>::insert(uow, row).await?)
+        Ok(user::insert(uow, row).await?)
     }
 
     /// The password hash of a user without a password: an Argon2id PHC
@@ -678,31 +655,32 @@ impl Social {
     ) -> Result<social_account::Model, SocialError> {
         let now = rt.now();
         let tokens = TokenColumns::of(rt, social_user.token.as_ref())?;
-        let row = social_account::ActiveModel {
-            id: Set(Uuid::now_v7()),
-            user_id: Set(user_id),
-            provider: Set(entry.key.clone()),
-            provider_user_id: Set(social_user.id.clone()),
-            email: Set(social_user.email.clone()),
-            name: Set(social_user.name.clone()),
-            avatar_url: Set(social_user.avatar_url.clone()),
-            nickname: Set(social_user.nickname.clone()),
-            access_token: Set(tokens.access),
-            refresh_token: Set(tokens.refresh),
-            token_expires_at: Set(tokens.expires_at),
-            scopes: Set(tokens.scopes),
-            created_at: Set(now),
-            updated_at: Set(now),
+        let row = social_account::Model {
+            id: Uuid::now_v7(),
+            user_id,
+            provider: entry.key.clone(),
+            provider_user_id: social_user.id.clone(),
+            email: social_user.email.clone(),
+            name: social_user.name.clone(),
+            avatar_url: social_user.avatar_url.clone(),
+            nickname: social_user.nickname.clone(),
+            access_token: tokens.access,
+            refresh_token: tokens.refresh,
+            token_expires_at: tokens.expires_at,
+            scopes: tokens.scopes,
+            created_at: now,
+            updated_at: now,
         };
-        let account = Repo::<social_account::Entity>::insert(uow, row)
-            .await
-            .map_err(|error| match error.sql_err() {
-                // A concurrent sign-in or link got there first.
-                Some(sea_orm::SqlErr::UniqueConstraintViolation(_)) => SocialError::AlreadyLinked {
-                    provider: entry.name.clone(),
-                },
-                _ => error.into(),
-            })?;
+        let account =
+            social_account::insert(uow, row)
+                .await
+                .map_err(|error| match error.db_error() {
+                    // A concurrent sign-in or link got there first.
+                    Some(db) if db.is_unique_violation() => SocialError::AlreadyLinked {
+                        provider: entry.name.clone(),
+                    },
+                    _ => error.into(),
+                })?;
         rt.emit_after_commit(
             uow,
             SocialAccountLinked {
@@ -734,23 +712,22 @@ impl Social {
     ) -> Result<social_account::Model, SocialError> {
         let tokens = TokenColumns::of(rt, social_user.token.as_ref())?;
         let keep = |new: &Option<String>, old: &Option<String>| new.clone().or_else(|| old.clone());
-        let mut row = social_account::ActiveModel {
-            id: Unchanged(account.id),
-            email: Set(keep(&social_user.email, &account.email)),
+        let now = rt.now();
+        Ok(social_account::update(uow, account.id, |row| {
+            row.email = keep(&social_user.email, &account.email);
             // Apple sends the name on the first sign-in only.
-            name: Set(keep(&social_user.name, &account.name)),
-            avatar_url: Set(keep(&social_user.avatar_url, &account.avatar_url)),
-            nickname: Set(keep(&social_user.nickname, &account.nickname)),
-            updated_at: Set(rt.now()),
-            ..Default::default()
-        };
-        if tokens.access.is_some() {
-            row.access_token = Set(tokens.access);
-            row.refresh_token = Set(tokens.refresh.or(account.refresh_token));
-            row.token_expires_at = Set(tokens.expires_at);
-            row.scopes = Set(tokens.scopes);
-        }
-        Ok(Repo::<social_account::Entity>::update(uow, row).await?)
+            row.name = keep(&social_user.name, &account.name);
+            row.avatar_url = keep(&social_user.avatar_url, &account.avatar_url);
+            row.nickname = keep(&social_user.nickname, &account.nickname);
+            row.updated_at = now;
+            if tokens.access.is_some() {
+                row.access_token = tokens.access;
+                row.refresh_token = tokens.refresh.or_else(|| account.refresh_token.clone());
+                row.token_expires_at = tokens.expires_at;
+                row.scopes = tokens.scopes;
+            }
+        })
+        .await?)
     }
 
     /// Runs `f` in the task's unfinished unit of work, or else in a new one
@@ -773,7 +750,7 @@ impl Social {
         let uow = rt.db.uow(None, request_id).await;
         match uow.scope(f(uow.clone())).await {
             Ok(value) => {
-                uow.commit().await?;
+                uow.commit().await.map_err(DbError::from)?;
                 Ok(value)
             }
             Err(error) => {

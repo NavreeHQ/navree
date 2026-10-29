@@ -1,6 +1,6 @@
 //! Notifications in the recipient's saved locale.
 
-use navree_db::{Db, ExecutorExt, Statement};
+use navree_db::{Db, Executor as _, Statement};
 use navree_i18n::{I18n, t};
 use navree_kernel::{Module, ModuleBuilder};
 use navree_mail::{MailModule, MailOptions, Mailer, TemplateMail, TransportConfig};
@@ -68,11 +68,6 @@ impl Module for Templates {
 
 #[tokio::test]
 async fn notifications_render_in_the_recipients_saved_locale() {
-    if crate::servers::native_units_of_work() {
-        // navree-notify stores notifications through SeaORM's transaction until its own port.
-        eprintln!("skipped: navree-notify is not moved off SeaORM's transaction yet");
-        return;
-    }
     let world = World::with(
         support::with_database()
             .module(ViewModule::for_root(ViewOptions {
@@ -132,16 +127,19 @@ async fn notifications_render_in_the_recipients_saved_locale() {
     assert_eq!(mail[1].text.as_deref(), Some("Sent by Acme CRM."));
 
     let db = world.app.get::<Db>().await;
-    let rows: Vec<Value> = db
-        .fetch_column(&Statement::text(
+    let rows = db
+        .fetch_all(&Statement::text(
             "SELECT data FROM notifications ORDER BY created_at, id",
         ))
         .await
         .unwrap();
     assert_eq!(
-        rows[0],
+        rows[0].get::<Value>("data").unwrap(),
         json!({ "message": "Ada a gagné Lovelace renewal." })
     );
-    assert_eq!(rows[1], json!({ "message": "Ada won Lovelace renewal." }));
+    assert_eq!(
+        rows[1].get::<Value>("data").unwrap(),
+        json!({ "message": "Ada won Lovelace renewal." })
+    );
     world.app.shutdown().await.unwrap();
 }

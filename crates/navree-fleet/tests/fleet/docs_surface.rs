@@ -8,7 +8,7 @@ use std::collections::BTreeSet;
 
 use navree_access::{AccessModule, AccessOptions, Subject};
 use navree_config::{ConfigModule, ConfigSources};
-use navree_db::{DatabaseModule, Db};
+use navree_db::{DatabaseModule, Db, Executor as _, Statement};
 use navree_events::Event;
 use navree_fleet::testing::FakeSpawner;
 use navree_fleet::{
@@ -19,7 +19,6 @@ use navree_fleet::{
 };
 use navree_kernel::{Module, Navree};
 use navree_queue::{QueueModule, QueueOptions};
-use sea_orm::{ConnectionTrait, Statement};
 use serde_json::json;
 
 use crate::support::{Harness, builder};
@@ -152,17 +151,18 @@ fn the_documented_commands_are_registered() {
 async fn the_migrations_create_the_documented_tables() {
     let h = Harness::new(builder()).await;
     let db = h.app.get::<Db>().await;
+    assert_eq!(
+        navree_db::Executor::backend(&*db),
+        crate::database::Server::current().backend(),
+        "the suite runs on the configured server"
+    );
     for table in [
         "fleet_masters",
         "fleet_state",
         "fleet_jobs",
         "fleet_metrics",
     ] {
-        db.conn()
-            .execute_raw(Statement::from_string(
-                db.backend(),
-                format!("SELECT COUNT(*) FROM {table}"),
-            ))
+        db.fetch_all(&Statement::text(format!("SELECT COUNT(*) FROM {table}")))
             .await
             .unwrap_or_else(|error| panic!("{table}: {error}"));
     }

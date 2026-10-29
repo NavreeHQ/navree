@@ -5,14 +5,14 @@ use std::fmt;
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
-use navree_access::{Ability, Accessible, ActionMarker, Authorized, PrincipalAccess, Subject};
+use navree_access::{
+    Ability, Accessible, ActionMarker, Authorized, PrincipalAccess, Subject, SubjectRecords,
+};
 use navree_auth::User;
 use navree_contracts::Clock;
-use navree_db::{Repo, Uow};
+use navree_db::Uow;
 use navree_http::AppError;
 use navree_kernel::AppContext;
-use sea_orm::{EntityTrait, IntoActiveModel};
-use serde::Serialize;
 use uuid::Uuid;
 
 /// What every tool call of a run shares.
@@ -63,31 +63,27 @@ impl AgentRun {
     /// A list filter: the rows of `E` the user may do `A` on.
     pub fn accessible<E, A>(&self) -> Accessible<E, A>
     where
-        E: EntityTrait + Subject,
+        E: Subject,
         A: ActionMarker,
     {
         Accessible::new(self.shared.access.ability.clone())
     }
 
-    /// Loads record `id` of `E` in the tool call's unit of work and checks
-    /// `A` on it: the record, or a 404 (no such record) or a 403.
-    pub async fn authorize<E, A>(
-        &self,
-        id: impl Into<sea_orm::Value>,
-    ) -> Result<Authorized<E, A>, AppError>
+    /// Loads record `id` of `S` (an ORM model declared with `#[model(subject
+    /// = "...")]`, or any other [`SubjectRecords`]) in the tool call's unit
+    /// of work and checks `A` on it: the record, or a 404 (no such record)
+    /// or a 403.
+    pub async fn authorize<S, A>(&self, id: impl ToString) -> Result<Authorized<S, A>, AppError>
     where
-        E: EntityTrait + Subject,
-        E::Model: Serialize + IntoActiveModel<E::ActiveModel> + Sync,
-        E::ActiveModel: Send + Sync,
+        S: SubjectRecords,
         A: ActionMarker,
     {
-        let model = Repo::<E>::find(&self.uow, id)
-            .await
-            .map_err(|error| {
-                navree_db::map_db_error(&error).unwrap_or_else(|| AppError::internal(error))
-            })?
-            .ok_or_else(AppError::not_found)?;
-        Authorized::check(model, self.shared.access.ability.clone())
+        Authorized::load(
+            &self.uow,
+            self.shared.access.ability.clone(),
+            &id.to_string(),
+        )
+        .await
     }
 
     /// The tool call's unit of work: it commits when the tool returns `Ok`
