@@ -9,7 +9,7 @@
 //! ├── mod.rs           # SettingsModule
 //! ├── controller.rs    # /api/v1/settings/workspace, /notifications, the fake checkout
 //! ├── service.rs       # SettingsService
-//! ├── entity.rs        # the `notification_settings` table
+//! ├── entity.rs        # the `notification_settings` model
 //! ├── dto.rs           # request and response bodies
 //! └── migrations/      # the table and its row-level security policy
 //! (tests: tests/settings.rs and tests/billing.rs boot the whole app)
@@ -22,8 +22,6 @@ mod migrations;
 mod service;
 
 use navree::prelude::*;
-// COMPAT (data-layer move): `sea_workspace_entity` for the SeaORM entity.
-use navree::workspace::sea_compat::ModuleBuilderSeaWorkspaceExt as _;
 use navree::workspace::Workspace;
 
 pub use controller::SettingsController;
@@ -44,9 +42,10 @@ impl SettingsModule {
     /// lines above the `navree:wire` marker.
     fn wire(&self, m: &mut ModuleBuilder) {
         m.migrations(migrations::migrations())
+            .model::<entity::NotificationSetting>()
             // Rows belong to one workspace: `navree check` makes sure they
             // are only read and written through `WorkspaceRepo`.
-            .sea_workspace_entity::<entity::Entity>();
+            .workspace_entity::<entity::NotificationSetting>();
         // navree:wire
     }
 }

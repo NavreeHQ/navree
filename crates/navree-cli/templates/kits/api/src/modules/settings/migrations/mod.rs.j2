@@ -2,6 +2,7 @@
 //! <name>` adds one here.
 
 use navree::db::MigrationSet;
+use navree::schema::migration;
 
 mod {{ migration_prefix }}_create_notification_settings_table;
 
@@ -9,5 +10,5 @@ mod {{ migration_prefix }}_create_notification_settings_table;
 pub fn migrations() -> MigrationSet {
     MigrationSet::new("settings")
         .after(["workspace"])
-        .migration({{ migration_prefix }}_create_notification_settings_table::Migration)
+        .migration(migration!({{ migration_prefix }}_create_notification_settings_table))
 }

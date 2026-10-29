@@ -4,18 +4,15 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use chrono::Utc;
-use navree::db::{Repo, Uow};
+use navree::db::Uow;
 use navree::http::AppError;
 use navree::injectable;
-use navree::workspace::entity::workspace;
-// COMPAT (data-layer move): the SeaORM form of `WorkspaceRepo`.
-use navree::workspace::sea_compat::WorkspaceRepo;
-use navree::workspace::{Workspace, Workspaces};
-use sea_orm::{ActiveValue::Set, ColumnTrait, DbErr, IntoActiveModel, QueryFilter};
+use navree::orm::{Model as _, OrmError, Record};
+use navree::workspace::{Workspace, WorkspaceRepo, Workspaces};
 use uuid::Uuid;
 
 use super::dto::{NotificationSettings, UpdateNotifications, UpdateWorkspace};
-use super::entity::{ActiveModel, Column, Entity};
+use super::entity::NotificationSetting;
 
 /// Changes a workspace's name and slug, and members' notification
 /// preferences.
@@ -46,10 +43,17 @@ impl SettingsService {
                     vec!["slug has already been taken".to_owned()],
                 )])));
             }
-            let mut active: workspace::ActiveModel = workspace.into_active_model();
-            active.slug = Set(slug);
-            active.updated_at = Set(Utc::now());
-            workspace = Repo::<workspace::Entity>::update(uow, active).await?;
+            let Some(mut record) = Workspace::query()
+                .where_key(workspace.id)
+                .first(uow)
+                .await?
+            else {
+                return Err(AppError::not_found());
+            };
+            record.slug = slug;
+            record.updated_at = Utc::now();
+            record.save(uow).await?;
+            workspace = record.model().clone();
         }
         Ok(workspace)
     }
@@ -61,18 +65,11 @@ impl SettingsService {
         uow: &Uow,
         workspace: Uuid,
         user: Uuid,
-    ) -> Result<NotificationSettings, DbErr> {
-        let saved = WorkspaceRepo::<Entity>::select(workspace)
-            .filter(Column::UserId.eq(user))
-            .one(&*uow.tx().await?)
-            .await?;
-        Ok(
-            saved.map_or_else(NotificationSettings::default, |row| NotificationSettings {
-                project_activity: row.project_activity,
-                weekly_summary: row.weekly_summary,
-                product_updates: row.product_updates,
-            }),
-        )
+    ) -> Result<NotificationSettings, OrmError> {
+        let saved = Self::saved(uow, workspace, user).await?;
+        Ok(saved
+            .as_ref()
+            .map_or_else(NotificationSettings::default, preferences))
     }
 
     /// Saves the fields present in `input`.
@@ -82,45 +79,59 @@ impl SettingsService {
         workspace: Uuid,
         user: Uuid,
         input: UpdateNotifications,
-    ) -> Result<NotificationSettings, DbErr> {
-        let now = Utc::now();
-        let saved = WorkspaceRepo::<Entity>::select(workspace)
-            .filter(Column::UserId.eq(user))
-            .one(&*uow.tx().await?)
-            .await?;
-        let current = self.notifications(uow, workspace, user).await?;
+    ) -> Result<NotificationSettings, OrmError> {
+        let saved = Self::saved(uow, workspace, user).await?;
+        let current = saved
+            .as_ref()
+            .map_or_else(NotificationSettings::default, preferences);
         let wanted = NotificationSettings {
             project_activity: input.project_activity.unwrap_or(current.project_activity),
             weekly_summary: input.weekly_summary.unwrap_or(current.weekly_summary),
             product_updates: input.product_updates.unwrap_or(current.product_updates),
         };
         match saved {
-            Some(row) => {
-                let mut active: ActiveModel = row.into();
-                active.project_activity = Set(wanted.project_activity);
-                active.weekly_summary = Set(wanted.weekly_summary);
-                active.product_updates = Set(wanted.product_updates);
-                active.updated_at = Set(now);
-                WorkspaceRepo::<Entity>::update(uow, workspace, active).await?;
+            Some(mut row) => {
+                row.project_activity = wanted.project_activity;
+                row.weekly_summary = wanted.weekly_summary;
+                row.product_updates = wanted.product_updates;
+                WorkspaceRepo::<NotificationSetting>::update(uow, workspace, &mut row).await?;
             }
             None => {
-                WorkspaceRepo::<Entity>::insert(
+                WorkspaceRepo::<NotificationSetting>::insert(
                     uow,
                     workspace,
-                    ActiveModel {
-                        id: Set(Uuid::now_v7()),
-                        user_id: Set(user),
-                        project_activity: Set(wanted.project_activity),
-                        weekly_summary: Set(wanted.weekly_summary),
-                        product_updates: Set(wanted.product_updates),
-                        created_at: Set(now),
-                        updated_at: Set(now),
-                        ..Default::default()
+                    NotificationSetting {
+                        user_id: user,
+                        project_activity: wanted.project_activity,
+                        weekly_summary: wanted.weekly_summary,
+                        product_updates: wanted.product_updates,
+                        ..NotificationSetting::default()
                     },
                 )
                 .await?;
             }
         }
         Ok(wanted)
+    }
+
+    /// The row holding `user`'s preferences in `workspace`, if they saved any.
+    async fn saved(
+        uow: &Uow,
+        workspace: Uuid,
+        user: Uuid,
+    ) -> Result<Option<Record<NotificationSetting>>, OrmError> {
+        WorkspaceRepo::<NotificationSetting>::query(workspace)
+            .where_(NotificationSetting::USER_ID.eq(user))
+            .first(uow)
+            .await
+    }
+}
+
+/// The preferences a stored row holds.
+fn preferences(row: &Record<NotificationSetting>) -> NotificationSettings {
+    NotificationSettings {
+        project_activity: row.project_activity,
+        weekly_summary: row.weekly_summary,
+        product_updates: row.product_updates,
     }
 }

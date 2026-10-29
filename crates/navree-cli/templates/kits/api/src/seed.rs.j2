@@ -12,11 +12,9 @@ use navree::workspace::{
     Members, NewWorkspace, Workspace, WorkspaceRepo, WorkspaceRole, Workspaces,
 };
 use navree::{BoxFuture, prelude::*};
-use sea_orm::{ActiveModelTrait, ActiveValue::Set, IntoActiveModel, PaginatorTrait};
-use uuid::Uuid;
 
 use crate::abilities::SUPER_ADMIN;
-use crate::modules::projects::entity::{ActiveModel as ProjectModel, Project};
+use crate::modules::projects::entity::Project;
 
 /// The seeder's name: `navree db:seed demo`.
 pub const DEMO_SEEDER: &str = "demo";
@@ -111,13 +109,9 @@ pub async fn seed_demo(ctx: &AppContext) -> Result<Workspace, BoxError> {
     in_uow(&db, |uow| async move {
         // On PostgreSQL, row-level security admits this workspace's rows only.
         workspaces.enter(&uow, id).await?;
-        let existing = WorkspaceRepo::<Project>::select(id)
-            .count(&*uow.tx().await?)
-            .await?;
-        if existing > 0 {
+        if WorkspaceRepo::<Project>::query(id).exists(&uow).await? {
             return Ok(());
         }
-        let now = chrono::Utc::now();
         for (name, description, status) in [
             (
                 "Website relaunch",
@@ -138,15 +132,12 @@ pub async fn seed_demo(ctx: &AppContext) -> Result<Workspace, BoxError> {
             WorkspaceRepo::<Project>::insert(
                 &uow,
                 id,
-                ProjectModel {
-                    id: Set(Uuid::now_v7()),
-                    name: Set(name.to_owned()),
-                    description: Set(Some(description.to_owned())),
-                    status: Set(status.to_owned()),
-                    created_by: Set(author),
-                    created_at: Set(now),
-                    updated_at: Set(now),
-                    ..Default::default()
+                Project {
+                    name: name.to_owned(),
+                    description: Some(description.to_owned()),
+                    status: status.to_owned(),
+                    created_by: author,
+                    ..Project::default()
                 },
             )
             .await?;
@@ -175,9 +166,14 @@ pub async fn ensure_account(
     }
     let db = ctx.get::<Db>().await?;
     let verified_at = user.created_at;
-    let mut active = user.into_active_model();
-    active.email_verified_at = Set(Some(verified_at));
-    Ok(active.update(db.conn()).await?)
+    User::query()
+        .where_key(user.id)
+        .update(&*db, [User::EMAIL_VERIFIED_AT.set(verified_at)])
+        .await?;
+    Ok(User {
+        email_verified_at: Some(verified_at),
+        ..user
+    })
 }
 
 /// Runs `f` in a new unit of work: commits when it succeeds, rolls back
