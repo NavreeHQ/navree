@@ -212,8 +212,7 @@ async fn malformed_filters_are_400() {
 #[tokio::test]
 async fn routes_can_be_turned_off_for_apps_without_an_authorizer() {
     // No RouteAuthorizer (no FixturesModule): the app still boots.
-    let app = TestApp::builder()
-        .temp_database()
+    let app = crate::servers::database(TestApp::builder())
         .config("audit.routes", false)
         .module(DatabaseModule)
         .module(AuditModule)

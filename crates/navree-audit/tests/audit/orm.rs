@@ -1,7 +1,6 @@
 //! The audit trail as navree-orm models: `AuditRecord` is queried like any
 //! model, `AuditFilter` gives the ORM query of its entries, and changes
-//! saved through ORM models inside a unit of work are audited like the
-//! ones made with `Repo`.
+//! saved through ORM models inside a unit of work are audited.
 
 use navree_audit::{AuditFilter, AuditRecord};
 use navree_contracts::{AuditEntry, AuditKind};
@@ -39,7 +38,7 @@ async fn audit_records_are_orm_models() {
     assert_eq!(AuditRecord::table_name(), "audit_logs");
     let by_actor = AuditRecord::query()
         .where_(AuditRecord::ACTOR_ID.eq(actor))
-        .get(db.conn())
+        .get(&*db)
         .await
         .unwrap();
     assert_eq!(by_actor.len(), 1);
@@ -48,7 +47,7 @@ async fn audit_records_are_orm_models() {
     assert_eq!(
         AuditRecord::query()
             .where_(AuditRecord::KIND.eq("security"))
-            .count(db.conn())
+            .count(&*db)
             .await
             .unwrap(),
         1
@@ -73,7 +72,7 @@ async fn a_filter_is_an_orm_query_of_its_entries() {
     };
     let mut actions: Vec<String> = filter
         .query()
-        .get(db.conn())
+        .get(&*db)
         .await
         .unwrap()
         .into_models()
@@ -87,7 +86,7 @@ async fn a_filter_is_an_orm_query_of_its_entries() {
         kind: Some(AuditKind::Auth),
         ..AuditFilter::default()
     };
-    assert_eq!(filter.query().count(db.conn()).await.unwrap(), 0);
+    assert_eq!(filter.query().count(&*db).await.unwrap(), 0);
 }
 
 #[tokio::test]

@@ -2,45 +2,34 @@
 
 use navree_audit::AuditLog;
 use navree_contracts::{AuditEntry, AuditKind};
-use navree_db::{Db, Repo};
-use sea_orm::{ActiveValue::Set, ConnectionTrait, IntoActiveModel, Statement};
+use navree_db::{Db, Executor, Statement};
+use navree_orm::Model as _;
 use serde_json::json;
 use uuid::Uuid;
 
-use crate::support::{self, audit_rows, new_note, note, user};
+use crate::support::{self, Note, User, audit_rows, new_note};
 
-type Users = Repo<user::Entity>;
-type Notes = Repo<note::Entity>;
-
-fn new_user() -> user::ActiveModel {
-    user::ActiveModel {
-        id: Set(Uuid::now_v7()),
-        email: Set("ada@example.com".into()),
-        password_hash: Set("$argon2id$hash-value".into()),
-        remember_token: Set(Some("remember-me-value".into())),
-        ssn: Set(Some("123-45-6789".into())),
-        settings: Set(json!({"theme": "dark", "token": "nested-token-value"})),
+fn new_user() -> User {
+    User {
+        id: Uuid::now_v7(),
+        email: "ada@example.com".into(),
+        password_hash: "$argon2id$hash-value".into(),
+        remember_token: Some("remember-me-value".into()),
+        ssn: Some("123-45-6789".into()),
+        settings: json!({"theme": "dark", "token": "nested-token-value"}),
     }
 }
 
 /// Every stored audit column as text, to search for leaked values.
 async fn raw_audit_text(db: &Db) -> String {
     let rows = db
-        .conn()
-        .query_all_raw(Statement::from_string(
-            db.backend(),
-            "SELECT action, coalesce(old_values, '') AS o, coalesce(new_values, '') AS n, metadata AS m FROM audit_logs",
+        .fetch_all(&Statement::text(
+            "SELECT action, old_values, new_values, metadata FROM audit_logs",
         ))
         .await
         .unwrap();
     rows.iter()
-        .map(|row| {
-            ["action", "o", "n", "m"]
-                .iter()
-                .map(|c| row.try_get::<String>("", c).unwrap())
-                .collect::<Vec<_>>()
-                .join(" ")
-        })
+        .map(|row| serde_json::Value::from(row.to_json().unwrap()).to_string())
         .collect::<Vec<_>>()
         .join("\n")
 }
@@ -55,21 +44,26 @@ async fn skipped_fields_never_stored() {
     let db = app.get::<Db>().await;
 
     let uow = db.uow(None, None).await;
-    let created = Users::insert(&uow, new_user()).await.unwrap();
-    let mut changed = created.clone().into_active_model();
-    changed.password_hash = Set("$argon2id$new-hash-value".into());
-    changed.remember_token = Set(None);
-    Users::update(&uow, changed).await.unwrap();
-    let mut changed = Users::find_or_fail(&uow, created.id)
-        .await
-        .unwrap()
-        .into_active_model();
-    changed.email = Set("ada@lovelace.dev".into());
-    Users::update(&uow, changed).await.unwrap();
-    Users::delete(&uow, Users::find_or_fail(&uow, created.id).await.unwrap())
+    let mut created = User::create(&uow, new_user()).await.unwrap();
+    created
+        .update(&uow, |user| {
+            user.password_hash = "$argon2id$new-hash-value".into();
+            user.remember_token = None;
+        })
         .await
         .unwrap();
-    Notes::insert(&uow, new_note("a")).await.unwrap();
+    let mut found = User::find_or_fail(&uow, created.id).await.unwrap();
+    found
+        .update(&uow, |user| user.email = "ada@lovelace.dev".into())
+        .await
+        .unwrap();
+    User::find_or_fail(&uow, created.id)
+        .await
+        .unwrap()
+        .delete(&uow)
+        .await
+        .unwrap();
+    Note::create(&uow, new_note("a")).await.unwrap();
     uow.commit().await.unwrap();
 
     let log = app.get::<AuditLog>().await;
@@ -139,8 +133,8 @@ async fn skipped_entities_are_not_audited() {
     let db = app.get::<Db>().await;
 
     let uow = db.uow(None, None).await;
-    Notes::insert(&uow, new_note("a")).await.unwrap();
-    Users::insert(&uow, new_user()).await.unwrap();
+    Note::create(&uow, new_note("a")).await.unwrap();
+    User::create(&uow, new_user()).await.unwrap();
     uow.commit().await.unwrap();
 
     let actions: Vec<_> = audit_rows(&app)
