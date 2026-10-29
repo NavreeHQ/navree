@@ -8,7 +8,7 @@ use std::sync::Arc;
 use navree_audit::AuditLog;
 use navree_cache::Cache;
 use navree_contracts::{AuditEntry, AuditKind, Clock};
-use navree_db::{Db, Uow};
+use navree_db::{Db, DbError, Uow};
 use navree_events::EventBus;
 use navree_kernel::WeakAppContext;
 use serde::Serialize;
@@ -398,7 +398,7 @@ impl Engine {
     /// not be cached.
     async fn reads_in_transaction(&self) -> bool {
         match (&self.db, Uow::current()) {
-            (Some(_), Some(uow)) => uow.open_tx().await.is_some(),
+            (Some(_), Some(uow)) => uow.has_open_transaction().await,
             _ => false,
         }
     }
@@ -549,7 +549,7 @@ impl Engine {
             Some((uow, false)) => work(Some(uow)).await,
             Some((uow, true)) => match uow.scope(work(Some(uow.clone()))).await {
                 Ok(value) => {
-                    uow.commit().await?;
+                    uow.commit().await.map_err(DbError::from)?;
                     Ok(value)
                 }
                 Err(error) => {
@@ -714,9 +714,7 @@ impl Engine {
                 if let Some(request_id) = uow.request_id() {
                     entry = entry.request_id(request_id);
                 }
-                log.record_in(uow, entry)
-                    .await
-                    .map_err(sea_orm::DbErr::from)?;
+                log.record_in(uow, entry).await?;
             }
             None => {
                 if let Err(error) = log.record(entry).await {

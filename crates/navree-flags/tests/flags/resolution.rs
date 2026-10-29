@@ -427,8 +427,7 @@ async fn plan_rollouts_need_a_plan_resolver() {
     use navree_flags::FlagsModule;
     use navree_testing::TestApp;
 
-    let app = TestApp::builder()
-        .temp_database()
+    let app = crate::servers::database(TestApp::builder())
         .config("flags.admin_routes", false)
         .module(DatabaseModule::from_config())
         .module(CacheModule::for_root(CacheOptions::default()))
