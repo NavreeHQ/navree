@@ -12,8 +12,22 @@ use serde::Serialize;
 /// A project. Searchable: every write through `WorkspaceRepo` queues a
 /// `search.sync` job, and `GET /api/v1/projects/search?q=` queries the
 /// engine (`search.engine`), scoped to the workspace.
-#[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize, Searchable)]
+///
+/// It is a navree-orm model too, the access subject `Project`, which the
+/// admin panel lists (`ProjectAdmin`). The ORM derive names its trait by
+/// path, since the struct is called `Model`.
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    DeriveEntityModel,
+    navree::orm::Model,
+    Serialize,
+    Searchable,
+)]
 #[sea_orm(table_name = "projects")]
+#[model(table = "projects", subject = "Project", permission_prefix = "projects")]
 #[searchable(name = "Project", workspace = "workspace_id")]
 pub struct Model {
     /// The id (UUID v7).

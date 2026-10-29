@@ -63,7 +63,7 @@
 //! | `logbook` | navree-logbook | `logbook` | `LogbookModule`: the local debugging timeline at `/_logbook`, with replay |
 //! | `micro` | navree-micro | `micro` (opt-in) | `MicroModule`, `ServiceClient`: messages and events between services over TCP, NATS (`micro-nats`), Kafka (`micro-kafka`), RabbitMQ (`micro-rabbitmq`), Redis Streams (`micro-redis`) or MQTT (`micro-mqtt`) |
 //! | `fleet` | navree-fleet | `fleet` | `FleetModule`: supervised queue workers, metrics, failed jobs, the `/_fleet` dashboard |
-//! | `helm` | navree-helm | `helm` | `HelmModule`: the admin panel generated from your entities |
+//! | `helm` | navree-helm | `helm` | `HelmModule`: the admin panel generated from your navree-orm models |
 //! | `workflows` | navree-workflows (plus `#[workflow]`, `#[trigger]`, `#[condition]`, `#[action]`) | `workflows` | `WorkflowsModule`: durable workflows (steps replayed on resume, timers, event waits, versions) and end-user automations |
 //! | `directory` | navree-directory | `directory` | `DirectoryModule`: a SCIM 2.0 server and pull connectors (Microsoft Graph, Google Workspace, Okta, LDAP and Active Directory) syncing users and groups into your model |
 //! | `domains` | navree-domains | `domains` | `DomainsModule`: workspaces on their own domains, verified through DNS, with automatic TLS (an on-demand proxy's ask endpoint or in-process ACME) and the `domain` workspace resolver |

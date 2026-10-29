@@ -135,8 +135,6 @@ fn navree_new_output_compiles_against_the_workspace() {
     )
     .unwrap();
 
-    make_resource(&root, "src/modules", &name("posts"), "Post").unwrap();
-
     // ORM models: one with every companion (its controller checks
     // abilities), one with a controller binding records for signed-in users,
     // and a second factory of the first model.
@@ -149,6 +147,9 @@ fn navree_new_output_compiles_against_the_workspace() {
         now,
     )
     .unwrap();
+    // A Helm resource over the model (its policy makes it a subject).
+    let resource = make_resource(&root, "src/modules", &name("posts"), "Comment").unwrap();
+    assert!(resource.hints.is_empty(), "{:?}", resource.hints);
     let label = Companions {
         migration: true,
         controller: true,
