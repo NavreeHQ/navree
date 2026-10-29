@@ -84,13 +84,6 @@ impl Pool {
         })
     }
 
-    /// A pool on an open driver pool (one SeaORM opened).
-    pub(crate) fn from_driver(driver: DriverPool, reporter: Reporter) -> Pool {
-        Pool {
-            inner: Arc::new(PoolInner { driver, reporter }),
-        }
-    }
-
     pub(crate) fn driver(&self) -> &DriverPool {
         &self.inner.driver
     }

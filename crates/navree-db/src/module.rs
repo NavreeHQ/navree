@@ -10,7 +10,6 @@ use navree_kernel::{
     Lifecycle, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver, Scope,
 };
 use navree_telemetry::Telemetry;
-use sea_orm::DbErr;
 
 use crate::events::publish;
 use crate::http::{map_db_error, uow_layer};
@@ -27,7 +26,7 @@ use crate::{
 /// (`ctx.get_named::<Db>("default")`; the named ones too when
 /// [`for_root`](DatabaseModule::for_root) gives them, since configured ones
 /// are known only at boot); contributes the unit-of-work layer
-/// ([`LayerSlot::Uow`](navree_http::LayerSlot::Uow)), the `DbErr` → error
+/// ([`LayerSlot::Uow`](navree_http::LayerSlot::Uow)), the `DbError` → error
 /// mapping and the `database` health check (a `dyn HealthCheck`
 /// multi-binding); registers the commands `migrate`, `migrate:install`,
 /// `migrate:rollback`, `migrate:reset`, `migrate:refresh`, `migrate:fresh`,
@@ -181,7 +180,6 @@ fn register(m: &mut ModuleBuilder, options: Option<DbOptions>) {
             .deps(vec![ProviderKey::of::<Db>()]),
         )
         .http_layer(uow_layer())
-        .map_error::<DbErr>(map_db_error)
         .map_error::<crate::DbError>(map_db_error)
         .command(CommandSpec::new(
             "migrate",
@@ -273,7 +271,7 @@ impl HealthCheck for DatabaseHealth {
 
     fn check(&self) -> BoxFuture<'_, HealthStatus> {
         Box::pin(async move {
-            match self.0.conn().ping().await {
+            match self.0.ping().await {
                 Ok(()) => HealthStatus::Up,
                 Err(error) => {
                     tracing::warn!(target: "navree_db", %error, "database health check failed");

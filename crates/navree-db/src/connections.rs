@@ -6,12 +6,12 @@ use std::sync::Arc;
 
 use navree_kernel::{AppContext, BoxError, BoxFuture, Lifecycle, WeakAppContext};
 use navree_telemetry::Telemetry;
-use sea_orm::DbErr;
+
 use tokio::sync::Mutex;
 
 use crate::db::DEFAULT_CONNECTION;
 use crate::events::publish;
-use crate::{ConnectionEstablished, DatabaseBusy, DatabaseStatus, Db, DbOptions};
+use crate::{ConnectionEstablished, DatabaseBusy, DatabaseStatus, Db, DbError, DbOptions};
 
 /// Every configured database connection: the default one (the app's
 /// [`Db`]) and the named ones of `[database.connections.<name>]`, each
@@ -72,12 +72,12 @@ impl DbConnections {
 
     /// Connection `name` (`default` for the default one), opened on first
     /// use. An unknown name is an error listing the configured ones.
-    pub async fn get(&self, name: &str) -> Result<Arc<Db>, DbErr> {
+    pub async fn get(&self, name: &str) -> Result<Arc<Db>, DbError> {
         if name == DEFAULT_CONNECTION {
             return Ok(self.default.clone());
         }
         let Some(options) = self.configured.get(name) else {
-            return Err(DbErr::Custom(format!(
+            return Err(DbError::new(crate::ErrorKind::Other, format!(
                 "no database connection named `{name}` (configured: {})",
                 self.names().join(", ")
             )));
@@ -88,7 +88,7 @@ impl DbConnections {
         }
         let db = Db::connect_named(name, options, self.telemetry.clone())
             .await
-            .map_err(|error| DbErr::Custom(format!("connection `{name}`: {error}")))?;
+            .map_err(|error| { let message = format!("connection `{name}`: {}", error.message()); error.with_message(message) })?;
         let db = Arc::new(match self.app.as_ref().and_then(WeakAppContext::upgrade) {
             Some(app) => db.with_app(&app),
             None => db,
@@ -113,7 +113,7 @@ impl DbConnections {
         &self,
         databases: &[String],
         max: Option<u64>,
-    ) -> Result<Vec<DatabaseStatus>, DbErr> {
+    ) -> Result<Vec<DatabaseStatus>, DbError> {
         let names: Vec<String> = if databases.is_empty() {
             self.names().into_iter().map(str::to_owned).collect()
         } else {
@@ -143,7 +143,7 @@ impl DbConnections {
 
     /// Closes the named connections opened so far (the default one closes
     /// with the module).
-    pub async fn close(&self) -> Result<(), DbErr> {
+    pub async fn close(&self) -> Result<(), DbError> {
         let open: Vec<Arc<Db>> = self.open.lock().await.drain().map(|(_, db)| db).collect();
         for db in open {
             db.close().await?;

@@ -2,7 +2,7 @@
 //! `mysql`, `mariadb`, `sqlite3`, `mongosh`) for a connection URL, behind
 //! `navree db`.
 
-use sea_orm::DbErr;
+use crate::DbError;
 
 use crate::options::scheme;
 
@@ -39,11 +39,11 @@ impl ClientCommand {
     ///     client.env,
     ///     [("PGPASSWORD".to_owned(), "s@cret".to_owned()), ("PGSSLMODE".to_owned(), "require".to_owned())]
     /// );
-    /// # Ok::<(), sea_orm::DbErr>(())
+    /// # Ok::<(), navree_db::DbError>(())
     /// ```
-    pub fn for_url(url: &str) -> Result<ClientCommand, DbErr> {
+    pub fn for_url(url: &str) -> Result<ClientCommand, DbError> {
         let unsupported = || {
-            DbErr::Custom(format!(
+            DbError::unsupported(format!(
                 "no database client is known for `{}`",
                 crate::options::redact_url(url)
             ))
@@ -98,12 +98,12 @@ impl ClientCommand {
 
 /// `sqlite3 <file>` for `sqlite://path?mode=rwc`, `sqlite:path` or
 /// `sqlite:///abs/path`.
-fn sqlite(url: &str) -> Result<ClientCommand, DbErr> {
+fn sqlite(url: &str) -> Result<ClientCommand, DbError> {
     let rest = &url["sqlite:".len()..];
     let rest = rest.strip_prefix("//").unwrap_or(rest);
     let path = rest.split(['?', '#']).next().unwrap_or_default();
     if path.is_empty() || path == ":memory:" {
-        return Err(DbErr::Custom(
+        return Err(DbError::unsupported(
             "an in-memory SQLite database lives in the app's process; there is no client to open"
                 .to_owned(),
         ));
