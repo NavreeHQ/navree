@@ -8,5 +8,5 @@ mod m20261025_000001_create_posts;
 pub fn migrations() -> MigrationSet {
     MigrationSet::new("posts")
         .after(["auth"])
-        .migration(m20261025_000001_create_posts::Migration)
+        .migration(navree::schema::migration!(m20261025_000001_create_posts))
 }

@@ -228,34 +228,25 @@ fn prelude_brings_the_everyday_types() {
         ("read", "create", "update", "delete", "manage", "all")
     );
     let _: fn(&str) -> navree::access::FieldRef = field;
-    // The two `Factory` types: the DI factory keeps its name, the model
-    // factory is renamed.
+    // The two `Factory` names: the DI factory keeps its name, the ORM's
+    // model factory trait is `ModelFactory`.
     assert!(same::<Factory<u8>, navree::kernel::Factory<u8>>());
-    assert!(same::<
-        dyn ModelFactory<Entity = DummyEntity>,
-        dyn navree::db::Factory<Entity = DummyEntity>,
-    >());
+    fn orm_factory<F: navree::orm::factory::ModelFactory>() {}
+    orm_factory::<ThingFactory>();
 }
 
-/// A stand-in entity type for the model factory check (navree-db's
-/// `Factory` is generic over SeaORM entities until the data-layer move's
-/// step 8).
-type DummyEntity = dummy::Entity;
+/// A model factory written against the prelude's `ModelFactory`.
+struct ThingFactory;
 
-mod dummy {
-    use sea_orm::entity::prelude::*;
+impl ModelFactory for ThingFactory {
+    type Model = Thing;
 
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
-    #[sea_orm(table_name = "dummies")]
-    pub struct Model {
-        #[sea_orm(primary_key)]
-        pub id: i64,
+    fn definition(&self, _ctx: &mut navree::orm::factory::FactoryContext<'_, Thing>) -> Thing {
+        Thing {
+            id: 0,
+            name: "thing".to_owned(),
+        }
     }
-
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
 /// An ORM model declared with the prelude alone.

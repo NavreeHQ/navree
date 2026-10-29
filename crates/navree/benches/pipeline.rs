@@ -9,10 +9,10 @@
 //! - `pipeline/db`: `GET /db`, one `SELECT` by primary key through the pool
 //!   (SQLite).
 //! - `pipeline/insert`: `POST /deals`, a JSON body deserialized and
-//!   validated by `Valid<Json<T>>`, then inserted with `Repo::insert` in the
-//!   request's unit of work, which commits.
-//! - `uow/begin_commit`: a unit of work that begins and commits a SQLite
-//!   transaction, outside HTTP.
+//!   validated by `Valid<Json<T>>`, then inserted with `Model::create` in
+//!   the request's unit of work, which commits.
+//! - `uow/begin_commit`: a unit of work that begins a SQLite transaction
+//!   (with its first statement, `SELECT 1`) and commits it, outside HTTP.
 //! - `kernel/get`: `AppContext::get::<Db>()`, the service locator.
 //!
 //! Run them with `cargo bench -p navree --bench pipeline` (add
@@ -28,54 +28,31 @@ use http_body_util::BodyExt;
 use navree::App;
 use navree::axum::body::Body;
 use navree::axum::http::{Request, StatusCode};
-use navree::db::{Db, DbOptions};
+use navree::db::{Db, DbOptions, Executor as _, Statement};
 use navree::http::{HttpOptions, build_router};
 use navree::prelude::*;
-use sea_orm::{ConnectionTrait, EntityTrait};
 use serde::{Deserialize, Serialize};
 use tokio::runtime::Runtime;
 use tower::ServiceExt;
 use uuid::Uuid;
 
 /// `world (id, randomnumber)`: the rows `/db` reads.
-mod world {
-    use sea_orm::entity::prelude::*;
-    use serde::Serialize;
-
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
-    #[sea_orm(table_name = "world")]
-    pub struct Model {
-        #[sea_orm(primary_key, auto_increment = false)]
-        pub id: i32,
-        #[sea_orm(column_name = "randomnumber")]
-        #[serde(rename = "randomNumber")]
-        pub random_number: i32,
-    }
-
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
+#[derive(Model, Clone, Debug, Default, PartialEq, Eq, Serialize)]
+#[model(table = "world")]
+pub struct World {
+    pub id: i32,
+    #[model(column = "randomnumber")]
+    #[serde(rename = "randomNumber")]
+    pub random_number: i32,
 }
 
 /// `deals (id, title, amount_cents)`: the rows `/deals` inserts.
-mod deal {
-    use sea_orm::entity::prelude::*;
-    use serde::Serialize;
-
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
-    #[sea_orm(table_name = "deals")]
-    pub struct Model {
-        #[sea_orm(primary_key, auto_increment = false)]
-        pub id: Uuid,
-        pub title: String,
-        pub amount_cents: i64,
-    }
-
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
+#[derive(Model, Clone, Debug, Default, PartialEq, Eq, Serialize)]
+#[model(table = "deals")]
+pub struct Deal {
+    pub id: Uuid,
+    pub title: String,
+    pub amount_cents: i64,
 }
 
 /// Rows in `world`.
@@ -114,10 +91,9 @@ impl BenchController {
 
     #[get("/db")]
     #[public]
-    async fn db(&self) -> Result<Json<world::Model>> {
+    async fn db(&self) -> Result<Json<Record<World>>> {
         let id = NEXT_ID.fetch_add(1, Ordering::Relaxed) % WORLD_ROWS + 1;
-        let row = world::Entity::find_by_id(id)
-            .one(self.db.conn())
+        let row = World::find(&*self.db, id)
             .await?
             .ok_or_else(AppError::not_found)?;
         Ok(Json(row))
@@ -129,14 +105,13 @@ impl BenchController {
         &self,
         uow: Uow,
         Valid(Json(input)): Valid<Json<CreateDeal>>,
-    ) -> Result<Created<deal::Model>> {
-        use sea_orm::ActiveValue::Set;
-        let deal = Repo::<deal::Entity>::insert(
+    ) -> Result<Created<Record<Deal>>> {
+        let deal = Deal::create(
             &uow,
-            deal::ActiveModel {
-                id: Set(Uuid::now_v7()),
-                title: Set(input.title),
-                amount_cents: Set(input.amount_cents),
+            Deal {
+                id: Uuid::now_v7(),
+                title: input.title,
+                amount_cents: input.amount_cents,
             },
         )
         .await?;
@@ -190,7 +165,7 @@ async fn boot() -> Bench {
              INSERT INTO world SELECT i, ((i * 7919) % 10000) + 1 FROM n"
         ),
     ] {
-        db.conn().execute_unprepared(&sql).await.expect("schema");
+        db.pool().execute_script(&sql).await.expect("schema");
     }
     let router = build_router(app.ctx()).await.expect("router builds");
     Bench {
@@ -288,7 +263,9 @@ fn pipeline(c: &mut Criterion) {
             let db = db.clone();
             async move {
                 let uow = db.uow(None, Some("bench".to_owned())).await;
-                drop(uow.tx().await.expect("begin"));
+                uow.fetch_all(&Statement::text("SELECT 1"))
+                    .await
+                    .expect("begin");
                 uow.commit().await.expect("commit");
             }
         });

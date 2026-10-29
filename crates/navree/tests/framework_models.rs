@@ -188,7 +188,18 @@ async fn framework_tables_are_models_on_sqlite() {
 mod scratch {
     use std::sync::atomic::{AtomicU32, Ordering};
 
-    use sea_orm::{ConnectionTrait, Database};
+    use navree::db::{DbOptions, Executor as _, Pool};
+
+    /// A pool on the server database at `url`.
+    async fn connect(url: &str) -> Pool {
+        Pool::connect(&DbOptions {
+            url: url.to_owned(),
+            max_connections: 1,
+            ..DbOptions::default()
+        })
+        .await
+        .expect("connects")
+    }
 
     static COUNTER: AtomicU32 = AtomicU32::new(0);
 
@@ -213,11 +224,11 @@ mod scratch {
                 std::process::id(),
                 COUNTER.fetch_add(1, Ordering::SeqCst)
             );
-            let conn = Database::connect(&admin).await.expect("connects");
-            conn.execute_unprepared(&format!("CREATE DATABASE {name}"))
+            let conn = connect(&admin).await;
+            conn.execute_script(&format!("CREATE DATABASE {name}"))
                 .await
                 .expect("the test user may create databases");
-            conn.close().await.expect("closes");
+            conn.close().await;
             let (base, query) = match admin.split_once('?') {
                 Some((base, query)) => (base.to_owned(), format!("?{query}")),
                 None => (admin.clone(), String::new()),
@@ -234,14 +245,14 @@ mod scratch {
 
         /// Drops the database.
         pub async fn drop(self) {
-            let conn = Database::connect(&self.admin).await.expect("connects");
+            let conn = connect(&self.admin).await;
             let sql = if self.mysql {
                 format!("DROP DATABASE IF EXISTS {}", self.name)
             } else {
                 format!("DROP DATABASE IF EXISTS {} WITH (FORCE)", self.name)
             };
-            conn.execute_unprepared(&sql).await.expect("drops");
-            conn.close().await.expect("closes");
+            conn.execute_script(&sql).await.expect("drops");
+            conn.close().await;
         }
     }
 }
