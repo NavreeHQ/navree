@@ -583,9 +583,18 @@ async fn a_migration_can_ask_for_a_transaction_on_mysql() {
     let app = app_on(db.clone(), Some(true)).await;
     Migrator::up(app.ctx()).await.expect("migrates");
     let sql: Vec<String> = sent_raw(&db).into_iter().map(|(sql, _)| sql).collect();
+    // Statements in a SeaORM transaction reach its driver keyed by their
+    // values' kinds (a scripted connection's transaction does not say it is
+    // scripted; see navree-db's DESIGN.md, "Prepared statements and
+    // parameter types").
     assert_eq!(
         sql[2..],
-        ["BEGIN", sql[3].as_str(), INSERT_APPLIED, "COMMIT"]
+        [
+            "BEGIN",
+            sql[3].as_str(),
+            &format!("{INSERT_APPLIED} /* params: text, text, i64, timestamp */"),
+            "COMMIT"
+        ]
     );
     assert!(sql[3].starts_with("CREATE TABLE `users`"), "{}", sql[3]);
 }

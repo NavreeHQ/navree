@@ -207,11 +207,14 @@ impl<'a, C: ConnectionTrait + Sync + ?Sized> SeaExecutor<'a, C> {
     /// PostgreSQL and MySQL the text names the kind of each value
     /// (`/* params: i64, text */`): SeaORM binds each kind as one type, so
     /// values of other kinds make another statement (see
-    /// [`Keyed`](crate::engine::driver::Keyed)).
+    /// [`Keyed`](crate::engine::driver::Keyed)). A mock connection
+    /// (`migrate --pretend`, scripted tests) prepares nothing and keeps the
+    /// SQL as written.
     pub(crate) fn statement(&self, statement: &Statement) -> Result<sea_orm::Statement, DbError> {
         let backend = Executor::backend(self);
         let statement = statement.for_backend(backend)?;
         let sql = match backend {
+            _ if self.conn.is_mock_connection() => statement.sql().to_owned(),
             Backend::Sqlite => statement.sql().to_owned(),
             Backend::Postgres | Backend::MySql => {
                 let mut text = KeyedText::new(statement.sql(), statement.values().len());

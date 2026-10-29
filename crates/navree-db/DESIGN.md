@@ -225,7 +225,10 @@ columns.
 
 - Navree's query log (`QueryLog`, `Db::on_query`, `before_executing`),
   the slow-query log, telemetry, errors and `Statement`'s `Display` show
-  the SQL as written, without the comment.
+  the SQL as written, without the comment, and so does `migrate
+  --pretend` (a SeaORM mock connection prepares nothing, so its
+  statements are not keyed; a transaction on one cannot say it is a
+  mock, so the scripted tests see keyed statements there).
 - The database sees the comment: PostgreSQL's `pg_stat_activity.query`,
   `pg_prepared_statements`, server logs (`log_statement`,
   `log_min_duration_statement`) and `pg_stat_statements` show
