@@ -185,7 +185,7 @@ impl fmt::Debug for TokenPair {
 ///   although the request fails; on SQLite call it before writing through
 ///   the request's unit of work.
 /// - Reads use the connection pool, or the task's unit of work when its
-///   transaction is open (`Db::reader`).
+///   transaction is open (as the ORM reads through a `Db`).
 /// - Logins, failed logins, refreshes, detected reuse and logouts are
 ///   written to the `dyn AuditSink` when one is registered.
 pub struct AuthService {
@@ -663,8 +663,9 @@ impl AuthService {
 
     /// The user with `id`. Inside a unit of work whose transaction is open
     /// (a request after a record check, say) it reads through that
-    /// transaction (`Db::reader`), so the request never waits for a second
-    /// pool connection while it holds SQLite's write lock.
+    /// transaction (as the ORM reads through a `Db`), so the request never
+    /// waits for a second pool connection while it holds SQLite's write
+    /// lock.
     pub async fn find_user(&self, id: Uuid) -> Result<Option<User>, AuthError> {
         Ok(User::find(&self.db, id).await?.map(Record::into_inner))
     }
