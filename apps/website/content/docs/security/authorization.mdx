@@ -46,7 +46,7 @@ The migration set `access` creates the tables `roles`, `permissions`, `role_perm
 
 | Term | Meaning |
 |---|---|
-| Subject | A type of thing, named in PascalCase: `Post`, `Deal`. An entity becomes a subject by implementing `Subject`. |
+| Subject | A type of thing, named in PascalCase: `Post`, `Deal`. A model becomes a subject with `#[model(subject)]`. |
 | Action | `read`, `create`, `update`, `delete`, `manage` (any action), or your own: `publish`, `move`. |
 | Rule | Allows (`can`) or denies (`cannot`) an action on a subject, optionally only where conditions on the record hold and only for some fields. |
 | Ability | One user's rules, in order. Navree builds it from your abilities function. |
@@ -56,31 +56,32 @@ Abilities serialise to the JSON rule format of [CASL](https://casl.js.org), so t
 
 ### Subjects
 
-Implement `Subject` for each entity you want to check, and register it with `AccessModule::for_feature` in its module:
+Make each model you want to check a subject, and register it with `AccessModule::for_feature` in its module. A [navree-orm model](/docs/orm/workspaces-and-access/#access-control) is a subject through its `#[model(..)]` attribute:
 
-```rust title="src/modules/posts/entity.rs"
-use navree::access::Subject;
-
-// ... the SeaORM entity of the `posts` table: Model, Column, Entity
+```rust title="src/modules/posts/model.rs"
+use navree::prelude::*;
 
 /// Rules name it `Post`; permissions are `posts.<action>`.
-impl Subject for Entity {
-    const SUBJECT: &'static str = "Post";
-    const PERMISSION_PREFIX: &'static str = "posts";
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "posts", timestamps, subject = "Post", permission_prefix = "posts")]
+pub struct Post {
+    pub id: Uuid,
+    pub author_id: Uuid,
+    pub title: String,
+    pub body: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
-
-/// The subject in route attributes and extractors.
-pub type Post = Entity;
 ```
 
 ```rust title="src/modules/posts/mod.rs"
 mod controller;
-mod entity;
+mod model;
 
 use navree::prelude::*;
 
 pub use controller::PostsController;
-pub use entity::Post;
+pub use model::Post;
 
 #[module(
     imports = [AccessModule::for_feature::<Post>()],
@@ -89,7 +90,20 @@ pub use entity::Post;
 pub struct PostsModule;
 ```
 
-`for_feature` maps the permission prefix to the subject, and lets routes load the entity's records by primary key (a UUID, an integer or a string). A subject that isn't an entity, such as `Report`, registers with `AccessModule::for_subject::<S>()` for its permission prefix alone. Users are a subject too: `navree::auth::User` is `User`, with the prefix `users`. To check routes against users and to make `users.*` permissions apply, import `AccessModule::for_feature::<navree::auth::user::Entity>()` (the SeaORM entity of the same table, which `for_feature` loads records through).
+`subject` alone names the subject after the struct and takes the table as the permission prefix; `policy = PostPolicy` adds the rules about it. `for_feature` maps the permission prefix to the subject, and lets routes load the model's records by route key (a UUID, an integer or a string): the ORM loads them in the request's unit of work, on navree-db's own transaction. A subject that isn't a model, such as `Report`, registers with `AccessModule::for_subject::<S>()` for its permission prefix alone. Users are a subject too: `navree::auth::User` is the subject `User`, with the prefix `users`. To check routes against users and to make `users.*` permissions apply, import `AccessModule::for_feature::<navree::auth::User>()`.
+
+A SeaORM entity of a crate that isn't moved yet becomes a subject by implementing `Subject` for its `Entity`, and registers with `for_feature` the same way; navree-access loads its records through a shim until the SeaORM layer is removed:
+
+```rust title="src/modules/posts/entity.rs"
+use navree::access::Subject;
+
+// ... the SeaORM entity of the `posts` table: Model, Column, Entity
+
+impl Subject for Entity {
+    const SUBJECT: &'static str = "Post";
+    const PERMISSION_PREFIX: &'static str = "posts";
+}
+```
 
 ## Defining abilities
 
@@ -359,14 +373,13 @@ Guests never pass `#[can]`, even when a rule allows guests: make such a route `#
 
 ### Authorized
 
-With `from = "id"`, the route authorizer loads the record before the handler runs and hands it over as `Authorized<E, A>`:
+With `from = "id"`, the route authorizer loads the record before the handler runs and hands it over as `Authorized<M, A>`:
 
 ```rust title="src/modules/posts/controller.rs"
-use navree::db::paginate;
+use navree::orm::access::AccessibleQuery;
 use navree::prelude::*;
-use sea_orm::{EntityTrait, QueryOrder};
 
-use super::entity::{self as post, Model, Post};
+use super::model::Post;
 use super::{Publish, UpdatePost};
 
 #[injectable]
@@ -382,15 +395,14 @@ impl PostsController {
         uow: Uow,
         scope: Accessible<Post, Read>,
         page: PageQuery,
-    ) -> Result<Page<Model>> {
-        let select = scope.apply(post::Entity::find().order_by_desc(post::Column::CreatedAt));
-        Ok(paginate(select, &*uow.tx().await?, page).await?)
+    ) -> Result<Page<Record<Post>>> {
+        Ok(scope.query().latest().paginate(&uow, page).await?)
     }
 
     /// 404 when there is no such post, 403 when the rules say no.
     #[get("/{id}")]
     #[can(Read, Post, from = "id")]
-    async fn show(&self, post: Authorized<Post, Read>) -> Json<Model> {
+    async fn show(&self, post: Authorized<Post, Read>) -> Json<Record<Post>> {
         Json(post.into_inner())
     }
 
@@ -400,7 +412,7 @@ impl PostsController {
         &self,
         post: Authorized<Post, Update>,
         Valid(Json(input)): Valid<Json<UpdatePost>>,
-    ) -> Result<Json<Model>> {
+    ) -> Result<Json<Record<Post>>> {
         // 403 "You may not change these fields: author_id." when the
         // rule is limited to title and body.
         post.check_fields(&input.changed_fields())?;
@@ -410,7 +422,7 @@ impl PostsController {
 
     #[post("/{id}/publish")]
     #[can(Publish, Post, from = "id")]
-    async fn publish(&self, post: Authorized<Post, Publish>) -> Result<Json<Model>> {
+    async fn publish(&self, post: Authorized<Post, Publish>) -> Result<Json<Record<Post>>> {
         // ...
         Ok(Json(post.into_inner()))
     }
@@ -425,7 +437,7 @@ For a `from` route, the authorizer:
 4. checks the rules against the record, and answers 403 when they say no;
 5. keeps the record for the handler.
 
-`Authorized<E, A>` dereferences to the model and has `into_inner()`, `model()`, `record()` (the JSON the conditions saw), `ability()` and `check_fields(..)`. The extractor must match the route: `Authorized<Post, Update>` on a route without `#[can(Update, Post, from = ..)]` is a 500 that says so. So is a `from` route for a subject registered without `for_feature`.
+For a model, `Authorized<M, A>` dereferences to its `Record<M>` (which dereferences to the model, so `post.title` works), and `into_inner()` gives the `Record<M>`; `.into_inner()` on that gives the model. For a SeaORM entity it dereferences to the entity's model. It also has `model()`, `record()` (the JSON the conditions saw), `ability()` and `check_fields(..)`. The extractor must match the route: `Authorized<Post, Update>` on a route without `#[can(Update, Post, from = ..)]` is a 500 that says so. So is a `from` route for a subject registered without `for_feature`.
 
 Conditions see the record as JSON with one member per column, named like the column. UUIDs are hyphenated lower-case strings, timestamps RFC 3339 UTC strings with microseconds, and dates `YYYY-MM-DD`. The same JSON comes from `navree::orm::access::record_json(&record)` for an ORM model (`ability.authorize(Update, &record)` checks one directly), `navree::access::row_json(&row)` for a navree-db record, and `navree::access::record_json(&model)` for a SeaORM entity's model.
 

@@ -67,7 +67,15 @@ rules:
         - "/crates/navree-integrations/"
         - "/crates/navree-macros/"
         - "/crates/navree-media/"
-        - "/crates/navree-workspace/"
+        # navree-workspace is moved; its SeaORM compatibility layer (the
+        # `sea_compat` repositories and registrations, the SeaORM derive kept
+        # on three models and on `LibraryScope`) stays until the crates
+        # using it are moved (step 8). The conformity scanner's tests read
+        # SeaORM entity sources as text.
+        - "/crates/navree-workspace/src/sea_compat.rs"
+        - "/crates/navree-workspace/src/entity.rs"
+        - "/crates/navree-workspace/src/library/mod.rs"
+        - "/crates/navree-workspace/src/conformity/source.rs"
     pattern-regex: '(?m)^(?!\s*//)[^\n"]*?(?:\bsea_orm(?:_migration)?\s*::|#\[\s*sea_orm\s*[(\]])'
 
   - id: navree-sea-orm-dependency-ratchet
@@ -115,5 +123,6 @@ rules:
         - "/crates/navree-sso/"
         - "/crates/navree-webhooks/"
         - "/crates/navree-workflows/"
-        - "/crates/navree-workspace/"
+        # navree-workspace: sea-orm for its compatibility layer, until step 8.
+        - "/crates/navree-workspace/Cargo.toml"
     pattern-regex: '(?m)^\s*sea-orm(?:-migration)?\s*(?:=|\.)'
