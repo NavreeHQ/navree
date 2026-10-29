@@ -12,16 +12,22 @@ use sqlx::{Arguments, ConnectOptions, Decode, Row as _, Sqlite, TypeInfo, ValueR
 use crate::engine::{Backend, DbError, Kind, Value};
 use crate::{DbOptions, SqliteOptions};
 
-/// The values of a statement as SQLite binds them: decimals as text (SQLite
-/// has no exact decimal type), UUIDs as 16 bytes, date-times as text.
-pub(crate) fn arguments(values: &[Value]) -> Result<SqliteArguments, DbError> {
+/// The text SQLite prepares for `sql` (the SQL as written) and its values
+/// as SQLite binds them: decimals as text (SQLite has no exact decimal
+/// type), UUIDs as 16 bytes, date-times as text.
+///
+/// SQLite types values, not parameters or columns: a prepared statement
+/// binds each run's values as they are and reads each result cell by
+/// what it holds, so one prepared statement serves values of any type
+/// (unlike PostgreSQL and MySQL, see [`Keyed`](super::Keyed)).
+pub(crate) fn statement(sql: &str, values: &[Value]) -> Result<(String, SqliteArguments), DbError> {
     let mut args = SqliteArguments::default();
     for value in values {
         bind(&mut args, value).map_err(|error| {
             DbError::invalid(format!("cannot bind {} on SQLite: {error}", value.kind()))
         })?;
     }
-    Ok(args)
+    Ok((sql.to_owned(), args))
 }
 
 fn bind(args: &mut SqliteArguments, value: &Value) -> Result<(), sqlx::error::BoxDynError> {
