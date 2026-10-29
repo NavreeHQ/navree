@@ -35,9 +35,7 @@ rules:
         # navree-auth is ported; `User` keeps its SeaORM derive (the
         # compatibility layer for the crates not yet on navree-orm) until step 8.
         - "/crates/navree-auth/src/entity/user.rs"
-        - "/crates/navree-billing/"
         - "/crates/navree-db/"
-        - "/crates/navree-flags/"
         - "/crates/navree-fleet/"
         - "/crates/navree-graphql/"
         - "/crates/navree-grpc/"
@@ -55,7 +53,6 @@ rules:
         - "/crates/navree-queue/"
         - "/crates/navree-schema/"
         - "/crates/navree-search/"
-        - "/crates/navree-settings/"
         - "/crates/navree-sheets/"
         - "/crates/navree-social/"
         - "/crates/navree-sso/"
@@ -98,9 +95,7 @@ rules:
         - "/crates/navree-ai/"
         # navree-auth: sea-orm for `User`'s compatibility derive, until step 8.
         - "/crates/navree-auth/Cargo.toml"
-        - "/crates/navree-billing/"
         - "/crates/navree-db/"
-        - "/crates/navree-flags/"
         - "/crates/navree-fleet/"
         - "/crates/navree-graphql/"
         - "/crates/navree-grpc/"
@@ -117,7 +112,6 @@ rules:
         - "/crates/navree-queue/"
         - "/crates/navree-schema/"
         - "/crates/navree-search/"
-        - "/crates/navree-settings/"
         - "/crates/navree-sheets/"
         - "/crates/navree-social/"
         - "/crates/navree-sso/"

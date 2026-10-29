@@ -74,8 +74,7 @@ pub fn plans() -> Value {
 
 /// The platform without a billable registration.
 pub fn platform() -> TestAppBuilder {
-    TestApp::builder()
-        .temp_database()
+    crate::servers::database(TestApp::builder())
         .fake_auth()
         .config("http.per_ip_rate_limit", Value::Null)
         .config("app.key", navree_crypto::generate_key())
