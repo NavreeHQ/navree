@@ -326,12 +326,22 @@ fn every_kind() -> Vec<Value> {
 
 /// What one run of `sql` returned: the value of its one column, or that
 /// it failed.
+///
+/// On MySQL a `NULL` is any `NULL`: the kind it reads back as is the
+/// result column's type, which MySQL derives for `SELECT ?` from the
+/// values a statement saw (text for a statement first run with a `NULL`,
+/// `BIGINT` for one that ran with an integer of the same type before).
+/// The value is `NULL` either way; keying statements by which values are
+/// `NULL` too would multiply the statements of every insert.
 async fn outcome(db: &impl Executor, sql: &str, value: &Value) -> String {
     match db
         .fetch_one(&Statement::portable(sql, [value.clone()]))
         .await
     {
-        Ok(row) => format!("{:?}", row.value(0)),
+        Ok(row) => match row.value(0) {
+            Ok(Value::Null(_)) if db.backend() == Backend::MySql => "Ok(NULL)".to_owned(),
+            read => format!("{read:?}"),
+        },
         Err(error) => format!("error {:?} {}", error.kind(), error.code().unwrap_or("")),
     }
 }
@@ -346,15 +356,24 @@ async fn every_kind_after_every_other_on(db: &Db, values: &[Value], sqls: &[Stri
             first.push(outcome(db, &format!("{sql} -- first run {at}\n"), value).await);
         }
         let mut wrong = Vec::new();
-        for earlier in values {
-            for (at, value) in values.iter().enumerate() {
-                let _ = outcome(db, sql, earlier).await;
-                let again = outcome(db, sql, value).await;
-                if again != first[at] {
-                    wrong.push(format!(
-                        "{value:?} after {earlier:?}: {again}, first run: {}",
-                        first[at]
-                    ));
+        // Values first, then the NULLs; and the other way round, in a
+        // statement of its own (ending with a line comment).
+        let reversed = format!("{sql} -- NULLs first\n");
+        for (text, order) in [(sql, false), (&reversed, true)] {
+            let mut earlier_ones: Vec<&Value> = values.iter().collect();
+            if order {
+                earlier_ones.reverse();
+            }
+            for earlier in earlier_ones {
+                for (at, value) in values.iter().enumerate() {
+                    let _ = outcome(db, text, earlier).await;
+                    let again = outcome(db, text, value).await;
+                    if again != first[at] {
+                        wrong.push(format!(
+                            "{value:?} after {earlier:?}: {again}, first run: {}",
+                            first[at]
+                        ));
+                    }
                 }
             }
         }
@@ -364,10 +383,17 @@ async fn every_kind_after_every_other_on(db: &Db, values: &[Value], sqls: &[Stri
             .count();
         assert!(
             wrong.is_empty(),
-            "`{sql}`: {} of {} runs differ from a first run ({silent} with a wrong value, the others with an error); the first 40:\n{}",
+            "`{sql}`: {} of {} runs differ from a first run ({silent} with a wrong value, the others with an error); the first 40, then those of values:\n{}\n{}",
             wrong.len(),
-            values.len() * values.len(),
-            wrong[..wrong.len().min(40)].join("\n")
+            2 * values.len() * values.len(),
+            wrong[..wrong.len().min(40)].join("\n"),
+            wrong
+                .iter()
+                .filter(|line| !line.starts_with("Null("))
+                .take(40)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join("\n")
         );
     }
 }
@@ -394,6 +420,79 @@ pub async fn every_kind_after_every_other(scratch: Scratch) {
     };
     let sqls = [cast.to_owned(), "SELECT ? AS v".to_owned()];
     every_kind_after_every_other_on(&db, &values, &sqls).await;
+}
+
+/// Query logs, listeners and errors show the SQL as written; the server
+/// sees it followed by the types its values bind (PostgreSQL and MySQL),
+/// placed before a trailing `;`.
+pub async fn logs_show_the_sql_as_written(scratch: Scratch) {
+    let backend = scratch.server.backend();
+    let db = pool_of(&scratch, 1).await;
+    measures(&db).await;
+    let heard = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let listener = heard.clone();
+    db.on_query(move |query| listener.lock().unwrap().push(query.sql.clone()));
+
+    let written = match backend {
+        Backend::Postgres => {
+            "SELECT query AS seen FROM pg_stat_activity WHERE pid = pg_backend_pid() AND ? > 0;"
+        }
+        Backend::MySql => {
+            "SELECT INFO AS seen FROM information_schema.PROCESSLIST WHERE ID = CONNECTION_ID() AND ? > 0;"
+        }
+        Backend::Sqlite => "SELECT 'not kept' AS seen WHERE ? > 0;",
+    };
+    let statement = Statement::portable(written, [1_i64.into()]);
+    let ((), logged) = navree_db::QueryLog::capture(async {
+        let row = db.fetch_one(&statement).await.unwrap();
+        let seen: String = row.get("seen").unwrap();
+        let expected = match backend {
+            Backend::Postgres => format!(
+                "{} /* params: INT8 */;",
+                written.trim_end_matches(';').replace("? > 0", "$1 > 0")
+            ),
+            // MySQL shows a prepared statement with its values in place,
+            // without the `;`.
+            Backend::MySql => format!(
+                "{} /* params: BIGINT */",
+                written.trim_end_matches(';').replace("? > 0", "1 > 0")
+            ),
+            Backend::Sqlite => "not kept".to_owned(),
+        };
+        assert_eq!(seen, expected, "what the server sees");
+    })
+    .await;
+    let as_run = statement.for_backend(backend).unwrap().sql().to_owned();
+    assert_eq!(logged.len(), 1);
+    assert_eq!(logged[0].sql, as_run, "the query log");
+    assert_eq!(
+        heard.lock().unwrap().as_slice(),
+        [as_run.clone()],
+        "listeners"
+    );
+
+    // A failure names the SQL as written too.
+    let missing = Statement::portable("SELECT id FROM nowhere WHERE id = ?", [1_i64.into()]);
+    let ((), logged) = navree_db::QueryLog::capture(async {
+        assert!(db.fetch_all(&missing).await.is_err());
+    })
+    .await;
+    assert!(logged[0].failed);
+    assert!(!logged[0].sql.contains("params:"), "{}", logged[0].sql);
+
+    // Statements without values, and a NULL, run as written and keyed.
+    let rows = ids(
+        &db,
+        "SELECT id FROM measures WHERE id = COALESCE(?, 2);",
+        Value::Null(Kind::I64),
+    )
+    .await;
+    assert_eq!(rows, Ok(vec![2]));
+    let count = db
+        .fetch_all(&Statement::text("SELECT id FROM measures ORDER BY id;\n"))
+        .await
+        .unwrap();
+    assert_eq!(count.len(), 3);
 }
 
 /// How long repeated statements with stable value types take: a query

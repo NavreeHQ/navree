@@ -2,28 +2,35 @@
 //! options every pooled connection starts with.
 
 use sqlx::postgres::{PgArguments, PgConnectOptions, PgPoolOptions, PgRow, PgSslMode, PgValueRef};
-use sqlx::{Arguments, ConnectOptions, Decode, Postgres, Row as _, TypeInfo, ValueRef};
+use sqlx::{ConnectOptions, Decode, Postgres, Row as _, TypeInfo, ValueRef};
 
+use super::Keyed;
 use crate::engine::{Backend, DbError, Kind, Value};
 use crate::{DbOptions, PostgresOptions};
 
-/// The values of a statement as PostgreSQL binds them: NULLs typed by
-/// their kind, unsigned integers in the next wider signed type (PostgreSQL
-/// has none), `i8` as `SMALLINT`.
-pub(crate) fn arguments(values: &[Value]) -> Result<PgArguments, DbError> {
-    let mut args = PgArguments::default();
+/// The text PostgreSQL prepares for `sql` and its values as PostgreSQL
+/// binds them: NULLs typed by their kind, unsigned integers in the next
+/// wider signed type (PostgreSQL has none; a `u64` beyond `i64` as
+/// `NUMERIC`), `i8` as `SMALLINT`.
+///
+/// A prepared statement's parameters keep the types of its first run, so
+/// the text names the types the values bind (`... WHERE amount > $1 /*
+/// params: INT8 */`): a run with values of other types is another
+/// statement ([`Keyed`](super::Keyed)).
+pub(crate) fn statement(sql: &str, values: &[Value]) -> Result<(String, PgArguments), DbError> {
+    let mut keyed = Keyed::new(sql, values.len());
     for value in values {
-        bind(&mut args, value).map_err(|error| {
+        bind(&mut keyed, value).map_err(|error| {
             DbError::invalid(format!(
                 "cannot bind {} on PostgreSQL: {error}",
                 value.kind()
             ))
         })?;
     }
-    Ok(args)
+    Ok(keyed.finish())
 }
 
-fn bind(args: &mut PgArguments, value: &Value) -> Result<(), sqlx::error::BoxDynError> {
+fn bind(args: &mut Keyed<'_, PgArguments>, value: &Value) -> Result<(), sqlx::error::BoxDynError> {
     match value {
         Value::Null(kind) => bind_null(args, *kind),
         Value::Bool(v) => args.add(*v),
@@ -110,7 +117,10 @@ fn parse_vector(bytes: &[u8]) -> Result<Vec<f32>, sqlx::error::BoxDynError> {
     Ok(items)
 }
 
-fn bind_null(args: &mut PgArguments, kind: Kind) -> Result<(), sqlx::error::BoxDynError> {
+fn bind_null(
+    args: &mut Keyed<'_, PgArguments>,
+    kind: Kind,
+) -> Result<(), sqlx::error::BoxDynError> {
     match kind {
         Kind::Bool => args.add(None::<bool>),
         Kind::I8 | Kind::I16 | Kind::U8 => args.add(None::<i16>),
@@ -292,6 +302,100 @@ pub(crate) fn pool_options(options: &DbOptions) -> PgPoolOptions {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The text of `sql` prepared with `values`.
+    fn keyed(sql: &str, values: Vec<Value>) -> String {
+        statement(sql, &values).unwrap().0
+    }
+
+    #[test]
+    fn statements_are_keyed_by_the_types_their_values_bind() {
+        use chrono::{NaiveDate, TimeZone, Utc};
+
+        // Nothing bound: the SQL as written.
+        assert_eq!(keyed("SELECT 1;", vec![]), "SELECT 1;");
+        // The comment goes before a trailing `;` and whitespace.
+        assert_eq!(
+            keyed("SELECT $1, $2 ;\n", vec![1_i64.into(), "a".into()]),
+            "SELECT $1, $2 /* params: INT8, TEXT */ ;\n"
+        );
+        let date = NaiveDate::from_ymd_opt(2026, 10, 29).unwrap();
+        let at = date.and_hms_opt(1, 2, 3).unwrap();
+        let every = vec![
+            Value::Bool(true),
+            Value::I8(1),
+            Value::I16(1),
+            Value::I32(1),
+            Value::I64(1),
+            Value::U8(1),
+            Value::U16(1),
+            Value::U32(1),
+            Value::U64(1),
+            Value::U64(u64::MAX),
+            Value::F32(1.0),
+            Value::F64(1.0),
+            Value::Decimal(rust_decimal::Decimal::ONE),
+            Value::String("a".into()),
+            Value::Bytes(vec![1]),
+            Value::Json(serde_json::json!(1)),
+            Value::Uuid(uuid::Uuid::nil()),
+            Value::Date(date),
+            Value::Time(at.time()),
+            Value::DateTime(at),
+            Value::Timestamp(Utc.from_utc_datetime(&at)),
+            Value::TimestampTz(Utc.from_utc_datetime(&at).fixed_offset()),
+            Value::Enum {
+                type_name: "mood".into(),
+                value: "happy".into(),
+            },
+            Value::Vector(vec![1.0]),
+        ];
+        assert_eq!(
+            keyed("SELECT", every),
+            "SELECT /* params: BOOL, INT2, INT2, INT4, INT8, INT2, INT4, INT8, INT8, NUMERIC, \
+             FLOAT4, FLOAT8, NUMERIC, TEXT, BYTEA, JSONB, UUID, DATE, TIME, TIMESTAMP, \
+             TIMESTAMPTZ, TIMESTAMPTZ, TEXT, vector */"
+        );
+        // A NULL binds its kind's type.
+        let nulls = [
+            Kind::Bool,
+            Kind::I8,
+            Kind::I32,
+            Kind::U32,
+            Kind::F32,
+            Kind::Decimal,
+            Kind::String,
+            Kind::Bytes,
+            Kind::Json,
+            Kind::Uuid,
+            Kind::Date,
+            Kind::Time,
+            Kind::DateTime,
+            Kind::Timestamp,
+            Kind::TimestampTz,
+            Kind::Enum,
+            Kind::Vector,
+        ];
+        assert_eq!(
+            keyed("SELECT", nulls.into_iter().map(Value::Null).collect()),
+            "SELECT /* params: BOOL, INT2, INT4, INT8, FLOAT4, NUMERIC, TEXT, BYTEA, JSONB, \
+             UUID, DATE, TIME, TIMESTAMP, TIMESTAMPTZ, TIMESTAMPTZ, TEXT, vector */"
+        );
+        // Values of another type: another text; of the same types: the same.
+        let sql = "SELECT id FROM t WHERE n > $1";
+        assert_ne!(
+            keyed(sql, vec![1_i64.into()]),
+            keyed(sql, vec![1.5_f64.into()])
+        );
+        assert_ne!(
+            keyed(sql, vec![Value::Null(Kind::I64)]),
+            keyed(sql, vec![1.5_f64.into()])
+        );
+        assert_eq!(
+            keyed(sql, vec![Value::Null(Kind::I64)]),
+            keyed(sql, vec![7_i64.into()])
+        );
+    }
 
     #[test]
     fn vectors_cross_in_pgvector_s_binary_form() {
