@@ -576,7 +576,7 @@ impl LighthouseStore {
         labels: &Labels,
     ) -> Result<Vec<Candidate>, DbErr> {
         let now = Utc::now();
-        let txn = self.db.conn().begin().await?;
+        let txn = self.db.begin_for_write().await?;
         let mut candidates = Vec::new();
         let mut touched: Vec<issue::Model> = Vec::new();
 
