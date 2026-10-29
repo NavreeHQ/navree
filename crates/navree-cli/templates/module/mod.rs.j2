@@ -6,7 +6,7 @@
 //! ├── mod.rs           # {{ module_pascal }}Module: what the module provides and imports
 //! ├── controller.rs    # {{ entity_pascal }}Controller: the HTTP routes
 //! ├── service.rs       # {{ entity_pascal }}Service: the business logic
-//! ├── entity.rs        # the `{{ table }}` table (SeaORM entity)
+//! ├── entity.rs        # the `{{ table }}` table, as an ORM model
 //! ├── dto.rs           # request bodies and their validation rules
 //! ├── migrations/      # migrations owned by this module
 //! └── tests/           # tests on a fresh database
@@ -26,11 +26,10 @@ use navree::access::AccessModule;
 use navree::db::ModuleBuilderDbExt;
 use navree::kernel::ModuleBuilder;
 use navree::module;
+use navree::orm::ModuleBuilderOrmExt;
 
 pub use controller::{{ entity_pascal }}Controller;
-{% if crud %}
 pub use entity::{{ entity_pascal }};
-{% endif %}
 pub use service::{{ entity_pascal }}Service;
 
 {% if crud %}
@@ -40,7 +39,7 @@ pub use service::{{ entity_pascal }}Service;
 /// with permissions (`{{ table }}.read`, `.create`, `.update`, `.delete`, or
 /// `{{ table }}.manage` for all) or with rules in the app's abilities function.
 #[module(
-    imports = [AccessModule::for_feature::<entity::Entity>()],
+    imports = [AccessModule::for_feature::<{{ entity_pascal }}>()],
     providers = [{{ entity_pascal }}Service],
     controllers = [{{ entity_pascal }}Controller],
     exports = [{{ entity_pascal }}Service],
@@ -59,11 +58,12 @@ pub use service::{{ entity_pascal }}Service;
 pub struct {{ module_pascal }}Module;
 
 impl {{ module_pascal }}Module {
-    /// Registrations `#[module]` has no key for (migrations, jobs,
+    /// Registrations `#[module]` has no key for (migrations, models, jobs,
     /// listeners, commands, templates). `navree make:*` adds its lines above
     /// the `navree:wire` marker.
     fn wire(&self, m: &mut ModuleBuilder) {
         m.migrations(migrations::migrations());
+        m.model::<{{ entity_pascal }}>();
         // navree:wire
     }
 }

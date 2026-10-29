@@ -186,11 +186,11 @@ for chunk in &chunks {
 Embedding calls a provider, so it belongs in a [queued job](/docs/digging-deeper/queues/), not in the request that saved the note. The CRM indexes an activity whenever it is created or changed:
 
 ```rust title="crates/crm-activities/src/index.rs"
-use crm_core::entities::activity;
+use crm_core::models::Activity;
 use navree::ai::{Chunker, Embeddings, Filter, VectorRecord, VectorStore};
 use navree::contracts::{BoxError, Job, JobContext};
 use navree::db::Db;
-use sea_orm::EntityTrait;
+use navree::orm::Model as _;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use uuid::Uuid;
@@ -211,7 +211,7 @@ impl Job for IndexActivity {
 
         // Old chunks go first: an edited note may now have fewer of them.
         notes.delete_where(Filter::eq("activity_id", self.activity_id)).await?;
-        let Some(activity) = activity::Entity::find_by_id(self.activity_id).one(db.conn()).await? else {
+        let Some(activity) = Activity::find(&db, self.activity_id).await? else {
             return Ok(()); // deleted: nothing to index
         };
 
@@ -243,9 +243,9 @@ impl Job for IndexActivity {
 The service dispatches it after each write. In a request, the job joins the request's [unit of work](/docs/database/unit-of-work/), so it is queued only if the activity is saved, and the worker never reads a note that was rolled back:
 
 ```rust title="crates/crm-activities/src/service.rs"
-let model = Repo::<activity::Entity>::insert(uow, active_model).await?;
-self.queue.dispatch(IndexActivity { activity_id: model.id }).await?; // [!code ++]
-self.present_one(uow, model).await
+let activity = Activity::create(uow, new_activity).await?;
+self.queue.dispatch(IndexActivity { activity_id: activity.id }).await?; // [!code ++]
+self.present_one(uow, activity).await
 ```
 
 Do the same in `update` and `delete`. The job is safe to run twice, as [jobs should be](/docs/digging-deeper/queues/#retries-and-backoff): it replaces the activity's chunks every time.
@@ -255,11 +255,11 @@ Do the same in `update` and `delete`. The job is safe to run twice, as [jobs sho
 Records that existed before you added the index, or every record after you change the embedding model, need a pass of their own. A command that queues one job per record does it, and the queue spreads the work over your workers:
 
 ```rust title="crates/crm-activities/src/commands/reindex.rs"
-use crm_core::entities::activity;
+use crm_core::models::Activity;
 use navree::kernel::{AppContext, BoxError, CommandSpec};
 use navree::db::Db;
+use navree::orm::Model as _;
 use navree::queue::Queue;
-use sea_orm::{EntityTrait, QuerySelect};
 
 /// `activities:reindex`: queues an index job for every activity.
 pub fn reindex() -> CommandSpec {
@@ -269,12 +269,7 @@ pub fn reindex() -> CommandSpec {
 async fn run(ctx: AppContext, _args: Vec<String>) -> Result<(), BoxError> {
     let db = ctx.get::<Db>().await?;
     let queue = ctx.get::<Queue>().await?;
-    let ids: Vec<uuid::Uuid> = activity::Entity::find()
-        .select_only()
-        .column(activity::Column::Id)
-        .into_tuple()
-        .all(db.conn())
-        .await?;
+    let ids: Vec<uuid::Uuid> = Activity::query().pluck(&db, Activity::ID).await?;
     for activity_id in &ids {
         queue.dispatch(super::IndexActivity { activity_id: *activity_id }).await?;
     }
@@ -299,16 +294,16 @@ A vector index doesn't know your access rules. Two patterns keep retrieval insid
 **Re-check the hits.** For questions across records, take the candidate ids from the index and load them through your access filter. Anything the user can't read drops out before the model sees it:
 
 ```rust
-use crm_core::{Activity, entities::activity};
-use navree::access::Accessible;
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+use crm_core::models::Activity;
+use navree::access::{Accessible, Read};
+use navree::orm::access::AccessibleQuery as _;
 
 let hits = notes.search(&question).limit(30).await?;
 let ids: Vec<Uuid> = hits.iter().filter_map(|m| m.metadata["activity_id"].as_str()?.parse().ok()).collect();
 
 let readable = Accessible::<Activity, Read>::new(access.ability.clone())
-    .apply(activity::Entity::find().filter(activity::Column::Id.is_in(ids)))
-    .all(&*uow.tx().await?)
+    .apply(Activity::query().where_key_in(ids))
+    .get(&uow)
     .await?;
 ```
 

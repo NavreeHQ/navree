@@ -51,7 +51,7 @@ struct ModuleContext {
     a_entity_title: String,
     /// `blog_posts`: the table and the permission prefix.
     table: String,
-    /// `BlogPosts`: the `DeriveIden` enum of the table.
+    /// `BlogPosts`: the table in `PascalCase`.
     table_iden: String,
     /// `m20261025_143005_create_blog_posts_table`.
     migration: String,
@@ -226,7 +226,7 @@ pub enum MakeKind {
     Controller,
     /// `services/<name>.rs`: `<Name>Service`, a provider of the module.
     Service,
-    /// `entities/<name>.rs`: a SeaORM entity for the `<names>` table.
+    /// `entities/<name>.rs`: an ORM model of the `<names>` table (a bare `make:model`).
     Entity,
     /// `migrations/m<timestamp>_<name>.rs`, added to the module's set.
     Migration,
@@ -333,7 +333,7 @@ impl MakeKind {
         let what = match self {
             MakeKind::Controller => "HTTP controllers",
             MakeKind::Service => "Services",
-            MakeKind::Entity => "Database entities",
+            MakeKind::Entity => "Database tables as ORM models",
             MakeKind::Migration => "Migrations",
             MakeKind::Job => "Queued jobs",
             MakeKind::Event => "Events",

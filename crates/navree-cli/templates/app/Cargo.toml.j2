@@ -10,9 +10,6 @@ chrono = { version = "0.4", features = ["serde"] }
 # garde's derive names `::garde`, so the app depends on it directly.
 garde = { version = "0.23", features = ["derive", "email"] }
 navree = {{ navree_dependency }}
-# SeaORM's derives name `::sea_orm`; the database drivers come with navree.
-# (Migrations are written with the schema builder, `navree::schema`.)
-sea-orm = { version = "2.0.4", default-features = false, features = ["macros", "with-chrono", "with-json", "with-uuid"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 uuid = { version = "1", features = ["serde", "v7"] }

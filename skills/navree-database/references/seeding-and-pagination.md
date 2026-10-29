@@ -5,17 +5,14 @@
 A seeder is a provider implementing `navree::db::Seeder`, registered with
 `m.seeder::<T>()` in the module's `wire`. `navree db:seed` runs every
 seeder (modules in dependency order); `navree db:seed demo-posts` runs the
-named ones; `navree migrate:fresh --seed` starts over. There is no
-`make:seeder`: write the file by hand.
+named ones; `navree migrate:fresh --seed` starts over. `navree make:seeder
+posts demo_posts` writes and registers one (`make:model --seeder` writes one
+that uses the model's factory).
 
 ```rust
-use chrono::Utc;
 use navree::BoxFuture;
 use navree::db::{Db, Seeder};
 use navree::prelude::*;
-use sea_orm::ActiveValue::Set;
-use sea_orm::{EntityTrait, PaginatorTrait};
-use uuid::Uuid;
 
 /// `db:seed demo-posts`: three posts, only into an empty table.
 #[injectable]
@@ -28,22 +25,14 @@ impl Seeder for PostSeeder {
 
     fn run<'a>(&'a self, _ctx: &'a AppContext, db: &'a Db) -> BoxFuture<'a, Result<(), BoxError>> {
         Box::pin(async move {
-            if post::Entity::find().count(db.conn()).await? > 0 {
+            if Post::query().exists(db).await? {
                 return Ok(()); // safe to run twice
             }
             db.transaction(|uow| async move {
                 for name in ["Hello", "Second", "Third"] {
-                    let now = Utc::now();
-                    Repo::<post::Entity>::insert(
+                    Post::create(
                         &uow,
-                        post::ActiveModel {
-                            id: Set(Uuid::now_v7()),
-                            owner_id: Set(None),
-                            name: Set(name.to_owned()),
-                            published: Set(true),
-                            created_at: Set(now),
-                            updated_at: Set(now),
-                        },
+                        Post { name: name.to_owned(), published: true, ..Post::default() },
                     )
                     .await?;
                 }
@@ -58,104 +47,97 @@ impl Seeder for PostSeeder {
 
 - Make seeders idempotent; separate what every environment needs (roles)
   from demo data, as two seeders.
-- Inserting through `Repo` in a unit of work records audit entries; plain
-  SeaORM through `db.conn()` doesn't.
+- Creating records through a unit of work (or `&db`, which joins one)
+  records change events for the audit log; mass writes (`insert` of many
+  rows) and raw statements don't.
 - Use services through `ctx.get::<T>()`: create users with
   `AuthService::create_user` so passwords are hashed properly.
 - In tests: `app.run_command("db:seed", &["demo-posts"]).await?`.
 
 ## Factory
 
+A model factory is a `navree::orm::factory::ModelFactory`, linked to its
+model with `#[model(factory = PostFactory)]` (the `navree-orm` skill has
+the whole API: states, sequences, relations, `make`, `create`):
+
 ```rust
-use chrono::Utc;
-use navree::db::Factory;
-use sea_orm::ActiveValue::Set;
-use uuid::Uuid;
+use navree::orm::factory::{FactoryContext, ModelFactory};
 
-/// Posts named `Post 0`, `Post 1`, ...
-pub struct PostFactory {
-    pub owner_id: Uuid,
-    pub published: bool,
-}
+/// Posts with fake names.
+#[derive(Default)]
+pub struct PostFactory;
 
-impl PostFactory {
-    pub fn new(owner_id: Uuid) -> Self {
-        Self { owner_id, published: false }
-    }
+impl ModelFactory for PostFactory {
+    type Model = Post;
 
-    pub fn published(self) -> Self {
-        Self { published: true, ..self }
-    }
-}
-
-impl Factory for PostFactory {
-    type Entity = post::Entity;
-
-    fn definition(&self, n: usize) -> post::ActiveModel {
-        let now = Utc::now();
-        post::ActiveModel {
-            id: Set(Uuid::now_v7()),
-            owner_id: Set(Some(self.owner_id)),
-            name: Set(format!("Post {n}")),
-            published: Set(self.published),
-            created_at: Set(now),
-            updated_at: Set(now),
+    fn definition(&self, ctx: &mut FactoryContext<'_, Post>) -> Post {
+        Post {
+            name: ctx.fake().title(),
+            ..Post::default()
         }
     }
 }
+
+impl PostFactory {
+    /// A state: `Post::factory().state(PostFactory::published)`.
+    pub fn published(post: &mut Post) {
+        post.published = true;
+    }
+}
 ```
 
 ```rust
-use navree::db::{create, create_many};
-
 let db = app.get::<Db>().await;
-let first = create(&PostFactory::new(owner), db.conn()).await?;              // definition 0
-let posts = create_many(&PostFactory::new(owner).published(), db.conn(), 10).await?; // 0..10
+let first = Post::factory().create_one(&*db).await?;
+let posts = Post::factory().state(PostFactory::published).count(10).create(&*db).await?;
 ```
 
-`n` restarts at 0 for every call, so values derived only from `n` repeat
-across calls; use `Uuid::now_v7()` for unique columns. Factories insert with
-plain SeaORM: no change events, no service rules. In the prelude the trait
-is `ModelFactory` (`Factory` there is the kernel's provider factory).
+Unique columns take `ctx.fake().unique(|f| f.word())` or `Uuid::now_v7()`.
+`navree make:factory posts post` writes the file; `navree make:model posts
+Post --factory` links one to a new model. In the prelude the trait is
+`ModelFactory` (`Factory` there is the kernel's provider factory).
 
 ## Offset pagination
 
 ```rust
-use navree::db::{Page, PageQuery, paginate};
+use navree::db::{Page, PageQuery};
+use navree::orm::Record;
 
 #[get("/")]
 #[can(Read, Post)]
-async fn index(&self, uow: Uow, scope: Accessible<Post, Read>, page: PageQuery) -> Result<Page<Model>> {
-    let select = scope.apply(Entity::find().order_by_desc(Column::CreatedAt).order_by_desc(Column::Id));
-    Ok(paginate(select, &*uow.tx().await?, page).await?)
+async fn index(&self, uow: Uow, scope: Accessible<Post, Read>, page: PageQuery) -> Result<Page<Record<Post>>> {
+    Ok(scope.query().order_by_desc(Post::CREATED_AT).order_by_desc(Post::ID).paginate(&uow, page).await?)
 }
 ```
 
+(`scope.query()` comes from `navree::orm::access::AccessibleQuery`.)
 `GET /api/v1/posts?page=2&per_page=15` answers
 `{"data": [...], "meta": {"current_page": 2, "per_page": 15, "total": 31, "last_page": 3}}`.
-`page` defaults to 1, `per_page` to 15 and is capped at 100; a non-positive
-value is a 400. A page past the end is empty, not an error. Convert items
-with `page.map(PostResource::from)`; build a page from other rows with
-`Page::new(data, query, total)`. For your own limits, validate a query DTO
-and build `PageQuery::new(page, per_page)`.
+`page` defaults to 1, `per_page` to 15 (or the model's `per_page`) and is
+capped at 100; a non-positive value is a 400. A page past the end is empty,
+not an error. Convert items with `page.map(PostResource::from)`; build a
+page from other rows with `Page::new(data, query, total)`. For your own
+limits, validate a query DTO and build `PageQuery::new(page, per_page)`.
+`simple_paginate` skips the count and answers `has_more` instead.
 
 ## Cursor pagination
 
 ```rust
-use navree::db::{CursorPage, CursorQuery, cursor_paginate_desc};
+use navree::orm::{CursorPage, CursorRequest, Record};
 
 #[get("/feed")]
 #[can(Read, Post)]
-async fn feed(&self, uow: Uow, scope: Accessible<Post, Read>, cursor: CursorQuery) -> Result<CursorPage<Model>> {
-    let tx = uow.tx().await?;
-    Ok(cursor_paginate_desc(scope.apply(Entity::find()), Column::Id, &*tx, cursor).await?)
+async fn feed(&self, uow: Uow, scope: Accessible<Post, Read>, cursor: CursorRequest) -> Result<CursorPage<Record<Post>>> {
+    Ok(scope.query().latest().cursor_paginate(&uow, cursor).await?)
 }
 ```
 
 `?cursor=..&limit=..` (limit default 15, max 100); the answer is
-`{"data": [...], "next_cursor": "..."}` (`null` on the last page). The column
-must be a UUID (v7, so its order is creation order); don't order the query
-yourself. `cursor_paginate` gives oldest first.
+`{"data": [...], "next_cursor": "...", "prev_cursor": null}` (`null` when
+there is no such page). The cursor encodes the query's order columns and the
+last row's values, with the key appended as a tie-breaker, so any mix of
+directions works over non-`NULL` columns; a cursor that doesn't match the
+query is a 400.
 
 ## OpenAPI
 

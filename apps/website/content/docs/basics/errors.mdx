@@ -491,16 +491,16 @@ Navree's own modules register mappers the same way: navree-auth turns its errors
 
 ## Database errors
 
-`DatabaseModule` maps SeaORM's `DbErr`, so `?` on a query does the right thing:
+`DatabaseModule` maps the database's errors, so `?` on a query does the right thing. Both `OrmError` (what the model API returns) and navree-db's `DbError` convert to `AppError`:
 
-| `DbErr` | Response |
+| Error | Response |
 |---|---|
-| `RecordNotFound`, `RecordNotUpdated` | 404 `Not Found`, code `not_found` |
+| `ModelNotFound` (`find_or_fail`, `first_or_fail`, `sole`), a `DbError` of kind `NotFound` | 404 `Not Found`, code `not_found` |
 | a unique constraint violation | 409 `A record with the same unique value already exists.`, code `conflict` |
 | a foreign key constraint violation | 409 `The change conflicts with a related record.`, code `conflict` |
 | anything else | 500, code `internal_error` |
 
-No SQL text or driver message reaches the client. The mapping function is public as `navree::db::map_db_error`, so your own mapper can reuse it for an error type that wraps `DbErr`, and give the result a more specific code with `.with_code(...)`.
+No SQL text or driver message reaches the client. The mapping function is public as `navree::db::map_db_error`, which takes a `&DbError` and returns `Option<AppError>` (`None` for a 500), so your own mapper can reuse it for an error type that wraps `DbError`, and give the result a more specific code with `.with_code(...)`. To branch on a failure yourself, ask the error: `error.is_unique_violation()`, `is_foreign_key_violation()` and `is_not_found()` on an `OrmError`, or `ErrorKind` on a `DbError`.
 
 The [unit of work](/docs/database/unit-of-work/) rolls back whenever the response status is 400 or above, so a request that fails halfway leaves no partial writes.
 

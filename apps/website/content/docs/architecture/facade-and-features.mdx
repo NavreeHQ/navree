@@ -17,7 +17,7 @@ serde = { version = "1", features = ["derive"] }
 
 The crates aren't on crates.io yet, so the dependency comes from Git: `cargo add --git https://github.com/NavreeHQ/navree navree` adds it for you. An app created with `navree new` depends on a local checkout of Navree instead (a `path` dependency); see [where new apps get Navree from](/docs/getting-started/installation/#where-new-apps-get-navree-from).
 
-`main` needs nothing else: `AppBuilder::run` starts its own Tokio runtime. Add `tokio` when you write `#[tokio::test]` tests, and add `serde`, `sea-orm`, `garde` or `utoipa` directly when you use their derives, because derive macros name their own crate.
+`main` needs nothing else: `AppBuilder::run` starts its own Tokio runtime. Add `tokio` when you write `#[tokio::test]` tests, and add `serde`, `garde` or `utoipa` directly when you use their derives, because derive macros name their own crate.
 
 Then one import brings the usual names into scope:
 
@@ -129,7 +129,7 @@ The facade's root also has:
 | Kernel | `Navree`, `AppBuilder`, `AppContext`, `Module`, `ModuleBuilder`, `Injectable`, `Factory`, `Lazy`, `Resolver`, `BoxError` |
 | Config | `ConfigModule`, `ConfigSources` |
 | HTTP | `Result`, `AppError`, `Json`, `Created`, `NoContent`, `Scoped`, `Path`, `Query`, `HttpModule` |
-| Database | `DatabaseModule`, `Uow`, `Repo`, `Page`, `PageQuery`, `MigrationSet`, `ModelFactory` |
+| Database | `DatabaseModule`, `Uow`, `Page`, `PageQuery`, `MigrationSet`, `Model`, `Record` |
 | Validation | `Valid`, `ValidAsync`, `ValidationModule` |
 | Authentication | `AuthModule`, `AuthService`, `CurrentUser` |
 | MCP (with `mcp`) | `McpModule` (and `m.mcp_server::<S>()`) |
@@ -161,7 +161,7 @@ It also imports every `ModuleBuilder` extension trait anonymously (`as _`), so m
 Three details to know:
 
 - **`Result` is Navree's.** With `http`, the prelude's `Result<T>` is `navree::Result<T>`, whose error type defaults to `AppError`, and it shadows the standard prelude's `Result`. Name the error type when it isn't an `AppError`: `fn main() -> Result<(), BoxError>`.
-- **Two factories.** `Factory` is the kernel's provider factory. navree-db's model factory trait (for test data) is renamed `ModelFactory` in the prelude.
+- **Two factories.** `Factory` is the kernel's provider factory. The ORM's model factories (for test data) are in `navree::orm::factory`, not in the prelude.
 - **Test helpers aren't in the prelude.** Import them from `navree::testing`.
 
 ## Cargo features

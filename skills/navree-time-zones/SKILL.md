@@ -65,10 +65,10 @@ async fn signups(
     uow: Uow,
 ) -> Result<WithZone<SignupReport>> {
     let (from, to) = range.utc_bounds(&zone);       // [start of from, end of to)
-    let signups = signup::Entity::find()
-        .filter(signup::Column::CreatedAt.gte(from))
-        .filter(signup::Column::CreatedAt.lt(to))
-        .count(&*uow.tx().await?)
+    let signups = Signup::query()
+        .where_(Signup::CREATED_AT.gte(from))
+        .where_(Signup::CREATED_AT.lt(to))
+        .count(&uow)
         .await?;
     Ok(WithZone::new(&zone, SignupReport { from, to, signups }))   // adds "timeZone"
 }

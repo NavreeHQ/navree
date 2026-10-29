@@ -44,7 +44,7 @@ pub enum Command {
     /// Generate a service in a module (services/NAME.rs).
     #[command(name = "make:service")]
     MakeService(MakeArgs),
-    /// Generate a database entity in a module (entities/NAME.rs).
+    /// Generate a bare ORM model in a module (entities/NAME.rs); `make:model` adds the companions.
     #[command(name = "make:entity")]
     MakeEntity(MakeArgs),
     /// Generate a migration in a module (create_TABLE_table creates the table).

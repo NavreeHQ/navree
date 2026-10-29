@@ -26,7 +26,7 @@ conventions, and says which skill to load for each task.
 | [`navree-errors-and-responses`](navree-errors-and-responses/SKILL.md) | Return errors in Navree's JSON shape, map error types, shape responses |
 | [`navree-orm`](navree-orm/SKILL.md) | Models, queries, relationships and eager loading, scopes, soft deletes, casts, events, factories, model tests, route model binding |
 | [`navree-migrations`](navree-migrations/SKILL.md) | Migrations with the schema builder: tables, columns, indexes, foreign keys, running, rolling back and squashing them |
-| [`navree-database`](navree-database/SKILL.md) | Database configuration, the unit of work, transactions in jobs, SeaORM entities and `Repo`, seeders, pagination, TimescaleDB |
+| [`navree-database`](navree-database/SKILL.md) | Database configuration, the unit of work, transactions in jobs, raw statements, seeders, pagination, TimescaleDB |
 | [`navree-auth`](navree-auth/SKILL.md) | JWT sign-in, refresh tokens, the current user, account flows, two-factor, sessions and step-up, impersonation, passwordless and passkeys, platform sign-in, token exchange |
 | [`navree-access-control`](navree-access-control/SKILL.md) | Roles, permissions, abilities, record checks and SQL list filters |
 | [`navree-queues-and-scheduling`](navree-queues-and-scheduling/SKILL.md) | Jobs, workers, retries, failed jobs, batches, operations with progress, and cron-style schedules |

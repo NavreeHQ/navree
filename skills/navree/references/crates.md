@@ -1,7 +1,7 @@
 # The navree facade: modules, crates and sections
 
-An app depends on the `navree` crate alone (plus `serde`, `garde` and
-`sea-orm` for their derives, and `chrono` and `uuid`). Its default `full`
+An app depends on the `navree` crate alone (plus `serde` and `garde`
+for their derives, and `chrono` and `uuid`). Its default `full`
 feature turns every module on; each module is also its own feature.
 `postgres` adds the PostgreSQL driver and `mysql` the MySQL and MariaDB
 driver; SQLite is the default and is compiled in. `mongo` (opt-in) adds
@@ -20,7 +20,7 @@ MongoDB.
 | `navree::cache` | navree-cache | `cache` | `CacheModule::from_config()` | `cache` | `Cache`, `Locks` |
 | `navree::http_client` | navree-http-client | `http-client` | `HttpClientModule::from_config()` | `http_client` | `HttpClient`, `HttpClient::fake()` |
 | `navree::schema` | navree-schema | `schema` | (used by migrations) | `schema` | `Schema`, `Blueprint`, `Migration`, `migration!`, `Target`, `Dialect` |
-| `navree::db` | navree-db | `db` | `DatabaseModule::from_config()` | `database` | `Db`, `Uow`, `Repo`, `MigrationSet`, `Migrator`, `Seeder`, `Factory`, `paginate`, `Page`, `PageQuery` |
+| `navree::db` | navree-db | `db` | `DatabaseModule::from_config()` | `database` | `Db`, `Uow`, `Executor`, `Statement`, `MigrationSet`, `Migrator`, `Seeder`, `Page`, `PageQuery` |
 | `navree::orm` | navree-orm | `orm` | `OrmModule::from_config()` | `orm` | `#[derive(Model)]`, `Record`, `Collection`, `Builder`, `#[relations]`, `#[scopes]`, `binding::Bound`, `factory::ModelFactory`, `testing` |
 | `navree::mongo` | navree-mongo | `mongo` (opt-in, not in `full`) | `MongoModule::from_config()` | `database.mongodb` | `MongoDb`, models with `driver = "mongodb"`, collections and their migrations |
 | `navree::testing` | navree-testing | `testing` | | | `TestApp`, `TestClient`, `principal`, `temp_sqlite_url` |

@@ -120,15 +120,15 @@ async fn update(
 }
 ```
 
-`from` must name a parameter of the route's path (the controller prefix counts); otherwise it's a compile error. For the record to load, the entity's module imports `AccessModule::for_feature::<Deal>()`; see [modules](/docs/architecture/modules/#feature-registrations-with-for_feature).
+`from` must name a parameter of the route's path (the controller prefix counts); otherwise it's a compile error. For the record to load, the model's module imports `AccessModule::for_feature::<Deal>()`; see [modules](/docs/architecture/modules/#feature-registrations-with-for_feature).
 
 The action and the subject can be marker types or strings:
 
 - **Actions:** the markers `Read`, `Create`, `Update`, `Delete` and `Manage` from the prelude, your own types implementing `ActionMarker`, or a string such as `"archive"`.
-- **Subjects:** a type implementing `Subject` (a SeaORM entity or any other type), or a string.
+- **Subjects:** a type implementing `Subject` (an ORM model declared `#[model(subject)]`, or any other type), or a string.
 
 ```rust
-/// A subject that isn't a database entity.
+/// A subject that isn't a database model.
 pub struct Report;
 
 impl Subject for Report {

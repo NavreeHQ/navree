@@ -135,7 +135,7 @@ This is what happens when a rep moves a deal to `won`:
 <Steps>
 <Step title="The request writes the change">
 
-`DealService::move_to` updates the deal through `Repo`, which records the change for the audit observer. The unit of work opened its transaction the first time the service used the database.
+`DealService::move_to` saves the deal's record, which records the change for the audit observer. The unit of work opened its transaction the first time the service used the database.
 
 </Step>
 <Step title="The service emits DealWon">

@@ -4,7 +4,9 @@ use garde::Validate;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::entity::Model;
+use navree::orm::Record;
+
+use super::entity::Profile;
 
 /// The time zone of users who have not chosen one.
 pub const DEFAULT_TIMEZONE: &str = "UTC";
@@ -39,12 +41,12 @@ impl ProfileResponse {
     }
 }
 
-impl From<Model> for ProfileResponse {
-    fn from(profile: Model) -> Self {
+impl From<Record<Profile>> for ProfileResponse {
+    fn from(profile: Record<Profile>) -> Self {
         Self {
             user_id: profile.user_id,
-            bio: profile.bio,
-            timezone: profile.timezone,
+            bio: profile.bio.clone(),
+            timezone: profile.timezone.clone(),
         }
     }
 }

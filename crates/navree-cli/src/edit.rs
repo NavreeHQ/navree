@@ -153,7 +153,7 @@ fn indent_of(line: &str) -> String {
 /// the last `.migration(` line (splitting a chain rustfmt joined into one
 /// line), or after `MigrationSet::new(..)` when the set is empty.
 /// `Unchanged` when `stem` is already in the set (as a schema migration or
-/// a SeaORM `<stem>::Migration`); `None` when the file builds no set.
+/// a legacy `<stem>::Migration`); `None` when the file builds no set.
 pub fn add_migration(src: &str, stem: &str) -> Option<Edit> {
     const CALL: &str = ".migration(";
     let imported = src
@@ -343,7 +343,7 @@ mod tests {
     }
 
     #[test]
-    fn a_set_of_seaorm_migrations_gets_the_macro_by_its_path() {
+    fn a_set_of_legacy_migrations_gets_the_macro_by_its_path() {
         let src = "pub fn migrations() -> MigrationSet {\n    MigrationSet::new(\"posts\").migration(a::Migration)\n}\n";
         assert_eq!(
             add_migration(src, "b"),
@@ -356,7 +356,7 @@ mod tests {
         assert_eq!(
             add_migration(src, "a"),
             Some(Edit::Unchanged),
-            "a SeaORM migration of that name is there"
+            "a legacy migration of that name is there"
         );
     }
 

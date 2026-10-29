@@ -49,8 +49,8 @@ struct ContactRow {
 #[get("/export.csv")]
 #[permissions("contacts.export")]
 async fn export_csv(&self) -> Result<Download> {
-    let contacts = contact::Entity::find().order_by_asc(contact::Column::Email).all(self.db.conn()).await?;
-    Ok(self.exports.csv("contacts", contacts.into_iter().map(ContactRow::from)))
+    let contacts = Contact::query().order_by(Contact::EMAIL).get(&*self.db).await?;
+    Ok(self.exports.csv("contacts", contacts.iter().map(|contact| ContactRow::from(&**contact))))
 }
 ```
 
@@ -129,7 +129,7 @@ impl Import for ContactsImport {
     }
 
     async fn insert(&self, _ctx: &ImportContext, uow: &Uow, row: ContactInput) -> Result<(), BoxError> {
-        // Save through `uow` (Repo::<contact::Entity>::insert(uow, ..)).
+        // Save through `uow` (Contact::create(uow, ..)).
         // Err(RowRejected::new("reason").into()) refuses this row with a message.
     }
 

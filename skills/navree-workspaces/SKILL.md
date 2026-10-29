@@ -231,8 +231,8 @@ isolation = "schema"   # PostgreSQL only: schema workspace_<id>, search_path per
 ```
 
 - Tenant tables come from `m.workspace_migrations(MigrationSet::new("notes").migration(SchemaMigration::new("m..._create_notes", CreateNotes)))`,
-  not `m.migrations`; they must be navree-schema migrations (the
-  per-workspace runner refuses SeaORM ones). Schema: run when the workspace is created; database:
+  not `m.migrations`; they are navree-schema migrations like every other.
+  Schema: run when the workspace is created; database:
   on first open per process; both: `navree workspace:migrate [slug...]`.
 - Handlers use `WorkspaceUow` (derefs to `Uow`, a navree-orm executor): the request's unit of work
   for row/schema, a unit of work on the workspace's database for database
@@ -374,9 +374,8 @@ LibraryRepo::<Template>::clone_to(&uow, ws_item, LibraryOwner::Organization(org)
 LibraryRepo::<Template>::seed_global(db, "slug", items).await?;          // seeders: create/update global rows by a unique column
 ```
 
-- Helm: derive `DeriveEntityModel` + `navree::orm::Model` on one struct
-  (`LibraryScope` is a SeaORM active enum too); `Resource::query` filters
-  `Column::Scope.eq(LibraryScope::Global)`, `create` calls
+- Helm: the library model derives `navree::orm::Model`; `Resource::query`
+  filters `Template::SCOPE.eq(LibraryScope::Global)`, `create` calls
   `LibraryRepo::create(ctx.uow(), LibraryOwner::Global, ..)`.
 
 ## Steps: give the app a demo workspace
@@ -481,11 +480,8 @@ app.isolation_suite::<DealsModule>()
 Classify every model (`m.workspace_scoped::<M>()`,
 `m.workspace_entity::<M>()` or `m.global_entity::<M>()`; a
 `#[model(workspace)]` model scopes its own queries) and run
-`navree check`: `workspace.entities` and `workspace.repo` scan the source
-of SeaORM entities an app still has (their registrations are
-`m.sea_workspace_entity::<E>()` / `m.sea_global_entity::<E>()`, and the repo
-is `sea_compat::WorkspaceRepo`), and `workspace.tables` checks the workspace
-column, its index and RLS of every classified table.
+`navree check`: `workspace.tables` checks the workspace column, its index
+and RLS of every classified table.
 
 Read invitation tokens from `app.get::<Mailer>().await.array_transport().unwrap().sent()`
 (config `mail.transport = "array"`); move time with
@@ -531,12 +527,6 @@ Read invitation tokens from `app.get::<Mailer>().await.array_transport().unwrap(
   `library_read_only` (clone it), another workspace's item a 404; writing
   for another owner there needs `unguarded(..)` plus your own permission
   check.
-- An app's remaining SeaORM entities keep working through
-  `navree::workspace::sea_compat::{WorkspaceScoped, WorkspaceRepo,
-  ModuleBuilderSeaWorkspaceExt}` (`sea_workspace_scoped`,
-  `sea_workspace_entity`, `sea_global_entity`), the forms the `workspace.*`
-  conformity checks name. It has no partition or organization forms. It is
-  removed in step 8 of the data-layer move; write new code with models.
 
 Docs: `/docs/workspaces/introduction/`, `/docs/workspaces/resolution/`,
 `/docs/workspaces/members-and-roles/`, `/docs/workspaces/invitations/`,
