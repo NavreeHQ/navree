@@ -4,13 +4,13 @@
 use std::sync::Arc;
 
 use chrono::Utc;
-use navree_auth::{AuthService, JwtService, TokenType, user};
+use navree_auth::{AuthService, JwtService, TokenType, User};
 use navree_contracts::AuditSink;
 use navree_db::Db;
 use navree_events::{EventBus, EventsModule};
 use navree_social::{Social, SocialUser, social_account};
 use navree_testing::TestApp;
-use sea_orm::{ActiveModelTrait, EntityTrait, Set, Unchanged};
+use navree_orm::Model as _;
 use serde_json::{Value, json};
 
 use crate::support::{
@@ -27,12 +27,16 @@ fn github(id: &str, email: Option<&str>, verified: bool) -> SocialUser {
 
 async fn accounts(app: &TestApp) -> Vec<social_account::Model> {
     let db = app.get::<Db>().await;
-    social_account::Entity::find().all(db.conn()).await.unwrap()
+    social_account::Model::query()
+        .get(&*db)
+        .await
+        .unwrap()
+        .into_models()
 }
 
 async fn users(app: &TestApp) -> Vec<navree_auth::User> {
     let db = app.get::<Db>().await;
-    user::Entity::find().all(db.conn()).await.unwrap()
+    User::query().get(&*db).await.unwrap().into_models()
 }
 
 async fn login(app: &TestApp, email: &str) -> u16 {
@@ -287,14 +291,11 @@ async fn allowed_email_domains_limit_sign_ins() {
 
 async fn turn_on_two_factor(app: &TestApp, id: uuid::Uuid) {
     let db = app.get::<Db>().await;
-    user::ActiveModel {
-        id: Unchanged(id),
-        two_factor_confirmed_at: Set(Some(Utc::now())),
-        ..Default::default()
-    }
-    .update(db.conn())
-    .await
-    .unwrap();
+    User::query()
+        .where_key(id)
+        .update(&*db, [User::TWO_FACTOR_CONFIRMED_AT.set(Some(Utc::now()))])
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
@@ -606,10 +607,7 @@ async fn deleting_a_user_deletes_their_accounts() {
         .json_value();
     let id: uuid::Uuid = serde_json::from_value(body["user"]["id"].clone()).unwrap();
     let db = app.get::<Db>().await;
-    user::Entity::delete_by_id(id)
-        .exec(db.conn())
-        .await
-        .unwrap();
+    User::query().where_key(id).delete(&*db).await.unwrap();
     assert!(accounts(&app).await.is_empty());
 }
 

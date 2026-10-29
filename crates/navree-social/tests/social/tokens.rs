@@ -10,18 +10,19 @@ use navree_crypto::Encrypter;
 use navree_db::Db;
 use navree_social::{ProviderToken, Social, SocialError, SocialUser, social_account};
 use navree_testing::{FixedClock, TestApp};
-use sea_orm::EntityTrait;
+use navree_orm::Model as _;
 use uuid::Uuid;
 
 use crate::support::{fake_app, sign_in};
 
 async fn account(app: &TestApp) -> social_account::Model {
     let db = app.get::<Db>().await;
-    social_account::Entity::find()
-        .one(db.conn())
+    social_account::Model::query()
+        .first(&*db)
         .await
         .unwrap()
         .expect("an account")
+        .into_inner()
 }
 
 fn user_id(body: &serde_json::Value) -> Uuid {
