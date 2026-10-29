@@ -6,7 +6,7 @@ use std::sync::Arc;
 use chrono::Utc;
 use navree_db::{Db, Uow};
 use navree_kernel::BoxFuture;
-use navree_orm::{Executor, Model as _, OrmError, table};
+use navree_orm::{Executor, Model as _, table};
 use uuid::Uuid;
 
 use super::FlagStore;
@@ -167,8 +167,8 @@ async fn override_counts_in<E: Executor + ?Sized>(
         .await?;
     let mut counts = BTreeMap::new();
     for row in rows {
-        let flag: String = row.get("flag").map_err(OrmError::from)?;
-        let count: i64 = row.get("count").map_err(OrmError::from)?;
+        let flag: String = row.get("flag")?;
+        let count: i64 = row.get("count")?;
         counts.insert(flag, u64::try_from(count).unwrap_or(0));
     }
     Ok(counts)
