@@ -96,7 +96,9 @@ navree dev                     # API on :8080, web app on :3000
   with a fresh `navree new acme-latest --kit saas` to adopt template fixes.
 - Read the generated `AGENTS.md` before changing a kit app: it lists the
   layout, the commands and the conventions (workspace-scoped features copy
-  `src/modules/projects/`; micro handlers copy
+  `src/modules/projects/`, whose `entity.rs` is a navree-orm model declared
+  `#[model(workspace, subject)]` with a schema-builder migration, read and
+  written through `WorkspaceRepo`; micro handlers copy
   `crates/<service>/src/modules/invoices/handlers.rs`).
 
 ## 3. Start the database, set the application key and run

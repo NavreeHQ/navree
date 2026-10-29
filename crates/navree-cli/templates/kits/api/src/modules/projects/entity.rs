@@ -1,19 +1,19 @@
-//! The `projects` table: one row per project, owned by a workspace
-//! (`workspace_id`; row isolation, enforced by PostgreSQL row-level
-//! security).
+//! The `projects` table as an ORM model: one row per project, owned by a
+//! workspace (`workspace_id`; row isolation, enforced by the model's
+//! workspace scope and by PostgreSQL row-level security).
 
-use navree::access::Subject;
-// COMPAT (data-layer port): the SeaORM forms of the workspace repositories.
-use navree::workspace::sea_compat::WorkspaceScoped;
-use sea_orm::entity::prelude::*;
+use chrono::{DateTime, Utc};
+use navree::prelude::*;
 use serde::Serialize;
+use uuid::Uuid;
 
-/// A project.
-#[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
-#[sea_orm(table_name = "projects")]
-pub struct Model {
-    /// The id (UUID v7).
-    #[sea_orm(primary_key, auto_increment = false)]
+/// A project. Query it with `Project::query()` (the current workspace's
+/// rows) or `WorkspaceRepo::<Project>::query(workspace)`; the model is the
+/// access subject `Project`, with permissions `projects.<action>`.
+#[derive(Model, Clone, Debug, Default, PartialEq, Eq, Serialize)]
+#[model(table = "projects", timestamps, workspace, subject)]
+pub struct Project {
+    /// The id (UUID v7, generated when the project is created).
     pub id: Uuid,
     /// The workspace it belongs to.
     pub workspace_id: Uuid,
@@ -25,23 +25,11 @@ pub struct Model {
     pub status: String,
     /// The user who created it.
     pub created_by: Uuid,
-    pub created_at: DateTimeUtc,
-    pub updated_at: DateTimeUtc,
-}
-
-#[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-pub enum Relation {}
-
-impl ActiveModelBehavior for ActiveModel {}
-
-/// The access subject `Project`; permissions `projects.<action>`.
-impl Subject for Entity {
-    const SUBJECT: &'static str = "Project";
-    const PERMISSION_PREFIX: &'static str = "projects";
+    /// When it was created.
+    pub created_at: DateTime<Utc>,
+    /// When it last changed.
+    pub updated_at: DateTime<Utc>,
 }
 
 /// Every query through `WorkspaceRepo` is filtered by `workspace_id`.
-impl WorkspaceScoped for Entity {}
-
-/// The entity, named after its subject for `#[can(Read, Project)]`.
-pub type Project = Entity;
+impl WorkspaceScoped for Project {}
