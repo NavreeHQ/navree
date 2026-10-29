@@ -19,7 +19,7 @@ For work bigger than one job, the same module runs [batches](/docs/digging-deepe
 
 <Callout type="note" title="Drivers">
 
-Every driver implements the public `QueueStore` trait, so other backends can be added without changes to your jobs (see [writing a driver](#writing-a-driver)). The database driver reserves jobs on PostgreSQL with `FOR UPDATE SKIP LOCKED`. The queue's test suites, batches and operations included, run on SQLite, and on PostgreSQL with `cargo test -p navree-queue --features postgres` and `NAVREE_TEST_POSTGRES_URL` set (see [what has been run on PostgreSQL](/docs/database/getting-started/#postgresql)).
+Every driver implements the public `QueueStore` trait, so other backends can be added without changes to your jobs (see [writing a driver](#writing-a-driver)). The database driver reserves jobs on PostgreSQL with `FOR UPDATE SKIP LOCKED`, and on MySQL with a short transaction that locks the next job with `SELECT … FOR UPDATE SKIP LOCKED`. The queue's test suites, batches and operations included, run on SQLite, on PostgreSQL with `NAVREE_TEST_DATABASE=postgres cargo test -p navree-queue --features postgres` and `NAVREE_TEST_POSTGRES_URL` set (see [what has been run on PostgreSQL](/docs/database/getting-started/#postgresql)), and on MySQL with `NAVREE_TEST_DATABASE=mysql`, `--features mysql` and `NAVREE_TEST_MYSQL_URL`; `NAVREE_TEST_NATIVE_UNITS_OF_WORK=1` runs them with `database.native_units_of_work` on.
 
 </Callout>
 
@@ -73,7 +73,7 @@ Navree::app().module(QueueModule::for_root(QueueOptions {
 
 ### The database driver
 
-The module contributes a migration set named `queue` that creates `jobs` and `failed_jobs` (plus `job_batches` and `operations`, for [batches and operations](/docs/digging-deeper/batches-and-operations/#tables)); `migrate` runs it with your app's [migrations](/docs/database/migrations/). Workers reserve jobs atomically, so any number of worker processes, on any number of servers, can share one database. On SQLite a reservation is an `UPDATE … WHERE id = (SELECT … LIMIT 1) RETURNING …`; PostgreSQL adds `FOR UPDATE SKIP LOCKED`.
+The module contributes a migration set named `queue` that creates `jobs` and `failed_jobs` (plus `job_batches` and `operations`, for [batches and operations](/docs/digging-deeper/batches-and-operations/#tables)); `migrate` runs it with your app's [migrations](/docs/database/migrations/). Workers reserve jobs atomically, so any number of worker processes, on any number of servers, can share one database. On SQLite a reservation is an `UPDATE … WHERE id = (SELECT … LIMIT 1) RETURNING …`; PostgreSQL adds `FOR UPDATE SKIP LOCKED`; MySQL, which cannot return the rows of an `UPDATE`, locks the candidate with `SELECT … FOR UPDATE SKIP LOCKED`, updates it and reads it back in one transaction.
 
 ### The memory driver
 
@@ -171,8 +171,7 @@ A job doesn't run inside a unit of work. When it writes to the database, open a 
 ```rust
 let db = ctx.app.get::<Db>().await?;
 db.transaction(|uow| async move {
-    let tx = uow.tx().await?;
-    // ... write through `&*tx`
+    // ... write through `&uow` (models, statements)
     Ok(())
 })
 .await?;

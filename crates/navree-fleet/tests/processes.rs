@@ -14,10 +14,13 @@ use navree_db::DatabaseModule;
 use navree_fleet::{Fleet, FleetModule, Master, MasterSettings, ProcessSpawner};
 use navree_kernel::{AppBuilder, Module, ModuleBuilder, Navree};
 use navree_queue::{Queue, QueueModule};
-use navree_testing::{TestApp, temp_sqlite_url};
+use navree_testing::TestApp;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio_util::sync::CancellationToken;
+
+#[path = "fleet/database.rs"]
+mod database;
 
 /// Takes 20 ms; on queue `default`.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -87,10 +90,12 @@ where
 }
 
 async fn a_master_supervises_real_worker_processes() {
-    let (url, _guard) = temp_sqlite_url();
+    let (url, _guard) = database::scratch();
+    let native = database::native_units_of_work();
     let app = TestApp::builder()
         .config("database.url", url.clone())
         .config("database.migrate_on_boot", true)
+        .config("database.native_units_of_work", native)
         .config("queue.poll_interval_ms", 20)
         .config("fleet.dashboard", false)
         .config(
@@ -112,6 +117,7 @@ async fn a_master_supervises_real_worker_processes() {
     let spawner = ProcessSpawner::current_exe()
         .unwrap()
         .env("APP_DATABASE__URL", &url)
+        .env("APP_DATABASE__NATIVE_UNITS_OF_WORK", native.to_string())
         .env("APP_QUEUE__POLL_INTERVAL_MS", "20")
         .env("APP_FLEET__DASHBOARD", "false");
     let master = Master::new(fleet.clone())
