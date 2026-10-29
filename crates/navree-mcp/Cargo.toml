@@ -49,6 +49,8 @@ uuid = { workspace = true }
 [dev-dependencies]
 navree-crypto = { workspace = true }
 navree-macros = { workspace = true }
+# The tests' `deals` table is a model and an access subject.
+navree-orm = { workspace = true, features = ["access"] }
 tempfile = { workspace = true }
 tracing-subscriber = { workspace = true }
 trybuild = { workspace = true }

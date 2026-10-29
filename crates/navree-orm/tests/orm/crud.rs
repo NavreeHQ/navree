@@ -1,7 +1,7 @@
 //! Creating, saving, deleting, refreshing, replicating, touching and
 //! incrementing records.
 
-use navree_db::sea_orm::ConnectionTrait;
+use navree_db::Executor as _;
 use navree_orm::{Model, OrmError, Record, Ulid};
 use uuid::Uuid;
 
@@ -116,8 +116,8 @@ async fn save_updates_only_the_dirty_columns() {
     let t = sqlite().await;
     let mut acme = Company::create(&t.db, company("Acme")).await.unwrap();
     // Someone else changes another column meanwhile.
-    t.db.conn()
-        .execute_unprepared("UPDATE companies SET employees = 50 WHERE id = 1")
+    t.db.pool()
+        .execute_script("UPDATE companies SET employees = 50 WHERE id = 1")
         .await
         .unwrap();
     acme.name = "Acme Corp".into();
@@ -173,8 +173,8 @@ async fn delete_removes_the_row_and_destroy_deletes_by_key() {
 async fn refresh_and_fresh_reload_from_the_database() {
     let t = sqlite().await;
     let mut acme = Company::create(&t.db, company("Acme")).await.unwrap();
-    t.db.conn()
-        .execute_unprepared("UPDATE companies SET name = 'Renamed' WHERE id = 1")
+    t.db.pool()
+        .execute_script("UPDATE companies SET name = 'Renamed' WHERE id = 1")
         .await
         .unwrap();
     let fresh = acme.fresh(&t.db).await.unwrap().unwrap();
@@ -186,8 +186,8 @@ async fn refresh_and_fresh_reload_from_the_database() {
     assert_eq!(acme.name, "Renamed");
     assert!(acme.is_clean());
 
-    t.db.conn()
-        .execute_unprepared("DELETE FROM companies")
+    t.db.pool()
+        .execute_script("DELETE FROM companies")
         .await
         .unwrap();
     assert!(acme.fresh(&t.db).await.unwrap().is_none());
@@ -227,8 +227,8 @@ async fn replicate_copies_the_columns_without_key_and_timestamps() {
 async fn increment_and_decrement_change_the_row_and_the_record() {
     let t = sqlite().await;
     let mut acme = Company::create(&t.db, company("Acme")).await.unwrap();
-    t.db.conn()
-        .execute_unprepared("UPDATE companies SET employees = 10 WHERE id = 1")
+    t.db.pool()
+        .execute_script("UPDATE companies SET employees = 10 WHERE id = 1")
         .await
         .unwrap();
     // The record holds 0, the row 10: the database does the arithmetic.

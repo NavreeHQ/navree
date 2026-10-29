@@ -7,7 +7,7 @@
 use std::collections::BTreeSet;
 
 use chrono::{DateTime, FixedOffset, NaiveDate, TimeZone, Utc};
-use navree_db::sea_orm::ConnectionTrait;
+use navree_db::Executor as _;
 use navree_orm::attributes::ExtraCast;
 use navree_orm::cast::{Cast, CastError, Castable, InboundCast, MultiColumnCast};
 use navree_orm::{Decimal, Model, OrmError, Record, Ulid, attrs};
@@ -524,8 +524,8 @@ async fn fields_across_columns_track_each_column() {
         Some(navree_orm::Value::from("GBP"))
     );
 
-    t.db.conn()
-        .execute_unprepared("UPDATE ledgers SET tip_cents = 5, tip_currency = NULL")
+    t.db.pool()
+        .execute_script("UPDATE ledgers SET tip_cents = 5, tip_currency = NULL")
         .await
         .unwrap();
     let error = Ledger::find_or_fail(&t.db, record.id).await.unwrap_err();
@@ -691,8 +691,8 @@ async fn untyped_input_reaches_every_cast_in_its_plain_form() {
 async fn stored_values_that_do_not_fit_are_cast_errors_naming_the_column() {
     let t = sqlite(SCHEMA).await;
     Ledger::create(&t.db, ledger()).await.unwrap();
-    t.db.conn()
-        .execute_unprepared("UPDATE ledgers SET reference = x'0102'")
+    t.db.pool()
+        .execute_script("UPDATE ledgers SET reference = x'0102'")
         .await
         .unwrap();
     let error = Ledger::query().first(&t.db).await.unwrap_err();
@@ -700,8 +700,8 @@ async fn stored_values_that_do_not_fit_are_cast_errors_naming_the_column() {
         error.to_string(),
         "cannot cast column `reference` of Ledger: 2 bytes are not a binary UUID (16 bytes)"
     );
-    t.db.conn()
-        .execute_unprepared("UPDATE ledgers SET reference = x'00000000000000000000000000000000', opened_at = 'soon'")
+    t.db.pool()
+        .execute_script("UPDATE ledgers SET reference = x'00000000000000000000000000000000', opened_at = 'soon'")
         .await
         .unwrap();
     let error = Ledger::query().first(&t.db).await.unwrap_err();
@@ -714,8 +714,8 @@ async fn stored_values_that_do_not_fit_are_cast_errors_naming_the_column() {
 
     // Decimals that do not parse are errors naming the column, stored or
     // given.
-    t.db.conn()
-        .execute_unprepared("UPDATE ledgers SET opened_at = '27/10/2026 08:30', balance = 'lots'")
+    t.db.pool()
+        .execute_script("UPDATE ledgers SET opened_at = '27/10/2026 08:30', balance = 'lots'")
         .await
         .unwrap();
     let error = Ledger::query().first(&t.db).await.unwrap_err();

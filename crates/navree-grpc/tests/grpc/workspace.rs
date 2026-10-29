@@ -3,7 +3,8 @@
 //! answers with the status of the same meaning.
 
 use navree_access::{AccessModule, AccessOptions};
-use navree_db::{DatabaseModule, Db, MigrationSet, ModuleBuilderDbExt};
+use navree_db::navree_schema::{Migration, Schema, SchemaMigration, SchemaResult};
+use navree_db::{DatabaseModule, Db, Executor as _, MigrationSet, ModuleBuilderDbExt, Statement};
 use navree_events::EventsModule;
 use navree_grpc::testing::TestChannel;
 use navree_grpc::{Code, GrpcModule, ModuleBuilderGrpcExt, Request, Response, grpc_service};
@@ -14,10 +15,6 @@ use navree_mail::{MailModule, MailOptions, TransportConfig};
 use navree_testing::{TestApp, principal};
 use navree_view::{ViewModule, ViewOptions};
 use navree_workspace::{CurrentWorkspace, NewWorkspace, Workspace, WorkspaceModule, Workspaces};
-use sea_orm::sea_query::{ColumnDef, Query, Table};
-use sea_orm::{ConnectionTrait, DbErr};
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
 use serde_json::Value;
 use uuid::Uuid;
 
@@ -47,25 +44,19 @@ impl Ping for WorkspacePing {
 /// `users(id, name, email)`, the table navree-auth creates.
 struct CreateUsers;
 
-impl MigrationName for CreateUsers {
-    fn name(&self) -> &str {
-        "m20261026_000001_create_users"
-    }
-}
-
-#[async_trait]
-impl MigrationTrait for CreateUsers {
-    async fn up(&self, manager: &SchemaManager) -> std::result::Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table("users")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("name").string().not_null())
-                    .col(ColumnDef::new("email").string().not_null().unique_key())
-                    .to_owned(),
-            )
+impl Migration for CreateUsers {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema
+            .create("users", |t| {
+                t.uuid("id").primary();
+                t.string("name");
+                t.string("email").unique();
+            })
             .await
+    }
+
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop_if_exists("users").await
     }
 }
 
@@ -73,8 +64,11 @@ struct WorkspacePingModule;
 
 impl Module for WorkspacePingModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.migrations(MigrationSet::new("auth").migration(CreateUsers))
-            .grpc_service::<WorkspacePing>();
+        m.migrations(MigrationSet::new("auth").migration(SchemaMigration::new(
+            "m20261026_000001_create_users",
+            CreateUsers,
+        )))
+        .grpc_service::<WorkspacePing>();
     }
 }
 
@@ -105,13 +99,11 @@ async fn user(app: &TestApp, name: &str) -> Uuid {
     let id = Uuid::now_v7();
     app.get::<Db>()
         .await
-        .conn()
-        .execute(
-            Query::insert()
-                .into_table("users")
-                .columns(["id", "name", "email"])
-                .values_panic([id.into(), name.into(), format!("{name}@example.com").into()]),
-        )
+        .pool()
+        .execute(&Statement::portable(
+            "INSERT INTO users (id, name, email) VALUES (?, ?, ?)",
+            [id.into(), name.into(), format!("{name}@example.com").into()],
+        ))
         .await
         .unwrap();
     id

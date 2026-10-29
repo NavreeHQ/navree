@@ -61,6 +61,8 @@ navree-access = { workspace = true }
 navree-events = { workspace = true }
 navree-mail = { workspace = true }
 navree-observe = { workspace = true }
+# The tests' `deals` table is a model and an access subject.
+navree-orm = { workspace = true, features = ["access"] }
 navree-testing = { workspace = true }
 navree-view = { workspace = true }
 navree-workspace = { workspace = true }

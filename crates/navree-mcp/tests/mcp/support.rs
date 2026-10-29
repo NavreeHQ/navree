@@ -8,51 +8,39 @@ use std::sync::{Arc, Mutex};
 use garde::Validate;
 use navree_access::{
     AbilityCtx, AccessModule, AccessOptions, AccessService, ActionMarker, Authorized, MANAGE, READ,
-    Read, Rules, Subject, UPDATE, Update, field,
+    Read, Rules, UPDATE, Update, field,
 };
 use navree_contracts::{AuditEntry, AuditSink, BoxError, BoxFuture, Principal};
+use navree_db::navree_schema::{Migration, Schema, SchemaMigration, SchemaResult};
 use navree_db::{DatabaseModule, Db, MigrationSet, ModuleBuilderDbExt};
 use navree_http::AppError;
 use navree_kernel::{Module, ModuleBuilder};
 use navree_macros::{injectable, mcp_server};
 use navree_mcp::{McpContext, McpModule, ModuleBuilderMcpExt, PromptMessage, ResourceContents};
+use navree_orm::Model as _;
+use navree_orm::access::AccessibleQuery as _;
 use navree_testing::{TestApp, TestAppBuilder, principal};
-use sea_orm::sea_query::{ColumnDef, Table};
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, Set};
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
-/// The `deals` entity.
+/// The `deals` model: the access subject `Deal`.
 pub mod deal {
-    use sea_orm::entity::prelude::*;
     use serde::Serialize;
+    use uuid::Uuid;
 
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
-    #[sea_orm(table_name = "deals")]
-    pub struct Model {
-        #[sea_orm(primary_key, auto_increment = false)]
+    #[derive(Clone, Debug, Default, PartialEq, Eq, navree_orm::Model, Serialize)]
+    #[model(table = "deals", subject = "Deal", permission_prefix = "deals")]
+    pub struct Deal {
         pub id: Uuid,
         pub owner_id: Uuid,
         pub title: String,
         pub stage: String,
         pub amount_cents: i64,
     }
-
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
-pub type Deal = deal::Entity;
-
-impl Subject for deal::Entity {
-    const SUBJECT: &'static str = "Deal";
-    const PERMISSION_PREFIX: &'static str = "deals";
-}
+pub use deal::Deal;
 
 /// The `move` action on deals.
 pub struct Move;
@@ -64,33 +52,21 @@ impl ActionMarker for Move {
 /// Creates `deals`.
 pub struct CreateDeals;
 
-impl MigrationName for CreateDeals {
-    fn name(&self) -> &str {
-        "m20261026_000001_create_deals"
-    }
-}
-
-#[async_trait]
-impl MigrationTrait for CreateDeals {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), sea_orm::DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table("deals")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("owner_id").uuid().not_null())
-                    .col(ColumnDef::new("title").string().not_null())
-                    .col(ColumnDef::new("stage").string().not_null())
-                    .col(ColumnDef::new("amount_cents").big_integer().not_null())
-                    .to_owned(),
-            )
+impl Migration for CreateDeals {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema
+            .create("deals", |t| {
+                t.uuid("id").primary();
+                t.uuid("owner_id");
+                t.string("title");
+                t.string("stage");
+                t.big_integer("amount_cents");
+            })
             .await
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), sea_orm::DbErr> {
-        manager
-            .drop_table(Table::drop().table("deals").to_owned())
-            .await
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop_if_exists("deals").await
     }
 }
 
@@ -125,8 +101,8 @@ pub struct DealResource {
     pub amount_cents: i64,
 }
 
-impl From<deal::Model> for DealResource {
-    fn from(model: deal::Model) -> Self {
+impl From<Deal> for DealResource {
+    fn from(model: Deal) -> Self {
         Self {
             id: model.id,
             owner_id: model.owner_id,
@@ -235,19 +211,17 @@ impl CrmMcp {
         cx: &McpContext,
         args: ListDeals,
     ) -> Result<Vec<DealResource>, AppError> {
-        let mut select = cx
-            .accessible::<Deal, Read>()
-            .apply(deal::Entity::find().order_by_asc(deal::Column::Title));
+        let mut query = cx.accessible::<Deal, Read>().query().order_by(Deal::TITLE);
         if let Some(stage) = args.stage {
-            select = select.filter(deal::Column::Stage.eq(stage.as_str()));
+            query = query.where_(Deal::STAGE.eq(stage.as_str()));
         }
-        if let Some(query) = args.query {
-            select = select.filter(deal::Column::Title.contains(query));
+        if let Some(words) = args.query {
+            query = query.where_(Deal::TITLE.like(format!("%{words}%")));
         }
         if args.mine {
-            select = select.filter(deal::Column::OwnerId.eq(cx.user_id()));
+            query = query.where_(Deal::OWNER_ID.eq(cx.user_id()));
         }
-        let rows = select.all(&*cx.uow().tx().await?).await?;
+        let rows = query.get(cx.uow()).await?.into_models();
         Ok(rows.into_iter().map(DealResource::from).collect())
     }
 
@@ -259,15 +233,18 @@ impl CrmMcp {
         cx: &McpContext,
         args: CreateDeal,
     ) -> Result<DealResource, AppError> {
-        let model = deal::ActiveModel {
-            id: Set(Uuid::now_v7()),
-            owner_id: Set(cx.user_id()),
-            title: Set(args.title),
-            stage: Set("lead".to_owned()),
-            amount_cents: Set(args.amount_cents),
-        }
-        .insert(&*cx.uow().tx().await?)
-        .await?;
+        let model = Deal::create(
+            cx.uow(),
+            Deal {
+                id: Uuid::now_v7(),
+                owner_id: cx.user_id(),
+                title: args.title,
+                stage: "lead".to_owned(),
+                amount_cents: args.amount_cents,
+            },
+        )
+        .await?
+        .into_inner();
         Ok(model.into())
     }
 
@@ -292,9 +269,10 @@ impl CrmMcp {
         args: MoveDealArgs,
     ) -> Result<DealResource, AppError> {
         let deal = cx.authorize::<Deal, Move>(args.deal_id).await?;
-        let mut model: deal::ActiveModel = deal.into_inner().into();
-        model.stage = Set(args.stage.as_str().to_owned());
-        Ok(model.update(&*cx.uow().tx().await?).await?.into())
+        let mut deal = deal.into_inner();
+        deal.stage = args.stage.as_str().to_owned();
+        deal.save(cx.uow()).await?;
+        Ok(deal.into_inner().into())
     }
 
     /// Renames a deal the user may update.
@@ -306,9 +284,10 @@ impl CrmMcp {
         deal: Authorized<Deal, Update>,
         args: RenameDeal,
     ) -> Result<DealResource, AppError> {
-        let mut model: deal::ActiveModel = deal.into_inner().into();
-        model.title = Set(args.title);
-        Ok(model.update(&*cx.uow().tx().await?).await?.into())
+        let mut deal = deal.into_inner();
+        deal.title = args.title;
+        deal.save(cx.uow()).await?;
+        Ok(deal.into_inner().into())
     }
 
     /// The month's sales, as text.
@@ -358,7 +337,7 @@ impl CrmMcp {
     #[mcp_resource("crm://deals/{id}", mime = "application/json")]
     #[can(Read, Deal, from = "id")]
     async fn deal(&self, deal: Authorized<Deal, Read>) -> Result<DealResource, AppError> {
-        Ok(deal.into_inner().into())
+        Ok(deal.into_inner().into_inner().into())
     }
 
     /// The pipeline: how many deals each stage has.
@@ -367,9 +346,10 @@ impl CrmMcp {
     async fn pipeline(&self, cx: &McpContext) -> Result<Value, AppError> {
         let rows = cx
             .accessible::<Deal, Read>()
-            .apply(deal::Entity::find())
-            .all(&*cx.uow().tx().await?)
-            .await?;
+            .query()
+            .get(cx.uow())
+            .await?
+            .into_models();
         let mut counts = serde_json::Map::new();
         for row in rows {
             let count = counts.entry(row.stage).or_insert(Value::from(0));
@@ -449,8 +429,11 @@ pub struct DealsModule;
 
 impl Module for DealsModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.import(AccessModule::for_feature::<deal::Entity>())
-            .migrations(MigrationSet::new("deals").migration(CreateDeals))
+        m.import(AccessModule::for_feature::<Deal>())
+            .migrations(MigrationSet::new("deals").migration(SchemaMigration::new(
+                "m20261026_000001_create_deals",
+                CreateDeals,
+            )))
             .mcp_server::<CrmMcp>();
     }
 }
@@ -519,28 +502,32 @@ pub async fn give_role(app: &TestApp, user: Uuid, role: &str, permissions: &[&st
 }
 
 /// Inserts a deal owned by `owner`.
-pub async fn insert_deal(app: &TestApp, owner: Uuid, title: &str, stage: &str) -> deal::Model {
+pub async fn insert_deal(app: &TestApp, owner: Uuid, title: &str, stage: &str) -> Deal {
     let db = app.get::<Db>().await;
-    deal::ActiveModel {
-        id: Set(Uuid::now_v7()),
-        owner_id: Set(owner),
-        title: Set(title.to_owned()),
-        stage: Set(stage.to_owned()),
-        amount_cents: Set(10_000),
-    }
-    .insert(db.conn())
+    Deal::create(
+        &*db,
+        Deal {
+            id: Uuid::now_v7(),
+            owner_id: owner,
+            title: title.to_owned(),
+            stage: stage.to_owned(),
+            amount_cents: 10_000,
+        },
+    )
     .await
     .expect("insert deal")
+    .into_inner()
 }
 
 /// Every deal in the database.
-pub async fn all_deals(app: &TestApp) -> Vec<deal::Model> {
+pub async fn all_deals(app: &TestApp) -> Vec<Deal> {
     let db = app.get::<Db>().await;
-    deal::Entity::find()
-        .order_by_asc(deal::Column::Title)
-        .all(db.conn())
+    Deal::query()
+        .order_by(Deal::TITLE)
+        .get(&*db)
         .await
         .unwrap()
+        .into_models()
 }
 
 /// Tool names, sorted.
