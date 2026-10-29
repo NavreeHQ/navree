@@ -10,9 +10,19 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+## navree-db's PostgreSQL driver (the module tests on PostgreSQL and
+## TimescaleDB: `NAVREE_TEST_DATABASE=postgres` with `NAVREE_TEST_POSTGRES_URL`).
+postgres = ["navree-db/postgres"]
+## navree-db's MySQL driver (`NAVREE_TEST_DATABASE=mysql` with
+## `NAVREE_TEST_MYSQL_URL`).
+mysql = ["navree-db/mysql"]
+
 # The ability engine (`src/engine`) is pure: rules, record checks, CASL JSON
-# and SQL list filters. The AccessModule half adds the database tables,
-# services, the route authorizer, extractors, endpoints and commands.
+# and SQL list filters (navree-db values and statements). The AccessModule
+# half adds the database tables (navree-db records, a navree-schema
+# migration), services, the route authorizer, extractors, endpoints and
+# commands.
 [dependencies]
 axum = { workspace = true }
 chrono = { workspace = true }
@@ -22,9 +32,6 @@ navree-contracts = { workspace = true }
 navree-db = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
-sea-orm = { workspace = true }
-sea-orm-migration = { workspace = true }
-sea-query = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

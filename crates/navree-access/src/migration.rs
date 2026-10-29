@@ -1,145 +1,114 @@
-//! The access module's migrations (`MigrationSet` `access`, after `auth`).
+//! The access module's migrations (`MigrationSet` `access`, after `auth`),
+//! on the schema builder.
 
 use navree_db::MigrationSet;
-use sea_orm::DbErr;
-use sea_orm::sea_query::{ColumnDef, ForeignKey, ForeignKeyAction, Index, Query, Table};
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
+use navree_db::navree_schema::{
+    Blueprint, ColumnBuilder, Dialect, Migration, Schema, SchemaMigration, SchemaResult,
+};
 
-use crate::entity::access_meta::VERSION_KEY;
+use crate::entity::VERSION_KEY;
 
 /// The access module's migration set.
 pub(crate) fn migrations() -> MigrationSet {
     MigrationSet::new("access")
         .after(["auth"])
-        .migration(CreateAccessTables)
+        .migration(SchemaMigration::new(
+            "m20261025_000001_create_access_tables",
+            CreateAccessTables,
+        ))
 }
 
 /// Creates `roles`, `permissions`, `role_permissions`, `user_roles`,
 /// `user_permissions` and `access_meta` (with the version row at 1).
+///
+/// The columns keep the types the first version of this migration gave
+/// them, so databases created before and after it read alike: UUIDs are
+/// `BINARY(16)` on MySQL (the bytes navree-db binds there), timestamps keep
+/// the database's default precision.
 struct CreateAccessTables;
 
-impl MigrationName for CreateAccessTables {
-    fn name(&self) -> &str {
-        "m20261025_000001_create_access_tables"
+/// A UUID column: `BINARY(16)` on MySQL, `uuid` elsewhere.
+fn uuid<'a>(t: &'a mut Blueprint, name: &str, mysql: bool) -> ColumnBuilder<'a> {
+    if mysql {
+        t.binary(name).length(16).fixed()
+    } else {
+        t.uuid(name)
     }
 }
 
-#[async_trait]
-impl MigrationTrait for CreateAccessTables {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table("roles")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("name").string().not_null().unique_key())
-                    .col(ColumnDef::new("description").string().null())
-                    .col(
-                        ColumnDef::new("created_at")
-                            .timestamp_with_time_zone()
-                            .not_null(),
-                    )
-                    .to_owned(),
-            )
+impl Migration for CreateAccessTables {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        let mysql = schema.target().await?.dialect() == Dialect::MySql;
+        schema
+            .create("roles", |t| {
+                uuid(t, "id", mysql).primary();
+                t.string("name").unique();
+                t.string("description").nullable();
+                t.timestamp_tz("created_at").default_precision();
+            })
             .await?;
-        manager
-            .create_table(
-                Table::create()
-                    .table("permissions")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("name").string().not_null().unique_key())
-                    .to_owned(),
-            )
+        schema
+            .create("permissions", |t| {
+                uuid(t, "id", mysql).primary();
+                t.string("name").unique();
+            })
             .await?;
-        manager
-            .create_table(
-                Table::create()
-                    .table("role_permissions")
-                    .col(ColumnDef::new("role_id").uuid().not_null())
-                    .col(ColumnDef::new("permission_id").uuid().not_null())
-                    .primary_key(Index::create().col("role_id").col("permission_id"))
-                    .foreign_key(
-                        ForeignKey::create()
-                            .from("role_permissions", "role_id")
-                            .to("roles", "id")
-                            .on_delete(ForeignKeyAction::Cascade),
-                    )
-                    .foreign_key(
-                        ForeignKey::create()
-                            .from("role_permissions", "permission_id")
-                            .to("permissions", "id")
-                            .on_delete(ForeignKeyAction::Cascade),
-                    )
-                    .to_owned(),
-            )
+        schema
+            .create("role_permissions", |t| {
+                uuid(t, "role_id", mysql);
+                uuid(t, "permission_id", mysql);
+                t.primary(["role_id", "permission_id"]);
+                t.foreign(["role_id"])
+                    .references(["id"])
+                    .on("roles")
+                    .cascade_on_delete();
+                t.foreign(["permission_id"])
+                    .references(["id"])
+                    .on("permissions")
+                    .cascade_on_delete();
+            })
             .await?;
-        manager
-            .create_table(
-                Table::create()
-                    .table("user_roles")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("user_id").uuid().not_null())
-                    .col(ColumnDef::new("role_id").uuid().not_null())
-                    .col(ColumnDef::new("team_id").uuid().null())
-                    .foreign_key(
-                        ForeignKey::create()
-                            .from("user_roles", "role_id")
-                            .to("roles", "id")
-                            .on_delete(ForeignKeyAction::Cascade),
-                    )
-                    .to_owned(),
-            )
+        schema
+            .create("user_roles", |t| {
+                uuid(t, "id", mysql).primary();
+                uuid(t, "user_id", mysql);
+                uuid(t, "role_id", mysql);
+                uuid(t, "team_id", mysql).nullable();
+                t.foreign(["role_id"])
+                    .references(["id"])
+                    .on("roles")
+                    .cascade_on_delete();
+                t.unique(["user_id", "role_id", "team_id"])
+                    .name("user_roles_user_role_team_unique");
+            })
             .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("user_roles_user_role_team_unique")
-                    .table("user_roles")
-                    .col("user_id")
-                    .col("role_id")
-                    .col("team_id")
-                    .unique()
-                    .to_owned(),
-            )
+        schema
+            .create("user_permissions", |t| {
+                uuid(t, "user_id", mysql);
+                uuid(t, "permission_id", mysql);
+                t.primary(["user_id", "permission_id"]);
+                t.foreign(["permission_id"])
+                    .references(["id"])
+                    .on("permissions")
+                    .cascade_on_delete();
+            })
             .await?;
-        manager
-            .create_table(
-                Table::create()
-                    .table("user_permissions")
-                    .col(ColumnDef::new("user_id").uuid().not_null())
-                    .col(ColumnDef::new("permission_id").uuid().not_null())
-                    .primary_key(Index::create().col("user_id").col("permission_id"))
-                    .foreign_key(
-                        ForeignKey::create()
-                            .from("user_permissions", "permission_id")
-                            .to("permissions", "id")
-                            .on_delete(ForeignKeyAction::Cascade),
-                    )
-                    .to_owned(),
-            )
+        schema
+            .create("access_meta", |t| {
+                t.string("key").primary();
+                t.big_integer("version");
+            })
             .await?;
-        manager
-            .create_table(
-                Table::create()
-                    .table("access_meta")
-                    .col(ColumnDef::new("key").string().not_null().primary_key())
-                    .col(ColumnDef::new("version").big_integer().not_null())
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .execute(
-                Query::insert()
-                    .into_table("access_meta")
-                    .columns(["key", "version"])
-                    .values_panic([VERSION_KEY.into(), 1_i64.into()])
-                    .to_owned(),
-            )
+        let quote = if mysql { '`' } else { '"' };
+        schema
+            .statement(&format!(
+                "INSERT INTO {quote}access_meta{quote} ({quote}key{quote}, {quote}version{quote}) \
+                 VALUES ('{VERSION_KEY}', 1)"
+            ))
             .await
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
         for table in [
             "access_meta",
             "user_permissions",
@@ -148,9 +117,7 @@ impl MigrationTrait for CreateAccessTables {
             "permissions",
             "roles",
         ] {
-            manager
-                .drop_table(Table::drop().table(table).to_owned())
-                .await?;
+            schema.drop(table).await?;
         }
         Ok(())
     }

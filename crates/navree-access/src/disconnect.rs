@@ -6,12 +6,11 @@
 //! 4200, reconnect and authorize again).
 
 use navree_contracts::{AuditEntry, Broadcaster};
-use navree_db::Uow;
+use navree_db::{DbError, Executor, Uow};
 use navree_kernel::WeakAppContext;
-use sea_orm::{ColumnTrait, ConnectionTrait, DbErr, EntityTrait, QueryFilter, QuerySelect};
 use uuid::Uuid;
 
-use crate::entity::{role, user_role};
+use crate::store;
 
 /// Role-level changes after which a role's members may see less.
 const NARROWING_ROLE_CHANGES: [&str; 2] = [
@@ -24,10 +23,10 @@ const NARROWING_ROLE_CHANGES: [&str; 2] = [
 /// permissions), or the members of a role that lost permissions. Role
 /// deletions are handled by `AccessService::delete_role`, which knows the
 /// members before it removes them.
-pub(crate) async fn affected_users<C: ConnectionTrait>(
-    conn: &C,
+pub(crate) async fn affected_users<E: Executor + ?Sized>(
+    exec: &E,
     entry: &AuditEntry,
-) -> Result<Vec<Uuid>, DbErr> {
+) -> Result<Vec<Uuid>, DbError> {
     match entry.subject_type.as_deref() {
         Some("user") => Ok(entry
             .subject_id
@@ -39,34 +38,13 @@ pub(crate) async fn affected_users<C: ConnectionTrait>(
             let Some(name) = entry.subject_id.as_deref() else {
                 return Ok(Vec::new());
             };
-            match role::Entity::find()
-                .filter(role::Column::Name.eq(name))
-                .one(conn)
-                .await?
-            {
-                Some(role) => role_members(conn, role.id).await,
+            match store::find_role(exec, name).await? {
+                Some(role) => store::role_members(exec, role.id).await,
                 None => Ok(Vec::new()),
             }
         }
         _ => Ok(Vec::new()),
     }
-}
-
-/// The users holding role `role_id`.
-pub(crate) async fn role_members<C: ConnectionTrait>(
-    conn: &C,
-    role_id: Uuid,
-) -> Result<Vec<Uuid>, DbErr> {
-    let mut users: Vec<Uuid> = user_role::Entity::find()
-        .select_only()
-        .column(user_role::Column::UserId)
-        .filter(user_role::Column::RoleId.eq(role_id))
-        .into_tuple()
-        .all(conn)
-        .await?;
-    users.sort();
-    users.dedup();
-    Ok(users)
 }
 
 /// Once `uow` commits, ends the real-time subscriptions of `users` (when
