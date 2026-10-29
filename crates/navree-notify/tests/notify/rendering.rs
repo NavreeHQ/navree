@@ -88,8 +88,7 @@ async fn database_data_defaults_to_the_serialized_notification() {
 
 #[tokio::test]
 async fn every_failed_channel_is_reported_and_the_others_still_deliver() {
-    let app = TestApp::builder()
-        .temp_database()
+    let app = crate::database::database(TestApp::builder())
         .module(DatabaseModule)
         .module(NotifyModule)
         .build()

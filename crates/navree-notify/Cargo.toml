@@ -48,8 +48,6 @@ navree-time = { workspace = true }
 navree-view = { workspace = true }
 # Numbers in E.164 (`Phone`) for the SMS and WhatsApp channels.
 navree-validation = { workspace = true, features = ["phone"] }
-sea-orm = { workspace = true }
-sea-orm-migration = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_urlencoded = { workspace = true }

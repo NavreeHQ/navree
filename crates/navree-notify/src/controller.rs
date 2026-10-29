@@ -485,19 +485,18 @@ impl NotificationsController {
     ) -> Result<Page<DatabaseNotification>, AppError> {
         Ok(self
             .notifier
-            .notifications(uow.db().conn(), &me, unread, page)
+            .notifications(uow.db(), &me, unread, page)
             .await?)
     }
 
     async fn unread_count(&self, me: SignedIn, uow: Uow) -> Result<Json<Value>, AppError> {
-        let count = self.notifier.unread_count(uow.db().conn(), &me).await?;
+        let count = self.notifier.unread_count(uow.db(), &me).await?;
         Ok(Json(json!({ "count": count })))
     }
 
     async fn mark_read(&self, me: SignedIn, uow: Uow, id: &str) -> Result<NoContent, AppError> {
         let id = Uuid::parse_str(id).map_err(|_| AppError::not_found())?;
-        let tx = uow.tx().await?;
-        if self.notifier.mark_as_read(&*tx, &me, id).await? {
+        if self.notifier.mark_as_read(&uow, &me, id).await? {
             Ok(NoContent)
         } else {
             Err(AppError::not_found())
@@ -505,8 +504,7 @@ impl NotificationsController {
     }
 
     async fn mark_all_read(&self, me: SignedIn, uow: Uow) -> Result<NoContent, AppError> {
-        let tx = uow.tx().await?;
-        self.notifier.mark_all_as_read(&*tx, &me).await?;
+        self.notifier.mark_all_as_read(&uow, &me).await?;
         Ok(NoContent)
     }
 }

@@ -7,7 +7,6 @@ use std::str::FromStr;
 use chrono::{DateTime, Utc};
 use navree_kernel::WeakAppContext;
 use navree_orm::{Model, Record};
-use sea_orm::DbErr;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -252,8 +251,7 @@ impl DeliveryLog {
             .where_(NotificationDelivery::PROVIDER.eq(update.provider.as_str()))
             .where_(NotificationDelivery::PROVIDER_MESSAGE_ID.eq(update.message_id.as_str()))
             .first(e)
-            .await)
-        .map_err(DbErr::from)?;
+            .await)?;
         let Some(mut record) = found else {
             return Ok(None);
         };
@@ -266,7 +264,7 @@ impl DeliveryLog {
             record.error = update.error.clone().or_else(|| update.error_code.clone());
         }
         record.updated_at = crate::notifier::now_in(&self.app).await;
-        on!(&exec, e => record.save(e).await).map_err(DbErr::from)?;
+        on!(&exec, e => record.save(e).await)?;
         exec.wrote();
         Ok(Some((record.into_inner(), true)))
     }
@@ -281,8 +279,7 @@ impl DeliveryLog {
             .where_(NotificationDelivery::NOTIFICATION_ID.eq(id))
             .oldest_by(NotificationDelivery::CREATED_AT)
             .get(e)
-            .await)
-        .map_err(DbErr::from)?;
+            .await)?;
         Ok(rows.into_iter().map(Record::into_inner).collect())
     }
 
@@ -306,8 +303,7 @@ impl DeliveryLog {
                 ],
             )
             .get(e)
-            .await)
-        .map_err(DbErr::from)?;
+            .await)?;
         Ok(rows
             .into_iter()
             .filter_map(|row| row.into_inner().recipient)
@@ -325,8 +321,7 @@ impl DeliveryLog {
             .where_(NotificationDelivery::PROVIDER.eq(provider))
             .where_(NotificationDelivery::PROVIDER_MESSAGE_ID.eq(message_id))
             .first(e)
-            .await)
-        .map_err(DbErr::from)?;
+            .await)?;
         Ok(row.map(Record::into_inner))
     }
 
@@ -367,7 +362,7 @@ impl DeliveryLog {
             Some(recipient) => query.where_(NotificationDelivery::RECIPIENT.eq(recipient)),
             None => query.where_null(NotificationDelivery::RECIPIENT),
         };
-        let existing = on!(&exec, e => query.first(e).await).map_err(DbErr::from)?;
+        let existing = on!(&exec, e => query.first(e).await)?;
         let mut record = existing.unwrap_or_else(|| {
             Record::new(NotificationDelivery {
                 id: Uuid::now_v7(),
@@ -401,7 +396,7 @@ impl DeliveryLog {
             }
         }
         record.updated_at = now;
-        on!(&exec, e => record.save(e).await).map_err(DbErr::from)?;
+        on!(&exec, e => record.save(e).await)?;
         Ok(())
     }
 }

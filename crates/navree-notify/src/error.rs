@@ -2,9 +2,10 @@
 
 use std::collections::BTreeMap;
 
+use navree_db::DbError;
 use navree_kernel::BoxError;
 use navree_mail::MailError;
-use sea_orm::DbErr;
+use navree_orm::OrmError;
 
 use crate::{Channel, ChannelError};
 
@@ -16,7 +17,12 @@ use crate::{Channel, ChannelError};
 pub enum NotifyError {
     /// A database query failed (the database channel or a read-state query).
     #[error("notification database error: {0}")]
-    Database(#[from] DbErr),
+    Database(#[from] DbError),
+    /// An ORM operation on a channel table failed (the database channel,
+    /// the delivery log, preferences, held deliveries, opt-outs or push
+    /// subscriptions).
+    #[error("notification database error: {0}")]
+    Orm(#[from] OrmError),
     /// The mail channel failed to send.
     #[error("the mail channel failed: {0}")]
     Mail(#[from] MailError),

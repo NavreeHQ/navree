@@ -11,7 +11,6 @@ use navree_kernel::{AppContext, WeakAppContext};
 use navree_mail::{MailScope, Mailable, Mailer};
 use navree_orm::{Executor, Model as _};
 use navree_telemetry::{EventKind, NotificationSent, Telemetry, TelemetryEvent};
-use sea_orm::DbErr;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -199,17 +198,13 @@ impl Notifier {
             .partition(|job| job.delivery.channel() == Channel::Database);
         if !planned.deferred.is_empty() {
             // Held with the transaction: a rollback drops them too.
-            let tx = uow.tx().await?;
-            NotificationDeferral::insert_or_ignore(&*tx, planned.deferred)
-                .await
-                .map_err(DbErr::from)?;
+            NotificationDeferral::insert_or_ignore(uow, planned.deferred).await?;
             uow.mark_modified();
         }
         if !stored.is_empty() {
-            let tx = uow.tx().await?;
             for job in &stored {
                 if let Delivery::Database { data } = &job.delivery {
-                    store(&*tx, job, data).await?;
+                    store(uow, job, data).await?;
                 }
             }
             if self.telemetry.enabled(EventKind::NotificationSent) {
@@ -304,7 +299,7 @@ impl Notifier {
                     .try_get::<Db>()
                     .await
                     .ok_or_else(|| unavailable(Channel::Database, "add DatabaseModule"))?;
-                store(db.conn(), job, data).await?;
+                store(&*db, job, data).await?;
                 Ok(true)
             }
             Delivery::Mail { mail } => {
@@ -933,9 +928,7 @@ async fn store<E: Executor + ?Sized>(
         read_at: None,
         created_at: job.created_at,
     };
-    notifications::Model::insert_or_ignore(exec, [row])
-        .await
-        .map_err(DbErr::from)?;
+    notifications::Model::insert_or_ignore(exec, [row]).await?;
     Ok(())
 }
 
