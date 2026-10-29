@@ -10,7 +10,8 @@ use navree_crypto::CryptoError;
 use navree_http::AppError;
 use navree_kernel::{BoxError, KernelError};
 use navree_mail::MailError;
-use sea_orm::DbErr;
+use navree_db::DbError;
+use navree_orm::OrmError;
 
 /// An auth-module error. Returned from handlers with `?`, it becomes an
 /// error response (the module registers the mapping): bad credentials and
@@ -196,9 +197,13 @@ pub enum AuthError {
     /// The login throttle's cache failed.
     #[error("auth cache error: {0}")]
     Cache(#[from] CacheError),
-    /// A database error.
+    /// A database error (navree-db's statements, transactions and units of
+    /// work).
     #[error("auth database error: {0}")]
-    Db(#[from] DbErr),
+    Db(#[from] DbError),
+    /// An ORM error (the module's models and their queries).
+    #[error("auth database error: {0}")]
+    Orm(#[from] OrmError),
 }
 
 impl AuthError {
@@ -313,6 +318,7 @@ impl AuthError {
             ),
             AuthError::Disabled(_) => Some(AppError::not_found()),
             AuthError::Db(error) => navree_db::map_db_error(error),
+            AuthError::Orm(error) => error.db_error().and_then(navree_db::map_db_error),
             AuthError::Signing(_)
             | AuthError::Crypto(_)
             | AuthError::Cache(_)
@@ -332,14 +338,6 @@ impl AuthError {
             Some(error) => error,
             None => AppError::internal(self),
         }
-    }
-}
-
-/// The module's ORM operations fail as database errors
-/// ([`AuthError::Db`]), like its SeaORM ones.
-impl From<navree_orm::OrmError> for AuthError {
-    fn from(error: navree_orm::OrmError) -> Self {
-        AuthError::Db(error.into())
     }
 }
 
