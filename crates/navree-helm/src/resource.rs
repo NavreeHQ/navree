@@ -1,32 +1,38 @@
 //! The [`Resource`] trait and [`FormData`].
 
 use axum::extract::FromRequest;
-use navree_access::Subject;
+use navree_access::SubjectRecords;
 use navree_http::{AppError, Json};
 use navree_kernel::{AppContext, BoxFuture};
+use navree_orm::{Builder, Model, Record};
 use navree_validation::Valid;
-use sea_orm::{EntityTrait, IntoActiveModel, Select};
-use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
 
 use crate::{Action, Field, Filter, Metric, SaveContext, save};
 
-/// The model of resource `R`'s entity.
-pub type ModelOf<R> = <<R as Resource>::Entity as EntityTrait>::Model;
+/// The model of resource `R`.
+pub type ModelOf<R> = <R as Resource>::Model;
 
-/// One entity in the admin panel: which fields to show and edit, how to
+/// A record of resource `R`'s model.
+pub type RecordOf<R> = Record<<R as Resource>::Model>;
+
+/// One model in the admin panel: which fields to show and edit, how to
 /// filter and search it, which actions run on it and which numbers
 /// matter. Register it with `m.resource::<R>()`
 /// ([`ModuleBuilderHelmExt::resource`](crate::ModuleBuilderHelmExt::resource)),
 /// which also registers `R` as a provider of the module.
 ///
 /// ```ignore
+/// #[derive(Model, Clone, Debug, Default, Serialize)]
+/// #[model(table = "deals", subject = "Deal", timestamps)]
+/// pub struct Deal { /* id, title, amount_cents, created_at, .. */ }
+///
 /// #[injectable]
 /// pub struct DealResource;
 ///
 /// impl Resource for DealResource {
-///     type Entity = deal::Entity;
+///     type Model = Deal;
 ///
 ///     const LABEL: &'static str = "Deals";
 ///     const SINGULAR: &'static str = "Deal";
@@ -39,25 +45,18 @@ pub type ModelOf<R> = <<R as Resource>::Entity as EntityTrait>::Model;
 /// }
 /// ```
 ///
-/// Every screen starts from [`query`](Resource::query), then applies the
-/// user's access filter, so a resource never shows a row its rules hide.
-/// Writes go through [`create`](Resource::create),
-/// [`update`](Resource::update) and [`delete`](Resource::delete), which by
-/// default write the form's values to the entity's columns with
-/// `navree_db::Repo` in the request's unit of work (audited).
+/// Every screen starts from [`query`](Resource::query) (the model's query,
+/// with its global scopes), then applies the user's access filter, so a
+/// resource never shows a row its rules hide. Writes go through
+/// [`create`](Resource::create), [`update`](Resource::update) and
+/// [`delete`](Resource::delete), which by default write the form's values
+/// to the model's columns in the request's unit of work and record the
+/// change for the audit trail.
 pub trait Resource: Send + Sync + 'static {
-    /// The SeaORM entity. It implements navree-access's `Subject`, which it
-    /// already does if routes check it with `#[can]`.
-    type Entity: EntityTrait<
-            Model: Serialize
-                       + IntoActiveModel<<Self::Entity as EntityTrait>::ActiveModel>
-                       + Clone
-                       + Send
-                       + Sync,
-            ActiveModel: Send + Sync,
-        > + Subject
-        + Send
-        + Sync;
+    /// The navree-orm model. It is an access subject
+    /// (`#[model(subject = "Deal")]`), which it already is if routes check
+    /// it with `#[can]`.
+    type Model: Model + SubjectRecords;
 
     /// The plural name on screen (`"Deals"`).
     const LABEL: &'static str;
@@ -89,59 +88,65 @@ pub trait Resource: Send + Sync + 'static {
     fn fields(&self) -> Vec<Field>;
 
     /// The filters of the list's side panel.
-    fn filters(&self) -> Vec<Filter<Self::Entity>> {
+    fn filters(&self) -> Vec<Filter<Self::Model>> {
         Vec::new()
     }
 
     /// The actions on the list and on records.
-    fn actions(&self) -> Vec<Action<Self::Entity>> {
+    fn actions(&self) -> Vec<Action<Self::Model>> {
         Vec::new()
     }
 
     /// The metric cards.
-    fn metrics(&self) -> Vec<Metric<Self::Entity>> {
+    fn metrics(&self) -> Vec<Metric<Self::Model>> {
         Vec::new()
     }
 
-    /// The base query of every screen, metric and relationship picker
-    /// (hide soft-deleted rows here). Helm applies the user's access filter
-    /// after it, so it never widens what a user may see.
-    fn query(&self, select: Select<Self::Entity>) -> Select<Self::Entity> {
-        select
+    /// The base query of every screen, metric and relationship picker:
+    /// `query` is the model's (its global scopes, soft deletes included,
+    /// apply when it runs). Narrow it here; Helm applies the user's access
+    /// filter after it, so it never widens what a user may see.
+    fn query(&self, query: Builder<Self::Model>) -> Builder<Self::Model> {
+        query
     }
 
     /// Creates a record from a create form (already checked against the
-    /// fields' rules). By default: a new active model with the form's
-    /// values, a UUID v7 primary key when the key is a UUID, `created_at`
-    /// and `updated_at` set to now when the entity has them, inserted with
-    /// `Repo::insert`.
+    /// fields' rules). By default: a new model (each field at its type's
+    /// default) with the form's values set through each field's conversion
+    /// (casts and mutators included), `created_at` and `updated_at` set to
+    /// now when the model has them, inserted with a generated key, and a
+    /// `created` change event with the record's serialized form. A model
+    /// with a field whose type has no `Default` overrides this.
     fn create<'a>(
         &'a self,
         ctx: &'a SaveContext,
         form: FormData,
-    ) -> BoxFuture<'a, Result<ModelOf<Self>, AppError>> {
-        Box::pin(save::create::<Self::Entity>(ctx, form))
+    ) -> BoxFuture<'a, Result<RecordOf<Self>, AppError>> {
+        Box::pin(save::create::<Self::Model>(ctx, form))
     }
 
     /// Updates `record` from an edit form (the submitted fields only). By
     /// default: the form's values set on the record, `updated_at` set to
-    /// now when the entity has it, saved with `Repo::update`.
+    /// now when the model has it, the changed columns written, and an
+    /// `updated` change event with the changed fields of the record's
+    /// serialized form.
     fn update<'a>(
         &'a self,
         ctx: &'a SaveContext,
-        record: ModelOf<Self>,
+        record: RecordOf<Self>,
         form: FormData,
-    ) -> BoxFuture<'a, Result<ModelOf<Self>, AppError>> {
-        Box::pin(save::update::<Self::Entity>(ctx, record, form))
+    ) -> BoxFuture<'a, Result<RecordOf<Self>, AppError>> {
+        Box::pin(save::update::<Self::Model>(ctx, record, form))
     }
 
-    /// Deletes `record`. By default with `Repo::delete`.
+    /// Deletes `record` (a soft delete when the model soft deletes) and
+    /// records a `deleted` change event.
     fn delete<'a>(
         &'a self,
         ctx: &'a SaveContext,
-        record: ModelOf<Self>,
+        record: RecordOf<Self>,
     ) -> BoxFuture<'a, Result<(), AppError>> {
-        Box::pin(save::delete::<Self::Entity>(ctx, record))
+        Box::pin(save::delete::<Self::Model>(ctx, record))
     }
 }
 
