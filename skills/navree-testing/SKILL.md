@@ -179,7 +179,7 @@ unregistered jobs: keep one test on the real queue.
 ## Isolation suites
 
 Multi-tenant modules get cross-workspace tests generated from their route
-table: `app.isolation_suite::<DealsModule>().factory(DealFactory::default()).run().await`
+table: `app.isolation_suite::<DealsModule>().factory(Deal::factory()).run().await`
 (`navree::workspace::testing::IsolationSuiteExt`). From workspace A, B's
 records must be a 404, missing from lists and never created there. See
 skill `navree-module-conformity` for bindings, bodies and the report.

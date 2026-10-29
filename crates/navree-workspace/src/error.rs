@@ -3,9 +3,9 @@
 use std::collections::BTreeMap;
 
 use http::StatusCode;
+use navree_db::DbError;
 use navree_http::AppError;
 use navree_kernel::BoxError;
-use sea_orm::DbErr;
 
 /// The error code of a write refused by a read-only demo workspace
 /// (`AppError::code`).
@@ -146,7 +146,7 @@ pub enum WorkspaceError {
     FeatureDisabled(&'static str),
     /// A database error.
     #[error("workspace database error: {0}")]
-    Db(#[from] DbErr),
+    Db(#[from] DbError),
     /// Anything else (a user directory or tenant database failure).
     #[error(transparent)]
     Other(BoxError),
@@ -277,9 +277,6 @@ fn map_orm_error(error: &navree_orm::OrmError) -> Option<AppError> {
         if let Some(db) = cause.downcast_ref::<navree_db::DbError>() {
             return navree_db::map_db_error(db);
         }
-        if let Some(db) = cause.downcast_ref::<DbErr>() {
-            return navree_db::map_db_error(db);
-        }
         next = cause.source();
     }
     None
@@ -383,7 +380,7 @@ mod tests {
                 "not_a_demo_workspace",
             ),
             (
-                WorkspaceError::Db(DbErr::RecordNotFound("workspaces x".into())),
+                WorkspaceError::Db(DbError::not_found("workspaces x")),
                 404,
                 "not_found",
             ),

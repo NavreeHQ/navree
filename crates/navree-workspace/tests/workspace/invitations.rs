@@ -3,8 +3,8 @@
 use std::time::Duration;
 
 use navree_crypto::sha256_hex;
-use navree_workspace::{WorkspaceError, WorkspaceRole, entity::invitation};
-use sea_orm::EntityTrait;
+use navree_orm::Model as _;
+use navree_workspace::{Invitation, WorkspaceError, WorkspaceRole};
 
 use crate::support::World;
 
@@ -38,8 +38,7 @@ async fn an_invitation_is_mailed_with_a_token_stored_hashed() {
         sent.invitation.expires_at,
         crate::support::start() + chrono::TimeDelta::days(7)
     );
-    let stored = invitation::Entity::find_by_id(sent.invitation.id)
-        .one(world.db().await.conn())
+    let stored = Invitation::find(&*world.db().await, sent.invitation.id)
         .await
         .unwrap()
         .unwrap();
@@ -105,8 +104,7 @@ async fn accepting_adds_the_member_with_the_invited_role() {
     assert_eq!(accepted.workspace.id, acme.id);
     assert_eq!(accepted.member.role, "viewer");
     assert_eq!(accepted.member.user_id, grace);
-    let stored = invitation::Entity::find_by_id(sent.invitation.id)
-        .one(world.db().await.conn())
+    let stored = Invitation::find(&*world.db().await, sent.invitation.id)
         .await
         .unwrap()
         .unwrap();
@@ -254,11 +252,8 @@ async fn invitations_expire() {
         .run_command("workspace:prune-invitations", &[])
         .await
         .unwrap();
-    let left = invitation::Entity::find()
-        .all(world.db().await.conn())
-        .await
-        .unwrap();
-    assert!(left.is_empty());
+    let left = Invitation::query().count(&*world.db().await).await.unwrap();
+    assert_eq!(left, 0);
 }
 
 #[tokio::test]

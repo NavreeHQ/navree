@@ -37,7 +37,7 @@ With `path_prefix = "/w"`, the segment after the first `w` segment of the path i
 impl DealsController {
     #[get("/")]
     #[permissions("deals.read")]
-    async fn index(&self, ws: CurrentWorkspace, uow: Uow, page: PageQuery) -> Result<Page<deal::Model>> {
+    async fn index(&self, ws: CurrentWorkspace, uow: Uow, page: PageQuery) -> Result<Page<Record<Deal>>> {
         // GET /api/v1/w/acme/deals
         // ...
     }
@@ -119,7 +119,7 @@ async fn show(&self, ws: CurrentWorkspace) -> Json<serde_json::Value> {
 | `can(action, subject)` | A type-level ability check |
 | `has_permission(permission)` | Whether they hold `deals.export` (as `#[permissions]` checks it) |
 | `authorize(permission)` | `Ok(())`, or a 403 |
-| `scope(select)` | `select` limited to this workspace's rows (row isolation) |
+| `scope(query)` | A `Builder<M>` limited to this workspace's rows (row isolation): `ws.scope(Deal::query())` |
 | `isolation()` | The configured `Isolation` |
 | `resolver()` | The resolver that found the workspace (`ResolverKind::Domain` for a custom domain; `None` when a path parameter did) |
 

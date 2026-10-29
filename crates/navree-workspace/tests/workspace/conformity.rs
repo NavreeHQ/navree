@@ -6,125 +6,75 @@ use std::path::Path;
 use navree_contracts::{
     CONFORMITY_COMMAND, CheckReport, ConformityOptions, ConformityReport, Finding, Severity,
 };
+use navree_db::navree_schema::{Migration, Schema, SchemaMigration, SchemaResult};
 use navree_db::{MigrationSet, ModuleBuilderDbExt};
 use navree_kernel::{Module, ModuleBuilder};
 use navree_testing::{TempDirGuard, TestApp};
 use navree_workspace::{ModuleBuilderWorkspaceExt, WorkspaceScoped};
-use sea_orm::DbErr;
-use sea_orm::sea_query::{ColumnDef, Index, Table};
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
+use uuid::Uuid;
 
-use crate::support::builder;
+use crate::database::Server;
+use crate::support::{builder, uuid};
 
 /// `countries`: shared by every workspace.
-mod country {
-    use sea_orm::entity::prelude::*;
-
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
-    #[sea_orm(table_name = "countries")]
-    pub struct Model {
-        #[sea_orm(primary_key, auto_increment = false)]
-        pub code: String,
-    }
-
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
+#[derive(Clone, Debug, Default, PartialEq, Eq, navree_orm::Model, serde::Serialize)]
+#[model(table = "countries", primary_key = "code")]
+struct Country {
+    code: String,
 }
 
 /// `deal_notes`: rows of one workspace, not an access subject.
-mod deal_note {
-    use sea_orm::entity::prelude::*;
-
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
-    #[sea_orm(table_name = "deal_notes")]
-    pub struct Model {
-        #[sea_orm(primary_key, auto_increment = false)]
-        pub id: Uuid,
-        pub workspace_id: Uuid,
-        pub body: String,
-    }
-
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
+#[derive(Clone, Debug, Default, PartialEq, Eq, navree_orm::Model, serde::Serialize)]
+#[model(table = "deal_notes")]
+struct DealNote {
+    id: Uuid,
+    workspace_id: Uuid,
+    body: String,
 }
 
-impl WorkspaceScoped for deal_note::Entity {}
+impl WorkspaceScoped for DealNote {}
 
 /// `labels`: declared a workspace entity, but its table has no workspace
 /// column.
-mod label {
-    use sea_orm::entity::prelude::*;
-
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
-    #[sea_orm(table_name = "labels")]
-    pub struct Model {
-        #[sea_orm(primary_key, auto_increment = false)]
-        pub id: Uuid,
-        pub name: String,
-    }
-
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
+#[derive(Clone, Debug, Default, PartialEq, Eq, navree_orm::Model, serde::Serialize)]
+#[model(table = "labels")]
+struct Label {
+    id: Uuid,
+    name: String,
 }
 
-impl WorkspaceScoped for label::Entity {}
+impl WorkspaceScoped for Label {}
 
 /// `deal_notes` with an index on `workspace_id`, and `labels` without the
 /// column.
 struct CreateNotesAndLabels;
 
-impl MigrationName for CreateNotesAndLabels {
-    fn name(&self) -> &str {
-        "m20261027_000001_create_deal_notes_and_labels"
-    }
-}
-
-#[async_trait]
-impl MigrationTrait for CreateNotesAndLabels {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table("deal_notes")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("workspace_id").uuid().not_null())
-                    .col(ColumnDef::new("body").string().not_null())
-                    .to_owned(),
-            )
+impl Migration for CreateNotesAndLabels {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        let dialect = schema.target().await?.dialect();
+        schema
+            .create("deal_notes", |t| {
+                uuid(t, "id", dialect).primary();
+                uuid(t, "workspace_id", dialect);
+                t.string("body");
+                t.index("workspace_id")
+                    .name("deal_notes_workspace_id_index");
+            })
             .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("deal_notes_workspace_id_index")
-                    .table("deal_notes")
-                    .col("workspace_id")
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_table(
-                Table::create()
-                    .table("labels")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("name").string().not_null())
-                    .to_owned(),
-            )
+        schema
+            .create("labels", |t| {
+                uuid(t, "id", dialect).primary();
+                t.string("name");
+            })
             .await
     }
 
-    async fn down(&self, _manager: &SchemaManager) -> Result<(), DbErr> {
+    async fn down(&self, _schema: &Schema<'_>) -> SchemaResult {
         Ok(())
     }
 }
 
-/// Classifies the test entities.
+/// Classifies the test models.
 struct ClassifiedModule;
 
 impl Module for ClassifiedModule {
@@ -132,11 +82,14 @@ impl Module for ClassifiedModule {
         m.migrations(
             MigrationSet::new("classified")
                 .after(["workspace"])
-                .migration(CreateNotesAndLabels),
+                .migration(SchemaMigration::new(
+                    "m20261027_000001_create_deal_notes_and_labels",
+                    CreateNotesAndLabels,
+                )),
         )
-        .global_entity::<country::Entity>()
-        .workspace_entity::<deal_note::Entity>()
-        .workspace_entity::<label::Entity>();
+        .global_entity::<Country>()
+        .workspace_entity::<DealNote>()
+        .workspace_entity::<Label>();
     }
 }
 
@@ -178,7 +131,7 @@ fn shop(root: &Path) {
         root,
         "src/deals/service.rs",
         r#"use navree::db::Repo;
-use navree::workspace::WorkspaceRepo;
+use navree::workspace::sea_compat::WorkspaceRepo;
 
 use super::{entity, note};
 use crate::countries;
@@ -234,7 +187,7 @@ async fn every_entity_must_be_classified() {
                 "entity `tags` is not classified as a workspace or a global entity"
             )
             .hint(
-                "register it in its module: m.workspace_entity::<tags::Entity>() (its rows belong to one workspace) or m.global_entity::<tags::Entity>() (shared by every workspace)"
+                "register it in its module: m.sea_workspace_entity::<tags::Entity>() (its rows belong to one workspace) or m.sea_global_entity::<tags::Entity>() (shared by every workspace), or port it to a navree-orm model"
             )
         ]
     );
@@ -267,7 +220,7 @@ async fn workspace_entities_must_be_reached_through_workspace_repo() {
     assert_eq!(
         repo.outcome.findings[0].hint.as_deref(),
         Some(
-            "go through WorkspaceRepo::<entity::Entity> (select, find, insert, update, delete), or mark a deliberate cross-workspace access with // navree:allow(workspace-repo)"
+            "go through sea_compat::WorkspaceRepo::<entity::Entity> (select, find, insert, update, delete), or mark a deliberate cross-workspace access with // navree:allow(workspace-repo)"
         )
     );
 }
@@ -278,23 +231,38 @@ async fn workspace_tables_need_an_indexed_workspace_column() {
     let dir = TempDirGuard::new();
     let report = report(&app, dir.path()).await;
     let tables = report.check("workspace.tables").unwrap();
-    // deals (workspace_scoped in the fixtures), deal_notes and labels.
-    assert_eq!(tables.outcome.checked, 3);
-    assert_eq!(
-        subjects(tables),
-        [
-            (
-                Severity::Warning,
-                "deals".to_owned(),
-                "no index starts with `workspace_id`".to_owned()
-            ),
-            (
-                Severity::Error,
-                "labels".to_owned(),
-                "has no `workspace_id` column".to_owned()
-            ),
-        ]
+    // deals (workspace_scoped in the fixtures), deal_notes and labels; on
+    // MySQL, whose catalog the check does not read, none.
+    let checked = if Server::current() == Server::MySql {
+        0
+    } else {
+        3
+    };
+    assert_eq!(tables.outcome.checked, checked);
+    let rls_off = |table: &str| {
+        (
+            Severity::Warning,
+            table.to_owned(),
+            "row-level security is off".to_owned(),
+        )
+    };
+    let no_index = (
+        Severity::Warning,
+        "deals".to_owned(),
+        "no index starts with `workspace_id`".to_owned(),
     );
+    let no_column = (
+        Severity::Error,
+        "labels".to_owned(),
+        "has no `workspace_id` column".to_owned(),
+    );
+    let expected = match Server::current() {
+        // The catalog also says where row-level security is off.
+        Server::Postgres => vec![rls_off("deal_notes"), no_index, rls_off("deals"), no_column],
+        Server::MySql => vec![],
+        Server::Sqlite => vec![no_index, no_column],
+    };
+    assert_eq!(subjects(tables), expected);
     // Without sources, the source checks are skipped.
     let entities = report.check("workspace.entities").unwrap();
     assert!(
@@ -346,6 +314,12 @@ async fn navree_check_runs_them_through_the_conformity_command() {
         .await
         .unwrap_err();
     // One unclassified entity, two direct accesses, one table without the
-    // column; one table without an index.
-    assert_eq!(error.to_string(), "conformity: 4 errors, 1 warning");
+    // column; one table without an index (and, on PostgreSQL, two without
+    // row-level security; on MySQL the tables are not checked).
+    let expected = match Server::current() {
+        Server::Postgres => "conformity: 4 errors, 3 warnings",
+        Server::MySql => "conformity: 3 errors, 0 warnings",
+        Server::Sqlite => "conformity: 4 errors, 1 warning",
+    };
+    assert_eq!(error.to_string(), expected);
 }

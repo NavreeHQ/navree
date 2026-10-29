@@ -1,9 +1,13 @@
-//! The workspace module's tables: navree-orm models, and SeaORM entities.
+//! The workspace module's tables, as navree-orm models.
 //!
-//! Each table's `Model` is one struct deriving both: the rows are ORM
-//! models (`Workspace::query()`, typed columns such as `Member::USER_ID`),
-//! and the SeaORM entities (`Entity`, `Column`, `ActiveModel`, the
-//! navree-access subjects) stay for code built on them.
+//! Each table's `Model` is a navree-orm model: rows are read with the model
+//! API and its builders (`Workspace::query()`, typed columns such as
+//! `Member::USER_ID`). Seven of them are navree-access subjects
+//! (`#[model(subject)]`): `Workspace`, `WorkspaceMember`,
+//! `WorkspaceInvitation`, `Organization`, `OrganizationMember`,
+//! `AccessRequest` and `WorkspacePartition`, registered by the module, so
+//! `can(.., from = "id")` routes load them through the ORM in the
+//! request's unit of work.
 //!
 //! - `workspaces(id, name, slug UNIQUE, owner_id, timezone, country, kind,
 //!   created_at, updated_at)`, `kind` being `live` or `demo`
@@ -44,6 +48,17 @@
 //! services, which keep the invariants, emit the events and record the
 //! changes; read them freely. The organization and partition tables exist
 //! whether or not the features are on; they stay empty while they are off.
+//!
+//! # Compatibility layer (data-layer move; removed in step 8)
+//!
+//! Crates not yet moved to navree-orm still read workspaces,
+//! organizations and memberships as SeaORM entities
+//! (`workspace::Entity::find_by_id` in navree-sso, `member::Entity` in
+//! navree-billing, admin-panel resources over `workspace::Entity`). For
+//! them, and only for them, those three models keep the SeaORM derive, an
+//! empty `Relation` and `ActiveModelBehavior`, and their `Entity` types are
+//! access subjects. Everything marked `COMPAT` is that layer; nothing else
+//! in navree-workspace uses it.
 
 use std::fmt;
 
@@ -95,15 +110,23 @@ impl fmt::Display for WorkspaceKind {
 
 /// `workspaces`: the tenants.
 pub mod workspace {
+    use chrono::{DateTime, Utc};
+    // COMPAT: the SeaORM derive of `Model` (see the module documentation).
     use sea_orm::entity::prelude::*;
     use serde::Serialize;
 
     use super::WorkspaceKind;
 
-    /// A workspace.
+    /// A workspace: the access subject `Workspace` (permissions
+    /// `workspace.<action>`).
+    // COMPAT: `DeriveEntityModel` and the `#[sea_orm]` attributes.
     #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
     #[sea_orm(table_name = "workspaces")]
-    #[model(table = "workspaces")]
+    #[model(
+        table = "workspaces",
+        subject = "Workspace",
+        permission_prefix = "workspace"
+    )]
     pub struct Model {
         /// The id (UUID v7).
         #[sea_orm(primary_key, auto_increment = false)]
@@ -126,9 +149,9 @@ pub mod workspace {
         /// [`DemoWorkspaces`](crate::DemoWorkspaces)).
         pub kind: String,
         /// When the workspace was created.
-        pub created_at: DateTimeUtc,
+        pub created_at: DateTime<Utc>,
         /// When the workspace last changed.
-        pub updated_at: DateTimeUtc,
+        pub updated_at: DateTime<Utc>,
     }
 
     impl Model {
@@ -143,43 +166,33 @@ pub mod workspace {
         }
     }
 
-    /// A workspace has many members and invitations.
+    /// COMPAT: no relations are declared (the SeaORM entity's).
     #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {
-        /// `workspace_members.workspace_id`.
-        #[sea_orm(has_many = "super::member::Entity")]
-        Members,
-        /// `workspace_invitations.workspace_id`.
-        #[sea_orm(has_many = "super::invitation::Entity")]
-        Invitations,
-    }
+    pub enum Relation {}
 
-    impl Related<super::member::Entity> for Entity {
-        fn to() -> RelationDef {
-            Relation::Members.def()
-        }
-    }
-
-    impl Related<super::invitation::Entity> for Entity {
-        fn to() -> RelationDef {
-            Relation::Invitations.def()
-        }
-    }
-
+    /// COMPAT: the SeaORM entity's behaviour.
     impl ActiveModelBehavior for ActiveModel {}
 }
 
 /// `workspace_members`: who belongs to a workspace, with which role.
 pub mod member {
+    use chrono::{DateTime, Utc};
+    // COMPAT: the SeaORM derive of `Model` (see the module documentation).
     use sea_orm::entity::prelude::*;
     use serde::Serialize;
 
     use crate::WorkspaceRole;
 
-    /// A membership.
+    /// A membership: the access subject `WorkspaceMember` (permissions
+    /// `workspace.members.<action>`).
+    // COMPAT: `DeriveEntityModel` and the `#[sea_orm]` attributes.
     #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
     #[sea_orm(table_name = "workspace_members")]
-    #[model(table = "workspace_members")]
+    #[model(
+        table = "workspace_members",
+        subject = "WorkspaceMember",
+        permission_prefix = "workspace.members"
+    )]
     pub struct Model {
         /// The id (UUID v7).
         #[sea_orm(primary_key, auto_increment = false)]
@@ -195,9 +208,9 @@ pub mod member {
         /// listed in `partition_grants`.
         pub partition_scope: String,
         /// When the user joined.
-        pub created_at: DateTimeUtc,
+        pub created_at: DateTime<Utc>,
         /// When the membership last changed.
-        pub updated_at: DateTimeUtc,
+        pub updated_at: DateTime<Utc>,
     }
 
     impl Model {
@@ -212,42 +225,33 @@ pub mod member {
         }
     }
 
-    /// A membership belongs to a workspace.
+    /// COMPAT: no relations are declared (the SeaORM entity's).
     #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {
-        /// `workspaces.id`.
-        #[sea_orm(
-            belongs_to = "super::workspace::Entity",
-            from = "Column::WorkspaceId",
-            to = "super::workspace::Column::Id",
-            on_delete = "Cascade"
-        )]
-        Workspace,
-    }
+    pub enum Relation {}
 
-    impl Related<super::workspace::Entity> for Entity {
-        fn to() -> RelationDef {
-            Relation::Workspace.def()
-        }
-    }
-
+    /// COMPAT: the SeaORM entity's behaviour.
     impl ActiveModelBehavior for ActiveModel {}
 }
 
 /// `workspace_invitations`: pending and accepted invitations.
 pub mod invitation {
-    use sea_orm::entity::prelude::*;
+    use chrono::{DateTime, Utc};
     use serde::Serialize;
+    use uuid::Uuid;
 
     use crate::WorkspaceRole;
 
-    /// An invitation. The token digest is never serialized.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
-    #[sea_orm(table_name = "workspace_invitations")]
-    #[model(table = "workspace_invitations")]
+    /// An invitation: the access subject `WorkspaceInvitation` (permissions
+    /// `workspace.invitations.<action>`). The token digest is never
+    /// serialized.
+    #[derive(Clone, Debug, PartialEq, Eq, navree_orm::Model, Serialize)]
+    #[model(
+        table = "workspace_invitations",
+        subject = "WorkspaceInvitation",
+        permission_prefix = "workspace.invitations"
+    )]
     pub struct Model {
         /// The id (UUID v7).
-        #[sea_orm(primary_key, auto_increment = false)]
         pub id: Uuid,
         /// The workspace.
         pub workspace_id: Uuid,
@@ -257,18 +261,17 @@ pub mod invitation {
         pub role: String,
         /// SHA-256 of the token (lower-case hex). Never serialized.
         #[serde(skip_serializing)]
-        #[sea_orm(unique)]
         pub token_hash: String,
         /// Who sent it, if a user did.
         pub invited_by: Option<Uuid>,
         /// When it stops being accepted.
-        pub expires_at: DateTimeUtc,
+        pub expires_at: DateTime<Utc>,
         /// When it was accepted, if it was.
-        pub accepted_at: Option<DateTimeUtc>,
+        pub accepted_at: Option<DateTime<Utc>>,
         /// The user who accepted it.
         pub accepted_by: Option<Uuid>,
         /// When it was sent.
-        pub created_at: DateTimeUtc,
+        pub created_at: DateTime<Utc>,
     }
 
     impl Model {
@@ -278,42 +281,29 @@ pub mod invitation {
         }
 
         /// Whether it is still open: not accepted and not expired at `now`.
-        pub fn is_pending(&self, now: DateTimeUtc) -> bool {
+        pub fn is_pending(&self, now: DateTime<Utc>) -> bool {
             self.accepted_at.is_none() && self.expires_at > now
         }
     }
-
-    /// An invitation belongs to a workspace.
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {
-        /// `workspaces.id`.
-        #[sea_orm(
-            belongs_to = "super::workspace::Entity",
-            from = "Column::WorkspaceId",
-            to = "super::workspace::Column::Id",
-            on_delete = "Cascade"
-        )]
-        Workspace,
-    }
-
-    impl Related<super::workspace::Entity> for Entity {
-        fn to() -> RelationDef {
-            Relation::Workspace.def()
-        }
-    }
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
 /// `organizations`: the level above workspaces.
 pub mod organization {
+    use chrono::{DateTime, Utc};
+    // COMPAT: the SeaORM derive of `Model` (see the module documentation).
     use sea_orm::entity::prelude::*;
     use serde::Serialize;
 
-    /// An organization.
+    /// An organization: the access subject `Organization` (permissions
+    /// `organization.<action>`).
+    // COMPAT: `DeriveEntityModel` and the `#[sea_orm]` attributes.
     #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
     #[sea_orm(table_name = "organizations")]
-    #[model(table = "organizations")]
+    #[model(
+        table = "organizations",
+        subject = "Organization",
+        permission_prefix = "organization"
+    )]
     pub struct Model {
         /// The id (UUID v7).
         #[sea_orm(primary_key, auto_increment = false)]
@@ -331,52 +321,38 @@ pub mod organization {
         /// An IANA time zone name (`Europe/London`), if set.
         pub timezone: Option<String>,
         /// When the organization was created.
-        pub created_at: DateTimeUtc,
+        pub created_at: DateTime<Utc>,
         /// When the organization last changed.
-        pub updated_at: DateTimeUtc,
+        pub updated_at: DateTime<Utc>,
     }
 
-    /// An organization has many members and access requests.
+    /// COMPAT: no relations are declared (the SeaORM entity's).
     #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {
-        /// `organization_members.organization_id`.
-        #[sea_orm(has_many = "super::organization_member::Entity")]
-        Members,
-        /// `access_requests.organization_id`.
-        #[sea_orm(has_many = "super::access_request::Entity")]
-        AccessRequests,
-    }
+    pub enum Relation {}
 
-    impl Related<super::organization_member::Entity> for Entity {
-        fn to() -> RelationDef {
-            Relation::Members.def()
-        }
-    }
-
-    impl Related<super::access_request::Entity> for Entity {
-        fn to() -> RelationDef {
-            Relation::AccessRequests.def()
-        }
-    }
-
+    /// COMPAT: the SeaORM entity's behaviour.
     impl ActiveModelBehavior for ActiveModel {}
 }
 
 /// `organization_members`: who belongs to an organization, with which role
 /// and in which of its workspaces.
 pub mod organization_member {
-    use sea_orm::entity::prelude::*;
+    use chrono::{DateTime, Utc};
     use serde::Serialize;
+    use uuid::Uuid;
 
     use crate::OrgRole;
 
-    /// An organization membership.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
-    #[sea_orm(table_name = "organization_members")]
-    #[model(table = "organization_members")]
+    /// An organization membership: the access subject `OrganizationMember`
+    /// (permissions `organization.members.<action>`).
+    #[derive(Clone, Debug, PartialEq, Eq, navree_orm::Model, Serialize)]
+    #[model(
+        table = "organization_members",
+        subject = "OrganizationMember",
+        permission_prefix = "organization.members"
+    )]
     pub struct Model {
         /// The id (UUID v7).
-        #[sea_orm(primary_key, auto_increment = false)]
         pub id: Uuid,
         /// The organization.
         pub organization_id: Uuid,
@@ -389,9 +365,9 @@ pub mod organization_member {
         /// or `only` the ones listed in `organization_grants`.
         pub scope: String,
         /// When the user joined.
-        pub created_at: DateTimeUtc,
+        pub created_at: DateTime<Utc>,
         /// When the membership last changed.
-        pub updated_at: DateTimeUtc,
+        pub updated_at: DateTime<Utc>,
     }
 
     impl Model {
@@ -405,42 +381,20 @@ pub mod organization_member {
             self.scope == crate::org_role::SCOPE_ONLY
         }
     }
-
-    /// A membership belongs to an organization.
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {
-        /// `organizations.id`.
-        #[sea_orm(
-            belongs_to = "super::organization::Entity",
-            from = "Column::OrganizationId",
-            to = "super::organization::Column::Id",
-            on_delete = "Cascade"
-        )]
-        Organization,
-    }
-
-    impl Related<super::organization::Entity> for Entity {
-        fn to() -> RelationDef {
-            Relation::Organization.def()
-        }
-    }
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
 /// `organization_grants`: the workspaces an organization member limited to
 /// `only` some of them reaches.
 pub mod organization_grant {
-    use sea_orm::entity::prelude::*;
+    use chrono::{DateTime, Utc};
     use serde::Serialize;
+    use uuid::Uuid;
 
     /// A grant of one workspace to one organization member.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
-    #[sea_orm(table_name = "organization_grants")]
+    #[derive(Clone, Debug, PartialEq, Eq, navree_orm::Model, Serialize)]
     #[model(table = "organization_grants")]
     pub struct Model {
         /// The id (UUID v7).
-        #[sea_orm(primary_key, auto_increment = false)]
         pub id: Uuid,
         /// The organization.
         pub organization_id: Uuid,
@@ -449,45 +403,28 @@ pub mod organization_grant {
         /// The workspace the member reaches.
         pub workspace_id: Uuid,
         /// When the grant was made.
-        pub created_at: DateTimeUtc,
+        pub created_at: DateTime<Utc>,
     }
-
-    /// A grant belongs to a membership.
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {
-        /// `organization_members.id`.
-        #[sea_orm(
-            belongs_to = "super::organization_member::Entity",
-            from = "Column::MemberId",
-            to = "super::organization_member::Column::Id",
-            on_delete = "Cascade"
-        )]
-        Member,
-    }
-
-    impl Related<super::organization_member::Entity> for Entity {
-        fn to() -> RelationDef {
-            Relation::Member.def()
-        }
-    }
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
 /// `access_requests`: users asking to join an organization.
 pub mod access_request {
-    use sea_orm::entity::prelude::*;
+    use chrono::{DateTime, Utc};
     use serde::Serialize;
+    use uuid::Uuid;
 
     use crate::AccessRequestStatus;
 
-    /// An access request.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
-    #[sea_orm(table_name = "access_requests")]
-    #[model(table = "access_requests")]
+    /// An access request: the access subject `AccessRequest` (permissions
+    /// `organization.access_requests.<action>`).
+    #[derive(Clone, Debug, PartialEq, Eq, navree_orm::Model, Serialize)]
+    #[model(
+        table = "access_requests",
+        subject = "AccessRequest",
+        permission_prefix = "organization.access_requests"
+    )]
     pub struct Model {
         /// The id (UUID v7).
-        #[sea_orm(primary_key, auto_increment = false)]
         pub id: Uuid,
         /// The organization asked.
         pub organization_id: Uuid,
@@ -504,13 +441,13 @@ pub mod access_request {
         /// Who approved or declined it.
         pub decided_by: Option<Uuid>,
         /// When it was approved or declined.
-        pub decided_at: Option<DateTimeUtc>,
+        pub decided_at: Option<DateTime<Utc>>,
         /// Why it was declined, if a reason was given.
         pub reason: Option<String>,
         /// When it was made.
-        pub created_at: DateTimeUtc,
+        pub created_at: DateTime<Utc>,
         /// When it last changed.
-        pub updated_at: DateTimeUtc,
+        pub updated_at: DateTime<Utc>,
     }
 
     impl Model {
@@ -524,41 +461,24 @@ pub mod access_request {
             self.status() == AccessRequestStatus::Pending
         }
     }
-
-    /// An access request belongs to an organization.
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {
-        /// `organizations.id`.
-        #[sea_orm(
-            belongs_to = "super::organization::Entity",
-            from = "Column::OrganizationId",
-            to = "super::organization::Column::Id",
-            on_delete = "Cascade"
-        )]
-        Organization,
-    }
-
-    impl Related<super::organization::Entity> for Entity {
-        fn to() -> RelationDef {
-            Relation::Organization.def()
-        }
-    }
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
 /// `workspace_partitions`: named slices of a workspace's data.
 pub mod partition {
-    use sea_orm::entity::prelude::*;
+    use chrono::{DateTime, Utc};
     use serde::Serialize;
+    use uuid::Uuid;
 
-    /// A partition.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
-    #[sea_orm(table_name = "workspace_partitions")]
-    #[model(table = "workspace_partitions")]
+    /// A partition: the access subject `WorkspacePartition` (permissions
+    /// `workspace.partitions.<action>`).
+    #[derive(Clone, Debug, PartialEq, Eq, navree_orm::Model, Serialize)]
+    #[model(
+        table = "workspace_partitions",
+        subject = "WorkspacePartition",
+        permission_prefix = "workspace.partitions"
+    )]
     pub struct Model {
         /// The id (UUID v7).
-        #[sea_orm(primary_key, auto_increment = false)]
         pub id: Uuid,
         /// The workspace.
         pub workspace_id: Uuid,
@@ -567,46 +487,24 @@ pub mod partition {
         /// The handle, unique in the workspace (`acme-co-uk`).
         pub slug: String,
         /// When the partition was created.
-        pub created_at: DateTimeUtc,
+        pub created_at: DateTime<Utc>,
         /// When the partition last changed.
-        pub updated_at: DateTimeUtc,
+        pub updated_at: DateTime<Utc>,
     }
-
-    /// A partition belongs to a workspace.
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {
-        /// `workspaces.id`.
-        #[sea_orm(
-            belongs_to = "super::workspace::Entity",
-            from = "Column::WorkspaceId",
-            to = "super::workspace::Column::Id",
-            on_delete = "Cascade"
-        )]
-        Workspace,
-    }
-
-    impl Related<super::workspace::Entity> for Entity {
-        fn to() -> RelationDef {
-            Relation::Workspace.def()
-        }
-    }
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
 /// `partition_grants`: the partitions a workspace member limited to `only`
 /// some of them sees.
 pub mod partition_grant {
-    use sea_orm::entity::prelude::*;
+    use chrono::{DateTime, Utc};
     use serde::Serialize;
+    use uuid::Uuid;
 
     /// A grant of one partition to one workspace member.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
-    #[sea_orm(table_name = "partition_grants")]
+    #[derive(Clone, Debug, PartialEq, Eq, navree_orm::Model, Serialize)]
     #[model(table = "partition_grants")]
     pub struct Model {
         /// The id (UUID v7).
-        #[sea_orm(primary_key, auto_increment = false)]
         pub id: Uuid,
         /// The workspace.
         pub workspace_id: Uuid,
@@ -615,37 +513,8 @@ pub mod partition_grant {
         /// The partition the member sees.
         pub partition_id: Uuid,
         /// When the grant was made.
-        pub created_at: DateTimeUtc,
+        pub created_at: DateTime<Utc>,
     }
-
-    /// A grant belongs to a membership and a partition.
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {
-        /// `workspace_members.id`.
-        #[sea_orm(
-            belongs_to = "super::member::Entity",
-            from = "Column::MemberId",
-            to = "super::member::Column::Id",
-            on_delete = "Cascade"
-        )]
-        Member,
-        /// `workspace_partitions.id`.
-        #[sea_orm(
-            belongs_to = "super::partition::Entity",
-            from = "Column::PartitionId",
-            to = "super::partition::Column::Id",
-            on_delete = "Cascade"
-        )]
-        Partition,
-    }
-
-    impl Related<super::partition::Entity> for Entity {
-        fn to() -> RelationDef {
-            Relation::Partition.def()
-        }
-    }
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
 /// A workspace (a row of `workspaces`).
@@ -700,37 +569,67 @@ pub const MEMBER_SUBJECT: &str = "WorkspaceMember";
 /// `workspace.invitations.<action>`.
 pub const INVITATION_SUBJECT: &str = "WorkspaceInvitation";
 
+/// COMPAT: the SeaORM entity of workspaces is the access subject
+/// `Workspace` too, for admin-panel resources over it.
 impl Subject for workspace::Entity {
     const SUBJECT: &'static str = WORKSPACE_SUBJECT;
     const PERMISSION_PREFIX: &'static str = "workspace";
 }
 
+/// COMPAT: the SeaORM entity of memberships is the access subject
+/// `WorkspaceMember` too.
 impl Subject for member::Entity {
     const SUBJECT: &'static str = MEMBER_SUBJECT;
     const PERMISSION_PREFIX: &'static str = "workspace.members";
 }
 
-impl Subject for invitation::Entity {
-    const SUBJECT: &'static str = INVITATION_SUBJECT;
-    const PERMISSION_PREFIX: &'static str = "workspace.invitations";
-}
-
+/// COMPAT: the SeaORM entity of organizations is the access subject
+/// `Organization` too.
 impl Subject for organization::Entity {
     const SUBJECT: &'static str = ORGANIZATION_SUBJECT;
     const PERMISSION_PREFIX: &'static str = "organization";
 }
 
-impl Subject for organization_member::Entity {
-    const SUBJECT: &'static str = ORG_MEMBER_SUBJECT;
-    const PERMISSION_PREFIX: &'static str = "organization.members";
-}
+#[cfg(test)]
+mod tests {
+    use navree_access::SubjectRecords;
 
-impl Subject for access_request::Entity {
-    const SUBJECT: &'static str = ACCESS_REQUEST_SUBJECT;
-    const PERMISSION_PREFIX: &'static str = "organization.access_requests";
-}
+    use super::*;
 
-impl Subject for partition::Entity {
-    const SUBJECT: &'static str = PARTITION_SUBJECT;
-    const PERMISSION_PREFIX: &'static str = "workspace.partitions";
+    fn subject<S: SubjectRecords>() -> (&'static str, &'static str) {
+        (S::SUBJECT, S::PERMISSION_PREFIX)
+    }
+
+    #[test]
+    fn the_models_are_the_module_s_subjects() {
+        assert_eq!(subject::<Workspace>(), (WORKSPACE_SUBJECT, "workspace"));
+        assert_eq!(subject::<Member>(), (MEMBER_SUBJECT, "workspace.members"));
+        assert_eq!(
+            subject::<Invitation>(),
+            (INVITATION_SUBJECT, "workspace.invitations")
+        );
+        assert_eq!(
+            subject::<Organization>(),
+            (ORGANIZATION_SUBJECT, "organization")
+        );
+        assert_eq!(
+            subject::<OrgMember>(),
+            (ORG_MEMBER_SUBJECT, "organization.members")
+        );
+        assert_eq!(
+            subject::<AccessRequest>(),
+            (ACCESS_REQUEST_SUBJECT, "organization.access_requests")
+        );
+        assert_eq!(
+            subject::<Partition>(),
+            (PARTITION_SUBJECT, "workspace.partitions")
+        );
+        // COMPAT: the SeaORM entities name the same subjects.
+        assert_eq!(<workspace::Entity as Subject>::SUBJECT, WORKSPACE_SUBJECT);
+        assert_eq!(<member::Entity as Subject>::SUBJECT, MEMBER_SUBJECT);
+        assert_eq!(
+            <organization::Entity as Subject>::SUBJECT,
+            ORGANIZATION_SUBJECT
+        );
+    }
 }

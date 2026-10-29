@@ -6,11 +6,13 @@ use std::sync::Arc;
 
 use chrono::TimeZone;
 use http::Method;
-use navree_db::{MigrationSet, Repo};
+use navree_db::MigrationSet;
+use navree_db::navree_schema::{Migration, Schema, SchemaMigration, SchemaResult};
 use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{
     BoxError, BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver,
 };
+use navree_orm::prelude::*;
 use navree_schedule::{ScheduleModule, Scheduler};
 use navree_testing::TempDirGuard;
 use navree_workspace::{
@@ -18,15 +20,11 @@ use navree_workspace::{
     ModuleBuilderWorkspaceExt, NewWorkspace, Workspace, WorkspaceError, WorkspaceKind,
     WorkspaceRepo, WorkspaceUow,
 };
-use sea_orm::sea_query::{ColumnDef, Table};
-use sea_orm::{ActiveValue::Set, ColumnTrait, DbErr, EntityTrait, QueryFilter};
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use crate::support::{World, builder, deal};
+use crate::support::{Deal, World, builder, new_deal, uuid};
 
 /// A deal as the fixture file lists it.
 #[derive(Deserialize)]
@@ -56,14 +54,10 @@ impl DemoSeeder for DealsDemo {
         Box::pin(async move {
             let deals: Vec<DealFixture> = demo.fixture("deals")?;
             for fixture in deals {
-                WorkspaceRepo::<deal::Entity>::insert(
+                WorkspaceRepo::<Deal>::insert(
                     demo.uow(),
                     demo.id(),
-                    deal::ActiveModel {
-                        id: Set(Uuid::now_v7()),
-                        workspace_id: Set(demo.id()),
-                        title: Set(fixture.title),
-                    },
+                    new_deal(demo.id(), &fixture.title),
                 )
                 .await?;
             }
@@ -83,9 +77,10 @@ impl Injectable for DealsController {
 }
 
 async fn index(ws: CurrentWorkspace, uow: WorkspaceUow) -> Result<Json<Value>, AppError> {
-    let deals = WorkspaceRepo::<deal::Entity>::select(ws.id())
-        .all(&*uow.tx().await?)
-        .await?;
+    let deals = WorkspaceRepo::<Deal>::query(ws.id())
+        .get(&*uow)
+        .await?
+        .into_models();
     Ok(Json(json!({
         "demo": ws.is_demo(),
         "guest": ws.is_guest(),
@@ -98,18 +93,15 @@ async fn store(
     ws: CurrentWorkspace,
     uow: WorkspaceUow,
     Json(input): Json<Value>,
-) -> Result<Json<deal::Model>, AppError> {
+) -> Result<Json<Deal>, AppError> {
     Ok(Json(
-        WorkspaceRepo::<deal::Entity>::insert(
-            &uow,
+        WorkspaceRepo::<Deal>::insert(
+            &*uow,
             ws.id(),
-            deal::ActiveModel {
-                id: Set(Uuid::now_v7()),
-                workspace_id: Set(ws.id()),
-                title: Set(input["title"].as_str().unwrap_or_default().to_owned()),
-            },
+            new_deal(ws.id(), input["title"].as_str().unwrap_or_default()),
         )
-        .await?,
+        .await?
+        .into_inner(),
     ))
 }
 
@@ -189,10 +181,11 @@ impl World {
 
     /// The titles of `workspace`'s deals, sorted.
     async fn deal_titles(&self, workspace: Uuid) -> Vec<String> {
-        let mut titles: Vec<String> = WorkspaceRepo::<deal::Entity>::select(workspace)
-            .all(self.db().await.conn())
+        let mut titles: Vec<String> = WorkspaceRepo::<Deal>::query(workspace)
+            .get(&*self.db().await)
             .await
             .unwrap()
+            .into_models()
             .into_iter()
             .map(|deal| deal.title)
             .collect();
@@ -421,9 +414,8 @@ async fn the_reset_command_takes_demo_slugs_only() {
     let second = world.demo(ada, "Second demo").await;
 
     // Read-only demos reset too, from the command.
-    deal::Entity::delete_many()
-        .filter(deal::Column::WorkspaceId.eq(second.id))
-        .exec(world.db().await.conn())
+    WorkspaceRepo::<Deal>::query(second.id)
+        .delete(&*world.db().await)
         .await
         .unwrap();
     assert!(world.deal_titles(second.id).await.is_empty());
@@ -813,50 +805,28 @@ async fn invalid_demo_options_fail_the_boot() {
 // Database isolation: the demo's data lives in its own database.
 
 /// `notes(id, body)`, in every workspace's database.
-mod note {
-    use sea_orm::entity::prelude::*;
-    use serde::Serialize;
-
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
-    #[sea_orm(table_name = "notes")]
-    pub struct Model {
-        #[sea_orm(primary_key, auto_increment = false)]
-        pub id: Uuid,
-        pub body: String,
-    }
-
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
+#[derive(Clone, Debug, Default, PartialEq, Eq, navree_orm::Model, serde::Serialize)]
+#[model(table = "notes")]
+struct Note {
+    id: Uuid,
+    body: String,
 }
 
 struct CreateNotes;
 
-impl MigrationName for CreateNotes {
-    fn name(&self) -> &str {
-        "m20261027_000001_create_notes"
-    }
-}
-
-#[async_trait]
-impl MigrationTrait for CreateNotes {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table("notes")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("body").string().not_null())
-                    .to_owned(),
-            )
+impl Migration for CreateNotes {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        let dialect = schema.target().await?.dialect();
+        schema
+            .create("notes", |t| {
+                uuid(t, "id", dialect).primary();
+                t.string("body");
+            })
             .await
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .drop_table(Table::drop().table("notes").to_owned())
-            .await
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop_if_exists("notes").await
     }
 }
 
@@ -889,11 +859,11 @@ impl DemoSeeder for NotesDemo {
             let notes: Vec<NoteFixture> =
                 demo.parse_fixture(r#"[{ "body": "Call back", "due": "{{ today + 2d }}" }]"#)?;
             for note in notes {
-                Repo::<note::Entity>::insert(
+                Note::create(
                     demo.uow(),
-                    note::ActiveModel {
-                        id: Set(Uuid::now_v7()),
-                        body: Set(format!("{} by {}", note.body, note.due)),
+                    Note {
+                        id: Uuid::now_v7(),
+                        body: format!("{} by {}", note.body, note.due),
                     },
                 )
                 .await?;
@@ -907,8 +877,11 @@ struct NotesModule;
 
 impl Module for NotesModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.workspace_migrations(MigrationSet::new("notes").migration(CreateNotes))
-            .demo_seeder::<NotesDemo>();
+        m.workspace_migrations(MigrationSet::new("notes").migration(SchemaMigration::new(
+            "m20261027_000001_create_notes",
+            CreateNotes,
+        )))
+        .demo_seeder::<NotesDemo>();
     }
 }
 
@@ -934,10 +907,11 @@ async fn database_isolation_seeds_and_resets_the_demo_database() {
         .get::<navree_workspace::WorkspaceDatabases>()
         .await;
     let notes = |db: Arc<navree_db::Db>| async move {
-        note::Entity::find()
-            .all(db.conn())
+        Note::query()
+            .get(db.as_ref())
             .await
             .unwrap()
+            .into_models()
             .into_iter()
             .map(|note| note.body)
             .collect::<Vec<_>>()
@@ -947,11 +921,11 @@ async fn database_isolation_seeds_and_resets_the_demo_database() {
     assert_eq!(notes(tenant.clone()).await, ["Call back by 2026-10-28"]);
 
     let uow = tenant.uow(None, None).await;
-    Repo::<note::Entity>::insert(
+    Note::create(
         &uow,
-        note::ActiveModel {
-            id: Set(Uuid::now_v7()),
-            body: Set("Scribble".into()),
+        Note {
+            id: Uuid::now_v7(),
+            body: "Scribble".into(),
         },
     )
     .await

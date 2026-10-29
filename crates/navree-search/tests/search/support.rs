@@ -13,7 +13,7 @@ use navree_search::{
     Document, Embeddings, IndexSettings, Search, SearchContext, SearchModule, Searchable,
 };
 use navree_testing::{TestApp, TestAppBuilder};
-use navree_workspace::WorkspaceScoped;
+use navree_workspace::sea_compat::WorkspaceScoped;
 use sea_orm::{ActiveValue::Set, ConnectionTrait, DbErr, EntityTrait};
 use sea_orm_migration::async_trait::async_trait;
 use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};

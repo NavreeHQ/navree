@@ -187,8 +187,8 @@ fn prelude_brings_the_everyday_types() {
     assert!(same::<InWorkspace, navree::workspace::InWorkspace>());
     assert!(same::<WorkspaceUow, navree::workspace::WorkspaceUow>());
     assert!(same::<
-        WorkspaceRepo<DummyEntity>,
-        navree::workspace::WorkspaceRepo<DummyEntity>,
+        WorkspaceRepo<Thing>,
+        navree::workspace::WorkspaceRepo<Thing>,
     >());
     // Organizations and partitions.
     assert!(same::<
@@ -198,10 +198,7 @@ fn prelude_brings_the_everyday_types() {
     assert!(same::<InOrganization, navree::workspace::InOrganization>());
     assert!(same::<CurrentPartition, navree::workspace::CurrentPartition>());
     assert!(same::<PartitionScope, navree::workspace::PartitionScope>());
-    assert!(same::<
-        OrgRepo<DummyEntity>,
-        navree::workspace::OrgRepo<DummyEntity>,
-    >());
+    assert!(same::<OrgRepo<Thing>, navree::workspace::OrgRepo<Thing>>());
     // Shared libraries.
     assert!(same::<
         LibraryRepo<Thing>,

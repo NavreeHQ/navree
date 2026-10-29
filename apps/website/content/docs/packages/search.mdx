@@ -481,7 +481,7 @@ Each `include` takes that entity's `Accessible` scope. A result carries the `nam
 
 ## Workspaces
 
-In an app with [workspaces](/docs/workspaces/introduction/) and row isolation, a searchable entity that implements `WorkspaceScoped` stores its workspace column (`workspace_id` by default) in every document. The derive finds the column; a hand-written `settings()` names it with `.workspace("workspace_id")`.
+In an app with [workspaces](/docs/workspaces/introduction/) and row isolation, a searchable SeaORM entity that implements `WorkspaceScoped` (the compatibility form, `navree::workspace::sea_compat::WorkspaceScoped`) stores its workspace column (`workspace_id` by default) in every document. The derive finds the column; a hand-written `settings()` names it with `.workspace("workspace_id")`.
 
 Every query on such an index names the workspace, as `WorkspaceRepo` does for rows. In a request, pass the `CurrentWorkspace` id; in jobs and commands, the workspace you work in:
 

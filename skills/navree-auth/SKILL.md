@@ -119,9 +119,13 @@ impl ProfileController {
 ```
 
 `uow.actor()` also gives the user id inside services. `navree::auth::User`
-is a navree-orm model (`User::query()`, `User::EMAIL`, `User::find(&db, id)`);
+is a navree-orm model (`User::query()`, `User::EMAIL`, `User::find(&db, id)`)
+and the access subject `User` (`#[model(subject = "User", permission_prefix =
+"users")]`): register it with `AccessModule::for_feature::<navree_auth::User>()`
+and take `Authorized<User, Read>`, which derefs to `Record<User>`
+(`.into_inner()` is the Record, `.into_inner().into_inner()` the `User`).
 `navree::auth::user::Entity` is the SeaORM entity of the same table, kept only
-for code not yet on navree-orm (and for `AccessModule::for_feature`). Modules
+for code not yet on navree-orm (and as a subject for such crates). Modules
 that create users (social sign-in, single sign-on) write them with
 `navree::auth::user::insert(&uow, user)`, which records the change event
 without the secrets. Its

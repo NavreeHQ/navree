@@ -4,10 +4,8 @@
 use std::fmt;
 use std::sync::Arc;
 
-use navree_db::Db;
+use navree_db::{Backend, Db, Executor, Row, Statement, Value};
 use navree_kernel::{BoxError, BoxFuture};
-use sea_orm::sea_query::{Alias, Expr, ExprTrait, Query};
-use sea_orm::{ConnectionTrait, DbBackend, Statement};
 use serde::Serialize;
 use tokio::sync::OnceCell;
 use uuid::Uuid;
@@ -84,27 +82,35 @@ impl fmt::Debug for TableUserDirectory {
 }
 
 async fn table_exists(db: &Db, table: &str) -> Result<bool, BoxError> {
-    let backend = db.backend();
-    let statement = match backend {
-        DbBackend::Sqlite => Statement::from_sql_and_values(
-            backend,
-            "SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = ?",
-            [table.into()],
-        ),
-        _ => Statement::from_sql_and_values(
-            backend,
-            "SELECT 1 AS found WHERE to_regclass($1) IS NOT NULL",
-            [table.into()],
-        ),
+    let reader = db.read_executor().await;
+    let sql = match reader.backend() {
+        Backend::Sqlite => "SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = ?",
+        Backend::MySql => {
+            "SELECT 1 AS found FROM information_schema.tables \
+             WHERE table_schema = DATABASE() AND table_name = ?"
+        }
+        Backend::Postgres => "SELECT 1 AS found WHERE to_regclass(?) IS NOT NULL",
     };
-    Ok(db.reader().await.query_one_raw(statement).await?.is_some())
+    let statement = Statement::portable(sql, [Value::from(table)]);
+    Ok(reader.fetch_optional(&statement).await?.is_some())
 }
 
-fn summary(row: &sea_orm::QueryResult) -> Result<UserSummary, BoxError> {
+/// `SELECT id, name, email FROM <table> WHERE <condition>` for `backend`.
+fn select(backend: Backend, table: &str, condition: &str) -> String {
+    format!(
+        "SELECT {id}, {name}, {email} FROM {table} WHERE {condition}",
+        id = backend.quote_identifier("id"),
+        name = backend.quote_identifier("name"),
+        email = backend.quote_identifier("email"),
+        table = backend.quote_identifier(table),
+    )
+}
+
+fn summary(row: &Row) -> Result<UserSummary, BoxError> {
     Ok(UserSummary {
-        id: row.try_get("", "id")?,
-        name: row.try_get("", "name")?,
-        email: row.try_get("", "email")?,
+        id: row.get("id")?,
+        name: row.get("name")?,
+        email: row.get("email")?,
     })
 }
 
@@ -117,12 +123,15 @@ impl UserDirectory for TableUserDirectory {
             if ids.is_empty() {
                 return Ok(Vec::new());
             }
-            let select = Query::select()
-                .columns([Alias::new("id"), Alias::new("name"), Alias::new("email")])
-                .from(Alias::new(table))
-                .and_where(Expr::col(Alias::new("id")).is_in(ids.iter().copied()))
-                .to_owned();
-            let rows = self.db.reader().await.query_all(&select).await?;
+            let reader = self.db.read_executor().await;
+            let backend = reader.backend();
+            let marks = vec!["?"; ids.len()].join(", ");
+            let condition = format!("{} IN ({marks})", backend.quote_identifier("id"));
+            let statement = Statement::portable(
+                select(backend, table, &condition),
+                ids.iter().map(|id| Value::from(*id)),
+            );
+            let rows = reader.fetch_all(&statement).await?;
             rows.iter().map(summary).collect()
         })
     }
@@ -135,13 +144,14 @@ impl UserDirectory for TableUserDirectory {
             let Some(table) = self.table().await? else {
                 return Ok(None);
             };
-            let select = Query::select()
-                .columns([Alias::new("id"), Alias::new("name"), Alias::new("email")])
-                .from(Alias::new(table))
-                .and_where(Expr::col(Alias::new("email")).eq(email.trim().to_lowercase()))
-                .limit(1)
-                .to_owned();
-            let row = self.db.reader().await.query_one(&select).await?;
+            let reader = self.db.read_executor().await;
+            let backend = reader.backend();
+            let condition = format!("{} = ? LIMIT 1", backend.quote_identifier("email"));
+            let statement = Statement::portable(
+                select(backend, table, &condition),
+                [Value::from(email.trim().to_lowercase())],
+            );
+            let row = reader.fetch_optional(&statement).await?;
             row.as_ref().map(summary).transpose()
         })
     }
