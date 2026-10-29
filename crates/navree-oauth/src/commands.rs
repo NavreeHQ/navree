@@ -306,35 +306,34 @@ pub(crate) async fn prune(ctx: &AppContext, args: &[String]) -> Result<String, B
     let core = ctx.get::<Core>().await?;
     let cutoff = core.now() - TimeDelta::days(days);
     let deleted = in_uow(ctx, |uow| async move {
-        let tx = uow.tx().await?;
         let mut total = 0;
         total += authorization_request::Model::query()
             .where_(authorization_request::Model::EXPIRES_AT.lt(cutoff))
-            .delete(&*tx)
+            .delete(&uow)
             .await?;
         total += code::Model::query()
             .where_(code::Model::EXPIRES_AT.lt(cutoff))
-            .delete(&*tx)
+            .delete(&uow)
             .await?;
         total += device_code::Model::query()
             .where_(device_code::Model::EXPIRES_AT.lt(cutoff))
-            .delete(&*tx)
+            .delete(&uow)
             .await?;
         total += access_token::Model::query()
             .where_(access_token::Model::EXPIRES_AT.lt(cutoff))
             .or_where(access_token::Model::REVOKED_AT.lt(cutoff))
-            .delete(&*tx)
+            .delete(&uow)
             .await?;
         // Rotated tokens stay until they expire: reuse detection needs them.
         total += refresh_token::Model::query()
             .where_(refresh_token::Model::EXPIRES_AT.lt(cutoff))
             .or_where(refresh_token::Model::REVOKED_AT.lt(cutoff))
-            .delete(&*tx)
+            .delete(&uow)
             .await?;
         total += personal_access_token::Model::query()
             .where_(personal_access_token::Model::EXPIRES_AT.lt(cutoff))
             .or_where(personal_access_token::Model::REVOKED_AT.lt(cutoff))
-            .delete(&*tx)
+            .delete(&uow)
             .await?;
         Ok(total)
     })

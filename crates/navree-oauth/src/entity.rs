@@ -1,7 +1,11 @@
-//! The OAuth server's tables: navree-orm models (`Client::query()`, typed
-//! columns such as `Client::OWNER_ID`), and SeaORM entities for code built
-//! on SeaORM's query API. Scopes, grants and redirect URIs are stored
-//! space-separated; tokens, codes and secrets as SHA-256 digests.
+//! The OAuth server's tables, as navree-orm models (`Client::query()`, typed
+//! columns such as `Client::OWNER_ID`). Scopes, grants and redirect URIs are
+//! stored space-separated; tokens, codes and secrets as SHA-256 digests.
+//!
+//! Digests (client secrets, token, code and device code hashes) are never
+//! serialized, and the server writes these tables with bulk inserts and
+//! set-based updates, which record no change events: no digest reaches an
+//! observer or an audit trail.
 //!
 //! - `oauth_clients(id, name, secret_hash, redirect_uris, scopes, grants,
 //!   owner_id, trusted, introspect, workspace_id, logo_url, website,
@@ -29,17 +33,16 @@ use crate::scope::parse_scope;
 
 /// `oauth_clients`: the apps that ask for tokens.
 pub mod client {
-    use sea_orm::entity::prelude::*;
+    use chrono::{DateTime, Utc};
     use serde::Serialize;
+    use uuid::Uuid;
 
     /// A registered client. `secret_hash` is `None` for public clients and
     /// never serialized.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
-    #[sea_orm(table_name = "oauth_clients")]
+    #[derive(Clone, Debug, PartialEq, Eq, navree_orm::Model, Serialize)]
     #[model(table = "oauth_clients")]
     pub struct Model {
         /// The client id (UUID v7).
-        #[sea_orm(primary_key, auto_increment = false)]
         pub id: Uuid,
         /// The name shown on the consent page.
         pub name: String,
@@ -66,32 +69,25 @@ pub mod client {
         /// The client's website.
         pub website: Option<String>,
         /// When it was created.
-        pub created_at: DateTimeUtc,
+        pub created_at: DateTime<Utc>,
         /// When it last changed.
-        pub updated_at: DateTimeUtc,
+        pub updated_at: DateTime<Utc>,
         /// When it was revoked.
-        pub revoked_at: Option<DateTimeUtc>,
+        pub revoked_at: Option<DateTime<Utc>>,
     }
-
-    /// No relations are declared.
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
 /// `oauth_authorizations`: the scopes a user approved for a client.
 pub mod authorization {
-    use sea_orm::entity::prelude::*;
+    use chrono::{DateTime, Utc};
     use serde::Serialize;
+    use uuid::Uuid;
 
     /// A remembered approval.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
-    #[sea_orm(table_name = "oauth_authorizations")]
+    #[derive(Clone, Debug, PartialEq, Eq, navree_orm::Model, Serialize)]
     #[model(table = "oauth_authorizations")]
     pub struct Model {
         /// The id.
-        #[sea_orm(primary_key, auto_increment = false)]
         pub id: Uuid,
         /// The user.
         pub user_id: Uuid,
@@ -100,32 +96,25 @@ pub mod authorization {
         /// The approved scopes, space-separated.
         pub scopes: String,
         /// When the user first approved the client.
-        pub created_at: DateTimeUtc,
+        pub created_at: DateTime<Utc>,
         /// When the approval last changed.
-        pub updated_at: DateTimeUtc,
+        pub updated_at: DateTime<Utc>,
     }
-
-    /// No relations are declared.
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
 /// `oauth_authorization_requests`: `GET /oauth/authorize` requests waiting
 /// for the user's decision.
 pub mod authorization_request {
-    use sea_orm::entity::prelude::*;
+    use chrono::{DateTime, Utc};
     use serde::Serialize;
+    use uuid::Uuid;
 
     /// A pending (or decided) authorization request.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
-    #[sea_orm(table_name = "oauth_authorization_requests")]
+    #[derive(Clone, Debug, PartialEq, Eq, navree_orm::Model, Serialize)]
     #[model(table = "oauth_authorization_requests")]
     pub struct Model {
         /// The id (random, UUID v4): the `request` parameter of the
         /// consent page.
-        #[sea_orm(primary_key, auto_increment = false)]
         pub id: Uuid,
         /// The client.
         pub client_id: Uuid,
@@ -144,34 +133,26 @@ pub mod authorization_request {
         /// `pending`, `approved` or `denied`.
         pub status: String,
         /// When it expires.
-        pub expires_at: DateTimeUtc,
+        pub expires_at: DateTime<Utc>,
         /// When it was made.
-        pub created_at: DateTimeUtc,
+        pub created_at: DateTime<Utc>,
     }
-
-    /// No relations are declared.
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
 /// `oauth_codes`: authorization codes (single use).
 pub mod code {
-    use sea_orm::entity::prelude::*;
+    use chrono::{DateTime, Utc};
     use serde::Serialize;
+    use uuid::Uuid;
 
     /// An authorization code.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
-    #[sea_orm(table_name = "oauth_codes")]
+    #[derive(Clone, Debug, PartialEq, Eq, navree_orm::Model, Serialize)]
     #[model(table = "oauth_codes")]
     pub struct Model {
         /// The id.
-        #[sea_orm(primary_key, auto_increment = false)]
         pub id: Uuid,
         /// The SHA-256 digest of the code.
         #[serde(skip_serializing)]
-        #[sea_orm(unique)]
         pub code_hash: String,
         /// The client.
         pub client_id: Uuid,
@@ -186,36 +167,28 @@ pub mod code {
         /// The OpenID Connect `nonce`.
         pub nonce: Option<String>,
         /// When it expires.
-        pub expires_at: DateTimeUtc,
+        pub expires_at: DateTime<Utc>,
         /// When it was exchanged.
-        pub used_at: Option<DateTimeUtc>,
+        pub used_at: Option<DateTime<Utc>>,
         /// When it was issued.
-        pub created_at: DateTimeUtc,
+        pub created_at: DateTime<Utc>,
     }
-
-    /// No relations are declared.
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
 /// `oauth_access_tokens`: opaque `nva_` access tokens.
 pub mod access_token {
-    use sea_orm::entity::prelude::*;
+    use chrono::{DateTime, Utc};
     use serde::Serialize;
+    use uuid::Uuid;
 
     /// An access token.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
-    #[sea_orm(table_name = "oauth_access_tokens")]
+    #[derive(Clone, Debug, PartialEq, Eq, navree_orm::Model, Serialize)]
     #[model(table = "oauth_access_tokens")]
     pub struct Model {
         /// The id.
-        #[sea_orm(primary_key, auto_increment = false)]
         pub id: Uuid,
         /// The SHA-256 digest of the token.
         #[serde(skip_serializing)]
-        #[sea_orm(unique)]
         pub token_hash: String,
         /// The client.
         pub client_id: Uuid,
@@ -233,37 +206,29 @@ pub mod access_token {
         /// The workspace it is limited to.
         pub workspace_id: Option<Uuid>,
         /// When it expires.
-        pub expires_at: DateTimeUtc,
+        pub expires_at: DateTime<Utc>,
         /// When it was revoked.
-        pub revoked_at: Option<DateTimeUtc>,
+        pub revoked_at: Option<DateTime<Utc>>,
         /// When it was issued.
-        pub created_at: DateTimeUtc,
+        pub created_at: DateTime<Utc>,
     }
-
-    /// No relations are declared.
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
 /// `oauth_refresh_tokens`: opaque `nvr_` refresh tokens, single use and
 /// rotated; a family shares one grant.
 pub mod refresh_token {
-    use sea_orm::entity::prelude::*;
+    use chrono::{DateTime, Utc};
     use serde::Serialize;
+    use uuid::Uuid;
 
     /// A refresh token.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
-    #[sea_orm(table_name = "oauth_refresh_tokens")]
+    #[derive(Clone, Debug, PartialEq, Eq, navree_orm::Model, Serialize)]
     #[model(table = "oauth_refresh_tokens")]
     pub struct Model {
         /// The id.
-        #[sea_orm(primary_key, auto_increment = false)]
         pub id: Uuid,
         /// The SHA-256 digest of the token.
         #[serde(skip_serializing)]
-        #[sea_orm(unique)]
         pub token_hash: String,
         /// The client.
         pub client_id: Uuid,
@@ -280,41 +245,32 @@ pub mod refresh_token {
         /// The workspace its tokens are limited to.
         pub workspace_id: Option<Uuid>,
         /// When it expires.
-        pub expires_at: DateTimeUtc,
+        pub expires_at: DateTime<Utc>,
         /// When it was rotated.
-        pub used_at: Option<DateTimeUtc>,
+        pub used_at: Option<DateTime<Utc>>,
         /// When it was revoked.
-        pub revoked_at: Option<DateTimeUtc>,
+        pub revoked_at: Option<DateTime<Utc>>,
         /// When it was issued.
-        pub created_at: DateTimeUtc,
+        pub created_at: DateTime<Utc>,
     }
-
-    /// No relations are declared.
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
 /// `oauth_device_codes`: device authorization requests.
 pub mod device_code {
-    use sea_orm::entity::prelude::*;
+    use chrono::{DateTime, Utc};
     use serde::Serialize;
+    use uuid::Uuid;
 
     /// A device authorization.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
-    #[sea_orm(table_name = "oauth_device_codes")]
+    #[derive(Clone, Debug, PartialEq, Eq, navree_orm::Model, Serialize)]
     #[model(table = "oauth_device_codes")]
     pub struct Model {
         /// The id.
-        #[sea_orm(primary_key, auto_increment = false)]
         pub id: Uuid,
         /// The SHA-256 digest of the device code.
         #[serde(skip_serializing)]
-        #[sea_orm(unique)]
         pub device_code_hash: String,
         /// The user code, normalized (`WDJBMJHT`).
-        #[sea_orm(unique)]
         pub user_code: String,
         /// The client.
         pub client_id: Uuid,
@@ -327,34 +283,27 @@ pub mod device_code {
         /// The polling interval, in seconds.
         pub interval_secs: i64,
         /// When the device last polled.
-        pub last_polled_at: Option<DateTimeUtc>,
+        pub last_polled_at: Option<DateTime<Utc>>,
         /// When it expires.
-        pub expires_at: DateTimeUtc,
+        pub expires_at: DateTime<Utc>,
         /// When the device received its tokens.
-        pub used_at: Option<DateTimeUtc>,
+        pub used_at: Option<DateTime<Utc>>,
         /// When it was made.
-        pub created_at: DateTimeUtc,
+        pub created_at: DateTime<Utc>,
     }
-
-    /// No relations are declared.
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
 /// `personal_access_tokens`: `nvp_` tokens users create for scripts.
 pub mod personal_access_token {
-    use sea_orm::entity::prelude::*;
+    use chrono::{DateTime, Utc};
     use serde::Serialize;
+    use uuid::Uuid;
 
     /// A personal access token (never with its secret).
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
-    #[sea_orm(table_name = "personal_access_tokens")]
+    #[derive(Clone, Debug, PartialEq, Eq, navree_orm::Model, Serialize)]
     #[model(table = "personal_access_tokens")]
     pub struct Model {
         /// The id.
-        #[sea_orm(primary_key, auto_increment = false)]
         pub id: Uuid,
         /// The owner.
         pub user_id: Uuid,
@@ -362,25 +311,18 @@ pub mod personal_access_token {
         pub name: String,
         /// The SHA-256 digest of the token.
         #[serde(skip_serializing)]
-        #[sea_orm(unique)]
         pub token_hash: String,
         /// Its scopes, space-separated.
         pub scopes: String,
         /// When it expires; `None` never.
-        pub expires_at: Option<DateTimeUtc>,
+        pub expires_at: Option<DateTime<Utc>>,
         /// When it was last used (updated at most once a minute).
-        pub last_used_at: Option<DateTimeUtc>,
+        pub last_used_at: Option<DateTime<Utc>>,
         /// When it was revoked.
-        pub revoked_at: Option<DateTimeUtc>,
+        pub revoked_at: Option<DateTime<Utc>>,
         /// When it was created.
-        pub created_at: DateTimeUtc,
+        pub created_at: DateTime<Utc>,
     }
-
-    /// No relations are declared.
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
 /// A registered client.

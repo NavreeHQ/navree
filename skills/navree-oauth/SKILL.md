@@ -166,6 +166,18 @@ then commit the `uow`. Move time with
 `override_value::<dyn Clock>(Arc::new(FixedClock::new(now)))`; record audit
 entries with `override_value::<dyn AuditSink>(..)`.
 
+## Data
+
+- The tables are navree-orm models (`navree::oauth::Client`,
+  `PersonalAccessToken`, `Authorization`, and `entity::{access_token,
+  refresh_token, code, device_code, authorization_request}::Model`): query
+  with `Client::query().where_(Client::OWNER_ID.eq(id))`, `Client::find(&db, id)`.
+  There is no SeaORM entity.
+- The server writes them with bulk inserts and set-based updates (no
+  change events), so digests never reach an audit trail; keep it that
+  way (`row.save(&uow)` records every column).
+- Errors: `OAuthError::Db(DbError)` and `OAuthError::Orm(OrmError)`.
+
 ## Checks
 
 - `cargo test -p navree-oauth` (unit + `tests/oauth/*`).

@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 
 use chrono::{DateTime, TimeZone, Utc};
 use http::Method;
-use navree_access::{AccessModule, AccessOptions, AccessService, Subject};
+use navree_access::{AccessModule, AccessOptions, AccessService};
 use navree_auth::{AuthModule, AuthService, User};
 use navree_contracts::{AuditEntry, AuditSink, BoxError, BoxFuture, Clock, FixedClock};
 use navree_crypto::{CryptoModule, generate_key};
@@ -38,26 +38,15 @@ pub fn start() -> DateTime<Utc> {
 
 /// The `deals` subject (no table: the probe routes only check access).
 pub mod deal {
-    use sea_orm::entity::prelude::*;
     use serde::Serialize;
+    use uuid::Uuid;
 
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
-    #[sea_orm(table_name = "deals")]
+    #[derive(Clone, Debug, Default, PartialEq, Eq, navree_orm::Model, Serialize)]
+    #[model(table = "deals", subject = "Deal", permission_prefix = "deals")]
     pub struct Model {
-        #[sea_orm(primary_key, auto_increment = false)]
         pub id: Uuid,
         pub title: String,
     }
-
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
-}
-
-impl Subject for deal::Entity {
-    const SUBJECT: &'static str = "Deal";
-    const PERMISSION_PREFIX: &'static str = "deals";
 }
 
 /// Probe routes under `/api/probe`.
@@ -128,7 +117,7 @@ pub struct ProbeModule;
 
 impl Module for ProbeModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.import(AccessModule::for_feature::<deal::Entity>())
+        m.import(AccessModule::for_feature::<deal::Model>())
             .controller::<ProbeController>();
     }
 }
@@ -150,8 +139,7 @@ pub fn scopes() -> Value {
 /// A test app: crypto (fast hashing), a fresh database, auth, access with
 /// the default abilities, the probe routes and the OAuth server.
 pub fn builder() -> TestAppBuilder {
-    TestApp::builder()
-        .temp_database()
+    crate::servers::database(TestApp::builder())
         .config("app.key", generate_key())
         .config("app.url", ISSUER)
         .config("hashing.memory_kib", 1024)
