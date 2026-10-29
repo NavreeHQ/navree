@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use navree_db::{DatabaseModule, Db, ModuleBuilderDbExt, Uow};
+use navree_db::{DatabaseModule, Db, Executor, ExecutorExt, ModuleBuilderDbExt, Statement, Uow};
 use navree_events::{EventBus, EventsModule, Listener, ModuleBuilderEventsExt};
 use navree_http::{AppError, Result};
 use navree_kernel::{AppContext, BoxError, BoxFuture, Module, ModuleBuilder};
@@ -17,10 +17,11 @@ use navree_micro::{
 };
 use navree_testing::TestApp;
 use navree_validation::Valid;
-use sea_orm::{ConnectionTrait, DbBackend, Statement};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
+use crate::databases::Scratch;
+use crate::on_every_server;
 use crate::support::{Counter, DealRenamed, NewNote, insert_note, notes};
 
 /// What the handlers saw, in order.
@@ -125,6 +126,17 @@ impl Alerts {
         self.client.emit("security.quiet", &json!({})).await?;
         Err(AppError::conflict("rolled back"))
     }
+
+    /// Writes a note and emits an event in the same unit of work.
+    #[message_pattern("alerts.announce")]
+    #[public]
+    async fn announce(&self, uow: Uow, Payload(note): Payload<NewNote>) -> Result<()> {
+        insert_note(&uow, &note.body).await?;
+        self.client
+            .emit("alerts.announced", &NewNote { body: note.body })
+            .await?;
+        Ok(())
+    }
 }
 
 /// The alerts feature.
@@ -136,22 +148,28 @@ impl Module for AlertsModule {
             .value(Seen::default())
             .value(Switch::default())
             .migrations(
-                navree_db::MigrationSet::new("deals").migration(crate::support::CreateTables),
+                navree_db::MigrationSet::new("deals")
+                    .migration(crate::support::CreateTables::migration()),
             )
             .message_handlers::<Alerts>();
     }
 }
 
-async fn alerts_app(micro: &MicroFake) -> TestApp {
-    alerts_app_with(micro, |options| options).await
+async fn alerts_app(micro: &MicroFake, scratch: &Scratch) -> TestApp {
+    alerts_app_with(micro, scratch, |options| options).await
 }
 
+/// The alerts service on the scratch database, its units of work on
+/// navree-db's own transaction.
 async fn alerts_app_with(
     micro: &MicroFake,
+    scratch: &Scratch,
     options: impl FnOnce(MicroOptions) -> MicroOptions,
 ) -> TestApp {
     TestApp::builder()
-        .temp_database()
+        .config("database.url", scratch.url.as_str())
+        .config("database.migrate_on_boot", true)
+        .config("database.native_units_of_work", true)
         .module(DatabaseModule)
         .module(MicroModule::for_root(options(MicroOptions {
             service: "alerts".into(),
@@ -167,10 +185,9 @@ async fn alerts_app_with(
         .await
 }
 
-#[tokio::test]
-async fn events_reach_their_handler_with_the_actor() {
+async fn events_reach_their_handler_with_the_actor(scratch: Scratch) {
     let micro = MicroFake::new();
-    let app = alerts_app(&micro).await;
+    let app = alerts_app(&micro, &scratch).await;
     let rep = Uuid::now_v7();
     micro
         .client()
@@ -191,10 +208,9 @@ async fn events_reach_their_handler_with_the_actor() {
     app.shutdown().await.unwrap();
 }
 
-#[tokio::test]
-async fn a_redelivered_event_is_skipped_by_the_inbox() {
+async fn a_redelivered_event_is_skipped_by_the_inbox(scratch: Scratch) {
     let micro = MicroFake::new();
-    let app = alerts_app(&micro).await;
+    let app = alerts_app(&micro, &scratch).await;
     micro
         .client()
         .emit(
@@ -232,10 +248,9 @@ async fn a_redelivered_event_is_skipped_by_the_inbox() {
     app.shutdown().await.unwrap();
 }
 
-#[tokio::test]
-async fn failed_events_are_retried_then_dead_lettered_and_retried_by_hand() {
+async fn failed_events_are_retried_then_dead_lettered_and_retried_by_hand(scratch: Scratch) {
     let micro = MicroFake::new();
-    let app = alerts_app(&micro).await;
+    let app = alerts_app(&micro, &scratch).await;
     micro.client().emit("jobs.flaky", &json!({})).await.unwrap();
     let seen = app.get::<Seen>().await;
     assert_eq!(
@@ -277,10 +292,9 @@ async fn failed_events_are_retried_then_dead_lettered_and_retried_by_hand() {
     app.shutdown().await.unwrap();
 }
 
-#[tokio::test]
-async fn events_that_cannot_succeed_are_dead_lettered_at_once() {
+async fn events_that_cannot_succeed_are_dead_lettered_at_once(scratch: Scratch) {
     let micro = MicroFake::new();
-    let app = alerts_app(&micro).await;
+    let app = alerts_app(&micro, &scratch).await;
     micro
         .client()
         .emit(
@@ -306,10 +320,9 @@ async fn events_that_cannot_succeed_are_dead_lettered_at_once() {
     app.shutdown().await.unwrap();
 }
 
-#[tokio::test]
-async fn dead_letters_can_go_to_the_log_instead() {
+async fn dead_letters_can_go_to_the_log_instead(scratch: Scratch) {
     let micro = MicroFake::new();
-    let app = alerts_app_with(&micro, |mut options| {
+    let app = alerts_app_with(&micro, &scratch, |mut options| {
         options.events.dead_letter = Some(navree_micro::DeadLetterMode::Log);
         options
     })
@@ -331,10 +344,9 @@ async fn dead_letters_can_go_to_the_log_instead() {
     app.shutdown().await.unwrap();
 }
 
-#[tokio::test]
-async fn wildcard_handlers_see_the_actual_pattern() {
+async fn wildcard_handlers_see_the_actual_pattern(scratch: Scratch) {
     let micro = MicroFake::new();
-    let app = alerts_app(&micro).await;
+    let app = alerts_app(&micro, &scratch).await;
     for pattern in ["audit.login", "audit.logout", "audit.deep.nested"] {
         micro.client().emit(pattern, &json!({})).await.unwrap();
     }
@@ -345,11 +357,11 @@ async fn wildcard_handlers_see_the_actual_pattern() {
     app.shutdown().await.unwrap();
 }
 
-#[tokio::test]
-async fn instances_share_events_and_broadcast_reaches_each() {
+async fn instances_share_events_and_broadcast_reaches_each(scratch: Scratch) {
     let micro = MicroFake::new();
-    let one = alerts_app(&micro).await;
-    let two = alerts_app(&micro).await;
+    // Two instances of the service on one database.
+    let one = alerts_app(&micro, &scratch).await;
+    let two = alerts_app(&micro, &scratch).await;
 
     micro
         .client()
@@ -371,16 +383,20 @@ async fn instances_share_events_and_broadcast_reaches_each() {
             .await
             .unwrap();
     }
-    let total = notes(&one).await.len() + notes(&two).await.len();
-    assert_eq!(total, 4, "each event handled by one instance");
+    // The database is shared: its notes are the sum of both instances'.
+    assert_eq!(
+        notes(&one).await.len(),
+        4,
+        "each event handled by one instance"
+    );
+    assert_eq!(notes(&two).await.len(), 4);
     one.shutdown().await.unwrap();
     two.shutdown().await.unwrap();
 }
 
-#[tokio::test]
-async fn events_with_one_key_are_handled_in_order() {
+async fn events_with_one_key_are_handled_in_order(scratch: Scratch) {
     let micro = MicroFake::new();
-    let app = alerts_app(&micro).await;
+    let app = alerts_app(&micro, &scratch).await;
     let client = micro.client();
     let mut sends = Vec::new();
     for n in 0..8u64 {
@@ -399,10 +415,9 @@ async fn events_with_one_key_are_handled_in_order() {
     app.shutdown().await.unwrap();
 }
 
-#[tokio::test]
-async fn ordered_handlers_hold_the_events_behind_a_failing_one() {
+async fn ordered_handlers_hold_the_events_behind_a_failing_one(scratch: Scratch) {
     let micro = MicroFake::new();
-    let app = alerts_app(&micro).await;
+    let app = alerts_app(&micro, &scratch).await;
     let client = micro.client();
     let mut waits = Vec::new();
     for n in 0..4u64 {
@@ -419,10 +434,63 @@ async fn ordered_handlers_hold_the_events_behind_a_failing_one() {
     app.shutdown().await.unwrap();
 }
 
-#[tokio::test]
-async fn immediately_publishes_even_when_the_unit_of_work_rolls_back() {
+/// The `micro` migration set keeps its name, so databases that ran it
+/// before it moved to the schema builder see nothing pending, and its tables
+/// and indexes exist.
+async fn the_micro_migration_keeps_its_name(scratch: Scratch) {
     let micro = MicroFake::new();
-    let app = alerts_app(&micro).await;
+    let app = alerts_app(&micro, &scratch).await;
+    let status = navree_db::Migrator::status(app.ctx()).await.unwrap();
+    let ours: Vec<_> = status.iter().filter(|m| m.module == "micro").collect();
+    assert_eq!(ours.len(), 1, "{status:?}");
+    assert_eq!(ours[0].name, "m20261026_000001_create_micro_tables");
+    assert!(ours[0].applied);
+    let db = app.get::<Db>().await;
+    let schema = navree_db::navree_schema::Schema::new(&*db);
+    for (table, index) in [
+        ("micro_outbox", ["created_at"].as_slice()),
+        ("micro_inbox", ["created_at"].as_slice()),
+        ("micro_dead_letters", ["service", "failed_at"].as_slice()),
+    ] {
+        assert!(schema.has_table(table).await.unwrap(), "{table}");
+        assert!(
+            schema.has_index(table, index, None).await.unwrap(),
+            "{table} {index:?}"
+        );
+    }
+    app.shutdown().await.unwrap();
+}
+
+/// The transactional outbox: the event is written with the note in one
+/// transaction, published after the commit and removed from the outbox.
+async fn events_emitted_in_a_unit_of_work_are_published_after_it_commits(scratch: Scratch) {
+    let micro = MicroFake::new();
+    let app = alerts_app(&micro, &scratch).await;
+    micro
+        .client()
+        .request(
+            "alerts.announce",
+            &NewNote {
+                body: "hello".into(),
+            },
+        )
+        .await
+        .assert_status(200);
+    micro.assert_emitted("alerts.announced", |note: &NewNote| note.body == "hello");
+    assert_eq!(notes(&app).await.len(), 1);
+    let db = app.get::<Db>().await;
+    let waiting: i64 = db
+        .fetch_scalar(&Statement::text("SELECT COUNT(*) FROM micro_outbox"))
+        .await
+        .unwrap();
+    assert_eq!(waiting, 0, "published rows leave the outbox");
+    // The handled request left its inbox row (`dedupe` is off: no reply).
+    app.shutdown().await.unwrap();
+}
+
+async fn immediately_publishes_even_when_the_unit_of_work_rolls_back(scratch: Scratch) {
+    let micro = MicroFake::new();
+    let app = alerts_app(&micro, &scratch).await;
     micro
         .client()
         .request("alerts.fail_loudly", &())
@@ -433,10 +501,9 @@ async fn immediately_publishes_even_when_the_unit_of_work_rolls_back() {
     app.shutdown().await.unwrap();
 }
 
-#[tokio::test]
-async fn the_relay_publishes_what_a_crashed_process_left_in_the_outbox() {
+async fn the_relay_publishes_what_a_crashed_process_left_in_the_outbox(scratch: Scratch) {
     let micro = MicroFake::new();
-    let app = alerts_app_with(&micro, |mut options| {
+    let app = alerts_app_with(&micro, &scratch, |mut options| {
         options.outbox_poll_ms = 20;
         options
     })
@@ -449,22 +516,22 @@ async fn the_relay_publishes_what_a_crashed_process_left_in_the_outbox() {
     })
     .to_string();
     let old = chrono::Utc::now().timestamp_millis() - 60_000;
-    db.conn()
-        .execute_raw(Statement::from_sql_and_values(
-            DbBackend::Sqlite,
-            "INSERT INTO micro_outbox (id, pattern, headers, payload, seq, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-            [
-                "0199c1d2-6f7e-7a31-b5d4-2f0c8e9a1b23".into(),
-                "deal.renamed".into(),
-                headers.into(),
-                br#"{"deal_id":"0199c1d2-6f7e-7a31-b5d4-2f0c8e9a1b24","title":"Left behind"}"#.to_vec().into(),
-                1i64.into(),
-                old.into(),
-            ],
-        ))
-        .await
-        .unwrap();
-    for _ in 0..100 {
+    db.execute(&Statement::portable(
+        "INSERT INTO micro_outbox (id, pattern, headers, payload, seq, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        [
+            "0199c1d2-6f7e-7a31-b5d4-2f0c8e9a1b23".into(),
+            "deal.renamed".into(),
+            headers.into(),
+            br#"{"deal_id":"0199c1d2-6f7e-7a31-b5d4-2f0c8e9a1b24","title":"Left behind"}"#
+                .to_vec()
+                .into(),
+            1i64.into(),
+            old.into(),
+        ],
+    ))
+    .await
+    .unwrap();
+    for _ in 0..300 {
         if !micro.emitted_envelopes("deal.renamed").is_empty() {
             break;
         }
@@ -473,20 +540,11 @@ async fn the_relay_publishes_what_a_crashed_process_left_in_the_outbox() {
     micro.assert_emitted("deal.renamed", |event: &DealRenamed| {
         event.title == "Left behind"
     });
-    let left = db
-        .conn()
-        .query_one_raw(Statement::from_string(
-            DbBackend::Sqlite,
-            "SELECT COUNT(*) AS n FROM micro_outbox",
-        ))
+    let left: i64 = db
+        .fetch_scalar(&Statement::text("SELECT COUNT(*) FROM micro_outbox"))
         .await
-        .unwrap()
         .unwrap();
-    assert_eq!(
-        left.try_get::<i64>("", "n").unwrap(),
-        0,
-        "published rows are deleted"
-    );
+    assert_eq!(left, 0, "published rows are deleted");
     app.shutdown().await.unwrap();
 }
 
@@ -590,3 +648,20 @@ async fn forwarded_events_can_carry_a_key() {
     assert_eq!(sent[0].key(), Some(deal_id.to_string().as_str()));
     app.shutdown().await.unwrap();
 }
+
+on_every_server!(
+    "navree_micro";
+    events_reach_their_handler_with_the_actor,
+    a_redelivered_event_is_skipped_by_the_inbox,
+    failed_events_are_retried_then_dead_lettered_and_retried_by_hand,
+    events_that_cannot_succeed_are_dead_lettered_at_once,
+    dead_letters_can_go_to_the_log_instead,
+    wildcard_handlers_see_the_actual_pattern,
+    instances_share_events_and_broadcast_reaches_each,
+    events_with_one_key_are_handled_in_order,
+    ordered_handlers_hold_the_events_behind_a_failing_one,
+    immediately_publishes_even_when_the_unit_of_work_rolls_back,
+    the_relay_publishes_what_a_crashed_process_left_in_the_outbox,
+    events_emitted_in_a_unit_of_work_are_published_after_it_commits,
+    the_micro_migration_keeps_its_name,
+);

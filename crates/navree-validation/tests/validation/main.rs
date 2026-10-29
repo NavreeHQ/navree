@@ -2,6 +2,7 @@
 //! navree-http pipeline of a `TestApp`.
 
 mod database;
+mod databases;
 mod form;
 #[cfg(feature = "html")]
 mod html;

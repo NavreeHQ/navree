@@ -1,5 +1,6 @@
 //! The database store: the `sessions` table, owned by the `session`
-//! migration set.
+//! migration set, on SQLite, PostgreSQL and MySQL (each test on a database
+//! of its own; see `databases.rs` for the servers).
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -8,16 +9,16 @@ use axum::Json;
 use axum::http::Method;
 use chrono::{TimeDelta, Utc};
 use navree_contracts::{SessionRecord, SessionStore};
-use navree_db::Uow;
-use navree_db::{DatabaseModule, Db, Migrator};
+use navree_db::{DatabaseModule, Db, Executor, ExecutorExt, Migrator, Statement, Uow};
 use navree_http::{Controller, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use navree_session::Session;
 use navree_session::{DatabaseStore, SessionModule, SessionOptions, SessionStoreKind};
-use navree_testing::TestApp;
-use sea_orm::{ConnectionTrait, Statement};
+use navree_testing::{TestApp, TestAppBuilder};
 use serde_json::{Map, json};
 
+use crate::databases::Scratch;
+use crate::on_every_server;
 use crate::support;
 
 /// A route that writes in the request's unit of work and in the session.
@@ -40,12 +41,10 @@ impl Controller for WritesBoth {
 }
 
 async fn write_both(uow: Uow, session: Session) -> navree_http::Result<Json<serde_json::Value>> {
-    let tx = uow.tx().await?;
-    tx.execute_unprepared("CREATE TABLE IF NOT EXISTS notes (body TEXT)")
-        .await?;
-    tx.execute_unprepared("INSERT INTO notes (body) VALUES ('hello')")
-        .await?;
-    drop(tx);
+    uow.execute(&Statement::text(
+        "INSERT INTO notes (body) VALUES ('hello')",
+    ))
+    .await?;
     session.insert("noted", &true)?;
     Ok(Json(json!({ "ok": true })))
 }
@@ -58,9 +57,17 @@ impl Module for WritesBothModule {
     }
 }
 
-async fn app() -> TestApp {
+/// An app on the scratch database, migrated on boot, its units of work on
+/// navree-db's own transaction.
+fn builder(scratch: &Scratch) -> TestAppBuilder {
     support::base()
-        .temp_database()
+        .config("database.url", scratch.url.as_str())
+        .config("database.migrate_on_boot", true)
+        .config("database.native_units_of_work", true)
+}
+
+async fn app(scratch: &Scratch) -> TestApp {
+    let app = builder(scratch)
         .module(DatabaseModule)
         .module(WritesBothModule)
         .module(SessionModule::for_root(SessionOptions {
@@ -68,20 +75,19 @@ async fn app() -> TestApp {
             ..SessionOptions::default()
         }))
         .build()
+        .await;
+    app.get::<Db>()
         .await
+        .execute_script("CREATE TABLE notes (body TEXT)")
+        .await
+        .expect("creates notes");
+    app
 }
 
 async fn rows(db: &Db) -> i64 {
-    let row = db
-        .conn()
-        .query_one_raw(Statement::from_string(
-            db.backend(),
-            "SELECT count(*) AS n FROM sessions",
-        ))
+    db.fetch_scalar(&Statement::text("SELECT count(*) FROM sessions"))
         .await
         .expect("count sessions")
-        .expect("a row");
-    row.try_get::<i64>("", "n").expect("count")
 }
 
 fn record(data: serde_json::Value, expires_in: TimeDelta) -> SessionRecord {
@@ -94,9 +100,8 @@ fn record(data: serde_json::Value, expires_in: TimeDelta) -> SessionRecord {
     }
 }
 
-#[tokio::test]
-async fn database_store_roundtrip() {
-    let app = app().await;
+async fn database_store_roundtrip(scratch: Scratch) {
+    let app = app(&scratch).await;
     let db = app.get::<Db>().await;
     let store = app.get::<dyn SessionStore>().await;
 
@@ -138,19 +143,17 @@ async fn database_store_roundtrip() {
     assert!(store.load("never-existed").await.unwrap().is_none());
 }
 
-#[tokio::test]
-async fn the_session_migration_set_creates_the_table() {
-    let app = app().await;
+async fn the_session_migration_set_creates_the_table(scratch: Scratch) {
+    let app = app(&scratch).await;
     let status = Migrator::status(app.ctx()).await.unwrap();
     let session: Vec<_> = status.iter().filter(|m| m.module == "session").collect();
     assert_eq!(session.len(), 1, "{status:?}");
+    assert_eq!(session[0].name, "m20261025_000001_create_sessions_table");
     assert!(session[0].applied);
 }
 
-#[tokio::test]
-async fn database_store_from_config() {
-    let app = support::base()
-        .temp_database()
+async fn database_store_from_config(scratch: Scratch) {
+    let app = builder(&scratch)
         .config("session.store", "database")
         .module(DatabaseModule)
         .module(SessionModule::from_config())
@@ -161,9 +164,8 @@ async fn database_store_from_config() {
     assert_eq!(rows(&*app.get::<Db>().await).await, 1);
 }
 
-#[tokio::test]
-async fn regenerate_deletes_the_old_row() {
-    let app = app().await;
+async fn regenerate_deletes_the_old_row(scratch: Scratch) {
+    let app = app(&scratch).await;
     let db = app.get::<Db>().await;
     let client = app.client();
     support::put(&client, "k", json!(1)).await;
@@ -176,9 +178,8 @@ async fn regenerate_deletes_the_old_row() {
     assert_eq!(rows(&db).await, 1, "only the new row is left");
 }
 
-#[tokio::test]
-async fn prune_expired_deletes_old_rows() {
-    let app = app().await;
+async fn prune_expired_deletes_old_rows(scratch: Scratch) {
+    let app = app(&scratch).await;
     let db = app.get::<Db>().await;
     let store = DatabaseStore::new((*db).clone());
     store
@@ -205,23 +206,8 @@ async fn prune_expired_deletes_old_rows() {
     assert!(store.load("forever").await.unwrap().is_some());
 }
 
-#[tokio::test]
-async fn the_database_store_needs_the_database_module() {
-    let error = support::base()
-        .module(SessionModule::for_root(SessionOptions {
-            store: SessionStoreKind::Database,
-            ..SessionOptions::default()
-        }))
-        .try_build()
-        .await
-        .expect_err("no DatabaseModule");
-    let message = error.to_string();
-    assert!(message.contains("DatabaseModule"), "{message}");
-}
-
-#[tokio::test]
-async fn the_session_is_saved_after_the_unit_of_work_commits() {
-    let app = app().await;
+async fn the_session_is_saved_after_the_unit_of_work_commits(scratch: Scratch) {
+    let app = app(&scratch).await;
     let db = app.get::<Db>().await;
     let client = app.client();
     client.csrf_cookie().await;
@@ -238,16 +224,46 @@ async fn the_session_is_saved_after_the_unit_of_work_commits() {
         "the session write does not wait for the request's transaction"
     );
     assert_eq!(support::get(&client, "noted").await.1, json!(true));
-    let notes = db
-        .conn()
-        .query_one_raw(Statement::from_string(
-            db.backend(),
-            "SELECT count(*) AS n FROM notes",
-        ))
+    let notes: i64 = db
+        .fetch_scalar(&Statement::text("SELECT count(*) FROM notes"))
         .await
-        .unwrap()
-        .unwrap()
-        .try_get::<i64>("", "n")
         .unwrap();
     assert_eq!(notes, 1, "the unit of work committed");
+}
+
+/// A failed write is a `DbError` of the engine, classified like any other.
+async fn a_store_without_the_table_reports_a_database_error(scratch: Scratch) {
+    let db = scratch.db().await;
+    let store = DatabaseStore::new(db);
+    let error = store.prune_expired().await.expect_err("no sessions table");
+    assert!(!error.is_unique_violation(), "{error}");
+    assert!(
+        store.load("anything").await.is_err(),
+        "loading without the table fails too"
+    );
+}
+
+on_every_server!(
+    "navree_session";
+    database_store_roundtrip,
+    the_session_migration_set_creates_the_table,
+    database_store_from_config,
+    regenerate_deletes_the_old_row,
+    prune_expired_deletes_old_rows,
+    the_session_is_saved_after_the_unit_of_work_commits,
+    a_store_without_the_table_reports_a_database_error,
+);
+
+#[tokio::test]
+async fn the_database_store_needs_the_database_module() {
+    let error = support::base()
+        .module(SessionModule::for_root(SessionOptions {
+            store: SessionStoreKind::Database,
+            ..SessionOptions::default()
+        }))
+        .try_build()
+        .await
+        .expect_err("no DatabaseModule");
+    let message = error.to_string();
+    assert!(message.contains("DatabaseModule"), "{message}");
 }

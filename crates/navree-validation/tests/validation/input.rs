@@ -14,7 +14,9 @@ use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use crate::support::{CreateUser, UserEmail, app_with, errors, insert};
+use crate::databases::Scratch;
+use crate::on_every_server;
+use crate::support::{CreateUser, UserEmail, app_with, create_tables, errors, insert};
 
 /// Input read from a body of `key=value` lines; `!` is unreadable input and
 /// anything else that is not a line pair is malformed.
@@ -154,22 +156,18 @@ async fn valid_wraps_a_valid_input_with_the_json_field_errors() {
         .assert_error(400, "unreadable input");
 }
 
-#[tokio::test]
-async fn valid_async_runs_the_database_rules_after_the_garde_rules() {
+async fn valid_async_runs_the_database_rules_after_the_garde_rules(scratch: Scratch) {
     let app = navree_testing::TestApp::builder()
         .config("http.per_ip_rate_limit", Value::Null)
-        .temp_database()
+        .config("database.url", scratch.url.as_str())
+        .config("database.migrate_on_boot", true)
+        .config("database.native_units_of_work", true)
         .module(navree_db::DatabaseModule)
         .module(LinesModule)
         .build()
         .await;
     let db = app.get::<navree_db::Db>().await;
-    sea_orm::ConnectionTrait::execute_unprepared(
-        db.conn(),
-        "CREATE TABLE users (id BLOB PRIMARY KEY NOT NULL, email TEXT NOT NULL)",
-    )
-    .await
-    .expect("users table");
+    create_tables(&db).await;
     insert(&app, "users", Uuid::now_v7(), "taken@example.com").await;
 
     app.client()
@@ -201,3 +199,8 @@ async fn valid_async_runs_the_database_rules_after_the_garde_rules() {
         &json!({ "email": ["email must be a valid email address"] })
     );
 }
+
+on_every_server!(
+    "navree_validation";
+    valid_async_runs_the_database_rules_after_the_garde_rules,
+);

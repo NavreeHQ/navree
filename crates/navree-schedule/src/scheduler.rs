@@ -8,7 +8,7 @@ use std::time::Instant;
 use chrono::{DateTime, DurationRound, TimeDelta, Timelike, Utc};
 use futures_util::future::join_all;
 use navree_contracts::{Clock, ZoneLevel};
-use navree_db::Db;
+use navree_db::{Db, Executor};
 use navree_kernel::{AppContext, BoxError, CommandFn, WeakAppContext};
 use navree_telemetry::{
     EventKind, ScheduledTaskRan, Telemetry, TelemetryContext, TelemetryEvent, TracePolicy,
@@ -415,9 +415,19 @@ impl Scheduler {
             .collect()
     }
 
+    /// What the run table's statements run on: the writer's pool, outside
+    /// any unit of work the tick's tasks open (a claim must be visible to the
+    /// other schedulers at once, and stay when a task rolls back).
+    fn executor(&self) -> &dyn Executor {
+        match self.db.pool() {
+            Some(pool) => pool,
+            None => &*self.db,
+        }
+    }
+
     /// Deletes runs older than [`RUN_RETENTION`] (once an hour, from `tick`).
     async fn prune(&self, tick: DateTime<Utc>) {
-        match store::prune(self.db.conn(), tick - RUN_RETENTION).await {
+        match store::prune(self.executor(), tick - RUN_RETENTION).await {
             Ok(0) => {}
             Ok(deleted) => {
                 tracing::debug!(target: "navree::schedule", deleted, "pruned old schedule runs");
@@ -436,7 +446,7 @@ impl Scheduler {
         run: Run,
         tick: DateTime<Utc>,
     ) -> Result<RunOutcome, ScheduleError> {
-        let conn = self.db.conn();
+        let conn = self.executor();
         let name = run.name.clone();
         let outcome = |status| RunOutcome {
             task: name.clone(),
@@ -620,7 +630,10 @@ mod tests {
     #[test]
     fn error_chain_skips_sources_the_message_already_shows() {
         // thiserror's `#[error("...: {0}")]` with `#[from]` prints its source too.
-        let error = ScheduleError::Db(sea_orm::DbErr::Custom("disk I/O error".to_owned()));
+        let error = ScheduleError::Db(navree_db::DbError::new(
+            navree_db::ErrorKind::Other,
+            "disk I/O error",
+        ));
         let chain = error_chain(&error);
         assert_eq!(chain.matches("disk I/O error").count(), 1, "{chain}");
     }

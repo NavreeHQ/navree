@@ -4,6 +4,8 @@ use std::fmt;
 
 use navree_schedule::RunStatus;
 
+use crate::databases::Scratch;
+use crate::on_every_server;
 use crate::support::{Counter, Tasks, TestDb, at, clock, runs, scheduler};
 
 /// An error with a source, to check the stored message keeps the chain.
@@ -22,9 +24,8 @@ impl std::error::Error for SyncFailed {
     }
 }
 
-#[tokio::test]
-async fn failed_task_records_error() {
-    let db = TestDb::new();
+async fn failed_task_records_error(scratch: Scratch) {
+    let db = TestDb::on(&scratch);
     let clock = clock("2026-10-25T04:00:07Z");
     let app = db
         .boot(
@@ -58,9 +59,8 @@ async fn failed_task_records_error() {
     assert_eq!(rows[0].finished_at, Some(at("2026-10-25T04:00:07Z")));
 }
 
-#[tokio::test]
-async fn panicking_task_is_recorded_as_failed_and_others_still_run() {
-    let db = TestDb::new();
+async fn panicking_task_is_recorded_as_failed_and_others_still_run(scratch: Scratch) {
+    let db = TestDb::on(&scratch);
     let count = Counter::default();
     let task = count.clone();
     let app = db
@@ -95,3 +95,9 @@ async fn panicking_task_is_recorded_as_failed_and_others_still_run() {
     assert_eq!(failed.status, "failed");
     assert!(failed.error.as_deref().unwrap().contains("kaboom"));
 }
+
+on_every_server!(
+    "navree_schedule";
+    failed_task_records_error,
+    panicking_task_is_recorded_as_failed_and_others_still_run,
+);

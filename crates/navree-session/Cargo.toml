@@ -10,6 +10,12 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+## Runs the PostgreSQL suite (`NAVREE_TEST_POSTGRES_URL`).
+postgres = ["navree-db/postgres"]
+## Runs the MySQL suite (`NAVREE_TEST_MYSQL_URL`).
+mysql = ["navree-db/mysql"]
+
 [dependencies]
 axum = { workspace = true }
 chrono = { workspace = true }
@@ -21,8 +27,6 @@ navree-db = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
 percent-encoding = { workspace = true }
-sea-orm = { workspace = true }
-sea-orm-migration = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
@@ -31,6 +35,8 @@ tracing = { workspace = true }
 wildmatch = { workspace = true }
 
 [dev-dependencies]
+futures-util = { workspace = true }
 navree-testing = { workspace = true }
+tempfile = { workspace = true }
 tokio = { workspace = true }
 uuid = { workspace = true }

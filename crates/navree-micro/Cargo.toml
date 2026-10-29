@@ -22,6 +22,10 @@ rabbitmq = ["dep:lapin"]
 redis = ["dep:redis"]
 ## MQTT 5.
 mqtt = ["dep:rumqttc"]
+## Runs the PostgreSQL suite (`NAVREE_TEST_POSTGRES_URL`).
+postgres = ["navree-db/postgres"]
+## Runs the MySQL suite (`NAVREE_TEST_MYSQL_URL`).
+mysql = ["navree-db/mysql"]
 
 [dependencies]
 async-nats = { workspace = true, optional = true }
@@ -48,8 +52,6 @@ redis = { workspace = true, optional = true, features = ["tls-rustls-webpki-root
 rmp-serde = { workspace = true }
 rumqttc = { workspace = true, optional = true }
 rustls = { workspace = true }
-sea-orm = { workspace = true }
-sea-orm-migration = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true, optional = true }
@@ -67,6 +69,9 @@ garde = { workspace = true }
 navree-access = { workspace = true }
 navree-macros = { workspace = true }
 rcgen = { workspace = true }
+# The `deals` fixture is a SeaORM entity: navree-access still reads its
+# subjects through one (until it is moved).
+sea-orm = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
 trybuild = { workspace = true }

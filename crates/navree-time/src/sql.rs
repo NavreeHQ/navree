@@ -2,8 +2,7 @@
 //! aggregate by the tenant's days in the database.
 
 use chrono::{DateTime, TimeDelta, Utc};
-use sea_orm::DbBackend;
-use sea_orm::sea_query::Expr;
+use navree_db::{Backend, Statement};
 
 use crate::Zone;
 
@@ -28,26 +27,30 @@ use crate::Zone;
 /// offsets too and needs no zone tables. Without a window, SQLite uses the
 /// offset in force now.
 ///
+/// Each helper returns a [`Statement`] fragment (portable `?` SQL and the
+/// values it binds) that fits into any query; an expression that appears
+/// more than once (`SELECT` and `GROUP BY`, a `CASE`) carries its values
+/// once per appearance.
+///
 /// ```
+/// use navree_db::Backend;
 /// use navree_time::Zone;
-/// use sea_orm::DbBackend;
-/// use sea_orm::sea_query::{Expr, PostgresQueryBuilder, Query};
 ///
 /// let zone = Zone::parse("Asia/Kolkata").unwrap();
-/// let day = zone.sql(DbBackend::Postgres).local_date(Expr::col("created_at"));
-/// let sql = Query::select().expr(day).to_string(PostgresQueryBuilder);
-/// assert_eq!(sql, r#"SELECT CAST(("created_at" AT TIME ZONE 'Asia/Kolkata') AS DATE)"#);
+/// let sql = zone.sql(Backend::Postgres);
+/// let day = sql.local_date(&sql.column("created_at"));
+/// assert_eq!(day.sql(), r#"CAST(("created_at" AT TIME ZONE 'Asia/Kolkata') AS DATE)"#);
 /// ```
 #[derive(Clone, Debug)]
 pub struct ZoneSql {
     zone: Zone,
-    backend: DbBackend,
+    backend: Backend,
     window: Option<(DateTime<Utc>, DateTime<Utc>)>,
 }
 
 impl Zone {
     /// SQL helpers for this zone on `backend`.
-    pub fn sql(&self, backend: DbBackend) -> ZoneSql {
+    pub fn sql(&self, backend: Backend) -> ZoneSql {
         ZoneSql {
             zone: *self,
             backend,
@@ -69,15 +72,21 @@ impl ZoneSql {
         format!("'{}'", self.zone.name().replace('\'', "''"))
     }
 
+    /// The column `name` (quoted for the backend; `table.column` quotes each
+    /// part) as an expression to convert.
+    pub fn column(&self, name: &str) -> Statement {
+        Statement::text(self.backend.quote_identifier(name))
+    }
+
     /// `expr` (a UTC timestamp) as a local timestamp.
-    pub fn local_timestamp(&self, expr: impl Into<Expr>) -> Expr {
-        self.convert(expr.into(), "datetime", |sql| sql, |sql| sql)
+    pub fn local_timestamp(&self, expr: &Statement) -> Statement {
+        self.convert(expr, "datetime", |sql| sql, |sql| sql)
     }
 
     /// `expr` (a UTC timestamp) as a local calendar date.
-    pub fn local_date(&self, expr: impl Into<Expr>) -> Expr {
+    pub fn local_date(&self, expr: &Statement) -> Statement {
         self.convert(
-            expr.into(),
+            expr,
             "date",
             |sql| format!("CAST({sql} AS DATE)"),
             |sql| format!("DATE({sql})"),
@@ -88,22 +97,22 @@ impl ZoneSql {
     /// transaction on PostgreSQL), or `None` on SQLite.
     pub fn set_local(&self) -> Option<String> {
         match self.backend {
-            DbBackend::Postgres => Some(format!("SET LOCAL TIME ZONE {}", self.literal())),
-            DbBackend::MySql => Some(format!("SET time_zone = {}", self.literal())),
+            Backend::Postgres => Some(format!("SET LOCAL TIME ZONE {}", self.literal())),
+            Backend::MySql => Some(format!("SET time_zone = {}", self.literal())),
             _ => None,
         }
     }
 
     fn convert(
         &self,
-        expr: Expr,
+        expr: &Statement,
         sqlite_function: &str,
         postgres: impl Fn(String) -> String,
         mysql: impl Fn(String) -> String,
-    ) -> Expr {
+    ) -> Statement {
         let template = match self.backend {
-            DbBackend::Postgres => postgres(format!("({EXPR} AT TIME ZONE {})", self.literal())),
-            DbBackend::MySql => match self.window {
+            Backend::Postgres => postgres(format!("({EXPR} AT TIME ZONE {})", self.literal())),
+            Backend::MySql => match self.window {
                 None => mysql(format!("CONVERT_TZ({EXPR}, '+00:00', {})", self.literal())),
                 Some(_) => self.by_offset(|seconds| {
                     mysql(format!(
@@ -133,29 +142,33 @@ impl ZoneSql {
         for pair in periods.windows(2) {
             let (_, offset) = pair[0];
             let (change, _) = pair[1];
-            sql.push_str(&format!(
-                " WHEN julianday({EXPR}) < julianday('{}') THEN {}",
-                change.format("%Y-%m-%d %H:%M:%S"),
-                apply(offset)
-            ));
+            let change = change.format("%Y-%m-%d %H:%M:%S");
+            // SQLite compares instants stored as text through `julianday`;
+            // MySQL's DATETIME columns (in UTC) compare as they are.
+            let before = match self.backend {
+                Backend::MySql => format!("{EXPR} < '{change}'"),
+                _ => format!("julianday({EXPR}) < julianday('{change}')"),
+            };
+            sql.push_str(&format!(" WHEN {before} THEN {}", apply(offset)));
         }
         let (_, last) = periods[periods.len() - 1];
         sql.push_str(&format!(" ELSE {} END", apply(last)));
         sql
     }
 
-    /// `template` with `expr` at every [`EXPR`] mark, in the backend's
-    /// placeholder syntax: `$1` on PostgreSQL, one positional `?` per mark
-    /// elsewhere.
-    fn custom(&self, template: &str, expr: Expr) -> Expr {
-        if self.backend == DbBackend::Postgres {
-            return Expr::cust_with_expr(template.replace(EXPR, "$1"), expr);
+    /// `template` with `expr` at every [`EXPR`] mark: its SQL written in and
+    /// its values bound once per mark.
+    fn custom(&self, template: &str, expr: &Statement) -> Statement {
+        let mut sql = String::with_capacity(template.len() + expr.sql().len());
+        let mut values = Vec::new();
+        for (index, piece) in template.split(EXPR).enumerate() {
+            if index > 0 {
+                sql.push_str(expr.sql());
+                values.extend_from_slice(expr.values());
+            }
+            sql.push_str(piece);
         }
-        let marks = template.matches(EXPR).count();
-        Expr::cust_with_exprs(
-            template.replace(EXPR, "?"),
-            std::iter::repeat_n(expr, marks),
-        )
+        Statement::portable(sql, values)
     }
 }
 

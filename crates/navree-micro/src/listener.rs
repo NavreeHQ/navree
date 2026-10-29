@@ -583,13 +583,12 @@ pub(crate) async fn sweep_outbox(
     let published = store
         .db()
         .transaction(|uow| async move {
-            let tx = uow.tx().await?;
-            let rows = store_in.outbox_due(&*tx, before, OUTBOX_BATCH).await?;
+            let rows = store_in.outbox_due(&uow, before, OUTBOX_BATCH).await?;
             let mut published = 0;
             for row in rows {
                 match transport.publish(row.envelope).await {
                     Ok(()) => {
-                        store_in.outbox_delete_on(&*tx, &row.id).await?;
+                        store_in.outbox_delete_on(&uow, &row.id).await?;
                         published += 1;
                     }
                     Err(error) => {
@@ -598,7 +597,6 @@ pub(crate) async fn sweep_outbox(
                     }
                 }
             }
-            drop(tx);
             Ok(published)
         })
         .await?;

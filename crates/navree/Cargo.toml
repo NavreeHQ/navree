@@ -110,7 +110,7 @@ storage-gcs = ["storage", "navree-storage/gcs"]
 storage-azure = ["storage", "navree-storage/azure"]
 ## Time zones: zones, the request's zone, local days, send windows,
 ## holidays and local-time SQL (the IANA database compiled in; in `full`).
-time = ["dep:navree-time", "http"]
+time = ["dep:navree-time", "http", "db"]
 ## L4
 session = ["dep:navree-session", "http", "crypto", "db"]
 ## With `orm` on too, also `navree::orm::validation` (`unique` and `exists`
