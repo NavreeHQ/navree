@@ -88,10 +88,8 @@ fn vectors_take_each_databases_form() {
     };
     let statements = per_dialect(|dialect| insert(&ledger, dialect));
     assert_eq!(DIALECTS.len(), 3);
-    // PostgreSQL binds pgvector's value with the `postgres` feature (which
-    // links pgvector), and its text form without it.
-    #[cfg(feature = "postgres")]
-    insta::assert_snapshot!("vectors_with_pgvector", statements);
-    #[cfg(not(feature = "postgres"))]
-    insta::assert_snapshot!("vectors_without_pgvector", statements);
+    // The value is a vector on every database; navree-db's driver sends it in
+    // pgvector's binary form to PostgreSQL, and MySQL and SQLite store its
+    // little-endian bytes.
+    insta::assert_snapshot!("vectors", statements);
 }
