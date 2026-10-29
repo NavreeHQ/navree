@@ -7,7 +7,7 @@ mod memory;
 
 use std::sync::Arc;
 
-pub(crate) use database::{DatabaseStore, statement};
+pub(crate) use database::DatabaseStore;
 pub(crate) use memory::MemoryStore;
 
 use navree_contracts::{BoxFuture, JobEnvelope};

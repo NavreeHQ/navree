@@ -15,6 +15,10 @@ default = []
 ## PostgreSQL for the tests: with `NAVREE_TEST_POSTGRES_URL` set, every
 ## test harness runs on its own fresh PostgreSQL database.
 postgres = ["navree-db/postgres"]
+## MySQL for the tests: with `NAVREE_TEST_DATABASE=mysql` and
+## `NAVREE_TEST_MYSQL_URL` set, every test harness runs on its own fresh
+## MySQL database.
+mysql = ["navree-db/mysql"]
 
 [dependencies]
 # The operations routes and their SSE stream.
@@ -36,8 +40,6 @@ navree-realtime = { workspace = true }
 # The watchdog, scheduled every minute in apps with `ScheduleModule`.
 navree-schedule = { workspace = true }
 navree-telemetry = { workspace = true }
-sea-orm = { workspace = true }
-sea-orm-migration = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }

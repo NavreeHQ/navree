@@ -11,9 +11,8 @@ use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use navree_contracts::{BoxError, Broadcaster, Job, JobEnvelope, Principal, permitted};
-use navree_db::{Db, Uow};
+use navree_db::{Db, Executor, Statement, Uow};
 use navree_kernel::{AppContext, WeakAppContext};
-use sea_orm::{ConnectionTrait, Statement};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::broadcast;
@@ -306,6 +305,16 @@ impl Operations {
         self.db.as_ref().ok_or(QueueError::NoDatabase)
     }
 
+    /// What the operations' statements run on outside a unit of work: the
+    /// writer's pool (or the connection itself when it has no pool).
+    fn writer(&self) -> Result<&dyn Executor, QueueError> {
+        let db = self.db()?;
+        Ok(match db.pool() {
+            Some(pool) => pool,
+            None => db,
+        })
+    }
+
     /// Stores `operation` as `pending`, as part of `uow`; returns it.
     pub async fn start(
         &self,
@@ -314,9 +323,7 @@ impl Operations {
     ) -> Result<OperationRecord, QueueError> {
         let now = self.queue.now_ms();
         let record = sql::new_record(Uuid::now_v7(), &operation, now);
-        let tx = uow.tx().await?;
-        tx.execute_raw(sql::insert(uow.db().backend(), &record)?)
-            .await?;
+        uow.execute(&sql::insert(&record)?).await?;
         Ok(record)
     }
 
@@ -339,9 +346,7 @@ impl Operations {
             unique_key: None,
         };
         if operation.idempotent {
-            let tx = uow.tx().await?;
-            tx.execute_raw(sql::set_job(uow.db().backend(), operation.id, &envelope)?)
-                .await?;
+            uow.execute(&sql::set_job(operation.id, &envelope)?).await?;
         }
         self.queue
             .push_for_operation_in(uow, envelope, operation.id)
@@ -363,9 +368,7 @@ impl Operations {
             .queue
             .dispatch_batch_in(uow, batch.operation(operation.id))
             .await?;
-        let tx = uow.tx().await?;
-        tx.execute_raw(sql::set_batch(
-            uow.db().backend(),
+        uow.execute(&sql::set_batch(
             operation.id,
             &batch.id,
             total,
@@ -377,7 +380,7 @@ impl Operations {
 
     /// The operation `id`.
     pub async fn find(&self, id: Uuid) -> Result<Option<OperationRecord>, QueueError> {
-        sql::find(self.db()?.conn(), self.db()?.backend(), id).await
+        sql::find(self.writer()?, id).await
     }
 
     /// The operations `owner` started, newest first, at most `limit`.
@@ -386,7 +389,7 @@ impl Operations {
         owner: Uuid,
         limit: usize,
     ) -> Result<Vec<OperationRecord>, QueueError> {
-        sql::for_owner(self.db()?.conn(), self.db()?.backend(), owner, limit).await
+        sql::for_owner(self.writer()?, owner, limit).await
     }
 
     /// Records progress: the operation becomes `running` with `done` of
@@ -400,14 +403,14 @@ impl Operations {
         note: impl Into<String>,
     ) -> Result<Option<OperationRecord>, QueueError> {
         let now = self.queue.now_ms();
-        let stmt = sql::progress(self.db()?.backend(), id, done, total, &note.into(), now);
+        let stmt = sql::progress(id, done, total, &note.into(), now);
         self.update(id, stmt).await
     }
 
     /// Renews the heartbeat of a pending or running operation (work that
     /// runs outside the queue calls this to show it is alive).
     pub async fn heartbeat(&self, id: Uuid) -> Result<(), QueueError> {
-        let stmt = sql::heartbeat(self.db()?.backend(), id, self.queue.now_ms());
+        let stmt = sql::heartbeat(id, self.queue.now_ms());
         self.execute(stmt).await.map(|_| ())
     }
 
@@ -421,14 +424,7 @@ impl Operations {
     ) -> Result<Option<OperationRecord>, QueueError> {
         let result = serde_json::to_value(result).map_err(QueueError::Payload)?;
         let now = self.queue.now_ms();
-        let stmt = sql::finish(
-            self.db()?.backend(),
-            id,
-            OperationStatus::Succeeded,
-            Some(&result),
-            None,
-            now,
-        )?;
+        let stmt = sql::finish(id, OperationStatus::Succeeded, Some(&result), None, now)?;
         self.update(id, stmt).await
     }
 
@@ -441,14 +437,7 @@ impl Operations {
     ) -> Result<Option<OperationRecord>, QueueError> {
         let now = self.queue.now_ms();
         let error = error.into();
-        let stmt = sql::finish(
-            self.db()?.backend(),
-            id,
-            OperationStatus::Failed,
-            None,
-            Some(&error),
-            now,
-        )?;
+        let stmt = sql::finish(id, OperationStatus::Failed, None, Some(&error), now)?;
         self.update(id, stmt).await
     }
 
@@ -459,14 +448,7 @@ impl Operations {
     /// when there is none).
     pub async fn cancel(&self, id: Uuid) -> Result<Option<OperationRecord>, QueueError> {
         let now = self.queue.now_ms();
-        let stmt = sql::finish(
-            self.db()?.backend(),
-            id,
-            OperationStatus::Cancelled,
-            None,
-            None,
-            now,
-        )?;
+        let stmt = sql::finish(id, OperationStatus::Cancelled, None, None, now)?;
         let record = self.update(id, stmt).await?;
         if let Some(record) = &record
             && record.status == OperationStatus::Cancelled
@@ -498,8 +480,7 @@ impl Operations {
         let stale_ms =
             i64::try_from(self.options.stale_after_secs.saturating_mul(1000)).unwrap_or(i64::MAX);
         let before = now.saturating_sub(stale_ms);
-        let backend = self.db()?.backend();
-        let stale = sql::stale(self.db()?.conn(), backend, before).await?;
+        let stale = sql::stale(self.writer()?, before).await?;
         let mut report = SweepReport::default();
         for record in stale {
             let id = record.id.to_string();
@@ -523,7 +504,7 @@ impl Operations {
                     .and_then(|job| serde_json::from_value::<JobEnvelope>(job).ok())
                 && record.redispatches < self.options.max_redispatches
             {
-                let claim = sql::redispatched(backend, record.id, before, now);
+                let claim = sql::redispatched(record.id, before, now);
                 if !self.apply(record.id, claim).await?.0 {
                     // Another sweep restarted it, or it came back to life.
                     continue;
@@ -539,7 +520,7 @@ impl Operations {
                 report.redispatched += 1;
                 continue;
             }
-            let stalled = sql::stalled(backend, record.id, STALLED_MESSAGE, before, now);
+            let stalled = sql::stalled(record.id, STALLED_MESSAGE, before, now);
             if !self.apply(record.id, stalled).await?.0 {
                 continue;
             }
@@ -561,8 +542,8 @@ impl Operations {
             .queue
             .now_ms()
             .saturating_sub(i64::try_from(older_than.as_millis()).unwrap_or(i64::MAX));
-        let stmt = sql::prune(self.db()?.backend(), before);
-        Ok(self.db()?.conn().execute_raw(stmt).await?.rows_affected())
+        let stmt = sql::prune(before);
+        Ok(self.writer()?.execute(&stmt).await?.rows_affected)
     }
 
     /// Whether `principal` may see `operation`: its owner, or a holder of
@@ -627,24 +608,16 @@ impl Operations {
         row: &crate::batch::BatchRow,
         now: i64,
     ) -> Result<Statement, QueueError> {
-        let backend = self.db()?.backend();
         if row.cancelled_at.is_some() && row.failed_jobs == 0 {
-            sql::finish(backend, id, OperationStatus::Cancelled, None, None, now)
+            sql::finish(id, OperationStatus::Cancelled, None, None, now)
         } else if row.failed_jobs > 0 && !row.allow_failures {
             let error = format!("{} of {} jobs failed.", row.failed_jobs, row.total_jobs);
-            sql::finish(
-                backend,
-                id,
-                OperationStatus::Failed,
-                None,
-                Some(&error),
-                now,
-            )
+            sql::finish(id, OperationStatus::Failed, None, Some(&error), now)
         } else if row.callbacks_failed > 0 {
             let error = "A follow-up job of the batch failed.";
-            sql::finish(backend, id, OperationStatus::Failed, None, Some(error), now)
+            sql::finish(id, OperationStatus::Failed, None, Some(error), now)
         } else {
-            sql::finish(backend, id, OperationStatus::Succeeded, None, None, now)
+            sql::finish(id, OperationStatus::Succeeded, None, None, now)
         }
     }
 
@@ -656,7 +629,7 @@ impl Operations {
     ) -> Result<Option<OperationRecord>, QueueError> {
         let now = self.queue.now_ms();
         let done = row.total_jobs.saturating_sub(row.pending_jobs);
-        let stmt = sql::counts(self.db()?.backend(), id, done, row.total_jobs, now);
+        let stmt = sql::counts(id, done, row.total_jobs, now);
         self.update(id, stmt).await
     }
 
@@ -667,7 +640,7 @@ impl Operations {
         id: Uuid,
         note: &str,
     ) -> Result<Option<OperationRecord>, QueueError> {
-        let stmt = sql::note(self.db()?.backend(), id, note, self.queue.now_ms());
+        let stmt = sql::note(id, note, self.queue.now_ms());
         self.update(id, stmt).await
     }
 
@@ -678,14 +651,7 @@ impl Operations {
         id: Uuid,
     ) -> Result<Option<OperationRecord>, QueueError> {
         let now = self.queue.now_ms();
-        let stmt = sql::finish(
-            self.db()?.backend(),
-            id,
-            OperationStatus::Succeeded,
-            None,
-            None,
-            now,
-        )?;
+        let stmt = sql::finish(id, OperationStatus::Succeeded, None, None, now)?;
         self.update(id, stmt).await
     }
 
@@ -694,13 +660,13 @@ impl Operations {
         &self,
         id: Uuid,
     ) -> Result<Option<OperationRecord>, QueueError> {
-        let stmt = sql::running(self.db()?.backend(), id, self.queue.now_ms());
+        let stmt = sql::running(id, self.queue.now_ms());
         self.update(id, stmt).await
     }
 
     /// The status of operation `id`.
     pub(crate) async fn status(&self, id: Uuid) -> Result<Option<OperationStatus>, QueueError> {
-        sql::status(self.db()?.conn(), self.db()?.backend(), id).await
+        sql::status(self.writer()?, id).await
     }
 
     fn app(&self) -> Option<AppContext> {
@@ -713,10 +679,9 @@ impl Operations {
         if let Some(uow) = Uow::current()
             && !uow.is_finished().await
         {
-            let tx = uow.tx().await?;
-            return Ok(tx.execute_raw(stmt).await?.rows_affected());
+            return Ok(uow.execute(&stmt).await?.rows_affected);
         }
-        Ok(self.db()?.conn().execute_raw(stmt).await?.rows_affected())
+        Ok(self.writer()?.execute(&stmt).await?.rows_affected)
     }
 
     /// Runs an update of operation `id` (in the current unit of work when
@@ -742,10 +707,8 @@ impl Operations {
         if let Some(uow) = Uow::current()
             && !uow.is_finished().await
         {
-            let tx = uow.tx().await?;
-            let changed = tx.execute_raw(stmt).await?.rows_affected() > 0;
-            let record = sql::find(&*tx, uow.db().backend(), id).await?;
-            drop(tx);
+            let changed = uow.execute(&stmt).await?.rows_affected > 0;
+            let record = sql::find(&uow, id).await?;
             if changed && let Some(record) = record.clone() {
                 let announcer = self.announcer();
                 uow.after_commit(move || {
@@ -754,7 +717,7 @@ impl Operations {
             }
             return Ok((changed, record));
         }
-        let changed = self.db()?.conn().execute_raw(stmt).await?.rows_affected() > 0;
+        let changed = self.writer()?.execute(&stmt).await?.rows_affected > 0;
         let record = self.find(id).await?;
         if changed && let Some(record) = &record {
             self.announcer().announce(record).await;

@@ -13,6 +13,7 @@ mod module;
 mod observed;
 mod operations;
 mod reference_store;
+mod servers;
 mod suite;
 mod support;
 mod telemetry;
