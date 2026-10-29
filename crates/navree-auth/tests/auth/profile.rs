@@ -3,11 +3,11 @@
 use std::sync::Arc;
 
 use chrono::Utc;
+use navree_auth::User;
 use navree_contracts::AuditSink;
 use navree_db::Db;
-use navree_testing::{TestClient, TestResponse};
-use navree_auth::User;
 use navree_orm::Model as _;
+use navree_testing::{TestClient, TestResponse};
 use serde_json::{Value, json};
 
 use crate::support::{

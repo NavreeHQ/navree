@@ -114,7 +114,8 @@ impl ServerDatabase {
         let base = admin.split('?').next().unwrap_or(&admin);
         let (base, _) = base.rsplit_once('/').expect("a database URL");
         let url = format!("{base}/{name}");
-        run_admin(&admin, format!("CREATE DATABASE {name}")).unwrap_or_else(|error| panic!("{error}"));
+        run_admin(&admin, format!("CREATE DATABASE {name}"))
+            .unwrap_or_else(|error| panic!("{error}"));
         ServerDatabase {
             server,
             admin,

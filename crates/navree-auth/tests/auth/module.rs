@@ -8,8 +8,8 @@ use navree_auth::{
 };
 use navree_crypto::CryptoModule;
 use navree_db::{DatabaseModule, Db};
-use navree_testing::TestApp;
 use navree_orm::Model as _;
+use navree_testing::TestApp;
 use serde_json::{Value, json};
 
 use crate::support::{self, PASSWORD, login, signed_in};

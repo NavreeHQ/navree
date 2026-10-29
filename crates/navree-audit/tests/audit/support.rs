@@ -106,12 +106,14 @@ pub struct FixturesModule {
 
 impl Module for FixturesModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.migrations(MigrationSet::new("fixtures").migration(SchemaMigration::new(
-            "m0001_create_fixtures",
-            CreateFixtures,
-        )))
-            .value_arc::<dyn RouteAuthorizer>(self.authorizer.clone())
-            .exports::<dyn RouteAuthorizer>();
+        m.migrations(
+            MigrationSet::new("fixtures").migration(SchemaMigration::new(
+                "m0001_create_fixtures",
+                CreateFixtures,
+            )),
+        )
+        .value_arc::<dyn RouteAuthorizer>(self.authorizer.clone())
+        .exports::<dyn RouteAuthorizer>();
     }
 }
 

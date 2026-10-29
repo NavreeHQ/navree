@@ -6,8 +6,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use navree_audit::AuditLog;
-use navree_contracts::{AuditEntry, AuditKind, AuditSink};
 use navree_audit::AuditRecord;
+use navree_contracts::{AuditEntry, AuditKind, AuditSink};
 use navree_db::Db;
 use navree_orm::Model as _;
 use serde_json::json;

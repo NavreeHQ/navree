@@ -172,11 +172,7 @@ async fn current_user_is_401_once_the_user_is_deleted() {
         .assert_status(200)
         .assert_json_path("email", json!("ada@example.com"));
     let db = app.get::<Db>().await;
-    User::query()
-        .where_key(user.id)
-        .delete(&*db)
-        .await
-        .unwrap();
+    User::query().where_key(user.id).delete(&*db).await.unwrap();
     app.client()
         .get("/api/probe/user")
         .bearer(&access)

@@ -9,9 +9,9 @@ use navree_contracts::{AuditSink, Clock, FixedClock};
 use navree_crypto::sha256_hex;
 use navree_db::Db;
 use navree_kernel::{Module, ModuleBuilder};
+use navree_orm::Model as _;
 use navree_testing::{TestApp, TestClient, TestResponse};
 use navree_view::ModuleBuilderViewExt;
-use navree_orm::Model as _;
 use serde_json::json;
 
 use crate::support::{

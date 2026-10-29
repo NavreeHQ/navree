@@ -24,9 +24,7 @@ async fn data_changes_of_an_impersonated_unit_of_work_record_the_impersonator() 
     uow.commit().await.unwrap();
 
     let plain = db.uow(Some(user), None).await;
-    Note::create(&plain, new_note("by the user"))
-        .await
-        .unwrap();
+    Note::create(&plain, new_note("by the user")).await.unwrap();
     plain.commit().await.unwrap();
 
     let rows = audit_rows(&app).await;
