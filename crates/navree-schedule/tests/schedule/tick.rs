@@ -2,11 +2,12 @@
 
 use navree_schedule::RunStatus;
 
+use crate::databases::Scratch;
+use crate::on_every_server;
 use crate::support::{Counter, Tasks, TestDb, at, clock, scheduler};
 
-#[tokio::test]
-async fn daily_at_due_only_at_that_minute() {
-    let db = TestDb::new();
+async fn daily_at_due_only_at_that_minute(scratch: Scratch) {
+    let db = TestDb::on(&scratch);
     let runs = Counter::default();
     let task = runs.clone();
     let app = db
@@ -37,9 +38,8 @@ async fn daily_at_due_only_at_that_minute() {
     assert_eq!(runs.get(), 2);
 }
 
-#[tokio::test]
-async fn cron_expression_parsed() {
-    let db = TestDb::new();
+async fn cron_expression_parsed(scratch: Scratch) {
+    let db = TestDb::on(&scratch);
     let runs = Counter::default();
     let task = runs.clone();
     let app = db
@@ -112,9 +112,8 @@ async fn malformed_daily_at_fails_the_boot() {
     );
 }
 
-#[tokio::test]
-async fn list_shows_next_run() {
-    let db = TestDb::new();
+async fn list_shows_next_run(scratch: Scratch) {
+    let db = TestDb::on(&scratch);
     let runs = Counter::default();
     let app = db
         .boot(
@@ -142,3 +141,10 @@ async fn list_shows_next_run() {
         ]
     );
 }
+
+on_every_server!(
+    "navree_schedule";
+    daily_at_due_only_at_that_minute,
+    cron_expression_parsed,
+    list_shows_next_run,
+);

@@ -8,6 +8,9 @@ use sea_orm::sea_query::{
 };
 use sea_orm::{ConnectionTrait, DbBackend, DbErr, Statement, Value};
 
+use crate::schema::OnExecutor;
+use crate::{Backend, DbError, Executor, ExecutorExt};
+
 /// A point on a time-series table's time axis: where
 /// [`prune_time_series`] cuts.
 ///
@@ -56,6 +59,14 @@ impl std::fmt::Display for TimePoint {
 
 impl TimePoint {
     fn value(self) -> Value {
+        match self {
+            TimePoint::At(moment) => moment.into(),
+            TimePoint::Integer(value) => value.into(),
+        }
+    }
+
+    /// The cutoff as a bound value of navree-db's.
+    fn bound(self) -> crate::Value {
         match self {
             TimePoint::At(moment) => moment.into(),
             TimePoint::Integer(value) => value.into(),
@@ -135,6 +146,109 @@ where
     Ok(conn.execute(&delete).await?.rows_affected())
 }
 
+/// [`prune_time_series`] on navree-db's executors (a pool, a transaction, a
+/// unit of work, a [`Db`](crate::Db)), for code that no longer holds a
+/// SeaORM connection: the same behaviour, the errors of the engine.
+///
+/// ```no_run
+/// # async fn prune(db: &navree_db::Db) -> Result<(), navree_db::DbError> {
+/// use chrono::{TimeDelta, Utc};
+/// use navree_db::prune_time_series_on;
+///
+/// let deleted = prune_time_series_on(
+///     db,
+///     "events",
+///     "occurred_at",
+///     Utc::now() - TimeDelta::days(90),
+/// )
+/// .await?;
+/// println!("deleted {deleted} events");
+/// # Ok(()) }
+/// ```
+pub async fn prune_time_series_on<E>(
+    executor: &E,
+    table: &str,
+    time_column: &str,
+    before: impl Into<TimePoint>,
+) -> Result<u64, DbError>
+where
+    E: Executor + ?Sized,
+{
+    let before = before.into();
+    let backend = executor.backend();
+    let delete = crate::Statement::portable(
+        format!(
+            "DELETE FROM {} WHERE {} < ?",
+            backend.quote_identifier(table),
+            backend.quote_identifier(time_column)
+        ),
+        [before.bound()],
+    );
+    if backend == Backend::Postgres
+        && let Some(dimension) = time_dimension_on(executor, table).await?
+        && dimension.column == time_column
+    {
+        // Built first: it checks the cutoff against the column's type
+        // before any statement runs.
+        let drop = drop_chunks_statement(table, &dimension, before)?;
+        let count = crate::Statement::portable(
+            format!(
+                "SELECT COUNT(*) FROM {} WHERE {} < ?",
+                backend.quote_identifier(table),
+                backend.quote_identifier(time_column)
+            ),
+            [before.bound()],
+        );
+        let older: i64 = executor.fetch_scalar(&count).await?;
+        if older > 0 {
+            executor.fetch_all(&drop).await?;
+            executor.execute(&delete).await?;
+        }
+        return Ok(u64::try_from(older).unwrap_or(0));
+    }
+    Ok(executor.execute(&delete).await?.rows_affected)
+}
+
+async fn time_dimension_on<E>(executor: &E, table: &str) -> Result<Option<TimeDimension>, DbError>
+where
+    E: Executor + ?Sized,
+{
+    Schema::new(&OnExecutor(executor))
+        .time_dimension(table)
+        .await
+        .map_err(|error| match error {
+            SchemaError::Database { source, .. } => match source.downcast::<DbError>() {
+                Ok(error) => *error,
+                Err(other) => DbError::unsupported(other.to_string()),
+            },
+            other => DbError::unsupported(format!(
+                "cannot read the time dimension of `{table}`: {other}"
+            )),
+        })
+}
+
+/// `SELECT drop_chunks(..)` for chunks entirely before `before`, as
+/// [`drop_chunks`] builds it, on navree-db's statements.
+fn drop_chunks_statement(
+    table: &str,
+    dimension: &TimeDimension,
+    before: TimePoint,
+) -> Result<crate::Statement, DbError> {
+    let column_type = dimension.column_type.as_str();
+    check_cutoff(table, dimension, before).map_err(DbError::invalid)?;
+    // Always cast: the function takes `"any"`, so a prepared statement is
+    // typed by the first cutoff bound to it, and a pooled connection that
+    // pruned a timestamp table must not reuse it for an integer one (the
+    // statement text differs per column type).
+    // The cast type is a catalog type name checked against the types pruning knows (above);
+    // the cutoff itself is a bound parameter.
+    // nosemgrep: navree-sql-built-from-strings
+    Ok(crate::Statement::portable(
+        format!("SELECT drop_chunks(CAST(? AS regclass), older_than => CAST(? AS {column_type}))"),
+        [table.into(), before.bound()],
+    ))
+}
+
 /// The time dimension of `table` when it is a hypertable.
 async fn time_dimension<C>(conn: &C, table: &str) -> Result<Option<TimeDimension>, DbErr>
 where
@@ -206,6 +320,29 @@ const TIME_TYPES: [&str; 6] = [
     "smallint",
 ];
 
+/// Why `before` cannot cut `table`'s time column, if it cannot.
+fn check_cutoff(table: &str, dimension: &TimeDimension, before: TimePoint) -> Result<(), String> {
+    let column_type = dimension.column_type.as_str();
+    if !TIME_TYPES.contains(&column_type) {
+        return Err(format!(
+            "cannot drop the chunks of `{table}`: its time column `{}` has type `{column_type}`, which pruning does not know",
+            dimension.column
+        ));
+    }
+    if dimension.is_integer() != matches!(before, TimePoint::Integer(_)) {
+        return Err(format!(
+            "cannot prune `{table}` before {before}: its time column `{}` is `{column_type}`; pass {}",
+            dimension.column,
+            if dimension.is_integer() {
+                "an integer (TimePoint::Integer)"
+            } else {
+                "a moment (TimePoint::At)"
+            }
+        ));
+    }
+    Ok(())
+}
+
 /// `SELECT drop_chunks(...)` for chunks entirely before `before`, which is
 /// cast to the time column's own type (TimescaleDB requires it).
 fn drop_chunks(
@@ -214,23 +351,7 @@ fn drop_chunks(
     before: TimePoint,
 ) -> Result<Statement, DbErr> {
     let column_type = dimension.column_type.as_str();
-    if !TIME_TYPES.contains(&column_type) {
-        return Err(DbErr::Custom(format!(
-            "cannot drop the chunks of `{table}`: its time column `{}` has type `{column_type}`, which pruning does not know",
-            dimension.column
-        )));
-    }
-    if dimension.is_integer() != matches!(before, TimePoint::Integer(_)) {
-        return Err(DbErr::Custom(format!(
-            "cannot prune `{table}` before {before}: its time column `{}` is `{column_type}`; pass {}",
-            dimension.column,
-            if dimension.is_integer() {
-                "an integer (TimePoint::Integer)"
-            } else {
-                "a moment (TimePoint::At)"
-            }
-        )));
-    }
+    check_cutoff(table, dimension, before).map_err(DbErr::Custom)?;
     let cutoff = if column_type == before.postgres_type() {
         "$2".to_owned()
     } else {
@@ -312,6 +433,29 @@ mod tests {
             integer.sql,
             "SELECT drop_chunks(CAST($1 AS regclass), older_than => CAST($2 AS integer))"
         );
+    }
+
+    #[test]
+    fn the_executor_statement_casts_the_cutoff_to_the_time_column() {
+        let at = drop_chunks_statement(
+            "events",
+            &dimension("timestamp with time zone"),
+            TimePoint::At(moment()),
+        )
+        .unwrap();
+        assert_eq!(
+            at.sql(),
+            "SELECT drop_chunks(CAST(? AS regclass), older_than => CAST(? AS timestamp with time zone))"
+        );
+        // A different column type is a different statement text, so a
+        // connection never reuses one prepared for another cutoff type.
+        let integer =
+            drop_chunks_statement("ticks", &dimension("bigint"), TimePoint::Integer(5)).unwrap();
+        assert_ne!(integer.sql(), at.sql());
+        assert_eq!(integer.values().len(), 2);
+        let error = drop_chunks_statement("ticks", &dimension("bigint"), TimePoint::At(moment()))
+            .unwrap_err();
+        assert_eq!(error.kind(), crate::ErrorKind::InvalidStatement);
     }
 
     #[test]

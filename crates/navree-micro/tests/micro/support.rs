@@ -13,7 +13,10 @@ use navree_access::{
     UPDATE, Update, field,
 };
 use navree_contracts::{AuditEntry, AuditSink, BoxError, BoxFuture};
-use navree_db::{Db, MigrationSet, ModuleBuilderDbExt, Uow};
+use navree_db::navree_schema::{Migration, Schema, SchemaMigration, SchemaResult};
+use navree_db::{
+    Db, DbError, Executor, ExecutorExt, MigrationSet, ModuleBuilderDbExt, Statement, Uow,
+};
 use navree_http::{AppError, CurrentPrincipal, Guard, Result};
 use navree_kernel::{Module, ModuleBuilder};
 use navree_macros::{injectable, message_handlers};
@@ -21,10 +24,7 @@ use navree_micro::{MessageContext, ModuleBuilderMicroExt, Payload, ServiceClient
 use navree_telemetry::TelemetryContext;
 use navree_testing::TestApp;
 use navree_validation::Valid;
-use sea_orm::sea_query::{ColumnDef, Table};
-use sea_orm::{ActiveModelTrait, ConnectionTrait, DbBackend, Set, Statement};
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
+use sea_orm::{ActiveModelTrait, Set};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -54,45 +54,40 @@ impl Subject for deal::Entity {
     const PERMISSION_PREFIX: &'static str = "deals";
 }
 
+/// The name of the migration that creates `deals` and `notes`.
+pub const CREATE_TABLES: &str = "m20261026_000001_create_deals_and_notes";
+
 /// Creates `deals` and `notes`.
 pub struct CreateTables;
 
-impl MigrationName for CreateTables {
-    fn name(&self) -> &str {
-        "m20261026_000001_create_deals_and_notes"
+impl CreateTables {
+    /// The migration, as `MigrationSet::migration` takes it.
+    pub fn migration() -> SchemaMigration<CreateTables> {
+        SchemaMigration::new(CREATE_TABLES, CreateTables)
     }
 }
 
-#[async_trait]
-impl MigrationTrait for CreateTables {
-    async fn up(&self, manager: &SchemaManager) -> std::result::Result<(), sea_orm::DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table("deals")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("owner_id").uuid().not_null())
-                    .col(ColumnDef::new("title").string().not_null())
-                    .to_owned(),
-            )
+impl Migration for CreateTables {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema
+            .create("deals", |t| {
+                t.uuid("id").primary();
+                t.uuid("owner_id");
+                t.string("title");
+            })
             .await?;
-        manager
-            .create_table(
-                Table::create()
-                    .table("notes")
-                    .col(ColumnDef::new("id").string().not_null().primary_key())
-                    .col(ColumnDef::new("body").string().not_null())
-                    .col(ColumnDef::new("actor").string().null())
-                    .to_owned(),
-            )
+        schema
+            .create("notes", |t| {
+                t.string("id").primary();
+                t.string("body");
+                t.string("actor").nullable();
+            })
             .await
     }
 
-    async fn down(&self, manager: &SchemaManager) -> std::result::Result<(), sea_orm::DbErr> {
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
         for table in ["notes", "deals"] {
-            manager
-                .drop_table(Table::drop().table(table).to_owned())
-                .await?;
+            schema.drop_if_exists(table).await?;
         }
         Ok(())
     }
@@ -321,10 +316,8 @@ impl DealsHandlers {
 }
 
 /// Writes a note in `uow`.
-pub async fn insert_note(uow: &Uow, body: &str) -> std::result::Result<(), sea_orm::DbErr> {
-    let tx = uow.tx().await?;
-    tx.execute_raw(Statement::from_sql_and_values(
-        DbBackend::Sqlite,
+pub async fn insert_note(uow: &Uow, body: &str) -> std::result::Result<(), DbError> {
+    uow.execute(&Statement::portable(
         "INSERT INTO notes (id, body, actor) VALUES (?, ?, ?)",
         [
             Uuid::now_v7().to_string().into(),
@@ -336,36 +329,22 @@ pub async fn insert_note(uow: &Uow, body: &str) -> std::result::Result<(), sea_o
     Ok(())
 }
 
-async fn count_notes(uow: &Uow) -> std::result::Result<i64, sea_orm::DbErr> {
-    let tx = uow.tx().await?;
-    let row = tx
-        .query_one_raw(Statement::from_string(
-            DbBackend::Sqlite,
-            "SELECT COUNT(*) AS n FROM notes",
-        ))
-        .await?
-        .expect("a count");
-    row.try_get("", "n")
+async fn count_notes(uow: &Uow) -> std::result::Result<i64, DbError> {
+    uow.fetch_scalar(&Statement::text("SELECT COUNT(*) FROM notes"))
+        .await
 }
 
 /// The notes in the database: `(body, actor)`.
 pub async fn notes(app: &TestApp) -> Vec<(String, Option<String>)> {
     let db = app.get::<Db>().await;
-    db.conn()
-        .query_all_raw(Statement::from_string(
-            DbBackend::Sqlite,
-            "SELECT body, actor FROM notes ORDER BY id",
-        ))
-        .await
-        .expect("notes")
-        .iter()
-        .map(|row| {
-            (
-                row.try_get("", "body").unwrap(),
-                row.try_get("", "actor").unwrap(),
-            )
-        })
-        .collect()
+    db.fetch_all(&Statement::text(
+        "SELECT body, actor FROM notes ORDER BY id",
+    ))
+    .await
+    .expect("notes")
+    .iter()
+    .map(|row| (row.get("body").unwrap(), row.get("actor").unwrap()))
+    .collect()
 }
 
 /// The deals feature.
@@ -374,7 +353,7 @@ pub struct DealsModule;
 impl Module for DealsModule {
     fn register(&self, m: &mut ModuleBuilder) {
         m.import(AccessModule::for_feature::<deal::Entity>())
-            .migrations(MigrationSet::new("deals").migration(CreateTables))
+            .migrations(MigrationSet::new("deals").migration(CreateTables::migration()))
             .provider::<InternalOnly>()
             .message_handlers::<DealsHandlers>();
     }

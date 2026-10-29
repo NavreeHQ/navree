@@ -116,8 +116,10 @@ const HIERARCHY: &[Rule] = &[
     rule("navree-storage", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto"]),
     // Time zones: zones, local days, send windows, holidays; the
     // `CurrentZone` extractor reads the request (navree-http) and collects
-    // zone sources (navree-contracts) from workspaces and apps.
-    rule("navree-time", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-http"]),
+    // zone sources (navree-contracts) from workspaces and apps. Its local-time
+    // SQL are navree-db `Statement` fragments (a same-layer edge, like
+    // navree-mail -> navree-db; the database never depends on time).
+    rule("navree-time", 3, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db"]),
     // L4
     rule("navree-session", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto", "navree-db"]),
     rule("navree-validation", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db"]),

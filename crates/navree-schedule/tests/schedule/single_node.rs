@@ -2,11 +2,12 @@
 
 use navree_schedule::{RunStatus, SkipReason};
 
+use crate::databases::Scratch;
+use crate::on_every_server;
 use crate::support::{Counter, Tasks, TestDb, at, clock, runs, scheduler};
 
-#[tokio::test]
-async fn same_tick_runs_once_across_two_schedulers() {
-    let db = TestDb::new();
+async fn same_tick_runs_once_across_two_schedulers(scratch: Scratch) {
+    let db = TestDb::on(&scratch);
     let clock = clock("2026-10-25T02:00:05Z");
     let count = Counter::default();
     let (first, second) = (count.clone(), count.clone());
@@ -68,3 +69,8 @@ async fn same_tick_runs_once_across_two_schedulers() {
     assert_eq!(next[0].status, RunStatus::Succeeded);
     assert_eq!(count.get(), 2);
 }
+
+on_every_server!(
+    "navree_schedule";
+    same_tick_runs_once_across_two_schedulers,
+);

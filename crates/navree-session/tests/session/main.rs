@@ -6,6 +6,7 @@ mod support;
 mod cookies;
 mod csrf;
 mod database;
+mod databases;
 mod lifecycle;
 mod module;
 mod spa;

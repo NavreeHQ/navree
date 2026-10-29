@@ -245,7 +245,9 @@ by their modules' migrations: `audit_logs`, `webhook_deliveries`,
 Their primary keys include the time column there, so nothing may reference
 them by `id` alone. Prune old rows with
 `navree::db::prune_time_series(conn, table, time_column, cutoff)`: whole
-chunks go on a hypertable, one `DELETE` elsewhere. See
+chunks go on a hypertable, one `DELETE` elsewhere
+(`prune_time_series_on(&executor, ..)` on a `Db`, `Transaction` or `Uow`,
+returning `DbError`). See
 `references/timescaledb.md`.
 
 ## Common mistakes

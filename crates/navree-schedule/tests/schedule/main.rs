@@ -1,6 +1,8 @@
-//! navree-schedule integration tests. Every test uses a fresh temporary SQLite
-//! file and a `FixedClock`.
+//! navree-schedule integration tests. Every test uses a fresh database (a
+//! temporary SQLite file; the tests of the run table also run on PostgreSQL
+//! and MySQL, see `databases.rs`) and a `FixedClock`.
 
+mod databases;
 mod support;
 
 mod cli;

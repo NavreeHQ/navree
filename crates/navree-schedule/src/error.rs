@@ -1,6 +1,6 @@
 //! [`ScheduleError`].
 
-use sea_orm::DbErr;
+use navree_db::DbError;
 
 /// A scheduling problem. The first four variants are found while the
 /// [`Scheduler`](crate::Scheduler) is built, so they fail the boot.
@@ -59,5 +59,5 @@ pub enum ScheduleError {
     AppDropped,
     /// Reading or writing `schedule_runs` failed.
     #[error("schedule_runs: {0}")]
-    Db(#[from] DbErr),
+    Db(#[from] DbError),
 }

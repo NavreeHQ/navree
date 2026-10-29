@@ -134,6 +134,28 @@ macro_rules! schema_connection {
 
 schema_connection!(Pool, Transaction, Uow, Db);
 
+/// A schema on any [`Executor`] (a `&dyn Executor` too), for code that
+/// holds one and not a concrete connection: `Schema::new(&OnExecutor(&e))`.
+pub(crate) struct OnExecutor<'a, E: ?Sized>(pub(crate) &'a E);
+
+impl<E: Executor + ?Sized> SchemaConnection for OnExecutor<'_, E> {
+    fn backend(&self) -> Dialect {
+        dialect(self.0.backend())
+    }
+
+    fn execute<'a>(&'a self, sql: &'a str) -> BoxFuture<'a, Result<(), SchemaError>> {
+        Box::pin(execute_on(self.0, sql))
+    }
+
+    fn query<'a>(
+        &'a self,
+        sql: &'a str,
+        params: &'a [SchemaValue],
+    ) -> BoxFuture<'a, Result<Vec<SchemaRow>, SchemaError>> {
+        Box::pin(query_on(self.0, sql, params))
+    }
+}
+
 /// A schema on a SeaORM connection or transaction, while code still holds
 /// one: `Schema::new(&SeaExecutor::new(&*uow.tx().await?))`.
 impl<C: ConnectionTrait + Sync + ?Sized> SchemaConnection for SeaExecutor<'_, C> {

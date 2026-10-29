@@ -305,3 +305,119 @@ async fn regular_tables_and_other_columns_are_pruned_row_by_row() {
     }
     scratch.drop().await;
 }
+
+/// `prune_time_series_on`, the same pruning on navree-db's executors: a
+/// transaction, then the `Db`; whole chunks on hypertables (by a moment or
+/// by an integer), the cutoff's kind checked, a regular table row by row.
+#[tokio::test]
+async fn the_executor_variant_prunes_like_the_connection_one() {
+    use navree_db::prune_time_series_on;
+
+    let Some(scratch) = Scratch::new().await else {
+        return;
+    };
+    let db = scratch.db().await;
+    if !timescaledb(&db).await {
+        scratch.drop().await;
+        return;
+    }
+    let schema = Schema::new(&db);
+    schema
+        .create_hypertable("events", "occurred_at", |t| {
+            t.uuid_primary();
+            t.timestamp_tz("occurred_at");
+            t.hypertable("occurred_at").chunk_interval("1 day");
+        })
+        .await
+        .unwrap();
+    schema
+        .create_hypertable("ticks", "at_ms", |t| {
+            t.uuid_primary();
+            t.big_integer("at_ms");
+            t.hypertable("at_ms").chunk_interval("86400000");
+        })
+        .await
+        .unwrap();
+    schema
+        .create("notes", |t| {
+            t.uuid_primary();
+            t.timestamp_tz("occurred_at");
+        })
+        .await
+        .unwrap();
+    for n in 1..=10 {
+        insert_event(&db, "events", day(n)).await;
+        insert_event(&db, "notes", day(n)).await;
+        db.conn()
+            .execute(
+                Query::insert()
+                    .into_table(Alias::new("ticks"))
+                    .columns([Alias::new("id"), Alias::new("at_ms")])
+                    .values_panic([
+                        uuid::Uuid::now_v7().into(),
+                        day(n).timestamp_millis().into(),
+                    ]),
+            )
+            .await
+            .unwrap();
+    }
+    let chunks = |table: &'static str| {
+        let db = db.clone();
+        async move { number(&db, &format!("SELECT count(*) FROM show_chunks('{table}')")).await }
+    };
+    assert_eq!(chunks("events").await, 10);
+
+    // In a transaction: the count, the dropped chunks and the delete commit
+    // together.
+    let tx = db.begin().await.unwrap();
+    let deleted = prune_time_series_on(&tx, "events", "occurred_at", day(4))
+        .await
+        .unwrap();
+    assert_eq!(deleted, 3);
+    tx.commit().await.unwrap();
+    assert_eq!(chunks("events").await, 7);
+
+    // A rolled-back prune leaves everything.
+    let tx = db.begin().await.unwrap();
+    prune_time_series_on(&tx, "events", "occurred_at", day(8))
+        .await
+        .unwrap();
+    tx.rollback().await.unwrap();
+    assert_eq!(chunks("events").await, 7);
+
+    // The `Db`, a qualified name, nothing older.
+    let deleted = prune_time_series_on(&db, "public.events", "occurred_at", day(6))
+        .await
+        .unwrap();
+    assert_eq!(deleted, 2);
+    assert_eq!(
+        prune_time_series_on(&db, "events", "occurred_at", day(6))
+            .await
+            .unwrap(),
+        0
+    );
+    assert_eq!(chunks("events").await, 5);
+
+    // Integer time columns, and a cutoff of the wrong kind refused.
+    let deleted = prune_time_series_on(&db, "ticks", "at_ms", day(4).timestamp_millis())
+        .await
+        .unwrap();
+    assert_eq!(deleted, 3);
+    assert_eq!(chunks("ticks").await, 7);
+    let error = prune_time_series_on(&db, "ticks", "at_ms", TimePoint::At(day(6)))
+        .await
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("its time column `at_ms` is `bigint`; pass an integer (TimePoint::Integer)"),
+        "{error}"
+    );
+
+    // A regular table is pruned row by row.
+    let deleted = prune_time_series_on(&db, "notes", "occurred_at", day(3))
+        .await
+        .unwrap();
+    assert_eq!(deleted, 2);
+    scratch.drop().await;
+}

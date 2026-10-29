@@ -16,13 +16,13 @@ use navree::contracts::{
     BoxFuture, Clock, Dispatcher, FixedClock, Job, JobContext, JobEnvelope, ZoneLevel, ZoneOwner,
     ZoneRequest, ZoneSource,
 };
-use navree::db::Db;
+use navree::db::{Db, Executor, Statement};
 use navree::kernel::{CommandSpec, Resolver};
 use navree::prelude::*;
 use navree::schedule::{LocalRun, RunStatus, Scheduler};
 use navree::testing::{TestApp, principal};
 use navree::time::{FixedHolidays, Holidays, LocalDayError, ZoneError, Zones, ZonesFake};
-use sea_orm::sea_query::{self, Alias, ColumnDef, Expr, ExprTrait, Table};
+use sea_orm::sea_query::{self, ColumnDef, Expr, ExprTrait, Table};
 use sea_orm::{
     ActiveValue::Set, ColumnTrait, ConnectionTrait, DbErr, EntityTrait, PaginatorTrait, QueryFilter,
 };
@@ -317,29 +317,26 @@ async fn sql_groups_rows_by_local_day() {
         DayRange::new("2026-03-28".parse().unwrap(), "2026-03-30".parse().unwrap()).unwrap();
 
     let (from, to) = range.utc_bounds(&zone);
-    let day = zone
-        .sql(db.backend())
-        .within(from, to)
-        .local_date(Expr::col(signup::Column::CreatedAt));
-    let query = sea_query::Query::select()
-        .expr_as(day.clone(), Alias::new("day"))
-        .expr_as(Expr::cust("COUNT(*)"), Alias::new("signups"))
-        .from(signup::Entity)
-        .and_where(Expr::col(signup::Column::CreatedAt).gte(from))
-        .and_where(Expr::col(signup::Column::CreatedAt).lt(to))
-        .add_group_by([day])
-        .to_owned();
+    let sql = zone.sql(Executor::backend(&*db)).within(from, to);
+    let day = sql.local_date(&sql.column("created_at"));
+    let statement = Statement::portable(
+        format!(
+            "SELECT {day} AS day, COUNT(*) AS signups FROM signups \
+             WHERE created_at >= ? AND created_at < ? GROUP BY {day}",
+            day = day.sql()
+        ),
+        [from.into(), to.into()],
+    );
 
     let mut rows: Vec<(String, i64)> = db
-        .conn()
-        .query_all(&query)
+        .fetch_all(&statement)
         .await
         .unwrap()
         .iter()
         .map(|row| {
             (
-                row.try_get::<String>("", "day").unwrap(),
-                row.try_get::<i64>("", "signups").unwrap(),
+                row.get::<String>("day").unwrap(),
+                row.get::<i64>("signups").unwrap(),
             )
         })
         .collect();

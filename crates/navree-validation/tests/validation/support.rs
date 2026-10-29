@@ -10,7 +10,7 @@ use std::sync::Arc;
 use axum::extract::{Form, Query};
 use garde::Validate;
 use http::Method;
-use navree_db::{DatabaseModule, Db, Uow};
+use navree_db::{Backend, DatabaseModule, Db, Executor, Statement, Uow};
 use navree_http::{Controller, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{
     BoxError, BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver,
@@ -18,9 +18,10 @@ use navree_kernel::{
 use navree_testing::TestApp;
 use navree_validation::rules::{self, confirmed};
 use navree_validation::{AsyncRule, AsyncRules, UowCheck, Valid, ValidAsync};
-use sea_orm::{ConnectionTrait, DbBackend, Statement};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+
+use crate::databases::Scratch;
 
 /// The `min`/`max`/`email` family.
 #[derive(Debug, Deserialize, Serialize, Validate)]
@@ -202,8 +203,7 @@ impl UowCheck for NotReserved {
         ignore: Option<&'a str>,
     ) -> BoxFuture<'a, Result<bool, BoxError>> {
         Box::pin(async move {
-            let tx = uow.tx().await?;
-            tx.execute_unprepared("SELECT 1").await?;
+            uow.fetch_all(&Statement::text("SELECT 1")).await?;
             Ok(self.0 != "admin" || ignore == Some("admin"))
         })
     }
@@ -315,23 +315,40 @@ impl Module for DatabaseTestModule {
     }
 }
 
-/// An app with a fresh SQLite database holding `users(id, email)` and
-/// `companies(id, name)`.
-pub async fn database_app() -> TestApp {
+/// The type of an `id` column that holds the UUIDs the ORM writes: a 16-byte
+/// blob on SQLite and MySQL, `uuid` on PostgreSQL.
+fn id_type(backend: Backend) -> &'static str {
+    match backend {
+        Backend::Postgres => "uuid",
+        Backend::MySql => "BINARY(16)",
+        Backend::Sqlite => "BLOB",
+    }
+}
+
+/// Creates `users(id, email)` and `companies(id, name)`.
+pub async fn create_tables(db: &Db) {
+    let id = id_type(Executor::backend(db));
+    for sql in [
+        format!("CREATE TABLE users (id {id} PRIMARY KEY NOT NULL, email TEXT NOT NULL)"),
+        format!("CREATE TABLE companies (id {id} PRIMARY KEY NOT NULL, name TEXT NOT NULL)"),
+    ] {
+        db.execute_script(&sql).await.expect(&sql);
+    }
+}
+
+/// An app on the scratch database (its units of work on navree-db's own
+/// transaction) holding `users(id, email)` and `companies(id, name)`.
+pub async fn database_app(scratch: &Scratch) -> TestApp {
     let app = TestApp::builder()
         .config("http.per_ip_rate_limit", Value::Null)
-        .temp_database()
+        .config("database.url", scratch.url.as_str())
+        .config("database.migrate_on_boot", true)
+        .config("database.native_units_of_work", true)
         .module(DatabaseModule)
         .module(DatabaseTestModule)
         .build()
         .await;
-    let db = app.get::<Db>().await;
-    for sql in [
-        "CREATE TABLE users (id BLOB PRIMARY KEY NOT NULL, email TEXT NOT NULL)",
-        "CREATE TABLE companies (id BLOB PRIMARY KEY NOT NULL, name TEXT NOT NULL)",
-    ] {
-        db.conn().execute_unprepared(sql).await.expect(sql);
-    }
+    create_tables(&*app.get::<Db>().await).await;
     app
 }
 
@@ -339,14 +356,12 @@ pub async fn database_app() -> TestApp {
 pub async fn insert(app: &TestApp, table: &str, id: uuid::Uuid, value: &str) {
     let db = app.get::<Db>().await;
     let column = if table == "users" { "email" } else { "name" };
-    db.conn()
-        .execute_raw(Statement::from_sql_and_values(
-            DbBackend::Sqlite,
-            format!("INSERT INTO {table} (id, {column}) VALUES (?, ?)"),
-            [id.into(), value.into()],
-        ))
-        .await
-        .expect("insert");
+    db.execute(&Statement::portable(
+        format!("INSERT INTO {table} (id, {column}) VALUES (?, ?)"),
+        [id.into(), value.into()],
+    ))
+    .await
+    .expect("insert");
 }
 
 /// Records the type of the deserializer that read it (and skips its value).

@@ -65,7 +65,10 @@ fn register(m: &mut ModuleBuilder) {
     m.global()
         .migrations(
             MigrationSet::new(MIGRATION_MODULE)
-                .migration(CreateScheduleRuns)
+                .migration(SchemaMigration::new(
+                    CreateScheduleRuns::NAME,
+                    CreateScheduleRuns,
+                ))
                 .migration(SchemaMigration::new(
                     ConvertScheduleRunsToHypertable::NAME,
                     ConvertScheduleRunsToHypertable,

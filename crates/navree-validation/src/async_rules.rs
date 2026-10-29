@@ -4,10 +4,8 @@
 use std::fmt;
 use std::sync::Arc;
 
-use navree_db::Uow;
+use navree_db::{DbError, Executor, Statement, Uow, Value};
 use navree_kernel::{BoxError, BoxFuture};
-use sea_orm::sea_query::{Alias, Expr, ExprTrait, Query};
-use sea_orm::{ConnectionTrait, DbErr, Value};
 use uuid::Uuid;
 
 /// The column `unique` compares with `ignore_id`.
@@ -178,7 +176,7 @@ impl AsyncRule {
     ) -> Self {
         Self {
             field: field.into(),
-            null: !value.is_some(),
+            null: value.is_null(),
             check: Check::Table {
                 kind,
                 table: table.into(),
@@ -236,25 +234,22 @@ impl AsyncRule {
         }
     }
 
-    /// Whether the rule passes on `conn` (a connection or a transaction).
-    /// A [`check`](AsyncRule::check) rule needs a unit of work
-    /// ([`passes_in`](AsyncRule::passes_in)): here it fails with
+    /// Whether the rule passes on `executor` (a pool, a transaction, a
+    /// unit of work or a `Db`). A [`check`](AsyncRule::check) rule needs a
+    /// unit of work ([`passes_in`](AsyncRule::passes_in)): here it fails with
     /// [`RuleError::NeedsUnitOfWork`].
-    pub async fn passes<C: ConnectionTrait>(&self, conn: &C) -> Result<bool, RuleError> {
+    pub async fn passes<E: Executor + ?Sized>(&self, executor: &E) -> Result<bool, RuleError> {
         let ignore_id = match &self.check {
             Check::Table { ignore_id, .. } => *ignore_id,
             Check::Uow { .. } => None,
         };
-        self.passes_ignoring(conn, ignore_id).await
+        self.passes_ignoring(executor, ignore_id).await
     }
 
     /// Whether the rule passes in `uow` (any rule).
     pub async fn passes_in(&self, uow: &Uow) -> Result<bool, RuleError> {
         match &self.check {
-            Check::Table { ignore_id, .. } => {
-                let tx = uow.tx().await.map_err(|source| self.database(source))?;
-                self.passes_ignoring(&*tx, *ignore_id).await
-            }
+            Check::Table { ignore_id, .. } => self.passes_ignoring(uow, *ignore_id).await,
             Check::Uow { check, .. } => self.run_check(check.as_ref(), uow, None).await,
         }
     }
@@ -267,9 +262,7 @@ impl AsyncRule {
     ) -> Result<bool, RuleError> {
         match &self.check {
             Check::Table { .. } => {
-                // Dropped before the unit of work commits.
-                let tx = uow.tx().await.map_err(|source| self.database(source))?;
-                self.passes_ignoring(&*tx, self.ignore_for(path_params))
+                self.passes_ignoring(uow, self.ignore_for(path_params))
                     .await
             }
             Check::Uow { check, .. } => {
@@ -330,17 +323,17 @@ impl AsyncRule {
         self.null
     }
 
-    fn database(&self, source: DbErr) -> RuleError {
+    fn database(&self, source: DbError) -> RuleError {
         RuleError::Database {
             rule: self.rule(),
             field: self.field.clone(),
-            source,
+            source: Box::new(source),
         }
     }
 
-    pub(crate) async fn passes_ignoring<C: ConnectionTrait>(
+    pub(crate) async fn passes_ignoring<E: Executor + ?Sized>(
         &self,
-        conn: &C,
+        executor: &E,
         ignore_id: Option<Uuid>,
     ) -> Result<bool, RuleError> {
         let Check::Table {
@@ -361,17 +354,26 @@ impl AsyncRule {
         if self.is_null() {
             return Ok(true);
         }
-        let mut select = Query::select();
-        select
-            .expr(Expr::val(1))
-            .from(Alias::new(table))
-            .and_where(Expr::col(Alias::new(column)).eq(value.clone()));
+        let backend = executor.backend();
+        let (table, column) = (
+            backend.quote_identifier(table),
+            backend.quote_identifier(column),
+        );
+        let mut sql = format!("SELECT 1 FROM {table} WHERE {column} = ?");
+        let mut values = vec![value.clone()];
         if let (Kind::Unique, Some(id)) = (kind, ignore_id) {
-            select.and_where(Expr::col(Alias::new(ID_COLUMN)).ne(id));
+            sql.push_str(&format!(
+                " AND {} <> ?",
+                backend.quote_identifier(ID_COLUMN)
+            ));
+            values.push(id.into());
         }
-        select.limit(1);
-        let found = conn
-            .query_one(&select)
+        sql.push_str(" LIMIT 1");
+        // The identifiers are checked names, quoted for the backend; the
+        // values are bound.
+        // nosemgrep: navree-sql-built-from-strings
+        let found = executor
+            .fetch_optional(&Statement::portable(sql, values))
             .await
             .map_err(|source| self.database(source))?
             .is_some();
@@ -424,9 +426,9 @@ pub enum RuleError {
         rule: &'static str,
         /// The validated field.
         field: String,
-        /// The database error.
+        /// The database error (boxed: it is large).
         #[source]
-        source: DbErr,
+        source: Box<DbError>,
     },
     /// A [`UowCheck`] failed to run.
     #[error("the `{rule}` rule on `{field}` could not be checked: {source}")]

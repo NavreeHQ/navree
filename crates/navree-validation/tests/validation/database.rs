@@ -1,17 +1,17 @@
 //! `ValidAsync` and `AsyncRule`: `unique` and `exists` run inside the
 //! request's unit of work, after the garde rules pass.
 
-use navree_db::Db;
+use navree_db::{Db, Executor, Statement};
 use navree_validation::{AsyncRule, RuleError};
-use sea_orm::ConnectionTrait;
 use serde_json::json;
 use uuid::Uuid;
 
+use crate::databases::Scratch;
+use crate::on_every_server;
 use crate::support::{NotReserved, database_app, errors, insert};
 
-#[tokio::test]
-async fn unique_rule_rejects_existing_and_ignores_self() {
-    let app = database_app().await;
+async fn unique_rule_rejects_existing_and_ignores_self(scratch: Scratch) {
+    let app = database_app(&scratch).await;
     let (alice, bob) = (Uuid::now_v7(), Uuid::now_v7());
     insert(&app, "users", alice, "alice@example.com").await;
     insert(&app, "users", bob, "bob@example.com").await;
@@ -51,14 +51,13 @@ async fn unique_rule_rejects_existing_and_ignores_self() {
     // The same through the API, with an explicit id to ignore.
     let db = app.get::<Db>().await;
     let taken = |ignore| AsyncRule::unique("email", "users", "email", "alice@example.com", ignore);
-    assert!(!taken(None).passes(db.conn()).await.unwrap());
-    assert!(taken(Some(alice)).passes(db.conn()).await.unwrap());
-    assert!(!taken(Some(bob)).passes(db.conn()).await.unwrap());
+    assert!(!taken(None).passes(&*db).await.unwrap());
+    assert!(taken(Some(alice)).passes(&*db).await.unwrap());
+    assert!(!taken(Some(bob)).passes(&*db).await.unwrap());
 }
 
-#[tokio::test]
-async fn exists_rule() {
-    let app = database_app().await;
+async fn exists_rule(scratch: Scratch) {
+    let app = database_app(&scratch).await;
     let acme = Uuid::now_v7();
     insert(&app, "companies", acme, "Acme").await;
 
@@ -89,9 +88,8 @@ async fn exists_rule() {
     );
 }
 
-#[tokio::test]
-async fn garde_rules_run_before_async_rules() {
-    let app = database_app().await;
+async fn garde_rules_run_before_async_rules(scratch: Scratch) {
+    let app = database_app(&scratch).await;
 
     // `title` fails garde, so the `exists` query never runs.
     let response = app
@@ -107,9 +105,8 @@ async fn garde_rules_run_before_async_rules() {
     );
 }
 
-#[tokio::test]
-async fn rejects_bad_identifier_in_rule() {
-    let app = database_app().await;
+async fn rejects_bad_identifier_in_rule(scratch: Scratch) {
+    let app = database_app(&scratch).await;
     let db = app.get::<Db>().await;
 
     for (table, column) in [
@@ -121,7 +118,7 @@ async fn rejects_bad_identifier_in_rule() {
         ("public.companies", "name"),
     ] {
         let error = AsyncRule::exists("name", table, column, "Acme")
-            .passes(db.conn())
+            .passes(&*db)
             .await
             .unwrap_err();
         assert!(
@@ -137,15 +134,13 @@ async fn rejects_bad_identifier_in_rule() {
         .send()
         .await
         .assert_error(500, "Internal server error");
-    db.conn()
-        .execute_unprepared("SELECT count(*) FROM companies")
+    db.fetch_all(&Statement::text("SELECT count(*) FROM companies"))
         .await
         .expect("the companies table still exists");
 }
 
-#[tokio::test]
-async fn async_rules_on_query_and_form() {
-    let app = database_app().await;
+async fn async_rules_on_query_and_form(scratch: Scratch) {
+    let app = database_app(&scratch).await;
     let acme = Uuid::now_v7();
     insert(&app, "companies", acme, "Acme").await;
     let missing = Uuid::now_v7().to_string();
@@ -201,9 +196,8 @@ async fn async_rules_without_database_module_are_a_server_error() {
         .assert_status(200);
 }
 
-#[tokio::test]
-async fn check_rules_run_in_the_unit_of_work_with_the_path_parameter() {
-    let app = database_app().await;
+async fn check_rules_run_in_the_unit_of_work_with_the_path_parameter(scratch: Scratch) {
+    let app = database_app(&scratch).await;
 
     let response = app
         .client()
@@ -241,7 +235,7 @@ async fn check_rules_run_in_the_unit_of_work_with_the_path_parameter() {
     // Outside a request: in a unit of work, not on a bare connection.
     let db = app.get::<Db>().await;
     let rule = || AsyncRule::check("code", "unique", NotReserved("admin".into()));
-    let error = rule().passes(db.conn()).await.unwrap_err();
+    let error = rule().passes(&*db).await.unwrap_err();
     assert!(
         matches!(error, RuleError::NeedsUnitOfWork { rule: "unique", .. }),
         "{error}"
@@ -255,3 +249,13 @@ async fn check_rules_run_in_the_unit_of_work_with_the_path_parameter() {
     let plain = AsyncRule::exists("name", "companies", "name", "Acme");
     assert!(!plain.passes_in(&uow).await.unwrap());
 }
+
+on_every_server!(
+    "navree_validation";
+    unique_rule_rejects_existing_and_ignores_self,
+    exists_rule,
+    garde_rules_run_before_async_rules,
+    rejects_bad_identifier_in_rule,
+    async_rules_on_query_and_form,
+    check_rules_run_in_the_unit_of_work_with_the_path_parameter,
+);
