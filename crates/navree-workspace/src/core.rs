@@ -9,14 +9,11 @@ use navree_db::{Db, Uow};
 use navree_events::{Event, EventBus};
 use navree_kernel::{AppContext, WeakAppContext};
 use navree_mail::{Mailable, Mailer};
-use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter};
+use navree_orm::{Executor, Model as _, Record};
 use uuid::Uuid;
 
 use crate::directory::UserDirectory;
-use crate::entity::{
-    Member, OrgMember, Organization, Workspace, member, organization, organization_member,
-    workspace,
-};
+use crate::entity::{Member, OrgMember, Organization, Workspace};
 use crate::isolation::IsolationDriver;
 use crate::{OrgRole, OrgRoleTable, RoleTable, WorkspaceConfig, WorkspaceError, WorkspaceRole};
 
@@ -119,58 +116,60 @@ impl Core {
         ))
     }
 
-    /// The organization with `id` read through `conn`;
+    /// The organization with `id` read through `exec`;
     /// `OrganizationNotFound` when there is none.
-    pub(crate) async fn organization_in<C: ConnectionTrait>(
+    pub(crate) async fn organization_in<E: Executor + ?Sized>(
         &self,
-        conn: &C,
+        exec: &E,
         id: Uuid,
     ) -> Result<Organization, WorkspaceError> {
-        organization::Entity::find_by_id(id)
-            .one(conn)
+        Organization::find(exec, id)
             .await?
+            .map(Record::into_inner)
             .ok_or_else(|| WorkspaceError::OrganizationNotFound(id.to_string()))
     }
 
-    /// The membership of `user` in organization `org`, read through `conn`.
-    pub(crate) async fn org_member_in<C: ConnectionTrait>(
+    /// The membership of `user` in organization `org`, read through `exec`.
+    pub(crate) async fn org_member_in<E: Executor + ?Sized>(
         &self,
-        conn: &C,
+        exec: &E,
         org: Uuid,
         user: Uuid,
     ) -> Result<Option<OrgMember>, WorkspaceError> {
-        Ok(organization_member::Entity::find()
-            .filter(organization_member::Column::OrganizationId.eq(org))
-            .filter(organization_member::Column::UserId.eq(user))
-            .one(conn)
-            .await?)
+        Ok(OrgMember::query()
+            .where_(OrgMember::ORGANIZATION_ID.eq(org))
+            .where_(OrgMember::USER_ID.eq(user))
+            .first(exec)
+            .await?
+            .map(Record::into_inner))
     }
 
-    /// The workspace with `id` read through `conn`; `WorkspaceNotFound` when
+    /// The workspace with `id` read through `exec`; `WorkspaceNotFound` when
     /// there is none.
-    pub(crate) async fn workspace_in<C: ConnectionTrait>(
+    pub(crate) async fn workspace_in<E: Executor + ?Sized>(
         &self,
-        conn: &C,
+        exec: &E,
         id: Uuid,
     ) -> Result<Workspace, WorkspaceError> {
-        workspace::Entity::find_by_id(id)
-            .one(conn)
+        Workspace::find(exec, id)
             .await?
+            .map(Record::into_inner)
             .ok_or_else(|| WorkspaceError::WorkspaceNotFound(id.to_string()))
     }
 
-    /// The membership of `user` in `workspace`, read through `conn`.
-    pub(crate) async fn member_in<C: ConnectionTrait>(
+    /// The membership of `user` in `workspace`, read through `exec`.
+    pub(crate) async fn member_in<E: Executor + ?Sized>(
         &self,
-        conn: &C,
+        exec: &E,
         workspace: Uuid,
         user: Uuid,
     ) -> Result<Option<Member>, WorkspaceError> {
-        Ok(member::Entity::find()
-            .filter(member::Column::WorkspaceId.eq(workspace))
-            .filter(member::Column::UserId.eq(user))
-            .one(conn)
-            .await?)
+        Ok(Member::query()
+            .where_(Member::WORKSPACE_ID.eq(workspace))
+            .where_(Member::USER_ID.eq(user))
+            .first(exec)
+            .await?
+            .map(Record::into_inner))
     }
 
     /// Emits `event` once `uow` commits, when the app has an `EventBus`.

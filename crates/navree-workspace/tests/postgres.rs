@@ -7,8 +7,10 @@
 //! `target/test-databases.env`) to a superuser URL of a throwaway server, for
 //! example `postgres://postgres:postgres@127.0.0.1:55432/postgres`. Each
 //! test creates its own database and a non-superuser login role (superusers
-//! bypass row-level security), and drops both at the end. ORM models run
-//! here too: row-level security and schemas cover their queries.
+//! bypass row-level security), and drops both at the end. Every model is a
+//! navree-orm model: row-level security and schemas cover their queries.
+//! `NAVREE_TEST_NATIVE_UNITS_OF_WORK=1` runs the units of work on
+//! navree-db's own transactions.
 #![cfg(feature = "postgres")]
 
 use std::sync::Arc;
@@ -17,12 +19,18 @@ use axum::extract::Path;
 use http::Method;
 use navree_access::{AccessModule, AccessOptions};
 use navree_contracts::{ConformityOptions, ConformityReport};
-use navree_db::{DatabaseModule, Factory, MigrationSet, ModuleBuilderDbExt, Repo};
+use navree_db::navree_schema::{Migration, Schema, SchemaMigration, SchemaResult};
+use navree_db::{
+    DatabaseModule, DbOptions, Executor, MigrationSet, ModuleBuilderDbExt, Pool, Statement,
+    Value as DbValue,
+};
 use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{
     BoxError, BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver,
 };
-use navree_testing::{IsolationReport, TestApp, principal};
+use navree_orm::Model as _;
+use navree_orm::factory::{Factory, FactoryContext, ModelFactory};
+use navree_testing::{IsolationReport, TestApp, TestAppBuilder, principal};
 use navree_workspace::testing::IsolationSuiteExt;
 use navree_workspace::{
     CurrentOrganization, CurrentWorkspace, DemoSeed, DemoSeeder, DemoWorkspaces,
@@ -30,70 +38,53 @@ use navree_workspace::{
     PartitionScope, PartitionScoped, Partitions, RlsPolicy, WorkspaceModule, WorkspaceRepo,
     WorkspaceScoped, WorkspaceUow, Workspaces,
 };
-use sea_orm::sea_query::{ColumnDef, Index, Table};
-use sea_orm::{
-    ActiveValue::Set, ConnectionTrait, Database, DbBackend, DbErr, EntityTrait, Statement,
-};
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
 /// `items(id, workspace_id, title)` with the row-level security policy (row
-/// isolation), or `items(id, title)` in each workspace's schema.
-mod item {
-    use sea_orm::entity::prelude::*;
-    use serde::Serialize;
-
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
-    #[sea_orm(table_name = "items")]
-    pub struct Model {
-        #[sea_orm(primary_key, auto_increment = false)]
-        pub id: Uuid,
-        pub workspace_id: Uuid,
-        pub title: String,
-    }
-
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
+/// isolation), or in each workspace's schema.
+#[derive(Clone, Debug, Default, PartialEq, Eq, navree_orm::Model, serde::Serialize)]
+#[model(table = "items")]
+struct Item {
+    id: Uuid,
+    workspace_id: Uuid,
+    title: String,
 }
 
-impl WorkspaceScoped for item::Entity {}
+impl WorkspaceScoped for Item {}
+
+/// An item of `workspace` titled `title`, with a new id.
+fn new_item(workspace: Uuid, title: &str) -> Item {
+    Item {
+        id: Uuid::now_v7(),
+        workspace_id: workspace,
+        title: title.to_owned(),
+    }
+}
+
+/// `m20261026_000001_create_items`.
+fn create_items() -> SchemaMigration<CreateItems> {
+    SchemaMigration::new("m20261026_000001_create_items", CreateItems)
+}
 
 struct CreateItems;
 
-impl MigrationName for CreateItems {
-    fn name(&self) -> &str {
-        "m20261026_000001_create_items"
-    }
-}
-
-#[async_trait]
-impl MigrationTrait for CreateItems {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table("items")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("workspace_id").uuid().not_null())
-                    .col(ColumnDef::new("title").string().not_null())
-                    .to_owned(),
-            )
+impl Migration for CreateItems {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema
+            .create("items", |t| {
+                t.uuid("id").primary();
+                t.uuid("workspace_id");
+                t.string("title");
+            })
             .await?;
-        manager
-            .get_connection()
-            .execute_unprepared(&RlsPolicy::new("items").create_sql())
+        schema
+            .statement(&RlsPolicy::new("items").create_sql())
             .await
-            .map(drop)
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .drop_table(Table::drop().table("items").to_owned())
-            .await
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop_if_exists("items").await
     }
 }
 
@@ -109,24 +100,15 @@ async fn store(
     ws: CurrentWorkspace,
     uow: WorkspaceUow,
     Json(input): Json<Value>,
-) -> Result<Json<item::Model>, AppError> {
-    Ok(Json(
-        Repo::<item::Entity>::insert(
-            &uow,
-            item::ActiveModel {
-                id: Set(Uuid::now_v7()),
-                workspace_id: Set(ws.id()),
-                title: Set(input["title"].as_str().unwrap_or_default().to_owned()),
-            },
-        )
-        .await?,
-    ))
+) -> Result<Json<Item>, AppError> {
+    let item = new_item(ws.id(), input["title"].as_str().unwrap_or_default());
+    Ok(Json(Item::create(&*uow, item).await?.into_inner()))
 }
 
 /// Every row the transaction can see: no `WHERE`, so only the database's
 /// isolation (the policy, or the schema) scopes it.
 async fn index(_ws: CurrentWorkspace, uow: WorkspaceUow) -> Result<Json<Value>, AppError> {
-    let items = item::Entity::find().all(&*uow.tx().await?).await?;
+    let items = Item::query().get(&*uow).await?.into_models();
     Ok(Json(json!({ "data": items })))
 }
 
@@ -135,23 +117,25 @@ async fn show(
     _ws: CurrentWorkspace,
     uow: WorkspaceUow,
     Path(id): Path<Uuid>,
-) -> Result<Json<item::Model>, AppError> {
-    Ok(Json(Repo::<item::Entity>::find_or_fail(&uow, id).await?))
+) -> Result<Json<Item>, AppError> {
+    Ok(Json(Item::find_or_fail(&*uow, id).await?.into_inner()))
 }
 
 /// Items for isolation suites; the suite sets `workspace_id`.
+#[derive(Default)]
 struct ItemFactory;
 
-impl Factory for ItemFactory {
-    type Entity = item::Entity;
+impl ModelFactory for ItemFactory {
+    type Model = Item;
 
-    fn definition(&self, n: usize) -> item::ActiveModel {
-        item::ActiveModel {
-            id: Set(Uuid::now_v7()),
-            workspace_id: Set(Uuid::nil()),
-            title: Set(format!("Item {n}")),
-        }
+    fn definition(&self, ctx: &mut FactoryContext<'_, Item>) -> Item {
+        new_item(Uuid::nil(), &format!("Item {}", ctx.index()))
     }
+}
+
+/// The suites' factory of items.
+fn items() -> Factory<ItemFactory> {
+    Factory::new()
 }
 
 impl Controller for ItemsController {
@@ -176,7 +160,7 @@ impl Module for RowItemsModule {
         m.migrations(
             MigrationSet::new("items")
                 .after(["workspace"])
-                .migration(CreateItems),
+                .migration(create_items()),
         )
         .controller::<ItemsController>();
     }
@@ -188,7 +172,7 @@ struct SchemaItemsModule;
 
 impl Module for SchemaItemsModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.workspace_migrations(MigrationSet::new("items").migration(CreateItems))
+        m.workspace_migrations(MigrationSet::new("items").migration(create_items()))
             .controller::<ItemsController>();
     }
 }
@@ -205,16 +189,12 @@ impl Scratch {
         // The variable, or `target/test-databases.env`.
         let admin = navree_orm::testing::database::TestServer::Postgres.url()?;
         let name = format!("navree_ws_{}", Uuid::now_v7().simple());
-        let conn = Database::connect(&admin).await.unwrap();
-        conn.execute_unprepared(&format!(
-            "CREATE ROLE {name} LOGIN PASSWORD 'secret' NOSUPERUSER NOBYPASSRLS"
-        ))
-        .await
-        .unwrap();
-        conn.execute_unprepared(&format!("CREATE DATABASE {name} OWNER {name}"))
-            .await
-            .unwrap();
-        conn.close().await.unwrap();
+        run(
+            &admin,
+            &format!("CREATE ROLE {name} LOGIN PASSWORD 'secret' NOSUPERUSER NOBYPASSRLS"),
+        )
+        .await;
+        run(&admin, &format!("CREATE DATABASE {name} OWNER {name}")).await;
         let rest = admin.split_once('@').unwrap().1;
         let host = rest.split('/').next().unwrap();
         let url = format!("postgres://{name}:secret@{host}/{name}");
@@ -222,22 +202,51 @@ impl Scratch {
     }
 
     async fn drop(self) {
-        let conn = Database::connect(&self.admin).await.unwrap();
-        conn.execute_unprepared(&format!(
-            "DROP DATABASE IF EXISTS {} WITH (FORCE)",
-            self.name
-        ))
-        .await
-        .unwrap();
-        conn.execute_unprepared(&format!("DROP ROLE IF EXISTS {}", self.name))
-            .await
-            .unwrap();
+        run(
+            &self.admin,
+            &format!("DROP DATABASE IF EXISTS {} WITH (FORCE)", self.name),
+        )
+        .await;
+        run(&self.admin, &format!("DROP ROLE IF EXISTS {}", self.name)).await;
     }
 }
 
+/// Runs `sql` on the server of `admin`.
+async fn run(admin: &str, sql: &str) {
+    let pool = Pool::connect(&DbOptions {
+        url: admin.to_owned(),
+        max_connections: 1,
+        ..DbOptions::default()
+    })
+    .await
+    .unwrap();
+    pool.execute_script(sql).await.unwrap();
+    pool.close().await;
+}
+
+/// A test app on `scratch`, with the current kind of units of work
+/// (`NAVREE_TEST_NATIVE_UNITS_OF_WORK=1`: navree-db's own transactions).
+fn builder(scratch: &Scratch) -> TestAppBuilder {
+    let builder = TestApp::builder();
+    let builder = if std::env::var("NAVREE_TEST_NATIVE_UNITS_OF_WORK").as_deref() == Ok("1") {
+        builder.config("database.native_units_of_work", true)
+    } else {
+        builder
+    };
+    builder.config("database.url", scratch.url.clone())
+}
+
+/// The single row of `sql`'s column `column`, read in `uow`.
+async fn scalar<T: navree_db::FromValue>(uow: &navree_db::Uow, sql: &str, column: &str) -> T {
+    uow.fetch_one(&Statement::text(sql))
+        .await
+        .unwrap()
+        .get::<T>(column)
+        .unwrap()
+}
+
 async fn app(scratch: &Scratch, isolation: &str, items: impl Module) -> TestApp {
-    TestApp::builder()
-        .config("database.url", scratch.url.clone())
+    builder(scratch)
         .config("database.migrate_on_boot", true)
         .config("http.per_ip_rate_limit", Value::Null)
         .config("workspace.isolation", isolation)
@@ -296,16 +305,7 @@ async fn row_level_security_scopes_every_query_to_the_request_workspace() {
     let db = app.get::<navree_db::Db>().await;
     let workspaces = app.get::<Workspaces>().await;
     let count = |uow: navree_db::Uow| async move {
-        let tx = uow.tx().await.unwrap();
-        let row = tx
-            .query_one_raw(Statement::from_string(
-                DbBackend::Postgres,
-                "SELECT count(*)::bigint AS n FROM items",
-            ))
-            .await
-            .unwrap()
-            .unwrap();
-        row.try_get::<i64>("", "n").unwrap()
+        scalar::<i64>(&uow, "SELECT count(*)::bigint AS n FROM items", "n").await
     };
     // No workspace: the policy hides every row.
     assert_eq!(count(db.uow(None, None).await).await, 0);
@@ -318,26 +318,17 @@ async fn row_level_security_scopes_every_query_to_the_request_workspace() {
     workspaces.enter(&uow, acme.id).await.unwrap();
     assert_eq!(count(uow.clone()).await, 1);
     // Writing another workspace's row fails the policy check.
-    let refused = Repo::<item::Entity>::insert(
-        &uow,
-        item::ActiveModel {
-            id: Set(Uuid::now_v7()),
-            workspace_id: Set(globex.id),
-            title: Set("Smuggled".into()),
-        },
-    )
-    .await;
+    let refused = Item::create(&uow, new_item(globex.id, "Smuggled")).await;
     assert!(refused.is_err(), "{refused:?}");
     uow.rollback().await.unwrap();
     // WorkspaceRepo scopes on its own too.
     let uow = db.uow(None, None).await;
     workspaces.enter(&uow, acme.id).await.unwrap();
     assert_eq!(
-        WorkspaceRepo::<item::Entity>::select(globex.id)
-            .all(&*uow.tx().await.unwrap())
+        WorkspaceRepo::<Item>::query(globex.id)
+            .count(&uow)
             .await
-            .unwrap()
-            .len(),
+            .unwrap(),
         0
     );
     uow.rollback().await.unwrap();
@@ -380,15 +371,13 @@ async fn schema_isolation_gives_each_workspace_its_own_tables() {
 
     let db = app.get::<navree_db::Db>().await;
     let schemas: Vec<String> = db
-        .conn()
-        .query_all_raw(Statement::from_string(
-            DbBackend::Postgres,
-            "SELECT table_schema AS s FROM information_schema.tables WHERE table_name = 'items' ORDER BY 1",
+        .fetch_all(&Statement::text(
+            "SELECT table_schema::text AS s FROM information_schema.tables WHERE table_name = 'items' ORDER BY 1",
         ))
         .await
         .unwrap()
         .iter()
-        .map(|row| row.try_get::<String>("", "s").unwrap())
+        .map(|row| row.get::<String>("s").unwrap())
         .collect();
     assert_eq!(schemas.len(), 2, "{schemas:?}");
     assert!(schemas.contains(&format!("workspace_{}", acme.id.simple())));
@@ -399,11 +388,9 @@ async fn schema_isolation_gives_each_workspace_its_own_tables() {
     workspaces.delete(&uow, acme.id).await.unwrap();
     uow.commit().await.unwrap();
     let left = db
-        .conn()
-        .query_one_raw(Statement::from_sql_and_values(
-            DbBackend::Postgres,
-            "SELECT 1 AS found FROM information_schema.schemata WHERE schema_name = $1",
-            [format!("workspace_{}", acme.id.simple()).into()],
+        .fetch_optional(&Statement::portable(
+            "SELECT 1 AS found FROM information_schema.schemata WHERE schema_name = ?",
+            [DbValue::from(format!("workspace_{}", acme.id.simple()))],
         ))
         .await
         .unwrap();
@@ -415,68 +402,53 @@ async fn schema_isolation_gives_each_workspace_its_own_tables() {
 
 /// `notes(id, workspace_id, partition_id, body)` with a policy that lets
 /// organization requests read and narrows partition requests.
-mod note {
-    use sea_orm::entity::prelude::*;
-    use serde::Serialize;
-
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
-    #[sea_orm(table_name = "notes")]
-    pub struct Model {
-        #[sea_orm(primary_key, auto_increment = false)]
-        pub id: Uuid,
-        pub workspace_id: Uuid,
-        pub partition_id: Option<Uuid>,
-        pub body: String,
-    }
-
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
+#[derive(Clone, Debug, Default, PartialEq, Eq, navree_orm::Model, serde::Serialize)]
+#[model(table = "notes")]
+struct Note {
+    id: Uuid,
+    workspace_id: Uuid,
+    partition_id: Option<Uuid>,
+    body: String,
 }
 
-impl WorkspaceScoped for note::Entity {}
+impl WorkspaceScoped for Note {}
 
-impl PartitionScoped for note::Entity {}
+impl PartitionScoped for Note {}
+
+/// A note of `workspace` and `partition` saying `body`, with a new id.
+fn new_note(workspace: Uuid, partition: Option<Uuid>, body: &str) -> Note {
+    Note {
+        id: Uuid::now_v7(),
+        workspace_id: workspace,
+        partition_id: partition,
+        body: body.to_owned(),
+    }
+}
 
 struct CreateNotes;
 
-impl MigrationName for CreateNotes {
-    fn name(&self) -> &str {
-        "m20261026_000001_create_notes"
-    }
-}
-
-#[async_trait]
-impl MigrationTrait for CreateNotes {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table("notes")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("workspace_id").uuid().not_null())
-                    .col(ColumnDef::new("partition_id").uuid().null())
-                    .col(ColumnDef::new("body").string().not_null())
-                    .to_owned(),
-            )
+impl Migration for CreateNotes {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema
+            .create("notes", |t| {
+                t.uuid("id").primary();
+                t.uuid("workspace_id");
+                t.uuid("partition_id").nullable();
+                t.string("body");
+            })
             .await?;
-        manager
-            .get_connection()
-            .execute_unprepared(
+        schema
+            .statement(
                 &RlsPolicy::new("notes")
                     .organizations()
                     .partitioned()
                     .create_sql(),
             )
             .await
-            .map(drop)
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .drop_table(Table::drop().table("notes").to_owned())
-            .await
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop_if_exists("notes").await
     }
 }
 
@@ -491,9 +463,10 @@ impl Injectable for NotesController {
 /// Every note the transaction can see: no `WHERE`, so only the policy
 /// scopes it.
 async fn every_note(uow: &navree_db::Uow) -> Result<Value, AppError> {
-    let mut bodies: Vec<String> = note::Entity::find()
-        .all(&*uow.tx().await?)
+    let mut bodies: Vec<String> = Note::query()
+        .get(uow)
         .await?
+        .into_models()
         .into_iter()
         .map(|note| note.body)
         .collect();
@@ -532,18 +505,15 @@ struct NotesModule;
 
 impl Module for NotesModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.migrations(
-            MigrationSet::new("notes")
-                .after(["workspace"])
-                .migration(CreateNotes),
-        )
+        m.migrations(MigrationSet::new("notes").after(["workspace"]).migration(
+            SchemaMigration::new("m20261026_000001_create_notes", CreateNotes),
+        ))
         .controller::<NotesController>();
     }
 }
 
 async fn org_app(scratch: &Scratch) -> TestApp {
-    TestApp::builder()
-        .config("database.url", scratch.url.clone())
+    builder(scratch)
         .config("database.migrate_on_boot", true)
         .config("http.per_ip_rate_limit", Value::Null)
         .config("workspace.users_table", "")
@@ -566,17 +536,9 @@ async fn note(app: &TestApp, workspace: Uuid, partition: Option<Uuid>, body: &st
         .enter(&uow, workspace)
         .await
         .unwrap();
-    Repo::<note::Entity>::insert(
-        &uow,
-        note::ActiveModel {
-            id: Set(Uuid::now_v7()),
-            workspace_id: Set(workspace),
-            partition_id: Set(partition),
-            body: Set(body.to_owned()),
-        },
-    )
-    .await
-    .unwrap();
+    Note::create(&uow, new_note(workspace, partition, body))
+        .await
+        .unwrap();
     uow.commit().await.unwrap();
 }
 
@@ -633,39 +595,32 @@ async fn row_level_security_lets_organization_requests_read_their_workspaces_onl
     let uow = db.uow(None, None).await;
     organizations.enter(&uow, a.id).await.unwrap();
     assert_eq!(every_note(&uow).await.unwrap(), json!(["a1", "a2"]));
-    let refused = Repo::<note::Entity>::insert(
-        &uow,
-        note::ActiveModel {
-            id: Set(Uuid::now_v7()),
-            workspace_id: Set(a1.id),
-            partition_id: Set(None),
-            body: Set("org-level write".into()),
-        },
-    )
-    .await;
+    let refused = Note::create(&uow, new_note(a1.id, None, "org-level write")).await;
     assert!(refused.is_err(), "{refused:?}");
     uow.rollback().await.unwrap();
     // Nor can it update or delete the rows it reads.
     let uow = db.uow(None, None).await;
     organizations.enter(&uow, a.id).await.unwrap();
-    let tx = uow.tx().await.unwrap();
-    let deleted = tx.execute_unprepared("DELETE FROM notes").await.unwrap();
-    assert_eq!(deleted.rows_affected(), 0);
-    let updated = tx
-        .execute_unprepared("UPDATE notes SET body = 'changed'")
+    let deleted = uow
+        .execute(&Statement::text("DELETE FROM notes"))
         .await
         .unwrap();
-    assert_eq!(updated.rows_affected(), 0);
-    drop(tx);
+    assert_eq!(deleted.rows_affected, 0);
+    let updated = uow
+        .execute(&Statement::text("UPDATE notes SET body = 'changed'"))
+        .await
+        .unwrap();
+    assert_eq!(updated.rows_affected, 0);
     assert_eq!(every_note(&uow).await.unwrap(), json!(["a1", "a2"]));
     uow.rollback().await.unwrap();
     // OrgRepo narrows further, to the workspaces a member reaches.
     let uow = db.uow(None, None).await;
     organizations.enter(&uow, a.id).await.unwrap();
-    let only_a2 = OrgRepo::<note::Entity>::select(&[a2.id, b1.id])
-        .all(&*uow.tx().await.unwrap())
+    let only_a2 = OrgRepo::<Note>::query(&[a2.id, b1.id])
+        .get(&uow)
         .await
-        .unwrap();
+        .unwrap()
+        .into_models();
     assert_eq!(
         only_a2.iter().map(|n| n.body.as_str()).collect::<Vec<_>>(),
         ["a2"]
@@ -725,16 +680,7 @@ async fn row_level_security_narrows_partition_requests() {
         .unwrap();
     partitions.enter(&uow, uk.id).await.unwrap();
     assert_eq!(every_note(&uow).await.unwrap(), json!(["uk"]));
-    let refused = Repo::<note::Entity>::insert(
-        &uow,
-        note::ActiveModel {
-            id: Set(Uuid::now_v7()),
-            workspace_id: Set(acme.id),
-            partition_id: Set(Some(de.id)),
-            body: Set("smuggled".into()),
-        },
-    )
-    .await;
+    let refused = Note::create(&uow, new_note(acme.id, Some(de.id), "smuggled")).await;
     assert!(refused.is_err(), "{refused:?}");
     uow.rollback().await.unwrap();
 
@@ -743,60 +689,30 @@ async fn row_level_security_narrows_partition_requests() {
 }
 
 /// `memos(id, workspace_id)`: indexed by workspace, without the policy.
-mod memo {
-    use sea_orm::entity::prelude::*;
-
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
-    #[sea_orm(table_name = "memos")]
-    pub struct Model {
-        #[sea_orm(primary_key, auto_increment = false)]
-        pub id: Uuid,
-        pub workspace_id: Uuid,
-    }
-
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
+#[derive(Clone, Debug, Default, PartialEq, Eq, navree_orm::Model, serde::Serialize)]
+#[model(table = "memos")]
+struct Memo {
+    id: Uuid,
+    workspace_id: Uuid,
 }
 
-impl WorkspaceScoped for memo::Entity {}
+impl WorkspaceScoped for Memo {}
 
 struct CreateMemos;
 
-impl MigrationName for CreateMemos {
-    fn name(&self) -> &str {
-        "m20261026_000002_create_memos"
-    }
-}
-
-#[async_trait]
-impl MigrationTrait for CreateMemos {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table("memos")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("workspace_id").uuid().not_null())
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("memos_workspace_id_idx")
-                    .table("memos")
-                    .col("workspace_id")
-                    .to_owned(),
-            )
+impl Migration for CreateMemos {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema
+            .create("memos", |t| {
+                t.uuid("id").primary();
+                t.uuid("workspace_id");
+                t.index("workspace_id").name("memos_workspace_id_idx");
+            })
             .await
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .drop_table(Table::drop().table("memos").to_owned())
-            .await
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop_if_exists("memos").await
     }
 }
 
@@ -809,11 +725,14 @@ impl Module for ClassifiedModule {
         m.migrations(
             MigrationSet::new("classified")
                 .after(["workspace"])
-                .migration(CreateItems)
-                .migration(CreateMemos),
+                .migration(create_items())
+                .migration(SchemaMigration::new(
+                    "m20261026_000002_create_memos",
+                    CreateMemos,
+                )),
         )
-        .workspace_entity::<item::Entity>()
-        .workspace_entity::<memo::Entity>();
+        .workspace_entity::<Item>()
+        .workspace_entity::<Memo>();
     }
 }
 
@@ -876,16 +795,13 @@ const PASSING: [&str; 3] = [
 async fn workspace_named(app: &TestApp, name: &str) -> Uuid {
     let db = app.get::<navree_db::Db>().await;
     let row = db
-        .conn()
-        .query_one_raw(Statement::from_sql_and_values(
-            DbBackend::Postgres,
-            "SELECT id FROM workspaces WHERE name = $1",
-            [name.into()],
+        .fetch_one(&Statement::portable(
+            "SELECT id FROM workspaces WHERE name = ?",
+            [DbValue::from(name)],
         ))
         .await
-        .unwrap()
         .unwrap();
-    row.try_get::<Uuid>("", "id").unwrap()
+    row.get::<Uuid>("id").unwrap()
 }
 
 /// The handlers read by id without a workspace filter: row-level security
@@ -899,7 +815,7 @@ async fn isolation_suites_pass_on_row_level_security_alone() {
     let app = app(&scratch, "row", RowItemsModule).await;
     let report = app
         .isolation_suite::<RowItemsModule>()
-        .factory(ItemFactory)
+        .factory(items())
         .body("POST", "/api/items", json!({ "title": "Renewal" }))
         .run()
         .await;
@@ -919,7 +835,7 @@ async fn isolation_suites_pass_under_schema_isolation() {
     let app = app(&scratch, "schema", SchemaItemsModule).await;
     let report = app
         .isolation_suite::<SchemaItemsModule>()
-        .factory(ItemFactory)
+        .factory(items())
         .body("POST", "/api/items", json!({ "title": "Renewal" }))
         .run()
         .await;
@@ -930,20 +846,14 @@ async fn isolation_suites_pass_under_schema_isolation() {
     let uow = app.get::<navree_db::Db>().await.uow(None, None).await;
     app.get::<Workspaces>().await.enter(&uow, b).await.unwrap();
     let owners: Vec<Uuid> = uow
-        .tx()
-        .await
-        .unwrap()
-        .query_all_raw(Statement::from_string(
-            DbBackend::Postgres,
-            format!(
-                "SELECT workspace_id AS w FROM workspace_{}.items",
-                b.simple()
-            ),
-        ))
+        .fetch_all(&Statement::text(format!(
+            "SELECT workspace_id AS w FROM workspace_{}.items",
+            b.simple()
+        )))
         .await
         .unwrap()
         .iter()
-        .map(|row| row.try_get::<Uuid>("", "w").unwrap())
+        .map(|row| row.get::<Uuid>("w").unwrap())
         .collect();
     uow.rollback().await.unwrap();
     assert!(!owners.is_empty());
@@ -1101,21 +1011,11 @@ async fn orm_queries_follow_the_workspace_schema() {
     // The row is in Acme's schema (read inside Acme: the table's policy
     // hides rows outside a workspace).
     let uow = uow_in(&app, Some(acme.id)).await;
-    let rows = uow
-        .tx()
-        .await
-        .unwrap()
-        .query_one_raw(Statement::from_string(
-            DbBackend::Postgres,
-            format!(
-                "SELECT count(*)::bigint AS n FROM workspace_{}.items",
-                acme.id.simple()
-            ),
-        ))
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(rows.try_get::<i64>("", "n").unwrap(), 1);
+    let sql = format!(
+        "SELECT count(*)::bigint AS n FROM workspace_{}.items",
+        acme.id.simple()
+    );
+    assert_eq!(scalar::<i64>(&uow, &sql, "n").await, 1);
     uow.rollback().await.unwrap();
 
     app.shutdown().await.unwrap();
@@ -1150,14 +1050,10 @@ impl DemoSeeder for ItemsDemo {
             let items: Vec<ItemFixture> =
                 demo.parse_fixture(r#"[{ "title": "Demo one" }, { "title": "Demo two" }]"#)?;
             for fixture in items {
-                WorkspaceRepo::<item::Entity>::insert(
+                WorkspaceRepo::<Item>::insert(
                     demo.uow(),
                     demo.id(),
-                    item::ActiveModel {
-                        id: Set(Uuid::now_v7()),
-                        workspace_id: Set(demo.id()),
-                        title: Set(fixture.title),
-                    },
+                    new_item(demo.id(), &fixture.title),
                 )
                 .await?;
             }
@@ -1185,10 +1081,11 @@ async fn titles(app: &TestApp, workspace: Uuid) -> Vec<String> {
         .enter(&uow, workspace)
         .await
         .unwrap();
-    let mut titles: Vec<String> = item::Entity::find()
-        .all(&*uow.tx().await.unwrap())
+    let mut titles: Vec<String> = Item::query()
+        .get(&uow)
         .await
         .unwrap()
+        .into_models()
         .into_iter()
         .map(|item| item.title)
         .collect();
@@ -1268,8 +1165,7 @@ async fn demo_resets_clear_the_demo_schema_under_schema_isolation() {
 }
 
 async fn demo_app(scratch: &Scratch, isolation: &str, items: impl Module) -> TestApp {
-    TestApp::builder()
-        .config("database.url", scratch.url.clone())
+    builder(scratch)
         .config("database.migrate_on_boot", true)
         .config("http.per_ip_rate_limit", Value::Null)
         .config("workspace.isolation", isolation)

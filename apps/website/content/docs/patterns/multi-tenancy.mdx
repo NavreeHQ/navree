@@ -96,32 +96,34 @@ A resolver finds a slug or an id, and the first one that finds something wins. T
 
 With row isolation, every tenant table has a `workspace_id` column. The rule is simple: **no query on a tenant table runs without the current workspace.** Navree helps you keep it in four layers.
 
-**Mark the entity.** An entity that implements `WorkspaceScoped` belongs to a workspace, through its `workspace_id` column:
+**Mark the model.** A model that implements `WorkspaceScoped` belongs to a workspace, through its `workspace_id` column:
 
-```rust title="src/modules/projects/entity.rs"
-impl WorkspaceScoped for project::Entity {}
-
-impl Subject for project::Entity {
-    const SUBJECT: &'static str = "Project";
-    const PERMISSION_PREFIX: &'static str = "projects";
+```rust title="src/modules/projects/model.rs"
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "projects", subject = "Project", permission_prefix = "projects")]
+pub struct Project {
+    pub id: Uuid,
+    pub workspace_id: Uuid,
+    pub name: String,
 }
+
+impl WorkspaceScoped for Project {}
 ```
 
-**Query through `WorkspaceRepo`.** It is `Repo` with the workspace built in: reads filter by `workspace_id`, inserts set it, and updates and deletes only touch rows of that workspace. A record of another workspace is a 404, as if it didn't exist.
+**Query through `WorkspaceRepo`.** It is the model API with the workspace built in: reads filter by `workspace_id`, inserts set it, and updates and deletes only touch rows of that workspace. A record of another workspace is a 404, as if it didn't exist. (A model declared `#[model(workspace)]` already scopes its own queries to the current workspace; `WorkspaceRepo` is for naming a workspace explicitly, and both use the same column.)
 
 ```rust title="src/modules/projects/service.rs"
-type Projects = WorkspaceRepo<project::Entity>;
+type Projects = WorkspaceRepo<Project>;
 
 #[injectable]
 pub struct ProjectService;
 
 impl ProjectService {
-    pub async fn list(&self, uow: &Uow, workspace: Uuid, page: PageQuery) -> Result<Page<project::Model>> {
-        let select = Projects::select(workspace).order_by_desc(project::Column::Id);
-        Ok(paginate(select, &*uow.tx().await?, page).await?)
+    pub async fn list(&self, uow: &Uow, workspace: Uuid, page: PageQuery) -> Result<Page<Record<Project>>> {
+        Ok(Projects::query(workspace).latest().paginate(uow, page).await?)
     }
 
-    pub async fn show(&self, uow: &Uow, workspace: Uuid, id: Uuid) -> Result<project::Model> {
+    pub async fn show(&self, uow: &Uow, workspace: Uuid, id: Uuid) -> Result<Record<Project>> {
         Ok(Projects::find_or_fail(uow, workspace, id).await?)
     }
 }
@@ -141,14 +143,14 @@ impl ProjectsController {
     /// `GET /api/v1/projects`: the current workspace's projects.
     #[get("/")]
     #[permissions("projects.read")]
-    async fn index(&self, uow: WorkspaceUow, ws: CurrentWorkspace, page: PageQuery) -> Result<Page<project::Model>> {
+    async fn index(&self, uow: WorkspaceUow, ws: CurrentWorkspace, page: PageQuery) -> Result<Page<Record<Project>>> {
         self.projects.list(&uow, ws.id(), page).await
     }
 
     /// `GET /api/v1/projects/{id}`
     #[get("/{id}")]
     #[can(Read, Project, from = "id")]
-    async fn show(&self, uow: WorkspaceUow, ws: CurrentWorkspace, Path(id): Path<Uuid>) -> Result<Json<project::Model>> {
+    async fn show(&self, uow: WorkspaceUow, ws: CurrentWorkspace, Path(id): Path<Uuid>) -> Result<Json<Record<Project>>> {
         Ok(Json(self.projects.show(&uow, ws.id(), id).await?))
     }
 }
@@ -170,11 +172,12 @@ impl ProjectsModule {
 
 `m.workspace_scoped::<Project>()` makes `#[can(.., from = "id")]` check that the record belongs to the current workspace before the access rule runs, so asking for another workspace's project is a 404 before the service is called. `WorkspaceUow` derefs to `Uow`: under row and schema isolation it is the request's own unit of work, already scoped, and under database isolation it is a unit of work on the workspace's database, committed with the request. Handlers written with it work under every strategy.
 
-**Let PostgreSQL enforce it.** A missed filter is a data leak, so on PostgreSQL add a row-level security policy to each tenant table in a migration. Rows are then visible and writable only while the transaction's `navree.workspace` setting holds their workspace id, which every workspace request sets:
+**Let PostgreSQL enforce it.** A missed filter is a data leak, so on PostgreSQL add a row-level security policy to each tenant table in a migration (a [navree-schema migration](/docs/database/migrations/)). Rows are then visible and writable only while the transaction's `navree.workspace` setting holds their workspace id, which every workspace request sets:
 
 ```rust title="src/modules/projects/migrations/m20261026_100000_projects_rls.rs"
-let sql = RlsPolicy::new("projects").create_sql();
-manager.get_connection().execute_unprepared(&sql).await?;
+if schema.target().await?.dialect() == Dialect::Postgres {
+    schema.statement(&RlsPolicy::new("projects").create_sql()).await?;
+}
 ```
 
 The policy is forced, so it binds the role the app connects as. A query that forgot its filter returns nothing instead of everyone's rows. Maintenance that spans workspaces runs as a database role with `BYPASSRLS`.
@@ -188,7 +191,7 @@ let db = ctx.app.get::<Db>().await?;
 let workspaces = ctx.app.get::<Workspaces>().await?;
 let uow = db.uow(None, None).await;
 workspaces.enter(&uow, self.workspace_id).await?;
-let projects = Projects::select(self.workspace_id).all(&*uow.tx().await?).await?;
+let projects = Projects::query(self.workspace_id).get(&uow).await?;
 // ...
 uow.commit().await?;
 ```

@@ -18,28 +18,30 @@ to users, an **ability** is one user's compiled rules.
 
 ## Steps for a new resource
 
-1. Make the entity a subject and register it (a `--crud` module from
-   `navree make:module` already does both):
+1. Make the model a subject and register it (a `--crud` module from
+   `navree make:module` already does both). A navree-orm model is a subject
+   through its attribute (`policy = ..` adds its rules and implies `subject`):
 
 ```rust
-use navree::access::Subject;
-
-impl Subject for Entity {
-    const SUBJECT: &'static str = "Post";       // rules and __type name it
-    const PERMISSION_PREFIX: &'static str = "posts"; // posts.read, posts.*, ...
-}
-
-pub type Post = Entity; // `#[can(Read, Post)]`, `Authorized<Post, Update>`
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "posts", subject = "Post", permission_prefix = "posts")] // rules and __type name it; posts.read, posts.*, ...
+pub struct Post { /* columns */ }       // `#[can(Read, Post)]`, `Authorized<Post, Update>`
 ```
 
 ```rust
 #[module(
-    imports = [AccessModule::for_feature::<entity::Entity>()], // record loading + prefix mapping
+    imports = [AccessModule::for_feature::<Post>()], // record loading + prefix mapping
     providers = [PostService],
     controllers = [PostController],
 )]
 pub struct PostsModule;
 ```
+
+   A SeaORM entity of a crate not yet on navree-orm becomes a subject with
+   `impl navree::access::Subject for Entity { const SUBJECT; const
+   PERMISSION_PREFIX; }` and registers as `for_feature::<entity::Entity>()`;
+   navree-access loads its records through a shim until the SeaORM layer is
+   removed. navree-auth's users: `for_feature::<navree_auth::User>()`.
 
 2. Protect each route with one access attribute (template below).
 3. Grant access: permissions to a role (`navree access:grant editor
@@ -51,7 +53,9 @@ pub struct PostsModule;
    `scope.sql_filter(&TypedColumns::new("posts").with(..)).to_statement(backend)`,
    a portable fragment; a SeaORM entity, until it moves to a model:
    `scope.apply(Entity::find())`); check records with
-   `#[can(.., from = "id")]` and `Authorized`.
+   `#[can(.., from = "id")]` and `Authorized` (for a model it derefs to
+   `Record<M>`; `.into_inner()` is the Record, `.into_inner().into_inner()`
+   the model).
 5. Test guests (401), users without the grant (403) and with it.
 
 ## Routes
@@ -61,20 +65,19 @@ pub struct PostsModule;
 impl PostController {
     #[get("/")]
     #[public]                                       // guests too: the filter decides what they see
-    async fn index(&self, uow: Uow, scope: Accessible<Post, Read>, page: PageQuery) -> Result<Page<Model>> {
-        let select = scope.apply(Entity::find().order_by_desc(Column::CreatedAt).order_by_desc(Column::Id));
-        Ok(paginate(select, &*uow.tx().await?, page).await?)
+    async fn index(&self, uow: Uow, scope: Accessible<Post, Read>, page: PageQuery) -> Result<Page<Record<Post>>> {
+        Ok(scope.query().latest().paginate(&uow, page).await?)
     }
 
     #[post("/{id}/publish")]
     #[can(Publish, Post, from = "id")]              // 404 when missing, 403 when the rules say no
-    async fn publish(&self, uow: Uow, post: Authorized<Post, Publish>) -> Result<Json<Model>> {
+    async fn publish(&self, uow: Uow, post: Authorized<Post, Publish>) -> Result<Json<Record<Post>>> {
         Ok(Json(self.posts.publish(&uow, post.into_inner()).await?))
     }
 
     #[patch("/{id}")]
     #[can(Update, Post, from = "id")]
-    async fn update(&self, uow: Uow, post: Authorized<Post, Update>, Valid(Json(input)): Valid<Json<UpdatePost>>) -> Result<Json<Model>> {
+    async fn update(&self, uow: Uow, post: Authorized<Post, Update>, Valid(Json(input)): Valid<Json<UpdatePost>>) -> Result<Json<Record<Post>>> {
         post.check_fields(&input.changed_fields())?; // 403 "You may not change these fields: ..."
         Ok(Json(self.posts.update(&uow, post.into_inner(), input).await?))
     }
@@ -228,9 +231,9 @@ roles: it is the right client for the refused side; give real roles through
 
 - Expecting `#[permissions("posts.update")]` to pass with an owner-only
   rule: permissions need unconditional rules. Use `#[can(.., from = "id")]`.
-- Listing with `Entity::find()` without `Accessible`: users see rows they
+- Listing with `Post::query()` without `Accessible`: users see rows they
   then can't open.
-- A `from = "id"` route on an entity not registered with `for_feature` (500).
+- A `from = "id"` route on a subject not registered with `for_feature` (500).
 - Soft-deleted rows still load in record checks: check `deleted_at`.
 - Integers above 2^53 - 1 in conditions: pass them as strings.
 - Making a route `#[public]` to fix a 403: grant the permission or add a rule.

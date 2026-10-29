@@ -1367,7 +1367,13 @@ Built. What each part is and where it plugs in:
   columns, `Builder::accessible(&ability, A)` and `Accessible<M, A>`
   (`AccessibleQuery`) filter queries (counts and pages included), and
   `AbilityExt` checks records; policies are registered by
-  `AccessModule::for_feature::<Model>()`.
+  `AccessModule::for_feature::<Model>()`. The derive writes the
+  `SubjectRecords` implementation for each subject model, because nothing
+  else can: navree-access sits below navree-orm and cannot name `Model`,
+  and a blanket `impl<M: Model + Subject> SubjectRecords for M` in
+  navree-orm breaks the orphan rule (a foreign trait for an uncovered type
+  parameter). Records load through the ORM in the unit of work the request
+  runs in, on navree-db's own transaction as on SeaORM's.
 - **Validation** (`src/validation.rs`, feature `validation`): `unique`
   and `exists` build navree-validation `AsyncRule`s over a `UowCheck` that
   queries the model in the request's unit of work (scopes and workspace

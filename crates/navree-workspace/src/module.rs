@@ -10,17 +10,15 @@ use http::{HeaderName, HeaderValue};
 use navree_access::{AccessModule, Subject};
 use navree_config::ModuleBuilderConfigExt;
 use navree_contracts::{Clock, ModuleBuilderConformityExt, PermissionCheck, ZoneSource};
-use navree_db::{Db, DbOptions, MigrationSet, ModuleBuilderDbExt};
+use navree_db::{Backend, Db, DbOptions, Executor as _, MigrationSet, ModuleBuilderDbExt};
 use navree_http::{AppError, GlobalLayer, LayerSlot, ModuleBuilderHttpExt};
 use navree_kernel::{
     AppContext, BoxError, BoxFuture, Factory, Injectable, Lifecycle, Module, ModuleBuilder,
     ModuleId, ProviderKey, Resolver,
 };
-use navree_orm::ModuleBuilderOrmExt;
 use navree_orm::hooks::ModelHook;
+use navree_orm::{Model, ModuleBuilderOrmExt};
 use navree_schedule::ModuleBuilderScheduleExt;
-use sea_orm::{DbBackend, EntityTrait, IntoActiveModel};
-use serde::Serialize;
 
 use crate::DemoMode;
 use crate::commands::{DEMO_RESET_COMMAND, commands};
@@ -31,7 +29,7 @@ use crate::current::{ScopedSubject, TenantCell};
 use crate::demo::{DEMO_HEADER, DemoSeeder, DemoWorkspaces};
 use crate::directory::{TableUserDirectory, UserDirectory};
 use crate::entity::{
-    access_request, invitation, member, organization, organization_member, partition, workspace,
+    AccessRequest, Invitation, Member, OrgMember, Organization, Partition, Workspace,
 };
 use crate::error::map_workspace_error;
 use crate::isolation::{IsolationDriver, WorkspaceScoped};
@@ -166,13 +164,13 @@ fn register(m: &mut ModuleBuilder, config: Option<WorkspaceConfig>) {
     };
     m.exports::<WorkspaceConfig>()
         .imports((
-            AccessModule::for_feature::<workspace::Entity>(),
-            AccessModule::for_feature::<member::Entity>(),
-            AccessModule::for_feature::<invitation::Entity>(),
-            AccessModule::for_feature::<organization::Entity>(),
-            AccessModule::for_feature::<organization_member::Entity>(),
-            AccessModule::for_feature::<access_request::Entity>(),
-            AccessModule::for_feature::<partition::Entity>(),
+            AccessModule::for_feature::<Workspace>(),
+            AccessModule::for_feature::<Member>(),
+            AccessModule::for_feature::<Invitation>(),
+            AccessModule::for_feature::<Organization>(),
+            AccessModule::for_feature::<OrgMember>(),
+            AccessModule::for_feature::<AccessRequest>(),
+            AccessModule::for_feature::<Partition>(),
         ))
         .factory(
             Factory::<dyn UserDirectory>::new(|r: Resolver| async move {
@@ -211,7 +209,7 @@ fn register(m: &mut ModuleBuilder, config: Option<WorkspaceConfig>) {
             Factory::<IsolationDriver>::new(|r: Resolver| async move {
                 let config = r.get::<WorkspaceConfig>().await?;
                 let db = r.get::<Db>().await?;
-                if config.isolation == Isolation::Schema && db.backend() != DbBackend::Postgres {
+                if config.isolation == Isolation::Schema && db.backend() != Backend::Postgres {
                     return Err(
                         "workspace.isolation = \"schema\" needs PostgreSQL (one schema per workspace)"
                             .into(),
@@ -452,29 +450,25 @@ pub trait ModuleBuilderWorkspaceExt {
     /// (`m.migrations(..)`).
     fn workspace_migrations(&mut self, set: MigrationSet) -> &mut Self;
 
-    /// Registers `E` as workspace-scoped: on routes guarded by
+    /// Registers model `M` as workspace-scoped: on routes guarded by
     /// [`InWorkspace`](crate::InWorkspace), a `can(.., from = "id")` check
-    /// on `E`'s subject first confirms that the record belongs to the
-    /// current workspace (a 404 otherwise). It also classifies `E` as a
+    /// on `M`'s subject first confirms that the record belongs to the
+    /// current workspace (a 404 otherwise). It also classifies `M` as a
     /// workspace entity, like [`workspace_entity`](Self::workspace_entity).
-    fn workspace_scoped<E>(&mut self) -> &mut Self
-    where
-        E: WorkspaceScoped + Subject,
-        E::Model: Serialize + IntoActiveModel<E::ActiveModel> + Sync,
-        E::ActiveModel: Send + Sync;
+    fn workspace_scoped<M: WorkspaceScoped + Subject>(&mut self) -> &mut Self;
 
-    /// Classifies `E` as a workspace entity: its rows belong to one
+    /// Classifies model `M` as a workspace entity: its rows belong to one
     /// workspace (row isolation). `navree check` requires every entity of
     /// the app to be classified, checks that workspace entities are reached
     /// only through [`WorkspaceRepo`](crate::WorkspaceRepo), and that their
-    /// table has an indexed workspace column. Use it for entities that are
+    /// table has an indexed workspace column. Use it for models that are
     /// not access subjects (child records such as deal notes); subjects use
     /// [`workspace_scoped`](Self::workspace_scoped).
-    fn workspace_entity<E: WorkspaceScoped>(&mut self) -> &mut Self;
+    fn workspace_entity<M: WorkspaceScoped>(&mut self) -> &mut Self;
 
-    /// Classifies `E` as a global entity: one set of rows shared by every
-    /// workspace (countries, plans, the app's own settings).
-    fn global_entity<E: EntityTrait>(&mut self) -> &mut Self;
+    /// Classifies model `M` as a global entity: one set of rows shared by
+    /// every workspace (countries, plans, the app's own settings).
+    fn global_entity<M: Model>(&mut self) -> &mut Self;
 
     /// Registers library model `M` (see [`library`](crate::library)): its
     /// queries see what the current workspace sees
@@ -512,22 +506,17 @@ impl ModuleBuilderWorkspaceExt for ModuleBuilder {
         self.contribute(WorkspaceMigrationSet(set))
     }
 
-    fn workspace_scoped<E>(&mut self) -> &mut Self
-    where
-        E: WorkspaceScoped + Subject,
-        E::Model: Serialize + IntoActiveModel<E::ActiveModel> + Sync,
-        E::ActiveModel: Send + Sync,
-    {
-        self.contribute(ScopedSubject::of::<E>())
-            .contribute(EntityClass::workspace::<E>())
+    fn workspace_scoped<M: WorkspaceScoped + Subject>(&mut self) -> &mut Self {
+        self.contribute(ScopedSubject::of::<M>())
+            .contribute(EntityClass::workspace::<M>())
     }
 
-    fn workspace_entity<E: WorkspaceScoped>(&mut self) -> &mut Self {
-        self.contribute(EntityClass::workspace::<E>())
+    fn workspace_entity<M: WorkspaceScoped>(&mut self) -> &mut Self {
+        self.contribute(EntityClass::workspace::<M>())
     }
 
-    fn global_entity<E: EntityTrait>(&mut self) -> &mut Self {
-        self.contribute(EntityClass::global::<E>())
+    fn global_entity<M: Model>(&mut self) -> &mut Self {
+        self.contribute(EntityClass::global(M::meta().table()))
     }
 
     fn library<M: Library>(&mut self) -> &mut Self {

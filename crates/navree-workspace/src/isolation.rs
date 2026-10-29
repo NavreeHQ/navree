@@ -1,180 +1,168 @@
-//! Keeping workspaces apart: [`WorkspaceScoped`] entities and
+//! Keeping workspaces apart: [`WorkspaceScoped`] models and
 //! [`WorkspaceRepo`] (row isolation), [`RlsPolicy`] (PostgreSQL row-level
 //! security), and the per-transaction settings of each isolation strategy.
 
 use std::fmt;
 use std::marker::PhantomData;
-use std::str::FromStr;
 use std::sync::Arc;
 
-use navree_db::{Repo, Uow};
+use navree_db::{Backend, Executor as _, Statement, Uow, Value};
 use navree_kernel::WeakAppContext;
-use sea_orm::{
-    ActiveModelTrait, ColumnTrait, ConnectionTrait, DbBackend, DbErr, EntityTrait, IntoActiveModel,
-    Iterable, ModelTrait, PrimaryKeyToColumn, QueryFilter, Select, Statement, Value,
-};
-use serde::Serialize;
+use navree_orm::{Builder, Executor, Model, OrmError, PrimaryKey, Record, col};
 use uuid::Uuid;
 
 use crate::tenant::{WorkspaceDatabases, migrate_in, workspace_sets};
 use crate::{Isolation, WorkspaceError};
 
-/// An entity whose rows belong to a workspace (row isolation): its table
-/// has a workspace id column, `workspace_id` unless
+/// A navree-orm model whose rows belong to a workspace (row isolation): its
+/// table has a workspace id column, `workspace_id` unless
 /// [`WORKSPACE_COLUMN`](WorkspaceScoped::WORKSPACE_COLUMN) says otherwise.
 ///
 /// ```ignore
-/// impl WorkspaceScoped for deal::Entity {}
+/// impl WorkspaceScoped for Deal {}
 /// ```
-pub trait WorkspaceScoped: EntityTrait {
+///
+/// A model declared `#[model(workspace)]` scopes its own queries to the
+/// current workspace; `WorkspaceScoped` adds [`WorkspaceRepo`] (queries
+/// and writes for a workspace named explicitly), the
+/// [`InWorkspace`](crate::InWorkspace) guard's record check
+/// ([`workspace_scoped`](crate::ModuleBuilderWorkspaceExt::workspace_scoped))
+/// and the `navree check` classification. Give both the same column.
+pub trait WorkspaceScoped: Model {
     /// The column holding the workspace id.
     const WORKSPACE_COLUMN: &'static str = "workspace_id";
 }
 
-/// The workspace column of `E`.
-pub(crate) fn workspace_column<E: WorkspaceScoped>() -> Result<E::Column, DbErr> {
-    E::Column::from_str(E::WORKSPACE_COLUMN).map_err(|_| {
-        DbErr::Custom(format!(
-            "`{}` has no column `{}`: set WorkspaceScoped::WORKSPACE_COLUMN",
-            E::default().table_name(),
-            E::WORKSPACE_COLUMN
-        ))
-    })
+/// The workspace column of `M`, qualified with its table, as a filter on
+/// `workspace`.
+fn in_workspace<M: WorkspaceScoped>(workspace: Uuid) -> navree_orm::Filter {
+    col(format!("{}.{}", M::meta().table(), M::WORKSPACE_COLUMN)).eq(workspace)
 }
 
-/// `navree_db::Repo` scoped to one workspace (row isolation): every read
-/// filters by the entity's workspace column, inserts set it, and updates and
-/// deletes only touch rows of that workspace, so a record of another
-/// workspace is `RecordNotFound` (a 404 over HTTP). Writes go through
-/// `Repo`, so change observers (the audit trail) see them.
+/// Queries and writes of model `M` scoped to one workspace (row
+/// isolation): every query filters by the model's workspace column (in
+/// place of the model's own workspace scope, if it has one), inserts set
+/// it, and updates and deletes only touch rows of that workspace, so a
+/// record of another workspace is [`OrmError::ModelNotFound`] (a 404 over
+/// HTTP). Writes go through the model API (its hooks, and the change
+/// events the audit trail reads), inside
+/// [`navree_orm::workspace::scope`] for that workspace.
 ///
 /// ```ignore
-/// type Deals = WorkspaceRepo<deal::Entity>;
+/// type Deals = WorkspaceRepo<Deal>;
 ///
-/// async fn show(ws: CurrentWorkspace, uow: Uow, Path(id): Path<Uuid>) -> Result<Json<deal::Model>> {
+/// async fn show(ws: CurrentWorkspace, uow: Uow, Path(id): Path<Uuid>) -> Result<Json<Record<Deal>>> {
 ///     Ok(Json(Deals::find_or_fail(&uow, ws.id(), id).await?))
 /// }
 ///
-/// async fn index(ws: CurrentWorkspace, uow: Uow, page: PageQuery) -> Result<Page<deal::Model>> {
-///     Ok(paginate(Deals::select(ws.id()), &*uow.tx().await?, page).await?)
+/// async fn index(ws: CurrentWorkspace, uow: Uow, page: PageRequest) -> Result<Json<Page<Deal>>> {
+///     Ok(Json(Deals::query(ws.id()).paginate(&uow, page).await?))
 /// }
 /// ```
-pub struct WorkspaceRepo<E>(PhantomData<E>);
+pub struct WorkspaceRepo<M>(PhantomData<M>);
 
-impl<E> WorkspaceRepo<E>
-where
-    E: WorkspaceScoped,
-    E::Model: Serialize + IntoActiveModel<E::ActiveModel> + Sync,
-    E::ActiveModel: Send + Sync,
-{
-    /// `select` restricted to the rows of `workspace`.
-    pub fn scope(workspace: Uuid, select: Select<E>) -> Select<E> {
-        match workspace_column::<E>() {
-            Ok(column) => select.filter(column.eq(workspace)),
-            // A misdeclared entity matches nothing rather than everything.
-            Err(error) => {
-                tracing::error!(target: "navree::workspace", %error, "cannot scope a query to a workspace");
-                select.filter(sea_orm::sea_query::Expr::cust("1 = 0"))
-            }
-        }
+impl<M: WorkspaceScoped> WorkspaceRepo<M> {
+    /// `query` restricted to the rows of `workspace`.
+    pub fn scope(workspace: Uuid, query: Builder<M>) -> Builder<M> {
+        query
+            .without_workspace_scope()
+            .where_(in_workspace::<M>(workspace))
     }
 
-    /// Every row of `workspace` (`E::find()` scoped).
-    pub fn select(workspace: Uuid) -> Select<E> {
-        Self::scope(workspace, E::find())
+    /// Every row of `workspace` (`M::query()` scoped).
+    pub fn query(workspace: Uuid) -> Builder<M> {
+        Self::scope(workspace, M::query())
     }
 
-    /// The record of `workspace` with primary key `id` (single-column
-    /// keys), read in the unit of work's transaction.
-    pub async fn find(
-        uow: &Uow,
+    /// The record of `workspace` with key `key`.
+    pub async fn find<E: Executor + ?Sized>(
+        exec: &E,
         workspace: Uuid,
-        id: impl Into<Value>,
-    ) -> Result<Option<E::Model>, DbErr> {
-        let select = Self::scope(workspace, by_id::<E>(id.into())?);
-        select.one(&*uow.tx().await?).await
+        key: impl Into<M::Key>,
+    ) -> Result<Option<Record<M>>, OrmError> {
+        Self::query(workspace).where_key(key).first(exec).await
     }
 
-    /// Like [`find`](WorkspaceRepo::find), but `RecordNotFound` (a 404) when
-    /// `workspace` has no such record.
-    pub async fn find_or_fail(
-        uow: &Uow,
+    /// Like [`find`](WorkspaceRepo::find), but [`OrmError::ModelNotFound`]
+    /// (a 404) when `workspace` has no such record.
+    pub async fn find_or_fail<E: Executor + ?Sized>(
+        exec: &E,
         workspace: Uuid,
-        id: impl Into<Value>,
-    ) -> Result<E::Model, DbErr> {
-        Self::find(uow, workspace, id)
+        key: impl Into<M::Key>,
+    ) -> Result<Record<M>, OrmError> {
+        let key = key.into();
+        Self::find(exec, workspace, key.clone())
             .await?
-            .ok_or_else(|| not_found::<E>())
+            .ok_or_else(|| not_found::<M>(&key))
     }
 
-    /// Inserts `am` into `workspace` (its workspace column is set).
-    pub async fn insert(
-        uow: &Uow,
+    /// Creates `model` in `workspace` (its workspace column is set).
+    pub async fn insert<E: Executor + ?Sized>(
+        exec: &E,
         workspace: Uuid,
-        mut am: E::ActiveModel,
-    ) -> Result<E::Model, DbErr> {
-        am.set(workspace_column::<E>()?, workspace.into());
-        Repo::<E>::insert(uow, am).await
+        mut model: M,
+    ) -> Result<Record<M>, OrmError> {
+        model.set_value(M::WORKSPACE_COLUMN, Value::from(workspace))?;
+        navree_orm::workspace::scope(workspace, M::create(exec, model)).await
     }
 
-    /// Updates `am`, a record of `workspace` (`RecordNotFound` otherwise);
-    /// its workspace column cannot be changed.
-    pub async fn update(
-        uow: &Uow,
+    /// Saves `record`, a record of `workspace` ([`OrmError::ModelNotFound`]
+    /// otherwise); its workspace column cannot change. A record read from
+    /// the database writes the columns that changed; one built from a model
+    /// (`Record::from(model)`) replaces the stored row's values with its
+    /// own.
+    pub async fn update<E: Executor + ?Sized>(
+        exec: &E,
         workspace: Uuid,
-        mut am: E::ActiveModel,
-    ) -> Result<E::Model, DbErr> {
-        let column = workspace_column::<E>()?;
-        let key = am.get_primary_key_value().ok_or(DbErr::PrimaryKeyNotSet {
-            ctx: "WorkspaceRepo::update",
-        })?;
-        let mut keys = E::PrimaryKey::iter();
-        let mut select = E::find();
-        for value in key {
-            let Some(pk) = keys.next() else {
-                break;
-            };
-            select = select.filter(pk.into_column().eq(value));
+        record: &mut Record<M>,
+    ) -> Result<(), OrmError> {
+        let key = record.key();
+        let Some(mut stored) = Self::find(exec, workspace, key.clone()).await? else {
+            return Err(not_found::<M>(&key));
+        };
+        if !record.exists() {
+            *stored.model_mut() = record.model().clone();
+            *record = stored;
         }
-        let exists = Self::scope(workspace, select)
-            .one(&*uow.tx().await?)
-            .await?
-            .is_some();
-        if !exists {
-            return Err(not_found::<E>());
-        }
-        am.set(column, workspace.into());
-        Repo::<E>::update(uow, am).await
+        record
+            .model_mut()
+            .set_value(M::WORKSPACE_COLUMN, Value::from(workspace))?;
+        navree_orm::workspace::scope(workspace, record.save(exec)).await?;
+        Ok(())
     }
 
-    /// Deletes `model`, a record of `workspace` (`RecordNotFound` otherwise).
-    pub async fn delete(uow: &Uow, workspace: Uuid, model: E::Model) -> Result<(), DbErr> {
-        if model.get(workspace_column::<E>()?) != Value::from(workspace) {
-            return Err(not_found::<E>());
+    /// Deletes `record`, a record of `workspace` ([`OrmError::ModelNotFound`]
+    /// otherwise).
+    pub async fn delete<E: Executor + ?Sized>(
+        exec: &E,
+        workspace: Uuid,
+        mut record: Record<M>,
+    ) -> Result<(), OrmError> {
+        let key = record.key();
+        let ours = record.model().value(M::WORKSPACE_COLUMN)? == Some(Value::from(workspace));
+        if !ours
+            || !Self::query(workspace)
+                .where_key(key.clone())
+                .exists(exec)
+                .await?
+        {
+            return Err(not_found::<M>(&key));
         }
-        Repo::<E>::delete(uow, model).await
+        navree_orm::workspace::scope(workspace, record.delete(exec)).await?;
+        Ok(())
     }
 }
 
-impl<E> fmt::Debug for WorkspaceRepo<E> {
+impl<M> fmt::Debug for WorkspaceRepo<M> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "WorkspaceRepo<{}>", std::any::type_name::<E>())
+        write!(f, "WorkspaceRepo<{}>", std::any::type_name::<M>())
     }
 }
 
-pub(crate) fn by_id<E: EntityTrait>(id: Value) -> Result<Select<E>, DbErr> {
-    let mut columns = E::PrimaryKey::iter();
-    match (columns.next(), columns.next()) {
-        (Some(pk), None) => Ok(E::find().filter(pk.into_column().eq(id))),
-        _ => Err(DbErr::KeyArityMismatch {
-            expected: u8::try_from(E::PrimaryKey::iter().count()).unwrap_or(u8::MAX),
-            received: 1,
-        }),
-    }
-}
-
-pub(crate) fn not_found<E: EntityTrait>() -> DbErr {
-    DbErr::RecordNotFound(format!("{} (in this workspace)", E::default().table_name()))
+/// The 404 for record `key` of `M` that the workspace (or organization,
+/// partition) does not have.
+pub(crate) fn not_found<M: Model>(key: &M::Key) -> OrmError {
+    OrmError::not_found(M::meta().name(), vec![key.to_key_string()])
 }
 
 /// PostgreSQL row-level security for a workspace-owned table: rows are
@@ -194,8 +182,8 @@ pub(crate) fn not_found<E: EntityTrait>() -> DbErr {
 /// The policy is `FORCE`d, so it binds the table's owner too (the role the
 /// app usually connects as). Without the setting no row is visible: maintenance
 /// across workspaces runs as a role with `BYPASSRLS`. Run the SQL in a
-/// migration (`manager.get_connection().execute_unprepared(&sql)`) on
-/// PostgreSQL only.
+/// migration (`schema.statement(&sql)`, after checking that
+/// `schema.target().await?.dialect()` is PostgreSQL) on PostgreSQL only.
 ///
 /// Two options widen and narrow it:
 ///
@@ -380,22 +368,15 @@ impl IsolationDriver {
     /// schema isolation, the `search_path`, beginning the transaction.
     pub(crate) async fn apply(&self, uow: &Uow, workspace: Uuid) -> Result<(), WorkspaceError> {
         uow.set_workspace(Some(workspace));
-        if uow.db().backend() != DbBackend::Postgres {
+        if uow.backend() != Backend::Postgres {
             return Ok(());
         }
-        let tx = uow.tx().await?;
-        let mut sql = "SELECT set_config('navree.workspace', $1, true)".to_owned();
-        let mut values: Vec<Value> = vec![workspace.to_string().into()];
+        uow.set_local("navree.workspace", &workspace.to_string())
+            .await?;
         if self.isolation == Isolation::Schema {
-            sql.push_str(", set_config('search_path', $2, true)");
-            values.push(format!("{}, public", quote(&self.schema_name(workspace))).into());
+            let path = format!("{}, public", quote(&self.schema_name(workspace)));
+            uow.set_local("search_path", &path).await?;
         }
-        tx.execute_raw(Statement::from_sql_and_values(
-            DbBackend::Postgres,
-            sql,
-            values,
-        ))
-        .await?;
         Ok(())
     }
 
@@ -408,17 +389,10 @@ impl IsolationDriver {
         name: &'static str,
         value: Uuid,
     ) -> Result<(), WorkspaceError> {
-        if uow.db().backend() != DbBackend::Postgres {
+        if uow.backend() != Backend::Postgres {
             return Ok(());
         }
-        uow.tx()
-            .await?
-            .execute_raw(Statement::from_sql_and_values(
-                DbBackend::Postgres,
-                "SELECT set_config($1, $2, true)",
-                [name.into(), value.to_string().into()],
-            ))
-            .await?;
+        uow.set_local(name, &value.to_string()).await?;
         Ok(())
     }
 
@@ -429,23 +403,22 @@ impl IsolationDriver {
             return Ok(());
         }
         let schema = quote(&self.schema_name(workspace));
-        let tx = uow.tx().await?;
-        tx.execute_unprepared(&format!("CREATE SCHEMA IF NOT EXISTS {schema}"))
+        uow.execute_script(&format!("CREATE SCHEMA IF NOT EXISTS {schema}"))
             .await?;
-        let previous: String = tx
-            .query_one_raw(Statement::from_string(
-                DbBackend::Postgres,
+        let previous: String = uow
+            .fetch_optional(&Statement::text(
                 "SELECT current_setting('search_path') AS path",
             ))
             .await?
-            .map(|row| row.try_get::<String>("", "path"))
+            .map(|row| row.get::<String>("path"))
             .transpose()?
             .unwrap_or_else(|| "public".to_owned());
-        set_search_path(&*tx, &format!("{schema}, public")).await?;
+        uow.set_local("search_path", &format!("{schema}, public"))
+            .await?;
         if let Some(app) = self.app.upgrade() {
-            migrate_in(&tx, &workspace_sets(&app)).await?;
+            migrate_in(uow, &workspace_sets(&app)).await?;
         }
-        set_search_path(&*tx, &previous).await?;
+        uow.set_local("search_path", &previous).await?;
         Ok(())
     }
 
@@ -457,9 +430,7 @@ impl IsolationDriver {
             Isolation::Row => {}
             Isolation::Schema => {
                 let schema = quote(&self.schema_name(workspace));
-                uow.tx()
-                    .await?
-                    .execute_unprepared(&format!("DROP SCHEMA IF EXISTS {schema} CASCADE"))
+                uow.execute_script(&format!("DROP SCHEMA IF EXISTS {schema} CASCADE"))
                     .await?;
             }
             Isolation::Database => {
@@ -485,17 +456,15 @@ impl IsolationDriver {
                 let uow = db.uow(None, None).await;
                 let result = async {
                     let schema = quote(&self.schema_name(workspace));
-                    let tx = uow.tx().await?;
-                    tx.execute_unprepared(&format!("CREATE SCHEMA IF NOT EXISTS {schema}"))
+                    uow.execute_script(&format!("CREATE SCHEMA IF NOT EXISTS {schema}"))
                         .await?;
-                    set_search_path(&*tx, &format!("{schema}, public")).await?;
+                    uow.set_local("search_path", &format!("{schema}, public"))
+                        .await?;
                     let sets = match self.app.upgrade() {
                         Some(app) => workspace_sets(&app),
                         None => Vec::new(),
                     };
-                    let ran = migrate_in(&tx, &sets).await?;
-                    drop(tx);
-                    Ok::<_, WorkspaceError>(ran)
+                    migrate_in(&uow, &sets).await
                 }
                 .await;
                 match result {
@@ -522,16 +491,6 @@ impl IsolationDriver {
             }
         }
     }
-}
-
-async fn set_search_path<C: ConnectionTrait>(conn: &C, path: &str) -> Result<(), DbErr> {
-    conn.execute_raw(Statement::from_sql_and_values(
-        DbBackend::Postgres,
-        "SELECT set_config('search_path', $1, true)",
-        [path.into()],
-    ))
-    .await
-    .map(drop)
 }
 
 impl fmt::Debug for IsolationDriver {

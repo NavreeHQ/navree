@@ -67,11 +67,10 @@
 //!   [`ClientMeta`] gives the client's IP, user agent and
 //!   request id.
 //! - [`User`] is navree-access's subject `User` (permission prefix
-//!   `users`). While navree-access loads subjects as SeaORM entities, import
-//!   `AccessModule::for_feature::<navree_auth::user::Entity>()` for
-//!   `can(.., User, from = "id")` checks and `users.*` permissions (the
-//!   compatibility layer of [`user`], removed in step 8 of the data-layer
-//!   port).
+//!   `users`, `#[model(subject)]`): import
+//!   `AccessModule::for_feature::<navree_auth::User>()` for
+//!   `can(.., User, from = "id")` checks, which load users through the ORM
+//!   in the request's unit of work, and for `users.*` permissions.
 //! - Passwords are hashed with Argon2id (navree-crypto) and rehashed at login
 //!   when the parameters change. `users.password_hash` and the two-factor
 //!   columns are never serialized.

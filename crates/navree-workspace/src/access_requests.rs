@@ -5,17 +5,18 @@ use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 
-use navree_db::{Repo, Uow};
-use sea_orm::{ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter, QueryOrder, Set};
+use navree_db::Uow;
+use navree_orm::{Model as _, Record};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::core::Core;
 use crate::directory::UserSummary;
-use crate::entity::{AccessRequest, OrgMember, access_request};
+use crate::entity::{AccessRequest, OrgMember};
 use crate::events::{AccessRequestApproved, AccessRequestDeclined, AccessRequested};
 use crate::grants::attached;
 use crate::org_members::OrgMembers;
+use crate::store;
 use crate::{OrgRole, Selector, WorkspaceError, WorkspaceSelector};
 
 /// The longest access request message or decline reason, in characters.
@@ -141,45 +142,43 @@ impl AccessRequests {
     ) -> Result<AccessRequest, WorkspaceError> {
         self.core.require_organizations()?;
         let message = check_text("message", input.message.as_deref())?;
-        let tx = uow.tx().await?;
-        self.core.organization_in(&*tx, org).await?;
+        self.core.organization_in(uow, org).await?;
         if let Some(workspace) = input.workspace_id
-            && !attached(&*tx, org).await?.iter().any(|w| w.id == workspace)
+            && !attached(uow, org).await?.iter().any(|w| w.id == workspace)
         {
             return Err(WorkspaceError::invalid(
                 "workspace_id",
                 "workspace_id must be a workspace of the organization",
             ));
         }
-        if self.core.org_member_in(&*tx, org, user).await?.is_some() {
+        if self.core.org_member_in(uow, org, user).await?.is_some() {
             return Err(WorkspaceError::AlreadyOrganizationMember);
         }
-        let pending = access_request::Entity::find()
-            .filter(access_request::Column::OrganizationId.eq(org))
-            .filter(access_request::Column::UserId.eq(user))
-            .filter(access_request::Column::Status.eq(AccessRequestStatus::Pending.as_str()))
-            .one(&*tx)
+        let pending = AccessRequest::query()
+            .where_(AccessRequest::ORGANIZATION_ID.eq(org))
+            .where_(AccessRequest::USER_ID.eq(user))
+            .where_(AccessRequest::STATUS.eq(AccessRequestStatus::Pending.as_str()))
+            .exists(uow)
             .await?;
-        if pending.is_some() {
+        if pending {
             return Err(WorkspaceError::AccessRequestPending);
         }
-        drop(tx);
         let now = self.core.now();
-        let created = Repo::<access_request::Entity>::insert(
+        let created = store::insert(
             uow,
-            access_request::ActiveModel {
-                id: Set(Uuid::now_v7()),
-                organization_id: Set(org),
-                workspace_id: Set(input.workspace_id),
-                user_id: Set(user),
-                message: Set(message),
-                status: Set(AccessRequestStatus::Pending.as_str().to_owned()),
-                role: Set(None),
-                decided_by: Set(None),
-                decided_at: Set(None),
-                reason: Set(None),
-                created_at: Set(now),
-                updated_at: Set(now),
+            AccessRequest {
+                id: Uuid::now_v7(),
+                organization_id: org,
+                workspace_id: input.workspace_id,
+                user_id: user,
+                message,
+                status: AccessRequestStatus::Pending.as_str().to_owned(),
+                role: None,
+                decided_by: None,
+                decided_at: None,
+                reason: None,
+                created_at: now,
+                updated_at: now,
             },
         )
         .await?;
@@ -201,13 +200,14 @@ impl AccessRequests {
     /// users.
     pub async fn pending(&self, org: Uuid) -> Result<Vec<AccessRequestInfo>, WorkspaceError> {
         self.core.require_organizations()?;
-        let requests = access_request::Entity::find()
-            .filter(access_request::Column::OrganizationId.eq(org))
-            .filter(access_request::Column::Status.eq(AccessRequestStatus::Pending.as_str()))
-            .order_by_asc(access_request::Column::CreatedAt)
-            .order_by_asc(access_request::Column::Id)
-            .all(&self.core.db.reader().await)
-            .await?;
+        let requests = AccessRequest::query()
+            .where_(AccessRequest::ORGANIZATION_ID.eq(org))
+            .where_(AccessRequest::STATUS.eq(AccessRequestStatus::Pending.as_str()))
+            .order_by(AccessRequest::CREATED_AT)
+            .order_by(AccessRequest::ID)
+            .get(&*self.core.db)
+            .await?
+            .into_models();
         let ids: Vec<Uuid> = requests.iter().map(|r| r.user_id).collect();
         let users: HashMap<Uuid, UserSummary> = self
             .core
@@ -230,21 +230,24 @@ impl AccessRequests {
     /// Access request `id` of organization `org`.
     pub async fn find(&self, org: Uuid, id: Uuid) -> Result<Option<AccessRequest>, WorkspaceError> {
         self.core.require_organizations()?;
-        Ok(access_request::Entity::find_by_id(id)
-            .filter(access_request::Column::OrganizationId.eq(org))
-            .one(&self.core.db.reader().await)
-            .await?)
+        Ok(AccessRequest::query()
+            .where_key(id)
+            .where_(AccessRequest::ORGANIZATION_ID.eq(org))
+            .first(&*self.core.db)
+            .await?
+            .map(Record::into_inner))
     }
 
     /// Every request `user` made, newest first.
     pub async fn for_user(&self, user: Uuid) -> Result<Vec<AccessRequest>, WorkspaceError> {
         self.core.require_organizations()?;
-        Ok(access_request::Entity::find()
-            .filter(access_request::Column::UserId.eq(user))
-            .order_by_desc(access_request::Column::CreatedAt)
-            .order_by_desc(access_request::Column::Id)
-            .all(&self.core.db.reader().await)
-            .await?)
+        Ok(AccessRequest::query()
+            .where_(AccessRequest::USER_ID.eq(user))
+            .order_by_desc(AccessRequest::CREATED_AT)
+            .order_by_desc(AccessRequest::ID)
+            .get(&*self.core.db)
+            .await?
+            .into_models())
     }
 
     /// Approves pending request `id` of organization `org`: the user joins
@@ -259,12 +262,11 @@ impl AccessRequests {
         approval: Approval,
     ) -> Result<ApprovedRequest, WorkspaceError> {
         self.core.require_organizations()?;
-        let tx = uow.tx().await?;
-        let found = self.pending_in(&tx, org, id).await?;
+        let found = self.pending_in(uow, org, id).await?;
         let workspaces = match (approval.workspaces, found.workspace_id) {
             (Some(workspaces), _) => workspaces,
             (None, Some(workspace)) => {
-                if !attached(&*tx, org).await?.iter().any(|w| w.id == workspace) {
+                if !attached(uow, org).await?.iter().any(|w| w.id == workspace) {
                     return Err(WorkspaceError::invalid(
                         "workspaces",
                         "the requested workspace left the organization: name the workspaces to grant",
@@ -274,20 +276,20 @@ impl AccessRequests {
             }
             (None, None) => Selector::All,
         };
-        drop(tx);
         let user = found.user_id;
         let member = self
             .members
             .add(uow, org, user, approval.role.clone(), workspaces)
             .await?;
-        let mut row = found.into_active_model();
         let now = self.core.now();
-        row.status = Set(AccessRequestStatus::Approved.as_str().to_owned());
-        row.role = Set(Some(approval.role.as_str().to_owned()));
-        row.decided_by = Set(decided_by);
-        row.decided_at = Set(Some(now));
-        row.updated_at = Set(now);
-        let request = Repo::<access_request::Entity>::update(uow, row).await?;
+        let request = store::update(uow, found, |row| {
+            row.status = AccessRequestStatus::Approved.as_str().to_owned();
+            row.role = Some(approval.role.as_str().to_owned());
+            row.decided_by = decided_by;
+            row.decided_at = Some(now);
+            row.updated_at = now;
+        })
+        .await?;
         self.core
             .emit_after_commit(
                 uow,
@@ -316,16 +318,17 @@ impl AccessRequests {
     ) -> Result<AccessRequest, WorkspaceError> {
         self.core.require_organizations()?;
         let reason = check_text("reason", reason.as_deref())?;
-        let found = self.pending_in(&*uow.tx().await?, org, id).await?;
+        let found = self.pending_in(uow, org, id).await?;
         let user = found.user_id;
-        let mut row = found.into_active_model();
         let now = self.core.now();
-        row.status = Set(AccessRequestStatus::Declined.as_str().to_owned());
-        row.reason = Set(reason);
-        row.decided_by = Set(decided_by);
-        row.decided_at = Set(Some(now));
-        row.updated_at = Set(now);
-        let request = Repo::<access_request::Entity>::update(uow, row).await?;
+        let request = store::update(uow, found, |row| {
+            row.status = AccessRequestStatus::Declined.as_str().to_owned();
+            row.reason = reason;
+            row.decided_by = decided_by;
+            row.decided_at = Some(now);
+            row.updated_at = now;
+        })
+        .await?;
         self.core
             .emit_after_commit(
                 uow,
@@ -340,18 +343,20 @@ impl AccessRequests {
         Ok(request)
     }
 
-    /// The pending request `id` of `org`, read in the transaction.
+    /// The pending request `id` of `org`, read in the unit of work.
     async fn pending_in(
         &self,
-        tx: &sea_orm::DatabaseTransaction,
+        uow: &Uow,
         org: Uuid,
         id: Uuid,
     ) -> Result<AccessRequest, WorkspaceError> {
-        let found = access_request::Entity::find_by_id(id)
-            .filter(access_request::Column::OrganizationId.eq(org))
-            .one(tx)
+        let found = AccessRequest::query()
+            .where_key(id)
+            .where_(AccessRequest::ORGANIZATION_ID.eq(org))
+            .first(uow)
             .await?
-            .ok_or(WorkspaceError::AccessRequestNotFound)?;
+            .ok_or(WorkspaceError::AccessRequestNotFound)?
+            .into_inner();
         if found.is_pending() {
             Ok(found)
         } else {

@@ -19,6 +19,8 @@ mod migrations;
 mod service;
 
 use navree::prelude::*;
+// COMPAT (data-layer port): `sea_workspace_scoped` for the SeaORM entity.
+use navree::workspace::sea_compat::ModuleBuilderSeaWorkspaceExt as _;
 
 pub use controller::ProjectsController;
 pub use entity::Project;
@@ -42,6 +44,6 @@ impl ProjectsModule {
     fn wire(&self, m: &mut ModuleBuilder) {
         m.migrations(migrations::migrations())
             // `#[can(.., from = "id")]` answers 404 for another workspace's project.
-            .workspace_scoped::<Project>();
+            .sea_workspace_scoped::<Project>();
     }
 }

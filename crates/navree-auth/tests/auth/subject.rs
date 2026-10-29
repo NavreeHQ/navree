@@ -1,6 +1,8 @@
-//! navree-access interop: `navree_auth::user::Entity` is the CASL subject
-//! `User` (permission prefix `users`), so apps can load users for
-//! `can(.., "User", from = "id")` with `AccessModule::for_feature`.
+//! navree-access interop: the `User` model is the CASL subject `User`
+//! (permission prefix `users`), so apps can load users for
+//! `can(.., "User", from = "id")` with `AccessModule::for_feature`:
+//! through the ORM, in the request's unit of work, on either kind of unit
+//! of work.
 
 use std::sync::Arc;
 
@@ -9,7 +11,7 @@ use navree_access::{
     AbilityCtx, AccessModule, AccessOptions, AccessService, Authorized, READ, Read, Rules, Subject,
     UPDATE, Update, field,
 };
-use navree_auth::{CurrentUser, USER_PERMISSION_PREFIX, USER_SUBJECT, UserResource, user};
+use navree_auth::{CurrentUser, USER_PERMISSION_PREFIX, USER_SUBJECT, User, UserResource, user};
 use navree_contracts::BoxFuture;
 use navree_db::Db;
 use navree_http::{Controller, Json, ModuleBuilderHttpExt, RouteDef};
@@ -36,8 +38,8 @@ impl Injectable for PeopleController {
     }
 }
 
-async fn show(person: Authorized<user::Entity, Read>) -> Json<UserResource> {
-    Json(UserResource::from(person.into_inner()))
+async fn show(person: Authorized<User, Read>) -> Json<UserResource> {
+    Json(UserResource::from(person.into_inner().into_inner()))
 }
 
 impl Controller for PeopleController {
@@ -54,20 +56,19 @@ struct PeopleModule;
 
 impl Module for PeopleModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.import(AccessModule::for_feature::<user::Entity>())
+        m.import(AccessModule::for_feature::<User>())
             .controller::<PeopleController>();
     }
 }
 
 #[test]
-fn the_user_entity_is_the_user_subject() {
-    assert_eq!(<user::Entity as Subject>::SUBJECT, "User");
-    assert_eq!(<user::Entity as Subject>::PERMISSION_PREFIX, "users");
+fn the_user_model_is_the_user_subject() {
+    assert_eq!(<User as Subject>::SUBJECT, "User");
+    assert_eq!(<User as Subject>::PERMISSION_PREFIX, "users");
+    assert_eq!(<User as Subject>::SUBJECT, USER_SUBJECT);
+    assert_eq!(<User as Subject>::PERMISSION_PREFIX, USER_PERMISSION_PREFIX);
+    // COMPAT: the SeaORM entity names the same subject.
     assert_eq!(<user::Entity as Subject>::SUBJECT, USER_SUBJECT);
-    assert_eq!(
-        <user::Entity as Subject>::PERMISSION_PREFIX,
-        USER_PERMISSION_PREFIX
-    );
 }
 
 #[tokio::test]
@@ -132,7 +133,7 @@ impl Injectable for EditorController {
 }
 
 async fn edit(
-    person: Authorized<user::Entity, Update>,
+    person: Authorized<User, Update>,
     CurrentUser(me): CurrentUser,
 ) -> Json<serde_json::Value> {
     Json(json!({ "person": person.into_inner().id, "me": me.id }))
@@ -152,7 +153,7 @@ struct EditorModule;
 
 impl Module for EditorModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.import(AccessModule::for_feature::<user::Entity>())
+        m.import(AccessModule::for_feature::<User>())
             .controller::<EditorController>();
     }
 }

@@ -19,38 +19,41 @@ Workspace-owned tables carry the workspace's id, and every query filters by it.
 
 ### Scoping queries
 
-Mark the entity, then read and write through `WorkspaceRepo`:
+Mark the model, then read and write through `WorkspaceRepo`:
 
-```rust title="src/deals/entity.rs"
+```rust title="src/deals/model.rs"
 /// Rows carry a `workspace_id` column.
-impl WorkspaceScoped for deal::Entity {}
+impl WorkspaceScoped for Deal {}
 ```
 
-A different column name goes in the trait: `impl WorkspaceScoped for deal::Entity { const WORKSPACE_COLUMN: &'static str = "team_id"; }`.
+`Deal` is a `#[derive(Model)]` struct. A different column name goes in the trait: `impl WorkspaceScoped for Deal { const WORKSPACE_COLUMN: &'static str = "team_id"; }`.
 
-| `WorkspaceRepo::<E>::` | Does |
+A model declared `#[model(workspace)]` (see [workspaces and access](/docs/orm/workspaces-and-access/)) already scopes its own queries to the current workspace. `WorkspaceScoped` is for naming a workspace explicitly, as jobs, commands, seeders and cross-workspace code do, and it feeds the route record check and `navree check` below. A model that has both uses the same column for both.
+
+| `WorkspaceRepo::<M>::` | Does |
 |---|---|
-| `select(workspace)` | `E::find()` limited to the workspace's rows |
-| `scope(workspace, select)` | Adds the workspace filter to any `Select<E>` |
-| `find(&uow, workspace, id)`, `find_or_fail` | Reads one record of the workspace; another workspace's record is not found (a 404 from a handler) |
-| `insert(&uow, workspace, model)` | Sets the workspace column, then inserts |
-| `update(&uow, workspace, model)` | Updates a record of the workspace; the workspace column can't change |
-| `delete(&uow, workspace, model)` | Deletes a record of the workspace |
+| `query(workspace)` | `M::query()` limited to the workspace's rows, a `Builder<M>` |
+| `scope(workspace, query)` | Adds the workspace filter to any `Builder<M>` |
+| `find(&uow, workspace, id)`, `find_or_fail` | Reads one record of the workspace; another workspace's record is `None`, or `OrmError::ModelNotFound` (a 404 from a handler) |
+| `insert(&uow, workspace, model)` | Sets the workspace column, then creates the record |
+| `update(&uow, workspace, &mut record)` | Saves a record of the workspace; the workspace column can't change |
+| `delete(&uow, workspace, record)` | Deletes a record of the workspace |
 
-Writes go through `Repo`, so the [audit trail](/docs/security/audit-log/) and other change observers see them. `CurrentWorkspace::scope(select)` is the same filter for the request's workspace:
+The first argument is any navree-orm executor: the request's `&uow`, a pool (`&*db`), or a `WorkspaceUow` (`&*workspace_uow`). Writes go through the model API, inside `navree::orm::workspace::scope` for the workspace, so the model's hooks run and the change events that the [audit trail](/docs/security/audit-log/) reads are emitted. A record read from the database writes the columns that changed; one built from a model with `Record::from(model)` replaces the stored row's values. Reads end in the builder's usual methods: `.get(&uow).await?.into_models()`, `.paginate(&uow, page)`, `.count(&uow)`. `CurrentWorkspace::scope(query)` is the same filter for the request's workspace:
 
 ```rust
 #[get("/")]
 #[permissions("deals.read")]
-async fn index(&self, ws: CurrentWorkspace, uow: Uow, page: PageQuery) -> Result<Page<deal::Model>> {
-    let select = WorkspaceRepo::<Deal>::select(ws.id());
-    Ok(paginate(select, &*uow.tx().await?, page).await?)
+async fn index(&self, ws: CurrentWorkspace, uow: Uow, page: PageQuery) -> Result<Page<Record<Deal>>> {
+    Ok(WorkspaceRepo::<Deal>::query(ws.id()).paginate(&uow, page).await?)
 }
 ```
 
+A crate that is not on navree-orm yet keeps its SeaORM entities working through `navree::workspace::sea_compat`, which has the SeaORM forms of `WorkspaceScoped`, `PartitionScoped`, `WorkspaceRepo`, `OrgRepo`, `PartitionRepo` and the module registrations (`sea_workspace_scoped`, `sea_workspace_entity`, `sea_global_entity`). It goes away once the last SeaORM entity is ported; everything on this page uses models.
+
 ### Records checked by route
 
-A route that checks a record, `#[can(Update, Deal, from = "id")]`, loads it by primary key before the handler runs. Register the entity as workspace-scoped in its module, and the [`InWorkspace` guard](/docs/workspaces/resolution/#the-inworkspace-guard) first confirms the record belongs to the current workspace; a record of another workspace is a 404, whatever the member's role:
+A route that checks a record, `#[can(Update, Deal, from = "id")]`, loads it by primary key before the handler runs. Register the model as workspace-scoped in its module, and the [`InWorkspace` guard](/docs/workspaces/resolution/#the-inworkspace-guard) first confirms the record belongs to the current workspace; a record of another workspace is a 404, whatever the member's role:
 
 ```rust title="src/deals/mod.rs"
 #[module(
@@ -65,7 +68,10 @@ impl DealsModule {
         m.migrations(
             MigrationSet::new("deals")
                 .after(["workspace"])
-                .migration(migration::CreateDeals),
+                .migration(SchemaMigration::new(
+                    "m20261026_000001_create_deals",
+                    migration::CreateDeals,
+                )),
         )
         .workspace_scoped::<Deal>();
     }
@@ -74,52 +80,34 @@ impl DealsModule {
 
 ### Row-level security on PostgreSQL
 
-On PostgreSQL, the database enforces the scope too. Every workspace request sets the setting `navree.workspace` to the workspace's id for its transaction (`set_config(.., true)`, so it ends with the transaction), next to the `navree.actor` and `navree.request_id` settings navree-db sets. A row-level security policy compares each row's column with it. `RlsPolicy` writes the SQL; run it in the table's migration:
+On PostgreSQL, the database enforces the scope too. Every workspace request sets the setting `navree.workspace` to the workspace's id for its transaction (with `Uow::set_local`, so it ends with the transaction), next to the `navree.actor` and `navree.request_id` settings navree-db sets. A row-level security policy compares each row's column with it. Every statement of that unit of work is covered, navree-orm queries and raw navree-db statements alike, on either kind of transaction a unit of work can run on (`database.native_units_of_work`). `RlsPolicy` writes the SQL; run it in the table's migration, on PostgreSQL only:
 
 ```rust title="src/deals/migration.rs"
-use navree::db::sea_orm::sea_query::{ColumnDef, Table};
-use navree::db::sea_orm::{ConnectionTrait, DbBackend, DbErr};
+use navree::schema::{Dialect, Migration, Schema, SchemaResult};
 use navree::workspace::RlsPolicy;
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
 
 pub struct CreateDeals;
 
-impl MigrationName for CreateDeals {
-    fn name(&self) -> &str {
-        "m20261026_000001_create_deals"
-    }
-}
-
-#[async_trait]
-impl MigrationTrait for CreateDeals {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table("deals")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("workspace_id").uuid().not_null())
-                    .col(ColumnDef::new("owner_id").uuid().not_null())
-                    .col(ColumnDef::new("title").string().not_null())
-                    .col(ColumnDef::new("amount_cents").big_integer().not_null())
-                    .to_owned(),
-            )
+impl Migration for CreateDeals {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema
+            .create("deals", |t| {
+                t.uuid("id").primary();
+                t.uuid("workspace_id").index();
+                t.uuid("owner_id");
+                t.string("title");
+                t.big_integer("amount_cents");
+            })
             .await?;
         // On PostgreSQL the database enforces the scope as well.
-        if manager.get_database_backend() == DbBackend::Postgres {
-            manager
-                .get_connection()
-                .execute_unprepared(&RlsPolicy::new("deals").create_sql())
-                .await?;
+        if schema.target().await?.dialect() == Dialect::Postgres {
+            schema.statement(&RlsPolicy::new("deals").create_sql()).await?;
         }
         Ok(())
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .drop_table(Table::drop().table("deals").to_owned())
-            .await
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop_if_exists("deals").await
     }
 }
 ```
@@ -149,7 +137,7 @@ workspaces.enter(&uow, workspace.id).await?; // navree.workspace for this transa
 uow.commit().await?;
 ```
 
-SQLite and MySQL have no row-level security, and `Workspaces::enter` sets nothing there. On them, row isolation is the scoping alone: a query that leaves out the workspace filter sees every workspace's rows, so read and write workspace data through `WorkspaceRepo`.
+SQLite and MySQL have no row-level security, and `Workspaces::enter` sets nothing there. On them, row isolation is the scoping alone: a query that leaves out the workspace filter sees every workspace's rows, so read and write workspace data through `WorkspaceRepo` (or a `#[model(workspace)]` model).
 
 On SQLite, `enter` and the request do nothing to the transaction: `WorkspaceRepo` and the route record checks are the scope.
 
@@ -175,11 +163,11 @@ CREATE POLICY "contacts_organization_read" ON "contacts" FOR SELECT
 
 PostgreSQL combines the two policies with `OR` for reads, and only the workspace policy applies to inserts, updates and deletes: an organization request reads across its workspaces, and changes rows only in a workspace it has also resolved. The read policy covers the whole organization; a member limited to some of its workspaces is narrowed by `OrgRepo` with `CurrentOrganization::workspace_ids()`. With `.partitioned()` as well, the partition condition narrows both policies. `drop_sql()` drops both.
 
-In code, `OrgRepo::<E>` reads across workspaces and `PartitionRepo::<E>` narrows `WorkspaceRepo` to partitions, on every database.
+In code, `OrgRepo::<M>` reads across workspaces and `PartitionRepo::<M>` narrows `WorkspaceRepo` to partitions, on every database.
 
 ### Migrations
 
-Row isolation uses ordinary migrations (`m.migrations(..)`): one set of tables for every workspace.
+Row isolation uses ordinary migrations (`m.migrations(..)`): one set of tables for every workspace. They are [navree-schema migrations](/docs/database/migrations/), as above.
 
 ## Schema isolation
 
@@ -200,10 +188,15 @@ pub struct NotesModule;
 
 impl NotesModule {
     fn wire(&self, m: &mut ModuleBuilder) {
-        m.workspace_migrations(MigrationSet::new("notes").migration(CreateNotes));
+        m.workspace_migrations(MigrationSet::new("notes").migration(SchemaMigration::new(
+            "m20261026_000001_create_notes",
+            CreateNotes,
+        )));
     }
 }
 ```
+
+Workspace migrations must be navree-schema migrations: the per-workspace runner refuses SeaORM ones.
 
 - Creating a workspace creates its schema and runs every workspace migration in it, in the same transaction.
 - Each schema records its own migrations in its own `navree_migrations` table.
@@ -214,12 +207,12 @@ Handlers write their queries without any workspace filter; `WorkspaceUow` (or th
 
 ```rust
 #[get("/")]
-async fn index(&self, uow: WorkspaceUow) -> Result<Json<Vec<note::Model>>> {
-    Ok(Json(note::Entity::find().all(&*uow.tx().await?).await?))
+async fn index(&self, uow: WorkspaceUow) -> Result<Json<Vec<Note>>> {
+    Ok(Json(Note::query().get(&*uow).await?.into_models()))
 }
 ```
 
-Jobs and commands call `Workspaces::enter(&uow, id)`, which sets the same `search_path`.
+Jobs and commands call `Workspaces::enter(&uow, id)`, which sets the same `search_path` (with `Uow::set_local`, for the transaction).
 
 ## Database isolation
 
@@ -239,19 +232,12 @@ database_url = "sqlite://storage/workspaces/{id}.db?mode=rwc"
 
 ### `WorkspaceUow`
 
-`WorkspaceUow` is the unit of work for the current workspace's data under every strategy: the request's own `Uow` under row and schema isolation, and a unit of work on the workspace's database under database isolation. It dereferences to `Uow`, so `Repo`, `WorkspaceRepo` and `paginate` take it:
+`WorkspaceUow` is the unit of work for the current workspace's data under every strategy: the request's own `Uow` under row and schema isolation, and a unit of work on the workspace's database under database isolation. It dereferences to `Uow`, which is a navree-orm executor, so models, `WorkspaceRepo` and `paginate` take it:
 
 ```rust
-async fn store(&self, uow: WorkspaceUow, Json(input): Json<NewNote>) -> Result<Json<note::Model>> {
-    let note = Repo::<note::Entity>::insert(
-        &uow,
-        note::ActiveModel {
-            id: Set(Uuid::now_v7()),
-            body: Set(input.body),
-        },
-    )
-    .await?;
-    Ok(Json(note))
+async fn store(&self, uow: WorkspaceUow, Json(input): Json<NewNote>) -> Result<Json<Note>> {
+    let note = Note::create(&*uow, Note { id: Uuid::now_v7(), body: input.body }).await?;
+    Ok(Json(note.into_inner()))
 }
 ```
 
@@ -273,7 +259,7 @@ uow.commit().await?;
 | | Row | Schema | Database |
 |---|---|---|---|
 | Migrations | `m.migrations(..)`, run once | `m.workspace_migrations(..)`, run per workspace | `m.workspace_migrations(..)`, run per workspace |
-| Queries | Filter with `WorkspaceRepo` | Plain queries | Plain queries |
+| Queries | Filter with `WorkspaceRepo` (or `#[model(workspace)]`) | Plain queries | Plain queries |
 | Cross-workspace reports | Plain SQL | `UNION` across schemas | One query per database |
 | Cost of one more workspace | Its rows | A schema and its tables | A database and a connection pool |
 | Backup or delete one workspace | Delete by `workspace_id` | Dump or drop one schema | Dump or drop one database |
@@ -295,7 +281,7 @@ An [isolation suite](/docs/testing/isolation-tests/) writes those tests for ever
 
 ```rust
 app.isolation_suite::<DealsModule>()
-    .factory(DealFactory::default())
+    .factory(Deal::factory())
     .body("POST", "/api/v1/deals", json!({ "title": "Renewal" }))
     .run()
     .await;

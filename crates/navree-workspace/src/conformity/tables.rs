@@ -1,8 +1,7 @@
 //! What the database says about a workspace table: its columns, which
 //! columns lead an index, and (PostgreSQL) whether row-level security is on.
 
-use navree_db::Db;
-use sea_orm::{ConnectionTrait, DbBackend, DbErr, QueryResult, Statement};
+use navree_db::{Backend, Db, DbError, Executor, Row, Statement, Value};
 
 /// The facts about one table.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -19,16 +18,16 @@ pub(crate) struct TableFacts {
 
 /// Reads the facts about `table`, or `None` on a database this check does
 /// not read (anything but SQLite and PostgreSQL).
-pub(crate) async fn table_facts(db: &Db, table: &str) -> Result<Option<TableFacts>, DbErr> {
-    match db.backend() {
-        DbBackend::Sqlite => sqlite(db, table).await.map(Some),
-        DbBackend::Postgres => postgres(db, table).await.map(Some),
-        _ => Ok(None),
+pub(crate) async fn table_facts(db: &Db, table: &str) -> Result<Option<TableFacts>, DbError> {
+    match Executor::backend(db) {
+        Backend::Sqlite => sqlite(db, table).await.map(Some),
+        Backend::Postgres => postgres(db, table).await.map(Some),
+        Backend::MySql => Ok(None),
     }
 }
 
-async fn rows(db: &Db, statement: Statement) -> Result<Vec<QueryResult>, DbErr> {
-    db.conn().query_all_raw(statement).await
+async fn rows(db: &Db, statement: Statement) -> Result<Vec<Row>, DbError> {
+    db.fetch_all(&statement).await
 }
 
 /// `"name"` with embedded quotes doubled, for PRAGMA arguments.
@@ -36,12 +35,12 @@ fn quoted(name: &str) -> String {
     format!("\"{}\"", name.replace('"', "\"\""))
 }
 
-async fn sqlite(db: &Db, table: &str) -> Result<TableFacts, DbErr> {
-    let pragma = |sql: String| Statement::from_string(DbBackend::Sqlite, sql);
+async fn sqlite(db: &Db, table: &str) -> Result<TableFacts, DbError> {
+    let pragma = Statement::text;
     let columns: Vec<String> = rows(db, pragma(format!("PRAGMA table_info({})", quoted(table))))
         .await?
         .iter()
-        .map(|row| row.try_get::<String>("", "name"))
+        .map(|row| row.get::<String>("name"))
         .collect::<Result<_, _>>()?;
     if columns.is_empty() {
         return Ok(TableFacts::default());
@@ -49,16 +48,11 @@ async fn sqlite(db: &Db, table: &str) -> Result<TableFacts, DbErr> {
     let mut index_leads = Vec::new();
     let indexes = rows(db, pragma(format!("PRAGMA index_list({})", quoted(table)))).await?;
     for index in indexes {
-        let name: String = index.try_get("", "name")?;
+        let name: String = index.get("name")?;
         let info = rows(db, pragma(format!("PRAGMA index_info({})", quoted(&name)))).await?;
         let lead = info
             .iter()
-            .map(|row| {
-                Ok::<_, DbErr>((
-                    row.try_get::<i64>("", "seqno")?,
-                    row.try_get::<String>("", "name")?,
-                ))
-            })
+            .map(|row| Ok::<_, DbError>((row.get::<i64>("seqno")?, row.get::<String>("name")?)))
             .collect::<Result<Vec<_>, _>>()?
             .into_iter()
             .min_by_key(|(seqno, _)| *seqno)
@@ -73,10 +67,8 @@ async fn sqlite(db: &Db, table: &str) -> Result<TableFacts, DbErr> {
     })
 }
 
-async fn postgres(db: &Db, table: &str) -> Result<TableFacts, DbErr> {
-    let statement = |sql: &str| {
-        Statement::from_sql_and_values(DbBackend::Postgres, sql, [table.to_owned().into()])
-    };
+async fn postgres(db: &Db, table: &str) -> Result<TableFacts, DbError> {
+    let statement = |sql: &str| Statement::new(Backend::Postgres, sql, [Value::from(table)]);
     let columns: Vec<String> = rows(
         db,
         statement(
@@ -86,7 +78,7 @@ async fn postgres(db: &Db, table: &str) -> Result<TableFacts, DbErr> {
     )
     .await?
     .iter()
-    .map(|row| row.try_get::<String>("", "name"))
+    .map(|row| row.get::<String>("name"))
     .collect::<Result<_, _>>()?;
     if columns.is_empty() {
         return Ok(TableFacts::default());
@@ -103,7 +95,7 @@ async fn postgres(db: &Db, table: &str) -> Result<TableFacts, DbErr> {
     )
     .await?
     .iter()
-    .map(|row| row.try_get::<String>("", "name"))
+    .map(|row| row.get::<String>("name"))
     .collect::<Result<_, _>>()?;
     let rls = rows(
         db,
@@ -115,12 +107,7 @@ async fn postgres(db: &Db, table: &str) -> Result<TableFacts, DbErr> {
     )
     .await?
     .first()
-    .map(|row| {
-        Ok::<_, DbErr>((
-            row.try_get::<bool>("", "enabled")?,
-            row.try_get::<bool>("", "forced")?,
-        ))
-    })
+    .map(|row| Ok::<_, DbError>((row.get::<bool>("enabled")?, row.get::<bool>("forced")?)))
     .transpose()?;
     Ok(TableFacts {
         exists: true,

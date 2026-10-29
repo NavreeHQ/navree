@@ -1,6 +1,6 @@
 ---
 name: navree-module-conformity
-description: "Audits a Navree module or app for conformity and tenant isolation: `navree check` (module graph, then `conformity:check`: `api.docs` with `api.require_docs` and `api.undocumented`, `workspace.entities`, `workspace.repo` with the `navree:allow(workspace-repo)` marker, `workspace.tables`, `i18n.translations`, `db.migrations`), `TestApp::isolation_suite::<M>()` cross-workspace tests from a module's route table and factories (`IsolationSuiteExt::factory`, `.record`, `.body`, `.skip`, `Tenancy`), custom checks with `ConformityCheck`, and `navree gate` (fmt, clippy, tests, check and the front end under a machine lock). Use when finishing or reviewing a module, before a push or release, when adding a workspace-owned entity or route, when `navree check` or an isolation suite fails, or when data might leak between workspaces."
+description: "Audits a Navree module or app for conformity and tenant isolation: `navree check` (module graph, then `conformity:check`: `api.docs` with `api.require_docs` and `api.undocumented`, `workspace.entities`, `workspace.repo` with the `navree:allow(workspace-repo)` marker, `workspace.tables`, `i18n.translations`, `db.migrations`), `TestApp::isolation_suite::<M>()` cross-workspace tests from a module's route table and factories (`IsolationSuiteExt::factory`, `.record`, `.body`, `.skip`, `Tenancy`), custom checks with `ConformityCheck`, and `navree gate` (fmt, clippy, tests, check and the front end under a machine lock). Use when finishing or reviewing a module, before a push or release, when adding a workspace-owned model, entity or route, when `navree check` or an isolation suite fails, or when data might leak between workspaces."
 ---
 
 # Module conformity
@@ -20,21 +20,28 @@ workspace's records. Three tools prove it:
 
 ## Steps: audit a module
 
-1. Classify every entity in the module's `register`:
+1. Classify every workspace table (model) in the module's `register`:
 
    ```rust
-   m.workspace_scoped::<Deal>()        // workspace entity and access subject (record checks by id)
-       .workspace_entity::<DealNote>()  // workspace entity, not an access subject
+   m.workspace_scoped::<Deal>()        // workspace model and access subject (record checks by id)
+       .workspace_entity::<DealNote>()  // workspace model, not an access subject
        .global_entity::<Currency>();    // one set of rows for every workspace
    ```
 
-   Workspace entities implement `WorkspaceScoped` (column `workspace_id`
-   unless `WORKSPACE_COLUMN` says otherwise).
-2. Reach workspace entities only through `WorkspaceRepo::<E>` (`select`,
+   Workspace models are `#[derive(Model)]` structs that implement
+   `WorkspaceScoped` (column `workspace_id` unless `WORKSPACE_COLUMN` says
+   otherwise); a `#[model(workspace)]` model also scopes its own queries.
+   A SeaORM entity of a crate not yet ported is classified with
+   `m.sea_workspace_scoped::<E>()`, `m.sea_workspace_entity::<E>()` or
+   `m.sea_global_entity::<E>()` (`ModuleBuilderSeaWorkspaceExt`, in
+   `navree::workspace::sea_compat`).
+2. Reach workspace models only through `WorkspaceRepo::<M>` (`query`,
    `find`, `find_or_fail`, `insert`, `update`, `delete`) or
-   `CurrentWorkspace::scope(select)`. A deliberate cross-workspace query
-   (an admin report, a maintenance command) gets
-   `// navree:allow(workspace-repo)` on its line or the line above.
+   `CurrentWorkspace::scope(query)`. For a SeaORM entity the `workspace.repo`
+   source scan applies and the way in is `sea_compat::WorkspaceRepo::<E>`; a
+   deliberate cross-workspace query (an admin report, a maintenance
+   command) gets `// navree:allow(workspace-repo)` on its line or the line
+   above.
 3. Document every route with `#[api(summary = "..", tag = "..")]` (or
    `.api(ApiMeta { .. })` on a `RouteDef`). Routes that stay undocumented
    on purpose go in `api.undocumented` (`"METHOD /path"`, `"/path"`, a
@@ -43,7 +50,9 @@ workspace's records. Three tools prove it:
    `"/admin*"`, Fleet's `"/_fleet*"`, `"/graphql*"`, `"/_navree/ui*"`, each
    at its configured path).
 4. Give the workspace table an index that starts with `workspace_id` and,
-   on PostgreSQL, `RlsPolicy::new("deals").create_sql()` in its migration.
+   on PostgreSQL, `schema.statement(&RlsPolicy::new("deals").create_sql())`
+   in its navree-schema migration (after checking
+   `schema.target().await?.dialect() == Dialect::Postgres`).
 5. Write the module's isolation suite (below) and run it with `cargo test`.
 6. Run `navree check`, fix every error, read every warning.
 7. Run `navree gate` before pushing.
@@ -65,9 +74,9 @@ app's config and a migrated database (`navree migrate` first). Errors exit
 | Check | From | Fails on (error) / reports (warning) |
 |---|---|---|
 | `api.docs` | `ApiModule` | error: a route without `#[api]` (not in `api.undocumented`) |
-| `workspace.entities` | `WorkspaceModule` | error: an entity in `src/` not classified, or classified both ways |
-| `workspace.repo` | `WorkspaceModule` | error: `Entity::find*`, `insert*`, `update*`, `delete*` or `Repo::<E>` on a workspace entity |
-| `workspace.tables` | `WorkspaceModule` | error: no workspace column; warning: no index starting with it, row-level security off (PostgreSQL), table missing |
+| `workspace.entities` | `WorkspaceModule` | error: a SeaORM entity in `src/` (`#[sea_orm(table_name)]`) not classified, or classified both ways; hints name `m.sea_workspace_entity::<..>()` and `m.sea_global_entity::<..>()` |
+| `workspace.repo` | `WorkspaceModule` | error: `Entity::find*`, `insert*`, `update*`, `delete*` or `Repo::<E>` on a SeaORM workspace entity; hint names `sea_compat::WorkspaceRepo::<..>` |
+| `workspace.tables` | `WorkspaceModule` | every classified table (models too): error: no workspace column; warning: no index starting with it, row-level security off (PostgreSQL), table missing |
 | `i18n.translations` | built in | runs the app's `i18n:check` when a module registers it, else skipped |
 | `db.migrations` | built in | runs the app's `migrate:lint` when a module registers it, else skipped |
 
@@ -75,7 +84,7 @@ The `workspace.*` checks are skipped under `schema` and `database`
 isolation. `api.require_docs = true` makes an undocumented route stop the
 boot itself (turn it on in development).
 
-The `workspace.repo` scan reads source as text: it follows `use` trees,
+The `workspace.entities` and `workspace.repo` scans read the source of SeaORM entities as text: it follows `use` trees,
 renames, globs and `type` aliases, and skips `tests/`, `benches/`,
 `examples/` and `#[cfg(test)]`. It cannot see through generics or macros;
 the isolation suite covers what reaches the routes.
@@ -91,7 +100,7 @@ use serde_json::json;
 async fn deals_stay_in_their_workspace() {
     let app = app().await; // WorkspaceModule + DealsModule (+ .fake_auth() with AuthModule)
     app.isolation_suite::<DealsModule>()
-        .factory(DealFactory::default())                       // binds {id}, uses workspaces
+        .factory(Deal::factory())                              // a navree-orm Factory; binds {id}, uses workspaces
         .body("POST", "/api/v1/deals", json!({ "title": "Renewal" }))
         .run()
         .await;
@@ -112,7 +121,8 @@ a valid `.body`) or a 401 (no test authenticator) fails the route, and
 `run` panics with a table of every route. `try_run` returns the
 `IsolationReport` instead.
 
-- `.factory_for("deal", DealFactory::default())` binds `{deal}`;
+- `.factory_for("deal", Deal::factory())` binds `{deal}` (`Deal::factory()` needs
+  `#[model(factory = DealFactory)]`; else `Factory::<DealFactory>::new()`);
   `.record("note", |cx| async move { .. })` binds `{note}` with an async
   closure (`cx.tenant().id`, `cx.params()["deal"]`, `cx.n()`), returning
   the id as text.
@@ -122,8 +132,9 @@ a valid `.body`) or a 401 (no test authenticator) fails the route, and
   `.body` are skipped.
 - Paths are the mounted templates: prefix and version included
   (`/api/v1/deals/{id}`).
-- Records go through `WorkspaceRepo::insert` (row isolation) or into the
-  workspace's schema or database, with the workspace column set.
+- Records go through `WorkspaceRepo::insert` (row isolation) or are created
+  through the model API in the workspace's schema or database, with the
+  workspace column set.
 - `navree::workspace::testing` needs the `navree` features `workspace` and
   `testing` (both in the default `full`).
 - Another tenant model: implement `navree::testing::Tenancy` (`create`,

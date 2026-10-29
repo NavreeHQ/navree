@@ -66,24 +66,33 @@ partitions.grant(&uow, workspace.id, grace, PartitionSelector::only([uk.id])).aw
 
 ## Making a table partitioned
 
-Give the table a `partition_id` column next to its `workspace_id`, and mark the entity with `PartitionScoped` on top of `WorkspaceScoped`:
+Give the table a `partition_id` column next to its `workspace_id`, and mark the model with `PartitionScoped` on top of `WorkspaceScoped`:
 
-```rust title="src/contacts/entity.rs"
+```rust title="src/contacts/model.rs"
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "contacts")]
+pub struct Contact {
+    pub id: Uuid,
+    pub workspace_id: Uuid,
+    pub partition_id: Option<Uuid>,
+    pub name: String,
+}
+
 /// Rows carry `workspace_id` and `partition_id` columns.
-impl WorkspaceScoped for contact::Entity {}
-impl PartitionScoped for contact::Entity {}
+impl WorkspaceScoped for Contact {}
+impl PartitionScoped for Contact {}
 ```
 
-Another column name goes in the trait: `impl PartitionScoped for contact::Entity { const PARTITION_COLUMN: &'static str = "domain_id"; }`. Then read and write through `PartitionRepo`, which is `WorkspaceRepo` narrowed to a `PartitionSelector`:
+Another column name goes in the trait: `impl PartitionScoped for Contact { const PARTITION_COLUMN: &'static str = "domain_id"; }`. Then read and write through `PartitionRepo`, which is `WorkspaceRepo` narrowed to a `PartitionSelector`:
 
-| `PartitionRepo::<E>::` | Does |
+| `PartitionRepo::<M>::` | Does |
 |---|---|
-| `select(workspace, selector)` | The workspace's rows the selector sees |
-| `scope(workspace, selector, select)` | Adds both filters to any `Select<E>` |
-| `find(&uow, workspace, selector, id)`, `find_or_fail` | One record, if the selector sees it; else not found (a 404 from a handler) |
-| `insert(&uow, workspace, partition, model)` | Sets both columns, then inserts |
-| `update(&uow, workspace, selector, model)` | Updates a record the selector sees; moving it to another partition needs the selector to see that one too |
-| `delete(&uow, workspace, selector, model)` | Deletes a record the selector sees |
+| `query(workspace, &selector)` | The workspace's rows the selector sees, a `Builder<M>` |
+| `scope(workspace, &selector, query)` | Adds both filters to any `Builder<M>` |
+| `find(&uow, workspace, &selector, id)`, `find_or_fail` | One record, if the selector sees it; else `None`, or `OrmError::ModelNotFound` (a 404 from a handler) |
+| `insert(&uow, workspace, partition, model)` | Sets both columns, then creates the record |
+| `update(&uow, workspace, &selector, &mut record)` | Saves a record the selector sees; moving it to another partition needs the selector to see that one too |
+| `delete(&uow, workspace, &selector, record)` | Deletes a record the selector sees |
 
 ## The partitions of a request
 
@@ -97,9 +106,9 @@ Two extractors resolve the request's partitions inside its workspace. Both resol
 impl ContactsController {
     #[get("/")]
     #[permissions("contacts.read")]
-    async fn index(&self, scope: PartitionScope, uow: Uow, page: PageQuery) -> Result<Page<contact::Model>> {
-        let select = PartitionRepo::<Contact>::select(scope.workspace_id(), scope.selector());
-        Ok(paginate(select, &*uow.tx().await?, page).await?)
+    async fn index(&self, scope: PartitionScope, uow: Uow, page: PageQuery) -> Result<Page<Record<Contact>>> {
+        let contacts = PartitionRepo::<Contact>::query(scope.workspace_id(), scope.selector());
+        Ok(contacts.paginate(&uow, page).await?)
     }
 
     #[post("/")]
@@ -110,19 +119,14 @@ impl ContactsController {
         partition: CurrentPartition,
         uow: Uow,
         Json(input): Json<NewContact>,
-    ) -> Result<Created<contact::Model>> {
-        let contact = PartitionRepo::<Contact>::insert(
-            &uow,
-            ws.id(),
-            partition.id(),
-            contact::ActiveModel {
-                id: Set(Uuid::now_v7()),
-                name: Set(input.name),
-                ..Default::default()
-            },
-        )
-        .await?;
-        Ok(Created(format!("/api/v1/contacts/{}", contact.id), contact))
+    ) -> Result<Created<Contact>> {
+        let contact = Contact {
+            id: Uuid::now_v7(),
+            name: input.name,
+            ..Contact::default()
+        };
+        let contact = PartitionRepo::<Contact>::insert(&uow, ws.id(), partition.id(), contact).await?;
+        Ok(Created(format!("/api/v1/contacts/{}", contact.id), contact.into_inner()))
     }
 }
 ```
@@ -136,7 +140,7 @@ impl ContactsController {
 | `allowed()` | Every partition the member sees, whatever the request names |
 | `current()` | The named partition, as a `CurrentPartition` |
 | `includes(id)` | Whether the request may touch partition `id` |
-| `scope(select)` | `select` limited to the workspace and `selector()` |
+| `scope(query)` | A `Builder<M>` limited to the workspace and `selector()`: `scope.scope(Contact::query())` |
 
 | Situation | Status | `message` |
 |---|---|---|
@@ -151,10 +155,9 @@ Both extractors also answer the workspace's errors (401, 400, 404, 403) first.
 When a request names a partition, its transaction gets `navree.partition`, next to `navree.workspace`. `RlsPolicy::partitioned()` adds the partition to the workspace policy: while the setting is set, only that partition's rows are visible and writable.
 
 ```rust
-if manager.get_database_backend() == DbBackend::Postgres {
-    manager
-        .get_connection()
-        .execute_unprepared(&RlsPolicy::new("contacts").partitioned().create_sql())
+if schema.target().await?.dialect() == Dialect::Postgres {
+    schema
+        .statement(&RlsPolicy::new("contacts").partitioned().create_sql())
         .await?;
 }
 ```

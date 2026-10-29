@@ -225,13 +225,15 @@ pub mod __private {
         }
     }
 
-    /// The workspace column of a `WorkspaceScoped` entity.
+    /// The workspace column of a `WorkspaceScoped` entity (the SeaORM form
+    /// of navree-workspace's compatibility layer, `sea_compat`, while
+    /// `Searchable` is derived on SeaORM entities).
     pub trait ViaScoped {
         /// `Some(E::WORKSPACE_COLUMN)`.
         fn workspace_column(&self) -> Option<&'static str>;
     }
 
-    impl<E: navree_workspace::WorkspaceScoped> ViaScoped for &WorkspaceProbe<E> {
+    impl<E: navree_workspace::sea_compat::WorkspaceScoped> ViaScoped for &WorkspaceProbe<E> {
         fn workspace_column(&self) -> Option<&'static str> {
             Some(E::WORKSPACE_COLUMN)
         }
