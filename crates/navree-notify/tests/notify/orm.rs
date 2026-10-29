@@ -32,7 +32,7 @@ async fn stored_notifications_are_orm_models() {
         .where_null(Stored::READ_AT)
         .order_by(Stored::CREATED_AT)
         .order_by(Stored::ID)
-        .get(db.conn())
+        .get(&*db)
         .await
         .unwrap();
     assert_eq!(mine.len(), 2);
@@ -42,7 +42,7 @@ async fn stored_notifications_are_orm_models() {
     assert_eq!(
         Stored::query()
             .where_(Stored::NOTIFICATION_TYPE.eq("deal_won"))
-            .count(db.conn())
+            .count(&*db)
             .await
             .unwrap(),
         3,
@@ -64,7 +64,7 @@ async fn old_notifications_are_pruned_with_the_orm() {
     let tomorrow = Utc::now() + TimeDelta::days(1);
     let pruned = Stored::query()
         .where_(Stored::CREATED_AT.lt(tomorrow))
-        .delete(db.conn())
+        .delete(&*db)
         .await
         .unwrap();
     assert_eq!(pruned, 1);
