@@ -45,7 +45,12 @@ pub struct PostsModule;
 3. Grant access: permissions to a role (`navree access:grant editor
    posts.update`), or rules in `src/abilities.rs` (`navree make:policy posts
    moderation` adds a policy file and calls it from there).
-4. Filter lists with `Accessible<Post, Read>`; check records with
+4. Filter lists with `Accessible<Post, Read>` (an ORM model:
+   `scope.query()` / `scope.apply(Post::query())` from
+   `navree::orm::access::AccessibleQuery`; SQL you write yourself:
+   `scope.sql_filter(&TypedColumns::new("posts").with(..)).to_statement(backend)`,
+   a portable fragment; a SeaORM entity, until it moves to a model:
+   `scope.apply(Entity::find())`); check records with
    `#[can(.., from = "id")]` and `Authorized`.
 5. Test guests (401), users without the grant (403) and with it.
 
@@ -153,7 +158,11 @@ pub fn define(ctx: &AbilityCtx, rules: &mut Rules) {
 ## Checks in services
 
 `Abilities(ability)` (extractor) or `Authorized::ability()` give the
-compiled rules: `ability.can(PUBLISH, "Post", Some(&navree::access::record_json(&post)))`,
+compiled rules: `ability.can(PUBLISH, "Post", Some(&record_json))` with the
+record's JSON (`navree::orm::access::record_json(&record)` for an ORM model,
+or `ability.authorize(Publish, &record)?` from `AbilityExt`;
+`navree::access::row_json(&row)` for a navree-db record;
+`navree::access::record_json(&model)` for a SeaORM entity's model),
 `ability.can_field(..)`, `ability.permitted_fields(..)`. `CurrentAccess`
 adds roles, permissions and `super_admin`.
 
