@@ -18,13 +18,15 @@ use uuid::Uuid;
 
 use crate::support::*;
 
-/// A document with a scanned image; its timestamps are the model's.
+/// A document with a scanned image; its timestamps and soft deletes are
+/// the model's.
 #[derive(navree_orm::Model, Clone, Debug, Default, PartialEq, Serialize)]
 #[model(
     table = "documents",
     subject = "Document",
     permission_prefix = "documents",
-    timestamps
+    timestamps,
+    soft_deletes
 )]
 pub struct Document {
     pub id: Uuid,
@@ -32,6 +34,7 @@ pub struct Document {
     pub scan: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub deleted_at: Option<DateTime<Utc>>,
 }
 
 struct CreateDocuments;
@@ -46,6 +49,7 @@ impl Migration for CreateDocuments {
                 t.string("scan").nullable();
                 t.timestamp_tz("created_at");
                 t.timestamp_tz("updated_at");
+                t.timestamp_tz("deleted_at").nullable();
             })
             .await
     }
@@ -170,11 +174,62 @@ async fn page(client: &TestClient, path: &str) -> String {
 
 async fn reload_document(app: &TestApp, id: Uuid) -> Document {
     let db = app.get::<navree_db::Db>().await;
-    Document::find(&*db, id)
+    Document::query()
+        .with_trashed()
+        .find(&*db, id)
         .await
         .unwrap()
         .map(Record::into_inner)
         .unwrap()
+}
+
+/// The default writes on a soft-deleting model with timestamps: the
+/// model's own key and timestamps on create, `updated_at` on update, and a
+/// delete that trashes the row, which the panel then no longer shows.
+#[tokio::test]
+async fn a_soft_deleting_model_is_trashed_by_the_default_delete() {
+    let app = files_app().await;
+    let (_, admin) = user(&app, ADMIN).await;
+    let body = admin
+        .post("/admin/api/resources/documents")
+        .json(&json!({ "name": "Lease" }))
+        .send()
+        .await
+        .assert_status(201)
+        .json_value();
+    let id: Uuid = body["data"]["id"].as_str().unwrap().parse().unwrap();
+    let saved = reload_document(&app, id).await;
+    assert_eq!(saved.name, "Lease");
+    assert_eq!(saved.created_at, now());
+    assert_eq!(saved.updated_at, now());
+    assert_eq!(saved.deleted_at, None);
+
+    admin
+        .patch(&format!("/admin/api/resources/documents/{id}"))
+        .json(&json!({ "name": "Lease, signed" }))
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("data.title", json!("Lease, signed"));
+    admin
+        .delete(&format!("/admin/api/resources/documents/{id}"))
+        .send()
+        .await
+        .assert_status(204);
+    let trashed = reload_document(&app, id).await;
+    assert_eq!(trashed.name, "Lease, signed");
+    assert!(trashed.deleted_at.is_some(), "the row is trashed, not removed");
+    admin
+        .get("/admin/api/resources/documents")
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("meta.total", 0.into());
+    admin
+        .get(&format!("/admin/api/resources/documents/{id}"))
+        .send()
+        .await
+        .assert_error(404, None);
 }
 
 #[tokio::test]
