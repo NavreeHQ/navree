@@ -6,8 +6,8 @@ use navree_kernel::{BoxFuture, Injectable, KernelError, Lazy, Resolver};
 use navree_orm::OrmError;
 use serde::{Deserialize, Serialize};
 
-use crate::{Search, SearchError};
 use crate::service::{group_by_workspace, syncing_paused};
+use crate::{Search, SearchError};
 
 /// The job name of [`SyncDocuments`].
 pub const SYNC_JOB: &str = "search.sync";

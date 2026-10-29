@@ -747,7 +747,6 @@ pub(crate) async fn open_uow(db: &Db) -> Option<Uow> {
     (!uow.is_finished().await && uow.has_open_transaction().await).then_some(uow)
 }
 
-
 impl fmt::Debug for Search {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let names: Vec<&str> = self

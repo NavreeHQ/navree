@@ -38,9 +38,9 @@ use sea_orm::{
 use serde::Serialize;
 use uuid::Uuid;
 
+use crate::WorkspaceError;
 use crate::conformity::EntityClass;
 use crate::current::ScopedSubject;
-use crate::WorkspaceError;
 
 /// A SeaORM entity whose rows belong to a workspace (row isolation): its table
 /// has a workspace id column, `workspace_id` unless

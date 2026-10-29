@@ -155,9 +155,8 @@ async fn the_typo_threshold_applies_per_query_and_the_trigram_index_exists() {
         assert_eq!(found(&loose, "lovlace").await, 1);
 
         // The setting stayed local to the queries.
-        let setting = Statement::text(
-            "SELECT current_setting('pg_trgm.word_similarity_threshold') AS value",
-        );
+        let setting =
+            Statement::text("SELECT current_setting('pg_trgm.word_similarity_threshold') AS value");
         let shown: String = db.fetch_scalar(&setting).await.unwrap();
         assert_eq!(shown, "0.6");
 

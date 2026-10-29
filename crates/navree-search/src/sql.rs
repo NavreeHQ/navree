@@ -281,10 +281,7 @@ mod tests {
             "(json_type(d.fields, '$.\"flag\"') = 'true' OR json_extract(d.fields, '$.\"closed_at\"') IS NULL)"
         );
         assert_eq!(n, 0);
-        let (text, _) = render(
-            Backend::Sqlite,
-            Filter::is_in("s", [json!("a"), json!(2)]),
-        );
+        let (text, _) = render(Backend::Sqlite, Filter::is_in("s", [json!("a"), json!(2)]));
         assert_eq!(
             text,
             "(((json_type(d.fields, '$.\"s\"') = 'text' AND json_extract(d.fields, '$.\"s\"') = ?) OR \

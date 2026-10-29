@@ -331,7 +331,8 @@ fn model_attribute(field: &syn::Field) -> ModelAttribute {
                 continue;
             };
             // Only top-level keys: the token before is a comma or nothing.
-            let top = at == 0 || matches!(&tokens[at - 1], TokenTree::Punct(p) if p.as_char() == ',');
+            let top =
+                at == 0 || matches!(&tokens[at - 1], TokenTree::Punct(p) if p.as_char() == ',');
             if !top {
                 continue;
             }
@@ -347,7 +348,8 @@ fn model_attribute(field: &syn::Field) -> ModelAttribute {
                     }
                 }
                 "skip" => out.not_a_column = Some(key.span()),
-                "columns" if matches!(next, Some(TokenTree::Group(g)) if g.delimiter() == Delimiter::Parenthesis) => {
+                "columns" if matches!(next, Some(TokenTree::Group(g)) if g.delimiter() == Delimiter::Parenthesis) =>
+                {
                     out.not_a_column = Some(key.span());
                 }
                 _ => {}

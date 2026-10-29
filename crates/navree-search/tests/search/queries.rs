@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::servers::Server;
 use crate::support::{
-    self, Contact, Deal, Company, ids, insert, insert_contacts, new_company, new_contact, settle,
+    self, Company, Contact, Deal, ids, insert, insert_contacts, new_company, new_contact, settle,
 };
 
 /// Ada, Grace and Alan; Ada and Alan owned by `owner`, Grace a customer.

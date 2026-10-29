@@ -169,9 +169,8 @@ impl<M: Searchable> IndexOps for ModelIndex<M> {
                     .column(name)
                     .ok_or_else(|| missing_column::<M>(name))?;
                 if let Some(value) = typed_value(column, workspace) {
-                    query = query.where_(
-                        col(format!("{}.{}", M::meta().table(), column.name())).eq(value),
-                    );
+                    query = query
+                        .where_(col(format!("{}.{}", M::meta().table(), column.name())).eq(value));
                 }
             }
             let records = query

@@ -1,8 +1,8 @@
 //! [`SearchError`] and its error responses.
 
+use navree_db::DbError;
 use navree_http::AppError;
 use navree_kernel::BoxError;
-use navree_db::DbError;
 use navree_orm::OrmError;
 
 /// Everything that can go wrong while searching or indexing.
@@ -167,10 +167,7 @@ mod tests {
                 503,
             ),
             (SearchError::Other("boom".into()), 500),
-            (
-                SearchError::Db(DbError::not_found("deals 1")),
-                404,
-            ),
+            (SearchError::Db(DbError::not_found("deals 1")), 404),
         ];
         for (error, status) in cases {
             assert_eq!(error.to_app_error().status.as_u16(), status, "{error}");
