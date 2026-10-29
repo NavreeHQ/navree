@@ -436,18 +436,18 @@ mod tests {
 
     #[test]
     fn filters_and_sorts_need_one_column() {
-        let error = error(quote!(
+        let message = error(quote!(
             #[model(skip)]
             #[searchable(filter)]
             pub label: String
         ));
-        assert!(error.contains("one column of the model"), "{error}");
-        let error = error(quote!(
+        assert!(message.contains("one column of the model"), "{message}");
+        let message = error(quote!(
             #[model(columns(amount: i64, currency: String))]
             #[searchable(sort)]
             pub price: Money
         ));
-        assert!(error.contains("one column of the model"), "{error}");
+        assert!(message.contains("one column of the model"), "{message}");
         // As text only, a computed field is fine.
         let args = field(quote!(
             #[model(skip)]
