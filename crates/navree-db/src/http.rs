@@ -14,13 +14,12 @@ use navree_contracts::{AuthState, Impersonator, RequestId};
 use navree_http::{AppError, GlobalLayer, LayerSlot};
 use navree_kernel::{AppContext, BoxFuture};
 use navree_telemetry::TelemetryContext;
-use sea_orm::sqlx::error::ErrorKind;
-use sea_orm::{DbErr, RuntimeErr, SqlErr};
+
 use tokio::sync::OnceCell;
 use tower::{Layer, Service, ServiceExt};
 use tracing::Instrument;
 
-use crate::{Db, Uow};
+use crate::{Db, DbError, ErrorKind, Uow};
 
 /// The unit of work of the current request, opened by the `DatabaseModule`
 /// layer. A 500 error when `DatabaseModule` is not in the app.
@@ -243,209 +242,121 @@ async fn finish(uow: &Uow, response: Response) -> Response {
 }
 
 /// The error response for a database error, used by `DatabaseModule` for
-/// errors returned from handlers with `?`: a missing record (navree-db's
-/// [`ErrorKind::NotFound`](crate::ErrorKind::NotFound), SeaORM's
-/// `RecordNotFound` and `RecordNotUpdated`) → 404, unique and
-/// foreign-key violations → 409, anything else stays a 500. No SQL detail
-/// reaches the client.
+/// errors returned from handlers with `?`: a missing record
+/// ([`ErrorKind::NotFound`]) → 404, unique and foreign-key violations
+/// ([`ErrorKind::UniqueViolation`], [`ErrorKind::ForeignKeyViolation`]) →
+/// 409, anything else stays a 500 (`None`). No SQL detail reaches the
+/// client.
 ///
-/// It takes navree-db's [`DbError`](crate::DbError) and, while crates move
-/// off SeaORM, SeaORM's `DbErr` (see [`MappedDbError`]). Violations are
-/// recognised on every database: MySQL and MariaDB error numbers (1062
-/// duplicate entry; 1451 and 1452 foreign key failures, and their
-/// relatives), PostgreSQL SQLSTATEs (`23505`, `23503`) and SQLite's
-/// extended codes.
+/// Violations are recognised on every database (see [`DbError`]): MySQL
+/// and MariaDB error numbers (1062 duplicate entry; 1451 and 1452 foreign
+/// key failures, and their relatives), PostgreSQL SQLSTATEs (`23505`,
+/// `23503`) and SQLite's extended codes.
 ///
 /// ```
 /// use navree_db::{DbError, ErrorKind, map_db_error};
-/// use sea_orm::DbErr;
 ///
-/// let error = map_db_error(&DbErr::RecordNotFound("deals 42".into())).unwrap();
-/// assert_eq!(error.status.as_u16(), 404);
-/// assert!(map_db_error(&DbErr::Custom("boom".into())).is_none());
+/// let missing = map_db_error(&DbError::not_found("deals 42")).unwrap();
+/// assert_eq!(missing.status.as_u16(), 404);
 /// let duplicate = DbError::new(ErrorKind::UniqueViolation, "duplicate key");
 /// assert_eq!(map_db_error(&duplicate).unwrap().status.as_u16(), 409);
 /// assert!(map_db_error(&DbError::invalid("bad")).is_none());
 /// ```
-pub fn map_db_error<E: MappedDbError + ?Sized>(error: &E) -> Option<AppError> {
-    error.app_error()
-}
-
-/// The response of what a database error says about the request.
-fn response(violation: Violation) -> AppError {
-    match violation {
-        Violation::NotFound => AppError::not_found(),
-        Violation::Unique => {
+pub fn map_db_error(error: &DbError) -> Option<AppError> {
+    Some(match error.kind() {
+        ErrorKind::NotFound => AppError::not_found(),
+        ErrorKind::UniqueViolation => {
             AppError::conflict("A record with the same unique value already exists.")
         }
-        Violation::ForeignKey => AppError::conflict("The change conflicts with a related record."),
-    }
-}
-
-/// A database error [`map_db_error`] answers: navree-db's
-/// [`DbError`](crate::DbError), and SeaORM's `DbErr` while crates move off
-/// SeaORM.
-pub trait MappedDbError: sealed::Sealed {
-    /// The error response it answers, if it is not a 500.
-    fn app_error(&self) -> Option<AppError>;
-}
-
-mod sealed {
-    pub trait Sealed {}
-    impl Sealed for sea_orm::DbErr {}
-    impl Sealed for crate::DbError {}
-}
-
-impl MappedDbError for DbErr {
-    fn app_error(&self) -> Option<AppError> {
-        match self {
-            DbErr::RecordNotFound(_) | DbErr::RecordNotUpdated => Some(Violation::NotFound),
-            _ => violation(self),
+        ErrorKind::ForeignKeyViolation => {
+            AppError::conflict("The change conflicts with a related record.")
         }
-        .map(response)
-    }
-}
-
-impl MappedDbError for crate::DbError {
-    fn app_error(&self) -> Option<AppError> {
-        match self.kind() {
-            crate::ErrorKind::NotFound => Some(Violation::NotFound),
-            crate::ErrorKind::UniqueViolation => Some(Violation::Unique),
-            crate::ErrorKind::ForeignKeyViolation => Some(Violation::ForeignKey),
-            _ => None,
-        }
-        .map(response)
-    }
-}
-
-/// What a database error says about the request.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Violation {
-    NotFound,
-    Unique,
-    ForeignKey,
-}
-
-/// The constraint `error` broke: SeaORM's reading of the driver's error
-/// code, else SQLx's (`DatabaseError::kind`), which knows a few codes
-/// SeaORM's list leaves out (MySQL's 1859, a duplicate found while
-/// `ALTER TABLE` builds a unique index).
-fn violation(error: &DbErr) -> Option<Violation> {
-    match error.sql_err() {
-        Some(SqlErr::UniqueConstraintViolation(_)) => return Some(Violation::Unique),
-        Some(SqlErr::ForeignKeyConstraintViolation(_)) => return Some(Violation::ForeignKey),
-        _ => {}
-    }
-    let (DbErr::Exec(RuntimeErr::SqlxError(error)) | DbErr::Query(RuntimeErr::SqlxError(error))) =
-        error
-    else {
-        return None;
-    };
-    match error.as_database_error()?.kind() {
-        ErrorKind::UniqueViolation => Some(Violation::Unique),
-        ErrorKind::ForeignKeyViolation => Some(Violation::ForeignKey),
-        _ => None,
-    }
+        _ => return None,
+    })
 }
 
 #[cfg(test)]
 mod tests {
-    use std::borrow::Cow;
-    use std::sync::Arc;
-
-    use sea_orm::RuntimeErr;
-    use sea_orm::sqlx::error::{DatabaseError, ErrorKind};
-
     use super::*;
 
-    /// A driver error SeaORM does not recognise, classified by SQLx: MySQL's
-    /// 1859, a duplicate found while `ALTER TABLE` builds a unique index.
-    #[derive(Debug)]
-    struct DriverError {
-        message: &'static str,
-        kind: ErrorKind,
-    }
-
-    impl std::fmt::Display for DriverError {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            f.write_str(self.message)
-        }
-    }
-
-    impl std::error::Error for DriverError {}
-
-    impl DatabaseError for DriverError {
-        fn message(&self) -> &str {
-            self.message
-        }
-
-        fn code(&self) -> Option<Cow<'_, str>> {
-            Some(Cow::Borrowed("23000"))
-        }
-
-        fn as_error(&self) -> &(dyn std::error::Error + Send + Sync + 'static) {
-            self
-        }
-
-        fn as_error_mut(&mut self) -> &mut (dyn std::error::Error + Send + Sync + 'static) {
-            self
-        }
-
-        fn into_error(self: Box<Self>) -> Box<dyn std::error::Error + Send + Sync + 'static> {
-            self
-        }
-
-        fn kind(&self) -> ErrorKind {
-            match self.kind {
-                ErrorKind::UniqueViolation => ErrorKind::UniqueViolation,
-                ErrorKind::ForeignKeyViolation => ErrorKind::ForeignKeyViolation,
-                _ => ErrorKind::Other,
-            }
-        }
-    }
-
-    fn driver_error(kind: ErrorKind, wrap: fn(RuntimeErr) -> DbErr) -> DbErr {
-        let error = DriverError {
-            message: "Duplicate entry 'x' found while adding the unique index",
-            kind,
-        };
-        wrap(RuntimeErr::SqlxError(Arc::new(
-            sea_orm::sqlx::Error::Database(Box::new(error)),
-        )))
-    }
-
-    fn message(error: &DbErr) -> Option<(u16, serde_json::Value)> {
+    fn message(error: &DbError) -> Option<(u16, serde_json::Value)> {
         map_db_error(error).map(|app| (app.status.as_u16(), app.body()["message"].clone()))
     }
 
     #[test]
-    fn violations_the_driver_classifies_are_conflicts() {
-        for wrap in [DbErr::Exec as fn(RuntimeErr) -> DbErr, DbErr::Query] {
-            assert_eq!(
-                message(&driver_error(ErrorKind::UniqueViolation, wrap)),
-                Some((
-                    409,
-                    "A record with the same unique value already exists.".into()
-                ))
-            );
-            assert_eq!(
-                message(&driver_error(ErrorKind::ForeignKeyViolation, wrap)),
-                Some((409, "The change conflicts with a related record.".into()))
-            );
-            assert_eq!(message(&driver_error(ErrorKind::Other, wrap)), None);
-        }
+    fn violations_are_conflicts() {
+        assert_eq!(
+            message(&DbError::new(ErrorKind::UniqueViolation, "duplicate")),
+            Some((
+                409,
+                "A record with the same unique value already exists.".into()
+            ))
+        );
+        assert_eq!(
+            message(&DbError::new(ErrorKind::ForeignKeyViolation, "dangling")),
+            Some((409, "The change conflicts with a related record.".into()))
+        );
     }
 
     #[test]
     fn missing_records_are_not_found_and_other_errors_stay_500s() {
         assert_eq!(
-            message(&DbErr::RecordNotFound("notes 1".into())),
+            message(&DbError::not_found("notes 1")),
             Some((404, "Not Found".into()))
         );
+        assert_eq!(message(&DbError::new(ErrorKind::Database, "boom")), None);
+        assert_eq!(message(&DbError::new(ErrorKind::Deadlock, "x")), None);
+    }
+
+    /// MySQL's 1859 (a duplicate found while `ALTER TABLE` builds a unique
+    /// index) is a unique violation SQLx classifies.
+    #[test]
+    fn driver_classified_violations_are_conflicts() {
+        use std::borrow::Cow;
+
+        #[derive(Debug)]
+        struct Duplicate;
+
+        impl std::fmt::Display for Duplicate {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("Duplicate entry 'x' found while adding the unique index")
+            }
+        }
+
+        impl std::error::Error for Duplicate {}
+
+        impl sqlx::error::DatabaseError for Duplicate {
+            fn message(&self) -> &str {
+                "Duplicate entry 'x' found while adding the unique index"
+            }
+
+            fn code(&self) -> Option<Cow<'_, str>> {
+                Some(Cow::Borrowed("23000"))
+            }
+
+            fn as_error(&self) -> &(dyn std::error::Error + Send + Sync + 'static) {
+                self
+            }
+
+            fn as_error_mut(&mut self) -> &mut (dyn std::error::Error + Send + Sync + 'static) {
+                self
+            }
+
+            fn into_error(self: Box<Self>) -> Box<dyn std::error::Error + Send + Sync + 'static> {
+                self
+            }
+
+            fn kind(&self) -> sqlx::error::ErrorKind {
+                sqlx::error::ErrorKind::UniqueViolation
+            }
+        }
+
+        let error = DbError::from_sqlx(sqlx::Error::Database(Box::new(Duplicate)), None);
+        assert_eq!(error.kind(), ErrorKind::UniqueViolation);
         assert_eq!(
-            message(&DbErr::RecordNotUpdated),
-            Some((404, "Not Found".into()))
+            message(&error).map(|(status, _)| status),
+            Some(409),
+            "{error}"
         );
-        assert_eq!(message(&DbErr::Custom("boom".into())), None);
     }
 }

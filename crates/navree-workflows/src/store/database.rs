@@ -39,10 +39,7 @@ impl DatabaseWorkflowStore {
     /// never the task's unit of work (a lease or a claim must not roll back
     /// with a request), or the connection itself when it has no pool.
     fn executor(&self) -> &dyn Executor {
-        match self.db.pool() {
-            Some(pool) => pool,
-            None => &self.db,
-        }
+        self.db.pool()
     }
 
     /// Runs `stmt` in `uow`'s transaction, or on its own.

@@ -20,7 +20,7 @@ use chrono::{DateTime, Utc};
 use navree_contracts::{Clock, SystemClock};
 use navree_crypto::Encrypter;
 use navree_db::record::{self, Filter};
-use navree_db::{Db, DbError, Record as _, Uow};
+use navree_db::{Db, Record as _, Uow};
 use navree_events::{Event, EventBus};
 use navree_kernel::{AppContext, WeakAppContext};
 use sha2::{Digest as _, Sha256};
@@ -166,7 +166,7 @@ impl Store {
         let uow = db.uow(None, None).await;
         match uow.scope(f(uow.clone())).await {
             Ok(value) => {
-                uow.commit().await.map_err(DbError::from)?;
+                uow.commit().await?;
                 Ok(value)
             }
             Err(error) => {

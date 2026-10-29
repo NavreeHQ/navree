@@ -91,11 +91,9 @@ where
 
 async fn a_master_supervises_real_worker_processes() {
     let (url, _guard) = database::scratch();
-    let native = database::native_units_of_work();
     let app = TestApp::builder()
         .config("database.url", url.clone())
         .config("database.migrate_on_boot", true)
-        .config("database.native_units_of_work", native)
         .config("queue.poll_interval_ms", 20)
         .config("fleet.dashboard", false)
         .config(
@@ -117,7 +115,6 @@ async fn a_master_supervises_real_worker_processes() {
     let spawner = ProcessSpawner::current_exe()
         .unwrap()
         .env("APP_DATABASE__URL", &url)
-        .env("APP_DATABASE__NATIVE_UNITS_OF_WORK", native.to_string())
         .env("APP_QUEUE__POLL_INTERVAL_MS", "20")
         .env("APP_FLEET__DASHBOARD", "false");
     let master = Master::new(fleet.clone())

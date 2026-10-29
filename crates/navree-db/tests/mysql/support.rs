@@ -2,9 +2,18 @@
 
 #![allow(dead_code)]
 
-use navree_db::{Db, DbOptions};
-use sea_orm::{ConnectionTrait, Database, DbBackend, Statement};
+use navree_db::{Db, DbError, DbOptions, Executor, Pool, Statement};
 use uuid::Uuid;
+
+/// A one-connection pool on `url` (the admin's).
+async fn connect(url: &str) -> Result<Pool, DbError> {
+    Pool::connect(&DbOptions {
+        url: url.to_owned(),
+        max_connections: 1,
+        ..DbOptions::default()
+    })
+    .await
+}
 
 /// A MySQL or MariaDB server URL whose user may create and drop databases,
 /// e.g. `mysql://root:secret@127.0.0.1:3306/navree_test`.
@@ -39,13 +48,13 @@ impl Scratch {
             return None;
         };
         let name = format!("navree_db_{}", Uuid::now_v7().simple());
-        let conn = Database::connect(admin.as_str())
+        let conn = connect(&admin)
             .await
             .unwrap_or_else(|error| panic!("{test}: cannot connect to {URL_VARIABLE}: {error}"));
-        conn.execute_unprepared(&format!("CREATE DATABASE `{name}` CHARACTER SET utf8mb4"))
+        conn.execute_script(&format!("CREATE DATABASE `{name}` CHARACTER SET utf8mb4"))
             .await
             .expect("creates the scratch database");
-        conn.close().await.expect("closes the admin connection");
+        conn.close().await;
         let url = with_database(&admin, &name);
         Some(Scratch { admin, name, url })
     }
@@ -77,10 +86,8 @@ impl Scratch {
 
     /// A connection to the server as the admin of `NAVREE_TEST_MYSQL_URL`
     /// (to kill connections, or drop and create the scratch database).
-    pub async fn admin(&self) -> sea_orm::DatabaseConnection {
-        Database::connect(self.admin.as_str())
-            .await
-            .expect("connects as the admin")
+    pub async fn admin(&self) -> Pool {
+        connect(&self.admin).await.expect("connects as the admin")
     }
 }
 
@@ -96,13 +103,14 @@ impl Drop for Scratch {
                 .build()
                 .expect("a runtime");
             runtime.block_on(async move {
-                let conn = Database::connect(admin.as_str()).await?;
+                let conn = connect(&admin).await?;
                 // An unfinished transaction of the test would block the drop.
-                conn.execute_unprepared("SET SESSION lock_wait_timeout = 10")
+                conn.execute_script("SET SESSION lock_wait_timeout = 10")
                     .await?;
-                conn.execute_unprepared(&format!("DROP DATABASE IF EXISTS `{name}`"))
+                conn.execute_script(&format!("DROP DATABASE IF EXISTS `{name}`"))
                     .await?;
-                conn.close().await
+                conn.close().await;
+                Ok::<(), DbError>(())
             })
         })
         .join();
@@ -139,18 +147,18 @@ impl Account {
         let id = Uuid::now_v7().simple().to_string();
         let user = format!("nv_{}", &id[16..]);
         let password = format!("pw-{}", &id[..16]);
-        let conn = Database::connect(scratch.admin.as_str())
+        let conn = connect(&scratch.admin)
             .await
             .expect("connects as the admin");
         for sql in [
             format!("CREATE USER '{user}'@'%' IDENTIFIED WITH {plugin} BY '{password}'"),
             format!("GRANT ALL ON `{}`.* TO '{user}'@'%'", scratch.name),
         ] {
-            conn.execute_unprepared(&sql)
+            conn.execute_script(&sql)
                 .await
                 .unwrap_or_else(|error| panic!("{sql}: {error}"));
         }
-        conn.close().await.expect("closes the admin connection");
+        conn.close().await;
         let (scheme, rest) = scratch.url.split_once("://").expect("a URL");
         let (_, host_and_db) = rest.split_once('@').expect("a URL with a user");
         let url = format!("{scheme}://{user}:{password}@{host_and_db}");
@@ -173,10 +181,11 @@ impl Drop for Account {
                 .build()
                 .expect("a runtime");
             runtime.block_on(async move {
-                let conn = Database::connect(admin.as_str()).await?;
-                conn.execute_unprepared(&format!("DROP USER IF EXISTS '{user}'@'%'"))
+                let conn = connect(&admin).await?;
+                conn.execute_script(&format!("DROP USER IF EXISTS '{user}'@'%'"))
                     .await?;
-                conn.close().await
+                conn.close().await;
+                Ok::<(), DbError>(())
             })
         })
         .join();
@@ -189,7 +198,7 @@ impl Drop for Account {
 }
 
 /// Whether the server behind `conn` is MariaDB (`VERSION()` names it).
-pub async fn is_mariadb(conn: &impl ConnectionTrait) -> bool {
+pub async fn is_mariadb(conn: &(impl Executor + ?Sized)) -> bool {
     string(conn, "SELECT VERSION()").await.contains("MariaDB")
 }
 
@@ -209,13 +218,13 @@ pub fn with_database(url: &str, database: &str) -> String {
 }
 
 /// Runs `sql` and returns the first column of every row as text.
-pub async fn strings(conn: &impl ConnectionTrait, sql: &str) -> Vec<String> {
-    conn.query_all_raw(Statement::from_string(DbBackend::MySql, sql))
+pub async fn strings(conn: &(impl Executor + ?Sized), sql: &str) -> Vec<String> {
+    conn.fetch_all(&Statement::text(sql))
         .await
         .unwrap_or_else(|error| panic!("{sql}: {error}"))
         .iter()
         .map(|row| {
-            row.try_get_by_index::<Option<String>>(0)
+            row.get::<Option<String>>(0)
                 .unwrap_or_else(|error| panic!("{sql}: {error}"))
                 .unwrap_or_default()
         })
@@ -223,27 +232,25 @@ pub async fn strings(conn: &impl ConnectionTrait, sql: &str) -> Vec<String> {
 }
 
 /// Runs `sql` and returns the first column of its one row as text.
-pub async fn string(conn: &impl ConnectionTrait, sql: &str) -> String {
+pub async fn string(conn: &(impl Executor + ?Sized), sql: &str) -> String {
     let mut values = strings(conn, sql).await;
     assert_eq!(values.len(), 1, "{sql}: one row expected, got {values:?}");
     values.remove(0)
 }
 
 /// `SELECT COUNT(*) FROM table`.
-pub async fn count(conn: &impl ConnectionTrait, table: &str) -> i64 {
+pub async fn count(conn: &(impl Executor + ?Sized), table: &str) -> i64 {
     let row = conn
-        .query_one_raw(Statement::from_string(
-            DbBackend::MySql,
-            format!("SELECT COUNT(*) AS n FROM `{table}`"),
-        ))
+        .fetch_one(&Statement::text(format!(
+            "SELECT COUNT(*) AS n FROM `{table}`"
+        )))
         .await
-        .expect("count query")
-        .expect("count row");
-    row.try_get::<i64>("", "n").expect("count")
+        .expect("count query");
+    row.get::<i64>("n").expect("count")
 }
 
 /// The base tables of the current database, sorted.
-pub async fn tables(conn: &impl ConnectionTrait) -> Vec<String> {
+pub async fn tables(conn: &(impl Executor + ?Sized)) -> Vec<String> {
     strings(
         conn,
         "SELECT CAST(table_name AS CHAR) FROM information_schema.tables \

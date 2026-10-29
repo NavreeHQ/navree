@@ -7,10 +7,8 @@
 //!   (SQL and bound [`Value`]s; portable `?` placeholders), [`Row`]s read
 //!   as any [`FromValue`] type, classified [`DbError`]s, [`Transaction`]s
 //!   with savepoints, and the [`Executor`] they share with [`Db`] and
-//!   [`Uow`]. Statements are timed and reported like everything else below.
-//!   SeaORM still runs on the same connections ([`Db::conn`] is a view over
-//!   the writer's pool) while crates move off it; [`compat`] bridges the
-//!   two (see `docs/superpowers/specs/2026-10-28-navree-data-layer-on-sqlx.md`).
+//!   [`Uow`]. Statements are timed and reported like everything else below
+//!   (see `docs/superpowers/specs/2026-10-28-navree-data-layer-on-sqlx.md`).
 //! - [`DatabaseModule`] is global: it connects the pool at boot and exports
 //!   [`Db`] and [`DbOptions`] (section `database`). TimescaleDB, Navree's
 //!   default database, and plain PostgreSQL are behind the `postgres`
@@ -51,32 +49,31 @@
 //!   `database.transaction_settings` is off.
 //!   [`ChangeObserver`]s see every recorded [`ChangeEvent`] inside the
 //!   transaction, right before commit; after-commit hooks run once it is
-//!   durable.
-//! - [`Repo`] writes entities through a unit of work and records the
-//!   change events (old and new values) automatically.
+//!   durable. navree-orm's models write through it and record the change
+//!   events (old and new values) automatically.
 //! - [`Record`]s are typed rows on navree-db's statements alone, for the
 //!   crates below navree-orm: one declaration ([`record!`]) lists the
 //!   columns, and [`record`](mod@record)'s selects ([`Filter`], pages, `FOR UPDATE`),
 //!   inserts, updates, upserts and deletes are built from it (with change
-//!   events through a [`Uow`]). [`Db::read_executor`] reads where
-//!   [`Db::reader`] would.
+//!   events through a [`Uow`]). [`Db::read_executor`] reads from the
+//!   task's unit of work, the writer or a replica.
 //! - [`MigrationSet`]s are contributed per module and run by the
 //!   [`Migrator`] in dependency order (`after`), recorded in
 //!   `navree_migrations` by batch; each migration runs in a transaction
 //!   unless it opts out. Migrations are written with the schema builder
-//!   ([`navree_schema`], re-exported) or with SeaORM; the migrator steps,
-//!   pretends, rolls back, resets, refreshes, and loads and writes schema
-//!   dumps.
-//! - [`Seeder`]s fill the database (`db:seed`); [`Factory`] and
-//!   [`create_many`] build test records.
+//!   ([`navree_schema`], re-exported); the migrator steps, pretends, rolls
+//!   back, resets, refreshes, and loads and writes schema dumps.
+//! - [`Seeder`]s fill the database (`db:seed`); navree-orm's factories
+//!   build test records.
 //! - [`prune_time_series`] deletes the rows of a time-series table older
 //!   than a cutoff; on a TimescaleDB hypertable it drops whole chunks
-//!   instead of deleting row by row ([`prune_time_series_on`] runs on
-//!   navree-db's executors).
-//! - [`PageQuery`] / [`Page`] / [`paginate`] give offset
-//!   pages (`{"data", "meta": {"current_page", "per_page", "total",
-//!   "last_page"}}`); [`CursorQuery`] / [`CursorPage`] / [`cursor_paginate`]
-//!   page by a UUID v7 key.
+//!   instead of deleting row by row.
+//! - [`PageQuery`] / [`Page`] are offset pages (`{"data", "meta":
+//!   {"current_page", "per_page", "total", "last_page"}}`); [`CursorQuery`]
+//!   / [`CursorPage`] page by a UUID v7 key. navree-orm's builders fill
+//!   them (`paginate`, `cursor_paginate`).
+//! - [`contains_ignore_case`] and [`eq_ignore_case`] match text ignoring
+//!   case beyond ASCII, the same on every database, as statement fragments.
 //! - Database errors returned from handlers with `?` map to error
 //!   responses: record not found → 404, unique or foreign-key violation →
 //!   409, anything else → 500 ([`map_db_error`]).
@@ -105,16 +102,19 @@
 //! }
 //! ```
 //!
-//! A handler using the unit of work:
+//! A handler using the unit of work (a navree-orm model, and a statement):
 //!
 //! ```ignore
-//! async fn store(uow: Uow, Json(input): Json<NewDeal>) -> navree_http::Result<Created<deal::Model>> {
-//!     let deal = Repo::<deal::Entity>::insert(&uow, input.into_active_model()).await?;
+//! async fn store(uow: Uow, Json(input): Json<NewDeal>) -> navree_http::Result<Created<Record<Deal>>> {
+//!     let deal = Deal::create(&uow, input.into()).await?;
 //!     Ok(Created(format!("/api/v1/deals/{}", deal.id), deal))
 //! }
 //!
-//! async fn index(uow: Uow, page: PageQuery) -> navree_http::Result<Page<deal::Model>> {
-//!     Ok(paginate(deal::Entity::find(), &*uow.tx().await?, page).await?)
+//! async fn stale(uow: Uow) -> navree_http::Result<Json<i64>> {
+//!     let count: i64 = uow
+//!         .fetch_scalar(&Statement::text("SELECT COUNT(*) FROM deals WHERE stage = 'lead'"))
+//!         .await?;
+//!     Ok(Json(count))
 //! }
 //! ```
 #![forbid(unsafe_code)]
@@ -131,9 +131,7 @@ mod mysql;
 mod options;
 mod paginate;
 mod queries;
-mod reader;
 pub mod record;
-mod repo;
 mod schema;
 mod seed;
 mod text;
@@ -143,36 +141,58 @@ mod uow;
 pub use client::ClientCommand;
 pub use connections::DbConnections;
 pub use db::{DEFAULT_CONNECTION, Db, PoolStats, ReadExecutor};
-pub use engine::compat;
 pub use engine::{
     Backend, ColumnIndex, DbError, ErrorKind, Executed, Executor, ExecutorExt, FromValue, HasKind,
     Kind, Pool, Row, RowStream, Statement, Transaction, TxOptions, Value, ValueError,
 };
 pub use events::{ConnectionEstablished, DatabaseBusy, DatabaseStatus};
-pub use http::{MappedDbError, map_db_error};
+pub use http::map_db_error;
 pub use migrate::{
-    FreshOptions, IntoMigration, LoadedDump, MIGRATIONS_TABLE, MigrateOptions, MigrationError,
-    MigrationReport, MigrationRun, MigrationSet, MigrationStatus, Migrator, Refreshed,
-    RollbackOptions, SetMigration, migration_kind, record_migration, recorded_migrations,
+    FreshOptions, LoadedDump, MIGRATIONS_TABLE, MigrateOptions, MigrationError, MigrationReport,
+    MigrationRun, MigrationSet, MigrationStatus, Migrator, Refreshed, RollbackOptions,
+    SetMigration, record_migration, recorded_migrations,
 };
 pub use module::{DatabaseModule, ModuleBuilderDbExt};
 pub use options::{DbOptions, IsolationLevel, MySqlOptions, PostgresOptions, SqliteOptions};
 pub use paginate::{
     CursorPage, CursorQuery, DEFAULT_PER_PAGE, MAX_PER_PAGE, Page, PageMeta, PageQuery,
-    cursor_paginate, cursor_paginate_desc, paginate,
 };
 pub use queries::{LoggedQuery, QueryLog, QueryStats, RepeatedQuery};
-pub use reader::Reader;
 pub use record::{Compare, Delete, Filter, Record, Select, Update};
-pub use repo::Repo;
 pub use seed::{
-    Factory, SeedOptions, Seeder, SeederCalls, create, create_many, run_seeders, run_seeders_with,
-    seeding_without_model_events,
+    SeedOptions, Seeder, SeederCalls, run_seeders, run_seeders_with, seeding_without_model_events,
 };
 pub use text::{contains_ignore_case, eq_ignore_case};
-pub use time_series::{TimePoint, prune_time_series, prune_time_series_on};
+pub use time_series::{TimePoint, prune_time_series};
 pub use uow::{ChangeEvent, ChangeObserver, ChangeOp, Uow};
 
 pub use navree_schema;
-pub use sea_orm;
-pub use sea_orm_migration;
+
+#[cfg(test)]
+mod tests {
+    /// navree-db is its own data layer: no source file names another
+    /// one's crates.
+    #[test]
+    fn the_sources_name_no_other_data_layer() {
+        let banned = [concat!("sea", "_orm"), concat!("sea", "_query")];
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut offenders = Vec::new();
+        let mut stack = vec![dir];
+        while let Some(dir) = stack.pop() {
+            for entry in std::fs::read_dir(&dir).expect("reads src") {
+                let path = entry.expect("an entry").path();
+                if path.is_dir() {
+                    stack.push(path);
+                    continue;
+                }
+                let text = std::fs::read_to_string(&path).expect("reads a source file");
+                for (number, line) in text.lines().enumerate() {
+                    if banned.iter().any(|name| line.contains(name)) {
+                        offenders.push(format!("{}:{}: {line}", path.display(), number + 1));
+                    }
+                }
+            }
+        }
+        assert!(offenders.is_empty(), "{}", offenders.join("\n"));
+    }
+}

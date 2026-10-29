@@ -22,7 +22,7 @@ impl ActionMarker for Publish {
 
 /// Posts: CRUD-ish routes, each checking the caller's abilities on `Post`.
 #[module(
-    imports = [AccessModule::for_feature::<entity::Entity>()],
+    imports = [AccessModule::for_feature::<entity::Post>()],
     providers = [PostService],
     controllers = [PostController],
     exports = [PostService],

@@ -89,10 +89,6 @@ async fn graceful_shutdown_drains_the_queue() {
         .0
         .config("database.url", url.clone())
         .config("database.migrate_on_boot", true)
-        .config(
-            "database.native_units_of_work",
-            crate::servers::native_units_of_work(),
-        )
         .build()
         .await;
     let log = audit_log(&app).await;

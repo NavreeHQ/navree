@@ -70,10 +70,10 @@ impl DirectorySink for RecipientSink {
     ) -> navree::BoxFuture<'a, Result<Option<String>, BoxError>> {
         Box::pin(async move {
             let user = &change.user;
-            let tx = ctx.uow().tx().await?;
+            let uow = ctx.uow();
             let mut recipient = match Recipient::query()
                 .where_(Recipient::DIRECTORY_USER_ID.eq(change.directory_user_id))
-                .first(&*tx)
+                .first(uow)
                 .await?
             {
                 Some(recipient) => recipient,
@@ -87,7 +87,7 @@ impl DirectorySink for RecipientSink {
             recipient.name = user.full_name();
             recipient.department = user.department.clone();
             recipient.active = user.active;
-            recipient.save(&*tx).await?;
+            recipient.save(uow).await?;
             Ok(Some(recipient.id.to_string()))
         })
     }
@@ -98,10 +98,10 @@ impl DirectorySink for RecipientSink {
         change: &'a UserChange,
     ) -> navree::BoxFuture<'a, Result<(), BoxError>> {
         Box::pin(async move {
-            let tx = ctx.uow().tx().await?;
+            let uow = ctx.uow();
             Recipient::query()
                 .where_(Recipient::DIRECTORY_USER_ID.eq(change.directory_user_id))
-                .update(&*tx, [Recipient::ACTIVE.set(false)])
+                .update(uow, [Recipient::ACTIVE.set(false)])
                 .await?;
             Ok(())
         })

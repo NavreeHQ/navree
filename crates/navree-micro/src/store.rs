@@ -181,10 +181,7 @@ impl Store {
     /// cleanups are their own transactions), or the connection itself when
     /// it has no pool.
     fn pool(&self) -> &dyn Executor {
-        match self.db.pool() {
-            Some(pool) => pool,
-            None => &self.db,
-        }
+        self.db.pool()
     }
 
     /// Writes `envelope` to the outbox in the transaction of `uow`.

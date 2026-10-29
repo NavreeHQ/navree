@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use futures::TryStreamExt;
-use navree_db::sea_orm::ConnectionTrait;
+use navree_db::Executor as _;
 use navree_db::{DatabaseModule, Db, DbOptions, QueryLog};
 use navree_kernel::{App, Navree};
 use navree_orm::{
@@ -55,7 +55,7 @@ async fn app_with_connections(dir: &TempDir) -> (App, Arc<Db>) {
     let db = app.ctx().get::<Db>().await.unwrap();
     for name in ["analytics", "archive"] {
         let named = db.connection(name).await.unwrap();
-        named.conn().execute_unprepared(METRICS).await.unwrap();
+        named.pool().execute_script(METRICS).await.unwrap();
     }
     (app, db)
 }
@@ -287,7 +287,7 @@ async fn a_db_outside_an_app_cannot_reach_other_connections() {
     )
     .await
     .unwrap();
-    analytics.conn().execute_unprepared(METRICS).await.unwrap();
+    analytics.pool().execute_script(METRICS).await.unwrap();
     Metric::create(&analytics, metric("visits", 1))
         .await
         .unwrap();
@@ -331,7 +331,7 @@ async fn orm_statements_reach_query_logs_listeners_and_hooks() {
         "{}",
         queries[0].sql
     );
-    assert_eq!(queries[0].values, [navree_db::sea_orm::Value::from(true)]);
+    assert_eq!(queries[0].values, [navree_db::Value::from(true)]);
     assert!(
         !queries[0].raw_sql().contains('?'),
         "{}",
@@ -368,8 +368,8 @@ async fn replicated(dir: &TempDir) -> Db {
     for (options, name) in [(&writer, "writer"), (&replica, "replica")] {
         let db = Db::connect(options).await.unwrap();
         create_tables(&db).await;
-        db.conn()
-            .execute_unprepared(&format!(
+        db.pool()
+            .execute_script(&format!(
                 "INSERT INTO companies (name, created_at, updated_at) VALUES ('{name}', '2026-10-27 09:30:00', '2026-10-27 09:30:00')"
             ))
             .await

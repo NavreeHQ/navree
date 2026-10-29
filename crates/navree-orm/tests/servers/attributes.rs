@@ -9,7 +9,7 @@ use std::collections::BTreeSet;
 use chrono::{DateTime, FixedOffset, TimeZone, Utc};
 use navree_crypto::{AppKey, Encrypter, Hasher, HashingOptions};
 use navree_db::Db;
-use navree_db::sea_orm::ConnectionTrait;
+use navree_db::Executor as _;
 use navree_orm::attributes::{CastContext, ExtraCast};
 use navree_orm::cast::{Cast, CastError, MultiColumnCast, is_password_hash};
 use navree_orm::{Decimal, Model, Ulid, attrs};
@@ -196,7 +196,7 @@ pub async fn casts(db: Db, server: Server) {
         Server::Postgres => POSTGRES_TABLES,
         Server::MySql => MYSQL_TABLES,
     };
-    db.conn().execute_unprepared(tables.trim()).await.unwrap();
+    db.pool().execute_script(tables.trim()).await.unwrap();
     let key = AppKey::generate();
     services(&key)
         .scope(async {
@@ -309,7 +309,7 @@ pub async fn vectors(db: Db, server: Server) {
         ],
     };
     for statement in statements {
-        if let Err(error) = db.conn().execute_unprepared(statement).await {
+        if let Err(error) = db.pool().execute_script(statement).await {
             eprintln!("skipped: {server:?} has no vector type ({error})");
             return;
         }

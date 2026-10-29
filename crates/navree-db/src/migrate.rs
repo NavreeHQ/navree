@@ -2,7 +2,6 @@
 
 pub(crate) mod commands;
 mod conn;
-mod pretend;
 mod report;
 mod runner;
 
@@ -13,8 +12,8 @@ use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
 use navree_kernel::{AppContext, BoxError};
-use navree_schema::{Dialect, NamedMigration, SchemaError, SchemaMigration};
-use sea_orm_migration::MigrationTrait;
+use navree_schema::{Dialect, NamedMigration, SchemaError};
+
 use serde::Serialize;
 
 pub use report::{
@@ -39,21 +38,18 @@ pub const MIGRATIONS_TABLE: &str = "navree_migrations";
 ///
 /// A set holds migrations written with the schema builder
 /// ([`navree_schema::Migration`], added with `navree_schema::migration!` or
-/// [`SchemaMigration::new`]). SeaORM migrations (`MigrationTrait`) still
-/// run beside them, in the same name order, until every crate's
-/// migrations are written with the schema builder.
+/// [`SchemaMigration::new`](navree_schema::SchemaMigration::new)).
 ///
 /// On SQLite and PostgreSQL each migration runs in its own transaction (DDL
-/// included) unless it opts out (`within_transaction` returning `false`; a
-/// SeaORM migration's `use_transaction` returning `Some(false)`), for
-/// statements such as `CREATE INDEX CONCURRENTLY`; the `navree_migrations`
-/// row is written in the same transaction, so a failed migration leaves
-/// nothing behind.
+/// included) unless it opts out (`within_transaction` returning `false`),
+/// for statements such as `CREATE INDEX CONCURRENTLY`; the
+/// `navree_migrations` row is written in the same transaction, so a failed
+/// migration leaves nothing behind.
 ///
 /// MySQL and MariaDB commit every DDL statement implicitly, so there a
 /// migration runs outside a transaction unless it asks for one
-/// (`within_transaction_on_mysql` returning `true`; `use_transaction`
-/// returning `Some(true)`): worth it for data migrations, whose `INSERT`s
+/// (`within_transaction_on_mysql` returning `true`): worth it for data
+/// migrations, whose `INSERT`s
 /// and `UPDATE`s then roll back with the `navree_migrations` row. A MySQL
 /// migration that fails part way keeps the statements that ran before the
 /// failure and is not recorded: keep one DDL statement per migration, or
@@ -91,43 +87,6 @@ pub struct MigrationSet {
     pub after: Vec<&'static str>,
     /// The migrations written with the schema builder.
     pub migrations: Vec<Box<dyn NamedMigration>>,
-    /// SeaORM migrations, run beside [`migrations`](Self::migrations) until
-    /// every crate's are written with the schema builder.
-    sea_orm: Vec<Box<dyn MigrationTrait>>,
-}
-
-/// What [`MigrationSet::migration`] adds: a schema-builder migration
-/// ([`SchemaMigration`], what `navree_schema::migration!` builds), or a
-/// SeaORM migration while crates still have them. `Kind` tells the two
-/// apart ([`migration_kind`]); it is inferred.
-pub trait IntoMigration<Kind>: Sized {
-    /// Adds the migration to `set`.
-    fn add_to(self, set: &mut MigrationSet);
-}
-
-/// The kinds of migration a [`MigrationSet`] takes (the `Kind` of
-/// [`IntoMigration`]).
-pub mod migration_kind {
-    /// A migration written with the schema builder.
-    #[derive(Debug)]
-    pub enum Schema {}
-
-    /// A SeaORM migration (`MigrationTrait`), run until every crate's
-    /// migrations are written with the schema builder.
-    #[derive(Debug)]
-    pub enum SeaOrm {}
-}
-
-impl<M: navree_schema::Migration> IntoMigration<migration_kind::Schema> for SchemaMigration<M> {
-    fn add_to(self, set: &mut MigrationSet) {
-        set.migrations.push(Box::new(self));
-    }
-}
-
-impl<T: MigrationTrait + 'static> IntoMigration<migration_kind::SeaOrm> for T {
-    fn add_to(self, set: &mut MigrationSet) {
-        set.sea_orm.push(Box::new(self));
-    }
 }
 
 impl MigrationSet {
@@ -137,7 +96,6 @@ impl MigrationSet {
             module,
             after: Vec::new(),
             migrations: Vec::new(),
-            sea_orm: Vec::new(),
         }
     }
 
@@ -148,21 +106,15 @@ impl MigrationSet {
     }
 
     /// Adds a migration: `navree_schema::migration!(m20261025_000001_create_deals)`
-    /// or `SchemaMigration::new(name, migration)` (a SeaORM migration
-    /// is taken too, while crates still have them).
-    pub fn migration<Kind>(mut self, migration: impl IntoMigration<Kind>) -> Self {
-        migration.add_to(&mut self);
+    /// or `SchemaMigration::new(name, migration)`.
+    pub fn migration(mut self, migration: impl NamedMigration + 'static) -> Self {
+        self.migrations.push(Box::new(migration));
         self
     }
 
     /// The names of every migration of the set, in run order.
     pub fn names(&self) -> Vec<&str> {
-        let mut names: Vec<&str> = self
-            .migrations
-            .iter()
-            .map(|m| m.name())
-            .chain(self.sea_orm.iter().map(|m| m.name()))
-            .collect();
+        let mut names: Vec<&str> = self.migrations.iter().map(|m| m.name()).collect();
         names.sort_unstable();
         names
     }
@@ -172,12 +124,7 @@ impl MigrationSet {
         let mut entries: Vec<SetMigration<'_>> = self
             .migrations
             .iter()
-            .map(|m| SetMigration::Schema(m.as_ref()))
-            .chain(
-                self.sea_orm
-                    .iter()
-                    .map(|m| SetMigration::SeaOrm(m.as_ref())),
-            )
+            .map(|m| SetMigration(m.as_ref()))
             .collect();
         entries.sort_by(|a, b| a.name().cmp(b.name()));
         entries
@@ -247,7 +194,7 @@ pub enum MigrationError {
         /// `module/name`.
         migration: String,
         /// Why: the schema builder's error ([`SchemaError`]), the
-        /// database's ([`DbError`]), or a SeaORM migration's.
+        /// database's ([`DbError`]).
         #[source]
         source: BoxError,
     },
@@ -278,12 +225,6 @@ pub enum MigrationError {
     /// A database error outside a migration.
     #[error(transparent)]
     Db(#[from] DbError),
-}
-
-impl From<sea_orm::DbErr> for MigrationError {
-    fn from(error: sea_orm::DbErr) -> MigrationError {
-        MigrationError::Db(DbError::from(error))
-    }
 }
 
 /// Runs the migrations every module contributed, against the app's [`Db`].
@@ -461,74 +402,37 @@ struct Step<'a> {
     body: SetMigration<'a>,
 }
 
-/// One migration of a [`MigrationSet`] ([`MigrationSet::entries`]): written
-/// with the schema builder, or a SeaORM migration while crates still have
-/// them.
+/// One migration of a [`MigrationSet`] ([`MigrationSet::entries`]), for
+/// runners of their own (navree-workspace's per-workspace migrations under
+/// schema and database isolation).
 #[derive(Clone, Copy)]
-pub enum SetMigration<'a> {
-    /// A migration written with the schema builder.
-    Schema(&'a dyn NamedMigration),
-    /// A SeaORM migration.
-    SeaOrm(&'a dyn MigrationTrait),
-}
+pub struct SetMigration<'a>(&'a dyn NamedMigration);
 
-impl SetMigration<'_> {
+impl<'a> SetMigration<'a> {
     /// The name recorded in `navree_migrations`.
-    pub fn name(&self) -> &str {
-        match self {
-            SetMigration::Schema(migration) => migration.name(),
-            SetMigration::SeaOrm(migration) => migration.name(),
-        }
+    pub fn name(&self) -> &'a str {
+        self.0.name()
     }
 
-    /// Applies the migration on `conn` (a transaction, a unit of work), for
-    /// runners of their own: navree-workspace's per-workspace migrations
-    /// under schema and database isolation. A SeaORM migration needs a
-    /// SeaORM transaction ([`up_in`](Self::up_in)): `Unsupported` here.
+    /// The migration itself.
+    pub fn migration(&self) -> &'a dyn NamedMigration {
+        self.0
+    }
+
+    /// Applies the migration on `conn` (a transaction, a unit of work).
     pub async fn up_on(&self, conn: &(impl Executor + ?Sized)) -> Result<(), DbError> {
-        match self {
-            SetMigration::Schema(migration) => migration
-                .up(&navree_schema::Schema::new(&crate::schema::OnExecutor(
-                    conn,
-                )))
-                .await
-                .map_err(|error| DbError::new(crate::ErrorKind::Other, error.to_string())),
-            SetMigration::SeaOrm(migration) => Err(DbError::unsupported(format!(
-                "`{}` is a SeaORM migration: write it with the schema builder to run it here",
-                migration.name()
-            ))),
-        }
-    }
-
-    /// Applies the migration inside a SeaORM transaction, for runners of
-    /// their own that still hold one. The [`Migrator`] runs migrations on
-    /// navree-db's transactions; this goes once no runner holds a SeaORM
-    /// transaction.
-    pub async fn up_in(&self, tx: &sea_orm::DatabaseTransaction) -> Result<(), sea_orm::DbErr> {
-        match self {
-            SetMigration::Schema(migration) => {
-                let conn = crate::compat::SeaExecutor::new(tx);
-                migration
-                    .up(&navree_schema::Schema::new(&conn))
-                    .await
-                    .map_err(|error| sea_orm::DbErr::Migration(error.to_string()))
-            }
-            SetMigration::SeaOrm(migration) => {
-                migration
-                    .up(&sea_orm_migration::SchemaManager::new(tx))
-                    .await
-            }
-        }
+        self.0
+            .up(&navree_schema::Schema::new(&crate::schema::OnExecutor(
+                conn,
+            )))
+            .await
+            .map_err(|error| DbError::new(crate::ErrorKind::Other, error.to_string()))
     }
 }
 
 impl fmt::Debug for SetMigration<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let kind = match self {
-            SetMigration::Schema(_) => "Schema",
-            SetMigration::SeaOrm(_) => "SeaOrm",
-        };
-        f.debug_tuple(kind).field(&self.name()).finish()
+        f.debug_tuple("SetMigration").field(&self.name()).finish()
     }
 }
 
@@ -545,12 +449,7 @@ impl Step<'_> {
     /// migration asks, else where DDL is transactional (PostgreSQL,
     /// SQLite; not MySQL).
     fn transactional(&self, dialect: Dialect) -> bool {
-        match self.body {
-            SetMigration::Schema(migration) => migration.transactional(dialect),
-            SetMigration::SeaOrm(migration) => migration
-                .use_transaction()
-                .unwrap_or(dialect != Dialect::MySql),
-        }
+        self.body.0.transactional(dialect)
     }
 }
 

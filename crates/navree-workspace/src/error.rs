@@ -165,6 +165,12 @@ impl WorkspaceError {
     pub fn to_app_error(&self) -> AppError {
         map_workspace_error(self).unwrap_or_else(|| AppError::internal(self.to_string()))
     }
+
+    /// A [`Db`](WorkspaceError::Db) error from anything navree-db turns
+    /// into a [`DbError`] (what its connections and units of work return).
+    pub(crate) fn db(error: impl Into<DbError>) -> Self {
+        WorkspaceError::Db(error.into())
+    }
 }
 
 /// The error response for a [`WorkspaceError`], `None` for errors that stay

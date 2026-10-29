@@ -1,17 +1,23 @@
 //! The workspace conformity checks `navree check` runs, and the entity
 //! classification they read.
 //!
-//! - `workspace.entities`: every SeaORM entity the app's source defines is
-//!   classified as a workspace entity (`sea_workspace_scoped`,
-//!   `sea_workspace_entity`) or a global one (`sea_global_entity`). Models
-//!   are classified with `workspace_scoped`, `workspace_entity` and
-//!   `global_entity`; a model declared `#[model(workspace)]` scopes its own
-//!   queries.
-//! - `workspace.repo`: SeaORM workspace entities are reached only through
-//!   the compatibility layer's `WorkspaceRepo` (a source scan;
-//!   `// navree:allow(workspace-repo)` allows one access).
-//! - `workspace.tables`: each workspace table has its workspace column, an
-//!   index that starts with it and, on PostgreSQL, row-level security.
+//! - `workspace.entities`: every navree-orm model the app's source defines
+//!   (a struct deriving `Model`) is classified exactly once, by its table: a
+//!   workspace entity (`m.workspace_scoped::<M>()`,
+//!   `m.workspace_entity::<M>()`, or `#[model(workspace)]` on the model,
+//!   which scopes its own queries and so classifies it on its own), a global
+//!   one (`m.global_entity::<M>()`) or a library (`m.library::<M>()`).
+//! - `workspace.repo`: the workspace models are reached only through a
+//!   workspace scope (a source scan; `// navree:allow(workspace-repo)`
+//!   allows one access). A registered workspace model that does not scope
+//!   itself is reached through `WorkspaceRepo`, never through the `Model`
+//!   entry points (`Deal::query()`, `Deal::find(..)`, `Deal::create(..)`,
+//!   ..); a `#[model(workspace)]` model is reached any way but with its
+//!   scope left out (`.without_workspace_scope()`,
+//!   `.without_global_scopes()`).
+//! - `workspace.tables`: each registered workspace table (`workspace_scoped`,
+//!   `workspace_entity`) has its workspace column, an index that starts
+//!   with it and, on PostgreSQL, row-level security.
 //!
 //! All three apply to row isolation; under schema and database isolation
 //! each workspace's tables are apart already, and they are skipped.
@@ -27,7 +33,7 @@ use navree_db::Db;
 use crate::{Isolation, WorkspaceConfig, WorkspaceScoped};
 
 pub(crate) use source::ALLOW_MARKER;
-use source::{EntityDef, Project};
+use source::{AccessKind, ModelDef, Project};
 
 /// How an entity is classified, contributed by the module that owns it.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -153,28 +159,31 @@ fn entities_check() -> ConformityCheck {
                 Err(reason) => return Ok(CheckOutcome::skipped(reason)),
             };
             let registry = Registry::of(&cx);
-            let entities = project.entities();
-            let findings = entities
+            let models = project.models();
+            let findings = models
                 .iter()
-                .filter_map(|entity| classification_finding(entity, &registry));
-            Ok(CheckOutcome::checked(entities.len()).findings(findings.collect::<Vec<_>>()))
+                .filter_map(|model| classification_finding(model, &registry));
+            Ok(CheckOutcome::checked(models.len()).findings(findings.collect::<Vec<_>>()))
         },
     )
 }
 
-fn classification_finding(entity: &EntityDef, registry: &Registry) -> Option<Finding> {
+/// The finding for `model` when it is not classified exactly once.
+/// `#[model(workspace)]` classifies a model as a workspace entity on its
+/// own: it scopes its own queries to the current workspace.
+fn classification_finding(model: &ModelDef, registry: &Registry) -> Option<Finding> {
     let classes: Vec<&str> = [
         (
-            registry.workspace.contains_key(&entity.table),
+            model.scopes_itself() || registry.workspace.contains_key(&model.table),
             "a workspace",
         ),
-        (registry.global.contains(&entity.table), "a global"),
-        (registry.library.contains(&entity.table), "a library"),
+        (registry.global.contains(&model.table), "a global"),
+        (registry.library.contains(&model.table), "a library"),
     ]
     .into_iter()
     .filter_map(|(classified, class)| classified.then_some(class))
     .collect();
-    let name = entity.short_name();
+    let name = &model.name;
     match classes.as_slice() {
         [_] => None,
         [.., last] if classes.len() > 1 => {
@@ -185,24 +194,27 @@ fn classification_finding(entity: &EntityDef, registry: &Registry) -> Option<Fin
             };
             Some(
                 Finding::error(
-                    &entity.location,
-                    format!("entity `{}` is classified as {listed} entity", entity.table),
+                    &model.location,
+                    format!(
+                        "model `{name}` (table `{}`) is classified as {listed} entity",
+                        model.table
+                    ),
                 )
                 .hint(format!(
-                    "keep one of m.sea_workspace_entity::<{name}>(), m.sea_global_entity::<{name}>() and m.library::<..>() for its table"
+                    "keep one classification for its table: #[model(workspace)] or m.workspace_entity::<{name}>() (a workspace entity), m.global_entity::<{name}>() or m.library::<{name}>()"
                 )),
             )
         }
         _ => Some(
             Finding::error(
-                &entity.location,
+                &model.location,
                 format!(
-                    "entity `{}` is not classified as a workspace or a global entity",
-                    entity.table
+                    "model `{name}` (table `{}`) is not classified as a workspace or a global entity",
+                    model.table
                 ),
             )
             .hint(format!(
-                "register it in its module: m.sea_workspace_entity::<{name}>() (its rows belong to one workspace) or m.sea_global_entity::<{name}>() (shared by every workspace), or port it to a navree-orm model"
+                "classify it in its module: #[model(workspace)] or m.workspace_entity::<{name}>() with impl WorkspaceScoped for {name} (its rows belong to one workspace), m.global_entity::<{name}>() (shared by every workspace) or m.library::<{name}>() (a shared library)"
             )),
         ),
     }
@@ -221,33 +233,38 @@ fn repo_check() -> ConformityCheck {
                 Err(reason) => return Ok(CheckOutcome::skipped(reason)),
             };
             let registry = Registry::of(&cx);
-            let workspace_entities: Vec<EntityDef> = project
-                .entities()
+            let workspace_models: Vec<ModelDef> = project
+                .models()
                 .into_iter()
-                .filter(|e| registry.workspace.contains_key(&e.table))
-                .collect();
-            let short_names: BTreeMap<String, String> = workspace_entities
-                .iter()
-                .map(|e| (e.table.clone(), e.short_name()))
+                .filter(|m| m.scopes_itself() || registry.workspace.contains_key(&m.table))
                 .collect();
             let findings: Vec<Finding> = project
-                .direct_accesses(&workspace_entities)
+                .direct_accesses(&workspace_models)
                 .into_iter()
                 .map(|access| {
-                    let name = short_names
-                        .get(&access.table)
-                        .cloned()
-                        .unwrap_or_else(|| "Entity".to_owned());
-                    Finding::error(
-                        access.location,
-                        format!(
-                            "reaches workspace entity `{}` directly with `{}`",
-                            access.table, access.expression
-                        ),
-                    )
-                    .hint(format!(
-                        "go through sea_compat::WorkspaceRepo::<{name}> (select, find, insert, update, delete), or mark a deliberate cross-workspace access with // {ALLOW_MARKER}"
-                    ))
+                    let name = &access.model;
+                    match access.kind {
+                        AccessKind::Unscoped => Finding::error(
+                            access.location,
+                            format!(
+                                "reaches workspace entity `{}` directly with `{}`",
+                                access.table, access.expression
+                            ),
+                        )
+                        .hint(format!(
+                            "go through WorkspaceRepo::<{name}> (query, find, find_or_fail, insert, update, delete), declare the model #[model(workspace)] so it scopes its own queries, or mark a deliberate cross-workspace access with // {ALLOW_MARKER}"
+                        )),
+                        AccessKind::LeavesScope => Finding::error(
+                            access.location,
+                            format!(
+                                "leaves the workspace scope of `{}` with `{}`",
+                                access.table, access.expression
+                            ),
+                        )
+                        .hint(format!(
+                            "name the workspace with .for_workspace(id) or WorkspaceRepo::<{name}>, or mark a deliberate cross-workspace access with // {ALLOW_MARKER}"
+                        )),
+                    }
                 })
                 .collect();
             Ok(CheckOutcome::checked(project.file_count()).findings(findings))
@@ -333,36 +350,65 @@ mod tests {
         }
     }
 
+    fn template(workspace: Option<&str>) -> ModelDef {
+        ModelDef {
+            name: "Template".to_owned(),
+            table: "templates".to_owned(),
+            workspace: workspace.map(str::to_owned),
+            path: vec!["app".into(), "template".into(), "Template".into()],
+            location: "src/template.rs:3".to_owned(),
+        }
+    }
+
     #[test]
     fn libraries_are_classified_once() {
-        let entity = EntityDef {
-            table: "templates".to_owned(),
-            path: vec!["app".into(), "template".into(), "Entity".into()],
-            location: "src/template.rs:3".to_owned(),
-        };
+        let model = template(None);
         let mut registry = Registry::default();
-        assert!(
-            classification_finding(&entity, &registry)
-                .unwrap()
-                .message
-                .contains("is not classified")
+        let unclassified = classification_finding(&model, &registry).unwrap();
+        assert_eq!(
+            unclassified.message,
+            "model `Template` (table `templates`) is not classified as a workspace or a global entity"
         );
+        let hint = unclassified.hint.unwrap();
+        assert!(hint.contains("m.workspace_entity::<Template>()"), "{hint}");
+        assert!(hint.contains("m.global_entity::<Template>()"), "{hint}");
+        assert!(!hint.contains("sea_"), "{hint}");
         registry.library.insert("templates".to_owned());
-        assert!(classification_finding(&entity, &registry).is_none());
+        assert!(classification_finding(&model, &registry).is_none());
         registry.global.insert("templates".to_owned());
-        let both = classification_finding(&entity, &registry).unwrap();
+        let both = classification_finding(&model, &registry).unwrap();
         assert_eq!(
             both.message,
-            "entity `templates` is classified as both a global and a library entity"
+            "model `Template` (table `templates`) is classified as both a global and a library entity"
         );
-        assert!(both.hint.unwrap().contains("m.library::<..>()"));
+        assert!(both.hint.unwrap().contains("m.library::<Template>()"));
         registry
             .workspace
             .insert("templates".to_owned(), "workspace_id");
         assert_eq!(
-            classification_finding(&entity, &registry).unwrap().message,
-            "entity `templates` is classified as a workspace, a global and a library entity"
+            classification_finding(&model, &registry).unwrap().message,
+            "model `Template` (table `templates`) is classified as a workspace, a global and a library entity"
         );
+    }
+
+    #[test]
+    fn self_scoping_models_are_workspace_entities_on_their_own() {
+        let model = template(Some("workspace_id"));
+        let mut registry = Registry::default();
+        assert!(classification_finding(&model, &registry).is_none());
+        // Registered as a workspace entity too: still one class.
+        registry
+            .workspace
+            .insert("templates".to_owned(), "workspace_id");
+        assert!(classification_finding(&model, &registry).is_none());
+        registry.workspace.clear();
+        registry.global.insert("templates".to_owned());
+        let both = classification_finding(&model, &registry).unwrap();
+        assert_eq!(
+            both.message,
+            "model `Template` (table `templates`) is classified as both a workspace and a global entity"
+        );
+        assert!(both.hint.unwrap().contains("#[model(workspace)]"));
     }
 
     #[test]

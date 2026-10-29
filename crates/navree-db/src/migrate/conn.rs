@@ -1,14 +1,9 @@
-//! What migrations run on: navree-db's pool and transactions ([`Conn`],
-//! [`Tx`]). SeaORM migrations, until every crate's are written with the
-//! schema builder, run on a SeaORM view of the same connections; a `Db`
-//! made from a scripted SeaORM connection (tests) runs everything through
-//! that connection.
+//! What migrations run on: navree-db's pool ([`Conn`]) and transactions
+//! ([`Tx`]).
 
 use navree_kernel::BoxFuture;
 use navree_schema::{Dialect, SchemaError, SchemaRow, SchemaValue};
-use sea_orm::{DatabaseConnection, DatabaseTransaction};
 
-use crate::compat::SeaExecutor;
 use crate::engine::driver::{Executed, RowStream};
 use crate::schema::{dialect, execute_on, query_on};
 use crate::{
@@ -16,34 +11,23 @@ use crate::{
     TxOptions,
 };
 
+/// A transaction a migration runs in.
+pub(super) type Tx = Transaction;
+
 /// The connection migrations run on.
 #[derive(Clone)]
 pub(super) struct Conn {
-    /// navree-db's pool; `None` for a `Db` made from a scripted SeaORM
-    /// connection.
-    pool: Option<Pool>,
-    /// The SeaORM connection on the same connections, for SeaORM
-    /// migrations.
-    sea: DatabaseConnection,
+    pool: Pool,
     /// Whether the pool was opened for the migrations alone (and is closed
     /// afterwards).
     dedicated: bool,
-}
-
-/// A transaction a migration runs in.
-pub(super) enum Tx {
-    /// navree-db's own.
-    Native(Transaction),
-    /// SeaORM's, for a SeaORM migration (or on a scripted connection).
-    Sea(DatabaseTransaction),
 }
 
 impl Conn {
     /// The connections of `db`.
     pub(super) fn of(db: &Db) -> Conn {
         Conn {
-            pool: db.pool().cloned(),
-            sea: db.conn().clone(),
+            pool: db.pool().clone(),
             dedicated: false,
         }
     }
@@ -68,11 +52,8 @@ impl Conn {
             },
             ..DbOptions::default()
         };
-        let pool = Pool::connect(&options).await?;
-        let sea = crate::db::sea_view(pool.driver());
         Ok(Conn {
-            pool: Some(pool),
-            sea,
+            pool: Pool::connect(&options).await?,
             dedicated: true,
         })
     }
@@ -88,13 +69,7 @@ impl Conn {
         dialect(Executor::backend(self))
     }
 
-    /// The SeaORM connection on the same connections.
-    pub(super) fn sea(&self) -> &DatabaseConnection {
-        &self.sea
-    }
-
-    /// Begins a transaction: navree-db's own (SeaORM's on a scripted
-    /// connection).
+    /// Begins a transaction.
     ///
     /// A migration reads before it writes (does the table exist? which
     /// foreign keys does it have?), and the migrations table is written in
@@ -105,26 +80,13 @@ impl Conn {
     /// transaction takes the write lock when it begins (`BEGIN IMMEDIATE`)
     /// and queues for it like any other writer.
     pub(super) async fn begin(&self) -> Result<Tx, DbError> {
-        match &self.pool {
-            Some(pool) => Ok(Tx::Native(
-                pool.begin_with(TxOptions::new().immediate()).await?,
-            )),
-            None => self.begin_sea().await,
-        }
-    }
-
-    /// Begins a SeaORM transaction on the same connections, for a SeaORM
-    /// migration (`IMMEDIATE` on SQLite, as [`begin`](Conn::begin)).
-    pub(super) async fn begin_sea(&self) -> Result<Tx, DbError> {
-        Ok(Tx::Sea(crate::db::begin_for_write(&self.sea).await?))
+        self.pool.begin_with(TxOptions::new().immediate()).await
     }
 
     /// Closes a dedicated pool.
     pub(super) async fn close(self) {
-        if self.dedicated
-            && let Some(pool) = &self.pool
-        {
-            pool.close().await;
+        if self.dedicated {
+            self.pool.close().await;
         }
     }
 
@@ -140,13 +102,11 @@ impl Conn {
     /// error) rather than going back to the pool with foreign keys off.
     pub(super) async fn drop_all_sqlite_tables(&self) -> Result<(), DbError> {
         #[cfg(feature = "sqlite")]
-        if let Some(pool) = &self.pool
-            && let crate::engine::driver::DriverPool::Sqlite(pool) = pool.driver()
-        {
+        if let crate::engine::driver::DriverPool::Sqlite(pool) = self.pool.driver() {
             return drop_all_sqlite_tables(pool).await;
         }
         Err(DbError::unsupported(
-            "migrate:fresh on SQLite needs navree-db's own SQLite pool",
+            "migrate:fresh on SQLite needs navree-db's SQLite driver (the `sqlite` feature)",
         ))
     }
 }
@@ -187,160 +147,53 @@ async fn drop_all_sqlite_tables(pool: &sqlx::SqlitePool) -> Result<(), DbError> 
     dedicated.close().await.map_err(error)
 }
 
-impl Tx {
-    /// The SeaORM transaction, for a SeaORM migration.
-    pub(super) fn sea(&self) -> Option<&DatabaseTransaction> {
-        match self {
-            Tx::Native(_) => None,
-            Tx::Sea(tx) => Some(tx),
-        }
-    }
-
-    /// Commits.
-    pub(super) async fn commit(self) -> Result<(), DbError> {
-        match self {
-            Tx::Native(tx) => tx.commit().await,
-            Tx::Sea(tx) => Ok(tx.commit().await?),
-        }
-    }
-
-    /// Rolls back.
-    pub(super) async fn rollback(self) -> Result<(), DbError> {
-        match self {
-            Tx::Native(tx) => tx.rollback().await,
-            Tx::Sea(tx) => Ok(tx.rollback().await?),
-        }
-    }
-}
-
-/// Statements on the pool, or through the scripted connection.
+/// Statements on the pool.
 impl Executor for Conn {
     fn backend(&self) -> Backend {
-        match &self.pool {
-            Some(pool) => pool.backend(),
-            None => SeaExecutor::new(&self.sea).backend(),
-        }
+        self.pool.backend()
     }
 
     fn execute<'a>(&'a self, statement: &'a Statement) -> BoxFuture<'a, Result<Executed, DbError>> {
-        match &self.pool {
-            Some(pool) => pool.execute(statement),
-            None => Box::pin(async move { SeaExecutor::new(&self.sea).execute(statement).await }),
-        }
+        self.pool.execute(statement)
     }
 
     fn fetch_all<'a>(
         &'a self,
         statement: &'a Statement,
     ) -> BoxFuture<'a, Result<Vec<Row>, DbError>> {
-        match &self.pool {
-            Some(pool) => pool.fetch_all(statement),
-            None => Box::pin(async move { SeaExecutor::new(&self.sea).fetch_all(statement).await }),
-        }
+        self.pool.fetch_all(statement)
     }
 
     fn fetch_optional<'a>(
         &'a self,
         statement: &'a Statement,
     ) -> BoxFuture<'a, Result<Option<Row>, DbError>> {
-        match &self.pool {
-            Some(pool) => pool.fetch_optional(statement),
-            None => {
-                Box::pin(async move { SeaExecutor::new(&self.sea).fetch_optional(statement).await })
-            }
-        }
+        self.pool.fetch_optional(statement)
     }
 
     fn fetch<'a>(&'a self, statement: &'a Statement) -> BoxFuture<'a, Result<RowStream, DbError>> {
-        match &self.pool {
-            Some(pool) => pool.fetch(statement),
-            None => Box::pin(async move { SeaExecutor::new(&self.sea).fetch(statement).await }),
-        }
+        self.pool.fetch(statement)
     }
 
     fn execute_script<'a>(&'a self, sql: &'a str) -> BoxFuture<'a, Result<Executed, DbError>> {
-        match &self.pool {
-            Some(pool) => pool.execute_script(sql),
-            None => Box::pin(async move { SeaExecutor::new(&self.sea).execute_script(sql).await }),
-        }
+        self.pool.execute_script(sql)
     }
 }
 
-/// Statements in the transaction.
-impl Executor for Tx {
-    fn backend(&self) -> Backend {
-        match self {
-            Tx::Native(tx) => tx.backend(),
-            Tx::Sea(tx) => SeaExecutor::new(tx).backend(),
-        }
+impl navree_schema::SchemaConnection for Conn {
+    fn backend(&self) -> Dialect {
+        dialect(Executor::backend(self))
     }
 
-    fn execute<'a>(&'a self, statement: &'a Statement) -> BoxFuture<'a, Result<Executed, DbError>> {
-        match self {
-            Tx::Native(tx) => tx.execute(statement),
-            Tx::Sea(tx) => Box::pin(async move { SeaExecutor::new(tx).execute(statement).await }),
-        }
+    fn execute<'a>(&'a self, sql: &'a str) -> BoxFuture<'a, Result<(), SchemaError>> {
+        Box::pin(execute_on(self, sql))
     }
 
-    fn fetch_all<'a>(
+    fn query<'a>(
         &'a self,
-        statement: &'a Statement,
-    ) -> BoxFuture<'a, Result<Vec<Row>, DbError>> {
-        match self {
-            Tx::Native(tx) => tx.fetch_all(statement),
-            Tx::Sea(tx) => Box::pin(async move { SeaExecutor::new(tx).fetch_all(statement).await }),
-        }
-    }
-
-    fn fetch_optional<'a>(
-        &'a self,
-        statement: &'a Statement,
-    ) -> BoxFuture<'a, Result<Option<Row>, DbError>> {
-        match self {
-            Tx::Native(tx) => tx.fetch_optional(statement),
-            Tx::Sea(tx) => {
-                Box::pin(async move { SeaExecutor::new(tx).fetch_optional(statement).await })
-            }
-        }
-    }
-
-    fn fetch<'a>(&'a self, statement: &'a Statement) -> BoxFuture<'a, Result<RowStream, DbError>> {
-        match self {
-            Tx::Native(tx) => tx.fetch(statement),
-            Tx::Sea(tx) => Box::pin(async move { SeaExecutor::new(tx).fetch(statement).await }),
-        }
-    }
-
-    fn execute_script<'a>(&'a self, sql: &'a str) -> BoxFuture<'a, Result<Executed, DbError>> {
-        match self {
-            Tx::Native(tx) => tx.execute_script(sql),
-            Tx::Sea(tx) => Box::pin(async move { SeaExecutor::new(tx).execute_script(sql).await }),
-        }
+        sql: &'a str,
+        params: &'a [SchemaValue],
+    ) -> BoxFuture<'a, Result<Vec<SchemaRow>, SchemaError>> {
+        Box::pin(query_on(self, sql, params))
     }
 }
-
-macro_rules! schema_connection {
-    ($($ty:ty),*) => {
-        $(
-            impl navree_schema::SchemaConnection for $ty {
-                fn backend(&self) -> Dialect {
-                    dialect(Executor::backend(self))
-                }
-
-                fn execute<'a>(&'a self, sql: &'a str) -> BoxFuture<'a, Result<(), SchemaError>> {
-                    Box::pin(execute_on(self, sql))
-                }
-
-                fn query<'a>(
-                    &'a self,
-                    sql: &'a str,
-                    params: &'a [SchemaValue],
-                ) -> BoxFuture<'a, Result<Vec<SchemaRow>, SchemaError>> {
-                    Box::pin(query_on(self, sql, params))
-                }
-            }
-        )*
-    };
-}
-
-schema_connection!(Conn, Tx);

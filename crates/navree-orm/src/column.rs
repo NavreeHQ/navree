@@ -497,9 +497,8 @@ fn json_suffix(column: &ColumnRef) -> String {
 /// A condition for `where_`, `having` and join clauses.
 ///
 /// Built from columns (`Deal::STAGE.eq(Stage::Won)`, `col("x").gt(5)`),
-/// expressions (`Expr::count_all().gt(3)`), raw SQL ([`Filter::raw`]), a
-/// [render-tree](crate::render::ast) condition, or a sea-query condition
-/// (navree-db's `contains_ignore_case`), and combined with
+/// expressions (`Expr::count_all().gt(3)`), raw SQL ([`Filter::raw`]), or a
+/// [render-tree](crate::render::ast) condition, and combined with
 /// [`and`](Filter::and), [`or`](Filter::or) and [`not`](Filter::not).
 #[derive(Clone, Debug)]
 pub struct Filter(pub(crate) Where);

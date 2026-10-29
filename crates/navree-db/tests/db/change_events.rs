@@ -1,16 +1,16 @@
-//! When change events are prepared: as `Repo` writes when the app has a
-//! change observer, and only when `uow.changes()` asks otherwise (an app
-//! that nobody observes pays for no serialization).
+//! When change events are prepared: as recorded writes run when the app
+//! has a change observer, and only when `uow.changes()` asks otherwise (an
+//! app that nobody observes pays for no serialization).
 
 use std::cell::Cell;
 use std::sync::{Arc, Mutex};
 
 use navree_db::{
-    ChangeEvent, ChangeObserver, ChangeOp, DatabaseModule, Db, MigrationSet, ModuleBuilderDbExt,
-    Repo, Uow,
+    ChangeEvent, ChangeObserver, ChangeOp, DatabaseModule, Db, DbError, MigrationSet,
+    ModuleBuilderDbExt, Uow, record,
 };
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Navree, Resolver};
-use sea_orm::{ActiveValue::Set, DatabaseTransaction, DbErr, IntoActiveModel};
+use serde::ser::SerializeStruct;
 use serde_json::json;
 use uuid::Uuid;
 
@@ -18,7 +18,7 @@ use crate::fixtures::{CreateNotes, notes_db};
 use crate::support::TempDb;
 
 thread_local! {
-    /// How many `counted` rows this thread serialized.
+    /// How many `Counted` rows this thread serialized.
     static SERIALIZED: Cell<usize> = const { Cell::new(0) };
 }
 
@@ -26,61 +26,53 @@ fn serialized() -> usize {
     SERIALIZED.get()
 }
 
-/// The `notes` table, with a model that counts its serializations.
-mod counted {
-    use sea_orm::entity::prelude::*;
-    use serde::ser::SerializeStruct;
-
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
-    #[sea_orm(table_name = "notes")]
-    pub struct Model {
-        #[sea_orm(primary_key, auto_increment = false)]
-        pub id: Uuid,
-        pub title: String,
-        pub body: String,
+navree_db::record! {
+    /// The `notes` table, as a record that counts its serializations.
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    struct Counted in "notes" {
+        id: Uuid,
+        title: String,
+        body: String,
     }
-
-    impl serde::Serialize for Model {
-        fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-            super::SERIALIZED.set(super::SERIALIZED.get() + 1);
-            let mut note = serializer.serialize_struct("Model", 3)?;
-            note.serialize_field("id", &self.id)?;
-            note.serialize_field("title", &self.title)?;
-            note.serialize_field("body", &self.body)?;
-            note.end()
-        }
-    }
-
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
-type Counted = Repo<counted::Entity>;
+impl serde::Serialize for Counted {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        SERIALIZED.set(SERIALIZED.get() + 1);
+        let mut note = serializer.serialize_struct("Counted", 3)?;
+        note.serialize_field("id", &self.id)?;
+        note.serialize_field("title", &self.title)?;
+        note.serialize_field("body", &self.body)?;
+        note.end()
+    }
+}
 
-fn new_counted(title: &str) -> counted::ActiveModel {
-    counted::ActiveModel {
-        id: Set(Uuid::now_v7()),
-        title: Set(title.to_owned()),
-        body: Set(format!("body of {title}")),
+fn new_counted(title: &str) -> Counted {
+    Counted {
+        id: Uuid::now_v7(),
+        title: title.to_owned(),
+        body: format!("body of {title}"),
     }
 }
 
 /// Inserts, updates (twice: once without a change) and deletes a note.
 async fn write_through(uow: &Uow) -> Uuid {
-    let created = Counted::insert(uow, new_counted("a"))
+    let created = record::insert_recorded(uow, &new_counted("a"))
         .await
         .expect("insert");
-    let mut changed = created.clone().into_active_model();
-    changed.body = Set("changed".into());
-    let updated = Counted::update(uow, changed).await.expect("update");
-    let mut same = updated.clone().into_active_model();
-    same.body = Set(updated.body.clone());
-    let unchanged = Counted::update(uow, same)
+    let changed = Counted {
+        body: "changed".into(),
+        ..created.clone()
+    };
+    let updated = record::update_recorded(uow, &created, &changed)
+        .await
+        .expect("update");
+    let unchanged = record::update_recorded(uow, &updated, &updated.clone())
         .await
         .expect("update without a change");
-    Counted::delete(uow, unchanged).await.expect("delete");
+    record::delete_recorded(uow, &unchanged)
+        .await
+        .expect("delete");
     created.id
 }
 
@@ -153,10 +145,9 @@ impl Injectable for Recorder {
 impl ChangeObserver for Recorder {
     fn observe<'a>(
         &'a self,
-        _tx: &'a DatabaseTransaction,
         _uow: &'a Uow,
         changes: &'a [ChangeEvent],
-    ) -> BoxFuture<'a, Result<(), DbErr>> {
+    ) -> BoxFuture<'a, Result<(), DbError>> {
         self.0.0.lock().unwrap().extend_from_slice(changes);
         Box::pin(async { Ok(()) })
     }
@@ -187,7 +178,7 @@ async fn with_an_observer_events_are_prepared_as_records_are_written() {
     let uow = db.uow(None, None).await;
 
     let before = serialized();
-    Counted::insert(&uow, new_counted("b"))
+    record::insert_recorded(&uow, &new_counted("b"))
         .await
         .expect("insert");
     assert_eq!(serialized(), before + 1, "serialized as it is written");

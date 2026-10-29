@@ -28,10 +28,7 @@
 //!
 //! The module's tables are navree-db records ([`entity`]), created by a
 //! navree-schema migration; list filters are navree-db values and portable
-//! statements ([`SqlFilter::to_statement`]). The SeaORM forms some crates
-//! still use (entities as subjects, `Accessible::apply` on a SeaORM select,
-//! [`EntityColumns`], [`record_json`]) are a compatibility shim that goes
-//! once those crates are ported.
+//! statements ([`SqlFilter::to_statement`]).
 #![forbid(unsafe_code)]
 
 pub mod engine;
@@ -50,8 +47,6 @@ mod module;
 mod options;
 mod permission_check;
 mod records;
-// SeaORM compatibility shim: remove in step 8 of the data-layer port.
-mod sea_compat;
 mod service;
 mod store;
 mod subject;
@@ -71,6 +66,4 @@ pub use module::AccessModule;
 pub use options::{AbilitiesFn, AccessOptions, default_abilities};
 pub use records::{Policy, SubjectRecords};
 pub use service::{AccessService, Explanation, RoleInfo};
-// The SeaORM shim's names (remove in step 8).
-pub use sea_compat::{EntityColumns, record_json};
 pub use subject::row_json;

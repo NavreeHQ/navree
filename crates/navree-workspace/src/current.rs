@@ -514,7 +514,7 @@ impl Guard for InWorkspace {
 /// How to check that a record of a workspace-scoped subject belongs to a
 /// workspace: what
 /// [`workspace_scoped`](crate::ModuleBuilderWorkspaceExt::workspace_scoped)
-/// registers (and, for SeaORM entities, the compatibility layer).
+/// registers.
 pub(crate) struct ScopedSubject {
     pub(crate) subject: &'static str,
     pub(crate) belongs: fn(Uow, Uuid, String) -> BoxFuture<'static, Result<bool, BoxError>>,

@@ -58,7 +58,7 @@ pub async fn commit_rollback_and_drop(scratch: Scratch) {
     assert_eq!(bodies(&db).await, ["kept"]);
 
     // Every connection went back to the pool usable, outside a transaction.
-    for _ in 0..db.pool().unwrap().stats().size + 1 {
+    for _ in 0..db.pool().stats().size + 1 {
         let tx = db.begin().await.unwrap();
         assert_eq!(bodies(&tx).await, ["kept"]);
         tx.rollback().await.unwrap();

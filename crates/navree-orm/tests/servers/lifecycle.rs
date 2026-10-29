@@ -6,7 +6,7 @@ use std::sync::Mutex;
 
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use navree_db::Db;
-use navree_db::sea_orm::ConnectionTrait;
+use navree_db::Executor as _;
 use navree_orm::hooks::{Flow, ModelEvent};
 use navree_orm::prune::{MassPrunable, Prunable};
 use navree_orm::{
@@ -136,8 +136,8 @@ fn memo(server: Server, body: &str) -> Memo {
 /// The lifecycle on `server`.
 pub async fn scenario(db: Db, server: Server) {
     for statement in schema(server) {
-        db.conn()
-            .execute_unprepared(statement)
+        db.pool()
+            .execute_script(statement)
             .await
             .unwrap_or_else(|error| panic!("{statement}: {error}"));
     }

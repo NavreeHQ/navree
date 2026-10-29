@@ -259,7 +259,7 @@ impl Injectable for DeleteWithModel {
 }
 
 impl ChangeObserver for DeleteWithModel {
-    fn observe_with<'a>(
+    fn observe<'a>(
         &'a self,
         uow: &'a Uow,
         changes: &'a [ChangeEvent],

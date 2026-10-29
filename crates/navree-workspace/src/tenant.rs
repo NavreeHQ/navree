@@ -239,7 +239,7 @@ impl WorkspaceDatabases {
         })?;
         // The main database's settings, without its read replicas.
         let options = self.options.for_database(url);
-        let db = Arc::new(Db::connect(&options).await?);
+        let db = Arc::new(Db::connect(&options).await.map_err(WorkspaceError::db)?);
         let ran = match self.app.upgrade() {
             Some(app) => migrate_db(&db, &workspace_sets(&app)).await?,
             None => Vec::new(),

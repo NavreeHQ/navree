@@ -699,6 +699,18 @@ fn forbidden_crypto_packages(lock: &str) -> Vec<String> {
     listed_packages(lock, FORBIDDEN_CRYPTO_PACKAGES)
 }
 
+/// Packages of another data layer listed in a `Cargo.lock`: any `sea-*`
+/// crate. Navree's data layer is its own (navree-db on SQLx, navree-orm,
+/// navree-schema), so none may come back through a dependency.
+fn other_data_layer_packages(lock: &str) -> Vec<String> {
+    lock.lines()
+        .filter_map(|line| line.trim().strip_prefix("name = \""))
+        .filter_map(|rest| rest.strip_suffix('"'))
+        .filter(|name| name.starts_with("sea-"))
+        .map(str::to_owned)
+        .collect()
+}
+
 /// The packages of `names` that a `Cargo.lock` lists.
 fn listed_packages(lock: &str, names: &[&str]) -> Vec<String> {
     lock.lines()
@@ -798,6 +810,38 @@ fn lockfile_follows_the_crypto_policy() {
     );
 }
 
+/// Navree's data layer is its own: no `sea-*` crate (sea-orm, sea-query,
+/// sea-orm-migration, sea-schema and their helpers) is in the resolved
+/// graph, and no workspace crate declares one.
+#[test]
+fn no_other_data_layer_is_in_the_graph() {
+    let lockfile = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Cargo.lock");
+    let lock = std::fs::read_to_string(&lockfile).expect("Cargo.lock is readable");
+    let found = other_data_layer_packages(&lock);
+    assert!(
+        found.is_empty(),
+        "Cargo.lock contains `sea-*` packages: {found:?}; Navree's data layer is          navree-db, navree-orm and navree-schema. Find what pulls them in with          `cargo tree -i <package>`"
+    );
+    let metadata = workspace_metadata();
+    let declared: Vec<String> = packages(&metadata)
+        .iter()
+        .flat_map(|package| {
+            let from = str_field(package, "name").to_owned();
+            package["dependencies"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|dependency| str_field(dependency, "name").to_owned())
+                .filter(|name| name.starts_with("sea-"))
+                .map(move |name| format!("{from} -> {name}"))
+        })
+        .collect();
+    assert!(
+        declared.is_empty(),
+        "workspace crates declare `sea-*` dependencies: {declared:?}"
+    );
+}
+
 #[test]
 fn hierarchy_table_lists_exactly_the_workspace_crates() {
     let in_workspace = workspace_crates(&workspace_metadata());
@@ -852,7 +896,7 @@ fn navree_edges_are_read_from_cargo_metadata_with_their_kind() {
                 "name": "navree-db",
                 "dependencies": [
                     { "name": "navree-http", "kind": null, "rename": null },
-                    { "name": "sea-orm", "kind": null, "rename": null },
+                    { "name": "sqlx", "kind": null, "rename": null },
                     { "name": "navree-kernel", "kind": "dev", "rename": "kernel" },
                     { "name": "navree-config", "kind": "build", "rename": null }
                 ]
@@ -902,6 +946,33 @@ version = "0.9.109"
     assert_eq!(
         forbidden_native_packages(lock),
         vec!["aws-lc-sys".to_owned(), "openssl-sys".to_owned()]
+    );
+}
+
+#[test]
+fn other_data_layer_packages_are_found_in_a_lockfile() {
+    let lock = r#"
+version = 4
+
+[[package]]
+name = "sea-query"
+version = "1.0.2"
+
+[[package]]
+name = "seahash"
+version = "4.1.0"
+
+[[package]]
+name = "sqlx"
+version = "0.9.0"
+
+[[package]]
+name = "sea-orm-migration"
+version = "2.0.4"
+"#;
+    assert_eq!(
+        other_data_layer_packages(lock),
+        vec!["sea-query".to_owned(), "sea-orm-migration".to_owned()]
     );
 }
 

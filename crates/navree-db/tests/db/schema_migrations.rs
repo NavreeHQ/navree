@@ -1,6 +1,6 @@
-//! Migrations written with the schema builder: run beside SeaORM ones, by
-//! batch and step, rolled back, reset and refreshed, pretended, dumped and
-//! loaded, and through the commands.
+//! Migrations written with the schema builder: by batch and step, rolled
+//! back, reset and refreshed, pretended, dumped and loaded, and through
+//! the commands.
 
 use std::path::Path;
 
@@ -9,8 +9,8 @@ use navree_db::{
     DatabaseModule, Db, FreshOptions, MigrateOptions, MigrationSet, Migrator, ModuleBuilderDbExt,
     RollbackOptions,
 };
+use navree_db::{Executor, ExecutorExt, Statement};
 use navree_kernel::{App, AppBuilder, Module, ModuleBuilder, Navree};
-use sea_orm::{ConnectionTrait, Statement};
 use serde_json::json;
 
 use crate::fixtures::{CreateTable, count, tables};
@@ -131,7 +131,8 @@ mod m0001_create_events {
     }
 }
 
-/// `crm`: companies and deals (schema migrations) and tags (SeaORM), plus
+/// `crm`: companies and deals (module migrations) and tags (a migration of
+/// its own type, `CreateTable`), plus
 /// `extra` later migrations.
 struct Crm {
     extra: Vec<&'static str>,
@@ -185,9 +186,8 @@ async fn db(app: &App) -> Db {
 }
 
 async fn batches(db: &Db) -> Vec<(String, i64)> {
-    db.conn()
-        .query_all_raw(Statement::from_string(
-            db.backend(),
+    db.pool()
+        .fetch_all(&Statement::text(
             "SELECT module || '/' || name AS migration, batch FROM navree_migrations ORDER BY batch, module, name",
         ))
         .await
@@ -195,15 +195,15 @@ async fn batches(db: &Db) -> Vec<(String, i64)> {
         .iter()
         .map(|row| {
             (
-                row.try_get::<String>("", "migration").unwrap(),
-                row.try_get::<i64>("", "batch").unwrap(),
+                row.get::<String>("migration").unwrap(),
+                row.get::<i64>("batch").unwrap(),
             )
         })
         .collect()
 }
 
 #[tokio::test]
-async fn schema_and_seaorm_migrations_share_a_set() {
+async fn the_migrations_of_a_set_run_in_name_order() {
     let temp = TempDb::new();
     let app = boot(crm_app(&temp, &[])).await;
     let report = Migrator::run(app.ctx(), &MigrateOptions::default())
@@ -326,8 +326,8 @@ async fn refresh_rolls_back_then_migrates() {
     let app = boot(crm_app(&temp, &[])).await;
     let db = db(&app).await;
     Migrator::up(app.ctx()).await.unwrap();
-    db.conn()
-        .execute_unprepared("INSERT INTO companies (name) VALUES ('Acme')")
+    db.pool()
+        .execute_script("INSERT INTO companies (name) VALUES ('Acme')")
         .await
         .unwrap();
     let refreshed = Migrator::refresh(app.ctx(), None).await.unwrap();
@@ -374,10 +374,10 @@ async fn pretend_records_the_sql_and_changes_nothing() {
         "CREATE TABLE \"deals\" (\"id\" INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, \"company_id\" INTEGER NOT NULL, \"title\" VARCHAR NOT NULL, \"created_at\" DATETIME, \"updated_at\" DATETIME, FOREIGN KEY (\"company_id\") REFERENCES \"companies\" (\"id\") ON DELETE CASCADE)"
     );
     let tags = &report.migrations[2].statements;
-    assert_eq!(tags.len(), 1, "{tags:?}");
+    assert_eq!(tags.len(), 2, "the table and its unique index: {tags:?}");
     assert!(
         tags[0].starts_with("CREATE TABLE \"tags\""),
-        "a SeaORM migration's statements are recorded too: {tags:?}"
+        "every migration's statements are recorded: {tags:?}"
     );
     assert!(
         tables(&db).await.is_empty(),
@@ -416,8 +416,8 @@ async fn sqlite_rebuilds_keep_the_rows_that_reference_the_table() {
     let first = boot(crm_app(&temp, &[])).await;
     Migrator::up(first.ctx()).await.unwrap();
     let db = db(&first).await;
-    db.conn()
-        .execute_unprepared(
+    db.pool()
+        .execute_script(
             "INSERT INTO companies (name) VALUES ('Acme'); \
              INSERT INTO deals (company_id, title) VALUES (1, 'Big one')",
         )
@@ -437,17 +437,12 @@ async fn sqlite_rebuilds_keep_the_rows_that_reference_the_table() {
         "rebuilding companies did not cascade into deals"
     );
     for _ in 0..3 {
-        let row = db
-            .conn()
-            .query_one_raw(Statement::from_string(db.backend(), "PRAGMA foreign_keys"))
+        let on: i32 = db
+            .pool()
+            .fetch_scalar(&Statement::text("PRAGMA foreign_keys"))
             .await
-            .unwrap()
             .unwrap();
-        assert_eq!(
-            row.try_get_by_index::<i32>(0).unwrap(),
-            1,
-            "the pool still enforces foreign keys"
-        );
+        assert_eq!(on, 1, "the pool still enforces foreign keys");
     }
     Migrator::rollback(app.ctx()).await.unwrap();
     assert_eq!(count(&db, "deals").await, 1);
@@ -565,8 +560,8 @@ async fn fresh_drops_views_on_request() {
     let app = boot(crm_app(&temp, &[])).await;
     Migrator::up(app.ctx()).await.unwrap();
     let db = db(&app).await;
-    db.conn()
-        .execute_unprepared("CREATE VIEW company_names AS SELECT name FROM companies")
+    db.pool()
+        .execute_script("CREATE VIEW company_names AS SELECT name FROM companies")
         .await
         .unwrap();
     let report = Migrator::fresh_with(
@@ -580,9 +575,8 @@ async fn fresh_drops_views_on_request() {
     .unwrap();
     assert_eq!(report.migrations.len(), 3);
     let views = db
-        .conn()
-        .query_all_raw(Statement::from_string(
-            db.backend(),
+        .pool()
+        .fetch_all(&Statement::text(
             "SELECT name FROM sqlite_master WHERE type = 'view'",
         ))
         .await

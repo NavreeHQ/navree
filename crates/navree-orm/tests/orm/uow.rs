@@ -203,20 +203,18 @@ async fn mass_writes_run_in_the_unit_of_work_without_events() {
     assert_eq!(count_rows(&t.db, "companies").await, 2);
 }
 
-/// A unit of work on navree-db's own transaction (no SeaORM transaction to
-/// hand out) runs every ORM operation: reads and writes in its transaction,
+/// A unit of work runs every ORM operation: reads and writes in its transaction,
 /// `&Db` joining it, savepoints for the work that must stand alone, and
 /// cursors that hold its connection.
 #[tokio::test]
-async fn units_of_work_on_navree_db_s_own_transaction_run_the_orm() {
+async fn units_of_work_run_the_orm() {
     use futures::TryStreamExt;
 
     use crate::models::Tag;
 
     let t = sqlite().await;
-    let db = t.db.with_native_units_of_work(true);
+    let db = t.db.clone();
     let uow = db.uow(None, None).await;
-    assert!(uow.tx().await.is_err(), "no SeaORM transaction to hand out");
     let acme = Company::create(
         &uow,
         Company {

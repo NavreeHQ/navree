@@ -5,8 +5,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use navree_db::{Db, QueryLog, RepeatedQuery};
-use sea_orm::{ConnectionTrait, DbBackend, Statement};
+use navree_db::{Backend, Db, Executor, QueryLog, RepeatedQuery, Statement, Value};
 
 use crate::support::{LogCapture, TempDb};
 
@@ -15,29 +14,29 @@ const INSERT: &str = "INSERT INTO people (name) VALUES (?)";
 async fn people() -> (Db, TempDb) {
     let temp = TempDb::new();
     let db = Db::connect(&temp.options()).await.unwrap();
-    db.conn()
-        .execute_unprepared("CREATE TABLE people (id INTEGER PRIMARY KEY, name TEXT NOT NULL)")
+    db.pool()
+        .execute_script("CREATE TABLE people (id INTEGER PRIMARY KEY, name TEXT NOT NULL)")
         .await
         .unwrap();
     (db, temp)
 }
 
 fn insert(name: &str) -> Statement {
-    Statement::from_sql_and_values(DbBackend::Sqlite, INSERT, [name.into()])
+    Statement::portable(INSERT, [name.into()])
 }
 
 fn select() -> Statement {
-    Statement::from_string(DbBackend::Sqlite, "SELECT name FROM people")
+    Statement::text("SELECT name FROM people")
 }
 
 #[tokio::test]
 async fn query_logs_capture_the_statements_of_a_scope() {
     let (db, _temp) = people().await;
     let (inner_count, queries) = QueryLog::capture(async {
-        db.conn().execute_raw(insert("ada")).await.unwrap();
+        db.pool().execute(&insert("ada")).await.unwrap();
         let (_, inner) = QueryLog::capture(async {
             assert!(QueryLog::is_capturing());
-            db.conn().query_all_raw(select()).await.unwrap()
+            db.pool().fetch_all(&select()).await.unwrap()
         })
         .await;
         inner.len()
@@ -50,20 +49,20 @@ async fn query_logs_capture_the_statements_of_a_scope() {
         "the outer capture sees the inner one's statements"
     );
     assert_eq!(queries[0].sql, INSERT);
-    assert_eq!(queries[0].values, [sea_orm::Value::from("ada")]);
+    assert_eq!(queries[0].values, [Value::from("ada")]);
     assert_eq!(
         queries[0].raw_sql(),
         "INSERT INTO people (name) VALUES ('ada')"
     );
     assert_eq!(&*queries[0].connection, "default");
-    assert_eq!(queries[0].backend, DbBackend::Sqlite);
+    assert_eq!(queries[0].backend, Backend::Sqlite);
     assert!(!queries[0].failed);
     assert_eq!(queries[1].sql, "SELECT name FROM people");
     assert!(!QueryLog::is_capturing());
 
     let (_, failed) = QueryLog::capture(async {
-        let missing = Statement::from_string(DbBackend::Sqlite, "SELECT * FROM missing");
-        db.conn().query_all_raw(missing).await.unwrap_err()
+        let missing = Statement::text("SELECT * FROM missing");
+        db.pool().fetch_all(&missing).await.unwrap_err()
     })
     .await;
     assert!(failed[0].failed);
@@ -84,15 +83,11 @@ async fn listeners_and_hooks_see_statements_and_transactions() {
     let hook = executing.clone();
     db.before_executing(move |sql| hook.lock().unwrap().push(sql.to_owned()));
 
-    db.conn().execute_raw(insert("ada")).await.unwrap();
+    db.execute(&insert("ada")).await.unwrap();
     // Every handle on the pool shares the listeners.
-    db.clone()
-        .conn()
-        .execute_raw(insert("grace"))
-        .await
-        .unwrap();
+    db.clone().execute(&insert("grace")).await.unwrap();
     db.transaction(|uow| async move {
-        uow.tx().await?.execute_raw(insert("edsger")).await?;
+        uow.execute(&insert("edsger")).await?;
         Ok(())
     })
     .await
@@ -115,8 +110,22 @@ async fn listeners_and_hooks_see_statements_and_transactions() {
     );
     assert_eq!(transactions.load(Ordering::SeqCst), 1);
     // Statement hooks run for code that announces its statements.
+    let announced: Vec<String> = executing
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|sql| *sql == "SELECT 1")
+        .cloned()
+        .collect();
+    assert!(announced.is_empty());
     db.run_before_executing("SELECT 1");
-    assert_eq!(*executing.lock().unwrap(), ["SELECT 1"]);
+    assert!(
+        executing
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|sql| sql == "SELECT 1")
+    );
     db.run_before_starting_transaction();
     assert_eq!(transactions.load(Ordering::SeqCst), 2);
 }
@@ -133,11 +142,10 @@ async fn units_of_work_count_their_statements() {
     });
     let uow = db.uow(None, Some("req-1".into())).await;
     uow.scope(async {
-        let tx = uow.tx().await.unwrap();
         for name in ["a", "b", "c"] {
-            tx.execute_raw(insert(name)).await.unwrap();
+            uow.execute(&insert(name)).await.unwrap();
         }
-        tx.query_all_raw(select()).await.unwrap();
+        uow.fetch_all(&select()).await.unwrap();
     })
     .await;
     let stats = uow.query_stats();
@@ -158,12 +166,7 @@ async fn units_of_work_count_their_statements() {
     }
     uow.allow_duration_handlers_again();
     uow.scope(async {
-        uow.tx()
-            .await
-            .unwrap()
-            .execute_raw(insert("d"))
-            .await
-            .unwrap();
+        uow.execute(&insert("d")).await.unwrap();
     })
     .await;
     assert_eq!(slow.lock().unwrap().len(), 2, "allowed again");
@@ -174,7 +177,7 @@ async fn units_of_work_count_their_statements() {
 
     // Statements outside the unit of work's scope are not its own.
     let other = db.uow(None, None).await;
-    db.conn().execute_raw(insert("e")).await.unwrap();
+    db.pool().execute(&insert("e")).await.unwrap();
     assert_eq!(other.query_stats().statements, 0);
 }
 
@@ -185,11 +188,8 @@ async fn a_finished_unit_of_work_logs_its_statements_and_repeats() {
     let _guard = logs.install();
     let uow = db.uow(None, Some("req-9".into())).await;
     uow.scope(async {
-        let tx = uow.tx().await.unwrap();
         for n in 0..10 {
-            tx.execute_raw(insert(&format!("person {n}")))
-                .await
-                .unwrap();
+            uow.execute(&insert(&format!("person {n}"))).await.unwrap();
         }
     })
     .await;

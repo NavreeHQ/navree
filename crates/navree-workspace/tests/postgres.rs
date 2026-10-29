@@ -9,8 +9,6 @@
 //! test creates its own database and a non-superuser login role (superusers
 //! bypass row-level security), and drops both at the end. Every model is a
 //! navree-orm model: row-level security and schemas cover their queries.
-//! `NAVREE_TEST_NATIVE_UNITS_OF_WORK=1` runs the units of work on
-//! navree-db's own transactions.
 #![cfg(feature = "postgres")]
 
 use std::sync::Arc;
@@ -224,16 +222,9 @@ async fn run(admin: &str, sql: &str) {
     pool.close().await;
 }
 
-/// A test app on `scratch`, with the current kind of units of work
-/// (`NAVREE_TEST_NATIVE_UNITS_OF_WORK=1`: navree-db's own transactions).
+/// A test app on `scratch`.
 fn builder(scratch: &Scratch) -> TestAppBuilder {
-    let builder = TestApp::builder();
-    let builder = if std::env::var("NAVREE_TEST_NATIVE_UNITS_OF_WORK").as_deref() == Ok("1") {
-        builder.config("database.native_units_of_work", true)
-    } else {
-        builder
-    };
-    builder.config("database.url", scratch.url.clone())
+    TestApp::builder().config("database.url", scratch.url.clone())
 }
 
 /// The single row of `sql`'s column `column`, read in `uow`.

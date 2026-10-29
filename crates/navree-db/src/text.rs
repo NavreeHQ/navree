@@ -1,7 +1,10 @@
 //! Case-insensitive text matching that also folds non-ASCII letters:
 //! [`contains_ignore_case`] and [`eq_ignore_case`], with the same results on
 //! SQLite, PostgreSQL and MySQL: case is ignored, accents are not (`équipe`
-//! finds `Équipe` but not `Equipe`).
+//! finds `Équipe` but not `Equipe`). Each returns a condition as a portable
+//! [`Statement`] fragment (SQL with `?` placeholders and their values) for
+//! statements built by hand; navree-orm's columns have the same matching
+//! (`Deal::TITLE.contains_ignore_case(..)`).
 //!
 //! The usual `LOWER(column) LIKE '%term%'` falls short on every database:
 //!
@@ -30,67 +33,82 @@
 //! does (`ΟΔΟΣ` → `οδοσ`, where `str::to_lowercase` would end the word
 //! with `ς`).
 
-use sea_orm::DbBackend;
-use sea_orm::sea_query::{BinOper, Expr, ExprTrait, Func, LikeExpr};
+use crate::{Backend, Statement};
 
-/// `expr` contains `term`, ignoring case (simple Unicode case mapping).
-/// Every character of `term` matches itself: `%`, `_`, `*`, `?`, `[`, `\`
-/// and the regular-expression characters are not wildcards. Like any
-/// "contains" search, it reads every row: no index helps.
+/// `expr` contains `term`, ignoring case (simple Unicode case mapping), as
+/// a portable condition: `expr` is SQL (a quoted column, an expression;
+/// a `?` in it is a placeholder), the term is bound. Every character of
+/// `term` matches itself: `%`, `_`, `*`, `?`, `[`, `\` and the
+/// regular-expression characters are not wildcards. Like any "contains"
+/// search, it reads every row: no index helps.
 ///
 /// ```
-/// use navree_db::contains_ignore_case;
-/// use sea_orm::DbBackend;
-/// use sea_orm::sea_query::{Alias, Expr, MysqlQueryBuilder, Query};
+/// use navree_db::{Backend, Value, contains_ignore_case};
 ///
-/// let sql = Query::select()
-///     .column(Alias::new("name"))
-///     .from(Alias::new("companies"))
-///     .and_where(contains_ignore_case(DbBackend::MySql, Expr::col(Alias::new("name")), "Équipe"))
-///     .to_string(MysqlQueryBuilder);
-/// assert!(sql.ends_with("WHERE INSTR(CAST(LOWER(`name`) AS BINARY), CAST('équipe' AS BINARY)) > 0"));
+/// let backend = Backend::MySql;
+/// let condition = contains_ignore_case(backend, &backend.quote_identifier("name"), "Équipe");
+/// assert_eq!(condition.sql(), "INSTR(CAST(LOWER(`name`) AS BINARY), CAST(? AS BINARY)) > 0");
+/// assert_eq!(condition.values(), [Value::from("équipe")]);
 /// ```
 ///
-/// With an entity, pass the backend of the connection the query runs on:
+/// In a statement of your own, append the fragment's SQL and its values:
 ///
-/// ```ignore
-/// let backend = uow.db().backend();
-/// select = select.filter(contains_ignore_case(backend, Expr::col(company::Column::Name), "équipe"));
 /// ```
-pub fn contains_ignore_case(backend: DbBackend, expr: impl Into<Expr>, term: &str) -> Expr {
+/// use navree_db::{Backend, Statement, contains_ignore_case};
+///
+/// let condition = contains_ignore_case(Backend::Sqlite, "\"name\"", "Øl");
+/// let select = Statement::portable(
+///     format!("SELECT id FROM companies WHERE {}", condition.sql()),
+///     condition.values().to_vec(),
+/// );
+/// assert_eq!(select.sql(), r#"SELECT id FROM companies WHERE "name" GLOB ?"#);
+/// ```
+pub fn contains_ignore_case(backend: Backend, expr: &str, term: &str) -> Statement {
     match backend {
-        DbBackend::Sqlite => glob(expr, format!("*{}*", glob_pattern(term))),
-        DbBackend::MySql => Expr::expr(
-            Func::cust("INSTR")
-                .arg(bytes(lower(expr)))
-                .arg(bytes(Expr::val(fold_case(term)))),
-        )
-        .gt(0),
-        _ if folds_beyond_ascii(term) => regex(expr, regex_pattern(term)),
-        _ => lower(expr).like(like_contains(term)),
+        Backend::Sqlite => Statement::portable(
+            format!("{expr} GLOB ?"),
+            [format!("*{}*", glob_pattern(term)).into()],
+        ),
+        Backend::MySql => Statement::portable(
+            format!("INSTR(CAST(LOWER({expr}) AS BINARY), CAST(? AS BINARY)) > 0"),
+            [fold_case(term).into()],
+        ),
+        Backend::Postgres if folds_beyond_ascii(term) => {
+            Statement::portable(format!("{expr} ~ ?"), [regex_pattern(term).into()])
+        }
+        Backend::Postgres => Statement::portable(
+            format!("LOWER({expr}) LIKE ? ESCAPE '\\'"),
+            [like_contains(term).into()],
+        ),
     }
 }
 
-/// `expr` equals `value`, ignoring case (simple Unicode case mapping).
+/// `expr` equals `value`, ignoring case (simple Unicode case mapping), as
+/// a portable condition (see [`contains_ignore_case`]).
 ///
 /// ```
-/// use navree_db::eq_ignore_case;
-/// use sea_orm::DbBackend;
-/// use sea_orm::sea_query::{Alias, Expr, PostgresQueryBuilder, Query};
+/// use navree_db::{Backend, Value, eq_ignore_case};
 ///
-/// let sql = Query::select()
-///     .column(Alias::new("id"))
-///     .from(Alias::new("users"))
-///     .and_where(eq_ignore_case(DbBackend::Postgres, Expr::col(Alias::new("email")), "Ann@Example.com"))
-///     .to_string(PostgresQueryBuilder);
-/// assert!(sql.ends_with(r#"WHERE LOWER("email") = 'ann@example.com'"#));
+/// let condition = eq_ignore_case(Backend::Postgres, "\"email\"", "Ann@Example.com");
+/// assert_eq!(condition.sql(), r#"LOWER("email") = ?"#);
+/// assert_eq!(condition.values(), [Value::from("ann@example.com")]);
 /// ```
-pub fn eq_ignore_case(backend: DbBackend, expr: impl Into<Expr>, value: &str) -> Expr {
+pub fn eq_ignore_case(backend: Backend, expr: &str, value: &str) -> Statement {
     match backend {
-        DbBackend::Sqlite => glob(expr, glob_pattern(value)),
-        DbBackend::MySql => bytes(lower(expr)).eq(bytes(Expr::val(fold_case(value)))),
-        _ if folds_beyond_ascii(value) => regex(expr, format!("^{}$", regex_pattern(value))),
-        _ => lower(expr).eq(fold_case(value)),
+        Backend::Sqlite => {
+            Statement::portable(format!("{expr} GLOB ?"), [glob_pattern(value).into()])
+        }
+        Backend::MySql => Statement::portable(
+            format!("CAST(LOWER({expr}) AS BINARY) = CAST(? AS BINARY)"),
+            [fold_case(value).into()],
+        ),
+        Backend::Postgres if folds_beyond_ascii(value) => Statement::portable(
+            format!("{expr} ~ ?"),
+            [format!("^{}$", regex_pattern(value)).into()],
+        ),
+        Backend::Postgres => {
+            Statement::portable(format!("LOWER({expr}) = ?"), [fold_case(value).into()])
+        }
     }
 }
 
@@ -98,21 +116,6 @@ pub fn eq_ignore_case(backend: DbBackend, expr: impl Into<Expr>, value: &str) ->
 /// context rules (a word-final `Σ` becomes `σ`, not `ς`).
 fn fold_case(text: &str) -> String {
     text.chars().flat_map(char::to_lowercase).collect()
-}
-
-fn lower(expr: impl Into<Expr>) -> Expr {
-    Expr::expr(Func::lower(expr.into()))
-}
-
-/// MySQL's `CAST(expr AS BINARY)`: compared byte for byte, whatever the
-/// collation.
-fn bytes(expr: impl Into<Expr>) -> Expr {
-    Expr::expr(Func::cast_as(expr.into(), "BINARY"))
-}
-
-/// PostgreSQL's case-sensitive regular expression match, `expr ~ pattern`.
-fn regex(expr: impl Into<Expr>, pattern: String) -> Expr {
-    expr.into().binary(BinOper::Custom("~"), Expr::val(pattern))
 }
 
 /// Whether `text` has a letter outside ASCII with case variants: a letter
@@ -144,13 +147,8 @@ fn regex_pattern(text: &str) -> String {
     pattern
 }
 
-fn glob(expr: impl Into<Expr>, pattern: String) -> Expr {
-    expr.into()
-        .binary(BinOper::Custom("GLOB"), Expr::val(pattern))
-}
-
 /// `%term%`, lower-cased, with `%`, `_` and `\` escaped (escape `\`).
-fn like_contains(term: &str) -> LikeExpr {
+fn like_contains(term: &str) -> String {
     let mut pattern = String::with_capacity(term.len() + 2);
     pattern.push('%');
     for c in fold_case(term).chars() {
@@ -160,7 +158,7 @@ fn like_contains(term: &str) -> LikeExpr {
         pattern.push(c);
     }
     pattern.push('%');
-    LikeExpr::new(pattern).escape('\\')
+    pattern
 }
 
 /// A `GLOB` pattern matching exactly `text` in any letter case: a letter
@@ -217,11 +215,12 @@ fn single(mut chars: impl Iterator<Item = char>) -> Option<char> {
 
 #[cfg(test)]
 mod tests {
-    use sea_orm::sea_query::{
-        Alias, MysqlQueryBuilder, PostgresQueryBuilder, Query, SqliteQueryBuilder,
-    };
-
     use super::*;
+    use crate::Value;
+
+    fn text(statement: &Statement) -> (&str, Vec<Value>) {
+        (statement.sql(), statement.values().to_vec())
+    }
 
     #[test]
     fn case_folds_letter_by_letter() {
@@ -234,56 +233,39 @@ mod tests {
 
     #[test]
     fn mysql_compares_lower_cased_bytes() {
-        let sql = |condition: Expr| {
-            Query::select()
-                .column(Alias::new("name"))
-                .from(Alias::new("t"))
-                .and_where(condition)
-                .to_string(MysqlQueryBuilder)
-        };
-        let col = || Expr::col(Alias::new("name"));
-        let contains = sql(contains_ignore_case(
-            DbBackend::MySql,
-            col(),
-            "Équipe 50%_*",
-        ));
-        assert!(
-            contains.contains(
-                "INSTR(CAST(LOWER(`name`) AS BINARY), CAST('équipe 50%_*' AS BINARY)) > 0"
-            ),
-            "{contains}"
+        assert_eq!(
+            text(&contains_ignore_case(
+                Backend::MySql,
+                "`name`",
+                "Équipe 50%_*"
+            )),
+            (
+                "INSTR(CAST(LOWER(`name`) AS BINARY), CAST(? AS BINARY)) > 0",
+                vec![Value::from("équipe 50%_*")]
+            )
         );
-        let equals = sql(eq_ignore_case(DbBackend::MySql, col(), "ΟΔΟΣ"));
-        assert!(
-            equals.contains("CAST(LOWER(`name`) AS BINARY) = CAST('οδοσ' AS BINARY)"),
-            "{equals}"
+        assert_eq!(
+            text(&eq_ignore_case(Backend::MySql, "`name`", "ΟΔΟΣ")),
+            (
+                "CAST(LOWER(`name`) AS BINARY) = CAST(? AS BINARY)",
+                vec![Value::from("οδοσ")]
+            )
         );
     }
 
     #[test]
     fn postgres_matches_letters_beyond_ascii_with_a_regular_expression() {
-        let sql = |condition: Expr| {
-            Query::select()
-                .column(Alias::new("name"))
-                .from(Alias::new("t"))
-                .and_where(condition)
-                .to_string(PostgresQueryBuilder)
-        };
-        let col = || Expr::col(Alias::new("name"));
-        let equals = sql(eq_ignore_case(DbBackend::Postgres, col(), "ΟΔΟΣ"));
-        assert!(
-            equals.contains(r#""name" ~ '^[Οο][Δδ][Οο][Σσ]$'"#),
-            "{equals}"
+        assert_eq!(
+            text(&eq_ignore_case(Backend::Postgres, "\"name\"", "ΟΔΟΣ")),
+            (r#""name" ~ ?"#, vec![Value::from("^[Οο][Δδ][Οο][Σσ]$")])
         );
-        let contains = sql(contains_ignore_case(
-            DbBackend::Postgres,
-            col(),
-            "Øl (v2.0)",
-        ));
-        // Inline, PostgreSQL's builder doubles the pattern's backslashes.
-        assert!(
-            contains.contains(r#""name" ~ E'[Øø][lL] \\([vV]2\\.0\\)'"#),
-            "{contains}"
+        assert_eq!(
+            text(&contains_ignore_case(
+                Backend::Postgres,
+                "\"name\"",
+                "Øl (v2.0)"
+            )),
+            (r#""name" ~ ?"#, vec![Value::from(r"[Øø][lL] \([vV]2\.0\)")])
         );
     }
 
@@ -315,47 +297,35 @@ mod tests {
 
     #[test]
     fn sqlite_uses_glob_and_postgres_lower_like() {
-        let sql = |backend: DbBackend, condition: Expr| {
-            let mut query = Query::select();
-            query
-                .column(Alias::new("name"))
-                .from(Alias::new("t"))
-                .and_where(condition);
-            match backend {
-                DbBackend::Sqlite => query.to_string(SqliteQueryBuilder),
-                _ => query.to_string(PostgresQueryBuilder),
-            }
-        };
-        let col = || Expr::col(Alias::new("name"));
-        let sqlite = sql(
-            DbBackend::Sqlite,
-            contains_ignore_case(DbBackend::Sqlite, col(), "Øl"),
+        assert_eq!(
+            text(&contains_ignore_case(Backend::Sqlite, "\"name\"", "Øl")),
+            (r#""name" GLOB ?"#, vec![Value::from("*[Øø][lL]*")])
         );
-        assert!(sqlite.contains(r#""name" GLOB '*[Øø][lL]*'"#), "{sqlite}");
-        let sqlite = sql(
-            DbBackend::Sqlite,
-            eq_ignore_case(DbBackend::Sqlite, col(), "Énergie"),
+        assert_eq!(
+            text(&eq_ignore_case(Backend::Sqlite, "\"name\"", "Énergie")),
+            (
+                r#""name" GLOB ?"#,
+                vec![Value::from("[Éé][nN][eE][rR][gG][iI][eE]")]
+            )
         );
-        assert!(
-            sqlite.contains(r#""name" GLOB '[Éé][nN][eE][rR][gG][iI][eE]'"#),
-            "{sqlite}"
+        assert_eq!(
+            text(&contains_ignore_case(
+                Backend::Postgres,
+                "\"name\"",
+                "50%_Off"
+            )),
+            (
+                r#"LOWER("name") LIKE ? ESCAPE '\'"#,
+                vec![Value::from(r"%50\%\_off%")]
+            )
         );
-        let postgres = sql(
-            DbBackend::Postgres,
-            contains_ignore_case(DbBackend::Postgres, col(), "50%_Off"),
-        );
-        assert!(
-            postgres.contains(r#"LOWER("name") LIKE E'%50\\%\\_off%' ESCAPE E'\\'"#)
-                || postgres.contains(r#"LOWER("name") LIKE '%50\%\_off%' ESCAPE '\'"#),
-            "{postgres}"
-        );
-        let postgres = sql(
-            DbBackend::Postgres,
-            eq_ignore_case(DbBackend::Postgres, col(), "Ann@Example.com"),
-        );
-        assert!(
-            postgres.contains(r#"LOWER("name") = 'ann@example.com'"#),
-            "{postgres}"
+        assert_eq!(
+            text(&eq_ignore_case(
+                Backend::Postgres,
+                "\"name\"",
+                "Ann@Example.com"
+            )),
+            (r#"LOWER("name") = ?"#, vec![Value::from("ann@example.com")])
         );
     }
 }

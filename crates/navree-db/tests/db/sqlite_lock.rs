@@ -15,13 +15,10 @@ use navree_db::{
 };
 use navree_kernel::{App, Module, ModuleBuilder, Navree};
 use navree_schema::{Schema, SchemaMigration, SchemaResult};
-use sea_orm::DbErr;
-use sea_orm::sea_query::{ColumnDef, Table};
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
 
 use crate::support::TempDb;
 
-/// How many migrations of each kind run while the writer holds the lock.
+/// How many migrations run while the writer holds the lock.
 const MIGRATIONS: usize = 12;
 
 /// Looks before it writes, as most schema-builder migrations do (the
@@ -49,62 +46,18 @@ impl navree_schema::Migration for ReadThenWrite {
     }
 }
 
-/// The same on SeaORM's schema manager.
-struct SeaReadThenWrite {
-    name: String,
-    table: String,
-}
-
-impl MigrationName for SeaReadThenWrite {
-    fn name(&self) -> &str {
-        &self.name
-    }
-}
-
-#[sea_orm_migration::async_trait::async_trait]
-impl MigrationTrait for SeaReadThenWrite {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        if !manager.has_table(&self.table).await? {
-            manager
-                .create_table(
-                    Table::create()
-                        .table(self.table.clone())
-                        .col(ColumnDef::new("id").integer().not_null().primary_key())
-                        .to_owned(),
-                )
-                .await?;
-        }
-        Ok(())
-    }
-
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .drop_table(Table::drop().table(self.table.clone()).to_owned())
-            .await
-    }
-}
-
-struct Lookers {
-    sea: bool,
-}
+struct Lookers;
 
 impl Module for Lookers {
     fn register(&self, m: &mut ModuleBuilder) {
         let mut set = MigrationSet::new("lookers");
         for n in 0..MIGRATIONS {
-            set = if self.sea {
-                set.migration(SeaReadThenWrite {
-                    name: format!("m{n:04}_sea_looker"),
-                    table: format!("sea_looker_{n}"),
-                })
-            } else {
-                set.migration(SchemaMigration::new(
-                    format!("m{n:04}_looker"),
-                    ReadThenWrite {
-                        table: format!("looker_{n}"),
-                    },
-                ))
-            };
+            set = set.migration(SchemaMigration::new(
+                format!("m{n:04}_looker"),
+                ReadThenWrite {
+                    table: format!("looker_{n}"),
+                },
+            ));
         }
         m.migrations(set);
     }
@@ -164,18 +117,19 @@ impl Writer {
     }
 }
 
-async fn app(temp: &TempDb, sea: bool) -> App {
+async fn app(temp: &TempDb) -> App {
     Navree::app()
         .module(DatabaseModule::for_root(temp.options()))
-        .module(Lookers { sea })
+        .module(Lookers)
         .boot()
         .await
         .expect("the app boots")
 }
 
-async fn migrate_beside_a_writer(sea: bool) {
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn migrations_queue_on_the_write_lock_instead_of_failing() {
     let temp = TempDb::new();
-    let app = app(&temp, sea).await;
+    let app = app(&temp).await;
     let db = (*app.ctx().get::<Db>().await.expect("Db")).clone();
     let writer = Writer::start(&db).await;
     let before = writer.commits.load(Ordering::SeqCst);
@@ -198,14 +152,4 @@ async fn migrate_beside_a_writer(sea: bool) {
         commits > before,
         "the writer kept writing through the migrations ({before} -> {commits} commits)"
     );
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn schema_migrations_queue_on_the_write_lock_instead_of_failing() {
-    migrate_beside_a_writer(false).await;
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn seaorm_migrations_queue_on_the_write_lock_instead_of_failing() {
-    migrate_beside_a_writer(true).await;
 }

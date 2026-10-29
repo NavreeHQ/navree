@@ -1,7 +1,7 @@
 //! `Collection`: finding, filtering, grouping, plucking and refreshing
 //! records.
 
-use navree_db::sea_orm::ConnectionTrait;
+use navree_db::Executor as _;
 use navree_orm::{Collection, Model};
 
 use crate::models::{Company, Deal, Stage};
@@ -106,8 +106,8 @@ async fn queries_and_refreshes() {
         .await
         .unwrap();
     assert_eq!(updated, 2);
-    t.db.conn()
-        .execute_unprepared("DELETE FROM companies WHERE id = 3")
+    t.db.pool()
+        .execute_script("DELETE FROM companies WHERE id = 3")
         .await
         .unwrap();
     let fresh = all.fresh(&t.db).await.unwrap();

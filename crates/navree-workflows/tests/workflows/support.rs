@@ -595,12 +595,8 @@ pub fn builder(
     clock: Arc<FixedClock>,
     journal: Arc<Journal>,
 ) -> TestAppBuilder {
-    let app = if crate::servers::native_units_of_work() {
-        TestApp::builder().config("database.native_units_of_work", true)
-    } else {
-        TestApp::builder()
-    };
-    app.config("database.url", database.url.clone())
+    TestApp::builder()
+        .config("database.url", database.url.clone())
         .config("database.migrate_on_boot", true)
         .config("database.max_connections", 4)
         .config("workflows.routes", false)

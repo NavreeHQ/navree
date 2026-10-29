@@ -3,9 +3,8 @@
 //! database, and up again once it can.
 
 use navree_contracts::{HealthCheck, HealthStatus};
-use navree_db::{DatabaseModule, Db};
+use navree_db::{DatabaseModule, Db, Executor};
 use navree_kernel::Navree;
-use sea_orm::ConnectionTrait;
 
 use crate::support::{Scratch, string};
 
@@ -32,14 +31,14 @@ async fn the_database_health_check_follows_the_server() {
     // The server ends the pool's only connection and the database goes:
     // the pool's next connection cannot open.
     let db = app.ctx().get::<Db>().await.unwrap();
-    let connection = string(db.conn(), "SELECT CAST(CONNECTION_ID() AS CHAR)").await;
+    let connection = string(db.pool(), "SELECT CAST(CONNECTION_ID() AS CHAR)").await;
     let admin = scratch.admin().await;
     admin
-        .execute_unprepared(&format!("KILL {connection}"))
+        .execute_script(&format!("KILL {connection}"))
         .await
         .expect("kills the pool's connection");
     admin
-        .execute_unprepared(&format!("DROP DATABASE `{}`", scratch.name))
+        .execute_script(&format!("DROP DATABASE `{}`", scratch.name))
         .await
         .expect("drops the database");
     assert_eq!(
@@ -48,7 +47,7 @@ async fn the_database_health_check_follows_the_server() {
     );
 
     admin
-        .execute_unprepared(&format!(
+        .execute_script(&format!(
             "CREATE DATABASE `{}` CHARACTER SET utf8mb4",
             scratch.name
         ))
@@ -59,6 +58,6 @@ async fn the_database_health_check_follows_the_server() {
         HealthStatus::Up,
         "the pool reconnects"
     );
-    admin.close().await.unwrap();
+    admin.close().await;
     app.shutdown().await.unwrap();
 }

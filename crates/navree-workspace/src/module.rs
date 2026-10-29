@@ -463,7 +463,10 @@ pub trait ModuleBuilderWorkspaceExt {
     /// only through [`WorkspaceRepo`](crate::WorkspaceRepo), and that their
     /// table has an indexed workspace column. Use it for models that are
     /// not access subjects (child records such as deal notes); subjects use
-    /// [`workspace_scoped`](Self::workspace_scoped).
+    /// [`workspace_scoped`](Self::workspace_scoped). A model declared
+    /// `#[model(workspace)]` scopes its own queries and is a workspace
+    /// entity to `navree check` without this registration (which still
+    /// adds the table check and `WorkspaceRepo`).
     fn workspace_entity<M: WorkspaceScoped>(&mut self) -> &mut Self;
 
     /// Classifies model `M` as a global entity: one set of rows shared by

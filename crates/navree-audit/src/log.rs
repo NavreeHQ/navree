@@ -8,7 +8,7 @@ use chrono::{DateTime, TimeDelta, Utc};
 use navree_contracts::{AuditEntry, AuditKind, AuditSink, Clock, SystemClock};
 use navree_db::{
     ChangeEvent, ChangeObserver, ChangeOp, Db, DbError, Executor, Page, PageQuery, Uow,
-    prune_time_series_on, record,
+    prune_time_series, record,
 };
 use navree_kernel::{BoxError, BoxFuture};
 use navree_orm::{OrmError, Record};
@@ -44,7 +44,7 @@ pub enum AuditError {
 /// - Data changes recorded in a [`Uow`] (by navree-orm models saved in it,
 ///   navree-db's recorded record writes, or `navree_db::Repo`) become `data`
 ///   entries written inside the unit of work's transaction, right before it
-///   commits ([`ChangeObserver::observe_with`]): a rolled-back change leaves
+///   commits ([`ChangeObserver::observe`]): a rolled-back change leaves
 ///   no audit row. The action is
 ///   `<subject>.<created|updated|deleted>` (`deal.updated`), the subject the
 ///   table's subject type (`Deal`), the actor, impersonator and request id
@@ -207,11 +207,11 @@ impl AuditLog {
 
     /// Deletes entries recorded before `cutoff`; returns how many. On
     /// TimescaleDB, where `audit_logs` is a hypertable, the weeks entirely
-    /// before `cutoff` go as whole chunks (see [`prune_time_series_on`]),
+    /// before `cutoff` go as whole chunks (see [`prune_time_series`]),
     /// in a unit of work of its own.
     pub async fn prune_before(&self, cutoff: DateTime<Utc>) -> Result<u64, DbError> {
         let uow = self.db.uow(None, None).await;
-        match prune_time_series_on(&uow, AUDIT_TABLE, "created_at", cutoff).await {
+        match prune_time_series(&uow, AUDIT_TABLE, "created_at", cutoff).await {
             Ok(pruned) => {
                 uow.commit().await?;
                 Ok(pruned)
@@ -287,11 +287,9 @@ impl AuditLog {
     }
 }
 
-/// Writes the `data` entries through the unit of work being committed, on
-/// either kind of transaction (SeaORM's runs this through `observe`'s
-/// default).
+/// Writes the `data` entries through the unit of work being committed.
 impl ChangeObserver for AuditLog {
-    fn observe_with<'a>(
+    fn observe<'a>(
         &'a self,
         uow: &'a Uow,
         changes: &'a [ChangeEvent],
@@ -365,10 +363,7 @@ async fn handle(db: &Db, message: Message) {
 /// never the task's unit of work (an entry that joined it would be rolled
 /// back with the request), or the connection itself when it has no pool.
 fn own_connection(db: &Db) -> &dyn Executor {
-    match db.pool() {
-        Some(pool) => pool,
-        None => db,
-    }
+    db.pool()
 }
 
 /// Inserts `rows` through `exec`: the log's own connection, or the unit of

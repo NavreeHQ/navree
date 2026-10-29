@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex, PoisonError, RwLock};
 use std::time::Duration;
 
 use http::Method;
-use navree_db::{Backend, Db, DbError, Executor, Pool};
+use navree_db::{Backend, Db, Executor, Pool};
 use navree_http_client::HttpClient;
 use navree_kernel::{AppContext, BoxError, BoxFuture};
 use serde_json::{Value, json};
@@ -577,9 +577,7 @@ impl PgvectorStore {
 impl PgvectorStore {
     /// The writer's pool (the store keeps its rows outside units of work).
     fn pool(&self) -> Result<&Pool, SearchError> {
-        Ok(self.db.pool().ok_or_else(|| {
-            DbError::unsupported("the pgvector store needs a database with a pool")
-        })?)
+        Ok(self.db.pool())
     }
 }
 

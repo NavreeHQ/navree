@@ -309,10 +309,7 @@ impl Operations {
     /// writer's pool (or the connection itself when it has no pool).
     fn writer(&self) -> Result<&dyn Executor, QueueError> {
         let db = self.db()?;
-        Ok(match db.pool() {
-            Some(pool) => pool,
-            None => db,
-        })
+        Ok(db.pool())
     }
 
     /// Stores `operation` as `pending`, as part of `uow`; returns it.

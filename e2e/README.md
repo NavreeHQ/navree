@@ -41,7 +41,7 @@ the `evidence` seeder (three workspaces, an operator who is a super admin,
 
 | Module | What it exercises |
 |---|---|
-| `projects` | A navree-orm model behind `WorkspaceRepo` (with the SeaORM derive kept for the admin panel), row-level security, `#[derive(Searchable)]` synced to Meilisearch by queued jobs, broadcasts on change |
+| `projects` | A navree-orm model behind `WorkspaceRepo`, row-level security, `#[derive(Searchable)]` synced to Meilisearch by queued jobs, broadcasts on change |
 | `tasks` | A navree-orm model with `#[model(workspace)]`, route-model binding with `#[can(.., from = "id")]`, `Accessible` list filters |
 | `reports` | `POST /api/v1/reports` queues `reports.generate` in the request's unit of work; the worker computes and emits `report.computed` on NATS JetStream; the micro event handler in `serve` marks it `done` |
 | `live` | `POST /api/v1/live/publish` on the workspace's private channel; Redis backplane between processes |

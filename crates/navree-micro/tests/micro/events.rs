@@ -159,8 +159,7 @@ async fn alerts_app(micro: &MicroFake, scratch: &Scratch) -> TestApp {
     alerts_app_with(micro, scratch, |options| options).await
 }
 
-/// The alerts service on the scratch database, its units of work on
-/// navree-db's own transaction.
+/// The alerts service on the scratch database.
 async fn alerts_app_with(
     micro: &MicroFake,
     scratch: &Scratch,
@@ -169,7 +168,6 @@ async fn alerts_app_with(
     TestApp::builder()
         .config("database.url", scratch.url.as_str())
         .config("database.migrate_on_boot", true)
-        .config("database.native_units_of_work", true)
         .module(DatabaseModule)
         .module(MicroModule::for_root(options(MicroOptions {
             service: "alerts".into(),

@@ -2,7 +2,7 @@
 //! `navree::prelude` and `navree::orm`, inside a unit of work.
 
 use navree::BoxError;
-use navree::db::sea_orm::ConnectionTrait;
+use navree::db::Executor as _;
 use navree::db::{Db, DbOptions};
 use navree::orm::testing::database::{Template, TestDb};
 use navree::orm::{Dialect, col};
@@ -32,8 +32,8 @@ async fn models_work_through_the_facade() {
     })
     .await
     .unwrap();
-    db.conn()
-        .execute_unprepared(
+    db.pool()
+        .execute_script(
             "CREATE TABLE contacts (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, email TEXT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
         )
         .await
@@ -132,7 +132,7 @@ async fn relations_work_through_the_facade() {
         "CREATE TABLE customers (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL)",
         "CREATE TABLE people (id INTEGER PRIMARY KEY AUTOINCREMENT, customer_id INTEGER NULL, name TEXT NOT NULL)",
     ] {
-        db.conn().execute_unprepared(statement).await.unwrap();
+        db.pool().execute_script(statement).await.unwrap();
     }
     let acme = Customer::create(
         &db,
@@ -185,8 +185,8 @@ static CONTACTS: Template = Template::new("facade contacts", |template| {
     Box::pin(async move {
         template
             .db()
-            .conn()
-            .execute_unprepared(
+            .pool()
+            .execute_script(
                 "CREATE TABLE contacts (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, email TEXT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
             )
             .await?;

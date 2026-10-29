@@ -200,7 +200,7 @@ pub(super) async fn finish_uow<T>(
 ) -> Result<T, QueueError> {
     match result {
         Ok(value) => {
-            uow.commit().await.map_err(navree_db::DbError::from)?;
+            uow.commit().await?;
             Ok(value)
         }
         Err(error) => {
