@@ -659,15 +659,32 @@ impl From<crate::render::ast::Expr> for Filter {
     }
 }
 
-impl From<sea_query::Condition> for Filter {
-    fn from(condition: sea_query::Condition) -> Self {
-        Filter(Where::Sql(condition))
-    }
-}
-
-impl From<sea_query::Expr> for Filter {
-    fn from(expr: sea_query::Expr) -> Self {
-        Filter(Where::Sql(sea_query::Condition::all().add(expr)))
+/// A portable SQL fragment (navree-db's `Statement::portable`: `?`
+/// placeholders and their values), such as a list filter of navree-access
+/// written by `SqlFilter::to_statement`, embedded as [`Filter::raw`]. A
+/// statement written for one backend's placeholders (`$1`) is refused when
+/// the query runs.
+///
+/// ```
+/// use navree_db::Statement;
+/// use navree_orm::{Dialect, Filter};
+///
+/// let fragment = Statement::portable("stage = ? OR amount > ?", ["won".into(), 100_i64.into()]);
+/// let sql = Filter::from(fragment).not().to_sql(Dialect::Postgres).unwrap();
+/// assert_eq!(sql.sql, "NOT (stage = $1 OR amount > $2)");
+/// ```
+impl From<navree_db::Statement> for Filter {
+    fn from(statement: navree_db::Statement) -> Self {
+        if let Some(backend) = statement.backend() {
+            return Filter(Where::Invalid(format!(
+                "a filter fragment must use portable `?` placeholders; this one was written for {backend}"
+            )));
+        }
+        let (sql, values) = statement.into_parts();
+        Filter(Where::Raw {
+            sql: Cow::Owned(sql),
+            values,
+        })
     }
 }
 

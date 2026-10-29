@@ -242,15 +242,14 @@ impl navree_contracts::AuditSink for DbAudit {
         entry: navree_contracts::AuditEntry,
     ) -> navree_contracts::BoxFuture<'_, Result<(), navree_contracts::BoxError>> {
         Box::pin(async move {
-            use sea_orm::ConnectionTrait;
+            use navree_db::{Executor, Statement};
             let db = self.0.get().expect("database set");
-            db.conn()
-                .execute_raw(sea_orm::Statement::from_sql_and_values(
-                    db.backend(),
-                    "INSERT INTO denials (action) VALUES (?)",
-                    [entry.action.into()],
-                ))
-                .await?;
+            let pool = db.pool().expect("a pool of navree-db's own");
+            pool.execute(&Statement::portable(
+                "INSERT INTO denials (action) VALUES (?)",
+                [entry.action.into()],
+            ))
+            .await?;
             Ok(())
         })
     }
@@ -258,7 +257,7 @@ impl navree_contracts::AuditSink for DbAudit {
 
 #[tokio::test]
 async fn denial_audit_does_not_wait_for_the_request_transaction() {
-    use sea_orm::ConnectionTrait;
+    use navree_db::{Executor, ExecutorExt, Statement};
 
     let sink = DbAudit::default();
     let app = crate::support::builder(&crate::support::RecordingAudit::default())
@@ -266,8 +265,7 @@ async fn denial_audit_does_not_wait_for_the_request_transaction() {
         .build()
         .await;
     let db = app.get::<Db>().await;
-    db.conn()
-        .execute_unprepared("CREATE TABLE denials (action TEXT NOT NULL)")
+    db.execute_script("CREATE TABLE denials (action TEXT NOT NULL)")
         .await
         .unwrap();
     sink.0.set((*db).clone()).ok();
@@ -285,16 +283,13 @@ async fn denial_audit_does_not_wait_for_the_request_transaction() {
         "the denial took {:?}",
         started.elapsed()
     );
-    let row = db
-        .conn()
-        .query_one_raw(sea_orm::Statement::from_string(
-            db.backend(),
+    let denied: i64 = db
+        .fetch_scalar(&Statement::text(
             "SELECT count(*) AS n FROM denials WHERE action = 'access.denied'",
         ))
         .await
-        .unwrap()
         .unwrap();
-    assert_eq!(row.try_get::<i64>("", "n").unwrap(), 1);
+    assert_eq!(denied, 1);
 }
 
 /// Records `end_user_subscriptions` calls.

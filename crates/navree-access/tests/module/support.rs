@@ -1,4 +1,4 @@
-//! Shared fixtures: a `posts` entity with its controller, an abilities
+//! Shared fixtures: a `posts` record with its controller, an abilities
 //! function, a recording audit sink and helpers to seed roles and posts.
 
 #![allow(dead_code)]
@@ -10,86 +10,100 @@ use chrono::{DateTime, Utc};
 use http::Method;
 use navree_access::{
     AbilityCtx, AccessModule, AccessOptions, AccessService, Accessible, Authorized, DELETE, READ,
-    Read, Rules, Subject, UPDATE, Update, field,
+    Read, Rules, Subject, SubjectRecords, TypedColumns, UPDATE, Update, field, row_json,
 };
 use navree_contracts::{AuditEntry, AuditSink, BoxError, BoxFuture};
-use navree_db::{Db, MigrationSet, ModuleBuilderDbExt, Uow};
+use navree_db::navree_schema::{Dialect, Migration, Schema, SchemaMigration, SchemaResult};
+use navree_db::record::{self, Filter};
+use navree_db::{Db, Executor, Kind, MigrationSet, ModuleBuilderDbExt, Record, Uow};
 use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use navree_testing::{TestApp, TestAppBuilder};
-use sea_orm::sea_query::{ColumnDef, Table};
-use sea_orm::{ActiveModelTrait, EntityTrait, QueryOrder, Set};
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
+use serde::Serialize;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
 /// The role that passes every check in the test apps.
 pub const SUPER_ADMIN: &str = "super-admin";
 
-/// The `posts` entity.
-pub mod post {
-    use sea_orm::entity::prelude::*;
-    use serde::Serialize;
-
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
-    #[sea_orm(table_name = "posts")]
-    pub struct Model {
-        #[sea_orm(primary_key, auto_increment = false)]
+navree_db::record! {
+    /// A post (`posts`).
+    #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+    pub struct Post in "posts" {
         pub id: Uuid,
         pub author_id: Option<Uuid>,
         pub title: String,
         pub status: String,
         pub published: bool,
-        pub created_at: DateTimeUtc,
+        pub created_at: DateTime<Utc>,
     }
-
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
-impl Subject for post::Entity {
+impl Subject for Post {
     const SUBJECT: &'static str = "Post";
     const PERMISSION_PREFIX: &'static str = "posts";
+}
+
+impl Post {
+    /// The columns of `posts` for list filters.
+    pub fn columns() -> TypedColumns {
+        TypedColumns::new(Post::TABLE)
+            .with("id", Kind::Uuid)
+            .with("author_id", Kind::Uuid)
+            .with("title", Kind::String)
+            .with("status", Kind::String)
+            .with("published", Kind::Bool)
+            .with("created_at", Kind::Timestamp)
+    }
+}
+
+/// Posts are loaded by id, in the request's unit of work.
+impl SubjectRecords for Post {
+    type Record = Post;
+
+    fn load<'a>(uow: &'a Uow, id: &'a str) -> BoxFuture<'a, Result<Option<Post>, BoxError>> {
+        Box::pin(async move {
+            let Ok(id) = Uuid::parse_str(id) else {
+                return Ok(None);
+            };
+            let mut select = Post::select().eq("id", id);
+            if uow.lock_for_update() {
+                select = select.for_update();
+            }
+            Ok(select.one(uow).await?)
+        })
+    }
+
+    fn record_json(record: &Post) -> Value {
+        row_json(record)
+    }
 }
 
 /// Creates `posts`.
 pub struct CreatePosts;
 
-impl MigrationName for CreatePosts {
-    fn name(&self) -> &str {
-        "m20261025_000001_create_posts"
-    }
-}
-
-#[async_trait]
-impl MigrationTrait for CreatePosts {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), sea_orm::DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table("posts")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("author_id").uuid().null())
-                    .col(ColumnDef::new("title").string().not_null())
-                    .col(ColumnDef::new("status").string().not_null())
-                    .col(ColumnDef::new("published").boolean().not_null())
-                    .col(
-                        ColumnDef::new("created_at")
-                            .timestamp_with_time_zone()
-                            .not_null(),
-                    )
-                    .to_owned(),
-            )
+impl Migration for CreatePosts {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        let mysql = schema.target().await?.dialect() == Dialect::MySql;
+        schema
+            .create("posts", |t| {
+                if mysql {
+                    t.binary("id").length(16).fixed().primary();
+                    t.binary("author_id").length(16).fixed().nullable();
+                } else {
+                    t.uuid("id").primary();
+                    t.uuid("author_id").nullable();
+                }
+                t.string("title");
+                t.string("status");
+                t.boolean("published");
+                t.timestamp_tz("created_at");
+            })
             .await
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), sea_orm::DbErr> {
-        manager
-            .drop_table(Table::drop().table("posts").to_owned())
-            .await
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop("posts").await
     }
 }
 
@@ -166,43 +180,50 @@ impl Controller for PostController {
     }
 }
 
-async fn index(
-    uow: Uow,
-    posts: Accessible<post::Entity, Read>,
-) -> navree_http::Result<Json<Value>> {
-    let select = posts.apply(post::Entity::find().order_by_asc(post::Column::Title));
-    let rows = select.all(&*uow.tx().await?).await?;
+async fn index(uow: Uow, posts: Accessible<Post, Read>) -> navree_http::Result<Json<Value>> {
+    let (sql, values) = posts
+        .sql_filter(&Post::columns())
+        .to_statement(uow.backend())
+        .into_parts();
+    let rows = Post::select()
+        .filter(Filter::all().raw(sql, values))
+        .order_by("title")
+        .all(&uow)
+        .await
+        .map_err(AppError::internal)?;
     let titles: Vec<String> = rows.into_iter().map(|p| p.title).collect();
     Ok(Json(json!({ "titles": titles })))
 }
 
-async fn show(post: Authorized<post::Entity, Read>) -> Json<post::Model> {
+async fn show(post: Authorized<Post, Read>) -> Json<Post> {
     Json(post.into_inner())
 }
 
 async fn update(
     uow: Uow,
-    post: Authorized<post::Entity, Update>,
+    post: Authorized<Post, Update>,
     Json(input): Json<serde_json::Map<String, Value>>,
-) -> navree_http::Result<Json<post::Model>> {
+) -> navree_http::Result<Json<Post>> {
     let changed: Vec<&str> = input.keys().map(String::as_str).collect();
     post.check_fields(&changed)?;
-    let mut model: post::ActiveModel = post.into_inner().into();
+    let mut model = post.into_inner();
     if let Some(title) = input.get("title").and_then(Value::as_str) {
-        model.title = Set(title.to_owned());
+        title.clone_into(&mut model.title);
     }
     if let Some(status) = input.get("status").and_then(Value::as_str) {
-        model.status = Set(status.to_owned());
+        status.clone_into(&mut model.status);
     }
     if let Some(author) = input.get("author_id") {
-        model.author_id = Set(serde_json::from_value(author.clone())
-            .map_err(|error| AppError::bad_request(error.to_string()))?);
+        model.author_id = serde_json::from_value(author.clone())
+            .map_err(|error| AppError::bad_request(error.to_string()))?;
     }
-    let updated = model.update(&*uow.tx().await?).await?;
-    Ok(Json(updated))
+    record::update(&uow, &model)
+        .await
+        .map_err(AppError::internal)?;
+    Ok(Json(model))
 }
 
-async fn destroy(_post: Authorized<post::Entity, navree_access::Delete>) -> http::StatusCode {
+async fn destroy(_post: Authorized<Post, navree_access::Delete>) -> http::StatusCode {
     http::StatusCode::NO_CONTENT
 }
 
@@ -215,8 +236,11 @@ pub struct PostsModule;
 
 impl Module for PostsModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.import(AccessModule::for_feature::<post::Entity>())
-            .migrations(MigrationSet::new("posts").migration(CreatePosts))
+        m.import(AccessModule::for_feature::<Post>())
+            .migrations(MigrationSet::new("posts").migration(SchemaMigration::new(
+                "m20261025_000001_create_posts",
+                CreatePosts,
+            )))
             .controller::<PostController>();
     }
 }
@@ -242,11 +266,11 @@ impl AuditSink for RecordingAudit {
     }
 }
 
-/// The test app builder: a temporary database, the access module with
-/// [`options`], the posts feature and a recording audit sink.
+/// The test app builder: a database of its own (see [`crate::database`]),
+/// the access module with [`options`], the posts feature and a recording
+/// audit sink.
 pub fn builder(audit: &RecordingAudit) -> TestAppBuilder {
-    TestApp::builder()
-        .temp_database()
+    crate::database::database(TestApp::builder())
         .config("http.per_ip_rate_limit", Value::Null)
         .module(navree_db::DatabaseModule)
         .module(AccessModule::for_root(options()))
@@ -292,24 +316,26 @@ pub async fn give_role(app: &TestApp, user: Uuid, role: &str, permissions: &[&st
     .await;
 }
 
-/// Inserts a post.
+/// Inserts a post; the post as stored.
 pub async fn insert_post(
     app: &TestApp,
     title: &str,
     author: Option<Uuid>,
     status: &str,
     published: bool,
-) -> post::Model {
+) -> Post {
     let db = app.get::<Db>().await;
-    post::ActiveModel {
-        id: Set(Uuid::now_v7()),
-        author_id: Set(author),
-        title: Set(title.to_owned()),
-        status: Set(status.to_owned()),
-        published: Set(published),
-        created_at: Set(timestamp("2026-10-25T12:00:00.250000Z")),
-    }
-    .insert(db.conn())
+    record::insert_returning(
+        &*db,
+        &Post {
+            id: Uuid::now_v7(),
+            author_id: author,
+            title: title.to_owned(),
+            status: status.to_owned(),
+            published,
+            created_at: timestamp("2026-10-25T12:00:00.250000Z"),
+        },
+    )
     .await
     .expect("insert post")
 }

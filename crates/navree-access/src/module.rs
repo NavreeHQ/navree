@@ -13,7 +13,7 @@ use crate::authorizer::AccessAuthorizer;
 use crate::commands::commands;
 use crate::controller::{AbilitiesController, AccessAdminController};
 use crate::engine::Subject;
-use crate::entity::role;
+use crate::entity::RoleRow;
 use crate::error::{AccessError, map_access_error};
 use crate::factory::AbilityFactory;
 use crate::migration::migrations;
@@ -70,15 +70,15 @@ impl AccessModule {
 
     /// Registers `S` as a subject: its permission prefix maps to its
     /// subject type, `can(.., S::SUBJECT, from = "id")` routes load its
-    /// records ([`SubjectRecords::load`]: an entity by primary key, an ORM
-    /// model by route key, in the request's unit of work), and its policy,
+    /// records ([`SubjectRecords::load`]: an ORM model by route key, a record
+    /// by its key, in the request's unit of work), and its policy,
     /// if it has one ([`SubjectRecords::policy`]), joins every principal's
     /// rules.
     pub fn for_feature<S: SubjectRecords>() -> impl Module {
         AccessFeature::<S>(PhantomData)
     }
 
-    /// Registers a subject that is not an entity (only its permission
+    /// Registers a subject without records (only its permission
     /// prefix, e.g. `reports` → `Report`).
     pub fn for_subject<S: Subject + Send + Sync + 'static>() -> impl Module {
         AccessSubject::<S>(PhantomData)
@@ -119,7 +119,7 @@ impl Module for ConfiguredAccessModule {
 fn register(m: &mut ModuleBuilder, options: AccessOptions) {
     m.global()
         .value(options)
-        .contribute(SubjectRegistration::entity::<role::Entity>())
+        .contribute(SubjectRegistration::records::<RoleRow>())
         .factory(
             Factory::<AbilityFactory>::new(|r: Resolver| async move {
                 let db = r.get::<Db>().await?;

@@ -30,7 +30,9 @@ use std::fmt;
 use std::marker::PhantomData;
 
 use chrono::{DateTime, NaiveDate, NaiveDateTime, SecondsFormat, Utc};
-use navree_access::{Ability, Accessible, ActionMarker, Cond, Conditions, Subject};
+use navree_access::{
+    Ability, Accessible, ActionMarker, SqlColumn, SqlColumns, SqlFilter, SqlOp, Subject,
+};
 use navree_db::Uow;
 use navree_http::AppError;
 use navree_kernel::{BoxError, BoxFuture};
@@ -42,16 +44,20 @@ use crate::column::{Filter, col};
 use crate::model::Model;
 use crate::query::Builder;
 use crate::record::Record;
-use crate::render::ast::{BinaryOp, Expr as SqlExpr};
+use crate::render::ast::{BinaryOp, Expr as SqlExpr, ObjectName};
 use crate::value::{Decimal, Kind, Value, to_json};
 
 /// The column mapping of ability conditions on model `M`: rule fields are
 /// `M`'s columns, qualified with its table, and operands are bound with the
 /// column's type (UUIDs, date-times, dates and decimals as typed values,
-/// enums stored as text or numbers as such). A field that is not a column is
-/// SQL `NULL`, as [`record_json`] has no such member and a record check sees
-/// `null`. [`ModelColumns::filter`] turns an ability's rules into one SQL
-/// condition with it (which [`Builder::accessible`] does).
+/// enums stored as text or numbers as such, numbers as the column's integer
+/// or float). A field that is not a column is SQL `NULL`, as [`record_json`]
+/// has no such member and a record check sees `null`.
+///
+/// It is navree-access's [`SqlColumns`] for the model:
+/// [`ModelColumns::filter`] compiles an ability's rules with navree-access's
+/// list-filter compiler and writes the result as one render-tree condition
+/// (which [`Builder::accessible`] does).
 pub struct ModelColumns<M>(PhantomData<fn() -> M>);
 
 impl<M> ModelColumns<M> {
@@ -77,7 +83,8 @@ impl<M> fmt::Debug for ModelColumns<M> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Stored {
     Bool,
-    Number,
+    Integer,
+    Float,
     Text,
     Uuid,
     DateTimeUtc,
@@ -93,7 +100,7 @@ fn stored<M: Model>(column: &str) -> Option<Stored> {
     if let Some(cast) = meta.cast_name() {
         return Some(match cast {
             "string_enum" => Stored::Text,
-            "int_enum" => Stored::Number,
+            "int_enum" => Stored::Integer,
             _ => Stored::Other,
         });
     }
@@ -105,8 +112,10 @@ fn stored<M: Model>(column: &str) -> Option<Stored> {
     let last = inner.rsplit("::").next().unwrap_or(inner);
     Some(match last {
         "bool" => Stored::Bool,
-        "i8" | "i16" | "i32" | "i64" | "isize" | "u8" | "u16" | "u32" | "u64" | "usize" | "f32"
-        | "f64" => Stored::Number,
+        "i8" | "i16" | "i32" | "i64" | "isize" | "u8" | "u16" | "u32" | "u64" | "usize" => {
+            Stored::Integer
+        }
+        "f32" | "f64" => Stored::Float,
         "String" | "Ulid" => Stored::Text,
         "Uuid" => Stored::Uuid,
         "Decimal" => Stored::Decimal,
@@ -121,14 +130,7 @@ impl<M: Model> ModelColumns<M> {
     /// The column for rule field `field`: `M`'s column, qualified with its
     /// table, or SQL `NULL` when `M` has no such column.
     pub fn column(&self, field: &str) -> SqlExpr {
-        if M::meta().has_column(field) {
-            SqlExpr::qualified(
-                crate::render::ast::ObjectName::parse(M::meta().table()),
-                field.to_owned(),
-            )
-        } else {
-            SqlExpr::null()
-        }
+        lower_column(&SqlColumns::column(self, field))
     }
 
     /// The value bound for the non-null JSON operand `value` on `field`:
@@ -159,7 +161,7 @@ impl<M: Model> ModelColumns<M> {
                 _ => None,
             }
         });
-        typed.unwrap_or_else(|| json_operand(value))
+        typed.unwrap_or_else(|| navree_access::sql_value(value))
     }
 
     /// Whether the non-null JSON operand `value` has the JSON type of
@@ -172,7 +174,7 @@ impl<M: Model> ModelColumns<M> {
             // Not a column: SQL `NULL`, which matches nothing either way.
             None => true,
             Some(Stored::Bool) => value.is_boolean(),
-            Some(Stored::Number) => value.is_number(),
+            Some(Stored::Integer | Stored::Float) => value.is_number(),
             Some(
                 Stored::Text
                 | Stored::Uuid
@@ -190,139 +192,90 @@ impl<M: Model> ModelColumns<M> {
     /// first `WHEN` that holds is the rule a record check picks (last match
     /// wins), `FALSE` when no rule applies.
     ///
-    /// Each condition is `TRUE` exactly when the record check holds and
-    /// `FALSE` or `NULL` otherwise (`CASE` treats `NULL` as not matched), so
-    /// the condition is always `TRUE` or `FALSE` and safe to negate. As in
-    /// record checks, `$eq: null` is `IS NULL`, `$ne` is null-safe
-    /// (`IS DISTINCT FROM` on PostgreSQL, `NOT (a <=> b)` on MySQL, `IS NOT`
-    /// on SQLite), and `$in` / `$nin` treat a `null` member as matching
-    /// null columns.
+    /// navree-access compiles it ([`Ability::sql_filter_with`] with this
+    /// mapping); it is written here as a render-tree condition, so each
+    /// dialect writes it in its own SQL. Each condition is `TRUE` exactly
+    /// when the record check holds and `FALSE` or `NULL` otherwise (`CASE`
+    /// treats `NULL` as not matched), so the condition is always `TRUE` or
+    /// `FALSE` and safe to negate. As in record checks, `$eq: null` is
+    /// `IS NULL`, `$ne` is null-safe (`IS DISTINCT FROM` on PostgreSQL,
+    /// `NOT (a <=> b)` on MySQL, `IS NOT` on SQLite), and `$in` / `$nin`
+    /// treat a `null` member as matching null columns.
     pub fn filter(&self, ability: &Ability, action: &str, subject: &str) -> SqlExpr {
-        // The rule selection of a whole-record check: field-only `cannot`
-        // rules do not hide records.
-        let relevant = ability.rules().iter().rev().filter(|rule| {
-            rule.matches_action(action) && rule.matches_subject(subject) && rule.matches_field(None)
-        });
-        let mut whens: Vec<(&Conditions, bool)> = Vec::new();
-        let mut otherwise = false;
-        for rule in relevant {
-            match &rule.conditions {
-                Some(conditions) if !conditions.is_empty() => {
-                    whens.push((conditions, !rule.inverted));
-                }
-                // Matches every record: decides for the rows not caught above.
-                _ => {
-                    otherwise = !rule.inverted;
-                    break;
-                }
-            }
-        }
-        // A trailing WHEN with the ELSE result changes nothing.
-        while whens.last().is_some_and(|(_, allow)| *allow == otherwise) {
-            whens.pop();
-        }
-        if whens.is_empty() {
-            return SqlExpr::bool(otherwise);
-        }
-        SqlExpr::case(
-            whens
-                .into_iter()
-                .map(|(conditions, allow)| (self.conditions(conditions), SqlExpr::bool(allow)))
-                .collect(),
-            Some(SqlExpr::bool(otherwise)),
-        )
-    }
-
-    /// Every condition of a rule, joined with `AND`.
-    fn conditions(&self, conditions: &Conditions) -> SqlExpr {
-        let mut all: Vec<SqlExpr> = conditions
-            .iter()
-            .flat_map(|(field, conds)| conds.iter().map(move |cond| self.cond(field, cond)))
-            .collect();
-        if all.len() == 1 {
-            all.remove(0)
-        } else {
-            SqlExpr::And(all)
-        }
-    }
-
-    /// One condition on `field`.
-    fn cond(&self, field: &str, cond: &Cond) -> SqlExpr {
-        let column = self.column(field);
-        let value = |v: &Json| SqlExpr::Value(self.value(field, v));
-        // A non-null operand of another type than the column never compares
-        // equal or ordered (see `accepts`).
-        let foreign = |v: &Json| !v.is_null() && !self.accepts(field, v);
-        match cond {
-            Cond::Eq(Json::Null) => column.is_null(),
-            Cond::Eq(v) if foreign(v) => SqlExpr::bool(false),
-            Cond::Eq(v) => column.eq(value(v)),
-            Cond::Ne(Json::Null) => column.is_not_null(),
-            Cond::Ne(v) if foreign(v) => SqlExpr::bool(true),
-            Cond::Ne(v) => column.binary(BinaryOp::NullSafeNotEq, value(v)),
-            Cond::Lt(v) | Cond::Lte(v) | Cond::Gt(v) | Cond::Gte(v) if foreign(v) => {
-                SqlExpr::bool(false)
-            }
-            Cond::Lt(v) => column.lt(value(v)),
-            Cond::Lte(v) => column.lte(value(v)),
-            Cond::Gt(v) => column.gt(value(v)),
-            Cond::Gte(v) => column.gte(value(v)),
-            Cond::In(items) => {
-                let (has_null, values) = self.listed(field, items);
-                let listed = (!values.is_empty()).then(|| {
-                    column
-                        .clone()
-                        .in_list(values.into_iter().map(value).collect())
-                });
-                match (listed, has_null) {
-                    (Some(listed), true) => SqlExpr::Or(vec![listed, column.is_null()]),
-                    (Some(listed), false) => listed,
-                    (None, true) => column.is_null(),
-                    (None, false) => SqlExpr::bool(false),
-                }
-            }
-            Cond::Nin(items) => {
-                let (has_null, values) = self.listed(field, items);
-                let unlisted = (!values.is_empty()).then(|| {
-                    column
-                        .clone()
-                        .not_in_list(values.into_iter().map(value).collect())
-                });
-                match (unlisted, has_null) {
-                    (Some(unlisted), true) => SqlExpr::And(vec![column.is_not_null(), unlisted]),
-                    (Some(unlisted), false) => SqlExpr::Or(vec![column.is_null(), unlisted]),
-                    (None, true) => column.is_not_null(),
-                    (None, false) => SqlExpr::bool(true),
-                }
-            }
-        }
-    }
-
-    /// Whether `items` holds `null`, and its members of the column's type.
-    fn listed<'a>(&self, field: &str, items: &'a [Json]) -> (bool, Vec<&'a Json>) {
-        let has_null = items.iter().any(Json::is_null);
-        let values = items
-            .iter()
-            .filter(|v| !v.is_null() && self.accepts(field, v))
-            .collect();
-        (has_null, values)
+        lower(&ability.sql_filter_with(action, subject, self))
     }
 }
 
-/// A JSON operand as a value without a column type: booleans as `Bool`,
-/// integers as `I64`, other numbers as `F64`, strings as text (arrays
-/// and objects, which conditions never hold, as their JSON text).
-fn json_operand(value: &Json) -> Value {
-    match value {
-        Json::Null => Value::Null(Kind::String),
-        Json::Bool(b) => Value::from(*b),
-        Json::Number(n) => match (n.as_i64(), n.as_f64()) {
-            (Some(i), _) => Value::from(i),
-            (None, Some(f)) => Value::from(f),
-            (None, None) => Value::from(n.to_string()),
-        },
-        Json::String(s) => Value::from(s.as_str()),
-        other => Value::from(other.to_string()),
+/// navree-access's view of the model's columns.
+impl<M: Model> SqlColumns for ModelColumns<M> {
+    fn column(&self, field: &str) -> SqlColumn {
+        if M::meta().has_column(field) {
+            SqlColumn::qualified(M::meta().table(), field)
+        } else {
+            SqlColumn::Null
+        }
+    }
+
+    fn value(&self, field: &str, value: &Json) -> Value {
+        ModelColumns::value(self, field, value)
+    }
+
+    fn accepts(&self, field: &str, value: &Json) -> bool {
+        ModelColumns::accepts(self, field, value)
+    }
+
+    fn kind(&self, field: &str) -> Option<Kind> {
+        match stored::<M>(field)? {
+            Stored::Integer => Some(Kind::I64),
+            Stored::Float => Some(Kind::F64),
+            _ => None,
+        }
+    }
+}
+
+/// A compiled list filter as a render-tree condition.
+fn lower(filter: &SqlFilter) -> SqlExpr {
+    match filter {
+        SqlFilter::Bool(value) => SqlExpr::bool(*value),
+        SqlFilter::Case { whens, otherwise } => SqlExpr::case(
+            whens
+                .iter()
+                .map(|(condition, allow)| (lower(condition), SqlExpr::bool(*allow)))
+                .collect(),
+            Some(SqlExpr::bool(*otherwise)),
+        ),
+        SqlFilter::And(parts) => SqlExpr::And(parts.iter().map(lower).collect()),
+        SqlFilter::Or(parts) => SqlExpr::Or(parts.iter().map(lower).collect()),
+        SqlFilter::IsNull(column) => lower_column(column).is_null(),
+        SqlFilter::IsNotNull(column) => lower_column(column).is_not_null(),
+        SqlFilter::Compare(column, op, value) => {
+            let (column, value) = (lower_column(column), SqlExpr::Value(value.clone()));
+            match op {
+                SqlOp::Eq => column.eq(value),
+                SqlOp::DistinctFrom => column.binary(BinaryOp::NullSafeNotEq, value),
+                SqlOp::Lt => column.lt(value),
+                SqlOp::Lte => column.lte(value),
+                SqlOp::Gt => column.gt(value),
+                SqlOp::Gte => column.gte(value),
+            }
+        }
+        SqlFilter::In(column, values) => {
+            lower_column(column).in_list(values.iter().cloned().map(SqlExpr::Value).collect())
+        }
+        SqlFilter::NotIn(column, values) => {
+            lower_column(column).not_in_list(values.iter().cloned().map(SqlExpr::Value).collect())
+        }
+    }
+}
+
+fn lower_column(column: &SqlColumn) -> SqlExpr {
+    match column {
+        SqlColumn::Column {
+            table: Some(table),
+            name,
+        } => SqlExpr::qualified(ObjectName::parse(table.clone()), name.clone()),
+        SqlColumn::Column { table: None, name } => SqlExpr::col(name.clone()),
+        SqlColumn::Null => SqlExpr::null(),
     }
 }
 

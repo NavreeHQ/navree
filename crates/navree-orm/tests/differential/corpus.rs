@@ -992,14 +992,6 @@ pub fn reads(dialect: Dialect) -> Vec<Case> {
             navree_orm::ir::NativeFilter::new("mongodb", "{ status: 'open' }"),
         ))),
     ));
-    // A condition built with sea-query: written by sea-query's builder and
-    // embedded by the renderer as a raw fragment.
-    cases.push(read(
-        "a condition built with the query builder",
-        table("companies").where_(Filter::from(
-            sea_query::Condition::all().add(sea_query::Expr::cust("1 = 1")),
-        )),
-    ));
     // Where the compiler's SQL is wrong and the renderer's right.
     cases.push(
         read(

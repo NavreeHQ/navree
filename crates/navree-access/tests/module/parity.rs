@@ -1,51 +1,56 @@
 //! Review focus 5: for any rule set, `ability.can(action, record)` equals
-//! "the record is in the `Accessible` list query", with the SQL running
-//! against SQLite on real column types (UUID blobs, timestamps, booleans,
-//! integers, floats, nullable columns).
+//! "the record is in the `Accessible` list query", with the SQL running on
+//! the test database (see [`crate::database`]) on real column types (UUIDs,
+//! timestamps with microseconds, booleans, integers, floats, nullable
+//! columns).
 
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use chrono::{DateTime, Duration, Utc};
 use navree_access::{
-    Ability, Accessible, ActionMarker, Cond, Conditions, Delete, Read, Rule, Subject, Update,
-    record_json,
+    Ability, Accessible, ActionMarker, Cond, Conditions, Delete, Read, Rule, Subject, TypedColumns,
+    Update, row_json,
 };
-use navree_db::{Db, DbOptions};
+use navree_db::navree_schema::{Dialect, Schema};
+use navree_db::record::{self, Filter};
+use navree_db::{Db, Executor, Kind, Record};
 use proptest::prelude::*;
 use proptest::test_runner::{Config, TestCaseError, TestRunner};
-use sea_orm::sea_query::{ColumnDef, Table};
-use sea_orm::{ActiveModelTrait, EntityTrait, Set};
-use sea_orm_migration::SchemaManager;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-mod item {
-    use sea_orm::entity::prelude::*;
-
-    #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
-    #[sea_orm(table_name = "items")]
-    pub struct Model {
-        #[sea_orm(primary_key, auto_increment = false)]
+navree_db::record! {
+    /// An item (`items`).
+    #[derive(Clone, Debug, PartialEq)]
+    pub struct Item in "items" {
         pub id: Uuid,
         pub owner_id: Option<Uuid>,
         pub status: Option<String>,
         pub amount: i64,
         pub score: f64,
         pub flag: bool,
-        pub created_at: DateTimeUtc,
-        pub due_at: Option<DateTimeUtc>,
+        pub created_at: DateTime<Utc>,
+        pub due_at: Option<DateTime<Utc>>,
     }
-
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
-impl Subject for item::Entity {
+impl Subject for Item {
     const SUBJECT: &'static str = "Item";
     const PERMISSION_PREFIX: &'static str = "items";
+}
+
+/// The columns of `items` with their types.
+fn columns() -> TypedColumns {
+    TypedColumns::new(Item::TABLE)
+        .with("id", Kind::Uuid)
+        .with("owner_id", Kind::Uuid)
+        .with("status", Kind::String)
+        .with("amount", Kind::I64)
+        .with("score", Kind::F64)
+        .with("flag", Kind::Bool)
+        .with("created_at", Kind::Timestamp)
+        .with("due_at", Kind::Timestamp)
 }
 
 /// The values records and conditions draw from, so they often meet.
@@ -191,54 +196,59 @@ fn rules_strategy() -> impl Strategy<Value = Vec<RuleSeed>> {
     prop::collection::vec(rule, 0..6)
 }
 
-/// Inserts records covering every pool value, including nulls.
-async fn seed(db: &Db, pools: &Pools) -> Vec<item::Model> {
-    let manager = SchemaManager::new(db.conn());
-    manager
-        .create_table(
-            Table::create()
-                .table("items")
-                .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                .col(ColumnDef::new("owner_id").uuid().null())
-                .col(ColumnDef::new("status").string().null())
-                .col(ColumnDef::new("amount").big_integer().not_null())
-                .col(ColumnDef::new("score").double().not_null())
-                .col(ColumnDef::new("flag").boolean().not_null())
-                .col(
-                    ColumnDef::new("created_at")
-                        .timestamp_with_time_zone()
-                        .not_null(),
-                )
-                .col(ColumnDef::new("due_at").timestamp_with_time_zone().null())
-                .to_owned(),
-        )
+/// Creates `items` and inserts records covering every pool value, including
+/// nulls; the records as stored.
+async fn seed(db: &Db, pools: &Pools) -> Vec<Item> {
+    let schema = Schema::new(db);
+    let mysql = schema.target().await.expect("a target").dialect() == Dialect::MySql;
+    schema
+        .create("items", |t| {
+            if mysql {
+                t.binary("id").length(16).fixed().primary();
+                t.binary("owner_id").length(16).fixed().nullable();
+            } else {
+                t.uuid("id").primary();
+                t.uuid("owner_id").nullable();
+            }
+            t.string("status").nullable();
+            t.big_integer("amount");
+            t.double("score");
+            t.boolean("flag");
+            t.timestamp_tz("created_at");
+            t.timestamp_tz("due_at").nullable();
+        })
         .await
         .expect("create items");
     let statuses = [Some("draft"), Some("open"), Some("won"), None];
     let mut records = Vec::new();
     for i in 0..72_usize {
-        let model = item::ActiveModel {
-            id: Set(Uuid::now_v7()),
-            owner_id: Set((i % 4 != 3).then(|| pools.owners[i % 3])),
-            status: Set(statuses[(i / 2) % 4].map(str::to_owned)),
-            amount: Set([-5, 0, 3, 4, 10][(i / 3) % 5]),
-            score: Set([0.5, 1.0, 2.25][(i / 5) % 3]),
-            flag: Set(i.is_multiple_of(2)),
-            created_at: Set(pools.times[(i / 7) % 5]),
-            due_at: Set((i % 3 != 0).then(|| pools.times[(i + 2) % 5])),
-        }
-        .insert(db.conn())
-        .await
-        .expect("insert item");
-        records.push(model);
+        let item = Item {
+            id: Uuid::now_v7(),
+            owner_id: (i % 4 != 3).then(|| pools.owners[i % 3]),
+            status: statuses[(i / 2) % 4].map(str::to_owned),
+            amount: [-5, 0, 3, 4, 10][(i / 3) % 5],
+            score: [0.5, 1.0, 2.25][(i / 5) % 3],
+            flag: i.is_multiple_of(2),
+            created_at: pools.times[(i / 7) % 5],
+            due_at: (i % 3 != 0).then(|| pools.times[(i + 2) % 5]),
+        };
+        let stored = record::insert_returning(db, &item)
+            .await
+            .expect("insert item");
+        assert_eq!(stored, item, "the database keeps microseconds");
+        records.push(stored);
     }
     records
 }
 
 async fn listed<A: ActionMarker>(db: &Db, ability: &Arc<Ability>) -> BTreeSet<Uuid> {
-    Accessible::<item::Entity, A>::new(ability.clone())
-        .apply(item::Entity::find())
-        .all(db.conn())
+    let (sql, values) = Accessible::<Item, A>::new(ability.clone())
+        .sql_filter(&columns())
+        .to_statement(Executor::backend(db))
+        .into_parts();
+    Item::select()
+        .filter(Filter::all().raw(sql, values))
+        .all(db)
         .await
         .expect("list query")
         .into_iter()
@@ -246,10 +256,10 @@ async fn listed<A: ActionMarker>(db: &Db, ability: &Arc<Ability>) -> BTreeSet<Uu
         .collect()
 }
 
-fn allowed(ability: &Ability, action: &str, records: &[item::Model]) -> BTreeSet<Uuid> {
+fn allowed(ability: &Ability, action: &str, records: &[Item]) -> BTreeSet<Uuid> {
     records
         .iter()
-        .filter(|item| ability.can(action, "Item", Some(&record_json(*item))))
+        .filter(|item| ability.can(action, "Item", Some(&row_json(*item))))
         .map(|item| item.id)
         .collect()
 }
@@ -260,17 +270,11 @@ fn record_check_and_list_filter_agree() {
         .enable_all()
         .build()
         .unwrap();
-    let (url, _guard) = navree_testing::temp_sqlite_url();
     let pools = Pools::new();
-    let (db, records) = runtime.block_on(async {
-        let db = Db::connect(&DbOptions {
-            url,
-            ..DbOptions::default()
-        })
-        .await
-        .expect("connect");
+    let (db, records, _keep) = runtime.block_on(async {
+        let (db, keep) = crate::database::connect().await;
         let records = seed(&db, &pools).await;
-        (db, records)
+        (db, records, keep)
     });
 
     let mut runner = TestRunner::new(Config::with_cases(400));
@@ -290,14 +294,17 @@ fn record_check_and_list_filter_agree() {
                     let expected = allowed(&ability, action, &records);
                     if sql != expected {
                         return Err(TestCaseError::fail(format!(
-                            "`{action}` disagrees for rules {}:\n  only in SQL: {:?}\n  only in record checks: {:?}",
+                            "`{action}` disagrees for rules {}:\n  SQL: {}\n  only in SQL: {:?}\n  only in record checks: {:?}",
                             ability.to_casl_json(),
+                            ability
+                                .sql_filter_with(action, "Item", &columns())
+                                .to_statement(Executor::backend(&db)),
                             sql.difference(&expected)
-                                .map(|id| record_json(records.iter().find(|r| r.id == *id).unwrap()))
+                                .map(|id| row_json(records.iter().find(|r| r.id == *id).unwrap()))
                                 .collect::<Vec<_>>(),
                             expected
                                 .difference(&sql)
-                                .map(|id| record_json(records.iter().find(|r| r.id == *id).unwrap()))
+                                .map(|id| row_json(records.iter().find(|r| r.id == *id).unwrap()))
                                 .collect::<Vec<_>>(),
                         )));
                     }
@@ -306,13 +313,16 @@ fn record_check_and_list_filter_agree() {
             })
         })
         .unwrap();
+    runtime.block_on(async {
+        let _ = db.close().await;
+    });
 }
 
 #[test]
 fn record_json_uses_column_names_and_condition_forms() {
     let pools = Pools::new();
     let id = Uuid::now_v7();
-    let model = item::Model {
+    let item = Item {
         id,
         owner_id: None,
         status: Some("open".into()),
@@ -323,7 +333,7 @@ fn record_json_uses_column_names_and_condition_forms() {
         due_at: None,
     };
     assert_eq!(
-        record_json(&model),
+        row_json(&item),
         json!({
             "id": id.hyphenated().to_string(),
             "owner_id": null,

@@ -517,6 +517,7 @@ impl<R: Resource> Handle<R> {
     /// The rows the user may do `action` on, starting from the resource's
     /// query.
     fn base(&self, cx: &Cx, action: &str) -> Select<R::Entity> {
+        // SeaORM shim of navree-access (until navree-helm is moved).
         let condition = cx.ability().sql_filter_with(
             action,
             <R::Entity as Subject>::SUBJECT,
@@ -524,7 +525,7 @@ impl<R: Resource> Handle<R> {
         );
         self.resource
             .query(<R::Entity as EntityTrait>::find())
-            .filter(condition)
+            .filter(condition.to_sea_query())
     }
 
     fn template(&self, column: &str) -> &SqlValue {

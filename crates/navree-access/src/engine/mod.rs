@@ -1,6 +1,7 @@
 //! The ability engine: rules in CASL's JSON format, record checks and SQL list
-//! filters. Pure: no database, HTTP or module wiring (that is the
-//! `AccessModule` half of the crate).
+//! filters. Pure: no database connection, HTTP or module wiring (that is the
+//! `AccessModule` half of the crate); list filters are navree-db values and
+//! statements.
 //!
 //! - [`Rules`] collects rules in order with [`Rules::can`] / [`Rules::cannot`];
 //!   [`Rules::build`] validates them into an [`Ability`].
@@ -9,7 +10,9 @@
 //!   matching rule wins, `manage` matches any action, `all` matches any
 //!   subject, and no matching rule means deny.
 //! - [`Ability::sql_filter`] compiles the same rules into one SQL `CASE`
-//!   chain, so a record check and a list filter never disagree.
+//!   chain ([`SqlFilter`], written for a backend as a portable fragment by
+//!   [`SqlFilter::to_statement`]), so a record check and a list filter never
+//!   disagree.
 //! - [`Ability::to_casl_json`] / [`Ability::from_casl_json`] speak CASL's JSON
 //!   rule format, which `createMongoAbility` in `@casl/ability` accepts as is.
 //!
@@ -76,7 +79,10 @@ mod sql;
 pub use ability::Ability;
 pub use condition::{Cond, Conditions, FieldRef, IntoCondValue, field};
 pub use rule::{Rule, RuleBuilder, RuleError, Rules};
-pub use sql::{DefaultColumns, SqlColumns, sql_value};
+pub use sql::{
+    DefaultColumns, SqlColumn, SqlColumns, SqlFilter, SqlOp, TypedColumns, accepts_kind, sql_value,
+    typed_value, value_json,
+};
 
 /// The standard `read` action.
 pub const READ: &str = "read";
