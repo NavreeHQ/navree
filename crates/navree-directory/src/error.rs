@@ -2,7 +2,7 @@
 
 use http::StatusCode;
 use navree_crypto::CryptoError;
-use navree_db::sea_orm::DbErr;
+use navree_db::DbError;
 use navree_http::AppError;
 use navree_integrations::IntegrationsError;
 use navree_kernel::{BoxError, KernelError};
@@ -73,7 +73,10 @@ pub enum DirectoryError {
     Crypto(#[from] CryptoError),
     /// A database error.
     #[error("directory database error: {0}")]
-    Db(#[from] DbErr),
+    Db(#[from] DbError),
+    /// A model operation failed (a query, a write, a hook).
+    #[error("directory database error: {0}")]
+    Orm(#[from] OrmError),
     /// A provider the service needs could not be resolved.
     #[error("directory provider error: {0}")]
     Kernel(#[from] KernelError),
@@ -130,6 +133,7 @@ impl DirectoryError {
                 .with_detail(format!("{source_name} could not be read: {message}")),
             DirectoryError::Integrations(error) => return error.to_app_error(),
             DirectoryError::Db(error) => return navree_db::map_db_error(error),
+            DirectoryError::Orm(error) => return map_orm_error(error),
             DirectoryError::Sink(_)
             | DirectoryError::NotBound
             | DirectoryError::Config(_)
@@ -150,10 +154,13 @@ impl DirectoryError {
     }
 }
 
-/// The ORM's errors are database errors (`Db`), mapped the same way.
-impl From<OrmError> for DirectoryError {
-    fn from(error: OrmError) -> Self {
-        DirectoryError::Db(DbErr::from(error))
+/// The response of an ORM error: a missing record is a 404, a unique or
+/// foreign-key violation a 409, anything else a 500.
+fn map_orm_error(error: &OrmError) -> Option<AppError> {
+    match error {
+        OrmError::Db(db) => navree_db::map_db_error(db),
+        OrmError::ModelNotFound { .. } => Some(AppError::not_found()),
+        _ => None,
     }
 }
 

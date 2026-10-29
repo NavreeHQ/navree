@@ -7,6 +7,7 @@ mod certificates;
 mod claims;
 mod cloudflare;
 mod commands;
+mod flow;
 mod https;
 mod managed;
 mod migration;

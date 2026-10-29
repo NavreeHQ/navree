@@ -7,17 +7,19 @@
 //! `NAVREE_TEST_POSTGRES_URL` to a superuser URL of a throwaway server, for
 //! example `postgres://postgres:postgres@127.0.0.1:55432/postgres`. Each
 //! test creates its own database and drops it at the end.
+//!
+//! The module's down migration runs under a writer that adds chunks to the
+//! hypertables, as a flush does.
 #![cfg(feature = "postgres")]
 
 use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::Utc;
-use navree_db::DatabaseModule;
+use navree_db::{DatabaseModule, Db, DbOptions, Executor, Migrator, Pool, Statement};
 use navree_lighthouse::{IssueFilter, IssueStatus, Lighthouse, LighthouseModule, Period, Report};
 use navree_telemetry::{EventContext, RequestHandled, Telemetry, TelemetryEvent, TelemetryRecord};
 use navree_testing::TestApp;
-use sea_orm::{ConnectionTrait, Database};
 use uuid::Uuid;
 
 /// A database of its own on the server of `NAVREE_TEST_POSTGRES_URL`.
@@ -34,31 +36,42 @@ impl Scratch {
             return None;
         };
         let name = format!("navree_lighthouse_{}", Uuid::now_v7().simple());
-        let conn = Database::connect(&admin).await.unwrap();
-        conn.execute_unprepared(&format!("CREATE DATABASE {name}"))
-            .await
-            .unwrap();
-        conn.close().await.unwrap();
+        run_admin(&admin, &format!("CREATE DATABASE {name}")).await;
         let (base, _) = admin.rsplit_once('/').unwrap();
         let url = format!("{base}/{name}");
         Some(Scratch { admin, name, url })
     }
 
     async fn drop(self) {
-        let conn = Database::connect(&self.admin).await.unwrap();
-        conn.execute_unprepared(&format!(
-            "DROP DATABASE IF EXISTS {} WITH (FORCE)",
-            self.name
-        ))
-        .await
-        .unwrap();
+        run_admin(
+            &self.admin,
+            &format!("DROP DATABASE IF EXISTS {} WITH (FORCE)", self.name),
+        )
+        .await;
     }
+}
+
+/// Runs `sql` on the server of `admin`.
+async fn run_admin(admin: &str, sql: &str) {
+    let pool = Pool::connect(&DbOptions {
+        url: admin.to_owned(),
+        max_connections: 1,
+        ..DbOptions::default()
+    })
+    .await
+    .unwrap();
+    pool.execute_script(sql).await.unwrap();
+    pool.close().await;
 }
 
 /// One process: the database and Lighthouse with a small detail queue.
 async fn process(scratch: &Scratch, server: &str) -> TestApp {
     TestApp::builder()
         .config("database.url", scratch.url.clone())
+        .config(
+            "database.native_units_of_work",
+            std::env::var("NAVREE_TEST_NATIVE_UNITS_OF_WORK").as_deref() == Ok("1"),
+        )
         .config("database.migrate_on_boot", true)
         .config("lighthouse.server", server)
         .config("lighthouse.release", "r1")
@@ -172,5 +185,90 @@ async fn two_processes_count_every_request_and_reopen_a_resolved_issue_once() {
 
     web.shutdown().await.unwrap();
     worker.shutdown().await.unwrap();
+    scratch.drop().await;
+}
+
+/// One flush as the recording thread makes it, in a transaction of its
+/// own: an issue, an occurrence, a sample and an aggregate row, in that
+/// order. The occurrence, the sample and the aggregate are `days` days
+/// back, a day of their own in the hypertables: each adds a chunk.
+async fn flush_a_day(db: &Db, n: u64, days: u64) -> Result<(), navree_db::DbError> {
+    let tx = db.begin().await?;
+    let statements = [
+        format!(
+            "INSERT INTO lighthouse_issues (id, fingerprint, kind, level, status, title, culprit, message, chain, count, first_seen, last_seen, created_at, updated_at) \
+             VALUES (gen_random_uuid(), 'race-{n}', 'exception', 'error', 'open', 't', 'c', 'm', '[]', 1, now(), now(), now(), now())"
+        ),
+        format!(
+            "INSERT INTO lighthouse_occurrences (id, issue_id, at, level, message, chain, context) \
+             SELECT gen_random_uuid(), id, now() - interval '{days} days', 'error', 'm', '[]', '{{}}' FROM lighthouse_issues WHERE fingerprint = 'race-{n}'"
+        ),
+        format!(
+            "INSERT INTO lighthouse_samples (id, kind, name, at, duration_ms, outcome, slow, spans, context) \
+             VALUES (gen_random_uuid(), 'request', 'GET /', now() - interval '{days} days', 1.0, 'ok', false, '[]', '{{}}')"
+        ),
+        format!(
+            "INSERT INTO lighthouse_aggregates (id, resolution, bucket, kind, key_hash, key, process, count, errors, extra, total_ms, max_ms, histogram) \
+             VALUES (gen_random_uuid(), 60, now() - interval '{days} days', 'request', 'h', 'k', 'p', 1, 0, 0, 1.0, 1.0, '')"
+        ),
+    ];
+    for sql in statements {
+        tx.execute(&Statement::text(sql)).await?;
+    }
+    tx.commit().await
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_down_migration_survives_a_flush_adding_a_chunk() {
+    let Some(scratch) = Scratch::new().await else {
+        return;
+    };
+    let app = TestApp::builder()
+        .config("database.url", scratch.url.clone())
+        .config("database.migrate_on_boot", true)
+        .config("lighthouse.enabled", false)
+        .config("lighthouse.dashboard", false)
+        .module(DatabaseModule::from_config())
+        .module(LighthouseModule::from_config())
+        .build()
+        .await;
+    let db = app.get::<Db>().await;
+    for round in 0..8u64 {
+        // A writer that flushes a new day every time (a chunk each), until
+        // its tables are gone.
+        let writer = {
+            let db = db.clone();
+            tokio::spawn(async move {
+                let mut flushed = 0u64;
+                for day in 0..10_000 {
+                    if flush_a_day(&db, round * 10_000 + day, day % 300)
+                        .await
+                        .is_err()
+                    {
+                        break;
+                    }
+                    flushed += 1;
+                }
+                flushed
+            })
+        };
+        // Let it get going, then roll the module back under it.
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        let reverted = Migrator::reset(app.ctx(), false)
+            .await
+            .unwrap_or_else(|error| panic!("round {round}: the rollback fails: {error}"));
+        assert!(!reverted.migrations.is_empty());
+        let flushed = writer.await.unwrap();
+        assert!(flushed > 0, "round {round}: the writer was flushing");
+        let tables = db
+            .fetch_all(&Statement::text(
+                "SELECT tablename FROM pg_tables WHERE tablename LIKE 'lighthouse_%'",
+            ))
+            .await
+            .unwrap();
+        assert!(tables.is_empty(), "round {round}: the tables are gone");
+        Migrator::up(app.ctx()).await.unwrap();
+    }
+    app.shutdown().await.unwrap();
     scratch.drop().await;
 }

@@ -241,6 +241,7 @@ impl Server {
                 }
             }
         };
+        let matched = exact_external_id(matched, query.filter.as_ref(), |row| &row.external_id);
         let total = matched.len();
         let page: Vec<models::User> = matched
             .into_iter()
@@ -395,11 +396,10 @@ impl Server {
         let saved = text.clone();
         self.rt
             .write(None, |uow| async move {
-                let tx = uow.tx().await?;
                 models::User::query()
                     .where_(models::User::ID.eq(id))
                     .update(
-                        &*tx,
+                        &uow,
                         [
                             models::User::RESOURCE.set(Some(saved)),
                             models::User::UPDATED_AT.set(now),
@@ -552,6 +552,7 @@ impl Server {
                 }
             }
         };
+        let matched = exact_external_id(matched, query.filter.as_ref(), |row| &row.external_id);
         let total = matched.len();
         let page: Vec<models::Group> = matched
             .into_iter()
@@ -780,6 +781,26 @@ pub(crate) fn resource_of(user: &DirectoryUser) -> Value {
         resource.insert(ENTERPRISE_USER_SCHEMA.into(), Value::Object(enterprise));
     }
     Value::Object(resource)
+}
+
+/// `externalId` compares case-exact, but a database whose collation ignores
+/// case (MySQL's default) answers an indexed `externalId eq` lookup with
+/// every spelling of it: keep the rows that match exactly.
+fn exact_external_id<T>(
+    rows: Vec<T>,
+    filter: Option<&Filter>,
+    external_id: impl Fn(&T) -> &String,
+) -> Vec<T> {
+    match filter
+        .and_then(Filter::simple_eq)
+        .filter(|(attribute, _)| attribute.eq_ignore_ascii_case("externalId"))
+    {
+        Some((_, wanted)) => rows
+            .into_iter()
+            .filter(|row| external_id(row) == wanted)
+            .collect(),
+        None => rows,
+    }
 }
 
 #[cfg(test)]

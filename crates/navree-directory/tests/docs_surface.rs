@@ -28,6 +28,9 @@ use navree_integrations::ScopeSet;
 use navree_orm::Model as _;
 use navree_testing::TestApp;
 use serde_json::{Value, json};
+
+#[path = "directory/servers.rs"]
+mod servers;
 use uuid::Uuid;
 
 #[test]
@@ -597,8 +600,7 @@ fn abilities(ctx: &AbilityCtx, rules: &mut Rules) {
 
 #[tokio::test]
 async fn the_documented_routes_and_commands_are_registered() {
-    let app = TestApp::builder()
-        .temp_database()
+    let app = servers::database(TestApp::builder())
         .module(DatabaseModule::from_config())
         .module(AccessModule::for_root(AccessOptions {
             abilities,

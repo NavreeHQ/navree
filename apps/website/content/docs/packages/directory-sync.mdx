@@ -515,7 +515,7 @@ Pages have `{data, meta: {current_page, per_page, total, last_page}}`, 50 a page
 | 409 | `directory_run_not_held` | Approving a run that isn't held |
 | 502 | `directory_source_failed` | `DirectoryError::Source` returned from a handler (runs record their source failures instead) |
 
-`DirectoryError` returned from a handler with `?` keeps its answer; the `microsoft`, `google` and `okta` sources pass on navree-integrations' answers (`integration_not_connected`). SCIM requests answer in the SCIM error shape: `invalidSyntax`, `invalidFilter`, `invalidPath`, `invalidValue`, `noTarget` and `uniqueness`.
+`DirectoryError` returned from a handler with `?` keeps its answer; a database error (`DirectoryError::Db`, and `DirectoryError::Orm` for model operations) answers as navree-db maps it: 404 for a missing record, 409 for a unique or foreign-key violation, otherwise a 500; the `microsoft`, `google` and `okta` sources pass on navree-integrations' answers (`integration_not_connected`). SCIM requests answer in the SCIM error shape: `invalidSyntax`, `invalidFilter`, `invalidPath`, `invalidValue`, `noTarget` and `uniqueness`.
 
 ## Commands
 

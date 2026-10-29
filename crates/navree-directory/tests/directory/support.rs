@@ -293,8 +293,7 @@ fn abilities(ctx: &AbilityCtx, rules: &mut Rules) {
 /// clock, the directory module from configuration (admin routes off), the
 /// recording sink.
 pub fn builder(clock: Arc<FixedClock>, inbox: Arc<Inbox>, log: Arc<SinkLog>) -> TestAppBuilder {
-    TestApp::builder()
-        .temp_database()
+    crate::servers::database(TestApp::builder())
         .config("app.key", generate_key())
         .config("http.per_ip_rate_limit", Value::Null)
         .config("directory.routes", false)

@@ -6,16 +6,19 @@
 //! tables (when missing) in that database as it connects at boot, makes
 //! the time-series ones hypertables there when it runs TimescaleDB, and
 //! reads and writes there.
+//!
+//! Written with the schema builder. The names are the ones the module's
+//! migrations always had, so a database migrated by an earlier version
+//! finds nothing pending. The columns are the types those migrations
+//! created: UUIDs as `BINARY(16)` on MySQL and MariaDB (where navree-db
+//! writes UUIDs as 16 bytes), text of no fixed length as `VARCHAR` without
+//! a length on PostgreSQL and SQLite and `VARCHAR(255)` on MySQL.
 
 use navree_db::MigrationSet;
 use navree_db::navree_schema::{
-    Dialect, Hypertable, KeyStrategy, Migration, Schema, SchemaMigration, SchemaResult,
-    TimescaleMode,
+    Blueprint, ColumnBuilder, Dialect, Hypertable, KeyStrategy, Migration, Schema, SchemaMigration,
+    SchemaResult, TimescaleMode,
 };
-use sea_orm::DbErr;
-use sea_orm::sea_query::{ColumnDef, ForeignKey, ForeignKeyAction, Index, Table};
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
 
 /// The name of the Lighthouse migration set.
 pub const LIGHTHOUSE_MIGRATIONS: &str = "lighthouse";
@@ -32,7 +35,10 @@ pub(crate) const AGGREGATES_TABLE: &str = "lighthouse_aggregates";
 /// The Lighthouse migration set.
 pub(crate) fn migrations() -> MigrationSet {
     MigrationSet::new(LIGHTHOUSE_MIGRATIONS)
-        .migration(CreateLighthouseTables)
+        .migration(SchemaMigration::new(
+            "m20261027_000001_create_lighthouse_tables",
+            CreateLighthouseTables,
+        ))
         .migration(SchemaMigration::new(
             "m20261027_000002_convert_lighthouse_events_to_hypertables",
             ConvertEventsToHypertables,
@@ -111,304 +117,222 @@ impl Migration for ConvertEventsToHypertables {
     }
 }
 
+/// The five tables, in the order a batch writes them (and the order the
+/// down migration locks them in): issues first.
+const TABLES: [&str; 5] = [
+    "lighthouse_issues",
+    "lighthouse_occurrences",
+    "lighthouse_samples",
+    "lighthouse_aggregates",
+    "lighthouse_alerts",
+];
+
 /// Creates the five tables.
 pub(crate) struct CreateLighthouseTables;
 
-impl MigrationName for CreateLighthouseTables {
-    fn name(&self) -> &str {
-        "m20261027_000001_create_lighthouse_tables"
+impl Migration for CreateLighthouseTables {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        create_tables(schema).await
+    }
+
+    /// Drops the tables.
+    ///
+    /// On PostgreSQL every table is locked first, in the order the
+    /// recording thread's batches write them (issues, occurrences, samples,
+    /// aggregates, alerts). A batch being flushed while the tables go would
+    /// otherwise add a chunk to a hypertable that is being dropped, or wait
+    /// for a lock the drop holds while the drop waits for one of its own,
+    /// and the database would end one of them as a deadlock. Locked first,
+    /// in that order, the drop waits for a batch in progress to commit; a
+    /// batch that starts after it finds the tables gone, a failed flush
+    /// Lighthouse reports and drops.
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        if schema.target().await?.dialect() == Dialect::Postgres && !schema.is_pretending() {
+            let mut existing = Vec::new();
+            for table in TABLES {
+                if schema.has_table(table).await? {
+                    existing.push(table);
+                }
+            }
+            if !existing.is_empty() {
+                schema
+                    .statement(&format!(
+                        "LOCK TABLE {} IN ACCESS EXCLUSIVE MODE",
+                        existing.join(", ")
+                    ))
+                    .await?;
+            }
+        }
+        for table in TABLES.iter().rev() {
+            schema.drop_if_exists(table).await?;
+        }
+        Ok(())
     }
 }
 
-#[async_trait]
-impl MigrationTrait for CreateLighthouseTables {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        create_tables(manager).await
-    }
-
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        drop_tables(manager).await
+/// A UUID column: `BINARY(16)` on MySQL and MariaDB, `uuid` elsewhere.
+fn uuid<'a>(t: &'a mut Blueprint, name: &str, dialect: Dialect) -> ColumnBuilder<'a> {
+    if dialect == Dialect::MySql {
+        t.binary(name).length(16).fixed()
+    } else {
+        t.uuid(name)
     }
 }
 
-fn timestamp(name: &'static str) -> ColumnDef {
-    ColumnDef::new(name)
-        .timestamp_with_time_zone()
-        .not_null()
-        .to_owned()
+/// A text column of no fixed length: `VARCHAR(255)` on MySQL and MariaDB,
+/// `VARCHAR` elsewhere.
+fn varchar<'a>(t: &'a mut Blueprint, name: &str, dialect: Dialect) -> ColumnBuilder<'a> {
+    if dialect == Dialect::MySql {
+        t.string(name).length(255)
+    } else {
+        t.raw_column(name, "VARCHAR")
+    }
 }
 
-fn nullable_timestamp(name: &'static str) -> ColumnDef {
-    ColumnDef::new(name)
-        .timestamp_with_time_zone()
-        .null()
-        .to_owned()
-}
-
-fn nullable_string(name: &'static str) -> ColumnDef {
-    ColumnDef::new(name).string().null().to_owned()
-}
-
-fn text(name: &'static str) -> ColumnDef {
-    ColumnDef::new(name).text().not_null().to_owned()
-}
-
-fn nullable_text(name: &'static str) -> ColumnDef {
-    ColumnDef::new(name).text().null().to_owned()
-}
-
-/// Creates the tables (if they do not exist yet).
-pub(crate) async fn create_tables(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
-    manager
-        .create_table(
-            Table::create()
-                .table("lighthouse_issues")
-                .if_not_exists()
-                .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                .col(
-                    ColumnDef::new("fingerprint")
-                        .string()
-                        .not_null()
-                        .unique_key(),
-                )
-                .col(ColumnDef::new("kind").string().not_null())
-                .col(ColumnDef::new("level").string().not_null())
-                .col(ColumnDef::new("status").string().not_null())
-                .col(ColumnDef::new("title").string().not_null())
-                .col(ColumnDef::new("culprit").string().not_null())
-                .col(text("message"))
-                .col(text("chain"))
-                .col(nullable_string("location"))
-                .col(nullable_string("error_type"))
-                .col(ColumnDef::new("count").big_integer().not_null())
-                .col(timestamp("first_seen"))
-                .col(timestamp("last_seen"))
-                .col(nullable_string("first_release"))
-                .col(nullable_string("last_release"))
-                .col(nullable_string("environment"))
-                .col(nullable_timestamp("resolved_at"))
-                .col(nullable_string("resolved_in_release"))
-                .col(nullable_timestamp("ignored_until"))
-                .col(ColumnDef::new("ignore_remaining").big_integer().null())
-                .col(nullable_timestamp("regressed_at"))
-                .col(nullable_text("comment"))
-                .col(timestamp("created_at"))
-                .col(timestamp("updated_at"))
-                .to_owned(),
-        )
-        .await?;
-    manager
-        .create_index(
-            Index::create()
-                .if_not_exists()
-                .name("lighthouse_issues_status_last_seen_index")
-                .table("lighthouse_issues")
-                .col("status")
-                .col("last_seen")
-                .to_owned(),
-        )
-        .await?;
-    manager
-        .create_table(
-            Table::create()
-                .table("lighthouse_occurrences")
-                .if_not_exists()
-                .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                .col(ColumnDef::new("issue_id").uuid().not_null())
-                .col(timestamp("at"))
-                .col(ColumnDef::new("level").string().not_null())
-                .col(text("message"))
-                .col(text("chain"))
-                .col(nullable_text("backtrace"))
-                .col(nullable_string("location"))
-                .col(nullable_string("request_id"))
-                .col(nullable_string("job_id"))
-                .col(nullable_string("trace_id"))
-                .col(nullable_string("user_id"))
-                .col(nullable_string("workspace_id"))
-                .col(nullable_string("release"))
-                .col(nullable_string("environment"))
-                .col(nullable_string("server"))
-                .col(nullable_string("process"))
-                .col(nullable_string("method"))
-                .col(nullable_string("route"))
-                .col(nullable_string("path"))
-                .col(ColumnDef::new("status").integer().null())
-                .col(ColumnDef::new("sample_id").uuid().null())
-                .col(text("context"))
-                .foreign_key(
-                    ForeignKey::create()
-                        .from("lighthouse_occurrences", "issue_id")
-                        .to("lighthouse_issues", "id")
-                        .on_delete(ForeignKeyAction::Cascade),
-                )
-                .to_owned(),
-        )
-        .await?;
-    manager
-        .create_index(
-            Index::create()
-                .if_not_exists()
-                .name("lighthouse_occurrences_issue_at_index")
-                .table("lighthouse_occurrences")
-                .col("issue_id")
-                .col("at")
-                .to_owned(),
-        )
-        .await?;
-    manager
-        .create_index(
-            Index::create()
-                .if_not_exists()
-                .name("lighthouse_occurrences_at_index")
-                .table("lighthouse_occurrences")
-                .col("at")
-                .to_owned(),
-        )
-        .await?;
-    manager
-        .create_table(
-            Table::create()
-                .table("lighthouse_samples")
-                .if_not_exists()
-                .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                .col(ColumnDef::new("kind").string().not_null())
-                .col(ColumnDef::new("name").string().not_null())
-                .col(timestamp("at"))
-                .col(ColumnDef::new("duration_ms").double().not_null())
-                .col(ColumnDef::new("status").integer().null())
-                .col(ColumnDef::new("outcome").string().not_null())
-                .col(ColumnDef::new("slow").boolean().not_null())
-                .col(nullable_string("request_id"))
-                .col(nullable_string("job_id"))
-                .col(nullable_string("trace_id"))
-                .col(nullable_string("user_id"))
-                .col(nullable_string("workspace_id"))
-                .col(nullable_string("release"))
-                .col(nullable_string("environment"))
-                .col(nullable_string("server"))
-                .col(nullable_string("process"))
-                .col(text("spans"))
-                .col(text("context"))
-                .col(nullable_text("error"))
-                .to_owned(),
-        )
-        .await?;
-    manager
-        .create_index(
-            Index::create()
-                .if_not_exists()
-                .name("lighthouse_samples_kind_name_duration_index")
-                .table("lighthouse_samples")
-                .col("kind")
-                .col("name")
-                .col("duration_ms")
-                .to_owned(),
-        )
-        .await?;
-    manager
-        .create_index(
-            Index::create()
-                .if_not_exists()
-                .name("lighthouse_samples_at_index")
-                .table("lighthouse_samples")
-                .col("at")
-                .to_owned(),
-        )
-        .await?;
-    manager
-        .create_table(
-            Table::create()
-                .table("lighthouse_aggregates")
-                .if_not_exists()
-                .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                .col(ColumnDef::new("resolution").integer().not_null())
-                .col(timestamp("bucket"))
-                .col(ColumnDef::new("kind").string().not_null())
-                .col(ColumnDef::new("key_hash").string().not_null())
-                .col(text("key"))
-                .col(ColumnDef::new("process").string().not_null())
-                .col(ColumnDef::new("count").big_integer().not_null())
-                .col(ColumnDef::new("errors").big_integer().not_null())
-                .col(ColumnDef::new("extra").big_integer().not_null())
-                .col(ColumnDef::new("total_ms").double().not_null())
-                .col(ColumnDef::new("max_ms").double().not_null())
-                .col(text("histogram"))
-                .col(nullable_text("detail"))
-                .to_owned(),
-        )
-        .await?;
-    manager
-        .create_index(
-            Index::create()
-                .if_not_exists()
-                .name("lighthouse_aggregates_row_unique")
-                .table("lighthouse_aggregates")
-                .col("resolution")
-                .col("bucket")
-                .col("kind")
-                .col("key_hash")
-                .col("process")
-                .unique()
-                .to_owned(),
-        )
-        .await?;
-    manager
-        .create_index(
-            Index::create()
-                .if_not_exists()
-                .name("lighthouse_aggregates_kind_bucket_index")
-                .table("lighthouse_aggregates")
-                .col("kind")
-                .col("resolution")
-                .col("bucket")
-                .to_owned(),
-        )
-        .await?;
-    manager
-        .create_table(
-            Table::create()
-                .table("lighthouse_alerts")
-                .if_not_exists()
-                .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                .col(ColumnDef::new("issue_id").uuid().null())
-                .col(ColumnDef::new("kind").string().not_null())
-                .col(ColumnDef::new("channel").string().not_null())
-                .col(ColumnDef::new("subject_key").string().not_null())
-                .col(ColumnDef::new("status").string().not_null())
-                .col(ColumnDef::new("attempts").integer().not_null().default(0))
-                .col(nullable_text("error"))
-                .col(text("payload"))
-                .col(timestamp("created_at"))
-                .col(nullable_timestamp("delivered_at"))
-                .to_owned(),
-        )
-        .await?;
-    manager
-        .create_index(
-            Index::create()
-                .if_not_exists()
-                .name("lighthouse_alerts_subject_kind_index")
-                .table("lighthouse_alerts")
-                .col("subject_key")
-                .col("kind")
-                .col("created_at")
-                .to_owned(),
-        )
-        .await
-}
-
-/// Drops the tables.
-async fn drop_tables(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
-    for table in [
-        "lighthouse_alerts",
-        "lighthouse_aggregates",
-        "lighthouse_samples",
-        "lighthouse_occurrences",
-        "lighthouse_issues",
-    ] {
-        manager
-            .drop_table(Table::drop().table(table).if_exists().to_owned())
+/// Creates the tables that do not exist yet, with their indexes.
+pub(crate) async fn create_tables(schema: &Schema<'_>) -> SchemaResult {
+    let d = schema.target().await?.dialect();
+    if !schema.has_table("lighthouse_issues").await? {
+        schema
+            .create("lighthouse_issues", |t| {
+                uuid(t, "id", d).primary();
+                varchar(t, "fingerprint", d).unique();
+                varchar(t, "kind", d);
+                varchar(t, "level", d);
+                varchar(t, "status", d);
+                varchar(t, "title", d);
+                varchar(t, "culprit", d);
+                t.text("message");
+                t.text("chain");
+                varchar(t, "location", d).nullable();
+                varchar(t, "error_type", d).nullable();
+                t.big_integer("count");
+                t.timestamp_tz("first_seen");
+                t.timestamp_tz("last_seen");
+                varchar(t, "first_release", d).nullable();
+                varchar(t, "last_release", d).nullable();
+                varchar(t, "environment", d).nullable();
+                t.timestamp_tz("resolved_at").nullable();
+                varchar(t, "resolved_in_release", d).nullable();
+                // A DATETIME on MySQL: its TIMESTAMP ends in 2038, and an issue can
+                // be ignored until 2099.
+                t.date_time_tz("ignored_until").nullable();
+                t.big_integer("ignore_remaining").nullable();
+                t.timestamp_tz("regressed_at").nullable();
+                t.text("comment").nullable();
+                t.timestamp_tz("created_at");
+                t.timestamp_tz("updated_at");
+                t.index(["status", "last_seen"])
+                    .name("lighthouse_issues_status_last_seen_index");
+            })
+            .await?;
+    }
+    if !schema.has_table("lighthouse_occurrences").await? {
+        schema
+            .create("lighthouse_occurrences", |t| {
+                uuid(t, "id", d).primary();
+                uuid(t, "issue_id", d);
+                t.timestamp_tz("at");
+                varchar(t, "level", d);
+                t.text("message");
+                t.text("chain");
+                t.text("backtrace").nullable();
+                varchar(t, "location", d).nullable();
+                varchar(t, "request_id", d).nullable();
+                varchar(t, "job_id", d).nullable();
+                varchar(t, "trace_id", d).nullable();
+                varchar(t, "user_id", d).nullable();
+                varchar(t, "workspace_id", d).nullable();
+                varchar(t, "release", d).nullable();
+                varchar(t, "environment", d).nullable();
+                varchar(t, "server", d).nullable();
+                varchar(t, "process", d).nullable();
+                varchar(t, "method", d).nullable();
+                varchar(t, "route", d).nullable();
+                varchar(t, "path", d).nullable();
+                t.integer("status").nullable();
+                uuid(t, "sample_id", d).nullable();
+                t.text("context");
+                t.foreign(["issue_id"])
+                    .references(["id"])
+                    .on("lighthouse_issues")
+                    .cascade_on_delete();
+                t.index(["issue_id", "at"])
+                    .name("lighthouse_occurrences_issue_at_index");
+                t.index(["at"]).name("lighthouse_occurrences_at_index");
+            })
+            .await?;
+    }
+    if !schema.has_table("lighthouse_samples").await? {
+        schema
+            .create("lighthouse_samples", |t| {
+                uuid(t, "id", d).primary();
+                varchar(t, "kind", d);
+                varchar(t, "name", d);
+                t.timestamp_tz("at");
+                t.double("duration_ms");
+                t.integer("status").nullable();
+                varchar(t, "outcome", d);
+                t.boolean("slow");
+                varchar(t, "request_id", d).nullable();
+                varchar(t, "job_id", d).nullable();
+                varchar(t, "trace_id", d).nullable();
+                varchar(t, "user_id", d).nullable();
+                varchar(t, "workspace_id", d).nullable();
+                varchar(t, "release", d).nullable();
+                varchar(t, "environment", d).nullable();
+                varchar(t, "server", d).nullable();
+                varchar(t, "process", d).nullable();
+                t.text("spans");
+                t.text("context");
+                t.text("error").nullable();
+                t.index(["kind", "name", "duration_ms"])
+                    .name("lighthouse_samples_kind_name_duration_index");
+                t.index(["at"]).name("lighthouse_samples_at_index");
+            })
+            .await?;
+    }
+    if !schema.has_table("lighthouse_aggregates").await? {
+        schema
+            .create("lighthouse_aggregates", |t| {
+                uuid(t, "id", d).primary();
+                t.integer("resolution");
+                t.timestamp_tz("bucket");
+                varchar(t, "kind", d);
+                varchar(t, "key_hash", d);
+                t.text("key");
+                varchar(t, "process", d);
+                t.big_integer("count");
+                t.big_integer("errors");
+                t.big_integer("extra");
+                t.double("total_ms");
+                t.double("max_ms");
+                t.text("histogram");
+                t.text("detail").nullable();
+                t.unique(["resolution", "bucket", "kind", "key_hash", "process"])
+                    .name("lighthouse_aggregates_row_unique");
+                t.index(["kind", "resolution", "bucket"])
+                    .name("lighthouse_aggregates_kind_bucket_index");
+            })
+            .await?;
+    }
+    if !schema.has_table("lighthouse_alerts").await? {
+        schema
+            .create("lighthouse_alerts", |t| {
+                uuid(t, "id", d).primary();
+                uuid(t, "issue_id", d).nullable();
+                varchar(t, "kind", d);
+                varchar(t, "channel", d);
+                varchar(t, "subject_key", d);
+                varchar(t, "status", d);
+                t.integer("attempts").default(0);
+                t.text("error").nullable();
+                t.text("payload");
+                t.timestamp_tz("created_at");
+                t.timestamp_tz("delivered_at").nullable();
+                t.index(["subject_key", "kind", "created_at"])
+                    .name("lighthouse_alerts_subject_kind_index");
+            })
             .await?;
     }
     Ok(())

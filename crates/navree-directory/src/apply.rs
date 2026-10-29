@@ -65,7 +65,6 @@ impl Applier {
         let data = serde_json::to_string(user).unwrap_or_default();
         let resource = resource.map(|r| serde_json::to_string(r).unwrap_or_default());
         let mut row = {
-            let tx = uow.tx().await?;
             let mut record = match &step.previous {
                 None => Record::new(models::User {
                     id: id.unwrap_or_else(Uuid::now_v7),
@@ -75,7 +74,7 @@ impl Applier {
                 }),
                 Some(previous) => models::User::query()
                     .where_(models::User::ID.eq(previous.id))
-                    .first(&*tx)
+                    .first(uow)
                     .await?
                     .ok_or(DirectoryError::ConnectionNotFound)?,
             };
@@ -95,7 +94,7 @@ impl Applier {
                 (false, Some(at)) => Some(at),
                 (false, None) => Some(now),
             };
-            record.save(&*tx).await?;
+            record.save(uow).await?;
             uow.mark_modified();
             record.into_inner()
         };
@@ -124,10 +123,9 @@ impl Applier {
             }
         }
         if local_id != row.local_id {
-            let tx = uow.tx().await?;
             models::User::query()
                 .where_(models::User::ID.eq(row.id))
-                .update(&*tx, [models::User::LOCAL_ID.set(local_id.clone())])
+                .update(uow, [models::User::LOCAL_ID.set(local_id.clone())])
                 .await?;
             row.local_id = local_id;
         }
@@ -224,14 +222,13 @@ impl Applier {
                 .map_err(DirectoryError::Sink)?;
         }
         {
-            let tx = uow.tx().await?;
             models::Membership::query()
                 .where_(models::Membership::USER_ID.eq(row.id))
-                .delete(&*tx)
+                .delete(uow)
                 .await?;
             models::User::query()
                 .where_(models::User::ID.eq(row.id))
-                .delete(&*tx)
+                .delete(uow)
                 .await?;
             uow.mark_modified();
         }
@@ -262,10 +259,9 @@ impl Applier {
                 .as_ref()
                 .ok_or(DirectoryError::ConnectionNotFound)?;
             let row = {
-                let tx = uow.tx().await?;
                 models::Group::query()
                     .where_(models::Group::ID.eq(previous.id))
-                    .first(&*tx)
+                    .first(uow)
                     .await?
                     .map(Record::into_inner)
             };
@@ -276,14 +272,13 @@ impl Applier {
                     .await
                     .map_err(DirectoryError::Sink)?;
             }
-            let tx = uow.tx().await?;
             models::Membership::query()
                 .where_(models::Membership::GROUP_ID.eq(previous.id))
-                .delete(&*tx)
+                .delete(uow)
                 .await?;
             models::Group::query()
                 .where_(models::Group::ID.eq(previous.id))
-                .delete(&*tx)
+                .delete(uow)
                 .await?;
             uow.mark_modified();
             return Ok(row.unwrap_or_default());
@@ -291,7 +286,6 @@ impl Applier {
         let data = serde_json::to_string(&group.without_members()).unwrap_or_default();
         let resource = resource.map(|r| serde_json::to_string(r).unwrap_or_default());
         let mut row = {
-            let tx = uow.tx().await?;
             let mut record = match &step.previous {
                 None => Record::new(models::Group {
                     id: id.unwrap_or_else(Uuid::now_v7),
@@ -301,7 +295,7 @@ impl Applier {
                 }),
                 Some(previous) => models::Group::query()
                     .where_(models::Group::ID.eq(previous.id))
-                    .first(&*tx)
+                    .first(uow)
                     .await?
                     .ok_or(DirectoryError::ConnectionNotFound)?,
             };
@@ -313,7 +307,7 @@ impl Applier {
             }
             record.fingerprint = group.fingerprint();
             record.updated_at = now;
-            record.save(&*tx).await?;
+            record.save(uow).await?;
             uow.mark_modified();
             record.into_inner()
         };
@@ -332,10 +326,9 @@ impl Applier {
             }
         }
         if local_id != row.local_id {
-            let tx = uow.tx().await?;
             models::Group::query()
                 .where_(models::Group::ID.eq(row.id))
-                .update(&*tx, [models::Group::LOCAL_ID.set(local_id.clone())])
+                .update(uow, [models::Group::LOCAL_ID.set(local_id.clone())])
                 .await?;
             row.local_id = local_id;
         }
@@ -367,8 +360,7 @@ impl Applier {
         if added.is_empty() && removed.is_empty() {
             return Ok(());
         }
-        let tx = uow.tx().await?;
-        let ids = user_ids(&*tx, self.connection.id, added.iter().chain(removed)).await?;
+        let ids = user_ids(uow, self.connection.id, added.iter().chain(removed)).await?;
         let rows: Vec<models::Membership> = added
             .iter()
             .filter_map(|external| ids.get(external))
@@ -381,7 +373,7 @@ impl Applier {
             .collect();
         if !rows.is_empty() {
             models::Membership::query()
-                .insert_or_ignore(&*tx, rows)
+                .insert_or_ignore(uow, rows)
                 .await?;
         }
         let gone: Vec<Uuid> = removed
@@ -392,7 +384,7 @@ impl Applier {
             models::Membership::query()
                 .where_(models::Membership::GROUP_ID.eq(group_id))
                 .where_(models::Membership::USER_ID.is_in(chunk.iter().copied()))
-                .delete(&*tx)
+                .delete(uow)
                 .await?;
         }
         uow.mark_modified();

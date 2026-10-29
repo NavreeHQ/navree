@@ -1,10 +1,12 @@
-//! The sheets module's migrations (`MigrationSet` `sheets`).
+//! The sheets module's migrations (`MigrationSet` `sheets`), written with
+//! the schema builder. The name is the one the module's migration always
+//! had, so a database migrated by an earlier version finds nothing
+//! pending.
 
 use navree_db::MigrationSet;
-use sea_orm::DbErr;
-use sea_orm::sea_query::{ColumnDef, Index, Table};
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
+use navree_db::navree_schema::{
+    Blueprint, ColumnBuilder, Migration, Schema, SchemaMigration, SchemaResult,
+};
 
 use crate::import::store::{IMPORT_MAPPINGS_TABLE, IMPORT_ROWS_TABLE, IMPORTS_TABLE};
 
@@ -13,7 +15,10 @@ pub const SHEETS_MIGRATIONS: &str = "sheets";
 
 /// The sheets module's migration set.
 pub(crate) fn migrations() -> MigrationSet {
-    MigrationSet::new(SHEETS_MIGRATIONS).migration(CreateImportTables)
+    MigrationSet::new(SHEETS_MIGRATIONS).migration(SchemaMigration::new(
+        "m20261027_000001_create_import_tables",
+        CreateImportTables,
+    ))
 }
 
 /// Creates `imports`, `import_rows` and `import_mappings`. Ids are text,
@@ -21,130 +26,81 @@ pub(crate) fn migrations() -> MigrationSet {
 /// database.
 struct CreateImportTables;
 
-impl MigrationName for CreateImportTables {
-    fn name(&self) -> &str {
-        "m20261027_000001_create_import_tables"
-    }
+/// An id: text of 36 characters.
+fn id<'a>(t: &'a mut Blueprint, name: &str) -> ColumnBuilder<'a> {
+    t.string(name).length(36)
 }
 
-fn id(name: &'static str) -> ColumnDef {
-    ColumnDef::new(name).string_len(36).not_null().to_owned()
+/// A time in Unix milliseconds.
+fn millis<'a>(t: &'a mut Blueprint, name: &str) -> ColumnBuilder<'a> {
+    t.big_integer(name)
 }
 
-fn nullable_id(name: &'static str) -> ColumnDef {
-    ColumnDef::new(name).string_len(36).null().to_owned()
-}
-
-fn millis(name: &'static str) -> ColumnDef {
-    ColumnDef::new(name).big_integer().not_null().to_owned()
-}
-
-#[async_trait]
-impl MigrationTrait for CreateImportTables {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table(IMPORTS_TABLE)
-                    .col(id("id").primary_key())
-                    .col(ColumnDef::new("importer").string_len(100).not_null())
-                    .col(ColumnDef::new("status").string_len(20).not_null())
-                    .col(ColumnDef::new("filename").text().not_null())
-                    .col(ColumnDef::new("disk").string_len(100).not_null())
-                    .col(ColumnDef::new("path").text().not_null())
-                    .col(ColumnDef::new("format").string_len(10).null())
-                    .col(ColumnDef::new("encoding").string_len(50).null())
-                    .col(ColumnDef::new("sheet").text().null())
-                    .col(ColumnDef::new("locale").string_len(35).null())
-                    .col(ColumnDef::new("headers").text().not_null())
-                    .col(ColumnDef::new("mapping").text().not_null())
-                    .col(ColumnDef::new("mapping_chosen").boolean().not_null())
-                    .col(ColumnDef::new("save_mapping").boolean().not_null())
-                    .col(ColumnDef::new("missing").text().not_null())
-                    .col(ColumnDef::new("duplicates").string_len(10).null())
-                    .col(ColumnDef::new("counts").text().not_null())
-                    .col(nullable_id("operation_id"))
-                    .col(ColumnDef::new("error_path").text().null())
-                    .col(ColumnDef::new("error").text().null())
-                    .col(nullable_id("owner_id"))
-                    .col(nullable_id("workspace_id"))
-                    .col(millis("created_at"))
-                    .col(millis("updated_at"))
-                    .col(ColumnDef::new("finished_at").big_integer().null())
-                    .to_owned(),
-            )
+impl Migration for CreateImportTables {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema
+            .create(IMPORTS_TABLE, |t| {
+                id(t, "id").primary();
+                t.string("importer").length(100);
+                t.string("status").length(20);
+                t.text("filename");
+                t.string("disk").length(100);
+                t.text("path");
+                t.string("format").length(10).nullable();
+                t.string("encoding").length(50).nullable();
+                t.text("sheet").nullable();
+                t.string("locale").length(35).nullable();
+                t.text("headers");
+                t.text("mapping");
+                t.boolean("mapping_chosen");
+                t.boolean("save_mapping");
+                t.text("missing");
+                t.string("duplicates").length(10).nullable();
+                t.text("counts");
+                id(t, "operation_id").nullable();
+                t.text("error_path").nullable();
+                t.text("error").nullable();
+                id(t, "owner_id").nullable();
+                id(t, "workspace_id").nullable();
+                millis(t, "created_at");
+                millis(t, "updated_at");
+                t.big_integer("finished_at").nullable();
+                t.index(["owner_id", "created_at"])
+                    .name("imports_owner_created_index");
+                t.index(["updated_at"]).name("imports_updated_at_index");
+            })
             .await?;
-        for (name, columns) in [
-            (
-                "imports_owner_created_index",
-                &["owner_id", "created_at"][..],
-            ),
-            ("imports_updated_at_index", &["updated_at"][..]),
-        ] {
-            let mut index = Index::create();
-            index.name(name).table(IMPORTS_TABLE);
-            for column in columns {
-                index.col(*column);
-            }
-            manager.create_index(index.to_owned()).await?;
-        }
-        manager
-            .create_table(
-                Table::create()
-                    .table(IMPORT_ROWS_TABLE)
-                    .col(id("import_id"))
-                    .col(ColumnDef::new("row_no").big_integer().not_null())
-                    .col(ColumnDef::new("status").string_len(20).not_null())
-                    .col(ColumnDef::new("row_key").text().null())
-                    .col(ColumnDef::new("cells").text().not_null())
-                    .col(ColumnDef::new("errors").text().not_null())
-                    .primary_key(Index::create().col("import_id").col("row_no"))
-                    .to_owned(),
-            )
+        schema
+            .create(IMPORT_ROWS_TABLE, |t| {
+                id(t, "import_id");
+                t.big_integer("row_no");
+                t.string("status").length(20);
+                t.text("row_key").nullable();
+                t.text("cells");
+                t.text("errors");
+                t.primary(["import_id", "row_no"]);
+                t.index(["import_id", "status", "row_no"])
+                    .name("import_rows_status_index");
+            })
             .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("import_rows_status_index")
-                    .table(IMPORT_ROWS_TABLE)
-                    .col("import_id")
-                    .col("status")
-                    .col("row_no")
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_table(
-                Table::create()
-                    .table(IMPORT_MAPPINGS_TABLE)
-                    .col(id("id").primary_key())
-                    .col(ColumnDef::new("importer").string_len(100).not_null())
-                    .col(nullable_id("workspace_id"))
-                    .col(ColumnDef::new("fingerprint").string_len(64).not_null())
-                    .col(ColumnDef::new("mapping").text().not_null())
-                    .col(millis("created_at"))
-                    .col(millis("updated_at"))
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("import_mappings_lookup_index")
-                    .table(IMPORT_MAPPINGS_TABLE)
-                    .col("importer")
-                    .col("fingerprint")
-                    .to_owned(),
-            )
-            .await?;
-        Ok(())
+        schema
+            .create(IMPORT_MAPPINGS_TABLE, |t| {
+                id(t, "id").primary();
+                t.string("importer").length(100);
+                id(t, "workspace_id").nullable();
+                t.string("fingerprint").length(64);
+                t.text("mapping");
+                millis(t, "created_at");
+                millis(t, "updated_at");
+                t.index(["importer", "fingerprint"])
+                    .name("import_mappings_lookup_index");
+            })
+            .await
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
         for table in [IMPORT_MAPPINGS_TABLE, IMPORT_ROWS_TABLE, IMPORTS_TABLE] {
-            manager
-                .drop_table(Table::drop().table(table).if_exists().to_owned())
-                .await?;
+            schema.drop_if_exists(table).await?;
         }
         Ok(())
     }
