@@ -15,7 +15,7 @@ use navree_orm::render::ast::{
     Query, Select, SelectItem, SetExpr, SetOperator, Source, SqlType, Statement, Truncate, Update,
 };
 use navree_orm::render::{render, render_all, render_expr, render_query};
-use navree_orm::{Dialect, Value};
+use navree_orm::{Dialect, Kind, Value};
 
 const DIALECTS: [Dialect; 3] = [Dialect::Postgres, Dialect::MySql, Dialect::Sqlite];
 
@@ -597,7 +597,7 @@ fn inserts() {
         "companies",
         ["name", "country"],
         vec![
-            vec![val("Acme"), val(Value::String(None))],
+            vec![val("Acme"), val(Value::Null(Kind::String))],
             vec![val("Globex"), Expr::DefaultValue],
         ],
     );

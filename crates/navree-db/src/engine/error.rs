@@ -69,9 +69,17 @@ pub enum ErrorKind {
 pub struct DbError {
     kind: ErrorKind,
     message: String,
+    /// The server's code and constraint, when it gave them (boxed, so the
+    /// error stays small inside the error types that wrap it).
+    details: Option<Box<Details>>,
+    source: Option<Arc<sqlx::Error>>,
+}
+
+/// What the server said about an error beyond its message.
+#[derive(Clone, Debug, Default)]
+struct Details {
     code: Option<String>,
     constraint: Option<String>,
-    source: Option<Arc<sqlx::Error>>,
 }
 
 impl DbError {
@@ -80,8 +88,7 @@ impl DbError {
         DbError {
             kind,
             message: message.into(),
-            code: None,
-            constraint: None,
+            details: None,
             source: None,
         }
     }
@@ -124,8 +131,8 @@ impl DbError {
         DbError {
             kind,
             message: error.to_string(),
-            code,
-            constraint,
+            details: (code.is_some() || constraint.is_some())
+                .then(|| Box::new(Details { code, constraint })),
             source: Some(error),
         }
     }
@@ -156,12 +163,12 @@ impl DbError {
     /// error number on MySQL (`1062`), the extended result code on SQLite
     /// (`2067`).
     pub fn code(&self) -> Option<&str> {
-        self.code.as_deref()
+        self.details.as_ref()?.code.as_deref()
     }
 
     /// The constraint the server named, when it names one.
     pub fn constraint(&self) -> Option<&str> {
-        self.constraint.as_deref()
+        self.details.as_ref()?.constraint.as_deref()
     }
 
     /// The driver's error, when it came from the driver.
@@ -214,8 +221,8 @@ impl fmt::Debug for DbError {
         f.debug_struct("DbError")
             .field("kind", &self.kind)
             .field("message", &self.message)
-            .field("code", &self.code)
-            .field("constraint", &self.constraint)
+            .field("code", &self.code())
+            .field("constraint", &self.constraint())
             .finish()
     }
 }
@@ -344,6 +351,15 @@ fn database_kind(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Error types that wrap it (the ORM's, the crates') stay small enough
+    /// for `Result`s.
+    #[test]
+    fn errors_stay_small() {
+        assert!(std::mem::size_of::<DbError>() <= 48);
+        let plain = DbError::new(ErrorKind::Database, "boom");
+        assert_eq!((plain.code(), plain.constraint()), (None, None));
+    }
 
     #[test]
     fn driver_errors_are_classified() {

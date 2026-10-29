@@ -315,7 +315,7 @@ mod tests {
         ));
         let read: String = Encrypted::get_with(stored, &rotated).unwrap();
         assert_eq!(read, "x", "previous keys still decrypt");
-        let nulls = Row::from_values(vec![("note".into(), Value::String(None))]);
+        let nulls = Row::from_values(vec![("note".into(), Value::Null(crate::Kind::String))]);
         assert!(!<Encrypted as Cast<String>>::is_stale(
             &nulls, "note", &rotated
         ));

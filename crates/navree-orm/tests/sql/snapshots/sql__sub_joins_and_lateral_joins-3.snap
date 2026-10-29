@@ -1,10 +1,9 @@
 ---
 source: crates/navree-orm/tests/sql/main.rs
-assertion_line: 673
 expression: "query(Company::query().join_lateral(latest(),\n\"latest\").add_select([\"latest.title\"]))"
 ---
 PostgreSQL: SELECT "companies"."id", "companies"."name", "companies"."country", "latest"."title" FROM "companies" INNER JOIN LATERAL (SELECT "deals"."title" FROM "deals" WHERE "deals"."company_id" = "companies"."id" AND "deals"."deleted_at" IS NULL ORDER BY "deals"."created_at" DESC LIMIT $1) AS "latest" ON TRUE
-  values: [BigUnsigned(Some(2))]
+  values: [U64(2)]
 MySQL: SELECT `companies`.`id`, `companies`.`name`, `companies`.`country`, `latest`.`title` FROM `companies` INNER JOIN LATERAL (SELECT `deals`.`title` FROM `deals` WHERE `deals`.`company_id` = `companies`.`id` AND `deals`.`deleted_at` IS NULL ORDER BY `deals`.`created_at` DESC LIMIT ?) AS `latest` ON TRUE
-  values: [BigUnsigned(Some(2))]
+  values: [U64(2)]
 SQLite: error: a lateral join is not supported on SQLite

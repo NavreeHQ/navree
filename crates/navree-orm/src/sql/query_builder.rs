@@ -30,7 +30,11 @@ pub(crate) fn condition_fragment(
         Dialect::MySql => select.build_any(&MysqlQueryBuilder),
         Dialect::Sqlite => select.build_any(&SqliteQueryBuilder),
     };
-    let values = values.0;
+    let values = values
+        .0
+        .into_iter()
+        .map(|value| navree_db::compat::from_sea_value(value).map_err(OrmError::from))
+        .collect::<Result<Vec<Value>>>()?;
     let Some(sql) = sql.strip_prefix("SELECT 1 WHERE ") else {
         return if sql == "SELECT 1" && values.is_empty() {
             Ok(("1 = 1".to_owned(), values))

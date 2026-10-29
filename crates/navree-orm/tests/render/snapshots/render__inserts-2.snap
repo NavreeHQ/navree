@@ -3,7 +3,7 @@ source: crates/navree-orm/tests/render/main.rs
 expression: "statement(Insert\n{\n    returning:\n    vec![SelectItem::new(col(\"id\")),\n    SelectItem::aliased(col(\"name\"), \"label\")],\n    ..Insert::values(\"companies\", [\"name\"], vec![vec![val(\"Acme\")]])\n})"
 ---
 PostgreSQL: INSERT INTO "companies" ("name") VALUES ($1) RETURNING "id", "name" AS "label"
-  values: [String(Some("Acme"))]
+  values: [String("Acme")]
 MySQL: error: RETURNING is not supported on MySQL
 SQLite: INSERT INTO "companies" ("name") VALUES (?) RETURNING "id", "name" AS "label"
-  values: [String(Some("Acme"))]
+  values: [String("Acme")]

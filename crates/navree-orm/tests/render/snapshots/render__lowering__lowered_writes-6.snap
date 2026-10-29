@@ -3,8 +3,8 @@ source: crates/navree-orm/tests/render/lowering.rs
 expression: "per_dialect(|d| render_delete(&delete, d))"
 ---
 PostgreSQL: DELETE FROM "deals" WHERE "deals"."amount_cents" < $1
-  values: [BigInt(Some(0))]
+  values: [I64(0)]
 MySQL: DELETE FROM `deals` WHERE `deals`.`amount_cents` < ?
-  values: [BigInt(Some(0))]
+  values: [I64(0)]
 SQLite: DELETE FROM "deals" WHERE "deals"."amount_cents" < ?
-  values: [BigInt(Some(0))]
+  values: [I64(0)]

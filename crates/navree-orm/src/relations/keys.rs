@@ -26,22 +26,22 @@ pub(crate) fn key_of(value: &Value) -> Option<RelationKey> {
         return None;
     }
     Some(match value {
-        Value::TinyInt(Some(v)) => RelationKey::Int(i128::from(*v)),
-        Value::SmallInt(Some(v)) => RelationKey::Int(i128::from(*v)),
-        Value::Int(Some(v)) => RelationKey::Int(i128::from(*v)),
-        Value::BigInt(Some(v)) => RelationKey::Int(i128::from(*v)),
-        Value::TinyUnsigned(Some(v)) => RelationKey::Int(i128::from(*v)),
-        Value::SmallUnsigned(Some(v)) => RelationKey::Int(i128::from(*v)),
-        Value::Unsigned(Some(v)) => RelationKey::Int(i128::from(*v)),
-        Value::BigUnsigned(Some(v)) => RelationKey::Int(i128::from(*v)),
-        Value::Bool(Some(v)) => RelationKey::Bool(*v),
-        Value::Float(Some(v)) => float_key(f64::from(*v)),
-        Value::Double(Some(v)) => float_key(*v),
-        Value::Decimal(Some(v)) => decimal_key(v),
-        Value::String(Some(v)) => text_key(v),
-        Value::Char(Some(v)) => RelationKey::Text(v.to_string()),
-        Value::Uuid(Some(v)) => RelationKey::Text(v.hyphenated().to_string()),
-        Value::Bytes(Some(v)) => match Uuid::from_slice(v) {
+        Value::I8(v) => RelationKey::Int(i128::from(*v)),
+        Value::I16(v) => RelationKey::Int(i128::from(*v)),
+        Value::I32(v) => RelationKey::Int(i128::from(*v)),
+        Value::I64(v) => RelationKey::Int(i128::from(*v)),
+        Value::U8(v) => RelationKey::Int(i128::from(*v)),
+        Value::U16(v) => RelationKey::Int(i128::from(*v)),
+        Value::U32(v) => RelationKey::Int(i128::from(*v)),
+        Value::U64(v) => RelationKey::Int(i128::from(*v)),
+        Value::Bool(v) => RelationKey::Bool(*v),
+        Value::F32(v) => float_key(f64::from(*v)),
+        Value::F64(v) => float_key(*v),
+        Value::Decimal(v) => decimal_key(v),
+        Value::String(v) => text_key(v),
+        Value::Enum { value, .. } => text_key(value),
+        Value::Uuid(v) => RelationKey::Text(v.hyphenated().to_string()),
+        Value::Bytes(v) => match Uuid::from_slice(v) {
             Ok(uuid) => RelationKey::Text(uuid.hyphenated().to_string()),
             Err(_) => RelationKey::Bytes(v.clone()),
         },
@@ -132,14 +132,14 @@ fn in_list(column: ColumnRef, keys: &[(RelationKey, Value)], inline_integers: bo
 fn is_integer(value: &Value) -> bool {
     matches!(
         value,
-        Value::TinyInt(_)
-            | Value::SmallInt(_)
-            | Value::Int(_)
-            | Value::BigInt(_)
-            | Value::TinyUnsigned(_)
-            | Value::SmallUnsigned(_)
-            | Value::Unsigned(_)
-            | Value::BigUnsigned(_)
+        Value::I8(_)
+            | Value::I16(_)
+            | Value::I32(_)
+            | Value::I64(_)
+            | Value::U8(_)
+            | Value::U16(_)
+            | Value::U32(_)
+            | Value::U64(_)
     )
 }
 
@@ -149,38 +149,32 @@ mod tests {
 
     #[test]
     fn keys_ignore_representation() {
+        assert_eq!(key_of(&Value::I32(7)), key_of(&Value::U64(7)));
+        assert_eq!(key_of(&Value::F64(7.0)), key_of(&Value::I64(7)));
         assert_eq!(
-            key_of(&Value::Int(Some(7))),
-            key_of(&Value::BigUnsigned(Some(7)))
-        );
-        assert_eq!(
-            key_of(&Value::Double(Some(7.0))),
-            key_of(&Value::BigInt(Some(7)))
-        );
-        assert_eq!(
-            key_of(&Value::Decimal(Some(Decimal::new(700, 2)))),
-            key_of(&Value::BigInt(Some(7)))
+            key_of(&Value::Decimal(Decimal::new(700, 2))),
+            key_of(&Value::I64(7))
         );
         let uuid = Uuid::now_v7();
         assert_eq!(
-            key_of(&Value::Uuid(Some(uuid))),
+            key_of(&Value::Uuid(uuid)),
             key_of(&Value::from(uuid.to_string().to_uppercase()))
         );
         assert_eq!(
-            key_of(&Value::Uuid(Some(uuid))),
-            key_of(&Value::Bytes(Some(uuid.as_bytes().to_vec())))
+            key_of(&Value::Uuid(uuid)),
+            key_of(&Value::Bytes(uuid.as_bytes().to_vec()))
         );
-        assert_ne!(key_of(&Value::from("7")), key_of(&Value::BigInt(Some(7))));
-        assert_eq!(key_of(&Value::BigInt(None)), None);
+        assert_ne!(key_of(&Value::from("7")), key_of(&Value::I64(7)));
+        assert_eq!(key_of(&Value::Null(crate::Kind::I64)), None);
     }
 
     #[test]
     fn distinct_keys_are_sorted_and_unique() {
         let keys = distinct_keys([
-            Value::BigInt(Some(3)),
-            Value::BigInt(None),
-            Value::Int(Some(1)),
-            Value::BigInt(Some(3)),
+            Value::I64(3),
+            Value::Null(crate::Kind::I64),
+            Value::I32(1),
+            Value::I64(3),
         ]);
         let ints: Vec<RelationKey> = keys.into_iter().map(|(key, _)| key).collect();
         assert_eq!(ints, [RelationKey::Int(1), RelationKey::Int(3)]);
@@ -199,11 +193,11 @@ mod tests {
 
     #[test]
     fn integer_keys_are_inlined_for_sql_others_bound() {
-        let keys = distinct_keys([Value::BigInt(Some(2)), Value::BigInt(Some(1))]);
+        let keys = distinct_keys([Value::I64(2), Value::I64(1)]);
         let inlined = list(in_list(ColumnRef::new(Some("t"), "id"), &keys, true));
         assert!(matches!(&inlined[0], Expr::Raw { sql, .. } if sql == "1"));
         let bound = list(in_keys(ColumnRef::new(Some("t"), "id"), &keys));
-        assert!(matches!(&bound[0], Expr::Value(Value::BigInt(Some(1)))));
+        assert!(matches!(&bound[0], Expr::Value(Value::I64(1))));
         let keys = distinct_keys([Value::from("a")]);
         let text = list(in_list(ColumnRef::new(Some("t"), "id"), &keys, true));
         assert!(matches!(&text[0], Expr::Value(_)));

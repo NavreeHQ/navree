@@ -3,7 +3,7 @@ source: crates/navree-orm/tests/sql/main.rs
 expression: "per_dialect(|d|\ntable(\"deals as d\").join(\"companies\", \"companies.id\", \"=\",\n\"d.company_id\").where_(col(\"companies.active\").eq(false)).to_update_sql(d,\n[col(\"stage\").set(\"lost\")]))"
 ---
 PostgreSQL: UPDATE "deals" SET "stage" = $1 WHERE "ctid" IN (SELECT "d"."ctid" FROM "deals" AS "d" INNER JOIN "companies" ON "companies"."id" = "d"."company_id" WHERE "companies"."active" = $2)
-  values: [String(Some("lost")), Bool(Some(false))]
+  values: [String("lost"), Bool(false)]
 MySQL: error: a table update with joins, a limit or an offset (MySQL has no row id; a model query narrows the rows by key) is not supported on MySQL
 SQLite: UPDATE "deals" SET "stage" = ? WHERE "rowid" IN (SELECT "d"."rowid" FROM "deals" AS "d" INNER JOIN "companies" ON "companies"."id" = "d"."company_id" WHERE "companies"."active" = ?)
-  values: [String(Some("lost")), Bool(Some(false))]
+  values: [String("lost"), Bool(false)]

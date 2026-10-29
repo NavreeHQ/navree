@@ -65,7 +65,6 @@ rules:
         - "/crates/navree-integrations/"
         - "/crates/navree-macros/"
         - "/crates/navree-media/"
-        - "/crates/navree-mongo/"
         - "/crates/navree-workspace/"
     pattern-regex: '(?m)^(?!\s*//)[^\n"]*?(?:\bsea_orm(?:_migration)?\s*::|#\[\s*sea_orm\s*[(\]])'
 

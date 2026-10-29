@@ -199,21 +199,24 @@ mod tests {
     fn tuples_convert_and_report_the_failing_column() {
         let stored = (7_i64, "EUR".to_owned());
         let values = stored.to_values();
-        assert_eq!(values, [Value::BigInt(Some(7)), Value::from("EUR")]);
+        assert_eq!(values, [Value::I64(7), Value::from("EUR")]);
         assert_eq!(<(i64, String)>::from_values(values).unwrap(), stored);
         let (index, error) =
             <(i64, String)>::from_values(vec![Value::from("x"), Value::from("EUR")]).unwrap_err();
         assert_eq!(index, 0);
         assert_eq!(error, FieldError::Invalid("`x` is not an integer".into()));
         assert_eq!(
-            <(i64, String)>::from_values(vec![Value::BigInt(Some(1))])
+            <(i64, String)>::from_values(vec![Value::I64(1)])
                 .unwrap_err()
                 .0,
             1
         );
         assert_eq!(
             <(i64, String)>::nulls(),
-            [Value::BigInt(None), Value::String(None)]
+            [
+                Value::Null(crate::Kind::I64),
+                Value::Null(crate::Kind::String)
+            ]
         );
         assert_eq!(<(i64, Option<String>)>::type_name(1), "Option<String>");
     }
@@ -221,22 +224,22 @@ mod tests {
     #[test]
     fn rows_read_every_column_or_none_when_all_are_null() {
         let row = Row::from_values(vec![
-            ("cents".into(), Value::BigInt(Some(5))),
+            ("cents".into(), Value::I64(5)),
             ("currency".into(), Value::from("USD")),
         ]);
         let read = <(i64, String)>::from_row(&row, &["cents", "currency"]).unwrap();
         assert_eq!(read, (5, "USD".to_owned()));
         let nulls = Row::from_values(vec![
-            ("cents".into(), Value::BigInt(None)),
-            ("currency".into(), Value::String(None)),
+            ("cents".into(), Value::Null(crate::Kind::I64)),
+            ("currency".into(), Value::Null(crate::Kind::String)),
         ]);
         assert_eq!(
             <(i64, String)>::from_row_option(&nulls, &["cents", "currency"]).unwrap(),
             None
         );
         let half = Row::from_values(vec![
-            ("cents".into(), Value::BigInt(Some(5))),
-            ("currency".into(), Value::String(None)),
+            ("cents".into(), Value::I64(5)),
+            ("currency".into(), Value::Null(crate::Kind::String)),
         ]);
         assert_eq!(
             <(i64, String)>::from_row_option(&half, &["cents", "currency"]).unwrap_err(),

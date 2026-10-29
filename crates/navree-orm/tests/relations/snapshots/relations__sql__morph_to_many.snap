@@ -3,8 +3,8 @@ source: crates/navree-orm/tests/relations/sql.rs
 expression: per_dialect(|dialect| deal().labels().to_sql(dialect))
 ---
 PostgreSQL: SELECT "tags"."id", "tags"."name", "tags"."updated_at", "taggables"."taggable_id" AS "pivot_taggable_id", "taggables"."tag_id" AS "pivot_tag_id", "taggables"."taggable_type" AS "pivot_taggable_type" FROM "tags" INNER JOIN "taggables" ON "tags"."id" = "taggables"."tag_id" WHERE "taggables"."taggable_id" = $1 AND "taggables"."taggable_type" = $2
-  values: [BigInt(Some(7)), String(Some("deal"))]
+  values: [I64(7), String("deal")]
 MySQL: SELECT `tags`.`id`, `tags`.`name`, `tags`.`updated_at`, `taggables`.`taggable_id` AS `pivot_taggable_id`, `taggables`.`tag_id` AS `pivot_tag_id`, `taggables`.`taggable_type` AS `pivot_taggable_type` FROM `tags` INNER JOIN `taggables` ON `tags`.`id` = `taggables`.`tag_id` WHERE `taggables`.`taggable_id` = ? AND `taggables`.`taggable_type` = ?
-  values: [BigInt(Some(7)), String(Some("deal"))]
+  values: [I64(7), String("deal")]
 SQLite: SELECT "tags"."id", "tags"."name", "tags"."updated_at", "taggables"."taggable_id" AS "pivot_taggable_id", "taggables"."tag_id" AS "pivot_tag_id", "taggables"."taggable_type" AS "pivot_taggable_type" FROM "tags" INNER JOIN "taggables" ON "tags"."id" = "taggables"."tag_id" WHERE "taggables"."taggable_id" = ? AND "taggables"."taggable_type" = ?
-  values: [BigInt(Some(7)), String(Some("deal"))]
+  values: [I64(7), String("deal")]

@@ -3,6 +3,6 @@ source: crates/navree-orm/tests/sql/main.rs
 expression: "rows(table(\"readings\").select_time_bucket(\"1 month\", \"taken_at\", \"bucket\"))"
 ---
 PostgreSQL: SELECT time_bucket(CAST($1 AS INTERVAL), "taken_at") AS "bucket" FROM "readings"
-  values: [String(Some("1 month"))]
+  values: [String("1 month")]
 MySQL: error: a time bucket of `1 month` (calendar or unreadable widths need TimescaleDB) is not supported on MySQL
 SQLite: error: a time bucket of `1 month` (calendar or unreadable widths need TimescaleDB) is not supported on SQLite

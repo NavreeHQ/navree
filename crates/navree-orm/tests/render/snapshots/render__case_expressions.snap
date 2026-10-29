@@ -3,8 +3,8 @@ source: crates/navree-orm/tests/render/main.rs
 expression: "expr(Expr::case(vec![(col(\"amount_cents\").gt(val(1000_i64)),\nExpr::string(\"big\")),\n(col(\"amount_cents\").gt(val(0_i64)), Expr::string(\"small\")),],\nSome(Expr::string(\"none\"))))"
 ---
 PostgreSQL: CASE WHEN "amount_cents" > $1 THEN 'big' WHEN "amount_cents" > $2 THEN 'small' ELSE 'none' END
-  values: [BigInt(Some(1000)), BigInt(Some(0))]
+  values: [I64(1000), I64(0)]
 MySQL: CASE WHEN `amount_cents` > ? THEN 'big' WHEN `amount_cents` > ? THEN 'small' ELSE 'none' END
-  values: [BigInt(Some(1000)), BigInt(Some(0))]
+  values: [I64(1000), I64(0)]
 SQLite: CASE WHEN "amount_cents" > ? THEN 'big' WHEN "amount_cents" > ? THEN 'small' ELSE 'none' END
-  values: [BigInt(Some(1000)), BigInt(Some(0))]
+  values: [I64(1000), I64(0)]

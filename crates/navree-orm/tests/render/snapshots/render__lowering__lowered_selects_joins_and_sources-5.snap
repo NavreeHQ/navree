@@ -3,8 +3,8 @@ source: crates/navree-orm/tests/render/lowering.rs
 expression: "rows(table(\"ignored\").from_raw(\"generate_series(?, ?) AS n\", [1, 10]))"
 ---
 PostgreSQL: SELECT * FROM generate_series($1, $2) AS "n"
-  values: [Int(Some(1)), Int(Some(10))]
+  values: [I32(1), I32(10)]
 MySQL: SELECT * FROM generate_series(?, ?) AS `n`
-  values: [Int(Some(1)), Int(Some(10))]
+  values: [I32(1), I32(10)]
 SQLite: SELECT * FROM generate_series(?, ?) AS "n"
-  values: [Int(Some(1)), Int(Some(10))]
+  values: [I32(1), I32(10)]

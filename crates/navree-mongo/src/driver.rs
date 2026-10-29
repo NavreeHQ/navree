@@ -627,7 +627,9 @@ impl MongoDriver {
                         let mut list = Vec::with_capacity(rows.len());
                         for row in rows {
                             let first = row.values()?.into_iter().next();
-                            list.push(Expr::Value(first.map_or(Value::String(None), |(_, v)| v)));
+                            list.push(Expr::Value(
+                                first.map_or(Value::Null(navree_orm::Kind::String), |(_, v)| v),
+                            ));
                         }
                         *values = InValues::List(list);
                     }
@@ -720,9 +722,9 @@ impl DocumentDriver for MongoDriver {
         Box::pin(async move {
             let counts = aggregate.function == navree_orm::ir::AggregateFunction::Count;
             let nothing = if counts {
-                Value::BigInt(Some(0))
+                Value::I64(0)
             } else {
-                Value::String(None)
+                Value::Null(navree_orm::Kind::String)
             };
             if query.limit == Some(0) {
                 query.check()?;
@@ -731,7 +733,7 @@ impl DocumentDriver for MongoDriver {
             match compile::aggregate(query, aggregate)? {
                 MongoCommand::Count(count) => {
                     let n = self.count_documents(&count).await?;
-                    Ok(Value::BigInt(Some(i64::try_from(n).unwrap_or(i64::MAX))))
+                    Ok(Value::I64(i64::try_from(n).unwrap_or(i64::MAX)))
                 }
                 command => {
                     let documents = self.read_documents(&command).await?;
@@ -794,7 +796,7 @@ impl DocumentDriver for MongoDriver {
                     for (field, first) in &firsts {
                         let key = first + offset;
                         document.insert(field.clone(), key);
-                        row.push((field.clone(), Value::BigInt(Some(key))));
+                        row.push((field.clone(), Value::I64(key)));
                     }
                     returned.push(Row::from_values(row));
                 }

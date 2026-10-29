@@ -328,8 +328,7 @@ fn field_path_of(
 /// Text from a value (a pattern, a key).
 fn text(value: &Value, what: &str) -> Result<String, OrmError> {
     match value {
-        Value::String(Some(text)) => Ok(text.clone()),
-        Value::Char(Some(c)) => Ok(c.to_string()),
+        Value::String(text) => Ok(text.clone()),
         other => Err(invalid(format!(
             "{what} must be text, not {}",
             navree_orm::to_json(other)
@@ -767,11 +766,11 @@ fn date_part(
 /// A date value as `YYYY-MM-DD`.
 fn date_text(value: &Value) -> Result<String, OrmError> {
     let date = match value {
-        Value::ChronoDate(Some(date)) => *date,
-        Value::ChronoDateTime(Some(at)) => at.date(),
-        Value::ChronoDateTimeUtc(Some(at)) => at.date_naive(),
-        Value::ChronoDateTimeWithTimeZone(Some(at)) => at.date_naive(),
-        Value::String(Some(text)) => NaiveDate::parse_from_str(text.trim(), "%Y-%m-%d")
+        Value::Date(date) => *date,
+        Value::DateTime(at) => at.date(),
+        Value::Timestamp(at) => at.date_naive(),
+        Value::TimestampTz(at) => at.date_naive(),
+        Value::String(text) => NaiveDate::parse_from_str(text.trim(), "%Y-%m-%d")
             .map_err(|_| invalid(format!("`{text}` is not a date (YYYY-MM-DD)")))?,
         other => {
             return Err(invalid(format!(
@@ -786,10 +785,10 @@ fn date_text(value: &Value) -> Result<String, OrmError> {
 /// A time value as `HH:MM:SS`.
 fn time_text(value: &Value) -> Result<String, OrmError> {
     let time = match value {
-        Value::ChronoTime(Some(time)) => *time,
-        Value::ChronoDateTime(Some(at)) => at.time(),
-        Value::ChronoDateTimeUtc(Some(at)) => at.time(),
-        Value::String(Some(text)) => NaiveTime::parse_from_str(text.trim(), "%H:%M:%S")
+        Value::Time(time) => *time,
+        Value::DateTime(at) => at.time(),
+        Value::Timestamp(at) => at.time(),
+        Value::String(text) => NaiveTime::parse_from_str(text.trim(), "%H:%M:%S")
             .or_else(|_| NaiveTime::parse_from_str(text.trim(), "%H:%M"))
             .map_err(|_| invalid(format!("`{text}` is not a time (HH:MM:SS)")))?,
         other => {
@@ -815,9 +814,9 @@ fn number(value: &Value, part: DatePart) -> Result<i64, OrmError> {
         _ => ("year", |date| i64::from(date.year())),
     };
     Ok(match value {
-        Value::ChronoDate(Some(date)) => from_date(*date),
-        Value::ChronoDateTimeUtc(Some(at)) => from_date(at.date_naive()),
-        Value::ChronoDateTime(Some(at)) => from_date(at.date()),
+        Value::Date(date) => from_date(*date),
+        Value::Timestamp(at) => from_date(at.date_naive()),
+        Value::DateTime(at) => from_date(at.date()),
         other => <i64 as navree_orm::Field>::from_value(other.clone())
             .map_err(|error| invalid(format!("a {name} condition takes a number: {error}")))?,
     })
@@ -984,11 +983,11 @@ mod tests {
             doc! { "stage": { "$ne": "won" } }
         );
         assert_eq!(
-            compile(cmp("closed_at", "=", Value::String(None))).unwrap(),
+            compile(cmp("closed_at", "=", Value::Null(navree_orm::Kind::String))).unwrap(),
             doc! { "closed_at": Bson::Null }
         );
         assert_eq!(
-            compile(cmp("amount", ">", Value::BigInt(None))).unwrap(),
+            compile(cmp("amount", ">", Value::Null(navree_orm::Kind::I64))).unwrap(),
             nothing()
         );
         assert_eq!(

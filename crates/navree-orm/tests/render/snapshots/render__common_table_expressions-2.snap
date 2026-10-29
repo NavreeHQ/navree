@@ -3,8 +3,8 @@ source: crates/navree-orm/tests/render/main.rs
 expression: "query(Query::from(Select::from_table(\"numbers\").column(col(\"n\"))).with_recursive([numbers]).order_by(col(\"n\").asc()))"
 ---
 PostgreSQL: WITH RECURSIVE "numbers" ("n") AS (SELECT $1 UNION ALL SELECT "n" + $2 FROM "numbers" WHERE "n" < $3) SELECT "n" FROM "numbers" ORDER BY "n" ASC
-  values: [BigInt(Some(1)), BigInt(Some(1)), BigInt(Some(5))]
+  values: [I64(1), I64(1), I64(5)]
 MySQL: WITH RECURSIVE `numbers` (`n`) AS (SELECT ? UNION ALL SELECT `n` + ? FROM `numbers` WHERE `n` < ?) SELECT `n` FROM `numbers` ORDER BY `n` ASC
-  values: [BigInt(Some(1)), BigInt(Some(1)), BigInt(Some(5))]
+  values: [I64(1), I64(1), I64(5)]
 SQLite: WITH RECURSIVE "numbers" ("n") AS (SELECT ? UNION ALL SELECT "n" + ? FROM "numbers" WHERE "n" < ?) SELECT "n" FROM "numbers" ORDER BY "n" ASC
-  values: [BigInt(Some(1)), BigInt(Some(1)), BigInt(Some(5))]
+  values: [I64(1), I64(1), I64(5)]

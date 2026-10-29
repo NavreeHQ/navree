@@ -8,8 +8,8 @@
 //! | Executor | Reads | Writes |
 //! |---|---|---|
 //! | [`Db`] | the task's current unit of work when its transaction is open on this pool, else a read replica (the writer with none, after the unit of work wrote, or when asked) | the task's current unfinished unit of work on this pool, else the pool |
-//! | [`Uow`] | its transaction | its transaction, change events recorded |
-//! | `DatabaseConnection`, `DatabaseTransaction` | as given | as given, no change events |
+//! | [`Uow`] | its transaction (begun by its first statement) | its transaction, change events recorded |
+//! | SeaORM's `DatabaseConnection`, `DatabaseTransaction` (while crates move off SeaORM) | as given | as given, no change events |
 //! | `Arc<E>` | as `E` | as `E` |
 //!
 //! `Db` joins the current unit of work (the request's, in a handler) the
@@ -28,6 +28,13 @@
 //! with [`OrmError::Connection`]. SeaORM connections, transactions and
 //! document stores run what they are given.
 //!
+//! **The engine.** Statements run through navree-db's
+//! [`Executor`](navree_db::Executor): its pools, the unit of work's
+//! transaction (navree-db's own, or SeaORM's while crates move off it), and
+//! the transactions and savepoints the ORM begins for work that must happen
+//! as a whole. navree-db times and reports every statement (query logs,
+//! listeners, hooks, telemetry, slow-query logs).
+//!
 //! A document store's executor resolves a [`DocumentTarget`]: the driver,
 //! the app, and where the change events of its writes go (navree-db's unit
 //! of work it joined, or a [`ChangeRecorder`] of the store's own).
@@ -42,12 +49,15 @@ use std::time::Duration;
 use chrono::{DateTime, Utc};
 use futures::stream::{BoxStream, Stream, StreamExt};
 use navree_contracts::Clock;
-use navree_db::{ChangeEvent, DEFAULT_CONNECTION, Db, Reader, Uow};
-use navree_kernel::AppContext;
-use sea_orm::{
-    ConnectionTrait, DatabaseConnection, DatabaseTransaction, ExecResult, QueryResult, StreamTrait,
-    TransactionTrait,
+use navree_db::{
+    ChangeEvent, DEFAULT_CONNECTION, Db, DbError, Executed, Executor as DbExecutor, Pool,
+    Row as DbRow, Transaction, Uow,
 };
+use navree_kernel::{AppContext, BoxFuture};
+
+mod sea;
+
+use sea::SeaConn;
 
 use crate::driver::{DocumentDriver, InsertOutcome};
 use crate::error::OrmError;
@@ -55,7 +65,7 @@ use crate::ir::{Aggregate, DeleteIr, InsertIr, QueryIr, UpdateIr};
 use crate::row::Row;
 use crate::sql::{self, Dialect, Statement};
 use crate::streams::{StreamingGuard, ensure_free};
-use crate::value::{Field, Value};
+use crate::value::{Field, Kind, Value};
 
 /// Rows read one by one as the database sends them (see
 /// [`Target::stream`]).
@@ -228,17 +238,63 @@ pub struct SqlTarget<'a> {
     uow: Option<Uow>,
     app: Option<AppContext>,
     /// The connection whose statement and transaction hooks run
-    /// ([`Db::before_executing`], [`Db::before_starting_transaction`]).
+    /// ([`Db::before_executing`], [`Db::before_starting_transaction`]) for
+    /// the statements navree-db does not see itself (those that run on
+    /// SeaORM's connections and transactions).
     db: Option<Db>,
 }
 
+/// What an [`SqlTarget`]'s statements run on.
 enum SqlConn<'a> {
-    Pool(&'a DatabaseConnection),
-    /// A pool handle of a [`Db`] (cheap to clone), which may be a named
-    /// connection resolved for this operation.
-    Owned(DatabaseConnection),
-    Transaction(Arc<DatabaseTransaction>),
-    TransactionRef(&'a DatabaseTransaction),
+    /// A pool of navree-db's own: the writer, or a read replica (cheap to
+    /// clone; possibly of a named connection resolved for this operation).
+    Pool(Pool),
+    /// A unit of work: its transaction (navree-db's or SeaORM's), begun by
+    /// its first statement.
+    Uow(Uow),
+    /// A transaction or savepoint the ORM began on navree-db's connections.
+    Tx(&'a Transaction),
+    /// A SeaORM connection or transaction (given as the executor, a `Db`
+    /// made from a SeaORM connection, or a savepoint of a unit of work on
+    /// SeaORM's transaction).
+    Sea(SeaConn<'a>),
+}
+
+/// A transaction the ORM began for work that must happen as a whole: a
+/// transaction of its own on a pool, or a savepoint of the transaction the
+/// operation runs in. Commit or roll it back; dropped unfinished, it rolls
+/// back.
+pub(crate) struct OwnTransaction(OwnTx);
+
+enum OwnTx {
+    Native(Transaction),
+    Sea(sea::SeaTransaction),
+}
+
+impl OwnTransaction {
+    /// Commits it (releases the savepoint).
+    pub(crate) async fn commit(self) -> Result<(), OrmError> {
+        match self.0 {
+            OwnTx::Native(tx) => tx.commit().await.map_err(OrmError::from),
+            OwnTx::Sea(tx) => tx.commit().await,
+        }
+    }
+
+    /// Rolls it back (to the savepoint).
+    pub(crate) async fn rollback(self) -> Result<(), OrmError> {
+        match self.0 {
+            OwnTx::Native(tx) => tx.rollback().await.map_err(OrmError::from),
+            OwnTx::Sea(tx) => tx.rollback().await,
+        }
+    }
+
+    /// What statements in it run on.
+    fn conn(&self) -> SqlConn<'_> {
+        match &self.0 {
+            OwnTx::Native(tx) => SqlConn::Tx(tx),
+            OwnTx::Sea(tx) => SqlConn::Sea(tx.conn()),
+        }
+    }
 }
 
 /// Where the writes through a [`DocumentTarget`] record their
@@ -469,38 +525,19 @@ impl Target<'_> {
 
     /// A savepoint (a nested transaction) of the transaction this target
     /// runs in; `None` outside a transaction and on document stores.
-    pub(crate) async fn begin_savepoint(&self) -> Result<Option<DatabaseTransaction>, OrmError> {
+    pub(crate) async fn begin_savepoint(&self) -> Result<Option<OwnTransaction>, OrmError> {
         match self {
-            Target::Sql(sql) => {
-                ensure_free(sql.conn.transaction_id())?;
-                match &sql.conn {
-                    SqlConn::Transaction(tx) => Ok(Some(tx.begin().await?)),
-                    SqlConn::TransactionRef(tx) => Ok(Some(tx.begin().await?)),
-                    SqlConn::Pool(_) | SqlConn::Owned(_) => Ok(None),
-                }
-            }
-            Target::Document(_) => Ok(None),
+            Target::Sql(sql) if sql.in_transaction() => sql.begin_atomic().await.map(Some),
+            Target::Sql(_) | Target::Document(_) => Ok(None),
         }
     }
 
     /// A transaction for work that must happen as a whole: a savepoint of
     /// the transaction this target runs in, or a new transaction on the
     /// pool. `None` on document stores (each operation stands alone).
-    pub(crate) async fn begin_atomic(&self) -> Result<Option<DatabaseTransaction>, OrmError> {
+    pub(crate) async fn begin_atomic(&self) -> Result<Option<OwnTransaction>, OrmError> {
         match self {
-            Target::Sql(sql) => match &sql.conn {
-                SqlConn::Pool(conn) => {
-                    sql.announce_transaction();
-                    Ok(Some(conn.begin().await?))
-                }
-                SqlConn::Owned(conn) => {
-                    sql.announce_transaction();
-                    Ok(Some(conn.begin().await?))
-                }
-                SqlConn::Transaction(_) | SqlConn::TransactionRef(_) => {
-                    self.begin_savepoint().await
-                }
-            },
+            Target::Sql(sql) => sql.begin_atomic().await.map(Some),
             Target::Document(_) => Ok(None),
         }
     }
@@ -508,34 +545,20 @@ impl Target<'_> {
     /// A transaction of its own for a target on a pool connection (several
     /// statements that must succeed together); `None` when the target is
     /// already a transaction (the statements join it) or a document store.
-    pub(crate) async fn begin_transaction(&self) -> Result<Option<DatabaseTransaction>, OrmError> {
+    pub(crate) async fn begin_transaction(&self) -> Result<Option<OwnTransaction>, OrmError> {
         match self {
-            Target::Sql(sql) => match &sql.conn {
-                SqlConn::Pool(conn) => {
-                    sql.announce_transaction();
-                    Ok(Some(conn.begin().await?))
-                }
-                SqlConn::Owned(conn) => {
-                    sql.announce_transaction();
-                    Ok(Some(conn.begin().await?))
-                }
-                SqlConn::Transaction(_) | SqlConn::TransactionRef(_) => Ok(None),
-            },
-            Target::Document(_) => Ok(None),
+            Target::Sql(sql) if !sql.in_transaction() => sql.begin_atomic().await.map(Some),
+            Target::Sql(_) | Target::Document(_) => Ok(None),
         }
     }
 
-    /// The same target running on `tx` (a savepoint of its transaction).
-    pub(crate) fn on_transaction<'b>(&self, tx: &'b DatabaseTransaction) -> Target<'b> {
+    /// The same target running in `tx` (a transaction or savepoint it
+    /// began).
+    pub(crate) fn on_transaction<'b>(&self, tx: &'b OwnTransaction) -> Target<'b> {
         match self {
             Target::Sql(sql) => Target::Sql(SqlTarget {
                 db: sql.db.clone(),
-                ..SqlTarget::new(
-                    SqlConn::TransactionRef(tx),
-                    sql.dialect,
-                    sql.uow.clone(),
-                    sql.app.clone(),
-                )
+                ..SqlTarget::new(tx.conn(), sql.dialect, sql.uow.clone(), sql.app.clone())
             }),
             Target::Document(document) => Target::Document(document.clone()),
         }
@@ -609,7 +632,7 @@ impl Target<'_> {
                 let statement = sql::render_aggregate(query, aggregate, sql.dialect)?;
                 match sql.query_one_timed(&statement, query.timeout).await? {
                     Some(row) => Row::from_sql(row).value("aggregate"),
-                    None => Ok(Value::BigInt(None)),
+                    None => Ok(Value::Null(Kind::I64)),
                 }
             }
             Target::Document(document) => {
@@ -661,10 +684,11 @@ impl Target<'_> {
                 } else {
                     let result = sql.execute(&statement).await?;
                     Ok(InsertOutcome {
-                        rows_affected: result.rows_affected(),
+                        rows_affected: result.rows_affected,
                         returned: Vec::new(),
-                        last_insert_id: (sql.dialect == Dialect::MySql)
-                            .then(|| result.last_insert_id()),
+                        last_insert_id: result
+                            .last_insert_id
+                            .filter(|_| sql.dialect == Dialect::MySql),
                     })
                 }
             }
@@ -680,7 +704,7 @@ impl Target<'_> {
         match self {
             Target::Sql(sql) => {
                 let statement = sql::render_update(update, sql.dialect)?;
-                Ok(sql.execute(&statement).await?.rows_affected())
+                Ok(sql.execute(&statement).await?.rows_affected)
             }
             Target::Document(document) => {
                 crate::testing::note_statement();
@@ -694,7 +718,7 @@ impl Target<'_> {
         match self {
             Target::Sql(sql) => {
                 let statement = sql::render_delete(delete, sql.dialect)?;
-                Ok(sql.execute(&statement).await?.rows_affected())
+                Ok(sql.execute(&statement).await?.rows_affected)
             }
             Target::Document(document) => {
                 crate::testing::note_statement();
@@ -721,14 +745,19 @@ impl<'a> SqlTarget<'a> {
         self
     }
 
-    /// Runs the connection's before-executing hooks for `sql`.
+    /// Runs the connection's before-executing hooks for `sql`, when the
+    /// statement runs where navree-db does not run them itself (SeaORM's
+    /// connections and transactions).
     fn announce(&self, sql: &str) {
-        if let Some(db) = &self.db {
+        if let Some(db) = &self.db
+            && self.conn.through_sea_orm()
+        {
             db.run_before_executing(sql);
         }
     }
 
-    /// Runs the connection's before-transaction hooks.
+    /// Runs the connection's before-transaction hooks, for a transaction
+    /// SeaORM begins (navree-db's pools run them themselves).
     fn announce_transaction(&self) {
         if let Some(db) = &self.db {
             db.run_before_starting_transaction();
@@ -749,20 +778,16 @@ impl<'a> SqlTarget<'a> {
     /// Runs `statement` and returns its rows. Outside a transaction, a read
     /// that loses its connection runs once more on another pooled one (see
     /// [`OrmError::is_lost_connection`]).
-    pub async fn query_all(&self, statement: &Statement) -> Result<Vec<QueryResult>, OrmError> {
+    pub async fn query_all(&self, statement: &Statement) -> Result<Vec<DbRow>, OrmError> {
         ensure_free(self.conn.transaction_id())?;
         self.announce(&statement.sql);
         crate::testing::note_statement();
-        let statement = statement.to_sea_orm();
-        let rows = match &self.conn {
-            SqlConn::Pool(conn) => {
-                read_again_if_lost(conn, statement, |conn, s| conn.query_all_raw(s)).await
-            }
-            SqlConn::Owned(conn) => {
-                read_again_if_lost(conn, statement, |conn, s| conn.query_all_raw(s)).await
-            }
-            SqlConn::Transaction(tx) => tx.query_all_raw(statement).await,
-            SqlConn::TransactionRef(tx) => tx.query_all_raw(statement).await,
+        let statement = statement.to_db();
+        let exec = self.conn.executor();
+        let rows = if self.conn.on_pool() {
+            read_again_if_lost(|| exec.get().fetch_all(&statement)).await
+        } else {
+            exec.get().fetch_all(&statement).await
         };
         rows.map_err(|error| self.error(error))
     }
@@ -770,46 +795,41 @@ impl<'a> SqlTarget<'a> {
     /// Runs `statement` and returns its first row (read again once outside
     /// a transaction when the connection is lost, like
     /// [`query_all`](Self::query_all)).
-    pub async fn query_one(&self, statement: &Statement) -> Result<Option<QueryResult>, OrmError> {
+    pub async fn query_one(&self, statement: &Statement) -> Result<Option<DbRow>, OrmError> {
         ensure_free(self.conn.transaction_id())?;
         self.announce(&statement.sql);
         crate::testing::note_statement();
-        let statement = statement.to_sea_orm();
-        let row = match &self.conn {
-            SqlConn::Pool(conn) => {
-                read_again_if_lost(conn, statement, |conn, s| conn.query_one_raw(s)).await
-            }
-            SqlConn::Owned(conn) => {
-                read_again_if_lost(conn, statement, |conn, s| conn.query_one_raw(s)).await
-            }
-            SqlConn::Transaction(tx) => tx.query_one_raw(statement).await,
-            SqlConn::TransactionRef(tx) => tx.query_one_raw(statement).await,
+        let statement = statement.to_db();
+        let exec = self.conn.executor();
+        let row = if self.conn.on_pool() {
+            read_again_if_lost(|| exec.get().fetch_optional(&statement)).await
+        } else {
+            exec.get().fetch_optional(&statement).await
         };
         row.map_err(|error| self.error(error))
     }
 
-    /// Runs `statement` for its effect.
-    pub async fn execute(&self, statement: &Statement) -> Result<ExecResult, OrmError> {
+    /// Runs `statement` for its effect: how many rows it changed, and the
+    /// key the database assigned (MySQL, SQLite).
+    pub async fn execute(&self, statement: &Statement) -> Result<Executed, OrmError> {
         ensure_free(self.conn.transaction_id())?;
         self.announce(&statement.sql);
         crate::testing::note_statement();
-        let statement = statement.to_sea_orm();
-        let result = match &self.conn {
-            SqlConn::Pool(conn) => conn.execute_raw(statement).await,
-            SqlConn::Owned(conn) => conn.execute_raw(statement).await,
-            SqlConn::Transaction(tx) => tx.execute_raw(statement).await,
-            SqlConn::TransactionRef(tx) => tx.execute_raw(statement).await,
-        };
-        result.map_err(|error| self.error(error))
+        let statement = statement.to_db();
+        let exec = self.conn.executor();
+        exec.get()
+            .execute(&statement)
+            .await
+            .map_err(|error| self.error(error))
     }
 
     /// The ORM error for a database error: SQLite without a registered
     /// `regexp` function cannot run regular expressions (`Unsupported`);
     /// anything else is the database's error.
-    fn error(&self, error: sea_orm::DbErr) -> OrmError {
+    fn error(&self, error: DbError) -> OrmError {
         if self.dialect == Dialect::Sqlite
             && error
-                .to_string()
+                .message()
                 .to_ascii_lowercase()
                 .contains("no such function: regexp")
         {
@@ -823,15 +843,11 @@ impl<'a> SqlTarget<'a> {
 
     /// Runs `sql` as written, without values (several statements may be
     /// separated by `;`).
-    pub async fn execute_unprepared(&self, sql: &str) -> Result<ExecResult, OrmError> {
+    pub async fn execute_unprepared(&self, sql: &str) -> Result<Executed, OrmError> {
         ensure_free(self.conn.transaction_id())?;
         self.announce(sql);
-        Ok(match &self.conn {
-            SqlConn::Pool(conn) => conn.execute_unprepared(sql).await?,
-            SqlConn::Owned(conn) => conn.execute_unprepared(sql).await?,
-            SqlConn::Transaction(tx) => tx.execute_unprepared(sql).await?,
-            SqlConn::TransactionRef(tx) => tx.execute_unprepared(sql).await?,
-        })
+        let exec = self.conn.executor();
+        Ok(exec.get().execute_script(sql).await?)
     }
 
     /// Runs `statement` and hands its rows out one by one as the database
@@ -843,24 +859,36 @@ impl<'a> SqlTarget<'a> {
         ensure_free(id)?;
         self.announce(&statement.sql);
         crate::testing::note_statement();
-        let statement = statement.to_sea_orm();
-        let rows: RowsStream<'_> = match &self.conn {
-            SqlConn::Pool(conn) => conn
-                .stream_raw(statement)
-                .await?
-                .map(|row| row.map(Row::from_sql).map_err(OrmError::from))
-                .boxed(),
-            SqlConn::Owned(conn) => conn
-                .stream_raw(statement)
-                .await?
-                .map(|row| row.map(Row::from_sql).map_err(OrmError::from))
-                .boxed(),
-            SqlConn::Transaction(tx) => Guarded::new(tx.stream_raw(statement).await?, id).boxed(),
-            SqlConn::TransactionRef(tx) => {
-                Guarded::new(tx.stream_raw(statement).await?, id).boxed()
-            }
-        };
-        Ok(rows)
+        if let SqlConn::Sea(sea) = &self.conn {
+            return sea.stream(statement, id).await;
+        }
+        let statement = statement.to_db();
+        let rows = self.conn.executor().get().fetch(&statement).await?;
+        Ok(Guarded::new(rows, id).boxed())
+    }
+
+    /// A transaction for work that must happen as a whole: a savepoint of
+    /// the transaction the target runs in, or a new transaction on its pool.
+    /// (Boxed: the futures of the operations awaiting it stay shallow.)
+    fn begin_atomic(&self) -> BoxFuture<'_, Result<OwnTransaction, OrmError>> {
+        Box::pin(async move {
+            ensure_free(self.conn.transaction_id())?;
+            let tx = match &self.conn {
+                SqlConn::Pool(pool) => OwnTx::Native(pool.begin().await?),
+                SqlConn::Uow(uow) if uow.db().native_units_of_work() => {
+                    OwnTx::Native(uow.savepoint().await?)
+                }
+                SqlConn::Uow(uow) => OwnTx::Sea(sea::SeaTransaction::savepoint_of(uow).await?),
+                SqlConn::Tx(tx) => OwnTx::Native(tx.savepoint().await?),
+                SqlConn::Sea(sea) => {
+                    if !sea.in_transaction() {
+                        self.announce_transaction();
+                    }
+                    OwnTx::Sea(sea.begin().await?)
+                }
+            };
+            Ok(OwnTransaction(tx))
+        })
     }
 
     /// [`query_all`](Self::query_all), stopped by the database after
@@ -869,7 +897,7 @@ impl<'a> SqlTarget<'a> {
         &self,
         statement: &Statement,
         timeout: Option<Duration>,
-    ) -> Result<Vec<QueryResult>, OrmError> {
+    ) -> Result<Vec<DbRow>, OrmError> {
         match self.timed(TimedRead::All(statement), timeout).await? {
             TimedRows::All(rows) => Ok(rows),
             TimedRows::One(row) => Ok(row.into_iter().collect()),
@@ -882,7 +910,7 @@ impl<'a> SqlTarget<'a> {
         &self,
         statement: &Statement,
         timeout: Option<Duration>,
-    ) -> Result<Option<QueryResult>, OrmError> {
+    ) -> Result<Option<DbRow>, OrmError> {
         match self.timed(TimedRead::One(statement), timeout).await? {
             TimedRows::One(row) => Ok(row),
             TimedRows::All(rows) => Ok(rows.into_iter().next()),
@@ -926,28 +954,11 @@ impl<'a> SqlTarget<'a> {
         read: TimedRead<'_>,
         timeout: Duration,
     ) -> Result<TimedRows, OrmError> {
-        ensure_free(self.conn.transaction_id())?;
         let in_transaction = self.in_transaction();
-        let tx = match &self.conn {
-            SqlConn::Pool(conn) => {
-                self.announce_transaction();
-                conn.begin().await?
-            }
-            SqlConn::Owned(conn) => {
-                self.announce_transaction();
-                conn.begin().await?
-            }
-            SqlConn::Transaction(tx) => tx.begin().await?,
-            SqlConn::TransactionRef(tx) => tx.begin().await?,
-        };
+        let tx = self.begin_atomic().await?;
         let nested = SqlTarget {
             db: self.db.clone(),
-            ..SqlTarget::new(
-                SqlConn::TransactionRef(&tx),
-                self.dialect,
-                self.uow.clone(),
-                self.app.clone(),
-            )
+            ..SqlTarget::new(tx.conn(), self.dialect, self.uow.clone(), self.app.clone())
         };
         let result = async {
             let previous = if in_transaction {
@@ -957,7 +968,7 @@ impl<'a> SqlTarget<'a> {
                     dialect: Dialect::Postgres,
                 };
                 match nested.query_one(&current).await? {
-                    Some(row) => Some(row.try_get::<String>("", "previous")?),
+                    Some(row) => Some(row.get::<String>("previous")?),
                     None => None,
                 }
             } else {
@@ -1001,21 +1012,16 @@ impl<'a> SqlTarget<'a> {
     }
 }
 
-/// Runs `read` with `statement` on the pool `conn`, and once more (on
-/// another pooled connection) when the connection was lost under it.
-async fn read_again_if_lost<'c, T, F, Fut>(
-    conn: &'c DatabaseConnection,
-    statement: sea_orm::Statement,
-    read: F,
-) -> Result<T, sea_orm::DbErr>
+/// Runs `read`, and once more (on another pooled connection) when the
+/// connection was lost under it.
+async fn read_again_if_lost<'r, T, F>(read: F) -> Result<T, DbError>
 where
-    F: Fn(&'c DatabaseConnection, sea_orm::Statement) -> Fut,
-    Fut: Future<Output = Result<T, sea_orm::DbErr>>,
+    F: Fn() -> BoxFuture<'r, Result<T, DbError>>,
 {
-    match read(conn, statement.clone()).await {
+    match read().await {
         Err(error) if crate::error::lost_connection(&error) => {
             tracing::warn!(target: "navree_orm", %error, "the connection was lost under a read; reading again");
-            read(conn, statement).await
+            read().await
         }
         result => result,
     }
@@ -1029,26 +1035,76 @@ enum TimedRead<'s> {
 
 /// What a [`TimedRead`] returns.
 enum TimedRows {
-    All(Vec<QueryResult>),
-    One(Option<QueryResult>),
+    All(Vec<DbRow>),
+    One(Option<DbRow>),
 }
 
-impl SqlConn<'_> {
-    /// The identity of the transaction statements run in (its address),
-    /// `None` on the pool.
-    fn transaction_id(&self) -> Option<usize> {
+/// The navree-db executor an [`SqlConn`] runs statements on.
+enum ConnExecutor<'x> {
+    Ref(&'x dyn DbExecutor),
+    Sea(sea::SeaExecutor<'x>),
+}
+
+impl ConnExecutor<'_> {
+    fn get(&self) -> &dyn DbExecutor {
         match self {
-            SqlConn::Pool(_) | SqlConn::Owned(_) => None,
-            SqlConn::Transaction(tx) => Some(Arc::as_ptr(tx) as usize),
-            SqlConn::TransactionRef(tx) => {
-                Some(std::ptr::from_ref::<DatabaseTransaction>(tx) as usize)
-            }
+            ConnExecutor::Ref(executor) => *executor,
+            ConnExecutor::Sea(sea) => sea.get(),
         }
     }
 }
 
-/// A transaction's row stream, marking the transaction busy while it lives
-/// (see [`ensure_free`]).
+impl SqlConn<'_> {
+    /// The identity of the transaction statements run in (its address, a
+    /// unit of work's own), `None` on a pool.
+    fn transaction_id(&self) -> Option<usize> {
+        match self {
+            SqlConn::Pool(_) => None,
+            // The `Db` every handle of the unit of work shares.
+            SqlConn::Uow(uow) => Some(std::ptr::from_ref::<Db>(uow.db()) as usize),
+            SqlConn::Tx(tx) => Some(std::ptr::from_ref::<Transaction>(tx) as usize),
+            SqlConn::Sea(sea) => sea.transaction_id(),
+        }
+    }
+
+    /// Whether statements run on a pool (outside any transaction).
+    fn on_pool(&self) -> bool {
+        self.transaction_id().is_none()
+    }
+
+    /// Whether statements run through SeaORM (whose connections do not run
+    /// navree-db's statement hooks).
+    fn through_sea_orm(&self) -> bool {
+        match self {
+            SqlConn::Pool(_) | SqlConn::Tx(_) => false,
+            SqlConn::Uow(uow) => !uow.db().native_units_of_work(),
+            SqlConn::Sea(_) => true,
+        }
+    }
+
+    /// What statements run on.
+    fn executor(&self) -> ConnExecutor<'_> {
+        match self {
+            SqlConn::Pool(pool) => ConnExecutor::Ref(pool),
+            SqlConn::Uow(uow) => ConnExecutor::Ref(uow),
+            SqlConn::Tx(tx) => ConnExecutor::Ref(*tx),
+            SqlConn::Sea(sea) => ConnExecutor::Sea(sea.executor()),
+        }
+    }
+
+    /// The same connection, borrowed.
+    fn reborrow(&self) -> SqlConn<'_> {
+        match self {
+            SqlConn::Pool(pool) => SqlConn::Pool(pool.clone()),
+            SqlConn::Uow(uow) => SqlConn::Uow(uow.clone()),
+            SqlConn::Tx(tx) => SqlConn::Tx(tx),
+            SqlConn::Sea(sea) => SqlConn::Sea(sea.reborrow()),
+        }
+    }
+}
+
+/// A stream of rows, marking the transaction it reads in busy while it
+/// lives (see [`ensure_free`]).
 struct Guarded<S> {
     rows: Pin<Box<S>>,
     _busy: Option<StreamingGuard>,
@@ -1063,9 +1119,10 @@ impl<S> Guarded<S> {
     }
 }
 
-impl<S> Stream for Guarded<S>
+impl<S, E> Stream for Guarded<S>
 where
-    S: Stream<Item = Result<QueryResult, sea_orm::DbErr>>,
+    S: Stream<Item = Result<DbRow, E>>,
+    OrmError: From<E>,
 {
     type Item = Result<Row, OrmError>;
 
@@ -1079,7 +1136,27 @@ where
 
 /// Whether `uow` runs on the same pool as `db`.
 fn same_pool(db: &Db, uow: &Uow) -> bool {
-    std::ptr::eq(db.conn(), uow.db().conn())
+    match (db.pool(), uow.db().pool()) {
+        (Some(ours), Some(theirs)) => ours.same_pool(theirs),
+        // A `Db` made from a SeaORM connection.
+        _ => std::ptr::eq(db.conn(), uow.db().conn()),
+    }
+}
+
+/// The pool of `db` an operation runs on outside a unit of work: the writer
+/// for writes and `writer`, else the one the task reads from (a replica,
+/// or the writer after its unit of work wrote); the SeaORM connection of a
+/// `Db` made from one.
+fn pool_conn(db: &Db, writer: bool) -> SqlConn<'static> {
+    let pool = if writer {
+        db.pool()
+    } else {
+        db.task_read_pool()
+    };
+    match pool {
+        Some(pool) => SqlConn::Pool(pool.clone()),
+        None => SqlConn::Sea(SeaConn::from_db(db)),
+    }
 }
 
 /// Where an operation of `access` runs on `db`: the task's unit of work on
@@ -1089,30 +1166,26 @@ fn same_pool(db: &Db, uow: &Uow) -> bool {
 /// wrote). A write marks the task's unit of work as having written, so
 /// its later reads stay on the writer.
 async fn db_target(db: &Db, access: Access, writer: bool) -> Result<Target<'static>, OrmError> {
-    let dialect = Dialect::from_backend(db.backend())?;
+    let dialect = Dialect::from(DbExecutor::backend(db));
     let app = db.app();
     let current = Uow::current().filter(|uow| same_pool(db, uow));
     let target = match access {
-        Access::Read => match db.reader().await {
-            Reader::Transaction(tx) => {
-                SqlTarget::new(SqlConn::Transaction(tx), dialect, current, app)
+        Access::Read => match current {
+            Some(uow) if uow.has_open_transaction().await => {
+                SqlTarget::new(SqlConn::Uow(uow.clone()), dialect, Some(uow), app)
             }
-            Reader::Pool(conn) => {
-                let conn = if writer { db.conn() } else { conn };
-                SqlTarget::new(SqlConn::Owned(conn.clone()), dialect, None, app)
-            }
+            _ => SqlTarget::new(pool_conn(db, writer), dialect, None, app),
         },
         Access::Write => match current {
             Some(uow) => {
                 uow.mark_modified();
                 if uow.is_finished().await {
-                    SqlTarget::new(SqlConn::Owned(db.conn().clone()), dialect, None, app)
+                    SqlTarget::new(pool_conn(db, true), dialect, None, app)
                 } else {
-                    let tx = uow.tx().await?;
-                    SqlTarget::new(SqlConn::Transaction(tx), dialect, Some(uow), app)
+                    SqlTarget::new(SqlConn::Uow(uow.clone()), dialect, Some(uow), app)
                 }
             }
-            None => SqlTarget::new(SqlConn::Owned(db.conn().clone()), dialect, None, app),
+            None => SqlTarget::new(pool_conn(db, true), dialect, None, app),
         },
     };
     Ok(Target::Sql(target.watched_by(db)))
@@ -1168,11 +1241,10 @@ impl Executor for Uow {
         if access == Access::Write {
             self.mark_modified();
         }
-        let tx = self.tx().await?;
         Ok(Target::Sql(
             SqlTarget::new(
-                SqlConn::Transaction(tx),
-                Dialect::from_backend(self.db().backend())?,
+                SqlConn::Uow(self.clone()),
+                Dialect::from(DbExecutor::backend(self)),
                 Some(self.clone()),
                 self.db().app(),
             )
@@ -1198,28 +1270,6 @@ impl Executor for Uow {
     }
 }
 
-impl Executor for DatabaseConnection {
-    async fn target(&self, _access: Access) -> Result<Target<'_>, OrmError> {
-        Ok(Target::Sql(SqlTarget::new(
-            SqlConn::Pool(self),
-            Dialect::from_backend(ConnectionTrait::get_database_backend(self))?,
-            None,
-            None,
-        )))
-    }
-}
-
-impl Executor for DatabaseTransaction {
-    async fn target(&self, _access: Access) -> Result<Target<'_>, OrmError> {
-        Ok(Target::Sql(SqlTarget::new(
-            SqlConn::TransactionRef(self),
-            Dialect::from_backend(ConnectionTrait::get_database_backend(self))?,
-            None,
-            None,
-        )))
-    }
-}
-
 /// A target runs operations where it is (its connection or transaction,
 /// its unit of work), so code holding one can call any method taking an
 /// executor.
@@ -1239,12 +1289,7 @@ impl Target<'_> {
             Target::Sql(sql) => Target::Sql(SqlTarget {
                 db: sql.db.clone(),
                 ..SqlTarget::new(
-                    match &sql.conn {
-                        SqlConn::Pool(conn) => SqlConn::Pool(conn),
-                        SqlConn::Owned(conn) => SqlConn::Pool(conn),
-                        SqlConn::Transaction(tx) => SqlConn::Transaction(Arc::clone(tx)),
-                        SqlConn::TransactionRef(tx) => SqlConn::TransactionRef(tx),
-                    },
+                    sql.conn.reborrow(),
                     sql.dialect,
                     sql.uow.clone(),
                     sql.app.clone(),

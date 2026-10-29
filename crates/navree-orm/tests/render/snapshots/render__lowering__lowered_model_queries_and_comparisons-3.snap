@@ -3,8 +3,8 @@ source: crates/navree-orm/tests/render/lowering.rs
 expression: "query(Deal::query().where_(Deal::STAGE.eq(Stage::Won)).where_(Deal::AMOUNT_CENTS.gte(10_000)).where_(Deal::TITLE.ne(\"Draft\")).where_(Deal::CLOSED_AT.gt(at())).where_(Deal::AMOUNT_CENTS.op(\"<>\",\n7)))"
 ---
 PostgreSQL: SELECT "deals"."id", "deals"."company_id", "deals"."title", "deals"."amount_cents", "deals"."stage", "deals"."tags", "deals"."closed_at", "deals"."created_at", "deals"."updated_at", "deals"."deleted_at" FROM "deals" WHERE "deals"."stage" = $1 AND "deals"."amount_cents" >= $2 AND "deals"."title" <> $3 AND "deals"."closed_at" > $4 AND "deals"."amount_cents" <> $5 AND "deals"."deleted_at" IS NULL
-  values: [String(Some("won")), BigInt(Some(10000)), String(Some("Draft")), ChronoDateTimeUtc(Some(2026-10-27T08:30:00Z)), BigInt(Some(7))]
+  values: [String("won"), I64(10000), String("Draft"), Timestamp(2026-10-27T08:30:00Z), I64(7)]
 MySQL: SELECT `deals`.`id`, `deals`.`company_id`, `deals`.`title`, `deals`.`amount_cents`, `deals`.`stage`, `deals`.`tags`, `deals`.`closed_at`, `deals`.`created_at`, `deals`.`updated_at`, `deals`.`deleted_at` FROM `deals` WHERE `deals`.`stage` = ? AND `deals`.`amount_cents` >= ? AND `deals`.`title` <> ? AND `deals`.`closed_at` > ? AND `deals`.`amount_cents` <> ? AND `deals`.`deleted_at` IS NULL
-  values: [String(Some("won")), BigInt(Some(10000)), String(Some("Draft")), ChronoDateTimeUtc(Some(2026-10-27T08:30:00Z)), BigInt(Some(7))]
+  values: [String("won"), I64(10000), String("Draft"), Timestamp(2026-10-27T08:30:00Z), I64(7)]
 SQLite: SELECT "deals"."id", "deals"."company_id", "deals"."title", "deals"."amount_cents", "deals"."stage", "deals"."tags", "deals"."closed_at", "deals"."created_at", "deals"."updated_at", "deals"."deleted_at" FROM "deals" WHERE "deals"."stage" = ? AND "deals"."amount_cents" >= ? AND "deals"."title" <> ? AND "deals"."closed_at" > ? AND "deals"."amount_cents" <> ? AND "deals"."deleted_at" IS NULL
-  values: [String(Some("won")), BigInt(Some(10000)), String(Some("Draft")), ChronoDateTimeUtc(Some(2026-10-27T08:30:00Z)), BigInt(Some(7))]
+  values: [String("won"), I64(10000), String("Draft"), Timestamp(2026-10-27T08:30:00Z), I64(7)]

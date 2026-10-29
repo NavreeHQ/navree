@@ -25,7 +25,9 @@ Principles:
   `set_config` for audit and workspace row-level security), migrations and
   the page shape stay in navree-db. Every statement runs through them, so
   audit trails, workspace isolation and after-commit work keep working.
-  SeaORM entities keep working beside ORM models (same pool, same values).
+  The ORM runs on navree-db's engine (its values, rows, pools,
+  transactions and executor); SeaORM entities keep working beside ORM
+  models while crates move off them (same pool, same unit of work).
 - **One driver abstraction.** A query is first a driver-neutral value (the
   IR, `navree_orm::ir`), then SQL for PostgreSQL/TimescaleDB, MySQL or
   SQLite written by the ORM's own renderer (`navree_orm::render`, section
@@ -61,8 +63,8 @@ The facade turns it on with the `orm` feature (in `full`; it turns on
 treats navree-orm-macros as a companion proc-macro crate of navree-orm
 (`COMPANION_MACROS` in `crates/navree/tests/facade.rs`).
 
-Features of navree-orm: `postgres` (navree-db's PostgreSQL driver, and
-SeaORM's pgvector values for `cast = "vector"`), `mysql` (navree-db's
+Features of navree-orm: `postgres` (navree-db's PostgreSQL driver, which
+binds pgvector's `vector` for `cast = "vector"`), `mysql` (navree-db's
 MySQL and MariaDB driver), and three that pull in a same-layer crate (all
 optional, so the core needs none of them; the facade turns each on when
 both its features are on): `access` (navree-access: models as subjects,
@@ -88,7 +90,7 @@ src/
   lib.rs            crate docs (a runnable example), re-exports, `extern crate self`, `__private`
   prelude.rs        the app-facing names
   error.rs          OrmError, Result
-  value.rs          Value (sea-query's), Field, FieldError, ValueFor, Numeric, to_json, same_value
+  value.rs          Value and Kind (navree-db's), Field, FieldError, ValueFor, Numeric, to_json, same_value
   ulid.rs           Ulid (time-ordered 128-bit ids, Crockford base32)
   row.rs            Row: one result row (SQL or document); typed and dynamic reads; Serialize
   model.rs          Model trait (+ the static API), ModelMeta, ColumnMeta, KeyKind, PrimaryKey, Timestamp, derive_support
@@ -269,17 +271,23 @@ column per model. `Ulid` is stored as its 26-character text.
 
 ### Values and fields
 
-`Value` is sea-query's value enum, so the ORM binds exactly as SeaORM does
-(typed NULLs included). `Field` is the trait of Rust types a column holds:
-`to_value`, `null`, `from_sql(&QueryResult, column)` and
-`from_value(Value)`. Implemented for `bool`, the 8- to 64-bit integers,
-`f32`, `f64`, `Decimal`, `String`, `Vec<u8>`, `Uuid`, `Ulid`, `NaiveDate`,
-`NaiveTime`, `NaiveDateTime`, `DateTime<Utc>`, `DateTime<FixedOffset>`,
-`serde_json::Value`, `Value` and `Option<T>`. Decoding is exact first, then
-tolerant where databases differ: any integer width (PostgreSQL's decoders
-are strict), exact `NUMERIC`/`DECIMAL` sums read as integers, floats from
-decimals, UUIDs from text or bytes, date-times and JSON from text (SQLite,
-MySQL expressions).
+`Value` is navree-db's value (`navree_orm::Value` re-exports it, with its
+`Kind`): what a statement binds and a row holds, a NULL keeping its kind
+(`Value::Null(Kind::I64)`; PostgreSQL types every parameter), plus
+`Enum { type_name, value }` (a value of a named type: bound as its text,
+cast to the type by the PostgreSQL grammar, a MongoDB `ObjectId` in
+documents) and `Vector` (pgvector's `vector` on PostgreSQL, little-endian
+`f32` bytes elsewhere). `Field` is the trait of Rust types a column holds:
+`to_value`, `null`, `from_value(Value)` and `from_sql(&navree_db::Row,
+column)`, which by default reads the column as navree-db reads it by its
+type (`Row::value`) and converts it with `from_value`. Implemented for
+`bool`, the 8- to 64-bit integers, `f32`, `f64`, `Decimal`, `String`,
+`Vec<u8>`, `Uuid`, `Ulid`, `NaiveDate`, `NaiveTime`, `NaiveDateTime`,
+`DateTime<Utc>`, `DateTime<FixedOffset>`, `serde_json::Value`, `Value` and
+`Option<T>`. Conversion is tolerant where databases differ: any integer
+width, exact `NUMERIC`/`DECIMAL` sums read as integers, floats from
+decimals, booleans from MySQL's `TINYINT(1)`, UUIDs from text or bytes,
+date-times and JSON from text (SQLite, MySQL expressions).
 
 `ValueFor<T>` is what a column of `T` accepts: `T`, `T` for an `Option<T>`
 column, text for text columns, lossless integer and float widenings, and
@@ -632,8 +640,21 @@ serialised), and the TimescaleDB helpers (native on PostgreSQL; fixed-width
 buckets emulated on MySQL and SQLite with TimescaleDB's origin, Monday
 2000-01-03; `first`/`last` need TimescaleDB). On PostgreSQL a JSON text
 path (`->>`) is compared with the JSON text of a non-string value.
-Statements run through SeaORM's `ConnectionTrait`, so navree-db's query
-log, slow-query warnings and telemetry apply.
+Statements run through navree-db's `Executor`: a pool of navree-db's own
+(the writer, or a replica for reads outside a unit of work), the unit of
+work (its transaction, navree-db's or, by default while crates move off
+SeaORM, SeaORM's), or a transaction or savepoint the ORM began
+(`OwnTransaction`: a transaction on the pool, `Transaction::savepoint`,
+`Uow::savepoint`, or a SeaORM savepoint of a unit of work on SeaORM's
+transaction). navree-db times and reports every statement (query log,
+listeners, before-executing hooks, telemetry, slow-query warnings); the
+ORM runs the hooks itself only for the statements that go through
+SeaORM. A read on a pool that loses its connection (`DbError` of kind
+`ConnectionLost`, or a driver message saying so) runs once more; a
+cursor holds its transaction's connection (`ensure_free`). SeaORM's
+`DatabaseConnection` and `DatabaseTransaction` stay executors while
+crates still hand them over (`exec/sea.rs`, through navree-db's bridge;
+their cursors read through SeaORM's own).
 
 ### The renderer (`render/`)
 
@@ -714,11 +735,9 @@ test reads its sources to keep it so); its values are
   with `NULLS LAST` on MySQL), the case says so and the run requires the
   difference.
 
-**Still sea-query's**: `Value` (sea-query's value enum, until it becomes
-navree-db's own) and `Where::Sql` / `From<sea_query::Condition>` (until
-navree-access builds its filters without it). The statements run on
-SeaORM's connections (`Statement::to_sea_orm`) until the ORM executes
-through navree-db's engine.
+**Still sea-query's**: `Where::Sql` / `From<sea_query::Condition>` (until
+navree-access builds its filters without it): the condition is written by
+sea-query's builder and its values converted to navree-db's.
 
 ### Document drivers (`driver.rs`)
 
@@ -767,8 +786,9 @@ The seams a document store's executors use:
 
 ## 7. Row decoding
 
-`Row` wraps a SeaORM `QueryResult` or `(column, value)` pairs. `M::from_row`
-reads each column with its field's decoder. A missing column reads as the
+`Row` wraps navree-db's `Row`: the driver's row of an SQL query, or the
+`(column, value)` pairs a document driver returns (`Row::from_values`).
+`M::from_row` reads each column with its field's `from_sql`. A missing column reads as the
 default of a `#[model(default)]` field; for any other field it is
 `OrmError::MissingAttribute` (naming the model, the column and the selected
 columns) in strict mode (`prevent_missing_attributes`, the default) or when
@@ -776,9 +796,9 @@ the field's type has no `Default`, and the type's default otherwise (the
 derive passes each field's default through an autoref probe,
 `derive_support::DefaultOf`). `Builder::fetch` decodes with the strictness
 of the executor's app (`ExecContext::strictness`). Columns that are not
-model columns become the record's extras, decoded by their own type
-(`row::sniff`). Aggregates and selected values decode leniently into the
-requested type.
+model columns become the record's extras, read by their own type
+(`navree_db::Row::value`). Aggregates and selected values decode leniently
+into the requested type.
 
 ## 8. Errors
 
@@ -786,9 +806,9 @@ requested type.
 
 | Variant | When | Over HTTP |
 |---|---|---|
-| `ModelNotFound { model, keys }` | `first_or_fail`, `find_or_fail`, `sole`, `refresh` | 404 (its source is `DbErr::RecordNotFound`, which navree-db maps) |
+| `ModelNotFound { model, keys }` | `first_or_fail`, `find_or_fail`, `sole`, `refresh` | 404 (its source is a `DbError` of kind `NotFound`, which navree-db maps) |
 | `MultipleRecordsFound { model }` | `sole` | 500 |
-| `Db(DbErr)` | the database refused | 409 for unique and foreign-key violations (navree-db's mapping), else 500 |
+| `Db(DbError)` | the database refused (navree-db's classified error: `kind`, `code`, `constraint`) | 409 for unique and foreign-key violations (navree-db's mapping), else 500 |
 | `Decode`, `Cast` | a column cannot be read as its field / a cast failed | 500 |
 | `InvalidQuery(String)` | an unknown operator, wrong raw placeholders, a malformed cursor, an overflow, ... | 500 |
 | `Unsupported { feature, driver }` | a feature the dialect or driver lacks | 500 |
@@ -801,9 +821,12 @@ requested type.
 | `Connection { connection, message }` | an unknown connection name, or a unit of work of another connection | 500 |
 | `Timeout { timeout, source }` | the database stopped a read that outran the query's `timeout` | 500 |
 
-`is_not_found()`, `is_unique_violation()`, `is_timeout()` and
-`is_lost_connection()` classify. Messages name the model, the column and
-the operation; no SQL or values reach clients (navree-http logs the
+`is_not_found()`, `is_unique_violation()`, `is_foreign_key_violation()`,
+`is_timeout()` and `is_lost_connection()` classify; `db_error()` gives the
+`DbError` of `Db`, `ModelNotFound` and `Timeout`. `From<DbErr>` (SeaORM
+statements run inside ORM code while crates move off SeaORM) converts
+through navree-db's `DbError::from`. Messages name the model, the column
+and the operation; no SQL or values reach clients (navree-http logs the
 source of 500s).
 
 ## 9. Casts, collections, pagination
@@ -1446,8 +1469,9 @@ better.
   delivery log, the OAuth server's clients, grants and tokens, failed
   jobs, stored notifications and audit rows. Reads moved with them
   (auth's and social sign-in's user lookups too).
-- **Errors.** `From<OrmError> for DbErr` (database errors as they were,
-  not-found as `RecordNotFound`, the rest as `DbErr::Custom`) lets services
+- **Errors.** `From<OrmError> for DbErr` (database errors as SeaORM would
+  have returned them, not-found as `RecordNotFound`, the rest as
+  `DbErr::Custom`) lets services
   whose API speaks `DbErr` use `?`; the crates' own errors convert through
   it (`QueueError`, `AuthError`, `WebhooksError`, `OAuthError`,
   `SocialError`, each into its database variant).

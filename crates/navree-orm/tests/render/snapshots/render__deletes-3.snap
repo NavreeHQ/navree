@@ -4,5 +4,5 @@ expression: "statement(Delete\n{\n    order_by: vec![col(\"last_seen_at\").asc()
 ---
 PostgreSQL: error: a delete with ORDER BY or LIMIT (narrow the rows with a subquery) is not supported on PostgreSQL
 MySQL: DELETE FROM `sessions` WHERE `user_id` = ? ORDER BY `last_seen_at` ASC LIMIT ?
-  values: [BigInt(Some(7)), BigUnsigned(Some(100))]
+  values: [I64(7), U64(100)]
 SQLite: error: a delete with ORDER BY or LIMIT (narrow the rows with a subquery) is not supported on SQLite

@@ -1,14 +1,13 @@
 ---
 source: crates/navree-orm/tests/sql/main.rs
-assertion_line: 973
 expression: out
 ---
 PostgreSQL: SELECT "companies"."id", "companies"."name", "companies"."country" FROM "companies" WHERE "companies"."country" = $1
-  values: [String(Some("NZ"))]
+  values: [String("NZ")]
 MySQL: SELECT /*+ MAX_EXECUTION_TIME(1501) */ `companies`.`id`, `companies`.`name`, `companies`.`country` FROM `companies` WHERE `companies`.`country` = ?
-  values: [String(Some("NZ"))]
+  values: [String("NZ")]
 SQLite: SELECT "companies"."id", "companies"."name", "companies"."country" FROM "companies" WHERE "companies"."country" = ?
-  values: [String(Some("NZ"))]
+  values: [String("NZ")]
 count: SELECT /*+ MAX_EXECUTION_TIME(1501) */ COUNT(*) AS `aggregate` FROM `companies` WHERE `companies`.`country` = ?
 count of a limited query: SELECT /*+ MAX_EXECUTION_TIME(1501) */ COUNT(*) AS `aggregate` FROM (SELECT `companies`.`id`, `companies`.`name`, `companies`.`country` FROM `companies` WHERE `companies`.`country` = ? LIMIT ?) AS `aggregate_table`
 exists: SELECT /*+ MAX_EXECUTION_TIME(1501) */ EXISTS (SELECT 1 FROM `companies` WHERE `companies`.`country` = ?) AS `exists`

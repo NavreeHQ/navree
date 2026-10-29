@@ -3,8 +3,8 @@ source: crates/navree-orm/tests/render/main.rs
 expression: "statement(Update::new(\"deals\",\nvec![Assignment::new(\"stage\", val(\"won\")),\nAssignment::new(\"amount_cents\",\ncol(\"amount_cents\").add(val(5_i64))),]).filter(col(\"id\").eq(val(7_i64))))"
 ---
 PostgreSQL: UPDATE "deals" SET "stage" = $1, "amount_cents" = "amount_cents" + $2 WHERE "id" = $3
-  values: [String(Some("won")), BigInt(Some(5)), BigInt(Some(7))]
+  values: [String("won"), I64(5), I64(7)]
 MySQL: UPDATE `deals` SET `stage` = ?, `amount_cents` = `amount_cents` + ? WHERE `id` = ?
-  values: [String(Some("won")), BigInt(Some(5)), BigInt(Some(7))]
+  values: [String("won"), I64(5), I64(7)]
 SQLite: UPDATE "deals" SET "stage" = ?, "amount_cents" = "amount_cents" + ? WHERE "id" = ?
-  values: [String(Some("won")), BigInt(Some(5)), BigInt(Some(7))]
+  values: [String("won"), I64(5), I64(7)]

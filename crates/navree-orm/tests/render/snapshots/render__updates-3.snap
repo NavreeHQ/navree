@@ -4,5 +4,5 @@ expression: "statement(Update\n{\n    order_by: vec![col(\"created_at\").asc()],
 ---
 PostgreSQL: error: an update with ORDER BY or LIMIT (narrow the rows with a subquery) is not supported on PostgreSQL
 MySQL: UPDATE `sessions` SET `expired` = ? WHERE `user_id` = ? ORDER BY `created_at` ASC LIMIT ?
-  values: [Bool(Some(true)), BigInt(Some(7)), BigUnsigned(Some(100))]
+  values: [Bool(true), I64(7), U64(100)]
 SQLite: error: an update with ORDER BY or LIMIT (narrow the rows with a subquery) is not supported on SQLite

@@ -3,8 +3,8 @@ source: crates/navree-orm/tests/render/main.rs
 expression: "query(Query::from(deals().column_as(Expr::Subquery(Box::new(Query::from(Select::from_table(\"companies\").column(col(\"companies.name\")).filter(col(\"companies.id\").eq(col(\"deals.company_id\")))))),\n\"company\").filter(col(\"owner_id\").in_query(owners.clone())).filter(Expr::InQuery\n{\n    expr: Box::new(col(\"owner_id\")), query: Box::new(owners.clone()), negated:\n    true,\n}).filter(Expr::exists(owners.clone())).filter(Expr::Exists\n{ query: Box::new(owners), negated: true, })))"
 ---
 PostgreSQL: SELECT (SELECT "companies"."name" FROM "companies" WHERE "companies"."id" = "deals"."company_id") AS "company" FROM "deals" WHERE "owner_id" IN (SELECT "id" FROM "users" WHERE "active" = $1) AND "owner_id" NOT IN (SELECT "id" FROM "users" WHERE "active" = $2) AND EXISTS (SELECT "id" FROM "users" WHERE "active" = $3) AND NOT EXISTS (SELECT "id" FROM "users" WHERE "active" = $4)
-  values: [Bool(Some(true)), Bool(Some(true)), Bool(Some(true)), Bool(Some(true))]
+  values: [Bool(true), Bool(true), Bool(true), Bool(true)]
 MySQL: SELECT (SELECT `companies`.`name` FROM `companies` WHERE `companies`.`id` = `deals`.`company_id`) AS `company` FROM `deals` WHERE `owner_id` IN (SELECT `id` FROM `users` WHERE `active` = ?) AND `owner_id` NOT IN (SELECT `id` FROM `users` WHERE `active` = ?) AND EXISTS (SELECT `id` FROM `users` WHERE `active` = ?) AND NOT EXISTS (SELECT `id` FROM `users` WHERE `active` = ?)
-  values: [Bool(Some(true)), Bool(Some(true)), Bool(Some(true)), Bool(Some(true))]
+  values: [Bool(true), Bool(true), Bool(true), Bool(true)]
 SQLite: SELECT (SELECT "companies"."name" FROM "companies" WHERE "companies"."id" = "deals"."company_id") AS "company" FROM "deals" WHERE "owner_id" IN (SELECT "id" FROM "users" WHERE "active" = ?) AND "owner_id" NOT IN (SELECT "id" FROM "users" WHERE "active" = ?) AND EXISTS (SELECT "id" FROM "users" WHERE "active" = ?) AND NOT EXISTS (SELECT "id" FROM "users" WHERE "active" = ?)
-  values: [Bool(Some(true)), Bool(Some(true)), Bool(Some(true)), Bool(Some(true))]
+  values: [Bool(true), Bool(true), Bool(true), Bool(true)]

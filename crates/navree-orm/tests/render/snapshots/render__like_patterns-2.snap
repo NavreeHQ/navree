@@ -3,8 +3,8 @@ source: crates/navree-orm/tests/render/main.rs
 expression: "expr(Expr::Like\n{\n    expr: Box::new(col(\"title\")), pattern: Box::new(val(\"Q_ 50%*\")), escape:\n    None, negated: false, case: LikeCase::Match,\n})"
 ---
 PostgreSQL: "title" LIKE $1
-  values: [String(Some("Q_ 50%*"))]
+  values: [String("Q_ 50%*")]
 MySQL: `title` LIKE BINARY ?
-  values: [String(Some("Q_ 50%*"))]
+  values: [String("Q_ 50%*")]
 SQLite: "title" GLOB replace(replace(replace(replace(replace(?, '[', '[[]'), '*', '[*]'), '?', '[?]'), '%', '*'), '_', '?')
-  values: [String(Some("Q_ 50%*"))]
+  values: [String("Q_ 50%*")]

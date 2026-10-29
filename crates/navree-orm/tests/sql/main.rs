@@ -13,7 +13,7 @@ use navree_orm::ir::{
     TableRef, UpdateIr, WhereClause,
 };
 use navree_orm::sql::{render_delete, render_insert, render_update};
-use navree_orm::{Builder, Dialect, Expr, Filter, Model, Statement, Value, col, table};
+use navree_orm::{Builder, Dialect, Expr, Filter, Kind, Model, Statement, Value, col, table};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -478,7 +478,7 @@ fn writes() {
         vec![
             vec![
                 IrExpr::Value(Value::from("Acme")),
-                IrExpr::Value(Value::String(None)),
+                IrExpr::Value(Value::Null(Kind::String)),
             ],
             vec![
                 IrExpr::Value(Value::from("Globex")),

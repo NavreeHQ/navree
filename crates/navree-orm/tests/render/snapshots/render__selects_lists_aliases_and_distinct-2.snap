@@ -3,8 +3,8 @@ source: crates/navree-orm/tests/render/main.rs
 expression: "query(Query::from(Select::from_source(Source::aliased(\"deals\",\n\"d\")).column(Expr::Wildcard(Some(ObjectName::parse(\"d\")))).column_as(col(\"d.title\"),\n\"name\").column_as(col(\"amount_cents\").mul(val(2_i64)), \"doubled\").distinct()))"
 ---
 PostgreSQL: SELECT DISTINCT "d".*, "d"."title" AS "name", "amount_cents" * $1 AS "doubled" FROM "deals" AS "d"
-  values: [BigInt(Some(2))]
+  values: [I64(2)]
 MySQL: SELECT DISTINCT `d`.*, `d`.`title` AS `name`, `amount_cents` * ? AS `doubled` FROM `deals` AS `d`
-  values: [BigInt(Some(2))]
+  values: [I64(2)]
 SQLite: SELECT DISTINCT "d".*, "d"."title" AS "name", "amount_cents" * ? AS "doubled" FROM "deals" AS "d"
-  values: [BigInt(Some(2))]
+  values: [I64(2)]

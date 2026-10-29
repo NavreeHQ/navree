@@ -1,11 +1,10 @@
 ---
 source: crates/navree-orm/tests/relations/sql.rs
-assertion_line: 149
 expression: "query(Company::query().where_has(\"subsidiaries.subsidiaries\", |q:\nBuilder<Company>| { q.where_(Company::ACTIVE.eq(true)) }))"
 ---
 PostgreSQL: SELECT "companies"."id", "companies"."parent_id", "companies"."owner_id", "companies"."name", "companies"."code", "companies"."active", "companies"."created_at", "companies"."updated_at" FROM "companies" WHERE EXISTS (SELECT 1 FROM "companies" AS "navree_1" WHERE "companies"."id" = "navree_1"."parent_id" AND EXISTS (SELECT 1 FROM "companies" AS "navree_2" WHERE "navree_1"."id" = "navree_2"."parent_id" AND "navree_2"."active" = $1))
-  values: [Bool(Some(true))]
+  values: [Bool(true)]
 MySQL: SELECT `companies`.`id`, `companies`.`parent_id`, `companies`.`owner_id`, `companies`.`name`, `companies`.`code`, `companies`.`active`, `companies`.`created_at`, `companies`.`updated_at` FROM `companies` WHERE EXISTS (SELECT 1 FROM `companies` AS `navree_1` WHERE `companies`.`id` = `navree_1`.`parent_id` AND EXISTS (SELECT 1 FROM `companies` AS `navree_2` WHERE `navree_1`.`id` = `navree_2`.`parent_id` AND `navree_2`.`active` = ?))
-  values: [Bool(Some(true))]
+  values: [Bool(true)]
 SQLite: SELECT "companies"."id", "companies"."parent_id", "companies"."owner_id", "companies"."name", "companies"."code", "companies"."active", "companies"."created_at", "companies"."updated_at" FROM "companies" WHERE EXISTS (SELECT 1 FROM "companies" AS "navree_1" WHERE "companies"."id" = "navree_1"."parent_id" AND EXISTS (SELECT 1 FROM "companies" AS "navree_2" WHERE "navree_1"."id" = "navree_2"."parent_id" AND "navree_2"."active" = ?))
-  values: [Bool(Some(true))]
+  values: [Bool(true)]

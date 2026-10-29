@@ -240,7 +240,7 @@ pub async fn affecting_statement<E: Executor + ?Sized>(exec: &E, statement: Raw)
     let target = exec.target(Access::Write).await?;
     let sql = sql_target(&target)?;
     let compiled = statement.to_statement(sql.dialect())?;
-    Ok(sql.execute(&compiled).await?.rows_affected())
+    Ok(sql.execute(&compiled).await?.rows_affected)
 }
 
 /// Runs `sql` as written, without binding values: several statements may

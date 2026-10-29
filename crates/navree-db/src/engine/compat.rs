@@ -5,7 +5,10 @@
 //! docs/superpowers/specs/2026-10-28-navree-data-layer-on-sqlx.md). The
 //! whole module goes when SeaORM does.
 
-use std::sync::Arc;
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::{Arc, Mutex, PoisonError};
+use std::task::{Context, Poll};
 
 use navree_kernel::BoxFuture;
 use sea_orm::{ConnectionTrait, DbBackend, DbErr, RuntimeErr};
@@ -31,8 +34,17 @@ pub fn backend_of(backend: DbBackend) -> Backend {
     }
 }
 
-/// `value` as SeaORM binds it.
+/// `value` as SeaORM binds it on PostgreSQL: a vector is pgvector's (with
+/// the `postgres` feature, its text otherwise); see [`to_sea_value_on`]
+/// for the other backends.
 pub fn to_sea_value(value: &Value) -> sea_orm::Value {
+    to_sea_value_on(Backend::Postgres, value)
+}
+
+/// `value` as SeaORM binds it on `backend`: a vector is pgvector's on
+/// PostgreSQL, little-endian `f32` bytes elsewhere; an enum value is its
+/// text.
+pub fn to_sea_value_on(backend: Backend, value: &Value) -> sea_orm::Value {
     use sea_orm::Value as S;
     match value {
         Value::Null(kind) => match kind {
@@ -57,6 +69,11 @@ pub fn to_sea_value(value: &Value) -> sea_orm::Value {
             Kind::DateTime => S::ChronoDateTime(None),
             Kind::Timestamp => S::ChronoDateTimeUtc(None),
             Kind::TimestampTz => S::ChronoDateTimeWithTimeZone(None),
+            Kind::Enum => S::String(None),
+            #[cfg(feature = "postgres")]
+            Kind::Vector if backend == Backend::Postgres => S::Vector(None),
+            Kind::Vector if backend == Backend::Postgres => S::String(None),
+            Kind::Vector => S::Bytes(None),
         },
         Value::Bool(v) => S::Bool(Some(*v)),
         Value::I8(v) => S::TinyInt(Some(*v)),
@@ -79,11 +96,21 @@ pub fn to_sea_value(value: &Value) -> sea_orm::Value {
         Value::DateTime(v) => S::ChronoDateTime(Some(*v)),
         Value::Timestamp(v) => S::ChronoDateTimeUtc(Some(*v)),
         Value::TimestampTz(v) => S::ChronoDateTimeWithTimeZone(Some(*v)),
+        Value::Enum { value, .. } => S::String(Some(value.clone())),
+        #[cfg(feature = "postgres")]
+        Value::Vector(v) if backend == Backend::Postgres => {
+            S::Vector(Some(sea_orm::prelude::PgVector::from(v.clone())))
+        }
+        Value::Vector(v) if backend == Backend::Postgres => {
+            let items: Vec<String> = v.iter().map(f32::to_string).collect();
+            S::String(Some(format!("[{}]", items.join(","))))
+        }
+        Value::Vector(v) => S::Bytes(Some(crate::engine::driver::vector_bytes(v))),
     }
 }
 
-/// A SeaORM value as navree-db's. Kinds navree-db does not have (arrays,
-/// vectors, enums of other crates) are an error.
+/// A SeaORM value as navree-db's (an enum value keeps its type name; a vector
+/// is navree-db's with the `postgres` feature). Arrays are an error.
 pub fn from_sea_value(value: sea_orm::Value) -> Result<Value, DbError> {
     use sea_orm::Value as S;
     fn or_null<T: Into<Value>>(value: Option<T>, kind: Kind) -> Value {
@@ -116,10 +143,13 @@ pub fn from_sea_value(value: sea_orm::Value) -> Result<Value, DbError> {
         S::ChronoDateTimeWithTimeZone(v) => or_null(v, Kind::TimestampTz),
         S::Uuid(v) => or_null(v, Kind::Uuid),
         S::Decimal(v) => or_null(v, Kind::Decimal),
-        S::Enum(sea_orm::sea_query::OptionEnum::Some(value)) => {
-            Value::String(value.value.into_owned())
-        }
-        S::Enum(sea_orm::sea_query::OptionEnum::None(_)) => Value::Null(Kind::String),
+        S::Enum(sea_orm::sea_query::OptionEnum::Some(value)) => Value::Enum {
+            type_name: value.type_name.to_string(),
+            value: value.value.into_owned(),
+        },
+        S::Enum(sea_orm::sea_query::OptionEnum::None(_)) => Value::Null(Kind::Enum),
+        #[cfg(feature = "postgres")]
+        S::Vector(v) => v.map_or(Value::Null(Kind::Vector), |v| Value::Vector(v.to_vec())),
         other => {
             return Err(DbError::unsupported(format!(
                 "navree-db has no value for {other:?}"
@@ -171,13 +201,17 @@ impl<'a, C: ConnectionTrait + Sync + ?Sized> SeaExecutor<'a, C> {
         SeaExecutor { conn }
     }
 
-    fn statement(&self, statement: &Statement) -> Result<sea_orm::Statement, DbError> {
+    /// `statement` as SeaORM runs it on this connection.
+    pub(crate) fn statement(&self, statement: &Statement) -> Result<sea_orm::Statement, DbError> {
         let backend = Executor::backend(self);
         let statement = statement.for_backend(backend)?;
         Ok(sea_orm::Statement::from_sql_and_values(
             db_backend(backend),
             statement.sql(),
-            statement.values().iter().map(to_sea_value),
+            statement
+                .values()
+                .iter()
+                .map(|value| to_sea_value_on(backend, value)),
         ))
     }
 }
@@ -236,6 +270,94 @@ impl<C: ConnectionTrait + Sync + ?Sized> Executor for SeaExecutor<'_, C> {
                 last_insert_id: None,
             })
         })
+    }
+}
+
+/// The rows of `statement` on SeaORM's transaction `tx`, read as the
+/// database sends them (SeaORM's stream, driven by the returned stream
+/// itself, in the task that polls it). The stream holds the transaction's
+/// connection until it ends or is dropped.
+pub(crate) fn stream_on_transaction(
+    tx: Arc<sea_orm::DatabaseTransaction>,
+    statement: sea_orm::Statement,
+) -> RowStream {
+    use futures_util::StreamExt as _;
+    use sea_orm::StreamTrait as _;
+
+    let slot: Arc<Mutex<Option<Result<Row, DbError>>>> = Arc::new(Mutex::new(None));
+    let handed = Arc::clone(&slot);
+    let producer = async move {
+        let rows = match tx.stream_raw(statement).await {
+            Ok(rows) => rows,
+            Err(error) => {
+                hand_over(&handed, Err(error.into())).await;
+                return;
+            }
+        };
+        futures_util::pin_mut!(rows);
+        while let Some(row) = rows.next().await {
+            let item = row.map(Row::from).map_err(DbError::from);
+            let failed = item.is_err();
+            hand_over(&handed, item).await;
+            if failed {
+                return;
+            }
+        }
+    };
+    Box::pin(Generated {
+        producer: Some(Box::pin(producer)),
+        slot,
+    })
+}
+
+/// Puts `item` in `slot` and waits until the stream handed it out: the
+/// first poll gives control back to the stream, which takes the item in
+/// the same `poll_next`; the next poll is the reader asking for more.
+fn hand_over(
+    slot: &Mutex<Option<Result<Row, DbError>>>,
+    item: Result<Row, DbError>,
+) -> impl Future<Output = ()> + Send + '_ {
+    *slot.lock().unwrap_or_else(PoisonError::into_inner) = Some(item);
+    let mut handed = false;
+    std::future::poll_fn(move |_| {
+        if handed {
+            Poll::Ready(())
+        } else {
+            handed = true;
+            Poll::Pending
+        }
+    })
+}
+
+/// A stream of what its producer hands over.
+struct Generated {
+    producer: Option<Pin<Box<dyn Future<Output = ()> + Send>>>,
+    slot: Arc<Mutex<Option<Result<Row, DbError>>>>,
+}
+
+impl futures_util::Stream for Generated {
+    type Item = Result<Row, DbError>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let this = &mut *self;
+        let Some(producer) = this.producer.as_mut() else {
+            return Poll::Ready(None);
+        };
+        let finished = producer.as_mut().poll(cx).is_ready();
+        if finished {
+            this.producer = None;
+        }
+        match this
+            .slot
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take()
+        {
+            Some(item) => Poll::Ready(Some(item)),
+            None if finished => Poll::Ready(None),
+            // Waiting for the database; its I/O wakes this task.
+            None => Poll::Pending,
+        }
     }
 }
 
