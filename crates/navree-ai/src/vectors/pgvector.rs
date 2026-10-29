@@ -5,9 +5,8 @@
 
 use std::sync::Arc;
 
-use navree_db::Db;
+use navree_db::{Backend, Db, DbError, Executor, Statement, Value as SqlValue};
 use navree_kernel::BoxFuture;
-use sea_orm::{ConnectionTrait, DbBackend, Statement, Value as SqlValue};
 use serde_json::{Value, json};
 
 use super::{Filter, VectorDriver, VectorMatch, VectorRecord, nested};
@@ -34,19 +33,14 @@ impl PgVector {
         self.check_backend()?;
         let result = self
             .db
-            .conn()
-            .execute_raw(Statement::from_sql_and_values(
-                DbBackend::Postgres,
-                sql,
-                values,
-            ))
+            .execute(&Statement::new(Backend::Postgres, sql, values))
             .await
             .map_err(database)?;
-        Ok(result.rows_affected())
+        Ok(result.rows_affected)
     }
 
     fn check_backend(&self) -> Result<(), AiError> {
-        if self.db.backend() != DbBackend::Postgres {
+        if Executor::backend(&*self.db) != Backend::Postgres {
             return Err(AiError::config(
                 "ai.vectors.store = \"pgvector\" needs a PostgreSQL database (database.url)",
             ));
@@ -55,7 +49,7 @@ impl PgVector {
     }
 }
 
-fn database(error: sea_orm::DbErr) -> AiError {
+fn database(error: DbError) -> AiError {
     AiError::internal(format!("pgvector: {error}"))
 }
 
@@ -230,18 +224,17 @@ impl VectorDriver for PgVector {
             self.check_backend()?;
             let existing = self
                 .db
-                .conn()
-                .query_one_raw(Statement::from_sql_and_values(
-                    DbBackend::Postgres,
+                .fetch_optional(&Statement::new(
+                    Backend::Postgres,
                     "SELECT a.atttypmod AS dimensions FROM pg_attribute a \
                      JOIN pg_class c ON c.oid = a.attrelid \
                      WHERE c.relname = $1 AND a.attname = 'embedding' AND c.relkind = 'r'",
-                    [SqlValue::from(format!("ai_vectors_{collection}"))],
+                    vec![SqlValue::from(format!("ai_vectors_{collection}"))],
                 ))
                 .await
                 .map_err(database)?;
             if let Some(row) = existing {
-                let size: i32 = row.try_get("", "dimensions").map_err(database)?;
+                let size: i32 = row.get("dimensions").map_err(database)?;
                 if size as usize != self.dimensions {
                     return Err(AiError::config(format!(
                         "the table ai_vectors_{collection} has vectors of {size} dimensions; ai.vectors.dimensions is {}",
@@ -333,23 +326,16 @@ impl VectorDriver for PgVector {
                 search_sql(collection, self.metric, vector, filter, limit, min_score);
             let rows = self
                 .db
-                .conn()
-                .query_all_raw(Statement::from_sql_and_values(
-                    DbBackend::Postgres,
-                    sql,
-                    values,
-                ))
+                .fetch_all(&Statement::new(Backend::Postgres, sql, values))
                 .await
                 .map_err(database)?;
             rows.iter()
                 .map(|row| {
                     Ok(VectorMatch {
-                        id: row.try_get("", "id").map_err(database)?,
-                        score: row.try_get::<f64>("", "score").map_err(database)? as f32,
-                        text: row.try_get("", "text").map_err(database)?,
-                        metadata: row
-                            .try_get::<Value>("", "metadata")
-                            .unwrap_or_else(|_| json!({})),
+                        id: row.get("id").map_err(database)?,
+                        score: row.get::<f64>("score").map_err(database)? as f32,
+                        text: row.get("text").map_err(database)?,
+                        metadata: row.get::<Value>("metadata").unwrap_or_else(|_| json!({})),
                     })
                 })
                 .collect()
@@ -361,15 +347,14 @@ impl VectorDriver for PgVector {
             self.check_backend()?;
             let row = self
                 .db
-                .conn()
-                .query_one_raw(Statement::from_string(
-                    DbBackend::Postgres,
-                    format!("SELECT COUNT(*) AS n FROM {}", table(collection)),
-                ))
+                .fetch_optional(&Statement::text(format!(
+                    "SELECT COUNT(*) AS n FROM {}",
+                    table(collection)
+                )))
                 .await
                 .map_err(database)?;
             let count: i64 = match row {
-                Some(row) => row.try_get("", "n").map_err(database)?,
+                Some(row) => row.get("n").map_err(database)?,
                 None => 0,
             };
             Ok(count.max(0) as u64)
@@ -380,6 +365,98 @@ impl VectorDriver for PgVector {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The statements that need no `vector` type, on a PostgreSQL server
+    /// (`NAVREE_TEST_POSTGRES_URL`, feature `postgres`): the dimension
+    /// check reads `atttypmod`, `count` reads a `bigint`, and writes and
+    /// filters bind text, JSON and ids. The table stands in for a
+    /// collection's, with a `varchar(64)` where the extension's column
+    /// goes; searching needs pgvector (`NAVREE_TEST_PGVECTOR_URL`, see the
+    /// conformance suite in `tests/ai/retrieval.rs`).
+    #[cfg(feature = "postgres")]
+    #[tokio::test]
+    async fn statements_run_on_a_server() {
+        use navree_db::DbOptions;
+
+        let Ok(admin_url) = std::env::var("NAVREE_TEST_POSTGRES_URL") else {
+            return;
+        };
+        let name = format!("navree_ai_pgvector_{}", uuid::Uuid::now_v7().simple());
+        let admin = navree_db::Pool::connect(&DbOptions {
+            url: admin_url.clone(),
+            max_connections: 1,
+            ..DbOptions::default()
+        })
+        .await
+        .expect("the admin URL connects");
+        admin
+            .execute_script(&format!("CREATE DATABASE {name}"))
+            .await
+            .expect("creates a database");
+        let (base, _) = admin_url
+            .split('?')
+            .next()
+            .and_then(|url| url.rsplit_once('/'))
+            .expect("a database URL");
+        let db = Arc::new(
+            Db::connect(&DbOptions {
+                url: format!("{base}/{name}"),
+                max_connections: 2,
+                ..DbOptions::default()
+            })
+            .await
+            .expect("connects"),
+        );
+        let store = PgVector::new(db.clone(), 3, Metric::Cosine);
+        let probe = async {
+            db.execute_script(
+                "CREATE TABLE \"ai_vectors_probe\" (id text PRIMARY KEY, \
+                 embedding varchar(64) NOT NULL, text text NOT NULL DEFAULT '', \
+                 metadata jsonb NOT NULL DEFAULT '{}'::jsonb)",
+            )
+            .await
+            .unwrap();
+            let error = store.ensure("probe").await.unwrap_err();
+            assert!(
+                error.to_string().contains("68 dimensions"),
+                "the column's modifier is read as an integer: {error}"
+            );
+            assert_eq!(store.count("probe").await.unwrap(), 0);
+            let inserted = store
+                .execute(
+                    "INSERT INTO \"ai_vectors_probe\" (id, embedding, text, metadata) \
+                     VALUES ($1, 'x', $2, $3::jsonb)"
+                        .to_owned(),
+                    vec![
+                        SqlValue::from("a".to_owned()),
+                        SqlValue::from("Alpha".to_owned()),
+                        SqlValue::from("{\"kind\":\"call\"}".to_owned()),
+                    ],
+                )
+                .await
+                .unwrap();
+            assert_eq!(inserted, 1);
+            assert_eq!(store.count("probe").await.unwrap(), 1);
+            store
+                .delete_where("probe", &Filter::eq("kind", "note"))
+                .await
+                .unwrap();
+            assert_eq!(store.count("probe").await.unwrap(), 1);
+            store
+                .delete_where("probe", &Filter::eq("kind", "call"))
+                .await
+                .unwrap();
+            assert_eq!(store.count("probe").await.unwrap(), 0);
+            store.delete("probe", vec!["a".to_owned()]).await.unwrap();
+        };
+        probe.await;
+        db.close().await.ok();
+        admin
+            .execute_script(&format!("DROP DATABASE IF EXISTS {name} WITH (FORCE)"))
+            .await
+            .expect("drops the database");
+        admin.close().await;
+    }
 
     #[test]
     fn create_statements() {
