@@ -48,22 +48,9 @@
 //! services, which keep the invariants, emit the events and record the
 //! changes; read them freely. The organization and partition tables exist
 //! whether or not the features are on; they stay empty while they are off.
-//!
-//! # Compatibility layer (data-layer move; removed in step 8)
-//!
-//! Crates not yet moved to navree-orm still read workspaces,
-//! organizations and memberships as SeaORM entities
-//! (`member::Entity` in navree-billing, admin-panel resources over
-//! `workspace::Entity`; navree-sso reads workspaces and organizations as
-//! models). For
-//! them, and only for them, those three models keep the SeaORM derive, an
-//! empty `Relation` and `ActiveModelBehavior`, and their `Entity` types are
-//! access subjects. Everything marked `COMPAT` is that layer; nothing else
-//! in navree-workspace uses it.
 
 use std::fmt;
 
-use navree_access::Subject;
 use serde::{Deserialize, Serialize};
 
 /// What a workspace holds: a team's own data, or a demo seeded from
@@ -112,17 +99,14 @@ impl fmt::Display for WorkspaceKind {
 /// `workspaces`: the tenants.
 pub mod workspace {
     use chrono::{DateTime, Utc};
-    // COMPAT: the SeaORM derive of `Model` (see the module documentation).
-    use sea_orm::entity::prelude::*;
+    use uuid::Uuid;
     use serde::Serialize;
 
     use super::WorkspaceKind;
 
     /// A workspace: the access subject `Workspace` (permissions
     /// `workspace.<action>`).
-    // COMPAT: `DeriveEntityModel` and the `#[sea_orm]` attributes.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
-    #[sea_orm(table_name = "workspaces")]
+    #[derive(Clone, Debug, PartialEq, Eq, navree_orm::Model, Serialize)]
     #[model(
         table = "workspaces",
         subject = "Workspace",
@@ -130,12 +114,10 @@ pub mod workspace {
     )]
     pub struct Model {
         /// The id (UUID v7).
-        #[sea_orm(primary_key, auto_increment = false)]
         pub id: Uuid,
         /// The display name.
         pub name: String,
         /// The unique, URL-safe handle (`acme`), used by the resolvers.
-        #[sea_orm(unique)]
         pub slug: String,
         /// The owner: always a member with the `owner` role.
         pub owner_id: Uuid,
@@ -167,28 +149,19 @@ pub mod workspace {
         }
     }
 
-    /// COMPAT: no relations are declared (the SeaORM entity's).
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    /// COMPAT: the SeaORM entity's behaviour.
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
 /// `workspace_members`: who belongs to a workspace, with which role.
 pub mod member {
     use chrono::{DateTime, Utc};
-    // COMPAT: the SeaORM derive of `Model` (see the module documentation).
-    use sea_orm::entity::prelude::*;
+    use uuid::Uuid;
     use serde::Serialize;
 
     use crate::WorkspaceRole;
 
     /// A membership: the access subject `WorkspaceMember` (permissions
     /// `workspace.members.<action>`).
-    // COMPAT: `DeriveEntityModel` and the `#[sea_orm]` attributes.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
-    #[sea_orm(table_name = "workspace_members")]
+    #[derive(Clone, Debug, PartialEq, Eq, navree_orm::Model, Serialize)]
     #[model(
         table = "workspace_members",
         subject = "WorkspaceMember",
@@ -196,7 +169,6 @@ pub mod member {
     )]
     pub struct Model {
         /// The id (UUID v7).
-        #[sea_orm(primary_key, auto_increment = false)]
         pub id: Uuid,
         /// The workspace.
         pub workspace_id: Uuid,
@@ -226,12 +198,6 @@ pub mod member {
         }
     }
 
-    /// COMPAT: no relations are declared (the SeaORM entity's).
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    /// COMPAT: the SeaORM entity's behaviour.
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
 /// `workspace_invitations`: pending and accepted invitations.
@@ -291,15 +257,12 @@ pub mod invitation {
 /// `organizations`: the level above workspaces.
 pub mod organization {
     use chrono::{DateTime, Utc};
-    // COMPAT: the SeaORM derive of `Model` (see the module documentation).
-    use sea_orm::entity::prelude::*;
+    use uuid::Uuid;
     use serde::Serialize;
 
     /// An organization: the access subject `Organization` (permissions
     /// `organization.<action>`).
-    // COMPAT: `DeriveEntityModel` and the `#[sea_orm]` attributes.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
-    #[sea_orm(table_name = "organizations")]
+    #[derive(Clone, Debug, PartialEq, Eq, navree_orm::Model, Serialize)]
     #[model(
         table = "organizations",
         subject = "Organization",
@@ -307,13 +270,11 @@ pub mod organization {
     )]
     pub struct Model {
         /// The id (UUID v7).
-        #[sea_orm(primary_key, auto_increment = false)]
         pub id: Uuid,
         /// The display name.
         pub name: String,
         /// The unique, URL-safe handle (`acme-group`), used by the
         /// resolvers.
-        #[sea_orm(unique)]
         pub slug: String,
         /// The owner: always a member with the `owner` role.
         pub owner_id: Uuid,
@@ -327,12 +288,6 @@ pub mod organization {
         pub updated_at: DateTime<Utc>,
     }
 
-    /// COMPAT: no relations are declared (the SeaORM entity's).
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    /// COMPAT: the SeaORM entity's behaviour.
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
 /// `organization_members`: who belongs to an organization, with which role
@@ -570,27 +525,6 @@ pub const MEMBER_SUBJECT: &str = "WorkspaceMember";
 /// `workspace.invitations.<action>`.
 pub const INVITATION_SUBJECT: &str = "WorkspaceInvitation";
 
-/// COMPAT: the SeaORM entity of workspaces is the access subject
-/// `Workspace` too, for admin-panel resources over it.
-impl Subject for workspace::Entity {
-    const SUBJECT: &'static str = WORKSPACE_SUBJECT;
-    const PERMISSION_PREFIX: &'static str = "workspace";
-}
-
-/// COMPAT: the SeaORM entity of memberships is the access subject
-/// `WorkspaceMember` too.
-impl Subject for member::Entity {
-    const SUBJECT: &'static str = MEMBER_SUBJECT;
-    const PERMISSION_PREFIX: &'static str = "workspace.members";
-}
-
-/// COMPAT: the SeaORM entity of organizations is the access subject
-/// `Organization` too.
-impl Subject for organization::Entity {
-    const SUBJECT: &'static str = ORGANIZATION_SUBJECT;
-    const PERMISSION_PREFIX: &'static str = "organization";
-}
-
 #[cfg(test)]
 mod tests {
     use navree_access::SubjectRecords;
@@ -624,13 +558,6 @@ mod tests {
         assert_eq!(
             subject::<Partition>(),
             (PARTITION_SUBJECT, "workspace.partitions")
-        );
-        // COMPAT: the SeaORM entities name the same subjects.
-        assert_eq!(<workspace::Entity as Subject>::SUBJECT, WORKSPACE_SUBJECT);
-        assert_eq!(<member::Entity as Subject>::SUBJECT, MEMBER_SUBJECT);
-        assert_eq!(
-            <organization::Entity as Subject>::SUBJECT,
-            ORGANIZATION_SUBJECT
         );
     }
 }

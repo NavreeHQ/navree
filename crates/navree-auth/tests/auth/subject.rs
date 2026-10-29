@@ -11,7 +11,7 @@ use navree_access::{
     AbilityCtx, AccessModule, AccessOptions, AccessService, Authorized, READ, Read, Rules, Subject,
     UPDATE, Update, field,
 };
-use navree_auth::{CurrentUser, USER_PERMISSION_PREFIX, USER_SUBJECT, User, UserResource, user};
+use navree_auth::{CurrentUser, USER_PERMISSION_PREFIX, USER_SUBJECT, User, UserResource};
 use navree_contracts::BoxFuture;
 use navree_db::Db;
 use navree_http::{Controller, Json, ModuleBuilderHttpExt, RouteDef};
@@ -67,8 +67,6 @@ fn the_user_model_is_the_user_subject() {
     assert_eq!(<User as Subject>::PERMISSION_PREFIX, "users");
     assert_eq!(<User as Subject>::SUBJECT, USER_SUBJECT);
     assert_eq!(<User as Subject>::PERMISSION_PREFIX, USER_PERMISSION_PREFIX);
-    // COMPAT: the SeaORM entity names the same subject.
-    assert_eq!(<user::Entity as Subject>::SUBJECT, USER_SUBJECT);
 }
 
 #[tokio::test]
@@ -120,50 +118,6 @@ async fn users_load_for_can_checks_and_users_permissions_apply() {
         .await
         .assert_status(200)
         .assert_json_path("email", json!("grace@example.com"));
-}
-
-/// A module that still registers the SeaORM twin of the user model
-/// (`user::Entity`, through the compatibility layer) next to the model.
-struct TwinsModule {
-    model_first: bool,
-}
-
-impl Module for TwinsModule {
-    fn register(&self, m: &mut ModuleBuilder) {
-        if self.model_first {
-            m.import(AccessModule::for_feature::<User>())
-                .import(AccessModule::for_feature::<user::Entity>());
-        } else {
-            m.import(AccessModule::for_feature::<user::Entity>())
-                .import(AccessModule::for_feature::<User>());
-        }
-        m.controller::<PeopleController>();
-    }
-}
-
-/// The model and its SeaORM twin name one subject: the app boots in either
-/// registration order and record checks load the model (`Authorized<User,
-/// _>` would fail on the entity's record).
-#[tokio::test]
-async fn a_seaorm_twin_of_the_user_model_yields_to_the_model() {
-    for model_first in [true, false] {
-        let app = support::builder()
-            .module(AccessModule::for_root(AccessOptions {
-                abilities,
-                super_admin_role: None,
-            }))
-            .module(TwinsModule { model_first })
-            .build()
-            .await;
-        let (ada, access, _) = signed_in(&app, "ada@example.com").await;
-        app.client()
-            .get(&format!("/api/people/{}", ada.id))
-            .bearer(&access)
-            .send()
-            .await
-            .assert_status(200)
-            .assert_json_path("__type", json!("User"));
-    }
 }
 
 /// `PATCH /api/people/{id}`: a record check (which begins the request's

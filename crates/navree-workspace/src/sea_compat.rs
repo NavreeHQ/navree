@@ -17,9 +17,9 @@
 //! Its users: navree-search (the `Searchable` derive's workspace column of
 //! a SeaORM entity, and its tests), evidence-app (projects), the CLI's
 //! `api` kit templates (projects and settings), and the facade's
-//! `workspace_demo_docs` and `facade` tests. The SeaORM derive kept on
-//! three models ([`entity`](crate::entity)) and on
-//! [`LibraryScope`](crate::LibraryScope) belongs to the same layer.
+//! `workspace_demo_docs` and `facade` tests. (The SeaORM derive once kept
+//! on three models and on [`LibraryScope`](crate::LibraryScope) for Helm's
+//! resources is gone: Helm takes navree-orm models.)
 //!
 //! New code uses the model forms at the crate root:
 //! [`crate::WorkspaceScoped`], [`crate::WorkspaceRepo`], [`crate::OrgRepo`],

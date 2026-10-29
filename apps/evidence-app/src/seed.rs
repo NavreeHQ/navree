@@ -18,7 +18,7 @@ use navree::db::{Db, Seeder, Uow};
 use navree::workspace::sea_compat::WorkspaceRepo;
 use navree::workspace::{Members, NewWorkspace, Workspace, WorkspaceRole, Workspaces};
 use navree::{BoxFuture, prelude::*};
-use sea_orm::{ActiveModelTrait, ActiveValue::Set, IntoActiveModel, PaginatorTrait};
+use sea_orm::{ActiveValue::Set, PaginatorTrait};
 use uuid::Uuid;
 
 use crate::abilities::SUPER_ADMIN;
@@ -282,9 +282,20 @@ pub async fn ensure_account(ctx: &AppContext, name: &str, email: &str) -> Result
     }
     let db = ctx.get::<Db>().await?;
     let verified_at = user.created_at;
-    let mut active = user.into_active_model();
-    active.email_verified_at = Set(Some(verified_at));
-    Ok(active.update(db.conn()).await?)
+    User::query()
+        .where_key(user.id)
+        .update(
+            &*db,
+            [navree::orm::Assignment::value(
+                "email_verified_at",
+                verified_at,
+            )],
+        )
+        .await?;
+    Ok(User {
+        email_verified_at: Some(verified_at),
+        ..user
+    })
 }
 
 /// Runs `f` in a new unit of work: commits when it succeeds, rolls back
