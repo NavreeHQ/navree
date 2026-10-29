@@ -636,12 +636,21 @@ impl<R: Record> Select<R> {
     ) -> Result<Page<R>, DbError> {
         let query = PageQuery::new(query.page, query.per_page);
         let total = self.count(exec).await?;
-        let rows = self
-            .clone()
-            .limit(query.per_page)
-            .offset(query.offset())
-            .all(exec)
-            .await?;
+        // A page past the end (any page number, however large) is empty and
+        // reads no rows: its offset may overflow, or exceed what a bound
+        // integer holds.
+        let past_the_end = (query.page - 1)
+            .checked_mul(query.per_page)
+            .is_none_or(|offset| offset >= total);
+        let rows = if past_the_end {
+            Vec::new()
+        } else {
+            self.clone()
+                .limit(query.per_page)
+                .offset(query.offset())
+                .all(exec)
+                .await?
+        };
         Ok(Page::new(rows, query, total))
     }
 }

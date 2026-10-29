@@ -1,15 +1,13 @@
-//! Units of work on navree-db's own transactions, units of work on
-//! SeaORM's serving navree-db's statements, change observers, and where a
-//! `Db` runs a statement.
+//! Units of work on navree-db's transactions, the settings they send,
+//! change observers, and where a `Db` runs a statement.
 
 use std::sync::{Arc, Mutex};
 
 use navree_db::{
-    Backend, ChangeEvent, ChangeObserver, ChangeOp, Db, DbError, Executor, ExecutorExt, Statement,
-    Uow, Value,
+    Backend, ChangeEvent, ChangeObserver, ChangeOp, Db, DbError, Executor, ExecutorExt, QueryLog,
+    Statement, Uow,
 };
 use navree_kernel::BoxFuture;
-use sea_orm::ConnectionTrait;
 use uuid::Uuid;
 
 use crate::support::{Scratch, script, serial};
@@ -38,29 +36,15 @@ async fn titles(db: &impl Executor) -> Vec<String> {
         .unwrap()
 }
 
-/// A unit of work on navree-db's own transaction: lazy, the actor and
-/// request id set for SQL, commit and rollback, after-commit hooks.
-pub async fn native_units_of_work(scratch: Scratch) {
-    // From the `database` section, as an app turns it on.
-    let options: navree_db::DbOptions = serde_json::from_value(serde_json::json!({
-        "url": scratch.options.url,
-        "native_units_of_work": true,
-        "postgres": { "search_path": scratch.options.postgres.search_path },
-    }))
-    .expect("a valid section");
-    let db = Db::connect(&options).await.unwrap();
-    assert!(db.native_units_of_work());
-    assert!(!scratch.db().await.native_units_of_work(), "off by default");
+/// A unit of work: lazy, the actor and request id set for SQL, commit and
+/// rollback, after-commit hooks.
+pub async fn units_of_work(scratch: Scratch) {
+    let db = scratch.db().await;
     let backend = scratch.server.backend();
     tables(&db, backend).await;
 
     let uow = db.uow(Some(ACTOR), Some("req-7".to_owned())).await;
     assert!(!uow.has_open_transaction().await);
-    let error = uow.tx().await.unwrap_err();
-    assert!(
-        error.to_string().contains("navree-db's own transaction"),
-        "{error}"
-    );
     uow.execute(&add_deal("Renewal")).await.unwrap();
     assert!(uow.has_open_transaction().await);
     assert!(uow.has_modified_records());
@@ -96,7 +80,7 @@ pub async fn native_units_of_work(scratch: Scratch) {
     });
     if backend != Backend::Sqlite {
         assert!(
-            titles(&db.pool().unwrap().clone()).await.is_empty(),
+            titles(&db.pool().clone()).await.is_empty(),
             "not committed yet"
         );
     }
@@ -114,8 +98,7 @@ pub async fn native_units_of_work(scratch: Scratch) {
             ..scratch.options.clone()
         })
         .await
-        .unwrap()
-        .with_native_units_of_work(true);
+        .unwrap();
         let uow = single.uow(Some(ACTOR), None).await;
         uow.execute(&add_deal("Upsell")).await.unwrap();
         uow.commit().await.unwrap();
@@ -137,9 +120,74 @@ pub async fn native_units_of_work(scratch: Scratch) {
     assert!(!titles(&db).await.contains(&"Discarded".to_owned()));
 }
 
+/// `database.transaction_settings`: on by default, a unit of work sets the
+/// actor and request id right after `BEGIN` (PostgreSQL, MySQL; MySQL also
+/// clears them before the transaction ends); turned off, its transaction
+/// is its own statements alone, one round trip fewer.
+pub async fn transaction_settings_follow_the_option(scratch: Scratch) {
+    assert!(navree_db::DbOptions::default().transaction_settings);
+    let options: navree_db::DbOptions =
+        serde_json::from_value(serde_json::json!({ "transaction_settings": false }))
+            .expect("valid section");
+    assert!(!options.transaction_settings);
+
+    let backend = scratch.server.backend();
+    let db = scratch.db().await;
+    assert!(db.transaction_settings());
+    tables(&db, backend).await;
+    let settings = |sql: &str| {
+        sql.contains("set_config('navree.actor'") || sql.starts_with("SET @navree_actor")
+    };
+
+    for enabled in [true, false] {
+        let db = db.with_transaction_settings(enabled);
+        assert_eq!(db.transaction_settings(), enabled);
+        let ((), sent) = QueryLog::capture(async {
+            let uow = db.uow(Some(ACTOR), Some("req-1".to_owned())).await;
+            uow.execute(&Statement::text("DELETE FROM deals"))
+                .await
+                .unwrap();
+            if backend == Backend::Postgres {
+                let actor: Option<String> = uow
+                    .fetch_scalar(&Statement::text(
+                        "SELECT NULLIF(current_setting('navree.actor', true), '')",
+                    ))
+                    .await
+                    .unwrap();
+                assert_eq!(actor.is_some(), enabled);
+            }
+            if backend == Backend::MySql {
+                let actor: Option<String> = uow
+                    .fetch_scalar(&Statement::text("SELECT @navree_actor"))
+                    .await
+                    .unwrap();
+                assert_eq!(actor.is_some(), enabled);
+            }
+            uow.commit().await.unwrap();
+        })
+        .await;
+        let sql: Vec<&str> = sent.iter().map(|query| query.sql.as_str()).collect();
+        let expected = match backend {
+            Backend::Sqlite => 0,
+            Backend::Postgres if enabled => 1,
+            Backend::MySql if enabled => 2,
+            _ => 0,
+        };
+        assert_eq!(
+            sql.iter().filter(|sql| settings(sql)).count(),
+            expected,
+            "settings {enabled} on {backend:?}: {sql:?}"
+        );
+        assert!(
+            sql.iter().any(|sql| sql.contains("DELETE FROM deals")),
+            "{sql:?}"
+        );
+    }
+}
+
 /// Savepoints and transaction-local settings inside a unit of work.
 pub async fn savepoints_and_settings_in_units_of_work(scratch: Scratch) {
-    let db = scratch.db().await.with_native_units_of_work(true);
+    let db = scratch.db().await;
     let backend = scratch.server.backend();
     tables(&db, backend).await;
 
@@ -178,7 +226,8 @@ pub async fn savepoints_and_settings_in_units_of_work(scratch: Scratch) {
 #[derive(Default)]
 struct Seen(Mutex<Vec<ChangeEvent>>);
 
-/// An observer writing an audit row through the unit of work it is handed.
+/// An observer writing an audit row through the unit of work it is handed;
+/// it refuses a change to `refused`.
 struct Auditor {
     seen: Arc<Seen>,
 }
@@ -200,7 +249,7 @@ impl navree_kernel::Injectable for Auditor {
 }
 
 impl ChangeObserver for Auditor {
-    fn observe_with<'a>(
+    fn observe<'a>(
         &'a self,
         uow: &'a Uow,
         changes: &'a [ChangeEvent],
@@ -217,58 +266,65 @@ impl ChangeObserver for Auditor {
                     ],
                 ))
                 .await?;
+                if change.entity == "refused" {
+                    return Err(DbError::invalid("refused"));
+                }
             }
             Ok(())
         })
     }
 }
 
-/// An app with an observer: it runs inside the transaction at commit, on
-/// navree-db's own transaction and (through `observe`'s default) on
-/// SeaORM's; a failing observer rolls everything back.
+fn change(entity: &str) -> ChangeEvent {
+    ChangeEvent {
+        entity: entity.into(),
+        id: "1".into(),
+        op: ChangeOp::Created,
+        old: None,
+        new: Some(serde_json::json!({"title": "x"})),
+    }
+}
+
+/// An app with an observer: it runs inside the transaction at commit; a
+/// failing observer rolls everything back.
 pub async fn observers_run_inside_the_commit(scratch: Scratch) {
     let backend = scratch.server.backend();
-    for native in [true, false] {
-        let app = navree_kernel::Navree::app()
-            .module(navree_db::DatabaseModule::for_root(scratch.options.clone()))
-            .module(ObserverModule)
-            .boot()
-            .await
-            .expect("boots");
-        let db = app
-            .ctx()
-            .get::<Db>()
-            .await
-            .expect("a Db")
-            .as_ref()
-            .clone()
-            .with_native_units_of_work(native);
-        if native {
-            tables(&db, backend).await;
-        }
-        let uow = db.uow(Some(ACTOR), None).await;
-        uow.execute(&add_deal(if native { "native" } else { "bridged" }))
-            .await
-            .unwrap();
-        uow.record_change(ChangeEvent {
-            entity: "deals".into(),
-            id: "1".into(),
-            op: ChangeOp::Created,
-            old: None,
-            new: Some(serde_json::json!({"title": "x"})),
-        });
-        uow.commit().await.unwrap();
-        let seen = app.ctx().get::<Seen>().await.unwrap();
-        assert_eq!(seen.0.lock().unwrap().len(), 1);
-        let rows = db
-            .fetch_all(&Statement::text("SELECT entity, op, actor FROM audit"))
-            .await
-            .unwrap();
-        let last = rows.last().expect("an audit row");
-        assert_eq!(last.get::<String>("entity").unwrap(), "deals");
-        assert_eq!(last.get::<String>("op").unwrap(), "created");
-        assert_eq!(last.get::<String>("actor").unwrap(), ACTOR.to_string());
-    }
+    let app = navree_kernel::Navree::app()
+        .module(navree_db::DatabaseModule::for_root(scratch.options.clone()))
+        .module(ObserverModule)
+        .boot()
+        .await
+        .expect("boots");
+    let db = app.ctx().get::<Db>().await.expect("a Db").as_ref().clone();
+    tables(&db, backend).await;
+    let uow = db.uow(Some(ACTOR), None).await;
+    uow.execute(&add_deal("observed")).await.unwrap();
+    uow.record_change(change("deals"));
+    uow.commit().await.unwrap();
+    let seen = app.ctx().get::<Seen>().await.unwrap();
+    assert_eq!(seen.0.lock().unwrap().len(), 1);
+    let rows = db
+        .fetch_all(&Statement::text("SELECT entity, op, actor FROM audit"))
+        .await
+        .unwrap();
+    let last = rows.last().expect("an audit row");
+    assert_eq!(last.get::<String>("entity").unwrap(), "deals");
+    assert_eq!(last.get::<String>("op").unwrap(), "created");
+    assert_eq!(last.get::<String>("actor").unwrap(), ACTOR.to_string());
+
+    // A refusing observer: the business row and the audit row roll back
+    // together, and the commit's error is the observer's.
+    let uow = db.uow(Some(ACTOR), None).await;
+    uow.execute(&add_deal("refused")).await.unwrap();
+    uow.record_change(change("refused"));
+    let error = uow.commit().await.unwrap_err();
+    assert!(error.to_string().contains("refused"), "{error}");
+    assert_eq!(titles(&db).await, ["observed"]);
+    let audit: i64 = db
+        .fetch_scalar(&Statement::text("SELECT COUNT(*) FROM audit"))
+        .await
+        .unwrap();
+    assert_eq!(audit, 1);
 }
 
 struct ObserverModule;
@@ -280,103 +336,27 @@ impl navree_kernel::Module for ObserverModule {
     }
 }
 
-/// A unit of work on SeaORM's transaction (the default) runs navree-db's
-/// statements in that same transaction.
-pub async fn bridged_units_of_work_share_one_transaction(scratch: Scratch) {
-    let db = scratch.db().await;
-    let backend = scratch.server.backend();
-    tables(&db, backend).await;
-    assert!(!db.native_units_of_work());
-
-    let uow = db.uow(Some(ACTOR), None).await;
-    {
-        let tx = uow.tx().await.unwrap();
-        tx.execute_unprepared("INSERT INTO deals (title) VALUES ('through SeaORM')")
-            .await
-            .unwrap();
-    }
-    // navree-db's statements see the SeaORM write: same transaction.
-    assert_eq!(titles(&uow).await, ["through SeaORM"]);
-    uow.execute(&add_deal("through navree-db")).await.unwrap();
-    if backend == Backend::Postgres {
-        let actor: String = uow
-            .fetch_scalar(&Statement::text(
-                "SELECT current_setting('navree.actor', true)",
-            ))
-            .await
-            .unwrap();
-        assert_eq!(actor, ACTOR.to_string());
-    }
-    assert!(
-        uow.savepoint().await.is_err(),
-        "savepoints of SeaORM's go through `tx().begin()`"
-    );
-    uow.rollback().await.unwrap();
-    assert!(
-        titles(&db).await.is_empty(),
-        "both writes rolled back together"
-    );
-
-    let uow = db.uow(None, None).await;
-    uow.execute(&add_deal("committed")).await.unwrap();
-    uow.commit().await.unwrap();
-    assert_eq!(titles(&db).await, ["committed"]);
-}
-
 /// Statements on a `Db` join the task's unit of work: writes always (they
 /// begin it), reads once it is open.
 pub async fn db_statements_join_the_current_unit_of_work(scratch: Scratch) {
-    for native in [true, false] {
-        let db = scratch.db().await.with_native_units_of_work(native);
-        let backend = scratch.server.backend();
-        if native {
-            tables(&db, backend).await;
-        } else {
-            script(&db, "DELETE FROM deals").await;
-        }
-        let uow = db.uow(None, None).await;
-        uow.scope(async {
-            // A read before the unit of work began runs on the pool.
-            assert!(titles(&db).await.is_empty());
-            assert!(!uow.has_open_transaction().await);
-            // A write joins (and begins) it.
-            db.execute(&add_deal("joined")).await.unwrap();
-            assert!(uow.has_open_transaction().await);
-            // Reads now see the uncommitted write.
-            assert_eq!(titles(&db).await, ["joined"]);
-        })
-        .await;
-        uow.rollback().await.unwrap();
-        assert!(
-            titles(&db).await.is_empty(),
-            "the write was the unit of work's"
-        );
-    }
-}
-
-/// `Value`s cross into SeaORM statements and back unchanged (the bridge).
-pub async fn bridge_values(scratch: Scratch) {
     let db = scratch.db().await;
     let backend = scratch.server.backend();
     tables(&db, backend).await;
     let uow = db.uow(None, None).await;
-    let row = uow
-        .fetch_one(&Statement::portable(
-            "SELECT ? AS n, ? AS t, ? AS missing",
-            [
-                Value::I64(7),
-                Value::from("seven"),
-                Value::Null(navree_db::Kind::String),
-            ],
-        ))
-        .await
-        .unwrap();
-    assert!(
-        row.as_sea_orm().is_some(),
-        "read through SeaORM's transaction"
-    );
-    assert_eq!(row.get::<i64>("n").unwrap(), 7);
-    assert_eq!(row.get::<String>("t").unwrap(), "seven");
-    assert_eq!(row.get::<Option<String>>("missing").unwrap(), None);
+    uow.scope(async {
+        // A read before the unit of work began runs on the pool.
+        assert!(titles(&db).await.is_empty());
+        assert!(!uow.has_open_transaction().await);
+        // A write joins (and begins) it.
+        db.execute(&add_deal("joined")).await.unwrap();
+        assert!(uow.has_open_transaction().await);
+        // Reads now see the uncommitted write.
+        assert_eq!(titles(&db).await, ["joined"]);
+    })
+    .await;
     uow.rollback().await.unwrap();
+    assert!(
+        titles(&db).await.is_empty(),
+        "the write was the unit of work's"
+    );
 }

@@ -732,3 +732,30 @@ impl DriverRow {
 fn connect_error(error: sqlx::Error, backend: Backend) -> DbError {
     DbError::from_sqlx(error, Some(backend)).with_kind(crate::ErrorKind::Connect)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The pool takes its checks and lifetimes from the options: by default a
+    /// connection taken from the pool is not pinged first (one round trip
+    /// saved per checkout); idle and old connections are replaced.
+    #[cfg(feature = "sqlite")]
+    #[test]
+    fn pool_checks_and_lifetimes_follow_the_options() {
+        let pool = pool_options::<sqlx::Sqlite>(&DbOptions::default());
+        assert!(!pool.get_test_before_acquire());
+        assert_eq!(pool.get_idle_timeout(), Some(Duration::from_secs(600)));
+        assert_eq!(pool.get_max_lifetime(), Some(Duration::from_secs(1800)));
+
+        let pool = pool_options::<sqlx::Sqlite>(&DbOptions {
+            test_before_acquire: true,
+            idle_timeout_secs: 0,
+            max_lifetime_secs: 60,
+            ..DbOptions::default()
+        });
+        assert!(pool.get_test_before_acquire());
+        assert_eq!(pool.get_idle_timeout(), None, "0: idle connections stay");
+        assert_eq!(pool.get_max_lifetime(), Some(Duration::from_secs(60)));
+    }
+}

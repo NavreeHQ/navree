@@ -2,12 +2,25 @@
 //! is ignored and accents are not, whatever the column's collation (the
 //! same results as on SQLite and PostgreSQL).
 
-use navree_db::{contains_ignore_case, eq_ignore_case};
-use sea_orm::sea_query::{Alias, Expr, Query};
-use sea_orm::{ActiveModelTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder};
+use navree_db::{
+    Db, Executor, ExecutorExt, Statement, contains_ignore_case, eq_ignore_case, record,
+};
 
-use crate::fixtures::{create_notes, new_note, note};
+use crate::fixtures::{create_notes, new_note};
 use crate::support::Scratch;
+
+/// The values of `column` in `table` where `condition` holds, in order.
+async fn matching(db: &Db, table: &str, column: &str, condition: Statement) -> Vec<String> {
+    db.fetch_column(&Statement::portable(
+        format!(
+            "SELECT {column} FROM {table} WHERE {} ORDER BY {column}",
+            condition.sql()
+        ),
+        condition.values().to_vec(),
+    ))
+    .await
+    .unwrap()
+}
 
 #[tokio::test]
 async fn non_ascii_text_matches_in_any_case_but_not_without_its_accents() {
@@ -26,16 +39,10 @@ async fn non_ascii_text_matches_in_any_case_but_not_without_its_accents() {
         "ΟΔΟΣ ΑΘΗΝΑΣ",
         "under_score 50%off",
     ] {
-        new_note(title).insert(db.conn()).await.unwrap();
+        record::insert(&db, &new_note(title)).await.unwrap();
     }
     let backend = db.backend();
-    let titles = |condition| {
-        note::Entity::find()
-            .filter(condition)
-            .order_by_asc(note::Column::Title)
-            .all(db.conn())
-    };
-    let title = || Expr::col(note::Column::Title);
+    let title = backend.quote_identifier("title");
     for (term, expected) in [
         ("Øresund", vec!["Øresund Énergie"]),
         ("øresund", vec!["Øresund Énergie"]),
@@ -59,12 +66,13 @@ async fn non_ascii_text_matches_in_any_case_but_not_without_its_accents() {
         ("energie", vec![]),
         ("oresund", vec![]),
     ] {
-        let found: Vec<String> = titles(contains_ignore_case(backend, title(), term))
-            .await
-            .unwrap()
-            .into_iter()
-            .map(|note| note.title)
-            .collect();
+        let found = matching(
+            &db,
+            "notes",
+            "title",
+            contains_ignore_case(backend, &title, term),
+        )
+        .await;
         assert_eq!(found, expected, "search {term:?}");
     }
     for (value, matches) in [
@@ -74,9 +82,13 @@ async fn non_ascii_text_matches_in_any_case_but_not_without_its_accents() {
         ("øresund", 0),
         ("øresund énergie ", 0),
     ] {
-        let found = titles(eq_ignore_case(backend, title(), value))
-            .await
-            .unwrap();
+        let found = matching(
+            &db,
+            "notes",
+            "title",
+            eq_ignore_case(backend, &title, value),
+        )
+        .await;
         assert_eq!(found.len(), matches, "equals {value:?}");
     }
 }
@@ -91,44 +103,25 @@ async fn case_is_ignored_under_binary_and_case_sensitive_collations() {
         return;
     };
     let db = scratch.db().await;
-    db.conn()
-        .execute_unprepared(
-            "CREATE TABLE labels (\
-                 bin VARCHAR(64) COLLATE utf8mb4_bin NOT NULL, \
-                 cs VARCHAR(64) COLLATE utf8mb4_0900_as_cs NOT NULL)",
-        )
-        .await
-        .unwrap();
-    db.conn()
-        .execute_unprepared("INSERT INTO labels (bin, cs) VALUES ('Équipe Nord', 'Équipe Nord')")
+    db.execute_script(
+        "CREATE TABLE labels (\
+             bin VARCHAR(64) COLLATE utf8mb4_bin NOT NULL, \
+             cs VARCHAR(64) COLLATE utf8mb4_0900_as_cs NOT NULL)",
+    )
+    .await
+    .unwrap();
+    db.execute_script("INSERT INTO labels (bin, cs) VALUES ('Équipe Nord', 'Équipe Nord')")
         .await
         .unwrap();
     let backend = db.backend();
     for column in ["bin", "cs"] {
+        let quoted = backend.quote_identifier(column);
         for (condition, matches) in [
-            (
-                contains_ignore_case(backend, Expr::col(Alias::new(column)), "ÉQUIPE"),
-                1,
-            ),
-            (
-                eq_ignore_case(backend, Expr::col(Alias::new(column)), "équipe nord"),
-                1,
-            ),
-            (
-                contains_ignore_case(backend, Expr::col(Alias::new(column)), "equipe"),
-                0,
-            ),
+            (contains_ignore_case(backend, &quoted, "ÉQUIPE"), 1),
+            (eq_ignore_case(backend, &quoted, "équipe nord"), 1),
+            (contains_ignore_case(backend, &quoted, "equipe"), 0),
         ] {
-            let rows = db
-                .conn()
-                .query_all(
-                    Query::select()
-                        .column(Alias::new(column))
-                        .from(Alias::new("labels"))
-                        .and_where(condition),
-                )
-                .await
-                .unwrap();
+            let rows = matching(&db, "labels", &quoted, condition).await;
             assert_eq!(rows.len(), matches, "{column}");
         }
     }

@@ -18,8 +18,8 @@ use super::report::{
     FreshOptions, LoadedDump, MigrateOptions, MigrationReport, MigrationRun, RollbackOptions,
 };
 use super::{
-    Applied, MIGRATIONS_TABLE, MigrationError, MigrationSet, MigrationStatus, Step,
-    applied_rows, delete_sql, drop_all_tables, ensure_table, insert_sql, plan, sets_of,
+    Applied, MIGRATIONS_TABLE, MigrationError, MigrationSet, MigrationStatus, Step, applied_rows,
+    delete_sql, drop_all_tables, ensure_table, insert_sql, plan, sets_of,
 };
 use crate::{Backend, Db, DbError, DbOptions, Executor, SqliteOptions, Statement, Value};
 
@@ -479,7 +479,7 @@ async fn run_on_connection(
 async fn run_on(
     step: &Step<'_>,
     direction: Direction,
-    conn: &(impl SchemaConnection + Sync),
+    conn: &impl SchemaConnection,
 ) -> Result<(), BoxError> {
     let migration = step.body.migration();
     let schema = Schema::new(conn);

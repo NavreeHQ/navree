@@ -9,24 +9,25 @@ use axum::body::Body;
 use axum::extract::Path;
 use http::{Method, Request, StatusCode};
 use http_body_util::BodyExt;
-use navree_db::{DatabaseModule, Db, MigrationSet, ModuleBuilderDbExt, Repo, Uow, map_db_error};
+use navree_db::{
+    DatabaseModule, Db, DbError, Executor, MigrationSet, ModuleBuilderDbExt, Uow, map_db_error,
+    record,
+};
 use navree_http::{
     AppError, Controller, HttpModule, HttpOptions, Json, ModuleBuilderHttpExt, RouteDef,
     build_router,
 };
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Navree, Resolver};
-use sea_orm::sea_query::ForeignKeyAction;
-use sea_orm::{ActiveModelTrait, ConnectionTrait, DbErr};
-use sea_orm_migration::SchemaManager;
+use navree_schema::{ReferentialAction, Schema};
 use serde_json::{Value, json};
 use tower::ServiceExt;
 use uuid::Uuid;
 
-use crate::fixtures::{CreateNotes, CreateTable, create_notes, new_note, note};
+use crate::fixtures::{CreateNotes, CreateTable, Note, create_notes, new_note};
 use crate::support::{Scratch, count};
 
 /// The status and message `map_db_error` gives `error`, if any.
-fn mapped(error: &DbErr) -> Option<(u16, String)> {
+fn mapped(error: &DbError) -> Option<(u16, String)> {
     map_db_error(error).map(|app| (app.status.as_u16(), app.body()["message"].to_string()))
 }
 
@@ -37,16 +38,16 @@ async fn constraint_errors_map_to_conflicts() {
     };
     let db = scratch.db().await;
     create_notes(&db).await;
-    let manager = SchemaManager::new(db.conn());
+    let schema = Schema::new(db.pool());
     for migration in [
         CreateTable::boxed("m1", "users"),
-        CreateTable::referencing("m2", "companies", "users", ForeignKeyAction::Restrict),
+        CreateTable::referencing("m2", "companies", "users", ReferentialAction::Restrict),
     ] {
-        migration.up(&manager).await.unwrap();
+        migration.up(&schema).await.unwrap();
     }
 
-    new_note("same").insert(db.conn()).await.unwrap();
-    let duplicate = new_note("same").insert(db.conn()).await.unwrap_err();
+    record::insert(&db, &new_note("same")).await.unwrap();
+    let duplicate = record::insert(&db, &new_note("same")).await.unwrap_err();
     assert_eq!(
         mapped(&duplicate),
         Some((
@@ -58,8 +59,8 @@ async fn constraint_errors_map_to_conflicts() {
 
     let fk = "\"The change conflicts with a related record.\"".to_owned();
     let orphan = db
-        .conn()
-        .execute_unprepared(&format!(
+        .pool()
+        .execute_script(&format!(
             "INSERT INTO companies (id, title, owner_id) VALUES (UNHEX('{}'), 'acme', UNHEX('{}'))",
             Uuid::now_v7().simple(),
             Uuid::now_v7().simple()
@@ -69,15 +70,15 @@ async fn constraint_errors_map_to_conflicts() {
     assert_eq!(mapped(&orphan), Some((409, fk.clone())), "{orphan}");
 
     let owner = Uuid::now_v7();
-    db.conn()
-        .execute_unprepared(&format!(
+    db.pool()
+        .execute_script(&format!(
             "INSERT INTO users (id, title) VALUES (UNHEX('{}'), 'ann')",
             owner.simple()
         ))
         .await
         .unwrap();
-    db.conn()
-        .execute_unprepared(&format!(
+    db.pool()
+        .execute_script(&format!(
             "INSERT INTO companies (id, title, owner_id) VALUES (UNHEX('{}'), 'acme', UNHEX('{}'))",
             Uuid::now_v7().simple(),
             owner.simple()
@@ -85,13 +86,13 @@ async fn constraint_errors_map_to_conflicts() {
         .await
         .unwrap();
     let referenced = db
-        .conn()
-        .execute_unprepared("DELETE FROM users")
+        .pool()
+        .execute_script("DELETE FROM users")
         .await
         .unwrap_err();
     assert_eq!(mapped(&referenced), Some((409, fk)), "{referenced}");
 
-    let syntax = db.conn().execute_unprepared("SELEC 1").await.unwrap_err();
+    let syntax = db.pool().execute_script("SELEC 1").await.unwrap_err();
     assert_eq!(mapped(&syntax), None, "anything else stays a 500");
 }
 
@@ -114,7 +115,7 @@ impl Controller for NotesController {
                 Method::POST,
                 "/{title}",
                 |uow: Uow, Path(title): Path<String>| async move {
-                    let note = Repo::<note::Entity>::insert(&uow, new_note(&title)).await?;
+                    let note = record::insert_recorded(&uow, &new_note(&title)).await?;
                     Ok::<_, AppError>((StatusCode::CREATED, Json(json!({ "id": note.id }))))
                 },
             )
@@ -123,7 +124,7 @@ impl Controller for NotesController {
                 Method::POST,
                 "/{title}/fail",
                 |uow: Uow, Path(title): Path<String>| async move {
-                    Repo::<note::Entity>::insert(&uow, new_note(&title)).await?;
+                    record::insert_recorded(&uow, &new_note(&title)).await?;
                     Err::<(), _>(AppError::bad_request("changed my mind"))
                 },
             )
@@ -132,7 +133,9 @@ impl Controller for NotesController {
                 Method::GET,
                 "/by-id/{id}",
                 |uow: Uow, Path(id): Path<Uuid>| async move {
-                    let note = Repo::<note::Entity>::find_or_fail(&uow, id).await?;
+                    let note = record::find::<Note, _>(&uow, id)
+                        .await?
+                        .ok_or_else(|| DbError::not_found(format!("notes {id}")))?;
                     Ok::<_, AppError>(Json(json!({ "title": note.title })))
                 },
             )
@@ -187,11 +190,11 @@ async fn http_requests_commit_roll_back_and_answer_in_the_error_shape() {
         send(&router, post("/api/notes/kept")).await.0,
         StatusCode::CREATED
     );
-    assert_eq!(count(db.conn(), "notes").await, 1);
+    assert_eq!(count(db.pool(), "notes").await, 1);
 
     let (status, body) = send(&router, post("/api/notes/dropped/fail")).await;
     assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
-    assert_eq!(count(db.conn(), "notes").await, 1, "a 4xx rolls back");
+    assert_eq!(count(db.pool(), "notes").await, 1, "a 4xx rolls back");
 
     let (status, body) = send(&router, post("/api/notes/kept")).await;
     assert_eq!(status, StatusCode::CONFLICT, "{body}");
@@ -225,6 +228,6 @@ async fn http_requests_commit_roll_back_and_answer_in_the_error_shape() {
         send(&router, post("/api/notes/after")).await.0,
         StatusCode::CREATED
     );
-    assert_eq!(count(db.conn(), "notes").await, 2);
+    assert_eq!(count(db.pool(), "notes").await, 2);
     app.shutdown().await.unwrap();
 }

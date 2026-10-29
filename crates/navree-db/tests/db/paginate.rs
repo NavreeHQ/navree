@@ -1,35 +1,17 @@
-//! Offset pagination (`PageQuery`, `Page`) and cursor pagination.
+//! Offset pages (`PageQuery`, `Page`) and cursor pages (`CursorQuery`,
+//! `CursorPage`): the extractors, the response shapes, and a record
+//! select's pages.
 
 use axum::extract::FromRequestParts;
 use axum::response::IntoResponse;
 use http::{Request, StatusCode};
 use http_body_util::BodyExt;
-use navree_db::{
-    CursorPage, CursorQuery, Page, PageMeta, PageQuery, create_many, cursor_paginate,
-    cursor_paginate_desc, paginate,
-};
+use navree_db::{CursorPage, CursorQuery, Page, PageMeta, PageQuery, Record, record};
 use navree_http::AppError;
-use sea_orm::{EntityTrait, QueryOrder};
 use serde_json::json;
 
-use crate::fixtures::{note, notes_db};
+use crate::fixtures::{Note, notes_db};
 use crate::support::TempDb;
-
-/// Notes titled `note-0`, `note-1`, ... (factory from the seed tests' shape).
-struct Numbered;
-
-impl navree_db::Factory for Numbered {
-    type Entity = note::Entity;
-
-    fn definition(&self, n: usize) -> note::ActiveModel {
-        use sea_orm::ActiveValue::Set;
-        note::ActiveModel {
-            id: Set(uuid::Uuid::now_v7()),
-            title: Set(format!("note-{n:02}")),
-            body: Set(String::new()),
-        }
-    }
-}
 
 async fn page_query(uri: &str) -> Result<PageQuery, AppError> {
     let (mut parts, ()) = Request::get(uri).body(()).unwrap().into_parts();
@@ -41,16 +23,26 @@ async fn cursor_query(uri: &str) -> Result<CursorQuery, AppError> {
     CursorQuery::from_request_parts(&mut parts, &()).await
 }
 
+/// `n` notes titled `note-00`, `note-01`, ...
+async fn numbered(db: &navree_db::Db, n: usize) {
+    for i in 0..n {
+        let note = Note {
+            id: uuid::Uuid::now_v7(),
+            title: format!("note-{i:02}"),
+            body: String::new(),
+        };
+        record::insert(db, &note).await.unwrap();
+    }
+}
+
 #[tokio::test]
-async fn paginate_meta() {
+async fn record_pages_carry_their_meta() {
     let temp = TempDb::new();
     let db = notes_db(&temp).await;
-    create_many(&Numbered, db.conn(), 23).await.unwrap();
-    let select = || note::Entity::find().order_by_asc(note::Column::Title);
+    numbered(&db, 23).await;
+    let select = || Note::select().order_by("title");
 
-    let page = paginate(select(), db.conn(), PageQuery::new(2, 10))
-        .await
-        .unwrap();
+    let page = select().page(&db, PageQuery::new(2, 10)).await.unwrap();
     assert_eq!(
         page.meta,
         PageMeta {
@@ -63,14 +55,10 @@ async fn paginate_meta() {
     assert_eq!(page.data.len(), 10);
     assert_eq!(page.data[0].title, "note-10");
 
-    let last = paginate(select(), db.conn(), PageQuery::new(3, 10))
-        .await
-        .unwrap();
+    let last = select().page(&db, PageQuery::new(3, 10)).await.unwrap();
     assert_eq!(last.data.len(), 3);
 
-    let beyond = paginate(select(), db.conn(), PageQuery::new(9, 10))
-        .await
-        .unwrap();
+    let beyond = select().page(&db, PageQuery::new(9, 10)).await.unwrap();
     assert!(beyond.data.is_empty());
     assert_eq!(beyond.meta.current_page, 9);
     assert_eq!(beyond.meta.last_page, 3);
@@ -84,26 +72,23 @@ async fn paginate_meta() {
 }
 
 /// Any page number a client can send is an empty page past the end, not a
-/// panic in the offset arithmetic (`page * per_page` overflowing `u64`, or
-/// an offset above `i64::MAX` for the SQL bind).
+/// failure in the offset arithmetic (`page * per_page` overflowing `u64`,
+/// or an offset above `i64::MAX` for the SQL bind).
 #[tokio::test]
 async fn huge_page_numbers_are_empty_pages() {
     let temp = TempDb::new();
     let db = notes_db(&temp).await;
-    create_many(&Numbered, db.conn(), 3).await.unwrap();
+    numbered(&db, 3).await;
     for (page, per_page) in [
         (u64::MAX, 100),
         (100_000_000_000_000_000, 100),
         (1_152_921_504_606_846_977, 16),
         (u64::MAX / 15 + 2, 15),
     ] {
-        let result = paginate(
-            note::Entity::find(),
-            db.conn(),
-            PageQuery::new(page, per_page),
-        )
-        .await
-        .unwrap();
+        let result = Note::select()
+            .page(&db, PageQuery::new(page, per_page))
+            .await
+            .unwrap();
         assert!(result.data.is_empty(), "page {page}: {:?}", result.data);
         assert_eq!(result.meta.total, 3);
         assert_eq!(result.meta.current_page, page);
@@ -111,17 +96,16 @@ async fn huge_page_numbers_are_empty_pages() {
     let query = page_query("/notes?page=18446744073709551615&per_page=100")
         .await
         .unwrap();
-    let result = paginate(note::Entity::find(), db.conn(), query)
-        .await
-        .unwrap();
+    let result = Note::select().page(&db, query).await.unwrap();
     assert!(result.data.is_empty());
 }
 
 #[tokio::test]
-async fn paginate_empty_table_has_one_page() {
+async fn an_empty_table_has_one_page() {
     let temp = TempDb::new();
     let db = notes_db(&temp).await;
-    let page = paginate(note::Entity::find(), db.conn(), PageQuery::default())
+    let page = Note::select()
+        .page(&db, PageQuery::default())
         .await
         .unwrap();
     assert!(page.data.is_empty());
@@ -133,6 +117,18 @@ async fn paginate_empty_table_has_one_page() {
             total: 0,
             last_page: 1
         }
+    );
+}
+
+#[test]
+fn pages_compute_their_last_page() {
+    let page = Page::new(vec!["a"], PageQuery::new(1, 10), 21);
+    assert_eq!(page.meta.last_page, 3);
+    assert_eq!(
+        Page::<u8>::new(Vec::new(), PageQuery::new(0, 0), 0)
+            .meta
+            .last_page,
+        1
     );
 }
 
@@ -193,69 +189,21 @@ async fn page_renders_as_json() {
 }
 
 #[tokio::test]
-async fn cursor_pagination() {
-    let temp = TempDb::new();
-    let db = notes_db(&temp).await;
-    let notes = create_many(&Numbered, db.conn(), 5).await.unwrap();
-    let titles = |page: &CursorPage<note::Model>| {
-        page.data
-            .iter()
-            .map(|n| n.title.clone())
-            .collect::<Vec<_>>()
+async fn cursor_pages_render_as_json() {
+    let page = CursorPage {
+        data: vec!["a", "b"],
+        next_cursor: Some("AZoAAAAAcAAAgAAAAAAAAA".to_owned()),
     };
-
-    let first = cursor_paginate(
-        note::Entity::find(),
-        note::Column::Id,
-        db.conn(),
-        CursorQuery::new(None, 2),
-    )
-    .await
-    .unwrap();
-    assert_eq!(titles(&first), ["note-00", "note-01"]);
-    let second = cursor_paginate(
-        note::Entity::find(),
-        note::Column::Id,
-        db.conn(),
-        CursorQuery::new(first.next_cursor.clone(), 2),
-    )
-    .await
-    .unwrap();
-    assert_eq!(titles(&second), ["note-02", "note-03"]);
-    let third = cursor_paginate(
-        note::Entity::find(),
-        note::Column::Id,
-        db.conn(),
-        CursorQuery::new(second.next_cursor.clone(), 2),
-    )
-    .await
-    .unwrap();
-    assert_eq!(titles(&third), ["note-04"]);
-    assert_eq!(third.next_cursor, None);
-
-    let newest = cursor_paginate_desc(
-        note::Entity::find(),
-        note::Column::Id,
-        db.conn(),
-        CursorQuery::new(None, 3),
-    )
-    .await
-    .unwrap();
-    assert_eq!(titles(&newest), ["note-04", "note-03", "note-02"]);
-    let older = cursor_paginate_desc(
-        note::Entity::find(),
-        note::Column::Id,
-        db.conn(),
-        CursorQuery::new(newest.next_cursor.clone(), 3),
-    )
-    .await
-    .unwrap();
-    assert_eq!(titles(&older), ["note-01", "note-00"]);
-    assert_eq!(older.next_cursor, None);
-    assert_eq!(notes.len(), 5);
-
-    let json = serde_json::to_value(&first).unwrap();
-    assert_eq!(json["next_cursor"], json!(first.next_cursor));
+    let mapped = page.map(str::to_uppercase);
+    assert_eq!(mapped.data, ["A", "B"]);
+    let response = mapped.into_response();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(
+        json,
+        json!({"data": ["A", "B"], "next_cursor": "AZoAAAAAcAAAgAAAAAAAAA"})
+    );
 }
 
 #[tokio::test]
@@ -274,16 +222,13 @@ async fn cursor_query_validates_and_clamps() {
         error.body()["message"],
         json!(["cursor is invalid", "limit must be a positive integer"])
     );
-
-    let temp = TempDb::new();
-    let db = notes_db(&temp).await;
-    let error = cursor_paginate(
-        note::Entity::find(),
-        note::Column::Id,
-        db.conn(),
-        CursorQuery::new(Some("garbage".into()), 2),
-    )
-    .await
-    .unwrap_err();
-    assert!(error.to_string().contains("cursor"), "{error}");
+    // A cursor is a URL-safe base64 UUID.
+    let id = uuid::Uuid::now_v7();
+    use base64::Engine as _;
+    let cursor = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(id.as_bytes());
+    let query = cursor_query(&format!("/x?cursor={cursor}&limit=2"))
+        .await
+        .unwrap();
+    assert_eq!(query.cursor.as_deref(), Some(cursor.as_str()));
+    assert_eq!(query.limit, 2);
 }

@@ -1,5 +1,5 @@
-//! navree-db's statements reach the same query logs, listeners, hooks and
-//! unit-of-work statistics as SeaORM's; connections start with the
+//! Statements reach the query logs, listeners, hooks and unit-of-work
+//! statistics of their connection; connections start with the
 //! session of `database.*`.
 
 use std::sync::{Arc, Mutex};
@@ -11,7 +11,7 @@ use crate::support::{Scratch, script, serial};
 /// Query logs, listeners, before-executing and before-transaction hooks,
 /// and the statistics of the unit of work the statements run for.
 pub async fn statements_are_watched(scratch: Scratch) {
-    let db = scratch.db().await.with_native_units_of_work(true);
+    let db = scratch.db().await;
     let backend = scratch.server.backend();
     script(
         &db,
@@ -112,7 +112,7 @@ pub async fn sessions_follow_the_options(scratch: Scratch) {
         }
     }
     let db = Db::connect(&options).await.unwrap();
-    let pool = db.pool().expect("navree-db's own pool");
+    let pool = db.pool();
     let text = |sql: &'static str| {
         let pool = pool.clone();
         async move {

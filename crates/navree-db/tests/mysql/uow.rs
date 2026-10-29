@@ -6,19 +6,16 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use navree_db::{
-    ChangeEvent, ChangeObserver, DatabaseModule, Db, MigrationSet, ModuleBuilderDbExt, Repo, Uow,
+    ChangeEvent, ChangeObserver, DatabaseModule, Db, DbError, Executor, MigrationSet,
+    ModuleBuilderDbExt, Statement, Uow, record,
 };
 use navree_kernel::{
     BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Navree, ProviderKey, Resolver,
 };
-use sea_orm::sea_query::Query;
-use sea_orm::{ActiveModelTrait, ConnectionTrait, DatabaseTransaction, DbErr};
 use uuid::Uuid;
 
-use crate::fixtures::{CreateNotes, create_notes, new_note, note};
+use crate::fixtures::{CreateNotes, create_notes, new_note};
 use crate::support::{Scratch, count, string, strings};
-
-type Notes = Repo<note::Entity>;
 
 /// `actor|request_id`, with `NULL` for an unset variable.
 const VARIABLES: &str = "SELECT CONCAT(IFNULL(@navree_actor, 'NULL'), '|', \
@@ -36,28 +33,28 @@ async fn variables_are_set_inside_the_unit_of_work_and_cleared_after_it() {
     let actor = Uuid::now_v7();
 
     let committed = db.uow(Some(actor), Some("req-1".to_owned())).await;
-    let tx = committed.tx().await.unwrap();
-    assert_eq!(string(&*tx, VARIABLES).await, format!("{actor}|req-1"));
-    drop(tx);
+    assert_eq!(
+        string(&committed, VARIABLES).await,
+        format!("{actor}|req-1")
+    );
     committed.commit().await.unwrap();
-    assert_eq!(string(db.conn(), VARIABLES).await, "NULL|NULL");
+    assert_eq!(string(db.pool(), VARIABLES).await, "NULL|NULL");
 
     let rolled_back = db.uow(Some(actor), None).await;
-    let tx = rolled_back.tx().await.unwrap();
-    assert_eq!(string(&*tx, VARIABLES).await, format!("{actor}|NULL"));
-    drop(tx);
+    assert_eq!(
+        string(&rolled_back, VARIABLES).await,
+        format!("{actor}|NULL")
+    );
     rolled_back.rollback().await.unwrap();
-    assert_eq!(string(db.conn(), VARIABLES).await, "NULL|NULL");
+    assert_eq!(string(db.pool(), VARIABLES).await, "NULL|NULL");
 
     // A unit of work without an actor overwrites whatever is there.
-    db.conn()
-        .execute_unprepared("SET @navree_actor = 'stale', @navree_request_id = 'stale'")
+    db.pool()
+        .execute_script("SET @navree_actor = 'stale', @navree_request_id = 'stale'")
         .await
         .unwrap();
     let anonymous = db.uow(None, None).await;
-    let tx = anonymous.tx().await.unwrap();
-    assert_eq!(string(&*tx, VARIABLES).await, "NULL|NULL");
-    drop(tx);
+    assert_eq!(string(&anonymous, VARIABLES).await, "NULL|NULL");
     anonymous.commit().await.unwrap();
 }
 
@@ -71,8 +68,8 @@ async fn triggers_read_the_actor_and_request_id() {
     };
     let db = scratch.db_with(|options| options.max_connections = 1).await;
     create_notes(&db).await;
-    db.conn()
-        .execute_unprepared(
+    db.pool()
+        .execute_script(
             "CREATE TRIGGER notes_created AFTER INSERT ON notes FOR EACH ROW \
              INSERT INTO audit (entity, entity_id, op, actor) \
              VALUES ('notes', HEX(NEW.id), IFNULL(@navree_request_id, '-'), @navree_actor)",
@@ -82,16 +79,17 @@ async fn triggers_read_the_actor_and_request_id() {
 
     let actor = Uuid::now_v7();
     let uow = db.uow(Some(actor), Some("req-7".to_owned())).await;
-    Notes::insert(&uow, new_note("by the actor")).await.unwrap();
+    record::insert_recorded(&uow, &new_note("by the actor"))
+        .await
+        .unwrap();
     uow.commit().await.unwrap();
-    new_note("outside any unit of work")
-        .insert(db.conn())
+    record::insert(db.pool(), &new_note("outside any unit of work"))
         .await
         .unwrap();
 
     assert_eq!(
         strings(
-            db.conn(),
+            db.pool(),
             "SELECT CONCAT(op, '|', IFNULL(actor, 'NULL')) FROM audit ORDER BY id"
         )
         .await,
@@ -116,14 +114,14 @@ async fn a_trigger_stamps_the_actor_into_a_binary_uuid_column() {
          SET NEW.updated_by = UNHEX(REPLACE(@navree_actor, '-', ''))",
         "INSERT INTO deals (id, stage) VALUES (1, 'lead')",
     ] {
-        db.conn()
-            .execute_unprepared(sql)
+        db.pool()
+            .execute_script(sql)
             .await
             .unwrap_or_else(|error| panic!("{sql}: {error}"));
     }
     let updated_by = || async {
         string(
-            db.conn(),
+            db.pool(),
             "SELECT IFNULL(LOWER(HEX(updated_by)), 'NULL') FROM deals",
         )
         .await
@@ -131,18 +129,15 @@ async fn a_trigger_stamps_the_actor_into_a_binary_uuid_column() {
 
     let actor = Uuid::now_v7();
     let uow = db.uow(Some(actor), None).await;
-    uow.tx()
-        .await
-        .unwrap()
-        .execute_unprepared("UPDATE deals SET stage = 'won' WHERE id = 1")
+    uow.execute_script("UPDATE deals SET stage = 'won' WHERE id = 1")
         .await
         .unwrap();
     uow.commit().await.unwrap();
     assert_eq!(updated_by().await, actor.simple().to_string());
 
     // Outside a unit of work there is no actor.
-    db.conn()
-        .execute_unprepared("UPDATE deals SET stage = 'lost' WHERE id = 1")
+    db.pool()
+        .execute_script("UPDATE deals SET stage = 'lost' WHERE id = 1")
         .await
         .unwrap();
     assert_eq!(updated_by().await, "NULL");
@@ -164,43 +159,40 @@ async fn after_a_deadlock_the_victims_statements_commit_on_their_own() {
         "CREATE TABLE counters (id INT PRIMARY KEY, n INT NOT NULL)",
         "INSERT INTO counters (id, n) VALUES (1, 0), (2, 0)",
     ] {
-        db.conn().execute_unprepared(sql).await.unwrap();
+        db.pool().execute_script(sql).await.unwrap();
     }
     let bump = |id: i32| format!("UPDATE counters SET n = n + 1 WHERE id = {id}");
 
     let first = db.uow(None, None).await;
     let second = db.uow(None, None).await;
-    let first_tx = first.tx().await.unwrap();
-    let second_tx = second.tx().await.unwrap();
-    first_tx.execute_unprepared(&bump(1)).await.unwrap();
-    second_tx.execute_unprepared(&bump(2)).await.unwrap();
+    first.execute_script(&bump(1)).await.unwrap();
+    second.execute_script(&bump(2)).await.unwrap();
     // Each now waits for the row the other holds; InnoDB picks a victim.
     let crossing = tokio::spawn({
-        let first_tx = first_tx.clone();
+        let first = first.clone();
         let sql = bump(2);
-        async move { first_tx.execute_unprepared(&sql).await.map(drop) }
+        async move { first.execute_script(&sql).await.map(drop) }
     });
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-    let second_result = second_tx.execute_unprepared(&bump(1)).await.map(drop);
+    let second_result = second.execute_script(&bump(1)).await.map(drop);
     let first_result = crossing.await.unwrap();
-    let (victim, victim_tx, survivor, survivor_tx, error) = match (first_result, second_result) {
-        (Err(error), Ok(())) => (first, first_tx, second, second_tx, error),
-        (Ok(()), Err(error)) => (second, second_tx, first, first_tx, error),
+    let (victim, survivor, error) = match (first_result, second_result) {
+        (Err(error), Ok(())) => (first, second, error),
+        (Ok(()), Err(error)) => (second, first, error),
         other => panic!("one deadlock victim expected: {other:?}"),
     };
-    assert!(error.to_string().contains("Deadlock"), "{error}");
+    assert_eq!(error.kind(), navree_db::ErrorKind::Deadlock, "{error}");
+    assert!(error.is_retryable());
 
-    victim_tx
-        .execute_unprepared("INSERT INTO counters (id, n) VALUES (3, 0)")
+    victim
+        .execute_script("INSERT INTO counters (id, n) VALUES (3, 0)")
         .await
         .expect("runs, outside any transaction");
-    drop(victim_tx);
     victim.rollback().await.unwrap();
-    drop(survivor_tx);
     survivor.commit().await.unwrap();
     assert_eq!(
         strings(
-            db.conn(),
+            db.pool(),
             "SELECT CAST(id AS CHAR) FROM counters ORDER BY id"
         )
         .await,
@@ -220,35 +212,29 @@ async fn writes_are_visible_after_commit_and_gone_after_rollback() {
     create_notes(&db).await;
 
     let uow = db.uow(None, None).await;
-    new_note("kept")
-        .insert(&*uow.tx().await.unwrap())
-        .await
-        .unwrap();
+    record::insert(&uow, &new_note("kept")).await.unwrap();
     assert_eq!(
-        count(db.conn(), "notes").await,
+        count(db.pool(), "notes").await,
         0,
         "not visible before commit"
     );
     uow.commit().await.unwrap();
-    assert_eq!(count(db.conn(), "notes").await, 1);
+    assert_eq!(count(db.pool(), "notes").await, 1);
 
     let uow = db.uow(None, None).await;
-    new_note("dropped")
-        .insert(&*uow.tx().await.unwrap())
-        .await
-        .unwrap();
+    record::insert(&uow, &new_note("dropped")).await.unwrap();
     uow.rollback().await.unwrap();
-    assert_eq!(count(db.conn(), "notes").await, 1);
+    assert_eq!(count(db.pool(), "notes").await, 1);
 
     let error = db
         .transaction(|uow| async move {
-            new_note("also dropped").insert(&*uow.tx().await?).await?;
-            Err::<(), _>(DbErr::Custom("changed my mind".to_owned()))
+            record::insert(&uow, &new_note("also dropped")).await?;
+            Err::<(), _>(DbError::invalid("changed my mind"))
         })
         .await
         .unwrap_err();
     assert!(error.to_string().contains("changed my mind"), "{error}");
-    assert_eq!(count(db.conn(), "notes").await, 1);
+    assert_eq!(count(db.pool(), "notes").await, 1);
 }
 
 /// Makes [`FailingObserver`] fail.
@@ -267,23 +253,20 @@ impl Injectable for AuditObserver {
 impl ChangeObserver for AuditObserver {
     fn observe<'a>(
         &'a self,
-        tx: &'a DatabaseTransaction,
         uow: &'a Uow,
         changes: &'a [ChangeEvent],
-    ) -> BoxFuture<'a, Result<(), DbErr>> {
+    ) -> BoxFuture<'a, Result<(), DbError>> {
         Box::pin(async move {
             for change in changes {
-                tx.execute(
-                    Query::insert()
-                        .into_table("audit")
-                        .columns(["entity", "entity_id", "op", "actor"])
-                        .values_panic([
-                            change.entity.clone().into(),
-                            change.id.clone().into(),
-                            change.op.as_str().into(),
-                            uow.actor().map(|a| a.to_string()).into(),
-                        ]),
-                )
+                uow.execute(&Statement::portable(
+                    "INSERT INTO audit (entity, entity_id, op, actor) VALUES (?, ?, ?, ?)",
+                    [
+                        change.entity.clone().into(),
+                        change.id.clone().into(),
+                        change.op.as_str().into(),
+                        uow.actor().map(|a| a.to_string()).into(),
+                    ],
+                ))
                 .await?;
             }
             Ok(())
@@ -307,13 +290,12 @@ impl Injectable for FailingObserver {
 impl ChangeObserver for FailingObserver {
     fn observe<'a>(
         &'a self,
-        _tx: &'a DatabaseTransaction,
         _uow: &'a Uow,
         _changes: &'a [ChangeEvent],
-    ) -> BoxFuture<'a, Result<(), DbErr>> {
+    ) -> BoxFuture<'a, Result<(), DbError>> {
         Box::pin(async move {
             if self.0.0.load(Ordering::SeqCst) {
-                Err(DbErr::Custom("observer refused".to_owned()))
+                Err(DbError::invalid("observer refused"))
             } else {
                 Ok(())
             }
@@ -348,17 +330,17 @@ async fn observers_write_in_the_transaction_and_their_errors_roll_it_back() {
         .boot()
         .await
         .expect("boots and migrates");
-    let db = app.ctx().get::<Db>().await.unwrap();
+    let db: Arc<Db> = app.ctx().get::<Db>().await.unwrap();
     let actor = Uuid::now_v7();
 
     let uow = db.uow(Some(actor), Some("req".to_owned())).await;
-    Notes::insert(&uow, new_note("a")).await.unwrap();
-    Notes::insert(&uow, new_note("b")).await.unwrap();
+    record::insert_recorded(&uow, &new_note("a")).await.unwrap();
+    record::insert_recorded(&uow, &new_note("b")).await.unwrap();
     uow.commit().await.expect("commits");
-    assert_eq!(count(db.conn(), "notes").await, 2);
+    assert_eq!(count(db.pool(), "notes").await, 2);
     assert_eq!(
         strings(
-            db.conn(),
+            db.pool(),
             "SELECT CONCAT(op, '|', actor) FROM audit ORDER BY id"
         )
         .await,
@@ -372,19 +354,19 @@ async fn observers_write_in_the_transaction_and_their_errors_roll_it_back() {
         .0
         .store(true, Ordering::SeqCst);
     let uow = db.uow(Some(actor), None).await;
-    Notes::insert(&uow, new_note("c")).await.unwrap();
+    record::insert_recorded(&uow, &new_note("c")).await.unwrap();
     let error = uow.commit().await.unwrap_err();
     assert!(error.to_string().contains("observer refused"), "{error}");
     assert_eq!(
-        count(db.conn(), "notes").await,
+        count(db.pool(), "notes").await,
         2,
         "the change is rolled back"
     );
     assert_eq!(
-        count(db.conn(), "audit").await,
+        count(db.pool(), "audit").await,
         2,
         "and its audit row with it"
     );
-    assert_eq!(string(db.conn(), VARIABLES).await, "NULL|NULL");
+    assert_eq!(string(db.pool(), VARIABLES).await, "NULL|NULL");
     app.shutdown().await.unwrap();
 }
