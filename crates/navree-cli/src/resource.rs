@@ -1,7 +1,7 @@
-//! `navree make:resource <module> <Entity>`: a Helm resource with a field
-//! for every column of a SeaORM entity, registered with the module.
+//! `navree make:resource <module> <Model>`: a Helm resource with a field
+//! for every column of a navree-orm model, registered with the module.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anyhow::Context;
 use heck::ToSnakeCase;
@@ -13,12 +13,12 @@ use crate::names::Name;
 use crate::scaffold::{FileSet, join};
 use crate::templates::render;
 
-/// One column of the entity's `Model`.
+/// One column of the model.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Column {
-    /// The field (and column) name.
+    /// The column name (the field's, or `#[model(column = "..")]`).
     pub name: String,
-    /// The type's last path segment (`String`, `Uuid`, `DateTimeUtc`, ...),
+    /// The type's last path segment (`String`, `Uuid`, `DateTime`, ...),
     /// inside `Option<..>`.
     pub ty: String,
     /// Whether the type is an `Option`.
@@ -27,79 +27,119 @@ pub struct Column {
     pub primary_key: bool,
 }
 
-/// What `make:resource` reads from an entity file.
+/// The access subject a model declares with `#[model(subject ..)]`.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct EntityInfo {
-    /// `#[sea_orm(table_name = "..")]`.
-    pub table: String,
-    /// The `Model` struct's fields.
-    pub columns: Vec<Column>,
-    /// The `SUBJECT` of `impl Subject for Entity`, when there is one.
-    pub subject: Option<String>,
+pub struct SubjectInfo {
+    /// The subject's name (`Deal`): `subject = ".."`, else the struct's.
+    pub name: String,
+    /// The permission prefix: `permission_prefix = ".."`, else the table.
+    pub permission_prefix: String,
 }
 
-/// Parses an entity file: its `Model` struct, its table name and its
+/// What `make:resource` reads from a model file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModelInfo {
+    /// The struct's name (`Deal`).
+    pub name: String,
+    /// `#[model(table = "..")]`, else the snake_case plural of the name.
+    pub table: String,
+    /// The struct's fields that are columns (not `#[model(skip)]`).
+    pub columns: Vec<Column>,
+    /// The access subject, when the model is one.
+    pub subject: Option<SubjectInfo>,
+}
+
+/// Whether `attrs` derive `Model` (`#[derive(Model)]` or a path ending in
+/// `Model`, such as `navree::orm::Model`).
+fn derives_model(attrs: &[syn::Attribute]) -> bool {
+    attrs.iter().filter(|a| a.path().is_ident("derive")).any(|a| {
+        let mut found = false;
+        let _ = a.parse_nested_meta(|meta| {
+            if meta.path.segments.last().is_some_and(|s| s.ident == "Model") {
+                found = true;
+            }
+            Ok(())
+        });
+        found
+    })
+}
+
+/// The tokens of every `#[model(..)]` attribute in `attrs`, as text.
+fn model_tokens(attrs: &[syn::Attribute]) -> Vec<String> {
+    attrs
+        .iter()
+        .filter(|a| a.path().is_ident("model"))
+        .map(list_tokens)
+        .collect()
+}
+
+/// Whether the attribute tokens hold the bare word or key `word`
+/// (`subject`, `subject = ".."`, `skip`).
+fn has_word(tokens: &str, word: &str) -> bool {
+    tokens
+        .split(|c: char| !(c.is_alphanumeric() || c == '_'))
+        .any(|t| t == word)
+}
+
+/// Parses a model file: its `#[derive(Model)]` struct (the one named
+/// `model`, when given and there are several), its table, columns, key and
 /// access subject.
-pub fn parse_entity(source: &str) -> anyhow::Result<EntityInfo> {
-    let file = syn::parse_file(source).context("the entity file is not valid Rust")?;
-    let mut info = None;
-    let mut subject = None;
-    for item in &file.items {
-        match item {
-            syn::Item::Struct(model) if model.ident == "Model" => {
-                let table = model
-                    .attrs
-                    .iter()
-                    .filter(|a| a.path().is_ident("sea_orm"))
-                    .find_map(|a| quoted_value(&list_tokens(a), "table_name"))
-                    .context("`Model` has no #[sea_orm(table_name = \"..\")] attribute")?;
-                let syn::Fields::Named(fields) = &model.fields else {
-                    anyhow::bail!("`Model` has no named fields");
-                };
-                let columns = fields
-                    .named
-                    .iter()
-                    .filter_map(|field| {
-                        let name = field.ident.as_ref()?.to_string();
-                        let name = name.strip_prefix("r#").unwrap_or(&name).to_owned();
-                        let (optional, ty) = type_name(&field.ty);
-                        let primary_key = field.attrs.iter().any(|a| {
-                            a.path().is_ident("sea_orm") && list_tokens(a).contains("primary_key")
-                        });
-                        Some(Column {
-                            name,
-                            ty,
-                            optional,
-                            primary_key,
-                        })
-                    })
-                    .collect();
-                info = Some((table, columns));
-            }
-            syn::Item::Impl(block) => {
-                let is_subject = block
-                    .trait_
-                    .as_ref()
-                    .and_then(|(path, _)| path.segments.last())
-                    .is_some_and(|s| s.ident == "Subject");
-                if is_subject {
-                    subject = block.items.iter().find_map(|item| match item {
-                        syn::ImplItem::Const(c) if c.ident == "SUBJECT" => match &c.expr {
-                            syn::Expr::Lit(syn::ExprLit {
-                                lit: syn::Lit::Str(s),
-                                ..
-                            }) => Some(s.value()),
-                            _ => None,
-                        },
-                        _ => None,
-                    });
-                }
-            }
-            _ => {}
-        }
+pub fn parse_model(source: &str, model: Option<&Name>) -> anyhow::Result<ModelInfo> {
+    let file = syn::parse_file(source).context("the model file is not valid Rust")?;
+    let structs: Vec<&syn::ItemStruct> = file
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            syn::Item::Struct(s) if derives_model(&s.attrs) => Some(s),
+            _ => None,
+        })
+        .collect();
+    let item = match model {
+        Some(name) => structs
+            .iter()
+            .find(|s| s.ident.to_string().to_snake_case() == name.snake())
+            .or(structs.first()),
+        None => structs.first(),
     }
-    let (table, columns) = info.context("no `pub struct Model` (a SeaORM entity) in the file")?;
-    Ok(EntityInfo {
+    .context("no `#[derive(Model)]` struct (a navree-orm model) in the file")?;
+    let name = item.ident.to_string();
+    let tokens = model_tokens(&item.attrs).join(", ");
+    let table = quoted_value(&tokens, "table").unwrap_or_else(|| {
+        Name::parse("model", &name.to_snake_case())
+            .map(|n| n.plural().snake().to_owned())
+            .unwrap_or_else(|_| name.to_snake_case())
+    });
+    let key = quoted_value(&tokens, "primary_key").unwrap_or_else(|| "id".to_owned());
+    let subject = has_word(&tokens, "subject").then(|| SubjectInfo {
+        name: quoted_value(&tokens, "subject").unwrap_or_else(|| name.clone()),
+        permission_prefix: quoted_value(&tokens, "permission_prefix")
+            .unwrap_or_else(|| table.clone()),
+    });
+    let syn::Fields::Named(fields) = &item.fields else {
+        anyhow::bail!("`{name}` has no named fields");
+    };
+    let columns = fields
+        .named
+        .iter()
+        .filter_map(|field| {
+            let field_tokens = model_tokens(&field.attrs).join(", ");
+            if has_word(&field_tokens, "skip") {
+                return None;
+            }
+            let ident = field.ident.as_ref()?.to_string();
+            let ident = ident.strip_prefix("r#").unwrap_or(&ident).to_owned();
+            let name = quoted_value(&field_tokens, "column").unwrap_or(ident);
+            let (optional, ty) = type_name(&field.ty);
+            Some(Column {
+                primary_key: name == key,
+                name,
+                ty,
+                optional,
+            })
+        })
+        .collect();
+    Ok(ModelInfo {
+        name,
         table,
         columns,
         subject,
@@ -114,16 +154,29 @@ fn list_tokens(attr: &syn::Attribute) -> String {
     }
 }
 
-/// The string after `key =` in attribute tokens.
+/// The string after `key =` in attribute tokens (the key as a whole word).
 fn quoted_value(tokens: &str, key: &str) -> Option<String> {
-    let at = tokens.find(key)?;
-    let rest = tokens[at + key.len()..].trim_start().strip_prefix('=')?;
-    let rest = rest.trim_start().strip_prefix('"')?;
-    Some(rest.split('"').next()?.to_owned())
+    let mut from = 0;
+    while let Some(found) = tokens[from..].find(key) {
+        let at = from + found;
+        from = at + key.len();
+        let before = tokens[..at].chars().next_back();
+        if before.is_some_and(|c| c.is_alphanumeric() || c == '_') {
+            continue;
+        }
+        let Some(rest) = tokens[from..].trim_start().strip_prefix('=') else {
+            continue;
+        };
+        let Some(rest) = rest.trim_start().strip_prefix('"') else {
+            continue;
+        };
+        return Some(rest.split('"').next()?.to_owned());
+    }
+    None
 }
 
-/// `(optional, last segment)` of a type: `Option<DateTimeUtc>` is
-/// `(true, "DateTimeUtc")`.
+/// `(optional, last segment)` of a type: `Option<DateTime<Utc>>` is
+/// `(true, "DateTime")`.
 fn type_name(ty: &syn::Type) -> (bool, String) {
     let syn::Type::Path(path) = ty else {
         return (false, String::new());
@@ -214,18 +267,12 @@ fn field_for(column: &Column, columns: &[Column]) -> Option<FieldCode> {
             format!("Field::money(\"{name}\", \"currency\").sortable()")
         }
         _ if is_number(ty) => format!("Field::number(\"{name}\").sortable()"),
-        "Date" | "NaiveDate" => format!("Field::date(\"{name}\").sortable()"),
-        "DateTimeUtc"
-        | "DateTime"
-        | "DateTimeWithTimeZone"
-        | "DateTimeLocal"
-        | "NaiveDateTime"
-        | "TimeDateTime"
-        | "TimeDateTimeWithTimeZone" => {
+        "NaiveDate" | "Date" => format!("Field::date(\"{name}\").sortable()"),
+        "DateTime" | "NaiveDateTime" | "DateTimeUtc" => {
             format!("Field::datetime(\"{name}\"){readonly}.sortable()")
         }
-        "Uuid" if name.ends_with("_id") => {
-            let related = Name::parse("entity", name.trim_end_matches("_id"))
+        "Uuid" | "Ulid" if name.ends_with("_id") => {
+            let related = Name::parse("model", name.trim_end_matches("_id"))
                 .map(|n| format!("{}Resource", n.pascal()))
                 .unwrap_or_else(|_| "TheirResource".to_owned());
             return Some(FieldCode {
@@ -235,8 +282,8 @@ fn field_for(column: &Column, columns: &[Column]) -> Option<FieldCode> {
                 )),
             });
         }
-        "Uuid" => format!("Field::text(\"{name}\")"),
-        "Json" | "Value" | "JsonValue" => {
+        "Uuid" | "Ulid" => format!("Field::text(\"{name}\")"),
+        "Value" | "JsonValue" | "Json" => {
             return Some(FieldCode {
                 code: format!("Field::textarea(\"{name}\").readonly().hide_on_index()"),
                 comment: Some("A JSON column, shown as text.".to_owned()),
@@ -259,28 +306,24 @@ fn field_for(column: &Column, columns: &[Column]) -> Option<FieldCode> {
 #[derive(Debug, Clone, Serialize)]
 struct ResourceContext {
     pascal: String,
-    entity: String,
-    entity_path: String,
+    model: String,
+    model_path: String,
     label: String,
     singular: String,
     slug: String,
-    table: String,
+    permission_prefix: String,
     subject: String,
     title: String,
     search: String,
     fields: Vec<FieldCode>,
 }
 
-/// The resource file for entity `entity` (snake_case), read from `info`;
-/// `entity_path` is the Rust path of the entity module from the resource
-/// file (`super::super::entity`).
-pub fn resource_file(
-    entity: &Name,
-    info: &EntityInfo,
-    entity_path: &str,
-) -> anyhow::Result<String> {
+/// The resource file for model `name` (its resource is `<Name>Resource`),
+/// read from `info`; `model_path` is the Rust path of the model's module
+/// from the resource file (`super::super::models::deal`).
+pub fn resource_file(name: &Name, info: &ModelInfo, model_path: &str) -> anyhow::Result<String> {
     let table = Name::parse("table", &info.table).ok();
-    let plural = table.clone().unwrap_or_else(|| entity.plural());
+    let plural = table.clone().unwrap_or_else(|| name.plural());
     let title = TITLE_COLUMNS
         .iter()
         .find(|t| info.columns.iter().any(|c| c.name == **t && is_text(&c.ty)))
@@ -309,14 +352,20 @@ pub fn resource_file(
         search.push("\"email\"".to_owned());
     }
     let ctx = ResourceContext {
-        pascal: entity.pascal(),
-        entity: entity.snake().to_owned(),
-        entity_path: entity_path.to_owned(),
+        pascal: name.pascal(),
+        model: info.name.clone(),
+        model_path: model_path.to_owned(),
         label: plural.title(),
-        singular: entity.title(),
+        singular: name.title(),
         slug: info.table.replace('_', "-"),
-        table: info.table.clone(),
-        subject: info.subject.clone().unwrap_or_else(|| entity.pascal()),
+        permission_prefix: info
+            .subject
+            .as_ref()
+            .map_or_else(|| info.table.clone(), |s| s.permission_prefix.clone()),
+        subject: info
+            .subject
+            .as_ref()
+            .map_or_else(|| info.name.clone(), |s| s.name.clone()),
         title,
         search: search.join(", "),
         fields: info
@@ -328,17 +377,18 @@ pub fn resource_file(
     Ok(render("make/resource.rs", &ctx)?)
 }
 
-/// Generates a Helm resource for entity `entity` (`Deal` or `deal`) of
-/// module `module` under `root/modules_dir`: `resources/<entity>.rs`, the
+/// Generates a Helm resource for model `model` (`Deal` or `deal`) of
+/// module `module` under `root/modules_dir`, read from the module's
+/// `models/<model>.rs` (`navree make:model`): `resources/<model>.rs`, the
 /// `resources` module, and the registration at the module's
 /// `// navree:wire` marker. Nothing is written when a file exists.
 pub fn make_resource(
     root: &Path,
     modules_dir: &str,
     module: &Name,
-    entity: &str,
+    model: &str,
 ) -> anyhow::Result<MakeReport> {
-    let entity = Name::parse("entity", &entity.trim().to_snake_case())?;
+    let model = Name::parse("model", &model.trim().to_snake_case())?;
     let module_dir = join(root, modules_dir).join(module.snake());
     let module_rs = module_dir.join("mod.rs");
     if !module_rs.is_file() {
@@ -348,55 +398,29 @@ pub fn make_resource(
             m = module.snake()
         );
     }
-    let candidates: [(PathBuf, String); 2] = [
-        (
-            module_dir
-                .join("entities")
-                .join(format!("{}.rs", entity.snake())),
-            format!("super::super::entities::{}", entity.snake()),
-        ),
-        (
-            module_dir.join("entity.rs"),
-            "super::super::entity".to_owned(),
-        ),
-    ];
-    // `entities/<entity>.rs` (make:entity), else the module's `entity.rs`
-    // (make:module) when it is this entity: its table is the entity's
-    // plural, or the entity is the module's singular.
-    let mut found = None;
-    for (index, (path, rust_path)) in candidates.iter().enumerate() {
-        if !path.is_file() {
-            continue;
-        }
-        let source = std::fs::read_to_string(path)
-            .with_context(|| format!("cannot read {}", path.display()))?;
-        let info = parse_entity(&source)
-            .with_context(|| format!("cannot read the entity in {}", path.display()))?;
-        let matches = index == 0
-            || info.table == entity.plural().snake()
-            || entity.snake() == module.singular().snake();
-        if matches {
-            found = Some((path.clone(), rust_path.clone(), info));
-            break;
-        }
-    }
-    let Some((entity_file, entity_path, info)) = found else {
+    let model_file = module_dir
+        .join("models")
+        .join(format!("{}.rs", model.snake()));
+    if !model_file.is_file() {
         anyhow::bail!(
-            "entity `{e}` not found at {} (or as the module's entity in {}); create it with `navree make:entity {} {e}`",
-            candidates[0].0.display(),
-            candidates[1].0.display(),
+            "model `{m}` not found at {}; Helm resources take navree-orm models: create it with `navree make:model {} {m} --policy`",
+            model_file.display(),
             module.snake(),
-            e = entity.snake()
+            m = model.snake()
         );
-    };
-    let entity_path = entity_path.as_str();
+    }
+    let source = std::fs::read_to_string(&model_file)
+        .with_context(|| format!("cannot read {}", model_file.display()))?;
+    let info = parse_model(&source, Some(&model))
+        .with_context(|| format!("cannot read the model in {}", model_file.display()))?;
+    let model_path = format!("super::super::models::{}", model.snake());
 
     let resources_mod = module_dir.join("resources").join("mod.rs");
     let new_dir = !resources_mod.is_file();
     let mut files = FileSet::new();
     files.add(
-        format!("resources/{}.rs", entity.snake()),
-        resource_file(&entity, &info, entity_path)?,
+        format!("resources/{}.rs", model.snake()),
+        resource_file(&model, &info, &model_path)?,
     );
     if new_dir {
         files.add(
@@ -404,7 +428,7 @@ pub fn make_resource(
             format!(
                 "//! Helm resources of the {} module.\n\npub mod {};\n",
                 module.snake().replace('_', " "),
-                entity.snake()
+                model.snake()
             ),
         );
     }
@@ -419,7 +443,7 @@ pub fn make_resource(
             || format!("declare `pub mod resources;` in {}", module_rs.display()),
         )?;
     } else {
-        let decl = format!("pub mod {};", entity.snake());
+        let decl = format!("pub mod {};", model.snake());
         report.edit_file(
             &resources_mod,
             |src| Some(declare_module(src, &decl)),
@@ -428,8 +452,8 @@ pub fn make_resource(
     }
     let line = format!(
         "navree::helm::ModuleBuilderHelmExt::resource::<resources::{}::{}Resource>(m);",
-        entity.snake(),
-        entity.pascal()
+        model.snake(),
+        model.pascal()
     );
     report.edit_file(
         &module_rs,
@@ -438,10 +462,11 @@ pub fn make_resource(
     )?;
     if info.subject.is_none() {
         report.hints.push(format!(
-            "the entity needs an access subject: add `impl navree::access::Subject for Entity {{ const SUBJECT: &'static str = \"{}\"; const PERMISSION_PREFIX: &'static str = \"{}\"; }}` to {}",
-            entity.pascal(),
+            "the model needs an access subject: add `subject` to its `#[model(..)]` attribute (`#[model(table = \"{}\", subject)]`: the subject `{}`, permissions `{}.<action>`) in {}",
             info.table,
-            entity_file.display()
+            info.name,
+            info.table,
+            model_file.display()
         ));
     }
     Ok(report)
@@ -452,37 +477,43 @@ mod tests {
     use super::*;
 
     const DEAL: &str = r#"
-use navree::access::Subject;
-use sea_orm::entity::prelude::*;
+use chrono::{DateTime, NaiveDate, Utc};
+use navree::orm::Model;
+use serde::Serialize;
+use uuid::Uuid;
 
-#[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
-#[sea_orm(table_name = "deals")]
-pub struct Model {
-    #[sea_orm(primary_key, auto_increment = false)]
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "deals", timestamps, subject = "Deal", permission_prefix = "deals")]
+pub struct Deal {
     pub id: Uuid,
     pub title: String,
     pub amount_cents: i64,
     pub currency: String,
+    #[model(cast = "string_enum")]
     pub stage: Stage,
     pub company_id: Uuid,
     pub owner_id: Option<Uuid>,
     pub notes: Option<String>,
     pub won: bool,
-    pub expected_close_date: Option<Date>,
-    pub created_at: DateTimeUtc,
-}
-
-impl Subject for Entity {
-    const SUBJECT: &'static str = "Deal";
-    const PERMISSION_PREFIX: &'static str = "deals";
+    pub expected_close_date: Option<NaiveDate>,
+    #[model(skip)]
+    pub score: u8,
+    pub created_at: DateTime<Utc>,
 }
 "#;
 
     #[test]
-    fn entities_are_read_with_syn() {
-        let info = parse_entity(DEAL).unwrap();
+    fn models_are_read_with_syn() {
+        let info = parse_model(DEAL, None).unwrap();
+        assert_eq!(info.name, "Deal");
         assert_eq!(info.table, "deals");
-        assert_eq!(info.subject.as_deref(), Some("Deal"));
+        assert_eq!(
+            info.subject,
+            Some(SubjectInfo {
+                name: "Deal".into(),
+                permission_prefix: "deals".into()
+            })
+        );
         assert_eq!(info.columns.len(), 11);
         assert_eq!(
             info.columns[0],
@@ -502,13 +533,43 @@ impl Subject for Entity {
                 primary_key: false
             }
         );
-        assert!(parse_entity("struct Other;").is_err());
-        assert!(parse_entity("not rust {").is_err());
+        assert!(parse_model("struct Other;", None).is_err());
+        assert!(parse_model("not rust {", None).is_err());
+    }
+
+    #[test]
+    fn tables_keys_and_subjects_have_defaults() {
+        let source = r#"
+#[derive(navree::orm::Model, Clone, Debug, Default, Serialize)]
+#[model(primary_key = "code", subject)]
+pub struct Country {
+    pub code: String,
+    #[model(column = "display_name")]
+    pub name: String,
+}
+"#;
+        let info = parse_model(source, None).unwrap();
+        assert_eq!(info.table, "countries");
+        assert_eq!(
+            info.subject,
+            Some(SubjectInfo {
+                name: "Country".into(),
+                permission_prefix: "countries".into()
+            })
+        );
+        assert!(info.columns[0].primary_key);
+        assert_eq!(info.columns[1].name, "display_name");
+        let plain = parse_model(
+            "#[derive(Model)]\n#[model(table = \"subjects\")]\npub struct Topic { pub id: i64 }",
+            None,
+        )
+        .unwrap();
+        assert_eq!(plain.subject, None);
     }
 
     #[test]
     fn columns_become_fields() {
-        let info = parse_entity(DEAL).unwrap();
+        let info = parse_model(DEAL, None).unwrap();
         let code: Vec<String> = info
             .columns
             .iter()
