@@ -41,7 +41,8 @@ impl ProjectService {
         filter: ProjectFilter,
         page: PageQuery,
     ) -> Result<Page<ProjectResource>, OrmError> {
-        let mut query = WorkspaceRepo::<Project>::query(workspace).order_by_desc(Project::CREATED_AT);
+        let mut query =
+            WorkspaceRepo::<Project>::query(workspace).order_by_desc(Project::CREATED_AT);
         if let Some(status) = filter.status {
             query = query.where_(Project::STATUS.eq(status.as_str()));
         }

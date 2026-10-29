@@ -21,7 +21,15 @@ use serde::Serialize;
 /// (`search.engine`), scoped to the workspace.
 // COMPAT: `DeriveEntityModel` and the `#[sea_orm]` attributes.
 #[derive(
-    Clone, Debug, Default, PartialEq, Eq, DeriveEntityModel, navree::orm::Model, Serialize, Searchable,
+    Clone,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    DeriveEntityModel,
+    navree::orm::Model,
+    Serialize,
+    Searchable,
 )]
 #[sea_orm(table_name = "projects")]
 #[model(

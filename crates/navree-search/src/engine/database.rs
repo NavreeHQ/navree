@@ -390,8 +390,7 @@ impl SearchEngine for DatabaseEngine {
                     statements.push(fts.statement());
                 }
             }
-            self.write(statements)
-            .await
+            self.write(statements).await
         })
     }
 
@@ -406,8 +405,7 @@ impl SearchEngine for DatabaseEngine {
             for chunk in ids.chunks(500) {
                 statements.extend(delete_statements(backend, index, Some(chunk)));
             }
-            self.write(statements)
-            .await
+            self.write(statements).await
         })
     }
 
@@ -415,8 +413,7 @@ impl SearchEngine for DatabaseEngine {
         Box::pin(async move {
             let backend = self.backend();
             let statements = delete_statements(backend, index, None);
-            self.write(statements)
-            .await
+            self.write(statements).await
         })
     }
 
@@ -443,8 +440,7 @@ impl SearchEngine for DatabaseEngine {
                 scope(&mut rename, table, staged, None);
                 statements.push(rename.statement());
             }
-            self.write(statements)
-            .await
+            self.write(statements).await
         })
     }
 
@@ -748,8 +744,7 @@ mod tests {
     }
 
     fn postgres_sql(text: &str, trigram: bool) -> (String, String) {
-        let (mut select, mut count) =
-            (Sql::new(Backend::Postgres), Sql::new(Backend::Postgres));
+        let (mut select, mut count) = (Sql::new(Backend::Postgres), Sql::new(Backend::Postgres));
         let options = PostgresOptions {
             trigram,
             ..PostgresOptions::default()

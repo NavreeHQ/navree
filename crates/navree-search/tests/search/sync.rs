@@ -5,16 +5,15 @@ use std::sync::Arc;
 
 use navree_contracts::{Dispatcher, JobEnvelope};
 use navree_db::{DatabaseModule, Db};
-use navree_orm::Model;
 use navree_kernel::{BoxError, BoxFuture};
+use navree_orm::Model;
 use navree_queue::{Queue, QueueFake};
 use navree_search::{Search, SearchModule, SyncDocuments};
 use navree_testing::{TestApp, TestAppBuilder};
 use uuid::Uuid;
 
 use crate::support::{
-    self, Contact, Deal, insert, insert_contacts, new_company, new_contact, new_deal,
-    settle,
+    self, Contact, Deal, insert, insert_contacts, new_company, new_contact, new_deal, settle,
 };
 
 async fn found(search: &Search, text: &str) -> Vec<String> {

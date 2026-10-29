@@ -141,7 +141,9 @@ mod tests {
     }
 
     async fn run(pool: &Pool, sql: &str) {
-        navree_db::Executor::execute_script(pool, sql).await.unwrap();
+        navree_db::Executor::execute_script(pool, sql)
+            .await
+            .unwrap();
     }
 
     #[tokio::test]
