@@ -7,32 +7,34 @@ use std::sync::Arc;
 use axum::extract::Path;
 use http::{Method, StatusCode};
 use navree_access::{Authorized, Update};
-use navree_db::{Factory, Repo, Uow};
+use navree_db::Uow;
 use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use navree_testing::IsolationOutcome;
 use navree_workspace::testing::{IsolationSuiteExt, WorkspaceTenancy};
+use navree_orm::factory::{Factory, FactoryContext, ModelFactory};
+use navree_orm::prelude::*;
 use navree_workspace::{CurrentWorkspace, InWorkspace, WorkspaceRepo};
-use sea_orm::{ActiveValue::Set, EntityTrait, IntoActiveModel};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use crate::support::{World, builder, deal};
+use crate::support::{Deal, World, builder, new_deal};
 
 /// Deals with defaults; `workspace_id` is set by the suite.
 #[derive(Default)]
 struct DealFactory;
 
-impl Factory for DealFactory {
-    type Entity = deal::Entity;
+impl ModelFactory for DealFactory {
+    type Model = Deal;
 
-    fn definition(&self, n: usize) -> deal::ActiveModel {
-        deal::ActiveModel {
-            id: Set(Uuid::now_v7()),
-            workspace_id: Set(Uuid::nil()),
-            title: Set(format!("Deal {n}")),
-        }
+    fn definition(&self, ctx: &mut FactoryContext<'_, Deal>) -> Deal {
+        new_deal(Uuid::nil(), &format!("Deal {}", ctx.index()))
     }
+}
+
+/// The suite's factory of deals.
+fn deals() -> Factory<DealFactory> {
+    Factory::new()
 }
 
 fn title(input: &Value) -> String {
@@ -42,9 +44,10 @@ fn title(input: &Value) -> String {
 // --- Scoped: WorkspaceRepo and the workspace record check -----------------
 
 async fn index(ws: CurrentWorkspace, uow: Uow) -> Result<Json<Value>, AppError> {
-    let deals = WorkspaceRepo::<deal::Entity>::select(ws.id())
-        .all(&*uow.tx().await?)
-        .await?;
+    let deals = WorkspaceRepo::<Deal>::query(ws.id())
+        .get(&uow)
+        .await?
+        .into_models();
     Ok(Json(json!({ "data": deals })))
 }
 
@@ -52,9 +55,11 @@ async fn show(
     ws: CurrentWorkspace,
     uow: Uow,
     Path(id): Path<Uuid>,
-) -> Result<Json<deal::Model>, AppError> {
+) -> Result<Json<Deal>, AppError> {
     Ok(Json(
-        WorkspaceRepo::<deal::Entity>::find_or_fail(&uow, ws.id(), id).await?,
+        WorkspaceRepo::<Deal>::find_or_fail(&uow, ws.id(), id)
+            .await?
+            .into_inner(),
     ))
 }
 
@@ -63,14 +68,13 @@ async fn show(
 async fn update(
     ws: CurrentWorkspace,
     uow: Uow,
-    deal: Authorized<deal::Entity, Update>,
+    deal: Authorized<Deal, Update>,
     Json(input): Json<Value>,
-) -> Result<Json<deal::Model>, AppError> {
-    let mut model = deal.into_inner().into_active_model();
-    model.title = Set(title(&input));
-    Ok(Json(
-        WorkspaceRepo::<deal::Entity>::update(&uow, ws.id(), model).await?,
-    ))
+) -> Result<Json<Deal>, AppError> {
+    let mut record = deal.into_inner();
+    record.title = title(&input);
+    WorkspaceRepo::<Deal>::update(&uow, ws.id(), &mut record).await?;
+    Ok(Json(record.into_inner()))
 }
 
 async fn destroy(
@@ -78,8 +82,8 @@ async fn destroy(
     uow: Uow,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
-    let found = WorkspaceRepo::<deal::Entity>::find_or_fail(&uow, ws.id(), id).await?;
-    WorkspaceRepo::<deal::Entity>::delete(&uow, ws.id(), found).await?;
+    let found = WorkspaceRepo::<Deal>::find_or_fail(&uow, ws.id(), id).await?;
+    WorkspaceRepo::<Deal>::delete(&uow, ws.id(), found).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -87,11 +91,12 @@ async fn store(
     ws: CurrentWorkspace,
     uow: Uow,
     Json(input): Json<Value>,
-) -> Result<Json<deal::Model>, AppError> {
-    let mut model = DealFactory.definition(0);
-    model.title = Set(title(&input));
+) -> Result<Json<Deal>, AppError> {
+    let model = new_deal(Uuid::nil(), &title(&input));
     Ok(Json(
-        WorkspaceRepo::<deal::Entity>::insert(&uow, ws.id(), model).await?,
+        WorkspaceRepo::<Deal>::insert(&uow, ws.id(), model)
+            .await?
+            .into_inner(),
     ))
 }
 
@@ -140,29 +145,28 @@ impl Module for DealsModule {
 // --- Leaky: reads and writes by id, takes the workspace from the body -----
 
 async fn leaky_index(uow: Uow) -> Result<Json<Value>, AppError> {
-    let deals = deal::Entity::find().all(&*uow.tx().await?).await?;
+    let deals = Deal::query().get(&uow).await?.into_models();
     Ok(Json(json!({ "data": deals })))
 }
 
-async fn leaky_show(uow: Uow, Path(id): Path<Uuid>) -> Result<Json<deal::Model>, AppError> {
-    Ok(Json(Repo::<deal::Entity>::find_or_fail(&uow, id).await?))
+async fn leaky_show(uow: Uow, Path(id): Path<Uuid>) -> Result<Json<Deal>, AppError> {
+    Ok(Json(Deal::find_or_fail(&uow, id).await?.into_inner()))
 }
 
 async fn leaky_update(
     uow: Uow,
     Path(id): Path<Uuid>,
     Json(input): Json<Value>,
-) -> Result<Json<deal::Model>, AppError> {
-    let mut model = Repo::<deal::Entity>::find_or_fail(&uow, id)
-        .await?
-        .into_active_model();
-    model.title = Set(title(&input));
-    Ok(Json(Repo::<deal::Entity>::update(&uow, model).await?))
+) -> Result<Json<Deal>, AppError> {
+    let mut record = Deal::find_or_fail(&uow, id).await?;
+    record.title = title(&input);
+    record.save(&uow).await?;
+    Ok(Json(record.into_inner()))
 }
 
 async fn leaky_destroy(uow: Uow, Path(id): Path<Uuid>) -> Result<StatusCode, AppError> {
-    let found = Repo::<deal::Entity>::find_or_fail(&uow, id).await?;
-    Repo::<deal::Entity>::delete(&uow, found).await?;
+    let mut found = Deal::find_or_fail(&uow, id).await?;
+    found.delete(&uow).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -170,15 +174,13 @@ async fn leaky_store(
     ws: CurrentWorkspace,
     uow: Uow,
     Json(input): Json<Value>,
-) -> Result<Json<deal::Model>, AppError> {
+) -> Result<Json<Deal>, AppError> {
     let workspace = input["workspace_id"]
         .as_str()
         .and_then(|id| Uuid::parse_str(id).ok())
         .unwrap_or(ws.id());
-    let mut model = DealFactory.definition(0);
-    model.title = Set(title(&input));
-    model.workspace_id = Set(workspace);
-    Ok(Json(Repo::<deal::Entity>::insert(&uow, model).await?))
+    let model = new_deal(workspace, &title(&input));
+    Ok(Json(Deal::create(&uow, model).await?.into_inner()))
 }
 
 struct LeakyController;
@@ -248,7 +250,7 @@ async fn a_module_scoped_with_workspace_repo_passes() {
     let report = world
         .app
         .isolation_suite::<DealsModule>()
-        .factory(DealFactory)
+        .factory(deals())
         .body("POST", "/api/deals", json!({ "title": "Renewal" }))
         .run()
         .await;
@@ -285,7 +287,7 @@ async fn a_module_that_reads_by_id_fails_on_every_route() {
     let report = world
         .app
         .isolation_suite::<LeakyModule>()
-        .factory(DealFactory)
+        .factory(deals())
         .body("POST", "/api/leaky-deals", json!({ "title": "Renewal" }))
         .try_run()
         .await
@@ -325,7 +327,7 @@ async fn factory_for_binds_a_named_parameter_and_tenancy_can_be_set() {
         .app
         .isolation_suite::<DealsModule>()
         .tenancy(WorkspaceTenancy::new().owner_field("workspace_id"))
-        .factory_for("id", DealFactory)
+        .factory_for("id", deals())
         .skip("POST", "/api/deals", "creates are covered elsewhere")
         .run()
         .await;
@@ -344,7 +346,7 @@ async fn the_header_resolver_is_required() {
     let error = world
         .app
         .isolation_suite::<DealsModule>()
-        .factory(DealFactory)
+        .factory(deals())
         .try_run()
         .await
         .unwrap_err();

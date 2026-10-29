@@ -1,9 +1,7 @@
 //! The `Workspaces` and `Members` services.
 
-use navree_workspace::{
-    MemberInfo, NewWorkspace, OWNER, WorkspaceError, WorkspaceRole, entity::member,
-};
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+use navree_orm::Model as _;
+use navree_workspace::{Member, MemberInfo, NewWorkspace, OWNER, WorkspaceError, WorkspaceRole};
 use uuid::Uuid;
 
 use crate::support::World;
@@ -207,12 +205,12 @@ async fn deleting_a_workspace_removes_its_members_and_invitations() {
         .unwrap();
 
     let db = world.db().await;
-    let left = member::Entity::find()
-        .filter(member::Column::WorkspaceId.eq(acme.id))
-        .all(db.conn())
+    let left = Member::query()
+        .where_(Member::WORKSPACE_ID.eq(acme.id))
+        .count(&*db)
         .await
         .unwrap();
-    assert!(left.is_empty());
+    assert_eq!(left, 0);
     assert!(
         world
             .invitations()

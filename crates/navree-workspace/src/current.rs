@@ -718,23 +718,4 @@ mod tests {
             assert!(!writes(&method, Some(DemoIntent::Read)), "{method}");
         }
     }
-
-    #[test]
-    fn keys_take_the_column_type() {
-        let id = Uuid::now_v7();
-        assert_eq!(
-            key_value(&ColumnType::Uuid, &id.to_string()),
-            Some(Value::from(id))
-        );
-        assert_eq!(key_value(&ColumnType::Uuid, "nope"), None);
-        assert_eq!(
-            key_value(&ColumnType::BigInteger, "42"),
-            Some(Value::from(42_i64))
-        );
-        assert_eq!(key_value(&ColumnType::Integer, "x"), None);
-        assert_eq!(
-            key_value(&ColumnType::Text, "abc"),
-            Some(Value::from("abc".to_owned()))
-        );
-    }
 }

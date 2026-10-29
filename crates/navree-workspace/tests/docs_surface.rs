@@ -27,35 +27,22 @@ use navree_workspace::{
     PartitionRepo, PartitionScope, PartitionScoped, PartitionSelector, Partitions, RlsPolicy,
     WorkspaceConfig, WorkspaceError, WorkspaceScoped, WorkspaceSelector, Workspaces,
 };
-use sea_orm::{ActiveValue::Set, EntityName, EntityTrait};
+use navree_orm::Model as _;
 use uuid::Uuid;
 
 /// `contacts(id, workspace_id, partition_id, name)`, as on the partitions
 /// page.
-mod contact {
-    use sea_orm::entity::prelude::*;
-    use serde::Serialize;
-
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
-    #[sea_orm(table_name = "contacts")]
-    pub struct Model {
-        #[sea_orm(primary_key, auto_increment = false)]
-        pub id: Uuid,
-        pub workspace_id: Uuid,
-        pub partition_id: Option<Uuid>,
-        pub name: String,
-    }
-
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
+#[derive(Clone, Debug, Default, PartialEq, Eq, navree_orm::Model, serde::Serialize)]
+#[model(table = "contacts")]
+struct Contact {
+    id: Uuid,
+    workspace_id: Uuid,
+    partition_id: Option<Uuid>,
+    name: String,
 }
 
-impl WorkspaceScoped for contact::Entity {}
-impl PartitionScoped for contact::Entity {}
-
-type Contact = contact::Entity;
+impl WorkspaceScoped for Contact {}
+impl PartitionScoped for Contact {}
 
 /// The `Organizations` methods of the organizations page (compiled, never
 /// run).
@@ -243,9 +230,9 @@ async fn current_organization(org: CurrentOrganization, uow: Uow) -> Result<(), 
     let _: bool = org.has_permission("reports.read") && org.can("read", "Deal");
     org.authorize("reports.read")?;
     let _ = (org.ability(), org.access(), org.resolver());
-    let _ = org.scope(Contact::find());
-    let _ = OrgRepo::<Contact>::select(ids);
-    let _ = OrgRepo::<Contact>::scope(ids, Contact::find());
+    let _ = org.scope(Contact::query());
+    let _ = OrgRepo::<Contact>::query(ids);
+    let _ = OrgRepo::<Contact>::scope(ids, Contact::query());
     OrgRepo::<Contact>::find(&uow, ids, Uuid::now_v7()).await?;
     OrgRepo::<Contact>::find_or_fail(&uow, ids, Uuid::now_v7()).await?;
     let _ = (
@@ -300,32 +287,31 @@ async fn partition_requests(
         scope.current(),
         scope.includes(Uuid::now_v7()),
     );
-    let _ = scope.scope(Contact::find());
+    let _ = scope.scope(Contact::query());
     let _: (Uuid, Uuid, &str) = (
         partition.id(),
         partition.workspace_id(),
         partition.resolver().as_str(),
     );
     let _: &str = &partition.slug;
-    let _ = PartitionRepo::<Contact>::select(workspace, selector);
-    let _ = PartitionRepo::<Contact>::scope(workspace, selector, Contact::find());
+    let _ = PartitionRepo::<Contact>::query(workspace, selector);
+    let _ = PartitionRepo::<Contact>::scope(workspace, selector, Contact::query());
     PartitionRepo::<Contact>::find(&uow, workspace, selector, Uuid::now_v7()).await?;
     let found =
         PartitionRepo::<Contact>::find_or_fail(&uow, workspace, selector, Uuid::now_v7()).await?;
-    let created = PartitionRepo::<Contact>::insert(
+    let mut created = PartitionRepo::<Contact>::insert(
         &uow,
         ws.id(),
         partition.id(),
-        contact::ActiveModel {
-            id: Set(Uuid::now_v7()),
-            name: Set("Ada".into()),
-            ..Default::default()
+        Contact {
+            id: Uuid::now_v7(),
+            name: "Ada".into(),
+            ..Contact::default()
         },
     )
     .await?;
-    let mut row: contact::ActiveModel = created.into();
-    row.name = Set("Grace".into());
-    PartitionRepo::<Contact>::update(&uow, workspace, selector, row).await?;
+    created.name = "Grace".into();
+    PartitionRepo::<Contact>::update(&uow, workspace, selector, &mut created).await?;
     PartitionRepo::<Contact>::delete(&uow, workspace, selector, found).await?;
     Ok(())
 }
@@ -333,19 +319,19 @@ async fn partition_requests(
 #[test]
 fn the_documented_names_exist() {
     // Tables.
-    assert_eq!(organization::Entity.table_name(), "organizations");
+    assert_eq!(organization::Model::table_name(), "organizations");
     assert_eq!(
-        organization_member::Entity.table_name(),
+        organization_member::Model::table_name(),
         "organization_members"
     );
     assert_eq!(
-        organization_grant::Entity.table_name(),
+        organization_grant::Model::table_name(),
         "organization_grants"
     );
-    assert_eq!(access_request::Entity.table_name(), "access_requests");
-    assert_eq!(partition::Entity.table_name(), "workspace_partitions");
-    assert_eq!(partition_grant::Entity.table_name(), "partition_grants");
-    assert_eq!(workspace::Entity.table_name(), "workspaces");
+    assert_eq!(access_request::Model::table_name(), "access_requests");
+    assert_eq!(partition::Model::table_name(), "workspace_partitions");
+    assert_eq!(partition_grant::Model::table_name(), "partition_grants");
+    assert_eq!(workspace::Model::table_name(), "workspaces");
     // Events.
     for (name, expected) in [
         (OrganizationCreated::NAME, "organization.created"),

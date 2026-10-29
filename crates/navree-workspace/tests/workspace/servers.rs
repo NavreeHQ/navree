@@ -14,7 +14,7 @@ mod real {
     use navree_workspace::library::{
         Library, LibraryOwner, LibraryRepo, LibraryScope, LibraryViewer, LibraryVisibility,
     };
-    use sea_orm::{ConnectionTrait, Database};
+    use navree_db::{DbOptions, Executor, Pool};
     use serde_json::json;
     use uuid::Uuid;
 
@@ -32,11 +32,7 @@ mod real {
         async fn new(variable: &str, drop_sql: fn(&str) -> String) -> Option<Scratch> {
             let admin = std::env::var(variable).ok()?;
             let name = format!("navree_library_{}", Uuid::now_v7().simple());
-            let conn = Database::connect(&admin).await.unwrap();
-            conn.execute_unprepared(&format!("CREATE DATABASE {name}"))
-                .await
-                .unwrap();
-            conn.close().await.unwrap();
+            run(&admin, &format!("CREATE DATABASE {name}")).await;
             let (base, rest) = admin.rsplit_once('/').unwrap();
             let options = rest.find('?').map_or("", |at| &rest[at..]);
             let url = format!("{base}/{name}{options}");
@@ -48,9 +44,21 @@ mod real {
         }
 
         async fn drop(self) {
-            let conn = Database::connect(&self.admin).await.unwrap();
-            conn.execute_unprepared(&self.drop_sql).await.unwrap();
+            run(&self.admin, &self.drop_sql).await;
         }
+    }
+
+    /// Runs `sql` on the server of `admin`.
+    async fn run(admin: &str, sql: &str) {
+        let pool = Pool::connect(&DbOptions {
+            url: admin.to_owned(),
+            max_connections: 1,
+            ..DbOptions::default()
+        })
+        .await
+        .unwrap();
+        pool.execute_script(sql).await.unwrap();
+        pool.close().await;
     }
 
     fn raw(

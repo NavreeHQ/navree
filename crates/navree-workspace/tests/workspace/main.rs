@@ -1,6 +1,7 @@
 //! Integration tests of navree-workspace: services, invitations, request
 //! resolution, access integration, the routes and isolation.
 
+mod database;
 mod support;
 
 mod access;

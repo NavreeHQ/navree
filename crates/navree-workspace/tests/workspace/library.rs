@@ -20,7 +20,7 @@ use navree_workspace::{
     CurrentWorkspace, InWorkspace, ModuleBuilderWorkspaceExt, Organization, Workspace,
     WorkspaceError,
 };
-use sea_orm::ConnectionTrait;
+use navree_db::Executor as _;
 use serde::Serialize;
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -512,10 +512,7 @@ async fn the_check_constraint_refuses_contradicting_owners() {
         ("workspace", Some(org.as_str()), Some(ws.as_str())),
         ("shared", None, None),
     ] {
-        let refused = db
-            .conn()
-            .execute_unprepared(&insert(scope, organization, workspace))
-            .await;
+        let refused = db.execute_script(&insert(scope, organization, workspace)).await;
         assert!(
             refused
                 .unwrap_err()
@@ -529,8 +526,7 @@ async fn the_check_constraint_refuses_contradicting_owners() {
         ("organization", Some(org.as_str()), None),
         ("workspace", None, Some(ws.as_str())),
     ] {
-        db.conn()
-            .execute_unprepared(&insert(scope, organization, workspace))
+        db.execute_script(&insert(scope, organization, workspace))
             .await
             .unwrap();
     }
