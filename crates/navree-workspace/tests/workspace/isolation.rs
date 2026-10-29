@@ -212,7 +212,7 @@ async fn each_workspace_writes_to_its_own_database() {
             .contains(&globex.id.simple().to_string())
     );
     assert!(!has_table(&*world.db().await, "notes").await);
-    assert!(has_table(&*databases.db(acme.id).await.unwrap(), "notes").await);
+    assert!(has_table(&databases.db(acme.id).await.unwrap(), "notes").await);
 }
 
 #[tokio::test]

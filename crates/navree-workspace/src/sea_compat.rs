@@ -9,7 +9,7 @@
 //!   [`WorkspaceRepo`], [`OrgRepo`] and [`PartitionRepo`] over it (reads and
 //!   writes in the unit of work's SeaORM transaction, writes through
 //!   `navree_db::Repo`);
-//! - [`ModuleBuilderSeaWorkspaceExt`]: `sea_workspace_scoped`,
+//! - [`ModuleBuilderSeaWorkspaceExt`], with `sea_workspace_scoped`,
 //!   `sea_workspace_entity` and `sea_global_entity`, the SeaORM forms of
 //!   the module's registrations;
 //! - `?` from a SeaORM `DbErr` into [`WorkspaceError`].
