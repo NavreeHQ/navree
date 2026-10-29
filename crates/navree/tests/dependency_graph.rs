@@ -330,11 +330,12 @@ const HIERARCHY: &[Rule] = &[
     // users; XML signatures and ID tokens are verified with navree-crypto's
     // `jose` (ring), IdP metadata, key sets and DNS checks go through
     // navree-http-client, and states, replays and one-time codes live in
-    // navree-cache.
+    // navree-cache. The SSO tables are navree-orm models, and users and
+    // workspaces are read as navree-auth's and navree-workspace's models.
     rule("navree-sso", 6, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto",
         "navree-cache", "navree-events", "navree-http-client", "navree-db", "navree-auth",
-        "navree-workspace",
+        "navree-workspace", "navree-orm",
     ]),
     // Localization: Fluent messages, the request's locale (the signed-in
     // user's or the workspace's saved one, a query parameter, a cookie,

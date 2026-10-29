@@ -6,19 +6,19 @@
 use std::sync::{Arc, Mutex, PoisonError};
 
 use navree_access::{AbilityCtx, AccessModule, AccessOptions, AccessService, Rules};
-use navree_auth::{AuthModule, AuthService, ClientMeta, User, user};
+use navree_auth::{AuthModule, AuthService, ClientMeta, User};
 use navree_contracts::{AuditEntry, AuditSink, BoxError, BoxFuture};
 use navree_crypto::{CryptoModule, generate_key};
 use navree_db::{DatabaseModule, Db, Uow};
 use navree_events::EventsModule;
 use navree_http_client::{HttpClientModule, HttpClientOptions, SsrfPolicy};
+use navree_orm::{Model as _, Record};
 use navree_sso::{
     NewConnection, Provisioning, Sso, SsoConnection, SsoDomain, SsoFake, SsoModule, SsoOwner,
     StaticTxtResolver, TxtResolver,
 };
 use navree_testing::{TestApp, TestAppBuilder, TestResponse};
 use navree_workspace::WorkspaceModule;
-use sea_orm::{ActiveModelTrait, Set, Unchanged};
 use serde_json::Value;
 
 /// The API's public base URL in the tests.
@@ -68,8 +68,7 @@ fn abilities(ctx: &AbilityCtx, rules: &mut Rules) {
 /// from configuration (`sso.base_url` set), events, access and workspaces
 /// with organizations.
 pub fn builder() -> TestAppBuilder {
-    TestApp::builder()
-        .temp_database()
+    crate::servers::database(TestApp::builder())
         .config("app.key", generate_key())
         .config("hashing.memory_kib", 1024)
         .config("hashing.iterations", 1)
@@ -178,12 +177,16 @@ impl World {
     pub async fn create_verified_user(&self, name: &str, email: &str) -> User {
         let user = self.create_user(name, email).await;
         let db = self.app.get::<Db>().await;
-        let row = user::ActiveModel {
-            id: Unchanged(user.id),
-            email_verified_at: Set(Some(chrono::Utc::now())),
-            ..Default::default()
-        };
-        row.update(db.conn()).await.expect("the email is verified")
+        User::query()
+            .where_key(user.id)
+            .update(&db, [User::EMAIL_VERIFIED_AT.set(chrono::Utc::now())])
+            .await
+            .expect("the email is verified");
+        User::find(&db, user.id)
+            .await
+            .expect("the user is read")
+            .map(Record::into_inner)
+            .expect("the user exists")
     }
 
     /// An access token for `user`.

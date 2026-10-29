@@ -6,17 +6,18 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use chrono::{DateTime, TimeDelta, Utc};
-use navree_auth::{AuthService, ClientMeta, SignInAttempt, SignInMethod, User, email_domain, user};
+use navree_auth::{AuthService, ClientMeta, SignInAttempt, SignInMethod, User, email_domain};
 use navree_cache::Cache;
 use navree_config::Config;
 use navree_contracts::{AuditEntry, AuditKind, AuditSink, Clock, SystemClock};
 use navree_crypto::{Encrypter, Hasher, random_token, sha256_hex};
-use navree_db::{Db, Repo, Uow};
+use navree_db::{Db, DbError, Uow};
 use navree_events::{Event, EventBus};
 use navree_http::HttpOptions;
 use navree_http_client::{HttpClient, HttpClientOptions};
 use navree_kernel::{AppContext, BoxError, WeakAppContext};
-use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, Set, Unchanged};
+use navree_orm::{Assignment, Executor, Model as _, Record};
+use navree_workspace::{Organization, Workspace};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tokio::sync::OnceCell;
@@ -29,6 +30,7 @@ use crate::saml::{
     AuthnRequest, IdpMetadata, RequestOptions, ResponseCheck, SamlError, ServiceProvider,
     validate_response,
 };
+use crate::store;
 use crate::{
     ConnectionSettings, ConnectionUpdate, NewConnection, OidcSettings, Protocol, Provisioning,
     SamlSettings, ServiceProviderInfo, SsoConnection, SsoDiscovery, SsoDomain, SsoDomainVerified,
@@ -435,26 +437,29 @@ impl Sso {
     }
 
     /// The connection with id or slug `key`.
-    pub(crate) async fn load<C: ConnectionTrait>(
+    pub(crate) async fn load<E: Executor + ?Sized>(
         &self,
-        conn: &C,
+        exec: &E,
         key: &str,
     ) -> Result<Loaded, SsoError> {
-        let query = match Uuid::parse_str(key) {
-            Ok(id) => sso_connection::Entity::find_by_id(id),
-            Err(_) => sso_connection::Entity::find()
-                .filter(sso_connection::Column::Slug.eq(key.to_ascii_lowercase())),
+        let found = match Uuid::parse_str(key) {
+            Ok(id) => sso_connection::Model::find(exec, id).await?,
+            Err(_) => {
+                sso_connection::Model::query()
+                    .where_(sso_connection::Model::SLUG.eq(key.to_ascii_lowercase()))
+                    .first(exec)
+                    .await?
+            }
         };
-        let model = query
-            .one(conn)
-            .await?
+        let model = found
+            .map(Record::into_inner)
             .ok_or_else(|| SsoError::UnknownConnection(key.to_owned()))?;
         self.decode(model)
     }
 
     /// The connection with id or slug `key`.
     pub async fn connection(&self, key: &str) -> Result<SsoConnection, SsoError> {
-        let loaded = self.load(&self.db.reader().await, key).await?;
+        let loaded = self.load(&self.db, key).await?;
         Ok(self.present(&loaded))
     }
 
@@ -464,16 +469,15 @@ impl Sso {
         &self,
         owner: Option<SsoOwner>,
     ) -> Result<Vec<SsoConnection>, SsoError> {
-        let mut query =
-            sso_connection::Entity::find().order_by_asc(sso_connection::Column::CreatedAt);
+        let mut query = sso_connection::Model::query().order_by(sso_connection::Model::CREATED_AT);
         if let Some(owner) = owner {
-            query = query.filter(sso_connection::Column::OwnerType.eq(owner.kind()));
+            query = query.where_(sso_connection::Model::OWNER_TYPE.eq(owner.kind()));
             query = match owner.id() {
-                Some(id) => query.filter(sso_connection::Column::OwnerId.eq(id)),
-                None => query.filter(sso_connection::Column::OwnerId.is_null()),
+                Some(id) => query.where_(sso_connection::Model::OWNER_ID.eq(id)),
+                None => query.where_null(sso_connection::Model::OWNER_ID),
             };
         }
-        let rows = query.all(&self.db.reader().await).await?;
+        let rows = query.get(&self.db).await?.into_models();
         rows.into_iter()
             .map(|row| self.decode(row).map(|loaded| self.present(&loaded)))
             .collect()
@@ -501,10 +505,7 @@ impl Sso {
                 {
                     return Err(needs_workspaces());
                 }
-                navree_workspace::entity::workspace::Entity::find_by_id(id)
-                    .one(&*uow.tx().await?)
-                    .await?
-                    .is_some()
+                Workspace::find(uow, id).await?.is_some()
             }
             SsoOwner::Organization(id) => {
                 if app
@@ -516,8 +517,7 @@ impl Sso {
                 }
                 // Without organizations (`workspace.organizations.enabled`)
                 // the table may be missing: no such owner either way.
-                navree_workspace::entity::organization::Entity::find_by_id(id)
-                    .one(&*uow.tx().await?)
+                Organization::find(uow, id)
                     .await
                     .is_ok_and(|found| found.is_some())
             }
@@ -576,17 +576,16 @@ impl Sso {
         Ok(())
     }
 
-    async fn slug_taken<C: ConnectionTrait>(
-        conn: &C,
+    async fn slug_taken<E: Executor + ?Sized>(
+        exec: &E,
         slug: &str,
         except: Option<Uuid>,
     ) -> Result<bool, SsoError> {
-        let mut query =
-            sso_connection::Entity::find().filter(sso_connection::Column::Slug.eq(slug));
+        let mut query = sso_connection::Model::query().where_(sso_connection::Model::SLUG.eq(slug));
         if let Some(id) = except {
-            query = query.filter(sso_connection::Column::Id.ne(id));
+            query = query.where_(sso_connection::Model::ID.ne(id));
         }
-        Ok(query.one(conn).await?.is_some())
+        Ok(query.exists(exec).await?)
     }
 
     /// Creates a connection in `uow`. Field errors
@@ -608,51 +607,48 @@ impl Sso {
         self.check_owner(uow, input.owner).await?;
         self.check_settings(&input.settings)?;
         Self::check_provisioning(&input.provisioning)?;
-        let slug = {
-            let tx = uow.tx().await?;
-            match input.slug {
-                Some(slug) => {
-                    let slug = slug.trim().to_ascii_lowercase();
-                    check_slug(&slug)?;
-                    if Self::slug_taken(&*tx, &slug, None).await? {
-                        return Err(SsoError::invalid("slug", "slug has already been taken"));
-                    }
-                    slug
+        let slug = match input.slug {
+            Some(slug) => {
+                let slug = slug.trim().to_ascii_lowercase();
+                check_slug(&slug)?;
+                if Self::slug_taken(uow, &slug, None).await? {
+                    return Err(SsoError::invalid("slug", "slug has already been taken"));
                 }
-                None => {
-                    let base = slugify(&name);
-                    let base = if check_slug(&base).is_ok() {
-                        base
-                    } else {
-                        format!("{base}-sso")
-                    };
-                    let mut candidate = base.clone();
-                    let mut n = 2;
-                    while Self::slug_taken(&*tx, &candidate, None).await? {
-                        candidate = format!("{base}-{n}");
-                        n += 1;
-                    }
-                    candidate
+                slug
+            }
+            None => {
+                let base = slugify(&name);
+                let base = if check_slug(&base).is_ok() {
+                    base
+                } else {
+                    format!("{base}-sso")
+                };
+                let mut candidate = base.clone();
+                let mut n = 2;
+                while Self::slug_taken(uow, &candidate, None).await? {
+                    candidate = format!("{base}-{n}");
+                    n += 1;
                 }
+                candidate
             }
         };
         let now = self.now();
-        let row = sso_connection::ActiveModel {
-            id: Set(Uuid::now_v7()),
-            owner_type: Set(input.owner.kind().to_owned()),
-            owner_id: Set(input.owner.id()),
-            slug: Set(slug),
-            name: Set(name),
-            protocol: Set(input.settings.protocol().as_str().to_owned()),
-            enabled: Set(input.enabled),
-            enforce: Set(input.enforce),
-            settings: Set(self.encode_settings(&input.settings)?),
-            provisioning: Set(serde_json::to_string(&input.provisioning)
-                .map_err(|e| SsoError::Config(e.to_string()))?),
-            created_at: Set(now),
-            updated_at: Set(now),
+        let row = sso_connection::Model {
+            id: Uuid::now_v7(),
+            owner_type: input.owner.kind().to_owned(),
+            owner_id: input.owner.id(),
+            slug,
+            name,
+            protocol: input.settings.protocol().as_str().to_owned(),
+            enabled: input.enabled,
+            enforce: input.enforce,
+            settings: self.encode_settings(&input.settings)?,
+            provisioning: serde_json::to_string(&input.provisioning)
+                .map_err(|e| SsoError::Config(e.to_string()))?,
+            created_at: now,
+            updated_at: now,
         };
-        let model = Repo::<sso_connection::Entity>::insert(uow, row).await?;
+        let model = store::insert(uow, row).await?;
         Ok(self.present(&self.decode(model)?))
     }
 
@@ -663,15 +659,8 @@ impl Sso {
         key: &str,
         changes: ConnectionUpdate,
     ) -> Result<SsoConnection, SsoError> {
-        let current = {
-            let tx = uow.tx().await?;
-            self.load(&*tx, key).await?
-        };
-        let mut row = sso_connection::ActiveModel {
-            id: Unchanged(current.model.id),
-            updated_at: Set(self.now()),
-            ..Default::default()
-        };
+        let current = self.load(uow, key).await?;
+        let mut sets: Vec<Assignment> = vec![sso_connection::Model::UPDATED_AT.set(self.now())];
         if let Some(name) = changes.name {
             let name = name.trim().to_owned();
             if name.is_empty() || name.chars().count() > 120 {
@@ -680,19 +669,15 @@ impl Sso {
                     "name must be 1 to 120 characters",
                 ));
             }
-            row.name = Set(name);
+            sets.push(sso_connection::Model::NAME.set(name));
         }
         if let Some(slug) = changes.slug {
             let slug = slug.trim().to_ascii_lowercase();
             check_slug(&slug)?;
-            let taken = {
-                let tx = uow.tx().await?;
-                Self::slug_taken(&*tx, &slug, Some(current.model.id)).await?
-            };
-            if taken {
+            if Self::slug_taken(uow, &slug, Some(current.model.id)).await? {
                 return Err(SsoError::invalid("slug", "slug has already been taken"));
             }
-            row.slug = Set(slug);
+            sets.push(sso_connection::Model::SLUG.set(slug));
         }
         if let Some(mut settings) = changes.settings {
             if settings.protocol() != current.settings.protocol() {
@@ -714,35 +699,36 @@ impl Sso {
                 new.client_secret = Some(stored.clone());
             }
             self.check_settings(&settings)?;
-            row.settings = Set(self.encode_settings(&settings)?);
+            sets.push(sso_connection::Model::SETTINGS.set(self.encode_settings(&settings)?));
             self.forget_metadata(current.model.id);
         }
         if let Some(provisioning) = changes.provisioning {
             Self::check_provisioning(&provisioning)?;
-            row.provisioning = Set(serde_json::to_string(&provisioning)
-                .map_err(|e| SsoError::Config(e.to_string()))?);
+            sets.push(
+                sso_connection::Model::PROVISIONING.set(
+                    serde_json::to_string(&provisioning)
+                        .map_err(|e| SsoError::Config(e.to_string()))?,
+                ),
+            );
         }
         if let Some(enabled) = changes.enabled {
-            row.enabled = Set(enabled);
+            sets.push(sso_connection::Model::ENABLED.set(enabled));
         }
         if changes.follow_default_enforcement {
-            row.enforce = Set(None);
+            sets.push(sso_connection::Model::ENFORCE.set(None::<bool>));
         } else if let Some(enforce) = changes.enforce {
-            row.enforce = Set(Some(enforce));
+            sets.push(sso_connection::Model::ENFORCE.set(Some(enforce)));
         }
-        let model = Repo::<sso_connection::Entity>::update(uow, row).await?;
+        let model: sso_connection::Model = store::update(uow, current.model.id, sets).await?;
         Ok(self.present(&self.decode(model)?))
     }
 
     /// Deletes a connection in `uow`, with its domains and identities (the
     /// users stay).
     pub async fn delete_connection(&self, uow: &Uow, key: &str) -> Result<(), SsoError> {
-        let current = {
-            let tx = uow.tx().await?;
-            self.load(&*tx, key).await?
-        };
+        let current = self.load(uow, key).await?;
         self.forget_metadata(current.model.id);
-        Repo::<sso_connection::Entity>::delete(uow, current.model).await?;
+        store::delete(uow, current.model).await?;
         Ok(())
     }
 
@@ -764,13 +750,13 @@ impl Sso {
 
     /// The domains of a connection.
     pub async fn domains(&self, connection: &str) -> Result<Vec<SsoDomain>, SsoError> {
-        let reader = self.db.reader().await;
-        let loaded = self.load(&reader, connection).await?;
-        let rows = sso_domain::Entity::find()
-            .filter(sso_domain::Column::ConnectionId.eq(loaded.model.id))
-            .order_by_asc(sso_domain::Column::Domain)
-            .all(&reader)
-            .await?;
+        let loaded = self.load(&self.db, connection).await?;
+        let rows = sso_domain::Model::query()
+            .where_(sso_domain::Model::CONNECTION_ID.eq(loaded.model.id))
+            .order_by(sso_domain::Model::DOMAIN)
+            .get(&self.db)
+            .await?
+            .into_models();
         Ok(rows
             .into_iter()
             .map(|row| self.present_domain(row))
@@ -787,42 +773,38 @@ impl Sso {
         domain: &str,
     ) -> Result<SsoDomain, SsoError> {
         let domain = normalize_domain(domain)?;
-        let loaded = {
-            let tx = uow.tx().await?;
-            let loaded = self.load(&*tx, connection).await?;
-            let exists = sso_domain::Entity::find()
-                .filter(sso_domain::Column::ConnectionId.eq(loaded.model.id))
-                .filter(sso_domain::Column::Domain.eq(&domain))
-                .one(&*tx)
-                .await?;
-            if exists.is_some() {
-                return Err(SsoError::invalid(
-                    "domain",
-                    "domain has already been added to this connection",
-                ));
-            }
-            loaded
-        };
+        let loaded = self.load(uow, connection).await?;
+        let exists = sso_domain::Model::query()
+            .where_(sso_domain::Model::CONNECTION_ID.eq(loaded.model.id))
+            .where_(sso_domain::Model::DOMAIN.eq(domain.as_str()))
+            .exists(uow)
+            .await?;
+        if exists {
+            return Err(SsoError::invalid(
+                "domain",
+                "domain has already been added to this connection",
+            ));
+        }
         let now = self.now();
-        let row = sso_domain::ActiveModel {
-            id: Set(Uuid::now_v7()),
-            connection_id: Set(loaded.model.id),
-            domain: Set(domain),
-            token: Set(random_token(32)),
-            verified_at: Set(None),
-            created_at: Set(now),
-            updated_at: Set(now),
+        let row = sso_domain::Model {
+            id: Uuid::now_v7(),
+            connection_id: loaded.model.id,
+            domain,
+            token: random_token(32),
+            verified_at: None,
+            created_at: now,
+            updated_at: now,
         };
-        Ok(self.present_domain(Repo::<sso_domain::Entity>::insert(uow, row).await?))
+        Ok(self.present_domain(store::insert(uow, row).await?))
     }
 
-    async fn find_domain<C: ConnectionTrait>(
-        conn: &C,
+    async fn find_domain<E: Executor + ?Sized>(
+        exec: &E,
         id: Uuid,
     ) -> Result<sso_domain::Model, SsoError> {
-        sso_domain::Entity::find_by_id(id)
-            .one(conn)
+        sso_domain::Model::find(exec, id)
             .await?
+            .map(Record::into_inner)
             .ok_or(SsoError::DomainNotFound)
     }
 
@@ -831,7 +813,7 @@ impl Sso {
     /// [`SsoError::DomainTaken`] when another connection verified it first.
     /// Emits [`SsoDomainVerified`] after the commit.
     pub async fn verify_domain(&self, uow: &Uow, id: Uuid) -> Result<SsoDomain, SsoError> {
-        let domain = Self::find_domain(&*uow.tx().await?, id).await?;
+        let domain = Self::find_domain(uow, id).await?;
         if domain.verified_at.is_some() {
             return Ok(self.present_domain(domain));
         }
@@ -846,7 +828,7 @@ impl Sso {
     /// Marks a domain verified in `uow` without a DNS lookup (operators,
     /// seeders and tests).
     pub async fn mark_domain_verified(&self, uow: &Uow, id: Uuid) -> Result<SsoDomain, SsoError> {
-        let domain = Self::find_domain(&*uow.tx().await?, id).await?;
+        let domain = Self::find_domain(uow, id).await?;
         if domain.verified_at.is_some() {
             return Ok(self.present_domain(domain));
         }
@@ -858,13 +840,13 @@ impl Sso {
         uow: &Uow,
         domain: sso_domain::Model,
     ) -> Result<SsoDomain, SsoError> {
-        let taken = sso_domain::Entity::find()
-            .filter(sso_domain::Column::Domain.eq(&domain.domain))
-            .filter(sso_domain::Column::Id.ne(domain.id))
-            .filter(sso_domain::Column::VerifiedAt.is_not_null())
-            .one(&*uow.tx().await?)
+        let taken = sso_domain::Model::query()
+            .where_(sso_domain::Model::DOMAIN.eq(domain.domain.as_str()))
+            .where_(sso_domain::Model::ID.ne(domain.id))
+            .where_not_null(sso_domain::Model::VERIFIED_AT)
+            .exists(uow)
             .await?;
-        if taken.is_some() {
+        if taken {
             return Err(SsoError::DomainTaken(domain.domain));
         }
         let now = self.now();
@@ -872,38 +854,39 @@ impl Sso {
             connection_id: domain.connection_id,
             domain: domain.domain.clone(),
         };
-        let row = sso_domain::ActiveModel {
-            id: Unchanged(domain.id),
-            verified_at: Set(Some(now)),
-            updated_at: Set(now),
-            ..Default::default()
-        };
-        let model = Repo::<sso_domain::Entity>::update(uow, row).await?;
+        let model: sso_domain::Model = store::update(
+            uow,
+            domain.id,
+            vec![
+                sso_domain::Model::VERIFIED_AT.set(now),
+                sso_domain::Model::UPDATED_AT.set(now),
+            ],
+        )
+        .await?;
         self.emit_after_commit(uow, event).await;
         Ok(self.present_domain(model))
     }
 
     /// Removes a domain in `uow`.
     pub async fn remove_domain(&self, uow: &Uow, id: Uuid) -> Result<(), SsoError> {
-        let domain = Self::find_domain(&*uow.tx().await?, id).await?;
-        Repo::<sso_domain::Entity>::delete(uow, domain).await?;
+        let domain = Self::find_domain(uow, id).await?;
+        store::delete(uow, domain).await?;
         Ok(())
     }
 
     /// The enabled connection whose verified domain is `domain`.
     async fn connection_for_domain(&self, domain: &str) -> Result<Option<Loaded>, SsoError> {
-        let reader = self.db.reader().await;
-        let verified = sso_domain::Entity::find()
-            .filter(sso_domain::Column::Domain.eq(domain))
-            .filter(sso_domain::Column::VerifiedAt.is_not_null())
-            .one(&reader)
+        let verified = sso_domain::Model::query()
+            .where_(sso_domain::Model::DOMAIN.eq(domain))
+            .where_not_null(sso_domain::Model::VERIFIED_AT)
+            .first(&self.db)
             .await?;
         let Some(verified) = verified else {
             return Ok(None);
         };
-        let Some(model) = sso_connection::Entity::find_by_id(verified.connection_id)
-            .one(&reader)
+        let Some(model) = sso_connection::Model::find(&self.db, verified.connection_id)
             .await?
+            .map(Record::into_inner)
         else {
             return Ok(None);
         };
@@ -999,7 +982,7 @@ impl Sso {
         if let Some(return_to) = &return_to {
             check_return_to(return_to)?;
         }
-        let loaded = Self::enabled(self.load(&self.db.reader().await, key).await?)?;
+        let loaded = Self::enabled(self.load(&self.db, key).await?)?;
         let relay = random_token(32);
         let now = self.now();
         let ttl = self.options.state_ttl_secs;
@@ -1078,7 +1061,7 @@ impl Sso {
 
     /// The service provider metadata XML of SAML connection `key`.
     pub async fn saml_metadata(&self, key: &str) -> Result<String, SsoError> {
-        let loaded = self.load(&self.db.reader().await, key).await?;
+        let loaded = self.load(&self.db, key).await?;
         if loaded.settings.protocol() != Protocol::Saml {
             return Err(SsoError::UnknownConnection(key.to_owned()));
         }
@@ -1160,7 +1143,7 @@ impl Sso {
         relay_state: Option<&str>,
         meta: &ClientMeta,
     ) -> Result<SsoSignIn, SsoError> {
-        let loaded = Self::enabled(self.load(&self.db.reader().await, key).await?)?;
+        let loaded = Self::enabled(self.load(&self.db, key).await?)?;
         let ConnectionSettings::Saml(saml) = &loaded.settings else {
             return Err(SsoError::UnknownConnection(key.to_owned()));
         };
@@ -1245,7 +1228,7 @@ impl Sso {
         callback: &OidcCallback,
         meta: &ClientMeta,
     ) -> Result<SsoSignIn, SsoError> {
-        let loaded = Self::enabled(self.load(&self.db.reader().await, key).await?)?;
+        let loaded = Self::enabled(self.load(&self.db, key).await?)?;
         let ConnectionSettings::Oidc(settings) = &loaded.settings else {
             return Err(SsoError::UnknownConnection(key.to_owned()));
         };
@@ -1329,7 +1312,7 @@ impl Sso {
         profile: SsoProfile,
         meta: &ClientMeta,
     ) -> Result<SsoSignIn, SsoError> {
-        let loaded = Self::enabled(self.load(&self.db.reader().await, key).await?)?;
+        let loaded = Self::enabled(self.load(&self.db, key).await?)?;
         self.finish(&loaded, profile, None, None, meta).await
     }
 
@@ -1387,51 +1370,46 @@ impl Sso {
     ) -> Result<(User, bool), SsoError> {
         let now = self.now();
         let connection_id = loaded.model.id;
-        let identity = {
-            let tx = uow.tx().await?;
-            sso_identity::Entity::find()
-                .filter(sso_identity::Column::ConnectionId.eq(connection_id))
-                .filter(sso_identity::Column::Subject.eq(&profile.subject))
-                .one(&*tx)
-                .await?
-        };
+        let identity = sso_identity::Model::query()
+            .where_(sso_identity::Model::CONNECTION_ID.eq(connection_id))
+            .where_(sso_identity::Model::SUBJECT.eq(profile.subject.as_str()))
+            .first(uow)
+            .await?
+            .map(Record::into_inner);
         let attributes = profile.attributes.to_string();
         let (user, created) = match identity {
             Some(identity) => {
-                let user = {
-                    let tx = uow.tx().await?;
-                    user::Entity::find_by_id(identity.user_id).one(&*tx).await?
-                }
-                .ok_or_else(|| SsoError::Config("a linked user is missing".to_owned()))?;
-                let row = sso_identity::ActiveModel {
-                    id: Unchanged(identity.id),
-                    email: Set(profile.email.clone().or(identity.email)),
-                    attributes: Set(attributes),
-                    last_login_at: Set(now),
-                    updated_at: Set(now),
-                    ..Default::default()
-                };
-                Repo::<sso_identity::Entity>::update(uow, row).await?;
+                let user = User::find(uow, identity.user_id)
+                    .await?
+                    .map(Record::into_inner)
+                    .ok_or_else(|| SsoError::Config("a linked user is missing".to_owned()))?;
+                store::update::<sso_identity::Model>(
+                    uow,
+                    identity.id,
+                    vec![
+                        sso_identity::Model::EMAIL.set(profile.email.clone().or(identity.email)),
+                        sso_identity::Model::ATTRIBUTES.set(attributes),
+                        sso_identity::Model::LAST_LOGIN_AT.set(now),
+                        sso_identity::Model::UPDATED_AT.set(now),
+                    ],
+                )
+                .await?;
                 (user, false)
             }
             None => {
                 let email = profile.email.clone().ok_or(SsoError::MissingEmail)?;
                 let domain = profile.email_domain().unwrap_or_default();
-                let (verified, existing) = {
-                    let tx = uow.tx().await?;
-                    let verified = sso_domain::Entity::find()
-                        .filter(sso_domain::Column::ConnectionId.eq(connection_id))
-                        .filter(sso_domain::Column::Domain.eq(&domain))
-                        .filter(sso_domain::Column::VerifiedAt.is_not_null())
-                        .one(&*tx)
-                        .await?
-                        .is_some();
-                    let existing = user::Entity::find()
-                        .filter(user::Column::Email.eq(&email))
-                        .one(&*tx)
-                        .await?;
-                    (verified, existing)
-                };
+                let verified = sso_domain::Model::query()
+                    .where_(sso_domain::Model::CONNECTION_ID.eq(connection_id))
+                    .where_(sso_domain::Model::DOMAIN.eq(domain.as_str()))
+                    .where_not_null(sso_domain::Model::VERIFIED_AT)
+                    .exists(uow)
+                    .await?;
+                let existing = User::query()
+                    .where_(User::EMAIL.eq(email.as_str()))
+                    .first(uow)
+                    .await?
+                    .map(Record::into_inner);
                 // The identity provider vouches for the email only within
                 // the connection's verified domains, and an account links
                 // only when its owner proved the address too (an account
@@ -1447,18 +1425,18 @@ impl Sso {
                     }
                     None => (self.create_user(uow, profile, &email, trusted).await?, true),
                 };
-                let row = sso_identity::ActiveModel {
-                    id: Set(Uuid::now_v7()),
-                    connection_id: Set(connection_id),
-                    user_id: Set(user.id),
-                    subject: Set(profile.subject.clone()),
-                    email: Set(Some(email)),
-                    attributes: Set(attributes),
-                    last_login_at: Set(now),
-                    created_at: Set(now),
-                    updated_at: Set(now),
+                let row = sso_identity::Model {
+                    id: Uuid::now_v7(),
+                    connection_id,
+                    user_id: user.id,
+                    subject: profile.subject.clone(),
+                    email: Some(email),
+                    attributes,
+                    last_login_at: now,
+                    created_at: now,
+                    updated_at: now,
                 };
-                Repo::<sso_identity::Entity>::insert(uow, row).await?;
+                store::insert(uow, row).await?;
                 if created {
                     let mut audit = AuditEntry::new(AuditKind::Auth, "auth.register")
                         .actor(user.id)
@@ -1505,19 +1483,20 @@ impl Sso {
             .name
             .clone()
             .unwrap_or_else(|| email.split('@').next().unwrap_or(email).to_owned());
-        let row = user::ActiveModel {
-            id: Set(Uuid::now_v7()),
-            name: Set(name),
-            email: Set(email.to_owned()),
-            password_hash: Set(password_hash),
-            email_verified_at: Set(verified.then_some(now)),
-            two_factor_secret: Set(None),
-            two_factor_recovery_codes: Set(None),
-            two_factor_confirmed_at: Set(None),
-            created_at: Set(now),
-            updated_at: Set(now),
+        let row = User {
+            id: Uuid::now_v7(),
+            name,
+            email: email.to_owned(),
+            password_hash,
+            email_verified_at: verified.then_some(now),
+            two_factor_secret: None,
+            two_factor_recovery_codes: None,
+            two_factor_confirmed_at: None,
+            created_at: now,
+            updated_at: now,
         };
-        Ok(Repo::<user::Entity>::insert(uow, row).await?)
+        // Recorded without the password hash (`User` never serializes it).
+        Ok(navree_auth::user::insert(uow, row).await?)
     }
 
     /// An Argon2id PHC string with the hasher's parameters whose digest is
@@ -1733,7 +1712,7 @@ impl Sso {
         let uow = self.db.uow(None, request_id).await;
         match uow.scope(f(uow.clone())).await {
             Ok(value) => {
-                uow.commit().await?;
+                uow.commit().await.map_err(DbError::from)?;
                 Ok(value)
             }
             Err(error) => {
