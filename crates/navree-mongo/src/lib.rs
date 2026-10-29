@@ -131,7 +131,7 @@
 //!
 //! The suite checks the generated commands without a server and runs the
 //! rest against `NAVREE_TEST_MONGODB_URL` (a replica set, e.g.
-//! `mongodb://127.0.0.1:57017/navree_test?replicaSet=rs0` from
+//! `mongodb://127.0.0.1:45017/navree_test?replicaSet=rs0` from
 //! `scripts/dev-databases.ps1`), each test in a database of its own.
 #![forbid(unsafe_code)]
 

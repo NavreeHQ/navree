@@ -1,6 +1,6 @@
 //! The MongoDB server of the integration tests: `NAVREE_TEST_MONGODB_URL`
 //! (a replica set, so transactions work: e.g.
-//! `mongodb://127.0.0.1:57017/navree_test?replicaSet=rs0`). Each test gets a
+//! `mongodb://127.0.0.1:45017/navree_test?replicaSet=rs0`). Each test gets a
 //! database of its own, dropped when it ends. Without the variable, the
 //! tests that need a server print a notice and pass, unless
 //! `NAVREE_TEST_REQUIRE_SERVICES=1` makes them fail.
