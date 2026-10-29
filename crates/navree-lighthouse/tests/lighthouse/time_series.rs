@@ -1,10 +1,9 @@
 //! Lighthouse's events are time series: samples, occurrences and aggregates
 //! are TimescaleDB hypertables (see the facade's `time_series` suite),
-//! regular tables with time indexes here.
+//! regular tables with time indexes elsewhere.
 
 use navree_db::navree_schema::{IndexKind, Schema};
-use navree_db::{Db, MIGRATIONS_TABLE};
-use sea_orm::{ConnectionTrait, Statement};
+use navree_db::{Db, Executor, MIGRATIONS_TABLE, Statement};
 
 use crate::support::builder;
 
@@ -13,17 +12,13 @@ async fn samples_occurrences_and_aggregates_are_declared_hypertables() {
     let app = builder().build().await;
     let db = app.get::<Db>().await;
     let applied: Vec<String> = db
-        .conn()
-        .query_all_raw(Statement::from_string(
-            db.backend(),
-            format!(
-                "SELECT name FROM {MIGRATIONS_TABLE} WHERE module = 'lighthouse' ORDER BY name"
-            ),
-        ))
+        .fetch_all(&Statement::text(format!(
+            "SELECT name FROM {MIGRATIONS_TABLE} WHERE module = 'lighthouse' ORDER BY name"
+        )))
         .await
         .unwrap()
         .iter()
-        .map(|row| row.try_get::<String>("", "name").unwrap())
+        .map(|row| row.get::<String>("name").unwrap())
         .collect();
     assert_eq!(
         applied,
@@ -33,12 +28,13 @@ async fn samples_occurrences_and_aggregates_are_declared_hypertables() {
         ]
     );
     let schema = Schema::new(&db);
+    let timescale = schema.target().await.unwrap().timescaledb().is_some();
     for (table, time) in [
         ("lighthouse_samples", "at"),
         ("lighthouse_occurrences", "at"),
         ("lighthouse_aggregates", "bucket"),
     ] {
-        assert!(!schema.is_hypertable(table).await.unwrap());
+        assert_eq!(schema.is_hypertable(table).await.unwrap(), timescale);
         assert!(
             schema
                 .has_index(table, [time], Some(IndexKind::Index))

@@ -480,15 +480,14 @@ impl Runtime {
                     .map(|step| change_row(run_id, step, ChangeStatus::Applied, None, now))
                     .collect();
                 if !rows.is_empty() {
-                    let tx = uow.tx().await?;
-                    models::RunChange::query().insert(&*tx, rows).await?;
+                    models::RunChange::query().insert(&uow, rows).await?;
                 }
                 Ok::<_, DirectoryError>(())
             })
             .await;
         match together {
             Ok(()) => {
-                uow.commit().await?;
+                uow.commit().await.map_err(navree_db::DbError::from)?;
                 *recorded = (*recorded + chunk.len()).min(max);
                 return Ok(0);
             }
@@ -507,17 +506,15 @@ impl Runtime {
             match result {
                 Ok(()) => {
                     if *recorded < max {
-                        let tx = uow.tx().await?;
                         models::RunChange::query()
                             .insert(
-                                &*tx,
+                                &uow,
                                 [change_row(run_id, step, ChangeStatus::Applied, None, now)],
                             )
                             .await?;
-                        drop(tx);
                         *recorded += 1;
                     }
-                    uow.commit().await?;
+                    uow.commit().await.map_err(navree_db::DbError::from)?;
                 }
                 Err(error) => {
                     failures += 1;
@@ -593,10 +590,9 @@ impl Runtime {
         let error = outcome.error.clone();
         let row = self
             .housekeeping(|uow: Uow| async move {
-                let tx = uow.tx().await?;
                 let mut record = models::Run::query()
                     .where_(models::Run::ID.eq(run_id))
-                    .first(&*tx)
+                    .first(&uow)
                     .await?
                     .ok_or(DirectoryError::RunNotFound)?;
                 record.status = outcome.status.as_str().to_owned();
@@ -607,7 +603,7 @@ impl Runtime {
                 record.error = outcome.error.clone();
                 record.note = None;
                 record.finished_at = Some(now);
-                record.save(&*tx).await?;
+                record.save(&uow).await?;
                 if let Some(connection) = &connection_row {
                     let mut assignments = vec![
                         models::Connection::LAST_RUN_ID.set(Some(run_id)),
@@ -624,11 +620,10 @@ impl Runtime {
                     }
                     models::Connection::query()
                         .where_(models::Connection::ID.eq(connection.id))
-                        .update(&*tx, assignments)
+                        .update(&uow, assignments)
                         .await?;
                 }
                 uow.mark_modified();
-                drop(tx);
                 if let (Some(connection), Some(owner)) = (&connection_row, event_owner) {
                     self.emit_after_commit(
                         &uow,

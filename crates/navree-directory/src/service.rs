@@ -301,12 +301,10 @@ impl Directory {
         let row = rt
             .write(input.created_by, |uow| async move {
                 {
-                    let tx = uow.tx().await?;
                     let mut record = Record::new(row);
-                    record.save(&*tx).await?;
+                    record.save(&uow).await?;
                     uow.mark_modified();
                     let row = record.into_inner();
-                    drop(tx);
                     runtime
                         .audit_after_commit(&uow, "directory.connection_created", &row, json!({}))
                         .await;
@@ -377,16 +375,14 @@ impl Directory {
         let runtime = rt.clone();
         let row = rt
             .write(None, |uow| async move {
-                let tx = uow.tx().await?;
                 let mut record = models::Connection::query()
                     .where_(models::Connection::ID.eq(row.id))
-                    .first(&*tx)
+                    .first(&uow)
                     .await?
                     .ok_or(DirectoryError::ConnectionNotFound)?;
                 *record = row;
-                record.save(&*tx).await?;
+                record.save(&uow).await?;
                 uow.mark_modified();
-                drop(tx);
                 let row = record.into_inner();
                 runtime
                     .audit_after_commit(
@@ -502,11 +498,10 @@ impl Directory {
         let now = rt.now();
         let runtime = rt.clone();
         rt.write(None, |uow| async move {
-            let tx = uow.tx().await?;
             models::Connection::query()
                 .where_(models::Connection::ID.eq(row.id))
                 .update(
-                    &*tx,
+                    &uow,
                     [
                         models::Connection::SCIM_TOKEN_HASH.set(Some(hash)),
                         models::Connection::SCIM_TOKEN_HINT.set(Some(token_hint)),
@@ -515,7 +510,6 @@ impl Directory {
                 )
                 .await?;
             uow.mark_modified();
-            drop(tx);
             runtime
                 .audit_after_commit(&uow, "directory.scim_token_rotated", &row, json!({}))
                 .await;
@@ -588,10 +582,9 @@ impl Directory {
                         .dispatch(&uow, &record, job)
                         .await
                         .map_err(|e| DirectoryError::Queue(e.to_string()))?;
-                    let tx = uow.tx().await?;
                     models::Run::query()
                         .where_(models::Run::ID.eq(run.id))
-                        .update(&*tx, [models::Run::OPERATION_ID.set(Some(record.id))])
+                        .update(&uow, [models::Run::OPERATION_ID.set(Some(record.id))])
                         .await?;
                     run.operation_id = Some(record.id);
                 } else if let Some(dispatcher) = app.try_get::<dyn Dispatcher>().await {
@@ -901,9 +894,8 @@ impl Runtime {
             started_at: None,
             finished_at: None,
         };
-        let tx = uow.tx().await?;
         let mut record = Record::new(run);
-        record.save(&*tx).await?;
+        record.save(uow).await?;
         uow.mark_modified();
         Ok(run_view(&record.into_inner()))
     }
@@ -911,22 +903,21 @@ impl Runtime {
 
 /// Deletes a connection's rows in `uow`.
 async fn delete_rows(uow: &Uow, row: &models::Connection) -> Result<(), DirectoryError> {
-    let tx = uow.tx().await?;
     models::Membership::query()
         .where_(models::Membership::CONNECTION_ID.eq(row.id))
-        .delete(&*tx)
+        .delete(uow)
         .await?;
     models::User::query()
         .where_(models::User::CONNECTION_ID.eq(row.id))
-        .delete(&*tx)
+        .delete(uow)
         .await?;
     models::Group::query()
         .where_(models::Group::CONNECTION_ID.eq(row.id))
-        .delete(&*tx)
+        .delete(uow)
         .await?;
     let run_ids: Vec<Uuid> = models::Run::query()
         .where_(models::Run::CONNECTION_ID.eq(row.id))
-        .get(&*tx)
+        .get(uow)
         .await?
         .into_models()
         .into_iter()
@@ -935,16 +926,16 @@ async fn delete_rows(uow: &Uow, row: &models::Connection) -> Result<(), Director
     for chunk in run_ids.chunks(500) {
         models::RunChange::query()
             .where_(models::RunChange::RUN_ID.is_in(chunk.iter().copied()))
-            .delete(&*tx)
+            .delete(uow)
             .await?;
     }
     models::Run::query()
         .where_(models::Run::CONNECTION_ID.eq(row.id))
-        .delete(&*tx)
+        .delete(uow)
         .await?;
     models::Connection::query()
         .where_(models::Connection::ID.eq(row.id))
-        .delete(&*tx)
+        .delete(uow)
         .await?;
     uow.mark_modified();
     Ok(())

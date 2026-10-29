@@ -14,5 +14,6 @@ mod mcp;
 mod module;
 mod orm;
 mod recording;
+mod servers;
 mod statuses;
 mod time_series;

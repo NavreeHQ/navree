@@ -57,8 +57,6 @@ navree-workspace = { workspace = true }
 percent-encoding = { workspace = true }
 # XLSX writing.
 rust_xlsxwriter = { workspace = true }
-sea-orm = { workspace = true }
-sea-orm-migration = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }

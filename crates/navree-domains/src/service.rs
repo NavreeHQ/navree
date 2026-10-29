@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use chrono::{DateTime, TimeDelta, Utc};
 use navree_db::Uow;
-use navree_db::sea_orm::TransactionTrait as _;
 use navree_kernel::AppContext;
 use navree_orm::{Assignment, Model as _, Record};
 use rand::RngExt as _;
@@ -17,6 +16,7 @@ use crate::host::{is_within, normalize_host};
 use crate::options::{DomainsOptions, TlsMode};
 use crate::provider::RecordKind;
 use crate::runtime::Runtime;
+use crate::savepoint::Savepoint;
 use crate::types::{CustomDomain, DnsInstruction, DomainStatus, NewDomain, TlsStatus};
 use crate::verify::{self, Routing, txt_name};
 use crate::{CurrentDomain, DomainCertificates, DomainsError, models};
@@ -230,16 +230,14 @@ impl Domains {
         let event = view.clone();
         let inserted = rt
             .write(input.created_by, |uow| async move {
-                let tx = uow.tx().await?;
                 if let Some(old) = replaced {
                     models::Domain::query()
                         .where_(models::Domain::ID.eq(old))
-                        .delete(&*tx)
+                        .delete(&uow)
                         .await?;
                 }
-                Record::new(row).save(&*tx).await?;
+                Record::new(row).save(&uow).await?;
                 uow.mark_modified();
-                drop(tx);
                 runtime
                     .emit_after_commit(
                         &uow,
@@ -364,14 +362,13 @@ impl Domains {
         let runtime = rt.clone();
         let stored = rt
             .write(None, |uow| async move {
-                let tx = uow.tx().await?;
                 if created {
-                    Record::new(saved).save(&*tx).await?;
+                    Record::new(saved).save(&uow).await?;
                 } else {
                     models::Domain::query()
                         .where_(models::Domain::ID.eq(saved.id))
                         .update(
-                            &*tx,
+                            &uow,
                             [
                                 models::Domain::STATUS.set(saved.status),
                                 models::Domain::VERIFICATION_TOKEN.set(saved.verification_token),
@@ -389,7 +386,6 @@ impl Domains {
                         .await?;
                 }
                 uow.mark_modified();
-                drop(tx);
                 if created {
                     runtime
                         .emit_after_commit(&uow, DomainAdded { domain: event })
@@ -669,12 +665,11 @@ impl Domains {
         let workspace = row.workspace_id;
         self.rt
             .write(None, |uow| async move {
-                let tx = uow.tx().await?;
                 models::Domain::query()
                     .where_(models::Domain::WORKSPACE_ID.eq(workspace))
                     .where_(models::Domain::IS_PRIMARY.eq(true))
                     .update(
-                        &*tx,
+                        &uow,
                         [
                             models::Domain::IS_PRIMARY.set(false),
                             models::Domain::UPDATED_AT.set(now),
@@ -684,7 +679,7 @@ impl Domains {
                 models::Domain::query()
                     .where_(models::Domain::ID.eq(id))
                     .update(
-                        &*tx,
+                        &uow,
                         [
                             models::Domain::IS_PRIMARY.set(true),
                             models::Domain::UPDATED_AT.set(now),
@@ -714,19 +709,17 @@ impl Domains {
         };
         self.rt
             .write(None, |uow| async move {
-                let tx = uow.tx().await?;
                 models::Domain::query()
                     .where_(models::Domain::ID.eq(id))
-                    .delete(&*tx)
+                    .delete(&uow)
                     .await?;
                 if held {
                     models::Certificate::query()
                         .where_(models::Certificate::HOST.eq(host))
-                        .delete(&*tx)
+                        .delete(&uow)
                         .await?;
                 }
                 uow.mark_modified();
-                drop(tx);
                 runtime.emit_after_commit(&uow, event).await;
                 Ok(())
             })
@@ -878,18 +871,16 @@ impl Domains {
         let saved = row.clone();
         let gave_up_reason = gave_up.clone();
         rt.write(None, |uow| async move {
-            let tx = uow.tx().await?;
             // Only the check's columns: a primary flag or a certificate
             // written meanwhile stays.
             let updated = models::Domain::query()
                 .where_(models::Domain::ID.eq(saved.id))
-                .update(&*tx, check_columns(&saved))
+                .update(&uow, check_columns(&saved))
                 .await?;
             if updated == 0 {
                 return Err(DomainsError::DomainNotFound);
             }
             uow.mark_modified();
-            drop(tx);
             if let Some(reason) = gave_up_reason {
                 runtime
                     .emit_after_commit(
@@ -941,38 +932,39 @@ impl Domains {
         let saved = row.clone();
         let outcome = rt
             .write(None, |uow| async move {
-                let tx = uow.tx().await?;
                 // A savepoint, so that losing the race leaves the unit of
                 // work (a request's, perhaps) usable on PostgreSQL.
-                let attempt = tx.begin().await?;
-                if let Some(old) = old_id {
+                let attempt = Savepoint::begin(&uow, "promote_domain").await?;
+                let claimed = async {
+                    if let Some(old) = old_id {
+                        models::Domain::query()
+                            .where_(models::Domain::ID.eq(old))
+                            .delete(&uow)
+                            .await?;
+                        models::Certificate::query()
+                            .where_(models::Certificate::HOST.eq(saved.host.clone()))
+                            .delete(&uow)
+                            .await?;
+                    }
+                    let mut columns = check_columns(&saved);
+                    columns.push(models::Domain::TLS_STATUS.set(saved.tls_status.clone()));
+                    columns.push(models::Domain::VERIFIED_HOST.set(Some(saved.host.clone())));
+                    columns.push(models::Domain::TRANSFER.set(false));
                     models::Domain::query()
-                        .where_(models::Domain::ID.eq(old))
-                        .delete(&attempt)
-                        .await?;
-                    models::Certificate::query()
-                        .where_(models::Certificate::HOST.eq(saved.host.clone()))
-                        .delete(&attempt)
-                        .await?;
+                        .where_(models::Domain::ID.eq(saved.id))
+                        .where_(models::Domain::STATUS.ne(DomainStatus::Verified.as_str()))
+                        .update(&uow, columns)
+                        .await
                 }
-                let mut columns = check_columns(&saved);
-                columns.push(models::Domain::TLS_STATUS.set(saved.tls_status.clone()));
-                columns.push(models::Domain::VERIFIED_HOST.set(Some(saved.host.clone())));
-                columns.push(models::Domain::TRANSFER.set(false));
-                let claimed = models::Domain::query()
-                    .where_(models::Domain::ID.eq(saved.id))
-                    .where_(models::Domain::STATUS.ne(DomainStatus::Verified.as_str()))
-                    .update(&attempt, columns)
-                    .await;
+                .await;
                 match claimed {
                     Ok(0) => {
                         attempt.rollback().await?;
                         Ok(Promotion::Already)
                     }
                     Ok(_) => {
-                        attempt.commit().await?;
+                        attempt.release().await?;
                         uow.mark_modified();
-                        drop(tx);
                         runtime
                             .emit_after_commit(
                                 &uow,
@@ -1058,12 +1050,11 @@ impl Domains {
         let event = view.clone();
         let id = closed.id;
         rt.write(None, |uow| async move {
-            let tx = uow.tx().await?;
             let updated = models::Domain::query()
                 .where_(models::Domain::ID.eq(id))
                 .where_(models::Domain::STATUS.eq(DomainStatus::Pending.as_str()))
                 .update(
-                    &*tx,
+                    &uow,
                     [
                         models::Domain::STATUS.set(DomainStatus::Failed.as_str()),
                         models::Domain::NEXT_CHECK_AT.set(None::<DateTime<Utc>>),
@@ -1077,7 +1068,7 @@ impl Domains {
                 models::Domain::query()
                     .where_(models::Domain::ID.eq(id))
                     .where_(models::Domain::STATUS.eq(DomainStatus::Failed.as_str()))
-                    .update(&*tx, [models::Domain::LAST_ERROR.set(Some(reason))])
+                    .update(&uow, [models::Domain::LAST_ERROR.set(Some(reason))])
                     .await?;
             } else {
                 runtime
@@ -1147,8 +1138,7 @@ impl Domains {
             return Ok(0);
         }
         rt.write(None, |uow| async move {
-            let tx = uow.tx().await?;
-            let deleted = stale().delete(&*tx).await?;
+            let deleted = stale().delete(&uow).await?;
             uow.mark_modified();
             Ok(deleted)
         })

@@ -2,8 +2,7 @@
 
 use http::StatusCode;
 use navree_crypto::CryptoError;
-use navree_db::sea_orm::sqlx::error::ErrorKind;
-use navree_db::sea_orm::{DbErr, RuntimeErr, SqlErr};
+use navree_db::DbError;
 use navree_http::AppError;
 use navree_kernel::KernelError;
 use navree_orm::OrmError;
@@ -72,7 +71,10 @@ pub enum DomainsError {
     Crypto(#[from] CryptoError),
     /// A database error.
     #[error("domains database error: {0}")]
-    Db(#[from] DbErr),
+    Db(#[from] DbError),
+    /// A model operation failed (a query, a write, a hook).
+    #[error("domains database error: {0}")]
+    Orm(#[from] OrmError),
     /// A provider the service needs could not be resolved.
     #[error("domains provider error: {0}")]
     Kernel(#[from] KernelError),
@@ -99,17 +101,10 @@ impl DomainsError {
     /// a unique index (a second claim on a host, a second row of a
     /// workspace for one host).
     pub(crate) fn is_unique_violation(&self) -> bool {
-        let DomainsError::Db(error) = self else {
-            return false;
-        };
-        if matches!(error.sql_err(), Some(SqlErr::UniqueConstraintViolation(_))) {
-            return true;
-        }
-        match error {
-            DbErr::Exec(RuntimeErr::SqlxError(error))
-            | DbErr::Query(RuntimeErr::SqlxError(error)) => error
-                .as_database_error()
-                .is_some_and(|error| matches!(error.kind(), ErrorKind::UniqueViolation)),
+        match self {
+            DomainsError::Db(error) | DomainsError::Orm(OrmError::Db(error)) => {
+                error.is_unique_violation()
+            }
             _ => false,
         }
     }
@@ -151,6 +146,7 @@ impl DomainsError {
                     "The certificate for {host} could not be issued: {reason}"
                 )),
             DomainsError::Db(error) => return navree_db::map_db_error(error),
+            DomainsError::Orm(error) => return map_orm_error(error),
             DomainsError::Certificate(_)
             | DomainsError::NotBound
             | DomainsError::Config(_)
@@ -178,10 +174,13 @@ fn capitalize(text: &str) -> String {
     }
 }
 
-/// The ORM's errors are database errors (`Db`), mapped the same way.
-impl From<OrmError> for DomainsError {
-    fn from(error: OrmError) -> Self {
-        DomainsError::Db(DbErr::from(error))
+/// The response of an ORM error: a missing record is a 404, a unique or
+/// foreign-key violation a 409, anything else a 500.
+fn map_orm_error(error: &OrmError) -> Option<AppError> {
+    match error {
+        OrmError::Db(db) => navree_db::map_db_error(db),
+        OrmError::ModelNotFound { .. } => Some(AppError::not_found()),
+        _ => None,
     }
 }
 

@@ -396,6 +396,8 @@ Register it with `m.listen::<DomainVerified, DomainLog>()` in your module.
 | `dns_provider_failed` | 502 | The DNS provider refused a change |
 | `certificate_not_issued` | 502 | The ACME CA refused the order |
 
+A database error (`DomainsError::Db`, and `DomainsError::Orm` for model operations) answers as navree-db maps it: 409 for a unique or foreign-key violation, 404 for a missing record, otherwise a 500 whose details are logged. Proving control inside a request's unit of work uses a savepoint, so losing the race to another claim leaves the request's transaction usable on every database.
+
 ## Commands
 
 ```sh

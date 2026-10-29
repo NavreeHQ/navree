@@ -12,14 +12,13 @@ use http::Method;
 use navree_access::{AbilityCtx, AccessModule, AccessOptions, AccessService, Rules};
 use navree_auth::{AuthModule, AuthService, ClientMeta};
 use navree_crypto::CryptoModule;
-use navree_db::{DatabaseModule, Db};
+use navree_db::{DatabaseModule, Db, Executor, Statement};
 use navree_http::{AppError, Controller, ModuleBuilderHttpExt, NoContent, RouteDef};
 use navree_kernel::{
     BoxFuture, Injectable, KernelError, Module, ModuleBuilder, ProviderKey, Resolver,
 };
 use navree_lighthouse::{Lighthouse, LighthouseModule, LighthouseStore, Report};
 use navree_testing::{TestApp, TestAppBuilder};
-use sea_orm::ConnectionTrait;
 use serde_json::Value;
 use uuid::Uuid;
 
@@ -89,13 +88,10 @@ impl Controller for DemoController {
             RouteDef::on(Method::GET, "/query", move || {
                 let this = query.clone();
                 async move {
-                    let conn = this.db.conn();
-                    conn.query_all_raw(sea_orm::Statement::from_string(
-                        conn.get_database_backend(),
-                        "SELECT 1 WHERE 1 = 1",
-                    ))
-                    .await
-                    .map_err(AppError::internal)?;
+                    this.db
+                        .fetch_all(&Statement::text("SELECT 1 WHERE 1 = 1"))
+                        .await
+                        .map_err(AppError::internal)?;
                     Ok::<_, AppError>("queried")
                 }
             })
@@ -143,8 +139,7 @@ fn abilities(ctx: &AbilityCtx, rules: &mut Rules) {
 /// the super-admin role `admin`, the demo routes, and Lighthouse
 /// configured from `lighthouse.*`.
 pub fn builder() -> TestAppBuilder {
-    TestApp::builder()
-        .temp_database()
+    crate::servers::database(TestApp::builder())
         .config("http.per_ip_rate_limit", Value::Null)
         .config("app.key", navree_crypto::generate_key())
         .config("app.url", "https://api.acme.test")

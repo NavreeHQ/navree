@@ -1,5 +1,6 @@
 //! navree-directory's integration tests: one binary, one module per area.
 
+mod flow;
 mod ldap_server;
 mod routes;
 mod scim;

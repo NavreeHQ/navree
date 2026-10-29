@@ -11,7 +11,8 @@ publish.workspace = true
 workspace = true
 
 [features]
-# The database drivers of the gated server tests (`tests/directory/servers.rs`).
+# The test suite on PostgreSQL / MySQL (`NAVREE_TEST_DATABASE=postgres` or `mysql`, with
+# NAVREE_TEST_POSTGRES_URL / NAVREE_TEST_MYSQL_URL).
 postgres = ["navree-db/postgres"]
 mysql = ["navree-db/mysql"]
 
