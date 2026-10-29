@@ -420,14 +420,14 @@ impl PostsController {
 For a `from` route, the authorizer:
 
 1. runs the type-level check;
-2. loads the record by its primary key in the request's unit of work, with `SELECT ... FOR UPDATE` on PostgreSQL (on SQLite the write transaction already serialises writers). The test suite runs on SQLite, so the `FOR UPDATE` load hasn't run against PostgreSQL yet;
+2. loads the record by its primary key in the request's unit of work, with `SELECT ... FOR UPDATE` on PostgreSQL and MySQL (on SQLite the write transaction already serialises writers);
 3. answers 404 when there is no such record, or when the id can't be one (not a UUID for a UUID key, say);
 4. checks the rules against the record, and answers 403 when they say no;
 5. keeps the record for the handler.
 
 `Authorized<E, A>` dereferences to the model and has `into_inner()`, `model()`, `record()` (the JSON the conditions saw), `ability()` and `check_fields(..)`. The extractor must match the route: `Authorized<Post, Update>` on a route without `#[can(Update, Post, from = ..)]` is a 500 that says so. So is a `from` route for a subject registered without `for_feature`.
 
-Conditions see the record as JSON with one member per column, named like the column. UUIDs are hyphenated lower-case strings, timestamps RFC 3339 UTC strings with microseconds, and dates `YYYY-MM-DD`; `navree::access::record_json(&model)` builds the same JSON.
+Conditions see the record as JSON with one member per column, named like the column. UUIDs are hyphenated lower-case strings, timestamps RFC 3339 UTC strings with microseconds, and dates `YYYY-MM-DD`. The same JSON comes from `navree::orm::access::record_json(&record)` for an ORM model (`ability.authorize(Update, &record)` checks one directly), `navree::access::row_json(&row)` for a navree-db record, and `navree::access::record_json(&model)` for a SeaORM entity's model.
 
 <Callout type="warning" title="Soft-deleted records">
 
@@ -474,7 +474,7 @@ Code that shouldn't depend on navree-access asks `navree::contracts::permitted(&
 
 ## List filters in SQL
 
-A list endpoint must return only the rows the user may see, and it must agree with the record check, or users see records they then can't open. `Accessible<E, A>` compiles the same rules into one SQL `CASE` expression, so a row is listed exactly when `can(A, E, row)` would be true. Apply it to a SeaORM `Select`, as the `index` route above does. The CRM lists deals the same way:
+A list endpoint must return only the rows the user may see, and it must agree with the record check, or users see records they then can't open. `Accessible<E, A>` compiles the same rules into one SQL `CASE` expression, so a row is listed exactly when `can(A, E, row)` would be true. For an ORM model, `AccessibleQuery` (in `navree::orm::access`) applies it to the model's queries: `scope.query()` starts a query of the rows the user may see, `scope.apply(query)` narrows one you have. The CRM lists deals this way:
 
 ```rust title="apps/crm-api/crates/crm-deals/src/service.rs"
 pub async fn list(
@@ -484,10 +484,12 @@ pub async fn list(
     filter: DealFilter,
     page: PageQuery,
 ) -> Result<Page<DealResource>> {
-    let mut select = scope.apply(deal::Entity::find());
-    if let Some(stage) = filter.stage {
-        select = select.filter(deal::Column::Stage.eq(stage));
-    }
+    let page = scope
+        .apply(Deal::query())
+        .when_some(filter.stage, |query, stage| query.in_stage(stage))
+        // ...
+        .paginate(uow, page)
+        .await?;
     // ...
 }
 ```
@@ -502,9 +504,21 @@ CASE WHEN ("deals"."stage" IN ('won', 'lost')) THEN FALSE
 
 An unconditional rule turns into the `ELSE` (a rep reads every deal, so their read filter is `TRUE`), and an action with no rules into `FALSE`. The filter never yields `NULL`, so it is safe to negate.
 
-- Columns are qualified with the entity's table, and values are bound with the column's type, so UUID and timestamp columns compare like the stored values. A rule field that isn't a column of the entity is SQL `NULL`, as it is `null` in a record check.
-- The SQL is written for PostgreSQL and for SQLite 3.39 or newer. The tests run it on SQLite and only check the PostgreSQL form as generated text. ORM models' `accessible` filters are written by the ORM for each database, MySQL included, and run on all three in its tests. String comparisons agree with record checks under binary collation: SQLite's default, and `COLLATE "C"` on PostgreSQL.
-- `Accessible::condition()` returns the expression for queries you build yourself, and `ability.sql_filter_with(action, subject, &columns)` takes your own `SqlColumns` mapping (for joins or renamed columns). `ability.sql_filter(action, subject)` uses bare column names.
+- Columns are qualified with the model's table, and values are bound with the column's type, so UUID and timestamp columns compare like the stored values, and numbers are bound as the column's integer or float whatever the rule's JSON says (`3` or `3.5`; `amount > 3.5` on an integer column is `amount > 3`). A rule field that isn't a column is SQL `NULL`, as it is `null` in a record check.
+- The filter is written for the query's database: `ne` is null-safe on each (`IS DISTINCT FROM` on PostgreSQL, `NOT (a <=> b)` on MySQL, `IS NOT` on SQLite). The tests check that record checks and list filters agree on random rule sets on all three. String comparisons agree with record checks under binary collation: SQLite's default, `COLLATE "C"` on PostgreSQL, a binary collation on MySQL.
+- For queries the ORM doesn't build (a navree-db record, a report written in SQL), `scope.sql_filter(&columns)` compiles the filter with a column mapping (`TypedColumns` names the table and each column's type, or implement `SqlColumns` for joins or renamed columns) and `.to_statement(backend)` writes it as a portable fragment, SQL with `?` placeholders and its values. `ability.sql_filter_with(action, subject, &columns)` does the same from an `Ability`.
+
+```rust
+use navree::access::{Accessible, Read, TypedColumns};
+use navree::db::record::Filter;
+use navree::db::{Executor, Kind, Record};
+
+let columns = TypedColumns::new("deals")
+    .with("owner_id", Kind::Uuid)
+    .with("stage", Kind::String);
+let (sql, values) = scope.sql_filter(&columns).to_statement(uow.backend()).into_parts();
+let deals = DealRow::select().filter(Filter::all().raw(sql, values)).all(&uow).await?;
+```
 
 ## Abilities in the front end
 

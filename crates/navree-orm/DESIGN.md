@@ -156,7 +156,6 @@ src/
     table.rs        TableBuilder, table(): rows of any table, inserts/updates/deletes of rows
   sql/
     mod.rs          Dialect, Statement, the render_* statement functions (re-exported from render/), a filter alone
-    query_builder.rs  Where::Sql (a sea-query condition) as a raw fragment the renderer embeds (until navree-access builds trees)
   render/           the ORM's own SQL renderer (section 6, "The renderer"): every statement the ORM runs
     mod.rs          render, render_all, render_query, render_expr; the render_* lowerings re-exported
     ast.rs          the syntax tree: Statement, Query (WITH, compounds, order, limit, lock), Select, Source, Join, Expr, Insert, Update, Delete, Truncate
@@ -416,8 +415,10 @@ return `Self`; terminal methods take the executor first.
   are `Filter`s: from typed columns (`eq`, `ne`, `gt`, `gte`, `lt`, `lte`,
   `op`, `null_safe_eq`, `is_in`, `not_in`, `in_subquery`, `is_null`,
   `between`, `like`, `eq_column`, ...), expressions, raw SQL, render-tree
-  conditions (`From<render::ast::Expr>`), sea-query conditions
-  (`From<sea_query::Condition>`) and `and`/`or`/`not`/`all`/`any`.
+  conditions (`From<render::ast::Expr>`), portable statement fragments
+  (`From<navree_db::Statement>`: `Statement::portable` SQL with `?`, as
+  navree-access's `SqlFilter::to_statement` writes it) and
+  `and`/`or`/`not`/`all`/`any`.
 - Clauses (`clauses!`): `select` (replaces), `add_select`, `select_expr`,
   `select_raw`, `select_sub`, `select_time_bucket`, `select_first`,
   `select_last` (these add, keeping a model builder's columns), `distinct`,
@@ -556,7 +557,7 @@ unions, group_limit, connection, use_writer, timeout, errors }`.
 runs (`Route`, timed reads; section 6), not what it selects.
 `Where` covers `Compare`, `Null`, `In` (list or subquery), `Between`,
 `Like`, `IgnoreCase`, `DatePart`, `Exists`, `Group`, `JsonContains`,
-`JsonLength`, `FullText`, `Raw`, `Sql` (a sea-query condition), `Tree`
+`JsonLength`, `FullText`, `Raw` (also a portable statement fragment), `Tree`
 (a render-tree condition: the access filters of `accessible`) and
 `Invalid` (a problem found while building, reported when the query
 runs). `Expr` covers columns (with JSON paths), values, raw SQL,
@@ -702,16 +703,17 @@ test reads its sources to keep it so); its values are
   IR with the dialect rules (date parts, LIKE variants, text ignoring
   case, JSON containment, overlaps, keys and lengths, full text, group
   limits, time buckets, vector distances, JSON path assignments, the MySQL
-  timeout hint). `Where::Tree` is embedded as it is; `Where::Sql` (a
-  sea-query condition) is written by sea-query's builder for the dialect
-  and embedded as a raw fragment with portable placeholders
-  (`sql/query_builder.rs`), until navree-access builds its filters as
-  trees.
+  timeout hint). `Where::Tree` is embedded as it is; `Where::Raw` (raw
+  SQL, or a portable statement fragment) is embedded parenthesized, its
+  `?` placeholders numbered with the statement's.
 - **Access filters** (`access.rs`, feature `access`): `accessible` turns
   an ability's rules into one render-tree `CASE` (`ModelColumns::filter`:
-  last match wins, columns qualified with the model's table, operands
-  typed by the column), so `$ne` is null-safe on every dialect
-  (`IS DISTINCT FROM`, `NOT (a <=> b)` on MySQL, `IS NOT` on SQLite).
+  navree-access compiles the rules with `ModelColumns` as its
+  `SqlColumns`, last match wins, columns qualified with the model's
+  table, operands typed by the column, numbers as the column's integer or
+  float; the compiled `SqlFilter` is lowered to the tree), so `$ne` is
+  null-safe on every dialect (`IS DISTINCT FROM`, `NOT (a <=> b)` on
+  MySQL, `IS NOT` on SQLite).
 - **The tests**: `tests/render` pins each grammar's SQL per dialect and the
   `sql` tests' IR rendered through the lowering; `tests/sql` pins the
   ORM's statements per dialect. `tests/differential` runs on real
@@ -735,9 +737,11 @@ test reads its sources to keep it so); its values are
   with `NULLS LAST` on MySQL), the case says so and the run requires the
   difference.
 
-**Still sea-query's**: `Where::Sql` / `From<sea_query::Condition>` (until
-navree-access builds its filters without it): the condition is written by
-sea-query's builder and its values converted to navree-db's.
+No sea-query is left in the ORM: `Where::Sql` and
+`From<sea_query::Condition>` went with the data-layer port's step 5
+(navree-access builds its filters as `SqlFilter`s). SeaORM's connections
+and transactions still serve as executors (`exec/sea.rs`) until units of
+work run on navree-db's transactions only (step 8).
 
 ### Document drivers (`driver.rs`)
 

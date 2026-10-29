@@ -61,9 +61,6 @@ rust_decimal = { workspace = true }
 # hand them over (`exec/sea.rs`); `stream`: their cursors read rows as the
 # database sends them.
 sea-orm = { workspace = true, features = ["stream"] }
-# `Where::Sql` (a sea-query condition from navree-access) until navree-access
-# builds its filters without it.
-sea-query = { workspace = true, features = ["backend-mysql", "with-rust_decimal"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

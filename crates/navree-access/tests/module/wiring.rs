@@ -80,8 +80,7 @@ impl Module for ConflictingModule {
 
 #[tokio::test]
 async fn plain_access_module_grants_permissions_only() {
-    let app = TestApp::builder()
-        .temp_database()
+    let app = crate::database::database(TestApp::builder())
         .module(DatabaseModule)
         .module(AccessModule)
         .module(PostsModule)

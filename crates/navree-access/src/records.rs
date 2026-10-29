@@ -1,5 +1,5 @@
-//! [`SubjectRecords`]: subjects whose records routes load and check (SeaORM
-//! entities, and ORM models with `#[model(subject = "...")]`), and
+//! [`SubjectRecords`]: subjects whose records routes load and check (ORM
+//! models with `#[model(subject = "...")]`, navree-db records), and
 //! [`Policy`]: rules attached to a subject.
 
 use std::marker::PhantomData;
@@ -7,12 +7,11 @@ use std::sync::Arc;
 
 use navree_db::Uow;
 use navree_kernel::{BoxError, BoxFuture};
-use sea_orm::{DbErr, EntityTrait};
 use serde_json::Value;
 
 use crate::context::AbilityCtx;
 use crate::engine::{Rules, Subject};
-use crate::subject::{EntityLoader, LoadedRecord, SubjectLoader};
+use crate::subject::{LoadedRecord, SubjectLoader};
 
 /// A subject whose records can be loaded by the id a route names and
 /// checked against ability conditions: what `can(.., from = "id")` routes,
@@ -20,9 +19,12 @@ use crate::subject::{EntityLoader, LoadedRecord, SubjectLoader};
 /// [`AccessModule::for_feature`](crate::AccessModule::for_feature) work
 /// with.
 ///
-/// Every SeaORM entity that is a [`Subject`] is one (its records are its
-/// models); ORM models get an implementation from `#[derive(Model)]` with
-/// `#[model(subject = "...")]` (their records are ORM records).
+/// ORM models get an implementation from `#[derive(Model)]` with
+/// `#[model(subject = "...")]` (their records are ORM records). Below the
+/// ORM, implement it for a navree-db record by hand: load the row by key
+/// with `Select::for_update` when [`Uow::lock_for_update`] says so, and
+/// give [`row_json`](crate::row_json) as its JSON form (see
+/// [`RoleRow`](crate::entity::RoleRow)).
 pub trait SubjectRecords: Subject + Send + Sync + 'static {
     /// A loaded record.
     type Record: Clone + Send + Sync + 'static;
@@ -44,34 +46,6 @@ pub trait SubjectRecords: Subject + Send + Sync + 'static {
     /// `AccessModule::for_feature`. None by default.
     fn policy() -> Option<fn(&AbilityCtx, &mut Rules)> {
         None
-    }
-}
-
-impl<E> SubjectRecords for E
-where
-    E: EntityTrait + Subject,
-    E::Model: Sync,
-{
-    type Record = E::Model;
-
-    fn load<'a>(
-        uow: &'a Uow,
-        id: &'a str,
-    ) -> BoxFuture<'a, Result<Option<Self::Record>, BoxError>> {
-        Box::pin(async move {
-            let loaded = EntityLoader::<E>::new().load(uow, id).await?;
-            Ok(loaded.and_then(|record| {
-                record
-                    .model
-                    .downcast::<E::Model>()
-                    .ok()
-                    .map(|model| (*model).clone())
-            }))
-        })
-    }
-
-    fn record_json(record: &Self::Record) -> Value {
-        crate::subject::record_json(record)
     }
 }
 
@@ -136,10 +110,10 @@ impl<S: SubjectRecords> SubjectLoader for RecordsLoader<S> {
         &'a self,
         uow: &'a Uow,
         id: &'a str,
-    ) -> BoxFuture<'a, Result<Option<LoadedRecord>, DbErr>> {
+    ) -> BoxFuture<'a, Result<Option<LoadedRecord>, BoxError>> {
         Box::pin(async move {
-            let record = S::load(uow, id).await.map_err(|error| {
-                DbErr::Custom(format!("cannot load {} `{id}`: {error}", S::SUBJECT))
+            let record = S::load(uow, id).await.map_err(|error| -> BoxError {
+                format!("cannot load {} `{id}`: {error}", S::SUBJECT).into()
             })?;
             Ok(record.map(|record| LoadedRecord {
                 json: S::record_json(&record),

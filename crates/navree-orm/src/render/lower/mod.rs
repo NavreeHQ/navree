@@ -4,10 +4,11 @@
 //! distances, the MySQL timeout hint). The `render_*` functions lower and
 //! render in one step; they write every statement the ORM runs.
 //!
-//! [`Where::Sql`](crate::ir::Where::Sql) (a condition built by another
-//! query builder) is written by that builder and embedded as a raw
-//! fragment; [`Where::Tree`](crate::ir::Where::Tree) is a render-tree
-//! condition, embedded as it is.
+//! [`Where::Raw`](crate::ir::Where::Raw) (portable SQL with `?`
+//! placeholders, such as a navree-db `Statement::portable` fragment) is
+//! embedded as a parenthesized fragment;
+//! [`Where::Tree`](crate::ir::Where::Tree) is a render-tree condition,
+//! embedded as it is.
 //!
 //! ```
 //! use navree_orm::Dialect;

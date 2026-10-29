@@ -17,14 +17,21 @@
 //!   the app's route authorizer ([`AccessAuthorizer`]) for `roles`,
 //!   `permissions` and `can` route declarations.
 //! - [`AccessModule::for_feature`] registers a subject whose records routes
-//!   load ([`SubjectRecords`]: a SeaORM entity, or an ORM model with
-//!   `#[model(subject = "...")]`), so `can(Update, Post, from = "id")`
+//!   load ([`SubjectRecords`]: an ORM model with `#[model(subject =
+//!   "...")]`, or a navree-db record), so `can(Update, Post, from = "id")`
 //!   routes load the record in the request's unit of work and hand it to
 //!   the handler as [`Authorized<S, A>`](Authorized); a [`Policy`]
 //!   attached to the subject joins every principal's rules.
 //! - [`Accessible<E, A>`](Accessible) filters list queries with the same
 //!   rules (one SQL `CASE` chain, last match wins), so a record check and a
 //!   list filter never disagree; [`Abilities`] gives the handler the rules.
+//!
+//! The module's tables are navree-db records ([`entity`]), created by a
+//! navree-schema migration; list filters are navree-db values and portable
+//! statements ([`SqlFilter::to_statement`]). The SeaORM forms some crates
+//! still use (entities as subjects, `Accessible::apply` on a SeaORM select,
+//! [`EntityColumns`], [`record_json`]) are a compatibility shim that goes
+//! once those crates are ported.
 #![forbid(unsafe_code)]
 
 pub mod engine;
@@ -43,6 +50,8 @@ mod module;
 mod options;
 mod permission_check;
 mod records;
+// SeaORM compatibility shim: remove in step 8 of the data-layer port.
+mod sea_compat;
 mod service;
 mod store;
 mod subject;
@@ -52,7 +61,8 @@ pub use context::{AbilityCtx, AccessUser};
 pub use engine::{
     ALL, Ability, ActionMarker, CREATE, Cond, Conditions, Create, DELETE, DefaultColumns, Delete,
     FieldRef, IntoCondValue, MANAGE, Manage, READ, Read, Rule, RuleBuilder, RuleError, Rules,
-    SqlColumns, Subject, UPDATE, Update, field, sql_value,
+    SqlColumn, SqlColumns, SqlFilter, SqlOp, Subject, TypedColumns, UPDATE, Update, field,
+    sql_value,
 };
 pub use error::AccessError;
 pub use extract::{Abilities, Accessible, Authorized, CurrentAccess};
@@ -61,4 +71,6 @@ pub use module::AccessModule;
 pub use options::{AbilitiesFn, AccessOptions, default_abilities};
 pub use records::{Policy, SubjectRecords};
 pub use service::{AccessService, Explanation, RoleInfo};
-pub use subject::{EntityColumns, record_json};
+// The SeaORM shim's names (remove in step 8).
+pub use sea_compat::{EntityColumns, record_json};
+pub use subject::row_json;

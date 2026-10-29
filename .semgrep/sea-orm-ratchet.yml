@@ -27,7 +27,10 @@ rules:
         - "/apps/evidence-app/"
         - "/bench/"
         - "/crates/navree/"
-        - "/crates/navree-access/"
+        # navree-access is ported; its SeaORM compatibility shim (SeaORM
+        # entities as subjects, `Accessible::apply` on a SeaORM select) stays
+        # until the crates using it are ported (data-layer port, step 8).
+        - "/crates/navree-access/src/sea_compat.rs"
         - "/crates/navree-ai/"
         - "/crates/navree-audit/"
         - "/crates/navree-auth/"
@@ -43,7 +46,7 @@ rules:
         - "/crates/navree-logbook/"
         - "/crates/navree-mcp/"
         # navree-micro is ported; its tests keep one SeaORM fixture (the `deals`
-        # entity navree-access still reads its subjects through) until step 5.
+        # entity, a subject through navree-access's SeaORM shim) until step 8.
         - "/crates/navree-micro/tests/micro/support.rs"
         - "/crates/navree-notify/"
         - "/crates/navree-oauth/"
@@ -83,7 +86,6 @@ rules:
         - "/apps/evidence-app/"
         - "/bench/"
         - "/crates/navree/"
-        - "/crates/navree-access/"
         - "/crates/navree-ai/"
         - "/crates/navree-audit/"
         - "/crates/navree-auth/"
@@ -98,7 +100,7 @@ rules:
         - "/crates/navree-lighthouse/"
         - "/crates/navree-logbook/"
         - "/crates/navree-mcp/"
-        # navree-micro: a dev-dependency for that fixture, until navree-access is ported.
+        # navree-micro: a dev-dependency for that fixture (navree-access's shim, step 8).
         - "/crates/navree-micro/Cargo.toml"
         - "/crates/navree-notify/"
         - "/crates/navree-oauth/"

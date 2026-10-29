@@ -2,8 +2,8 @@
 
 use std::collections::BTreeMap;
 
+use navree_db::DbError;
 use navree_http::AppError;
-use sea_orm::DbErr;
 
 use crate::engine::RuleError;
 
@@ -51,7 +51,7 @@ pub enum AccessError {
     Config(String),
     /// A database error.
     #[error("access database error: {0}")]
-    Db(#[from] DbErr),
+    Db(#[from] DbError),
 }
 
 /// The error response for an [`AccessError`] (registered with

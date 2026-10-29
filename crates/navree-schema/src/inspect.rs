@@ -208,8 +208,12 @@ pub(crate) async fn detect(conn: &dyn SchemaConnection) -> SchemaResult<Target> 
             let sql = "SELECT current_setting('server_version_num') AS version_num, \
                 (SELECT extversion FROM pg_extension WHERE extname = 'timescaledb') AS installed, \
                 (SELECT default_version FROM pg_available_extensions WHERE name = 'timescaledb') AS available, \
-                current_setting('shared_preload_libraries') AS preload, \
+                CASE WHEN (SELECT rolsuper FROM pg_roles WHERE rolname = current_user) \
+                     THEN current_setting('shared_preload_libraries') END AS preload, \
                 (SELECT rolsuper FROM pg_roles WHERE rolname = current_user) AS superuser";
+            // Only a superuser may read `shared_preload_libraries` (and only
+            // a superuser could install the extension), so other roles (an
+            // app's restricted role under row-level security) skip it.
             let found = rows(conn, sql, Vec::new()).await?;
             let row = found.first();
             let number = row
