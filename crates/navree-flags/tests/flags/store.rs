@@ -175,8 +175,7 @@ async fn conformance(store: &dyn FlagStore) {
 }
 
 async fn database_app() -> TestApp {
-    TestApp::builder()
-        .temp_database()
+    crate::servers::database(TestApp::builder())
         .config("flags.routes", false)
         .config("flags.admin_routes", false)
         .module(DatabaseModule::from_config())
