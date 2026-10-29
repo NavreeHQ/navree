@@ -224,7 +224,7 @@ and `Unsupported` as `Unsupported`.
 - `commands`: what queries compile to (insta snapshots, one stage per
   line), without a server; `module` boots apps with an unreachable server.
 - Everything else runs against `NAVREE_TEST_MONGODB_URL` (a replica set:
-  `scripts/dev-databases.ps1` starts MongoDB 8.0 as `rs0` on port 57017;
+  `scripts/dev-databases.ps1` starts MongoDB 8.0 as `rs0` on port 45017;
   CI runs `.github/workflows/mongodb.yml`), each test in a database of its
   own, dropped at the end. Without the variable those tests pass with a
   notice, unless `NAVREE_TEST_REQUIRE_SERVICES=1`.
