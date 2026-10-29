@@ -5,11 +5,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::Utc;
+use navree_auth::User;
 use navree_contracts::{AuditSink, Clock, FixedClock};
 use navree_db::Db;
-use navree_testing::{TestApp, TestClient, TestResponse};
-use navree_auth::User;
 use navree_orm::Model as _;
+use navree_testing::{TestApp, TestClient, TestResponse};
 
 use crate::support::{self, RecordingSink, first_url, sent_mail, signed_in};
 

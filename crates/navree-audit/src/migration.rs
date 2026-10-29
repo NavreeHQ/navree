@@ -10,8 +10,8 @@
 
 use navree_db::MigrationSet;
 use navree_db::navree_schema::{
-    Blueprint, ColumnBuilder, Dialect, Hypertable, KeyStrategy, Migration, Schema,
-    SchemaMigration, SchemaResult,
+    Blueprint, ColumnBuilder, Dialect, Hypertable, KeyStrategy, Migration, Schema, SchemaMigration,
+    SchemaResult,
 };
 
 use crate::policy::AUDIT_TABLE;

@@ -7,8 +7,8 @@ use std::time::Duration;
 use navree_auth::login_token;
 use navree_contracts::AuditSink;
 use navree_db::Db;
-use navree_testing::{TestApp, TestAppBuilder};
 use navree_orm::Model as _;
+use navree_testing::{TestApp, TestAppBuilder};
 use serde_json::{Value, json};
 
 use crate::support::{

@@ -5,8 +5,8 @@
 use navree_audit::{AuditFilter, AuditLog};
 use navree_db::{Db, PageQuery};
 use navree_settings::{Scope, Settings, SettingsError, Source};
-use sea_orm::sea_query::{Expr, ExprTrait, Query};
 use sea_orm::ConnectionTrait;
+use sea_orm::sea_query::{Expr, ExprTrait, Query};
 use serde::Serialize;
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -506,7 +506,8 @@ async fn every_change_is_audited_in_its_transaction() {
 
     world.app.get::<AuditLog>().await.flush().await;
     let entries = {
-        let mut page = world.app
+        let mut page = world
+            .app
             .get::<AuditLog>()
             .await
             .list(

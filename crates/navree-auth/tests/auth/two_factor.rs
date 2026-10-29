@@ -12,8 +12,8 @@ use navree_auth::{
 use navree_contracts::{AuditSink, Clock, FixedClock};
 use navree_crypto::totp::{Secret, Totp};
 use navree_db::Db;
-use navree_testing::{TestApp, TestClient, TestResponse};
 use navree_orm::Model as _;
+use navree_testing::{TestApp, TestClient, TestResponse};
 use serde_json::{Value, json};
 
 use crate::support::{self, PASSWORD, RecordingSink, login, signed_in, tokens};

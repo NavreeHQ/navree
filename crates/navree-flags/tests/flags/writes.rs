@@ -8,8 +8,8 @@ use navree_audit::{AuditFilter, AuditLog};
 use navree_cache::{Cache, CacheStore, MemoryStore};
 use navree_db::{Db, PageQuery};
 use navree_flags::{FlagScope, FlagStore, FlagsError, MemoryFlagStore, Rollout, ScopeType};
-use sea_orm::sea_query::Query;
 use sea_orm::ConnectionTrait;
+use sea_orm::sea_query::Query;
 use serde_json::json;
 use uuid::Uuid;
 
@@ -124,7 +124,8 @@ async fn every_change_is_audited_in_its_transaction() {
 
     world.app.get::<AuditLog>().await.flush().await;
     let entries = {
-        let mut page = world.app
+        let mut page = world
+            .app
             .get::<AuditLog>()
             .await
             .list(
@@ -412,7 +413,8 @@ async fn the_memory_store_applies_changes_at_once() {
     assert_eq!(events.drain().len(), 1, "emitted at once");
     world.app.get::<AuditLog>().await.flush().await;
     let audited = {
-        let mut page = world.app
+        let mut page = world
+            .app
             .get::<AuditLog>()
             .await
             .list(

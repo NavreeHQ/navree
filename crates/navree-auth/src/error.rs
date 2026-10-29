@@ -7,10 +7,10 @@ use http::header::WWW_AUTHENTICATE;
 use http::{HeaderValue, StatusCode};
 use navree_cache::CacheError;
 use navree_crypto::CryptoError;
+use navree_db::DbError;
 use navree_http::AppError;
 use navree_kernel::{BoxError, KernelError};
 use navree_mail::MailError;
-use navree_db::DbError;
 use navree_orm::OrmError;
 
 /// An auth-module error. Returned from handlers with `?`, it becomes an

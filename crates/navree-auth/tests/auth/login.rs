@@ -309,7 +309,10 @@ async fn a_malformed_stored_hash_is_a_failed_login() {
     let db = app.get::<Db>().await;
     User::query()
         .where_key(user.id)
-        .update(&*db, [User::PASSWORD_HASH.set("not-a-phc-string".to_owned())])
+        .update(
+            &*db,
+            [User::PASSWORD_HASH.set("not-a-phc-string".to_owned())],
+        )
         .await
         .unwrap();
     login(&app.client(), "ada@example.com", PASSWORD)
