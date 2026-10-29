@@ -9,6 +9,7 @@
 //!
 //! `cargo test -p navree-db --features postgres,mysql --test engine`
 
+mod placeholder_types;
 mod records;
 mod statements;
 mod support;
@@ -17,6 +18,12 @@ mod units;
 mod values;
 mod watching;
 
+use placeholder_types::{
+    changing_value_types_across_connections_and_transactions,
+    changing_value_types_in_units_of_work, changing_value_types_on_one_connection,
+    every_kind_after_every_other, logs_show_the_sql_as_written, stable_types_timing,
+    typed_nulls_then_other_kinds,
+};
 use records::{
     read_executor_follows_the_unit_of_work, records_in_units_of_work, records_round_trip,
 };
@@ -53,9 +60,43 @@ on_every_server!(
     records_round_trip,
     records_in_units_of_work,
     read_executor_follows_the_unit_of_work,
+    changing_value_types_on_one_connection,
+    typed_nulls_then_other_kinds,
+    changing_value_types_across_connections_and_transactions,
+    every_kind_after_every_other,
+    logs_show_the_sql_as_written,
+    changing_value_types_in_units_of_work,
 );
 
 #[test]
 fn rows_built_by_hand_share_the_decoders() {
     values::hand_rows_share_the_decoders();
+}
+
+/// Timings of repeated statements with stable value types, printed (see
+/// `placeholder_types::stable_types_timing`).
+mod stable_types_timing {
+    use super::support::{Server, run};
+
+    #[tokio::test]
+    #[ignore = "a timing, printed: run with --ignored --nocapture"]
+    async fn postgres() {
+        run(
+            Server::Postgres,
+            "stable_types_timing on PostgreSQL",
+            super::stable_types_timing,
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    #[ignore = "a timing, printed: run with --ignored --nocapture"]
+    async fn mysql() {
+        run(
+            Server::MySql,
+            "stable_types_timing on MySQL",
+            super::stable_types_timing,
+        )
+        .await;
+    }
 }
