@@ -240,8 +240,26 @@ fn prelude_brings_the_everyday_types() {
     >());
 }
 
-/// A stand-in entity type for the model factory check.
-type DummyEntity = navree::access::entity::role::Entity;
+/// A stand-in entity type for the model factory check (navree-db's
+/// `Factory` is generic over SeaORM entities until the data-layer port's
+/// step 8).
+type DummyEntity = dummy::Entity;
+
+mod dummy {
+    use sea_orm::entity::prelude::*;
+
+    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
+    #[sea_orm(table_name = "dummies")]
+    pub struct Model {
+        #[sea_orm(primary_key)]
+        pub id: i64,
+    }
+
+    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+    pub enum Relation {}
+
+    impl ActiveModelBehavior for ActiveModel {}
+}
 
 /// An ORM model declared with the prelude alone.
 #[derive(Model, Clone, Debug, Default, serde::Serialize)]

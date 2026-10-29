@@ -6,6 +6,7 @@ use axum::extract::{FromRequestParts, Query};
 use axum::http::request::Parts;
 use navree_contracts::AuditKind;
 use navree_http::AppError;
+use navree_orm::render::ast::{Expr, LikeCase};
 use navree_orm::{Builder, Model as _};
 use sea_orm::sea_query::LikeExpr;
 use sea_orm::{ColumnTrait, Condition, QueryFilter, Select};
@@ -56,7 +57,43 @@ impl AuditFilter {
     /// # Ok(()) }
     /// ```
     pub fn query(&self) -> Builder<AuditRecord> {
-        AuditRecord::query().where_(self.condition())
+        AuditRecord::query().where_(self.tree())
+    }
+
+    /// The condition of [`query`](AuditFilter::query), as a render-tree
+    /// condition: the same tests as [`condition`](AuditFilter::condition).
+    fn tree(&self) -> Expr {
+        let mut all = Vec::new();
+        if let Some(actor_id) = self.actor_id {
+            all.push(Expr::col("actor_id").eq(Expr::value(actor_id)));
+        }
+        if let Some(impersonator_id) = self.impersonator_id {
+            all.push(Expr::col("impersonator_id").eq(Expr::value(impersonator_id)));
+        }
+        if let Some(subject_type) = &self.subject_type {
+            all.push(Expr::col("subject_type").eq(Expr::value(subject_type.as_str())));
+        }
+        if let Some(subject_id) = &self.subject_id {
+            all.push(Expr::col("subject_id").eq(Expr::value(subject_id.as_str())));
+        }
+        if let Some(action) = &self.action {
+            let exact = Expr::col("action").eq(Expr::value(action.as_str()));
+            all.push(if action.contains('.') {
+                exact
+            } else {
+                exact.or(Expr::Like {
+                    expr: Box::new(Expr::col("action")),
+                    pattern: Box::new(Expr::value(format!("%.{}", escape_like(action)))),
+                    escape: Some('\\'),
+                    negated: false,
+                    case: LikeCase::Database,
+                })
+            });
+        }
+        if let Some(kind) = self.kind {
+            all.push(Expr::col("kind").eq(Expr::value(kind_str(kind))));
+        }
+        Expr::And(all)
     }
 
     /// `select` restricted to the matching entries (the SeaORM form of
