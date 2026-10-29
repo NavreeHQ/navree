@@ -10,6 +10,14 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+default = []
+## The test suite on PostgreSQL (`NAVREE_TEST_DATABASE=postgres` with
+## NAVREE_TEST_POSTGRES_URL).
+postgres = ["navree-db/postgres"]
+## The test suite on MySQL (`NAVREE_TEST_DATABASE=mysql` with NAVREE_TEST_MYSQL_URL).
+mysql = ["navree-db/mysql"]
+
 [dependencies]
 axum = { workspace = true }
 bytes = { workspace = true }
@@ -27,11 +35,9 @@ navree-http = { workspace = true }
 navree-http-client = { workspace = true }
 navree-kernel = { workspace = true }
 # The billing tables are models (customers, subscriptions, items, usage, events).
-navree-orm = { workspace = true }
+navree-orm = { workspace = true, features = ["access"] }
 navree-schedule = { workspace = true }
 navree-workspace = { workspace = true }
-sea-orm = { workspace = true }
-sea-orm-migration = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }

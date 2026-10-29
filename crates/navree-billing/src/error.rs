@@ -3,9 +3,10 @@
 use std::collections::BTreeMap;
 
 use http::StatusCode;
+use navree_db::DbError;
 use navree_http::AppError;
 use navree_kernel::BoxError;
-use sea_orm::DbErr;
+use navree_orm::OrmError;
 
 use crate::provider::{ProviderError, WebhookError};
 
@@ -70,7 +71,10 @@ pub enum BillingError {
     Provider(#[from] ProviderError),
     /// A database error.
     #[error("billing database error: {0}")]
-    Db(#[from] DbErr),
+    Db(#[from] DbError),
+    /// A navree-orm operation on the billing tables failed.
+    #[error("billing database error: {0}")]
+    Orm(#[from] OrmError),
     /// A misuse of the fake provider.
     #[error("billing fake: {0}")]
     Fake(String),
@@ -83,6 +87,16 @@ pub enum BillingError {
 }
 
 impl BillingError {
+    /// Whether the database refused a write because a row with the same
+    /// unique value exists.
+    pub(crate) fn is_unique_violation(&self) -> bool {
+        match self {
+            BillingError::Db(db) => db.is_unique_violation(),
+            BillingError::Orm(orm) => orm.is_unique_violation(),
+            _ => false,
+        }
+    }
+
     /// An [`Invalid`](BillingError::Invalid) error for `field`.
     pub fn invalid(field: &'static str, message: impl Into<String>) -> Self {
         BillingError::Invalid {
@@ -135,8 +149,19 @@ pub(crate) fn map_billing_error(error: &BillingError) -> Option<AppError> {
                 provider_message(provider)
             )),
         BillingError::Db(db) => return navree_db::map_db_error(db),
+        BillingError::Orm(orm) => return map_orm_error(orm),
         BillingError::Fake(_) | BillingError::Config(_) | BillingError::Other(_) => return None,
     })
+}
+
+/// The response of an ORM error: a missing record is a 404, a unique or
+/// foreign-key violation a 409, anything else a 500.
+fn map_orm_error(error: &OrmError) -> Option<AppError> {
+    match error {
+        OrmError::Db(db) => navree_db::map_db_error(db),
+        OrmError::ModelNotFound { .. } => Some(AppError::not_found()),
+        _ => None,
+    }
 }
 
 /// What a client may see of a provider error (no URLs, no keys).
@@ -202,7 +227,7 @@ mod tests {
                 "payment_provider_error",
             ),
             (
-                BillingError::Db(DbErr::RecordNotFound("subscriptions".into())),
+                BillingError::Db(DbError::not_found("subscriptions")),
                 404,
                 "not_found",
             ),

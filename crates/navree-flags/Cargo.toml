@@ -14,6 +14,11 @@ workspace = true
 default = ["auth"]
 ## `From<&User>` and `From<&CurrentUser>` for `FlagScope` (navree-auth's user).
 auth = ["dep:navree-auth"]
+## The test suite on PostgreSQL (`NAVREE_TEST_DATABASE=postgres` with
+## NAVREE_TEST_POSTGRES_URL).
+postgres = ["navree-db/postgres"]
+## The test suite on MySQL (`NAVREE_TEST_DATABASE=mysql` with NAVREE_TEST_MYSQL_URL).
+mysql = ["navree-db/mysql"]
 
 [dependencies]
 axum = { workspace = true }
@@ -31,8 +36,6 @@ navree-kernel = { workspace = true }
 # The flags table is a model (`feature_flag::Model`).
 navree-orm = { workspace = true }
 navree-workspace = { workspace = true }
-sea-orm = { workspace = true }
-sea-orm-migration = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }

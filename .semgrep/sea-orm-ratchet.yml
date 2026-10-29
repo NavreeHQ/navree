@@ -37,9 +37,7 @@ rules:
         # evidence-app, and navree-auth's own subject test) until step 8. navree-social
         # and navree-sso are on the `User` model and no longer need it.
         - "/crates/navree-auth/src/entity/user.rs"
-        - "/crates/navree-billing/"
         - "/crates/navree-db/"
-        - "/crates/navree-flags/"
         - "/crates/navree-graphql/"
         - "/crates/navree-grpc/"
         - "/crates/navree-helm/"
@@ -52,7 +50,6 @@ rules:
         - "/crates/navree-orm/"
         - "/crates/navree-schema/"
         - "/crates/navree-search/"
-        - "/crates/navree-settings/"
         - "/crates/navree-sheets/"
         - "/crates/navree-webhooks/"
         - "/crates/navree-workflows/"
@@ -91,9 +88,7 @@ rules:
         - "/crates/navree/"
         # navree-auth: sea-orm for `User`'s compatibility derive, until step 8.
         - "/crates/navree-auth/Cargo.toml"
-        - "/crates/navree-billing/"
         - "/crates/navree-db/"
-        - "/crates/navree-flags/"
         - "/crates/navree-graphql/"
         - "/crates/navree-grpc/"
         - "/crates/navree-helm/"
@@ -105,7 +100,6 @@ rules:
         - "/crates/navree-orm/"
         - "/crates/navree-schema/"
         - "/crates/navree-search/"
-        - "/crates/navree-settings/"
         - "/crates/navree-sheets/"
         - "/crates/navree-webhooks/"
         - "/crates/navree-workflows/"

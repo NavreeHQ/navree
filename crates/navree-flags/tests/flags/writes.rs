@@ -7,9 +7,9 @@ use std::time::Duration;
 use navree_audit::{AuditFilter, AuditLog};
 use navree_cache::{Cache, CacheStore, MemoryStore};
 use navree_db::{Db, PageQuery};
+use navree_flags::entity::{feature_flag, feature_flag_override};
 use navree_flags::{FlagScope, FlagStore, FlagsError, MemoryFlagStore, Rollout, ScopeType};
-use sea_orm::ConnectionTrait;
-use sea_orm::sea_query::Query;
+use navree_orm::Model as _;
 use serde_json::json;
 use uuid::Uuid;
 
@@ -165,20 +165,17 @@ async fn every_change_is_audited_in_its_transaction() {
 
 /// Writes straight to the table, as another app instance would.
 async fn turn_on_behind_the_cache(db: &Db, workspace: Uuid) {
-    db.conn()
-        .execute(
-            Query::insert()
-                .into_table("feature_flag_overrides")
-                .columns(["flag", "scope_type", "scope_id", "active"])
-                .values_panic([
-                    "new-pipeline".into(),
-                    "workspace".into(),
-                    workspace.into(),
-                    true.into(),
-                ]),
-        )
-        .await
-        .unwrap();
+    feature_flag_override::Model::insert(
+        db,
+        [feature_flag_override::Model {
+            flag: "new-pipeline".to_owned(),
+            scope_type: "workspace".to_owned(),
+            scope_id: workspace,
+            active: true,
+        }],
+    )
+    .await
+    .unwrap();
 }
 
 #[tokio::test]
@@ -241,20 +238,19 @@ async fn checks_are_cached_and_changes_clear_the_cache() {
             .await
             .unwrap()
     );
-    db.conn()
-        .execute(
-            Query::insert()
-                .into_table("feature_flags")
-                .columns(["name", "everyone", "killed", "updated_at"])
-                .values_panic([
-                    "new-pipeline".into(),
-                    true.into(),
-                    false.into(),
-                    chrono::Utc::now().into(),
-                ]),
-        )
-        .await
-        .unwrap();
+    feature_flag::Model::insert(
+        &db,
+        [feature_flag::Model {
+            name: "new-pipeline".to_owned(),
+            everyone: Some(true),
+            rollout: None,
+            killed: false,
+            updated_at: chrono::Utc::now(),
+            updated_by: None,
+        }],
+    )
+    .await
+    .unwrap();
     assert!(
         !flags
             .active::<NewPipeline>(FlagScope::workspace(globex))

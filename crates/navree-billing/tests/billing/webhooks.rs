@@ -261,16 +261,13 @@ async fn a_failing_event_records_its_error_and_retries() {
         .unwrap();
     let db = world.db().await;
     let set_payload = |payload: String| {
-        use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, sea_query::Expr};
+        use navree_billing::entity::event;
+        use navree_orm::Model as _;
         let db = db.clone();
         async move {
-            navree_billing::entity::event::Entity::update_many()
-                .col_expr(
-                    navree_billing::entity::event::Column::Payload,
-                    Expr::value(payload),
-                )
-                .filter(navree_billing::entity::event::Column::Id.eq(stuck.event_id))
-                .exec(db.conn())
+            event::Model::query()
+                .where_(event::Model::ID.eq(stuck.event_id))
+                .update(&*db, [event::Model::PAYLOAD.set(payload)])
                 .await
                 .unwrap();
         }
@@ -385,8 +382,7 @@ async fn without_a_queue_the_event_is_processed_at_once() {
     use navree_db::DatabaseModule;
     use navree_testing::TestApp;
 
-    let app = TestApp::builder()
-        .temp_database()
+    let app = crate::servers::database(TestApp::builder())
         .config("billing.provider", "fake")
         .config("billing.routes", false)
         .config(

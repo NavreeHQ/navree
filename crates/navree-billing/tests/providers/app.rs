@@ -31,8 +31,7 @@ fn acme() -> BillableRef {
 }
 
 fn app(server: &MockServer) -> TestAppBuilder {
-    TestApp::builder()
-        .temp_database()
+    crate::servers::database(TestApp::builder())
         .config("queue.driver", "memory")
         .config("http_client.ssrf.allow_hosts", json!(["127.0.0.1"]))
         .config("http_client.retries", 0)

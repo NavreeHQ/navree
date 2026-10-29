@@ -1,7 +1,8 @@
 //! [`FlagsError`].
 
+use navree_db::DbError;
 use navree_http::AppError;
-use sea_orm::DbErr;
+use navree_orm::OrmError;
 
 /// What can go wrong checking or changing a flag.
 ///
@@ -43,7 +44,10 @@ pub enum FlagsError {
     NoPlanResolver,
     /// The database failed.
     #[error("feature flag storage failed: {0}")]
-    Database(#[from] DbErr),
+    Database(#[from] DbError),
+    /// A navree-orm operation on the flags tables failed.
+    #[error("flag storage failed: {0}")]
+    Orm(#[from] OrmError),
     /// A stored value could not be read back.
     #[error("feature flag storage holds an invalid value: {0}")]
     Corrupt(String),

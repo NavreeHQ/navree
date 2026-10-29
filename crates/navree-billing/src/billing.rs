@@ -10,16 +10,12 @@ use chrono::{DateTime, TimeDelta, Utc};
 use http::HeaderMap;
 use http::request::Parts;
 use navree_contracts::{Clock, Dispatcher, JobEnvelope};
-use navree_db::{Db, Uow};
+use navree_db::{Db, DbError, Uow};
 use navree_events::EventBus;
 use navree_http::AppError;
 use navree_kernel::WeakAppContext;
-use navree_workspace::entity::member;
-use sea_orm::sea_query::Expr;
-use sea_orm::{
-    ActiveModelTrait, ColumnTrait, ConnectionTrait, DbErr, EntityTrait, PaginatorTrait,
-    QueryFilter, QueryOrder, Set, SqlErr,
-};
+use navree_orm::{Executor, Model as _, OrmError, Record};
+use navree_workspace::Member;
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
@@ -185,13 +181,14 @@ impl Billing {
         billable: &impl AsBillable,
     ) -> Result<Vec<Subscription>, BillingError> {
         let billable = billable.billable_ref();
-        let rows = subscription::Entity::find()
-            .filter(subscription::Column::BillableType.eq(&billable.billable_type))
-            .filter(subscription::Column::BillableId.eq(billable.billable_id))
-            .order_by_desc(subscription::Column::CreatedAt)
-            .order_by_desc(subscription::Column::Id)
-            .all(&self.db.reader().await)
-            .await?;
+        let rows = subscription::Model::query()
+            .where_(subscription::Model::BILLABLE_TYPE.eq(billable.billable_type.as_str()))
+            .where_(subscription::Model::BILLABLE_ID.eq(billable.billable_id))
+            .order_by_desc(subscription::Model::CREATED_AT)
+            .order_by_desc(subscription::Model::ID)
+            .get(&*self.db)
+            .await?
+            .into_models();
         Ok(rows.iter().map(|row| self.snapshot(row)).collect())
     }
 
@@ -228,26 +225,22 @@ impl Billing {
         billable: &impl AsBillable,
     ) -> Result<Option<BillingCustomer>, BillingError> {
         let billable = billable.billable_ref();
-        Ok(self
-            .customer_row(
-                &self.db.reader().await,
-                &billable.billable_type,
-                billable.billable_id,
-            )
-            .await?)
+        self.customer_row(&*self.db, &billable.billable_type, billable.billable_id)
+            .await
     }
 
-    async fn customer_row<C: ConnectionTrait>(
+    async fn customer_row<E: Executor + ?Sized>(
         &self,
-        conn: &C,
+        exec: &E,
         billable_type: &str,
         billable_id: Uuid,
-    ) -> Result<Option<customer::Model>, DbErr> {
-        customer::Entity::find()
-            .filter(customer::Column::BillableType.eq(billable_type))
-            .filter(customer::Column::BillableId.eq(billable_id))
-            .one(conn)
-            .await
+    ) -> Result<Option<customer::Model>, BillingError> {
+        Ok(customer::Model::query()
+            .where_(customer::Model::BILLABLE_TYPE.eq(billable_type))
+            .where_(customer::Model::BILLABLE_ID.eq(billable_id))
+            .first(exec)
+            .await?
+            .map(Record::into_inner))
     }
 
     /// The provider customer id of the billable, at this provider.
@@ -330,7 +323,7 @@ impl Billing {
         let uow = self.db.uow(None, None).await;
         match uow.scope(f(uow.clone())).await {
             Ok(value) => {
-                uow.commit().await?;
+                uow.commit().await.map_err(DbError::from)?;
                 Ok(value)
             }
             Err(error) => {
@@ -486,8 +479,7 @@ impl Billing {
                 email,
             );
             self.work(|uow| async move {
-                let tx = uow.tx().await?;
-                self.link_customer(&*tx, &key, &id, email).await?;
+                self.link_customer(&uow, &key, &id, email).await?;
                 Ok(())
             })
             .await?;
@@ -496,44 +488,50 @@ impl Billing {
     }
 
     /// Links provider customer `customer_id` to the billable.
-    async fn link_customer<C: ConnectionTrait>(
+    async fn link_customer<E: Executor + ?Sized>(
         &self,
-        conn: &C,
+        exec: &E,
         billable: &(String, Uuid),
         customer_id: &str,
         email: Option<String>,
-    ) -> Result<(), DbErr> {
+    ) -> Result<(), BillingError> {
         let now = self.now();
         let provider = self.provider.name().to_owned();
-        match self.customer_row(conn, &billable.0, billable.1).await? {
+        match self.customer_row(exec, &billable.0, billable.1).await? {
             Some(row) => {
                 if row.provider_customer_id.as_deref() == Some(customer_id)
                     && row.provider.as_deref() == Some(provider.as_str())
                 {
                     return Ok(());
                 }
-                let mut active: customer::ActiveModel = row.clone().into();
-                active.provider = Set(Some(provider));
-                active.provider_customer_id = Set(Some(customer_id.to_owned()));
+                let mut sets = vec![
+                    customer::Model::PROVIDER.set(Some(provider)),
+                    customer::Model::PROVIDER_CUSTOMER_ID.set(Some(customer_id.to_owned())),
+                ];
                 if row.email.is_none() {
-                    active.email = Set(email);
+                    sets.push(customer::Model::EMAIL.set(email));
                 }
-                active.updated_at = Set(now);
-                active.update(conn).await?;
+                sets.push(customer::Model::UPDATED_AT.set(now));
+                customer::Model::query()
+                    .where_(customer::Model::ID.eq(row.id))
+                    .update(exec, sets)
+                    .await?;
             }
             None => {
-                customer::ActiveModel {
-                    id: Set(Uuid::now_v7()),
-                    billable_type: Set(billable.0.clone()),
-                    billable_id: Set(billable.1),
-                    provider: Set(Some(provider)),
-                    provider_customer_id: Set(Some(customer_id.to_owned())),
-                    email: Set(email),
-                    trial_ends_at: Set(None),
-                    created_at: Set(now),
-                    updated_at: Set(now),
-                }
-                .insert(conn)
+                customer::Model::insert(
+                    exec,
+                    [customer::Model {
+                        id: Uuid::now_v7(),
+                        billable_type: billable.0.clone(),
+                        billable_id: billable.1,
+                        provider: Some(provider),
+                        provider_customer_id: Some(customer_id.to_owned()),
+                        email,
+                        trial_ends_at: None,
+                        created_at: now,
+                        updated_at: now,
+                    }],
+                )
                 .await?;
             }
         }
@@ -546,9 +544,9 @@ impl Billing {
         if billable.billable_type != WORKSPACE_BILLABLE {
             return Ok(1);
         }
-        let members = member::Entity::find()
-            .filter(member::Column::WorkspaceId.eq(billable.billable_id))
-            .count(&self.db.reader().await)
+        let members = Member::query()
+            .where_(Member::WORKSPACE_ID.eq(billable.billable_id))
+            .count(&*self.db)
             .await?;
         Ok(u32::try_from(members).unwrap_or(u32::MAX).max(1))
     }
@@ -566,12 +564,13 @@ impl Billing {
             .await?
             .filter(|sub| !sub.ended())
             .ok_or(BillingError::NoSubscription)?;
-        let items = subscription_item::Entity::find()
-            .filter(subscription_item::Column::SubscriptionId.eq(sub.id))
-            .order_by_asc(subscription_item::Column::CreatedAt)
-            .order_by_asc(subscription_item::Column::Id)
-            .all(&self.db.reader().await)
-            .await?;
+        let items = subscription_item::Model::query()
+            .where_(subscription_item::Model::SUBSCRIPTION_ID.eq(sub.id))
+            .order_by(subscription_item::Model::CREATED_AT)
+            .order_by(subscription_item::Model::ID)
+            .get(&*self.db)
+            .await?
+            .into_models();
         Ok((sub, items))
     }
 
@@ -848,30 +847,37 @@ impl Billing {
         let now = self.now();
         let ends = now + TimeDelta::days(i64::from(days));
         self.work(|uow| async move {
-            let tx = uow.tx().await?;
             match self
-                .customer_row(&*tx, &billable.billable_type, billable.billable_id)
+                .customer_row(&uow, &billable.billable_type, billable.billable_id)
                 .await?
             {
                 Some(row) => {
-                    let mut active: customer::ActiveModel = row.into();
-                    active.trial_ends_at = Set(Some(ends));
-                    active.updated_at = Set(now);
-                    active.update(&*tx).await?;
+                    customer::Model::query()
+                        .where_(customer::Model::ID.eq(row.id))
+                        .update(
+                            &uow,
+                            [
+                                customer::Model::TRIAL_ENDS_AT.set(Some(ends)),
+                                customer::Model::UPDATED_AT.set(now),
+                            ],
+                        )
+                        .await?;
                 }
                 None => {
-                    customer::ActiveModel {
-                        id: Set(Uuid::now_v7()),
-                        billable_type: Set(billable.billable_type.clone()),
-                        billable_id: Set(billable.billable_id),
-                        provider: Set(None),
-                        provider_customer_id: Set(None),
-                        email: Set(billable.email.clone()),
-                        trial_ends_at: Set(Some(ends)),
-                        created_at: Set(now),
-                        updated_at: Set(now),
-                    }
-                    .insert(&*tx)
+                    customer::Model::insert(
+                        &uow,
+                        [customer::Model {
+                            id: Uuid::now_v7(),
+                            billable_type: billable.billable_type.clone(),
+                            billable_id: billable.billable_id,
+                            provider: None,
+                            provider_customer_id: None,
+                            email: billable.email.clone(),
+                            trial_ends_at: Some(ends),
+                            created_at: now,
+                            updated_at: now,
+                        }],
+                    )
                     .await?;
                 }
             }
@@ -953,17 +959,18 @@ impl Billing {
         let now = self.now();
         let meter = meter.to_owned();
         self.work(|uow| async move {
-            let tx = uow.tx().await?;
-            usage::ActiveModel {
-                id: Set(Uuid::now_v7()),
-                billable_type: Set(billable.billable_type.clone()),
-                billable_id: Set(billable.billable_id),
-                meter: Set(meter),
-                quantity: Set(quantity),
-                recorded_at: Set(now),
-                reported_at: Set(None),
-            }
-            .insert(&*tx)
+            usage::Model::insert(
+                &uow,
+                [usage::Model {
+                    id: Uuid::now_v7(),
+                    billable_type: billable.billable_type.clone(),
+                    billable_id: billable.billable_id,
+                    meter,
+                    quantity,
+                    recorded_at: now,
+                    reported_at: None,
+                }],
+            )
             .await?;
             Ok(())
         })
@@ -986,14 +993,14 @@ impl Billing {
             .await?
             .filter(Subscription::valid)
             .and_then(|sub| sub.current_period_start);
-        let mut select = usage::Entity::find()
-            .filter(usage::Column::BillableType.eq(&billable.billable_type))
-            .filter(usage::Column::BillableId.eq(billable.billable_id))
-            .filter(usage::Column::Meter.eq(meter));
+        let mut select = usage::Model::query()
+            .where_(usage::Model::BILLABLE_TYPE.eq(billable.billable_type.as_str()))
+            .where_(usage::Model::BILLABLE_ID.eq(billable.billable_id))
+            .where_(usage::Model::METER.eq(meter));
         if let Some(since) = since {
-            select = select.filter(usage::Column::RecordedAt.gte(since));
+            select = select.where_(usage::Model::RECORDED_AT.gte(since));
         }
-        let rows = select.all(&self.db.reader().await).await?;
+        let rows = select.get(&*self.db).await?.into_models();
         Ok(rows
             .iter()
             .map(|row| u64::try_from(row.quantity).unwrap_or_default())
@@ -1004,12 +1011,14 @@ impl Billing {
     /// billable and meter, and marks them reported (what
     /// `billing:report-usage` runs).
     pub async fn report_pending_usage(&self) -> Result<UsageReportSummary, BillingError> {
-        let rows = usage::Entity::find()
-            .filter(usage::Column::ReportedAt.is_null())
-            .order_by_asc(usage::Column::RecordedAt)
-            .order_by_asc(usage::Column::Id)
-            .all(self.db.conn())
-            .await?;
+        let rows = usage::Model::query()
+            .where_(usage::Model::REPORTED_AT.is_null())
+            .order_by(usage::Model::RECORDED_AT)
+            .order_by(usage::Model::ID)
+            .use_write()
+            .get(&*self.db)
+            .await?
+            .into_models();
         let mut groups: BTreeMap<(String, Uuid, String), Vec<usage::Model>> = BTreeMap::new();
         for row in rows {
             groups
@@ -1062,10 +1071,9 @@ impl Billing {
             };
             match self.provider.report_usage(&report).await {
                 Ok(()) => {
-                    usage::Entity::update_many()
-                        .col_expr(usage::Column::ReportedAt, Expr::value(self.now()))
-                        .filter(usage::Column::Id.is_in(ids))
-                        .exec(self.db.conn())
+                    usage::Model::query()
+                        .where_(usage::Model::ID.is_in(ids))
+                        .update(&*self.db, [usage::Model::REPORTED_AT.set(Some(self.now()))])
                         .await?;
                     summary.reported += 1;
                     summary.units += quantity;
@@ -1218,29 +1226,29 @@ impl Billing {
         let uow = self.db.uow(None, None).await;
         let stored: Result<Option<Uuid>, BillingError> = uow
             .scope(async {
-                let tx = uow.tx().await?;
-                if let Some(existing) = event::Entity::find()
-                    .filter(event::Column::Provider.eq(provider))
-                    .filter(event::Column::ProviderEventId.eq(&event.id))
-                    .one(&*tx)
+                if let Some(existing) = event::Model::query()
+                    .where_(event::Model::PROVIDER.eq(provider))
+                    .where_(event::Model::PROVIDER_EVENT_ID.eq(event.id.as_str()))
+                    .first(&uow)
                     .await?
                 {
                     return Ok(Some(existing.id));
                 }
-                event::ActiveModel {
-                    id: Set(id),
-                    provider: Set(provider.to_owned()),
-                    provider_event_id: Set(event.id.clone()),
-                    event_type: Set(event.event_type.clone()),
-                    payload: Set(payload),
-                    received_at: Set(now),
-                    processed_at: Set(None),
-                    attempts: Set(0),
-                    error: Set(None),
-                }
-                .insert(&*tx)
+                event::Model::insert(
+                    &uow,
+                    [event::Model {
+                        id,
+                        provider: provider.to_owned(),
+                        provider_event_id: event.id.clone(),
+                        event_type: event.event_type.clone(),
+                        payload,
+                        received_at: now,
+                        processed_at: None,
+                        attempts: 0,
+                        error: None,
+                    }],
+                )
                 .await?;
-                drop(tx);
                 if let Some(dispatcher) = &dispatcher {
                     let mut envelope = JobEnvelope::of(&ProcessBillingEvent { event_id: id })
                         .map_err(BillingError::Other)?;
@@ -1255,18 +1263,15 @@ impl Billing {
             .await;
         let duplicate_of = match stored {
             Ok(duplicate) => {
-                uow.commit().await?;
+                uow.commit().await.map_err(DbError::from)?;
                 duplicate
             }
             Err(error) => {
                 let _ = uow.rollback().await;
-                match &error {
-                    BillingError::Db(db)
-                        if matches!(db.sql_err(), Some(SqlErr::UniqueConstraintViolation(_))) =>
-                    {
-                        Some(Uuid::nil())
-                    }
-                    _ => return Err(error),
+                if error.is_unique_violation() {
+                    Some(Uuid::nil())
+                } else {
+                    return Err(error);
                 }
             }
         };
@@ -1297,7 +1302,12 @@ impl Billing {
     /// no-op. A failure is recorded on the row (`attempts`, `error`) and
     /// returned, so the queue retries it.
     pub async fn process_event(&self, id: Uuid) -> Result<(), BillingError> {
-        let Some(row) = event::Entity::find_by_id(id).one(self.db.conn()).await? else {
+        let Some(row) = event::Model::query()
+            .use_write()
+            .find(&*self.db, id)
+            .await?
+            .map(Record::into_inner)
+        else {
             return Ok(());
         };
         if row.processed_at.is_some() {
@@ -1306,11 +1316,15 @@ impl Billing {
         match self.process_row(&row).await {
             Ok(()) => Ok(()),
             Err(error) => {
-                event::Entity::update_many()
-                    .col_expr(event::Column::Attempts, Expr::value(row.attempts + 1))
-                    .col_expr(event::Column::Error, Expr::value(Some(error.to_string())))
-                    .filter(event::Column::Id.eq(row.id))
-                    .exec(self.db.conn())
+                event::Model::query()
+                    .where_(event::Model::ID.eq(row.id))
+                    .update(
+                        &*self.db,
+                        [
+                            event::Model::ATTEMPTS.set(row.attempts + 1),
+                            event::Model::ERROR.set(Some(error.to_string())),
+                        ],
+                    )
                     .await?;
                 Err(error)
             }
@@ -1323,22 +1337,24 @@ impl Billing {
         let result: Result<(), BillingError> = uow
             .scope(async {
                 let pending = self.apply_event(&uow, &event).await?;
-                let tx = uow.tx().await?;
-                event::Entity::update_many()
-                    .col_expr(event::Column::ProcessedAt, Expr::value(Some(self.now())))
-                    .col_expr(event::Column::Attempts, Expr::value(row.attempts + 1))
-                    .col_expr(event::Column::Error, Expr::value(None::<String>))
-                    .filter(event::Column::Id.eq(row.id))
-                    .exec(&*tx)
+                event::Model::query()
+                    .where_(event::Model::ID.eq(row.id))
+                    .update(
+                        &uow,
+                        [
+                            event::Model::PROCESSED_AT.set(Some(self.now())),
+                            event::Model::ATTEMPTS.set(row.attempts + 1),
+                            event::Model::ERROR.set_null(),
+                        ],
+                    )
                     .await?;
-                drop(tx);
                 self.emit_after_commit(&uow, pending);
                 Ok(())
             })
             .await;
         match result {
             Ok(()) => {
-                uow.commit().await?;
+                uow.commit().await.map_err(DbError::from)?;
                 Ok(())
             }
             Err(error) => {
@@ -1364,8 +1380,7 @@ impl Billing {
                     email,
                 } => {
                     if let Some(billable) = billable {
-                        let tx = uow.tx().await?;
-                        self.link_customer(&*tx, billable, customer_id, email.clone())
+                        self.link_customer(uow, billable, customer_id, email.clone())
                             .await?;
                     }
                 }
@@ -1410,20 +1425,18 @@ impl Billing {
         invoice: &ProviderInvoice,
         paid: bool,
     ) -> Result<Option<Pending>, BillingError> {
-        let tx = uow.tx().await?;
         let sub = match &invoice.subscription_id {
-            Some(id) => {
-                subscription::Entity::find()
-                    .filter(subscription::Column::Provider.eq(self.provider.name()))
-                    .filter(subscription::Column::ProviderId.eq(id))
-                    .one(&*tx)
-                    .await?
-            }
+            Some(id) => subscription::Model::query()
+                .where_(subscription::Model::PROVIDER.eq(self.provider.name()))
+                .where_(subscription::Model::PROVIDER_ID.eq(id.as_str()))
+                .first(uow)
+                .await?
+                .map(Record::into_inner),
             None => None,
         };
         let billable = match (&sub, &invoice.customer_id) {
             (Some(sub), _) => Some((sub.billable_type.clone(), sub.billable_id)),
-            (None, Some(customer)) => self.billable_of_customer(&*tx, customer).await?,
+            (None, Some(customer)) => self.billable_of_customer(uow, customer).await?,
             (None, None) => None,
         };
         let Some((billable_type, billable_id)) = billable else {
@@ -1459,17 +1472,20 @@ impl Billing {
     }
 
     /// The billable linked to provider customer `customer_id`.
-    async fn billable_of_customer<C: ConnectionTrait>(
+    async fn billable_of_customer<E: Executor + ?Sized>(
         &self,
-        conn: &C,
+        exec: &E,
         customer_id: &str,
-    ) -> Result<Option<(String, Uuid)>, DbErr> {
-        Ok(customer::Entity::find()
-            .filter(customer::Column::Provider.eq(self.provider.name()))
-            .filter(customer::Column::ProviderCustomerId.eq(customer_id))
-            .one(conn)
+    ) -> Result<Option<(String, Uuid)>, BillingError> {
+        Ok(customer::Model::query()
+            .where_(customer::Model::PROVIDER.eq(self.provider.name()))
+            .where_(customer::Model::PROVIDER_CUSTOMER_ID.eq(customer_id))
+            .first(exec)
             .await?
-            .map(|row| (row.billable_type, row.billable_id)))
+            .map(|row| {
+                let row = row.into_inner();
+                (row.billable_type, row.billable_id)
+            }))
     }
 
     /// Plan, interval, quantity and meters of a provider subscription.
@@ -1524,13 +1540,13 @@ impl Billing {
         at: DateTime<Utc>,
         pending: &mut Vec<Pending>,
     ) -> Result<Option<subscription::Model>, BillingError> {
-        let tx = uow.tx().await?;
         let provider = self.provider.name();
-        let existing = subscription::Entity::find()
-            .filter(subscription::Column::Provider.eq(provider))
-            .filter(subscription::Column::ProviderId.eq(&snapshot.id))
-            .one(&*tx)
-            .await?;
+        let existing = subscription::Model::query()
+            .where_(subscription::Model::PROVIDER.eq(provider))
+            .where_(subscription::Model::PROVIDER_ID.eq(snapshot.id.as_str()))
+            .first(uow)
+            .await?
+            .map(Record::into_inner);
         if let Some(row) = &existing
             && row.provider_updated_at.is_some_and(|stored| at < stored)
         {
@@ -1539,7 +1555,7 @@ impl Billing {
         let billable = match &existing {
             Some(row) => Some((row.billable_type.clone(), row.billable_id)),
             None => match self
-                .billable_of_customer(&*tx, &snapshot.customer_id)
+                .billable_of_customer(uow, &snapshot.customer_id)
                 .await?
             {
                 Some(billable) => Some(billable),
@@ -1550,7 +1566,7 @@ impl Billing {
             tracing::warn!(target: "navree::billing", subscription = %snapshot.id, "a subscription of an unknown customer, without billable metadata; ignored");
             return Ok(None);
         };
-        self.link_customer(&*tx, &billable, &snapshot.customer_id, None)
+        self.link_customer(uow, &billable, &snapshot.customer_id, None)
             .await?;
         let classified = self.classify(snapshot);
         let now = self.now();
@@ -1558,28 +1574,32 @@ impl Billing {
         let quantity = i64::from(classified.quantity);
         let row = match existing {
             None => {
-                let row = subscription::ActiveModel {
-                    id: Set(Uuid::now_v7()),
-                    billable_type: Set(billable.0.clone()),
-                    billable_id: Set(billable.1),
-                    provider: Set(provider.to_owned()),
-                    provider_id: Set(snapshot.id.clone()),
-                    provider_customer_id: Set(snapshot.customer_id.clone()),
-                    plan: Set(classified.plan.clone()),
-                    interval: Set(classified.interval.as_str().to_owned()),
-                    status: Set(status.as_str().to_owned()),
-                    quantity: Set(quantity),
-                    trial_ends_at: Set(snapshot.trial_ends_at),
-                    ends_at: Set(snapshot.ends_at),
-                    current_period_start: Set(snapshot.current_period_start),
-                    current_period_end: Set(snapshot.current_period_end),
-                    past_due_since: Set((status == SubscriptionStatus::PastDue).then_some(now)),
-                    provider_updated_at: Set(Some(at)),
-                    created_at: Set(now),
-                    updated_at: Set(now),
-                }
-                .insert(&*tx)
+                let id = Uuid::now_v7();
+                subscription::Model::insert(
+                    uow,
+                    [subscription::Model {
+                        id,
+                        billable_type: billable.0.clone(),
+                        billable_id: billable.1,
+                        provider: provider.to_owned(),
+                        provider_id: snapshot.id.clone(),
+                        provider_customer_id: snapshot.customer_id.clone(),
+                        plan: classified.plan.clone(),
+                        interval: classified.interval.as_str().to_owned(),
+                        status: status.as_str().to_owned(),
+                        quantity,
+                        trial_ends_at: snapshot.trial_ends_at,
+                        ends_at: snapshot.ends_at,
+                        current_period_start: snapshot.current_period_start,
+                        current_period_end: snapshot.current_period_end,
+                        past_due_since: (status == SubscriptionStatus::PastDue).then_some(now),
+                        provider_updated_at: Some(at),
+                        created_at: now,
+                        updated_at: now,
+                    }],
+                )
                 .await?;
+                let row = stored_subscription(uow, id).await?;
                 if status != SubscriptionStatus::Canceled {
                     pending.push(Pending::Created(SubscriptionCreated {
                         billable_type: row.billable_type.clone(),
@@ -1609,20 +1629,31 @@ impl Billing {
                 let newly_canceled = (old.ends_at.is_none() && snapshot.ends_at.is_some())
                     || (old.status != SubscriptionStatus::Canceled.as_str()
                         && status == SubscriptionStatus::Canceled);
-                let mut active: subscription::ActiveModel = old.clone().into();
-                active.provider_customer_id = Set(snapshot.customer_id.clone());
-                active.plan = Set(classified.plan.clone());
-                active.interval = Set(classified.interval.as_str().to_owned());
-                active.status = Set(status.as_str().to_owned());
-                active.quantity = Set(quantity);
-                active.trial_ends_at = Set(snapshot.trial_ends_at);
-                active.ends_at = Set(snapshot.ends_at);
-                active.current_period_start = Set(snapshot.current_period_start);
-                active.current_period_end = Set(snapshot.current_period_end);
-                active.past_due_since = Set(past_due_since);
-                active.provider_updated_at = Set(Some(at));
-                active.updated_at = Set(now);
-                let row = active.update(&*tx).await?;
+                subscription::Model::query()
+                    .where_(subscription::Model::ID.eq(old.id))
+                    .update(
+                        uow,
+                        [
+                            subscription::Model::PROVIDER_CUSTOMER_ID
+                                .set(snapshot.customer_id.clone()),
+                            subscription::Model::PLAN.set(classified.plan.clone()),
+                            subscription::Model::INTERVAL
+                                .set(classified.interval.as_str().to_owned()),
+                            subscription::Model::STATUS.set(status.as_str().to_owned()),
+                            subscription::Model::QUANTITY.set(quantity),
+                            subscription::Model::TRIAL_ENDS_AT.set(snapshot.trial_ends_at),
+                            subscription::Model::ENDS_AT.set(snapshot.ends_at),
+                            subscription::Model::CURRENT_PERIOD_START
+                                .set(snapshot.current_period_start),
+                            subscription::Model::CURRENT_PERIOD_END
+                                .set(snapshot.current_period_end),
+                            subscription::Model::PAST_DUE_SINCE.set(past_due_since),
+                            subscription::Model::PROVIDER_UPDATED_AT.set(Some(at)),
+                            subscription::Model::UPDATED_AT.set(now),
+                        ],
+                    )
+                    .await?;
+                let row = stored_subscription(uow, old.id).await?;
                 if newly_canceled {
                     pending.push(Pending::Canceled(SubscriptionCanceled {
                         billable_type: row.billable_type.clone(),
@@ -1645,21 +1676,23 @@ impl Billing {
                 row
             }
         };
-        subscription_item::Entity::delete_many()
-            .filter(subscription_item::Column::SubscriptionId.eq(row.id))
-            .exec(&*tx)
+        subscription_item::Model::query()
+            .where_(subscription_item::Model::SUBSCRIPTION_ID.eq(row.id))
+            .delete(uow)
             .await?;
         for (item, meter) in &classified.items {
-            subscription_item::ActiveModel {
-                id: Set(Uuid::now_v7()),
-                subscription_id: Set(row.id),
-                provider_item_id: Set(item.id.clone()),
-                price_id: Set(item.price_id.clone()),
-                meter: Set(meter.clone()),
-                quantity: Set(item.quantity.map(|q| i64::try_from(q).unwrap_or(i64::MAX))),
-                created_at: Set(now),
-            }
-            .insert(&*tx)
+            subscription_item::Model::insert(
+                uow,
+                [subscription_item::Model {
+                    id: Uuid::now_v7(),
+                    subscription_id: row.id,
+                    provider_item_id: item.id.clone(),
+                    price_id: item.price_id.clone(),
+                    meter: meter.clone(),
+                    quantity: item.quantity.map(|q| i64::try_from(q).unwrap_or(i64::MAX)),
+                    created_at: now,
+                }],
+            )
             .await?;
         }
         Ok(Some(row))
@@ -1670,24 +1703,24 @@ impl Billing {
     /// The received webhook events, newest first; with `failed_only`, those
     /// whose processing failed and has not succeeded since.
     pub async fn events(&self, failed_only: bool) -> Result<Vec<BillingEventRecord>, BillingError> {
-        let mut select = event::Entity::find().order_by_desc(event::Column::ReceivedAt);
+        let mut select = event::Model::query().order_by_desc(event::Model::RECEIVED_AT);
         if failed_only {
             select = select
-                .filter(event::Column::ProcessedAt.is_null())
-                .filter(event::Column::Error.is_not_null());
+                .where_(event::Model::PROCESSED_AT.is_null())
+                .where_(event::Model::ERROR.is_not_null());
         }
-        Ok(select.all(&self.db.reader().await).await?)
+        Ok(select.get(&*self.db).await?.into_models())
     }
 
     /// Deletes processed events older than `days` days; returns how many.
     pub async fn prune_events(&self, days: u32) -> Result<u64, BillingError> {
         let before = self.now() - TimeDelta::days(i64::from(days));
-        let deleted = event::Entity::delete_many()
-            .filter(event::Column::ProcessedAt.is_not_null())
-            .filter(event::Column::ProcessedAt.lt(before))
-            .exec(self.db.conn())
+        let deleted = event::Model::query()
+            .where_(event::Model::PROCESSED_AT.is_not_null())
+            .where_(event::Model::PROCESSED_AT.lt(before))
+            .delete(&*self.db)
             .await?;
-        Ok(deleted.rows_affected)
+        Ok(deleted)
     }
 
     // ---------------------------------------------------------- requests
@@ -1721,6 +1754,24 @@ impl Billing {
         let registration = self.route_registration().map_err(AppError::internal)?;
         (registration.resolve)(parts).await
     }
+}
+
+/// The subscription `id` as the database stored it (timestamps at its
+/// precision).
+async fn stored_subscription<E: Executor + ?Sized>(
+    exec: &E,
+    id: Uuid,
+) -> Result<subscription::Model, BillingError> {
+    Ok(subscription::Model::query()
+        .find(exec, id)
+        .await?
+        .ok_or_else(|| {
+            OrmError::not_found(
+                <subscription::Model as navree_orm::Model>::meta().name(),
+                vec![id.to_string()],
+            )
+        })?
+        .into_inner())
 }
 
 /// Picks the billable the routes act on from the registered ones.

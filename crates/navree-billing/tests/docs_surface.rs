@@ -15,10 +15,10 @@ use navree_billing::{
     Subscribed, Subscription, SubscriptionCanceled, SubscriptionCreated, SubscriptionStatus,
     SubscriptionUpdated, TrialEnding,
 };
+use navree_db::{Executor, Statement};
 use navree_events::Event;
 use navree_kernel::Module;
 use navree_workspace::{CurrentWorkspace, Workspace};
-use sea_orm::{ConnectionTrait, Statement};
 use serde_json::json;
 
 fn billable<B: Billable>() -> &'static str {
@@ -250,15 +250,13 @@ async fn the_documented_routes_tables_and_commands() {
 
     let db = app.get::<navree_db::Db>().await;
     let tables: BTreeSet<String> = db
-        .conn()
-        .query_all_raw(Statement::from_string(
-            db.backend(),
+        .fetch_all(&Statement::text(
             "SELECT name FROM sqlite_master WHERE type = 'table'",
         ))
         .await
         .unwrap()
         .into_iter()
-        .map(|row| row.try_get::<String>("", "name").unwrap())
+        .map(|row| row.get::<String>("name").unwrap())
         .collect();
     for table in [
         "billing_customers",
@@ -361,11 +359,11 @@ fn the_names_the_page_mentions_in_passing() {
 
     // "The tables": the entities are in `navree::billing::entity`.
     let _ = (
-        navree_billing::entity::customer::Entity,
-        navree_billing::entity::subscription::Entity,
-        navree_billing::entity::subscription_item::Entity,
-        navree_billing::entity::usage::Entity,
-        navree_billing::entity::event::Entity,
+        std::marker::PhantomData::<navree_billing::entity::customer::Model>,
+        std::marker::PhantomData::<navree_billing::entity::subscription::Model>,
+        std::marker::PhantomData::<navree_billing::entity::subscription_item::Model>,
+        std::marker::PhantomData::<navree_billing::entity::usage::Model>,
+        std::marker::PhantomData::<navree_billing::entity::event::Model>,
     );
 }
 

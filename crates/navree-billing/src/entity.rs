@@ -1,7 +1,6 @@
-//! The billing tables (migration set `billing`): navree-orm models
+//! The billing tables (migration set `billing`) as navree-orm models
 //! (`subscription::Model::query()`, typed columns such as
-//! `subscription::Model::STATUS`), and SeaORM entities for code built on
-//! SeaORM's query API.
+//! `subscription::Model::STATUS`).
 //!
 //! - `billing_customers(id, billable_type, billable_id, provider,
 //!   provider_customer_id, email, trial_ends_at, created_at, updated_at)`,
@@ -25,16 +24,15 @@
 /// `billing_customers`: the provider's customer of each billable, and the
 /// trial without a subscription.
 pub mod customer {
-    use sea_orm::entity::prelude::*;
+    use chrono::{DateTime, Utc};
     use serde::Serialize;
+    use uuid::Uuid;
 
     /// A billable's customer record.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
-    #[sea_orm(table_name = "billing_customers")]
+    #[derive(Clone, Debug, PartialEq, Eq, navree_orm::Model, Serialize)]
     #[model(table = "billing_customers")]
     pub struct Model {
         /// The id (UUID v7).
-        #[sea_orm(primary_key, auto_increment = false)]
         pub id: Uuid,
         /// `Billable::BILLABLE_TYPE` (`workspace`, `user`, ...).
         pub billable_type: String,
@@ -47,44 +45,37 @@ pub mod customer {
         /// The billing email the customer was created with.
         pub email: Option<String>,
         /// The end of a trial without a subscription.
-        pub trial_ends_at: Option<DateTimeUtc>,
+        pub trial_ends_at: Option<DateTime<Utc>>,
         /// When the row was created.
-        pub created_at: DateTimeUtc,
+        pub created_at: DateTime<Utc>,
         /// When the row last changed.
-        pub updated_at: DateTimeUtc,
+        pub updated_at: DateTime<Utc>,
     }
-
-    /// No relations.
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
 /// The access subject of subscriptions (`Subscription`), for admin panels
 /// (Helm) and `#[can]` checks; permissions `subscriptions.<action>`.
 pub const SUBSCRIPTION_SUBJECT: &str = "Subscription";
 
-/// Subscriptions are the access subject [`SUBSCRIPTION_SUBJECT`] with the
-/// permission prefix `subscriptions`, so an app can list them in Helm or
-/// check `#[can(Read, Subscription)]`.
-impl navree_access::Subject for subscription::Entity {
-    const SUBJECT: &'static str = SUBSCRIPTION_SUBJECT;
-    const PERMISSION_PREFIX: &'static str = "subscriptions";
-}
-
 /// `subscriptions`: the local copy of the provider's subscriptions.
+///
+/// The model is the access subject [`SUBSCRIPTION_SUBJECT`] with the
+/// permission prefix `subscriptions`, so an app can list subscriptions in
+/// Helm or check `#[can(Read, Subscription)]`.
 pub mod subscription {
-    use sea_orm::entity::prelude::*;
+    use chrono::{DateTime, Utc};
     use serde::Serialize;
+    use uuid::Uuid;
 
     /// A subscription row.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
-    #[sea_orm(table_name = "subscriptions")]
-    #[model(table = "subscriptions")]
+    #[derive(Clone, Debug, PartialEq, Eq, navree_orm::Model, Serialize)]
+    #[model(
+        table = "subscriptions",
+        subject = "Subscription",
+        permission_prefix = "subscriptions"
+    )]
     pub struct Model {
         /// The id (UUID v7).
-        #[sea_orm(primary_key, auto_increment = false)]
         pub id: Uuid,
         /// `Billable::BILLABLE_TYPE`.
         pub billable_type: String,
@@ -93,7 +84,6 @@ pub mod subscription {
         /// `stripe`, `paddle` or `fake`.
         pub provider: String,
         /// The provider's subscription id.
-        #[sea_orm(unique)]
         pub provider_id: String,
         /// The provider's customer id.
         pub provider_customer_id: String,
@@ -107,54 +97,37 @@ pub mod subscription {
         /// Seats.
         pub quantity: i64,
         /// When the trial ends.
-        pub trial_ends_at: Option<DateTimeUtc>,
+        pub trial_ends_at: Option<DateTime<Utc>>,
         /// When a canceled subscription ends (or ended).
-        pub ends_at: Option<DateTimeUtc>,
+        pub ends_at: Option<DateTime<Utc>>,
         /// The start of the current period.
-        pub current_period_start: Option<DateTimeUtc>,
+        pub current_period_start: Option<DateTime<Utc>>,
         /// The end of the current period.
-        pub current_period_end: Option<DateTimeUtc>,
+        pub current_period_end: Option<DateTime<Utc>>,
         /// Since when the subscription is past due.
-        pub past_due_since: Option<DateTimeUtc>,
+        pub past_due_since: Option<DateTime<Utc>>,
         /// The time of the provider state this row reflects (older webhook
         /// events are ignored).
-        pub provider_updated_at: Option<DateTimeUtc>,
+        pub provider_updated_at: Option<DateTime<Utc>>,
         /// When the row was created.
-        pub created_at: DateTimeUtc,
+        pub created_at: DateTime<Utc>,
         /// When the row last changed.
-        pub updated_at: DateTimeUtc,
+        pub updated_at: DateTime<Utc>,
     }
-
-    /// A subscription has items.
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {
-        /// `subscription_items.subscription_id`.
-        #[sea_orm(has_many = "super::subscription_item::Entity")]
-        Items,
-    }
-
-    impl Related<super::subscription_item::Entity> for Entity {
-        fn to() -> RelationDef {
-            Relation::Items.def()
-        }
-    }
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
 /// `subscription_items`: each price of a subscription, metered prices
 /// included.
 pub mod subscription_item {
-    use sea_orm::entity::prelude::*;
+    use chrono::{DateTime, Utc};
     use serde::Serialize;
+    use uuid::Uuid;
 
     /// A subscription item.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
-    #[sea_orm(table_name = "subscription_items")]
+    #[derive(Clone, Debug, PartialEq, Eq, navree_orm::Model, Serialize)]
     #[model(table = "subscription_items")]
     pub struct Model {
         /// The id (UUID v7).
-        #[sea_orm(primary_key, auto_increment = false)]
         pub id: Uuid,
         /// The subscription.
         pub subscription_id: Uuid,
@@ -167,43 +140,21 @@ pub mod subscription_item {
         /// The quantity (none for metered prices).
         pub quantity: Option<i64>,
         /// When the row was created.
-        pub created_at: DateTimeUtc,
+        pub created_at: DateTime<Utc>,
     }
-
-    /// An item belongs to a subscription.
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {
-        /// `subscriptions.id`.
-        #[sea_orm(
-            belongs_to = "super::subscription::Entity",
-            from = "Column::SubscriptionId",
-            to = "super::subscription::Column::Id",
-            on_delete = "Cascade"
-        )]
-        Subscription,
-    }
-
-    impl Related<super::subscription::Entity> for Entity {
-        fn to() -> RelationDef {
-            Relation::Subscription.def()
-        }
-    }
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
 /// `billing_usage`: recorded metered usage.
 pub mod usage {
-    use sea_orm::entity::prelude::*;
+    use chrono::{DateTime, Utc};
     use serde::Serialize;
+    use uuid::Uuid;
 
     /// One recorded use.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
-    #[sea_orm(table_name = "billing_usage")]
+    #[derive(Clone, Debug, PartialEq, Eq, navree_orm::Model, Serialize)]
     #[model(table = "billing_usage")]
     pub struct Model {
         /// The id (UUID v7).
-        #[sea_orm(primary_key, auto_increment = false)]
         pub id: Uuid,
         /// `Billable::BILLABLE_TYPE`.
         pub billable_type: String,
@@ -214,30 +165,23 @@ pub mod usage {
         /// How much was used.
         pub quantity: i64,
         /// When it was recorded.
-        pub recorded_at: DateTimeUtc,
+        pub recorded_at: DateTime<Utc>,
         /// When `billing:report-usage` sent it to the provider.
-        pub reported_at: Option<DateTimeUtc>,
+        pub reported_at: Option<DateTime<Utc>>,
     }
-
-    /// No relations.
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
 /// `billing_events`: every webhook received.
 pub mod event {
-    use sea_orm::entity::prelude::*;
+    use chrono::{DateTime, Utc};
     use serde::Serialize;
+    use uuid::Uuid;
 
     /// A received webhook event.
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, navree_orm::Model, Serialize)]
-    #[sea_orm(table_name = "billing_events")]
+    #[derive(Clone, Debug, PartialEq, Eq, navree_orm::Model, Serialize)]
     #[model(table = "billing_events")]
     pub struct Model {
         /// The id (UUID v7).
-        #[sea_orm(primary_key, auto_increment = false)]
         pub id: Uuid,
         /// `stripe`, `paddle` or `fake`.
         pub provider: String,
@@ -248,20 +192,14 @@ pub mod event {
         /// The raw JSON body.
         pub payload: String,
         /// When it arrived.
-        pub received_at: DateTimeUtc,
+        pub received_at: DateTime<Utc>,
         /// When the `billing.process_event` job finished it.
-        pub processed_at: Option<DateTimeUtc>,
+        pub processed_at: Option<DateTime<Utc>>,
         /// Processing attempts so far.
         pub attempts: i32,
         /// The error of the last failed attempt.
         pub error: Option<String>,
     }
-
-    /// No relations.
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
 
 /// A row of `billing_customers`.
@@ -275,17 +213,20 @@ pub type SubscriptionItem = subscription_item::Model;
 
 #[cfg(test)]
 mod tests {
-    use navree_access::Subject;
+    use navree_access::SubjectRecords;
 
     use super::*;
 
+    fn subject<S: SubjectRecords>() -> (&'static str, &'static str) {
+        (S::SUBJECT, S::PERMISSION_PREFIX)
+    }
+
     #[test]
     fn subscriptions_are_an_access_subject() {
-        assert_eq!(<subscription::Entity as Subject>::SUBJECT, "Subscription");
         assert_eq!(SUBSCRIPTION_SUBJECT, "Subscription");
         assert_eq!(
-            <subscription::Entity as Subject>::PERMISSION_PREFIX,
-            "subscriptions"
+            subject::<subscription::Model>(),
+            (SUBSCRIPTION_SUBJECT, "subscriptions")
         );
     }
 }

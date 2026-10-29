@@ -45,8 +45,7 @@ fn at(secs: i64) -> DateTime<Utc> {
 }
 
 async fn fake_case() -> Case {
-    let app = TestApp::builder()
-        .temp_database()
+    let app = crate::servers::database(TestApp::builder())
         .config("billing.provider", "fake")
         .config("billing.routes", false)
         .config("billing.return_url", "https://app.acme.test/settings/billing")
