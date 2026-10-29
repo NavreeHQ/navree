@@ -1,11 +1,17 @@
 //! The billing migrations (`MigrationSet` `billing`, after `auth` and
-//! `workspace`).
+//! `workspace`), on the schema builder.
+//!
+//! The name is the one the migration always had, so a database migrated by
+//! an earlier version finds nothing pending. The columns keep the types it
+//! created: UUIDs as `BINARY(16)` on MySQL and MariaDB (where navree-db
+//! writes UUIDs as 16 bytes), text as `VARCHAR` without a length on
+//! PostgreSQL and SQLite and `VARCHAR(255)` on MySQL, timestamps at the
+//! database's default precision.
 
 use navree_db::MigrationSet;
-use sea_orm::DbErr;
-use sea_orm::sea_query::{ColumnDef, ForeignKey, ForeignKeyAction, Index, Table};
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
+use navree_db::navree_schema::{
+    Blueprint, ColumnBuilder, Dialect, Migration, Schema, SchemaMigration, SchemaResult,
+};
 
 /// The name of the billing migration set; tables that reference the billing
 /// tables run `.after([BILLING_MIGRATIONS])`.
@@ -15,205 +21,133 @@ pub const BILLING_MIGRATIONS: &str = "billing";
 pub(crate) fn migrations() -> MigrationSet {
     MigrationSet::new(BILLING_MIGRATIONS)
         .after(["auth", "workspace"])
-        .migration(CreateBillingTables)
+        .migration(SchemaMigration::new(
+            "m20261026_000001_create_billing_tables",
+            CreateBillingTables,
+        ))
+}
+
+/// A UUID column: `BINARY(16)` on MySQL and MariaDB, `uuid` elsewhere.
+fn uuid<'a>(t: &'a mut Blueprint, name: &str, dialect: Dialect) -> ColumnBuilder<'a> {
+    if dialect == Dialect::MySql {
+        t.binary(name).length(16).fixed()
+    } else {
+        t.uuid(name)
+    }
+}
+
+/// A text column of no fixed length: `VARCHAR(255)` on MySQL and MariaDB,
+/// `VARCHAR` elsewhere.
+fn varchar<'a>(t: &'a mut Blueprint, name: &str, dialect: Dialect) -> ColumnBuilder<'a> {
+    if dialect == Dialect::MySql {
+        t.string(name).length(255)
+    } else {
+        t.raw_column(name, "VARCHAR")
+    }
+}
+
+/// A timestamp at the database's default precision.
+fn timestamp<'a>(t: &'a mut Blueprint, name: &str) -> ColumnBuilder<'a> {
+    t.timestamp_tz(name).default_precision()
 }
 
 /// Creates `billing_customers`, `subscriptions`, `subscription_items`,
 /// `billing_usage` and `billing_events`.
 struct CreateBillingTables;
 
-impl MigrationName for CreateBillingTables {
-    fn name(&self) -> &str {
-        "m20261026_000001_create_billing_tables"
-    }
-}
-
-fn timestamp(name: &'static str) -> ColumnDef {
-    ColumnDef::new(name)
-        .timestamp_with_time_zone()
-        .not_null()
-        .to_owned()
-}
-
-fn nullable_timestamp(name: &'static str) -> ColumnDef {
-    ColumnDef::new(name)
-        .timestamp_with_time_zone()
-        .null()
-        .to_owned()
-}
-
-#[async_trait]
-impl MigrationTrait for CreateBillingTables {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table("billing_customers")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("billable_type").string().not_null())
-                    .col(ColumnDef::new("billable_id").uuid().not_null())
-                    .col(ColumnDef::new("provider").string().null())
-                    .col(ColumnDef::new("provider_customer_id").string().null())
-                    .col(ColumnDef::new("email").string().null())
-                    .col(nullable_timestamp("trial_ends_at"))
-                    .col(timestamp("created_at"))
-                    .col(timestamp("updated_at"))
-                    .to_owned(),
-            )
+impl Migration for CreateBillingTables {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        let dialect = schema.target().await?.dialect();
+        schema
+            .create("billing_customers", |t| {
+                uuid(t, "id", dialect).primary();
+                varchar(t, "billable_type", dialect);
+                uuid(t, "billable_id", dialect);
+                varchar(t, "provider", dialect).nullable();
+                varchar(t, "provider_customer_id", dialect)
+                    .nullable()
+                    .index_named("billing_customers_provider_customer_id_index");
+                varchar(t, "email", dialect).nullable();
+                timestamp(t, "trial_ends_at").nullable();
+                timestamp(t, "created_at");
+                timestamp(t, "updated_at");
+                t.unique(["billable_type", "billable_id"])
+                    .name("billing_customers_billable_unique");
+            })
             .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("billing_customers_billable_unique")
-                    .table("billing_customers")
-                    .col("billable_type")
-                    .col("billable_id")
-                    .unique()
-                    .to_owned(),
-            )
+        schema
+            .create("subscriptions", |t| {
+                uuid(t, "id", dialect).primary();
+                varchar(t, "billable_type", dialect);
+                uuid(t, "billable_id", dialect);
+                varchar(t, "provider", dialect);
+                varchar(t, "provider_id", dialect).unique();
+                varchar(t, "provider_customer_id", dialect);
+                varchar(t, "plan", dialect);
+                varchar(t, "interval", dialect);
+                varchar(t, "status", dialect);
+                t.big_integer("quantity");
+                timestamp(t, "trial_ends_at").nullable();
+                timestamp(t, "ends_at").nullable();
+                timestamp(t, "current_period_start").nullable();
+                timestamp(t, "current_period_end").nullable();
+                timestamp(t, "past_due_since").nullable();
+                timestamp(t, "provider_updated_at").nullable();
+                timestamp(t, "created_at");
+                timestamp(t, "updated_at");
+                t.index(["billable_type", "billable_id"])
+                    .name("subscriptions_billable_index");
+            })
             .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("billing_customers_provider_customer_id_index")
-                    .table("billing_customers")
-                    .col("provider_customer_id")
-                    .to_owned(),
-            )
+        schema
+            .create("subscription_items", |t| {
+                uuid(t, "id", dialect).primary();
+                uuid(t, "subscription_id", dialect)
+                    .index_named("subscription_items_subscription_id_index");
+                varchar(t, "provider_item_id", dialect).nullable();
+                varchar(t, "price_id", dialect);
+                varchar(t, "meter", dialect).nullable();
+                t.big_integer("quantity").nullable();
+                timestamp(t, "created_at");
+                t.foreign("subscription_id")
+                    .references("id")
+                    .on("subscriptions")
+                    .cascade_on_delete();
+            })
             .await?;
-        manager
-            .create_table(
-                Table::create()
-                    .table("subscriptions")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("billable_type").string().not_null())
-                    .col(ColumnDef::new("billable_id").uuid().not_null())
-                    .col(ColumnDef::new("provider").string().not_null())
-                    .col(
-                        ColumnDef::new("provider_id")
-                            .string()
-                            .not_null()
-                            .unique_key(),
-                    )
-                    .col(ColumnDef::new("provider_customer_id").string().not_null())
-                    .col(ColumnDef::new("plan").string().not_null())
-                    .col(ColumnDef::new("interval").string().not_null())
-                    .col(ColumnDef::new("status").string().not_null())
-                    .col(ColumnDef::new("quantity").big_integer().not_null())
-                    .col(nullable_timestamp("trial_ends_at"))
-                    .col(nullable_timestamp("ends_at"))
-                    .col(nullable_timestamp("current_period_start"))
-                    .col(nullable_timestamp("current_period_end"))
-                    .col(nullable_timestamp("past_due_since"))
-                    .col(nullable_timestamp("provider_updated_at"))
-                    .col(timestamp("created_at"))
-                    .col(timestamp("updated_at"))
-                    .to_owned(),
-            )
+        schema
+            .create("billing_usage", |t| {
+                uuid(t, "id", dialect).primary();
+                varchar(t, "billable_type", dialect);
+                uuid(t, "billable_id", dialect);
+                varchar(t, "meter", dialect);
+                t.big_integer("quantity");
+                timestamp(t, "recorded_at");
+                timestamp(t, "reported_at")
+                    .nullable()
+                    .index_named("billing_usage_reported_at_index");
+                t.index(["billable_type", "billable_id", "meter"])
+                    .name("billing_usage_billable_meter_index");
+            })
             .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("subscriptions_billable_index")
-                    .table("subscriptions")
-                    .col("billable_type")
-                    .col("billable_id")
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_table(
-                Table::create()
-                    .table("subscription_items")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("subscription_id").uuid().not_null())
-                    .col(ColumnDef::new("provider_item_id").string().null())
-                    .col(ColumnDef::new("price_id").string().not_null())
-                    .col(ColumnDef::new("meter").string().null())
-                    .col(ColumnDef::new("quantity").big_integer().null())
-                    .col(timestamp("created_at"))
-                    .foreign_key(
-                        ForeignKey::create()
-                            .from("subscription_items", "subscription_id")
-                            .to("subscriptions", "id")
-                            .on_delete(ForeignKeyAction::Cascade),
-                    )
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("subscription_items_subscription_id_index")
-                    .table("subscription_items")
-                    .col("subscription_id")
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_table(
-                Table::create()
-                    .table("billing_usage")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("billable_type").string().not_null())
-                    .col(ColumnDef::new("billable_id").uuid().not_null())
-                    .col(ColumnDef::new("meter").string().not_null())
-                    .col(ColumnDef::new("quantity").big_integer().not_null())
-                    .col(timestamp("recorded_at"))
-                    .col(nullable_timestamp("reported_at"))
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("billing_usage_billable_meter_index")
-                    .table("billing_usage")
-                    .col("billable_type")
-                    .col("billable_id")
-                    .col("meter")
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("billing_usage_reported_at_index")
-                    .table("billing_usage")
-                    .col("reported_at")
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_table(
-                Table::create()
-                    .table("billing_events")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("provider").string().not_null())
-                    .col(ColumnDef::new("provider_event_id").string().not_null())
-                    .col(ColumnDef::new("event_type").string().not_null())
-                    .col(ColumnDef::new("payload").text().not_null())
-                    .col(timestamp("received_at"))
-                    .col(nullable_timestamp("processed_at"))
-                    .col(ColumnDef::new("attempts").integer().not_null().default(0))
-                    .col(ColumnDef::new("error").text().null())
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("billing_events_provider_event_unique")
-                    .table("billing_events")
-                    .col("provider")
-                    .col("provider_event_id")
-                    .unique()
-                    .to_owned(),
-            )
+        schema
+            .create("billing_events", |t| {
+                uuid(t, "id", dialect).primary();
+                varchar(t, "provider", dialect);
+                varchar(t, "provider_event_id", dialect);
+                varchar(t, "event_type", dialect);
+                t.text("payload");
+                timestamp(t, "received_at");
+                timestamp(t, "processed_at").nullable();
+                t.integer("attempts").default(0);
+                t.text("error").nullable();
+                t.unique(["provider", "provider_event_id"])
+                    .name("billing_events_provider_event_unique");
+            })
             .await
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
         for table in [
             "billing_events",
             "billing_usage",
@@ -221,9 +155,7 @@ impl MigrationTrait for CreateBillingTables {
             "subscriptions",
             "billing_customers",
         ] {
-            manager
-                .drop_table(Table::drop().table(table).to_owned())
-                .await?;
+            schema.drop(table).await?;
         }
         Ok(())
     }

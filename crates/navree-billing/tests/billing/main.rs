@@ -2,6 +2,7 @@
 //! webhook pipeline, subscription changes, trials, usage, invoices, seats,
 //! the routes and the commands.
 
+mod servers;
 mod support;
 
 mod checkout;

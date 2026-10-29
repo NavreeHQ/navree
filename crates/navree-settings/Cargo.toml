@@ -42,10 +42,10 @@ navree-macros = { workspace = true }
 # Feature `notify`: `SettingsTemplateOverrides` is navree-notify's
 # `dyn TemplateOverrides`.
 navree-notify = { workspace = true, optional = true }
+# The settings table is a model (`setting::Model`).
+navree-orm = { workspace = true }
 navree-validation = { workspace = true }
 navree-workspace = { workspace = true }
-sea-orm = { workspace = true }
-sea-orm-migration = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

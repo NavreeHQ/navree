@@ -12,8 +12,8 @@ use navree_flags::{
     FlagScope, FlagState, FlagStoreKind, Flags, FlagsError, FlagsFake, FlagsModule, FlagsOptions,
     MissingScope, PlanResolver, RequireFlag, Rollout, UserScope, requires_flag,
 };
+use navree_orm::Model as _;
 use navree_testing::TestApp;
-use sea_orm::EntityName;
 
 /// A flag for the signatures below.
 struct NewPipeline;
@@ -135,9 +135,9 @@ fn the_documented_api_exists() {
     let _ = FlagsFake::assert_not_checked::<NewPipeline>;
 
     // Tables, migration set and permission.
-    assert_eq!(feature_flag::Entity.table_name(), "feature_flags");
+    assert_eq!(feature_flag::Model::table_name(), "feature_flags");
     assert_eq!(
-        feature_flag_override::Entity.table_name(),
+        feature_flag_override::Model::table_name(),
         "feature_flag_overrides"
     );
     assert_eq!(FLAGS_MIGRATIONS, "flags");

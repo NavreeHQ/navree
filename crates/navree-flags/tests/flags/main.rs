@@ -2,6 +2,7 @@
 //! rollout, storage, the cache, writes in units of work, the request
 //! extractor and route guard, the routes, the commands and the fake.
 
+mod servers;
 mod support;
 
 mod admin;

@@ -4,12 +4,11 @@
 use std::sync::Arc;
 
 use chrono::{TimeZone, Utc};
-use navree_db::Db;
+use navree_db::{Db, Executor, Statement};
 use navree_settings::{
     DatabaseSettingsStore, MemorySettingsStore, ScopeKind, ScopeTarget, SettingsStore,
     StoredSetting,
 };
-use sea_orm::{ConnectionTrait, Statement};
 use serde_json::{Map, Value, json};
 use uuid::Uuid;
 
@@ -182,32 +181,29 @@ async fn rows_keep_the_documented_columns() {
         )
         .await
         .unwrap();
-    let backend = db.conn().get_database_backend();
+    let backend = Executor::backend(&*db);
+    let key = backend.quote_identifier("key");
+    let value = backend.quote_identifier("value");
     let rows = db
-        .conn()
-        .query_all_raw(Statement::from_string(
-            backend,
-            "SELECT \"key\", scope_type, scope_id, \"value\", overridden_fields FROM settings \
-             ORDER BY scope_type",
-        ))
+        .fetch_all(&Statement::text(format!(
+            "SELECT {key}, scope_type, scope_id, {value}, overridden_fields FROM settings \
+             ORDER BY scope_type"
+        )))
         .await
         .unwrap();
     assert_eq!(rows.len(), 2);
     let global = &rows[0];
-    assert_eq!(
-        global.try_get::<String>("", "scope_type").unwrap(),
-        "global"
-    );
-    assert_eq!(global.try_get::<Uuid>("", "scope_id").unwrap(), Uuid::nil());
+    assert_eq!(global.get::<String>("scope_type").unwrap(), "global");
+    assert_eq!(global.get::<Uuid>("scope_id").unwrap(), Uuid::nil());
     let workspace = &rows[1];
-    assert_eq!(workspace.try_get::<String>("", "key").unwrap(), "portal");
-    assert_eq!(workspace.try_get::<Uuid>("", "scope_id").unwrap(), acme);
+    assert_eq!(workspace.get::<String>("key").unwrap(), "portal");
+    assert_eq!(workspace.get::<Uuid>("scope_id").unwrap(), acme);
     assert_eq!(
-        workspace.try_get::<Value>("", "value").unwrap(),
+        workspace.get::<Value>("value").unwrap(),
         json!({"welcome_text": "Hi", "page_size": 10})
     );
     assert_eq!(
-        workspace.try_get::<Value>("", "overridden_fields").unwrap(),
+        workspace.get::<Value>("overridden_fields").unwrap(),
         json!(["page_size", "welcome_text"])
     );
 }
@@ -224,8 +220,7 @@ async fn an_unreadable_row_is_reported_not_guessed() {
         )
         .await
         .unwrap();
-    db.conn()
-        .execute_unprepared("UPDATE settings SET scope_type = 'team'")
+    db.execute(&Statement::text("UPDATE settings SET scope_type = 'team'"))
         .await
         .unwrap();
     let error = store.list(None, None).await.unwrap_err();

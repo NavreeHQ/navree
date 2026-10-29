@@ -6,10 +6,7 @@ use std::sync::Arc;
 use chrono::Utc;
 use navree_db::{Db, Uow};
 use navree_kernel::BoxFuture;
-use sea_orm::sea_query::{Expr, Func, OnConflict};
-use sea_orm::{
-    ActiveValue, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect,
-};
+use navree_orm::{Executor, Model as _, table};
 use uuid::Uuid;
 
 use super::FlagStore;
@@ -30,38 +27,15 @@ impl DatabaseFlagStore {
     }
 }
 
-/// Runs `$body` with `$conn` bound to a connection to read with: the unit
-/// of work's transaction, else `Db::reader` (the task's open transaction,
-/// else the pool).
-macro_rules! with_reader {
-    ($self:ident, $uow:expr, |$conn:ident| $body:expr) => {{
+/// Runs `$body` with `$exec` bound to what to run on: the unit of work, else
+/// the `Db`, which reads in the task's open unit of work or on the pool and
+/// writes where the ORM writes for any `Db`.
+macro_rules! with_exec {
+    ($self:ident, $uow:expr, |$exec:ident| $body:expr) => {{
         match $uow {
-            Some(uow) => {
-                let tx = uow.tx().await?;
-                let $conn = &*tx;
-                $body
-            }
+            Some($exec) => $body,
             None => {
-                let reader = $self.db.reader().await;
-                let $conn = &reader;
-                $body
-            }
-        }
-    }};
-}
-
-/// Runs `$body` with `$conn` bound to a connection to write with: the unit
-/// of work's transaction, else the pool.
-macro_rules! with_writer {
-    ($self:ident, $uow:expr, |$conn:ident| $body:expr) => {{
-        match $uow {
-            Some(uow) => {
-                let tx = uow.tx().await?;
-                let $conn = &*tx;
-                $body
-            }
-            None => {
-                let $conn = $self.db.conn();
+                let $exec = &*$self.db;
                 $body
             }
         }
@@ -98,176 +72,161 @@ fn to_override(row: feature_flag_override::Model) -> Result<FlagOverride, FlagsE
     })
 }
 
-async fn states_in<C: ConnectionTrait>(conn: &C) -> Result<Vec<FlagState>, FlagsError> {
-    feature_flag::Entity::find()
-        .order_by_asc(feature_flag::Column::Name)
-        .all(conn)
+async fn states_in<E: Executor + ?Sized>(exec: &E) -> Result<Vec<FlagState>, FlagsError> {
+    feature_flag::Model::query()
+        .order_by(feature_flag::Model::NAME)
+        .get(exec)
         .await?
+        .into_models()
         .into_iter()
         .map(to_state)
         .collect()
 }
 
-async fn state_in<C: ConnectionTrait>(
-    conn: &C,
+async fn state_in<E: Executor + ?Sized>(
+    exec: &E,
     name: &str,
 ) -> Result<Option<FlagState>, FlagsError> {
-    feature_flag::Entity::find_by_id(name.to_owned())
-        .one(conn)
+    feature_flag::Model::query()
+        .where_(feature_flag::Model::NAME.eq(name))
+        .first(exec)
         .await?
-        .map(to_state)
+        .map(|row| to_state(row.into_inner()))
         .transpose()
 }
 
-async fn save_state_in<C: ConnectionTrait>(conn: &C, state: &FlagState) -> Result<(), FlagsError> {
+async fn save_state_in<E: Executor + ?Sized>(
+    exec: &E,
+    state: &FlagState,
+) -> Result<(), FlagsError> {
     let rollout = state
         .rollout
         .as_ref()
         .map(serde_json::to_value)
         .transpose()
         .map_err(|error| FlagsError::Corrupt(error.to_string()))?;
-    let row = feature_flag::ActiveModel {
-        name: ActiveValue::Set(state.name.clone()),
-        everyone: ActiveValue::Set(state.everyone),
-        rollout: ActiveValue::Set(rollout),
-        killed: ActiveValue::Set(state.killed),
-        updated_at: ActiveValue::Set(state.updated_at.unwrap_or_else(Utc::now)),
-        updated_by: ActiveValue::Set(state.updated_by),
+    let row = feature_flag::Model {
+        name: state.name.clone(),
+        everyone: state.everyone,
+        rollout,
+        killed: state.killed,
+        updated_at: state.updated_at.unwrap_or_else(Utc::now),
+        updated_by: state.updated_by,
     };
-    feature_flag::Entity::insert(row)
-        .on_conflict(
-            OnConflict::column(feature_flag::Column::Name)
-                .update_columns([
-                    feature_flag::Column::Everyone,
-                    feature_flag::Column::Rollout,
-                    feature_flag::Column::Killed,
-                    feature_flag::Column::UpdatedAt,
-                    feature_flag::Column::UpdatedBy,
-                ])
-                .to_owned(),
+    feature_flag::Model::query()
+        .upsert(
+            exec,
+            [row],
+            ["name"],
+            ["everyone", "rollout", "killed", "updated_at", "updated_by"],
         )
-        .exec_without_returning(conn)
         .await?;
     Ok(())
 }
 
-async fn overrides_of_in<C: ConnectionTrait>(
-    conn: &C,
+async fn overrides_of_in<E: Executor + ?Sized>(
+    exec: &E,
     scope_type: ScopeType,
     scope_id: Uuid,
 ) -> Result<BTreeMap<String, bool>, FlagsError> {
-    Ok(feature_flag_override::Entity::find()
-        .filter(feature_flag_override::Column::ScopeType.eq(scope_type.as_str()))
-        .filter(feature_flag_override::Column::ScopeId.eq(scope_id))
-        .all(conn)
+    Ok(feature_flag_override::Model::query()
+        .where_(feature_flag_override::Model::SCOPE_TYPE.eq(scope_type.as_str()))
+        .where_(feature_flag_override::Model::SCOPE_ID.eq(scope_id))
+        .get(exec)
         .await?
+        .into_models()
         .into_iter()
         .map(|row| (row.flag, row.active))
         .collect())
 }
 
-async fn overrides_in<C: ConnectionTrait>(
-    conn: &C,
+async fn overrides_in<E: Executor + ?Sized>(
+    exec: &E,
     flag: &str,
 ) -> Result<Vec<FlagOverride>, FlagsError> {
-    feature_flag_override::Entity::find()
-        .filter(feature_flag_override::Column::Flag.eq(flag))
-        .order_by_asc(feature_flag_override::Column::ScopeType)
-        .order_by_asc(feature_flag_override::Column::ScopeId)
-        .all(conn)
+    feature_flag_override::Model::query()
+        .where_(feature_flag_override::Model::FLAG.eq(flag))
+        .order_by(feature_flag_override::Model::SCOPE_TYPE)
+        .order_by(feature_flag_override::Model::SCOPE_ID)
+        .get(exec)
         .await?
+        .into_models()
         .into_iter()
         .map(to_override)
         .collect()
 }
 
-async fn override_counts_in<C: ConnectionTrait>(
-    conn: &C,
+async fn override_counts_in<E: Executor + ?Sized>(
+    exec: &E,
 ) -> Result<BTreeMap<String, u64>, FlagsError> {
-    let rows: Vec<(String, i64)> = feature_flag_override::Entity::find()
-        .select_only()
-        .column(feature_flag_override::Column::Flag)
-        .column_as(
-            Expr::expr(Func::count(Expr::col(feature_flag_override::Column::Flag))),
-            "count",
-        )
-        .group_by(feature_flag_override::Column::Flag)
-        .into_tuple()
-        .all(conn)
+    let rows = table("feature_flag_overrides")
+        .select(["flag"])
+        .select_raw("COUNT(flag) AS count", Vec::<i64>::new())
+        .group_by(["flag"])
+        .get(exec)
         .await?;
-    Ok(rows
-        .into_iter()
-        .map(|(flag, count)| (flag, u64::try_from(count).unwrap_or(0)))
-        .collect())
+    let mut counts = BTreeMap::new();
+    for row in rows {
+        let flag: String = row.get("flag")?;
+        let count: i64 = row.get("count")?;
+        counts.insert(flag, u64::try_from(count).unwrap_or(0));
+    }
+    Ok(counts)
 }
 
-async fn set_override_in<C: ConnectionTrait>(
-    conn: &C,
+async fn set_override_in<E: Executor + ?Sized>(
+    exec: &E,
     entry: &FlagOverride,
 ) -> Result<(), FlagsError> {
-    let row = feature_flag_override::ActiveModel {
-        flag: ActiveValue::Set(entry.flag.clone()),
-        scope_type: ActiveValue::Set(entry.scope_type.as_str().to_owned()),
-        scope_id: ActiveValue::Set(entry.scope_id),
-        active: ActiveValue::Set(entry.active),
+    let row = feature_flag_override::Model {
+        flag: entry.flag.clone(),
+        scope_type: entry.scope_type.as_str().to_owned(),
+        scope_id: entry.scope_id,
+        active: entry.active,
     };
-    feature_flag_override::Entity::insert(row)
-        .on_conflict(
-            OnConflict::columns([
-                feature_flag_override::Column::Flag,
-                feature_flag_override::Column::ScopeType,
-                feature_flag_override::Column::ScopeId,
-            ])
-            .update_column(feature_flag_override::Column::Active)
-            .to_owned(),
-        )
-        .exec_without_returning(conn)
+    feature_flag_override::Model::query()
+        .upsert(exec, [row], ["flag", "scope_type", "scope_id"], ["active"])
         .await?;
     Ok(())
 }
 
-async fn remove_override_in<C: ConnectionTrait>(
-    conn: &C,
+async fn remove_override_in<E: Executor + ?Sized>(
+    exec: &E,
     flag: &str,
     scope_type: ScopeType,
     scope_id: Uuid,
 ) -> Result<bool, FlagsError> {
-    let result = feature_flag_override::Entity::delete_many()
-        .filter(feature_flag_override::Column::Flag.eq(flag))
-        .filter(feature_flag_override::Column::ScopeType.eq(scope_type.as_str()))
-        .filter(feature_flag_override::Column::ScopeId.eq(scope_id))
-        .exec(conn)
+    let deleted = feature_flag_override::Model::query()
+        .where_(feature_flag_override::Model::FLAG.eq(flag))
+        .where_(feature_flag_override::Model::SCOPE_TYPE.eq(scope_type.as_str()))
+        .where_(feature_flag_override::Model::SCOPE_ID.eq(scope_id))
+        .delete(exec)
         .await?;
-    Ok(result.rows_affected > 0)
+    Ok(deleted > 0)
 }
 
-async fn purge_in<C: ConnectionTrait>(conn: &C, flag: &str) -> Result<(), FlagsError> {
-    feature_flag_override::Entity::delete_many()
-        .filter(feature_flag_override::Column::Flag.eq(flag))
-        .exec(conn)
+async fn purge_in<E: Executor + ?Sized>(exec: &E, flag: &str) -> Result<(), FlagsError> {
+    feature_flag_override::Model::query()
+        .where_(feature_flag_override::Model::FLAG.eq(flag))
+        .delete(exec)
         .await?;
-    feature_flag::Entity::delete_by_id(flag.to_owned())
-        .exec(conn)
+    feature_flag::Model::query()
+        .where_(feature_flag::Model::NAME.eq(flag))
+        .delete(exec)
         .await?;
     Ok(())
 }
 
-async fn names_in<C: ConnectionTrait>(conn: &C) -> Result<BTreeSet<String>, FlagsError> {
-    let mut names: BTreeSet<String> = feature_flag::Entity::find()
-        .select_only()
-        .column(feature_flag::Column::Name)
-        .into_tuple::<String>()
-        .all(conn)
+async fn names_in<E: Executor + ?Sized>(exec: &E) -> Result<BTreeSet<String>, FlagsError> {
+    let mut names: BTreeSet<String> = feature_flag::Model::query()
+        .pluck(exec, feature_flag::Model::NAME)
         .await?
         .into_iter()
         .collect();
     names.extend(
-        feature_flag_override::Entity::find()
-            .select_only()
-            .column(feature_flag_override::Column::Flag)
+        feature_flag_override::Model::query()
             .distinct()
-            .into_tuple::<String>()
-            .all(conn)
+            .pluck(exec, feature_flag_override::Model::FLAG)
             .await?,
     );
     Ok(names)
@@ -278,7 +237,7 @@ impl FlagStore for DatabaseFlagStore {
         &'a self,
         uow: Option<&'a Uow>,
     ) -> BoxFuture<'a, Result<Vec<FlagState>, FlagsError>> {
-        Box::pin(async move { with_reader!(self, uow, |conn| states_in(conn).await) })
+        Box::pin(async move { with_exec!(self, uow, |exec| states_in(exec).await) })
     }
 
     fn state<'a>(
@@ -286,7 +245,7 @@ impl FlagStore for DatabaseFlagStore {
         uow: Option<&'a Uow>,
         name: &'a str,
     ) -> BoxFuture<'a, Result<Option<FlagState>, FlagsError>> {
-        Box::pin(async move { with_reader!(self, uow, |conn| state_in(conn, name).await) })
+        Box::pin(async move { with_exec!(self, uow, |exec| state_in(exec, name).await) })
     }
 
     fn save_state<'a>(
@@ -294,7 +253,7 @@ impl FlagStore for DatabaseFlagStore {
         uow: Option<&'a Uow>,
         state: &'a FlagState,
     ) -> BoxFuture<'a, Result<(), FlagsError>> {
-        Box::pin(async move { with_writer!(self, uow, |conn| save_state_in(conn, state).await) })
+        Box::pin(async move { with_exec!(self, uow, |exec| save_state_in(exec, state).await) })
     }
 
     fn overrides_of<'a>(
@@ -304,8 +263,8 @@ impl FlagStore for DatabaseFlagStore {
         scope_id: Uuid,
     ) -> BoxFuture<'a, Result<BTreeMap<String, bool>, FlagsError>> {
         Box::pin(async move {
-            with_reader!(self, uow, |conn| overrides_of_in(
-                conn, scope_type, scope_id
+            with_exec!(self, uow, |exec| overrides_of_in(
+                exec, scope_type, scope_id
             )
             .await)
         })
@@ -316,14 +275,14 @@ impl FlagStore for DatabaseFlagStore {
         uow: Option<&'a Uow>,
         flag: &'a str,
     ) -> BoxFuture<'a, Result<Vec<FlagOverride>, FlagsError>> {
-        Box::pin(async move { with_reader!(self, uow, |conn| overrides_in(conn, flag).await) })
+        Box::pin(async move { with_exec!(self, uow, |exec| overrides_in(exec, flag).await) })
     }
 
     fn override_counts<'a>(
         &'a self,
         uow: Option<&'a Uow>,
     ) -> BoxFuture<'a, Result<BTreeMap<String, u64>, FlagsError>> {
-        Box::pin(async move { with_reader!(self, uow, |conn| override_counts_in(conn).await) })
+        Box::pin(async move { with_exec!(self, uow, |exec| override_counts_in(exec).await) })
     }
 
     fn set_override<'a>(
@@ -331,7 +290,7 @@ impl FlagStore for DatabaseFlagStore {
         uow: Option<&'a Uow>,
         entry: &'a FlagOverride,
     ) -> BoxFuture<'a, Result<(), FlagsError>> {
-        Box::pin(async move { with_writer!(self, uow, |conn| set_override_in(conn, entry).await) })
+        Box::pin(async move { with_exec!(self, uow, |exec| set_override_in(exec, entry).await) })
     }
 
     fn remove_override<'a>(
@@ -342,8 +301,8 @@ impl FlagStore for DatabaseFlagStore {
         scope_id: Uuid,
     ) -> BoxFuture<'a, Result<bool, FlagsError>> {
         Box::pin(async move {
-            with_writer!(self, uow, |conn| remove_override_in(
-                conn, flag, scope_type, scope_id
+            with_exec!(self, uow, |exec| remove_override_in(
+                exec, flag, scope_type, scope_id
             )
             .await)
         })
@@ -354,13 +313,13 @@ impl FlagStore for DatabaseFlagStore {
         uow: Option<&'a Uow>,
         flag: &'a str,
     ) -> BoxFuture<'a, Result<(), FlagsError>> {
-        Box::pin(async move { with_writer!(self, uow, |conn| purge_in(conn, flag).await) })
+        Box::pin(async move { with_exec!(self, uow, |exec| purge_in(exec, flag).await) })
     }
 
     fn names<'a>(
         &'a self,
         uow: Option<&'a Uow>,
     ) -> BoxFuture<'a, Result<BTreeSet<String>, FlagsError>> {
-        Box::pin(async move { with_reader!(self, uow, |conn| names_in(conn).await) })
+        Box::pin(async move { with_exec!(self, uow, |exec| names_in(exec).await) })
     }
 }

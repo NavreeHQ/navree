@@ -4,10 +4,7 @@ use std::sync::Arc;
 
 use navree_db::{Db, Uow};
 use navree_kernel::BoxFuture;
-use sea_orm::sea_query::OnConflict;
-use sea_orm::{
-    ActiveValue, ColumnTrait, Condition, ConnectionTrait, EntityTrait, QueryFilter, QuerySelect,
-};
+use navree_orm::{Executor, Filter, Model as _};
 use serde_json::Value;
 
 use super::{SettingsStore, StoredSetting};
@@ -28,38 +25,15 @@ impl DatabaseSettingsStore {
     }
 }
 
-/// Runs `$body` with `$conn` bound to a connection to read with: the unit
-/// of work's transaction, else `Db::reader` (the task's open transaction,
-/// else the pool).
-macro_rules! with_reader {
-    ($self:ident, $uow:expr, |$conn:ident| $body:expr) => {{
+/// Runs `$body` with `$exec` bound to what to run on: the unit of work, else
+/// the `Db`, which reads in the task's open unit of work or on the pool and
+/// writes where the ORM writes for any `Db`.
+macro_rules! with_exec {
+    ($self:ident, $uow:expr, |$exec:ident| $body:expr) => {{
         match $uow {
-            Some(uow) => {
-                let tx = uow.tx().await?;
-                let $conn = &*tx;
-                $body
-            }
+            Some($exec) => $body,
             None => {
-                let reader = $self.db.reader().await;
-                let $conn = &reader;
-                $body
-            }
-        }
-    }};
-}
-
-/// Runs `$body` with `$conn` bound to a connection to write with: the unit
-/// of work's transaction, else the pool.
-macro_rules! with_writer {
-    ($self:ident, $uow:expr, |$conn:ident| $body:expr) => {{
-        match $uow {
-            Some(uow) => {
-                let tx = uow.tx().await?;
-                let $conn = &*tx;
-                $body
-            }
-            None => {
-                let $conn = $self.db.conn();
+                let $exec = &*$self.db;
                 $body
             }
         }
@@ -88,10 +62,11 @@ fn to_setting(row: setting::Model) -> Result<StoredSetting, SettingsError> {
     })
 }
 
-fn is_target(target: &ScopeTarget) -> Condition {
-    Condition::all()
-        .add(setting::Column::ScopeType.eq(target.kind.as_str()))
-        .add(setting::Column::ScopeId.eq(target.stored_id()))
+fn is_target(target: &ScopeTarget) -> Filter {
+    Filter::all([
+        setting::Model::SCOPE_TYPE.eq(target.kind.as_str()),
+        setting::Model::SCOPE_ID.eq(target.stored_id()),
+    ])
 }
 
 fn sorted(mut rows: Vec<StoredSetting>) -> Vec<StoredSetting> {
@@ -105,107 +80,91 @@ fn sorted(mut rows: Vec<StoredSetting>) -> Vec<StoredSetting> {
     rows
 }
 
-async fn load_in<C: ConnectionTrait>(
-    conn: &C,
+async fn load_in<E: Executor + ?Sized>(
+    exec: &E,
     key: &str,
     targets: &[ScopeTarget],
 ) -> Result<Vec<StoredSetting>, SettingsError> {
     if targets.is_empty() {
         return Ok(Vec::new());
     }
-    let any = targets
-        .iter()
-        .fold(Condition::any(), |any, target| any.add(is_target(target)));
-    setting::Entity::find()
-        .filter(setting::Column::Key.eq(key))
-        .filter(any)
-        .all(conn)
+    setting::Model::query()
+        .where_(setting::Model::KEY.eq(key))
+        .where_(Filter::any(targets.iter().map(is_target)))
+        .get(exec)
         .await?
+        .into_models()
         .into_iter()
         .map(to_setting)
         .collect()
 }
 
-async fn save_in<C: ConnectionTrait>(
-    conn: &C,
+async fn save_in<E: Executor + ?Sized>(
+    exec: &E,
     setting: &StoredSetting,
 ) -> Result<(), SettingsError> {
-    let row = setting::ActiveModel {
-        key: ActiveValue::Set(setting.key.clone()),
-        scope_type: ActiveValue::Set(setting.scope.kind.as_str().to_owned()),
-        scope_id: ActiveValue::Set(setting.scope.stored_id()),
-        value: ActiveValue::Set(Value::Object(setting.values.clone())),
-        overridden_fields: ActiveValue::Set(Value::from(setting.overridden_fields())),
-        updated_at: ActiveValue::Set(setting.updated_at),
-        updated_by: ActiveValue::Set(setting.updated_by),
+    let row = setting::Model {
+        key: setting.key.clone(),
+        scope_type: setting.scope.kind.as_str().to_owned(),
+        scope_id: setting.scope.stored_id(),
+        value: Value::Object(setting.values.clone()),
+        overridden_fields: Value::from(setting.overridden_fields()),
+        updated_at: setting.updated_at,
+        updated_by: setting.updated_by,
     };
-    setting::Entity::insert(row)
-        .on_conflict(
-            OnConflict::columns([
-                setting::Column::Key,
-                setting::Column::ScopeType,
-                setting::Column::ScopeId,
-            ])
-            .update_columns([
-                setting::Column::Value,
-                setting::Column::OverriddenFields,
-                setting::Column::UpdatedAt,
-                setting::Column::UpdatedBy,
-            ])
-            .to_owned(),
+    setting::Model::query()
+        .upsert(
+            exec,
+            [row],
+            ["key", "scope_type", "scope_id"],
+            ["value", "overridden_fields", "updated_at", "updated_by"],
         )
-        .exec_without_returning(conn)
         .await?;
     Ok(())
 }
 
-async fn delete_in<C: ConnectionTrait>(
-    conn: &C,
+async fn delete_in<E: Executor + ?Sized>(
+    exec: &E,
     key: &str,
     target: ScopeTarget,
 ) -> Result<bool, SettingsError> {
-    let result = setting::Entity::delete_many()
-        .filter(setting::Column::Key.eq(key))
-        .filter(is_target(&target))
-        .exec(conn)
+    let deleted = setting::Model::query()
+        .where_(setting::Model::KEY.eq(key))
+        .where_(is_target(&target))
+        .delete(exec)
         .await?;
-    Ok(result.rows_affected > 0)
+    Ok(deleted > 0)
 }
 
-async fn delete_scope_in<C: ConnectionTrait>(
-    conn: &C,
+async fn delete_scope_in<E: Executor + ?Sized>(
+    exec: &E,
     target: ScopeTarget,
 ) -> Result<Vec<String>, SettingsError> {
-    let mut keys: Vec<String> = setting::Entity::find()
-        .filter(is_target(&target))
-        .all(conn)
-        .await?
-        .into_iter()
-        .map(|row| row.key)
-        .collect();
+    let mut keys: Vec<String> = setting::Model::query()
+        .where_(is_target(&target))
+        .pluck(exec, setting::Model::KEY)
+        .await?;
     if keys.is_empty() {
         return Ok(keys);
     }
-    setting::Entity::delete_many()
-        .filter(is_target(&target))
-        .exec(conn)
+    setting::Model::query()
+        .where_(is_target(&target))
+        .delete(exec)
         .await?;
     keys.sort();
     keys.dedup();
     Ok(keys)
 }
 
-async fn list_in<C: ConnectionTrait>(
-    conn: &C,
+async fn list_in<E: Executor + ?Sized>(
+    exec: &E,
     key: Option<&str>,
 ) -> Result<Vec<StoredSetting>, SettingsError> {
-    let mut select = setting::Entity::find();
-    if let Some(key) = key {
-        select = select.filter(setting::Column::Key.eq(key));
-    }
-    let rows = select
-        .all(conn)
+    let rows = setting::Model::query()
+        .when_some(key, |query, key| query.where_(setting::Model::KEY.eq(key)))
+        .get(exec)
         .await?
+        .into_models()
         .into_iter()
         .map(to_setting)
         .collect::<Result<Vec<_>, _>>()?;
@@ -219,7 +178,7 @@ impl SettingsStore for DatabaseSettingsStore {
         key: &'a str,
         targets: &'a [ScopeTarget],
     ) -> BoxFuture<'a, Result<Vec<StoredSetting>, SettingsError>> {
-        Box::pin(async move { with_reader!(self, uow, |conn| load_in(conn, key, targets).await) })
+        Box::pin(async move { with_exec!(self, uow, |exec| load_in(exec, key, targets).await) })
     }
 
     fn load_for_update<'a>(
@@ -229,14 +188,17 @@ impl SettingsStore for DatabaseSettingsStore {
         target: ScopeTarget,
     ) -> BoxFuture<'a, Result<Option<StoredSetting>, SettingsError>> {
         Box::pin(async move {
-            let tx = uow.tx().await?;
-            let mut select = setting::Entity::find()
-                .filter(setting::Column::Key.eq(key))
-                .filter(is_target(&target));
+            let mut select = setting::Model::query()
+                .where_(setting::Model::KEY.eq(key))
+                .where_(is_target(&target));
             if uow.lock_for_update() {
-                select = select.lock_exclusive();
+                select = select.lock_for_update();
             }
-            select.one(&*tx).await?.map(to_setting).transpose()
+            select
+                .first(uow)
+                .await?
+                .map(|row| to_setting(row.into_inner()))
+                .transpose()
         })
     }
 
@@ -245,7 +207,7 @@ impl SettingsStore for DatabaseSettingsStore {
         uow: Option<&'a Uow>,
         setting: &'a StoredSetting,
     ) -> BoxFuture<'a, Result<(), SettingsError>> {
-        Box::pin(async move { with_writer!(self, uow, |conn| save_in(conn, setting).await) })
+        Box::pin(async move { with_exec!(self, uow, |exec| save_in(exec, setting).await) })
     }
 
     fn delete<'a>(
@@ -254,7 +216,7 @@ impl SettingsStore for DatabaseSettingsStore {
         key: &'a str,
         target: ScopeTarget,
     ) -> BoxFuture<'a, Result<bool, SettingsError>> {
-        Box::pin(async move { with_writer!(self, uow, |conn| delete_in(conn, key, target).await) })
+        Box::pin(async move { with_exec!(self, uow, |exec| delete_in(exec, key, target).await) })
     }
 
     fn delete_scope<'a>(
@@ -262,7 +224,7 @@ impl SettingsStore for DatabaseSettingsStore {
         uow: Option<&'a Uow>,
         target: ScopeTarget,
     ) -> BoxFuture<'a, Result<Vec<String>, SettingsError>> {
-        Box::pin(async move { with_writer!(self, uow, |conn| delete_scope_in(conn, target).await) })
+        Box::pin(async move { with_exec!(self, uow, |exec| delete_scope_in(exec, target).await) })
     }
 
     fn list<'a>(
@@ -270,6 +232,6 @@ impl SettingsStore for DatabaseSettingsStore {
         uow: Option<&'a Uow>,
         key: Option<&'a str>,
     ) -> BoxFuture<'a, Result<Vec<StoredSetting>, SettingsError>> {
-        Box::pin(async move { with_reader!(self, uow, |conn| list_in(conn, key).await) })
+        Box::pin(async move { with_exec!(self, uow, |exec| list_in(exec, key).await) })
     }
 }
