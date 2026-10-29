@@ -4,67 +4,43 @@
 use std::sync::Arc;
 
 use http::Method;
-use navree_db::{MigrationSet, Repo};
+use navree_db::MigrationSet;
+use navree_db::navree_schema::{Migration, Schema, SchemaMigration, SchemaResult};
 use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use navree_testing::TempDirGuard;
 use navree_workspace::{
     CurrentWorkspace, ModuleBuilderWorkspaceExt, WorkspaceDatabases, WorkspaceUow, Workspaces,
 };
-use sea_orm::sea_query::{ColumnDef, Table};
-use sea_orm::{ActiveValue::Set, ConnectionTrait, DbBackend, DbErr, EntityTrait, Statement};
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
+use navree_orm::{Model as _, OrmError};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use crate::support::{World, builder};
+use crate::support::{World, builder, uuid};
 
 /// `notes(id, body)`, in every workspace's database.
-mod note {
-    use sea_orm::entity::prelude::*;
-    use serde::Serialize;
-
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
-    #[sea_orm(table_name = "notes")]
-    pub struct Model {
-        #[sea_orm(primary_key, auto_increment = false)]
-        pub id: Uuid,
-        pub body: String,
-    }
-
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
+#[derive(Clone, Debug, Default, PartialEq, Eq, navree_orm::Model, serde::Serialize)]
+#[model(table = "notes")]
+struct Note {
+    id: Uuid,
+    body: String,
 }
 
 struct CreateNotes;
 
-impl MigrationName for CreateNotes {
-    fn name(&self) -> &str {
-        "m20261026_000001_create_notes"
-    }
-}
-
-#[async_trait]
-impl MigrationTrait for CreateNotes {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table("notes")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("body").string().not_null())
-                    .to_owned(),
-            )
+impl Migration for CreateNotes {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        let dialect = schema.target().await?.dialect();
+        schema
+            .create("notes", |t| {
+                uuid(t, "id", dialect).primary();
+                t.string("body");
+            })
             .await
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .drop_table(Table::drop().table("notes").to_owned())
-            .await
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop_if_exists("notes").await
     }
 }
 
@@ -76,22 +52,19 @@ impl Injectable for NotesController {
     }
 }
 
-async fn insert(uow: &WorkspaceUow, body: &str) -> Result<note::Model, DbErr> {
-    Repo::<note::Entity>::insert(
-        uow,
-        note::ActiveModel {
-            id: Set(Uuid::now_v7()),
-            body: Set(body.to_owned()),
-        },
-    )
-    .await
+async fn insert(uow: &WorkspaceUow, body: &str) -> Result<Note, OrmError> {
+    let note = Note {
+        id: Uuid::now_v7(),
+        body: body.to_owned(),
+    };
+    Ok(Note::create(&**uow, note).await?.into_inner())
 }
 
 async fn store(
     _ws: CurrentWorkspace,
     uow: WorkspaceUow,
     Json(input): Json<Value>,
-) -> Result<Json<note::Model>, AppError> {
+) -> Result<Json<Note>, AppError> {
     Ok(Json(
         insert(&uow, input["body"].as_str().unwrap_or_default()).await?,
     ))
@@ -103,7 +76,7 @@ async fn store_then_fail(uow: WorkspaceUow) -> Result<Json<Value>, AppError> {
 }
 
 async fn index(uow: WorkspaceUow) -> Result<Json<Value>, AppError> {
-    let notes = note::Entity::find().all(&*uow.tx().await?).await?;
+    let notes = Note::query().get(&*uow).await?.into_models();
     Ok(Json(json!({ "data": notes })))
 }
 
@@ -170,7 +143,10 @@ struct NotesModule;
 
 impl Module for NotesModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.workspace_migrations(MigrationSet::new("notes").migration(CreateNotes))
+        m.workspace_migrations(MigrationSet::new("notes").migration(SchemaMigration::new(
+            "m20261026_000001_create_notes",
+            CreateNotes,
+        )))
             .controller::<NotesController>();
     }
 }
@@ -189,15 +165,8 @@ async fn world(dir: &TempDirGuard) -> World {
     .await
 }
 
-async fn has_table<C: ConnectionTrait>(conn: &C, table: &str) -> bool {
-    conn.query_one_raw(Statement::from_sql_and_values(
-        DbBackend::Sqlite,
-        "SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = ?",
-        [table.into()],
-    ))
-    .await
-    .unwrap()
-    .is_some()
+async fn has_table(db: &navree_db::Db, table: &str) -> bool {
+    Schema::new(db).has_table(table).await.unwrap()
 }
 
 #[tokio::test]
@@ -242,8 +211,8 @@ async fn each_workspace_writes_to_its_own_database() {
             .unwrap()
             .contains(&globex.id.simple().to_string())
     );
-    assert!(!has_table(world.db().await.conn(), "notes").await);
-    assert!(has_table(databases.db(acme.id).await.unwrap().conn(), "notes").await);
+    assert!(!has_table(&*world.db().await, "notes").await);
+    assert!(has_table(&*databases.db(acme.id).await.unwrap(), "notes").await);
 }
 
 #[tokio::test]
@@ -273,7 +242,7 @@ async fn orm_models_run_in_the_workspace_database() {
         .assert_status(200)
         .assert_json_path("data", json!(["Second", "First"]))
         .assert_json_path("count", json!(2));
-    // The SeaORM route reads the same database.
+    // The other route reads the same database.
     client
         .get("/api/notes")
         .header("x-workspace", "acme")
@@ -299,7 +268,7 @@ async fn orm_models_run_in_the_workspace_database() {
             2
         );
     }
-    assert!(!has_table(world.db().await.conn(), "notes").await);
+    assert!(!has_table(&*world.db().await, "notes").await);
 }
 
 #[tokio::test]

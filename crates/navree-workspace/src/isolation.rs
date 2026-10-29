@@ -107,19 +107,22 @@ impl<M: WorkspaceScoped> WorkspaceRepo<M> {
     }
 
     /// Saves `record`, a record of `workspace` ([`OrmError::ModelNotFound`]
-    /// otherwise); its workspace column cannot change.
+    /// otherwise); its workspace column cannot change. A record read from
+    /// the database writes the columns that changed; one built from a model
+    /// (`Record::from(model)`) replaces the stored row's values with its
+    /// own.
     pub async fn update<E: Executor + ?Sized>(
         exec: &E,
         workspace: Uuid,
         record: &mut Record<M>,
     ) -> Result<(), OrmError> {
         let key = record.key();
-        if !Self::query(workspace)
-            .where_key(key.clone())
-            .exists(exec)
-            .await?
-        {
+        let Some(mut stored) = Self::find(exec, workspace, key.clone()).await? else {
             return Err(not_found::<M>(&key));
+        };
+        if !record.exists() {
+            *stored.model_mut() = record.model().clone();
+            *record = stored;
         }
         record
             .model_mut()

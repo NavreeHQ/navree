@@ -9,12 +9,12 @@ use navree_access::{Abilities, Authorized, CurrentAccess, Update};
 use navree_db::Uow;
 use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
+use navree_orm::prelude::*;
 use navree_workspace::{CurrentWorkspace, InWorkspace, WorkspaceRepo};
-use sea_orm::{ActiveValue::Set, EntityTrait};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use crate::support::{World, builder, deal};
+use crate::support::{Deal, World, builder, new_deal};
 
 /// Deal routes under `/api/deals`, guarded by `InWorkspace`, plus one
 /// route without the guard.
@@ -27,9 +27,10 @@ impl Injectable for DealsController {
 }
 
 async fn index(ws: CurrentWorkspace, uow: Uow) -> Result<Json<Value>, AppError> {
-    let deals = WorkspaceRepo::<deal::Entity>::select(ws.id())
-        .all(&*uow.tx().await?)
-        .await?;
+    let deals = WorkspaceRepo::<Deal>::query(ws.id())
+        .get(&uow)
+        .await?
+        .into_models();
     Ok(Json(json!({ "data": deals })))
 }
 
@@ -37,21 +38,17 @@ async fn store(
     ws: CurrentWorkspace,
     uow: Uow,
     Json(input): Json<Value>,
-) -> Result<Json<deal::Model>, AppError> {
-    let created = WorkspaceRepo::<deal::Entity>::insert(
+) -> Result<Json<Deal>, AppError> {
+    let created = WorkspaceRepo::<Deal>::insert(
         &uow,
         ws.id(),
-        deal::ActiveModel {
-            id: Set(Uuid::now_v7()),
-            workspace_id: Set(Uuid::nil()),
-            title: Set(input["title"].as_str().unwrap_or_default().to_owned()),
-        },
+        new_deal(Uuid::nil(), input["title"].as_str().unwrap_or_default()),
     )
     .await?;
-    Ok(Json(created))
+    Ok(Json(created.into_inner()))
 }
 
-async fn update(deal: Authorized<deal::Entity, Update>) -> Json<Value> {
+async fn update(deal: Authorized<Deal, Update>) -> Json<Value> {
     Json(json!({ "title": deal.title }))
 }
 
@@ -73,9 +70,11 @@ async fn show(
     ws: CurrentWorkspace,
     uow: Uow,
     Path(id): Path<Uuid>,
-) -> Result<Json<deal::Model>, AppError> {
+) -> Result<Json<Deal>, AppError> {
     Ok(Json(
-        WorkspaceRepo::<deal::Entity>::find_or_fail(&uow, ws.id(), id).await?,
+        WorkspaceRepo::<Deal>::find_or_fail(&uow, ws.id(), id)
+            .await?
+            .into_inner(),
     ))
 }
 
@@ -250,17 +249,9 @@ async fn records_of_another_workspace_are_not_found() {
         let title = title.to_owned();
         async move {
             let uow = world.db().await.uow(None, None).await;
-            let created = WorkspaceRepo::<deal::Entity>::insert(
-                &uow,
-                workspace,
-                deal::ActiveModel {
-                    id: Set(Uuid::now_v7()),
-                    workspace_id: Set(Uuid::nil()),
-                    title: Set(title),
-                },
-            )
-            .await
-            .unwrap();
+            let created = WorkspaceRepo::<Deal>::insert(&uow, workspace, new_deal(Uuid::nil(), &title))
+                .await
+                .unwrap();
             uow.commit().await.unwrap();
             created
         }
@@ -305,59 +296,60 @@ async fn the_repository_scopes_every_query() {
     let acme = world.workspace(ada, "Acme").await;
     let globex = world.workspace(ada, "Globex").await;
     let uow = world.db().await.uow(None, None).await;
-    let created = WorkspaceRepo::<deal::Entity>::insert(
-        &uow,
-        acme.id,
-        deal::ActiveModel {
-            id: Set(Uuid::now_v7()),
-            workspace_id: Set(globex.id),
-            title: Set("Acme deal".into()),
-        },
-    )
-    .await
-    .unwrap();
+    let created = WorkspaceRepo::<Deal>::insert(&uow, acme.id, new_deal(globex.id, "Acme deal"))
+        .await
+        .unwrap();
     assert_eq!(created.workspace_id, acme.id, "insert sets the workspace");
     assert!(
-        WorkspaceRepo::<deal::Entity>::find(&uow, globex.id, created.id)
+        WorkspaceRepo::<Deal>::find(&uow, globex.id, created.id)
             .await
             .unwrap()
             .is_none()
     );
-    let moved = WorkspaceRepo::<deal::Entity>::update(
-        &uow,
-        globex.id,
-        deal::ActiveModel {
-            id: Set(created.id),
-            workspace_id: Set(globex.id),
-            title: Set("Stolen".into()),
-        },
-    )
-    .await;
-    assert!(matches!(moved, Err(sea_orm::DbErr::RecordNotFound(_))));
-    let renamed = WorkspaceRepo::<deal::Entity>::update(
-        &uow,
-        acme.id,
-        deal::ActiveModel {
-            id: Set(created.id),
-            workspace_id: Set(globex.id),
-            title: Set("Renamed".into()),
-        },
-    )
-    .await
-    .unwrap();
-    assert_eq!(renamed.workspace_id, acme.id, "the workspace cannot change");
-    assert_eq!(renamed.title, "Renamed");
-    let refused = WorkspaceRepo::<deal::Entity>::delete(&uow, globex.id, renamed.clone()).await;
-    assert!(matches!(refused, Err(sea_orm::DbErr::RecordNotFound(_))));
-    WorkspaceRepo::<deal::Entity>::delete(&uow, acme.id, renamed)
+    let mut stolen = Record::from(Deal {
+        id: created.id,
+        workspace_id: globex.id,
+        title: "Stolen".into(),
+    });
+    let moved = WorkspaceRepo::<Deal>::update(&uow, globex.id, &mut stolen).await;
+    assert!(matches!(moved, Err(OrmError::ModelNotFound { .. })), "{moved:?}");
+    let mut renamed = WorkspaceRepo::<Deal>::find_or_fail(&uow, acme.id, created.id)
         .await
         .unwrap();
-    assert!(
-        deal::Entity::find()
-            .all(&*uow.tx().await.unwrap())
+    renamed.workspace_id = globex.id;
+    renamed.title = "Renamed".into();
+    WorkspaceRepo::<Deal>::update(&uow, acme.id, &mut renamed)
+        .await
+        .unwrap();
+    assert_eq!(renamed.workspace_id, acme.id, "the workspace cannot change");
+    assert_eq!(renamed.title, "Renamed");
+    let stored = WorkspaceRepo::<Deal>::find_or_fail(&uow, acme.id, created.id)
+        .await
+        .unwrap();
+    assert_eq!((stored.workspace_id, stored.title.as_str()), (acme.id, "Renamed"));
+    // A record built from a model replaces the stored values.
+    let mut replaced = Record::from(Deal {
+        id: created.id,
+        workspace_id: globex.id,
+        title: "Replaced".into(),
+    });
+    WorkspaceRepo::<Deal>::update(&uow, acme.id, &mut replaced)
+        .await
+        .unwrap();
+    assert_eq!(replaced.workspace_id, acme.id);
+    assert_eq!(replaced.title, "Replaced");
+    let refused = WorkspaceRepo::<Deal>::delete(&uow, globex.id, replaced.clone()).await;
+    assert!(matches!(refused, Err(OrmError::ModelNotFound { .. })), "{refused:?}");
+    WorkspaceRepo::<Deal>::delete(&uow, acme.id, replaced)
+        .await
+        .unwrap();
+    assert_eq!(
+        Deal::query()
+            .without_workspace_scope()
+            .count(&uow)
             .await
-            .unwrap()
-            .is_empty()
+            .unwrap(),
+        0
     );
     uow.commit().await.unwrap();
 }
