@@ -56,7 +56,7 @@ pub fn execute(cli: Cli, cwd: &Path) -> anyhow::Result<ExitCode> {
         Command::MakeResource(args) => {
             let module = Name::parse("module", &args.module)?;
             let root = app_root(cwd)?;
-            let report = make_resource(&root, &args.path, &module, &args.entity)?;
+            let report = make_resource(&root, &args.path, &module, &args.model)?;
             finish(&root, &report);
             Ok(ExitCode::SUCCESS)
         }

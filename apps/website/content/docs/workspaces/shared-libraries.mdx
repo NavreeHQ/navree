@@ -127,7 +127,7 @@ impl Module for TemplatesModule {
 - installs `LibraryVisibility`, the global scope that keeps the model's queries to what the current workspace sees;
 - adds `LibraryGuard`, the model hook that keeps a workspace's writes to its own items;
 - registers the model with navree-orm, so `model:show` lists it and its guard;
-- classifies the table as a library for [`navree check`](/docs/testing/conformity-checks/), so a SeaORM entity on it (as in the Helm section below) needs no `sea_workspace_entity` or `sea_global_entity`.
+- classifies the table as a library for [`navree check`](/docs/testing/conformity-checks/).
 
 ## Reading a library
 
@@ -344,57 +344,26 @@ Register it with `m.seeder::<TemplateLibrarySeeder>()` and run it with `navree d
 
 ## Managing global items in Helm
 
-[Helm](/docs/tools/helm/) resources wrap SeaORM entities, so a library that Helm manages derives the entity on the model's struct, as Navree's own tables do. `LibraryScope` is a SeaORM column type as well:
+A [Helm](/docs/tools/helm/) resource takes the library's model itself, once the model is an access subject. Add `subject` to its attribute:
 
 ```rust title="src/templates/model.rs"
-pub mod template {
-    use navree::workspace::library::{Library, LibraryScope};
-    use sea_orm::entity::prelude::*;
-    use serde::Serialize;
-
-    #[derive(Clone, Debug, Default, PartialEq, DeriveEntityModel, navree::orm::Model, Serialize)]
-    #[sea_orm(table_name = "templates")]
-    #[model(table = "templates", timestamps)]
-    pub struct Model {
-        #[sea_orm(primary_key, auto_increment = false)]
-        pub id: Uuid,
-        pub scope: LibraryScope,
-        pub organization_id: Option<Uuid>,
-        pub workspace_id: Option<Uuid>,
-        pub cloned_from_id: Option<Uuid>,
-        pub slug: String,
-        pub name: String,
-        pub body: String,
-        pub created_at: DateTimeUtc,
-        pub updated_at: DateTimeUtc,
-    }
-
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
-
-    impl Library for Model {}
-
-    impl navree::access::Subject for Entity {
-        const SUBJECT: &'static str = "Template";
-        const PERMISSION_PREFIX: &'static str = "templates";
-    }
+#[derive(Model, Clone, Debug, Default, Serialize)]
+#[model(table = "templates", timestamps, subject = "Template", permission_prefix = "templates")]
+pub struct Template {
+    // ... the fields above
 }
-
-pub type Template = template::Model;
 ```
 
 The resource lists, shows and edits global templates only, and creates new ones as global:
 
 ```rust title="src/templates/helm.rs"
 use navree::BoxFuture;
-use navree::helm::{Field, FormData, Resource, SaveContext};
+use navree::helm::{Field, FormData, RecordOf, Resource, SaveContext};
+use navree::orm::Builder;
 use navree::prelude::*;
 use navree::workspace::library::{LibraryOwner, LibraryRepo, LibraryScope};
-use sea_orm::{ColumnTrait, QueryFilter, Select};
 
-use super::model::{Template, template};
+use super::model::Template;
 
 #[derive(serde::Deserialize, garde::Validate)]
 struct TemplateForm {
@@ -410,7 +379,7 @@ struct TemplateForm {
 pub struct TemplateLibraryResource;
 
 impl Resource for TemplateLibraryResource {
-    type Entity = template::Entity;
+    type Model = Template;
     const LABEL: &'static str = "Template library";
     const SINGULAR: &'static str = "Template";
     const SLUG: &'static str = "template-library";
@@ -425,15 +394,15 @@ impl Resource for TemplateLibraryResource {
         ]
     }
 
-    fn query(&self, select: Select<template::Entity>) -> Select<template::Entity> {
-        select.filter(template::Column::Scope.eq(LibraryScope::Global))
+    fn query(&self, query: Builder<Template>) -> Builder<Template> {
+        query.where_(Template::SCOPE.eq(LibraryScope::Global))
     }
 
     fn create<'a>(
         &'a self,
         ctx: &'a SaveContext,
         form: FormData,
-    ) -> BoxFuture<'a, Result<Template, AppError>> {
+    ) -> BoxFuture<'a, Result<RecordOf<Self>, AppError>> {
         Box::pin(async move {
             let input: TemplateForm = form.parse().await?;
             let template = Template {
@@ -442,15 +411,13 @@ impl Resource for TemplateLibraryResource {
                 body: input.body.unwrap_or_default(),
                 ..Template::default()
             };
-            Ok(LibraryRepo::<Template>::create(ctx.uow(), LibraryOwner::Global, template)
-                .await?
-                .into_inner())
+            Ok(LibraryRepo::<Template>::create(ctx.uow(), LibraryOwner::Global, template).await?)
         })
     }
 }
 ```
 
-Register it with `m.resource::<TemplateLibraryResource>()` next to `m.library::<Template>()`. Helm's edits and deletes run outside any workspace, so the guard lets them through; the resource's `query` keeps them to global rows, and the user's abilities on `Template` decide the rest.
+Register it with `m.resource::<TemplateLibraryResource>()` next to `m.library::<Template>()`. Helm runs outside any workspace, so the model's visibility scope already shows global items only, and Helm's default writes are statements that the guard doesn't stop; the resource's `query` keeps them to global rows either way, and the user's abilities on `Template` decide the rest.
 
 ## Testing
 

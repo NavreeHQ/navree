@@ -2,19 +2,19 @@
 //! projects, with dashboard metrics, so the panel shows the evidence data.
 
 use navree::BoxFuture;
-use navree::auth::user;
-use navree::helm::{Field, FormData, Metric, Resource, SaveContext};
+use navree::auth::User;
+use navree::helm::{Field, FormData, Metric, RecordOf, Resource, SaveContext};
 use navree::prelude::*;
-use navree::workspace::entity::workspace;
+use navree::workspace::Workspace;
 
-use crate::modules::projects::entity as project;
+use crate::modules::projects::entity::Model as Project;
 
 /// Users: every account, searchable by name and email.
 #[injectable]
 pub struct UserAdmin;
 
 impl Resource for UserAdmin {
-    type Entity = user::Entity;
+    type Model = User;
 
     const LABEL: &'static str = "Users";
     const SINGULAR: &'static str = "User";
@@ -34,12 +34,12 @@ impl Resource for UserAdmin {
         ]
     }
 
-    fn metrics(&self) -> Vec<Metric<user::Entity>> {
+    fn metrics(&self) -> Vec<Metric<User>> {
         vec![
             Metric::value("Users").count().on_dashboard(),
             Metric::trend("Sign-ups")
                 .count()
-                .by_day(user::Column::CreatedAt, 30),
+                .by_day(User::CREATED_AT, 30),
         ]
     }
 
@@ -48,7 +48,7 @@ impl Resource for UserAdmin {
         &'a self,
         _ctx: &'a SaveContext,
         _form: FormData,
-    ) -> BoxFuture<'a, Result<user::Model>> {
+    ) -> BoxFuture<'a, Result<RecordOf<Self>>> {
         Box::pin(async move { Err(AppError::bad_request("Accounts sign up in the app.")) })
     }
 }
@@ -58,7 +58,7 @@ impl Resource for UserAdmin {
 pub struct WorkspaceAdmin;
 
 impl Resource for WorkspaceAdmin {
-    type Entity = workspace::Entity;
+    type Model = Workspace;
 
     const LABEL: &'static str = "Workspaces";
     const SINGULAR: &'static str = "Workspace";
@@ -78,7 +78,7 @@ impl Resource for WorkspaceAdmin {
         ]
     }
 
-    fn metrics(&self) -> Vec<Metric<workspace::Entity>> {
+    fn metrics(&self) -> Vec<Metric<Workspace>> {
         vec![Metric::value("Workspaces").count().on_dashboard()]
     }
 
@@ -87,7 +87,7 @@ impl Resource for WorkspaceAdmin {
         &'a self,
         _ctx: &'a SaveContext,
         _form: FormData,
-    ) -> BoxFuture<'a, Result<workspace::Model>> {
+    ) -> BoxFuture<'a, Result<RecordOf<Self>>> {
         Box::pin(async move {
             Err(AppError::bad_request(
                 "Workspaces are created by their owners in the app.",
@@ -101,7 +101,7 @@ impl Resource for WorkspaceAdmin {
 pub struct ProjectAdmin;
 
 impl Resource for ProjectAdmin {
-    type Entity = project::Entity;
+    type Model = Project;
 
     const LABEL: &'static str = "Projects";
     const SINGULAR: &'static str = "Project";
@@ -124,12 +124,12 @@ impl Resource for ProjectAdmin {
         ]
     }
 
-    fn metrics(&self) -> Vec<Metric<project::Entity>> {
+    fn metrics(&self) -> Vec<Metric<Project>> {
         vec![
             Metric::value("Projects").count().on_dashboard(),
             Metric::partition("By status")
                 .count()
-                .group_by(project::Column::Status)
+                .group_by(Project::STATUS)
                 .on_dashboard(),
         ]
     }
@@ -139,7 +139,7 @@ impl Resource for ProjectAdmin {
         &'a self,
         _ctx: &'a SaveContext,
         _form: FormData,
-    ) -> BoxFuture<'a, Result<project::Model>> {
+    ) -> BoxFuture<'a, Result<RecordOf<Self>>> {
         Box::pin(async move {
             Err(AppError::bad_request(
                 "Projects are created in their workspace.",

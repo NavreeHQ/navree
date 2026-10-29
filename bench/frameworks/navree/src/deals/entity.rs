@@ -24,23 +24,10 @@ pub struct Model {
     pub updated_at: DateTimeUtc,
 }
 
-/// The owner (`owner_id` → `users.id`).
+/// No relations are declared: `owner_id` points at navree-auth's `users`,
+/// a navree-orm model, whose names `OwnerRef::load` reads by id.
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-pub enum Relation {
-    /// The user who owns the deal.
-    #[sea_orm(
-        belongs_to = "navree::auth::user::Entity",
-        from = "Column::OwnerId",
-        to = "navree::auth::user::Column::Id"
-    )]
-    Owner,
-}
-
-impl Related<navree::auth::user::Entity> for Entity {
-    fn to() -> RelationDef {
-        Relation::Owner.def()
-    }
-}
+pub enum Relation {}
 
 impl ActiveModelBehavior for ActiveModel {}
 

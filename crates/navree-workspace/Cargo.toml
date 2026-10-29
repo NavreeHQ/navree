@@ -44,8 +44,8 @@ navree-schedule = { workspace = true }
 navree-telemetry = { workspace = true }
 navree-testing = { workspace = true, optional = true }
 navree-time = { workspace = true }
-# Compatibility layer only (`sea_compat`, the SeaORM derive kept on three
-# models and on `LibraryScope`): removed in step 8 of the data-layer move.
+# Compatibility layer only (`sea_compat`, the SeaORM forms of the scoped
+# repositories and registrations): removed in step 8 of the data-layer move.
 sea-orm = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

@@ -77,8 +77,6 @@ use std::str::FromStr;
 use navree_db::Uow;
 use navree_kernel::BoxFuture;
 use navree_orm::{Field, FieldError, FieldKind, Model, OrmError, Record, Value};
-// COMPAT: the SeaORM column type of `LibraryScope` (see its documentation).
-use sea_orm::sea_query::StringLen;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -94,10 +92,6 @@ use crate::{CurrentOrganization, CurrentWorkspace, Workspace, WorkspaceError};
 /// Stored as `global`, `organization` or `workspace`. A navree-orm model
 /// field of this type needs no cast. It defaults to `Workspace`: an item
 /// created inside a workspace request belongs to that workspace.
-///
-/// COMPAT (data-layer move; removed in step 8): it is a SeaORM active enum
-/// too (`EnumIter`, `DeriveActiveEnum`), for admin-panel resources over a
-/// SeaORM entity of a library table, until navree-helm takes models.
 #[derive(
     Clone,
     Copy,
@@ -111,22 +105,16 @@ use crate::{CurrentOrganization, CurrentWorkspace, Workspace, WorkspaceError};
     Serialize,
     Deserialize,
     utoipa::ToSchema,
-    sea_orm::EnumIter,
-    sea_orm::DeriveActiveEnum,
 )]
 #[serde(rename_all = "snake_case")]
-#[sea_orm(rs_type = "String", db_type = "String(StringLen::N(16))")]
 pub enum LibraryScope {
     /// The app's own items, seen by everyone (seeders and Helm place them).
-    #[sea_orm(string_value = "global")]
     Global,
     /// An organization's items, seen by the organization and its
     /// workspaces.
-    #[sea_orm(string_value = "organization")]
     Organization,
     /// A workspace's own items (its clones among them).
     #[default]
-    #[sea_orm(string_value = "workspace")]
     Workspace,
 }
 
@@ -568,16 +556,6 @@ mod tests {
             LibraryScope::from_value(Value::Null(navree_orm::Kind::String)),
             Err(FieldError::Null)
         );
-        // COMPAT: a SeaORM column too, stored under the same names.
-        use sea_orm::{ActiveEnum, Iterable};
-        assert_eq!(LibraryScope::iter().collect::<Vec<_>>(), LibraryScope::ALL);
-        for scope in LibraryScope::ALL {
-            assert_eq!(ActiveEnum::to_value(&scope), scope.as_str());
-            assert_eq!(
-                <LibraryScope as ActiveEnum>::try_from_value(&scope.as_str().to_owned()).unwrap(),
-                scope
-            );
-        }
     }
 
     #[test]

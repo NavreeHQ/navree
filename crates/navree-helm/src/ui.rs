@@ -15,7 +15,6 @@ use navree_crypto::{Encrypter, constant_time_eq, random_token};
 use navree_http::AppError;
 use navree_kernel::AppContext;
 use navree_storage::{Storage, UploadRules, store_upload};
-use sea_orm::DbErr;
 use serde::Serialize;
 use serde_json::{Map, Value, json};
 
@@ -148,11 +147,6 @@ fn map_db(error: AppError) -> AppError {
     }
     let mut next: Option<&(dyn StdError + 'static)> = error.source.as_deref().map(|e| e as _);
     while let Some(cause) = next {
-        if let Some(db) = cause.downcast_ref::<DbErr>()
-            && let Some(mapped) = navree_db::map_db_error(db)
-        {
-            return mapped;
-        }
         if let Some(db) = cause.downcast_ref::<navree_db::DbError>()
             && let Some(mapped) = navree_db::map_db_error(db)
         {

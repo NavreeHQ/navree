@@ -1,13 +1,14 @@
 ---
 name: navree-helm
-description: "Helm, the admin panel of navree-helm: the `helm` facade feature (in `full`), `HelmModule` and the `helm` config section, `navree make:resource <module> <Entity>`, the `Resource` trait (LABEL, SINGULAR, GROUP, ICON, TITLE, SEARCH, SLUG, PER_PAGE, DEFAULT_SORT, ORDER, fields, filters, actions, metrics, query, create, update, delete), `Field`, `Filter`, `Action` / `ActionContext` / `ActionResult`, `Metric`, `HelmPage` and `m.helm_page(..)`, `SaveContext` and `FormData::parse`, file fields on storage disks, the access rules every screen checks (`helm.view`, then read, create, update, delete and action abilities on each record and field), the audit entries, sign-in, CSRF and the strict CSP, and testing through `/admin/api`. Use when adding an admin panel or back office, exposing an entity at `/admin`, adding a filter, bulk action, metric card or custom admin page, saving admin edits through a service, or debugging a resource missing from the menu, a 403 or 404 in the panel, a boot error naming a resource, or a field shown read-only."
+description: "Helm, the admin panel of navree-helm: the `helm` facade feature (in `full`), `HelmModule` and the `helm` config section, `navree make:resource <module> <Model>`, the `Resource` trait over a navree-orm model (LABEL, SINGULAR, GROUP, ICON, TITLE, SEARCH, SLUG, PER_PAGE, DEFAULT_SORT, ORDER, fields, filters, actions, metrics, query, create, update, delete), `Field`, `Filter`, `Action` / `ActionContext` / `ActionResult`, `Metric`, `HelmPage` and `m.helm_page(..)`, `SaveContext` and `FormData::parse`, file fields on storage disks, the access rules every screen checks (`helm.view`, then read, create, update, delete and action abilities on each record and field), the audit entries, sign-in, CSRF and the strict CSP, and testing through `/admin/api`. Use when adding an admin panel or back office, exposing a model at `/admin`, adding a filter, bulk action, metric card or custom admin page, saving admin edits through a service, or debugging a resource missing from the menu, a 403 or 404 in the panel, a boot error naming a resource, or a field shown read-only."
 ---
 
 # Helm: the admin panel
 
 `navree::helm` (crate `navree-helm`, facade feature `helm`, part of `full`)
-serves an admin panel at `/admin` generated from your SeaORM entities. Each
-entity gets a **resource**: a provider implementing `Resource` that says
+serves an admin panel at `/admin` generated from your navree-orm models.
+Each model (an access subject: `#[model(subject = "Deal")]`) gets a
+**resource**: a provider implementing `Resource` that says
 which fields to show and edit, how to filter and search, which actions and
 metrics it has. Helm renders list, detail, create and edit screens on the
 server (navree-view templates, an embedded stylesheet and script, no front-end
@@ -47,20 +48,23 @@ navree access:grant manager helm.view
 ```
 
    Super-admins pass every check. Everything else depends on the user's
-   abilities on each resource's entity.
+   abilities on each resource's model.
 
-3. Generate a resource per entity and check what it wrote:
+3. Generate a resource per model and check what it wrote:
 
 ```sh
-navree make:resource deals Deal          # module, entity (Deal or deal); --path src/modules
+navree make:model deals Deal --policy    # the model, an access subject (models/deal.rs)
+navree make:resource deals Deal          # module, model (Deal or deal); --path src/modules
 ```
 
-   It writes `src/modules/deals/resources/deal.rs` (a field per column:
-   money when there is a `currency` column, read-only timestamps, a comment
-   suggesting `Field::belongs_to` for each `*_id`), declares
-   `mod resources;` and registers it at the `// navree:wire` marker with
-   `navree::helm::ModuleBuilderHelmExt::resource::<..>(m)`. If the entity has
-   no `impl Subject`, it prints the impl to add: Helm needs one.
+   It reads `src/modules/deals/models/deal.rs` and writes
+   `src/modules/deals/resources/deal.rs` (a field per column: money when
+   there is a `currency` column, read-only timestamps, a comment suggesting
+   `Field::belongs_to` for each `*_id`), declares `mod resources;` and
+   registers it at the `// navree:wire` marker with
+   `navree::helm::ModuleBuilderHelmExt::resource::<..>(m)`. If the model is
+   no access subject, it prints what to add (`subject` in its
+   `#[model(..)]`): Helm needs one. A SeaORM entity is not a resource.
 
 4. Open `http://127.0.0.1:8080/admin` and sign in with an app account. When
    the account has two-factor authentication on, the panel asks for the code
@@ -75,16 +79,18 @@ navree make:resource deals Deal          # module, entity (Deal or deal); --path
 
 ```rust
 use navree::helm::{Action, ActionResult, Field, Filter, Metric, Resource};
+use navree::orm::Builder;
 use navree::prelude::*;
-use sea_orm::{ColumnTrait, QueryFilter, Select};
 
-use crate::modules::deals::entity as deal;
+use crate::modules::deals::models::deal::Deal;
+// #[derive(Model, Clone, Debug, Default, Serialize)]
+// #[model(table = "deals", subject = "Deal", permission_prefix = "deals", soft_deletes)]
 
 #[injectable]
 pub struct DealResource;
 
 impl Resource for DealResource {
-    type Entity = deal::Entity;                 // must implement Subject
+    type Model = Deal;                          // a navree-orm model that is a subject
 
     const LABEL: &'static str = "Deals";        // plural, menu and headings
     const SINGULAR: &'static str = "Deal";      // defaults to LABEL
@@ -102,52 +108,55 @@ impl Resource for DealResource {
             Field::select("stage").options([("lead", "Lead"), ("won", "Won")]).badge(),
             Field::belongs_to::<CompanyResource>("company_id").label("Company"),
             Field::date("expected_close_date").sortable(),
-            Field::computed("probability", |d: &deal::Model| format!("{}%", d.probability)),
+            Field::computed("probability", |d: &Deal| format!("{}%", d.probability)),
             Field::datetime("created_at").readonly().sortable(),
         ]
     }
 
-    fn filters(&self) -> Vec<Filter<deal::Entity>> {
+    fn filters(&self) -> Vec<Filter<Deal>> {
         vec![
             Filter::select("stage").options([("lead", "Lead"), ("won", "Won")]),
             Filter::date_range("expected_close_date"),
-            Filter::boolean("open", "Open deals only", |select, on| {
-                if on { select.filter(deal::Column::ClosedAt.is_null()) } else { select }
+            Filter::boolean("open", "Open deals only", |query, on| {
+                if on { query.where_(Deal::CLOSED_AT.is_null()) } else { query }
             }),
         ]
     }
 
-    fn actions(&self) -> Vec<Action<deal::Entity>> {
+    fn actions(&self) -> Vec<Action<Deal>> {
         vec![Action::new("mark-won", "Mark as won")
             .ability(Move)                       // an ActionMarker; default Update
             .confirm("Mark the selected deals as won?")
-            .handle(|ctx, deals: Vec<deal::Model>| async move {
+            .handle(|ctx, deals: Vec<Record<Deal>>| async move {
                 let service = ctx.get::<DealService>().await?;
-                for deal in &deals {
-                    service.win(ctx.uow(), ctx.user_id(), deal.clone()).await?;
+                let count = deals.len();
+                for deal in deals {
+                    service.win(ctx.uow(), ctx.user_id(), deal).await?;
                 }
-                Ok(ActionResult::message(format!("{} deals marked as won.", deals.len())))
+                Ok(ActionResult::message(format!("{count} deals marked as won.")))
             })]
     }
 
-    fn metrics(&self) -> Vec<Metric<deal::Entity>> {
-        vec![
-            Metric::value("Open pipeline").sum(deal::Column::AmountCents)
-                .filter(deal::Column::ClosedAt.is_null()).money("USD").on_dashboard(),
-            Metric::trend("New deals").count().by_day(deal::Column::CreatedAt, 30),
-            Metric::partition("Deals by stage").count().group_by(deal::Column::Stage),
+    fn metrics(&self) -> Vec<Metric<Deal>> {
+        vec![                                    // typed columns or column names
+            Metric::value("Open pipeline").sum(Deal::AMOUNT_CENTS)
+                .filter(Deal::CLOSED_AT.is_null()).money("USD").on_dashboard(),
+            Metric::trend("New deals").count().by_day(Deal::CREATED_AT, 30),
+            Metric::partition("Deals by stage").count().group_by(Deal::STAGE),
         ]
     }
 
-    fn query(&self, select: Select<deal::Entity>) -> Select<deal::Entity> {
-        select.filter(deal::Column::DeletedAt.is_null()) // never widens access
+    fn query(&self, query: Builder<Deal>) -> Builder<Deal> {
+        query.where_(Deal::OWNER_ID.is_not_null()) // never widens access
     }
 }
 ```
 
 Register it in its module's `wire`: `m.resource::<DealResource>();` (the
-prelude brings `ModuleBuilderHelmExt`). That also registers the entity's
-subject with navree-access (`AccessModule::for_feature`).
+prelude brings `ModuleBuilderHelmExt`). That also registers the model's
+subject with navree-access (`AccessModule::for_feature`). Every screen reads
+`Deal::query()` (its global scopes apply: soft-deleted rows are hidden
+without a `query`), then `query`, then the user's access filter.
 
 ## Fields, filters, actions, metrics (what exists)
 
@@ -178,16 +187,23 @@ subject with navree-access (`AccessModule::for_feature`).
 
 ## Saving through your services
 
-By default Helm writes form values to the columns (`Repo::insert` /
-`update` / `delete` in the request's unit of work; UUID v7 keys,
-`created_at` / `updated_at` set). Override to run your service and DTO:
+By default Helm writes form values to the columns as ORM statements in the
+request's unit of work: each value goes through `Model::set_attribute`
+(casts and mutators), a create starts from a model whose fields are at their
+types' defaults (a field type without `Default` means: override `create`),
+gets a generated key and `created_at` / `updated_at` (when the model has
+them), an update writes the changed columns and sets `updated_at`, a delete
+soft-deletes a soft-deleting model. Model hooks and observers don't run on
+these writes; each records its change event with the record's serialized
+form, so `#[model(hidden)]` and `#[serde(skip_serializing)]` fields never
+reach observers or the audit log. Override to run your service and DTO:
 
 ```rust
 use navree::BoxFuture;
-use navree::helm::{FormData, SaveContext};
+use navree::helm::{FormData, RecordOf, SaveContext};
 
-fn update<'a>(&'a self, ctx: &'a SaveContext, deal: deal::Model, form: FormData)
-    -> BoxFuture<'a, Result<deal::Model>> {
+fn update<'a>(&'a self, ctx: &'a SaveContext, deal: RecordOf<Self>, form: FormData)
+    -> BoxFuture<'a, Result<RecordOf<Self>>> {
     Box::pin(async move {
         let input: UpdateDeal = form.parse().await?;   // garde, errors under fields
         ctx.get::<DealService>().await?.update_model(ctx.uow(), ctx.user_id(), deal, input).await
@@ -195,8 +211,12 @@ fn update<'a>(&'a self, ctx: &'a SaveContext, deal: deal::Model, form: FormData)
 }
 ```
 
-`create(ctx, form)` and `delete(ctx, record)` work the same way. An
-`AppError` 400 with field errors shows under the fields; others as a message.
+`create(ctx, form)` and `delete(ctx, record)` work the same way
+(`RecordOf<Self>` is `Record<Self::Model>`). A service that saves with
+`record.save(uow)` / `record.update(uow, ..)` runs the model's hooks, and its
+change events carry every column: write secret-holding tables with
+statements and record the event yourself. An `AppError` 400 with field
+errors shows under the fields; others as a message.
 
 ## Custom pages
 
@@ -259,7 +279,7 @@ token.
 ## Checks before you finish
 
 - The app boots: Helm validates every resource at boot (unknown column in a
-  field or `TITLE`, bad `pattern`, `belongs_to` to an unregistered resource,
+  field, a metric or `TITLE`, bad `pattern`, `belongs_to` to an unregistered resource,
   action without `.handle`, trend without a period, duplicate slug).
 - `helm.view` is granted to the roles that need the panel, and each role
   has `read` (and `create`, `update`, `delete`, action names) on the subject.
@@ -278,7 +298,13 @@ token.
   keeps it; sending it anyway is a 403. A field sent that isn't editable is a
   400 (`property x should not exist`).
 - **Action handler type errors:** when the closure calls methods on the
-  records, annotate them: `|ctx, deals: Vec<deal::Model>|`.
+  records, annotate them: `|ctx, deals: Vec<Record<Deal>>|`.
+- **`Resource::Model` doesn't satisfy `SubjectRecords`:** the model is no
+  access subject; add `subject` (and `permission_prefix`) to its
+  `#[model(..)]`.
+- **"Helm cannot make a new X from a form":** a field's type has no
+  `Default` (an enum without `#[default]`, a custom type); give it one or
+  override `create`.
 - **Action records skipped:** records the user can't act on are left out
   (`skipped` in the result); none left is a 403.
 - **File fields** store `{slug}/{random}.{ext}` on the field's disk after

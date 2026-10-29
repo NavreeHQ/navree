@@ -89,7 +89,7 @@ pub enum Command {
     /// Generate a seeder in a module (seeders/NAME.rs), registered for db:seed.
     #[command(name = "make:seeder")]
     MakeSeeder(MakeArgs),
-    /// Generate a Helm admin-panel resource for an entity of a module (resources/ENTITY.rs).
+    /// Generate a Helm admin-panel resource for a model of a module (resources/MODEL.rs).
     #[command(name = "make:resource")]
     MakeResource(MakeResourceArgs),
     /// Serve the app, rebuilding and restarting it when the code changes.
@@ -241,13 +241,13 @@ pub struct MakeArgs {
     pub path: String,
 }
 
-/// `navree make:resource <module> <Entity> [--path src/modules]`.
+/// `navree make:resource <module> <Model> [--path src/modules]`.
 #[derive(Debug, Args)]
 pub struct MakeResourceArgs {
     /// The module (a directory under --path, created by make:module).
     pub module: String,
-    /// The entity, as `Deal` or `deal` (in entity.rs or entities/ENTITY.rs).
-    pub entity: String,
+    /// The model, as `Deal` or `deal` (in models/MODEL.rs, made by make:model).
+    pub model: String,
     /// The directory holding feature modules, relative to the app.
     #[arg(long, default_value = MODULES_DIR)]
     pub path: String,

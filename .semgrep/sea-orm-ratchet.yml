@@ -33,16 +33,9 @@ rules:
         # entities as subjects, `Accessible::apply` on a SeaORM select) stays
         # until the crates using it are moved (data-layer move, step 8).
         - "/crates/navree-access/src/sea_compat.rs"
-        # navree-auth is moved; `User` keeps its SeaORM derive (the
-        # compatibility layer for the crates not yet on navree-orm: the
-        # admin resources over `user::Entity` in navree-helm's tests, the CLI kit and
-        # evidence-app, and navree-auth's own subject test) until step 8. navree-social
-        # and navree-sso are on the `User` model and no longer need it.
-        - "/crates/navree-auth/src/entity/user.rs"
         - "/crates/navree-db/"
         - "/crates/navree-graphql/"
         - "/crates/navree-grpc/"
-        - "/crates/navree-helm/"
         - "/crates/navree-mcp/"
         # navree-micro is moved; its tests keep one SeaORM fixture (the `deals`
         # entity, a subject through navree-access's SeaORM shim) until step 8.
@@ -52,12 +45,9 @@ rules:
         - "/crates/navree-cli/"
         # navree-workspace is moved; its SeaORM compatibility layer (the
         # `sea_compat` repository and registrations the conformity checks
-        # name, the SeaORM derive kept on three models and on `LibraryScope`)
-        # stays until step 8. The conformity scanner's tests read SeaORM
+        # name) stays until step 8. The conformity scanner's tests read SeaORM
         # entity sources as text.
         - "/crates/navree-workspace/src/sea_compat.rs"
-        - "/crates/navree-workspace/src/entity.rs"
-        - "/crates/navree-workspace/src/library/mod.rs"
         - "/crates/navree-workspace/src/conformity/source.rs"
     pattern-regex: '(?m)^(?!\s*//)[^\n"]*?(?:\bsea_orm(?:_migration)?\s*::|#\[\s*sea_orm\s*[(\]])'
 
@@ -80,12 +70,9 @@ rules:
         - "/apps/evidence-app/Cargo.toml"
         - "/bench/"
         - "/crates/navree/"
-        # navree-auth: sea-orm for `User`'s compatibility derive, until step 8.
-        - "/crates/navree-auth/Cargo.toml"
         - "/crates/navree-db/"
         - "/crates/navree-graphql/"
         - "/crates/navree-grpc/"
-        - "/crates/navree-helm/"
         - "/crates/navree-mcp/"
         # navree-micro: a dev-dependency for that fixture (navree-access's shim, step 8).
         - "/crates/navree-micro/Cargo.toml"

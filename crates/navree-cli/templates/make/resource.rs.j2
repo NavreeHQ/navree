@@ -3,17 +3,17 @@
 use navree::helm::{Field, Resource};
 use navree::injectable;
 
-use {{ entity_path }} as {{ entity }};
+use {{ model_path }}::{{ model }};
 
 /// {{ label }} in the panel. What a user sees and changes follows their
-/// abilities on `{{ subject }}`: grant `{{ table }}.read` (and `.create`,
+/// abilities on `{{ subject }}`: grant `{{ permission_prefix }}.read` (and `.create`,
 /// `.update`, `.delete`) to the roles that manage them, and `helm.view` to
 /// let them into the panel.
 #[injectable]
 pub struct {{ pascal }}Resource;
 
 impl Resource for {{ pascal }}Resource {
-    type Entity = {{ entity }}::Entity;
+    type Model = {{ model }};
 
     const LABEL: &'static str = "{{ label }}";
     const SINGULAR: &'static str = "{{ singular }}";

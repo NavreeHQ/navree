@@ -16,9 +16,10 @@
 //! - `?` from a SeaORM `DbErr` into [`WorkspaceError`].
 //!
 //! The organization and partition forms (`OrgRepo`, `PartitionScoped`,
-//! `PartitionRepo`) had no user left and are gone. The SeaORM derive kept
-//! on three models ([`entity`](crate::entity)) and on
-//! [`LibraryScope`](crate::LibraryScope) belongs to the same layer.
+//! `PartitionRepo`) had no user left and are gone; what remains is the
+//! form the conformity checks name. (The SeaORM derive once kept on three
+//! models and on [`LibraryScope`](crate::LibraryScope) for Helm's resources
+//! is gone: Helm takes navree-orm models.)
 //!
 //! New code uses the model forms at the crate root:
 //! [`crate::WorkspaceScoped`], [`crate::WorkspaceRepo`], [`crate::OrgRepo`],

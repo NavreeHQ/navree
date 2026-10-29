@@ -1,10 +1,10 @@
-//! `navree make:resource <module> <Entity>`: a Helm resource for an
-//! entity, registered with its module.
+//! `navree make:resource <module> <Model>`: a Helm resource for a
+//! navree-orm model, registered with its module.
 
 use std::path::{Path, PathBuf};
 
 use navree_cli::clock::Timestamp;
-use navree_cli::make::{MakeKind, MakeOptions, make_item, make_module};
+use navree_cli::make::{Companions, MakeKind, MakeOptions, make_item, make_model, make_module};
 use navree_cli::names::{AppName, Name};
 use navree_cli::new_app::{Database, NavreeSource, NewApp, Ui, create_app};
 use navree_cli::resource::make_resource;
@@ -17,7 +17,8 @@ fn name(s: &str) -> Name {
     Name::parse("name", s).unwrap()
 }
 
-/// A new app with a CRUD `deals` module (its entity in `entity.rs`).
+/// A new app with a CRUD `deals` module and its `Deal` model, made with a
+/// policy (so the model is an access subject).
 fn project() -> (tempfile::TempDir, PathBuf) {
     let dir = tempfile::tempdir().unwrap();
     let app = NewApp {
@@ -29,6 +30,19 @@ fn project() -> (tempfile::TempDir, PathBuf) {
     };
     let root = create_app(dir.path(), &app, now()).unwrap();
     make_module(&root, "src/modules", &name("deals"), true, now()).unwrap();
+    let policy = Companions {
+        policy: true,
+        ..Companions::default()
+    };
+    make_model(
+        &root,
+        "src/modules",
+        &name("deals"),
+        &name("deal"),
+        policy,
+        now(),
+    )
+    .unwrap();
     (dir, root)
 }
 
@@ -90,12 +104,12 @@ fn make_resource_writes_the_resource_and_registers_it() {
 }
 
 #[test]
-fn the_entity_may_be_written_in_snake_case() {
+fn the_model_may_be_written_in_snake_case() {
     let (_dir, root) = project();
     make_resource(&root, "src/modules", &name("deals"), "deal").unwrap();
-    assert!(
-        read(&root, "src/modules/deals/resources/deal.rs").contains("pub struct DealResource;")
-    );
+    let resource = read(&root, "src/modules/deals/resources/deal.rs");
+    assert!(resource.contains("pub struct DealResource;"), "{resource}");
+    assert!(resource.contains("type Model = Deal;"), "{resource}");
 }
 
 #[test]
@@ -105,7 +119,7 @@ fn a_second_resource_joins_the_resources_module() {
     make_item(
         &root,
         "src/modules",
-        MakeKind::Entity,
+        MakeKind::Model,
         &name("deals"),
         &name("deal_stage"),
         &MakeOptions::default(),
@@ -123,17 +137,17 @@ fn a_second_resource_joins_the_resources_module() {
     );
     let resource = read(&root, "src/modules/deals/resources/deal_stage.rs");
     assert!(
-        resource.contains("use super::super::entities::deal_stage as deal_stage;"),
+        resource.contains("use super::super::models::deal_stage::DealStage;"),
         "{resource}"
     );
     assert!(
         resource.contains("const LABEL: &'static str = \"Deal stages\";"),
         "{resource}"
     );
-    // The made entity has no access subject yet: a hint says how to add one.
+    // The made model is no access subject yet: a hint says how to make it one.
     assert_eq!(report.hints.len(), 1, "{:?}", report.hints);
     assert!(
-        report.hints[0].contains("impl navree::access::Subject for Entity"),
+        report.hints[0].contains("add `subject` to its `#[model(..)]` attribute"),
         "{:?}",
         report.hints
     );
@@ -144,7 +158,7 @@ fn a_second_resource_joins_the_resources_module() {
 }
 
 #[test]
-fn missing_modules_entities_and_existing_files_are_errors() {
+fn missing_modules_models_and_existing_files_are_errors() {
     let (_dir, root) = project();
     let error = make_resource(&root, "src/modules", &name("invoices"), "Invoice").unwrap_err();
     assert!(
@@ -153,11 +167,14 @@ fn missing_modules_entities_and_existing_files_are_errors() {
     );
     let error = make_resource(&root, "src/modules", &name("deals"), "Contact").unwrap_err();
     assert!(
-        error.to_string().contains("entity `contact` not found"),
+        error.to_string().contains("model `contact` not found")
+            && error
+                .to_string()
+                .contains("navree make:model deals contact"),
         "{error}"
     );
     let error = make_resource(&root, "src/modules", &name("deals"), "123").unwrap_err();
-    assert!(error.to_string().contains("invalid entity name"), "{error}");
+    assert!(error.to_string().contains("invalid model name"), "{error}");
     make_resource(&root, "src/modules", &name("deals"), "Deal").unwrap();
     let module = read(&root, "src/modules/deals/mod.rs");
     let error = make_resource(&root, "src/modules", &name("deals"), "Deal").unwrap_err();
