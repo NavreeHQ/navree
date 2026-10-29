@@ -280,11 +280,11 @@ const HIERARCHY: &[Rule] = &[
     // write permission checked with navree-access; it re-exports
     // `#[derive(Settings)]` from navree-macros. With its `notify` feature,
     // the `notification-templates` settings are navree-notify's template
-    // overrides.
+    // overrides. The settings table is a navree-orm model.
     rule("navree-settings", 6, &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-macros", "navree-http",
         "navree-cache", "navree-events", "navree-db", "navree-validation", "navree-audit",
-        "navree-access", "navree-workspace", "navree-notify",
+        "navree-access", "navree-workspace", "navree-notify", "navree-orm",
     ]),
     // GraphQL: `#[resolver]` fields with route-style access, per-request
     // units of work and dataloaders, subscriptions over WebSockets.

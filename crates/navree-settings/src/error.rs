@@ -2,9 +2,10 @@
 
 use std::collections::BTreeMap;
 
+use navree_db::DbError;
 use navree_http::AppError;
+use navree_orm::OrmError;
 use navree_validation::ValidationErrors;
-use sea_orm::DbErr;
 
 use crate::ScopeKind;
 
@@ -66,7 +67,10 @@ pub enum SettingsError {
     Definition(String),
     /// The database failed.
     #[error("settings storage failed: {0}")]
-    Database(#[from] DbErr),
+    Database(#[from] DbError),
+    /// A navree-orm operation on the settings table failed.
+    #[error("settings storage failed: {0}")]
+    Orm(#[from] OrmError),
     /// A stored value could not be read.
     #[error("settings storage holds an invalid value: {0}")]
     Corrupt(String),

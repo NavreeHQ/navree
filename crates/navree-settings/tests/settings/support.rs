@@ -9,21 +9,21 @@ use garde::Validate;
 use navree_access::{AccessModule, AccessOptions, AccessService};
 use navree_audit::AuditModule;
 use navree_cache::{CacheModule, CacheOptions};
+use navree_db::navree_schema::{
+    Blueprint, ColumnBuilder, Dialect, Migration, Schema, SchemaMigration, SchemaResult,
+};
 use navree_db::{DatabaseModule, Db, MigrationSet, ModuleBuilderDbExt, Uow};
 use navree_events::{EventBus, EventsModule};
 use navree_http::Json;
 use navree_kernel::{Module, ModuleBuilder};
 use navree_macros::{controller, injectable, module};
+use navree_orm::Model as _;
 use navree_settings::{ModuleBuilderSettingsExt, Setting, Settings, SettingsModule};
 use navree_testing::{TestApp, TestAppBuilder, TestClient, principal};
 use navree_workspace::{
     NewOrganization, NewWorkspace, OrgMembers, OrgRole, Organization, Organizations, Workspace,
     WorkspaceModule, WorkspaceRole, WorkspaceSelector, Workspaces,
 };
-use sea_orm::sea_query::{ColumnDef, Query, Table};
-use sea_orm::{ConnectionTrait, DbErr};
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tokio::sync::broadcast;
@@ -89,34 +89,48 @@ pub struct ForgottenSettings {
     pub on: bool,
 }
 
-/// `users(id, name, email)`, as navree-auth creates it.
-struct CreateUsers;
-
-impl MigrationName for CreateUsers {
-    fn name(&self) -> &str {
-        "m20261027_000001_create_users"
+/// A UUID column: `BINARY(16)` on MySQL (navree-db writes UUIDs as 16
+/// bytes there), `uuid` elsewhere.
+fn uuid<'a>(t: &'a mut Blueprint, name: &str, dialect: Dialect) -> ColumnBuilder<'a> {
+    if dialect == Dialect::MySql {
+        t.binary(name).length(16).fixed()
+    } else {
+        t.uuid(name)
     }
 }
 
-#[async_trait]
-impl MigrationTrait for CreateUsers {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table("users")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("name").string().not_null())
-                    .col(ColumnDef::new("email").string().not_null().unique_key())
-                    .to_owned(),
-            )
+/// `users(id, name, email)`, as navree-auth creates it.
+struct CreateUsers;
+
+impl Migration for CreateUsers {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        let dialect = schema.target().await?.dialect();
+        schema
+            .create("users", |t| {
+                uuid(t, "id", dialect).primary();
+                t.string("name");
+                t.string("email").unique();
+            })
             .await
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .drop_table(Table::drop().table("users").to_owned())
-            .await
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop("users").await
+    }
+}
+
+/// The `users` table as a model.
+pub mod user {
+    use serde::Serialize;
+    use uuid::Uuid;
+
+    /// A row of `users`.
+    #[derive(Clone, Debug, PartialEq, navree_orm::Model, Serialize)]
+    #[model(table = "users")]
+    pub struct Model {
+        pub id: Uuid,
+        pub name: String,
+        pub email: String,
     }
 }
 
@@ -171,16 +185,18 @@ pub struct FixturesModule;
 
 impl Module for FixturesModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.migrations(MigrationSet::new("auth").migration(CreateUsers))
-            .global();
+        m.migrations(MigrationSet::new("auth").migration(SchemaMigration::new(
+            "m20261027_000001_create_users",
+            CreateUsers,
+        )))
+        .global();
     }
 }
 
 /// The platform every test app has: database, cache, events, audit,
 /// access, workspaces with organizations and the fixtures.
 pub fn platform() -> TestAppBuilder {
-    TestApp::builder()
-        .temp_database()
+    crate::servers::database(TestApp::builder())
         .config("http.per_ip_rate_limit", Value::Null)
         .config("workspace.organizations.enabled", true)
         .module(DatabaseModule::from_config())
@@ -229,17 +245,17 @@ impl World {
     pub async fn user(&self, name: &str) -> Uuid {
         let id = Uuid::now_v7();
         let email = format!("{}-{id}@navree.test", name.to_lowercase());
-        self.db()
-            .await
-            .conn()
-            .execute(
-                Query::insert()
-                    .into_table("users")
-                    .columns(["id", "name", "email"])
-                    .values_panic([id.into(), name.into(), email.into()]),
-            )
-            .await
-            .unwrap();
+        let db = self.db().await;
+        user::Model::insert(
+            &*db,
+            [user::Model {
+                id,
+                name: name.to_owned(),
+                email,
+            }],
+        )
+        .await
+        .unwrap();
         id
     }
 
