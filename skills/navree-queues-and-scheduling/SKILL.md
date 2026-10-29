@@ -57,8 +57,7 @@ impl Job for ExportContacts {
     async fn handle(self, ctx: JobContext) -> Result<(), BoxError> {
         let db = ctx.app.get::<Db>().await?;
         db.transaction(|uow| async move {
-            let tx = uow.tx().await?;
-            // ... write through &*tx or Repo::<E>::insert(&uow, ..)
+            // ... write through &uow (models, statements)
             Ok(())
         })
         .await?;

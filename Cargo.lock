@@ -5538,8 +5538,6 @@ dependencies = [
  "navree-testing",
  "navree-view",
  "proptest",
- "sea-orm",
- "sea-orm-migration",
  "serde",
  "serde_json",
  "tempfile",

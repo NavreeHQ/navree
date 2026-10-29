@@ -1,7 +1,7 @@
 //! [`FleetError`].
 
+use navree_db::DbError;
 use navree_queue::QueueError;
-use sea_orm::DbErr;
 
 /// What a [`Fleet`](crate::Fleet) operation or the `fleet` command can fail
 /// with.
@@ -30,7 +30,7 @@ pub enum FleetError {
     Queue(#[from] QueueError),
     /// The database failed.
     #[error("Fleet database error: {0}")]
-    Database(#[from] DbErr),
+    Database(#[from] DbError),
     /// A stored value could not be read back.
     #[error("Fleet cannot read a stored value: {0}")]
     Corrupt(String),

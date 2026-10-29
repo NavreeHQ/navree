@@ -149,8 +149,7 @@ impl Module for JobsModule {
 /// A test app with a database, the queue, Fleet (no dashboard) and the
 /// test jobs; workers poll every 20 ms.
 pub fn builder() -> TestAppBuilder {
-    TestApp::builder()
-        .temp_database()
+    crate::database::database(TestApp::builder())
         .config("queue.poll_interval_ms", 20)
         .config("fleet.dashboard", false)
         .module(DatabaseModule::from_config())
