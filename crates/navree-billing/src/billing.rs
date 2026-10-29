@@ -225,9 +225,8 @@ impl Billing {
         billable: &impl AsBillable,
     ) -> Result<Option<BillingCustomer>, BillingError> {
         let billable = billable.billable_ref();
-        Ok(self
-            .customer_row(&*self.db, &billable.billable_type, billable.billable_id)
-            .await?)
+        self.customer_row(&*self.db, &billable.billable_type, billable.billable_id)
+            .await
     }
 
     async fn customer_row<E: Executor + ?Sized>(
