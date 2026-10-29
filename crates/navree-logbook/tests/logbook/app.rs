@@ -9,7 +9,8 @@ use axum::Extension;
 use http::{Method, StatusCode};
 use navree_cache::{Cache, CacheModule};
 use navree_contracts::{Job, JobContext};
-use navree_db::{DatabaseModule, MigrationSet, ModuleBuilderDbExt, Repo, Uow};
+use navree_db::navree_schema::{Dialect, Migration, Schema, SchemaMigration, SchemaResult};
+use navree_db::{DatabaseModule, MigrationSet, ModuleBuilderDbExt, Uow};
 use navree_events::{Event, EventBus, EventsModule};
 use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{
@@ -18,60 +19,39 @@ use navree_kernel::{
 use navree_logbook::{EntryKind, Filter, ListQuery, Logbook, LogbookModule, SqliteStore, Term};
 use navree_queue::{Queue, QueueDriver, QueueModule, QueueOptions};
 use navree_testing::{TestApp, TestAppBuilder};
-use sea_orm::ActiveValue::Set;
-use sea_orm::DbErr;
-use sea_orm::sea_query::{ColumnDef, Table};
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
+use navree_orm::Model as _;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-/// The `deals` table.
-pub mod deal {
-    use sea_orm::entity::prelude::*;
-    use serde::Serialize;
-
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
-    #[sea_orm(table_name = "deals")]
-    pub struct Model {
-        #[sea_orm(primary_key, auto_increment = false)]
-        pub id: Uuid,
-        pub title: String,
-    }
-
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
+/// The `deals` table: a navree-orm model.
+#[derive(Clone, Debug, PartialEq, Eq, navree_orm::Model, Serialize)]
+#[model(table = "deals")]
+pub struct Deal {
+    pub id: Uuid,
+    pub title: String,
 }
 
 struct CreateDeals;
 
-impl MigrationName for CreateDeals {
-    fn name(&self) -> &str {
-        "m0001_create_deals"
-    }
-}
-
-#[async_trait]
-impl MigrationTrait for CreateDeals {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table("deals")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("title").string().not_null())
-                    .to_owned(),
-            )
+impl Migration for CreateDeals {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        let mysql = schema.target().await?.dialect() == Dialect::MySql;
+        schema
+            .create("deals", |t| {
+                if mysql {
+                    t.binary("id").length(16).fixed().primary();
+                    t.string("title").length(255);
+                } else {
+                    t.uuid("id").primary();
+                    t.raw_column("title", "VARCHAR");
+                }
+            })
             .await
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .drop_table(Table::drop().table("deals").to_owned())
-            .await
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop_if_exists("deals").await
     }
 }
 
@@ -139,11 +119,11 @@ impl Controller for Fixtures {
                 "!/deals",
                 |uow: Uow, Json(body): Json<Value>| async move {
                     let title = body["title"].as_str().unwrap_or("untitled").to_owned();
-                    let deal = Repo::<deal::Entity>::insert(
+                    let deal = Deal::create(
                         &uow,
-                        deal::ActiveModel {
-                            id: Set(Uuid::now_v7()),
-                            title: Set(title),
+                        Deal {
+                            id: Uuid::now_v7(),
+                            title,
                         },
                     )
                     .await?;
@@ -192,7 +172,10 @@ impl Module for FixturesModule {
     fn register(&self, m: &mut ModuleBuilder) {
         use navree_contracts::ModuleBuilderJobsExt;
         m.controller::<Fixtures>()
-            .migrations(MigrationSet::new("fixtures").migration(CreateDeals))
+            .migrations(MigrationSet::new("fixtures").migration(SchemaMigration::new(
+                "m0001_create_deals",
+                CreateDeals,
+            )))
             .job::<SyncDeal>();
     }
 }
@@ -353,8 +336,7 @@ async fn test_apps_turn_logbook_off() {
 
 #[tokio::test]
 async fn queries_and_data_changes_are_recorded_and_tagged() {
-    let app = builder()
-        .temp_database()
+    let app = crate::servers::database(builder())
         .module(DatabaseModule::from_config())
         .module(LogbookModule::from_config())
         .module(FixturesModule)
@@ -393,8 +375,7 @@ async fn queries_and_data_changes_are_recorded_and_tagged() {
 
 #[tokio::test]
 async fn events_jobs_cache_tags_and_dumps_are_recorded_from_their_modules() {
-    let app = builder()
-        .temp_database()
+    let app = crate::servers::database(builder())
         .module(DatabaseModule::from_config())
         .module(EventsModule::for_root())
         .module(CacheModule::from_config())
