@@ -5,10 +5,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::Utc;
-use navree_auth::{JwtService, TokenType, user};
+use navree_auth::{JwtService, TokenType, User};
 use navree_contracts::{Clock, FixedClock};
 use navree_db::Db;
-use sea_orm::{EntityTrait, ModelTrait};
+use navree_orm::Model as _;
 use serde_json::{Value, json};
 
 use crate::support::{self, signed_in};
@@ -172,12 +172,9 @@ async fn current_user_is_401_once_the_user_is_deleted() {
         .assert_status(200)
         .assert_json_path("email", json!("ada@example.com"));
     let db = app.get::<Db>().await;
-    user::Entity::find_by_id(user.id)
-        .one(db.conn())
-        .await
-        .unwrap()
-        .unwrap()
-        .delete(db.conn())
+    User::query()
+        .where_key(user.id)
+        .delete(&*db)
         .await
         .unwrap();
     app.client()

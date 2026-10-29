@@ -27,11 +27,11 @@ use serde_json::{Value, json};
 /// A strong enough password for every test.
 pub const PASSWORD: &str = "correct horse battery";
 
-/// A test app with crypto (fast hashing), a fresh database and the auth
-/// module read from configuration, plus the probe routes.
+/// A test app with crypto (fast hashing), a fresh database (on the server
+/// `NAVREE_TEST_DATABASE` names; see [`servers`](crate::servers)) and the
+/// auth module read from configuration, plus the probe routes.
 pub fn builder() -> TestAppBuilder {
-    TestApp::builder()
-        .temp_database()
+    crate::servers::database(TestApp::builder())
         .config("app.key", generate_key())
         .config("hashing.memory_kib", 1024)
         .config("hashing.iterations", 1)

@@ -7,13 +7,13 @@ use std::time::Duration;
 use chrono::Utc;
 use navree_auth::{
     AuthError, AuthService, ClientMeta, LoginOutcome, TokenType, TwoFactorProof, User,
-    two_factor_enabled, user,
+    two_factor_enabled,
 };
 use navree_contracts::{AuditSink, Clock, FixedClock};
 use navree_crypto::totp::{Secret, Totp};
 use navree_db::Db;
 use navree_testing::{TestApp, TestClient, TestResponse};
-use sea_orm::EntityTrait;
+use navree_orm::Model as _;
 use serde_json::{Value, json};
 
 use crate::support::{self, PASSWORD, RecordingSink, login, signed_in, tokens};
@@ -119,13 +119,13 @@ async fn clocked_app() -> (TestApp, Arc<FixedClock>, Arc<RecordingSink>) {
     (app, clock, sink)
 }
 
-async fn stored(app: &TestApp, user: &User) -> user::Model {
+async fn stored(app: &TestApp, user: &User) -> User {
     let db = app.get::<Db>().await;
-    user::Entity::find_by_id(user.id)
-        .one(db.conn())
+    User::find(&*db, user.id)
         .await
         .unwrap()
         .unwrap()
+        .into_inner()
 }
 
 #[tokio::test]

@@ -8,7 +8,8 @@ use navree_auth::refresh_token;
 use navree_contracts::{AuditKind, AuditSink, Clock, FixedClock};
 use navree_crypto::sha256_hex;
 use navree_db::Db;
-use sea_orm::{ConnectionTrait, EntityTrait, Statement};
+use navree_db::{Executor, Statement};
+use navree_orm::Model as _;
 use serde_json::json;
 
 use crate::support::{self, RecordingSink, refresh, signed_in, tokens};
@@ -40,7 +41,7 @@ async fn refresh_rotates_and_old_token_stops_working() {
 
     // The rotation is recorded: the old row points at its successor.
     let db = app.get::<Db>().await;
-    let rows = refresh_token::Entity::find().all(db.conn()).await.unwrap();
+    let rows = refresh_token::Model::all(&*db).await.unwrap().into_vec();
     assert_eq!(rows.len(), 2);
     let old = rows
         .iter()
@@ -133,7 +134,7 @@ async fn refresh_token_hash_only_at_rest() {
     let app = support::app().await;
     let (_, _, token) = signed_in(&app, "ada@example.com").await;
     let db = app.get::<Db>().await;
-    let rows = refresh_token::Entity::find().all(db.conn()).await.unwrap();
+    let rows = refresh_token::Model::all(&*db).await.unwrap().into_vec();
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].token_hash, sha256_hex(token.as_bytes()));
     assert_eq!(rows[0].ip.as_deref(), Some("127.0.0.1"));
@@ -141,13 +142,12 @@ async fn refresh_token_hash_only_at_rest() {
     // No column of the table holds the token or its secret part.
     let (_, secret) = token.split_once('.').unwrap();
     let dump = db
-        .conn()
-        .query_all_raw(Statement::from_string(
-            db.backend(),
-            "SELECT * FROM refresh_tokens",
-        ))
+        .fetch_all(&Statement::text("SELECT * FROM refresh_tokens"))
         .await
         .unwrap();
-    let text = format!("{dump:?}");
+    let text = format!(
+        "{:?}",
+        dump.iter().map(|row| row.to_json()).collect::<Vec<_>>()
+    );
     assert!(!text.contains(secret), "{text}");
 }
