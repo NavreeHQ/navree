@@ -25,7 +25,7 @@ The module also mounts `GET /api/audit`, which requires the permission `audit.re
 
 ### Data changes
 
-Every insert, update and delete you make through a [model](/docs/orm/models/) or `Repo` in a unit of work becomes a `data` entry: in a request, the request's unit of work; elsewhere, one from `Db::uow` (see [The unit of work](/docs/database/unit-of-work/)). The entry is written inside the same transaction, right before it commits, so a change that rolls back leaves no entry, and an entry never exists without its change.
+Every insert, update and delete you make through a [model](/docs/orm/models/) or `Repo` in a unit of work becomes a `data` entry: in a request, the request's unit of work; elsewhere, one from `Db::uow` (see [The unit of work](/docs/database/unit-of-work/)). The entry is written inside the same transaction, right before it commits (the audit log is a change observer that writes through the unit of work, on either kind of transaction), so a change that rolls back leaves no entry, and an entry never exists without its change.
 
 ```json
 {
@@ -151,7 +151,7 @@ Hand-written routes use `.audit("contacts.exported")` on `RouteDef`.
 
 ## The record shape
 
-Each row of `audit_logs` is a `navree::audit::AuditRecord`: a model of Navree's ORM (`AuditRecord::query()`, typed columns such as `AuditRecord::ACTION`), and the model of the SeaORM entity `navree::audit::audit_log::Entity`. `GET /api/audit` returns the same fields:
+Each row of `audit_logs` is a `navree::audit::AuditRecord`: a model of Navree's ORM (`AuditRecord::query()`, typed columns such as `AuditRecord::ACTION`). The audit log writes rows with navree-db's statements (`AuditRecord` is also a `navree::db::Record`), on its own connection or in the unit of work it is given, never in a request's transaction by accident. `GET /api/audit` returns the same fields:
 
 | Field | Type | |
 |---|---|---|
@@ -235,9 +235,9 @@ Inject `Arc<AuditLog>` and call `list` with an `AuditFilter`:
 use navree::audit::{AuditFilter, AuditLog};
 use navree::contracts::AuditKind;
 use navree::db::PageQuery;
-use sea_orm::DbErr;
+use navree::orm::OrmError;
 
-pub async fn history_of_deal(log: &AuditLog, id: &str) -> Result<(), DbErr> {
+pub async fn history_of_deal(log: &AuditLog, id: &str) -> Result<(), OrmError> {
     let page = log
         .list(
             &AuditFilter {
@@ -285,8 +285,6 @@ let latest = filter
     .await?;
 ```
 
-`AuditFilter::apply` adds the same filter to a SeaORM `Select` of `navree::audit::audit_log::Entity` instead.
-
 ## Adding entries
 
 Build an entry with `navree::contracts::AuditEntry::new(kind, action)` and its setters: `actor`, `impersonator`, `subject`, `old_values`, `new_values`, `request_id`, `ip`, `user_agent` and `metadata`. Then choose where to write it:
@@ -294,8 +292,8 @@ Build an entry with `navree::contracts::AuditEntry::new(kind, action)` and its s
 ```rust title="src/modules/deals/exports.rs"
 use navree::audit::{AuditError, AuditLog};
 use navree::contracts::{AuditEntry, AuditKind};
+use navree::db::DbError;
 use navree::prelude::*;
-use sea_orm::DbErr;
 use serde_json::json;
 use uuid::Uuid;
 
@@ -317,7 +315,7 @@ impl DealExports {
     }
 
     /// Inside the unit of work: commits or rolls back with the change.
-    pub async fn won(&self, uow: &Uow, deal_id: Uuid) -> Result<(), DbErr> {
+    pub async fn won(&self, uow: &Uow, deal_id: Uuid) -> Result<(), DbError> {
         self.audit
             .record_in(
                 uow,
@@ -329,7 +327,9 @@ impl DealExports {
 ```
 
 - **`record`** writes on the audit log's own connection, outside any transaction: the entry stays even if the request fails afterwards. Use it for attempts and security events. Entries go into a queue of 4,096 and a background task writes them in order; `record` fails with `AuditError::QueueFull` only when that queue is full, and the entry is then dropped with a warning in the log. `flush().await` waits until everything queued so far is written. An entry without an impersonator gets the one of the task's current unit of work (`Uow::current()`), so entries written during an impersonated request name the impersonator.
-- **`record_in`** writes inside the unit of work's transaction, so the entry commits or rolls back with the work. Use it for business events that belong to a change. The actor, the impersonator and the request id default to the unit of work's.
+- **`record_in`** writes inside the unit of work's transaction, so the entry commits or rolls back with the work. Use it for business events that belong to a change. The actor, the impersonator and the request id default to the unit of work's. It fails with the `navree::db::DbError` of the insert.
+
+`list` fails with the ORM's `OrmError`, and `prune` and `prune_before` with a `DbError`.
 
 When the app shuts down gracefully, the queue is written out first; entries recorded after that are written directly.
 

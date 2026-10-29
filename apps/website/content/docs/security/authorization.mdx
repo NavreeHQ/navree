@@ -89,7 +89,7 @@ pub use entity::Post;
 pub struct PostsModule;
 ```
 
-`for_feature` maps the permission prefix to the subject, and lets routes load the entity's records by primary key (a UUID, an integer or a string). A subject that isn't an entity, such as `Report`, registers with `AccessModule::for_subject::<S>()` for its permission prefix alone. Users are a subject too: `navree::auth::user::Entity` is `User`, with the prefix `users`. Import `AccessModule::for_feature::<navree::auth::user::Entity>()` to check routes against users and to make `users.*` permissions apply.
+`for_feature` maps the permission prefix to the subject, and lets routes load the entity's records by primary key (a UUID, an integer or a string). A subject that isn't an entity, such as `Report`, registers with `AccessModule::for_subject::<S>()` for its permission prefix alone. Users are a subject too: `navree::auth::User` is `User`, with the prefix `users`. To check routes against users and to make `users.*` permissions apply, import `AccessModule::for_feature::<navree::auth::user::Entity>()` (the SeaORM entity of the same table, which `for_feature` loads records through).
 
 ## Defining abilities
 

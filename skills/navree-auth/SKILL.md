@@ -119,8 +119,12 @@ impl ProfileController {
 ```
 
 `uow.actor()` also gives the user id inside services. `navree::auth::User`
-is the model and `navree::auth::user::Entity` the entity; its columns are
-fixed, so keep app data about users in your own table keyed by `users.id`
+is a navree-orm model (`User::query()`, `User::EMAIL`, `User::find(&db, id)`);
+`navree::auth::user::Entity` is the SeaORM entity of the same table, kept only
+for code not yet on navree-orm (and for `AccessModule::for_feature`). Its
+columns are fixed and `AuthService` writes them (change events carry no
+password hash or two-factor data), so keep app data about users in your own
+table keyed by `users.id`
 (the generated `users` module's `user_profiles` does this). Add fields to
 the user JSON of `/api/auth/*` with a `UserResourceExtension` registered by
 `m.user_resource_extension::<T>()`.
