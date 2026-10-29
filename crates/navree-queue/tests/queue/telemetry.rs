@@ -62,8 +62,7 @@ async fn setup_with(driver: QueueDriver) -> Setup {
     let clock = Arc::new(FixedClock::new(start()));
     let journal = Arc::new(Journal::default());
     let recorder = TelemetryRecorder::new();
-    let app = TestApp::builder()
-        .temp_database()
+    let app = crate::servers::database(TestApp::builder())
         .module(DatabaseModule)
         .module(QueueModule::for_root(options(driver)))
         .module(JobsModule)

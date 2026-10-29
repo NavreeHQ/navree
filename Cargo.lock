@@ -6419,8 +6419,6 @@ dependencies = [
  "navree-schedule",
  "navree-telemetry",
  "navree-testing",
- "sea-orm",
- "sea-orm-migration",
  "serde",
  "serde_json",
  "sha2 0.11.1",
