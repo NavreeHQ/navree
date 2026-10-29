@@ -57,6 +57,13 @@ pub trait SubjectRecords: Subject + Send + Sync + 'static {
     fn policy() -> Option<fn(&AbilityCtx, &mut Rules)> {
         None
     }
+
+    /// Whether this is a SeaORM entity registered through the compatibility
+    /// layer, the twin of a model of the same table. When both register one
+    /// subject, the model's registration is the one kept. Not for new code;
+    /// the layer goes once every crate is on navree-orm.
+    #[doc(hidden)]
+    const SEA_COMPAT: bool = false;
 }
 
 /// Ability rules about one subject, kept next to it: attach it to an ORM
