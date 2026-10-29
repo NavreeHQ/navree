@@ -477,7 +477,9 @@ impl SetMigration<'_> {
     pub async fn up_on(&self, conn: &(impl Executor + ?Sized)) -> Result<(), DbError> {
         match self {
             SetMigration::Schema(migration) => migration
-                .up(&navree_schema::Schema::new(&crate::schema::OnExecutor(conn)))
+                .up(&navree_schema::Schema::new(&crate::schema::OnExecutor(
+                    conn,
+                )))
                 .await
                 .map_err(|error| DbError::new(crate::ErrorKind::Other, error.to_string())),
             SetMigration::SeaOrm(migration) => Err(DbError::unsupported(format!(

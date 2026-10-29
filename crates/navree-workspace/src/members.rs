@@ -12,8 +12,8 @@ use uuid::Uuid;
 use crate::core::Core;
 use crate::directory::UserSummary;
 use crate::entity::Member;
-use crate::store;
 use crate::events::{MemberAdded, MemberRemoved, MemberRoleChanged};
+use crate::store;
 use crate::workspaces::set_role;
 use crate::{WorkspaceError, WorkspaceRole};
 

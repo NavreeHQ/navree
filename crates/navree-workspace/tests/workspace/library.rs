@@ -7,6 +7,7 @@ use std::sync::Arc;
 use axum::extract::Path;
 use chrono::{DateTime, Utc};
 use http::Method;
+use navree_db::Executor as _;
 use navree_db::navree_schema::{Migration, Schema, SchemaMigration, SchemaResult};
 use navree_db::{Db, MigrationSet, ModuleBuilderDbExt, Uow};
 use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, RouteDef};
@@ -20,7 +21,6 @@ use navree_workspace::{
     CurrentWorkspace, InWorkspace, ModuleBuilderWorkspaceExt, Organization, Workspace,
     WorkspaceError,
 };
-use navree_db::Executor as _;
 use serde::Serialize;
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -521,7 +521,9 @@ async fn the_check_constraint_refuses_contradicting_owners() {
         ("workspace", Some(org.as_str()), Some(ws.as_str())),
         ("shared", None, None),
     ] {
-        let refused = db.execute_script(&insert(scope, organization, workspace)).await;
+        let refused = db
+            .execute_script(&insert(scope, organization, workspace))
+            .await;
         assert_eq!(
             refused.unwrap_err().kind(),
             navree_db::ErrorKind::CheckViolation,

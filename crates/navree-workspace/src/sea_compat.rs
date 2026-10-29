@@ -562,5 +562,4 @@ mod tests {
             Some(Value::from("abc".to_owned()))
         );
     }
-
 }

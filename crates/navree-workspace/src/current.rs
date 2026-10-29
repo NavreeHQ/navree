@@ -13,9 +13,9 @@ use navree_contracts::{AuthState, RequestId};
 use navree_db::Uow;
 use navree_http::{AppError, Guard, RouteMeta};
 use navree_kernel::{AppContext, BoxError, BoxFuture};
-use navree_telemetry::TelemetryContext;
 use navree_orm::Builder;
 use navree_orm::binding::{RouteBinding, RouteKey};
+use navree_telemetry::TelemetryContext;
 use tokio::sync::OnceCell;
 use uuid::Uuid;
 
@@ -539,7 +539,8 @@ async fn belongs<M: WorkspaceScoped>(
     workspace: Uuid,
     id: String,
 ) -> Result<bool, BoxError> {
-    let Some(query) = <RouteKey as RouteBinding<M>>::query(WorkspaceRepo::<M>::query(workspace), &id)
+    let Some(query) =
+        <RouteKey as RouteBinding<M>>::query(WorkspaceRepo::<M>::query(workspace), &id)
     else {
         return Ok(false);
     };

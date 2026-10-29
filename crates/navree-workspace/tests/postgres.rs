@@ -28,8 +28,8 @@ use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{
     BoxError, BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver,
 };
-use navree_orm::factory::{Factory, FactoryContext, ModelFactory};
 use navree_orm::Model as _;
+use navree_orm::factory::{Factory, FactoryContext, ModelFactory};
 use navree_testing::{IsolationReport, TestApp, TestAppBuilder, principal};
 use navree_workspace::testing::IsolationSuiteExt;
 use navree_workspace::{
@@ -505,14 +505,9 @@ struct NotesModule;
 
 impl Module for NotesModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.migrations(
-            MigrationSet::new("notes")
-                .after(["workspace"])
-                .migration(SchemaMigration::new(
-                    "m20261026_000001_create_notes",
-                    CreateNotes,
-                )),
-        )
+        m.migrations(MigrationSet::new("notes").after(["workspace"]).migration(
+            SchemaMigration::new("m20261026_000001_create_notes", CreateNotes),
+        ))
         .controller::<NotesController>();
     }
 }

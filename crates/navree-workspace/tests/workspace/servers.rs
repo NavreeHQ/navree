@@ -10,11 +10,11 @@
 
 #[cfg(any(feature = "postgres", feature = "mysql"))]
 mod real {
+    use navree_db::{DbOptions, Executor, Pool};
     use navree_orm::prelude::*;
     use navree_workspace::library::{
         Library, LibraryOwner, LibraryRepo, LibraryScope, LibraryViewer, LibraryVisibility,
     };
-    use navree_db::{DbOptions, Executor, Pool};
     use serde_json::json;
     use uuid::Uuid;
 

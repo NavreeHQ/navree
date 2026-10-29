@@ -198,10 +198,7 @@ fn prelude_brings_the_everyday_types() {
     assert!(same::<InOrganization, navree::workspace::InOrganization>());
     assert!(same::<CurrentPartition, navree::workspace::CurrentPartition>());
     assert!(same::<PartitionScope, navree::workspace::PartitionScope>());
-    assert!(same::<
-        OrgRepo<Thing>,
-        navree::workspace::OrgRepo<Thing>,
-    >());
+    assert!(same::<OrgRepo<Thing>, navree::workspace::OrgRepo<Thing>>());
     // Shared libraries.
     assert!(same::<
         LibraryRepo<Thing>,

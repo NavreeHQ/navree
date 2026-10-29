@@ -92,7 +92,11 @@ pub mod contact {
     use uuid::Uuid;
 
     #[derive(Clone, Debug, Default, PartialEq, Eq, navree_orm::Model, Serialize)]
-    #[model(table = "contacts", subject = "Contact", permission_prefix = "contacts")]
+    #[model(
+        table = "contacts",
+        subject = "Contact",
+        permission_prefix = "contacts"
+    )]
     pub struct Model {
         pub id: Uuid,
         pub workspace_id: Uuid,
