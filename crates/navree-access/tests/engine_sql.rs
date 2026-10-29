@@ -2,9 +2,10 @@
 //! with record checks (Review Focus 5, engine half).
 
 use navree_access::engine::{
-    ALL, Ability, Cond, Conditions, DELETE, MANAGE, READ, Rule, Rules, SqlColumns, UPDATE, field,
+    ALL, Ability, Cond, Conditions, DELETE, MANAGE, READ, Rule, Rules, SqlColumn, SqlColumns,
+    SqlFilter, UPDATE, field,
 };
-use sea_query::{Expr, PostgresQueryBuilder, Query, SqliteQueryBuilder};
+use navree_db::Backend;
 use serde_json::{Value, json};
 
 fn ability(define: impl FnOnce(&mut Rules)) -> Ability {
@@ -14,19 +15,16 @@ fn ability(define: impl FnOnce(&mut Rules)) -> Ability {
 }
 
 /// `SELECT "id" FROM "posts" WHERE <filter>` with values inlined.
-fn sqlite(filter: Expr) -> String {
-    Query::select()
-        .column("id")
-        .from("posts")
-        .and_where(filter)
-        .to_string(SqliteQueryBuilder)
+fn sqlite(filter: SqlFilter) -> String {
+    format!(
+        r#"SELECT "id" FROM "posts" WHERE {}"#,
+        where_clause(filter)
+    )
 }
 
-fn where_clause(filter: Expr) -> String {
-    let sql = sqlite(filter);
-    sql.split_once(" WHERE ")
-        .map(|(_, w)| w.to_owned())
-        .unwrap_or(sql)
+/// The filter as SQLite runs it, values inlined.
+fn where_clause(filter: SqlFilter) -> String {
+    filter.to_statement(Backend::Sqlite).to_string()
 }
 
 #[test]
@@ -49,15 +47,46 @@ fn sql_filter_case_chain_snapshot() {
 
     insta::assert_snapshot!(
         sqlite(ability.sql_filter(DELETE, "Post")),
-        @r#"SELECT "id" FROM "posts" WHERE (CASE WHEN ("status" IS NULL OR "status" NOT IN ('draft', 'review')) THEN FALSE WHEN ("archived_at" IS NOT NULL AND "locked" = TRUE) THEN FALSE WHEN ("author_id" = 7) THEN TRUE ELSE FALSE END)"#
+        @r#"SELECT "id" FROM "posts" WHERE CASE WHEN ("status" IS NULL OR "status" NOT IN ('draft', 'review')) THEN FALSE WHEN ("archived_at" IS NOT NULL AND "locked" = TRUE) THEN FALSE WHEN ("author_id" = 7) THEN TRUE ELSE FALSE END"#
     );
     // A field-only `cannot` does not hide records (as in `Ability::can`).
     insta::assert_snapshot!(
         where_clause(ability.sql_filter(UPDATE, "Post")),
-        @r#"(CASE WHEN ("author_id" = 7) THEN TRUE ELSE FALSE END)"#
+        @r#"CASE WHEN ("author_id" = 7) THEN TRUE ELSE FALSE END"#
     );
     // No rule for the action/subject: FALSE.
     insta::assert_snapshot!(where_clause(ability.sql_filter(READ, "Comment")), @"FALSE");
+}
+
+#[test]
+fn sql_filter_is_written_for_each_backend() {
+    let ability = ability(|r| {
+        r.can(READ, "Post").when(field("author_id").eq(7));
+        r.cannot(READ, "Post")
+            .when(field("status").ne("open").and(field("key").is_in([1, 2])));
+    });
+    let filter = ability.sql_filter(READ, "Post");
+    let postgres = filter.to_statement(Backend::Postgres);
+    assert_eq!(
+        postgres.sql(),
+        r#"CASE WHEN ("key" IN (?, ?) AND "status" IS DISTINCT FROM ?) THEN FALSE WHEN ("author_id" = ?) THEN TRUE ELSE FALSE END"#
+    );
+    assert_eq!(
+        postgres.for_backend(Backend::Postgres).unwrap().sql(),
+        r#"CASE WHEN ("key" IN ($1, $2) AND "status" IS DISTINCT FROM $3) THEN FALSE WHEN ("author_id" = $4) THEN TRUE ELSE FALSE END"#
+    );
+    assert_eq!(
+        postgres.values(),
+        [1_i64.into(), 2_i64.into(), "open".into(), 7_i64.into()]
+    );
+    assert_eq!(
+        filter.to_statement(Backend::MySql).sql(),
+        "CASE WHEN (`key` IN (?, ?) AND NOT (`status` <=> ?)) THEN FALSE WHEN (`author_id` = ?) THEN TRUE ELSE FALSE END"
+    );
+    assert_eq!(
+        filter.to_statement(Backend::Sqlite).sql(),
+        r#"CASE WHEN ("key" IN (?, ?) AND "status" IS NOT ?) THEN FALSE WHEN ("author_id" = ?) THEN TRUE ELSE FALSE END"#
+    );
 }
 
 #[test]
@@ -77,7 +106,7 @@ fn sql_filter_short_circuits_unconditional_rules() {
     });
     assert_eq!(
         where_clause(mostly.sql_filter(READ, "Post")),
-        r#"(CASE WHEN ("hidden" = TRUE) THEN FALSE ELSE TRUE END)"#
+        r#"CASE WHEN ("hidden" = TRUE) THEN FALSE ELSE TRUE END"#
     );
 
     // Trailing WHENs that agree with ELSE are dropped.
@@ -102,8 +131,8 @@ fn sql_filter_null_semantics() {
             r.can(READ, "Post").when(c);
         });
         let sql = where_clause(ability.sql_filter(READ, "Post"));
-        sql.strip_prefix("(CASE WHEN (")
-            .and_then(|s| s.strip_suffix(") THEN TRUE ELSE FALSE END)"))
+        sql.strip_prefix("CASE WHEN (")
+            .and_then(|s| s.strip_suffix(") THEN TRUE ELSE FALSE END"))
             .unwrap_or(&sql)
             .to_owned()
     };
@@ -116,10 +145,8 @@ fn sql_filter_null_semantics() {
         r#""team_id" IS NOT NULL"#
     );
     assert_eq!(one(field("team_id").eq(3)), r#""team_id" = 3"#);
-    assert_eq!(
-        one(field("team_id").ne(3)),
-        r#""team_id" IS DISTINCT FROM 3"#
-    );
+    // Null-safe: SQLite's `IS NOT` is PostgreSQL's `IS DISTINCT FROM`.
+    assert_eq!(one(field("team_id").ne(3)), r#""team_id" IS NOT 3"#);
     assert_eq!(one(field("rank").lt(2.5)), r#""rank" < 2.5"#);
     assert_eq!(one(field("rank").lte(2)), r#""rank" <= 2"#);
     assert_eq!(one(field("title").gt("m")), r#""title" > 'm'"#);
@@ -154,17 +181,22 @@ fn sql_filter_null_semantics() {
         one(field("a").eq(1).and(field("b").gt(2))),
         r#""a" = 1 AND "b" > 2"#
     );
+    // A condition with an `OR` inside an `AND` keeps its parentheses.
+    assert_eq!(
+        one(field("a").is_in([Some(1), None]).and(field("b").eq(2))),
+        r#"("a" IN (1) OR "a" IS NULL) AND "b" = 2"#
+    );
 }
 
 #[test]
 fn sql_filter_with_custom_columns_and_values() {
     struct Posts;
     impl SqlColumns for Posts {
-        fn column(&self, field: &str) -> Expr {
-            Expr::col(("posts", field.to_owned()))
+        fn column(&self, field: &str) -> SqlColumn {
+            SqlColumn::qualified("posts", field)
         }
 
-        fn value(&self, field: &str, value: &Value) -> sea_query::Value {
+        fn value(&self, field: &str, value: &Value) -> navree_db::Value {
             match (
                 field,
                 value.as_str().and_then(|s| uuid::Uuid::parse_str(s).ok()),
@@ -180,20 +212,15 @@ fn sql_filter_with_custom_columns_and_values() {
         r.can(UPDATE, "Post")
             .when(field("author_id").eq(user).and(field("rank").gt(1)));
     });
-    let filter = ability.sql_filter_with(UPDATE, "Post", &Posts);
-    let (sql, values) = Query::select()
-        .column("id")
-        .from("posts")
-        .and_where(filter)
-        .build(PostgresQueryBuilder);
+    let filter = ability
+        .sql_filter_with(UPDATE, "Post", &Posts)
+        .to_statement(Backend::Postgres);
+    let statement = filter.for_backend(Backend::Postgres).unwrap();
     assert_eq!(
-        sql,
-        r#"SELECT "id" FROM "posts" WHERE (CASE WHEN ("posts"."author_id" = $1 AND "posts"."rank" > $2) THEN TRUE ELSE FALSE END)"#
+        statement.sql(),
+        r#"CASE WHEN ("posts"."author_id" = $1 AND "posts"."rank" > $2) THEN TRUE ELSE FALSE END"#
     );
-    assert_eq!(
-        values.0,
-        vec![sea_query::Value::from(user), sea_query::Value::from(1_i64)]
-    );
+    assert_eq!(statement.values(), [user.into(), 1_i64.into()]);
 }
 
 #[test]
@@ -218,49 +245,89 @@ fn operands_a_column_does_not_accept_compile_like_record_checks() {
 
     // A record check never matches across types, so neither does SQL
     // (SQLite would otherwise compare `false` as `0`).
-    let never = r#"(CASE WHEN (FALSE) THEN TRUE ELSE FALSE END)"#;
-    let always = r#"(CASE WHEN (TRUE) THEN TRUE ELSE FALSE END)"#;
+    let never = r#"CASE WHEN (FALSE) THEN TRUE ELSE FALSE END"#;
+    let always = r#"CASE WHEN (TRUE) THEN TRUE ELSE FALSE END"#;
     assert_eq!(filter(field("flag").lte(0)), never);
     assert_eq!(filter(field("rank").eq("3")), never);
     assert_eq!(filter(field("rank").ne("3")), always);
     assert_eq!(filter(field("rank").not_in([json!("1")])), always);
     assert_eq!(
         filter(field("rank").is_in([json!(1), json!("1")])),
-        r#"(CASE WHEN ("rank" IN (1)) THEN TRUE ELSE FALSE END)"#
+        r#"CASE WHEN ("rank" IN (1)) THEN TRUE ELSE FALSE END"#
     );
     assert_eq!(
         filter(field("flag").is_in([json!(1), Value::Null])),
-        r#"(CASE WHEN ("flag" IS NULL) THEN TRUE ELSE FALSE END)"#
+        r#"CASE WHEN ("flag" IS NULL) THEN TRUE ELSE FALSE END"#
     );
     // Accepted operands compile as before.
     assert_eq!(
         filter(field("flag").eq(true)),
-        r#"(CASE WHEN ("flag" = TRUE) THEN TRUE ELSE FALSE END)"#
+        r#"CASE WHEN ("flag" = TRUE) THEN TRUE ELSE FALSE END"#
     );
 }
 
 #[test]
 fn sql_value_maps_json_scalars() {
     use navree_access::engine::sql_value;
-    use serde_json::json;
+    use navree_db::Value as SqlValue;
 
-    assert_eq!(sql_value(&json!(true)), sea_query::Value::from(true));
-    assert_eq!(sql_value(&json!(-7)), sea_query::Value::from(-7_i64));
+    assert_eq!(sql_value(&json!(true)), SqlValue::Bool(true));
+    assert_eq!(sql_value(&json!(-7)), SqlValue::I64(-7));
     assert_eq!(
         sql_value(&json!(9_007_199_254_740_991_u64)),
-        sea_query::Value::from(9_007_199_254_740_991_i64)
+        SqlValue::I64(9_007_199_254_740_991)
     );
-    assert_eq!(sql_value(&json!(2.5)), sea_query::Value::from(2.5_f64));
-    assert_eq!(sql_value(&json!("x")), sea_query::Value::from("x"));
+    assert_eq!(sql_value(&json!(2.5)), SqlValue::F64(2.5));
+    assert_eq!(sql_value(&json!("x")), SqlValue::from("x"));
+}
+
+#[test]
+fn typed_columns_type_operands_and_reject_other_types() {
+    use navree_access::engine::TypedColumns;
+    use navree_db::{Kind, Value as SqlValue};
+
+    let columns = TypedColumns::new("audit.deals")
+        .with("id", Kind::Uuid)
+        .with("won", Kind::Bool)
+        .with("closed_at", Kind::Timestamp)
+        .with("due_on", Kind::Date);
+    let id = uuid::Uuid::from_u128(7);
+    assert_eq!(
+        columns.value("id", &json!(id.to_string())),
+        SqlValue::Uuid(id)
+    );
+    assert!(matches!(
+        columns.value("closed_at", &json!("2026-10-25T12:00:00.250000Z")),
+        SqlValue::Timestamp(_)
+    ));
+    assert!(matches!(
+        columns.value("due_on", &json!("2026-10-25")),
+        SqlValue::Date(_)
+    ));
+    assert!(columns.accepts("won", &json!(true)));
+    assert!(!columns.accepts("won", &json!(1)));
+    assert!(!columns.accepts("id", &json!(7)));
+    // Not a column: SQL NULL, as a record check sees `null`.
+    assert_eq!(columns.column("missing"), SqlColumn::Null);
+    let ability = ability(|r| {
+        r.can(READ, "Deal")
+            .when(field("won").eq(true).and(field("missing").eq(None::<i64>)));
+    });
+    assert_eq!(
+        ability
+            .sql_filter_with(READ, "Deal", &columns)
+            .to_statement(Backend::Postgres)
+            .sql(),
+        r#"CASE WHEN (NULL IS NULL AND "audit"."deals"."won" = ?) THEN TRUE ELSE FALSE END"#
+    );
 }
 
 /// Property tests over random rule sets. Review Focus 5: `Ability::can` on a
 /// row as JSON equals "the row is selected by `sql_filter`", executed by
-/// SQLite with bound parameters (as SeaORM runs it) and with inlined values.
+/// SQLite with bound parameters (as navree-db runs it) and with inlined values.
 mod properties {
     use proptest::prelude::*;
     use proptest::test_runner::{Config, TestRunner};
-    use sea_query::Order;
     use serde_json::json;
     use sqlx::{Connection, Row, SqliteConnection};
 
@@ -375,28 +442,26 @@ mod properties {
     }
 
     /// Ids selected by `filter`, run with bound parameters and with literals.
-    async fn selected_ids(conn: &mut SqliteConnection, filter: Expr) -> (Vec<i64>, Vec<i64>) {
-        let select = Query::select()
-            .column("id")
-            .from("items")
-            .and_where(filter)
-            .order_by("id", Order::Asc)
-            .to_owned();
+    async fn selected_ids(
+        conn: &mut SqliteConnection,
+        filter: SqlFilter,
+    ) -> (Vec<i64>, Vec<i64>) {
+        let fragment = filter.to_statement(Backend::Sqlite);
+        let select = |condition: &str| format!("SELECT id FROM items WHERE {condition} ORDER BY id");
 
-        let (sql, values) = select.build(SqliteQueryBuilder);
-        let mut bound = sqlx::query(sqlx::AssertSqlSafe(sql));
-        for value in values.0 {
-            bound = match value {
-                sea_query::Value::Bool(v) => bound.bind(v),
-                sea_query::Value::BigInt(v) => bound.bind(v),
-                sea_query::Value::Double(v) => bound.bind(v),
-                sea_query::Value::String(v) => bound.bind(v),
+        let mut bound = sqlx::query(sqlx::AssertSqlSafe(select(fragment.sql())));
+        for value in fragment.values() {
+            bound = match value.clone() {
+                navree_db::Value::Bool(v) => bound.bind(v),
+                navree_db::Value::I64(v) => bound.bind(v),
+                navree_db::Value::F64(v) => bound.bind(v),
+                navree_db::Value::String(v) => bound.bind(v),
                 other => panic!("unexpected SQL value {other:?}"),
             };
         }
         let with_params = bound.fetch_all(&mut *conn).await.expect("bound query runs");
 
-        let inline = select.to_string(SqliteQueryBuilder);
+        let inline = select(&fragment.to_string());
         let with_literals = sqlx::query(sqlx::AssertSqlSafe(inline))
             .fetch_all(&mut *conn)
             .await

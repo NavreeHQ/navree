@@ -6,10 +6,10 @@ use chrono::Utc;
 use navree_access::{Authorized, Rules, Update, field};
 use uuid::Uuid;
 
-use crate::support::post;
+use crate::support::Post;
 
-fn post(author: Uuid) -> post::Model {
-    post::Model {
+fn post(author: Uuid) -> Post {
+    Post {
         id: Uuid::now_v7(),
         author_id: Some(author),
         title: "Hello".into(),
@@ -26,7 +26,7 @@ fn check_allows_a_record_the_ability_allows() {
     rules.can("update", "Post").when(field("author_id").eq(me));
     let ability = Arc::new(rules.build());
 
-    let authorized = Authorized::<post::Entity, Update>::check(post(me), ability).unwrap();
+    let authorized = Authorized::<Post, Update>::check(post(me), ability).unwrap();
 
     assert_eq!(authorized.author_id, Some(me));
     assert_eq!(authorized.record()["title"], "Hello");
@@ -39,7 +39,7 @@ fn check_refuses_a_record_the_ability_does_not_allow() {
     rules.can("update", "Post").when(field("author_id").eq(me));
     let ability = Arc::new(rules.build());
 
-    let Err(error) = Authorized::<post::Entity, Update>::check(post(Uuid::now_v7()), ability)
+    let Err(error) = Authorized::<Post, Update>::check(post(Uuid::now_v7()), ability)
     else {
         panic!("someone else's post is refused");
     };

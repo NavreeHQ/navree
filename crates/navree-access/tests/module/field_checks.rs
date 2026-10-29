@@ -12,7 +12,7 @@ use navree_http::{AccessSpec, CanSpec, RouteAuthorizer, RouteMeta};
 use navree_testing::{TestApp, principal};
 use uuid::Uuid;
 
-use crate::support::{app, insert_post, post};
+use crate::support::{Post, app, insert_post};
 
 /// A field check of `read Post from id` by `user` (a guest when `None`).
 async fn check(
@@ -58,7 +58,7 @@ async fn a_field_check_reads_the_record_id_from_its_arguments() {
     let (result, mut parts) = check(&app, Some(author), &draft.id.to_string(), &uow).await;
     result.expect("the author may read the draft");
     let authorized =
-        <Authorized<post::Entity, Read> as axum::extract::FromRequestParts<()>>::from_request_parts(
+        <Authorized<Post, Read> as axum::extract::FromRequestParts<()>>::from_request_parts(
             &mut parts,
             &(),
         )

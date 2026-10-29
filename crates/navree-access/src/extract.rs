@@ -12,15 +12,12 @@ use navree_contracts::AuthState;
 use navree_db::Uow;
 use navree_http::AppError;
 use navree_kernel::AppContext;
-use sea_orm::{EntityTrait, QueryFilter, Select};
-use sea_query::SimpleExpr;
 use serde_json::Value;
 
 use crate::authorizer::AuthorizedRecord;
-use crate::engine::{Ability, ActionMarker, Subject};
+use crate::engine::{Ability, ActionMarker, SqlColumns, SqlFilter, Subject};
 use crate::factory::{AbilityFactory, PrincipalAccess};
 use crate::records::SubjectRecords;
-use crate::subject::EntityColumns;
 
 /// The current principal's access, computed once per request (by the route
 /// authorizer or the first extractor that needs it) and kept in the request
@@ -62,7 +59,7 @@ pub(crate) async fn request_access(
 /// requests).
 ///
 /// ```ignore
-/// async fn show(Abilities(ability): Abilities, post: Authorized<post::Entity, Read>) -> .. {
+/// async fn show(Abilities(ability): Abilities, post: Authorized<Post, Read>) -> .. {
 ///     let can_delete = ability.can(DELETE, "Post", Some(post.record()));
 /// }
 /// ```
@@ -110,9 +107,9 @@ impl<S: Send + Sync> FromRequestParts<S> for CurrentAccess {
 
 /// The record of a `can(A, S, from = "id")` route, loaded and authorized
 /// by the route authorizer before the handler runs. `S` is any
-/// [`SubjectRecords`]: a SeaORM entity (the record is its model) or an ORM
-/// model declared with `#[model(subject = "...")]` (the record is an ORM
-/// record).
+/// [`SubjectRecords`]: an ORM model declared with `#[model(subject =
+/// "...")]` (the record is an ORM record) or a navree-db record that
+/// implements it.
 ///
 /// A 500 if the route does not declare that check (action `A::NAME` on
 /// subject `S::SUBJECT` with `from`).
@@ -280,15 +277,24 @@ where
 /// SQL is compiled from the same rules as record checks (last match wins),
 /// so a record is listed exactly when `can(A, E, record)` holds.
 ///
+/// For an ORM model (`Accessible<Deal, Read>`), navree-orm's
+/// `AccessibleQuery` applies it to the model's queries:
+///
 /// ```ignore
-/// async fn index(uow: Uow, posts: Accessible<post::Entity, Read>, page: PageQuery) -> .. {
-///     let select = posts.apply(post::Entity::find());
-///     Ok(paginate(select, &*uow.tx().await?, page).await?)
+/// async fn index(db: Db, deals: Accessible<Deal, Read>, page: PageQuery) -> .. {
+///     Ok(Json(deals.query().paginate(&db, page.page).await?))
 /// }
 /// ```
 ///
-/// For an ORM model (`Accessible<Deal, Read>`), navree-orm's
-/// `AccessibleQuery` applies it to the model's queries.
+/// Anywhere else, [`sql_filter`](Accessible::sql_filter) compiles it with a
+/// column mapping, and [`SqlFilter::to_statement`] writes it for a backend
+/// as a portable fragment:
+///
+/// ```ignore
+/// let columns = TypedColumns::new("deals").with("owner_id", Kind::Uuid);
+/// let (sql, values) = deals.sql_filter(&columns).to_statement(uow.backend()).into_parts();
+/// let rows = DealRow::select().filter(Filter::all().raw(sql, values)).all(&uow).await?;
+/// ```
 pub struct Accessible<E, A> {
     ability: Arc<Ability>,
     _marker: PhantomData<fn() -> (E, A)>,
@@ -311,24 +317,11 @@ where
     pub fn ability(&self) -> &Arc<Ability> {
         &self.ability
     }
-}
 
-impl<E, A> Accessible<E, A>
-where
-    E: EntityTrait + Subject,
-    A: ActionMarker,
-{
-    /// The SQL condition (see [`Ability::sql_filter_with`] and
-    /// [`EntityColumns`]).
-    pub fn condition(&self) -> SimpleExpr {
-        self.ability
-            .sql_filter_with(A::NAME, E::SUBJECT, &EntityColumns::<E>::new())
-    }
-
-    /// `select` restricted to the accessible rows.
-    pub fn apply(self, select: Select<E>) -> Select<E> {
-        let condition = self.condition();
-        select.filter(condition)
+    /// The list filter with `columns` mapping rule fields onto SQL (see
+    /// [`Ability::sql_filter_with`]).
+    pub fn sql_filter<C: SqlColumns + ?Sized>(&self, columns: &C) -> SqlFilter {
+        self.ability.sql_filter_with(A::NAME, E::SUBJECT, columns)
     }
 }
 

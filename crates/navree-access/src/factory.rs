@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use navree_bounded::Cache;
 use navree_contracts::Principal;
-use navree_db::{Db, Uow};
+use navree_db::{Db, Executor, Uow};
 use navree_http::{AccessSpec, AppError};
 use uuid::Uuid;
 
@@ -99,7 +99,7 @@ impl AbilityFactory {
             return self.build(None, Vec::new(), Vec::new(), 0).map(Arc::new);
         };
         let user = principal.user_id;
-        let version = store::version(self.db.conn()).await?;
+        let version = store::version(committed(&self.db)).await?;
         let access = self
             .cache
             .try_get_with((user, None, version), self.load(user, version))
@@ -143,7 +143,7 @@ impl AbilityFactory {
 
     /// Reads `user`'s roles and permissions and builds their abilities.
     async fn load(&self, user: Uuid, version: i64) -> Result<Arc<PrincipalAccess>, AccessError> {
-        let conn = self.db.conn();
+        let conn = committed(&self.db);
         let roles = store::roles_of(conn, user).await?;
         let permissions = store::permissions_of(conn, user).await?;
         Ok(Arc::new(self.build(
@@ -293,5 +293,16 @@ impl fmt::Debug for AbilityFactory {
             .field("options", &self.options)
             .field("subjects", &self.subjects.prefixes)
             .finish_non_exhaustive()
+    }
+}
+
+/// Where abilities are read: the writer's pool, so they are built from
+/// committed roles and permissions and never from the task's unit of work
+/// (a change rolled back must not leave abilities cached under its access
+/// version).
+fn committed(db: &Db) -> &dyn Executor {
+    match db.pool() {
+        Some(pool) => pool,
+        None => db,
     }
 }
