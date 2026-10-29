@@ -27,8 +27,6 @@ chrono = { version = "0.4", features = ["serde"] }
 garde = { version = "0.23", features = ["derive"] }
 # Each crate turns on the navree features it uses.
 navree = {{ navree_workspace_dependency }}
-# SeaORM's derives name `::sea_orm`; the database drivers come with navree.
-sea-orm = { version = "2.0.4", default-features = false, features = ["macros", "with-chrono", "with-json", "with-uuid"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

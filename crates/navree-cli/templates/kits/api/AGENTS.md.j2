@@ -52,16 +52,18 @@ workspace `demo`.
 Every product route belongs to a workspace. Copy the shape of
 `src/modules/projects/`:
 
-- the entity has a `workspace_id` column and implements `Subject` and
-  `WorkspaceScoped`; its migration runs `.after(["workspace"])` and adds the
-  PostgreSQL row-level security policy (`RlsPolicy::new("<table>")`);
-- the module registers `m.workspace_scoped::<Entity>()` and imports
-  `AccessModule::for_feature::<Entity>()`;
+- the model (`entity.rs`) is `#[model(workspace, subject)]` with a
+  `workspace_id` column and implements `WorkspaceScoped`; its migration runs
+  `.after(["workspace"])` and adds the PostgreSQL row-level security policy
+  (`RlsPolicy::new("<table>")`);
+- the module registers `m.model::<Project>()` and
+  `m.workspace_scoped::<Project>()` and imports
+  `AccessModule::for_feature::<Project>()`;
 - the controller has `#[guard(InWorkspace::guard())]`, takes
   `CurrentWorkspace` and `WorkspaceUow`, and declares access per route with
   `#[can(Action, Subject)]` (`from = "id"` loads the record: another
   workspace's is a 404);
-- the service reads and writes through `WorkspaceRepo::<Entity>` only.
+- the service reads and writes through `WorkspaceRepo::<Project>` only.
 
 The workspace comes from the `X-Workspace` header (its slug or id). Grant
 each workspace role its permissions in `config/app.toml`
@@ -100,9 +102,10 @@ are plural. Generators never overwrite a file.
   `AppError::forbidden()`, `AppError::bad_request("..")`,
   `AppError::conflict("..").with_code("..")`. Every error response is
   `{ "statusCode", "message", "error", "code" }`.
-- **Database.** SeaORM entities with UUID v7 ids; writes take the request's
-  unit of work first and go through `Repo` / `WorkspaceRepo` (audited);
-  lists take `PageQuery` and return `Page<T>`.
+- **Database.** navree-orm models with UUID v7 ids (`#[derive(Model)]`);
+  reads and writes take the request's unit of work first (`Project::create`,
+  `record.save(&uow)`, `WorkspaceRepo`), so they are audited; lists take
+  `PageQuery` and return `Page<T>`.
 - **Migrations** belong to their module's `MigrationSet`; never edit one
   that has run anywhere, add a new one.
 - **Configuration.** `config/app.toml` holds shared settings; secrets go in

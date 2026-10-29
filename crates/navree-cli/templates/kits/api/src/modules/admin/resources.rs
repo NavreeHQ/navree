@@ -7,8 +7,6 @@ use navree::billing::entity::subscription;
 use navree::crypto::generate_key;
 use navree::helm::{Field, Filter, FormData, Metric, Resource, SaveContext};
 use navree::prelude::*;
-use navree::workspace::Workspaces;
-use navree::workspace::entity::workspace;
 use sea_orm::{ColumnTrait, QueryFilter};
 use serde::Deserialize;
 
@@ -86,63 +84,6 @@ impl Resource for UserAdmin {
     }
 }
 
-/// Workspaces: name, slug and owner.
-#[injectable]
-pub struct WorkspaceAdmin;
-
-impl Resource for WorkspaceAdmin {
-    type Entity = workspace::Entity;
-
-    const LABEL: &'static str = "Workspaces";
-    const SINGULAR: &'static str = "Workspace";
-    const GROUP: &'static str = "Accounts";
-    const ICON: &'static str = "building-2";
-    const TITLE: &'static str = "name";
-    const SEARCH: &'static [&'static str] = &["name", "slug"];
-
-    fn fields(&self) -> Vec<Field> {
-        vec![
-            Field::text("name").required().max_length(100).sortable(),
-            Field::text("slug").readonly().sortable(),
-            Field::belongs_to::<UserAdmin>("owner_id")
-                .label("Owner")
-                .readonly(),
-            Field::datetime("created_at").readonly().sortable(),
-        ]
-    }
-
-    fn metrics(&self) -> Vec<Metric<workspace::Entity>> {
-        vec![Metric::value("Workspaces").count().on_dashboard()]
-    }
-
-    /// Workspaces are created by their owners (`POST /api/workspaces`).
-    fn create<'a>(
-        &'a self,
-        _ctx: &'a SaveContext,
-        _form: FormData,
-    ) -> BoxFuture<'a, Result<workspace::Model>> {
-        Box::pin(async move {
-            Err(AppError::bad_request(
-                "Workspaces are created by their owners in the app.",
-            ))
-        })
-    }
-
-    /// Deletes through `Workspaces`, which removes the members and
-    /// invitations too.
-    fn delete<'a>(
-        &'a self,
-        ctx: &'a SaveContext,
-        record: workspace::Model,
-    ) -> BoxFuture<'a, Result<()>> {
-        Box::pin(async move {
-            let workspaces = ctx.get::<Workspaces>().await?;
-            workspaces.delete(ctx.uow(), record.id).await?;
-            Ok(())
-        })
-    }
-}
-
 const STATUSES: [(&str, &str); 6] = [
     ("trialing", "Trialing"),
     ("active", "Active"),
@@ -170,9 +111,7 @@ impl Resource for SubscriptionAdmin {
 
     fn fields(&self) -> Vec<Field> {
         vec![
-            Field::belongs_to::<WorkspaceAdmin>("billable_id")
-                .label("Workspace")
-                .readonly(),
+            Field::text("billable_id").label("Workspace").readonly(),
             Field::text("plan").readonly().sortable(),
             Field::text("interval").readonly(),
             Field::select("status")

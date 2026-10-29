@@ -3,18 +3,17 @@
 
 use std::sync::Arc;
 
-use chrono::Utc;
-use navree::db::{Repo, Uow};
+use navree::db::Uow;
 use navree::events::Event;
 use navree::http::{AppError, Result};
 use navree::injectable;
 use navree::micro::ServiceClient;
-use sea_orm::{ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter};
+use navree::orm::Model as _;
 use uuid::Uuid;
 
 use {{ contracts_crate }}::{DealWon, Invoice, InvoiceDrafted, InvoiceStatus};
 
-use super::entity::{ActiveModel, Column, Entity, Model};
+use super::entity::StoredInvoice;
 
 /// Drafts and reads invoices.
 #[injectable]
@@ -25,20 +24,21 @@ pub struct InvoiceService {
 impl InvoiceService {
     /// The invoice `id`, or a 404.
     pub async fn find(&self, uow: &Uow, id: Uuid) -> Result<Invoice> {
-        let invoice = Entity::find_by_id(id)
-            .one(&*uow.tx().await?)
+        let invoice = StoredInvoice::query()
+            .where_key(id)
+            .first(uow)
             .await?
             .ok_or_else(|| AppError::not_found().with_detail("Invoice not found"))?;
-        Ok(view(invoice))
+        Ok(view(&invoice))
     }
 
     /// The invoice of `deal_id`, if it has one.
     pub async fn for_deal(&self, uow: &Uow, deal_id: Uuid) -> Result<Option<Invoice>> {
-        let invoice = Entity::find()
-            .filter(Column::DealId.eq(deal_id))
-            .one(&*uow.tx().await?)
+        let invoice = StoredInvoice::query()
+            .where_(StoredInvoice::DEAL_ID.eq(deal_id))
+            .first(uow)
             .await?;
-        Ok(invoice.map(view))
+        Ok(invoice.map(|invoice| view(&invoice)))
     }
 
     /// Drafts the invoice of a won deal and publishes `invoice.drafted`
@@ -48,17 +48,14 @@ impl InvoiceService {
         if let Some(existing) = self.for_deal(uow, deal.deal_id).await? {
             return Ok(existing);
         }
-        let now = Utc::now();
-        let invoice = Repo::<Entity>::insert(
+        let invoice = StoredInvoice::create(
             uow,
-            ActiveModel {
-                id: Set(Uuid::now_v7()),
-                deal_id: Set(deal.deal_id),
-                amount_cents: Set(deal.amount_cents),
-                currency: Set(deal.currency.to_uppercase()),
-                status: Set(InvoiceStatus::Draft.as_str().to_owned()),
-                created_at: Set(now),
-                updated_at: Set(now),
+            StoredInvoice {
+                deal_id: deal.deal_id,
+                amount_cents: deal.amount_cents,
+                currency: deal.currency.to_uppercase(),
+                status: InvoiceStatus::Draft.as_str().to_owned(),
+                ..StoredInvoice::default()
             },
         )
         .await?;
@@ -75,17 +72,17 @@ impl InvoiceService {
             // Events with the same key are handled in order.
             .key(invoice.deal_id)
             .await?;
-        Ok(view(invoice))
+        Ok(view(&invoice))
     }
 }
 
 /// The row as other services see it.
-fn view(model: Model) -> Invoice {
+fn view(model: &StoredInvoice) -> Invoice {
     Invoice {
         id: model.id,
         deal_id: model.deal_id,
         amount_cents: model.amount_cents,
-        currency: model.currency,
+        currency: model.currency.clone(),
         status: InvoiceStatus::parse(&model.status).unwrap_or(InvoiceStatus::Draft),
         created_at: model.created_at,
     }
