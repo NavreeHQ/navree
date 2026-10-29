@@ -87,6 +87,8 @@ impl OwnerRef {
             format!("SELECT id, name FROM users WHERE id IN ({placeholders})"),
             ids.into_iter().map(Value::from),
         );
+        // Only `?` placeholders are formatted in; the ids are bound.
+        // nosemgrep: navree-sql-built-from-strings
         let rows = exec.fetch_all(&select).await?;
         rows.iter()
             .map(|row| {
