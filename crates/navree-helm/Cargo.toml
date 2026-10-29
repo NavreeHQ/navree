@@ -56,7 +56,6 @@ uuid = { workspace = true }
 
 [dev-dependencies]
 navree-queue = { workspace = true }
-navree-schema = { workspace = true }
 navree-testing = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }

@@ -4,84 +4,54 @@
 
 use std::collections::BTreeMap;
 
-use navree_access::Subject;
+use chrono::{DateTime, Utc};
+use navree_db::navree_schema::{Dialect, Migration, Schema, SchemaMigration, SchemaResult};
 use navree_db::{MigrationSet, ModuleBuilderDbExt};
 use navree_helm::{Field, ModuleBuilderHelmExt, Resource};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
+use navree_orm::{Model, Record};
 use navree_storage::{DiskConfig, Storage, StorageModule, StorageOptions};
 use navree_testing::{TestApp, TestClient, TestResponse};
-use sea_orm::EntityTrait;
-use sea_orm::sea_query::{ColumnDef, Table};
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
+use serde::Serialize;
 use serde_json::json;
 use uuid::Uuid;
 
 use crate::support::*;
 
-pub mod document {
-    use sea_orm::entity::prelude::*;
-    use serde::Serialize;
-
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
-    #[sea_orm(table_name = "documents")]
-    pub struct Model {
-        #[sea_orm(primary_key, auto_increment = false)]
-        pub id: Uuid,
-        pub name: String,
-        pub scan: Option<String>,
-        pub created_at: DateTimeUtc,
-        pub updated_at: DateTimeUtc,
-    }
-
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
-}
-
-impl Subject for document::Entity {
-    const SUBJECT: &'static str = "Document";
-    const PERMISSION_PREFIX: &'static str = "documents";
+/// A document with a scanned image; its timestamps are the model's.
+#[derive(navree_orm::Model, Clone, Debug, Default, PartialEq, Serialize)]
+#[model(
+    table = "documents",
+    subject = "Document",
+    permission_prefix = "documents",
+    timestamps
+)]
+pub struct Document {
+    pub id: Uuid,
+    pub name: String,
+    pub scan: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 struct CreateDocuments;
 
-impl MigrationName for CreateDocuments {
-    fn name(&self) -> &str {
-        "m20261026_000002_create_documents"
-    }
-}
-
-#[async_trait]
-impl MigrationTrait for CreateDocuments {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), sea_orm::DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table("documents")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("name").string().not_null())
-                    .col(ColumnDef::new("scan").string().null())
-                    .col(
-                        ColumnDef::new("created_at")
-                            .timestamp_with_time_zone()
-                            .not_null(),
-                    )
-                    .col(
-                        ColumnDef::new("updated_at")
-                            .timestamp_with_time_zone()
-                            .not_null(),
-                    )
-                    .to_owned(),
-            )
+impl Migration for CreateDocuments {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        let mysql = schema.target().await?.dialect() == Dialect::MySql;
+        schema
+            .create("documents", |t| {
+                uuid(t, "id", mysql).primary();
+                t.string("name");
+                t.string("scan").nullable();
+                t.timestamp_tz("created_at");
+                t.timestamp_tz("updated_at");
+            })
             .await
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), sea_orm::DbErr> {
-        manager
-            .drop_table(Table::drop().table("documents").to_owned())
-            .await
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop_if_exists("documents").await
     }
 }
 
@@ -96,7 +66,7 @@ impl Injectable for DocumentResource {
 }
 
 impl Resource for DocumentResource {
-    type Entity = document::Entity;
+    type Model = Document;
 
     const LABEL: &'static str = "Documents";
     const SINGULAR: &'static str = "Document";
@@ -116,8 +86,13 @@ struct DocumentsModule;
 
 impl Module for DocumentsModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.migrations(MigrationSet::new("documents").migration(CreateDocuments))
-            .resource::<DocumentResource>();
+        m.migrations(
+            MigrationSet::new("documents").migration(SchemaMigration::new(
+                "m20261026_000002_create_documents",
+                CreateDocuments,
+            )),
+        )
+        .resource::<DocumentResource>();
     }
 }
 
@@ -193,12 +168,12 @@ async fn page(client: &TestClient, path: &str) -> String {
         .replace("&#x2f;", "/")
 }
 
-async fn reload_document(app: &TestApp, id: Uuid) -> document::Model {
+async fn reload_document(app: &TestApp, id: Uuid) -> Document {
     let db = app.get::<navree_db::Db>().await;
-    document::Entity::find_by_id(id)
-        .one(db.conn())
+    Document::find(&*db, id)
         .await
         .unwrap()
+        .map(Record::into_inner)
         .unwrap()
 }
 
@@ -289,11 +264,7 @@ async fn upload_problems_appear_under_the_field() {
 
     let db = app.get::<navree_db::Db>().await;
     assert!(
-        document::Entity::find()
-            .all(db.conn())
-            .await
-            .unwrap()
-            .is_empty(),
+        Document::query().count(&*db).await.unwrap() == 0,
         "nothing is saved"
     );
 }

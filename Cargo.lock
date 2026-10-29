@@ -5683,7 +5683,6 @@ dependencies = [
  "navree-kernel",
  "navree-orm",
  "navree-queue",
- "navree-schema",
  "navree-settings",
  "navree-storage",
  "navree-testing",

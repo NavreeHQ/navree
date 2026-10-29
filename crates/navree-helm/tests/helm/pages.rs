@@ -6,7 +6,7 @@ use navree_helm::{Field, HelmPage, ModuleBuilderHelmExt, Resource};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use navree_testing::principal;
 use navree_view::{ModuleBuilderViewExt, ViewModule};
-use sea_orm::{EntityTrait, PaginatorTrait};
+use navree_orm::Model;
 use serde_json::json;
 use uuid::Uuid;
 
@@ -31,7 +31,7 @@ impl Injectable for BoardResource {
 }
 
 impl Resource for BoardResource {
-    type Entity = deal::Entity;
+    type Model = Deal;
 
     const LABEL: &'static str = "Board";
     const SLUG: &'static str = "board";
@@ -64,9 +64,7 @@ impl Module for PagesModule {
                     .data(|ctx| async move {
                         // Services resolve with this module's visibility.
                         let _stats: Arc<PipelineStats> = ctx.get().await?;
-                        let deals = deal::Entity::find()
-                            .count(&*ctx.uow().tx().await?)
-                            .await?;
+                        let deals = Deal::query().count(ctx.uow()).await?;
                         Ok(json!({ "deals": deals }))
                     }),
             );
