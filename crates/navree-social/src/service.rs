@@ -557,9 +557,7 @@ impl Social {
         }
         if let Some(user) = by_email {
             if rt.options.link_by_email == LinkByEmail::Verified && social_user.email_verified {
-                let taken = find_user_account(uow, user.id, &entry.key)
-                    .await?
-                    .is_some();
+                let taken = find_user_account(uow, user.id, &entry.key).await?.is_some();
                 if taken {
                     return Err(SocialError::ProviderAlreadyConnected {
                         provider: entry.name.clone(),
@@ -673,15 +671,16 @@ impl Social {
             created_at: now,
             updated_at: now,
         };
-        let account = social_account::insert(uow, row)
-            .await
-            .map_err(|error| match error.db_error() {
-                // A concurrent sign-in or link got there first.
-                Some(db) if db.is_unique_violation() => SocialError::AlreadyLinked {
-                    provider: entry.name.clone(),
-                },
-                _ => error.into(),
-            })?;
+        let account =
+            social_account::insert(uow, row)
+                .await
+                .map_err(|error| match error.db_error() {
+                    // A concurrent sign-in or link got there first.
+                    Some(db) if db.is_unique_violation() => SocialError::AlreadyLinked {
+                        provider: entry.name.clone(),
+                    },
+                    _ => error.into(),
+                })?;
         rt.emit_after_commit(
             uow,
             SocialAccountLinked {

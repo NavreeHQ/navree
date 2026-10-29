@@ -17,9 +17,9 @@ use navree_kernel::{
     AppContext, BoxError, BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver,
 };
 use navree_logbook::{EntryKind, Filter, ListQuery, Logbook, LogbookModule, SqliteStore, Term};
+use navree_orm::Model as _;
 use navree_queue::{Queue, QueueDriver, QueueModule, QueueOptions};
 use navree_testing::{TestApp, TestAppBuilder};
-use navree_orm::Model as _;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -172,10 +172,10 @@ impl Module for FixturesModule {
     fn register(&self, m: &mut ModuleBuilder) {
         use navree_contracts::ModuleBuilderJobsExt;
         m.controller::<Fixtures>()
-            .migrations(MigrationSet::new("fixtures").migration(SchemaMigration::new(
-                "m0001_create_deals",
-                CreateDeals,
-            )))
+            .migrations(
+                MigrationSet::new("fixtures")
+                    .migration(SchemaMigration::new("m0001_create_deals", CreateDeals)),
+            )
             .job::<SyncDeal>();
     }
 }

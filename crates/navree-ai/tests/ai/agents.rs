@@ -76,11 +76,7 @@ impl Agent for NotesAssistant {
 
     /// Lists the notes the user can read.
     #[tool(read_only)]
-    async fn list_notes(
-        &self,
-        run: &AgentRun,
-        args: ListNotes,
-    ) -> Result<Vec<Note>, AppError> {
+    async fn list_notes(&self, run: &AgentRun, args: ListNotes) -> Result<Vec<Note>, AppError> {
         let notes = run
             .accessible::<Note, Read>()
             .apply(Note::query())
@@ -108,8 +104,12 @@ impl Agent for NotesAssistant {
     /// Renames a note.
     #[tool(needs_approval)]
     async fn rename_note(&self, run: &AgentRun, args: RenameNote) -> Result<Note, AppError> {
-        let mut note = run.authorize::<Note, Update>(args.note_id).await?.into_inner();
-        note.update(run.uow(), |note| note.title = args.title).await?;
+        let mut note = run
+            .authorize::<Note, Update>(args.note_id)
+            .await?
+            .into_inner();
+        note.update(run.uow(), |note| note.title = args.title)
+            .await?;
         Ok(note.into_inner())
     }
 
