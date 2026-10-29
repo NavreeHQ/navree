@@ -4,25 +4,36 @@
 use std::sync::Arc;
 
 use sqlx::mysql::{MySqlArguments, MySqlConnectOptions, MySqlPoolOptions, MySqlRow, MySqlValueRef};
-use sqlx::{Arguments, ConnectOptions, Decode, MySql, Row as _, TypeInfo, ValueRef};
+use sqlx::{ConnectOptions, Decode, MySql, Row as _, TypeInfo, ValueRef};
+
+use super::Keyed;
 
 use crate::engine::{Backend, DbError, Kind, Value};
 use crate::{DbOptions, MySqlOptions};
 
-/// The values of a statement as MySQL binds them: UUIDs as 16 bytes (the
-/// `BINARY(16)` columns the schema builder makes), instants with an offset
-/// converted to UTC.
-pub(crate) fn arguments(values: &[Value]) -> Result<MySqlArguments, DbError> {
-    let mut args = MySqlArguments::default();
+/// The text MySQL prepares for `sql` and its values as MySQL binds them:
+/// UUIDs as 16 bytes (the `BINARY(16)` columns the schema builder makes),
+/// instants with an offset converted to UTC.
+///
+/// MySQL sends the values' types with every run, but a prepared statement
+/// keeps the result types it derived from earlier runs' values (`SELECT
+/// ?` read back text as a `DOUBLE` after a boolean ran), so the
+/// text names the types the values bind, as on PostgreSQL
+/// ([`Keyed`](super::Keyed)).
+pub(crate) fn statement(sql: &str, values: &[Value]) -> Result<(String, MySqlArguments), DbError> {
+    let mut keyed = Keyed::new(sql, values.len());
     for value in values {
-        bind(&mut args, value).map_err(|error| {
+        bind(&mut keyed, value).map_err(|error| {
             DbError::invalid(format!("cannot bind {} on MySQL: {error}", value.kind()))
         })?;
     }
-    Ok(args)
+    Ok(keyed.finish())
 }
 
-fn bind(args: &mut MySqlArguments, value: &Value) -> Result<(), sqlx::error::BoxDynError> {
+fn bind(
+    args: &mut Keyed<'_, MySqlArguments>,
+    value: &Value,
+) -> Result<(), sqlx::error::BoxDynError> {
     match value {
         Value::Null(kind) => bind_null(args, *kind),
         Value::Bool(v) => args.add(*v),
@@ -51,7 +62,10 @@ fn bind(args: &mut MySqlArguments, value: &Value) -> Result<(), sqlx::error::Box
     }
 }
 
-fn bind_null(args: &mut MySqlArguments, kind: Kind) -> Result<(), sqlx::error::BoxDynError> {
+fn bind_null(
+    args: &mut Keyed<'_, MySqlArguments>,
+    kind: Kind,
+) -> Result<(), sqlx::error::BoxDynError> {
     match kind {
         Kind::Bool => args.add(None::<bool>),
         Kind::I8 => args.add(None::<i8>),
