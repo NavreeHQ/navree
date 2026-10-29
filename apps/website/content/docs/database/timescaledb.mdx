@@ -221,17 +221,17 @@ Compression (TimescaleDB's columnstore) stores old chunks by column, often at a 
 
 ### Pruning in code
 
-When the retention period is a setting, or other rows go with the old ones, prune from code: a command or a [scheduled task](/docs/digging-deeper/scheduling/). `navree::db::prune_time_series_on` deletes the rows older than a cutoff and returns how many. On a hypertable partitioned by that column it drops the chunks that lie entirely before the cutoff and deletes only the rows of the chunk that straddles it; on any other table it is one `DELETE`:
+When the retention period is a setting, or other rows go with the old ones, prune from code: a command or a [scheduled task](/docs/digging-deeper/scheduling/). `navree::db::prune_time_series` deletes the rows older than a cutoff and returns how many. On a hypertable partitioned by that column it drops the chunks that lie entirely before the cutoff and deletes only the rows of the chunk that straddles it; on any other table it is one `DELETE`:
 
 ```rust title="src/modules/analytics/prune.rs"
 use chrono::{TimeDelta, Utc};
-use navree::db::{Db, DbError, prune_time_series_on};
+use navree::db::{Db, DbError, prune_time_series};
 
 /// Deletes the events older than `days`; returns how many.
 pub async fn prune_events(db: &Db, days: i64) -> Result<u64, DbError> {
     let cutoff = Utc::now() - TimeDelta::days(days);
     let tx = db.begin().await?;
-    let deleted = prune_time_series_on(&tx, "events", "occurred_at", cutoff).await?;
+    let deleted = prune_time_series(&tx, "events", "occurred_at", cutoff).await?;
     tx.commit().await?;
     Ok(deleted)
 }

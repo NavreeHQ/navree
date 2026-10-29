@@ -72,6 +72,8 @@ You can run the app command directly too, which is what a deployment pipeline do
 | Check | Contributed by | Verifies |
 |---|---|---|
 | `api.docs` | `ApiModule` | Every route has `#[api]` documentation |
+| `workspace.entities` | `WorkspaceModule` | Every model in your source is classified once: a workspace model, a global one or a library |
+| `workspace.repo` | `WorkspaceModule` | Code reaches a workspace model that doesn't scope itself only through `WorkspaceRepo`, and nothing leaves a scoped model's workspace filter |
 | `workspace.tables` | `WorkspaceModule` | Each workspace table has its workspace column, an index that starts with it and, on PostgreSQL, row-level security |
 | `i18n.translations` | Built in | Runs the app's `i18n:check` command when a module registers it |
 | `db.migrations` | Built in | Runs the app's `migrate:lint` command when a module registers it |
@@ -134,6 +136,20 @@ impl DealsModule {
 A model declared `#[model(workspace)]` scopes its own queries to the current workspace, so nothing can reach its rows without the filter: `Deal::query()` reads the current workspace's rows and fails outside a workspace. Its table is still classified with `workspace_entity` or `workspace_scoped`, which is what [`workspace.tables`](#workspace-tables) reads. The [isolation tests](/docs/testing/isolation-tests/) catch a route that leaves the filter out.
 
 Tables defined by navree crates (users, workspaces, jobs) are classified by their own modules. A table classified both ways is an error.
+
+`workspace.entities` reads your source for every struct that derives `Model` and requires each one to be classified exactly once: by one of the registrations above, by `library`, or by `#[model(workspace)]` on its own. A model classified two ways is an error.
+
+`workspace.repo` finds the places where code could reach workspace rows without the filter:
+
+- A registered workspace model that doesn't scope itself (no `#[model(workspace)]`) is reached only through `WorkspaceRepo`. A direct `query`, `find`, `create`, `insert`, `upsert`, `destroy` or other entry point on it is a finding.
+- On a `#[model(workspace)]` model, a chain that leaves the scope (`.without_workspace_scope()`, `.without_global_scopes()`, `.without_global_scope::<WorkspaceScope>()`) is a finding.
+
+The check reads source, so a builder kept in a variable before it leaves the scope isn't followed; the [isolation tests](/docs/testing/isolation-tests/) catch what it can't see. Mark a deliberate cross-workspace read with a comment on the line before it:
+
+```rust
+// Every workspace's open deals, for the platform dashboard. navree:allow(workspace-repo)
+let open = Deal::query().without_workspace_scope().where_(Deal::STAGE.ne("won")).get(&db).await?;
+```
 
 ### Workspace tables
 
