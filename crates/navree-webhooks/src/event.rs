@@ -7,7 +7,6 @@ use std::marker::PhantomData;
 use navree_db::Db;
 use navree_events::{Event, Listener};
 use navree_kernel::{AppContext, BoxError, BoxFuture, Injectable, KernelError, Resolver};
-use sea_orm::DatabaseConnection;
 use serde_json::Value;
 use uuid::Uuid;
 
@@ -78,15 +77,10 @@ impl WebhookContext {
         &self.app
     }
 
-    /// The database.
+    /// The database: pass it to model reads (`Deal::find(ctx.db(), id)`,
+    /// `Deal::query().count(ctx.db())`) or run navree-db statements on it.
     pub fn db(&self) -> &Db {
         &self.db
-    }
-
-    /// The database connection, for SeaORM reads
-    /// (`deal::Entity::find_by_id(id).one(ctx.conn())`).
-    pub fn conn(&self) -> &DatabaseConnection {
-        self.db.conn()
     }
 }
 

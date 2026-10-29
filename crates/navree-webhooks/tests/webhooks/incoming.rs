@@ -126,8 +126,7 @@ fn incoming_app() -> TestAppBuilder {
 }
 
 fn incoming_app_with(clock: Arc<FixedClock>) -> TestAppBuilder {
-    TestApp::builder()
-        .temp_database()
+    crate::servers::database(TestApp::builder())
         .config("webhooks.routes", false)
         .config("webhooks.incoming.max_body_bytes", 2048)
         .config("webhooks.incoming.github.secret", "test-secret")

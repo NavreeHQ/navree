@@ -2,9 +2,9 @@
 
 use std::collections::BTreeMap;
 
+use navree_db::DbError;
 use navree_http::AppError;
 use navree_kernel::BoxError;
-use sea_orm::DbErr;
 use uuid::Uuid;
 
 use crate::DeliveryStatus;
@@ -52,7 +52,12 @@ pub enum WebhooksError {
     Missing(&'static str),
     /// A database error.
     #[error(transparent)]
-    Db(#[from] DbErr),
+    Db(#[from] DbError),
+    /// A model operation failed (a query, a write, a hook). It maps the way the
+    /// error in its source does: a 404 for a missing record, a 409 for a unique
+    /// violation.
+    #[error(transparent)]
+    Orm(#[from] navree_orm::OrmError),
     /// Building the payload of an event failed.
     #[error("cannot build the payload of `{event_type}`: {source}")]
     Payload {
@@ -98,14 +103,6 @@ impl WebhooksError {
             WebhooksError::NotRetryable(_) => Some(AppError::conflict(self.to_string())),
             _ => None,
         }
-    }
-}
-
-/// The module's ORM operations fail as database errors
-/// ([`WebhooksError::Db`]), like its SeaORM ones.
-impl From<navree_orm::OrmError> for WebhooksError {
-    fn from(error: navree_orm::OrmError) -> Self {
-        WebhooksError::Db(error.into())
     }
 }
 

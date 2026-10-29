@@ -60,6 +60,7 @@
 pub mod entity;
 pub mod events;
 
+mod changes;
 mod commands;
 mod controller;
 mod error;
