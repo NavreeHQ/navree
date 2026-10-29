@@ -144,7 +144,7 @@ fn register(m: &mut ModuleBuilder, options: Option<DbOptions>) {
                 if options.migrate_on_boot {
                     let direct = db.direct().await?;
                     let url = options.direct_url.as_deref().unwrap_or(&options.url);
-                    migrate::migrate_on_boot(&direct, &r.app(), url).await?;
+                    migrate::migrate_on_boot(&direct, &r.app(), url, &options.sqlite).await?;
                 }
                 Ok(Arc::new(db))
             })

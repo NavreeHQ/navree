@@ -15,6 +15,7 @@ mod queries;
 mod repo;
 mod schema_migrations;
 mod seed;
+mod sqlite_lock;
 mod telemetry;
 mod text;
 mod time_series;

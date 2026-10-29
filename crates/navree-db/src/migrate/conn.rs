@@ -6,13 +6,14 @@
 
 use navree_kernel::BoxFuture;
 use navree_schema::{Dialect, SchemaError, SchemaRow, SchemaValue};
-use sea_orm::{DatabaseConnection, DatabaseTransaction, TransactionTrait};
+use sea_orm::{DatabaseConnection, DatabaseTransaction};
 
 use crate::compat::SeaExecutor;
 use crate::engine::driver::{Executed, RowStream};
 use crate::schema::{dialect, execute_on, query_on};
 use crate::{
     Backend, Db, DbError, DbOptions, Executor, Pool, Row, SqliteOptions, Statement, Transaction,
+    TxOptions,
 };
 
 /// The connection migrations run on.
@@ -52,14 +53,18 @@ impl Conn {
     /// with foreign keys on that would run the ON DELETE actions of the
     /// tables that reference it. Each migration's rows are checked
     /// (`PRAGMA foreign_key_check`) before it commits instead.
-    pub(super) async fn sqlite(url: &str) -> Result<Conn, DbError> {
+    ///
+    /// The app's `database.sqlite` settings (journal mode, lock wait,
+    /// pragmas) apply to it as to the app's own connections; only the
+    /// foreign keys differ.
+    pub(super) async fn sqlite(url: &str, sqlite: &SqliteOptions) -> Result<Conn, DbError> {
         let options = DbOptions {
             url: url.to_owned(),
             max_connections: 1,
             min_connections: 1,
             sqlite: SqliteOptions {
                 foreign_keys: false,
-                ..SqliteOptions::default()
+                ..sqlite.clone()
             },
             ..DbOptions::default()
         };
@@ -90,17 +95,28 @@ impl Conn {
 
     /// Begins a transaction: navree-db's own (SeaORM's on a scripted
     /// connection).
+    ///
+    /// A migration reads before it writes (does the table exist? which
+    /// foreign keys does it have?), and the migrations table is written in
+    /// the same transaction. On SQLite a plain `BEGIN` that upgrades to a
+    /// write after a read fails with `database is locked` at once, without
+    /// waiting for `busy_timeout`, when another connection (a worker, a
+    /// scheduler tick) holds the write lock at that moment. So the
+    /// transaction takes the write lock when it begins (`BEGIN IMMEDIATE`)
+    /// and queues for it like any other writer.
     pub(super) async fn begin(&self) -> Result<Tx, DbError> {
         match &self.pool {
-            Some(pool) => Ok(Tx::Native(pool.begin().await?)),
+            Some(pool) => Ok(Tx::Native(
+                pool.begin_with(TxOptions::new().immediate()).await?,
+            )),
             None => self.begin_sea().await,
         }
     }
 
     /// Begins a SeaORM transaction on the same connections, for a SeaORM
-    /// migration.
+    /// migration (`IMMEDIATE` on SQLite, as [`begin`](Conn::begin)).
     pub(super) async fn begin_sea(&self) -> Result<Tx, DbError> {
-        Ok(Tx::Sea(self.sea.begin().await?))
+        Ok(Tx::Sea(crate::db::begin_for_write(&self.sea).await?))
     }
 
     /// Closes a dedicated pool.
@@ -152,7 +168,12 @@ async fn drop_all_sqlite_tables(pool: &sqlx::SqlitePool) -> Result<(), DbError> 
     .fetch_all(&mut *dedicated)
     .await
     .map_err(error)?;
-    let mut tx = dedicated.begin().await.map_err(error)?;
+    // `IMMEDIATE`: the write lock is taken (waiting up to `busy_timeout`)
+    // before the first `DROP`, not upgraded to after reading.
+    let mut tx = dedicated
+        .begin_with("BEGIN IMMEDIATE")
+        .await
+        .map_err(error)?;
     for table in &tables {
         sqlx::query(AssertSqlSafe(format!(
             "DROP TABLE IF EXISTS {}",
