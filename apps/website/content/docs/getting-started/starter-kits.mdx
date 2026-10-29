@@ -81,7 +81,7 @@ The SaaS kit is a working multi-tenant product: people sign up, create a workspa
 | Billing | Plans with monthly and yearly prices, trials, checkout, the customer portal, invoices; seats follow the member count |
 | Settings | Profile, password, two-factor, active sessions, workspace name and slug, notifications |
 | Product | A dashboard and an example feature, projects, with a list, a status filter, search, pagination, a detail page, real-time updates and access rules per role |
-| Admin | The [Helm](/docs/tools/helm/) admin panel at `/admin` for super admins: users, workspaces and subscriptions |
+| Admin | The [Helm](/docs/tools/helm/) admin panel at `/admin` for super admins: users and subscriptions |
 
 ### How it is built
 
@@ -145,7 +145,7 @@ impl ProjectsController {
 }
 ```
 
-The `InWorkspace` guard resolves the workspace from the request and checks that the user is a member before the access rules run, so `#[can]` and `Accessible` decide with the user's role in that workspace. The kit uses row isolation: the service reads and writes through `WorkspaceRepo`, so every query on a workspace table is filtered by `workspace_id`, and its migrations add PostgreSQL row-level security policies. The module registers `m.workspace_scoped::<Project>()`, so `navree check` verifies all of this. See [Multi-tenant SaaS](/docs/patterns/multi-tenancy/) and [Workspaces](/docs/workspaces/introduction/).
+The `InWorkspace` guard resolves the workspace from the request and checks that the user is a member before the access rules run, so `#[can]` and `Accessible` decide with the user's role in that workspace. The kit uses row isolation: the service reads and writes through `WorkspaceRepo`, so every query on a workspace table is filtered by `workspace_id`, and its migrations add PostgreSQL row-level security policies. `Project` is a [navree-orm](/docs/orm/models/) model declared `#[model(table = "projects", timestamps, workspace, subject)]` with a schema-builder migration, so it is also the access subject the `#[can]` checks name, and it never touches SeaORM. The module registers `m.model::<Project>()` and `m.workspace_scoped::<Project>()`, so `navree check` verifies all of this. The same holds for the settings module's `notification_settings` model, and for the micro kit's `invoices` model. See [Multi-tenant SaaS](/docs/patterns/multi-tenancy/) and [Workspaces](/docs/workspaces/introduction/).
 
 The front end is a Next.js app in `web/` with shadcn/ui components, TanStack Query and react-hook-form. Its server is a [backend-for-frontend](/docs/patterns/backend-for-frontend/): the browser calls only same-origin routes, and the BFF keeps the access token and the rotating refresh token in httpOnly cookies, refreshes them single-flight, checks the `Origin` of every write and forwards requests to the API with `Authorization: Bearer`. It also forwards the `X-Workspace` header the browser client sets from the `/w/<slug>/` URL, and `/admin`, so Helm opens on the web app's origin with the same session.
 
@@ -268,7 +268,7 @@ Use it for mobile apps, public APIs, or a front end you build in another stack. 
           invoices/
             handlers.rs     # #[message_pattern] and #[event_pattern]
             service.rs
-            entity.rs
+            entity.rs       # the `invoices` table as a navree-orm model
             migrations/
       tests/
         app.rs              # boots the service, health checks, patterns
@@ -335,7 +335,7 @@ The service also serves `/health/live`, `/health/ready` (with a `micro` check th
 
 The code is yours from the first commit, so change it the way you change any Navree app:
 
-- **Add features** with `navree make:module`, then copy the shape of `projects/`: a workspace-scoped entity, the `InWorkspace` guard and `CurrentWorkspace` in the controller, an access subject and a page in `web/app/(app)/w/[workspace]/`. In the `micro` kit, run the generators in `crates/<service>`.
+- **Add features** with `navree make:module`, then copy the shape of `projects/`: a workspace-scoped model, the `InWorkspace` guard and `CurrentWorkspace` in the controller, an access subject and a page in `web/app/(app)/w/[workspace]/`. In the `micro` kit, run the generators in `crates/<service>`.
 - **Remove what you don't need.** Delete the module and its line in `src/app.rs`; for billing, also remove `BillingModule` from `platform.rs`, the billing screens under `web/app/(app)/w/[workspace]/settings/billing/` and the billing tests. `navree check` tells you if anything still depends on it.
 - **Restyle the front end.** The colors, radius and fonts are CSS variables in `web/app/globals.css`, and the components in `web/components/ui/` are shadcn/ui source files you edit directly. Add more with `pnpm dlx shadcn@latest add <component>` in `web/`: the app runs the shadcn CLI without depending on it, and the one stylesheet it used from the `shadcn` package is vendored as `web/app/shadcn-tailwind.css`.
 - **Change roles and permissions** in `config/app.toml` (`[workspace.roles.*]`) and `src/abilities.rs`. The front end reads the rules from `GET /api/me/abilities` and `GET /api/v1/settings/abilities`, so buttons follow the API's rules without front-end changes.

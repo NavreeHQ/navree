@@ -19,8 +19,8 @@ mod service;
 use navree::db::ModuleBuilderDbExt;
 use navree::kernel::ModuleBuilder;
 use navree::micro::ModuleBuilderMicroExt;
-use navree::orm::ModuleBuilderOrmExt;
 use navree::module;
+use navree::orm::ModuleBuilderOrmExt;
 
 pub use handlers::InvoiceHandlers;
 pub use service::InvoiceService;
