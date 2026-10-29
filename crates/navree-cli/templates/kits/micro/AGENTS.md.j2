@@ -74,8 +74,10 @@ package: run them in `crates/{{ package }}`.
 
 ## Conventions
 
-- **Database.** SeaORM entities with UUID v7 ids; writes take the unit of
-  work first and go through `Repo` (audited). Migrations belong to their
+- **Database.** navree-orm models with UUID v7 ids (`#[derive(Model)]`);
+  reads and writes take the unit of work first (`Invoice::query()`,
+  `Invoice::create(&uow, ..)`, `record.save(&uow)`), so they are audited.
+  Migrations belong to their
   module's `MigrationSet`; never edit one that has run anywhere, add a new
   one.
 - **Configuration.** `config/app.toml` holds shared settings; secrets go in
