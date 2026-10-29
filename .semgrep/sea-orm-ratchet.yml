@@ -31,32 +31,29 @@ rules:
         # entities as subjects, `Accessible::apply` on a SeaORM select) stays
         # until the crates using it are moved (data-layer move, step 8).
         - "/crates/navree-access/src/sea_compat.rs"
-        - "/crates/navree-ai/"
         # navree-auth is moved; `User` keeps its SeaORM derive (the
-        # compatibility layer for the crates not yet on navree-orm) until step 8.
+        # compatibility layer for the crates not yet on navree-orm: the
+        # admin resources over `user::Entity` in navree-helm's tests, the CLI kit and
+        # evidence-app, and navree-auth's own subject test) until step 8. navree-social
+        # and navree-sso are on the `User` model and no longer need it.
         - "/crates/navree-auth/src/entity/user.rs"
         - "/crates/navree-billing/"
         - "/crates/navree-db/"
         - "/crates/navree-flags/"
-        - "/crates/navree-fleet/"
         - "/crates/navree-graphql/"
         - "/crates/navree-grpc/"
         - "/crates/navree-helm/"
         - "/crates/navree-i18n/"
         - "/crates/navree-lighthouse/"
-        - "/crates/navree-logbook/"
         - "/crates/navree-mcp/"
         # navree-micro is moved; its tests keep one SeaORM fixture (the `deals`
         # entity, a subject through navree-access's SeaORM shim) until step 8.
         - "/crates/navree-micro/tests/micro/support.rs"
-        - "/crates/navree-notify/"
         - "/crates/navree-orm/"
-        - "/crates/navree-queue/"
         - "/crates/navree-schema/"
         - "/crates/navree-search/"
         - "/crates/navree-settings/"
         - "/crates/navree-sheets/"
-        - "/crates/navree-social/"
         - "/crates/navree-webhooks/"
         - "/crates/navree-workflows/"
         - "/crates/navree-cli/"
@@ -64,7 +61,6 @@ rules:
         - "/crates/navree-domains/"
         - "/crates/navree-integrations/"
         - "/crates/navree-macros/"
-        - "/crates/navree-media/"
         # navree-workspace is moved; its SeaORM compatibility layer (the
         # `sea_compat` repositories and registrations, the SeaORM derive kept
         # on three models and on `LibraryScope`) stays until the crates
@@ -93,30 +89,24 @@ rules:
         - "/apps/evidence-app/"
         - "/bench/"
         - "/crates/navree/"
-        - "/crates/navree-ai/"
         # navree-auth: sea-orm for `User`'s compatibility derive, until step 8.
         - "/crates/navree-auth/Cargo.toml"
         - "/crates/navree-billing/"
         - "/crates/navree-db/"
         - "/crates/navree-flags/"
-        - "/crates/navree-fleet/"
         - "/crates/navree-graphql/"
         - "/crates/navree-grpc/"
         - "/crates/navree-helm/"
         - "/crates/navree-i18n/"
         - "/crates/navree-lighthouse/"
-        - "/crates/navree-logbook/"
         - "/crates/navree-mcp/"
         # navree-micro: a dev-dependency for that fixture (navree-access's shim, step 8).
         - "/crates/navree-micro/Cargo.toml"
-        - "/crates/navree-notify/"
         - "/crates/navree-orm/"
-        - "/crates/navree-queue/"
         - "/crates/navree-schema/"
         - "/crates/navree-search/"
         - "/crates/navree-settings/"
         - "/crates/navree-sheets/"
-        - "/crates/navree-social/"
         - "/crates/navree-webhooks/"
         - "/crates/navree-workflows/"
         # navree-workspace: sea-orm for its compatibility layer, until step 8.

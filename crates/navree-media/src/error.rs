@@ -1,6 +1,6 @@
 //! [`MediaError`] and [`ArchiveError`], and how they become responses.
 
-use navree_db::sea_orm::DbErr;
+use navree_db::DbError;
 use navree_http::AppError;
 use navree_orm::OrmError;
 use navree_storage::StorageError;
@@ -127,15 +127,13 @@ pub enum MediaError {
     /// A disk operation failed.
     #[error(transparent)]
     Storage(#[from] StorageError),
-    /// A database operation failed.
+    /// A database operation failed (navree-db's statements and units of
+    /// work).
     #[error(transparent)]
-    Db(#[from] DbErr),
-}
-
-impl From<OrmError> for MediaError {
-    fn from(error: OrmError) -> Self {
-        MediaError::Db(error.into())
-    }
+    Db(#[from] DbError),
+    /// A database operation of the media model failed.
+    #[error(transparent)]
+    Orm(#[from] OrmError),
 }
 
 impl MediaError {
@@ -158,7 +156,8 @@ impl MediaError {
             | MediaError::File { .. }
             | MediaError::Queue { .. }
             | MediaError::Storage(_)
-            | MediaError::Db(_) => 500,
+            | MediaError::Db(_)
+            | MediaError::Orm(_) => 500,
         }
     }
 
@@ -182,7 +181,8 @@ impl MediaError {
             | MediaError::File { .. }
             | MediaError::Queue { .. }
             | MediaError::Storage(_)
-            | MediaError::Db(_) => "internal_error",
+            | MediaError::Db(_)
+            | MediaError::Orm(_) => "internal_error",
         }
     }
 
@@ -305,9 +305,10 @@ impl ArchiveError {
 /// The response for a [`MediaError`] returned from a handler.
 pub(crate) fn map_media_error(error: &MediaError) -> Option<AppError> {
     match error {
-        MediaError::Storage(_) | MediaError::Db(_) => {
+        MediaError::Storage(_) | MediaError::Db(_) | MediaError::Orm(_) => {
             let mapped = match error {
                 MediaError::Db(db) => navree_db::map_db_error(db),
+                MediaError::Orm(orm) => orm.db_error().and_then(navree_db::map_db_error),
                 _ => None,
             };
             Some(mapped.unwrap_or_else(|| AppError::internal(error.to_string())))

@@ -53,8 +53,9 @@
 //!
 //! Crates not yet moved to navree-orm still read workspaces,
 //! organizations and memberships as SeaORM entities
-//! (`workspace::Entity::find_by_id` in navree-sso, `member::Entity` in
-//! navree-billing, admin-panel resources over `workspace::Entity`). For
+//! (`member::Entity` in navree-billing, admin-panel resources over
+//! `workspace::Entity`; navree-sso reads workspaces and organizations as
+//! models). For
 //! them, and only for them, those three models keep the SeaORM derive, an
 //! empty `Relation` and `ActiveModelBehavior`, and their `Entity` types are
 //! access subjects. Everything marked `COMPAT` is that layer; nothing else

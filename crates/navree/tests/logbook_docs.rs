@@ -2,13 +2,10 @@
 //! writes them (the facade, the prelude and the macros), compiled and run.
 
 use navree::db::Db;
+use navree::db::navree_schema::{Migration, Schema, SchemaMigration, SchemaResult};
 use navree::logbook::Logbook;
 use navree::prelude::*;
 use navree::testing::{TestApp, principal};
-use sea_orm::sea_query::{ColumnDef, Table};
-use sea_orm::{ActiveModelTrait, DbErr, EntityTrait, QueryOrder, Set};
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
 use serde::Serialize;
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -159,50 +156,27 @@ async fn tags_and_dumps_do_nothing_when_logbook_is_off() {
 // Using Logbook in tests: the deals board loads in three queries.
 // ---------------------------------------------------------------------------
 
-mod deal {
-    use sea_orm::entity::prelude::*;
-    use serde::Serialize;
-
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
-    #[sea_orm(table_name = "deals")]
-    pub struct Model {
-        #[sea_orm(primary_key, auto_increment = false)]
-        pub id: Uuid,
-        pub title: String,
-    }
-
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
+#[derive(Model, Clone, Debug, PartialEq, Eq, Serialize)]
+#[model(table = "deals")]
+struct Deal {
+    id: Uuid,
+    title: String,
 }
 
 struct CreateDeals;
 
-impl MigrationName for CreateDeals {
-    fn name(&self) -> &str {
-        "m0001_create_deals"
-    }
-}
-
-#[async_trait]
-impl MigrationTrait for CreateDeals {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table("deals")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("title").string().not_null())
-                    .to_owned(),
-            )
+impl Migration for CreateDeals {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema
+            .create("deals", |t| {
+                t.uuid("id").primary();
+                t.string("title");
+            })
             .await
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .drop_table(Table::drop().table("deals").to_owned())
-            .await
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop_if_exists("deals").await
     }
 }
 
@@ -214,11 +188,7 @@ impl BoardController {
     #[get("/board")]
     #[authenticated]
     async fn board(&self, uow: Uow) -> Result<Json<Value>> {
-        let tx = uow.tx().await?;
-        let deals = deal::Entity::find()
-            .order_by_asc(deal::Column::Title)
-            .all(&*tx)
-            .await?;
+        let deals = Deal::query().order_by(Deal::TITLE).get(&uow).await?;
         Ok(Json(json!({ "deals": deals })))
     }
 }
@@ -228,18 +198,23 @@ struct DealsModule;
 
 impl DealsModule {
     fn wire(&self, m: &mut ModuleBuilder) {
-        m.migrations(MigrationSet::new("deals").migration(CreateDeals));
+        m.migrations(
+            MigrationSet::new("deals")
+                .migration(SchemaMigration::new("m0001_create_deals", CreateDeals)),
+        );
     }
 }
 
 async fn seed_board(app: &TestApp, deals: usize) {
     let db = app.get::<Db>().await;
     for n in 0..deals {
-        deal::ActiveModel {
-            id: Set(Uuid::now_v7()),
-            title: Set(format!("Deal {n}")),
-        }
-        .insert(db.conn())
+        Deal::create(
+            &*db,
+            Deal {
+                id: Uuid::now_v7(),
+                title: format!("Deal {n}"),
+            },
+        )
         .await
         .unwrap();
     }

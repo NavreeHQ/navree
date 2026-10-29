@@ -12,18 +12,19 @@ use navree_ai::{
     Agent, AgentOptions, AgentRun, Ai, AiError, Conversations, FakeReply, ModuleBuilderAiExt,
     StreamEvent, agent,
 };
-use navree_db::{Db, PageQuery, Repo};
+use navree_db::{Db, PageQuery};
 use navree_http::AppError;
 use navree_kernel::{Module, ModuleBuilder};
 use navree_macros::injectable;
+use navree_orm::Model as _;
+use navree_orm::access::AccessibleQuery;
 use navree_testing::TestApp;
-use sea_orm::{EntityTrait, IntoActiveModel, Set};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::support::{agent_app, note, start, user};
+use crate::support::{Note, agent_app, start, user};
 
 #[derive(Debug, Deserialize, ToSchema, Validate)]
 pub struct ListNotes {
@@ -75,18 +76,14 @@ impl Agent for NotesAssistant {
 
     /// Lists the notes the user can read.
     #[tool(read_only)]
-    async fn list_notes(
-        &self,
-        run: &AgentRun,
-        args: ListNotes,
-    ) -> Result<Vec<note::Model>, AppError> {
-        let tx = run.uow().tx().await?;
+    async fn list_notes(&self, run: &AgentRun, args: ListNotes) -> Result<Vec<Note>, AppError> {
         let notes = run
-            .accessible::<note::Entity, Read>()
-            .apply(note::Entity::find())
-            .all(&*tx)
+            .accessible::<Note, Read>()
+            .apply(Note::query())
+            .get(run.uow())
             .await?;
         Ok(notes
+            .into_models()
             .into_iter()
             .filter(|n| args.query.as_ref().is_none_or(|q| n.title.contains(q)))
             .collect())
@@ -94,34 +91,33 @@ impl Agent for NotesAssistant {
 
     /// Adds a note owned by the user.
     #[tool]
-    #[can(Create, note::Entity)]
-    async fn add_note(&self, run: &AgentRun, args: AddNote) -> Result<note::Model, AppError> {
-        Ok(Repo::<note::Entity>::insert(
-            run.uow(),
-            note::ActiveModel {
-                id: Set(Uuid::now_v7()),
-                owner_id: Set(run.user_id()),
-                title: Set(args.title),
-            },
-        )
-        .await?)
+    #[can(Create, Note)]
+    async fn add_note(&self, run: &AgentRun, args: AddNote) -> Result<Note, AppError> {
+        let note = Note {
+            id: Uuid::now_v7(),
+            owner_id: run.user_id(),
+            title: args.title,
+        };
+        Ok(Note::create(run.uow(), note).await?.into_inner())
     }
 
     /// Renames a note.
     #[tool(needs_approval)]
-    async fn rename_note(&self, run: &AgentRun, args: RenameNote) -> Result<note::Model, AppError> {
-        let note = run.authorize::<note::Entity, Update>(args.note_id).await?;
-        let mut active = note.into_inner().into_active_model();
-        active.title = Set(args.title);
-        Ok(Repo::<note::Entity>::update(run.uow(), active).await?)
+    async fn rename_note(&self, run: &AgentRun, args: RenameNote) -> Result<Note, AppError> {
+        let mut note = run
+            .authorize::<Note, Update>(args.note_id)
+            .await?
+            .into_inner();
+        note.update(run.uow(), |note| note.title = args.title)
+            .await?;
+        Ok(note.into_inner())
     }
 
     /// Deletes every note. Managers only.
     #[tool]
-    #[can(Manage, note::Entity)]
+    #[can(Manage, Note)]
     async fn purge_notes(&self, run: &AgentRun) -> Result<u64, AppError> {
-        let tx = run.uow().tx().await?;
-        Ok(note::Entity::delete_many().exec(&*tx).await?.rows_affected)
+        Ok(Note::query().delete(run.uow()).await?)
     }
 
     /// Who is asking, and when.
@@ -163,11 +159,12 @@ async fn app() -> TestApp {
     agent_app().module(AssistantModule).build().await
 }
 
-async fn notes(app: &TestApp) -> Vec<note::Model> {
-    note::Entity::find()
-        .all(app.get::<Db>().await.conn())
+async fn notes(app: &TestApp) -> Vec<Note> {
+    Note::query()
+        .get(&*app.get::<Db>().await)
         .await
         .unwrap()
+        .into_models()
 }
 
 #[tokio::test]

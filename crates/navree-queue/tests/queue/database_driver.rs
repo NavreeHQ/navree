@@ -5,35 +5,30 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use navree_contracts::FixedClock;
-use navree_db::Db;
+use navree_db::{Db, Executor};
 use navree_queue::{Queue, QueueDriver, QueueError, QueueOptions, WorkOptions};
-use navree_testing::temp_sqlite_url;
-use sea_orm::ConnectionTrait;
 
 use crate::suite::{assert_handled_once, wait_until};
-
-/// With the `postgres` feature and `NAVREE_TEST_POSTGRES_URL` set, every
-/// harness (and so every suite) really runs on PostgreSQL.
-#[cfg(feature = "postgres")]
-#[tokio::test]
-async fn harnesses_run_on_postgres_when_it_is_configured() {
-    let h = harness(QueueDriver::Database).await;
-    let backend = h.app.get::<Db>().await.backend();
-    let expected = if std::env::var("NAVREE_TEST_POSTGRES_URL").is_ok() {
-        sea_orm::DbBackend::Postgres
-    } else {
-        sea_orm::DbBackend::Sqlite
-    };
-    assert_eq!(backend, expected);
-}
 use crate::support::{
     HideJobsTable, Journal, Record, app_on, app_without_jobs_on, harness, harness_with, options,
     start,
 };
 
+/// Every harness (and so every suite) really runs on the server
+/// `NAVREE_TEST_DATABASE` names.
+#[tokio::test]
+async fn harnesses_run_on_the_configured_server() {
+    let h = harness(QueueDriver::Database).await;
+    let db = h.app.get::<Db>().await;
+    assert_eq!(
+        Executor::backend(&db),
+        crate::servers::Server::current().backend()
+    );
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn concurrent_workers_in_two_apps_never_run_same_job() {
-    let (url, _guard) = temp_sqlite_url();
+    let (url, _guard) = crate::servers::scratch();
     let journal = Arc::new(Journal::default());
     let clock = Arc::new(FixedClock::new(start()));
     let first = app_on(
@@ -63,7 +58,7 @@ async fn concurrent_workers_in_two_apps_never_run_same_job() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn job_without_handler_fails_without_retries() {
-    let (url, _guard) = temp_sqlite_url();
+    let (url, _guard) = crate::servers::scratch();
     let journal = Arc::new(Journal::default());
     let clock = Arc::new(FixedClock::new(start()));
     let dispatcher = app_on(
@@ -113,14 +108,12 @@ async fn long_running_worker_survives_database_errors() {
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     // The table disappears under the worker, then comes back.
-    db.conn()
-        .execute_unprepared("ALTER TABLE jobs RENAME TO jobs_away")
+    db.execute_script("ALTER TABLE jobs RENAME TO jobs_away")
         .await
         .unwrap();
     tokio::time::sleep(Duration::from_millis(100)).await;
     assert!(!worker.is_finished(), "the worker keeps polling");
-    db.conn()
-        .execute_unprepared("ALTER TABLE jobs_away RENAME TO jobs")
+    db.execute_script("ALTER TABLE jobs_away RENAME TO jobs")
         .await
         .unwrap();
     h.queue.dispatch(Record::new("after")).await.unwrap();
@@ -139,10 +132,7 @@ async fn long_running_worker_survives_database_errors() {
 async fn finite_worker_returns_database_errors() {
     let h = harness(QueueDriver::Database).await;
     let db = h.app.get::<Db>().await;
-    db.conn()
-        .execute_unprepared("DROP TABLE jobs")
-        .await
-        .unwrap();
+    db.execute_script("DROP TABLE jobs").await.unwrap();
 
     let error = h
         .queue
@@ -174,8 +164,7 @@ async fn long_running_worker_survives_errors_recording_an_outcome() {
         !worker.is_finished(),
         "the worker outlives the failed completion"
     );
-    db.conn()
-        .execute_unprepared("ALTER TABLE jobs_away RENAME TO jobs")
+    db.execute_script("ALTER TABLE jobs_away RENAME TO jobs")
         .await
         .unwrap();
     h.queue.dispatch(Record::new("after")).await.unwrap();

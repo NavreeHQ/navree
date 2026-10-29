@@ -42,7 +42,7 @@ Navree::app()
 
 `CacheModule` is optional: without it, used states are remembered in the process, which is enough for a single instance. With several instances, give the cache a shared store so a state used on one instance is refused on the others.
 
-The module contributes the migration set `social` (after `auth`), which creates `social_accounts`: one row per linked provider account, with the user, the provider, the provider's user id, the email, name, avatar and handle it reported, and the encrypted provider tokens when you store them. Deleting a user deletes their rows.
+The module contributes the migration set `social` (after `auth`), which creates `social_accounts`: one row per linked provider account, with the user, the provider, the provider's user id, the email, name, avatar and handle it reported, and the encrypted provider tokens when you store them. Deleting a user deletes their rows. The table is a navree-orm model, `social_account::Model`, so apps can read it with `social_account::Model::query()` and its typed columns such as `social_account::Model::PROVIDER`; the module's own writes record change events without the encrypted tokens.
 
 ## Configuration
 

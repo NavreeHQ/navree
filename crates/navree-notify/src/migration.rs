@@ -9,10 +9,6 @@ use navree_db::MigrationSet;
 use navree_db::navree_schema::{
     Blueprint, ColumnBuilder, Dialect, Migration, Schema, SchemaMigration, SchemaResult,
 };
-use sea_orm::DbErr;
-use sea_orm::sea_query::{ColumnDef, Index, Table};
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
 
 /// The table of the database channel.
 pub const NOTIFICATIONS_TABLE: &str = "notifications";
@@ -35,7 +31,10 @@ pub const DEFERRALS_TABLE: &str = "notification_deferrals";
 /// The migrations of `NotifyModule` (module name `notify`).
 pub(crate) fn migrations() -> MigrationSet {
     MigrationSet::new("notify")
-        .migration(CreateNotifications)
+        .migration(SchemaMigration::new(
+            "m20261025_000001_create_notifications",
+            CreateNotifications,
+        ))
         .migration(SchemaMigration::new(
             "m20261028_000001_create_notification_deliveries_table",
             CreateDeliveries,
@@ -123,50 +122,26 @@ impl Migration for CreateDeferrals {
 /// foreign key: the owner is polymorphic (`notifiable_type`, `notifiable_id`).
 struct CreateNotifications;
 
-impl MigrationName for CreateNotifications {
-    fn name(&self) -> &str {
-        "m20261025_000001_create_notifications"
-    }
-}
-
-#[async_trait]
-impl MigrationTrait for CreateNotifications {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table(NOTIFICATIONS_TABLE)
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("notifiable_type").string().not_null())
-                    .col(ColumnDef::new("notifiable_id").string().not_null())
-                    .col(ColumnDef::new("type").string().not_null())
-                    .col(ColumnDef::new("data").json_binary().not_null())
-                    .col(ColumnDef::new("read_at").timestamp_with_time_zone().null())
-                    .col(
-                        ColumnDef::new("created_at")
-                            .timestamp_with_time_zone()
-                            .not_null(),
-                    )
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("idx_notifications_notifiable")
-                    .table(NOTIFICATIONS_TABLE)
-                    .col("notifiable_type")
-                    .col("notifiable_id")
-                    .col("read_at")
-                    .to_owned(),
-            )
+impl Migration for CreateNotifications {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        let mysql = schema.target().await?.dialect() == Dialect::MySql;
+        schema
+            .create(NOTIFICATIONS_TABLE, |t| {
+                uuid(t, "id", mysql).primary();
+                t.string("notifiable_type");
+                t.string("notifiable_id");
+                t.string("type");
+                t.jsonb("data");
+                t.timestamp_tz("read_at").nullable();
+                t.timestamp_tz("created_at");
+                t.index(["notifiable_type", "notifiable_id", "read_at"])
+                    .name("idx_notifications_notifiable");
+            })
             .await
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .drop_table(Table::drop().table(NOTIFICATIONS_TABLE).to_owned())
-            .await
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop_if_exists(NOTIFICATIONS_TABLE).await
     }
 }
 

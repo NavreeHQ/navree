@@ -1,10 +1,17 @@
-//! The social module's migrations (`MigrationSet` `social`, after `auth`).
+//! The social module's migrations (`MigrationSet` `social`, after `auth`),
+//! written with the schema builder.
+//!
+//! The migration keeps the name it always had, so a database migrated by an
+//! earlier version finds nothing pending. The columns are the types it
+//! created: UUIDs as `BINARY(16)` on MySQL and MariaDB (where navree-db
+//! writes UUIDs as 16 bytes, and where `users.id` is that type), names and
+//! identifiers as `VARCHAR` without a length on PostgreSQL and SQLite and
+//! `VARCHAR(255)` on MySQL.
 
 use navree_db::MigrationSet;
-use sea_orm::DbErr;
-use sea_orm::sea_query::{ColumnDef, ForeignKey, ForeignKeyAction, Index, Table};
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
+use navree_db::navree_schema::{
+    Blueprint, ColumnBuilder, Dialect, Migration, Schema, SchemaMigration, SchemaResult,
+};
 
 /// The name of the social module's migration set.
 pub const SOCIAL_MIGRATIONS: &str = "social";
@@ -13,86 +20,67 @@ pub const SOCIAL_MIGRATIONS: &str = "social";
 pub(crate) fn migrations() -> MigrationSet {
     MigrationSet::new(SOCIAL_MIGRATIONS)
         .after(["auth"])
-        .migration(CreateSocialAccounts)
+        .migration(SchemaMigration::new(
+            "m20261026_000001_create_social_accounts_table",
+            CreateSocialAccounts,
+        ))
 }
 
-/// Creates `social_accounts`.
+/// A UUID column: `BINARY(16)` on MySQL and MariaDB, `uuid` elsewhere.
+fn uuid<'a>(t: &'a mut Blueprint, name: &str, dialect: Dialect) -> ColumnBuilder<'a> {
+    if dialect == Dialect::MySql {
+        t.binary(name).length(16).fixed()
+    } else {
+        t.uuid(name)
+    }
+}
+
+/// A text column of no fixed length: `VARCHAR(255)` on MySQL and MariaDB,
+/// `VARCHAR` elsewhere.
+fn varchar<'a>(t: &'a mut Blueprint, name: &str, dialect: Dialect) -> ColumnBuilder<'a> {
+    if dialect == Dialect::MySql {
+        t.string(name).length(255)
+    } else {
+        t.raw_column(name, "VARCHAR")
+    }
+}
+
+/// Creates `social_accounts`, unique per (provider, provider user id) and
+/// per (user, provider); rows go with their user.
 struct CreateSocialAccounts;
 
-impl MigrationName for CreateSocialAccounts {
-    fn name(&self) -> &str {
-        "m20261026_000001_create_social_accounts_table"
-    }
-}
-
-fn timestamp(name: &'static str) -> ColumnDef {
-    ColumnDef::new(name)
-        .timestamp_with_time_zone()
-        .not_null()
-        .to_owned()
-}
-
-#[async_trait]
-impl MigrationTrait for CreateSocialAccounts {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table("social_accounts")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("user_id").uuid().not_null())
-                    .col(ColumnDef::new("provider").string().not_null())
-                    .col(ColumnDef::new("provider_user_id").string().not_null())
-                    .col(ColumnDef::new("email").string().null())
-                    .col(ColumnDef::new("name").string().null())
-                    .col(ColumnDef::new("avatar_url").text().null())
-                    .col(ColumnDef::new("nickname").string().null())
-                    .col(ColumnDef::new("access_token").text().null())
-                    .col(ColumnDef::new("refresh_token").text().null())
-                    .col(
-                        ColumnDef::new("token_expires_at")
-                            .timestamp_with_time_zone()
-                            .null(),
-                    )
-                    .col(ColumnDef::new("scopes").text().null())
-                    .col(timestamp("created_at"))
-                    .col(timestamp("updated_at"))
-                    .foreign_key(
-                        ForeignKey::create()
-                            .from("social_accounts", "user_id")
-                            .to("users", "id")
-                            .on_delete(ForeignKeyAction::Cascade),
-                    )
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("social_accounts_provider_user_unique")
-                    .table("social_accounts")
-                    .col("provider")
-                    .col("provider_user_id")
-                    .unique()
-                    .to_owned(),
-            )
-            .await?;
-        manager
-            .create_index(
-                Index::create()
-                    .name("social_accounts_user_provider_unique")
-                    .table("social_accounts")
-                    .col("user_id")
-                    .col("provider")
-                    .unique()
-                    .to_owned(),
-            )
+impl Migration for CreateSocialAccounts {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        let dialect = schema.target().await?.dialect();
+        schema
+            .create("social_accounts", |t| {
+                uuid(t, "id", dialect).primary();
+                uuid(t, "user_id", dialect);
+                varchar(t, "provider", dialect);
+                varchar(t, "provider_user_id", dialect);
+                varchar(t, "email", dialect).nullable();
+                varchar(t, "name", dialect).nullable();
+                t.text("avatar_url").nullable();
+                varchar(t, "nickname", dialect).nullable();
+                t.text("access_token").nullable();
+                t.text("refresh_token").nullable();
+                t.timestamp_tz("token_expires_at").nullable();
+                t.text("scopes").nullable();
+                t.timestamp_tz("created_at");
+                t.timestamp_tz("updated_at");
+                t.foreign("user_id")
+                    .references("id")
+                    .on("users")
+                    .cascade_on_delete();
+                t.unique(["provider", "provider_user_id"])
+                    .name("social_accounts_provider_user_unique");
+                t.unique(["user_id", "provider"])
+                    .name("social_accounts_user_provider_unique");
+            })
             .await
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .drop_table(Table::drop().table("social_accounts").to_owned())
-            .await
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop_if_exists("social_accounts").await
     }
 }

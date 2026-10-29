@@ -32,8 +32,7 @@ pub const PASSWORD: &str = "correct horse battery";
 /// A test app with crypto (fast hashing), a fresh database, auth and the
 /// social module read from configuration, with a GitHub provider.
 pub fn builder() -> TestAppBuilder {
-    TestApp::builder()
-        .temp_database()
+    crate::servers::database(TestApp::builder())
         .config("app.key", generate_key())
         .config("hashing.memory_kib", 1024)
         .config("hashing.iterations", 1)

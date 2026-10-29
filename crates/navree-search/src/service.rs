@@ -410,7 +410,7 @@ impl Search {
     /// Queues `job` as part of the commit a change observer sees.
     pub(crate) async fn queue_observed(
         &self,
-        tx: &DatabaseTransaction,
+        _tx: &DatabaseTransaction,
         uow: &Uow,
         job: SyncDocuments,
     ) -> Result<(), SearchError> {
@@ -418,7 +418,7 @@ impl Search {
             SyncMode::Off => Ok(()),
             SyncMode::Queued => {
                 if let Some(queue) = &self.inner.queue {
-                    queue.push_observed(tx, uow, self.envelope(&job)?).await?;
+                    queue.push_observed(uow, self.envelope(&job)?).await?;
                     return Ok(());
                 }
                 if let Some(dispatcher) = self.inner.dispatcher.clone() {
