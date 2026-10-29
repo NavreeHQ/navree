@@ -522,12 +522,9 @@ async fn database_errors_are_survived_and_the_workers_keep_running() {
     eventually("a worker", || async { master.spawner.running().len() == 1 }).await;
     let db = h.app.get::<navree_db::Db>().await;
     for table in ["fleet_state", "fleet_metrics", "fleet_jobs"] {
-        sea_orm::ConnectionTrait::execute_raw(
-            db.conn(),
-            sea_orm::Statement::from_string(db.backend(), format!("DROP TABLE {table}")),
-        )
-        .await
-        .unwrap();
+        navree_db::Executor::execute_script(&*db, &format!("DROP TABLE {table}"))
+            .await
+            .unwrap();
     }
     master.spawner.report(
         0,

@@ -6,6 +6,8 @@
 
 #[path = "queue/reference_store.rs"]
 mod reference_store;
+#[path = "queue/servers.rs"]
+mod servers;
 #[path = "queue/support.rs"]
 mod support;
 

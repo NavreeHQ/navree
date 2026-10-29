@@ -3,7 +3,7 @@
 
 use std::time::Duration;
 
-use navree_db::Db;
+use navree_db::{Db, Executor as _, Statement};
 use navree_queue::{Batch, QueueDriver, QueueError, WorkStats};
 
 use crate::support::{
@@ -213,7 +213,7 @@ pub async fn batch_dispatch_joins_the_current_unit_of_work(driver: QueueDriver) 
     let db = h.app.get::<Db>().await;
 
     let uow = db.uow(None, None).await;
-    drop(uow.tx().await.unwrap());
+    uow.fetch_all(&Statement::text("SELECT 1")).await.unwrap();
     let batch = uow
         .scope(
             h.queue

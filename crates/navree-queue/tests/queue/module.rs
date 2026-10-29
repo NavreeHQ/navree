@@ -150,8 +150,7 @@ async fn debug_output_names_the_driver_and_job_types() {
 
 #[tokio::test]
 async fn from_config_defaults_to_the_database_driver() {
-    let app = TestApp::builder()
-        .temp_database()
+    let app = crate::servers::database(TestApp::builder())
         .module(DatabaseModule)
         .module(QueueModule::from_config())
         .module(JobsModule)

@@ -20,7 +20,6 @@ use navree_notify::{
 use navree_orm::Model as _;
 use navree_testing::{TestApp, TestAppBuilder};
 use navree_view::{ModuleBuilderViewExt, ViewModule, ViewOptions};
-use sea_orm::{EntityTrait, QueryOrder};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -171,8 +170,7 @@ impl Dispatcher for RecordingDispatcher {
 /// A test app with a temporary database, views, array mail and
 /// `NotifyModule::for_root(options)`.
 pub fn builder(options: NotifyOptions) -> TestAppBuilder {
-    TestApp::builder()
-        .temp_database()
+    crate::database::database(TestApp::builder())
         .config("http.per_ip_rate_limit", Value::Null)
         .module(DatabaseModule)
         .module(ViewModule::for_root(ViewOptions {
@@ -206,12 +204,13 @@ pub async fn app_with_broadcaster() -> (TestApp, Arc<RecordingBroadcaster>) {
 /// Every stored notification, oldest first.
 pub async fn rows(app: &TestApp) -> Vec<notifications::Model> {
     let db = app.get::<Db>().await;
-    notifications::Entity::find()
-        .order_by_asc(notifications::Column::CreatedAt)
-        .order_by_asc(notifications::Column::Id)
-        .all(db.conn())
+    notifications::Model::query()
+        .order_by(notifications::Model::CREATED_AT)
+        .order_by(notifications::Model::ID)
+        .get(&*db)
         .await
         .expect("read notifications")
+        .into_models()
 }
 
 /// Every message the array transport recorded.
