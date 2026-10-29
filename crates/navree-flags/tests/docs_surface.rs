@@ -12,8 +12,8 @@ use navree_flags::{
     FlagScope, FlagState, FlagStoreKind, Flags, FlagsError, FlagsFake, FlagsModule, FlagsOptions,
     MissingScope, PlanResolver, RequireFlag, Rollout, UserScope, requires_flag,
 };
-use navree_testing::TestApp;
 use navree_orm::Model as _;
+use navree_testing::TestApp;
 
 /// A flag for the signatures below.
 struct NewPipeline;

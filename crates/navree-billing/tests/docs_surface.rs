@@ -15,10 +15,10 @@ use navree_billing::{
     Subscribed, Subscription, SubscriptionCanceled, SubscriptionCreated, SubscriptionStatus,
     SubscriptionUpdated, TrialEnding,
 };
+use navree_db::{Executor, Statement};
 use navree_events::Event;
 use navree_kernel::Module;
 use navree_workspace::{CurrentWorkspace, Workspace};
-use navree_db::{Executor, Statement};
 use serde_json::json;
 
 fn billable<B: Billable>() -> &'static str {

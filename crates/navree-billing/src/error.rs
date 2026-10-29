@@ -3,9 +3,9 @@
 use std::collections::BTreeMap;
 
 use http::StatusCode;
+use navree_db::DbError;
 use navree_http::AppError;
 use navree_kernel::BoxError;
-use navree_db::DbError;
 use navree_orm::OrmError;
 
 use crate::provider::{ProviderError, WebhookError};

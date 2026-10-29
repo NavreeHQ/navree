@@ -161,9 +161,7 @@ async fn list_in<E: Executor + ?Sized>(
     key: Option<&str>,
 ) -> Result<Vec<StoredSetting>, SettingsError> {
     let rows = setting::Model::query()
-        .when_some(key, |query, key| {
-            query.where_(setting::Model::KEY.eq(key))
-        })
+        .when_some(key, |query, key| query.where_(setting::Model::KEY.eq(key)))
         .get(exec)
         .await?
         .into_models()
