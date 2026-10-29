@@ -47,8 +47,7 @@ fn abilities(ctx: &AbilityCtx, rules: &mut Rules) {
 /// (routes off, no users table) and domains with a target and an address,
 /// the test routes, a fixed clock and the fakes.
 pub fn builder(world: &Fakes) -> TestAppBuilder {
-    TestApp::builder()
-        .temp_database()
+    crate::servers::database(TestApp::builder())
         .config("app.key", generate_key())
         .config("app.url", "https://app.example.com")
         .config("http.per_ip_rate_limit", Value::Null)
