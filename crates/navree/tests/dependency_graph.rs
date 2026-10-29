@@ -422,7 +422,8 @@ const HIERARCHY: &[Rule] = &[
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-http-client",
         "navree-db", "navree-orm", "navree-storage", "navree-queue",
     ]),
-    // Helm: the admin panel. navree-crypto seals its session cookie; with
+    // Helm: the admin panel over navree-orm models (their queries, access
+    // filters and subjects). navree-crypto seals its session cookie; with
     // its `settings` feature, the Settings screens edit navree-settings'
     // types (organizations and workspaces named by navree-workspace). Metric
     // results are kept in a navree-bounded cache.
@@ -430,7 +431,7 @@ const HIERARCHY: &[Rule] = &[
         "navree-kernel", "navree-bounded", "navree-contracts", "navree-config", "navree-http", "navree-view",
         "navree-cache", "navree-crypto", "navree-db", "navree-storage", "navree-queue",
         "navree-validation", "navree-audit", "navree-access", "navree-auth", "navree-workspace",
-        "navree-settings",
+        "navree-settings", "navree-orm",
     ]),
     // Workflows: durable runs stored through navree-db, woken by
     // navree-events listeners and the `workflows:tick` schedule
