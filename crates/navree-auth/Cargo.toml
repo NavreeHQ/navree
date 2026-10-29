@@ -28,7 +28,8 @@ chrono = { workspace = true }
 form_urlencoded = { workspace = true }
 garde = { workspace = true }
 http = { workspace = true }
-# Only for `impl navree_access::Subject for user::Entity` (no module import).
+# `User` is the access subject `User` (no module import), and the SeaORM
+# entity of the compatibility layer too.
 navree-access = { workspace = true }
 navree-cache = { workspace = true }
 navree-config = { workspace = true }
@@ -42,8 +43,9 @@ navree-kernel = { workspace = true }
 # navree-mail: the account flows of plan Task 30 (password reset mail).
 navree-mail = { workspace = true }
 # The auth tables are models (`User`, `refresh_token::Model`, ...); sessions,
-# sign-in tokens, pending resets and passkeys are written through the ORM.
-navree-orm = { workspace = true }
+# sign-in tokens, pending resets and passkeys are written through the ORM;
+# `User` is an access subject (`#[model(subject)]`, feature `access`).
+navree-orm = { workspace = true, features = ["access"] }
 navree-validation = { workspace = true }
 ring = { workspace = true }
 # Compatibility layer only (`entity/user.rs`): the SeaORM derive kept on
