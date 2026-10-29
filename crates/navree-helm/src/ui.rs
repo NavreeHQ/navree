@@ -153,6 +153,11 @@ fn map_db(error: AppError) -> AppError {
         {
             return mapped;
         }
+        if let Some(db) = cause.downcast_ref::<navree_db::DbError>()
+            && let Some(mapped) = navree_db::map_db_error(db)
+        {
+            return mapped;
+        }
         next = cause.source();
     }
     error

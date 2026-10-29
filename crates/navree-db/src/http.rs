@@ -243,39 +243,85 @@ async fn finish(uow: &Uow, response: Response) -> Response {
 }
 
 /// The error response for a database error, used by `DatabaseModule` for
-/// errors returned from handlers with `?`: `RecordNotFound` and
-/// `RecordNotUpdated` → 404, unique and foreign-key violations → 409,
-/// anything else stays a 500. No SQL detail reaches the client.
+/// errors returned from handlers with `?`: a missing record (navree-db's
+/// [`ErrorKind::NotFound`](crate::ErrorKind::NotFound), SeaORM's
+/// `RecordNotFound` and `RecordNotUpdated`) → 404, unique and
+/// foreign-key violations → 409, anything else stays a 500. No SQL detail
+/// reaches the client.
 ///
-/// Violations are recognised on every database: MySQL and MariaDB error
-/// numbers (1062 duplicate entry; 1451 and 1452 foreign key failures, and
-/// their relatives), PostgreSQL SQLSTATEs (`23505`, `23503`) and SQLite's
+/// It takes navree-db's [`DbError`](crate::DbError) and, while crates move
+/// off SeaORM, SeaORM's `DbErr` (see [`MappedDbError`]). Violations are
+/// recognised on every database: MySQL and MariaDB error numbers (1062
+/// duplicate entry; 1451 and 1452 foreign key failures, and their
+/// relatives), PostgreSQL SQLSTATEs (`23505`, `23503`) and SQLite's
 /// extended codes.
 ///
 /// ```
-/// use navree_db::map_db_error;
+/// use navree_db::{DbError, ErrorKind, map_db_error};
 /// use sea_orm::DbErr;
 ///
 /// let error = map_db_error(&DbErr::RecordNotFound("deals 42".into())).unwrap();
 /// assert_eq!(error.status.as_u16(), 404);
 /// assert!(map_db_error(&DbErr::Custom("boom".into())).is_none());
+/// let duplicate = DbError::new(ErrorKind::UniqueViolation, "duplicate key");
+/// assert_eq!(map_db_error(&duplicate).unwrap().status.as_u16(), 409);
+/// assert!(map_db_error(&DbError::invalid("bad")).is_none());
 /// ```
-pub fn map_db_error(error: &DbErr) -> Option<AppError> {
-    match error {
-        DbErr::RecordNotFound(_) | DbErr::RecordNotUpdated => Some(AppError::not_found()),
-        _ => match violation(error)? {
-            Violation::Unique => Some(AppError::conflict(
-                "A record with the same unique value already exists.",
-            )),
-            Violation::ForeignKey => Some(AppError::conflict(
-                "The change conflicts with a related record.",
-            )),
-        },
+pub fn map_db_error<E: MappedDbError + ?Sized>(error: &E) -> Option<AppError> {
+    error.app_error()
+}
+
+/// The response of what a database error says about the request.
+fn response(violation: Violation) -> AppError {
+    match violation {
+        Violation::NotFound => AppError::not_found(),
+        Violation::Unique => {
+            AppError::conflict("A record with the same unique value already exists.")
+        }
+        Violation::ForeignKey => AppError::conflict("The change conflicts with a related record."),
     }
 }
 
-/// A constraint a write broke.
+/// A database error [`map_db_error`] answers: navree-db's
+/// [`DbError`](crate::DbError), and SeaORM's `DbErr` while crates move off
+/// SeaORM.
+pub trait MappedDbError: sealed::Sealed {
+    /// The error response it answers, if it is not a 500.
+    fn app_error(&self) -> Option<AppError>;
+}
+
+mod sealed {
+    pub trait Sealed {}
+    impl Sealed for sea_orm::DbErr {}
+    impl Sealed for crate::DbError {}
+}
+
+impl MappedDbError for DbErr {
+    fn app_error(&self) -> Option<AppError> {
+        match self {
+            DbErr::RecordNotFound(_) | DbErr::RecordNotUpdated => Some(Violation::NotFound),
+            _ => violation(self),
+        }
+        .map(response)
+    }
+}
+
+impl MappedDbError for crate::DbError {
+    fn app_error(&self) -> Option<AppError> {
+        match self.kind() {
+            crate::ErrorKind::NotFound => Some(Violation::NotFound),
+            crate::ErrorKind::UniqueViolation => Some(Violation::Unique),
+            crate::ErrorKind::ForeignKeyViolation => Some(Violation::ForeignKey),
+            _ => None,
+        }
+        .map(response)
+    }
+}
+
+/// What a database error says about the request.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Violation {
+    NotFound,
     Unique,
     ForeignKey,
 }

@@ -3,8 +3,8 @@ source: crates/navree-orm/tests/sql/main.rs
 expression: "query(Company::query().where_(Company::COUNTRY.eq(\"DE\")).union(Company::query().where_(Company::COUNTRY.eq(\"US\")).order_by(Company::NAME).limit(5)).order_by_desc(Company::NAME).limit(10))"
 ---
 PostgreSQL: SELECT "companies"."id", "companies"."name", "companies"."country" FROM "companies" WHERE "companies"."country" = $1 UNION (SELECT "companies"."id", "companies"."name", "companies"."country" FROM "companies" WHERE "companies"."country" = $2 ORDER BY "companies"."name" ASC LIMIT $3) ORDER BY "name" DESC LIMIT $4
-  values: [String(Some("DE")), String(Some("US")), BigUnsigned(Some(5)), BigUnsigned(Some(10))]
+  values: [String("DE"), String("US"), U64(5), U64(10)]
 MySQL: SELECT `companies`.`id`, `companies`.`name`, `companies`.`country` FROM `companies` WHERE `companies`.`country` = ? UNION (SELECT `companies`.`id`, `companies`.`name`, `companies`.`country` FROM `companies` WHERE `companies`.`country` = ? ORDER BY `companies`.`name` ASC LIMIT ?) ORDER BY `name` DESC LIMIT ?
-  values: [String(Some("DE")), String(Some("US")), BigUnsigned(Some(5)), BigUnsigned(Some(10))]
+  values: [String("DE"), String("US"), U64(5), U64(10)]
 SQLite: SELECT "companies"."id", "companies"."name", "companies"."country" FROM "companies" WHERE "companies"."country" = ? UNION SELECT * FROM (SELECT "companies"."id", "companies"."name", "companies"."country" FROM "companies" WHERE "companies"."country" = ? ORDER BY "companies"."name" ASC LIMIT ?) AS "navree_union_1" ORDER BY "name" DESC LIMIT ?
-  values: [String(Some("DE")), String(Some("US")), BigUnsigned(Some(5)), BigUnsigned(Some(10))]
+  values: [String("DE"), String("US"), U64(5), U64(10)]

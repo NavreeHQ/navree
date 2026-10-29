@@ -14,7 +14,7 @@ use navree_orm::render::{
     render_aggregate, render_delete, render_exists, render_insert, render_select, render_truncate,
     render_update, render_update_from,
 };
-use navree_orm::{Builder, Dialect, Expr, Filter, LockMode, Model, Value, col, table};
+use navree_orm::{Builder, Dialect, Expr, Filter, Kind, LockMode, Model, Value, col, table};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -444,7 +444,7 @@ fn lowered_writes() {
         vec![
             vec![
                 IrExpr::Value(Value::from("Acme")),
-                IrExpr::Value(Value::String(None)),
+                IrExpr::Value(Value::Null(Kind::String)),
             ],
             vec![
                 IrExpr::Value(Value::from("Globex")),

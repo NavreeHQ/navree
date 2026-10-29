@@ -2268,7 +2268,7 @@ pub mod derive_support {
     /// The JSON inside a stored value, if it is JSON.
     pub fn stored_json(value: Value) -> Option<serde_json::Value> {
         match value {
-            Value::Json(Some(json)) => Some(*json),
+            Value::Json(json) => Some(json),
             _ => None,
         }
     }

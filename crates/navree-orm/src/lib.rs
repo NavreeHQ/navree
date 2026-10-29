@@ -47,8 +47,7 @@
 //!
 //! ```
 //! use chrono::{DateTime, Utc};
-//! use navree_db::{Db, DbOptions};
-//! use navree_db::sea_orm::ConnectionTrait;
+//! use navree_db::{Db, DbOptions, Executor};
 //! use navree_orm::prelude::*;
 //! use serde::{Deserialize, Serialize};
 //!
@@ -76,13 +75,12 @@
 //! # let dir = tempfile::tempdir().unwrap();
 //! # let url = format!("sqlite://{}?mode=rwc", dir.path().join("doc.db").display());
 //! let db = Db::connect(&DbOptions { url, ..DbOptions::default() }).await?;
-//! db.conn()
-//!     .execute_unprepared(
-//!         "CREATE TABLE deals (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL,
-//!          amount_cents INTEGER NOT NULL, stage TEXT NOT NULL,
-//!          created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
-//!     )
-//!     .await?;
+//! db.execute_script(
+//!     "CREATE TABLE deals (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL,
+//!      amount_cents INTEGER NOT NULL, stage TEXT NOT NULL,
+//!      created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
+//! )
+//! .await?;
 //!
 //! let mut deal = Deal::create(&db, Deal {
 //!     title: "Renewal".into(),
@@ -199,7 +197,8 @@ pub use sql::{Dialect, Statement};
 pub use streams::{RowStream, cursor};
 pub use ulid::{Ulid, UlidError};
 pub use value::{
-    Decimal, Field, FieldError, FieldKind, Numeric, Value, ValueFor, is_null, same_value, to_json,
+    Decimal, Field, FieldError, FieldKind, Kind, Numeric, Value, ValueFor, is_null, same_value,
+    to_json,
 };
 
 /// `#[derive(Model)]`, `#[scopes]`, `#[relations]`, `#[accessors]` and

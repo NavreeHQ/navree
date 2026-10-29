@@ -25,16 +25,16 @@
 //! deleted with their directory.
 //!
 //! ```
-//! use navree_db::sea_orm::ConnectionTrait;
+//! use navree_db::Executor;
 //! use navree_orm::testing::database::Template;
 //!
 //! /// The schema and its reference rows, built once per test binary.
 //! static DATABASE: Template = Template::new("notes", |template| {
 //!     Box::pin(async move {
-//!         let conn = template.db().conn();
-//!         conn.execute_unprepared("CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT NOT NULL)")
+//!         let db = template.db();
+//!         db.execute_script("CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT NOT NULL)")
 //!             .await?;
-//!         conn.execute_unprepared("INSERT INTO notes (body) VALUES ('welcome')").await?;
+//!         db.execute_script("INSERT INTO notes (body) VALUES ('welcome')").await?;
 //!         Ok(())
 //!     })
 //! });
@@ -42,7 +42,7 @@
 //! # #[tokio::main(flavor = "current_thread")]
 //! # async fn main() {
 //! let first = DATABASE.sqlite().await.unwrap();
-//! first.db().conn().execute_unprepared("DELETE FROM notes").await.unwrap();
+//! first.db().execute_script("DELETE FROM notes").await.unwrap();
 //! // Every copy starts from the template.
 //! let second = DATABASE.sqlite().await.unwrap();
 //! let rows = navree_orm::table("notes").count(second.db()).await.unwrap();
@@ -58,10 +58,7 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use navree_db::sea_orm::{
-    ConnectionTrait, DatabaseConnection, DbBackend, QueryResult, Statement, TransactionTrait,
-};
-use navree_db::{Db, DbOptions};
+use navree_db::{Backend, Db, DbOptions, Executor, ExecutorExt, Statement};
 use navree_kernel::{BoxError, BoxFuture};
 use navree_testing::TempDirGuard;
 use tokio::sync::OnceCell;
@@ -174,11 +171,11 @@ pub enum DatabaseKind {
 }
 
 impl DatabaseKind {
-    fn of(backend: DbBackend) -> Self {
+    fn of(backend: Backend) -> Self {
         match backend {
-            DbBackend::Postgres => DatabaseKind::Postgres,
-            DbBackend::MySql => DatabaseKind::MySql,
-            _ => DatabaseKind::Sqlite,
+            Backend::Postgres => DatabaseKind::Postgres,
+            Backend::MySql => DatabaseKind::MySql,
+            Backend::Sqlite => DatabaseKind::Sqlite,
         }
     }
 
@@ -560,7 +557,7 @@ impl LazyTestDb {
 
 /// Empties every table of `db` but `except` (see [`TestDb::truncate`]).
 pub async fn truncate_tables(db: &Db, except: &[&str]) -> Result<(), BoxError> {
-    let kind = DatabaseKind::of(db.backend());
+    let kind = DatabaseKind::of(Executor::backend(db));
     let list = match kind {
         DatabaseKind::Sqlite => {
             "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
@@ -572,7 +569,7 @@ pub async fn truncate_tables(db: &Db, except: &[&str]) -> Result<(), BoxError> {
             "SELECT TABLE_NAME AS name FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_TYPE = 'BASE TABLE' ORDER BY TABLE_NAME"
         }
     };
-    let tables: Vec<String> = strings(db.conn(), list, "name")
+    let tables: Vec<String> = strings(db, list)
         .await?
         .into_iter()
         .filter(|table| !except.contains(&table.as_str()))
@@ -581,19 +578,17 @@ pub async fn truncate_tables(db: &Db, except: &[&str]) -> Result<(), BoxError> {
         return Ok(());
     }
     // One connection throughout: the settings below are per session.
-    let tx = db.conn().begin().await?;
+    let tx = db.begin().await?;
     match kind {
         DatabaseKind::Sqlite => {
-            tx.execute_unprepared("PRAGMA defer_foreign_keys = ON")
-                .await?;
+            tx.execute_script("PRAGMA defer_foreign_keys = ON").await?;
             for table in &tables {
-                tx.execute_unprepared(&format!("DELETE FROM {}", kind.quote(table)))
+                tx.execute_script(&format!("DELETE FROM {}", kind.quote(table)))
                     .await?;
             }
             let sequences = strings(
                 &tx,
                 "SELECT name FROM sqlite_master WHERE name = 'sqlite_sequence'",
-                "name",
             )
             .await?;
             if !sequences.is_empty() {
@@ -601,7 +596,7 @@ pub async fn truncate_tables(db: &Db, except: &[&str]) -> Result<(), BoxError> {
                     .iter()
                     .map(|table| format!("'{}'", table.replace('\'', "''")))
                     .collect();
-                tx.execute_unprepared(&format!(
+                tx.execute_script(&format!(
                     "DELETE FROM sqlite_sequence WHERE name IN ({})",
                     names.join(", ")
                 ))
@@ -610,26 +605,26 @@ pub async fn truncate_tables(db: &Db, except: &[&str]) -> Result<(), BoxError> {
         }
         DatabaseKind::Postgres => {
             let names: Vec<String> = tables.iter().map(|table| kind.quote(table)).collect();
-            tx.execute_unprepared(&format!(
+            tx.execute_script(&format!(
                 "TRUNCATE TABLE {} RESTART IDENTITY CASCADE",
                 names.join(", ")
             ))
             .await?;
         }
         DatabaseKind::MySql => {
-            tx.execute_unprepared("SET FOREIGN_KEY_CHECKS = 0").await?;
+            tx.execute_script("SET FOREIGN_KEY_CHECKS = 0").await?;
             let mut outcome = Ok(());
             for table in &tables {
                 // TRUNCATE commits implicitly; the connection stays this one.
                 if let Err(error) = tx
-                    .execute_unprepared(&format!("TRUNCATE TABLE {}", kind.quote(table)))
+                    .execute_script(&format!("TRUNCATE TABLE {}", kind.quote(table)))
                     .await
                 {
                     outcome = Err(error);
                     break;
                 }
             }
-            tx.execute_unprepared("SET FOREIGN_KEY_CHECKS = 1").await?;
+            tx.execute_script("SET FOREIGN_KEY_CHECKS = 1").await?;
             outcome?;
         }
     }
@@ -660,24 +655,14 @@ async fn connect(url: &str) -> Result<Db, BoxError> {
     })
 }
 
-/// Closes `db`'s pool (every clone of it).
+/// Closes `db`'s pools (every clone of it).
 async fn close_pool(db: &Db) {
-    let conn: DatabaseConnection = db.conn().clone();
-    let _ = conn.close().await;
+    let _ = db.close().await;
 }
 
-/// The values of column `column` of `sql`'s rows.
-async fn strings<C: ConnectionTrait>(
-    conn: &C,
-    sql: &str,
-    column: &str,
-) -> Result<Vec<String>, BoxError> {
-    let rows: Vec<QueryResult> = conn
-        .query_all_raw(Statement::from_string(conn.get_database_backend(), sql))
-        .await?;
-    rows.iter()
-        .map(|row| row.try_get::<String>("", column).map_err(Into::into))
-        .collect()
+/// The first column of `sql`'s rows, as text.
+async fn strings(exec: &impl Executor, sql: &str) -> Result<Vec<String>, BoxError> {
+    Ok(exec.fetch_column::<String>(&Statement::text(sql)).await?)
 }
 
 /// Seconds since the Unix epoch.
@@ -780,8 +765,7 @@ async fn build_sqlite_template(template: &Template) -> Result<PathBuf, BoxError>
     // Every committed page into the main file, which the copies copy.
     built
         .db
-        .conn()
-        .execute_unprepared("PRAGMA wal_checkpoint(TRUNCATE)")
+        .execute_script("PRAGMA wal_checkpoint(TRUNCATE)")
         .await?;
     close_pool(&built.db).await;
     Ok(file)
@@ -822,9 +806,8 @@ async fn build_server_template(
         // A copy needs the template without connections (an app the build
         // booted may still be closing its pool).
         admin
-            .conn()
-            .execute_raw(Statement::from_sql_and_values(
-                DbBackend::Postgres,
+            .fetch_all(&Statement::new(
+                Backend::Postgres,
                 "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()",
                 [name.clone().into()],
             ))
@@ -944,7 +927,7 @@ async fn create_database(
     // A template another session still touches is retried briefly.
     let mut attempts = 0;
     loop {
-        match admin.conn().execute_unprepared(&sql).await {
+        match admin.execute_script(&sql).await {
             Ok(_) => return Ok(()),
             Err(error)
                 if attempts < 20 && error.to_string().contains("being accessed by other users") =>
@@ -966,7 +949,7 @@ async fn drop_database(server: &str, name: &str, kind: DatabaseKind) -> Result<(
         }
         _ => format!("DROP DATABASE IF EXISTS {}", kind.quote(name)),
     };
-    let outcome = admin.conn().execute_unprepared(&sql).await;
+    let outcome = admin.execute_script(&sql).await;
     close_pool(&admin).await;
     outcome?;
     Ok(())
@@ -979,7 +962,7 @@ async fn drop_stale(admin: &Db, kind: DatabaseKind, prefix: &str) {
         DatabaseKind::Postgres => "SELECT datname AS name FROM pg_database",
         _ => "SELECT SCHEMA_NAME AS name FROM information_schema.SCHEMATA",
     };
-    let Ok(names) = strings(admin.conn(), list, "name").await else {
+    let Ok(names) = strings(&admin, list).await else {
         return;
     };
     for name in names.iter().filter(|name| is_stale(name, prefix)) {
@@ -989,7 +972,7 @@ async fn drop_stale(admin: &Db, kind: DatabaseKind, prefix: &str) {
             }
             _ => format!("DROP DATABASE IF EXISTS {}", kind.quote(name)),
         };
-        let _ = admin.conn().execute_unprepared(&sql).await;
+        let _ = admin.execute_script(&sql).await;
     }
 }
 
@@ -997,44 +980,33 @@ async fn drop_stale(admin: &Db, kind: DatabaseKind, prefix: &str) {
 /// keys and rows) into `test`'s database.
 async fn copy_mysql_tables(test: &TestDb, template: &str) -> Result<(), BoxError> {
     let kind = DatabaseKind::MySql;
-    let tables = {
-        let rows = test
-            .db
-            .conn()
-            .query_all_raw(Statement::from_sql_and_values(
-                DbBackend::MySql,
-                "SELECT TABLE_NAME AS name FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_TYPE = 'BASE TABLE' ORDER BY TABLE_NAME",
-                [template.into()],
-            ))
-            .await?;
-        rows.iter()
-            .map(|row| row.try_get::<String>("", "name"))
-            .collect::<Result<Vec<_>, _>>()?
-    };
+    let tables: Vec<String> = test
+        .db
+        .fetch_column(&Statement::new(
+            Backend::MySql,
+            "SELECT TABLE_NAME AS name FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_TYPE = 'BASE TABLE' ORDER BY TABLE_NAME",
+            [template.into()],
+        ))
+        .await?;
     // One connection: foreign key checks are off for the session.
-    let tx = test.db.conn().begin().await?;
-    tx.execute_unprepared("SET FOREIGN_KEY_CHECKS = 0").await?;
+    let tx = test.db.begin().await?;
+    tx.execute_script("SET FOREIGN_KEY_CHECKS = 0").await?;
     for table in &tables {
         let source = format!("{}.{}", kind.quote(template), kind.quote(table));
-        let rows = tx
-            .query_all_raw(Statement::from_string(
-                DbBackend::MySql,
-                format!("SHOW CREATE TABLE {source}"),
-            ))
-            .await?;
-        let create = rows
-            .first()
-            .map(|row| row.try_get::<String>("", "Create Table"))
+        let create = tx
+            .fetch_optional(&Statement::text(format!("SHOW CREATE TABLE {source}")))
+            .await?
+            .map(|row| row.get::<String>("Create Table"))
             .transpose()?
             .ok_or_else(|| format!("SHOW CREATE TABLE {source} returned nothing"))?;
-        tx.execute_unprepared(&create).await?;
-        tx.execute_unprepared(&format!(
+        tx.execute_script(&create).await?;
+        tx.execute_script(&format!(
             "INSERT INTO {} SELECT * FROM {source}",
             kind.quote(table)
         ))
         .await?;
     }
-    tx.execute_unprepared("SET FOREIGN_KEY_CHECKS = 1").await?;
+    tx.execute_script("SET FOREIGN_KEY_CHECKS = 1").await?;
     tx.commit().await?;
     Ok(())
 }

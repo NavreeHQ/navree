@@ -5,9 +5,7 @@ use std::fmt;
 use std::str::FromStr;
 
 use chrono::{DateTime, Utc};
-use navree_db::sea_orm::QueryResult;
-use navree_db::sea_orm::sea_query::{Enum, OptionEnum};
-use navree_orm::{Field, FieldError, KeyKind, PrimaryKey, Value, ValueFor};
+use navree_orm::{Field, FieldError, KeyKind, Kind, PrimaryKey, Value, ValueFor};
 use serde::de::{self, MapAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -88,10 +86,7 @@ impl ObjectId {
     /// The id as a [`Value`]: an enum value of type
     /// [`OBJECT_ID_TYPE`] holding the hexadecimal digits.
     pub fn to_value(&self) -> Value {
-        Value::Enum(OptionEnum::Some(Box::new(Enum {
-            type_name: OBJECT_ID_TYPE.into(),
-            value: Cow::Owned(self.to_hex()),
-        })))
+        Value::enumeration(OBJECT_ID_TYPE, self.to_hex())
     }
 }
 
@@ -213,18 +208,18 @@ fn object_id(value: Value) -> Result<ObjectId, FieldError> {
         return Err(FieldError::Null);
     }
     match value {
-        Value::Enum(OptionEnum::Some(id)) => {
-            ObjectId::parse(&id.value).map_err(|error| FieldError::Invalid(error.to_string()))
+        Value::Enum { value, .. } => {
+            ObjectId::parse(&value).map_err(|error| FieldError::Invalid(error.to_string()))
         }
-        Value::String(Some(text)) => {
+        Value::String(text) => {
             ObjectId::parse(&text).map_err(|error| FieldError::Invalid(error.to_string()))
         }
-        Value::Bytes(Some(bytes)) => <[u8; 12]>::try_from(bytes.as_slice())
+        Value::Bytes(bytes) => <[u8; 12]>::try_from(bytes.as_slice())
             .map(ObjectId)
             .map_err(|_| {
                 FieldError::Invalid(format!("{} bytes are not an ObjectId (12)", bytes.len()))
             }),
-        Value::Json(Some(json)) => serde_json::from_value::<ObjectId>(*json)
+        Value::Json(json) => serde_json::from_value::<ObjectId>(json)
             .map_err(|error| FieldError::Invalid(error.to_string())),
         _ => Err(FieldError::Invalid(
             "expected an ObjectId, found a value of another type".to_owned(),
@@ -232,27 +227,18 @@ fn object_id(value: Value) -> Result<ObjectId, FieldError> {
     }
 }
 
-/// An ObjectId column: an ObjectId value in documents; hexadecimal text
-/// (`CHAR(24)`) or 12 bytes (`BINARY(12)`) in SQL databases.
+/// An ObjectId column: an ObjectId value in documents; in SQL databases it
+/// reads hexadecimal text (`CHAR(24)`) or 12 bytes (`BINARY(12)`), and is
+/// written as its text, which navree-orm casts to the type `"ObjectId"` on
+/// PostgreSQL (an enum value of that type): give such a column that type,
+/// e.g. `CREATE DOMAIN "ObjectId" AS CHAR(24)`.
 impl Field for ObjectId {
     fn to_value(&self) -> Value {
         ObjectId::to_value(self)
     }
 
     fn null() -> Value {
-        Value::Enum(OptionEnum::None(OBJECT_ID_TYPE.into()))
-    }
-
-    fn from_sql(row: &QueryResult, column: &str) -> Result<Self, FieldError> {
-        match <Option<String> as Field>::from_sql(row, column) {
-            Ok(Some(text)) => object_id(Value::String(Some(text))),
-            Ok(None) => Err(FieldError::Null),
-            Err(FieldError::Invalid(first)) => match <Vec<u8> as Field>::from_sql(row, column) {
-                Ok(bytes) => object_id(Value::Bytes(Some(bytes))),
-                Err(_) => Err(FieldError::Invalid(first)),
-            },
-            Err(other) => Err(other),
-        }
+        Value::Null(Kind::Enum)
     }
 
     fn from_value(value: Value) -> Result<Self, FieldError> {
@@ -308,10 +294,10 @@ mod tests {
     fn values_read_leniently() {
         let id = ObjectId::new();
         for value in [
-            Value::String(Some(id.to_hex())),
-            Value::Bytes(Some(id.bytes().to_vec())),
-            Value::Json(Some(Box::new(serde_json::json!({ "$oid": id.to_hex() })))),
-            Value::Json(Some(Box::new(serde_json::json!(id.to_hex())))),
+            Value::String(id.to_hex()),
+            Value::Bytes(id.bytes().to_vec()),
+            Value::Json(serde_json::json!({ "$oid": id.to_hex() })),
+            Value::Json(serde_json::json!(id.to_hex())),
         ] {
             assert_eq!(<ObjectId as Field>::from_value(value).unwrap(), id);
         }

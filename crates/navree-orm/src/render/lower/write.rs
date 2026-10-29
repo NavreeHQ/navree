@@ -308,9 +308,7 @@ impl Lowerer {
                 );
                 for (path, value) in paths {
                     let value = match value {
-                        Expr::Value(value) => {
-                            ast::Expr::Value(Value::Json(Some(Box::new(to_json(value)))))
-                        }
+                        Expr::Value(value) => ast::Expr::Value(Value::Json(to_json(value))),
                         other => ast::Expr::func("to_jsonb", vec![self.expr(other)?]),
                     };
                     target = ast::Expr::func(

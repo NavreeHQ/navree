@@ -181,7 +181,11 @@ impl DealService {
 ```
 
 `OrmError` converts into `AppError` with `?`: `ModelNotFound` is a 404, a
-unique or foreign-key violation a 409, the rest a 500.
+unique or foreign-key violation a 409, the rest a 500. A database's own
+error is navree-db's `DbError` (`OrmError::Db(DbError)`, `error.db_error()`;
+`kind()` is an `ErrorKind`, the same on every database). Values are
+navree-db's `Value` (`navree::orm::Value`): `Value::I64(7)`,
+`Value::from("text")`, a typed NULL `Value::Null(Kind::I64)`.
 
 ## Controller
 

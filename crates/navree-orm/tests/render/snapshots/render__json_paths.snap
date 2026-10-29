@@ -3,8 +3,8 @@ source: crates/navree-orm/tests/render/main.rs
 expression: "expr(Expr::Tuple(vec![col(\"meta\").json_text(path.clone()),\ncol(\"meta\").json(path),\ncol(\"meta\").json_text(vec![JsonSegment::Key(\"a\\\\b\".into())]),\ncol(\"meta\").json(vec![JsonSegment::Key(\"tags\".into())]).eq(val(\"[]\")),\ncol(\"meta\").json_text(Vec::new()),]))"
 ---
 PostgreSQL: (("meta"->'owner'->'it''s "odd"'->0->>(-2)), "meta"->'owner'->'it''s "odd"'->0->(-2), ("meta"->>E'a\\b'), "meta"->'tags' = $1, ("meta" #>> '{}'))
-  values: [String(Some("[]"))]
+  values: [String("[]")]
 MySQL: (json_unquote(json_extract(`meta`, '$."owner"."it''s \\"odd\\""[0][last-1]')), json_extract(`meta`, '$."owner"."it''s \\"odd\\""[0][last-1]'), json_unquote(json_extract(`meta`, '$."a\\\\b"')), json_extract(`meta`, '$."tags"') = ?, json_unquote(json_extract(`meta`, '$')))
-  values: [String(Some("[]"))]
+  values: [String("[]")]
 SQLite: (json_extract("meta", '$."owner"."it''s \"odd\""[0][#-2]'), "meta" -> '$."owner"."it''s \"odd\""[0][#-2]', json_extract("meta", '$."a\\b"'), "meta" -> '$."tags"' = ?, json_extract("meta", '$'))
-  values: [String(Some("[]"))]
+  values: [String("[]")]

@@ -3,8 +3,8 @@ source: crates/navree-orm/tests/sql/main.rs
 expression: "locked(Company::query().shared_lock().no_wait())"
 ---
 PostgreSQL: SELECT "companies"."id", "companies"."name", "companies"."country" FROM "companies" WHERE "companies"."id" = $1 FOR SHARE NOWAIT
-  values: [BigInt(Some(1))]
+  values: [I64(1)]
 MySQL: SELECT `companies`.`id`, `companies`.`name`, `companies`.`country` FROM `companies` WHERE `companies`.`id` = ? FOR SHARE NOWAIT
-  values: [BigInt(Some(1))]
+  values: [I64(1)]
 SQLite: SELECT "companies"."id", "companies"."name", "companies"."country" FROM "companies" WHERE "companies"."id" = ?
-  values: [BigInt(Some(1))]
+  values: [I64(1)]

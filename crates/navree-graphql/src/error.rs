@@ -127,6 +127,13 @@ fn classify(error: &ServerError, mappers: &[ErrorMapper]) -> Classified {
             None => internal(db.to_string()),
         };
     }
+    if let Some(db) = source.downcast_ref::<navree_db::DbError>() {
+        return match navree_db::map_db_error(db).or_else(|| ErrorMapper::apply_any(mappers, source))
+        {
+            Some(mapped) => from_app_error(&mapped, mappers),
+            None => internal(db.to_string()),
+        };
+    }
     if let Some(boxed) = source.downcast_ref::<BoxError>() {
         let error: &(dyn StdError + 'static) = &**boxed;
         return match ErrorMapper::apply_to(mappers, error) {

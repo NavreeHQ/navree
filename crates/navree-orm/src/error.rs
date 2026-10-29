@@ -1,11 +1,9 @@
 //! [`OrmError`]: what can go wrong in the ORM, and [`Result`].
 
 use std::borrow::Cow;
-use std::fmt;
-use std::sync::Arc;
 
-use sea_orm::sqlx::error::{DatabaseError, ErrorKind};
-use sea_orm::{DbErr, RuntimeErr, SqlErr};
+use navree_db::{DbError, ErrorKind};
+use sea_orm::DbErr;
 
 /// The result type of ORM operations.
 pub type Result<T, E = OrmError> = std::result::Result<T, E>;
@@ -18,7 +16,7 @@ pub type Result<T, E = OrmError> = std::result::Result<T, E>;
 /// Returned from an HTTP handler with `?`, an `OrmError` keeps its meaning:
 /// a missing record ([`ModelNotFound`](OrmError::ModelNotFound)) answers 404
 /// and a unique or foreign-key violation ([`Db`](OrmError::Db)) answers 409,
-/// because both carry a [`DbErr`] in their source chain, which navree-db's
+/// because both carry a [`DbError`] in their source chain, which navree-db's
 /// `DatabaseModule` maps. Anything else is a 500 whose details are logged
 /// and never sent to the client.
 ///
@@ -40,9 +38,10 @@ pub enum OrmError {
         model: Cow<'static, str>,
         /// The keys looked for; empty when the query was not by key.
         keys: Vec<String>,
-        /// `DbErr::RecordNotFound`, which navree-db maps to a 404.
+        /// A [`DbError`] of kind [`ErrorKind::NotFound`], which navree-db
+        /// maps to a 404.
         #[source]
-        source: DbErr,
+        source: DbError,
     },
     /// `sole` found more than one record.
     #[error("expected exactly one {model}, found more than one")]
@@ -52,7 +51,7 @@ pub enum OrmError {
     },
     /// The database refused a statement (or the connection failed).
     #[error("database error: {0}")]
-    Db(#[from] DbErr),
+    Db(#[from] DbError),
     /// A column could not be read as the type of its field.
     #[error("cannot read column `{column}` of {model} as {expected}: {message}")]
     Decode {
@@ -141,7 +140,7 @@ pub enum OrmError {
         timeout: std::time::Duration,
         /// The database's error.
         #[source]
-        source: DbErr,
+        source: DbError,
     },
     /// A row lacks a model column (a partial select left it out) and the
     /// strict mode `prevent_missing_attributes` is on, or the field has no
@@ -301,7 +300,7 @@ impl OrmError {
         OrmError::ModelNotFound {
             model,
             keys,
-            source: DbErr::RecordNotFound(message),
+            source: DbError::not_found(message),
         }
     }
 
@@ -314,7 +313,7 @@ impl OrmError {
     /// duplicate key error). [`is_unique_violation`](Self::is_unique_violation)
     /// is true for it, so `create_or_first` and friends recover from it,
     /// and returned from a handler it answers 409 like an SQL database's
-    /// violation: its source is a [`DbErr`] that navree-db maps. `message`
+    /// violation: its source is a [`DbError`] that navree-db maps. `message`
     /// is the store's own, for the logs; it never reaches a client.
     ///
     /// ```
@@ -325,33 +324,35 @@ impl OrmError {
     /// assert!(error.to_string().ends_with("mongodb: E11000 duplicate key error collection: app.users"));
     /// ```
     pub fn unique_violation(driver: &'static str, message: impl Into<String>) -> Self {
-        let violation = StoreViolation {
-            driver,
-            message: message.into(),
-        };
-        OrmError::Db(DbErr::Exec(RuntimeErr::SqlxError(Arc::new(
-            sea_orm::sqlx::Error::Database(Box::new(violation)),
-        ))))
+        OrmError::Db(DbError::new(
+            ErrorKind::UniqueViolation,
+            format!("{driver}: {}", message.into()),
+        ))
     }
 
     /// Whether the database refused a statement because it violates a
-    /// unique constraint: on every SQL database, and for a document store's
+    /// unique constraint: on every SQL database (navree-db classifies the
+    /// error by its code), and for a document store's
     /// [`unique_violation`](Self::unique_violation).
     pub fn is_unique_violation(&self) -> bool {
-        let OrmError::Db(error) = self else {
-            return false;
-        };
-        if matches!(error.sql_err(), Some(SqlErr::UniqueConstraintViolation(_))) {
-            return true;
-        }
-        // Violations SeaORM does not read by code, classified by the driver
-        // that raised them: a document store's, MySQL's 1859.
-        match error {
-            DbErr::Exec(RuntimeErr::SqlxError(error))
-            | DbErr::Query(RuntimeErr::SqlxError(error)) => error
-                .as_database_error()
-                .is_some_and(|error| matches!(error.kind(), ErrorKind::UniqueViolation)),
-            _ => false,
+        matches!(self, OrmError::Db(error) if error.is_unique_violation())
+    }
+
+    /// Whether the database refused a statement because it violates a
+    /// foreign-key constraint.
+    pub fn is_foreign_key_violation(&self) -> bool {
+        matches!(self, OrmError::Db(error) if error.is_foreign_key_violation())
+    }
+
+    /// The database's error, when the database refused the statement (or
+    /// the connection failed, or it ran out of time), or the record was not
+    /// found.
+    pub fn db_error(&self) -> Option<&DbError> {
+        match self {
+            OrmError::Db(source)
+            | OrmError::ModelNotFound { source, .. }
+            | OrmError::Timeout { source, .. } => Some(source),
+            _ => None,
         }
     }
 
@@ -370,12 +371,12 @@ impl OrmError {
     /// (the write may have run before the connection dropped).
     ///
     /// ```
+    /// use navree_db::{DbError, ErrorKind};
     /// use navree_orm::OrmError;
-    /// use sea_orm::DbErr;
     ///
-    /// let gone = OrmError::from(DbErr::Custom("2006 (HY000): MySQL server has gone away".into()));
+    /// let gone = OrmError::from(DbError::new(ErrorKind::ConnectionLost, "2006 (HY000): MySQL server has gone away"));
     /// assert!(gone.is_lost_connection());
-    /// assert!(!OrmError::from(DbErr::Custom("syntax error".into())).is_lost_connection());
+    /// assert!(!OrmError::from(DbError::new(ErrorKind::Database, "syntax error")).is_lost_connection());
     /// ```
     pub fn is_lost_connection(&self) -> bool {
         match self {
@@ -390,7 +391,9 @@ impl OrmError {
     /// (3024), MariaDB's `max_statement_time` (1969).
     pub(crate) fn timed_out(self, timeout: std::time::Duration) -> Self {
         match self {
-            OrmError::Db(source) if is_timeout_message(&source.to_string()) => {
+            OrmError::Db(source)
+                if source.kind() == ErrorKind::Timeout || is_timeout_message(source.message()) =>
+            {
                 OrmError::Timeout { timeout, source }
             }
             other => other,
@@ -446,45 +449,59 @@ impl OrmError {
     }
 }
 
+/// A SeaORM error as the ORM's: [`OrmError::Db`] with the [`DbError`] it
+/// converts to (a driver error keeps its classification), for code that
+/// still runs SeaORM statements inside ORM operations while crates move off
+/// SeaORM.
+impl From<DbErr> for OrmError {
+    fn from(error: DbErr) -> Self {
+        OrmError::Db(DbError::from(error))
+    }
+}
+
 /// An ORM error as a SeaORM [`DbErr`], for code whose API speaks `DbErr`
 /// (navree-db's repositories, the framework crates' services) and runs ORM
 /// operations inside: `?` converts.
 ///
-/// The database's own error comes back as it was, so a unique or
-/// foreign-key violation still answers 409 over HTTP; a missing record is
-/// `DbErr::RecordNotFound` (a 404); a timeout is the database's error;
-/// anything else (a column that does not decode, a cast that fails, an
-/// invalid query) is `DbErr::Custom` with the ORM's message.
+/// The database's own error comes back as SeaORM would have returned it, so
+/// a unique or foreign-key violation still answers 409 over HTTP; a missing
+/// record is `DbErr::RecordNotFound` (a 404); anything else (a column that
+/// does not decode, a cast that fails, an invalid query) is `DbErr::Custom`
+/// with the ORM's message.
 ///
 /// ```
+/// use navree_db::{DbError, ErrorKind};
 /// use navree_orm::OrmError;
 /// use sea_orm::DbErr;
 ///
 /// let missing = DbErr::from(OrmError::not_found("Deal", vec!["42".to_owned()]));
 /// assert!(matches!(missing, DbErr::RecordNotFound(message) if message == "no Deal found for key 42"));
-/// let refused = DbErr::from(OrmError::from(DbErr::Custom("UNIQUE constraint failed".into())));
+/// let refused = DbErr::from(OrmError::from(DbError::new(ErrorKind::Database, "UNIQUE constraint failed")));
 /// assert!(matches!(refused, DbErr::Custom(message) if message == "UNIQUE constraint failed"));
 /// ```
 impl From<OrmError> for DbErr {
     fn from(error: OrmError) -> Self {
         match error {
-            OrmError::Db(source)
-            | OrmError::ModelNotFound { source, .. }
-            | OrmError::Timeout { source, .. } => source,
+            OrmError::ModelNotFound { source, .. } => {
+                DbErr::RecordNotFound(source.message().to_owned())
+            }
+            OrmError::Db(source) | OrmError::Timeout { source, .. } => DbErr::from(source),
             other => DbErr::Custom(other.to_string()),
         }
     }
 }
 
-/// Whether `error` says the connection under a statement was lost.
-pub(crate) fn lost_connection(error: &DbErr) -> bool {
+/// Whether `error` says the connection under a statement was lost:
+/// navree-db classified it so, or its message says so (a driver error
+/// navree-db could not classify).
+pub(crate) fn lost_connection(error: &DbError) -> bool {
     if matches!(
-        error,
-        DbErr::ConnectionAcquire(sea_orm::ConnAcquireErr::ConnectionClosed)
+        error.kind(),
+        ErrorKind::ConnectionLost | ErrorKind::PoolClosed
     ) {
         return true;
     }
-    let message = error.to_string().to_ascii_lowercase();
+    let message = error.message().to_ascii_lowercase();
     [
         // MySQL 2006 and 2013.
         "server has gone away",
@@ -526,45 +543,6 @@ fn is_timeout_message(message: &str) -> bool {
     .any(|needle| message.contains(needle))
 }
 
-/// A document store's unique-constraint violation, in the shape SQLx gives
-/// database errors, so navree-db's error mapping and
-/// [`OrmError::is_unique_violation`] read it like an SQL database's.
-#[derive(Debug)]
-struct StoreViolation {
-    driver: &'static str,
-    message: String,
-}
-
-impl fmt::Display for StoreViolation {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}: {}", self.driver, self.message)
-    }
-}
-
-impl std::error::Error for StoreViolation {}
-
-impl DatabaseError for StoreViolation {
-    fn message(&self) -> &str {
-        &self.message
-    }
-
-    fn as_error(&self) -> &(dyn std::error::Error + Send + Sync + 'static) {
-        self
-    }
-
-    fn as_error_mut(&mut self) -> &mut (dyn std::error::Error + Send + Sync + 'static) {
-        self
-    }
-
-    fn into_error(self: Box<Self>) -> Box<dyn std::error::Error + Send + Sync + 'static> {
-        self
-    }
-
-    fn kind(&self) -> ErrorKind {
-        ErrorKind::UniqueViolation
-    }
-}
-
 fn not_found_message(model: &str, keys: &[String]) -> String {
     match keys {
         [] => format!("no {model} found"),
@@ -579,15 +557,23 @@ mod tests {
 
     use super::*;
 
+    /// A database error of `kind` with `message`.
+    fn db(kind: ErrorKind, message: &str) -> OrmError {
+        OrmError::from(DbError::new(kind, message))
+    }
+
     #[test]
-    fn not_found_carries_a_record_not_found_source() {
+    fn not_found_carries_a_not_found_source() {
         let error = OrmError::not_found("Deal", vec!["1".into(), "2".into()]);
         assert_eq!(error.to_string(), "no Deal found for keys 1, 2");
         let source = error.source().expect("a source");
-        assert!(matches!(
-            source.downcast_ref::<DbErr>(),
-            Some(DbErr::RecordNotFound(message)) if message == "no Deal found for keys 1, 2"
-        ));
+        let source = source.downcast_ref::<DbError>().expect("a DbError");
+        assert!(source.is_not_found());
+        assert_eq!(source.message(), "no Deal found for keys 1, 2");
+        assert_eq!(
+            navree_db::map_db_error(source).unwrap().status.as_u16(),
+            404
+        );
         assert_eq!(
             OrmError::not_found("Deal", Vec::new()).to_string(),
             "no Deal found"
@@ -672,27 +658,39 @@ mod tests {
     #[test]
     fn timeouts_are_recognised_by_the_database_message() {
         let timeout = std::time::Duration::from_millis(100);
-        let postgres = OrmError::from(DbErr::Custom(
-            "error returned from database: canceling statement due to statement timeout".into(),
-        ))
+        let postgres = db(
+            ErrorKind::Database,
+            "error returned from database: canceling statement due to statement timeout",
+        )
         .timed_out(timeout);
         assert!(postgres.is_timeout());
         assert_eq!(
             postgres.to_string(),
             "the statement ran longer than its timeout of 100ms and was stopped"
         );
-        assert!(postgres.source().unwrap().downcast_ref::<DbErr>().is_some());
-        let mysql = OrmError::from(DbErr::Custom(
-            "3024 (HY000): Query execution was interrupted, maximum statement execution time exceeded".into(),
-        ))
+        assert!(
+            postgres
+                .source()
+                .unwrap()
+                .downcast_ref::<DbError>()
+                .is_some()
+        );
+        assert!(postgres.db_error().is_some());
+        let mysql = db(
+            ErrorKind::Database,
+            "3024 (HY000): Query execution was interrupted, maximum statement execution time exceeded",
+        )
         .timed_out(timeout);
         assert!(mysql.is_timeout());
-        let mariadb = OrmError::from(DbErr::Custom(
-            "1969 (70100): Query execution was interrupted (max_statement_time exceeded)".into(),
-        ))
+        let mariadb = db(
+            ErrorKind::Database,
+            "1969 (70100): Query execution was interrupted (max_statement_time exceeded)",
+        )
         .timed_out(timeout);
         assert!(mariadb.is_timeout());
-        let other = OrmError::from(DbErr::Custom("syntax error".into())).timed_out(timeout);
+        let classified = db(ErrorKind::Timeout, "stopped").timed_out(timeout);
+        assert!(classified.is_timeout());
+        let other = db(ErrorKind::Database, "syntax error").timed_out(timeout);
         assert!(!other.is_timeout());
     }
 
@@ -707,53 +705,52 @@ mod tests {
             "server closed the connection unexpectedly",
             "Broken pipe (os error 32)",
         ] {
-            let error = OrmError::from(DbErr::Custom(message.into()));
+            let error = db(ErrorKind::Database, message);
             assert!(error.is_lost_connection(), "{message}");
         }
-        assert!(
-            OrmError::from(DbErr::ConnectionAcquire(
-                sea_orm::ConnAcquireErr::ConnectionClosed
-            ))
-            .is_lost_connection()
-        );
+        assert!(db(ErrorKind::ConnectionLost, "gone").is_lost_connection());
+        assert!(db(ErrorKind::PoolClosed, "closed").is_lost_connection());
         for message in [
             "UNIQUE constraint failed: tags.name",
             "Connection pool timed out",
         ] {
             assert!(
-                !OrmError::from(DbErr::Custom(message.into())).is_lost_connection(),
+                !db(ErrorKind::Database, message).is_lost_connection(),
                 "{message}"
             );
         }
         assert!(
-            !OrmError::from(DbErr::ConnectionAcquire(sea_orm::ConnAcquireErr::Timeout))
-                .is_lost_connection(),
+            !db(ErrorKind::PoolTimeout, "pool timed out").is_lost_connection(),
             "an exhausted pool is not a lost connection"
         );
         assert!(!OrmError::invalid("x").is_lost_connection());
     }
 
     #[test]
-    fn database_errors_expose_the_db_err_as_their_source() {
-        let error = OrmError::from(DbErr::Custom("boom".into()));
-        assert!(error.source().unwrap().downcast_ref::<DbErr>().is_some());
+    fn database_errors_expose_the_db_error_as_their_source() {
+        let error = db(ErrorKind::Database, "boom");
+        assert!(error.source().unwrap().downcast_ref::<DbError>().is_some());
         assert!(!error.is_unique_violation());
+        assert!(!error.is_foreign_key_violation());
         assert!(!error.is_not_found());
+        assert!(db(ErrorKind::ForeignKeyViolation, "fk").is_foreign_key_violation());
+        assert!(OrmError::invalid("x").db_error().is_none());
     }
 
     #[test]
     fn orm_errors_become_db_errors_keeping_the_database_s_own() {
         assert!(matches!(
-            DbErr::from(OrmError::from(DbErr::RecordNotUpdated)),
-            DbErr::RecordNotUpdated
+            DbErr::from(OrmError::from(DbErr::RecordNotFound("gone".into()))),
+            DbErr::RecordNotFound(message) if message == "gone"
         ));
         assert!(matches!(
             DbErr::from(OrmError::not_found("Deal", Vec::new())),
             DbErr::RecordNotFound(message) if message == "no Deal found"
         ));
-        let timeout = OrmError::from(DbErr::Custom(
-            "canceling statement due to statement timeout".into(),
-        ))
+        let timeout = db(
+            ErrorKind::Database,
+            "canceling statement due to statement timeout",
+        )
         .timed_out(std::time::Duration::from_secs(1));
         assert!(matches!(
             DbErr::from(timeout),
@@ -794,7 +791,7 @@ mod tests {
     }
 
     /// A document store's duplicate key is a unique violation, and its
-    /// `DbErr` answers 409 over HTTP like the SQL databases' violations.
+    /// `DbError` answers 409 over HTTP like the SQL databases' violations.
     #[test]
     fn document_store_duplicates_are_unique_violations() {
         let error = OrmError::unique_violation(
@@ -809,7 +806,7 @@ mod tests {
             ),
             "{error}"
         );
-        let source = error.source().unwrap().downcast_ref::<DbErr>().unwrap();
+        let source = error.source().unwrap().downcast_ref::<DbError>().unwrap();
         let response = navree_db::map_db_error(source).expect("a violation");
         assert_eq!(response.status.as_u16(), 409);
         assert_eq!(

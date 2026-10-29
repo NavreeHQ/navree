@@ -77,7 +77,6 @@ use std::str::FromStr;
 use navree_db::Uow;
 use navree_kernel::BoxFuture;
 use navree_orm::{Field, FieldError, FieldKind, Model, OrmError, Record, Value};
-use sea_orm::QueryResult;
 use sea_orm::sea_query::StringLen;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -172,17 +171,11 @@ impl Field for LibraryScope {
     const KIND: FieldKind = FieldKind::Text;
 
     fn to_value(&self) -> Value {
-        Value::String(Some(self.as_str().to_owned()))
+        Value::String(self.as_str().to_owned())
     }
 
     fn null() -> Value {
         <String as Field>::null()
-    }
-
-    fn from_sql(row: &QueryResult, column: &str) -> Result<Self, FieldError> {
-        String::from_sql(row, column)?
-            .parse()
-            .map_err(FieldError::Invalid)
     }
 
     fn from_value(value: Value) -> Result<Self, FieldError> {
@@ -565,11 +558,11 @@ mod tests {
                 .contains("expected `global`, `organization` or `workspace`")
         );
         assert!(matches!(
-            LibraryScope::from_value(Value::String(Some("shared".into()))),
+            LibraryScope::from_value(Value::String("shared".into())),
             Err(FieldError::Invalid(_))
         ));
         assert_eq!(
-            LibraryScope::from_value(Value::String(None)),
+            LibraryScope::from_value(Value::Null(navree_orm::Kind::String)),
             Err(FieldError::Null)
         );
         // A SeaORM column too, stored under the same names.

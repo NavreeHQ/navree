@@ -106,6 +106,13 @@ pub struct Executed {
     pub last_insert_id: Option<u64>,
 }
 
+/// A vector as little-endian `f32` bytes: MySQL 9's and MariaDB's binary
+/// `VECTOR` form, and the blobs SQLite extensions such as sqlite-vec read.
+#[cfg_attr(not(any(feature = "mysql", feature = "sqlite")), allow(dead_code))]
+pub(crate) fn vector_bytes(items: &[f32]) -> Vec<u8> {
+    items.iter().flat_map(|item| item.to_le_bytes()).collect()
+}
+
 /// Rows read one by one as the database sends them.
 pub type RowStream = BoxStream<'static, Result<crate::engine::Row, DbError>>;
 

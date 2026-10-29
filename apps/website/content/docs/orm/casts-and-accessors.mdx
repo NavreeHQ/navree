@@ -158,7 +158,7 @@ pub struct Invoice {
 }
 ```
 
-A cast with const generic parameters takes them in the attribute: `#[model(cast(Scaled, 100))]` is `Scaled<100>`. A type can also implement `Field` itself, which makes it usable in rows, plucks and untyped conditions too.
+A cast with const generic parameters takes them in the attribute: `#[model(cast(Scaled, 100))]` is `Scaled<100>`. A type can also implement `Field` itself, which makes it usable in rows, plucks and untyped conditions too: `to_value` and `null` give the column's `Value` (navree-db's, re-exported as `navree::orm::Value`), and `from_value` reads one back, as the database returned it for the column (`from_sql`, which reads it from the row, defaults to that).
 
 ### Transforming values on the way in
 

@@ -3,8 +3,8 @@ source: crates/navree-orm/tests/render/main.rs
 expression: "query(part(\"DE\").union(part(\"US\").order_by(col(\"name\").asc()).limit(5),\nfalse).order_by(col(\"name\").desc()))"
 ---
 PostgreSQL: SELECT "name" FROM "companies" WHERE "country" = $1 UNION (SELECT "name" FROM "companies" WHERE "country" = $2 ORDER BY "name" ASC LIMIT $3) ORDER BY "name" DESC
-  values: [String(Some("DE")), String(Some("US")), BigUnsigned(Some(5))]
+  values: [String("DE"), String("US"), U64(5)]
 MySQL: SELECT `name` FROM `companies` WHERE `country` = ? UNION (SELECT `name` FROM `companies` WHERE `country` = ? ORDER BY `name` ASC LIMIT ?) ORDER BY `name` DESC
-  values: [String(Some("DE")), String(Some("US")), BigUnsigned(Some(5))]
+  values: [String("DE"), String("US"), U64(5)]
 SQLite: SELECT "name" FROM "companies" WHERE "country" = ? UNION SELECT * FROM (SELECT "name" FROM "companies" WHERE "country" = ? ORDER BY "name" ASC LIMIT ?) AS "navree_union_1" ORDER BY "name" DESC
-  values: [String(Some("DE")), String(Some("US")), BigUnsigned(Some(5))]
+  values: [String("DE"), String("US"), U64(5)]

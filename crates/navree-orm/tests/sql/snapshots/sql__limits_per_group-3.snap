@@ -1,11 +1,10 @@
 ---
 source: crates/navree-orm/tests/sql/main.rs
-assertion_line: 706
 expression: "per_dialect(|d| render_aggregate(&limited.clone().into_ir(), &count, d))"
 ---
 PostgreSQL: SELECT COUNT(*) AS "aggregate" FROM (SELECT "navree_table"."id", "navree_table"."company_id", "navree_table"."title", "navree_table"."amount_cents", "navree_table"."stage", "navree_table"."tags", "navree_table"."closed_at", "navree_table"."created_at", "navree_table"."updated_at", "navree_table"."deleted_at" FROM (SELECT "deals"."id", "deals"."company_id", "deals"."title", "deals"."amount_cents", "deals"."stage", "deals"."tags", "deals"."closed_at", "deals"."created_at", "deals"."updated_at", "deals"."deleted_at", ROW_NUMBER() OVER (PARTITION BY "deals"."company_id" ORDER BY "deals"."created_at" DESC) AS "navree_row" FROM "deals" WHERE "deals"."deleted_at" IS NULL) AS "navree_table" WHERE "navree_table"."navree_row" <= $1 ORDER BY "navree_table"."navree_row" ASC) AS "aggregate_table"
-  values: [BigInt(Some(2))]
+  values: [I64(2)]
 MySQL: SELECT COUNT(*) AS `aggregate` FROM (SELECT `navree_table`.`id`, `navree_table`.`company_id`, `navree_table`.`title`, `navree_table`.`amount_cents`, `navree_table`.`stage`, `navree_table`.`tags`, `navree_table`.`closed_at`, `navree_table`.`created_at`, `navree_table`.`updated_at`, `navree_table`.`deleted_at` FROM (SELECT `deals`.`id`, `deals`.`company_id`, `deals`.`title`, `deals`.`amount_cents`, `deals`.`stage`, `deals`.`tags`, `deals`.`closed_at`, `deals`.`created_at`, `deals`.`updated_at`, `deals`.`deleted_at`, ROW_NUMBER() OVER (PARTITION BY `deals`.`company_id` ORDER BY `deals`.`created_at` DESC) AS `navree_row` FROM `deals` WHERE `deals`.`deleted_at` IS NULL) AS `navree_table` WHERE `navree_table`.`navree_row` <= ? ORDER BY `navree_table`.`navree_row` ASC) AS `aggregate_table`
-  values: [BigInt(Some(2))]
+  values: [I64(2)]
 SQLite: SELECT COUNT(*) AS "aggregate" FROM (SELECT "navree_table"."id", "navree_table"."company_id", "navree_table"."title", "navree_table"."amount_cents", "navree_table"."stage", "navree_table"."tags", "navree_table"."closed_at", "navree_table"."created_at", "navree_table"."updated_at", "navree_table"."deleted_at" FROM (SELECT "deals"."id", "deals"."company_id", "deals"."title", "deals"."amount_cents", "deals"."stage", "deals"."tags", "deals"."closed_at", "deals"."created_at", "deals"."updated_at", "deals"."deleted_at", ROW_NUMBER() OVER (PARTITION BY "deals"."company_id" ORDER BY "deals"."created_at" DESC) AS "navree_row" FROM "deals" WHERE "deals"."deleted_at" IS NULL) AS "navree_table" WHERE "navree_table"."navree_row" <= ? ORDER BY "navree_table"."navree_row" ASC) AS "aggregate_table"
-  values: [BigInt(Some(2))]
+  values: [I64(2)]

@@ -765,7 +765,7 @@ impl<P: Model> MorphTo<P> {
             None => crate::Field::to_value(&record.key()),
         };
         let type_matches = match &stored_type {
-            Value::String(Some(stored)) => *stored == M::morph_name(),
+            Value::String(stored) => *stored == M::morph_name(),
             _ => false,
         };
         type_matches
@@ -825,7 +825,7 @@ impl<P: Model> MorphTo<P> {
             let stored_type = column_value(&parent.model, &relation.type_column, &relation.name)?;
             let id = column_value(&parent.model, &relation.id_column, &relation.name)?;
             let name = match stored_type {
-                Value::String(Some(name)) if !name.is_empty() => name,
+                Value::String(name) if !name.is_empty() => name,
                 _ => continue,
             };
             if is_null(&id) {
@@ -900,9 +900,9 @@ impl<P: Model> MorphTo<P> {
         if targets.is_empty() {
             // No model to check: compare a constant, as a count of zero.
             return Ok(Where::Compare {
-                left: Expr::Value(Value::BigInt(Some(0))),
+                left: Expr::Value(Value::I64(0)),
                 op,
-                right: Expr::Value(Value::BigInt(Some(count_i))),
+                right: Expr::Value(Value::I64(count_i)),
             });
         }
         let exists = count == 1 && matches!(op, Operator::Gte | Operator::Lt);
@@ -932,7 +932,7 @@ impl<P: Model> MorphTo<P> {
                 Where::Compare {
                     left: Expr::Subquery(Box::new(query)),
                     op: op.clone(),
-                    right: Expr::Value(Value::BigInt(Some(count_i))),
+                    right: Expr::Value(Value::I64(count_i)),
                 }
             };
             alternatives.push(WhereClause::or(Where::Group(vec![
@@ -1059,7 +1059,7 @@ impl<P: Model> ErasedRelation<P> for MorphTo<P> {
         Box::pin(async move {
             let stored_type = column_value(&parent.model, &self.type_column, &self.name)?;
             let id = column_value(&parent.model, &self.id_column, &self.name)?;
-            let (Value::String(Some(name)), false) = (&stored_type, is_null(&id)) else {
+            let (Value::String(name), false) = (&stored_type, is_null(&id)) else {
                 return Ok(());
             };
             let morph_target = self.resolve(name)?;

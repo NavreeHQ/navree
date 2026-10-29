@@ -3,18 +3,19 @@
 //! | Value | BSON | Read back as |
 //! |---|---|---|
 //! | `bool` | boolean | `Bool` |
-//! | `i8`, `i16`, `i32`, `u8`, `u16` | 32-bit integer | `Int` |
-//! | `i64`, `u32`, `u64` up to `i64::MAX` | 64-bit integer | `BigInt` |
-//! | `f32`, `f64` | double | `Double` |
+//! | `i8`, `i16`, `i32`, `u8`, `u16` | 32-bit integer | `I32` |
+//! | `i64`, `u32`, `u64` up to `i64::MAX` | 64-bit integer | `I64` |
+//! | `f32`, `f64` | double | `F64` |
 //! | [`Decimal`] | Decimal128 | `Decimal` (text beyond 28 digits) |
 //! | `String`, `char` | string | `String` |
 //! | [`ObjectId`](crate::ObjectId) | ObjectId | `Enum` of type `ObjectId` |
 //! | `Uuid` | binary, subtype 4 | `Uuid` |
 //! | `Vec<u8>` | binary, generic subtype | `Bytes` |
-//! | `DateTime<Utc>`, `DateTime<FixedOffset>`, `NaiveDateTime` (UTC) | date (milliseconds) | `ChronoDateTimeUtc` |
-//! | `NaiveDate` | date at midnight UTC | `ChronoDateTimeUtc` (reads as a `NaiveDate`) |
+//! | `DateTime<Utc>`, `DateTime<FixedOffset>`, `NaiveDateTime` (UTC) | date (milliseconds) | `Timestamp` |
+//! | `NaiveDate` | date at midnight UTC | `Timestamp` (reads as a `NaiveDate`) |
 //! | `NaiveTime` | string `HH:MM:SS.ffffff` | `String` (reads as a `NaiveTime`) |
 //! | JSON (`serde_json::Value`, JSON casts) | embedded document, array or scalar | `Json` (relaxed extended JSON) |
+//! | a vector (`Value::Vector`) | array of doubles | `Json` |
 //! | NULL of any type | null | NULL |
 //!
 //! JSON is read as [extended JSON], so a JSON cast whose value holds
@@ -30,7 +31,6 @@ use std::str::FromStr;
 use bson::spec::BinarySubtype;
 use bson::{Binary, Bson, Decimal128, Document};
 use chrono::{NaiveTime, TimeZone, Utc};
-use navree_db::sea_orm::sea_query::OptionEnum;
 use navree_orm::{Decimal, OrmError, Row, Value, is_null};
 
 use crate::error::invalid;
@@ -45,65 +45,61 @@ const TIME_FORMAT: &str = "%H:%M:%S%.6f";
 /// ```
 /// use bson::Bson;
 /// use navree_mongo::{ObjectId, to_bson};
-/// use navree_orm::{Decimal, Value};
+/// use navree_orm::{Decimal, Kind, Value};
 ///
 /// assert_eq!(to_bson(&Value::from(42_i32)).unwrap(), Bson::Int32(42));
 /// assert_eq!(to_bson(&Value::from(42_i64)).unwrap(), Bson::Int64(42));
 /// let id = ObjectId::new();
 /// assert_eq!(to_bson(&id.to_value()).unwrap(), Bson::ObjectId(id.into()));
 /// assert_eq!(to_bson(&Value::from(Decimal::new(1250, 2))).unwrap().to_string(), "12.50");
-/// assert_eq!(to_bson(&Value::String(None)).unwrap(), Bson::Null);
+/// assert_eq!(to_bson(&Value::Null(Kind::String)).unwrap(), Bson::Null);
 /// ```
 pub fn to_bson(value: &Value) -> Result<Bson, OrmError> {
     if is_null(value) {
         return Ok(Bson::Null);
     }
     Ok(match value {
-        Value::Bool(Some(b)) => Bson::Boolean(*b),
-        Value::TinyInt(Some(v)) => Bson::Int32(i32::from(*v)),
-        Value::SmallInt(Some(v)) => Bson::Int32(i32::from(*v)),
-        Value::Int(Some(v)) => Bson::Int32(*v),
-        Value::BigInt(Some(v)) => Bson::Int64(*v),
-        Value::TinyUnsigned(Some(v)) => Bson::Int32(i32::from(*v)),
-        Value::SmallUnsigned(Some(v)) => Bson::Int32(i32::from(*v)),
-        Value::Unsigned(Some(v)) => Bson::Int64(i64::from(*v)),
-        Value::BigUnsigned(Some(v)) => Bson::Int64(i64::try_from(*v).map_err(|_| {
+        Value::Bool(b) => Bson::Boolean(*b),
+        Value::I8(v) => Bson::Int32(i32::from(*v)),
+        Value::I16(v) => Bson::Int32(i32::from(*v)),
+        Value::I32(v) => Bson::Int32(*v),
+        Value::I64(v) => Bson::Int64(*v),
+        Value::U8(v) => Bson::Int32(i32::from(*v)),
+        Value::U16(v) => Bson::Int32(i32::from(*v)),
+        Value::U32(v) => Bson::Int64(i64::from(*v)),
+        Value::U64(v) => Bson::Int64(i64::try_from(*v).map_err(|_| {
             invalid(format!(
                 "{v} does not fit MongoDB's 64-bit integers (store it as a Decimal)"
             ))
         })?),
-        Value::Float(Some(v)) => Bson::Double(f64::from(*v)),
-        Value::Double(Some(v)) => Bson::Double(*v),
-        Value::String(Some(s)) => Bson::String(s.clone()),
-        Value::Char(Some(c)) => Bson::String(c.to_string()),
-        Value::Enum(OptionEnum::Some(value)) if &*value.type_name == OBJECT_ID_TYPE => {
-            let id = ObjectId::parse(&value.value).map_err(|error| invalid(error.to_string()))?;
+        Value::F32(v) => Bson::Double(f64::from(*v)),
+        Value::F64(v) => Bson::Double(*v),
+        Value::String(s) => Bson::String(s.clone()),
+        Value::Enum { type_name, value } if type_name == OBJECT_ID_TYPE => {
+            let id = ObjectId::parse(value).map_err(|error| invalid(error.to_string()))?;
             Bson::ObjectId(id.into())
         }
-        Value::Enum(OptionEnum::Some(value)) => Bson::String(value.value.to_string()),
-        Value::Bytes(Some(bytes)) => Bson::Binary(Binary {
+        Value::Enum { value, .. } => Bson::String(value.clone()),
+        Value::Bytes(bytes) => Bson::Binary(Binary {
             subtype: BinarySubtype::Generic,
             bytes: bytes.clone(),
         }),
-        Value::Json(Some(json)) => json_to_bson(json)?,
-        Value::ChronoDate(Some(date)) => Bson::DateTime(bson::DateTime::from_chrono(
+        Value::Json(json) => json_to_bson(json)?,
+        Value::Date(date) => Bson::DateTime(bson::DateTime::from_chrono(
             Utc.from_utc_datetime(&date.and_time(NaiveTime::MIN)),
         )),
-        Value::ChronoTime(Some(time)) => Bson::String(time.format(TIME_FORMAT).to_string()),
-        Value::ChronoDateTime(Some(at)) => {
+        Value::Time(time) => Bson::String(time.format(TIME_FORMAT).to_string()),
+        Value::DateTime(at) => {
             Bson::DateTime(bson::DateTime::from_chrono(Utc.from_utc_datetime(at)))
         }
-        Value::ChronoDateTimeUtc(Some(at)) => Bson::DateTime(bson::DateTime::from_chrono(*at)),
-        Value::ChronoDateTimeLocal(Some(at)) => Bson::DateTime(bson::DateTime::from_chrono(*at)),
-        Value::ChronoDateTimeWithTimeZone(Some(at)) => {
-            Bson::DateTime(bson::DateTime::from_chrono(*at))
-        }
-        Value::Uuid(Some(uuid)) => Bson::Binary(Binary {
+        Value::Timestamp(at) => Bson::DateTime(bson::DateTime::from_chrono(*at)),
+        Value::TimestampTz(at) => Bson::DateTime(bson::DateTime::from_chrono(*at)),
+        Value::Uuid(uuid) => Bson::Binary(Binary {
             subtype: BinarySubtype::Uuid,
             bytes: uuid.as_bytes().to_vec(),
         }),
-        Value::Decimal(Some(decimal)) => Bson::Decimal128(decimal128(decimal)?),
-        // Variants other cargo features add: their JSON form.
+        Value::Decimal(decimal) => Bson::Decimal128(decimal128(decimal)?),
+        // Vectors and what later versions add: their JSON form.
         other => json_to_bson(&navree_orm::to_json(other))?,
     })
 }
@@ -131,7 +127,7 @@ pub(crate) fn json_to_bson(json: &serde_json::Value) -> Result<Bson, OrmError> {
 /// use navree_mongo::from_bson;
 /// use navree_orm::Value;
 ///
-/// assert_eq!(from_bson(Bson::Int32(7)), Value::Int(Some(7)));
+/// assert_eq!(from_bson(Bson::Int32(7)), Value::I32(7));
 /// assert_eq!(
 ///     from_bson(Bson::Document(doc! { "city": "Oslo", "floor": 3 })),
 ///     Value::from(serde_json::json!({ "city": "Oslo", "floor": 3 }))
@@ -140,29 +136,29 @@ pub(crate) fn json_to_bson(json: &serde_json::Value) -> Result<Bson, OrmError> {
 /// ```
 pub fn from_bson(bson: Bson) -> Value {
     match bson {
-        Bson::Double(v) => Value::Double(Some(v)),
-        Bson::String(s) | Bson::Symbol(s) => Value::String(Some(s)),
-        Bson::Boolean(b) => Value::Bool(Some(b)),
-        Bson::Null | Bson::Undefined => Value::String(None),
-        Bson::Int32(v) => Value::Int(Some(v)),
-        Bson::Int64(v) => Value::BigInt(Some(v)),
+        Bson::Double(v) => Value::F64(v),
+        Bson::String(s) | Bson::Symbol(s) => Value::String(s),
+        Bson::Boolean(b) => Value::Bool(b),
+        Bson::Null | Bson::Undefined => Value::Null(navree_orm::Kind::String),
+        Bson::Int32(v) => Value::I32(v),
+        Bson::Int64(v) => Value::I64(v),
         Bson::ObjectId(id) => ObjectId::from(id).to_value(),
-        Bson::DateTime(at) => Value::ChronoDateTimeUtc(Some(at.to_chrono())),
+        Bson::DateTime(at) => Value::Timestamp(at.to_chrono()),
         Bson::Binary(binary) => match binary.subtype {
             BinarySubtype::Uuid if binary.bytes.len() == 16 => {
                 match uuid::Uuid::from_slice(&binary.bytes) {
-                    Ok(uuid) => Value::Uuid(Some(uuid)),
-                    Err(_) => Value::Bytes(Some(binary.bytes)),
+                    Ok(uuid) => Value::Uuid(uuid),
+                    Err(_) => Value::Bytes(binary.bytes),
                 }
             }
-            _ => Value::Bytes(Some(binary.bytes)),
+            _ => Value::Bytes(binary.bytes),
         },
         Bson::Decimal128(decimal) => {
             let text = decimal.to_string();
             match Decimal::from_str(&text).or_else(|_| Decimal::from_scientific(&text)) {
-                Ok(decimal) => Value::Decimal(Some(decimal)),
+                Ok(decimal) => Value::Decimal(decimal),
                 // NaN, infinities, more digits than a Decimal holds.
-                Err(_) => Value::String(Some(text)),
+                Err(_) => Value::String(text),
             }
         }
         other @ (Bson::Document(_)
@@ -173,7 +169,7 @@ pub fn from_bson(bson: Bson) -> Value {
         | Bson::Timestamp(_)
         | Bson::MaxKey
         | Bson::MinKey
-        | Bson::DbPointer(_)) => Value::Json(Some(Box::new(other.into_relaxed_extjson()))),
+        | Bson::DbPointer(_)) => Value::Json(other.into_relaxed_extjson()),
     }
 }
 
@@ -199,7 +195,7 @@ pub fn document_row(mut document: Document, columns: Option<&[String]>) -> Row {
                 .map(|column| {
                     let value = document
                         .remove(column.as_str())
-                        .map_or(Value::String(None), from_bson);
+                        .map_or(Value::Null(navree_orm::Kind::String), from_bson);
                     (column.clone(), value)
                 })
                 .collect(),
@@ -322,12 +318,12 @@ mod tests {
         let huge: Decimal128 = "1.234567890123456789012345678901234E+40".parse().unwrap();
         assert!(matches!(
             from_bson(Bson::Decimal128(huge)),
-            Value::String(Some(_))
+            Value::String(_)
         ));
         let nan: Decimal128 = "NaN".parse().unwrap();
         assert_eq!(
             from_bson(Bson::Decimal128(nan)),
-            Value::String(Some("NaN".into()))
+            Value::String("NaN".into())
         );
     }
 

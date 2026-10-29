@@ -4,5 +4,5 @@ expression: "per_dialect(|d|\nrender_insert(&base().on_conflict(OnConflict::Upda
 ---
 PostgreSQL: error: invalid query: an upsert into `tags` on PostgreSQL needs the unique columns its rows conflict on
 MySQL: INSERT INTO `tags` (`name`, `color`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `color` = VALUES(`color`)
-  values: [String(Some("vip")), String(Some("gold"))]
+  values: [String("vip"), String("gold")]
 SQLite: error: invalid query: an upsert into `tags` on SQLite needs the unique columns its rows conflict on

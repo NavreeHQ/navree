@@ -3,7 +3,7 @@ source: crates/navree-orm/tests/sql/main.rs
 expression: "per_dialect(|d|\ntable(\"sessions\").where_(col(\"user_id\").eq(7)).order_by(\"last_seen_at\").limit(100).to_delete_sql(d))"
 ---
 PostgreSQL: DELETE FROM "sessions" WHERE "ctid" IN (SELECT "sessions"."ctid" FROM "sessions" WHERE "user_id" = $1 ORDER BY "last_seen_at" ASC LIMIT $2)
-  values: [Int(Some(7)), BigUnsigned(Some(100))]
+  values: [I32(7), U64(100)]
 MySQL: error: a table delete with joins, a limit or an offset (MySQL has no row id; a model query narrows the rows by key) is not supported on MySQL
 SQLite: DELETE FROM "sessions" WHERE "rowid" IN (SELECT "sessions"."rowid" FROM "sessions" WHERE "user_id" = ? ORDER BY "last_seen_at" ASC LIMIT ?)
-  values: [Int(Some(7)), BigUnsigned(Some(100))]
+  values: [I32(7), U64(100)]

@@ -7,8 +7,7 @@ use std::sync::{Arc, Mutex, Once};
 
 use chrono::{DateTime, TimeZone, Utc};
 use navree_contracts::{Clock, FixedClock};
-use navree_db::sea_orm::{ConnectOptions, ConnectionTrait, Database};
-use navree_db::{DatabaseModule, Db};
+use navree_db::{DatabaseModule, Db, DbOptions, Executor, ExecutorExt, Statement};
 use navree_kernel::Module;
 use navree_orm::relations::MorphMap;
 use navree_testing::TestApp;
@@ -52,8 +51,7 @@ pub struct TestDb {
 /// Creates the test tables.
 pub async fn create_tables(db: &Db) {
     for statement in SCHEMA.split(';').map(str::trim).filter(|s| !s.is_empty()) {
-        db.conn()
-            .execute_unprepared(statement)
+        db.execute_script(statement)
             .await
             .unwrap_or_else(|error| panic!("{statement}: {error}"));
     }
@@ -78,15 +76,16 @@ pub async fn sqlite() -> TestDb {
         "sqlite://{}?mode=rwc",
         dir.path().join("relations.db").display()
     );
-    let mut options = ConnectOptions::new(url);
-    options.sqlx_logging(false).max_connections(4);
-    let mut conn = Database::connect(options).await.expect("connects");
+    let db = Db::connect(&DbOptions {
+        url,
+        max_connections: 4,
+        ..DbOptions::default()
+    })
+    .await
+    .expect("connects");
     let log = QueryLog::default();
     let sink = log.clone();
-    conn.set_metric_callback(move |info| {
-        sink.0.lock().unwrap().push(info.statement.sql.clone());
-    });
-    let db = Db::from_connection(conn);
+    db.on_query(move |query| sink.0.lock().unwrap().push(query.sql.clone()));
     create_tables(&db).await;
     log.clear();
     TestDb { db, log, _dir: dir }
@@ -138,22 +137,16 @@ impl Module for Boxed {
 
 /// Counts the rows of `table` directly.
 pub async fn count_rows(db: &Db, table: &str) -> i64 {
-    let row = db
-        .conn()
-        .query_one_raw(navree_db::sea_orm::Statement::from_string(
-            db.backend(),
-            format!("SELECT COUNT(*) AS n FROM {table}"),
-        ))
-        .await
-        .unwrap()
-        .unwrap();
-    row.try_get::<i64>("", "n").unwrap()
+    db.fetch_scalar::<i64>(&Statement::text(format!(
+        "SELECT COUNT(*) AS n FROM {table}"
+    )))
+    .await
+    .unwrap()
 }
 
 /// Runs `sql` directly.
 pub async fn exec(db: &Db, sql: &str) {
-    db.conn()
-        .execute_unprepared(sql)
+    db.execute_script(sql)
         .await
         .unwrap_or_else(|error| panic!("{sql}: {error}"));
 }

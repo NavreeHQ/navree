@@ -202,3 +202,84 @@ async fn mass_writes_run_in_the_unit_of_work_without_events() {
     uow.rollback().await.unwrap();
     assert_eq!(count_rows(&t.db, "companies").await, 2);
 }
+
+/// A unit of work on navree-db's own transaction (no SeaORM transaction to
+/// hand out) runs every ORM operation: reads and writes in its transaction,
+/// `&Db` joining it, savepoints for the work that must stand alone, and
+/// cursors that hold its connection.
+#[tokio::test]
+async fn units_of_work_on_navree_db_s_own_transaction_run_the_orm() {
+    use futures::TryStreamExt;
+
+    use crate::models::Tag;
+
+    let t = sqlite().await;
+    let db = t.db.with_native_units_of_work(true);
+    let uow = db.uow(None, None).await;
+    assert!(uow.tx().await.is_err(), "no SeaORM transaction to hand out");
+    let acme = Company::create(
+        &uow,
+        Company {
+            name: "Acme".into(),
+            ..Company::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(Company::query().count(&uow).await.unwrap(), 1);
+    uow.scope(async {
+        assert_eq!(
+            Company::query().count(&db).await.unwrap(),
+            1,
+            "`&Db` reads in the open transaction"
+        );
+    })
+    .await;
+
+    // The failed insert runs in a savepoint; the transaction goes on.
+    Tag::create(
+        &uow,
+        Tag {
+            name: "vip".into(),
+            color: "red".into(),
+            ..Tag::default()
+        },
+    )
+    .await
+    .unwrap();
+    let existing = Tag::create_or_first(&uow, [Tag::NAME.set("vip")], |tag| {
+        tag.color = "gold".into()
+    })
+    .await
+    .unwrap();
+    assert_eq!(existing.color, "red");
+
+    {
+        let mut cursor = Company::query().cursor(&uow);
+        let first = cursor.try_next().await.unwrap().unwrap();
+        assert_eq!(first.id, acme.id);
+        let busy = Company::query().count(&uow).await.unwrap_err();
+        assert!(
+            busy.to_string().contains("busy streaming a cursor"),
+            "{busy}"
+        );
+    }
+    assert_eq!(uow.changes().len(), 2);
+    uow.commit().await.unwrap();
+    assert_eq!(count_rows(&t.db, "companies").await, 1);
+    assert_eq!(count_rows(&t.db, "tags").await, 1);
+
+    // Rolled back, nothing stays.
+    let uow = db.uow(None, None).await;
+    Company::create(
+        &uow,
+        Company {
+            name: "Ghost".into(),
+            ..Company::default()
+        },
+    )
+    .await
+    .unwrap();
+    uow.rollback().await.unwrap();
+    assert_eq!(count_rows(&t.db, "companies").await, 1);
+}

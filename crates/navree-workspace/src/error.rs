@@ -274,6 +274,9 @@ fn map_orm_error(error: &navree_orm::OrmError) -> Option<AppError> {
         if let Some(workspace) = cause.downcast_ref::<WorkspaceError>() {
             return map_workspace_error(workspace);
         }
+        if let Some(db) = cause.downcast_ref::<navree_db::DbError>() {
+            return navree_db::map_db_error(db);
+        }
         if let Some(db) = cause.downcast_ref::<DbErr>() {
             return navree_db::map_db_error(db);
         }

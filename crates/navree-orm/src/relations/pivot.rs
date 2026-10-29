@@ -240,7 +240,7 @@ impl Pivot {
     }
 
     pub(crate) async fn save_on(&mut self, target: &Target<'_>) -> Result<bool> {
-        let now = Value::ChronoDateTimeUtc(Some(target.context().now().await));
+        let now = Value::Timestamp(target.context().now().await);
         if !self.exists {
             let timestamps: Vec<Cow<'static, str>> = [&self.spec.created_at, &self.spec.updated_at]
                 .into_iter()

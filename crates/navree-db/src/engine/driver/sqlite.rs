@@ -51,6 +51,8 @@ fn bind(args: &mut SqliteArguments, value: &Value) -> Result<(), sqlx::error::Bo
         Value::DateTime(v) => args.add(*v),
         Value::Timestamp(v) => args.add(*v),
         Value::TimestampTz(v) => args.add(*v),
+        Value::Enum { value, .. } => args.add(value.clone()),
+        Value::Vector(v) => args.add(super::vector_bytes(v)),
     }
 }
 

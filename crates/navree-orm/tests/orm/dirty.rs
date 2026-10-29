@@ -38,14 +38,14 @@ async fn changes_are_tracked_per_column_until_saved() {
     assert_eq!(
         deal.get_dirty().unwrap(),
         [
-            ("amount_cents", Value::BigInt(Some(1500))),
+            ("amount_cents", Value::I64(1500)),
             ("stage", Value::from("closed_won")),
         ]
     );
     assert_eq!(deal.get_original().unwrap().stage, Stage::Lead);
     assert_eq!(
         deal.get_original_value(Deal::AMOUNT_CENTS).unwrap(),
-        Some(Value::BigInt(Some(1000)))
+        Some(Value::I64(1000))
     );
 
     deal.save(&t.db).await.unwrap();

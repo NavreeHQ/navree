@@ -48,7 +48,7 @@ impl DocumentDriver for Capture {
         _query: &'a QueryIr,
         _aggregate: &'a Aggregate,
     ) -> BoxFuture<'a, Result<Value, OrmError>> {
-        Box::pin(async { Ok(Value::BigInt(Some(0))) })
+        Box::pin(async { Ok(Value::I64(0)) })
     }
 
     fn insert<'a>(

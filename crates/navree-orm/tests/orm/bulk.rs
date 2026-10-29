@@ -8,8 +8,8 @@ use std::sync::{Arc, Mutex};
 use navree_kernel::{BoxFuture, Factory, Module, ModuleBuilder};
 use navree_orm::hooks::{ModelEvent, ModelHook};
 use navree_orm::{
-    ConflictUpdate, ExecContext, Expr, Model, OrmError, Record, Result, Value, col, col_as, raw,
-    table, unprepared,
+    ConflictUpdate, ExecContext, Expr, Kind, Model, OrmError, Record, Result, Value, col, col_as,
+    raw, table, unprepared,
 };
 
 use crate::models::{Company, Deal, DealMeta, Event, Setting, Stage, Tag};
@@ -163,7 +163,10 @@ async fn insert_or_ignore_skips_rows_that_conflict() {
     let error = table("tags")
         .insert_or_ignore(
             &t.db,
-            [[("name", Value::String(None)), ("color", Value::from("x"))]],
+            [[
+                ("name", Value::Null(Kind::String)),
+                ("color", Value::from("x")),
+            ]],
         )
         .await
         .unwrap_err();

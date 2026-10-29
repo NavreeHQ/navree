@@ -3,13 +3,13 @@
 //! other than UNION): rendered for each dialect, they return the same rows
 //! everywhere, the rows written here.
 
-use navree_orm::Dialect;
 use navree_orm::ir::JsonSegment;
 use navree_orm::render::ast::{
     Assignment, BinaryOp, ConflictAction, Cte, Delete, Expr, Ident, Insert, InsertSource, Join,
     LikeCase, Lock, LockStrength, ObjectName, OnConflict, Query, Select, SelectItem, Source,
     SqlType, Statement, Truncate, Update,
 };
+use navree_orm::{Dialect, Kind};
 use serde_json::{Value as Json, json};
 
 /// A statement (or a few) and what it must return.
@@ -597,9 +597,14 @@ pub fn statements() -> Vec<Portable> {
         ),
         query(
             "null-safe equality with a null",
-            Query::from(from("companies").column(col("id")).filter(
-                col("country").binary(BinaryOp::NullSafeEq, val(navree_orm::Value::String(None))),
-            )),
+            Query::from(
+                from("companies")
+                    .column(col("id"))
+                    .filter(col("country").binary(
+                        BinaryOp::NullSafeEq,
+                        val(navree_orm::Value::Null(Kind::String)),
+                    )),
+            ),
             json!([[3]]),
         ),
         query(

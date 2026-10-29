@@ -3,8 +3,8 @@ source: crates/navree-orm/tests/render/lowering.rs
 expression: "per_dialect(|d| render_insert(&upsert, d))"
 ---
 PostgreSQL: INSERT INTO "tags" ("name", "color") VALUES ($1, $2) ON CONFLICT ("name") DO UPDATE SET "color" = "excluded"."color", "hits" = "tags"."hits" + "excluded"."hits"
-  values: [String(Some("vip")), String(Some("gold"))]
+  values: [String("vip"), String("gold")]
 MySQL: INSERT INTO `tags` (`name`, `color`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `color` = VALUES(`color`), `hits` = `tags`.`hits` + VALUES(`hits`)
-  values: [String(Some("vip")), String(Some("gold"))]
+  values: [String("vip"), String("gold")]
 SQLite: INSERT INTO "tags" ("name", "color") VALUES (?, ?) ON CONFLICT ("name") DO UPDATE SET "color" = "excluded"."color", "hits" = "tags"."hits" + "excluded"."hits"
-  values: [String(Some("vip")), String(Some("gold"))]
+  values: [String("vip"), String("gold")]
