@@ -6,13 +6,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::Utc;
-use navree_db::Db;
+use navree_db::{Db, Executor, Statement};
 use navree_lighthouse::{IssueFilter, IssueKind, Period};
 use navree_telemetry::{
     EventContext, ExceptionReported, QueryExecuted, RequestHandled, Telemetry, TelemetryEvent,
     TelemetryRecord,
 };
-use sea_orm::{ConnectionTrait, Statement};
 
 use crate::support::{builder, flushed, lighthouse};
 
@@ -184,18 +183,13 @@ async fn by_default_errors_and_slow_requests_keep_their_traces_and_a_tenth_of_th
     let traces = |endpoint: &'static str| {
         let db = db.clone();
         async move {
-            let conn = db.conn();
-            let row = conn
-                .query_one_raw(Statement::from_string(
-                    conn.get_database_backend(),
-                    format!(
-                        "SELECT COUNT(*) AS n FROM lighthouse_samples WHERE name = '{endpoint}'"
-                    ),
-                ))
+            let row = db
+                .fetch_one(&Statement::text(format!(
+                    "SELECT COUNT(*) AS n FROM lighthouse_samples WHERE name = '{endpoint}'"
+                )))
                 .await
-                .unwrap()
                 .unwrap();
-            row.try_get::<i64>("", "n").unwrap()
+            row.get::<i64>("n").unwrap()
         }
     };
     let ok = traces("GET /api/v1/ok").await;

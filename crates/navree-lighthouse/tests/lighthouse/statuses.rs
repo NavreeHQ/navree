@@ -3,7 +3,7 @@
 //! and reopening.
 
 use navree_lighthouse::{IgnoreFor, IssueFilter, IssueStatus};
-use navree_testing::{TestApp, temp_sqlite_url};
+use navree_testing::TestApp;
 
 use crate::support::{builder, flushed};
 
@@ -54,7 +54,7 @@ async fn a_resolved_issue_that_happens_again_reopens_as_a_regression() {
 
 #[tokio::test]
 async fn resolved_in_the_next_release_reopens_only_in_another_release() {
-    let (url, _guard) = temp_sqlite_url();
+    let (url, _guard) = crate::servers::scratch();
     let in_release = |release: &str| {
         builder()
             .config("database.url", url.clone())

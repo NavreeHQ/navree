@@ -11,8 +11,7 @@ use crate::support::{DemoModule, InvoiceError};
 #[tokio::test]
 async fn the_fake_records_reports_and_captured_exceptions() {
     let fake = LighthouseFake::new();
-    let app = TestApp::builder()
-        .temp_database()
+    let app = crate::servers::database(TestApp::builder())
         .module(navree_db::DatabaseModule::from_config())
         .module(LighthouseModule::from_config())
         .module(DemoModule)

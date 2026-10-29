@@ -14,7 +14,6 @@ use navree_kernel::{
 };
 use navree_schedule::ModuleBuilderScheduleExt;
 use navree_telemetry::{ModuleBuilderTelemetryExt, TelemetrySink};
-use sea_orm_migration::SchemaManager;
 
 use crate::alert::DeliverAlert;
 use crate::api::LighthouseApiController;
@@ -222,7 +221,9 @@ async fn build(app: &AppContext, options: Arc<LighthouseOptions>) -> Result<Ligh
             })
             .await
             .map_err(|error| format!("lighthouse.database_url: cannot connect: {error}"))?;
-            create_tables(&SchemaManager::new(db.conn())).await?;
+            create_tables(&Schema::new(&db))
+                .await
+                .map_err(|error| format!("lighthouse.database_url: {error}"))?;
             // The app's `schema` section (TimescaleDB mode, extensions)
             // applies to this database too.
             let schema_options = match &config {
@@ -342,6 +343,6 @@ fn map_lighthouse_error(error: &LighthouseError) -> Option<AppError> {
             Some(AppError::not_found().with_detail(format!("{what} not found")))
         }
         LighthouseError::Other(message) => Some(AppError::bad_request(message.clone())),
-        LighthouseError::Db(_) => None,
+        LighthouseError::Db(_) | LighthouseError::Orm(_) => None,
     }
 }

@@ -6,12 +6,8 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 
 use chrono::{DateTime, TimeDelta, Utc};
-use navree_db::{Db, prune_time_series};
-use sea_orm::sea_query::{Expr, OnConflict, Query};
-use sea_orm::{
-    ActiveValue::Set, ColumnTrait, ConnectionTrait, DbErr, EntityTrait, PaginatorTrait,
-    QueryFilter, QueryOrder, QuerySelect,
-};
+use navree_db::{Db, DbError, Uow, prune_time_series_on};
+use navree_orm::{Assignment, ConflictUpdate, Filter, Model as _, OrmError, Record, col, table};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
@@ -33,7 +29,11 @@ pub enum LighthouseError {
     NotFound(&'static str),
     /// A database error.
     #[error(transparent)]
-    Db(#[from] DbErr),
+    Db(#[from] DbError),
+    /// A model operation failed (a query, a write). It maps the way the
+    /// error in its source does.
+    #[error(transparent)]
+    Orm(#[from] OrmError),
     /// Anything else.
     #[error("{0}")]
     Other(String),
@@ -516,6 +516,19 @@ const CHUNK: usize = 100;
 /// Times a status change is tried again after another process changed
 /// the issue first.
 const STATUS_ATTEMPTS: usize = 5;
+/// Times a batch is written again after the database ended its transaction
+/// as a deadlock or a serialization failure.
+const WRITE_ATTEMPTS: usize = 5;
+
+/// Whether the database ended the write in a way that writing again fixes.
+fn is_retryable(error: &LighthouseError) -> bool {
+    match error {
+        LighthouseError::Db(error) | LighthouseError::Orm(OrmError::Db(error)) => {
+            error.is_retryable()
+        }
+        _ => false,
+    }
+}
 
 /// Aggregate rows of one key merged over a period: the key, the summed
 /// values, and (count, errors) per bucket.
@@ -554,9 +567,9 @@ impl LighthouseStore {
 
     /// How many issues are open.
     pub async fn open_issue_count(&self) -> Result<u64, LighthouseError> {
-        Ok(issue::Entity::find()
-            .filter(issue::Column::Status.eq(IssueStatus::Open.as_str()))
-            .count(self.db.conn())
+        Ok(issue::Model::query()
+            .where_(issue::Model::STATUS.eq(IssueStatus::Open.as_str()))
+            .count(&self.db)
             .await?)
     }
 
@@ -570,186 +583,46 @@ impl LighthouseStore {
     // -----------------------------------------------------------------
 
     /// Writes a batch in one transaction; returns the alerts to consider.
+    ///
+    /// The transaction is a unit of work. It reads before it writes (the
+    /// issues of the batch, then their counts and statuses), and on SQLite a
+    /// unit of work begins `IMMEDIATE` (`BEGIN IMMEDIATE`, like
+    /// [`Db::begin_for_write`]): the batch queues for the write lock, up to
+    /// the busy timeout, instead of failing with `database is locked` when
+    /// another connection holds it between the batch's read and its write.
     pub(crate) async fn write_batch(
         &self,
         batch: Batch,
         labels: &Labels,
-    ) -> Result<Vec<Candidate>, DbErr> {
+    ) -> Result<Vec<Candidate>, LighthouseError> {
         let now = Utc::now();
-        let txn = self.db.begin_for_write().await?;
-        let mut candidates = Vec::new();
-        let mut touched: Vec<issue::Model> = Vec::new();
-
-        // Group the hits by fingerprint, in order of appearance.
-        let mut order: Vec<String> = Vec::new();
-        let mut groups: HashMap<String, Vec<Hit>> = HashMap::new();
-        for hit in batch.hits {
-            if !groups.contains_key(&hit.fingerprint) {
-                order.push(hit.fingerprint.clone());
-            }
-            groups.entry(hit.fingerprint.clone()).or_default().push(hit);
-        }
-        let mut existing: HashMap<String, issue::Model> = HashMap::new();
-        for chunk in order.chunks(CHUNK) {
-            for row in issue::Entity::find()
-                .filter(issue::Column::Fingerprint.is_in(chunk.iter().cloned()))
-                .all(&txn)
-                .await?
-            {
-                existing.insert(row.fingerprint.clone(), row);
-            }
-        }
-        let mut occurrences = Vec::new();
-        for fingerprint in &order {
-            let hits = &groups[fingerprint];
-            let n = hits.len() as i64;
-            let first_at = hits.iter().map(|hit| hit.at).min().unwrap_or(now);
-            let last_at = hits.iter().map(|hit| hit.at).max().unwrap_or(now);
-            let level = hits.iter().map(|hit| hit.level).max().unwrap_or_default();
-            let failed_job = hits.iter().any(|hit| hit.failed_job);
-            let mut row = match existing.get(fingerprint) {
-                Some(row) => Some(row.clone()),
-                None => {
-                    let first = &hits[0];
-                    let inserted = issue::Entity::insert(issue::ActiveModel {
-                        id: Set(Uuid::now_v7()),
-                        fingerprint: Set(fingerprint.clone()),
-                        kind: Set(first.kind.as_str().to_owned()),
-                        level: Set(level.as_str().to_owned()),
-                        status: Set(IssueStatus::Open.as_str().to_owned()),
-                        title: Set(first.title.clone()),
-                        culprit: Set(first.culprit.clone()),
-                        message: Set(first.message.clone()),
-                        chain: Set(serde_json::to_string(&first.chain).unwrap_or_default()),
-                        location: Set(first.location.clone()),
-                        error_type: Set(first.error_type.clone()),
-                        count: Set(n),
-                        first_seen: Set(first_at),
-                        last_seen: Set(last_at),
-                        first_release: Set(Some(labels.release.clone())),
-                        last_release: Set(Some(labels.release.clone())),
-                        environment: Set(Some(labels.environment.clone())),
-                        resolved_at: Set(None),
-                        resolved_in_release: Set(None),
-                        ignored_until: Set(None),
-                        ignore_remaining: Set(None),
-                        regressed_at: Set(None),
-                        comment: Set(None),
-                        created_at: Set(now),
-                        updated_at: Set(now),
-                    })
-                    .on_conflict(
-                        OnConflict::column(issue::Column::Fingerprint)
-                            .do_nothing()
-                            .to_owned(),
-                    )
-                    .exec_without_returning(&txn)
-                    .await?;
-                    if inserted == 0 {
-                        // Another process opened it first.
-                        issue::Entity::find()
-                            .filter(issue::Column::Fingerprint.eq(fingerprint.clone()))
-                            .one(&txn)
-                            .await?
-                    } else {
-                        let row = issue::Entity::find()
-                            .filter(issue::Column::Fingerprint.eq(fingerprint.clone()))
-                            .one(&txn)
-                            .await?
-                            .ok_or_else(|| DbErr::RecordNotFound("lighthouse issue".into()))?;
-                        if level > Level::Info {
-                            candidates.push(Candidate {
-                                kind: AlertKind::NewIssue,
-                                issue: row.clone(),
-                            });
-                            if failed_job {
-                                candidates.push(Candidate {
-                                    kind: AlertKind::FailedJob,
-                                    issue: row.clone(),
-                                });
-                            }
-                        }
-                        touched.push(row.clone());
-                        for hit in hits {
-                            if let Some(occurrence) = &hit.occurrence {
-                                occurrences.push(occurrence_model(row.id, occurrence, labels));
-                            }
-                        }
-                        continue;
-                    }
+        let mut attempt = 0;
+        let (mut candidates, touched) = loop {
+            attempt += 1;
+            let uow = self.db.uow(None, None).await;
+            let written = match write_rows(&uow, &batch, labels, now).await {
+                Ok(written) => uow
+                    .commit()
+                    .await
+                    .map(|()| written)
+                    .map_err(|error| LighthouseError::from(DbError::from(error))),
+                Err(error) => {
+                    let _ = uow.rollback().await;
+                    Err(error)
                 }
             };
-            let Some(current) = row.take() else {
-                continue;
-            };
-            let (current, regression) =
-                count_existing(&txn, current, n, last_at, level, labels, now).await?;
-            let new_level = Level::parse(&current.level).unwrap_or_default();
-            let alerting = current.status == IssueStatus::Open.as_str() && new_level > Level::Info;
-            if alerting && regression {
-                candidates.push(Candidate {
-                    kind: AlertKind::Regression,
-                    issue: current.clone(),
-                });
-            }
-            if alerting && failed_job {
-                candidates.push(Candidate {
-                    kind: AlertKind::FailedJob,
-                    issue: current.clone(),
-                });
-            }
-            touched.push(current.clone());
-            for hit in hits {
-                if let Some(occurrence) = &hit.occurrence {
-                    occurrences.push(occurrence_model(current.id, occurrence, labels));
+            match written {
+                Ok(written) => break written,
+                // Two processes writing at once can deadlock (TimescaleDB
+                // adds a chunk's foreign key to the issues, which a writer
+                // of the issues holds up): the database ended this one and
+                // the other went on, so write the batch again.
+                Err(error) if attempt < WRITE_ATTEMPTS && is_retryable(&error) => {
+                    tokio::time::sleep(std::time::Duration::from_millis(10 * attempt as u64)).await;
                 }
+                Err(error) => return Err(error),
             }
-        }
-        for chunk in occurrences.chunks(CHUNK) {
-            occurrence::Entity::insert_many(chunk.to_vec())
-                .exec_without_returning(&txn)
-                .await?;
-        }
-        let samples: Vec<sample::ActiveModel> = batch
-            .samples
-            .iter()
-            .map(|sample| sample_model(sample, labels))
-            .collect();
-        for chunk in samples.chunks(CHUNK) {
-            sample::Entity::insert_many(chunk.to_vec())
-                .exec_without_returning(&txn)
-                .await?;
-        }
-        let rows: Vec<aggregate::ActiveModel> = batch
-            .rows
-            .iter()
-            .map(|row| aggregate_model(row, labels))
-            .collect();
-        for chunk in rows.chunks(CHUNK) {
-            aggregate::Entity::insert_many(chunk.to_vec())
-                .on_conflict(
-                    OnConflict::columns([
-                        aggregate::Column::Resolution,
-                        aggregate::Column::Bucket,
-                        aggregate::Column::Kind,
-                        aggregate::Column::KeyHash,
-                        aggregate::Column::Process,
-                    ])
-                    .update_columns([
-                        aggregate::Column::Count,
-                        aggregate::Column::Errors,
-                        aggregate::Column::Extra,
-                        aggregate::Column::TotalMs,
-                        aggregate::Column::MaxMs,
-                        aggregate::Column::Histogram,
-                        aggregate::Column::Detail,
-                    ])
-                    .to_owned(),
-                )
-                .exec_without_returning(&txn)
-                .await?;
-        }
-        txn.commit().await?;
+        };
 
         // Spikes: open issues with enough occurrences in the window.
         let spike = self.options.alerts.spike;
@@ -788,33 +661,32 @@ impl LighthouseStore {
         &self,
         fingerprint: &str,
         since: DateTime<Utc>,
-    ) -> Result<i64, DbErr> {
-        let rows = aggregate::Entity::find()
-            .filter(aggregate::Column::Kind.eq(kind::ISSUE))
-            .filter(aggregate::Column::Resolution.eq(MINUTE))
-            .filter(aggregate::Column::KeyHash.eq(key_hash(fingerprint)))
-            .filter(aggregate::Column::Bucket.gte(since))
-            .all(self.db.conn())
+    ) -> Result<i64, LighthouseError> {
+        let rows = aggregate::Model::query()
+            .where_(aggregate::Model::KIND.eq(kind::ISSUE))
+            .where_(aggregate::Model::RESOLUTION.eq(MINUTE))
+            .where_(aggregate::Model::KEY_HASH.eq(key_hash(fingerprint)))
+            .where_(aggregate::Model::BUCKET.gte(since))
+            .get(&self.db)
             .await?;
         Ok(rows.iter().map(|row| row.count).sum())
     }
 
     /// Distinct users and workspaces among the stored occurrences of each
     /// issue.
-    async fn reach(&self, ids: &[Uuid]) -> Result<HashMap<Uuid, (i64, i64)>, DbErr> {
+    async fn reach(&self, ids: &[Uuid]) -> Result<HashMap<Uuid, (i64, i64)>, LighthouseError> {
         let mut reach: HashMap<Uuid, (HashSet<String>, HashSet<String>)> = HashMap::new();
         for chunk in ids.chunks(CHUNK) {
-            let rows: Vec<(Uuid, Option<String>, Option<String>)> = occurrence::Entity::find()
-                .select_only()
-                .column(occurrence::Column::IssueId)
-                .column(occurrence::Column::UserId)
-                .column(occurrence::Column::WorkspaceId)
+            let rows = table(OCCURRENCES_TABLE)
+                .select(["issue_id", "user_id", "workspace_id"])
                 .distinct()
-                .filter(occurrence::Column::IssueId.is_in(chunk.iter().copied()))
-                .into_tuple()
-                .all(self.db.conn())
+                .where_(col("issue_id").is_in(chunk.iter().copied()))
+                .get(&self.db)
                 .await?;
-            for (id, user, workspace) in rows {
+            for row in rows {
+                let id: Uuid = row.get("issue_id")?;
+                let user: Option<String> = row.get("user_id")?;
+                let workspace: Option<String> = row.get("workspace_id")?;
                 let entry = reach.entry(id).or_default();
                 if let Some(user) = user {
                     entry.0.insert(user);
@@ -848,7 +720,10 @@ impl LighthouseStore {
     }
 
     /// The issue as alerts carry it.
-    pub(crate) async fn issue_for_alert(&self, row: &issue::Model) -> Result<Issue, DbErr> {
+    pub(crate) async fn issue_for_alert(
+        &self,
+        row: &issue::Model,
+    ) -> Result<Issue, LighthouseError> {
         let users = self.reach(&[row.id]).await?.get(&row.id).map_or(0, |r| r.0);
         Ok(self.issue_of(row, users))
     }
@@ -864,81 +739,61 @@ impl LighthouseStore {
     ) -> Result<ListPage<IssueSummary>, LighthouseError> {
         let per_page = filter.per_page.unwrap_or(25).clamp(1, 100);
         let page = filter.page.unwrap_or(1).max(1);
-        let mut query = issue::Entity::find();
+        let mut query = issue::Model::query();
         if let Some(status) = non_empty(&filter.status) {
-            query = query.filter(issue::Column::Status.eq(status));
+            query = query.where_(issue::Model::STATUS.eq(status));
         }
         if let Some(kind) = non_empty(&filter.kind) {
-            query = query.filter(issue::Column::Kind.eq(kind));
+            query = query.where_(issue::Model::KIND.eq(kind));
         }
         if let Some(level) = non_empty(&filter.level) {
-            query = query.filter(issue::Column::Level.eq(level));
+            query = query.where_(issue::Model::LEVEL.eq(level));
         }
         if let Some(environment) = non_empty(&filter.environment) {
-            query = query.filter(issue::Column::Environment.eq(environment));
+            query = query.where_(issue::Model::ENVIRONMENT.eq(environment));
         }
         for culprit in [non_empty(&filter.route), non_empty(&filter.job)]
             .into_iter()
             .flatten()
         {
-            query = query.filter(issue::Column::Culprit.contains(culprit));
+            query = query.where_(issue::Model::CULPRIT.contains_ignore_case(culprit));
         }
         if let Some(search) = non_empty(&filter.search) {
-            query = query.filter(issue::Column::Title.contains(search));
+            query = query.where_(issue::Model::TITLE.contains_ignore_case(search));
         }
-        let occurrence_filters: Vec<(occurrence::Column, String, bool)> = [
-            (
-                occurrence::Column::Release,
-                non_empty(&filter.release),
-                false,
-            ),
-            (occurrence::Column::UserId, non_empty(&filter.user), false),
-            (
-                occurrence::Column::WorkspaceId,
-                non_empty(&filter.workspace),
-                false,
-            ),
+        // Issues with a stored occurrence that matches.
+        let occurrence_filters: Vec<Filter> = [
+            non_empty(&filter.release).map(|release| occurrence::Model::RELEASE.eq(release)),
+            non_empty(&filter.user).map(|user| occurrence::Model::USER_ID.eq(user)),
+            non_empty(&filter.workspace)
+                .map(|workspace| occurrence::Model::WORKSPACE_ID.eq(workspace)),
+            non_empty(&filter.tag).and_then(|tag| {
+                let (key, value) = tag.split_once(':')?;
+                let json =
+                    serde_json::to_string(&serde_json::json!({ key.trim(): value.trim() })).ok()?;
+                Some(occurrence::Model::CONTEXT.contains_ignore_case(json.trim_matches(['{', '}'])))
+            }),
         ]
         .into_iter()
-        .filter_map(|(column, value, like)| value.map(|value| (column, value.to_owned(), like)))
-        .chain(non_empty(&filter.tag).and_then(|tag| {
-            let (key, value) = tag.split_once(':')?;
-            Some((
-                occurrence::Column::Context,
-                format!(
-                    "%{}%",
-                    serde_json::to_string(&serde_json::json!({ key.trim(): value.trim() }))
-                        .ok()?
-                        .trim_matches(['{', '}'])
-                ),
-                true,
-            ))
-        }))
+        .flatten()
         .collect();
-        for (column, value, like) in occurrence_filters {
-            let condition = if like {
-                sea_orm::sea_query::ExprTrait::like(Expr::col(column), value)
-            } else {
-                sea_orm::sea_query::ExprTrait::eq(Expr::col(column), value)
-            };
-            query = query.filter(
-                issue::Column::Id.in_subquery(
-                    Query::select()
-                        .column(occurrence::Column::IssueId)
-                        .from(occurrence::Entity)
-                        .and_where(condition)
-                        .to_owned(),
+        for condition in occurrence_filters {
+            query = query.where_(
+                issue::Model::ID.in_subquery(
+                    occurrence::Model::query()
+                        .select([occurrence::Model::ISSUE_ID])
+                        .where_(condition),
                 ),
             );
         }
         query = match filter.sort {
-            IssueSort::LastSeen => query.order_by_desc(issue::Column::LastSeen),
-            IssueSort::FirstSeen => query.order_by_desc(issue::Column::FirstSeen),
-            IssueSort::Count => query.order_by_desc(issue::Column::Count),
+            IssueSort::LastSeen => query.order_by_desc(issue::Model::LAST_SEEN),
+            IssueSort::FirstSeen => query.order_by_desc(issue::Model::FIRST_SEEN),
+            IssueSort::Count => query.order_by_desc(issue::Model::COUNT),
         };
-        let paginator = query.paginate(self.db.conn(), per_page);
-        let total = paginator.num_items().await?;
-        let rows = paginator.fetch_page(page - 1).await?;
+        let paged = query.paginate(&self.db, (page, per_page)).await?;
+        let total = paged.meta.total;
+        let rows: Vec<issue::Model> = paged.data.into_iter().map(Record::into_inner).collect();
         let ids: Vec<Uuid> = rows.iter().map(|row| row.id).collect();
         let reach = self.reach(&ids).await?;
         let sparklines = self
@@ -978,18 +833,18 @@ impl LighthouseStore {
     async fn sparklines(
         &self,
         fingerprints: &[String],
-    ) -> Result<HashMap<String, Vec<i64>>, DbErr> {
+    ) -> Result<HashMap<String, Vec<i64>>, LighthouseError> {
         let now = Utc::now();
         let start = bucket_start(now, HOUR) - TimeDelta::hours(23);
         let mut out: HashMap<String, Vec<i64>> = HashMap::new();
         let hashes: Vec<String> = fingerprints.iter().map(|f| key_hash(f)).collect();
         for chunk in hashes.chunks(CHUNK) {
-            let rows = aggregate::Entity::find()
-                .filter(aggregate::Column::Kind.eq(kind::ISSUE))
-                .filter(aggregate::Column::Resolution.eq(HOUR))
-                .filter(aggregate::Column::Bucket.gte(start))
-                .filter(aggregate::Column::KeyHash.is_in(chunk.iter().cloned()))
-                .all(self.db.conn())
+            let rows = aggregate::Model::query()
+                .where_(aggregate::Model::KIND.eq(kind::ISSUE))
+                .where_(aggregate::Model::RESOLUTION.eq(HOUR))
+                .where_(aggregate::Model::BUCKET.gte(start))
+                .where_(aggregate::Model::KEY_HASH.is_in(chunk.iter().cloned()))
+                .get(&self.db)
                 .await?;
             for row in rows {
                 let index = ((row.bucket - start).num_hours()).clamp(0, 23) as usize;
@@ -1000,38 +855,42 @@ impl LighthouseStore {
         Ok(out)
     }
 
-    /// One issue's row.
+    /// One issue's row, read from the writer: a status change reads it
+    /// back right after writing it.
     async fn issue_row(&self, id: Uuid) -> Result<issue::Model, LighthouseError> {
-        issue::Entity::find_by_id(id)
-            .one(self.db.conn())
+        issue::Model::query()
+            .where_key(id)
+            .use_write()
+            .first(&self.db)
             .await?
+            .map(Record::into_inner)
             .ok_or(LighthouseError::NotFound("issue"))
     }
 
     /// One issue.
     pub async fn issue(&self, id: Uuid) -> Result<Issue, LighthouseError> {
         let row = self.issue_row(id).await?;
-        Ok(self.issue_for_alert(&row).await?)
+        self.issue_for_alert(&row).await
     }
 
     /// Everything about one issue.
     pub async fn issue_detail(&self, id: Uuid) -> Result<IssueDetail, LighthouseError> {
         let row = self.issue_row(id).await?;
         let (users, workspaces) = self.reach(&[id]).await?.get(&id).copied().unwrap_or((0, 0));
-        let latest = occurrence::Entity::find()
-            .filter(occurrence::Column::IssueId.eq(id))
-            .order_by_desc(occurrence::Column::At)
-            .one(self.db.conn())
+        let latest = occurrence::Model::query()
+            .where_(occurrence::Model::ISSUE_ID.eq(id))
+            .order_by_desc(occurrence::Model::AT)
+            .first(&self.db)
             .await?
-            .map(occurrence_of);
+            .map(|record| occurrence_of(record.into_inner()));
         let now = Utc::now();
         let start = bucket_start(now, HOUR) - TimeDelta::hours(7 * 24 - 1);
-        let rows = aggregate::Entity::find()
-            .filter(aggregate::Column::Kind.eq(kind::ISSUE))
-            .filter(aggregate::Column::Resolution.eq(HOUR))
-            .filter(aggregate::Column::KeyHash.eq(key_hash(&row.fingerprint)))
-            .filter(aggregate::Column::Bucket.gte(start))
-            .all(self.db.conn())
+        let rows = aggregate::Model::query()
+            .where_(aggregate::Model::KIND.eq(kind::ISSUE))
+            .where_(aggregate::Model::RESOLUTION.eq(HOUR))
+            .where_(aggregate::Model::KEY_HASH.eq(key_hash(&row.fingerprint)))
+            .where_(aggregate::Model::BUCKET.gte(start))
+            .get(&self.db)
             .await?;
         let mut timeline: Vec<TimelinePoint> = (0..7 * 24)
             .map(|i| TimelinePoint {
@@ -1077,16 +936,16 @@ impl LighthouseStore {
     ) -> Result<ListPage<Occurrence>, LighthouseError> {
         let per_page = per_page.clamp(1, 100);
         let page = page.max(1);
-        let paginator = occurrence::Entity::find()
-            .filter(occurrence::Column::IssueId.eq(issue_id))
-            .order_by_desc(occurrence::Column::At)
-            .paginate(self.db.conn(), per_page);
-        let total = paginator.num_items().await?;
-        let data = paginator
-            .fetch_page(page - 1)
-            .await?
+        let paged = occurrence::Model::query()
+            .where_(occurrence::Model::ISSUE_ID.eq(issue_id))
+            .order_by_desc(occurrence::Model::AT)
+            .paginate(&self.db, (page, per_page))
+            .await?;
+        let total = paged.meta.total;
+        let data = paged
+            .data
             .into_iter()
-            .map(occurrence_of)
+            .map(|record| occurrence_of(record.into_inner()))
             .collect();
         Ok(ListPage {
             data,
@@ -1100,15 +959,19 @@ impl LighthouseStore {
     }
 
     /// The alerts about an issue (or every alert), newest first, at most 50.
-    pub async fn alerts_for(&self, issue_id: Option<Uuid>) -> Result<Vec<AlertRecord>, DbErr> {
-        let mut query = alert::Entity::find().order_by_desc(alert::Column::CreatedAt);
+    pub async fn alerts_for(
+        &self,
+        issue_id: Option<Uuid>,
+    ) -> Result<Vec<AlertRecord>, LighthouseError> {
+        let mut query = alert::Model::query().order_by_desc(alert::Model::CREATED_AT);
         if let Some(id) = issue_id {
-            query = query.filter(alert::Column::IssueId.eq(id));
+            query = query.where_(alert::Model::ISSUE_ID.eq(id));
         }
         Ok(query
             .limit(50)
-            .all(self.db.conn())
+            .get(&self.db)
             .await?
+            .into_models()
             .into_iter()
             .map(|row| AlertRecord {
                 id: row.id,
@@ -1143,22 +1006,20 @@ impl LighthouseStore {
         } else {
             (IssueStatus::Resolved, None)
         };
-        issue::Entity::update_many()
-            .col_expr(issue::Column::Status, Expr::value(status.as_str()))
-            .col_expr(issue::Column::ResolvedAt, Expr::value(now))
-            .col_expr(issue::Column::ResolvedInRelease, Expr::value(release))
-            .col_expr(
-                issue::Column::IgnoredUntil,
-                Expr::value(Option::<DateTime<Utc>>::None),
+        issue::Model::query()
+            .where_key(id)
+            .update(
+                &self.db,
+                [
+                    issue::Model::STATUS.set(status.as_str()),
+                    issue::Model::RESOLVED_AT.set(Some(now)),
+                    issue::Model::RESOLVED_IN_RELEASE.set(release),
+                    issue::Model::IGNORED_UNTIL.set_null(),
+                    issue::Model::IGNORE_REMAINING.set_null(),
+                    issue::Model::COMMENT.set(comment),
+                    issue::Model::UPDATED_AT.set(now),
+                ],
             )
-            .col_expr(
-                issue::Column::IgnoreRemaining,
-                Expr::value(Option::<i64>::None),
-            )
-            .col_expr(issue::Column::Comment, Expr::value(comment))
-            .col_expr(issue::Column::UpdatedAt, Expr::value(now))
-            .filter(issue::Column::Id.eq(id))
-            .exec(self.db.conn())
             .await?;
         self.issue(id).await
     }
@@ -1181,17 +1042,18 @@ impl LighthouseStore {
                 ));
             }
         };
-        issue::Entity::update_many()
-            .col_expr(
-                issue::Column::Status,
-                Expr::value(IssueStatus::Ignored.as_str()),
+        issue::Model::query()
+            .where_key(id)
+            .update(
+                &self.db,
+                [
+                    issue::Model::STATUS.set(IssueStatus::Ignored.as_str()),
+                    issue::Model::IGNORED_UNTIL.set(until),
+                    issue::Model::IGNORE_REMAINING.set(remaining),
+                    issue::Model::COMMENT.set(comment),
+                    issue::Model::UPDATED_AT.set(Utc::now()),
+                ],
             )
-            .col_expr(issue::Column::IgnoredUntil, Expr::value(until))
-            .col_expr(issue::Column::IgnoreRemaining, Expr::value(remaining))
-            .col_expr(issue::Column::Comment, Expr::value(comment))
-            .col_expr(issue::Column::UpdatedAt, Expr::value(Utc::now()))
-            .filter(issue::Column::Id.eq(id))
-            .exec(self.db.conn())
             .await?;
         self.issue(id).await
     }
@@ -1199,30 +1061,11 @@ impl LighthouseStore {
     /// Reopens an issue.
     pub async fn reopen(&self, id: Uuid) -> Result<Issue, LighthouseError> {
         self.issue_row(id).await?;
-        issue::Entity::update_many()
-            .col_expr(
-                issue::Column::Status,
-                Expr::value(IssueStatus::Open.as_str()),
-            )
-            .col_expr(
-                issue::Column::ResolvedAt,
-                Expr::value(Option::<DateTime<Utc>>::None),
-            )
-            .col_expr(
-                issue::Column::ResolvedInRelease,
-                Expr::value(Option::<String>::None),
-            )
-            .col_expr(
-                issue::Column::IgnoredUntil,
-                Expr::value(Option::<DateTime<Utc>>::None),
-            )
-            .col_expr(
-                issue::Column::IgnoreRemaining,
-                Expr::value(Option::<i64>::None),
-            )
-            .col_expr(issue::Column::UpdatedAt, Expr::value(Utc::now()))
-            .filter(issue::Column::Id.eq(id))
-            .exec(self.db.conn())
+        let mut columns = reopen_columns();
+        columns.push(issue::Model::UPDATED_AT.set(Utc::now()));
+        issue::Model::query()
+            .where_key(id)
+            .update(&self.db, columns)
             .await?;
         self.issue(id).await
     }
@@ -1233,9 +1076,9 @@ impl LighthouseStore {
 
     /// One stored trace.
     pub async fn sample(&self, id: Uuid) -> Result<Sample, LighthouseError> {
-        let row = sample::Entity::find_by_id(id)
-            .one(self.db.conn())
+        let row = sample::Model::find(&self.db, id)
             .await?
+            .map(Record::into_inner)
             .ok_or(LighthouseError::NotFound("trace"))?;
         Ok(Sample {
             summary: sample_summary(&row),
@@ -1258,18 +1101,18 @@ impl LighthouseStore {
         kind: &str,
         period: Period,
         key: Option<&str>,
-    ) -> Result<Vec<Merged>, DbErr> {
+    ) -> Result<Vec<Merged>, LighthouseError> {
         let now = Utc::now();
         let resolution = period.resolution();
         let start = period_start(now, period);
-        let mut query = aggregate::Entity::find()
-            .filter(aggregate::Column::Kind.eq(kind))
-            .filter(aggregate::Column::Resolution.eq(resolution))
-            .filter(aggregate::Column::Bucket.gte(start));
+        let mut query = aggregate::Model::query()
+            .where_(aggregate::Model::KIND.eq(kind))
+            .where_(aggregate::Model::RESOLUTION.eq(resolution))
+            .where_(aggregate::Model::BUCKET.gte(start));
         if let Some(key) = key {
-            query = query.filter(aggregate::Column::KeyHash.eq(key_hash(key)));
+            query = query.where_(aggregate::Model::KEY_HASH.eq(key_hash(key)));
         }
-        let rows = query.all(self.db.conn()).await?;
+        let rows = query.get(&self.db).await?;
         let mut merged: BTreeMap<String, Merged> = BTreeMap::new();
         for row in rows {
             let values = Values {
@@ -1308,10 +1151,7 @@ impl LighthouseStore {
         }
         let exception_count: i64 = exceptions.iter().map(|(_, values, _)| values.count).sum();
         let failed_jobs: i64 = jobs.iter().map(|(_, values, _)| values.extra).sum();
-        let open_issues = issue::Entity::find()
-            .filter(issue::Column::Status.eq(IssueStatus::Open.as_str()))
-            .count(self.db.conn())
-            .await?;
+        let open_issues = self.open_issue_count().await?;
         let now = Utc::now();
         let mut timeline = empty_timeline(now, period);
         let start = period_start(now, period);
@@ -1348,17 +1188,19 @@ impl LighthouseStore {
     }
 
     /// The latest occurrences, newest first.
-    pub async fn feed(&self, limit: u64) -> Result<Vec<FeedItem>, DbErr> {
-        let rows = occurrence::Entity::find()
-            .order_by_desc(occurrence::Column::At)
+    pub async fn feed(&self, limit: u64) -> Result<Vec<FeedItem>, LighthouseError> {
+        let rows = occurrence::Model::query()
+            .order_by_desc(occurrence::Model::AT)
             .limit(limit)
-            .all(self.db.conn())
-            .await?;
-        let ids: Vec<Uuid> = rows.iter().map(|row| row.issue_id).collect();
-        let issues: HashMap<Uuid, issue::Model> = issue::Entity::find()
-            .filter(issue::Column::Id.is_in(ids))
-            .all(self.db.conn())
+            .get(&self.db)
             .await?
+            .into_models();
+        let ids: Vec<Uuid> = rows.iter().map(|row| row.issue_id).collect();
+        let issues: HashMap<Uuid, issue::Model> = issue::Model::query()
+            .where_(issue::Model::ID.is_in(ids))
+            .get(&self.db)
+            .await?
+            .into_models()
             .into_iter()
             .map(|row| (row.id, row))
             .collect();
@@ -1416,14 +1258,15 @@ impl LighthouseStore {
             timeline[index].count += count;
             timeline[index].errors += errors;
         }
-        let slowest = sample::Entity::find()
-            .filter(sample::Column::Kind.eq("request"))
-            .filter(sample::Column::Name.eq(endpoint))
-            .filter(sample::Column::At.gte(now - TimeDelta::minutes(period.minutes())))
-            .order_by_desc(sample::Column::DurationMs)
+        let slowest = sample::Model::query()
+            .where_(sample::Model::KIND.eq("request"))
+            .where_(sample::Model::NAME.eq(endpoint))
+            .where_(sample::Model::AT.gte(now - TimeDelta::minutes(period.minutes())))
+            .order_by_desc(sample::Model::DURATION_MS)
             .limit(20)
-            .all(self.db.conn())
+            .get(&self.db)
             .await?
+            .into_models()
             .iter()
             .map(sample_summary)
             .collect();
@@ -1508,40 +1351,33 @@ impl LighthouseStore {
     /// ignored issues with no occurrence left. Open issues are kept. On
     /// TimescaleDB, where samples, occurrences and aggregates are
     /// hypertables, the days entirely before the cutoff go as whole chunks
-    /// (see [`prune_time_series`]).
+    /// (see [`prune_time_series_on`]).
     pub async fn prune(&self, days: u32) -> Result<PruneSummary, LighthouseError> {
         let now = Utc::now();
         let cutoff = now - TimeDelta::days(i64::from(days.max(1)));
-        let conn = self.db.conn();
-        let samples = prune_time_series(conn, SAMPLES_TABLE, "at", cutoff).await?;
-        let occurrences = prune_time_series(conn, OCCURRENCES_TABLE, "at", cutoff).await?;
+        let db = &self.db;
+        let samples = prune_time_series_on(db, SAMPLES_TABLE, "at", cutoff).await?;
+        let occurrences = prune_time_series_on(db, OCCURRENCES_TABLE, "at", cutoff).await?;
         let minute_cutoff = cutoff.max(now - TimeDelta::days(2));
-        let aggregates = prune_time_series(conn, AGGREGATES_TABLE, "bucket", cutoff).await?
-            + aggregate::Entity::delete_many()
-                .filter(aggregate::Column::Resolution.eq(MINUTE))
-                .filter(aggregate::Column::Bucket.lt(minute_cutoff))
-                .exec(conn)
-                .await?
-                .rows_affected;
-        let alerts = alert::Entity::delete_many()
-            .filter(alert::Column::CreatedAt.lt(cutoff))
-            .exec(conn)
-            .await?
-            .rows_affected;
-        let issues = issue::Entity::delete_many()
-            .filter(issue::Column::Status.ne(IssueStatus::Open.as_str()))
-            .filter(issue::Column::LastSeen.lt(cutoff))
-            .filter(
-                issue::Column::Id.not_in_subquery(
-                    Query::select()
-                        .column(occurrence::Column::IssueId)
-                        .from(occurrence::Entity)
-                        .to_owned(),
-                ),
-            )
-            .exec(conn)
-            .await?
-            .rows_affected;
+        let aggregates = prune_time_series_on(db, AGGREGATES_TABLE, "bucket", cutoff).await?
+            + aggregate::Model::query()
+                .where_(aggregate::Model::RESOLUTION.eq(MINUTE))
+                .where_(aggregate::Model::BUCKET.lt(minute_cutoff))
+                .delete(db)
+                .await?;
+        let alerts = alert::Model::query()
+            .where_(alert::Model::CREATED_AT.lt(cutoff))
+            .delete(db)
+            .await?;
+        let issues =
+            issue::Model::query()
+                .where_(issue::Model::STATUS.ne(IssueStatus::Open.as_str()))
+                .where_(issue::Model::LAST_SEEN.lt(cutoff))
+                .where_(issue::Model::ID.not_in_subquery(
+                    occurrence::Model::query().select([occurrence::Model::ISSUE_ID]),
+                ))
+                .delete(db)
+                .await?;
         Ok(PruneSummary {
             samples,
             occurrences,
@@ -1561,14 +1397,14 @@ impl LighthouseStore {
         subject: &str,
         kind: AlertKind,
         since: DateTime<Utc>,
-    ) -> Result<bool, DbErr> {
-        Ok(alert::Entity::find()
-            .filter(alert::Column::SubjectKey.eq(subject))
-            .filter(alert::Column::Kind.eq(kind.as_str()))
-            .filter(alert::Column::CreatedAt.gt(since))
-            .one(self.db.conn())
-            .await?
-            .is_some())
+    ) -> Result<bool, LighthouseError> {
+        Ok(alert::Model::query()
+            .where_(alert::Model::SUBJECT_KEY.eq(subject))
+            .where_(alert::Model::KIND.eq(kind.as_str()))
+            .where_(alert::Model::CREATED_AT.gt(since))
+            .use_write()
+            .exists(&self.db)
+            .await?)
     }
 
     /// Stores an alert for one channel.
@@ -1577,28 +1413,40 @@ impl LighthouseStore {
         id: Uuid,
         alert: &crate::alert::Alert,
         channel: &str,
-    ) -> Result<(), DbErr> {
-        alert::Entity::insert(alert::ActiveModel {
-            id: Set(id),
-            issue_id: Set(Some(alert.issue.id)),
-            kind: Set(alert.kind.as_str().to_owned()),
-            channel: Set(channel.to_owned()),
-            subject_key: Set(alert.issue.id.to_string()),
-            status: Set("pending".to_owned()),
-            attempts: Set(0),
-            error: Set(None),
-            payload: Set(serde_json::to_string(alert).unwrap_or_default()),
-            created_at: Set(alert.at),
-            delivered_at: Set(None),
-        })
-        .exec_without_returning(self.db.conn())
-        .await?;
+    ) -> Result<(), LighthouseError> {
+        alert::Model::query()
+            .insert(
+                &self.db,
+                [alert::Model {
+                    id,
+                    issue_id: Some(alert.issue.id),
+                    kind: alert.kind.as_str().to_owned(),
+                    channel: channel.to_owned(),
+                    subject_key: alert.issue.id.to_string(),
+                    status: "pending".to_owned(),
+                    attempts: 0,
+                    error: None,
+                    payload: serde_json::to_string(alert).unwrap_or_default(),
+                    created_at: alert.at,
+                    delivered_at: None,
+                }],
+            )
+            .await?;
         Ok(())
     }
 
-    /// A stored alert row.
-    pub(crate) async fn alert_row(&self, id: Uuid) -> Result<Option<alert::Model>, DbErr> {
-        alert::Entity::find_by_id(id).one(self.db.conn()).await
+    /// A stored alert row, read from the writer (a delivery job reads the
+    /// alert its dispatch has just stored).
+    pub(crate) async fn alert_row(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<alert::Model>, LighthouseError> {
+        Ok(alert::Model::query()
+            .where_key(id)
+            .use_write()
+            .first(&self.db)
+            .await?
+            .map(Record::into_inner))
     }
 
     /// Records a delivery attempt.
@@ -1608,26 +1456,218 @@ impl LighthouseStore {
         result: Result<(), String>,
         attempts: i32,
         last_attempt: bool,
-    ) -> Result<(), DbErr> {
+    ) -> Result<(), LighthouseError> {
         let now = Utc::now();
-        let update = alert::Entity::update_many()
-            .col_expr(alert::Column::Attempts, Expr::value(attempts))
-            .filter(alert::Column::Id.eq(id));
-        let update = match result {
-            Ok(()) => update
-                .col_expr(alert::Column::Status, Expr::value("delivered"))
-                .col_expr(alert::Column::DeliveredAt, Expr::value(now))
-                .col_expr(alert::Column::Error, Expr::value(Option::<String>::None)),
-            Err(error) => update
-                .col_expr(
-                    alert::Column::Status,
-                    Expr::value(if last_attempt { "failed" } else { "pending" }),
-                )
-                .col_expr(alert::Column::Error, Expr::value(error)),
-        };
-        update.exec(self.db.conn()).await?;
+        let mut columns = vec![alert::Model::ATTEMPTS.set(attempts)];
+        match result {
+            Ok(()) => columns.extend([
+                alert::Model::STATUS.set("delivered"),
+                alert::Model::DELIVERED_AT.set(Some(now)),
+                alert::Model::ERROR.set_null(),
+            ]),
+            Err(error) => columns.extend([
+                alert::Model::STATUS.set(if last_attempt { "failed" } else { "pending" }),
+                alert::Model::ERROR.set(Some(error)),
+            ]),
+        }
+        alert::Model::query()
+            .where_key(id)
+            .update(&self.db, columns)
+            .await?;
         Ok(())
     }
+}
+
+/// The rows of a batch, written through `uow`: the issues (opened or
+/// counted), their occurrences, the samples and the aggregates. Returns the
+/// alerts to consider and the issues the batch touched.
+async fn write_rows(
+    uow: &Uow,
+    batch: &Batch,
+    labels: &Labels,
+    now: DateTime<Utc>,
+) -> Result<(Vec<Candidate>, Vec<issue::Model>), LighthouseError> {
+    let mut candidates = Vec::new();
+    let mut touched: Vec<issue::Model> = Vec::new();
+
+    // Group the hits by fingerprint, in order of appearance.
+    let mut order: Vec<String> = Vec::new();
+    let mut groups: HashMap<String, Vec<&Hit>> = HashMap::new();
+    for hit in &batch.hits {
+        if !groups.contains_key(&hit.fingerprint) {
+            order.push(hit.fingerprint.clone());
+        }
+        groups.entry(hit.fingerprint.clone()).or_default().push(hit);
+    }
+    let mut existing: HashMap<String, issue::Model> = HashMap::new();
+    for chunk in order.chunks(CHUNK) {
+        for row in issue::Model::query()
+            .where_(issue::Model::FINGERPRINT.is_in(chunk.iter().cloned()))
+            .get(uow)
+            .await?
+            .into_models()
+        {
+            existing.insert(row.fingerprint.clone(), row);
+        }
+    }
+    let mut occurrences = Vec::new();
+    for fingerprint in &order {
+        let hits = &groups[fingerprint];
+        let n = hits.len() as i64;
+        let first_at = hits.iter().map(|hit| hit.at).min().unwrap_or(now);
+        let last_at = hits.iter().map(|hit| hit.at).max().unwrap_or(now);
+        let level = hits.iter().map(|hit| hit.level).max().unwrap_or_default();
+        let failed_job = hits.iter().any(|hit| hit.failed_job);
+        let mut row = match existing.get(fingerprint) {
+            Some(row) => Some(row.clone()),
+            None => {
+                let first = &hits[0];
+                let inserted = issue::Model::query()
+                    .upsert(
+                        uow,
+                        [issue::Model {
+                            id: Uuid::now_v7(),
+                            fingerprint: fingerprint.clone(),
+                            kind: first.kind.as_str().to_owned(),
+                            level: level.as_str().to_owned(),
+                            status: IssueStatus::Open.as_str().to_owned(),
+                            title: first.title.clone(),
+                            culprit: first.culprit.clone(),
+                            message: first.message.clone(),
+                            chain: serde_json::to_string(&first.chain).unwrap_or_default(),
+                            location: first.location.clone(),
+                            error_type: first.error_type.clone(),
+                            count: n,
+                            first_seen: first_at,
+                            last_seen: last_at,
+                            first_release: Some(labels.release.clone()),
+                            last_release: Some(labels.release.clone()),
+                            environment: Some(labels.environment.clone()),
+                            resolved_at: None,
+                            resolved_in_release: None,
+                            ignored_until: None,
+                            ignore_remaining: None,
+                            regressed_at: None,
+                            comment: None,
+                            created_at: now,
+                            updated_at: now,
+                        }],
+                        [issue::Model::FINGERPRINT],
+                        Vec::<ConflictUpdate>::new(),
+                    )
+                    .await?;
+                let stored = issue::Model::query()
+                    .where_(issue::Model::FINGERPRINT.eq(fingerprint.clone()))
+                    .first(uow)
+                    .await?
+                    .map(Record::into_inner);
+                if inserted == 0 {
+                    // Another process opened it first.
+                    stored
+                } else {
+                    let row = stored.ok_or(LighthouseError::NotFound("issue"))?;
+                    if level > Level::Info {
+                        candidates.push(Candidate {
+                            kind: AlertKind::NewIssue,
+                            issue: row.clone(),
+                        });
+                        if failed_job {
+                            candidates.push(Candidate {
+                                kind: AlertKind::FailedJob,
+                                issue: row.clone(),
+                            });
+                        }
+                    }
+                    touched.push(row.clone());
+                    for hit in hits {
+                        if let Some(occurrence) = &hit.occurrence {
+                            occurrences.push(occurrence_model(row.id, occurrence, labels));
+                        }
+                    }
+                    continue;
+                }
+            }
+        };
+        let Some(current) = row.take() else {
+            continue;
+        };
+        let (current, regression) =
+            count_existing(uow, current, n, last_at, level, labels, now).await?;
+        let new_level = Level::parse(&current.level).unwrap_or_default();
+        let alerting = current.status == IssueStatus::Open.as_str() && new_level > Level::Info;
+        if alerting && regression {
+            candidates.push(Candidate {
+                kind: AlertKind::Regression,
+                issue: current.clone(),
+            });
+        }
+        if alerting && failed_job {
+            candidates.push(Candidate {
+                kind: AlertKind::FailedJob,
+                issue: current.clone(),
+            });
+        }
+        touched.push(current.clone());
+        for hit in hits {
+            if let Some(occurrence) = &hit.occurrence {
+                occurrences.push(occurrence_model(current.id, occurrence, labels));
+            }
+        }
+    }
+    for chunk in occurrences.chunks(CHUNK) {
+        occurrence::Model::query()
+            .insert(uow, chunk.to_vec())
+            .await?;
+    }
+    let samples: Vec<sample::Model> = batch
+        .samples
+        .iter()
+        .map(|sample| sample_model(sample, labels))
+        .collect();
+    for chunk in samples.chunks(CHUNK) {
+        sample::Model::query().insert(uow, chunk.to_vec()).await?;
+    }
+    let rows: Vec<aggregate::Model> = batch
+        .rows
+        .iter()
+        .map(|row| aggregate_model(row, labels))
+        .collect();
+    for chunk in rows.chunks(CHUNK) {
+        aggregate::Model::query()
+            .upsert(
+                uow,
+                chunk.to_vec(),
+                [
+                    aggregate::Model::RESOLUTION.name(),
+                    aggregate::Model::BUCKET.name(),
+                    aggregate::Model::KIND.name(),
+                    aggregate::Model::KEY_HASH.name(),
+                    aggregate::Model::PROCESS.name(),
+                ],
+                [
+                    ConflictUpdate::from(aggregate::Model::COUNT),
+                    aggregate::Model::ERRORS.into(),
+                    aggregate::Model::EXTRA.into(),
+                    aggregate::Model::TOTAL_MS.into(),
+                    aggregate::Model::MAX_MS.into(),
+                    aggregate::Model::HISTOGRAM.into(),
+                    aggregate::Model::DETAIL.into(),
+                ],
+            )
+            .await?;
+    }
+    Ok((candidates, touched))
+}
+
+/// The columns that make an issue open again: no resolution, no ignore.
+fn reopen_columns() -> Vec<Assignment> {
+    vec![
+        issue::Model::STATUS.set(IssueStatus::Open.as_str()),
+        issue::Model::RESOLVED_AT.set_null(),
+        issue::Model::RESOLVED_IN_RELEASE.set_null(),
+        issue::Model::IGNORED_UNTIL.set_null(),
+        issue::Model::IGNORE_REMAINING.set_null(),
+    ]
 }
 
 /// Adds `n` hits (the latest at `last_at`, the highest level `level`) to
@@ -1635,43 +1675,33 @@ impl LighthouseStore {
 /// makes the status change they cause. Returns the issue as it now is and
 /// whether this write reopened it as a regression.
 async fn count_existing(
-    txn: &sea_orm::DatabaseTransaction,
+    uow: &Uow,
     mut current: issue::Model,
     n: i64,
     last_at: DateTime<Utc>,
     level: Level,
     labels: &Labels,
     now: DateTime<Utc>,
-) -> Result<(issue::Model, bool), DbErr> {
+) -> Result<(issue::Model, bool), LighthouseError> {
     // An existing issue. The counts are one relative statement, so
     // processes writing at once never lose each other's hits.
     let read_level = Level::parse(&current.level).unwrap_or_default();
-    let mut counts = issue::Entity::update_many()
-        .col_expr(
-            issue::Column::Count,
-            sea_orm::sea_query::ExprTrait::add(Expr::col(issue::Column::Count), n),
-        )
-        .col_expr(
-            issue::Column::LastRelease,
-            Expr::value(labels.release.clone()),
-        )
-        .col_expr(
-            issue::Column::Environment,
-            Expr::value(labels.environment.clone()),
-        )
-        .col_expr(issue::Column::UpdatedAt, Expr::value(now));
+    let mut also = vec![
+        issue::Model::LAST_RELEASE.set(Some(labels.release.clone())),
+        issue::Model::ENVIRONMENT.set(Some(labels.environment.clone())),
+        issue::Model::UPDATED_AT.set(now),
+    ];
     if level > read_level {
-        counts = counts.col_expr(issue::Column::Level, Expr::value(level.as_str()));
+        also.push(issue::Model::LEVEL.set(level.as_str()));
     }
-    counts
-        .filter(issue::Column::Id.eq(current.id))
-        .exec(txn)
+    issue::Model::query()
+        .where_key(current.id)
+        .increment_with(uow, issue::Model::COUNT, n, also)
         .await?;
-    issue::Entity::update_many()
-        .col_expr(issue::Column::LastSeen, Expr::value(last_at))
-        .filter(issue::Column::Id.eq(current.id))
-        .filter(issue::Column::LastSeen.lt(last_at))
-        .exec(txn)
+    issue::Model::query()
+        .where_key(current.id)
+        .where_(issue::Model::LAST_SEEN.lt(last_at))
+        .update(uow, [issue::Model::LAST_SEEN.set(last_at)])
         .await?;
     current.count += n;
     current.last_seen = current.last_seen.max(last_at);
@@ -1686,53 +1716,27 @@ async fn count_existing(
     let mut regression = false;
     for _ in 0..STATUS_ATTEMPTS {
         let change = status_change(&current, n, last_at, &labels.release);
-        if change == StatusChange::None {
-            break;
-        }
-        let mut update = issue::Entity::update_many()
-            .filter(issue::Column::Id.eq(current.id))
-            .filter(issue::Column::Status.eq(current.status.clone()))
-            .filter(match current.ignore_remaining {
-                Some(remaining) => issue::Column::IgnoreRemaining.eq(remaining),
-                None => issue::Column::IgnoreRemaining.is_null(),
-            })
-            .filter(match &current.resolved_in_release {
-                Some(release) => issue::Column::ResolvedInRelease.eq(release.clone()),
-                None => issue::Column::ResolvedInRelease.is_null(),
-            });
-        match change {
-            StatusChange::None => {}
+        let sets = match change {
+            StatusChange::None => break,
             StatusChange::Reopen { regression } => {
-                update = update
-                    .col_expr(
-                        issue::Column::Status,
-                        Expr::value(IssueStatus::Open.as_str()),
-                    )
-                    .col_expr(
-                        issue::Column::ResolvedAt,
-                        Expr::value(Option::<DateTime<Utc>>::None),
-                    )
-                    .col_expr(
-                        issue::Column::ResolvedInRelease,
-                        Expr::value(Option::<String>::None),
-                    )
-                    .col_expr(
-                        issue::Column::IgnoredUntil,
-                        Expr::value(Option::<DateTime<Utc>>::None),
-                    )
-                    .col_expr(
-                        issue::Column::IgnoreRemaining,
-                        Expr::value(Option::<i64>::None),
-                    );
+                let mut sets = reopen_columns();
                 if regression {
-                    update = update.col_expr(issue::Column::RegressedAt, Expr::value(now));
+                    sets.push(issue::Model::REGRESSED_AT.set(Some(now)));
                 }
+                sets
             }
             StatusChange::IgnoreRemaining(left) => {
-                update = update.col_expr(issue::Column::IgnoreRemaining, Expr::value(left));
+                vec![issue::Model::IGNORE_REMAINING.set(Some(left))]
             }
-        }
-        if update.exec(txn).await?.rows_affected > 0 {
+        };
+        let changed = issue::Model::query()
+            .where_key(current.id)
+            .where_(issue::Model::STATUS.eq(current.status.as_str()))
+            .where_(issue::Model::IGNORE_REMAINING.eq(current.ignore_remaining))
+            .where_(issue::Model::RESOLVED_IN_RELEASE.eq(current.resolved_in_release.clone()))
+            .update(uow, sets)
+            .await?;
+        if changed > 0 {
             match change {
                 StatusChange::None => {}
                 StatusChange::Reopen {
@@ -1754,8 +1758,8 @@ async fn count_existing(
             }
             break;
         }
-        match issue::Entity::find_by_id(current.id).one(txn).await? {
-            Some(fresh) => current = fresh,
+        match issue::Model::find(uow, current.id).await? {
+            Some(fresh) => current = fresh.into_inner(),
             None => break,
         }
     }
@@ -1880,79 +1884,79 @@ fn occurrence_model(
     issue_id: Uuid,
     occurrence: &crate::engine::NewOccurrence,
     labels: &Labels,
-) -> occurrence::ActiveModel {
-    occurrence::ActiveModel {
-        id: Set(occurrence.id),
-        issue_id: Set(issue_id),
-        at: Set(occurrence.at),
-        level: Set(occurrence.level.as_str().to_owned()),
-        message: Set(occurrence.message.clone()),
-        chain: Set(serde_json::to_string(&occurrence.chain).unwrap_or_default()),
-        backtrace: Set(occurrence.backtrace.clone()),
-        location: Set(occurrence.location.clone()),
-        request_id: Set(occurrence.request_id.clone()),
-        job_id: Set(occurrence.job_id.clone()),
-        trace_id: Set(occurrence.trace_id.clone()),
-        user_id: Set(occurrence.user_id.clone()),
-        workspace_id: Set(occurrence.workspace_id.clone()),
-        release: Set(Some(labels.release.clone())),
-        environment: Set(Some(labels.environment.clone())),
-        server: Set(Some(labels.server.clone())),
-        process: Set(Some(labels.process.clone())),
-        method: Set(occurrence.method.clone()),
-        route: Set(occurrence.route.clone()),
-        path: Set(occurrence.path.clone()),
-        status: Set(occurrence.status.map(i32::from)),
-        sample_id: Set(occurrence.sample_id),
-        context: Set(serde_json::to_string(&occurrence.context).unwrap_or_else(|_| "{}".into())),
+) -> occurrence::Model {
+    occurrence::Model {
+        id: occurrence.id,
+        issue_id,
+        at: occurrence.at,
+        level: occurrence.level.as_str().to_owned(),
+        message: occurrence.message.clone(),
+        chain: serde_json::to_string(&occurrence.chain).unwrap_or_default(),
+        backtrace: occurrence.backtrace.clone(),
+        location: occurrence.location.clone(),
+        request_id: occurrence.request_id.clone(),
+        job_id: occurrence.job_id.clone(),
+        trace_id: occurrence.trace_id.clone(),
+        user_id: occurrence.user_id.clone(),
+        workspace_id: occurrence.workspace_id.clone(),
+        release: Some(labels.release.clone()),
+        environment: Some(labels.environment.clone()),
+        server: Some(labels.server.clone()),
+        process: Some(labels.process.clone()),
+        method: occurrence.method.clone(),
+        route: occurrence.route.clone(),
+        path: occurrence.path.clone(),
+        status: occurrence.status.map(i32::from),
+        sample_id: occurrence.sample_id,
+        context: serde_json::to_string(&occurrence.context).unwrap_or_else(|_| "{}".into()),
     }
 }
 
-fn sample_model(sample: &NewSample, labels: &Labels) -> sample::ActiveModel {
-    sample::ActiveModel {
-        id: Set(sample.id),
-        kind: Set(sample.kind.to_owned()),
-        name: Set(sample.name.clone()),
-        at: Set(sample.at),
-        duration_ms: Set(sample.duration_ms),
-        status: Set(sample.status.map(i32::from)),
-        outcome: Set(sample.outcome.to_owned()),
-        slow: Set(sample.slow),
-        request_id: Set(sample.context.request_id.clone()),
-        job_id: Set(sample.context.job_id.clone()),
-        trace_id: Set(sample
+fn sample_model(sample: &NewSample, labels: &Labels) -> sample::Model {
+    sample::Model {
+        id: sample.id,
+        kind: sample.kind.to_owned(),
+        name: sample.name.clone(),
+        at: sample.at,
+        duration_ms: sample.duration_ms,
+        status: sample.status.map(i32::from),
+        outcome: sample.outcome.to_owned(),
+        slow: sample.slow,
+        request_id: sample.context.request_id.clone(),
+        job_id: sample.context.job_id.clone(),
+        trace_id: sample
             .context
             .trace
             .as_ref()
-            .map(|trace| trace.trace_id.to_string())),
-        user_id: Set(sample.context.user_id.clone()),
-        workspace_id: Set(sample.context.workspace_id.clone()),
-        release: Set(Some(labels.release.clone())),
-        environment: Set(Some(labels.environment.clone())),
-        server: Set(Some(labels.server.clone())),
-        process: Set(Some(labels.process.clone())),
-        spans: Set(serde_json::to_string(&sample.spans).unwrap_or_else(|_| "[]".into())),
-        context: Set(serde_json::to_string(&sample.details).unwrap_or_else(|_| "{}".into())),
-        error: Set(sample.error.clone()),
+            .map(|trace| trace.trace_id.to_string()),
+        user_id: sample.context.user_id.clone(),
+        workspace_id: sample.context.workspace_id.clone(),
+        release: Some(labels.release.clone()),
+        environment: Some(labels.environment.clone()),
+        server: Some(labels.server.clone()),
+        process: Some(labels.process.clone()),
+        spans: serde_json::to_string(&sample.spans).unwrap_or_else(|_| "[]".into()),
+        context: serde_json::to_string(&sample.details).unwrap_or_else(|_| "{}".into()),
+        error: sample.error.clone(),
     }
 }
 
-fn aggregate_model(row: &Row, labels: &Labels) -> aggregate::ActiveModel {
-    aggregate::ActiveModel {
-        id: Set(Uuid::now_v7()),
-        resolution: Set(row.key.resolution),
-        bucket: Set(row.key.bucket),
-        kind: Set(row.key.kind.to_owned()),
-        key_hash: Set(key_hash(&row.key.key)),
-        key: Set(row.key.key.clone()),
-        process: Set(labels.process_key.clone()),
-        count: Set(row.values.count),
-        errors: Set(row.values.errors),
-        extra: Set(row.values.extra),
-        total_ms: Set(row.values.total_ms),
-        max_ms: Set(row.values.max_ms()),
-        histogram: Set(row.values.histogram.encode()),
-        detail: Set(row.values.detail.encode()),
+fn aggregate_model(row: &Row, labels: &Labels) -> aggregate::Model {
+    aggregate::Model {
+        id: Uuid::now_v7(),
+        resolution: row.key.resolution,
+        bucket: row.key.bucket,
+        kind: row.key.kind.to_owned(),
+        key_hash: key_hash(&row.key.key),
+        key: row.key.key.clone(),
+        process: labels.process_key.clone(),
+        count: row.values.count,
+        errors: row.values.errors,
+        extra: row.values.extra,
+        total_ms: row.values.total_ms,
+        max_ms: row.values.max_ms(),
+        histogram: row.values.histogram.encode(),
+        detail: row.values.detail.encode(),
     }
 }
 
@@ -1999,14 +2003,9 @@ fn sample_summary(row: &sample::Model) -> SampleSummary {
     }
 }
 
-/// The current UTC time on `ConnectionTrait` (keeps the import used).
-#[allow(dead_code)]
-fn _assert_connection<C: ConnectionTrait>(_c: &C) {}
-
 #[cfg(test)]
 mod tests {
-    use sea_orm::{ActiveModelTrait, IntoActiveModel, TransactionTrait};
-    use sea_orm_migration::SchemaManager;
+    use navree_db::navree_schema::Schema;
 
     use super::*;
 
@@ -2028,7 +2027,7 @@ mod tests {
         })
         .await
         .unwrap();
-        crate::migration::create_tables(&SchemaManager::new(db.conn()))
+        crate::migration::create_tables(&Schema::new(&db))
             .await
             .unwrap();
         (db, guard)
@@ -2036,44 +2035,46 @@ mod tests {
 
     async fn issue_with(db: &Db, status: IssueStatus, remaining: Option<i64>) -> issue::Model {
         let at = Utc::now() - TimeDelta::hours(1);
-        issue::ActiveModel {
-            id: Set(Uuid::now_v7()),
-            fingerprint: Set(format!("fp-{}", Uuid::now_v7())),
-            kind: Set(IssueKind::Exception.as_str().to_owned()),
-            level: Set(Level::Error.as_str().to_owned()),
-            status: Set(status.as_str().to_owned()),
-            title: Set("boom".into()),
-            culprit: Set("GET /x".into()),
-            message: Set("boom".into()),
-            chain: Set("[]".into()),
-            location: Set(None),
-            error_type: Set(None),
-            count: Set(10),
-            first_seen: Set(at),
-            last_seen: Set(at),
-            first_release: Set(Some("r1".into())),
-            last_release: Set(Some("r1".into())),
-            environment: Set(Some("test".into())),
-            resolved_at: Set((status == IssueStatus::Resolved).then_some(at)),
-            resolved_in_release: Set(None),
-            ignored_until: Set(None),
-            ignore_remaining: Set(remaining),
-            regressed_at: Set(None),
-            comment: Set(None),
-            created_at: Set(at),
-            updated_at: Set(at),
-        }
-        .insert(db.conn())
-        .await
-        .unwrap()
+        let model = issue::Model {
+            id: Uuid::now_v7(),
+            fingerprint: format!("fp-{}", Uuid::now_v7()),
+            kind: IssueKind::Exception.as_str().to_owned(),
+            level: Level::Error.as_str().to_owned(),
+            status: status.as_str().to_owned(),
+            title: "boom".into(),
+            culprit: "GET /x".into(),
+            message: "boom".into(),
+            chain: "[]".into(),
+            location: None,
+            error_type: None,
+            count: 10,
+            first_seen: at,
+            last_seen: at,
+            first_release: Some("r1".into()),
+            last_release: Some("r1".into()),
+            environment: Some("test".into()),
+            resolved_at: (status == IssueStatus::Resolved).then_some(at),
+            resolved_in_release: None,
+            ignored_until: None,
+            ignore_remaining: remaining,
+            regressed_at: None,
+            comment: None,
+            created_at: at,
+            updated_at: at,
+        };
+        issue::Model::query()
+            .insert(db, [model.clone()])
+            .await
+            .unwrap();
+        stored(db, model.id).await
     }
 
     /// Adds `n` hits at `level` to `read` (a possibly stale read) in one
     /// transaction.
     async fn hits(db: &Db, read: &issue::Model, n: i64, level: Level) -> (issue::Model, bool) {
-        let txn = db.conn().begin().await.unwrap();
+        let uow = db.uow(None, None).await;
         let result = count_existing(
-            &txn,
+            &uow,
             read.clone(),
             n,
             Utc::now(),
@@ -2083,16 +2084,16 @@ mod tests {
         )
         .await
         .unwrap();
-        txn.commit().await.unwrap();
+        uow.commit().await.unwrap();
         result
     }
 
     async fn stored(db: &Db, id: Uuid) -> issue::Model {
-        issue::Entity::find_by_id(id)
-            .one(db.conn())
+        issue::Model::find(db, id)
             .await
             .unwrap()
             .unwrap()
+            .into_inner()
     }
 
     #[tokio::test]
@@ -2102,12 +2103,19 @@ mod tests {
         // Another process saw the same resolved issue, reopened it as a
         // regression and committed, after this one read it.
         let earlier = Utc::now() - TimeDelta::minutes(1);
-        let mut other = read.clone().into_active_model();
-        other.status = Set(IssueStatus::Open.as_str().to_owned());
-        other.resolved_at = Set(None);
-        other.regressed_at = Set(Some(earlier));
-        other.count = Set(11);
-        other.update(db.conn()).await.unwrap();
+        issue::Model::query()
+            .where_key(read.id)
+            .update(
+                &db,
+                [
+                    issue::Model::STATUS.set(IssueStatus::Open.as_str()),
+                    issue::Model::RESOLVED_AT.set_null(),
+                    issue::Model::REGRESSED_AT.set(Some(earlier)),
+                    issue::Model::COUNT.set(11),
+                ],
+            )
+            .await
+            .unwrap();
 
         let (now_row, regression) = hits(&db, &read, 2, Level::Error).await;
         assert!(!regression, "the other process raised it");

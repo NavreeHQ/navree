@@ -1,20 +1,18 @@
 //! Booting the module: options in code, validation, `store = "off"`, a
 //! separate database, and the migration set.
 
-use navree_db::{DatabaseModule, Db};
+use navree_db::{DatabaseModule, Db, Executor, Statement};
 use navree_lighthouse::{
     IssueFilter, LIGHTHOUSE_MIGRATIONS, Lighthouse, LighthouseModule, LighthouseOptions,
     SampleRates, Thresholds,
 };
-use navree_testing::{TestApp, temp_sqlite_url};
-use sea_orm::ConnectionTrait;
+use navree_testing::TestApp;
 
 use crate::support::{DemoModule, builder, flushed};
 
 #[tokio::test]
 async fn for_root_takes_options_in_code() {
-    let app = TestApp::builder()
-        .temp_database()
+    let app = crate::servers::database(TestApp::builder())
         .module(DatabaseModule::from_config())
         .module(DemoModule)
         .module(LighthouseModule::for_root(LighthouseOptions {
@@ -51,8 +49,7 @@ async fn for_root_takes_options_in_code() {
 
 #[tokio::test]
 async fn invalid_options_fail_the_boot_naming_the_key() {
-    let error = TestApp::builder()
-        .temp_database()
+    let error = crate::servers::database(TestApp::builder())
         .module(DatabaseModule::from_config())
         .module(LighthouseModule::for_root(LighthouseOptions {
             sample: SampleRates {
@@ -70,8 +67,7 @@ async fn invalid_options_fail_the_boot_naming_the_key() {
         "{error}"
     );
 
-    let error = TestApp::builder()
-        .temp_database()
+    let error = crate::servers::database(TestApp::builder())
         .config("lighthouse.alerts.email.on", "new_issue,sometimes")
         .module(DatabaseModule::from_config())
         .module(LighthouseModule::from_config())
@@ -104,7 +100,7 @@ async fn with_the_store_off_nothing_is_kept_and_nothing_is_mounted() {
 
 #[tokio::test]
 async fn a_separate_database_holds_the_tables() {
-    let (url, _guard) = temp_sqlite_url();
+    let (url, _guard) = crate::servers::scratch();
     let app = builder()
         .config("lighthouse.database_url", url.clone())
         .build()
@@ -125,17 +121,19 @@ async fn a_separate_database_holds_the_tables() {
         1
     );
     let app_db = app.get::<Db>().await;
-    let rows = app_db
-        .conn()
-        .query_all_raw(sea_orm::Statement::from_string(
-            app_db.conn().get_database_backend(),
+    let row = app_db
+        .fetch_one(&Statement::text(
             "SELECT count(*) AS n FROM lighthouse_issues",
         ))
         .await
         .unwrap();
-    let n: i64 = rows[0].try_get("", "n").unwrap();
+    let n: i64 = row.get("n").unwrap();
     assert_eq!(n, 0, "the app's own tables stay empty");
-    assert!(store.db().conn().get_database_backend() == app_db.conn().get_database_backend());
+    assert_eq!(Executor::backend(store.db()), Executor::backend(&*app_db));
+    assert!(
+        !store.db().same_as(&app_db),
+        "the store has its own database"
+    );
     assert_eq!(LIGHTHOUSE_MIGRATIONS, "lighthouse");
     app.shutdown().await.unwrap();
 }
