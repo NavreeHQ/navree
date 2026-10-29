@@ -11,7 +11,7 @@ use chrono::{DateTime, SecondsFormat, TimeDelta, Utc};
 use http::header::{CONTENT_TYPE, HeaderName, HeaderValue, USER_AGENT};
 use navree_contracts::{Clock, Dispatcher, Job, JobEnvelope, JobOptions, SystemClock};
 use navree_crypto::Encrypter;
-use navree_db::{Db, DbError, Page, PageQuery, Uow, prune_time_series};
+use navree_db::{Db, Page, PageQuery, Uow, prune_time_series};
 use navree_events::EventBus;
 use navree_http_client::{HttpClient, HttpClientError};
 use navree_kernel::{AppContext, WeakAppContext};
@@ -1155,7 +1155,7 @@ impl Webhooks {
         let uow = db.uow(None, None).await;
         match uow.scope(f(uow.clone())).await {
             Ok(value) => {
-                uow.commit().await.map_err(DbError::from)?;
+                uow.commit().await?;
                 Ok(value)
             }
             Err(error) => {

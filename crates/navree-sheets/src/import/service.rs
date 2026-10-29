@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use bytes::Bytes;
 use navree_contracts::{BoxError, JobContext};
-use navree_db::{Db, DbError, Uow};
+use navree_db::{Db, Uow};
 use navree_kernel::{AppContext, WeakAppContext};
 use navree_queue::{Batch, Operation, OperationStatus, Operations};
 use serde_json::Value;
@@ -914,7 +914,7 @@ impl Imports {
                     };
                     let marked = async {
                         store::set_row(&uow, id, row.row, status, &BTreeMap::new()).await?;
-                        uow.commit().await.map_err(DbError::from)
+                        uow.commit().await
                     }
                     .await;
                     match marked {

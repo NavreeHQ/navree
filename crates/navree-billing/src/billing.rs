@@ -10,7 +10,7 @@ use chrono::{DateTime, TimeDelta, Utc};
 use http::HeaderMap;
 use http::request::Parts;
 use navree_contracts::{Clock, Dispatcher, JobEnvelope};
-use navree_db::{Db, DbError, Uow};
+use navree_db::{Db, Uow};
 use navree_events::EventBus;
 use navree_http::AppError;
 use navree_kernel::WeakAppContext;
@@ -323,7 +323,7 @@ impl Billing {
         let uow = self.db.uow(None, None).await;
         match uow.scope(f(uow.clone())).await {
             Ok(value) => {
-                uow.commit().await.map_err(DbError::from)?;
+                uow.commit().await?;
                 Ok(value)
             }
             Err(error) => {
@@ -1263,7 +1263,7 @@ impl Billing {
             .await;
         let duplicate_of = match stored {
             Ok(duplicate) => {
-                uow.commit().await.map_err(DbError::from)?;
+                uow.commit().await?;
                 duplicate
             }
             Err(error) => {
@@ -1354,7 +1354,7 @@ impl Billing {
             .await;
         match result {
             Ok(()) => {
-                uow.commit().await.map_err(DbError::from)?;
+                uow.commit().await?;
                 Ok(())
             }
             Err(error) => {
