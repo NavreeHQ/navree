@@ -12,11 +12,7 @@ use navree::testing::{TempDirGuard, TestApp, TestAppBuilder, principal};
 use navree::workspace::{
     DEMO_HEADER, DemoMode, DemoSeed, DemoSeeder, DemoWorkspaces, NewWorkspace, WorkspaceKind,
 };
-use sea_orm::ActiveValue::Set;
-use sea_orm::sea_query::{ColumnDef, Table};
-use sea_orm::{DbErr, EntityTrait};
-use sea_orm_migration::async_trait::async_trait;
-use sea_orm_migration::{MigrationName, MigrationTrait, SchemaManager};
+use navree::db::navree_schema::{Migration, Schema, SchemaMigration, SchemaResult};
 use serde::Deserialize;
 use serde_json::json;
 use uuid::Uuid;
@@ -25,69 +21,48 @@ use uuid::Uuid;
 // The CRM module: a workspace-owned `companies` table and its demo seeder.
 // ---------------------------------------------------------------------------
 
-mod company {
-    use sea_orm::entity::prelude::*;
-    use serde::Serialize;
+#[derive(Clone, Debug, PartialEq, Eq, navree::orm::Model, serde::Serialize)]
+#[model(table = "companies", subject = "Company", permission_prefix = "companies")]
+struct Company {
+    id: Uuid,
+    workspace_id: Uuid,
+    name: String,
+    stage: String,
+    last_contacted_at: DateTime<Utc>,
+}
 
-    #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize)]
-    #[sea_orm(table_name = "companies")]
-    pub struct Model {
-        #[sea_orm(primary_key, auto_increment = false)]
-        pub id: Uuid,
-        pub workspace_id: Uuid,
-        pub name: String,
-        pub stage: String,
-        pub last_contacted_at: DateTimeUtc,
+impl WorkspaceScoped for Company {}
+
+impl Company {
+    /// A company of `workspace`, with a new id.
+    fn new(workspace: Uuid, name: String, stage: String, last_contacted_at: DateTime<Utc>) -> Self {
+        Company {
+            id: Uuid::now_v7(),
+            workspace_id: workspace,
+            name,
+            stage,
+            last_contacted_at,
+        }
     }
-
-    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
-
-    impl ActiveModelBehavior for ActiveModel {}
 }
-
-impl Subject for company::Entity {
-    const SUBJECT: &'static str = "Company";
-    const PERMISSION_PREFIX: &'static str = "companies";
-}
-
-impl WorkspaceScoped for company::Entity {}
-
-type Company = company::Entity;
 
 struct CreateCompanies;
 
-impl MigrationName for CreateCompanies {
-    fn name(&self) -> &str {
-        "m20261027_000001_create_companies"
-    }
-}
-
-#[async_trait]
-impl MigrationTrait for CreateCompanies {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table("companies")
-                    .col(ColumnDef::new("id").uuid().not_null().primary_key())
-                    .col(ColumnDef::new("workspace_id").uuid().not_null())
-                    .col(ColumnDef::new("name").string().not_null())
-                    .col(ColumnDef::new("stage").string().not_null())
-                    .col(
-                        ColumnDef::new("last_contacted_at")
-                            .timestamp_with_time_zone()
-                            .not_null(),
-                    )
-                    .to_owned(),
-            )
+impl Migration for CreateCompanies {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema
+            .create("companies", |t| {
+                t.uuid("id").primary();
+                t.uuid("workspace_id");
+                t.string("name");
+                t.string("stage");
+                t.timestamp_tz("last_contacted_at");
+            })
             .await
     }
 
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .drop_table(Table::drop().table("companies").to_owned())
-            .await
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop_if_exists("companies").await
     }
 }
 
@@ -117,18 +92,13 @@ impl DemoSeeder for CrmDemo {
         Box::pin(async move {
             let companies: Vec<CompanyFixture> = demo.fixture("crm/companies")?;
             for fixture in companies {
-                WorkspaceRepo::<Company>::insert(
-                    demo.uow(),
+                let company = Company::new(
                     demo.id(),
-                    company::ActiveModel {
-                        id: Set(Uuid::now_v7()),
-                        workspace_id: Set(demo.id()),
-                        name: Set(fixture.name),
-                        stage: Set(fixture.stage),
-                        last_contacted_at: Set(fixture.last_contacted_at),
-                    },
-                )
-                .await?;
+                    fixture.name,
+                    fixture.stage,
+                    fixture.last_contacted_at,
+                );
+                WorkspaceRepo::<Company>::insert(demo.uow(), demo.id(), company).await?;
             }
             Ok(())
         })
@@ -143,27 +113,17 @@ struct CompaniesController;
 impl CompaniesController {
     #[get("/")]
     #[permissions("companies.read")]
-    async fn index(&self, ws: CurrentWorkspace, uow: Uow) -> Result<Json<Vec<company::Model>>> {
-        let select = WorkspaceRepo::<Company>::select(ws.id());
-        Ok(Json(select.all(&*uow.tx().await?).await?))
+    async fn index(&self, ws: CurrentWorkspace, uow: Uow) -> Result<Json<Vec<Company>>> {
+        let companies = WorkspaceRepo::<Company>::query(ws.id()).get(&uow).await?;
+        Ok(Json(companies.into_models()))
     }
 
     #[post("/")]
     #[permissions("companies.create")]
-    async fn store(&self, ws: CurrentWorkspace, uow: Uow) -> Result<Json<company::Model>> {
-        let created = WorkspaceRepo::<Company>::insert(
-            &uow,
-            ws.id(),
-            company::ActiveModel {
-                id: Set(Uuid::now_v7()),
-                workspace_id: Set(ws.id()),
-                name: Set("Prospect's own".to_owned()),
-                stage: Set("lead".to_owned()),
-                last_contacted_at: Set(Utc::now()),
-            },
-        )
-        .await?;
-        Ok(Json(created))
+    async fn store(&self, ws: CurrentWorkspace, uow: Uow) -> Result<Json<Company>> {
+        let company = Company::new(ws.id(), "Prospect's own".into(), "lead".into(), Utc::now());
+        let created = WorkspaceRepo::<Company>::insert(&uow, ws.id(), company).await?;
+        Ok(Json(created.into_inner()))
     }
 }
 
@@ -179,7 +139,10 @@ impl CrmModule {
         m.migrations(
             MigrationSet::new("companies")
                 .after(["workspace"])
-                .migration(CreateCompanies),
+                .migration(SchemaMigration::new(
+                    "m20261027_000001_create_companies",
+                    CreateCompanies,
+                )),
         )
         .workspace_scoped::<Company>()
         .demo_seeder::<CrmDemo>();
@@ -318,11 +281,10 @@ async fn a_reset_demo_takes_writes_until_the_nightly_reset() {
         .assert_status(200);
     assert_eq!(written.header(DEMO_HEADER), Some("reset"));
     let count = || async {
-        WorkspaceRepo::<Company>::select(demo.id)
-            .all(app.get::<Db>().await.conn())
+        WorkspaceRepo::<Company>::query(demo.id)
+            .count(&*app.get::<Db>().await)
             .await
             .unwrap()
-            .len()
     };
     assert_eq!(count().await, 4);
 
@@ -355,10 +317,10 @@ async fn a_seeder_can_clear_its_own_way() {
     uow.commit().await.unwrap();
     let reset = demos.reset(demo.id).await.unwrap();
     assert_eq!(reset.seeders, ["crm", "pipeline"]);
-    let companies = company::Entity::find()
-        .all(app.get::<Db>().await.conn())
+    let companies = WorkspaceRepo::<Company>::query(demo.id)
+        .count(&*app.get::<Db>().await)
         .await
         .unwrap();
-    assert_eq!(companies.len(), 3);
+    assert_eq!(companies, 3);
     app.shutdown().await.unwrap();
 }
