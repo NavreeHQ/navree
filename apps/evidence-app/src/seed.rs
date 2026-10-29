@@ -14,9 +14,9 @@
 use navree::access::AccessService;
 use navree::auth::{AuthService, User};
 use navree::db::{Db, Seeder, Uow};
-use navree::workspace::{
-    Members, NewWorkspace, Workspace, WorkspaceRepo, WorkspaceRole, Workspaces,
-};
+// COMPAT (data-layer move): the SeaORM form of `WorkspaceRepo`.
+use navree::workspace::sea_compat::WorkspaceRepo;
+use navree::workspace::{Members, NewWorkspace, Workspace, WorkspaceRole, Workspaces};
 use navree::{BoxFuture, prelude::*};
 use sea_orm::{ActiveModelTrait, ActiveValue::Set, IntoActiveModel, PaginatorTrait};
 use uuid::Uuid;

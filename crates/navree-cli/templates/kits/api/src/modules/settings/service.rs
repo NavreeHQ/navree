@@ -8,7 +8,9 @@ use navree::db::{Repo, Uow};
 use navree::http::AppError;
 use navree::injectable;
 use navree::workspace::entity::workspace;
-use navree::workspace::{Workspace, WorkspaceRepo, Workspaces};
+// COMPAT (data-layer move): the SeaORM form of `WorkspaceRepo`.
+use navree::workspace::sea_compat::WorkspaceRepo;
+use navree::workspace::{Workspace, Workspaces};
 use sea_orm::{ActiveValue::Set, ColumnTrait, DbErr, IntoActiveModel, QueryFilter};
 use uuid::Uuid;
 
