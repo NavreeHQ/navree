@@ -15,7 +15,6 @@ use navree_http::{AppError, GlobalLayer, LayerSlot};
 use navree_kernel::{AppContext, BoxFuture};
 use navree_telemetry::TelemetryContext;
 
-
 use tokio::sync::OnceCell;
 use tower::{Layer, Service, ServiceExt};
 use tracing::Instrument;

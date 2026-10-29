@@ -610,8 +610,7 @@ impl Webhooks {
                 .delete(&uow)
                 .await?;
             let deliveries =
-                prune_time_series(&uow, DELIVERIES_TABLE, "created_at", deliveries_before)
-                    .await?;
+                prune_time_series(&uow, DELIVERIES_TABLE, "created_at", deliveries_before).await?;
             let receipts = receipt::Model::query()
                 .where_(receipt::Model::RECEIVED_AT.lt(receipts_before))
                 .delete(&uow)
